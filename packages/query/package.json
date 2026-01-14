@@ -1,0 +1,45 @@
+{
+  "name": "@gscdump/query",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Unified query abstraction - routes to DB or GSC API",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/query"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "obuild --stub",
+    "build": "obuild",
+    "typecheck": "tsc --noEmit",
+    "prepack": "pnpm run build"
+  },
+  "peerDependencies": {
+    "google-auth-library": "catalog:deps"
+  },
+  "dependencies": {
+    "@gscdump/db": "workspace:*",
+    "gscdump": "workspace:*"
+  }
+}

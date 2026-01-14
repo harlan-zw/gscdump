@@ -1,0 +1,44 @@
+{
+  "name": "@gscdump/db",
+  "type": "module",
+  "version": "0.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/db"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./cloud": {
+      "types": "./dist/cloud.d.mts",
+      "import": "./dist/cloud.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "obuild",
+    "dev": "obuild --stub",
+    "typecheck": "tsc --noEmit",
+    "prepack": "pnpm run build",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@googleapis/searchconsole": "catalog:deps",
+    "db0": "catalog:",
+    "drizzle-orm": "catalog:",
+    "google-auth-library": "catalog:deps",
+    "gscdump": "workspace:*",
+    "ufo": "catalog:deps"
+  },
+  "devDependencies": {
+    "drizzle-kit": "catalog:"
+  }
+}

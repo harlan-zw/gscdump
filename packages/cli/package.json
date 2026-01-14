@@ -1,0 +1,47 @@
+{
+  "name": "@gscdump/cli",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "CLI for GSCDump - Google Search Console data extraction",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/cli"
+  },
+  "bin": {
+    "gscdump": "./dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "obuild",
+    "dev": "obuild --stub",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepack": "pnpm run build"
+  },
+  "dependencies": {
+    "@clack/prompts": "catalog:deps",
+    "@gscdump/db": "workspace:*",
+    "@gscdump/mcp": "workspace:*",
+    "@gscdump/query": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "citty": "catalog:deps",
+    "consola": "catalog:deps",
+    "dayjs": "catalog:deps",
+    "db0": "catalog:",
+    "google-auth-library": "catalog:deps",
+    "gscdump": "workspace:*",
+    "open": "catalog:deps"
+  },
+  "devDependencies": {
+    "vitest": "catalog:dev-test"
+  }
+}

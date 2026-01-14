@@ -1,0 +1,59 @@
+{
+  "name": "gscdump",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Google Search Console data extraction library",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/gscdump"
+  },
+  "keywords": [
+    "google-search-console",
+    "gsc",
+    "seo",
+    "search-analytics",
+    "webmaster-tools"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "obuild --stub",
+    "build": "obuild",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:e2e": "vitest run e2e/",
+    "test:real": "RUN_REAL_CREDENTIALS=true vitest run e2e/real-credentials.test.ts",
+    "prepack": "pnpm run build"
+  },
+  "dependencies": {
+    "dayjs": "catalog:deps",
+    "defu": "catalog:deps",
+    "ofetch": "catalog:deps",
+    "ufo": "catalog:deps"
+  },
+  "devDependencies": {
+    "@googleapis/indexing": "catalog:deps",
+    "@googleapis/searchconsole": "catalog:deps"
+  }
+}

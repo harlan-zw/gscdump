@@ -1,0 +1,29 @@
+{
+  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git"
+  },
+  "scripts": {
+    "build": "pnpm run -r build",
+    "dev": "pnpm run -r --parallel dev",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "pnpm run -r typecheck",
+    "test": "vitest",
+    "release": "pnpm build && bumpp packages/*/package.json"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "catalog:dev-lint",
+    "@types/node": "catalog:",
+    "bumpp": "catalog:dev-build",
+    "dotenv": "catalog:dev-test",
+    "eslint": "catalog:dev-lint",
+    "obuild": "catalog:dev-build",
+    "typescript": "catalog:dev-build",
+    "vitest": "catalog:dev-test"
+  }
+}

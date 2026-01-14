@@ -1,0 +1,41 @@
+{
+  "name": "@gscdump/mcp",
+  "type": "module",
+  "version": "0.0.0",
+  "description": "MCP tool handlers for Google Search Console",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./handlers": {
+      "types": "./dist/handlers/index.d.mts",
+      "import": "./dist/handlers/index.mjs"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.mts",
+      "import": "./dist/server/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "obuild",
+    "dev": "obuild --watch"
+  },
+  "dependencies": {
+    "@gscdump/query": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "gscdump": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@googleapis/searchconsole": "catalog:deps",
+    "@gscdump/db": "workspace:*",
+    "obuild": "catalog:dev-build",
+    "typescript": "catalog:dev-build"
+  }
+}

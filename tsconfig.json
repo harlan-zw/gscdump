@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "moduleDetection": "force",
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "declaration": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "references": [
+    { "path": "./packages/gscdump" },
+    { "path": "./packages/db" },
+    { "path": "./packages/mcp" }
+  ],
+  "include": [],
+  "exclude": ["node_modules", "dist"]
+}

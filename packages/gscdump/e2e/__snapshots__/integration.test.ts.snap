@@ -1,0 +1,817 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`e2E Integration Tests > data Transformation Tests > should properly transform country data with keywords 1`] = `
+{
+  "current": [
+    {
+      "clicks": 2800,
+      "country": "America",
+      "countryCode": "US",
+      "countryCodeGsc": "usa",
+      "ctr": 0.125,
+      "impressions": 22400,
+      "keys": null,
+      "keywords": 3,
+      "position": 7.2,
+    },
+    {
+      "clicks": 420,
+      "country": "United Kingdom",
+      "countryCode": "GB",
+      "countryCodeGsc": "gbr",
+      "ctr": 0.125,
+      "impressions": 3360,
+      "keys": null,
+      "keywords": 3,
+      "position": 7.5,
+    },
+    {
+      "clicks": 280,
+      "country": "Canada",
+      "countryCode": "CA",
+      "countryCodeGsc": "can",
+      "ctr": 0.1111,
+      "impressions": 2520,
+      "keys": null,
+      "keywords": 3,
+      "position": 8.1,
+    },
+  ],
+  "metadata": {
+    "currentCount": 3,
+    "previousCount": 3,
+    "totalKeywords": 9,
+  },
+  "previous": [
+    {
+      "clicks": 2800,
+      "country": "America",
+      "countryCode": "US",
+      "countryCodeGsc": "usa",
+      "ctr": 0.125,
+      "impressions": 22400,
+      "keys": null,
+      "position": 7.2,
+    },
+    {
+      "clicks": 420,
+      "country": "United Kingdom",
+      "countryCode": "GB",
+      "countryCodeGsc": "gbr",
+      "ctr": 0.125,
+      "impressions": 3360,
+      "keys": null,
+      "position": 7.5,
+    },
+    {
+      "clicks": 280,
+      "country": "Canada",
+      "countryCode": "CA",
+      "countryCodeGsc": "can",
+      "ctr": 0.1111,
+      "impressions": 2520,
+      "keys": null,
+      "position": 8.1,
+    },
+  ],
+}
+`;
+
+exports[`e2E Integration Tests > data Transformation Tests > should properly transform device data 1`] = `
+{
+  "current": [
+    {
+      "clicks": 1250,
+      "ctr": 0.0994,
+      "device": "desktop",
+      "impressions": 12580,
+      "keys": null,
+      "position": 8.2,
+    },
+    {
+      "clicks": 2100,
+      "ctr": 0.114,
+      "device": "mobile",
+      "impressions": 18420,
+      "keys": null,
+      "position": 6.8,
+    },
+    {
+      "clicks": 150,
+      "ctr": 0.0893,
+      "device": "tablet",
+      "impressions": 1680,
+      "keys": null,
+      "position": 9.1,
+    },
+  ],
+  "metadata": {
+    "currentCount": 3,
+    "previousCount": 3,
+  },
+  "previous": [
+    {
+      "clicks": 1250,
+      "ctr": 0.0994,
+      "device": "desktop",
+      "impressions": 12580,
+      "keys": null,
+      "position": 8.2,
+    },
+    {
+      "clicks": 2100,
+      "ctr": 0.114,
+      "device": "mobile",
+      "impressions": 18420,
+      "keys": null,
+      "position": 6.8,
+    },
+    {
+      "clicks": 150,
+      "ctr": 0.0893,
+      "device": "tablet",
+      "impressions": 1680,
+      "keys": null,
+      "position": 9.1,
+    },
+  ],
+}
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should complete a full GSC data fetch workflow 1`] = `
+[
+  {
+    "permissionLevel": "owner",
+    "siteUrl": "https://example.com/",
+  },
+  {
+    "permissionLevel": "owner",
+    "siteUrl": "sc-domain:example.com",
+  },
+  {
+    "permissionLevel": "full",
+    "siteUrl": "https://test.example.com/",
+  },
+]
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should complete a full GSC data fetch workflow 2`] = `
+[
+  {
+    "permissionLevel": "owner",
+    "siteUrl": "https://example.com/",
+    "sitemaps": [
+      {
+        "errors": 0,
+        "isPending": false,
+        "isSitemapsIndex": true,
+        "lastDownloaded": "2024-01-15T11:00:00.000Z",
+        "lastSubmitted": "2024-01-15T10:30:00.000Z",
+        "path": "https://example.com/sitemap.xml",
+        "type": "urlset",
+        "warnings": 0,
+      },
+      {
+        "errors": 0,
+        "isPending": false,
+        "isSitemapsIndex": false,
+        "lastDownloaded": "2024-01-15T11:00:00.000Z",
+        "lastSubmitted": "2024-01-15T10:30:00.000Z",
+        "path": "https://example.com/sitemap-posts.xml",
+        "type": "urlset",
+        "warnings": 0,
+      },
+    ],
+  },
+  {
+    "permissionLevel": "owner",
+    "siteUrl": "sc-domain:example.com",
+    "sitemaps": [
+      {
+        "errors": 0,
+        "isPending": false,
+        "isSitemapsIndex": true,
+        "lastDownloaded": "2024-01-15T11:00:00.000Z",
+        "lastSubmitted": "2024-01-15T10:30:00.000Z",
+        "path": "https://example.com/sitemap.xml",
+        "type": "urlset",
+        "warnings": 0,
+      },
+      {
+        "errors": 0,
+        "isPending": false,
+        "isSitemapsIndex": false,
+        "lastDownloaded": "2024-01-15T11:00:00.000Z",
+        "lastSubmitted": "2024-01-15T10:30:00.000Z",
+        "path": "https://example.com/sitemap-posts.xml",
+        "type": "urlset",
+        "warnings": 0,
+      },
+    ],
+  },
+  {
+    "permissionLevel": "full",
+    "siteUrl": "https://test.example.com/",
+    "sitemaps": [],
+  },
+]
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should complete a full GSC data fetch workflow 3`] = `
+{
+  "inspection": {
+    "indexStatusResult": {
+      "coverageState": "Submitted and indexed",
+      "googleCanonical": "https://example.com/page",
+      "indexingState": "INDEXING_ALLOWED",
+      "lastCrawlTime": "2024-01-15T10:30:00.000Z",
+      "pageFetchState": "SUCCESSFUL",
+      "robotsTxtState": "ALLOWED",
+      "userCanonical": "https://example.com/page",
+      "verdict": "PASS",
+    },
+    "inspectionResultLink": "https://search.google.com/search-console/inspect",
+    "mobileUsabilityResult": {
+      "verdict": "PASS",
+    },
+    "richResultsResult": {
+      "detectedItems": [
+        {
+          "items": [
+            "Article markup found",
+          ],
+          "richResultType": "Article",
+        },
+      ],
+      "verdict": "PASS",
+    },
+  },
+  "isIndexed": true,
+}
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should complete a full GSC data fetch workflow 4`] = `
+{
+  "current": [
+    {
+      "clicks": 1250,
+      "ctr": 0.0994,
+      "device": "desktop",
+      "impressions": 12580,
+      "keys": null,
+      "position": 8.2,
+    },
+    {
+      "clicks": 2100,
+      "ctr": 0.114,
+      "device": "mobile",
+      "impressions": 18420,
+      "keys": null,
+      "position": 6.8,
+    },
+    {
+      "clicks": 150,
+      "ctr": 0.0893,
+      "device": "tablet",
+      "impressions": 1680,
+      "keys": null,
+      "position": 9.1,
+    },
+  ],
+  "metadata": {
+    "currentCount": 3,
+    "previousCount": 3,
+  },
+  "previous": [
+    {
+      "clicks": 1250,
+      "ctr": 0.0994,
+      "device": "desktop",
+      "impressions": 12580,
+      "keys": null,
+      "position": 8.2,
+    },
+    {
+      "clicks": 2100,
+      "ctr": 0.114,
+      "device": "mobile",
+      "impressions": 18420,
+      "keys": null,
+      "position": 6.8,
+    },
+    {
+      "clicks": 150,
+      "ctr": 0.0893,
+      "device": "tablet",
+      "impressions": 1680,
+      "keys": null,
+      "position": 9.1,
+    },
+  ],
+}
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should complete a full GSC data fetch workflow 5`] = `
+{
+  "current": [
+    {
+      "clicks": 2800,
+      "country": "America",
+      "countryCode": "US",
+      "countryCodeGsc": "usa",
+      "ctr": 0.125,
+      "impressions": 22400,
+      "keys": null,
+      "keywords": 3,
+      "position": 7.2,
+    },
+    {
+      "clicks": 420,
+      "country": "United Kingdom",
+      "countryCode": "GB",
+      "countryCodeGsc": "gbr",
+      "ctr": 0.125,
+      "impressions": 3360,
+      "keys": null,
+      "keywords": 3,
+      "position": 7.5,
+    },
+    {
+      "clicks": 280,
+      "country": "Canada",
+      "countryCode": "CA",
+      "countryCodeGsc": "can",
+      "ctr": 0.1111,
+      "impressions": 2520,
+      "keys": null,
+      "keywords": 3,
+      "position": 8.1,
+    },
+  ],
+  "metadata": {
+    "currentCount": 3,
+    "previousCount": 3,
+    "totalKeywords": 9,
+  },
+  "previous": [
+    {
+      "clicks": 2800,
+      "country": "America",
+      "countryCode": "US",
+      "countryCodeGsc": "usa",
+      "ctr": 0.125,
+      "impressions": 22400,
+      "keys": null,
+      "position": 7.2,
+    },
+    {
+      "clicks": 420,
+      "country": "United Kingdom",
+      "countryCode": "GB",
+      "countryCodeGsc": "gbr",
+      "ctr": 0.125,
+      "impressions": 3360,
+      "keys": null,
+      "position": 7.5,
+    },
+    {
+      "clicks": 280,
+      "country": "Canada",
+      "countryCode": "CA",
+      "countryCodeGsc": "can",
+      "ctr": 0.1111,
+      "impressions": 2520,
+      "keys": null,
+      "position": 8.1,
+    },
+  ],
+}
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should generate proper query bodies with different options 1`] = `
+{
+  "aggregationType": "byPage",
+  "dataState": "all",
+  "dimensionFilterGroups": [
+    {
+      "filters": [
+        {
+          "dimension": "page",
+          "expression": "#",
+          "operator": "excludingRegex",
+        },
+      ],
+    },
+  ],
+  "endDate": "2026-01-13",
+  "rowLimit": 25000,
+  "startDate": "2025-12-14",
+  "type": "web",
+}
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should generate proper query bodies with different options 2`] = `
+{
+  "aggregationType": "byPage",
+  "dataState": "all",
+  "dimensionFilterGroups": [
+    {
+      "filters": [
+        {
+          "dimension": "page",
+          "expression": "#",
+          "operator": "excludingRegex",
+        },
+      ],
+    },
+  ],
+  "endDate": "2024-01-31",
+  "rowLimit": 25000,
+  "startDate": "2024-01-01",
+  "type": "web",
+}
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should generate proper query bodies with different options 3`] = `
+{
+  "aggregationType": "byPage",
+  "dataState": "all",
+  "dimensionFilterGroups": [
+    {
+      "filters": [
+        {
+          "dimension": "page",
+          "expression": "^https://example\\.com/.*",
+          "operator": "includingRegex",
+        },
+        {
+          "dimension": "page",
+          "expression": "#",
+          "operator": "excludingRegex",
+        },
+        {
+          "dimension": "query",
+          "expression": "test",
+          "operator": "contains",
+        },
+      ],
+    },
+  ],
+  "endDate": "2026-01-13",
+  "rowLimit": 25000,
+  "startDate": "2025-12-14",
+  "type": "web",
+}
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should generate proper query bodies with different options 4`] = `
+{
+  "aggregationType": "byPage",
+  "dataState": "all",
+  "dimensionFilterGroups": [
+    {
+      "filters": [
+        {
+          "dimension": "page",
+          "expression": "^https://example\\.com/.*",
+          "operator": "includingRegex",
+        },
+        {
+          "dimension": "page",
+          "expression": "#",
+          "operator": "excludingRegex",
+        },
+        {
+          "dimension": "query",
+          "expression": "guide",
+          "operator": "contains",
+        },
+        {
+          "dimension": "page",
+          "expression": "/admin",
+          "operator": "notContains",
+        },
+      ],
+    },
+  ],
+  "endDate": "2024-01-31",
+  "rowLimit": 25000,
+  "startDate": "2024-01-01",
+  "type": "web",
+}
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should handle comprehensive analytics data fetching 1`] = `
+{
+  "current": [
+    {
+      "clicks": 3500,
+      "ctr": 0.1071,
+      "impressions": 32680,
+      "keys": [],
+      "keywords": [
+        {
+          "clicks": 450,
+          "ctr": 0.125,
+          "impressions": 3600,
+          "keys": [
+            "best practices",
+          ],
+          "position": 4.2,
+        },
+        {
+          "clicks": 380,
+          "ctr": 0.0833,
+          "impressions": 4560,
+          "keys": [
+            "how to guide",
+          ],
+          "position": 5.8,
+        },
+        {
+          "clicks": 290,
+          "ctr": 0.1,
+          "impressions": 2900,
+          "keys": [
+            "tutorial",
+          ],
+          "position": 6.1,
+        },
+      ],
+      "position": 7.4,
+    },
+  ],
+  "metadata": {
+    "currentCount": 1,
+    "currentKeywordCount": 3,
+    "previousCount": 1,
+    "previousKeywordCount": 3,
+  },
+  "previous": [
+    {
+      "clicks": 3500,
+      "ctr": 0.1071,
+      "impressions": 32680,
+      "keys": [],
+      "keywords": [
+        {
+          "clicks": 450,
+          "ctr": 0.125,
+          "impressions": 3600,
+          "keys": [
+            "best practices",
+          ],
+          "position": 4.2,
+        },
+        {
+          "clicks": 380,
+          "ctr": 0.0833,
+          "impressions": 4560,
+          "keys": [
+            "how to guide",
+          ],
+          "position": 5.8,
+        },
+        {
+          "clicks": 290,
+          "ctr": 0.1,
+          "impressions": 2900,
+          "keys": [
+            "tutorial",
+          ],
+          "position": 6.1,
+        },
+      ],
+      "position": 7.4,
+    },
+  ],
+}
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should handle comprehensive analytics data fetching 2`] = `
+{
+  "current": [
+    {
+      "clicks": 1200,
+      "clicksPercent": 0,
+      "ctr": 0.1429,
+      "impressions": 8400,
+      "impressionsPercent": 0,
+      "keys": null,
+      "keyword": undefined,
+      "keywordPosition": 0,
+      "page": "https://example.com/",
+      "position": 3.2,
+      "prevClicks": 1200,
+      "prevImpressions": 8400,
+    },
+    {
+      "clicks": 800,
+      "clicksPercent": 0,
+      "ctr": 0.125,
+      "impressions": 6400,
+      "impressionsPercent": 0,
+      "keys": null,
+      "keyword": undefined,
+      "keywordPosition": 0,
+      "page": "https://example.com/guide",
+      "position": 4.8,
+      "prevClicks": 800,
+      "prevImpressions": 6400,
+    },
+    {
+      "clicks": 650,
+      "clicksPercent": 0,
+      "ctr": 0.1111,
+      "impressions": 5850,
+      "impressionsPercent": 0,
+      "keys": null,
+      "keyword": undefined,
+      "keywordPosition": 0,
+      "page": "https://example.com/blog",
+      "position": 5.5,
+      "prevClicks": 650,
+      "prevImpressions": 5850,
+    },
+  ],
+  "metadata": {
+    "currentCount": 3,
+    "keywordMatches": 3,
+    "previousCount": 3,
+  },
+  "previous": [
+    {
+      "clicks": 1200,
+      "ctr": 0.1429,
+      "impressions": 8400,
+      "keys": null,
+      "page": "https://example.com/",
+      "position": 3.2,
+    },
+    {
+      "clicks": 800,
+      "ctr": 0.125,
+      "impressions": 6400,
+      "keys": null,
+      "page": "https://example.com/guide",
+      "position": 4.8,
+    },
+    {
+      "clicks": 650,
+      "ctr": 0.1111,
+      "impressions": 5850,
+      "keys": null,
+      "page": "https://example.com/blog",
+      "position": 5.5,
+    },
+  ],
+}
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should handle comprehensive analytics data fetching 3`] = `
+{
+  "current": [
+    {
+      "clicks": 450,
+      "ctr": 0.125,
+      "ctrPercent": 0,
+      "impressions": 3600,
+      "keys": null,
+      "keyword": "best practices",
+      "page": null,
+      "position": 4.2,
+      "positionPercent": 0,
+      "prevCtr": 0.125,
+      "prevPosition": 4.2,
+    },
+    {
+      "clicks": 380,
+      "ctr": 0.0833,
+      "ctrPercent": 0,
+      "impressions": 4560,
+      "keys": null,
+      "keyword": "how to guide",
+      "page": null,
+      "position": 5.8,
+      "positionPercent": 0,
+      "prevCtr": 0.0833,
+      "prevPosition": 5.8,
+    },
+    {
+      "clicks": 290,
+      "ctr": 0.1,
+      "ctrPercent": 0,
+      "impressions": 2900,
+      "keys": null,
+      "keyword": "tutorial",
+      "page": null,
+      "position": 6.1,
+      "positionPercent": 0,
+      "prevCtr": 0.1,
+      "prevPosition": 6.1,
+    },
+  ],
+  "metadata": {
+    "currentCount": 3,
+    "pageMatches": 3,
+    "previousCount": 3,
+  },
+  "previous": [
+    {
+      "clicks": 450,
+      "ctr": 0.125,
+      "impressions": 3600,
+      "keys": null,
+      "keyword": "best practices",
+      "page": null,
+      "position": 4.2,
+    },
+    {
+      "clicks": 380,
+      "ctr": 0.0833,
+      "impressions": 4560,
+      "keys": null,
+      "keyword": "how to guide",
+      "page": null,
+      "position": 5.8,
+    },
+    {
+      "clicks": 290,
+      "ctr": 0.1,
+      "impressions": 2900,
+      "keys": null,
+      "keyword": "tutorial",
+      "page": null,
+      "position": 6.1,
+    },
+  ],
+}
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should handle different period ranges correctly 1`] = `
+[
+  {
+    "period": "7d",
+    "structure": {
+      "hasPeriod": true,
+      "hasPrevPeriod": true,
+      "hasStartEnd": true,
+      "periodLength": 7,
+      "prevPeriodLength": 6,
+    },
+  },
+  {
+    "period": "30d",
+    "structure": {
+      "hasPeriod": true,
+      "hasPrevPeriod": true,
+      "hasStartEnd": true,
+      "periodLength": 30,
+      "prevPeriodLength": 29,
+    },
+  },
+  {
+    "period": "90d",
+    "structure": {
+      "hasPeriod": true,
+      "hasPrevPeriod": true,
+      "hasStartEnd": true,
+      "periodLength": 90,
+      "prevPeriodLength": 89,
+    },
+  },
+  {
+    "period": "2mo",
+    "structure": {
+      "hasPeriod": true,
+      "hasPrevPeriod": true,
+      "hasStartEnd": true,
+      "periodLength": 60,
+      "prevPeriodLength": 59,
+    },
+  },
+  {
+    "period": "6mo",
+    "structure": {
+      "hasPeriod": true,
+      "hasPrevPeriod": true,
+      "hasStartEnd": true,
+      "periodLength": 180,
+      "prevPeriodLength": 180,
+    },
+  },
+]
+`;
+
+exports[`e2E Integration Tests > full API Workflow > should handle error scenarios gracefully 1`] = `[]`;
+
+exports[`e2E Integration Tests > full API Workflow > should handle error scenarios gracefully 2`] = `
+{
+  "current": [],
+  "metadata": {
+    "currentCount": 0,
+    "previousCount": 0,
+  },
+  "previous": [],
+}
+`;
