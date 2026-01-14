@@ -13,7 +13,9 @@
   "references": [
     { "path": "./packages/gscdump" },
     { "path": "./packages/db" },
-    { "path": "./packages/mcp" }
+    { "path": "./packages/mcp" },
+    { "path": "./packages/cli" },
+    { "path": "./packages/query" }
   ],
   "include": [],
   "exclude": ["node_modules", "dist"]
