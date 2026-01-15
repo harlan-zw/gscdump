@@ -13,6 +13,7 @@ import type { GscDb } from './connector'
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import { countries, percentDifference } from 'gscdump'
 import {
+  siteDateAnalytics,
   siteDateCountryAnalytics,
   siteDateDeviceAnalytics,
   siteKeywordDateAnalytics,
@@ -794,4 +795,81 @@ export async function hasDataForRange(
     .all()
   const row = rows[0]
   return (row?.count ?? 0) > 0
+}
+
+// Query+Page rows for cannibalization/zero-click analysis
+export interface QueryPageRow {
+  query: string
+  page: string
+  clicks: number
+  impressions: number
+  ctr: number
+  position: number
+}
+
+export async function queryQueryPageRows(
+  db: GscDb,
+  siteId: number,
+  range: DateRange,
+): Promise<QueryPageRow[]> {
+  const rows = await db.select({
+    keyword: siteKeywordPathDateAnalytics.keyword,
+    path: siteKeywordPathDateAnalytics.path,
+    totalClicks: sql<number>`sum(${siteKeywordPathDateAnalytics.clicks})`.as('total_clicks'),
+    totalImpressions: sql<number>`sum(${siteKeywordPathDateAnalytics.impressions})`.as('total_impressions'),
+    avgPosition: sql<number>`avg(${siteKeywordPathDateAnalytics.position})`.as('avg_position'),
+    avgCtr: sql<number>`avg(${siteKeywordPathDateAnalytics.ctr})`.as('avg_ctr'),
+  })
+    .from(siteKeywordPathDateAnalytics)
+    .where(and(
+      eq(siteKeywordPathDateAnalytics.siteId, siteId),
+      gte(siteKeywordPathDateAnalytics.date, range.startDate),
+      lte(siteKeywordPathDateAnalytics.date, range.endDate),
+    ))
+    .groupBy(siteKeywordPathDateAnalytics.keyword, siteKeywordPathDateAnalytics.path)
+    .orderBy(desc(sql`sum(${siteKeywordPathDateAnalytics.clicks})`))
+    .all()
+
+  return rows.map(row => ({
+    query: row.keyword,
+    page: row.path,
+    // @ts-expect-error db0 returns raw column names
+    clicks: row.total_clicks ?? 0,
+    // @ts-expect-error db0 returns raw column names
+    impressions: row.total_impressions ?? 0,
+    // @ts-expect-error db0 returns raw column names
+    ctr: (row.avg_ctr ?? 0) / 10000,
+    // @ts-expect-error db0 returns raw column names
+    position: (row.avg_position ?? 0) / 100,
+  }))
+}
+
+// Date rows for seasonality analysis
+export interface DateRow {
+  date: string
+  clicks: number
+  impressions: number
+  ctr: number
+  position: number
+}
+
+export async function queryDateRows(
+  db: GscDb,
+  siteId: number,
+  range: DateRange,
+): Promise<DateRow[]> {
+  const rows = await db.select()
+    .from(siteDateAnalytics)
+    .where(and(
+      eq(siteDateAnalytics.siteId, siteId),
+      gte(siteDateAnalytics.date, range.startDate),
+      lte(siteDateAnalytics.date, range.endDate),
+    ))
+    .orderBy(siteDateAnalytics.date)
+    .all()
+
+  return rows.map(row => ({
+    date: row.date,
+    ...fromGscMetrics(row),
+  }))
 }

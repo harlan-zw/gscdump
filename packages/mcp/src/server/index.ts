@@ -29,10 +29,12 @@ export interface CreateGscMcpServerOptions {
   version?: string
   /** Function to get auth for the current request context */
   getAuth: () => Promise<Auth> | Auth
+  /** Optional function to get database for local queries */
+  getDb?: () => Promise<import('@gscdump/db').GscDb | null> | import('@gscdump/db').GscDb | null
 }
 
 export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServer {
-  const { name = 'gscdump', version = '1.0.0', getAuth } = options
+  const { name = 'gscdump', version = '1.0.0', getAuth, getDb } = options
 
   const server = new McpServer({ name, version })
 
@@ -41,9 +43,11 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
 
   const getContext = async (): Promise<HandlerContext> => {
     const a = await auth()
+    const db = getDb ? await Promise.resolve(getDb()) : null
     return {
       auth: a,
       client: googleSearchConsole(a),
+      db,
     }
   }
 

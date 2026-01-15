@@ -101,6 +101,7 @@ export const batchInspectUrlsInput = z.object({
 export const cannibalizationInput = z.object({
   siteUrl: siteUrlSchema,
   period: periodSchema.optional().describe('Period (defaults to last 28 days)'),
+  source: dataSourceSchema,
   minImpressions: z.number().optional().describe('Minimum impressions for a query (default 10)'),
   maxPositionSpread: z.number().optional().describe('Maximum position spread to flag (default 10)'),
   minPages: z.number().optional().describe('Minimum pages ranking for same query (default 2)'),
@@ -111,6 +112,7 @@ export const cannibalizationInput = z.object({
 export const strikingDistanceInput = z.object({
   siteUrl: siteUrlSchema,
   period: periodSchema.optional().describe('Period (defaults to last 28 days)'),
+  source: dataSourceSchema,
   minPosition: z.number().optional().describe('Minimum position (default 4)'),
   maxPosition: z.number().optional().describe('Maximum position (default 20)'),
   minImpressions: z.number().optional().describe('Minimum impressions (default 100)'),
@@ -122,12 +124,14 @@ export const strikingDistanceInput = z.object({
 export const yoyComparisonInput = z.object({
   siteUrl: siteUrlSchema,
   period: periodSchema.optional().describe('Current period to compare (defaults to last 28 days)'),
+  source: dataSourceSchema,
 })
 
 export const moversAndShakersInput = z.object({
   siteUrl: siteUrlSchema,
   period: periodSchema.optional().describe('Recent period (defaults to last 7 days)'),
   comparePeriod: periodSchema.optional().describe('Baseline period (defaults to 4 weeks before period)'),
+  source: dataSourceSchema,
   changeThreshold: z.number().optional().describe('Minimum change threshold (default 0.2 = 20%)'),
   minImpressions: z.number().optional().describe('Minimum impressions (default 50)'),
   sortBy: z.enum(['clicks', 'impressions', 'clicksChange', 'impressionsChange', 'positionChange']).optional().describe('Sort metric (default clicksChange)'),
@@ -136,6 +140,7 @@ export const moversAndShakersInput = z.object({
 export const contentDecayInput = z.object({
   siteUrl: siteUrlSchema,
   period: periodSchema.optional().describe('Current period to analyze (defaults to last 28 days)'),
+  source: dataSourceSchema,
   lookbackDays: z.number().optional().describe('Number of days to look back for comparison (default 365)'),
   minPreviousClicks: z.number().optional().describe('Minimum clicks in previous period to consider (default 50)'),
   threshold: z.number().optional().describe('Minimum decline percentage 0-1 (default 0.2 = 20%)'),
@@ -145,6 +150,7 @@ export const contentDecayInput = z.object({
 export const zeroClickInput = z.object({
   siteUrl: siteUrlSchema,
   period: periodSchema.optional().describe('Period (defaults to last 28 days)'),
+  source: dataSourceSchema,
   minImpressions: z.number().optional().describe('Minimum impressions (default 1000)'),
   maxCtr: z.number().optional().describe('Maximum CTR (default 0.03 = 3%)'),
   maxPosition: z.number().optional().describe('Only consider queries in top X positions (default 10)'),

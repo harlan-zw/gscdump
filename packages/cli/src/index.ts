@@ -2,6 +2,7 @@
 
 import process from 'node:process'
 import { defineCommand, runMain } from 'citty'
+import { analyzeCommand } from './commands/analyze'
 import { authCommand } from './commands/auth'
 import { compareCommand } from './commands/compare'
 import { configCommand } from './commands/config'
@@ -25,6 +26,7 @@ const main = defineCommand({
     dump: dumpCommand,
     sync: syncCommand,
     compare: compareCommand,
+    analyze: analyzeCommand,
     sites: sitesCommand,
     sitemaps: sitemapsCommand,
     index: indexingCommand,

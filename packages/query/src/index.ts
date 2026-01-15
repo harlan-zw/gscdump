@@ -1,7 +1,7 @@
 // Providers
 export { createApiProvider } from './api-provider'
-
 export { createDbProvider } from './db-provider'
+
 // Factory
 export { createProvider } from './factory'
 
@@ -10,17 +10,12 @@ export type {
   CreateProviderOptions,
   DataProvider,
   DataSource,
+  DateMetrics,
   FetchKeywordResult,
   FetchPageResult,
   QueryContext,
+  QueryPageRow,
 } from './types'
 
-// Re-export analysis functions from gscdump (API-only, no DB equivalent)
-export {
-  analyzeCannibalization,
-  analyzeContentDecay,
-  analyzeMoversAndShakers,
-  analyzeStrikingDistance,
-  analyzeZeroClickQueries,
-  fetchYoYComparison,
-} from 'gscdump'
+// Analysis module - pure functions and provider-based wrappers
+export * from './analysis'

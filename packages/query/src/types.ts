@@ -13,6 +13,10 @@ import type {
   ResolvedAnalyticsRange,
   SearchAppearanceData,
 } from 'gscdump'
+import type { DateMetrics, QueryPageRow } from './analysis/types'
+
+// Re-export for convenience
+export type { DateMetrics, QueryPageRow }
 
 export type DataSource = 'api' | 'db' | 'auto'
 
@@ -35,6 +39,10 @@ export interface DataProvider {
 
   // API-only (optional)
   getSearchAppearanceWithComparison?: (siteUrl: string, range: ResolvedAnalyticsRange) => Promise<ComparisonResult<SearchAppearanceData>>
+
+  // Analysis-specific queries (optional)
+  getQueryPageRows?: (siteUrl: string, range: ResolvedAnalyticsRange) => Promise<QueryPageRow[]>
+  getDateRows?: (siteUrl: string, range: ResolvedAnalyticsRange) => Promise<DateMetrics[]>
 }
 
 export interface QueryContext {

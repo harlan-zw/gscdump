@@ -1,7 +1,9 @@
 import type { Auth } from 'gscdump'
 import type { DataProvider } from './types'
 import {
+  createQueryBody,
   fetchCountriesWithComparison,
+  fetchDates,
   fetchDatesWithComparison,
   fetchDevicesWithComparison,
   fetchKeyword,
@@ -11,6 +13,7 @@ import {
   fetchPagesWithComparison,
   fetchSearchAppearanceWithComparison,
   googleSearchConsole,
+  queryRecursive,
 } from 'gscdump'
 
 export function createApiProvider(auth: Auth): DataProvider {
@@ -45,5 +48,32 @@ export function createApiProvider(auth: Auth): DataProvider {
 
     getSearchAppearanceWithComparison: (siteUrl, range) =>
       fetchSearchAppearanceWithComparison(client, siteUrl, range),
+
+    getQueryPageRows: async (siteUrl, range) => {
+      const query = createQueryBody({ period: range.period })
+      const { rows } = await queryRecursive(client, siteUrl, {
+        ...query,
+        dimensions: ['query', 'page'],
+      })
+      return rows.map(row => ({
+        query: row.keys?.[0] || '',
+        page: row.keys?.[1] || '',
+        clicks: row.clicks || 0,
+        impressions: row.impressions || 0,
+        ctr: row.ctr || 0,
+        position: row.position || 0,
+      }))
+    },
+
+    getDateRows: async (siteUrl, range) => {
+      const dates = await fetchDates(client, siteUrl, { period: range.period })
+      return dates.map(d => ({
+        date: d.date,
+        clicks: d.clicks || 0,
+        impressions: d.impressions || 0,
+        ctr: d.ctr || 0,
+        position: d.position || 0,
+      }))
+    },
   }
 }

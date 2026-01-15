@@ -2,6 +2,7 @@ import type { DateRange, GscDb } from '@gscdump/db'
 import type { DataProvider } from './types'
 import {
   queryCountriesWithComparison,
+  queryDateRows,
   queryDatesWithComparison,
   queryDevicesWithComparison,
   queryKeyword,
@@ -9,6 +10,7 @@ import {
   queryPage,
   queryPages,
   queryPagesWithComparison,
+  queryQueryPageRows,
 } from '@gscdump/db'
 
 function toDateRange(period: { start: Date | string, end: Date | string }): DateRange {
@@ -82,5 +84,15 @@ export function createDbProvider(db: GscDb, siteIdMap: Map<string, number>): Dat
 
     // Not available from DB
     getSearchAppearanceWithComparison: undefined,
+
+    getQueryPageRows: async (siteUrl, range) => {
+      const siteId = getSiteId(siteUrl)
+      return queryQueryPageRows(db, siteId, toDateRange(range.period))
+    },
+
+    getDateRows: async (siteUrl, range) => {
+      const siteId = getSiteId(siteUrl)
+      return queryDateRows(db, siteId, toDateRange(range.period))
+    },
   }
 }
