@@ -3,7 +3,7 @@
  * Provides helpful messages for quota exceeded and rate limit errors.
  */
 
-export interface GscErrorInfo {
+export interface ErrorInfo {
   isQuotaError: boolean
   isRateLimitError: boolean
   isAuthError: boolean
@@ -133,10 +133,22 @@ export function getRetryAfter(error: unknown): number | undefined {
   return undefined
 }
 
+function formatQuotaSuggestion(message: string, retryAfter?: number): string {
+  if (message.includes('Search Console API'))
+    return `You exceeded the Search Analytics quota (${GSC_QUOTAS.searchAnalytics}/day). Try again tomorrow.`
+  if (message.includes('Indexing API'))
+    return `You exceeded the Indexing API quota (${GSC_QUOTAS.indexing}/day). Try again tomorrow.`
+  return `Quota exceeded. Try again in ${retryAfter ? `${retryAfter}s` : '24 hours'}.`
+}
+
+function formatRateLimitSuggestion(retryAfter?: number): string {
+  return `Rate limited. Slow down requests. Try again in ${retryAfter ? `${retryAfter}s` : 'a few minutes'}.`
+}
+
 /**
  * Analyzes an error and returns structured information with suggestions.
  */
-export function analyzeGscError(error: unknown): GscErrorInfo {
+export function analyzeError(error: unknown): ErrorInfo {
   const code = getErrorCode(error)
   const message = getErrorMessage(error)
   const retryAfter = getRetryAfter(error)
@@ -186,68 +198,11 @@ export function analyzeGscError(error: unknown): GscErrorInfo {
   }
 }
 
-function formatQuotaSuggestion(message: string, retryAfter?: number): string {
-  const lines: string[] = []
-
-  // Detect which API quota was exceeded
-  const msgLower = message.toLowerCase()
-  if (msgLower.includes('indexing') || msgLower.includes('publish')) {
-    lines.push(`Indexing API quota exceeded (~${GSC_QUOTAS.indexing} requests/day per property).`)
-  }
-  else if (msgLower.includes('inspection') || msgLower.includes('inspect')) {
-    lines.push(`URL Inspection API quota exceeded (~${GSC_QUOTAS.urlInspection} requests/day per property).`)
-  }
-  else {
-    lines.push(`Search Analytics API quota exceeded (~${GSC_QUOTAS.searchAnalytics} requests/day).`)
-  }
-
-  lines.push('')
-  lines.push('Suggestions:')
-
-  if (retryAfter) {
-    lines.push(`  • Wait ${formatDuration(retryAfter)} before retrying`)
-  }
-  else {
-    lines.push('  • Wait until quota resets (usually at midnight Pacific Time)')
-  }
-
-  lines.push('  • Use --db flag to sync data locally and query from database')
-  lines.push('  • Reduce date range with -p flag (e.g., -p 30d instead of -p 180d)')
-  lines.push('  • Split requests across multiple days')
-
-  return lines.join('\n')
-}
-
-function formatRateLimitSuggestion(retryAfter?: number): string {
-  const waitTime = retryAfter || 60
-  const lines: string[] = []
-
-  lines.push('Too many requests in a short period.')
-  lines.push('')
-  lines.push('Suggestions:')
-  lines.push(`  • Wait ${formatDuration(waitTime)} before retrying`)
-  lines.push('  • Increase --delay between batch operations')
-  lines.push('  • Process fewer items per batch')
-
-  return lines.join('\n')
-}
-
-function formatDuration(seconds: number): string {
-  if (seconds < 60)
-    return `${seconds} seconds`
-  if (seconds < 3600) {
-    const mins = Math.ceil(seconds / 60)
-    return `${mins} minute${mins > 1 ? 's' : ''}`
-  }
-  const hours = Math.ceil(seconds / 3600)
-  return `${hours} hour${hours > 1 ? 's' : ''}`
-}
-
 /**
  * Formats an error for CLI display with color codes.
  */
-export function formatGscErrorForCli(error: unknown): string {
-  const info = analyzeGscError(error)
+export function formatErrorForCli(error: unknown): string {
+  const info = analyzeError(error)
   const lines: string[] = []
 
   // Error message in red

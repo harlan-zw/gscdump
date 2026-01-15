@@ -1,4 +1,4 @@
-import type { Period } from './types'
+import type { Period } from '../core/types'
 import { dayjs } from './dayjs'
 
 export interface ResolvedPeriodRange {
@@ -62,7 +62,7 @@ export function userPeriodRange(periodRange: string | Period = '30d'): ResolvedP
       // 100 years ago
       startPeriod = dayjs().subtract(100, 'year')
       startPrevPeriod = dayjs().subtract(200, 'year')
-      endPrevPeriod = dayjs().subtract(100, 'year')
+      endPrevPeriod = dayjs().subtract(100, 'year').subtract(1, 'day')
     }
     else if (periodRange === 'max') {
       // GSC provides ~16 months of historical data
