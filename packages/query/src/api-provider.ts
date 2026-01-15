@@ -1,4 +1,4 @@
-import type { GscAuth, Site } from 'gscdump'
+import type { Auth } from 'gscdump'
 import type { DataProvider } from './types'
 import {
   fetchCountriesWithComparison,
@@ -10,41 +10,40 @@ import {
   fetchPages,
   fetchPagesWithComparison,
   fetchSearchAppearanceWithComparison,
+  googleSearchConsole,
 } from 'gscdump'
 
-function toSite(siteUrl: string): Site {
-  return { siteUrl, permissionLevel: 'owner' as const }
-}
+export function createApiProvider(auth: Auth): DataProvider {
+  const client = googleSearchConsole(auth)
 
-export function createApiProvider(auth: GscAuth): DataProvider {
   return {
     source: 'api',
 
     getDatesWithComparison: (siteUrl, range) =>
-      fetchDatesWithComparison(auth, siteUrl, range),
+      fetchDatesWithComparison(client, siteUrl, range),
 
     getPages: (siteUrl, range) =>
-      fetchPages(auth, toSite(siteUrl), range),
+      fetchPages(client, siteUrl, range),
 
     getPagesWithComparison: (siteUrl, range) =>
-      fetchPagesWithComparison(auth, toSite(siteUrl), range),
+      fetchPagesWithComparison(client, siteUrl, range),
 
     getKeywordsWithComparison: (siteUrl, range) =>
-      fetchKeywordsWithComparison(auth, toSite(siteUrl), range),
+      fetchKeywordsWithComparison(client, siteUrl, range),
 
     getCountriesWithComparison: (siteUrl, range) =>
-      fetchCountriesWithComparison(auth, toSite(siteUrl), range),
+      fetchCountriesWithComparison(client, siteUrl, range),
 
     getDevicesWithComparison: (siteUrl, range) =>
-      fetchDevicesWithComparison(auth, toSite(siteUrl), range),
+      fetchDevicesWithComparison(client, siteUrl, range),
 
     getPage: (siteUrl, range, path) =>
-      fetchPage(auth, toSite(siteUrl), range, path),
+      fetchPage(client, siteUrl, path, range),
 
     getKeyword: (siteUrl, range, keyword) =>
-      fetchKeyword(auth, toSite(siteUrl), range, keyword),
+      fetchKeyword(client, siteUrl, keyword, range),
 
     getSearchAppearanceWithComparison: (siteUrl, range) =>
-      fetchSearchAppearanceWithComparison(auth, toSite(siteUrl), range),
+      fetchSearchAppearanceWithComparison(client, siteUrl, range),
   }
 }

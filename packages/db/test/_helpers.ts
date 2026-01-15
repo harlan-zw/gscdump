@@ -18,7 +18,7 @@ export function createTestDb(): { db0: Database, db: GscDb } {
   return { db0, db }
 }
 
-export async function setupSchema(db0: Database) {
+export async function setupSchema(db0: Database): Promise<void> {
   await db0.exec(`
     CREATE TABLE IF NOT EXISTS sites (
       site_id INTEGER PRIMARY KEY,
@@ -130,7 +130,7 @@ export async function setupSchema(db0: Database) {
   `)
 }
 
-export async function seedTestData(db: GscDb) {
+export async function seedTestData(db: GscDb): Promise<void> {
   // Site
   await db.insert(sites).values({
     siteId: 1,

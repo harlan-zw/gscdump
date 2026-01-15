@@ -1,15 +1,17 @@
-import type { GscAuth } from 'gscdump'
+import { type Auth, googleSearchConsole } from 'gscdump'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import * as handlers from '../handlers'
 import {
   batchInspectUrlsInput,
   batchRequestIndexingInput,
   cannibalizationInput,
+  contentDecayInput,
   customQueryInput,
   fetchAnalyticsInput,
   fetchKeywordInput,
   fetchPageInput,
   getIndexingStatusInput,
+  HandlerContext,
   inspectUrlInput,
   listSitemapsInput,
   listSitesInput,
@@ -19,13 +21,14 @@ import {
   sitemapInput,
   strikingDistanceInput,
   yoyComparisonInput,
+  zeroClickInput,
 } from '../types'
 
 export interface CreateGscMcpServerOptions {
   name?: string
   version?: string
   /** Function to get auth for the current request context */
-  getAuth: () => Promise<GscAuth> | GscAuth
+  getAuth: () => Promise<Auth> | Auth
 }
 
 export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServer {
@@ -34,7 +37,15 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
   const server = new McpServer({ name, version })
 
   // Helper to resolve auth with proper typing
-  const auth = async () => Promise.resolve(getAuth())
+  const auth = async (): Promise<Auth> => Promise.resolve(getAuth())
+
+  const getContext = async (): Promise<HandlerContext> => {
+    const a = await auth()
+    return {
+      auth: a,
+      client: googleSearchConsole(a),
+    }
+  }
 
   // Sites tools
   server.registerTool(
@@ -44,7 +55,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: listSitesInput.shape,
     },
     async (args) => {
-      const result = await handlers.listSites(args, { auth: await auth() })
+      const result = await handlers.listSites(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -56,7 +67,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: listSitesInput.shape,
     },
     async (args) => {
-      const result = await handlers.listSitesWithSitemaps(args, { auth: await auth() })
+      const result = await handlers.listSitesWithSitemaps(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -68,7 +79,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: listSitemapsInput.shape,
     },
     async (args) => {
-      const result = await handlers.listSitemaps(args, { auth: await auth() })
+      const result = await handlers.listSitemaps(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -81,7 +92,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: sitemapInput.shape,
     },
     async (args) => {
-      const result = await handlers.getSitemap(args, { auth: await auth() })
+      const result = await handlers.getSitemap(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -93,7 +104,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: sitemapInput.shape,
     },
     async (args) => {
-      const result = await handlers.submitSitemap(args, { auth: await auth() })
+      const result = await handlers.submitSitemap(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -105,7 +116,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: sitemapInput.shape,
     },
     async (args) => {
-      const result = await handlers.deleteSitemap(args, { auth: await auth() })
+      const result = await handlers.deleteSitemap(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -118,7 +129,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: fetchAnalyticsInput.shape,
     },
     async (args) => {
-      const result = await handlers.fetchDates(args, { auth: await auth() })
+      const result = await handlers.fetchDates(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -130,7 +141,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: fetchAnalyticsInput.shape,
     },
     async (args) => {
-      const result = await handlers.fetchDevices(args, { auth: await auth() })
+      const result = await handlers.fetchDevices(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -142,7 +153,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: fetchAnalyticsInput.shape,
     },
     async (args) => {
-      const result = await handlers.fetchCountries(args, { auth: await auth() })
+      const result = await handlers.fetchCountries(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -154,7 +165,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: fetchAnalyticsInput.shape,
     },
     async (args) => {
-      const result = await handlers.fetchAllPages(args, { auth: await auth() })
+      const result = await handlers.fetchAllPages(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -166,7 +177,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: fetchAnalyticsInput.shape,
     },
     async (args) => {
-      const result = await handlers.fetchPagesComparison(args, { auth: await auth() })
+      const result = await handlers.fetchPagesComparison(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -178,7 +189,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: fetchAnalyticsInput.shape,
     },
     async (args) => {
-      const result = await handlers.fetchKeywords(args, { auth: await auth() })
+      const result = await handlers.fetchKeywords(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -190,7 +201,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: fetchAnalyticsInput.shape,
     },
     async (args) => {
-      const result = await handlers.fetchSearchAppearance(args, { auth: await auth() })
+      const result = await handlers.fetchSearchAppearance(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -202,7 +213,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: fetchPageInput.shape,
     },
     async (args) => {
-      const result = await handlers.fetchPageDetails(args, { auth: await auth() })
+      const result = await handlers.fetchPageDetails(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -214,7 +225,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: fetchKeywordInput.shape,
     },
     async (args) => {
-      const result = await handlers.fetchKeywordDetails(args, { auth: await auth() })
+      const result = await handlers.fetchKeywordDetails(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -226,7 +237,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: fetchAnalyticsInput.shape,
     },
     async (args) => {
-      const result = await handlers.fetchAnalyticsSummary(args, { auth: await auth() })
+      const result = await handlers.fetchAnalyticsSummary(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -239,7 +250,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: inspectUrlInput.shape,
     },
     async (args) => {
-      const result = await handlers.inspectUrl(args, { auth: await auth() })
+      const result = await handlers.inspectUrl(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -251,7 +262,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: requestIndexingInput.shape,
     },
     async (args) => {
-      const result = await handlers.requestIndexing(args, { auth: await auth() })
+      const result = await handlers.requestIndexing(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -263,7 +274,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: getIndexingStatusInput.shape,
     },
     async (args) => {
-      const result = await handlers.getIndexingStatus(args, { auth: await auth() })
+      const result = await handlers.getIndexingStatus(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -275,7 +286,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: batchRequestIndexingInput.shape,
     },
     async (args) => {
-      const result = await handlers.batchRequestIndexing(args, { auth: await auth() })
+      const result = await handlers.batchRequestIndexing(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -287,7 +298,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: batchInspectUrlsInput.shape,
     },
     async (args) => {
-      const result = await handlers.batchInspectUrls(args, { auth: await auth() })
+      const result = await handlers.batchInspectUrls(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -300,7 +311,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: cannibalizationInput.shape,
     },
     async (args) => {
-      const result = await handlers.detectCannibalization(args, { auth: await auth() })
+      const result = await handlers.detectCannibalization(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -312,7 +323,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: strikingDistanceInput.shape,
     },
     async (args) => {
-      const result = await handlers.findStrikingDistance(args, { auth: await auth() })
+      const result = await handlers.findStrikingDistance(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -324,7 +335,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: yoyComparisonInput.shape,
     },
     async (args) => {
-      const result = await handlers.fetchYoYComparison(args, { auth: await auth() })
+      const result = await handlers.fetchYoYComparison(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -336,7 +347,31 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: moversAndShakersInput.shape,
     },
     async (args) => {
-      const result = await handlers.analyzeMoversAndShakers(args, { auth: await auth() })
+      const result = await handlers.analyzeMoversAndShakers(args, await getContext())
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'detect-content-decay',
+    {
+      description: 'Identify decaying content (pages losing traffic vs previous year)',
+      inputSchema: contentDecayInput.shape,
+    },
+    async (args) => {
+      const result = await handlers.detectContentDecay(args, await getContext())
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'find-zero-click-queries',
+    {
+      description: 'Identify zero-click queries (high impressions, low CTR in top positions)',
+      inputSchema: zeroClickInput.shape,
+    },
+    async (args) => {
+      const result = await handlers.findZeroClickQueries(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -349,7 +384,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: customQueryInput.shape,
     },
     async (args) => {
-      const result = await handlers.customQuery(args, { auth: await auth() })
+      const result = await handlers.customQuery(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )

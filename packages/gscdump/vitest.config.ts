@@ -1,13 +1,18 @@
-import { defineConfig } from 'vitest/config'
+import { defineProject } from 'vitest/config'
 
-export default defineConfig({
+export default defineProject({
   test: {
+    name: 'gscdump',
     globals: true,
     reporters: 'dot',
+    setupFiles: ['../../vitest.setup.ts'],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      'e2e/real-credentials.test.ts',
     ],
+    typecheck: {
+      enabled: true,
+      include: ['**/*.test-d.ts'],
+    },
   },
 })

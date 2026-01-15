@@ -13,6 +13,7 @@ import {
 import { defineCommand } from 'citty'
 import betterSqlite3 from 'db0/connectors/better-sqlite3'
 import { eq } from 'drizzle-orm'
+import { googleSearchConsole } from 'gscdump'
 import { loadConfig } from '../config'
 import { clearLine, gscErrorHandler, logger, progressBar } from '../utils'
 
@@ -69,12 +70,13 @@ export const inspectCommand = defineCommand({
 
     const { getAuth } = await import('../auth')
     const auth = await getAuth({ interactive: false, config })
+    const client = googleSearchConsole(auth)
 
     const resolvedPath = path.resolve(dbPath)
     const { db, db0 } = createGscDb(betterSqlite3({ name: resolvedPath }))
     await setupSchema(db0)
 
-    await syncSites(db, auth).catch(gscErrorHandler)
+    await syncSites(db, client).catch(gscErrorHandler)
 
     const siteRecord = await getSiteByProperty(db, siteArg)
     if (!siteRecord) {
@@ -103,7 +105,7 @@ export const inspectCommand = defineCommand({
 
     const results: { path: string, isIndexed: boolean, error?: string }[] = []
 
-    const stats = await batchInspectUrls(db, auth, siteId, siteArg, paths.map(p => p.path), {
+    const stats = await batchInspectUrls(db, client, siteId, siteArg, paths.map(p => p.path), {
       delayMs,
       onProgress: (result, i, total) => {
         results.push(result)
@@ -253,12 +255,13 @@ export const indexingCommand = defineCommand({
 
         const { getAuth } = await import('../auth')
         const auth = await getAuth({ interactive: false, config })
+        const client = googleSearchConsole(auth)
 
         const resolvedPath = path.resolve(dbPath)
         const { db, db0 } = createGscDb(betterSqlite3({ name: resolvedPath }))
         await setupSchema(db0)
 
-        await syncSites(db, auth).catch(gscErrorHandler)
+        await syncSites(db, client).catch(gscErrorHandler)
 
         const siteRecord = await getSiteByProperty(db, siteArg)
         if (!siteRecord) {
@@ -287,7 +290,7 @@ export const indexingCommand = defineCommand({
 
         const results: { path: string, isIndexed: boolean, error?: string }[] = []
 
-        const stats = await batchInspectUrls(db, auth, siteId, siteArg, paths.map(p => p.path), {
+        const stats = await batchInspectUrls(db, client, siteId, siteArg, paths.map(p => p.path), {
           delayMs,
           onProgress: (result, i, total) => {
             results.push(result)
@@ -378,12 +381,13 @@ export const indexingCommand = defineCommand({
 
         const { getAuth } = await import('../auth')
         const auth = await getAuth({ interactive: false, config })
+        const client = googleSearchConsole(auth)
 
         const resolvedPath = path.resolve(dbPath)
         const { db, db0 } = createGscDb(betterSqlite3({ name: resolvedPath }))
         await setupSchema(db0)
 
-        await syncSites(db, auth).catch(gscErrorHandler)
+        await syncSites(db, client).catch(gscErrorHandler)
 
         const siteRecord = await getSiteByProperty(db, siteArg)
         if (!siteRecord) {
@@ -415,7 +419,7 @@ export const indexingCommand = defineCommand({
 
         const results: { url: string, error?: string }[] = []
 
-        const stats = await batchRequestIndexingForPaths(db, auth, siteId, siteArg, paths.map(p => p.path), {
+        const stats = await batchRequestIndexingForPaths(db, client, siteId, siteArg, paths.map(p => p.path), {
           type,
           delayMs,
           onProgress: (result, i, total) => {

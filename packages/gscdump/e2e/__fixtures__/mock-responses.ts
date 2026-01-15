@@ -3,15 +3,15 @@ import type { searchconsole_v1 } from '@googleapis/searchconsole/v1'
 export const mockSites: searchconsole_v1.Schema$WmxSite[] = [
   {
     siteUrl: 'https://example.com/',
-    permissionLevel: 'owner',
+    permissionLevel: 'siteOwner',
   },
   {
     siteUrl: 'sc-domain:example.com',
-    permissionLevel: 'owner',
+    permissionLevel: 'siteOwner',
   },
   {
     siteUrl: 'https://test.example.com/',
-    permissionLevel: 'full',
+    permissionLevel: 'siteFullUser',
   },
 ]
 

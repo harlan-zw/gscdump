@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FetchOptions } from 'ofetch'
-import { createFetch, googleSearchConsole } from '../src/client'
+import { createFetch, googleSearchConsole } from '../src'
 
 // Mock ofetch
-const { mockFetch, createSpy, ofetchSpy } = vi.hoisted(() => {
+const { mockFetch: _mockFetch, createSpy, ofetchSpy } = vi.hoisted(() => {
   const mockFetch = vi.fn() as any
   const createSpy = vi.fn((_options?: any) => mockFetch)
   const ofetchSpy = vi.fn() as any
@@ -110,7 +109,7 @@ describe('googleSearchConsole', () => {
   it('should accept custom fetch implementation', async () => {
     const customFetch = vi.fn()
     // We pass a dummy token because signature requires it even if options.fetch is used (though implementation might ignore it for auth logic if using custom fetch, signature demands it)
-    // Actually, createGscClient implementation: if options.fetch is present, createGscFetch is NOT called with auth.
+    // Actually, googleSearchConsole implementation: if options.fetch is present, createGscFetch is NOT called with auth.
     // But signature demands auth. So we pass 'dummy'.
     const client = googleSearchConsole('dummy', { fetch: customFetch as any })
     await client.sites.list()
@@ -126,7 +125,7 @@ describe('googleSearchConsole', () => {
 
   it('should call onRateLimited on 429', async () => {
     const onRateLimited = vi.fn()
-    const client = googleSearchConsole('test-token', { onRateLimited })
+    const _client = googleSearchConsole('test-token', { onRateLimited })
     // We can't trigger 429 easily because createGscFetch is mocked
     // Ideally we should test the interceptor logic, but since we mock `ofetch.create` returning a mock fetch,
     // we can't inspect the 'onResponseError' logic passed to create easily without peeking into calls again.
@@ -152,7 +151,7 @@ describe('createGscAuth', () => {
   })
 
   it('should create an auth client with credentials', async () => {
-    const { createAuth } = await import('../src/client')
+    const { createAuth } = await import('../src')
     const auth = createAuth({
       clientId: 'cid',
       clientSecret: 'csec',
@@ -163,7 +162,7 @@ describe('createGscAuth', () => {
   })
 
   it('should refresh token if expired or missing', async () => {
-    const { createAuth } = await import('../src/client')
+    const { createAuth } = await import('../src')
     const auth = createAuth({
       clientId: 'cid',
       clientSecret: 'csec',
@@ -181,7 +180,7 @@ describe('createGscAuth', () => {
       body: expect.objectContaining({
         refresh_token: 'rtoken',
         grant_type: 'refresh_token',
-      })
+      }),
     }))
 
     // Check credentials updated
@@ -205,7 +204,7 @@ describe('createGscAuth', () => {
   })
 })
 
-describe('createGscFetch', () => {
+describe('createGscFetch integration', () => {
   // Re-importing inside test context seems cleaner for isolation but not strictly necessary effectively
   // reusing logic from previous suite
 
@@ -220,7 +219,7 @@ describe('createGscFetch', () => {
     const optionsAuth = {
       clientId: 'cid',
       clientSecret: 'csec',
-      refreshToken: 'rtoken'
+      refreshToken: 'rtoken',
     }
 
     // We need createGscAuth to make an API call to get the INITIAL token?
@@ -240,5 +239,3 @@ describe('createGscFetch', () => {
     expect(reqCtx.options.headers.get('Authorization')).toBe('Bearer auto-wrapped-token')
   })
 })
-
-

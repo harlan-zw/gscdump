@@ -1,6 +1,6 @@
 import process from 'node:process'
 import { consola } from 'consola'
-import { formatGscErrorForCli } from 'gscdump'
+import { formatErrorForCli } from 'gscdump'
 
 export const VERSION = '1.0.0'
 
@@ -12,7 +12,7 @@ export const logger = consola.withTag('gscdump')
  */
 export function handleGscError(error: unknown): never {
   console.error()
-  console.error(formatGscErrorForCli(error))
+  console.error(formatErrorForCli(error))
   console.error()
   process.exit(1)
 }

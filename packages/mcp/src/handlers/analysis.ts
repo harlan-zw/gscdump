@@ -10,23 +10,19 @@ import type { z } from 'zod'
 import type { cannibalizationInput, contentDecayInput, HandlerContext, moversAndShakersInput, strikingDistanceInput, yoyComparisonInput, zeroClickInput } from '../types'
 import {
   analyzeMoversAndShakers as gscAnalyzeMovers,
-  detectCannibalization as gscDetectCannibalization,
-  detectContentDecay as gscDetectContentDecay,
+  analyzeCannibalization as gscAnalyzeCannibalization,
+  analyzeContentDecay as gscAnalyzeContentDecay,
   fetchYoYComparison as gscFetchYoY,
-  findStrikingDistance as gscFindStrikingDistance,
-  findZeroClickQueries as gscFindZeroClickQueries,
+  analyzeStrikingDistance as gscAnalyzeStrikingDistance,
+  analyzeZeroClickQueries as gscAnalyzeZeroClickQueries,
 } from '@gscdump/query'
 import { toPeriod } from '../types'
-
-function toSite(siteUrl: string) {
-  return { siteUrl, permissionLevel: 'siteOwner' as const }
-}
 
 export async function detectCannibalization(
   input: z.infer<typeof cannibalizationInput>,
   ctx: HandlerContext,
 ): Promise<CannibalizationResult[]> {
-  return gscDetectCannibalization(ctx.auth, toSite(input.siteUrl), {
+  return gscAnalyzeCannibalization(ctx.client, input.siteUrl, {
     period: input.period ? toPeriod(input.period) : undefined,
     minImpressions: input.minImpressions,
     maxPositionSpread: input.maxPositionSpread,
@@ -40,7 +36,7 @@ export async function findStrikingDistance(
   input: z.infer<typeof strikingDistanceInput>,
   ctx: HandlerContext,
 ): Promise<StrikingDistanceResult[]> {
-  return gscFindStrikingDistance(ctx.auth, toSite(input.siteUrl), {
+  return gscAnalyzeStrikingDistance(ctx.client, input.siteUrl, {
     period: input.period ? toPeriod(input.period) : undefined,
     minPosition: input.minPosition,
     maxPosition: input.maxPosition,
@@ -55,7 +51,7 @@ export async function fetchYoYComparison(
   input: z.infer<typeof yoyComparisonInput>,
   ctx: HandlerContext,
 ): Promise<YoYComparisonResult> {
-  return gscFetchYoY(ctx.auth, toSite(input.siteUrl), {
+  return gscFetchYoY(ctx.client, input.siteUrl, {
     period: input.period ? toPeriod(input.period) : undefined,
   })
 }
@@ -64,7 +60,7 @@ export async function analyzeMoversAndShakers(
   input: z.infer<typeof moversAndShakersInput>,
   ctx: HandlerContext,
 ): Promise<MoversAndShakersResult> {
-  return gscAnalyzeMovers(ctx.auth, toSite(input.siteUrl), {
+  return gscAnalyzeMovers(ctx.client, input.siteUrl, {
     period: input.period ? toPeriod(input.period) : undefined,
     comparePeriod: input.comparePeriod ? toPeriod(input.comparePeriod) : undefined,
     changeThreshold: input.changeThreshold,
@@ -77,7 +73,7 @@ export async function detectContentDecay(
   input: z.infer<typeof contentDecayInput>,
   ctx: HandlerContext,
 ): Promise<DecayResult[]> {
-  return gscDetectContentDecay(ctx.auth, toSite(input.siteUrl), {
+  return gscAnalyzeContentDecay(ctx.client, input.siteUrl, {
     period: input.period ? toPeriod(input.period) : undefined,
     lookbackDays: input.lookbackDays,
     minPreviousClicks: input.minPreviousClicks,
@@ -90,7 +86,7 @@ export async function findZeroClickQueries(
   input: z.infer<typeof zeroClickInput>,
   ctx: HandlerContext,
 ): Promise<ZeroClickResult[]> {
-  return gscFindZeroClickQueries(ctx.auth, toSite(input.siteUrl), {
+  return gscAnalyzeZeroClickQueries(ctx.client, input.siteUrl, {
     period: input.period ? toPeriod(input.period) : undefined,
     minImpressions: input.minImpressions,
     maxCtr: input.maxCtr,

@@ -2,210 +2,24 @@
 
 exports[`comprehensive E2E Tests > complex Data Flow Scenarios > should handle concurrent API calls without conflicts 1`] = `
 [
-  [
-    {
-      "permissionLevel": "owner",
-      "siteUrl": "https://example.com/",
-    },
-    {
-      "permissionLevel": "owner",
-      "siteUrl": "sc-domain:example.com",
-    },
-    {
-      "permissionLevel": "full",
-      "siteUrl": "https://test.example.com/",
-    },
-  ],
-  [
-    {
-      "permissionLevel": "owner",
-      "siteUrl": "https://example.com/",
-      "sitemaps": [
-        {
-          "errors": 0,
-          "isPending": false,
-          "isSitemapsIndex": true,
-          "lastDownloaded": "2024-01-15T11:00:00.000Z",
-          "lastSubmitted": "2024-01-15T10:30:00.000Z",
-          "path": "https://example.com/sitemap.xml",
-          "type": "urlset",
-          "warnings": 0,
-        },
-        {
-          "errors": 0,
-          "isPending": false,
-          "isSitemapsIndex": false,
-          "lastDownloaded": "2024-01-15T11:00:00.000Z",
-          "lastSubmitted": "2024-01-15T10:30:00.000Z",
-          "path": "https://example.com/sitemap-posts.xml",
-          "type": "urlset",
-          "warnings": 0,
-        },
-      ],
-    },
-    {
-      "permissionLevel": "owner",
-      "siteUrl": "sc-domain:example.com",
-      "sitemaps": [
-        {
-          "errors": 0,
-          "isPending": false,
-          "isSitemapsIndex": true,
-          "lastDownloaded": "2024-01-15T11:00:00.000Z",
-          "lastSubmitted": "2024-01-15T10:30:00.000Z",
-          "path": "https://example.com/sitemap.xml",
-          "type": "urlset",
-          "warnings": 0,
-        },
-        {
-          "errors": 0,
-          "isPending": false,
-          "isSitemapsIndex": false,
-          "lastDownloaded": "2024-01-15T11:00:00.000Z",
-          "lastSubmitted": "2024-01-15T10:30:00.000Z",
-          "path": "https://example.com/sitemap-posts.xml",
-          "type": "urlset",
-          "warnings": 0,
-        },
-      ],
-    },
-    {
-      "permissionLevel": "full",
-      "siteUrl": "https://test.example.com/",
-      "sitemaps": [],
-    },
-  ],
+  [],
+  [],
   {
-    "current": [
-      {
-        "clicks": 1250,
-        "ctr": 0.0994,
-        "device": "desktop",
-        "impressions": 12580,
-        "keys": null,
-        "position": 8.2,
-      },
-      {
-        "clicks": 2100,
-        "ctr": 0.114,
-        "device": "mobile",
-        "impressions": 18420,
-        "keys": null,
-        "position": 6.8,
-      },
-      {
-        "clicks": 150,
-        "ctr": 0.0893,
-        "device": "tablet",
-        "impressions": 1680,
-        "keys": null,
-        "position": 9.1,
-      },
-    ],
+    "current": [],
     "metadata": {
-      "currentCount": 3,
-      "previousCount": 3,
+      "currentCount": 0,
+      "previousCount": 0,
     },
-    "previous": [
-      {
-        "clicks": 1250,
-        "ctr": 0.0994,
-        "device": "desktop",
-        "impressions": 12580,
-        "keys": null,
-        "position": 8.2,
-      },
-      {
-        "clicks": 2100,
-        "ctr": 0.114,
-        "device": "mobile",
-        "impressions": 18420,
-        "keys": null,
-        "position": 6.8,
-      },
-      {
-        "clicks": 150,
-        "ctr": 0.0893,
-        "device": "tablet",
-        "impressions": 1680,
-        "keys": null,
-        "position": 9.1,
-      },
-    ],
+    "previous": [],
   },
   {
-    "current": [
-      {
-        "clicks": 1250,
-        "country": "desktop",
-        "countryCode": "desktop",
-        "countryCodeGsc": "desktop",
-        "ctr": 0.0994,
-        "impressions": 12580,
-        "keys": null,
-        "keywords": 3,
-        "position": 8.2,
-      },
-      {
-        "clicks": 2100,
-        "country": "mobile",
-        "countryCode": "mobile",
-        "countryCodeGsc": "mobile",
-        "ctr": 0.114,
-        "impressions": 18420,
-        "keys": null,
-        "keywords": 3,
-        "position": 6.8,
-      },
-      {
-        "clicks": 150,
-        "country": "tablet",
-        "countryCode": "tablet",
-        "countryCodeGsc": "tablet",
-        "ctr": 0.0893,
-        "impressions": 1680,
-        "keys": null,
-        "keywords": 3,
-        "position": 9.1,
-      },
-    ],
+    "current": [],
     "metadata": {
-      "currentCount": 3,
-      "previousCount": 3,
-      "totalKeywords": 9,
+      "currentCount": 0,
+      "previousCount": 0,
+      "totalKeywords": 0,
     },
-    "previous": [
-      {
-        "clicks": 1250,
-        "country": "desktop",
-        "countryCode": "desktop",
-        "countryCodeGsc": "desktop",
-        "ctr": 0.0994,
-        "impressions": 12580,
-        "keys": null,
-        "position": 8.2,
-      },
-      {
-        "clicks": 2100,
-        "country": "mobile",
-        "countryCode": "mobile",
-        "countryCodeGsc": "mobile",
-        "ctr": 0.114,
-        "impressions": 18420,
-        "keys": null,
-        "position": 6.8,
-      },
-      {
-        "clicks": 150,
-        "country": "tablet",
-        "countryCode": "tablet",
-        "countryCodeGsc": "tablet",
-        "ctr": 0.0893,
-        "impressions": 1680,
-        "keys": null,
-        "position": 9.1,
-      },
-    ],
+    "previous": [],
   },
   {
     "inspection": {
@@ -308,6 +122,7 @@ exports[`comprehensive E2E Tests > complex Data Flow Scenarios > should handle m
         "clicks": 1000,
         "ctr": 0.1,
         "device": "desktop",
+        "dimension": "device",
         "impressions": 10000,
         "keys": null,
         "position": 5,
@@ -322,6 +137,7 @@ exports[`comprehensive E2E Tests > complex Data Flow Scenarios > should handle m
         "clicks": 1000,
         "ctr": 0.1,
         "device": "desktop",
+        "dimension": "device",
         "impressions": 10000,
         "keys": null,
         "position": 5,
@@ -334,6 +150,7 @@ exports[`comprehensive E2E Tests > complex Data Flow Scenarios > should handle m
         "clicks": 500,
         "ctr": 0.0625,
         "device": "mobile",
+        "dimension": "device",
         "impressions": 8000,
         "keys": null,
         "position": 8,
@@ -348,6 +165,7 @@ exports[`comprehensive E2E Tests > complex Data Flow Scenarios > should handle m
         "clicks": 500,
         "ctr": 0.0625,
         "device": "mobile",
+        "dimension": "device",
         "impressions": 8000,
         "keys": null,
         "position": 8,
@@ -360,6 +178,7 @@ exports[`comprehensive E2E Tests > complex Data Flow Scenarios > should handle m
         "clicks": 100,
         "ctr": 0.05,
         "device": "tablet",
+        "dimension": "device",
         "impressions": 2000,
         "keys": null,
         "position": 12,
@@ -374,6 +193,7 @@ exports[`comprehensive E2E Tests > complex Data Flow Scenarios > should handle m
         "clicks": 100,
         "ctr": 0.05,
         "device": "tablet",
+        "dimension": "device",
         "impressions": 2000,
         "keys": null,
         "position": 12,
@@ -421,7 +241,7 @@ exports[`comprehensive E2E Tests > complex Data Flow Scenarios > should handle p
     "hasValidDates": true,
     "input": "all",
     "periodDays": 36525,
-    "prevPeriodDays": 36524,
+    "prevPeriodDays": 36523,
     "prevPeriodEndsBeforeCurrent": true,
     "success": true,
   },
@@ -610,6 +430,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 0,
       "ctr": 0,
       "device": "test-key",
+      "dimension": "device",
       "impressions": 1000,
       "keys": null,
       "position": 5.5,
@@ -618,6 +439,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 1000,
       "ctr": 0,
       "device": "test-key",
+      "dimension": "device",
       "impressions": 0,
       "keys": null,
       "position": 5.5,
@@ -626,6 +448,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 100,
       "ctr": 0.1,
       "device": "test-key",
+      "dimension": "device",
       "impressions": 1000,
       "keys": null,
       "position": 0,
@@ -634,6 +457,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 100,
       "ctr": 0.1,
       "device": "test-key",
+      "dimension": "device",
       "impressions": 1000,
       "keys": null,
       "position": 100,
@@ -642,6 +466,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 0,
       "ctr": 0.1,
       "device": "test-key",
+      "dimension": "device",
       "impressions": 0,
       "keys": null,
       "position": 5.5,
@@ -650,6 +475,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 100,
       "ctr": 0.1,
       "device": "unknown",
+      "dimension": "device",
       "impressions": 1000,
       "keys": null,
       "position": 5.5,
@@ -658,6 +484,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 100,
       "ctr": 0.1,
       "device": "unknown",
+      "dimension": "device",
       "impressions": 1000,
       "keys": null,
       "position": 5.5,
@@ -666,6 +493,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 100,
       "ctr": 0.1,
       "device": "unknown",
+      "dimension": "device",
       "impressions": 1000,
       "keys": null,
       "position": 5.5,
@@ -680,6 +508,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 0,
       "ctr": 0,
       "device": "test-key",
+      "dimension": "device",
       "impressions": 1000,
       "keys": null,
       "position": 5.5,
@@ -688,6 +517,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 1000,
       "ctr": 0,
       "device": "test-key",
+      "dimension": "device",
       "impressions": 0,
       "keys": null,
       "position": 5.5,
@@ -696,6 +526,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 100,
       "ctr": 0.1,
       "device": "test-key",
+      "dimension": "device",
       "impressions": 1000,
       "keys": null,
       "position": 0,
@@ -704,6 +535,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 100,
       "ctr": 0.1,
       "device": "test-key",
+      "dimension": "device",
       "impressions": 1000,
       "keys": null,
       "position": 100,
@@ -712,6 +544,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 0,
       "ctr": 0.1,
       "device": "test-key",
+      "dimension": "device",
       "impressions": 0,
       "keys": null,
       "position": 5.5,
@@ -720,6 +553,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 100,
       "ctr": 0.1,
       "device": "unknown",
+      "dimension": "device",
       "impressions": 1000,
       "keys": null,
       "position": 5.5,
@@ -728,6 +562,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 100,
       "ctr": 0.1,
       "device": "unknown",
+      "dimension": "device",
       "impressions": 1000,
       "keys": null,
       "position": 5.5,
@@ -736,6 +571,7 @@ exports[`comprehensive E2E Tests > data Integrity and Transformation Tests > sho
       "clicks": 100,
       "ctr": 0.1,
       "device": "unknown",
+      "dimension": "device",
       "impressions": 1000,
       "keys": null,
       "position": 5.5,
@@ -1163,29 +999,14 @@ exports[`comprehensive E2E Tests > edge Cases and Error Scenarios > should handl
 
 exports[`comprehensive E2E Tests > edge Cases and Error Scenarios > should handle malformed API responses 6`] = `[]`;
 
-exports[`comprehensive E2E Tests > edge Cases and Error Scenarios > should handle malformed API responses 7`] = `
-[
-  null,
-  undefined,
-  {},
-]
-`;
+exports[`comprehensive E2E Tests > edge Cases and Error Scenarios > should handle malformed API responses 7`] = `[]`;
 
-exports[`comprehensive E2E Tests > edge Cases and Error Scenarios > should handle malformed API responses 8`] = `
-[
-  {
-    "siteUrl": null,
-  },
-  {
-    "permissionLevel": null,
-  },
-]
-`;
+exports[`comprehensive E2E Tests > edge Cases and Error Scenarios > should handle malformed API responses 8`] = `[]`;
 
 exports[`comprehensive E2E Tests > site Permission and Access Control Tests > should handle different permission levels correctly 1`] = `
 [
   {
-    "permissionLevel": "owner",
+    "permissionLevel": "siteOwner",
     "siteUrl": "https://owner-site.com/",
     "sitemaps": [
       {
@@ -1211,7 +1032,7 @@ exports[`comprehensive E2E Tests > site Permission and Access Control Tests > sh
     ],
   },
   {
-    "permissionLevel": "full",
+    "permissionLevel": "siteFullUser",
     "siteUrl": "https://full-site.com/",
     "sitemaps": [],
   },
@@ -1223,7 +1044,28 @@ exports[`comprehensive E2E Tests > site Permission and Access Control Tests > sh
   {
     "permissionLevel": "siteOwner",
     "siteUrl": "https://readonly-site.com/",
-    "sitemaps": [],
+    "sitemaps": [
+      {
+        "errors": 0,
+        "isPending": false,
+        "isSitemapsIndex": true,
+        "lastDownloaded": "2024-01-15T11:00:00.000Z",
+        "lastSubmitted": "2024-01-15T10:30:00.000Z",
+        "path": "https://example.com/sitemap.xml",
+        "type": "urlset",
+        "warnings": 0,
+      },
+      {
+        "errors": 0,
+        "isPending": false,
+        "isSitemapsIndex": false,
+        "lastDownloaded": "2024-01-15T11:00:00.000Z",
+        "lastSubmitted": "2024-01-15T10:30:00.000Z",
+        "path": "https://example.com/sitemap-posts.xml",
+        "type": "urlset",
+        "warnings": 0,
+      },
+    ],
   },
 ]
 `;

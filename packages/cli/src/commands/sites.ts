@@ -1,5 +1,5 @@
 import { defineCommand } from 'citty'
-import { fetchGscSites } from 'gscdump'
+import { fetchSites, googleSearchConsole } from 'gscdump'
 import { getAuth } from '../auth'
 import { gscErrorHandler, logger } from '../utils'
 
@@ -17,8 +17,9 @@ export const sitesCommand = defineCommand({
   },
   async run({ args }) {
     const auth = await getAuth({ interactive: false })
+    const client = googleSearchConsole(auth)
 
-    const gscSites = await fetchGscSites(auth).catch(gscErrorHandler)
+    const gscSites = await fetchSites(client).catch(gscErrorHandler)
 
     const sites = gscSites
       .filter(site => site.siteUrl && site.permissionLevel !== 'siteUnverifiedUser')

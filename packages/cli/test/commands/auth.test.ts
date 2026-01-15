@@ -1,14 +1,8 @@
-import fs from 'node:fs/promises'
-import os from 'node:os'
-import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { authCommand } from '../../src/commands/auth'
 
 import { logger } from '../../src/utils'
 import { mockCredentials, mockExpiredCredentials } from '../__fixtures__/mocks'
-
-const CONFIG_DIR = path.join(os.homedir(), '.config', 'gscdump')
-const TOKENS_FILE = path.join(CONFIG_DIR, 'tokens.json')
 
 // Mock the logger
 vi.mock('../../src/utils', () => ({
@@ -21,31 +15,42 @@ vi.mock('../../src/utils', () => ({
   },
 }))
 
+// Mock config
+vi.mock('../../src/config', () => ({
+  loadConfig: vi.fn().mockResolvedValue({ mode: 'local' }),
+}))
+
+// Mock auth
+const mocks = vi.hoisted(() => ({
+  loadTokens: vi.fn(),
+  clearTokens: vi.fn(),
+  loadCloudTokens: vi.fn(),
+  clearCloudTokens: vi.fn(),
+}))
+
+vi.mock('../../src/auth', () => ({
+  loadTokens: mocks.loadTokens,
+  clearTokens: mocks.clearTokens,
+  loadCloudTokens: mocks.loadCloudTokens,
+  clearCloudTokens: mocks.clearCloudTokens,
+}))
+
 describe('auth command', () => {
-  let originalTokens: string | null = null
   let consoleOutput: string[] = []
   const originalLog = console.log
 
-  beforeEach(async () => {
+  beforeEach(() => {
     consoleOutput = []
     console.log = (...args: any[]) => {
       consoleOutput.push(args.map(String).join(' '))
     }
-    // Backup existing tokens
-    originalTokens = await fs.readFile(TOKENS_FILE, 'utf-8').catch(() => null)
     vi.clearAllMocks()
+    // Default loadTokens to return null
+    mocks.loadTokens.mockResolvedValue(null)
   })
 
-  afterEach(async () => {
+  afterEach(() => {
     console.log = originalLog
-    // Restore original tokens
-    if (originalTokens) {
-      await fs.mkdir(CONFIG_DIR, { recursive: true })
-      await fs.writeFile(TOKENS_FILE, originalTokens)
-    }
-    else {
-      await fs.rm(TOKENS_FILE).catch(() => {})
-    }
   })
 
   it('should have correct metadata', () => {
@@ -60,7 +65,7 @@ describe('auth command', () => {
 
   describe('status subcommand', () => {
     it('should show not authenticated when no tokens exist', async () => {
-      await fs.rm(TOKENS_FILE).catch(() => {})
+      mocks.loadTokens.mockResolvedValue(null)
 
       await authCommand.subCommands!.status.run!({
         args: {},
@@ -72,8 +77,7 @@ describe('auth command', () => {
     })
 
     it('should show authenticated when tokens exist', async () => {
-      await fs.mkdir(CONFIG_DIR, { recursive: true })
-      await fs.writeFile(TOKENS_FILE, JSON.stringify(mockCredentials))
+      mocks.loadTokens.mockResolvedValue(mockCredentials)
 
       await authCommand.subCommands!.status.run!({
         args: {},
@@ -85,8 +89,7 @@ describe('auth command', () => {
     })
 
     it('should show token details', async () => {
-      await fs.mkdir(CONFIG_DIR, { recursive: true })
-      await fs.writeFile(TOKENS_FILE, JSON.stringify(mockCredentials))
+      mocks.loadTokens.mockResolvedValue(mockCredentials)
 
       await authCommand.subCommands!.status.run!({
         args: {},
@@ -101,8 +104,7 @@ describe('auth command', () => {
     })
 
     it('should show expired status for expired tokens', async () => {
-      await fs.mkdir(CONFIG_DIR, { recursive: true })
-      await fs.writeFile(TOKENS_FILE, JSON.stringify(mockExpiredCredentials))
+      mocks.loadTokens.mockResolvedValue(mockExpiredCredentials)
 
       await authCommand.subCommands!.status.run!({
         args: {},
@@ -115,8 +117,7 @@ describe('auth command', () => {
     })
 
     it('should show valid status for valid tokens', async () => {
-      await fs.mkdir(CONFIG_DIR, { recursive: true })
-      await fs.writeFile(TOKENS_FILE, JSON.stringify(mockCredentials))
+      mocks.loadTokens.mockResolvedValue(mockCredentials)
 
       await authCommand.subCommands!.status.run!({
         args: {},
@@ -131,21 +132,17 @@ describe('auth command', () => {
 
   describe('logout subcommand', () => {
     it('should clear tokens file', async () => {
-      await fs.mkdir(CONFIG_DIR, { recursive: true })
-      await fs.writeFile(TOKENS_FILE, JSON.stringify(mockCredentials))
-
       await authCommand.subCommands!.logout.run!({
         args: {},
         rawArgs: [],
         cmd: authCommand.subCommands!.logout,
       })
 
-      const exists = await fs.access(TOKENS_FILE).then(() => true).catch(() => false)
-      expect(exists).toBe(false)
+      expect(mocks.clearTokens).toHaveBeenCalled()
     })
 
     it('should not throw if no tokens exist', async () => {
-      await fs.rm(TOKENS_FILE).catch(() => {})
+      mocks.clearTokens.mockResolvedValue(undefined)
 
       await expect(
         authCommand.subCommands!.logout.run!({

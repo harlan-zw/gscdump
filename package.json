@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm run -r typecheck",
-    "test": "vitest",
+    "test": "vitest --project @gscdump/cli --project @gscdump/db --project gscdump --project @gscdump/mcp",
+    "test:e2e": "vitest --project e2e",
     "release": "pnpm build && bumpp packages/*/package.json"
   },
   "devDependencies": {

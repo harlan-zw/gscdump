@@ -160,6 +160,27 @@ export async function executeAnalysisQuery(
 }
 
 /**
+ * Creates a new query with the same filters but different date range.
+ * Strips existing date filters and applies new dates.
+ */
+export function withDateRange(
+  query: GSCQueryBuilder<any, any>,
+  startDate: string,
+  endDate: string,
+): GSCQueryBuilder<any, any> {
+  const state = query.getState()
+  let newQuery = gsc.where(between(date, startDate, endDate))
+
+  for (const filter of state.filters) {
+    const nonDateFilters = filter._filters.filter((f: any) => f.dimension !== 'date')
+    if (nonDateFilters.length > 0)
+      newQuery = newQuery.where({ ...filter, _filters: nonDateFilters } as any)
+  }
+
+  return newQuery
+}
+
+/**
  * Fetches a map of query -> top page (by clicks).
  * Common pattern used by striking-distance, movers, opportunity, zero-click.
  */

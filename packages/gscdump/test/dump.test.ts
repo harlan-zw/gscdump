@@ -1,54 +1,48 @@
 import type { searchconsole_v1 } from '@googleapis/searchconsole/v1'
 import type { OAuth2Client } from 'googleapis-common'
-import type { AggregationType, DeviceData, KeywordData, PageData, QueryResultRow, Site } from '../src/searchanalytics'
-import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { fetchGscSites, fetchGscSitesWithSitemaps, inspectGscUrl } from '../src/api'
-import { createQueryBody, fetchDevicesWithComparison, withPropertyAggregation } from '../src/searchanalytics'
-import { formatDateGsc, percentDifference, userPeriodRange } from '../src/utils'
-
-// Create mock API methods
-const mockSitesList = vi.fn()
-const mockSitemapsList = vi.fn()
-const mockUrlInspect = vi.fn()
-const mockSearchAnalyticsQuery = vi.fn()
-
-// Mock the Google Search Console module
-vi.mock('@googleapis/searchconsole', () => ({
-  searchconsole: vi.fn(() => ({
-    sites: {
-      list: mockSitesList,
-    },
-    sitemaps: {
-      list: mockSitemapsList,
-    },
-    urlInspection: {
-      index: {
-        inspect: mockUrlInspect,
-      },
-    },
-    searchanalytics: {
-      query: mockSearchAnalyticsQuery,
-    },
-  })),
-}))
+import {
+  fetchSites,
+  fetchSitesWithSitemaps,
+  inspectUrl,
+  createQueryBody,
+  fetchDevicesWithComparison,
+  withPropertyAggregation,
+  formatDateGsc,
+  percentDifference,
+  userPeriodRange,
+} from '../src'
+import type { AggregationType, DeviceData, GoogleSearchConsoleClient, KeywordData, PageData, QueryResultRow, Site } from '../src'
 
 // Mock OAuth2Client
-const mockAuth = {} as OAuth2Client
+const _mockAuth = {
+  credentials: {
+    access_token: 'mock-token',
+  },
+} as unknown as OAuth2Client
+
+// Mock GoogleSearchConsoleClient
+const mockClient = {
+  sites: { list: vi.fn() },
+  sitemaps: { list: vi.fn() },
+  urlInspection: { inspect: vi.fn() },
+  searchAnalytics: { query: vi.fn() },
+  indexing: { publish: vi.fn(), getMetadata: vi.fn() },
+} as unknown as GoogleSearchConsoleClient
 
 // Mock site data
 const mockSite: Site = {
   siteUrl: 'https://example.com/',
-  permissionLevel: 'owner',
+  permissionLevel: 'siteOwner',
 }
 
 const mockSites: searchconsole_v1.Schema$WmxSite[] = [
   {
     siteUrl: 'https://example.com/',
-    permissionLevel: 'owner',
+    permissionLevel: 'siteOwner',
   },
   {
     siteUrl: 'https://test.com/',
-    permissionLevel: 'full',
+    permissionLevel: 'siteFullUser',
   },
 ]
 
@@ -65,43 +59,43 @@ const mockSitemaps: searchconsole_v1.Schema$WmxSitemap[] = [
 
 describe('aPI Functions', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
+    vi.mocked(mockClient.sites.list).mockResolvedValue({ siteEntry: mockSites })
+    vi.mocked(mockClient.sitemaps.list).mockResolvedValue({ sitemap: mockSitemaps })
+    vi.mocked(mockClient.urlInspection.inspect).mockResolvedValue({ inspectionResult: {} }) // Default minimal
   })
 
-  describe('fetchGscSites', () => {
+  describe('fetchSites', () => {
     it('should fetch Google Search Console sites', async () => {
-      mockSitesList.mockResolvedValue({
-        data: { siteEntry: mockSites },
+      vi.mocked(mockClient.sites.list).mockResolvedValue({
+        siteEntry: mockSites,
       })
 
-      const result = await fetchGscSites(mockAuth)
+      const result = await fetchSites(mockClient)
 
-      expect(mockSitesList).toHaveBeenCalledWith()
+      expect(mockClient.sites.list).toHaveBeenCalled()
       expect(result).toEqual(mockSites)
     })
 
     it('should return empty array when no sites found', async () => {
-      mockSitesList.mockResolvedValue({
-        data: {},
-      })
+      vi.mocked(mockClient.sites.list).mockResolvedValue({})
 
-      const result = await fetchGscSites(mockAuth)
+      const result = await fetchSites(mockClient)
 
       expect(result).toEqual([])
     })
   })
 
-  describe('fetchGscSitesWithSitemaps', () => {
+  describe('fetchSitesWithSitemaps', () => {
     it('should fetch sites with sitemaps for owners', async () => {
-      mockSitesList.mockResolvedValue({
-        data: { siteEntry: mockSites },
+      vi.mocked(mockClient.sites.list).mockResolvedValue({
+        siteEntry: mockSites,
+      })
+      vi.mocked(mockClient.sitemaps.list).mockResolvedValue({
+        sitemap: mockSitemaps,
       })
 
-      mockSitemapsList.mockResolvedValue({
-        data: { sitemap: mockSitemaps },
-      })
-
-      const result = await fetchGscSitesWithSitemaps(mockAuth)
+      const result = await fetchSitesWithSitemaps(mockClient)
 
       expect(result).toHaveLength(2)
       expect(result[0]).toHaveProperty('sitemaps')
@@ -118,22 +112,21 @@ describe('aPI Functions', () => {
         },
       ]
 
-      mockSitesList.mockResolvedValue({
-        data: { siteEntry: sitesWithUnverified },
+      vi.mocked(mockClient.sites.list).mockResolvedValue({
+        siteEntry: sitesWithUnverified,
+      })
+      vi.mocked(mockClient.sitemaps.list).mockResolvedValue({
+        sitemap: [],
       })
 
-      mockSitemapsList.mockResolvedValue({
-        data: { sitemap: [] },
-      })
-
-      const result = await fetchGscSitesWithSitemaps(mockAuth)
+      const result = await fetchSitesWithSitemaps(mockClient)
 
       expect(result).toHaveLength(2) // unverified user should be filtered out
       expect(result.every(site => site.permissionLevel !== 'siteUnverifiedUser')).toBe(true)
     })
   })
 
-  describe('inspectGscUrl', () => {
+  describe('inspectUrl', () => {
     it('should inspect URL and return indexing status', async () => {
       const mockInspection = {
         inspectionResult: {
@@ -143,18 +136,14 @@ describe('aPI Functions', () => {
         },
       }
 
-      mockUrlInspect.mockResolvedValue({
-        data: mockInspection,
-      })
+      vi.mocked(mockClient.urlInspection.inspect).mockResolvedValue(mockInspection)
 
-      const result = await inspectGscUrl(mockAuth, 'https://example.com/', 'https://example.com/page')
+      const result = await inspectUrl(mockClient, 'https://example.com/', 'https://example.com/page')
 
-      expect(mockUrlInspect).toHaveBeenCalledWith({
-        requestBody: {
-          inspectionUrl: 'https://example.com/page',
-          siteUrl: 'https://example.com/',
-        },
-      })
+      expect(mockClient.urlInspection.inspect).toHaveBeenCalledWith(
+        'https://example.com/',
+        'https://example.com/page',
+      )
       expect(result.isIndexed).toBe(true)
       expect(result.inspection).toBeDefined()
     })
@@ -168,11 +157,9 @@ describe('aPI Functions', () => {
         },
       }
 
-      mockUrlInspect.mockResolvedValue({
-        data: mockInspection,
-      })
+      vi.mocked(mockClient.urlInspection.inspect).mockResolvedValue(mockInspection)
 
-      const result = await inspectGscUrl(mockAuth, 'https://example.com/', 'https://example.com/page')
+      const result = await inspectUrl(mockClient, 'https://example.com/', 'https://example.com/page')
 
       expect(result.isIndexed).toBe(false)
     })
@@ -207,11 +194,11 @@ describe('search Analytics Functions', () => {
         },
       ]
 
-      mockSearchAnalyticsQuery
-        .mockResolvedValueOnce({ data: { rows: mockDeviceData } })
-        .mockResolvedValueOnce({ data: { rows: mockDeviceData } })
+      vi.mocked(mockClient.searchAnalytics.query)
+        .mockResolvedValueOnce({ rows: mockDeviceData })
+        .mockResolvedValueOnce({ rows: mockDeviceData })
 
-      const result = await fetchDevicesWithComparison(mockAuth, mockSite, mockRange)
+      const result = await fetchDevicesWithComparison(mockClient, mockSite.siteUrl, mockRange)
 
       expect(result).toHaveProperty('current')
       expect(result).toHaveProperty('previous')
@@ -233,12 +220,12 @@ describe('search Analytics Functions', () => {
         },
       ]
 
-      mockSearchAnalyticsQuery.mockResolvedValue({
-        data: { rows: mockDeviceData },
+      vi.mocked(mockClient.searchAnalytics.query).mockResolvedValue({
+        rows: mockDeviceData,
       })
 
       const rangeWithoutPrev = { period: mockRange.period }
-      const result = await fetchDevicesWithComparison(mockAuth, mockSite, rangeWithoutPrev)
+      const result = await fetchDevicesWithComparison(mockClient, mockSite.siteUrl, rangeWithoutPrev)
 
       expect(result.previous).toEqual([])
       expect(result.metadata.previousCount).toBe(0)

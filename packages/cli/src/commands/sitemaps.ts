@@ -1,5 +1,5 @@
 import { defineCommand } from 'citty'
-import { deleteSitemap, fetchSitemaps, getSitemap, submitSitemap } from 'gscdump'
+import { deleteSitemap, fetchSitemaps, fetchSitemap, googleSearchConsole, submitSitemap } from 'gscdump'
 import { getAuth } from '../auth'
 import { gscErrorHandler, logger } from '../utils'
 
@@ -23,7 +23,8 @@ const listCommand = defineCommand({
   },
   async run({ args }) {
     const auth = await getAuth({ interactive: false })
-    const sitemaps = await fetchSitemaps(auth, args.site).catch(gscErrorHandler)
+    const client = googleSearchConsole(auth)
+    const sitemaps = await fetchSitemaps(client, args.site).catch(gscErrorHandler)
 
     if (args.json) {
       console.log(JSON.stringify(sitemaps, null, 2))
@@ -71,7 +72,8 @@ const getCommand = defineCommand({
   },
   async run({ args }) {
     const auth = await getAuth({ interactive: false })
-    const sitemap = await getSitemap(auth, args.site, args.url).catch(gscErrorHandler)
+    const client = googleSearchConsole(auth)
+    const sitemap = await fetchSitemap(client, args.site, args.url).catch(gscErrorHandler)
 
     if (args.json) {
       console.log(JSON.stringify(sitemap, null, 2))
@@ -117,7 +119,8 @@ const submitCommand = defineCommand({
   },
   async run({ args }) {
     const auth = await getAuth({ interactive: false })
-    await submitSitemap(auth, args.site, args.url).catch(gscErrorHandler)
+    const client = googleSearchConsole(auth)
+    await submitSitemap(client, args.site, args.url).catch(gscErrorHandler)
     logger.success(`Submitted sitemap: ${args.url}`)
   },
 })
@@ -142,7 +145,8 @@ const deleteCommand = defineCommand({
   },
   async run({ args }) {
     const auth = await getAuth({ interactive: false })
-    await deleteSitemap(auth, args.site, args.url).catch(gscErrorHandler)
+    const client = googleSearchConsole(auth)
+    await deleteSitemap(client, args.site, args.url).catch(gscErrorHandler)
     logger.success(`Deleted sitemap: ${args.url}`)
   },
 })

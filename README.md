@@ -23,6 +23,7 @@
 - 🤖 MCP Server - let Claude, Cursor, or any AI agent query your search data directly.
 - 🔍 SEO analysis built-in - cannibalization, striking distance, movers & shakers.
 - ⚡ Indexing API - check index status, request indexing, batch operations.
+- 🎯 Typed query builder - Drizzle-style API with filter constraints narrowing result types.
 
 ## What is gscdump?
 
@@ -106,6 +107,24 @@ const pages = await fetchPagesWithComparison(auth, site, range)
 const keywords = await fetchKeywordsWithComparison(auth, site, range)
 ```
 
+### Streaming Large Datasets
+
+For memory-efficient pagination of large datasets (>25k rows):
+
+```ts
+import { queryRecursiveStream } from 'gscdump'
+
+// Stream keyword+page combinations - yields batches as they're fetched
+for await (const batch of queryRecursiveStream(client, site, {
+  dimensions: ['query', 'page'] as const,  // as const required for type inference
+  startDate: '2024-01-01',
+  endDate: '2024-01-31',
+})) {
+  // batch: { keyword: string, page: string, clicks, impressions, ctr, position }[]
+  await db.insert(batch)
+}
+```
+
 ### Analysis Functions
 
 ```ts
@@ -121,9 +140,48 @@ const opportunities = await findStrikingDistance(auth, site)
 const movers = await getMoversAndShakers(auth, site)
 ```
 
+### Typed Query Builder
+
+Drizzle-style query builder with full type safety. Filter constraints flow through to result types.
+
+```ts
+import { gsc, eq, and, inArray, contains, device, country, page, Device, Country } from 'gscdump/query'
+
+const result = await gsc
+  .select('page', 'query', 'device', 'country')
+  .where(and(
+    eq(device, Device.MOBILE),
+    inArray(country, [Country.USA, Country.GBR]),
+    contains(page, '/blog/')
+  ))
+  .period('2024-01-01', '2024-01-31')
+  .siteUrl('https://example.com')
+  .execute(client)
+
+// Fully typed results - narrowed by filters
+result.rows[0].device   // type: 'MOBILE' (narrowed by eq)
+result.rows[0].country  // type: 'usa' | 'gbr' (narrowed by inArray)
+result.rows[0].page     // type: string (contains doesn't narrow)
+result.rows[0].clicks   // type: number
+```
+
+**Operators:**
+
+| Operator | Narrows Type? | Description |
+|----------|---------------|-------------|
+| `eq(col, val)` | ✓ | Exact match |
+| `ne(col, val)` | ✗ | Not equal |
+| `inArray(col, [a, b])` | ✓ | Value in array (becomes `a \| b`) |
+| `contains(col, str)` | ✗ | String contains |
+| `like(col, '%pattern%')` | ✗ | SQL LIKE pattern |
+| `regex(col, /pattern/)` | ✗ | Regex match |
+| `and(...filters)` | ✓ | Merge constraints |
+| `or(...filters)` | ✗ | Any match |
+| `not(filter)` | ✗ | Invert filter |
+
 ### All Exports
 
-**Sites:** `fetchGscSites`, `fetchGscSitesWithSitemaps`, `inspectGscUrl`
+**Sites:** `fetchSites`, `fetchSitesWithSitemaps`, `inspectUrl`
 
 **Indexing:** `requestIndexing`, `getIndexingMetadata`, `batchRequestIndexing`
 
@@ -131,7 +189,9 @@ const movers = await getMoversAndShakers(auth, site)
 
 **Analysis:** `detectCannibalization`, `findStrikingDistance`, `fetchYoYComparison`, `getMoversAndShakers`
 
-**Low-level:** `queryRecursive`, `createQueryBody`, `withPropertyAggregation`
+**Low-level:** `queryRecursive`, `queryRecursiveStream`, `createQueryBody`, `withPropertyAggregation`, `collectStream`
+
+**Query Builder (`gscdump/query`):** `gsc`, `eq`, `ne`, `and`, `or`, `inArray`, `contains`, `like`, `regex`, `notRegex`, `not`, `page`, `query`, `device`, `country`, `searchAppearance`, `Device`, `Country`
 
 **Utils:** `userPeriodRange`, `formatDateGsc`, `percentDifference`
 

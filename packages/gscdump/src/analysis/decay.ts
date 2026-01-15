@@ -1,7 +1,6 @@
 import type { GoogleSearchConsoleClient } from '../core/client'
 import type { BaseAnalysisOptions, SortOrder } from './types'
-import { createSorter, defaultQuery, executeAnalysisQuery, getQueryDateRange } from './types'
-import { gsc, between, date } from '../query'
+import { createSorter, defaultQuery, executeAnalysisQuery, getQueryDateRange, withDateRange } from './types'
 import { dayjs } from '../utils/dayjs'
 
 export type DecaySortMetric = 'lostClicks' | 'declinePercent' | 'currentClicks'
@@ -57,7 +56,6 @@ export async function analyzeContentDecay(
     sortBy = 'lostClicks',
   } = options
 
-  const currentState = query.getState()
   const { startDate: currentStartStr, endDate: currentEndStr } = getQueryDateRange(query)
   const currentStart = dayjs(currentStartStr)
   const currentEnd = dayjs(currentEndStr)
@@ -72,14 +70,7 @@ export async function analyzeContentDecay(
     throw new Error(`Lookback period exceeds GSC 16-month retention limit. Reduce lookbackDays (currently ${lookbackDays}).`)
   }
 
-  // Create previous period query with same filters (excluding date filters)
-  let prevQuery = gsc.where(between(date, prevStart.format('YYYY-MM-DD'), prevEnd.format('YYYY-MM-DD')))
-  for (const filter of currentState.filters) {
-    const nonDateFilters = filter._filters.filter(f => f.dimension !== 'date')
-    if (nonDateFilters.length > 0) {
-      prevQuery = prevQuery.where({ ...filter, _filters: nonDateFilters } as any)
-    }
-  }
+  const prevQuery = withDateRange(query, prevStart.format('YYYY-MM-DD'), prevEnd.format('YYYY-MM-DD'))
 
   // Fetch data
   const [currentData, prevData] = await Promise.all([

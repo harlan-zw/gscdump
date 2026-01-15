@@ -2,7 +2,7 @@ import type { Database } from 'db0'
 
 // Creates all tables for the GSC CLI database
 // Uses IF NOT EXISTS so it's safe to call multiple times
-export async function setupSchema(db0: Database) {
+export async function setupSchema(db0: Database): Promise<void> {
   // Sites table (must be first - others reference it)
   await db0.exec(`
     CREATE TABLE IF NOT EXISTS sites (

@@ -4,7 +4,8 @@ import type {
   CountryData,
   DatesComparisonResult,
   DeviceData,
-  GscDataRow,
+  FetchKeywordResult,
+  FetchPageResult,
   KeywordData,
   Page,
   PageData,
@@ -15,10 +16,6 @@ import type { fetchAnalyticsInput, fetchKeywordInput, fetchPageInput, HandlerCon
 import { createProvider } from '@gscdump/query'
 import { fetchAnalyticsWithComparison as fetchAnalyticsCore, fetchSearchAppearanceWithComparison } from 'gscdump'
 import { toAnalyticsRange, toPeriod } from '../types'
-
-function toSite(siteUrl: string) {
-  return { siteUrl, permissionLevel: 'siteOwner' as const }
-}
 
 export async function fetchDates(
   input: z.infer<typeof fetchAnalyticsInput>,
@@ -116,13 +113,13 @@ export async function fetchSearchAppearance(
 ): Promise<ComparisonResult<SearchAppearanceData>> {
   const range = toAnalyticsRange(toPeriod(input.period), input.comparePrevious)
   // SearchAppearance is API-only, no DB equivalent
-  return fetchSearchAppearanceWithComparison(ctx.auth, toSite(input.siteUrl), range, input.options)
+  return fetchSearchAppearanceWithComparison(ctx.client, input.siteUrl, { ...range, ...input.options })
 }
 
 export async function fetchPageDetails(
   input: z.infer<typeof fetchPageInput>,
   ctx: HandlerContext,
-): Promise<{ dates: GscDataRow[], keywords: GscDataRow[] }> {
+): Promise<FetchPageResult> {
   const range = toAnalyticsRange(toPeriod(input.period), false)
   const provider = await createProvider({
     auth: ctx.auth,
@@ -137,7 +134,7 @@ export async function fetchPageDetails(
 export async function fetchKeywordDetails(
   input: z.infer<typeof fetchKeywordInput>,
   ctx: HandlerContext,
-): Promise<{ dates: GscDataRow[], pages: GscDataRow[] }> {
+): Promise<FetchKeywordResult> {
   const range = toAnalyticsRange(toPeriod(input.period), false)
   const provider = await createProvider({
     auth: ctx.auth,
@@ -155,5 +152,5 @@ export async function fetchAnalyticsSummary(
 ): Promise<ComparisonResult<AnalyticsData>> {
   const range = toAnalyticsRange(toPeriod(input.period), input.comparePrevious)
   // API-only, no DB equivalent for full analytics summary
-  return fetchAnalyticsCore(ctx.auth, toSite(input.siteUrl), range, input.options)
+  return fetchAnalyticsCore(ctx.client, input.siteUrl, { ...range, ...input.options })
 }

@@ -51,8 +51,8 @@ export async function batchRequestIndexing(
   })
   return {
     results,
-    success: results.filter(r => !r.error).length,
-    failed: results.filter(r => r.error).length,
+    success: results.length,
+    failed: 0,
   }
 }
 

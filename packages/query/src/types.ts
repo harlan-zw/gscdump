@@ -1,11 +1,12 @@
 import type { GscDb } from '@gscdump/db'
 import type {
+  Auth,
   ComparisonResult,
   CountryData,
   DatesComparisonResult,
   DeviceData,
-  GscAuth,
-  GscDataRow,
+  FetchKeywordResult,
+  FetchPageResult,
   KeywordData,
   Page,
   PageData,
@@ -15,16 +16,7 @@ import type {
 
 export type DataSource = 'api' | 'db' | 'auto'
 
-// Drill-down result types - aligned with actual API/DB return types
-export interface PageDrillDown {
-  dates: GscDataRow[]
-  keywords: GscDataRow[]
-}
-
-export interface KeywordDrillDown {
-  dates: GscDataRow[]
-  pages: GscDataRow[]
-}
+export type { FetchKeywordResult, FetchPageResult }
 
 export interface DataProvider {
   source: 'api' | 'db'
@@ -38,21 +30,21 @@ export interface DataProvider {
   getDevicesWithComparison: (siteUrl: string, range: ResolvedAnalyticsRange) => Promise<ComparisonResult<DeviceData>>
 
   // Drill-down queries
-  getPage: (siteUrl: string, range: ResolvedAnalyticsRange, path: string) => Promise<PageDrillDown>
-  getKeyword: (siteUrl: string, range: ResolvedAnalyticsRange, keyword: string) => Promise<KeywordDrillDown>
+  getPage: (siteUrl: string, range: ResolvedAnalyticsRange, path: string) => Promise<FetchPageResult>
+  getKeyword: (siteUrl: string, range: ResolvedAnalyticsRange, keyword: string) => Promise<FetchKeywordResult>
 
   // API-only (optional)
   getSearchAppearanceWithComparison?: (siteUrl: string, range: ResolvedAnalyticsRange) => Promise<ComparisonResult<SearchAppearanceData>>
 }
 
 export interface QueryContext {
-  auth: GscAuth
+  auth: Auth
   db?: GscDb | null
   source?: DataSource
 }
 
 export interface CreateProviderOptions {
-  auth: GscAuth
+  auth: Auth
   db?: GscDb | null
   source: DataSource
   siteUrls: string[]

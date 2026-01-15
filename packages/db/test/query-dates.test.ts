@@ -98,8 +98,8 @@ describe('queryDatesWithComparison', () => {
       { startDate: '2024-01-10', endDate: '2024-01-12' },
     )
 
-    expect(result.totals.current.clicks).toBeGreaterThan(0)
-    expect(result.totals.current.impressions).toBeGreaterThan(0)
+    expect(result.metadata.totals.current.clicks).toBeGreaterThan(0)
+    expect(result.metadata.totals.current.impressions).toBeGreaterThan(0)
   })
 
   it('calculates percent differences', async () => {
@@ -114,10 +114,10 @@ describe('queryDatesWithComparison', () => {
       { startDate: '2024-01-01', endDate: '2024-01-03' },
     )
 
-    expect(result.totals.clicksPercent).toBeDefined()
-    expect(result.totals.impressionsPercent).toBeDefined()
-    expect(result.totals.ctrPercent).toBeDefined()
-    expect(result.totals.positionPercent).toBeDefined()
+    expect(result.metadata.totals.clicksPercent).toBeDefined()
+    expect(result.metadata.totals.impressionsPercent).toBeDefined()
+    expect(result.metadata.totals.ctrPercent).toBeDefined()
+    expect(result.metadata.totals.positionPercent).toBeDefined()
   })
 
   it('returns empty previous when not provided', async () => {
@@ -132,7 +132,7 @@ describe('queryDatesWithComparison', () => {
     )
 
     expect(result.previous).toHaveLength(0)
-    expect(result.totals.previous.clicks).toBe(0)
+    expect(result.metadata.totals.previous.clicks).toBe(0)
   })
 
   it('sorts dates chronologically', async () => {

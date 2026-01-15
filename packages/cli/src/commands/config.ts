@@ -1,3 +1,4 @@
+import process from 'node:process'
 import { defineCommand } from 'citty'
 import { getConfigPath, loadConfig, saveConfig } from '../config'
 import { logger } from '../utils'
@@ -49,7 +50,7 @@ const setCommand = defineCommand({
     }
 
     const config = await loadConfig()
-    ;(config as any)[args.key] = args.value
+      ; (config as any)[args.key] = args.value
     await saveConfig(config)
 
     logger.success(`Set ${args.key} = ${args.value}`)

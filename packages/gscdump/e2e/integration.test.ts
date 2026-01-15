@@ -1,19 +1,18 @@
 import type { OAuth2Client } from 'googleapis-common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  fetchGscSites,
-  fetchGscSitesWithSitemaps,
-  inspectGscUrl,
-} from '../src/api'
-import {
+  fetchSites,
+  fetchSitesWithSitemaps,
+  inspectUrl,
   createQueryBody,
   fetchAnalyticsWithComparison,
   fetchCountriesWithComparison,
   fetchDevicesWithComparison,
   fetchKeywordsWithComparison,
   fetchPagesWithComparison,
-} from '../src/searchanalytics'
-import { userPeriodRange } from '../src/utils'
+  userPeriodRange,
+} from '../src'
+import { createMockGoogleSearchConsoleClient } from './__fixtures__/mock-client-logic'
 import {
   mockAnalyticsData,
   mockCountryData,
@@ -25,34 +24,7 @@ import {
   mockUrlInspection,
 } from './__fixtures__/mock-responses'
 
-// Create mock API methods
-const mockSitesList = vi.fn()
-const mockSitemapsList = vi.fn()
-const mockUrlInspect = vi.fn()
-const mockSearchAnalyticsQuery = vi.fn()
-
-// Mock the Google Search Console module
-vi.mock('@googleapis/searchconsole', () => ({
-  searchconsole: vi.fn(() => ({
-    sites: {
-      list: mockSitesList,
-    },
-    sitemaps: {
-      list: mockSitemapsList,
-    },
-    urlInspection: {
-      index: {
-        inspect: mockUrlInspect,
-      },
-    },
-    searchanalytics: {
-      query: mockSearchAnalyticsQuery,
-    },
-  })),
-}))
-
-// Mock OAuth2Client with realistic properties
-const mockAuth = {
+const _mockAuth = {
   credentials: {
     access_token: 'mock_access_token',
     token_type: 'Bearer',
@@ -68,49 +40,52 @@ const mockSite = {
 }
 
 describe('e2E Integration Tests', () => {
+  let mockClient: ReturnType<typeof createMockGoogleSearchConsoleClient>
+
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-14'))
+    vi.resetAllMocks()
+    mockClient = createMockGoogleSearchConsoleClient()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   describe('full API Workflow', () => {
     it('should complete a full GSC data fetch workflow', async () => {
       // Setup all mocks for the workflow
-      mockSitesList.mockResolvedValue({
-        data: { siteEntry: mockSites },
-      })
+      vi.mocked(mockClient.sites.list).mockResolvedValue({ siteEntry: mockSites })
 
-      mockSitemapsList.mockResolvedValue({
-        data: { sitemap: mockSitemaps },
-      })
+      vi.mocked(mockClient.sitemaps.list).mockResolvedValue({ sitemap: mockSitemaps })
 
-      mockUrlInspect.mockResolvedValue({
-        data: mockUrlInspection,
-      })
+      vi.mocked(mockClient.urlInspection.inspect).mockResolvedValue(mockUrlInspection)
 
       // Mock search analytics calls for different data types
-      mockSearchAnalyticsQuery
+      vi.mocked(mockClient.searchAnalytics.query)
         // Device data current period
-        .mockResolvedValueOnce({ data: { rows: mockDeviceData } })
+        .mockResolvedValueOnce({ rows: mockDeviceData })
         // Device data previous period
-        .mockResolvedValueOnce({ data: { rows: mockDeviceData } })
+        .mockResolvedValueOnce({ rows: mockDeviceData })
         // Country data current period
-        .mockResolvedValueOnce({ data: { rows: mockCountryData } })
+        .mockResolvedValueOnce({ rows: mockCountryData })
         // Country data previous period
-        .mockResolvedValueOnce({ data: { rows: mockCountryData } })
+        .mockResolvedValueOnce({ rows: mockCountryData })
         // Country keywords count queries
-        .mockResolvedValue({ data: { rows: mockKeywordData } })
+        .mockResolvedValue({ rows: mockKeywordData })
 
       // Step 1: Fetch sites
-      const sites = await fetchGscSites(mockAuth)
+      const sites = await fetchSites(mockClient)
       expect(sites).toMatchSnapshot()
 
       // Step 2: Fetch sites with sitemaps
-      const sitesWithSitemaps = await fetchGscSitesWithSitemaps(mockAuth)
+      const sitesWithSitemaps = await fetchSitesWithSitemaps(mockClient)
       expect(sitesWithSitemaps).toMatchSnapshot()
 
       // Step 3: Inspect a URL
-      const inspection = await inspectGscUrl(
-        mockAuth,
+      const inspection = await inspectUrl(
+        mockClient,
         'https://example.com/',
         'https://example.com/page',
       )
@@ -119,52 +94,52 @@ describe('e2E Integration Tests', () => {
       // Step 4: Fetch analytics data with date ranges
       const range = userPeriodRange('30d')
 
-      const devices = await fetchDevicesWithComparison(mockAuth, mockSite, range)
+      const devices = await fetchDevicesWithComparison(mockClient, mockSite.siteUrl, range)
       expect(devices).toMatchSnapshot()
 
-      const countries = await fetchCountriesWithComparison(mockAuth, mockSite, range)
+      const countries = await fetchCountriesWithComparison(mockClient, mockSite.siteUrl, range)
       expect(countries).toMatchSnapshot()
 
       // Verify all expected API calls were made
-      expect(mockSitesList).toHaveBeenCalledTimes(2) // once for sites, once for sitesWithSitemaps
-      expect(mockSitemapsList).toHaveBeenCalledTimes(2) // once for each owner site (2 owners)
-      expect(mockUrlInspect).toHaveBeenCalledTimes(1)
-      expect(mockSearchAnalyticsQuery).toHaveBeenCalled()
+      expect(mockClient.sites.list).toHaveBeenCalledTimes(2) // once for sites, once for sitesWithSitemaps
+      expect(mockClient.sitemaps.list).toHaveBeenCalledTimes(2) // once for each owner site (2 owners)
+      expect(mockClient.urlInspection.inspect).toHaveBeenCalledTimes(1)
+      expect(mockClient.searchAnalytics.query).toHaveBeenCalled()
     })
 
     it('should handle comprehensive analytics data fetching', async () => {
       const range = userPeriodRange('7d')
 
       // Mock all the different analytics calls
-      mockSearchAnalyticsQuery
+      vi.mocked(mockClient.searchAnalytics.query)
         // Analytics summary current
-        .mockResolvedValueOnce({ data: { rows: mockAnalyticsData } })
+        .mockResolvedValueOnce({ rows: mockAnalyticsData } as any)
         // Analytics summary previous
-        .mockResolvedValueOnce({ data: { rows: mockAnalyticsData } })
+        .mockResolvedValueOnce({ rows: mockAnalyticsData } as any)
         // Keywords current
-        .mockResolvedValueOnce({ data: { rows: mockKeywordData } })
+        .mockResolvedValueOnce({ rows: mockKeywordData } as any)
         // Keywords previous
-        .mockResolvedValueOnce({ data: { rows: mockKeywordData } })
+        .mockResolvedValueOnce({ rows: mockKeywordData } as any)
         // Pages current
-        .mockResolvedValueOnce({ data: { rows: mockPageData } })
+        .mockResolvedValueOnce({ rows: mockPageData } as any)
         // Pages previous
-        .mockResolvedValueOnce({ data: { rows: mockPageData } })
+        .mockResolvedValueOnce({ rows: mockPageData } as any)
         // Page-keyword mapping
-        .mockResolvedValueOnce({ data: { rows: mockKeywordData } })
+        .mockResolvedValueOnce({ rows: mockKeywordData } as any)
         // Keywords current
-        .mockResolvedValueOnce({ data: { rows: mockKeywordData } })
+        .mockResolvedValueOnce({ rows: mockKeywordData } as any)
         // Keywords previous
-        .mockResolvedValueOnce({ data: { rows: mockKeywordData } })
+        .mockResolvedValueOnce({ rows: mockKeywordData } as any)
         // Keyword-page mapping
-        .mockResolvedValueOnce({ data: { rows: mockPageData } })
+        .mockResolvedValueOnce({ rows: mockPageData } as any)
 
-      const analytics = await fetchAnalyticsWithComparison(mockAuth, mockSite, range)
+      const analytics = await fetchAnalyticsWithComparison(mockClient, mockSite.siteUrl, range)
       expect(analytics).toMatchSnapshot()
 
-      const pages = await fetchPagesWithComparison(mockAuth, mockSite, range)
+      const pages = await fetchPagesWithComparison(mockClient, mockSite.siteUrl, range)
       expect(pages).toMatchSnapshot()
 
-      const keywords = await fetchKeywordsWithComparison(mockAuth, mockSite, range)
+      const keywords = await fetchKeywordsWithComparison(mockClient, mockSite.siteUrl, range)
       expect(keywords).toMatchSnapshot()
     })
 
@@ -247,19 +222,19 @@ describe('e2E Integration Tests', () => {
 
     it('should handle error scenarios gracefully', async () => {
       // Mock API errors
-      mockSitesList.mockRejectedValue(new Error('API quota exceeded'))
+      vi.mocked(mockClient.sites.list).mockRejectedValue(new Error('API quota exceeded'))
 
-      await expect(fetchGscSites(mockAuth)).rejects.toThrow('API quota exceeded')
+      await expect(fetchSites(mockClient)).rejects.toThrow('API quota exceeded')
 
       // Mock empty responses
-      mockSitesList.mockResolvedValue({ data: {} })
-      const emptySites = await fetchGscSites(mockAuth)
+      vi.mocked(mockClient.sites.list).mockResolvedValue({})
+      const emptySites = await fetchSites(mockClient)
       expect(emptySites).toEqual([])
       expect(emptySites).toMatchSnapshot()
 
       // Mock null/undefined responses
-      mockSearchAnalyticsQuery.mockResolvedValue({ data: { rows: null } })
-      const devices = await fetchDevicesWithComparison(mockAuth, mockSite, userPeriodRange('7d'))
+      vi.mocked(mockClient.searchAnalytics.query).mockResolvedValue({ rows: null } as any)
+      const devices = await fetchDevicesWithComparison(mockClient, mockSite.siteUrl, userPeriodRange('7d'))
       expect(devices.current).toEqual([])
       expect(devices).toMatchSnapshot()
     })
@@ -267,13 +242,13 @@ describe('e2E Integration Tests', () => {
 
   describe('data Transformation Tests', () => {
     it('should properly transform device data', async () => {
-      mockSearchAnalyticsQuery
-        .mockResolvedValueOnce({ data: { rows: mockDeviceData } })
-        .mockResolvedValueOnce({ data: { rows: mockDeviceData } })
+      vi.mocked(mockClient.searchAnalytics.query)
+        .mockResolvedValueOnce({ rows: mockDeviceData } as any)
+        .mockResolvedValueOnce({ rows: mockDeviceData } as any)
 
       const result = await fetchDevicesWithComparison(
-        mockAuth,
-        mockSite,
+        mockClient,
+        mockSite.siteUrl,
         userPeriodRange('30d'),
       )
 
@@ -286,17 +261,17 @@ describe('e2E Integration Tests', () => {
     })
 
     it('should properly transform country data with keywords', async () => {
-      mockSearchAnalyticsQuery
+      vi.mocked(mockClient.searchAnalytics.query)
         // Countries current
-        .mockResolvedValueOnce({ data: { rows: mockCountryData } })
+        .mockResolvedValueOnce({ rows: mockCountryData } as any)
         // Countries previous
-        .mockResolvedValueOnce({ data: { rows: mockCountryData } })
+        .mockResolvedValueOnce({ rows: mockCountryData } as any)
         // Keyword counts for each country
-        .mockResolvedValue({ data: { rows: mockKeywordData } })
+        .mockResolvedValue({ rows: mockKeywordData } as any)
 
       const result = await fetchCountriesWithComparison(
-        mockAuth,
-        mockSite,
+        mockClient,
+        mockSite.siteUrl,
         userPeriodRange('30d'),
       )
 

@@ -1,4 +1,4 @@
-import { fetchGscSites } from 'gscdump'
+import { fetchSites } from 'gscdump'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sitesCommand } from '../../src/commands/sites'
@@ -12,10 +12,22 @@ const mockSites = [
 
 // Mock modules - must not reference external variables
 vi.mock('gscdump', () => ({
-  fetchGscSites: vi.fn(),
+  googleSearchConsole: vi.fn().mockReturnValue({
+    sites: {
+      list: vi.fn(),
+    },
+  }),
+  fetchSites: vi.fn(),
 }))
 
 vi.mock('../../src/auth', () => ({
+  getAuth: vi.fn().mockResolvedValue({
+    credentials: {
+      access_token: 'mock_access_token',
+      refresh_token: 'mock_refresh_token',
+      expiry_date: Date.now() + 3600000,
+    },
+  }),
   getAuthCredentials: vi.fn().mockResolvedValue({
     clientId: 'mock_client_id',
     clientSecret: 'mock_client_secret',
@@ -33,6 +45,9 @@ vi.mock('../../src/utils', () => ({
     error: vi.fn(),
     start: vi.fn(),
   },
+  gscErrorHandler: vi.fn((error: any) => {
+    throw error
+  }),
 }))
 
 describe('sites command', () => {
@@ -63,7 +78,7 @@ describe('sites command', () => {
   })
 
   it('should list sites in human-readable format', async () => {
-    vi.mocked(fetchGscSites).mockResolvedValue(mockSites as any)
+    vi.mocked(fetchSites).mockResolvedValue(mockSites as any)
 
     await sitesCommand.run!({
       args: { json: false },
@@ -71,11 +86,11 @@ describe('sites command', () => {
       cmd: sitesCommand,
     })
 
-    expect(fetchGscSites).toHaveBeenCalled()
+    expect(fetchSites).toHaveBeenCalled()
   })
 
   it('should output JSON when --json flag is set', async () => {
-    vi.mocked(fetchGscSites).mockResolvedValue(mockSites as any)
+    vi.mocked(fetchSites).mockResolvedValue(mockSites as any)
 
     await sitesCommand.run!({
       args: { json: true },
@@ -97,7 +112,7 @@ describe('sites command', () => {
       ...mockSites,
       { siteUrl: 'https://unverified.com/', permissionLevel: 'siteUnverifiedUser' },
     ]
-    vi.mocked(fetchGscSites).mockResolvedValue(sitesWithUnverified as any)
+    vi.mocked(fetchSites).mockResolvedValue(sitesWithUnverified as any)
 
     await sitesCommand.run!({
       args: { json: true },
@@ -117,7 +132,7 @@ describe('sites command', () => {
       { siteUrl: null, permissionLevel: 'siteOwner' },
       { siteUrl: undefined, permissionLevel: 'siteOwner' },
     ]
-    vi.mocked(fetchGscSites).mockResolvedValue(sitesWithNull as any)
+    vi.mocked(fetchSites).mockResolvedValue(sitesWithNull as any)
 
     await sitesCommand.run!({
       args: { json: true },
@@ -131,7 +146,7 @@ describe('sites command', () => {
   })
 
   it('should handle empty sites list', async () => {
-    vi.mocked(fetchGscSites).mockResolvedValue([])
+    vi.mocked(fetchSites).mockResolvedValue([])
 
     await sitesCommand.run!({
       args: { json: false },
@@ -140,6 +155,6 @@ describe('sites command', () => {
     })
 
     // Should not throw, just show warning
-    expect(fetchGscSites).toHaveBeenCalled()
+    expect(fetchSites).toHaveBeenCalled()
   })
 })

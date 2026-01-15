@@ -1,19 +1,19 @@
 import type { OAuth2Client } from 'googleapis-common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  fetchGscSites,
-  fetchGscSitesWithSitemaps,
-  inspectGscUrl,
-} from '../src/api'
-import {
+  fetchSites,
+  fetchSitesWithSitemaps,
+  inspectUrl,
   createQueryBody,
   fetchAnalyticsWithComparison,
   fetchCountriesWithComparison,
   fetchDevicesWithComparison,
   fetchKeywordsWithComparison,
   queryRecursive,
-} from '../src/searchanalytics'
-import { percentDifference, userPeriodRange } from '../src/utils'
+  percentDifference,
+  userPeriodRange,
+} from '../src'
+import { createMockGoogleSearchConsoleClient } from './__fixtures__/mock-client-logic'
 import {
   mockDeviceData,
   mockSitemaps,
@@ -21,39 +21,23 @@ import {
   mockUrlInspection,
 } from './__fixtures__/mock-responses'
 
-// Enhanced mock API methods with more granular control
-const mockSitesList = vi.fn()
-const mockSitemapsList = vi.fn()
-const mockUrlInspect = vi.fn()
-const mockSearchAnalyticsQuery = vi.fn()
-
-vi.mock('@googleapis/searchconsole', () => ({
-  searchconsole: vi.fn(() => ({
-    sites: {
-      list: mockSitesList,
-    },
-    sitemaps: {
-      list: mockSitemapsList,
-    },
-    urlInspection: {
-      index: {
-        inspect: mockUrlInspect,
-      },
-    },
-    searchanalytics: {
-      query: mockSearchAnalyticsQuery,
-    },
-  })),
-}))
-
-const mockAuth = {
+const _mockAuth = {
   credentials: { access_token: 'test_token' },
   generateAccessToken: vi.fn().mockResolvedValue({ token: 'test_token' }),
 } as unknown as OAuth2Client
 
 describe('comprehensive E2E Tests', () => {
+  let mockClient: ReturnType<typeof createMockGoogleSearchConsoleClient>
+
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-14'))
+    vi.resetAllMocks()
+    mockClient = createMockGoogleSearchConsoleClient()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   describe('edge Cases and Error Scenarios', () => {
@@ -67,17 +51,17 @@ describe('comprehensive E2E Tests', () => {
       ]
 
       for (const scenario of errorScenarios) {
-        mockSitesList.mockRejectedValueOnce(scenario.error)
+        vi.mocked(mockClient.sites.list).mockRejectedValueOnce(scenario.error)
 
         if (scenario.expectedMessage) {
-          await expect(fetchGscSites(mockAuth)).rejects.toThrow(scenario.expectedMessage)
+          await expect(fetchSites(mockClient)).rejects.toThrow(scenario.expectedMessage)
         }
         else {
-          await expect(fetchGscSites(mockAuth)).rejects.toThrow()
+          await expect(fetchSites(mockClient)).rejects.toThrow()
         }
       }
 
-      expect(mockSitesList).toHaveBeenCalledTimes(errorScenarios.length)
+      expect(mockClient.sites.list).toHaveBeenCalledTimes(errorScenarios.length)
     })
 
     it('should handle malformed API responses', async () => {
@@ -93,8 +77,8 @@ describe('comprehensive E2E Tests', () => {
       ]
 
       for (const response of malformedResponses) {
-        mockSitesList.mockResolvedValueOnce(response)
-        const result = await fetchGscSites(mockAuth)
+        vi.mocked(mockClient.sites.list).mockResolvedValueOnce(response as any)
+        const result = await fetchSites(mockClient)
         expect(Array.isArray(result)).toBe(true)
         expect(result).toMatchSnapshot()
       }
@@ -104,20 +88,20 @@ describe('comprehensive E2E Tests', () => {
       const emptyResponse = { data: { rows: [] } }
 
       // Test all analytics functions with empty responses
-      mockSearchAnalyticsQuery.mockResolvedValue(emptyResponse)
+      vi.mocked(mockClient.searchAnalytics.query).mockResolvedValue(emptyResponse as any)
 
-      const site = { siteUrl: 'https://example.com/', permissionLevel: 'owner' as const }
+      const site = { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' as const }
       const range = userPeriodRange('7d')
 
-      const devices = await fetchDevicesWithComparison(mockAuth, site, range)
+      const devices = await fetchDevicesWithComparison(mockClient, site.siteUrl, range)
       expect(devices.current).toEqual([])
       expect(devices.previous).toEqual([])
       expect(devices.metadata.currentCount).toBe(0)
 
-      const countries = await fetchCountriesWithComparison(mockAuth, site, range)
+      const countries = await fetchCountriesWithComparison(mockClient, site.siteUrl, range)
       expect(countries.current).toEqual([])
 
-      const analytics = await fetchAnalyticsWithComparison(mockAuth, site, range)
+      const analytics = await fetchAnalyticsWithComparison(mockClient, site.siteUrl, range)
       expect(analytics.current[0].keywords).toEqual([])
 
       expect({ devices, countries, analytics }).toMatchSnapshot()
@@ -158,64 +142,56 @@ describe('comprehensive E2E Tests', () => {
       }))
 
       // Mock recursive pagination - first call gets 25k (triggering recursion), second gets remaining rows (stopping recursion)
-      mockSearchAnalyticsQuery
-        .mockResolvedValueOnce({ data: { rows: largeDataset.slice(0, 25000) } })
-        .mockResolvedValueOnce({ data: { rows: largeDataset.slice(25000, 49000) } }) // Less than 25k to stop recursion
+      vi.mocked(mockClient.searchAnalytics.query)
+        .mockResolvedValueOnce({ rows: largeDataset.slice(0, 25000) } as any)
+        .mockResolvedValueOnce({ rows: largeDataset.slice(25000, 49000) } as any) // Less than 25k to stop recursion
 
-      const api = {
-        searchanalytics: {
-          query: mockSearchAnalyticsQuery,
-        },
-      } as any
+      const api = mockClient
 
-      const result = await queryRecursive(api, {
-        siteUrl: 'https://example.com/',
-        requestBody: {
-          startDate: '2024-01-01',
-          endDate: '2024-01-31',
-          dimensions: ['page'],
-        },
+      const result = await queryRecursive(api, 'https://example.com/', {
+        startDate: '2024-01-01',
+        endDate: '2024-01-31',
+        dimensions: ['page'],
+        rowLimit: 25000,
       })
 
-      expect(result.data.rows).toHaveLength(49000) // Should have combined all rows (25k + 24k)
+      expect(result.rows).toHaveLength(49000) // Should have combined all rows (25k + 24k)
       expect(result.pages).toBeGreaterThan(1) // Should indicate multiple pages
       // Don't snapshot 49k rows - just verify structure
-      expect(result.data.rows[0]).toHaveProperty('keys')
-      expect(result.data.rows[0]).toHaveProperty('clicks')
+      expect(result.rows[0]).toHaveProperty('keys')
+      expect(result.rows[0]).toHaveProperty('clicks')
     })
   })
 
   describe('complex Data Flow Scenarios', () => {
     it('should handle multi-site analytics comparison correctly', async () => {
       const multipleSites = [
-        { siteUrl: 'https://site1.com/', permissionLevel: 'owner' },
-        { siteUrl: 'https://site2.com/', permissionLevel: 'full' },
-        { siteUrl: 'sc-domain:site3.com', permissionLevel: 'owner' },
+        { siteUrl: 'https://site1.com/', permissionLevel: 'siteOwner' },
+        { siteUrl: 'https://site2.com/', permissionLevel: 'siteFullUser' },
+        { siteUrl: 'sc-domain:site3.com', permissionLevel: 'siteOwner' },
       ]
 
-      mockSitesList.mockResolvedValue({
-        data: { siteEntry: multipleSites },
-      })
+      mockClient.sites.list.mockResolvedValue({ siteEntry: multipleSites })
 
       // Mock different analytics data for each site
       const site1Data = [{ keys: ['desktop'], clicks: 1000, impressions: 10000, ctr: 0.1, position: 5 }]
       const site2Data = [{ keys: ['mobile'], clicks: 500, impressions: 8000, ctr: 0.0625, position: 8 }]
       const site3Data = [{ keys: ['tablet'], clicks: 100, impressions: 2000, ctr: 0.05, position: 12 }]
 
-      mockSearchAnalyticsQuery
-        .mockResolvedValueOnce({ data: { rows: site1Data } })
-        .mockResolvedValueOnce({ data: { rows: site1Data } })
-        .mockResolvedValueOnce({ data: { rows: site2Data } })
-        .mockResolvedValueOnce({ data: { rows: site2Data } })
-        .mockResolvedValueOnce({ data: { rows: site3Data } })
-        .mockResolvedValueOnce({ data: { rows: site3Data } })
+      vi.mocked(mockClient.searchAnalytics.query)
+        .mockResolvedValueOnce({ rows: site1Data })
+        .mockResolvedValueOnce({ rows: site1Data })
+        .mockResolvedValueOnce({ rows: site2Data })
+        .mockResolvedValueOnce({ rows: site2Data })
+        .mockResolvedValueOnce({ rows: site3Data })
+        .mockResolvedValueOnce({ rows: site3Data })
 
-      const sites = await fetchGscSites(mockAuth)
+      const sites = await fetchSites(mockClient)
       expect(sites).toHaveLength(3)
 
       const range = userPeriodRange('30d')
       const analyticsPromises = sites.map(site =>
-        fetchDevicesWithComparison(mockAuth, site, range),
+        fetchDevicesWithComparison(mockClient, site.siteUrl, range),
       )
 
       const results = await Promise.all(analyticsPromises)
@@ -230,28 +206,28 @@ describe('comprehensive E2E Tests', () => {
 
     it('should handle concurrent API calls without conflicts', async () => {
       // Test concurrent requests to different endpoints
-      mockSitesList.mockResolvedValue({ data: { siteEntry: mockSites } })
-      mockSearchAnalyticsQuery.mockResolvedValue({ data: { rows: mockDeviceData } })
-      mockUrlInspect.mockResolvedValue({ data: mockUrlInspection })
-      mockSitemapsList.mockResolvedValue({ data: { sitemap: mockSitemaps } })
+      vi.mocked(mockClient.sites.list).mockResolvedValue({ data: { siteEntry: mockSites } } as any)
+      vi.mocked(mockClient.searchAnalytics.query).mockResolvedValue({ data: { rows: mockDeviceData } } as any)
+      vi.mocked(mockClient.urlInspection.inspect).mockResolvedValue(mockUrlInspection as any)
+      vi.mocked(mockClient.sitemaps.list).mockResolvedValue({ sitemap: mockSitemaps } as any)
 
-      const site = { siteUrl: 'https://example.com/', permissionLevel: 'owner' as const }
+      const site = { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' as const }
       const range = userPeriodRange('7d')
       const urls = ['https://example.com/page1', 'https://example.com/page2', 'https://example.com/page3']
 
       // Run multiple operations concurrently
       const concurrentOperations = await Promise.all([
-        fetchGscSites(mockAuth),
-        fetchGscSitesWithSitemaps(mockAuth),
-        fetchDevicesWithComparison(mockAuth, site, range),
-        fetchCountriesWithComparison(mockAuth, site, range),
-        ...urls.map(url => inspectGscUrl(mockAuth, site.siteUrl, url)),
+        fetchSites(mockClient),
+        fetchSitesWithSitemaps(mockClient),
+        fetchDevicesWithComparison(mockClient, site.siteUrl, range),
+        fetchCountriesWithComparison(mockClient, site.siteUrl, range),
+        ...urls.map(url => inspectUrl(mockClient, site.siteUrl, url)),
       ])
 
       expect(concurrentOperations).toHaveLength(7) // 1 + 1 + 1 + 1 + 3 inspections
-      expect(mockSitesList).toHaveBeenCalledTimes(2)
-      expect(mockSearchAnalyticsQuery).toHaveBeenCalled()
-      expect(mockUrlInspect).toHaveBeenCalledTimes(3)
+      expect(mockClient.sites.list).toHaveBeenCalledTimes(2)
+      expect(mockClient.searchAnalytics.query).toHaveBeenCalled()
+      expect(mockClient.urlInspection.inspect).toHaveBeenCalledTimes(3)
 
       expect(concurrentOperations).toMatchSnapshot()
     })
@@ -316,14 +292,14 @@ describe('comprehensive E2E Tests', () => {
         { ...baseData, keys: ['', null, undefined] },
       ]
 
-      mockSearchAnalyticsQuery
-        .mockResolvedValueOnce({ data: { rows: variations } })
-        .mockResolvedValueOnce({ data: { rows: variations } })
+      vi.mocked(mockClient.searchAnalytics.query)
+        .mockResolvedValueOnce({ rows: variations })
+        .mockResolvedValueOnce({ rows: variations })
 
-      const site = { siteUrl: 'https://example.com/', permissionLevel: 'owner' as const }
+      const site = { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' as const }
       const range = userPeriodRange('7d')
 
-      const result = await fetchDevicesWithComparison(mockAuth, site, range)
+      const result = await fetchDevicesWithComparison(mockClient, site.siteUrl, range)
 
       // Verify all rows are transformed consistently
       expect(result.current).toHaveLength(variations.length)
@@ -419,17 +395,17 @@ describe('comprehensive E2E Tests', () => {
       const startTime = Date.now()
 
       // Mock fast responses
-      mockSitesList.mockResolvedValue({ data: { siteEntry: mockSites } })
+      vi.mocked(mockClient.sites.list).mockResolvedValue({ data: { siteEntry: mockSites } } as any)
 
       // Make rapid sequential calls
-      const promises = Array.from({ length: callCount }, () => fetchGscSites(mockAuth))
+      const promises = Array.from({ length: callCount }, () => fetchSites(mockClient))
       const results = await Promise.all(promises)
 
       const endTime = Date.now()
       const totalTime = endTime - startTime
 
       expect(results).toHaveLength(callCount)
-      expect(mockSitesList).toHaveBeenCalledTimes(callCount)
+      expect(mockClient.sites.list).toHaveBeenCalledTimes(callCount)
 
       // Performance assertion (should complete reasonably fast)
       expect(totalTime).toBeLessThan(5000) // 5 seconds max
@@ -449,15 +425,15 @@ describe('comprehensive E2E Tests', () => {
         position: Math.random() * 100,
       }))
 
-      mockSearchAnalyticsQuery
-        .mockResolvedValueOnce({ data: { rows: largeKeywordData } })
-        .mockResolvedValueOnce({ data: { rows: largeKeywordData.slice(0, 5000) } })
+      vi.mocked(mockClient.searchAnalytics.query)
+        .mockResolvedValueOnce({ rows: largeKeywordData })
+        .mockResolvedValueOnce({ rows: largeKeywordData.slice(0, 5000) })
 
-      const site = { siteUrl: 'https://example.com/', permissionLevel: 'owner' as const }
+      const site = { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' as const }
       const range = userPeriodRange('30d')
 
       const startMemory = process.memoryUsage()
-      const result = await fetchKeywordsWithComparison(mockAuth, site, range)
+      const result = await fetchKeywordsWithComparison(mockClient, site.siteUrl, range)
       const endMemory = process.memoryUsage()
 
       expect(result.current).toHaveLength(10000)
@@ -480,31 +456,30 @@ describe('comprehensive E2E Tests', () => {
   describe('site Permission and Access Control Tests', () => {
     it('should handle different permission levels correctly', async () => {
       const sitesWithDifferentPermissions = [
-        { siteUrl: 'https://owner-site.com/', permissionLevel: 'owner' },
-        { siteUrl: 'https://full-site.com/', permissionLevel: 'full' },
+        { siteUrl: 'https://owner-site.com/', permissionLevel: 'siteOwner' },
+        { siteUrl: 'https://full-site.com/', permissionLevel: 'siteFullUser' },
         { siteUrl: 'https://restricted-site.com/', permissionLevel: 'siteRestrictedUser' },
         { siteUrl: 'https://unverified-site.com/', permissionLevel: 'siteUnverifiedUser' },
         { siteUrl: 'https://readonly-site.com/', permissionLevel: 'siteOwner' }, // Legacy permission
       ]
 
-      mockSitesList.mockResolvedValue({
-        data: { siteEntry: sitesWithDifferentPermissions },
+      vi.mocked(mockClient.sites.list).mockResolvedValue({
+        siteEntry: sitesWithDifferentPermissions,
       })
 
-      // Mock sitemap responses based on permission
-      mockSitemapsList
-        .mockResolvedValueOnce({ data: { sitemap: mockSitemaps } }) // owner
-        .mockResolvedValueOnce({ data: { sitemap: [] } }) // full - no sitemaps access
-        .mockResolvedValueOnce({ data: { sitemap: mockSitemaps } }) // legacy owner
+      // Mock sitemap responses based on permission (only called for siteOwner)
+      vi.mocked(mockClient.sitemaps.list)
+        .mockResolvedValueOnce({ sitemap: mockSitemaps }) // siteOwner 1
+        .mockResolvedValueOnce({ sitemap: mockSitemaps }) // siteOwner 2 (legacy)
 
-      const result = await fetchGscSitesWithSitemaps(mockAuth)
+      const result = await fetchSitesWithSitemaps(mockClient)
 
       // Should filter out unverified users
       expect(result.some(site => site.permissionLevel === 'siteUnverifiedUser')).toBe(false)
 
       // Should handle sitemaps based on permission
-      const ownerSites = result.filter(site => site.permissionLevel === 'owner')
-      const nonOwnerSites = result.filter(site => site.permissionLevel !== 'owner' && site.permissionLevel !== 'siteOwner')
+      const ownerSites = result.filter(site => site.permissionLevel === 'siteOwner')
+      const nonOwnerSites = result.filter(site => site.permissionLevel !== 'siteOwner')
 
       expect(ownerSites.every(site => site.sitemaps.length > 0)).toBe(true)
       expect(nonOwnerSites.every(site => site.sitemaps.length === 0)).toBe(true)

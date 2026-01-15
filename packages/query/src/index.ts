@@ -10,15 +10,17 @@ export type {
   CreateProviderOptions,
   DataProvider,
   DataSource,
-  KeywordDrillDown,
-  PageDrillDown,
+  FetchKeywordResult,
+  FetchPageResult,
   QueryContext,
 } from './types'
 
 // Re-export analysis functions from gscdump (API-only, no DB equivalent)
 export {
+  analyzeCannibalization,
+  analyzeContentDecay,
   analyzeMoversAndShakers,
-  detectCannibalization,
+  analyzeStrikingDistance,
+  analyzeZeroClickQueries,
   fetchYoYComparison,
-  findStrikingDistance,
 } from 'gscdump'

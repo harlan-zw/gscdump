@@ -4,6 +4,8 @@ import type {
   DateData,
   DatesComparisonResult,
   DeviceData,
+  FetchKeywordResult,
+  FetchPageResult,
   KeywordData,
   PageData,
 } from 'gscdump'
@@ -19,7 +21,7 @@ import {
 } from './schema'
 
 // Convert DB stored metrics back to API format
-function fromGscMetrics(row: { clicks?: number | null, impressions?: number | null, ctr?: number | null, position?: number | null }) {
+function fromGscMetrics(row: { clicks?: number | null, impressions?: number | null, ctr?: number | null, position?: number | null }): { clicks: number, impressions: number, ctr: number, position: number } {
   return {
     clicks: row.clicks ?? 0,
     impressions: row.impressions ?? 0,
@@ -33,7 +35,7 @@ export interface DateRange {
   endDate: string
 }
 
-function computeTotals(rows: DateData[]) {
+function computeTotals(rows: DateData[]): { clicks: number, impressions: number, ctr: number, position: number } {
   if (!rows.length)
     return { clicks: 0, impressions: 0, ctr: 0, position: 0 }
   return {
@@ -71,7 +73,7 @@ export async function queryDatesWithComparison(
       existing.position = ((existing.position ?? 0) + metrics.position) / 2
     }
     else {
-      currentByDate.set(row.date, { dimension: 'date' as const, date: row.date, ...metrics })
+      currentByDate.set(row.date, { dimension: 'date' as const, date: row.date, keys: null, ...metrics })
     }
   }
 
@@ -99,7 +101,7 @@ export async function queryDatesWithComparison(
         existing.position = ((existing.position ?? 0) + metrics.position) / 2
       }
       else {
-        previousByDate.set(row.date, { dimension: 'date' as const, date: row.date, ...metrics })
+        previousByDate.set(row.date, { dimension: 'date' as const, date: row.date, keys: null, ...metrics })
       }
     }
     previousData = Array.from(previousByDate.values()).sort((a, b) => a.date.localeCompare(b.date))
@@ -658,7 +660,7 @@ export async function queryKeyword(
   siteId: number,
   range: DateRange,
   keyword: string,
-): Promise<{ dates: DateData[], pages: { page: string, clicks: number, impressions: number, ctr: number, position: number }[] }> {
+): Promise<FetchKeywordResult> {
   // Daily trend for keyword
   const dateRows = await db.select()
     .from(siteKeywordDateAnalytics)
@@ -674,6 +676,7 @@ export async function queryKeyword(
   const dates: DateData[] = dateRows.map(row => ({
     dimension: 'date' as const,
     date: row.date,
+    keys: null,
     ...fromGscMetrics(row),
   }))
 
@@ -707,6 +710,7 @@ export async function queryKeyword(
     ctr: (row.avg_ctr ?? 0) / 10000,
     // @ts-expect-error db0 returns raw column names
     position: (row.avg_position ?? 0) / 100,
+    keys: null as null,
   }))
 
   return { dates, pages }
@@ -718,7 +722,7 @@ export async function queryPage(
   siteId: number,
   range: DateRange,
   path: string,
-): Promise<{ dates: DateData[], keywords: { keyword: string, clicks: number, impressions: number, ctr: number, position: number }[] }> {
+): Promise<FetchPageResult> {
   // Daily trend for page
   const dateRows = await db.select()
     .from(sitePathDateAnalytics)
@@ -734,6 +738,7 @@ export async function queryPage(
   const dates: DateData[] = dateRows.map(row => ({
     dimension: 'date' as const,
     date: row.date,
+    keys: null,
     ...fromGscMetrics(row),
   }))
 
@@ -767,6 +772,7 @@ export async function queryPage(
     ctr: (row.avg_ctr ?? 0) / 10000,
     // @ts-expect-error db0 returns raw column names
     position: (row.avg_position ?? 0) / 100,
+    keys: null as null,
   }))
 
   return { dates, keywords }

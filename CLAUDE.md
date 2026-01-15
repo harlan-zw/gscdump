@@ -32,7 +32,7 @@ Web app lives separately at https://github.com/harlan-zw/gscdump.com
 ### gscdump (Core)
 GSC API wrapper. Pure functions, no persistence. Located at `packages/gscdump/src/`.
 
-Key exports: `fetchGscSites`, `fetchPages`, `fetchKeywordsWithComparison`, `fetchPagesWithComparison`, `queryRecursive`, `createQueryBody`
+Key exports: `fetchSites`, `fetchPages`, `fetchKeywordsWithComparison`, `fetchPagesWithComparison`, `queryRecursive`, `createQueryBody`
 
 ### @gscdump/cli
 CLI built with citty. Located at `packages/cli/src/`.

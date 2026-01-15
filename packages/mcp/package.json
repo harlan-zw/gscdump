@@ -24,7 +24,8 @@
   ],
   "scripts": {
     "build": "obuild",
-    "dev": "obuild --watch"
+    "dev": "obuild --watch",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@gscdump/query": "workspace:*",

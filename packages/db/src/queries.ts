@@ -9,25 +9,25 @@ import {
   sites,
 } from './schema'
 
-export function getSiteByProperty(db: GscDb, property: string) {
+export function getSiteByProperty(db: GscDb, property: string): Promise<typeof sites.$inferSelect | undefined> {
   return db.select()
     .from(sites)
     .where(eq(sites.property, property))
     .get()
 }
 
-export function getSiteById(db: GscDb, siteId: number) {
+export function getSiteById(db: GscDb, siteId: number): Promise<typeof sites.$inferSelect | undefined> {
   return db.select()
     .from(sites)
     .where(eq(sites.siteId, siteId))
     .get()
 }
 
-export function getAllSites(db: GscDb) {
+export function getAllSites(db: GscDb): Promise<typeof sites.$inferSelect[]> {
   return db.select().from(sites).all()
 }
 
-export function getPageTrend(db: GscDb, siteId: number, path: string, startDate: string, endDate: string) {
+export function getPageTrend(db: GscDb, siteId: number, path: string, startDate: string, endDate: string): Promise<typeof sitePathDateAnalytics.$inferSelect[]> {
   return db.select()
     .from(sitePathDateAnalytics)
     .where(and(
@@ -40,7 +40,7 @@ export function getPageTrend(db: GscDb, siteId: number, path: string, startDate:
     .all()
 }
 
-export function getTopPages(db: GscDb, siteId: number, startDate: string, endDate: string, limit = 100) {
+export function getTopPages(db: GscDb, siteId: number, startDate: string, endDate: string, limit = 100): Promise<{ path: string, totalClicks: number, totalImpressions: number, avgPosition: number, avgCtr: number }[]> {
   return db.select({
     path: sitePathDateAnalytics.path,
     totalClicks: sql<number>`sum(${sitePathDateAnalytics.clicks})`.as('total_clicks'),
@@ -60,7 +60,7 @@ export function getTopPages(db: GscDb, siteId: number, startDate: string, endDat
     .all()
 }
 
-export function getKeywordTrend(db: GscDb, siteId: number, keyword: string, startDate: string, endDate: string) {
+export function getKeywordTrend(db: GscDb, siteId: number, keyword: string, startDate: string, endDate: string): Promise<typeof siteKeywordDateAnalytics.$inferSelect[]> {
   return db.select()
     .from(siteKeywordDateAnalytics)
     .where(and(
@@ -73,7 +73,7 @@ export function getKeywordTrend(db: GscDb, siteId: number, keyword: string, star
     .all()
 }
 
-export function getTopKeywords(db: GscDb, siteId: number, startDate: string, endDate: string, limit = 100) {
+export function getTopKeywords(db: GscDb, siteId: number, startDate: string, endDate: string, limit = 100): Promise<{ keyword: string, totalClicks: number, totalImpressions: number, avgPosition: number, avgCtr: number }[]> {
   return db.select({
     keyword: siteKeywordDateAnalytics.keyword,
     totalClicks: sql<number>`sum(${siteKeywordDateAnalytics.clicks})`.as('total_clicks'),
@@ -93,7 +93,7 @@ export function getTopKeywords(db: GscDb, siteId: number, startDate: string, end
     .all()
 }
 
-export function getSiteDailyTotals(db: GscDb, siteId: number, startDate: string, endDate: string) {
+export function getSiteDailyTotals(db: GscDb, siteId: number, startDate: string, endDate: string): Promise<typeof siteDateAnalytics.$inferSelect[]> {
   return db.select()
     .from(siteDateAnalytics)
     .where(and(
@@ -105,7 +105,7 @@ export function getSiteDailyTotals(db: GscDb, siteId: number, startDate: string,
     .all()
 }
 
-export function getCountryBreakdown(db: GscDb, siteId: number, startDate: string, endDate: string) {
+export function getCountryBreakdown(db: GscDb, siteId: number, startDate: string, endDate: string): Promise<{ country: string, totalClicks: number, totalImpressions: number }[]> {
   return db.select({
     country: siteDateCountryAnalytics.country,
     totalClicks: sql<number>`sum(${siteDateCountryAnalytics.clicks})`.as('total_clicks'),
@@ -122,7 +122,7 @@ export function getCountryBreakdown(db: GscDb, siteId: number, startDate: string
     .all()
 }
 
-export function getDeviceBreakdown(db: GscDb, siteId: number, startDate: string, endDate: string) {
+export function getDeviceBreakdown(db: GscDb, siteId: number, startDate: string, endDate: string): Promise<{ device: string, totalClicks: number, totalImpressions: number }[]> {
   return db.select({
     device: siteDateDeviceAnalytics.device,
     totalClicks: sql<number>`sum(${siteDateDeviceAnalytics.clicks})`.as('total_clicks'),
@@ -144,7 +144,11 @@ export async function comparePeriods(
   siteId: number,
   current: { start: string, end: string },
   previous: { start: string, end: string },
-) {
+): Promise<{
+  current: { totalClicks: number, totalImpressions: number } | undefined
+  previous: { totalClicks: number, totalImpressions: number } | undefined
+  diff: { clicks: number, impressions: number }
+}> {
   const currentData = await db.select({
     totalClicks: sql<number>`sum(${sitePathDateAnalytics.clicks})`.as('total_clicks'),
     totalImpressions: sql<number>`sum(${sitePathDateAnalytics.impressions})`.as('total_impressions'),
@@ -181,7 +185,7 @@ export async function comparePeriods(
   }
 }
 
-export function pruneOldData(db: GscDb, cutoffDate: string) {
+export function pruneOldData(db: GscDb, cutoffDate: string): Promise<unknown[]> {
   return Promise.all([
     db.delete(sitePathDateAnalytics).where(lte(sitePathDateAnalytics.date, cutoffDate)),
     db.delete(siteKeywordDateAnalytics).where(lte(siteKeywordDateAnalytics.date, cutoffDate)),

@@ -28,10 +28,10 @@ Functions to persist gscdump fetch results to database.
 ```ts
 // src/sync.ts
 import type { OAuth2Client } from 'google-auth-library'
-import { fetchGscSites, fetchKeywordsWithComparison, fetchPagesWithComparison } from 'gscdump'
+import { fetchSites, fetchKeywordsWithComparison, fetchPagesWithComparison } from 'gscdump'
 
 export async function syncSites(db: GscDb, auth: OAuth2Client) {
-  const sites = await fetchGscSites(auth)
+  const sites = await fetchSites(auth)
   // upsert to sites table
 }
 
@@ -95,8 +95,8 @@ Common query patterns for retrieving stored data.
 // src/queries.ts
 
 // Get page performance trend over time
-export const getPageTrend = (db: GscDb, siteId: number, path: string, startDate: string, endDate: string) =>
-  db.select()
+export function getPageTrend(db: GscDb, siteId: number, path: string, startDate: string, endDate: string) {
+  return db.select()
     .from(sitePathDateAnalytics)
     .where(and(
       eq(sitePathDateAnalytics.siteId, siteId),
@@ -105,10 +105,11 @@ export const getPageTrend = (db: GscDb, siteId: number, path: string, startDate:
       lte(sitePathDateAnalytics.date, endDate),
     ))
     .orderBy(sitePathDateAnalytics.date)
+}
 
 // Get top pages by clicks for a date range
-export const getTopPages = (db: GscDb, siteId: number, startDate: string, endDate: string, limit = 100) =>
-  db.select({
+export function getTopPages(db: GscDb, siteId: number, startDate: string, endDate: string, limit = 100) {
+  return db.select({
     path: sitePathDateAnalytics.path,
     totalClicks: sql<number>`sum(${sitePathDateAnalytics.clicks})`,
     totalImpressions: sql<number>`sum(${sitePathDateAnalytics.impressions})`,
@@ -122,15 +123,18 @@ export const getTopPages = (db: GscDb, siteId: number, startDate: string, endDat
     .groupBy(sitePathDateAnalytics.path)
     .orderBy(desc(sql`sum(${sitePathDateAnalytics.clicks})`))
     .limit(limit)
+}
 
 // Get keyword rankings for a page
-export const getPageKeywords = (db: GscDb, siteId: number, path: string, date: string) =>
+export function getPageKeywords(db: GscDb, siteId: number, path: string, date: string) {
   // requires siteKeywordDatePathAnalytics if we want path-level keyword data
   // current schema has keyword-level only, may need to add
+  return []
+}
 
 // Get site daily totals
-export const getSiteDailyTotals = (db: GscDb, siteId: number, startDate: string, endDate: string) =>
-  db.select()
+export function getSiteDailyTotals(db: GscDb, siteId: number, startDate: string, endDate: string) {
+  return db.select()
     .from(siteDateAnalytics)
     .where(and(
       eq(siteDateAnalytics.siteId, siteId),
@@ -138,9 +142,10 @@ export const getSiteDailyTotals = (db: GscDb, siteId: number, startDate: string,
       lte(siteDateAnalytics.date, endDate),
     ))
     .orderBy(siteDateAnalytics.date)
+}
 
 // Compare two periods
-export const comparePeriods = (db: GscDb, siteId: number, current: Period, previous: Period) => {
+export function comparePeriods(db: GscDb, siteId: number, current: Period, previous: Period) {
   // aggregate both periods and return diff
 }
 ```

@@ -1,9 +1,9 @@
 import type { GscDb } from '@gscdump/db'
 import type { DataSource } from '@gscdump/query'
-import type { GscAuth, Period, ResolvedAnalyticsRange, Site } from 'gscdump'
+import type { Auth, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site } from 'gscdump'
 import { z } from 'zod'
 
-export type { DataSource, GscAuth, Period, ResolvedAnalyticsRange, Site }
+export type { DataSource, Auth, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site }
 
 // Zod schemas for MCP tool inputs
 
@@ -24,7 +24,8 @@ export const queryOptionsSchema = z.object({
 
 // Handler context - what each handler receives
 export interface HandlerContext {
-  auth: GscAuth
+  auth: Auth
+  client: GoogleSearchConsoleClient
   db?: GscDb | null
   source?: DataSource
 }

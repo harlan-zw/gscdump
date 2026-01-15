@@ -3,5 +3,5 @@ export default [
   'packages/db/vitest.config.ts',
   'packages/gscdump/vitest.config.ts',
   'packages/mcp/vitest.config.ts',
-  'tests/e2e/vitest.config.ts'
+  'tests/e2e/vitest.config.ts',
 ]

@@ -2,8 +2,7 @@ import type { Dayjs } from 'dayjs'
 import type { GoogleSearchConsoleClient } from '../core/client'
 import type { BaseAnalysisOptions } from './types'
 import type { GSCQueryBuilder } from '../query'
-import { defaultQuery, executeAnalysisQuery, getQueryDateRange } from './types'
-import { gsc, between, date } from '../query'
+import { defaultQuery, executeAnalysisQuery, getQueryDateRange, withDateRange } from './types'
 import { dayjs } from '../utils/dayjs'
 import { percentDifference } from '../utils/format'
 
@@ -62,7 +61,6 @@ export async function analyzeMoversAndShakers(
     sortBy = 'clicksChange',
   } = options
 
-  const recentState = query.getState()
   const { startDate: recentStartStr, endDate: recentEndStr } = getQueryDateRange(query)
   const recentStart = dayjs(recentStartStr)
   const recentEnd = dayjs(recentEndStr)
@@ -83,17 +81,7 @@ export async function analyzeMoversAndShakers(
     // Create baseline query with same filters, different period
     baselineEnd = recentStart.subtract(1, 'day')
     baselineStart = baselineEnd.subtract(28, 'day')
-    // Rebuild query with same filters but new period
-    // Filter out date filters from original query (we're setting a new period)
-    let newQuery = gsc.where(between(date, baselineStart.format('YYYY-MM-DD'), baselineEnd.format('YYYY-MM-DD')))
-    for (const filter of recentState.filters) {
-      // Skip date filters since we're setting new dates
-      const nonDateFilters = filter._filters.filter(f => f.dimension !== 'date')
-      if (nonDateFilters.length > 0) {
-        newQuery = newQuery.where({ ...filter, _filters: nonDateFilters } as any)
-      }
-    }
-    baselineQuery = newQuery
+    baselineQuery = withDateRange(query, baselineStart.format('YYYY-MM-DD'), baselineEnd.format('YYYY-MM-DD'))
   }
 
   // Fetch both periods with user's filters applied

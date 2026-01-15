@@ -1,9 +1,9 @@
-import type { OAuth2Client } from 'google-auth-library'
-import type { ResolvedAnalyticsRange } from 'gscdump'
+import type { GoogleSearchConsoleClient, ResolvedAnalyticsRange } from 'gscdump'
 import path from 'node:path'
 import process from 'node:process'
 import {
   createGscDb,
+  getLastSyncedDate,
   getSiteByProperty,
   setupSchema,
   syncCountries,
@@ -15,8 +15,9 @@ import {
   updateLastSynced,
 } from '@gscdump/db'
 import { defineCommand } from 'citty'
+import dayjs from 'dayjs'
 import betterSqlite3 from 'db0/connectors/better-sqlite3'
-import { userPeriodRange } from 'gscdump'
+import { googleSearchConsole, userPeriodRange } from 'gscdump'
 import { loadConfig } from '../config'
 import { clearLine, gscErrorHandler, logger, progressBar } from '../utils'
 
@@ -42,7 +43,7 @@ interface ExtendedSyncOptions extends SyncOptions {
 }
 
 async function runSync(
-  auth: OAuth2Client,
+  client: GoogleSearchConsoleClient,
   dbPath: string,
   siteArg: string | null,
   period: string,
@@ -65,7 +66,7 @@ async function runSync(
 
   if (!options.quiet && !options.json)
     logger.start('Syncing sites...')
-  const syncedSites = await syncSites(db, auth)
+  const syncedSites = await syncSites(db, client)
   if (!options.quiet && !options.json)
     logger.success(`Synced ${syncedSites.length} sites`)
 
@@ -92,7 +93,7 @@ async function runSync(
   }
   else {
     sitesToSync = syncedSites.map(s => ({
-      siteId: s.siteId,
+      siteId: s.siteId as number,
       siteUrl: s.property,
     }))
   }
@@ -101,7 +102,6 @@ async function runSync(
 
   // By default, exclude fresh/unfinalized data (last 3 days)
   // With --fresh, include up to yesterday (today has no data yet)
-  const { default: dayjs } = await import('dayjs')
   const daysOffset = options.fresh ? 1 : 3
   const adjustedEndDate = dayjs(periodRange.period.endDate).subtract(daysOffset, 'day').format('YYYY-MM-DD')
   const baseStartDate = dayjs(periodRange.period.startDate).subtract(daysOffset, 'day').format('YYYY-MM-DD')
@@ -109,7 +109,6 @@ async function runSync(
   const adjustedPrevStartDate = dayjs(periodRange.prevPeriod.startDate).subtract(daysOffset, 'day').format('YYYY-MM-DD')
 
   // Helper to create range for a site (may vary with incremental sync)
-  const { getLastSyncedDate } = await import('@gscdump/db')
 
   const getRangeForSite = async (siteId: number): Promise<{ range: ResolvedAnalyticsRange, startDate: string, skipped: boolean }> => {
     let startDate = baseStartDate
@@ -190,23 +189,23 @@ async function runSync(
 
       let rows: any[] = []
       if (dataType === 'pages') {
-        rows = await syncPages(db, auth, siteId, siteUrl, range)
+        rows = await syncPages(db, client, siteId, siteUrl, range)
         siteReport.rows.pages = rows.length
       }
       else if (dataType === 'keywords') {
-        rows = await syncKeywords(db, auth, siteId, siteUrl, range)
+        rows = await syncKeywords(db, client, siteId, siteUrl, range)
         siteReport.rows.keywords = rows.length
       }
       else if (dataType === 'keyword-paths') {
-        rows = await syncKeywordPaths(db, auth, siteId, siteUrl, range)
+        rows = await syncKeywordPaths(db, client, siteId, siteUrl, range)
         siteReport.rows.keywordPaths = rows.length
       }
       else if (dataType === 'countries') {
-        rows = await syncCountries(db, auth, siteId, siteUrl, range)
+        rows = await syncCountries(db, client, siteId, siteUrl, range)
         siteReport.rows.countries = rows.length
       }
       else if (dataType === 'devices') {
-        rows = await syncDevices(db, auth, siteId, siteUrl, range)
+        rows = await syncDevices(db, client, siteId, siteUrl, range)
         siteReport.rows.devices = rows.length
       }
 
@@ -298,8 +297,9 @@ export const syncCommand = defineCommand({
 
     const { getAuth } = await import('../auth')
     const auth = await getAuth({ interactive: false, config })
+    const client = googleSearchConsole(auth)
 
-    const report = await runSync(auth, dbPath, siteArg, periodArg, args.granular, {
+    const report = await runSync(client, dbPath, siteArg, periodArg, args.granular, {
       quiet: args.quiet,
       json: args.json,
       fresh: args.fresh,

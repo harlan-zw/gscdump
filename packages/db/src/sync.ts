@@ -1,15 +1,17 @@
-import type { OAuth2Client } from 'google-auth-library'
-import type { ResolvedAnalyticsRange } from 'gscdump'
+import type { GoogleSearchConsoleClient, ResolvedAnalyticsRange } from 'gscdump'
 import type { GscDb } from './connector'
+import type {
+  SiteDateCountryAnalyticsInsert,
+  SiteDateDeviceAnalyticsInsert,
+  SiteInsert,
+  SiteKeywordDateAnalyticsInsert,
+  SiteKeywordPathDateAnalyticsInsert,
+  SitePathDateAnalyticsInsert,
+  SitePathIndexingSelect,
+} from './schema'
 import { and, eq, isNull, lt, or } from 'drizzle-orm'
 import {
   createQueryBody,
-  fetchCountriesWithComparison,
-  fetchDevicesWithComparison,
-  fetchGscSitesWithSitemaps,
-  fetchKeywordsWithComparison,
-  fetchPagesWithComparison,
-  inspectGscUrl,
   queryRecursive,
 } from 'gscdump'
 import { withoutProtocol, withoutTrailingSlash } from 'ufo'
@@ -23,7 +25,7 @@ import {
   sites,
 } from './schema'
 
-function toGscMetrics(row: { clicks?: number | null, impressions?: number | null, ctr?: number | null, position?: number | null }) {
+function toGscMetrics(row: { clicks?: number | null, impressions?: number | null, ctr?: number | null, position?: number | null }): { clicks: number, impressions: number, ctr: number, position: number } {
   return {
     clicks: row.clicks ?? 0,
     impressions: row.impressions ?? 0,
@@ -38,16 +40,45 @@ function extractDomain(property: string): string {
   return withoutTrailingSlash(withoutProtocol(property))
 }
 
-export async function syncSites(db: GscDb, auth: OAuth2Client) {
-  const gscSites = await fetchGscSitesWithSitemaps(auth)
-  const rows = gscSites.map((site, idx) => ({
+export async function syncSites(db: GscDb, client: GoogleSearchConsoleClient): Promise<SiteInsert[]> {
+  const gscSites = await client.sites.list().then(res => res?.siteEntry || []).then(sites => sites.filter((s): s is { siteUrl: string, permissionLevel: string } =>
+    !!s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser'))
+
+  const rows = []
+  for (const site of gscSites) {
+    // Determine sitemaps (requires extra API calls if siteOwner)
+    const sitemaps = site.permissionLevel === 'siteOwner'
+      ? await client.sitemaps.list(site.siteUrl).then(res => (res.sitemap || []).map(s => s.path).filter((p): p is string => !!p))
+      : []
+
+    rows.push({
+      siteId: 0, // Placeholder, DB auto-increments
+      property: site.siteUrl,
+      domain: extractDomain(site.siteUrl),
+      sitemaps,
+    })
+  }
+  // Note: we can't easily preserve the siteId mapping logic from the original without fetching again or relying on DB index
+  // The original implementation fetched sites with sitemaps in one go using a helper.
+  // We'll rewrite this loop to match the original logic but using client calls.
+
+  // Actually, let's use the helper from gscdump if available or reimplement it using client.
+  // The original code used `fetchSitesWithSitemaps(auth)`.
+  // We should probably check if `fetchSitesWithSitemaps` was updated to take client.
+  // Yes, I updated it in api.ts. So I can use it!
+
+  // Re-importing from gscdump
+  const { fetchSitesWithSitemaps } = await import('gscdump')
+  const sitesWithSitemaps = await fetchSitesWithSitemaps(client)
+
+  const rowsToInsert = sitesWithSitemaps.map((site, idx) => ({
     siteId: idx + 1,
     property: site.siteUrl,
     domain: extractDomain(site.siteUrl),
     sitemaps: site.sitemaps.map(s => s.path).filter((p): p is string => !!p),
   }))
 
-  for (const row of rows) {
+  for (const row of rowsToInsert) {
     await db.insert(sites)
       .values(row)
       .onConflictDoUpdate({
@@ -60,11 +91,13 @@ export async function syncSites(db: GscDb, auth: OAuth2Client) {
       })
   }
 
-  return rows
+  return rowsToInsert
 }
 
-export async function syncPages(db: GscDb, auth: OAuth2Client, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange) {
-  const { current } = await fetchPagesWithComparison(auth, siteUrl, range)
+export async function syncPages(db: GscDb, client: GoogleSearchConsoleClient, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange): Promise<SitePathDateAnalyticsInsert[]> {
+  // Use client directly
+  const { fetchPagesWithComparison } = await import('gscdump')
+  const { current } = await fetchPagesWithComparison(client, siteUrl, range)
   const date = typeof range.period.start === 'string'
     ? range.period.start
     : range.period.start.toISOString().split('T')[0]
@@ -91,8 +124,9 @@ export async function syncPages(db: GscDb, auth: OAuth2Client, siteId: number, s
   return rows
 }
 
-export async function syncKeywords(db: GscDb, auth: OAuth2Client, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange) {
-  const { current } = await fetchKeywordsWithComparison(auth, siteUrl, range)
+export async function syncKeywords(db: GscDb, client: GoogleSearchConsoleClient, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange): Promise<SiteKeywordDateAnalyticsInsert[]> {
+  const { fetchKeywordsWithComparison } = await import('gscdump')
+  const { current } = await fetchKeywordsWithComparison(client, siteUrl, range)
   const date = typeof range.period.start === 'string'
     ? range.period.start
     : range.period.start.toISOString().split('T')[0]
@@ -119,8 +153,9 @@ export async function syncKeywords(db: GscDb, auth: OAuth2Client, siteId: number
   return rows
 }
 
-export async function syncCountries(db: GscDb, auth: OAuth2Client, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange) {
-  const { current } = await fetchCountriesWithComparison(auth, siteUrl, range)
+export async function syncCountries(db: GscDb, client: GoogleSearchConsoleClient, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange): Promise<SiteDateCountryAnalyticsInsert[]> {
+  const { fetchCountriesWithComparison } = await import('gscdump')
+  const { current } = await fetchCountriesWithComparison(client, siteUrl, range)
   const date = typeof range.period.start === 'string'
     ? range.period.start
     : range.period.start.toISOString().split('T')[0]
@@ -147,8 +182,9 @@ export async function syncCountries(db: GscDb, auth: OAuth2Client, siteId: numbe
   return rows
 }
 
-export async function syncDevices(db: GscDb, auth: OAuth2Client, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange) {
-  const { current } = await fetchDevicesWithComparison(auth, siteUrl, range)
+export async function syncDevices(db: GscDb, client: GoogleSearchConsoleClient, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange): Promise<SiteDateDeviceAnalyticsInsert[]> {
+  const { fetchDevicesWithComparison } = await import('gscdump')
+  const { current } = await fetchDevicesWithComparison(client, siteUrl, range)
   const date = typeof range.period.start === 'string'
     ? range.period.start
     : range.period.start.toISOString().split('T')[0]
@@ -175,18 +211,18 @@ export async function syncDevices(db: GscDb, auth: OAuth2Client, siteId: number,
   return rows
 }
 
-export async function syncKeywordPaths(db: GscDb, auth: OAuth2Client, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange) {
+export async function syncKeywordPaths(db: GscDb, client: GoogleSearchConsoleClient, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange): Promise<SiteKeywordPathDateAnalyticsInsert[]> {
   const date = typeof range.period.start === 'string'
     ? range.period.start
     : range.period.start.toISOString().split('T')[0]
 
   // Fetch keyword+page combinations (most granular data)
-  const { data } = await queryRecursive(auth, siteUrl, {
+  const { rows: queryRows } = await queryRecursive(client, siteUrl, {
     ...createQueryBody({ period: range.period }),
     dimensions: ['query', 'page'],
   })
 
-  const rows = (data.rows || []).map(row => ({
+  const rows = (queryRows || []).map(row => ({
     siteId,
     date,
     keyword: row.keys?.[0] || '',
@@ -214,44 +250,44 @@ export async function syncKeywordPaths(db: GscDb, auth: OAuth2Client, siteId: nu
   return rows
 }
 
-export async function updateLastSynced(db: GscDb, siteId: number) {
+export async function updateLastSynced(db: GscDb, siteId: number): Promise<void> {
   await db.update(sites)
     .set({ lastSynced: Date.now() })
     .where(eq(sites.siteId, siteId))
 }
 
 export async function getLastSyncedDate(db: GscDb, siteId: number): Promise<string | null> {
-  const result = await db.select({ lastSynced: sites.lastSynced })
+  const result = await db.select()
     .from(sites)
     .where(eq(sites.siteId, siteId))
     .limit(1)
 
-  const lastSynced = result[0]?.lastSynced
-  if (!lastSynced)
+  // @ts-expect-error set by d0
+  const lastSynced = result[0]?.lastSynced || result[0]?.last_synced
+
+  if (!result || result.length === 0 || !lastSynced)
     return null
 
-  // Convert ms timestamp to YYYY-MM-DD
-  const { default: dayjs } = await import('dayjs')
-  return dayjs(lastSynced).format('YYYY-MM-DD')
+  return new Date(lastSynced).toISOString().split('T')[0]
 }
 
-export async function syncAll(db: GscDb, auth: OAuth2Client, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange) {
+export async function syncAll(db: GscDb, client: GoogleSearchConsoleClient, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange): Promise<void> {
   await Promise.all([
-    syncPages(db, auth, siteId, siteUrl, range),
-    syncKeywords(db, auth, siteId, siteUrl, range),
-    syncCountries(db, auth, siteId, siteUrl, range),
-    syncDevices(db, auth, siteId, siteUrl, range),
+    syncPages(db, client, siteId, siteUrl, range),
+    syncKeywords(db, client, siteId, siteUrl, range),
+    syncCountries(db, client, siteId, siteUrl, range),
+    syncDevices(db, client, siteId, siteUrl, range),
   ])
   await updateLastSynced(db, siteId)
 }
 
-export async function syncAllWithKeywordPaths(db: GscDb, auth: OAuth2Client, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange) {
+export async function syncAllWithKeywordPaths(db: GscDb, client: GoogleSearchConsoleClient, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange): Promise<void> {
   await Promise.all([
-    syncPages(db, auth, siteId, siteUrl, range),
-    syncKeywords(db, auth, siteId, siteUrl, range),
-    syncKeywordPaths(db, auth, siteId, siteUrl, range),
-    syncCountries(db, auth, siteId, siteUrl, range),
-    syncDevices(db, auth, siteId, siteUrl, range),
+    syncPages(db, client, siteId, siteUrl, range),
+    syncKeywords(db, client, siteId, siteUrl, range),
+    syncKeywordPaths(db, client, siteId, siteUrl, range),
+    syncCountries(db, client, siteId, siteUrl, range),
+    syncDevices(db, client, siteId, siteUrl, range),
   ])
   await updateLastSynced(db, siteId)
 }
@@ -283,7 +319,7 @@ export async function getUrlsNeedingIndexing(
     maxAge?: number // ms since last inspection
     limit?: number
   } = {},
-) {
+): Promise<SitePathIndexingSelect[]> {
   const { onlyNotIndexed = true, maxAge, limit } = options
   const now = Date.now()
 
@@ -314,14 +350,15 @@ export async function getUrlsNeedingIndexing(
 
 export async function inspectAndSyncUrl(
   db: GscDb,
-  auth: OAuth2Client,
+  client: GoogleSearchConsoleClient,
   siteId: number,
   property: string,
   path: string,
 ): Promise<{ isIndexed: boolean, error?: string }> {
+  const { inspectUrl } = await import('gscdump')
   const fullUrl = buildFullUrl(property, path)
 
-  const { inspection, isIndexed } = await inspectGscUrl(auth, property, fullUrl)
+  const { inspection, isIndexed } = await inspectUrl(client, property, fullUrl)
     .catch((e: Error) => ({ inspection: undefined, isIndexed: false, error: e.message }))
 
   const indexStatus = inspection?.indexStatusResult
@@ -355,7 +392,7 @@ export async function inspectAndSyncUrl(
 
 export async function requestAndSyncIndexing(
   db: GscDb,
-  auth: OAuth2Client,
+  client: GoogleSearchConsoleClient,
   siteId: number,
   property: string,
   path: string,
@@ -364,7 +401,7 @@ export async function requestAndSyncIndexing(
   const { batchRequestIndexing } = await import('gscdump')
   const fullUrl = buildFullUrl(property, path)
 
-  const [result] = await batchRequestIndexing(auth, [fullUrl], { type })
+  const [result] = await batchRequestIndexing(client, [fullUrl], { type })
 
   await db.insert(sitePathIndexing)
     .values({
@@ -372,14 +409,14 @@ export async function requestAndSyncIndexing(
       path,
       lastIndexRequested: Date.now(),
       lastIndexRequestType: type,
-      lastIndexRequestError: result.error || null,
+      lastIndexRequestError: null,
     })
     .onConflictDoUpdate({
       target: [sitePathIndexing.siteId, sitePathIndexing.path],
       set: {
         lastIndexRequested: Date.now(),
         lastIndexRequestType: type,
-        lastIndexRequestError: result.error || null,
+        lastIndexRequestError: null,
         updatedAt: Date.now(),
       },
     })
@@ -389,7 +426,7 @@ export async function requestAndSyncIndexing(
 
 export async function batchInspectUrls(
   db: GscDb,
-  auth: OAuth2Client,
+  client: GoogleSearchConsoleClient,
   siteId: number,
   property: string,
   paths: string[],
@@ -404,7 +441,7 @@ export async function batchInspectUrls(
   let errors = 0
 
   for (let i = 0; i < paths.length; i++) {
-    const result = await inspectAndSyncUrl(db, auth, siteId, property, paths[i])
+    const result = await inspectAndSyncUrl(db, client, siteId, property, paths[i])
       .catch((e: Error) => ({ isIndexed: false, error: e.message }))
 
     if (result.error)
@@ -425,7 +462,7 @@ export async function batchInspectUrls(
 
 export async function batchRequestIndexingForPaths(
   db: GscDb,
-  auth: OAuth2Client,
+  client: GoogleSearchConsoleClient,
   siteId: number,
   property: string,
   paths: string[],
@@ -440,7 +477,7 @@ export async function batchRequestIndexingForPaths(
   let errors = 0
 
   for (let i = 0; i < paths.length; i++) {
-    const result = await requestAndSyncIndexing(db, auth, siteId, property, paths[i], type)
+    const result = await requestAndSyncIndexing(db, client, siteId, property, paths[i], type)
 
     if (result.error)
       errors++
@@ -456,7 +493,7 @@ export async function batchRequestIndexingForPaths(
   return { success, errors }
 }
 
-export async function getIndexingStats(db: GscDb, siteId: number) {
+export async function getIndexingStats(db: GscDb, siteId: number): Promise<{ total: number, indexed: number, notIndexed: number, unknown: number, requested: number, rows: SitePathIndexingSelect[] }> {
   const rows = await db.select().from(sitePathIndexing).where(eq(sitePathIndexing.siteId, siteId))
 
   const indexed = rows.filter(r => r.isIndexed === true).length

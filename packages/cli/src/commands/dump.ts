@@ -1,6 +1,6 @@
 import type { DataProvider, DataSource } from '@gscdump/query'
 import type { OAuth2Client } from 'google-auth-library'
-import type { DataType, ResolvedAnalyticsRange } from 'gscdump'
+import type { DataType, GoogleSearchConsoleClient, ResolvedAnalyticsRange } from 'gscdump'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
@@ -10,15 +10,15 @@ import { createProvider } from '@gscdump/query'
 import { defineCommand } from 'citty'
 import dayjs from 'dayjs'
 import betterSqlite3 from 'db0/connectors/better-sqlite3'
-import { fetchGscSites } from 'gscdump'
+import { fetchSites, googleSearchConsole } from 'gscdump'
 import { loadConfig } from '../config'
 import { clearLine, exportToCSV, gscErrorHandler, logger, parsePeriod, progressBar } from '../utils'
 
 const DUMP_DATA_TYPES = ['pages', 'keywords', 'countries', 'devices'] as const
 type DumpDataType = typeof DUMP_DATA_TYPES[number]
 
-async function getSites(auth: OAuth2Client): Promise<string[]> {
-  const sites = await fetchGscSites(auth)
+async function getSites(client: GoogleSearchConsoleClient): Promise<string[]> {
+  const sites = await fetchSites(client)
   return sites
     .filter(site => site.siteUrl && site.permissionLevel !== 'siteUnverifiedUser')
     .map(site => site.siteUrl!)
@@ -122,7 +122,8 @@ async function runDump(
 
 async function interactiveMode(auth: OAuth2Client, dbPath: string | null, source: DataSource): Promise<void> {
   process.stdout.write('  Fetching sites...')
-  const sites = await getSites(auth)
+  const client = googleSearchConsole(auth)
+  const sites = await getSites(client)
   clearLine()
   logger.success(`Found ${sites.length} sites`)
 
@@ -286,7 +287,8 @@ async function nonInteractiveMode(
   }
 
   process.stdout.write('  Validating sites...')
-  const availableSites = await getSites(auth)
+  const client = googleSearchConsole(auth)
+  const availableSites = await getSites(client)
   clearLine()
 
   const normalizedSites: string[] = []

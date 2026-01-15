@@ -26,6 +26,10 @@
     ".": {
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
+    },
+    "./query": {
+      "types": "./dist/query/index.d.mts",
+      "import": "./dist/query/index.mjs"
     }
   },
   "main": "./dist/index.mjs",

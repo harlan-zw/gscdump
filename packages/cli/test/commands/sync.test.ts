@@ -2,15 +2,15 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { syncCountries, syncDevices, syncKeywords, syncPages, syncSites } from '@gscdump/db'
-import { fetchGscSites } from 'gscdump'
+import { fetchSites } from 'gscdump'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { syncCommand } from '../../src/commands/sync'
 import { loadConfig } from '../../src/config'
 import { logger } from '../../src/utils'
 
-// Keep fetchGscSites reference for eslint
-void fetchGscSites
+// Keep fetchSites reference for eslint
+void fetchSites
 
 // Mock data - defined before mocks to avoid hoisting issues
 const mockSites = [
@@ -18,7 +18,7 @@ const mockSites = [
   { siteUrl: 'sc-domain:example.com', permissionLevel: 'siteOwner' },
 ]
 
-const mockAuth = {
+const _mockAuth = {
   credentials: {
     access_token: 'mock_access_token',
     refresh_token: 'mock_refresh_token',
@@ -39,6 +39,7 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
 vi.mock('@gscdump/db', () => ({
   createGscDb: vi.fn().mockReturnValue({}),
   getSiteByProperty: vi.fn(),
+  setupSchema: vi.fn().mockResolvedValue(undefined),
   syncCountries: vi.fn(),
   syncDevices: vi.fn(),
   syncKeywordPaths: vi.fn(),
@@ -53,7 +54,15 @@ vi.mock('db0/connectors/better-sqlite3', () => ({
 }))
 
 vi.mock('gscdump', () => ({
-  fetchGscSites: vi.fn(),
+  googleSearchConsole: vi.fn().mockReturnValue({
+    sites: {
+      list: vi.fn(),
+    },
+    searchAnalytics: {
+      query: vi.fn(),
+    },
+  }),
+  fetchSites: vi.fn(),
   userPeriodRange: vi.fn().mockReturnValue({
     period: { startDate: '2024-01-01', endDate: '2024-01-31' },
     prevPeriod: { startDate: '2023-12-01', endDate: '2023-12-31' },
@@ -61,6 +70,13 @@ vi.mock('gscdump', () => ({
 }))
 
 vi.mock('../../src/auth', () => ({
+  getAuth: vi.fn().mockResolvedValue({
+    credentials: {
+      access_token: 'mock_access_token',
+      refresh_token: 'mock_refresh_token',
+      expiry_date: Date.now() + 3600000,
+    },
+  }),
   getAuthCredentials: vi.fn().mockResolvedValue({
     clientId: 'mock_client_id',
     clientSecret: 'mock_client_secret',
@@ -84,6 +100,9 @@ vi.mock('../../src/utils', () => ({
   },
   clearLine: vi.fn(),
   progressBar: vi.fn().mockReturnValue('progress'),
+  gscErrorHandler: vi.fn((error: any) => {
+    throw error
+  }),
 }))
 
 describe('sync command', () => {
@@ -101,7 +120,7 @@ describe('sync command', () => {
     originalConfig = await fs.readFile(CONFIG_FILE, 'utf-8').catch(() => null)
     vi.clearAllMocks()
     // Set default mock return values
-    vi.mocked(fetchGscSites).mockResolvedValue(mockSites as any)
+    vi.mocked(fetchSites).mockResolvedValue(mockSites as any)
     vi.mocked(syncSites).mockResolvedValue([{ siteId: 1, property: 'https://example.com/' }] as any)
     vi.mocked(syncPages).mockResolvedValue(mockPageData as any)
     vi.mocked(syncKeywords).mockResolvedValue([{ keyword: 'test' }] as any)
@@ -112,12 +131,12 @@ describe('sync command', () => {
   afterEach(async () => {
     console.log = originalLog
     process.stdout.write = originalWrite
-    await fs.rm(TEST_DB).catch(() => {})
+    await fs.rm(TEST_DB).catch(() => { })
     if (originalConfig) {
       await fs.writeFile(CONFIG_FILE, originalConfig)
     }
     else {
-      await fs.rm(CONFIG_FILE).catch(() => {})
+      await fs.rm(CONFIG_FILE).catch(() => { })
     }
   })
 

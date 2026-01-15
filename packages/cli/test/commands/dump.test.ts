@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { fetchGscSites, fetchKeywordsWithComparison, fetchPages } from 'gscdump'
+import { fetchSites, fetchKeywordsWithComparison, fetchPages } from 'gscdump'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { dumpCommand } from '../../src/commands/dump'
@@ -14,7 +14,7 @@ const mockSites = [
   { siteUrl: 'sc-domain:example.com', permissionLevel: 'siteOwner' },
 ]
 
-const mockAuth = {
+const _mockAuth = {
   credentials: {
     access_token: 'mock_access_token',
     refresh_token: 'mock_refresh_token',
@@ -32,12 +32,12 @@ const mockKeywordsWithComparison = {
   previous: [{ keyword: 'test', clicks: 80, impressions: 900, ctr: 0.09, position: 6.0 }],
 }
 
-const mockCountriesWithComparison = {
+const _mockCountriesWithComparison = {
   current: [{ country: 'usa', clicks: 100, impressions: 1000, ctr: 0.1, position: 5.5 }],
   previous: [{ country: 'usa', clicks: 80, impressions: 900, ctr: 0.09, position: 6.0 }],
 }
 
-const mockDevicesWithComparison = {
+const _mockDevicesWithComparison = {
   current: [{ device: 'desktop', clicks: 100, impressions: 1000, ctr: 0.1, position: 5.5 }],
   previous: [{ device: 'desktop', clicks: 80, impressions: 900, ctr: 0.09, position: 6.0 }],
 }
@@ -47,7 +47,15 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
 
 // Mock all dependencies - don't reference variables in factories (hoisting)
 vi.mock('gscdump', () => ({
-  fetchGscSites: vi.fn(),
+  googleSearchConsole: vi.fn().mockReturnValue({
+    sites: {
+      list: vi.fn(),
+    },
+    searchAnalytics: {
+      query: vi.fn(),
+    },
+  }),
+  fetchSites: vi.fn(),
   fetchPages: vi.fn(),
   fetchKeywordsWithComparison: vi.fn(),
   fetchCountriesWithComparison: vi.fn(),
@@ -55,6 +63,13 @@ vi.mock('gscdump', () => ({
 }))
 
 vi.mock('../../src/auth', () => ({
+  getAuth: vi.fn().mockResolvedValue({
+    credentials: {
+      access_token: 'mock_access_token',
+      refresh_token: 'mock_refresh_token',
+      expiry_date: Date.now() + 3600000,
+    },
+  }),
   getAuthCredentials: vi.fn().mockResolvedValue({
     clientId: 'mock_client_id',
     clientSecret: 'mock_client_secret',
@@ -87,6 +102,9 @@ vi.mock('../../src/utils', () => ({
     return { amount, unit: unitMap[match[2].toLowerCase()] }
   }),
   exportToCSV: vi.fn().mockReturnValue('csv content'),
+  gscErrorHandler: vi.fn((error: any) => {
+    throw error
+  }),
 }))
 
 describe('dump command', () => {
@@ -104,7 +122,7 @@ describe('dump command', () => {
     originalConfig = await fs.readFile(CONFIG_FILE, 'utf-8').catch(() => null)
     vi.clearAllMocks()
     // Set/reset default mock return values
-    vi.mocked(fetchGscSites).mockResolvedValue(mockSites as any)
+    vi.mocked(fetchSites).mockResolvedValue(mockSites as any)
     vi.mocked(fetchPages).mockResolvedValue(mockPageData as any)
     vi.mocked(fetchKeywordsWithComparison).mockResolvedValue(mockKeywordsWithComparison as any)
     vi.mocked(loadConfig).mockResolvedValue({})
@@ -117,14 +135,14 @@ describe('dump command', () => {
     const files = await fs.readdir('.').catch(() => [])
     for (const file of files) {
       if (file.startsWith('gsc-') && (file.endsWith('.json') || file.endsWith('.csv'))) {
-        await fs.rm(file).catch(() => {})
+        await fs.rm(file).catch(() => { })
       }
     }
     if (originalConfig) {
       await fs.writeFile(CONFIG_FILE, originalConfig)
     }
     else {
-      await fs.rm(CONFIG_FILE).catch(() => {})
+      await fs.rm(CONFIG_FILE).catch(() => { })
     }
   })
 
@@ -159,7 +177,7 @@ describe('dump command', () => {
 
   describe('non-interactive mode', () => {
     it('should validate site availability', async () => {
-      vi.mocked(fetchGscSites).mockResolvedValue(mockSites as any)
+      vi.mocked(fetchSites).mockResolvedValue(mockSites as any)
 
       await dumpCommand.run!({
         args: {
@@ -173,11 +191,11 @@ describe('dump command', () => {
         cmd: dumpCommand,
       })
 
-      expect(fetchGscSites).toHaveBeenCalled()
+      expect(fetchSites).toHaveBeenCalled()
     })
 
     it('should fetch requested data types', async () => {
-      vi.mocked(fetchGscSites).mockResolvedValue(mockSites as any)
+      vi.mocked(fetchSites).mockResolvedValue(mockSites as any)
 
       await dumpCommand.run!({
         args: {
@@ -201,7 +219,7 @@ describe('dump command', () => {
         defaultPeriod: '7d',
         defaultFormat: 'csv',
       })
-      vi.mocked(fetchGscSites).mockResolvedValue(mockSites as any)
+      vi.mocked(fetchSites).mockResolvedValue(mockSites as any)
 
       await dumpCommand.run!({
         args: {
@@ -219,7 +237,7 @@ describe('dump command', () => {
     })
 
     it('should log success message', async () => {
-      vi.mocked(fetchGscSites).mockResolvedValue(mockSites as any)
+      vi.mocked(fetchSites).mockResolvedValue(mockSites as any)
 
       await dumpCommand.run!({
         args: {
@@ -239,7 +257,7 @@ describe('dump command', () => {
 
   describe('site normalization', () => {
     it('should match sites by various formats', async () => {
-      vi.mocked(fetchGscSites).mockResolvedValue([
+      vi.mocked(fetchSites).mockResolvedValue([
         { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' },
         { siteUrl: 'sc-domain:test.com', permissionLevel: 'siteOwner' },
       ] as any)
@@ -263,7 +281,7 @@ describe('dump command', () => {
 
   describe('output formats', () => {
     it('should create JSON output by default', async () => {
-      vi.mocked(fetchGscSites).mockResolvedValue(mockSites as any)
+      vi.mocked(fetchSites).mockResolvedValue(mockSites as any)
 
       await dumpCommand.run!({
         args: {

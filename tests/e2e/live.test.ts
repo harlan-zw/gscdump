@@ -2,16 +2,17 @@ import { resolve } from 'node:path'
 import { config } from 'dotenv'
 import { OAuth2Client } from 'google-auth-library'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { fetchGscSites, fetchGscSitesWithSitemaps, inspectGscUrl } from '../../packages/gscdump/src/api'
-
 import {
   fetchAnalyticsWithComparison,
   fetchCountriesWithComparison,
   fetchDevicesWithComparison,
   fetchKeywordsWithComparison,
   fetchPagesWithComparison,
-} from '../../packages/gscdump/src/searchanalytics'
-import { userPeriodRange } from '../../packages/gscdump/src/utils'
+  fetchSites,
+  fetchSitesWithSitemaps,
+  inspectUrl,
+  userPeriodRange,
+} from '../../packages/gscdump/src'
 
 config({ path: resolve(__dirname, '../../packages/gscdump/.env.test') })
 
@@ -39,7 +40,7 @@ describe.skipIf(!shouldRun)('e2e Real Credentials Tests', () => {
   })
 
   it('should fetch real GSC sites', async () => {
-    const sites = await fetchGscSites(auth)
+    const sites = await fetchSites(auth)
 
     expect(sites).toBeDefined()
     expect(Array.isArray(sites)).toBe(true)
@@ -59,7 +60,7 @@ describe.skipIf(!shouldRun)('e2e Real Credentials Tests', () => {
   })
 
   it('should fetch sites with sitemaps', async () => {
-    const sitesWithSitemaps = await fetchGscSitesWithSitemaps(auth)
+    const sitesWithSitemaps = await fetchSitesWithSitemaps(auth)
 
     expect(sitesWithSitemaps).toBeDefined()
     expect(Array.isArray(sitesWithSitemaps)).toBe(true)
@@ -79,7 +80,7 @@ describe.skipIf(!shouldRun)('e2e Real Credentials Tests', () => {
     const testUrl = 'https://harlanzw.com/'
     const inspectionUrl = 'https://harlanzw.com/blog'
 
-    const result = await inspectGscUrl(auth, testUrl, inspectionUrl)
+    const result = await inspectUrl(auth, testUrl, inspectionUrl)
 
     expect(result).toBeDefined()
     expect(result).toHaveProperty('inspection')
