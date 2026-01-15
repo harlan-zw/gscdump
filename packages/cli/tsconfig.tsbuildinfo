@@ -1,0 +1,1 @@
+{"root":["./src/auth.ts","./src/config.ts","./src/index.ts","./src/utils.ts","./src/commands/auth.ts","./src/commands/compare.ts","./src/commands/config.ts","./src/commands/dump.ts","./src/commands/indexing.ts","./src/commands/init.ts","./src/commands/mcp.ts","./src/commands/sitemaps.ts","./src/commands/sites.ts","./src/commands/sync.ts"],"version":"5.9.3"}
