@@ -12,6 +12,19 @@ import type {
   PageData,
   ResolvedAnalyticsRange,
   SearchAppearanceData,
+  // Analysis types for DB-optimized methods
+  StrikingDistanceOptions,
+  StrikingDistanceResult,
+  CannibalizationOptions,
+  CannibalizationResult,
+  ZeroClickOptions,
+  ZeroClickResult,
+  DecayOptions,
+  DecayResult,
+  MoversOptions,
+  MoversResult,
+  SeasonalityOptions,
+  SeasonalityResult,
 } from 'gscdump'
 import type { DateMetrics, QueryPageRow } from './analysis/types'
 
@@ -43,6 +56,14 @@ export interface DataProvider {
   // Analysis-specific queries (optional)
   getQueryPageRows?: (siteUrl: string, range: ResolvedAnalyticsRange) => Promise<QueryPageRow[]>
   getDateRows?: (siteUrl: string, range: ResolvedAnalyticsRange) => Promise<DateMetrics[]>
+
+  // DB-optimized analysis methods (optional - DB implements with SQL, API falls back to pure functions)
+  getStrikingDistanceResults?: (siteUrl: string, range: ResolvedAnalyticsRange, options?: StrikingDistanceOptions) => Promise<StrikingDistanceResult[]>
+  getCannibalizationResults?: (siteUrl: string, range: ResolvedAnalyticsRange, options?: CannibalizationOptions) => Promise<CannibalizationResult[]>
+  getZeroClickResults?: (siteUrl: string, range: ResolvedAnalyticsRange, options?: ZeroClickOptions) => Promise<ZeroClickResult[]>
+  getDecayResults?: (siteUrl: string, range: ResolvedAnalyticsRange, options?: DecayOptions) => Promise<DecayResult[]>
+  getMoversResults?: (siteUrl: string, range: ResolvedAnalyticsRange, options?: MoversOptions) => Promise<MoversResult>
+  getSeasonalityResults?: (siteUrl: string, range: ResolvedAnalyticsRange, options?: SeasonalityOptions) => Promise<SeasonalityResult>
 }
 
 export interface QueryContext {

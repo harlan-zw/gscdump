@@ -1,10 +1,14 @@
-import type { GoogleSearchConsoleClient } from '../core/client'
-import type { QueryMetrics, SortableOptions } from './types'
-import { createSorter, defaultQuery, executeAnalysisQuery, fetchQueryPageMap } from './types'
+/**
+ * Striking distance analysis - finds keywords close to page 1.
+ * Pure function operating on keyword data.
+ */
+
+import type { KeywordData } from '../api/search-analytics/types'
+import { type SortOrder, createSorter, num } from './types'
 
 export type StrikingDistanceSortMetric = 'clicks' | 'impressions' | 'ctr' | 'position' | 'potentialClicks'
 
-export interface StrikingDistanceOptions extends SortableOptions<StrikingDistanceSortMetric> {
+export interface StrikingDistanceOptions {
   /** Minimum position (inclusive). Default: 4 */
   minPosition?: number
   /** Maximum position (inclusive). Default: 20 */
@@ -13,14 +17,24 @@ export interface StrikingDistanceOptions extends SortableOptions<StrikingDistanc
   minImpressions?: number
   /** Maximum CTR (queries with low CTR have more potential). Default: 0.05 (5%) */
   maxCtr?: number
+  /** Sort metric. Default: potentialClicks */
+  sortBy?: StrikingDistanceSortMetric
+  /** Sort order. Default: desc */
+  sortOrder?: SortOrder
 }
 
-export interface StrikingDistanceResult extends QueryMetrics {
+export interface StrikingDistanceResult {
+  keyword: string
+  page: string | null
+  clicks: number
+  impressions: number
+  ctr: number
+  position: number
   /** Estimated clicks if position improved to top 3 */
   potentialClicks: number
 }
 
-const sortStrikingDistance = createSorter<StrikingDistanceResult, StrikingDistanceSortMetric>(
+const sortResults = createSorter<StrikingDistanceResult, StrikingDistanceSortMetric>(
   (item, metric) => item[metric],
   'potentialClicks',
 )
@@ -29,13 +43,11 @@ const sortStrikingDistance = createSorter<StrikingDistanceResult, StrikingDistan
  * Finds striking distance keywords - high impressions, low CTR, position 4-20.
  * These are "quick wins" that could gain significant traffic with small ranking improvements.
  */
-export async function analyzeStrikingDistance(
-  client: GoogleSearchConsoleClient,
-  siteUrl: string,
+export function analyzeStrikingDistance(
+  keywords: KeywordData[],
   options: StrikingDistanceOptions = {},
-): Promise<StrikingDistanceResult[]> {
+): StrikingDistanceResult[] {
   const {
-    query = defaultQuery(),
     minPosition = 4,
     maxPosition = 20,
     minImpressions = 100,
@@ -44,39 +56,36 @@ export async function analyzeStrikingDistance(
     sortOrder = 'desc',
   } = options
 
-  // Fetch query data and page lookup in parallel
-  const [queryData, pageMap] = await Promise.all([
-    executeAnalysisQuery(client, siteUrl, query, ['query']),
-    fetchQueryPageMap(client, siteUrl, query),
-  ])
-
   const results: StrikingDistanceResult[] = []
 
-  for (const row of queryData.rows) {
-    const rowQuery = row.query || ''
+  for (const row of keywords) {
+    const position = num(row.position)
+    const impressions = num(row.impressions)
+    const ctr = num(row.ctr)
+    const clicks = num(row.clicks)
 
     // Apply filters
-    if (row.position < minPosition || row.position > maxPosition)
+    if (position < minPosition || position > maxPosition)
       continue
-    if (row.impressions < minImpressions)
+    if (impressions < minImpressions)
       continue
-    if (row.ctr > maxCtr)
+    if (ctr > maxCtr)
       continue
 
     // Estimate potential clicks if position improved to ~2.5 (avg CTR ~15%)
     const potentialCtr = 0.15
-    const potentialClicks = Math.round(row.impressions * potentialCtr)
+    const potentialClicks = Math.round(impressions * potentialCtr)
 
     results.push({
-      query: rowQuery,
-      page: pageMap.get(rowQuery) || null,
-      clicks: row.clicks,
-      impressions: row.impressions,
-      ctr: row.ctr,
-      position: row.position,
+      keyword: row.keyword,
+      page: row.page ?? null,
+      clicks,
+      impressions,
+      ctr,
+      position,
       potentialClicks,
     })
   }
 
-  return sortStrikingDistance(results, sortBy, sortOrder)
+  return sortResults(results, sortBy, sortOrder)
 }

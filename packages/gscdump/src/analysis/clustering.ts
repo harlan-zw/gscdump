@@ -1,11 +1,14 @@
-import type { GoogleSearchConsoleClient } from '../core/client'
+/**
+ * Keyword clustering analysis - groups keywords by intent or prefix.
+ * Pure function operating on keyword data.
+ */
+
 import type { KeywordData } from '../api/search-analytics/types'
-import type { BaseAnalysisOptions } from './types'
-import { defaultQuery, executeAnalysisQuery } from './types'
+import { num } from './types'
 
 export type ClusterType = 'prefix' | 'intent' | 'both'
 
-export interface QueryClusteringOptions extends BaseAnalysisOptions {
+export interface ClusteringOptions {
   /** Minimum keywords for a cluster to be reported. Default: 2 */
   minClusterSize?: number
   /** Minimum impressions for a keyword to be included. Default: 10 */
@@ -14,7 +17,7 @@ export interface QueryClusteringOptions extends BaseAnalysisOptions {
   clusterBy?: ClusterType
 }
 
-export interface QueryCluster {
+export interface KeywordCluster {
   clusterName: string
   clusterType: 'prefix' | 'intent'
   keywords: KeywordData[]
@@ -24,8 +27,8 @@ export interface QueryCluster {
   keywordCount: number
 }
 
-export interface QueryClusteringResult {
-  clusters: QueryCluster[]
+export interface ClusteringResult {
+  clusters: KeywordCluster[]
   unclustered: KeywordData[]
 }
 
@@ -69,40 +72,29 @@ function extractWordPrefix(keyword: string, wordCount = 2): string | null {
 /**
  * Clusters keywords by intent prefix or common word prefix.
  * Simple regex/prefix approach - no external NLP dependencies.
+ *
+ * @param keywords Array of keyword data
+ * @param options Clustering options
  */
-export async function analyzeQueryClustering(
-  client: GoogleSearchConsoleClient,
-  siteUrl: string,
-  options: QueryClusteringOptions = {},
-): Promise<QueryClusteringResult> {
+export function analyzeClustering(
+  keywords: KeywordData[],
+  options: ClusteringOptions = {},
+): ClusteringResult {
   const {
-    query = defaultQuery(),
     minClusterSize = 2,
     minImpressions = 10,
     clusterBy = 'both',
   } = options
 
-  const { rows } = await executeAnalysisQuery(client, siteUrl, query, ['query'])
-
-  // Convert to KeywordData
-  const keywords: KeywordData[] = rows
-    .filter(row => row.impressions >= minImpressions)
-    .map(row => ({
-      dimension: 'query' as const,
-      keyword: row.query || '',
-      clicks: row.clicks,
-      impressions: row.impressions,
-      ctr: row.ctr,
-      position: row.position,
-      keys: null,
-    }))
+  // Filter by impressions
+  const filtered = keywords.filter(k => num(k.impressions) >= minImpressions)
 
   const clusterMap = new Map<string, { type: 'prefix' | 'intent', keywords: KeywordData[] }>()
   const clusteredKeywords = new Set<string>()
 
   // Cluster by intent first (higher priority)
   if (clusterBy === 'intent' || clusterBy === 'both') {
-    for (const kw of keywords) {
+    for (const kw of filtered) {
       const intent = extractIntentPrefix(kw.keyword)
       if (intent) {
         const existing = clusterMap.get(intent)
@@ -119,7 +111,7 @@ export async function analyzeQueryClustering(
 
   // Cluster by prefix for unclustered keywords
   if (clusterBy === 'prefix' || clusterBy === 'both') {
-    const unclustered = keywords.filter(kw => !clusteredKeywords.has(kw.keyword))
+    const unclustered = filtered.filter(kw => !clusteredKeywords.has(kw.keyword))
     const prefixMap = new Map<string, KeywordData[]>()
 
     for (const kw of unclustered) {
@@ -143,14 +135,14 @@ export async function analyzeQueryClustering(
   }
 
   // Build result clusters, filtering by minClusterSize
-  const clusters: QueryCluster[] = []
+  const clusters: KeywordCluster[] = []
   for (const [name, data] of clusterMap) {
     if (data.keywords.length < minClusterSize)
       continue
 
-    const totalClicks = data.keywords.reduce((sum, k) => sum + (k.clicks || 0), 0)
-    const totalImpressions = data.keywords.reduce((sum, k) => sum + (k.impressions || 0), 0)
-    const avgPosition = data.keywords.reduce((sum, k) => sum + (k.position || 0), 0) / data.keywords.length
+    const totalClicks = data.keywords.reduce((sum, k) => sum + num(k.clicks), 0)
+    const totalImpressions = data.keywords.reduce((sum, k) => sum + num(k.impressions), 0)
+    const avgPosition = data.keywords.reduce((sum, k) => sum + num(k.position), 0) / data.keywords.length
 
     clusters.push({
       clusterName: name,
@@ -166,7 +158,7 @@ export async function analyzeQueryClustering(
   // Sort by total clicks desc
   clusters.sort((a, b) => b.totalClicks - a.totalClicks)
 
-  const unclustered = keywords.filter(kw => !clusteredKeywords.has(kw.keyword))
+  const unclustered = filtered.filter(kw => !clusteredKeywords.has(kw.keyword))
 
   return { clusters, unclustered }
 }

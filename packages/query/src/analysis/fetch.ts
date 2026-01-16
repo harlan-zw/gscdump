@@ -1,78 +1,60 @@
 /**
  * Provider-based fetch wrappers for analysis functions.
- * These fetch data via DataProvider and pass to pure analysis functions.
+ *
+ * Each function checks for provider-level optimized methods first (DB uses SQL),
+ * then falls back to pure functions from gscdump (JS computation).
  */
 
 import type { ResolvedAnalyticsRange } from 'gscdump'
-import type { DataProvider } from '../types'
-
 import {
+  // Pure analysis functions
   analyzeStrikingDistance,
-  type StrikingDistanceOptions,
-  type StrikingDistanceResult,
-} from './striking-distance'
-
-import {
   analyzeOpportunity,
-  type OpportunityOptions,
-  type OpportunityResult,
-} from './opportunity'
-
-import {
   analyzeBrandSegmentation,
-  type BrandSegmentationOptions,
-  type BrandSegmentationResult,
-} from './brand'
-
-import {
   analyzePageConcentration,
   analyzeKeywordConcentration,
+  analyzeDecay,
+  analyzeMovers,
+  analyzeCannibalization,
+  analyzeZeroClick,
+  analyzeSeasonality,
+  // Types
+  type StrikingDistanceOptions,
+  type StrikingDistanceResult,
+  type OpportunityOptions,
+  type OpportunityResult,
+  type BrandSegmentationOptions,
+  type BrandSegmentationResult,
   type ConcentrationOptions,
   type ConcentrationResult,
-} from './concentration'
-
-import {
-  analyzeDecay,
   type DecayOptions,
   type DecayResult,
-} from './decay'
-
-import {
-  analyzeMovers,
   type MoversOptions,
   type MoversResult,
-} from './movers'
-
-import {
-  analyzeCannibalization,
   type CannibalizationOptions,
   type CannibalizationResult,
-} from './cannibalization'
-
-import {
-  analyzeZeroClick,
   type ZeroClickOptions,
   type ZeroClickResult,
-} from './zero-click'
-
-import {
-  analyzeSeasonality,
   type SeasonalityOptions,
   type SeasonalityResult,
-} from './seasonality'
+} from 'gscdump'
+import type { DataProvider } from '../types'
 
-// Striking distance: uses keyword data
+// Striking distance: check for optimized method, else use keyword data
 export async function fetchStrikingDistanceAnalysis(
   provider: DataProvider,
   siteUrl: string,
   range: ResolvedAnalyticsRange,
   options?: StrikingDistanceOptions,
 ): Promise<StrikingDistanceResult[]> {
+  if (provider.getStrikingDistanceResults)
+    return provider.getStrikingDistanceResults(siteUrl, range, options)
+
   const { current } = await provider.getKeywordsWithComparison(siteUrl, range)
   return analyzeStrikingDistance(current, options)
 }
 
-// Opportunity: uses keyword data
+// Opportunity: uses keyword data (no DB optimization - complex scoring)
 export async function fetchOpportunityAnalysis(
   provider: DataProvider,
   siteUrl: string,
@@ -83,7 +65,7 @@ export async function fetchOpportunityAnalysis(
   return analyzeOpportunity(current, options)
 }
 
-// Brand segmentation: uses keyword data
+// Brand segmentation: uses keyword data (no DB optimization yet)
 export async function fetchBrandAnalysis(
   provider: DataProvider,
   siteUrl: string,
@@ -94,7 +76,7 @@ export async function fetchBrandAnalysis(
   return analyzeBrandSegmentation(current, options)
 }
 
-// Page concentration: uses page data
+// Page concentration: uses page data (no DB optimization - simple computation)
 export async function fetchPageConcentrationAnalysis(
   provider: DataProvider,
   siteUrl: string,
@@ -105,7 +87,7 @@ export async function fetchPageConcentrationAnalysis(
   return analyzePageConcentration(current, options)
 }
 
-// Keyword concentration: uses keyword data
+// Keyword concentration: uses keyword data (no DB optimization - simple computation)
 export async function fetchKeywordConcentrationAnalysis(
   provider: DataProvider,
   siteUrl: string,
@@ -116,13 +98,16 @@ export async function fetchKeywordConcentrationAnalysis(
   return analyzeKeywordConcentration(current, options)
 }
 
-// Decay: uses page comparison data
+// Decay: check for optimized method, else use page comparison data
 export async function fetchDecayAnalysis(
   provider: DataProvider,
   siteUrl: string,
   range: ResolvedAnalyticsRange,
   options?: DecayOptions,
 ): Promise<DecayResult[]> {
+  if (provider.getDecayResults)
+    return provider.getDecayResults(siteUrl, range, options)
+
   const comparison = await provider.getPagesWithComparison(siteUrl, range)
   return analyzeDecay({
     current: comparison.current,
@@ -130,13 +115,16 @@ export async function fetchDecayAnalysis(
   }, options)
 }
 
-// Movers: uses keyword comparison data
+// Movers: check for optimized method, else use keyword comparison data
 export async function fetchMoversAnalysis(
   provider: DataProvider,
   siteUrl: string,
   range: ResolvedAnalyticsRange,
   options?: MoversOptions,
 ): Promise<MoversResult> {
+  if (provider.getMoversResults)
+    return provider.getMoversResults(siteUrl, range, options)
+
   const comparison = await provider.getKeywordsWithComparison(siteUrl, range)
   return analyzeMovers({
     current: comparison.current,
@@ -144,39 +132,48 @@ export async function fetchMoversAnalysis(
   }, options)
 }
 
-// Cannibalization: uses query+page rows
+// Cannibalization: check for optimized method, else use query+page rows
 export async function fetchCannibalizationAnalysis(
   provider: DataProvider,
   siteUrl: string,
   range: ResolvedAnalyticsRange,
   options?: CannibalizationOptions,
 ): Promise<CannibalizationResult[]> {
+  if (provider.getCannibalizationResults)
+    return provider.getCannibalizationResults(siteUrl, range, options)
+
   if (!provider.getQueryPageRows)
     throw new Error('Provider does not support getQueryPageRows')
   const rows = await provider.getQueryPageRows(siteUrl, range)
   return analyzeCannibalization(rows, options)
 }
 
-// Zero-click: uses query+page rows
+// Zero-click: check for optimized method, else use query+page rows
 export async function fetchZeroClickAnalysis(
   provider: DataProvider,
   siteUrl: string,
   range: ResolvedAnalyticsRange,
   options?: ZeroClickOptions,
 ): Promise<ZeroClickResult[]> {
+  if (provider.getZeroClickResults)
+    return provider.getZeroClickResults(siteUrl, range, options)
+
   if (!provider.getQueryPageRows)
     throw new Error('Provider does not support getQueryPageRows')
   const rows = await provider.getQueryPageRows(siteUrl, range)
   return analyzeZeroClick(rows, options)
 }
 
-// Seasonality: uses date rows
+// Seasonality: check for optimized method, else use date rows
 export async function fetchSeasonalityAnalysis(
   provider: DataProvider,
   siteUrl: string,
   range: ResolvedAnalyticsRange,
   options?: SeasonalityOptions,
 ): Promise<SeasonalityResult> {
+  if (provider.getSeasonalityResults)
+    return provider.getSeasonalityResults(siteUrl, range, options)
+
   if (!provider.getDateRows)
     throw new Error('Provider does not support getDateRows')
   const rows = await provider.getDateRows(siteUrl, range)

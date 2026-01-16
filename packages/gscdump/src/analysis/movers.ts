@@ -1,26 +1,31 @@
-import type { Dayjs } from 'dayjs'
-import type { GoogleSearchConsoleClient } from '../core/client'
-import type { BaseAnalysisOptions } from './types'
-import type { GSCQueryBuilder } from '../query'
-import { defaultQuery, executeAnalysisQuery, getQueryDateRange, withDateRange } from './types'
-import { dayjs } from '../utils/dayjs'
-import { percentDifference } from '../utils/format'
+/**
+ * Movers and shakers analysis - identifies keywords with significant changes.
+ * Pure function operating on current + previous keyword data.
+ */
+
+import type { KeywordData } from '../api/search-analytics/types'
+import { num } from './types'
 
 export type MoversSortMetric = 'clicks' | 'impressions' | 'clicksChange' | 'impressionsChange' | 'positionChange'
 
-export interface MoversAndShakersOptions extends BaseAnalysisOptions {
-  /** Baseline query to compare against. Default: 4 weeks before main query period */
-  compareQuery?: GSCQueryBuilder<any, any>
+export interface MoversOptions {
   /** Minimum change threshold to flag. Default: 0.2 (20%) */
   changeThreshold?: number
   /** Minimum impressions in recent period. Default: 50 */
   minImpressions?: number
-  /** Metric to sort results by. Default: 'clicksChange' */
+  /** Metric to sort results by. Default: clicksChange */
   sortBy?: MoversSortMetric
 }
 
+export interface MoversInput {
+  current: KeywordData[]
+  previous: KeywordData[]
+  /** If periods have different lengths, provide normalization factor (previous/current) */
+  normalizationFactor?: number
+}
+
 export interface MoverData {
-  query: string
+  keyword: string
   page: string | null
   recentClicks: number
   recentImpressions: number
@@ -34,123 +39,90 @@ export interface MoverData {
   positionChange: number
 }
 
-export interface MoversAndShakersResult {
+export interface MoversResult {
   rising: MoverData[]
   declining: MoverData[]
   stable: MoverData[]
-  periods: {
-    recent: { start: string, end: string }
-    baseline: { start: string, end: string }
-  }
+}
+
+function percentDifference(current: number, previous: number): number {
+  if (previous === 0)
+    return current > 0 ? 100 : 0
+  return ((current - previous) / previous) * 100
 }
 
 /**
- * Identifies movers and shakers - queries with significant recent changes.
- * Compares recent week against previous 4-week average baseline.
+ * Identifies movers and shakers - keywords with significant recent changes.
+ * Compares recent period against baseline period.
+ *
+ * @param input Current and previous keyword data
+ * @param options Filtering and sorting options
  */
-export async function analyzeMoversAndShakers(
-  client: GoogleSearchConsoleClient,
-  siteUrl: string,
-  options: MoversAndShakersOptions = {},
-): Promise<MoversAndShakersResult> {
+export function analyzeMovers(
+  input: MoversInput,
+  options: MoversOptions = {},
+): MoversResult {
   const {
-    query = defaultQuery(7),
-    compareQuery,
     changeThreshold = 0.2,
     minImpressions = 50,
     sortBy = 'clicksChange',
   } = options
 
-  const { startDate: recentStartStr, endDate: recentEndStr } = getQueryDateRange(query)
-  const recentStart = dayjs(recentStartStr)
-  const recentEnd = dayjs(recentEndStr)
+  const normFactor = input.normalizationFactor ?? 1
 
-  // Default baseline: 4 weeks before the recent period
-  // Use compareQuery if provided, otherwise derive from recent query
-  let baselineQuery: GSCQueryBuilder<any, any>
-  let baselineStart: Dayjs
-  let baselineEnd: Dayjs
-
-  if (compareQuery) {
-    baselineQuery = compareQuery
-    const { startDate: baseStartStr, endDate: baseEndStr } = getQueryDateRange(compareQuery)
-    baselineStart = dayjs(baseStartStr)
-    baselineEnd = dayjs(baseEndStr)
-  }
-  else {
-    // Create baseline query with same filters, different period
-    baselineEnd = recentStart.subtract(1, 'day')
-    baselineStart = baselineEnd.subtract(28, 'day')
-    baselineQuery = withDateRange(query, baselineStart.format('YYYY-MM-DD'), baselineEnd.format('YYYY-MM-DD'))
-  }
-
-  // Fetch both periods with user's filters applied
-  const [recentData, baselineData, recentPages, baselinePages] = await Promise.all([
-    executeAnalysisQuery(client, siteUrl, query, ['query']),
-    executeAnalysisQuery(client, siteUrl, baselineQuery, ['query']),
-    executeAnalysisQuery(client, siteUrl, query, ['query', 'page']),
-    executeAnalysisQuery(client, siteUrl, baselineQuery, ['query', 'page']),
-  ])
-
-  // Calculate period lengths for normalization
-  const recentDays = recentEnd.diff(recentStart, 'day') || 1
-  const baselineDays = baselineEnd.diff(baselineStart, 'day') || 1
-  const normalizationFactor = baselineDays / recentDays
-
-  // Build lookup maps
-  const baselineMap = new Map<string, { clicks: number, impressions: number, position: number }>()
-  for (const row of baselineData.rows) {
-    const rowQuery = row.query || ''
-    // Normalize baseline to same period length as recent for fair comparison
-    baselineMap.set(rowQuery, {
-      clicks: row.clicks / normalizationFactor,
-      impressions: row.impressions / normalizationFactor,
-      position: row.position,
+  // Build baseline map with normalized values
+  const baselineMap = new Map<string, { clicks: number, impressions: number, position: number, page: string | null }>()
+  for (const row of input.previous) {
+    baselineMap.set(row.keyword, {
+      clicks: num(row.clicks) / normFactor,
+      impressions: num(row.impressions) / normFactor,
+      position: num(row.position),
+      page: row.page ?? null,
     })
   }
 
-  // Build page lookup (top page per query from recent)
+  // Build page map from current (top page per keyword)
   const pageMap = new Map<string, string>()
-  for (const row of recentPages.rows) {
-    const rowQuery = row.query || ''
-    if (!pageMap.has(rowQuery))
-      pageMap.set(rowQuery, row.page || '')
+  for (const row of input.current) {
+    if (!pageMap.has(row.keyword) && row.page)
+      pageMap.set(row.keyword, row.page)
   }
-  // Fill in from baseline for queries not in recent
-  for (const row of baselinePages.rows) {
-    const rowQuery = row.query || ''
-    if (!pageMap.has(rowQuery))
-      pageMap.set(rowQuery, row.page || '')
+  // Fill in from baseline for keywords not in current
+  for (const row of input.previous) {
+    if (!pageMap.has(row.keyword) && row.page)
+      pageMap.set(row.keyword, row.page)
   }
 
   const rising: MoverData[] = []
   const declining: MoverData[] = []
   const stable: MoverData[] = []
 
-  // Process recent queries
-  for (const row of recentData.rows) {
-    const rowQuery = row.query || ''
+  // Process current keywords
+  for (const row of input.current) {
+    const impressions = num(row.impressions)
+    const clicks = num(row.clicks)
+    const position = num(row.position)
 
-    if (row.impressions < minImpressions)
+    if (impressions < minImpressions)
       continue
 
-    const baseline = baselineMap.get(rowQuery) || { clicks: 0, impressions: 0, position: 0 }
-    const clicksChangePercent = percentDifference(row.clicks, baseline.clicks)
-    const impressionsChangePercent = percentDifference(row.impressions, baseline.impressions)
+    const baseline = baselineMap.get(row.keyword) || { clicks: 0, impressions: 0, position: 0, page: null }
+    const clicksChangePercent = percentDifference(clicks, baseline.clicks)
+    const impressionsChangePercent = percentDifference(impressions, baseline.impressions)
 
     const data: MoverData = {
-      query: rowQuery,
-      page: pageMap.get(rowQuery) || null,
-      recentClicks: row.clicks,
-      recentImpressions: row.impressions,
-      recentPosition: row.position,
+      keyword: row.keyword,
+      page: pageMap.get(row.keyword) ?? null,
+      recentClicks: clicks,
+      recentImpressions: impressions,
+      recentPosition: position,
       baselineClicks: Math.round(baseline.clicks),
       baselineImpressions: Math.round(baseline.impressions),
       baselinePosition: baseline.position,
-      clicksChange: row.clicks - Math.round(baseline.clicks),
+      clicksChange: clicks - Math.round(baseline.clicks),
       clicksChangePercent,
       impressionsChangePercent,
-      positionChange: row.position - baseline.position,
+      positionChange: position - baseline.position,
     }
 
     const absChange = Math.abs(clicksChangePercent / 100)
@@ -185,19 +157,5 @@ export async function analyzeMoversAndShakers(
   declining.sort(sortFn)
   stable.sort((a, b) => b.recentClicks - a.recentClicks)
 
-  return {
-    rising,
-    declining,
-    stable,
-    periods: {
-      recent: {
-        start: recentStart.format('YYYY-MM-DD'),
-        end: recentEnd.format('YYYY-MM-DD'),
-      },
-      baseline: {
-        start: baselineStart.format('YYYY-MM-DD'),
-        end: baselineEnd.format('YYYY-MM-DD'),
-      },
-    },
-  }
+  return { rising, declining, stable }
 }

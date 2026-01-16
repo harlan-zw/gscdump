@@ -1,86 +1,76 @@
 /**
- * Analysis module - pure functions and provider-based wrappers.
- *
- * Pure functions operate on typed data and return typed results.
- * Fetch functions use DataProvider to get data, then call pure functions.
+ * Analysis module - re-exports pure functions from gscdump
+ * and provides provider-based fetch wrappers.
  */
 
-// Types
+// Types (local QueryPageRow, DateMetrics for provider interface)
 export * from './types'
 
-// Pure analysis functions
+// Re-export all pure analysis functions and types from gscdump
 export {
+  // Functions
   analyzeStrikingDistance,
+  analyzeOpportunity,
+  analyzeBrandSegmentation,
+  analyzeConcentration,
+  analyzePageConcentration,
+  analyzeKeywordConcentration,
+  analyzeDecay,
+  analyzeMovers,
+  analyzeCannibalization,
+  analyzeZeroClick,
+  analyzeSeasonality,
+  analyzeClustering,
+  // Types - Striking Distance
   type StrikingDistanceOptions,
   type StrikingDistanceResult,
   type StrikingDistanceSortMetric,
-} from './striking-distance'
-
-export {
-  analyzeOpportunity,
+  // Types - Opportunity
   type OpportunityOptions,
   type OpportunityResult,
   type OpportunitySortMetric,
   type OpportunityWeights,
   type OpportunityFactors,
-} from './opportunity'
-
-export {
-  analyzeBrandSegmentation,
+  // Types - Brand
   type BrandSegmentationOptions,
   type BrandSegmentationResult,
   type BrandSummary,
-} from './brand'
-
-export {
-  analyzeConcentration,
-  analyzePageConcentration,
-  analyzeKeywordConcentration,
+  // Types - Concentration
   type ConcentrationOptions,
   type ConcentrationResult,
   type ConcentrationItem,
   type ConcentrationInput,
   type ConcentrationRiskLevel,
-} from './concentration'
-
-export {
-  analyzeDecay,
+  // Types - Decay
   type DecayOptions,
   type DecayResult,
   type DecayInput,
   type DecaySortMetric,
-} from './decay'
-
-export {
-  analyzeMovers,
+  // Types - Movers
   type MoversOptions,
   type MoversResult,
   type MoversInput,
   type MoverData,
   type MoversSortMetric,
-} from './movers'
-
-export {
-  analyzeCannibalization,
+  // Types - Cannibalization
   type CannibalizationOptions,
   type CannibalizationResult,
   type CannibalizationPage,
   type CannibalizationSortMetric,
-} from './cannibalization'
-
-export {
-  analyzeZeroClick,
+  // Types - Zero Click
   type ZeroClickOptions,
   type ZeroClickResult,
-} from './zero-click'
-
-export {
-  analyzeSeasonality,
+  // Types - Seasonality
   type SeasonalityOptions,
   type SeasonalityResult,
   type SeasonalityMetric,
   type MonthlyData,
-} from './seasonality'
+  // Types - Clustering
+  type ClusteringOptions,
+  type ClusteringResult,
+  type KeywordCluster,
+  type ClusterType,
+} from 'gscdump'
 
 // Provider-based fetch wrappers
 export {

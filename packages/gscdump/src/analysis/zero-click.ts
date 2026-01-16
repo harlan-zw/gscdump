@@ -1,8 +1,12 @@
-import type { GoogleSearchConsoleClient } from '../core/client'
-import type { BaseAnalysisOptions, QueryMetrics } from './types'
-import { defaultQuery, executeAnalysisQuery, sortByMetric } from './types'
+/**
+ * Zero-click analysis - identifies queries with high impressions but low clicks.
+ * Pure function operating on query+page rows.
+ */
 
-export interface ZeroClickOptions extends BaseAnalysisOptions {
+import type { QueryPageRow } from './types'
+import { createSorter } from './types'
+
+export interface ZeroClickOptions {
   /** Minimum impressions. Default: 1000 */
   minImpressions?: number
   /** Maximum CTR to be considered "Zero Click". Default: 0.03 (3%) */
@@ -11,37 +15,42 @@ export interface ZeroClickOptions extends BaseAnalysisOptions {
   maxPosition?: number
 }
 
-// ZeroClickResult is exactly QueryMetrics
-export type ZeroClickResult = QueryMetrics
+export interface ZeroClickResult {
+  query: string
+  page: string
+  clicks: number
+  impressions: number
+  ctr: number
+  position: number
+}
+
+const sortResults = createSorter<ZeroClickResult, 'impressions'>(
+  item => item.impressions,
+  'impressions',
+)
 
 /**
  * Identifies potential "Zero-Click" queries.
  * These are high-volume queries where you rank well but get few clicks,
  * often due to SERP features (Answer Boxes, Knowledge Panels, AI Overviews).
+ *
+ * @param rows Query+page data rows
+ * @param options Filtering options
  */
-export async function analyzeZeroClickQueries(
-  client: GoogleSearchConsoleClient,
-  siteUrl: string,
+export function analyzeZeroClick(
+  rows: QueryPageRow[],
   options: ZeroClickOptions = {},
-): Promise<ZeroClickResult[]> {
+): ZeroClickResult[] {
   const {
-    query = defaultQuery(),
     minImpressions = 1000,
-    maxCtr = 0.03, // 3%
+    maxCtr = 0.03,
     maxPosition = 10,
   } = options
 
-  // Fetch queries with pages
-  const { rows } = await executeAnalysisQuery(client, siteUrl, query, ['query', 'page'])
-
-  const results: ZeroClickResult[] = []
-
   // Group by query to find top page per query
-  const queryMap = new Map<string, { page: string, clicks: number, impressions: number, position: number, ctr: number }>()
+  const queryMap = new Map<string, ZeroClickResult>()
 
   for (const row of rows) {
-    const rowQuery = row.query || ''
-
     if (row.impressions < minImpressions)
       continue
     if (row.position > maxPosition)
@@ -49,25 +58,19 @@ export async function analyzeZeroClickQueries(
     if (row.ctr > maxCtr)
       continue
 
-    // If query already exists, keep the one with better position (or more traffic)
-    const existing = queryMap.get(rowQuery)
+    // If query already exists, keep the one with better position
+    const existing = queryMap.get(row.query)
     if (!existing || row.position < existing.position) {
-      queryMap.set(rowQuery, {
-        page: row.page || '',
+      queryMap.set(row.query, {
+        query: row.query,
+        page: row.page,
         clicks: row.clicks,
         impressions: row.impressions,
-        position: row.position,
         ctr: row.ctr,
+        position: row.position,
       })
     }
   }
 
-  for (const [rowQuery, metrics] of queryMap) {
-    results.push({
-      query: rowQuery,
-      ...metrics,
-    })
-  }
-
-  return sortByMetric(results, 'impressions')
+  return sortResults(Array.from(queryMap.values()), 'impressions', 'desc')
 }

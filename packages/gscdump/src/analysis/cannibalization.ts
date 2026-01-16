@@ -1,20 +1,32 @@
-import type { GoogleSearchConsoleClient } from '../core/client'
-import type { BaseSearchMetrics, SortableOptions } from './types'
-import { createSorter, defaultQuery, executeAnalysisQuery } from './types'
+/**
+ * Keyword cannibalization analysis - detects multiple pages ranking for same query.
+ * Pure function operating on query+page rows.
+ */
+
+import type { QueryPageRow, SortOrder } from './types'
+import { createSorter } from './types'
 
 export type CannibalizationSortMetric = 'clicks' | 'impressions' | 'positionSpread' | 'pageCount'
 
-export interface CannibalizationOptions extends SortableOptions<CannibalizationSortMetric> {
+export interface CannibalizationOptions {
   /** Minimum impressions for a query to be considered. Default: 10 */
   minImpressions?: number
   /** Maximum position spread to flag as cannibalization. Default: 10 */
   maxPositionSpread?: number
   /** Minimum number of pages ranking for same query. Default: 2 */
   minPages?: number
+  /** Sort metric. Default: clicks */
+  sortBy?: CannibalizationSortMetric
+  /** Sort order. Default: desc */
+  sortOrder?: SortOrder
 }
 
-export interface CannibalizationPage extends BaseSearchMetrics {
+export interface CannibalizationPage {
   page: string
+  clicks: number
+  impressions: number
+  ctr: number
+  position: number
 }
 
 export interface CannibalizationResult {
@@ -25,11 +37,7 @@ export interface CannibalizationResult {
   positionSpread: number
 }
 
-/**
- * Detects keyword cannibalization - queries ranking for multiple pages.
- * Returns queries where multiple pages compete for the same search term.
- */
-const sortCannibalization = createSorter<CannibalizationResult, CannibalizationSortMetric>(
+const sortResults = createSorter<CannibalizationResult, CannibalizationSortMetric>(
   (item, metric) => {
     switch (metric) {
       case 'clicks': return item.totalClicks
@@ -41,13 +49,18 @@ const sortCannibalization = createSorter<CannibalizationResult, CannibalizationS
   'clicks',
 )
 
-export async function analyzeCannibalization(
-  client: GoogleSearchConsoleClient,
-  siteUrl: string,
+/**
+ * Detects keyword cannibalization - queries ranking for multiple pages.
+ * Returns queries where multiple pages compete for the same search term.
+ *
+ * @param rows Query+page data rows
+ * @param options Filtering and sorting options
+ */
+export function analyzeCannibalization(
+  rows: QueryPageRow[],
   options: CannibalizationOptions = {},
-): Promise<CannibalizationResult[]> {
+): CannibalizationResult[] {
   const {
-    query = defaultQuery(),
     minImpressions = 10,
     maxPositionSpread = 10,
     minPages = 2,
@@ -55,27 +68,22 @@ export async function analyzeCannibalization(
     sortOrder = 'desc',
   } = options
 
-  // Fetch query + page data
-  const { rows } = await executeAnalysisQuery(client, siteUrl, query, ['query', 'page'])
-
   // Group by query
   const queryMap = new Map<string, CannibalizationPage[]>()
 
   for (const row of rows) {
-    const rowQuery = row.query || ''
-
     if (row.impressions < minImpressions)
       continue
 
-    const pages = queryMap.get(rowQuery) || []
+    const pages = queryMap.get(row.query) || []
     pages.push({
-      page: row.page || '',
+      page: row.page,
       clicks: row.clicks,
       impressions: row.impressions,
       ctr: row.ctr,
       position: row.position,
     })
-    queryMap.set(rowQuery, pages)
+    queryMap.set(row.query, pages)
   }
 
   // Filter to queries with multiple pages
@@ -103,5 +111,5 @@ export async function analyzeCannibalization(
     })
   }
 
-  return sortCannibalization(results, sortBy, sortOrder)
+  return sortResults(results, sortBy, sortOrder)
 }

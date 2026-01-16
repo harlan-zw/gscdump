@@ -1,11 +1,14 @@
-import type { GoogleSearchConsoleClient } from '../core/client'
-import type { BaseAnalysisOptions } from './types'
-import { defaultQuery, executeAnalysisQuery } from './types'
+/**
+ * Seasonality analysis - detects monthly traffic patterns.
+ * Pure function operating on date-based metrics.
+ */
+
+import type { DateMetrics } from './types'
 
 export type SeasonalityMetric = 'clicks' | 'impressions'
 
-export interface SeasonalityOptions extends BaseAnalysisOptions {
-  /** Metric to analyze for seasonality. Default: 'clicks' */
+export interface SeasonalityOptions {
+  /** Metric to analyze for seasonality. Default: clicks */
   metric?: SeasonalityMetric
 }
 
@@ -20,7 +23,7 @@ export interface MonthlyData {
 export interface SeasonalityResult {
   hasSeasonality: boolean
   /** Coefficient of variation: std dev / mean. Higher = more seasonal. */
-  strength: number // 0-1 (capped)
+  strength: number
   peakMonths: string[] // e.g., ['11', '12'] for Nov-Dec
   troughMonths: string[] // e.g., ['06'] for June
   monthlyBreakdown: MonthlyData[]
@@ -39,26 +42,23 @@ function calculateCV(values: number[]): number {
     return 0
   const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length
   const stdDev = Math.sqrt(variance)
-  return Math.min(stdDev / mean, 1) // Cap at 1
+  return Math.min(stdDev / mean, 1)
 }
 
 /**
  * Detects seasonality patterns by analyzing monthly traffic variation.
  * Identifies peaks (>1.5x average) and troughs (<0.5x average).
+ *
+ * @param dates Array of date metrics (each row is one day)
+ * @param options Analysis options
  */
-export async function analyzeSeasonality(
-  client: GoogleSearchConsoleClient,
-  siteUrl: string,
+export function analyzeSeasonality(
+  dates: DateMetrics[],
   options: SeasonalityOptions = {},
-): Promise<SeasonalityResult> {
-  const {
-    query = defaultQuery(365),
-    metric = 'clicks',
-  } = options
+): SeasonalityResult {
+  const { metric = 'clicks' } = options
 
-  const { rows } = await executeAnalysisQuery(client, siteUrl, query, ['date'])
-
-  if (rows.length === 0) {
+  if (dates.length === 0) {
     return {
       hasSeasonality: false,
       strength: 0,
@@ -72,11 +72,8 @@ export async function analyzeSeasonality(
   // Aggregate by month
   const monthlyMap = new Map<string, number>()
 
-  for (const row of rows) {
-    const month = row.date?.substring(0, 7) // YYYY-MM
-    if (!month)
-      continue
-
+  for (const row of dates) {
+    const month = row.date.substring(0, 7) // YYYY-MM
     const value = metric === 'clicks' ? row.clicks : row.impressions
     monthlyMap.set(month, (monthlyMap.get(month) || 0) + value)
   }

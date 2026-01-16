@@ -1,21 +1,25 @@
-import type { GoogleSearchConsoleClient } from '../core/client'
-import type { BaseAnalysisOptions, QueryMetrics, SortOrder } from './types'
-import { createSorter, defaultQuery, executeAnalysisQuery, fetchQueryPageMap } from './types'
+/**
+ * Opportunity score analysis - scores keywords by optimization potential.
+ * Pure function operating on keyword data.
+ */
+
+import type { KeywordData } from '../api/search-analytics/types'
+import { type SortOrder, createSorter, num } from './types'
 
 export type OpportunitySortMetric = 'opportunityScore' | 'potentialClicks' | 'impressions' | 'position'
 
 export interface OpportunityWeights {
-  position?: number // default: 1
-  impressions?: number // default: 1
-  ctrGap?: number // default: 1
+  position?: number
+  impressions?: number
+  ctrGap?: number
 }
 
-export interface OpportunityScoreOptions extends BaseAnalysisOptions {
+export interface OpportunityOptions {
   /** Minimum impressions to consider. Default: 100 */
   minImpressions?: number
   /** Custom weights for score factors. Default: all 1 */
   weights?: OpportunityWeights
-  /** Sort metric. Default: 'opportunityScore' */
+  /** Sort metric. Default: opportunityScore */
   sortBy?: OpportunitySortMetric
 }
 
@@ -25,8 +29,14 @@ export interface OpportunityFactors {
   ctrGapScore: number
 }
 
-export interface OpportunityItem extends QueryMetrics {
-  opportunityScore: number // 0-100
+export interface OpportunityResult {
+  keyword: string
+  page: string | null
+  clicks: number
+  impressions: number
+  ctr: number
+  position: number
+  opportunityScore: number
   potentialClicks: number
   factors: OpportunityFactors
 }
@@ -51,7 +61,7 @@ function getExpectedCtr(position: number): number {
 }
 
 /**
- * Calculates position score: higher for positions 4-20 (improvable range).
+ * Position score: higher for positions 4-20 (improvable range).
  * Peak opportunity at positions 8-15.
  */
 function calculatePositionScore(position: number): number {
@@ -63,12 +73,11 @@ function calculatePositionScore(position: number): number {
   // Bell curve peaking around position 10-12
   const optimal = 11
   const distance = Math.abs(position - optimal)
-  const score = Math.max(0, 1 - (distance / 15))
-  return score
+  return Math.max(0, 1 - (distance / 15))
 }
 
 /**
- * Calculates impression score using log scale.
+ * Impression score using log scale.
  * Higher impressions = more traffic potential.
  */
 function calculateImpressionScore(impressions: number): number {
@@ -80,7 +89,7 @@ function calculateImpressionScore(impressions: number): number {
 }
 
 /**
- * Calculates CTR gap score: difference between actual and expected CTR.
+ * CTR gap score: difference between actual and expected CTR.
  * Higher gap = more opportunity for improvement.
  */
 function calculateCtrGapScore(actualCtr: number, position: number): number {
@@ -92,15 +101,14 @@ function calculateCtrGapScore(actualCtr: number, position: number): number {
   return Math.min(gap / expectedCtr, 1)
 }
 
-// position sorts asc (lower = better), others desc
-const OPPORTUNITY_SORT_ORDER: Record<OpportunitySortMetric, SortOrder> = {
+const SORT_ORDER: Record<OpportunitySortMetric, SortOrder> = {
   opportunityScore: 'desc',
   potentialClicks: 'desc',
   impressions: 'desc',
   position: 'asc',
 }
 
-const sortOpportunity = createSorter<OpportunityItem, OpportunitySortMetric>(
+const sortResults = createSorter<OpportunityResult, OpportunitySortMetric>(
   (item, metric) => item[metric],
   'opportunityScore',
 )
@@ -109,13 +117,11 @@ const sortOpportunity = createSorter<OpportunityItem, OpportunitySortMetric>(
  * Scores keywords by optimization opportunity.
  * Composite score combining position, impressions, and CTR gap factors.
  */
-export async function analyzeOpportunityScore(
-  client: GoogleSearchConsoleClient,
-  siteUrl: string,
-  options: OpportunityScoreOptions = {},
-): Promise<OpportunityItem[]> {
+export function analyzeOpportunity(
+  keywords: KeywordData[],
+  options: OpportunityOptions = {},
+): OpportunityResult[] {
   const {
-    query = defaultQuery(),
     minImpressions = 100,
     weights = {},
     sortBy = 'opportunityScore',
@@ -125,24 +131,21 @@ export async function analyzeOpportunityScore(
   const impressionsWeight = weights.impressions ?? 1
   const ctrGapWeight = weights.ctrGap ?? 1
 
-  // Fetch query data and page lookup in parallel
-  const [{ rows: queryRows }, queryPageMap] = await Promise.all([
-    executeAnalysisQuery(client, siteUrl, query, ['query']),
-    fetchQueryPageMap(client, siteUrl, query),
-  ])
+  const results: OpportunityResult[] = []
 
-  const results: OpportunityItem[] = []
+  for (const row of keywords) {
+    const impressions = num(row.impressions)
+    const position = num(row.position)
+    const ctr = num(row.ctr)
+    const clicks = num(row.clicks)
 
-  for (const row of queryRows) {
-    const rowQuery = row.query || ''
-
-    if (row.impressions < minImpressions)
+    if (impressions < minImpressions)
       continue
 
     // Calculate factor scores
-    const positionScore = calculatePositionScore(row.position)
-    const impressionScore = calculateImpressionScore(row.impressions)
-    const ctrGapScore = calculateCtrGapScore(row.ctr, row.position)
+    const positionScore = calculatePositionScore(position)
+    const impressionScore = calculateImpressionScore(impressions)
+    const ctrGapScore = calculateCtrGapScore(ctr, position)
 
     // Composite opportunity score (weighted geometric mean, normalized to 0-100)
     const weightedProduct
@@ -155,16 +158,16 @@ export async function analyzeOpportunityScore(
     const opportunityScore = Math.round(geometricMean * 100)
 
     // Calculate potential clicks if position improved to 3
-    const targetCtr = getExpectedCtr(Math.min(3, row.position))
-    const potentialClicks = Math.round(row.impressions * targetCtr)
+    const targetCtr = getExpectedCtr(Math.min(3, position))
+    const potentialClicks = Math.round(impressions * targetCtr)
 
     results.push({
-      query: rowQuery,
-      page: queryPageMap.get(rowQuery) || null,
-      clicks: row.clicks,
-      impressions: row.impressions,
-      ctr: row.ctr,
-      position: row.position,
+      keyword: row.keyword,
+      page: row.page ?? null,
+      clicks,
+      impressions,
+      ctr,
+      position,
       opportunityScore,
       potentialClicks,
       factors: {
@@ -175,5 +178,5 @@ export async function analyzeOpportunityScore(
     })
   }
 
-  return sortOpportunity(results, sortBy, OPPORTUNITY_SORT_ORDER[sortBy])
+  return sortResults(results, sortBy, SORT_ORDER[sortBy])
 }
