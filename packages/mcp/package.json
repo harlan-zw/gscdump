@@ -2,7 +2,33 @@
   "name": "@gscdump/mcp",
   "type": "module",
   "version": "0.0.1",
-  "description": "MCP tool handlers for Google Search Console",
+  "description": "MCP server for Google Search Console - let AI agents query your search data",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "google-search-console",
+    "gsc",
+    "ai",
+    "claude",
+    "cursor",
+    "seo"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
@@ -19,6 +45,9 @@
   },
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
+  "bin": {
+    "gscdump-mcp": "./dist/bin.mjs"
+  },
   "files": [
     "dist"
   ],

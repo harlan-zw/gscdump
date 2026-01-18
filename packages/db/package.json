@@ -2,12 +2,32 @@
   "name": "@gscdump/db",
   "type": "module",
   "version": "0.0.1",
+  "description": "SQLite persistence for Google Search Console data with Drizzle ORM",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
   "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/db#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/harlan-zw/gscdump.git",
     "directory": "packages/db"
   },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
+  },
+  "keywords": [
+    "google-search-console",
+    "gsc",
+    "sqlite",
+    "drizzle",
+    "database",
+    "seo",
+    "data-persistence"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",

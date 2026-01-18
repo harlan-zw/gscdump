@@ -7,15 +7,13 @@ gscdump/
 ├── packages/
 │   ├── gscdump/          # Core library - GSC API wrapper
 │   ├── cli/              # @gscdump/cli - Command-line interface
-│   └── db/               # @gscdump/db - SQLite persistence with Drizzle
-├── apps/
-│   ├── gscdump.com/      # Nuxt web dashboard
-│   └── cloud.gscdump.com/ # Nuxt cloud service (CLI auth, storage)
-├── layers/
-│   ├── auth/             # Nuxt layer - OAuth authentication
-│   └── mcp/              # Nuxt layer - Model Context Protocol tools
+│   ├── db/               # @gscdump/db - SQLite persistence with Drizzle
+│   ├── query/            # @gscdump/query - Data provider abstraction
+│   └── mcp/              # @gscdump/mcp - MCP server for AI assistants
 └── pnpm-workspace.yaml   # Workspace config with catalogs
 ```
+
+Web app lives separately at https://github.com/harlan-zw/gscdump.com
 
 ## Packages
 
@@ -119,17 +117,6 @@ const sites = await fetchSites({ accessToken: 'ya29.xxx...' })
 | `withFreshData()` | Request fresh (unfinalized) data |
 | `withFinalData()` | Request finalized data only |
 | `withPropertyAggregation()` | Use byProperty aggregation for domain totals |
-| `analyzeCannibalization(auth, site, opts?)` | Find queries ranking for multiple pages |
-| `analyzeStrikingDistance(auth, site, opts?)` | Find high-impression, low-CTR opportunities |
-| `fetchYoYComparison(auth, site, opts?)` | Year-over-year period comparison |
-| `analyzeMoversAndShakers(auth, site, opts?)` | Detect significant ranking/traffic changes |
-| `analyzeContentDecay(auth, site, opts?)` | Find pages losing traffic over time |
-| `analyzeZeroClickQueries(auth, site, opts?)` | Find high-impression queries with low CTR |
-| `analyzeBrandSegmentation(auth, site, opts)` | Segment keywords into brand vs non-brand |
-| `analyzeQueryClustering(auth, site, opts?)` | Cluster keywords by intent/prefix |
-| `analyzeTrafficConcentration(auth, site, opts?)` | Measure traffic distribution risk (Gini/HHI) |
-| `analyzeSeasonality(auth, site, opts?)` | Detect seasonal traffic patterns |
-| `analyzeOpportunityScore(auth, site, opts?)` | Score keywords by optimization potential |
 
 **Error Utilities:**
 
@@ -144,25 +131,152 @@ const sites = await fetchSites({ accessToken: 'ya29.xxx...' })
 | `analyzeGscError(error)` | Full error analysis |
 | `formatGscErrorForCli(error)` | CLI-friendly error message |
 
-**Analysis Algorithms:**
+**Analysis Functions (Pure):**
 
-| Algorithm | Description | Key Options |
-|-----------|-------------|-------------|
-| `analyzeCannibalization` | Detects keywords ranking for multiple pages (cannibalizing each other) | `minImpressions`, `maxPositionSpread`, `minPages` |
-| `analyzeStrikingDistance` | Finds keywords in positions 4-20 with high impressions (easy wins) | `minPosition`, `maxPosition`, `maxCtr` |
-| `analyzeMoversAndShakers` | Categorizes queries into rising, declining, stable based on period comparison | `changeThreshold`, `comparePeriod` |
-| `analyzeContentDecay` | Finds pages losing traffic compared to previous period | `threshold`, `minPreviousClicks` |
-| `analyzeZeroClickQueries` | Identifies high-impression queries with very low CTR (SERP features) | `maxCtr`, `maxPosition` |
-| `analyzeBrandSegmentation` | Separates brand vs non-brand traffic using provided brand terms | `brandTerms` (required), `minImpressions` |
-| `analyzeQueryClustering` | Groups keywords by intent prefix ("how to", "best") or common word prefix | `clusterBy` ('intent'/'prefix'/'both'), `minClusterSize` |
-| `analyzeTrafficConcentration` | Measures traffic concentration using Gini coefficient and HHI | `dimension` ('page'/'keyword'), `topN` |
-| `analyzeSeasonality` | Detects monthly traffic patterns, identifies peaks/troughs | `metric` ('clicks'/'impressions') |
-| `analyzeOpportunityScore` | Composite score combining position, impressions, CTR gap | `weights` (position/impressions/ctrGap) |
+All analysis functions are pure - they operate on typed data arrays and return typed results. No API calls.
+
+| Function | Purpose |
+|----------|---------|
+| `analyzeStrikingDistance(data, opts?)` | Find keywords in positions 4-20 with high impressions |
+| `analyzeOpportunity(data, opts?)` | Score keywords by optimization potential |
+| `analyzeBrandSegmentation(data, opts)` | Segment keywords into brand vs non-brand |
+| `analyzeConcentration(data, opts?)` | Measure traffic distribution risk (Gini/HHI) |
+| `analyzePageConcentration(...)` | Concentration analysis for pages |
+| `analyzeKeywordConcentration(...)` | Concentration analysis for keywords |
+| `analyzeDecay(current, previous, opts?)` | Find pages losing traffic over time |
+| `analyzeMovers(current, previous, opts?)` | Detect significant ranking/traffic changes |
+| `analyzeCannibalization(data, opts?)` | Find queries ranking for multiple pages |
+| `analyzeZeroClick(data, opts?)` | Find high-impression queries with low CTR |
+| `analyzeSeasonality(data, opts?)` | Detect monthly traffic patterns |
+| `analyzeClustering(data, opts?)` | Cluster keywords by intent/prefix |
 
 **Concentration Thresholds (HHI):**
 - `<1500`: Low risk - traffic is well distributed
 - `1500-2500`: Medium risk - moderate concentration
 - `>2500`: High risk - over-reliance on few pages/keywords
+
+### @gscdump/query
+
+Data provider abstraction layer. Provides unified interface to fetch data from API or DB.
+
+```
+packages/query/src/
+├── index.ts          # Re-exports all
+├── types.ts          # Provider types
+├── factory.ts        # createProvider factory
+├── api-provider.ts   # API-backed provider
+├── db-provider.ts    # DB-backed provider
+└── analysis/
+    ├── index.ts      # Re-exports gscdump analysis + fetch wrappers
+    ├── types.ts      # Provider-specific types
+    └── fetch.ts      # Provider-based fetch wrappers
+```
+
+**Provider Pattern:**
+
+```ts
+const provider = await createProvider({
+  auth,
+  db, // optional
+  source: 'auto', // 'api' | 'db' | 'auto'
+  siteUrls: ['sc-domain:example.com'],
+  range,
+})
+
+// Same interface regardless of source
+const pages = await provider.getPagesWithComparison(siteUrl, range)
+const keywords = await provider.getKeywordsWithComparison(siteUrl, range)
+```
+
+`auto` mode checks DB for data availability, falls back to API.
+
+**Analysis Fetch Wrappers:**
+
+Provider-based wrappers that fetch data and run analysis:
+
+| Function | Purpose |
+|----------|---------|
+| `fetchStrikingDistanceAnalysis(provider, site, range, opts?)` | Fetch keywords + run striking distance analysis |
+| `fetchOpportunityAnalysis(provider, site, range, opts?)` | Fetch keywords + run opportunity scoring |
+| `fetchBrandAnalysis(provider, site, range, opts)` | Fetch keywords + brand segmentation |
+| `fetchMoversAnalysis(provider, site, range, opts?)` | Fetch comparison data + movers analysis |
+| `fetchDecayAnalysis(provider, site, range, opts?)` | Fetch comparison data + decay detection |
+| `fetchCannibalizationAnalysis(provider, site, range, opts?)` | Fetch keyword-page data + cannibalization |
+| `fetchZeroClickAnalysis(provider, site, range, opts?)` | Fetch keywords + zero-click detection |
+| `fetchSeasonalityAnalysis(provider, site, range, opts?)` | Fetch daily data + seasonality analysis |
+| `fetchPageConcentrationAnalysis(provider, site, range, opts?)` | Fetch pages + concentration |
+| `fetchKeywordConcentrationAnalysis(provider, site, range, opts?)` | Fetch keywords + concentration |
+
+### @gscdump/mcp
+
+MCP (Model Context Protocol) server for AI assistant integration.
+
+```
+packages/mcp/src/
+├── index.ts          # Re-exports handlers + types
+├── types.ts          # Zod schemas for tool inputs
+├── server/
+│   └── index.ts      # createGscMcpServer factory
+└── handlers/
+    ├── index.ts      # Handler exports
+    ├── sites.ts      # Site/sitemap handlers
+    ├── analytics.ts  # Analytics fetch handlers
+    ├── indexing.ts   # URL inspection/indexing handlers
+    ├── analysis.ts   # Analysis handlers
+    ├── query.ts      # Custom query handler
+    └── utils.ts      # Period parsing utilities
+```
+
+**MCP Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `list-sites` | List all GSC properties |
+| `list-sites-with-sitemaps` | List sites with sitemap data |
+| `list-sitemaps` | List sitemaps for a site |
+| `get-sitemap` | Get sitemap details |
+| `submit-sitemap` | Submit new sitemap |
+| `delete-sitemap` | Delete sitemap |
+| `fetch-dates` | Daily search analytics |
+| `fetch-devices` | Device breakdown |
+| `fetch-countries` | Country breakdown |
+| `fetch-pages` | All pages with performance |
+| `fetch-pages-comparison` | Pages with period comparison |
+| `fetch-keywords` | Keywords with comparison |
+| `fetch-search-appearance` | Search appearance breakdown |
+| `fetch-page-details` | Single page drill-down |
+| `fetch-keyword-details` | Single keyword drill-down |
+| `fetch-analytics-summary` | Site summary with comparison |
+| `inspect-url` | URL indexing status |
+| `request-indexing` | Request URL indexing |
+| `get-indexing-status` | Indexing metadata |
+| `batch-request-indexing` | Batch indexing requests |
+| `batch-inspect-urls` | Batch URL inspection |
+| `detect-cannibalization` | Keyword cannibalization analysis |
+| `find-striking-distance` | Quick-win keywords |
+| `fetch-yoy-comparison` | Year-over-year comparison |
+| `analyze-movers-and-shakers` | Rising/declining queries |
+| `detect-content-decay` | Decaying content detection |
+| `find-zero-click-queries` | Zero-click query detection |
+| `custom-query` | Execute custom GSC query |
+| `parse-period` | Parse period strings to date ranges |
+
+**Usage:**
+
+```ts
+import { createGscMcpServer } from '@gscdump/mcp/server'
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+
+const server = createGscMcpServer({
+  name: 'gscdump',
+  version: '1.0.0',
+  getAuth: () => getAuth(),
+  getDb: () => db, // optional
+})
+
+const transport = new StdioServerTransport()
+await server.connect(transport)
+```
 
 ### @gscdump/cli
 
@@ -173,18 +287,19 @@ packages/cli/src/
 ├── index.ts              # Main entry, command registration
 ├── auth.ts               # OAuth2 flows (local + cloud), getAuth() helper
 ├── config.ts             # Config file handling (mode, cloudUrl, defaults)
-├── provider.ts           # Unified data source abstraction (API/DB/auto)
 ├── utils.ts              # Progress bars, CSV export, splash screen
 └── commands/
     ├── init.ts           # First-run setup (cloud/local mode selection)
     ├── dump.ts           # Export to JSON/CSV
     ├── sync.ts           # Sync to SQLite database
     ├── compare.ts        # Compare periods
+    ├── analyze.ts        # Run SEO analysis
     ├── sites.ts          # List GSC properties
     ├── sitemaps.ts       # Sitemap management
-    ├── indexing.ts       # URL indexing management (index subcommand)
+    ├── indexing.ts       # URL indexing management (index/inspect)
     ├── auth.ts           # Auth status/logout
-    └── config.ts         # Config management
+    ├── config.ts         # Config management
+    └── mcp.ts            # Start MCP server
 ```
 
 **Commands:**
@@ -196,6 +311,7 @@ packages/cli/src/
 | `gscdump dump -s site -d pages,keywords -p 90d` | Non-interactive export |
 | `gscdump sync -s site` | Sync data to SQLite |
 | `gscdump compare -s site` | Compare two periods |
+| `gscdump analyze <type> -s site` | Run SEO analysis |
 | `gscdump sites` | List available sites |
 | `gscdump sitemaps -s site` | List/manage sitemaps |
 | `gscdump index status -s site` | Show indexing status from DB |
@@ -205,13 +321,25 @@ packages/cli/src/
 | `gscdump auth status` | Show auth status |
 | `gscdump auth logout` | Clear tokens |
 | `gscdump config set key value` | Set config |
+| `gscdump mcp` | Start MCP server for AI assistants |
+
+**Analysis Types:**
+
+```bash
+gscdump analyze striking-distance -s sc-domain:example.com
+gscdump analyze opportunity -s sc-domain:example.com
+gscdump analyze movers -s sc-domain:example.com
+gscdump analyze decay -s sc-domain:example.com
+gscdump analyze cannibalization -s sc-domain:example.com
+gscdump analyze zero-click -s sc-domain:example.com
+```
 
 **Auth Modes:**
 - **Cloud**: Easy setup via cloud.gscdump.com (no API keys needed)
 - **Local**: Use your own Google OAuth credentials
 
 **Config (`~/.config/gscdump/config.json`):**
-// ~/.config/gscdump/config.json
+```json
 {
   "mode": "cloud",
   "cloudUrl": "https://cloud.gscdump.com",
@@ -220,26 +348,22 @@ packages/cli/src/
   "defaultFormat": "json",
   "defaultDb": "./data.db"
 }
+```
 
 ### @gscdump/db
 
-SQLite/D1 persistence layer with Drizzle ORM.
+SQLite persistence layer with Drizzle ORM.
 
 ```
 packages/db/src/
-├── index.ts          # Re-exports all (includes gscdump dep)
-├── cloud.ts          # Cloud-only exports (no gscdump dep)
+├── index.ts          # Re-exports all
+├── setup.ts          # createGscDb factory
 ├── connector.ts      # Database connection setup
 ├── schema.ts         # Drizzle schema definitions
 ├── queries.ts        # Query helpers (trends, rollups, changes)
-├── cloud-queries.ts  # Cloud-specific queries (users, cli_auth_codes, sessions)
 ├── sync.ts           # GSC → SQLite sync functions
 └── api-queries.ts    # DB-backed query functions (mirrors gscdump API)
 ```
-
-**Exports:**
-- `@gscdump/db` - Full package (includes sync functions that depend on gscdump)
-- `@gscdump/db/cloud` - Cloud-only (schema + cloud queries, no gscdump dependency)
 
 **Schema Tables:**
 
@@ -256,11 +380,6 @@ packages/db/src/
 | `site_date_country_analytics` | Daily country metrics |
 | `site_date_device_analytics` | Daily device metrics |
 | `site_date_search_appearance_analytics` | Daily search appearance metrics |
-| `keywords` | Keyword metadata (optional enrichment) |
-| `users` | OAuth users (cloud) |
-| `cli_auth_codes` | CLI device auth codes (cloud) |
-| `cli_sessions` | CLI session tracking (cloud) |
-| `user_sites` | User-site associations (cloud) |
 
 **Sync Functions:**
 
@@ -275,10 +394,10 @@ packages/db/src/
 | `syncAll(...)` | Sync all data types |
 | `syncAllWithKeywordPaths(...)` | Sync all including granular |
 | `updateLastSynced(db, siteId)` | Update site's lastSynced timestamp |
-| `inspectAndSyncUrl(db, auth, siteId, property, path)` | Inspect URL and save status to DB |
-| `requestAndSyncIndexing(db, auth, siteId, property, path, type?)` | Request indexing and save to DB |
-| `batchInspectUrls(db, auth, siteId, property, paths, opts?)` | Batch inspect URLs with progress |
-| `batchRequestIndexingForPaths(db, auth, siteId, property, paths, opts?)` | Batch request indexing with progress |
+| `inspectAndSyncUrl(db, auth, siteId, property, path)` | Inspect URL and save status |
+| `requestAndSyncIndexing(...)` | Request indexing and save to DB |
+| `batchInspectUrls(...)` | Batch inspect URLs with progress |
+| `batchRequestIndexingForPaths(...)` | Batch request indexing with progress |
 | `getIndexingStats(db, siteId)` | Get indexing status summary |
 | `getUrlsNeedingIndexing(db, siteId, opts?)` | Query URLs needing indexing |
 
@@ -320,146 +439,6 @@ packages/db/src/
 | `queryPage(db, siteId, range, path)` | Page drill-down from DB |
 | `hasDataForRange(db, siteId, range)` | Check if DB has data for range |
 
-**Cloud Query Functions:**
-
-| Function | Purpose |
-|----------|---------|
-| `createCliAuthCode(db, data)` | Create CLI auth code |
-| `getCliAuthCode(db, code)` | Get auth code by code |
-| `updateCliAuthCode(db, code, data)` | Update auth code |
-| `deleteCliAuthCode(db, code)` | Delete auth code |
-| `deleteExpiredCliAuthCodes(db)` | Cleanup expired codes |
-| `completeCliAuthCode(db, code, tokens)` | Complete auth with tokens |
-| `getUserByGoogleId(db, googleId)` | Get user by Google ID |
-| `getUserByEmail(db, email)` | Get user by email |
-| `getUserById(db, userId)` | Get user by ID |
-| `createUser(db, data)` | Create new user |
-| `updateUser(db, userId, data)` | Update user |
-| `upsertUser(db, data)` | Create or update user |
-| `updateUserTokens(db, userId, tokens)` | Update user OAuth tokens |
-| `createCliSession(db, data)` | Create CLI session |
-| `getCliSession(db, sessionId)` | Get session by ID |
-| `getUserSessions(db, userId)` | Get user's sessions |
-| `updateSessionLastUsed(db, sessionId)` | Update session activity |
-| `revokeCliSession(db, sessionId)` | Revoke single session |
-| `revokeAllUserSessions(db, userId)` | Revoke all user sessions |
-| `getUserSessionStats(db, userId)` | Get session statistics |
-
-## Apps
-
-### gscdump.com
-Main web dashboard for GSC data visualization.
-
-```
-apps/gscdump.com/
-├── app/
-│   ├── app.vue
-│   ├── components/
-│   │   └── PerformanceChart.vue
-│   ├── middleware/
-│   │   └── auth.ts
-│   └── pages/
-│       ├── index.vue         # Landing page
-│       ├── dashboard.vue     # User dashboard
-│       └── sites/
-│           ├── [siteUrl].vue # Site overview
-│           └── [siteUrl]/
-│               ├── index.vue     # Site dashboard
-│               ├── pages.vue     # Pages list
-│               ├── page.vue      # Single page details
-│               ├── keywords.vue  # Keywords list
-│               ├── keyword.vue   # Single keyword details
-│               ├── countries.vue # Country breakdown
-│               └── devices.vue   # Device breakdown
-├── server/
-│   └── ...
-└── nuxt.config.ts
-```
-
-### cloud.gscdump.com
-Cloud service for CLI authentication. Deployed to **Cloudflare Workers** with D1 database.
-
-```
-apps/cloud.gscdump.com/
-├── app/
-│   ├── app.vue
-│   ├── components/
-│   │   └── PerformanceChart.vue
-│   ├── middleware/
-│   │   └── auth.ts
-│   └── pages/
-│       ├── index.vue         # Landing page
-│       ├── dashboard.vue     # User dashboard
-│       └── cli/
-│           └── auth.vue      # CLI authorization page
-├── server/
-│   ├── api/
-│   │   ├── cli/auth/
-│   │   │   ├── init.post.ts      # Start CLI auth flow
-│   │   │   ├── poll.get.ts       # Poll for auth completion
-│   │   │   └── complete.post.ts  # Complete auth after OAuth
-│   │   └── user/...              # User API endpoints
-│   ├── routes/auth/
-│   │   └── google.get.ts     # OAuth callback
-│   ├── types/...
-│   └── utils/
-│       ├── db.ts             # D1 database connection
-│       └── ...
-├── migrations/
-│   ├── 0001_init.sql         # D1 schema (users, cli_auth_codes, sites)
-│   └── 0002_cli_sessions.sql # CLI sessions
-├── wrangler.toml             # Cloudflare config
-└── nuxt.config.ts            # cloudflare-durable preset
-```
-
-**Infrastructure:**
-- Nitro preset: `cloudflare-durable`
-- Database: Cloudflare D1 (`gscdump-db`)
-- Uses `gscdump` package directly (edge-compatible)
-
-**CLI Auth Flow:**
-1. CLI calls `POST /api/cli/auth/init` → returns `{ code, authUrl }`
-2. User visits `authUrl`, signs in with Google OAuth
-3. CLI polls `GET /api/cli/auth/poll?code=xxx` until complete
-4. CLI receives tokens and saves them locally
-
-## Nuxt Layers
-
-### auth
-
-OAuth2 authentication layer for Nuxt apps.
-
-```
-layers/auth/
-├── nuxt.config.ts
-└── server/
-    ├── routes/auth/google.get.ts   # OAuth callback
-    ├── types/auth.d.ts             # Session type augmentation
-    └── utils/gsc-auth.ts           # Auth utilities
-```
-
-### mcp
-
-Model Context Protocol tools for AI integrations.
-
-```
-layers/mcp/
-├── nuxt.config.ts
-└── server/mcp/
-    ├── index.ts
-    └── tools/
-        ├── list-sites.ts
-        ├── list-sites-with-sitemaps.ts
-        ├── get-analytics.ts
-        ├── get-pages.ts
-        ├── get-keywords.ts
-        ├── get-keyword-details.ts
-        ├── get-page-details.ts
-        ├── get-countries.ts
-        ├── get-devices.ts
-        └── inspect-url.ts
-```
-
 ## Data Flow
 
 ```
@@ -470,16 +449,26 @@ GscAuth (access token)
 │                    gscdump (core)                       │
 │  core/client.ts: gscClient (ofetch, edge-compatible)    │
 │  api/: sites, indexing, inspection, search-analytics/   │
-│  analysis/: cannibalization, decay, movers, etc         │
+│  analysis/: pure functions (no API calls)               │
 │  query/: fluent query builder                           │
 └─────────────────────────────────────────────────────────┘
      │                    │                    │
      ▼                    ▼                    ▼
-┌────────────────┐ ┌────────────────┐ ┌──────────────────┐
-│  @gscdump/cli  │ │  @gscdump/db   │ │ cloud.gscdump.com│
-│  dump → JSON   │ │  sync → SQLite │ │  Cloudflare D1   │
-│  dump → CSV    │ │  (drizzle-orm) │ │  (edge runtime)  │
-└────────────────┘ └────────────────┘ └──────────────────┘
+┌────────────────┐ ┌────────────────┐ ┌────────────────────┐
+│ @gscdump/query │ │  @gscdump/db   │ │   @gscdump/mcp     │
+│ API/DB provider│ │  sync → SQLite │ │   MCP server       │
+│ analysis fetch │ │  (drizzle-orm) │ │   for AI tools     │
+└────────────────┘ └────────────────┘ └────────────────────┘
+         │                 │                    │
+         └─────────────────┼────────────────────┘
+                           ▼
+                  ┌────────────────┐
+                  │  @gscdump/cli  │
+                  │  dump → JSON   │
+                  │  sync → SQLite │
+                  │  analyze → SEO │
+                  │  mcp → server  │
+                  └────────────────┘
 ```
 
 ## Key Patterns
@@ -509,25 +498,6 @@ interface ComparisonResult<T> {
 }
 ```
 
-### Data Provider Abstraction
-
-CLI uses a unified `DataProvider` interface to fetch data from API or DB:
-
-```ts
-const provider = await createProvider({
-  auth,
-  db,
-  source: 'auto', // 'api' | 'db' | 'auto'
-  siteUrls,
-  range,
-})
-
-// Same interface regardless of source
-const pages = await provider.getPagesWithComparison(siteUrl, range)
-```
-
-`auto` mode checks DB for data availability, falls back to API.
-
 ### Query Builder
 
 The `query/` module provides a fluent query builder for GSC Search Analytics API:
@@ -541,7 +511,7 @@ The `query/` module provides a fluent query builder for GSC Search Analytics API
 
 **Fluent builder:** `query()` for complex queries:
 ```ts
-import { query, eq, gt, contains } from 'gscdump'
+import { contains, eq, gt, query } from 'gscdump'
 
 const results = await query(auth, site)
   .select('query', 'page', 'clicks', 'impressions')
@@ -574,17 +544,37 @@ Uses `.catch()` on promises per project convention. No try/catch blocks.
 | `@googleapis/searchconsole` | Types only (devDep) |
 | `@googleapis/indexing` | Types only (devDep) |
 
+### @gscdump/query
+
+| Package | Purpose |
+|---------|---------|
+| `gscdump` | Core library |
+| `@gscdump/db` | Database provider |
+
+### @gscdump/mcp
+
+| Package | Purpose |
+|---------|---------|
+| `gscdump` | Core library |
+| `@gscdump/query` | Data providers |
+| `@modelcontextprotocol/sdk` | MCP SDK |
+| `zod` | Schema validation |
+
 ### @gscdump/db
 
 | Package | Purpose |
 |---------|---------|
-| `drizzle-orm` | SQLite/D1 ORM |
+| `drizzle-orm` | SQLite ORM |
 | `db0` | Database connector |
 
 ### @gscdump/cli
 
 | Package | Purpose |
 |---------|---------|
+| `gscdump` | Core library |
+| `@gscdump/db` | Database |
+| `@gscdump/query` | Data providers |
+| `@gscdump/mcp` | MCP server |
 | `google-auth-library` | OAuth2 flows |
 | `citty` | CLI framework |
 | `@clack/prompts` | Interactive prompts |
@@ -592,6 +582,6 @@ Uses `.catch()` on promises per project convention. No try/catch blocks.
 
 ## Build System
 
-- **obuild**: TypeScript build tool for all packages
+- **unbuild**: TypeScript build tool for all packages
 - **pnpm catalogs**: Centralized dependency versions in `pnpm-workspace.yaml`
 - **ESM only**: All packages use `"type": "module"`

@@ -21,9 +21,10 @@
 - 💾 Own your data - export to any SQL database. No BigQuery, no 16-month expiry.
 - 📊 Unlimited queries and row limits - GSC UI caps at 1k, API at 25k.
 - 🤖 MCP Server - let Claude, Cursor, or any AI agent query your search data directly.
-- 🔍 SEO analysis built-in - cannibalization, striking distance, movers & shakers.
+- 🔍 SEO analysis built-in - cannibalization, striking distance, movers & shakers, decay detection.
 - ⚡ Indexing API - check index status, request indexing, batch operations.
 - 🎯 Typed query builder - Drizzle-style API with filter constraints narrowing result types.
+- 🌐 Edge-compatible - works in Cloudflare Workers, Deno, etc.
 
 ## What is gscdump?
 
@@ -36,8 +37,8 @@ Export complete data with no row limits to any database you control. Your data, 
 ## Get Started
 
 ```bash
-# Auth with Google
-npx @gscdump/cli auth
+# First-run setup (choose cloud or local auth)
+npx @gscdump/cli init
 
 # List your sites
 npx @gscdump/cli sites
@@ -50,20 +51,27 @@ npx @gscdump/cli sync --site https://example.com --db ./gsc.db
 
 # Compare periods
 npx @gscdump/cli compare --site https://example.com --period 28d
+
+# Run SEO analysis
+npx @gscdump/cli analyze striking-distance --site https://example.com
 ```
 
 ### Commands
 
 | Command | Description |
 |---------|-------------|
+| `init` | First-run setup (choose cloud/local mode) |
 | `auth` | OAuth2 login with Google |
 | `sites` | List GSC properties |
 | `dump` | Export analytics to stdout/file |
 | `sync` | Persist to SQLite database |
 | `compare` | Period-over-period comparison |
-| `sitemaps` | List sitemaps for a site |
-| `index` | Request URL indexing |
-| `inspect` | URL inspection (index status) |
+| `analyze` | Run SEO analysis (striking-distance, movers, decay, etc.) |
+| `sitemaps` | List/manage sitemaps for a site |
+| `index` | URL indexing (status, inspect, request) |
+| `inspect` | Quick URL inspection |
+| `config` | Manage CLI configuration |
+| `mcp` | Start MCP server for AI assistants |
 
 ## MCP Server
 
@@ -92,11 +100,11 @@ The MCP server exposes tools for sites, pages, keywords, devices, countries, and
 ## API Usage
 
 ```ts
-import { OAuth2Client } from 'google-auth-library'
 import { fetchKeywordsWithComparison, fetchPagesWithComparison, userPeriodRange } from 'gscdump'
 
-const auth = new OAuth2Client(clientId, clientSecret)
-auth.setCredentials({ access_token, refresh_token })
+// Auth accepts token string or object
+const auth = 'ya29.xxx...'
+// or: { accessToken: 'ya29.xxx...' }
 
 const range = userPeriodRange('28d')
 
@@ -116,7 +124,7 @@ import { queryRecursiveStream } from 'gscdump'
 
 // Stream keyword+page combinations - yields batches as they're fetched
 for await (const batch of queryRecursiveStream(client, site, {
-  dimensions: ['query', 'page'] as const,  // as const required for type inference
+  dimensions: ['query', 'page'] as const, // as const required for type inference
   startDate: '2024-01-01',
   endDate: '2024-01-31',
 })) {
@@ -127,17 +135,25 @@ for await (const batch of queryRecursiveStream(client, site, {
 
 ### Analysis Functions
 
+Analysis functions are pure - they operate on typed data arrays and return typed results.
+
 ```ts
-import { detectCannibalization, findStrikingDistance, getMoversAndShakers } from 'gscdump'
+import {
+  analyzeCannibalization,
+  analyzeDecay,
+  analyzeMovers,
+  analyzeStrikingDistance,
+  fetchKeywordsWithComparison,
+} from 'gscdump'
 
-// Queries ranking for multiple pages
-const cannibalization = await detectCannibalization(auth, site)
+// Fetch data first
+const { current, previous } = await fetchKeywordsWithComparison(auth, site, range)
 
-// High impressions, low CTR (position 4-20)
-const opportunities = await findStrikingDistance(auth, site)
-
-// Significant ranking/traffic changes
-const movers = await getMoversAndShakers(auth, site)
+// Run pure analysis on the data
+const striking = analyzeStrikingDistance(current)
+const movers = analyzeMovers(current, previous)
+const decay = analyzeDecay(current, previous)
+const cannibalization = analyzeCannibalization(keywordPageData)
 ```
 
 ### Typed Query Builder
@@ -145,7 +161,7 @@ const movers = await getMoversAndShakers(auth, site)
 Drizzle-style query builder with full type safety. Filter constraints flow through to result types.
 
 ```ts
-import { gsc, eq, and, inArray, contains, device, country, page, Device, Country } from 'gscdump/query'
+import { and, contains, country, Country, device, Device, eq, gsc, inArray, page } from 'gscdump/query'
 
 const result = await gsc
   .select('page', 'query', 'device', 'country')
@@ -159,10 +175,10 @@ const result = await gsc
   .execute(client)
 
 // Fully typed results - narrowed by filters
-result.rows[0].device   // type: 'MOBILE' (narrowed by eq)
-result.rows[0].country  // type: 'usa' | 'gbr' (narrowed by inArray)
-result.rows[0].page     // type: string (contains doesn't narrow)
-result.rows[0].clicks   // type: number
+result.rows[0].device // type: 'MOBILE' (narrowed by eq)
+result.rows[0].country // type: 'usa' | 'gbr' (narrowed by inArray)
+result.rows[0].page // type: string (contains doesn't narrow)
+result.rows[0].clicks // type: number
 ```
 
 **Operators:**
@@ -181,35 +197,45 @@ result.rows[0].clicks   // type: number
 
 ### All Exports
 
-**Sites:** `fetchSites`, `fetchSitesWithSitemaps`, `inspectUrl`
+**Sites:** `fetchSites`, `fetchSitesWithSitemaps`, `fetchSitemaps`, `getSitemap`, `submitSitemap`, `deleteSitemap`, `inspectUrl`, `batchInspectUrls`
 
 **Indexing:** `requestIndexing`, `getIndexingMetadata`, `batchRequestIndexing`
 
-**Analytics:** `fetchAnalyticsWithComparison`, `fetchPagesWithComparison`, `fetchKeywordsWithComparison`, `fetchDevicesWithComparison`, `fetchCountriesWithComparison`, `fetchDates`, `fetchPages`, `fetchPage`, `fetchKeyword`
+**Analytics:** `fetchAnalyticsWithComparison`, `fetchPagesWithComparison`, `fetchKeywordsWithComparison`, `fetchDevicesWithComparison`, `fetchCountriesWithComparison`, `fetchSearchAppearanceWithComparison`, `fetchDates`, `fetchDatesWithComparison`, `fetchPages`, `fetchPage`, `fetchKeyword`
 
-**Analysis:** `detectCannibalization`, `findStrikingDistance`, `fetchYoYComparison`, `getMoversAndShakers`
+**Analysis (Pure):** `analyzeStrikingDistance`, `analyzeOpportunity`, `analyzeBrandSegmentation`, `analyzeConcentration`, `analyzeDecay`, `analyzeMovers`, `analyzeCannibalization`, `analyzeZeroClick`, `analyzeSeasonality`, `analyzeClustering`
 
-**Low-level:** `queryRecursive`, `queryRecursiveStream`, `createQueryBody`, `withPropertyAggregation`, `collectStream`
+**Low-level:** `gscClient`, `queryRecursive`, `queryRecursiveStream`, `createQueryBody`, `withPropertyAggregation`, `withSearchAppearance`, `withDataType`, `withFreshData`, `withFinalData`
 
 **Query Builder (`gscdump/query`):** `gsc`, `eq`, `ne`, `and`, `or`, `inArray`, `contains`, `like`, `regex`, `notRegex`, `not`, `page`, `query`, `device`, `country`, `searchAppearance`, `Device`, `Country`
+
+**Error Utilities:** `isQuotaError`, `isRateLimitError`, `isAuthError`, `getErrorCode`, `getErrorMessage`, `getRetryAfter`, `analyzeGscError`, `formatGscErrorForCli`
 
 **Utils:** `userPeriodRange`, `formatDateGsc`, `percentDifference`
 
 ## Auth Setup
 
+**Cloud mode** (recommended):
+```bash
+npx @gscdump/cli init  # Select "cloud"
+```
+Easy setup via cloud.gscdump.com - no API keys needed.
+
+**Local mode** (bring your own credentials):
 1. Create a Google Cloud project
 2. Enable "Search Console API" and "Web Search Indexing API"
 3. Create OAuth2 credentials (Desktop app)
-4. Run `gscdump auth`
+4. Run `npx @gscdump/cli init` and select "local"
 
 ## Packages
 
 | Package | Description |
 |---------|-------------|
-| [`@gscdump/cli`](./packages/cli) | CLI - dump, sync, compare, inspect |
+| [`gscdump`](./packages/gscdump) | Core library - GSC API wrapper, analysis functions, query builder |
+| [`@gscdump/cli`](./packages/cli) | CLI - dump, sync, compare, analyze, MCP server |
 | [`@gscdump/mcp`](./packages/mcp) | MCP server - AI agents query your GSC data |
 | [`@gscdump/db`](./packages/db) | SQLite persistence with Drizzle ORM |
-| [`gscdump`](./packages/gscdump) | Core library - use in your own tools |
+| [`@gscdump/query`](./packages/query) | Data provider abstraction (API/DB unified interface) |
 
 ## License
 

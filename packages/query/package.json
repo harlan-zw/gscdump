@@ -2,18 +2,31 @@
   "name": "@gscdump/query",
   "type": "module",
   "version": "0.0.1",
-  "description": "Unified query abstraction - routes to DB or GSC API",
+  "description": "Unified data provider for Google Search Console - routes queries to API or SQLite database",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
     "url": "https://harlanzw.com/"
   },
   "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/query#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/harlan-zw/gscdump.git",
     "directory": "packages/query"
   },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
+  },
+  "keywords": [
+    "google-search-console",
+    "gsc",
+    "data-provider",
+    "abstraction",
+    "api",
+    "database"
+  ],
   "sideEffects": false,
   "exports": {
     ".": {

@@ -2,18 +2,33 @@
   "name": "@gscdump/cli",
   "type": "module",
   "version": "0.0.1",
-  "description": "CLI for GSCDump - Google Search Console data extraction",
+  "description": "CLI for Google Search Console - dump, sync, compare, analyze, and run MCP server",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
     "url": "https://harlanzw.com/"
   },
   "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/cli#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/harlan-zw/gscdump.git",
     "directory": "packages/cli"
   },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
+  },
+  "keywords": [
+    "google-search-console",
+    "gsc",
+    "seo",
+    "cli",
+    "mcp",
+    "search-analytics",
+    "data-export",
+    "sqlite"
+  ],
   "bin": {
     "gscdump": "./dist/index.mjs"
   },

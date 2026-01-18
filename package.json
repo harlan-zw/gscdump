@@ -15,7 +15,7 @@
     "typecheck": "pnpm run -r typecheck",
     "test": "vitest --project @gscdump/cli --project @gscdump/db --project gscdump --project @gscdump/mcp --project @gscdump/query",
     "test:e2e": "vitest --project e2e",
-    "release": "pnpm build && bumpp packages/*/package.json"
+    "release": "pnpm build && bumpp --output=CHANGELOG.md packages/*/package.json"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev-lint",
