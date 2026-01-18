@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/db",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "SQLite persistence for Google Search Console data with Drizzle ORM",
   "author": {
     "name": "Harlan Wilton",
