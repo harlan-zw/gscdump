@@ -1,7 +1,7 @@
 {
   "name": "gscdump",
   "type": "module",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Google Search Console data extraction library",
   "author": {
     "name": "Harlan Wilton",

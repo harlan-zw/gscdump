@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/query",
   "type": "module",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Unified query abstraction - routes to DB or GSC API",
   "author": {
     "name": "Harlan Wilton",
