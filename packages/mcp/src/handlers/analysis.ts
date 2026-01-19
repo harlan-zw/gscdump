@@ -1,5 +1,6 @@
-import type { CannibalizationResult, DecayResult, MoversResult, StrikingDistanceResult, ZeroClickResult } from '@gscdump/query'
-import type { YoYComparisonResult } from 'gscdump'
+import type { GscDb } from '@gscdump/db'
+import type { CannibalizationResult, DataProvider, DecayResult, MoversResult, StrikingDistanceResult, ZeroClickResult } from '@gscdump/query'
+import type { Auth, YoYComparisonResult } from 'gscdump'
 import type { z } from 'zod'
 import type {
   cannibalizationInput,
@@ -7,27 +8,33 @@ import type {
   HandlerContext,
   moversAndShakersInput,
   Period,
+  SourceOption,
   strikingDistanceInput,
   yoyComparisonInput,
   zeroClickInput,
 } from '../types'
 import {
-
   createProvider,
-
   fetchCannibalizationAnalysis,
   fetchDecayAnalysis,
   fetchMoversAnalysis,
   fetchStrikingDistanceAnalysis,
   fetchZeroClickAnalysis,
-
 } from '@gscdump/query'
 import dayjs from 'dayjs'
-import {
-  fetchYoYComparison as gscFetchYoY,
-
-} from 'gscdump'
+import { fetchYoYComparison as gscFetchYoY } from 'gscdump'
 import { toAnalyticsRange, toPeriod } from '../types'
+
+function getProviderForSource(auth: Auth, db: GscDb | null | undefined, source: SourceOption): DataProvider {
+  if (source === 'api')
+    return createProvider({ auth })
+  if (source === 'db') {
+    if (!db)
+      throw new Error('Database required for db source')
+    return createProvider({ db })
+  }
+  return db ? createProvider({ auth, db }) : createProvider({ auth })
+}
 
 /** Default to last 28 days if no period specified */
 function defaultPeriod(): Period {
@@ -101,13 +108,7 @@ export async function detectCannibalization(
     false,
   )
 
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: input.source ?? ctx.source ?? 'auto',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, input.source ?? ctx.source ?? 'auto')
 
   return fetchCannibalizationAnalysis(provider, input.siteUrl, range, {
     minImpressions: input.minImpressions,
@@ -127,13 +128,7 @@ export async function findStrikingDistance(
     false,
   )
 
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: input.source ?? ctx.source ?? 'auto',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, input.source ?? ctx.source ?? 'auto')
 
   return fetchStrikingDistanceAnalysis(provider, input.siteUrl, range, {
     minPosition: input.minPosition,
@@ -164,13 +159,7 @@ export async function analyzeMoversAndShakers(
     input.comparePeriod ? toPeriod(input.comparePeriod) : undefined,
   )
 
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: input.source ?? ctx.source ?? 'auto',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, input.source ?? ctx.source ?? 'auto')
 
   return fetchMoversAnalysis(provider, input.siteUrl, range, {
     changeThreshold: input.changeThreshold,
@@ -188,13 +177,7 @@ export async function detectContentDecay(
     input.lookbackDays,
   )
 
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: input.source ?? ctx.source ?? 'auto',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, input.source ?? ctx.source ?? 'auto')
 
   return fetchDecayAnalysis(provider, input.siteUrl, range, {
     minPreviousClicks: input.minPreviousClicks,
@@ -212,13 +195,7 @@ export async function findZeroClickQueries(
     false,
   )
 
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: input.source ?? ctx.source ?? 'auto',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, input.source ?? ctx.source ?? 'auto')
 
   return fetchZeroClickAnalysis(provider, input.siteUrl, range, {
     minImpressions: input.minImpressions,

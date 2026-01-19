@@ -1,5 +1,6 @@
-import type { DataSource } from '@gscdump/query'
-import type { DataType, ResolvedAnalyticsRange } from 'gscdump'
+import type { GscDb } from '@gscdump/db'
+import type { DataProvider } from '@gscdump/query'
+import type { Auth, DataType, ResolvedAnalyticsRange } from 'gscdump'
 import path from 'node:path'
 import process from 'node:process'
 import { createGscDb } from '@gscdump/db'
@@ -10,6 +11,19 @@ import betterSqlite3 from 'db0/connectors/better-sqlite3'
 import { getAuth } from '../auth'
 import { loadConfig } from '../config'
 import { gscErrorHandler, logger, parsePeriod } from '../utils'
+
+type DataSource = 'api' | 'db' | 'auto'
+
+function getProviderForSource(auth: Auth, db: GscDb | null, source: DataSource): DataProvider {
+  if (source === 'api')
+    return createProvider({ auth })
+  if (source === 'db') {
+    if (!db)
+      throw new Error('Database required for db source')
+    return createProvider({ db })
+  }
+  return db ? createProvider({ auth, db }) : createProvider({ auth })
+}
 
 const SEARCH_TYPES: DataType[] = ['web', 'image', 'video', 'news', 'discover', 'googleNews']
 
@@ -190,13 +204,7 @@ export const compareCommand = defineCommand({
       ? createGscDb(betterSqlite3({ name: path.resolve(dbPath) })).db
       : null
 
-    const provider = await createProvider({
-      auth,
-      db,
-      source: effectiveSource,
-      siteUrls: [siteArg],
-      range,
-    })
+    const provider = getProviderForSource(auth, db, effectiveSource)
 
     if (args.json) {
       const [dates, pages, keywords] = await Promise.all([

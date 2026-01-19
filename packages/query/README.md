@@ -4,14 +4,14 @@
 [![npm downloads](https://img.shields.io/npm/dm/@gscdump/query?color=yellow)](https://npm.chart.dev/@gscdump/query)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-> Unified data provider for Google Search Console - routes queries to API or SQLite database.
+> Unified data provider for Google Search Console - routes queries to API or SQLite database with automatic sync.
 
 ## Features
 
 - **Unified Interface** - Same API whether data comes from GSC API or local database
-- **Automatic Routing** - Queries route to DB when data exists, falls back to API
+- **Automatic Sync** - When using hybrid mode, automatically fetches and persists data on cache miss
 - **Type-Safe** - Full TypeScript types across both providers
-- **Transparent** - Consumers don't need to know the data source
+- **Simple API** - Just provide `auth`, `db`, or both
 
 ## Install
 
@@ -21,73 +21,82 @@ npm install @gscdump/query
 
 ## Usage
 
+### API Only
+
+Fetch directly from Google Search Console API:
+
 ```ts
-import { createDb } from '@gscdump/db'
-import { createQueryProvider } from '@gscdump/query'
+import { createProvider } from '@gscdump/query'
 
-// Create provider with both sources
-const provider = createQueryProvider({
-  auth: 'ya29.xxx...',
-  db: createDb('./gsc.db'),
-})
+const provider = createProvider({ auth: oauthClient })
 
-// Queries automatically route to DB or API
-const pages = await provider.pages('https://example.com', {
-  startDate: '2024-01-01',
-  endDate: '2024-01-31',
-})
-
-const keywords = await provider.keywords('https://example.com', {
-  startDate: '2024-01-01',
-  endDate: '2024-01-31',
-})
+const pages = await provider.getPagesWithComparison('https://example.com', range)
 ```
 
-### API-Only Provider
+### DB Only
+
+Read from local SQLite database (errors if data is missing):
 
 ```ts
-import { createQueryProvider } from '@gscdump/query'
+import { createGscDb } from '@gscdump/db'
+import { createProvider } from '@gscdump/query'
 
-// No database - all queries go to GSC API
-const provider = createQueryProvider({
-  auth: 'ya29.xxx...',
-})
+const { db } = createGscDb(connector)
+const provider = createProvider({ db })
 
-const pages = await provider.pages('https://example.com', {
-  startDate: '2024-01-01',
-  endDate: '2024-01-31',
-})
+const pages = await provider.getPagesWithComparison('https://example.com', range)
 ```
 
-### DB-Only Provider
+### Hybrid (Recommended)
+
+Uses DB as cache, automatically syncs from API when data is missing:
 
 ```ts
-import { createDb } from '@gscdump/db'
-import { createQueryProvider } from '@gscdump/query'
+import { createGscDb } from '@gscdump/db'
+import { createProvider } from '@gscdump/query'
 
-// No API auth - queries only work if data exists in DB
-const provider = createQueryProvider({
-  db: createDb('./gsc.db'),
-})
+const { db } = createGscDb(connector)
+const provider = createProvider({ auth: oauthClient, db })
+
+// First call: fetches from API, syncs to DB, returns result
+// Second call: returns from DB (fast!)
+const pages = await provider.getPagesWithComparison('https://example.com', range)
 ```
 
 ## API
 
-### `createQueryProvider(options)`
+### `createProvider(options)`
 
-Creates a data provider that routes queries to the appropriate source.
+Creates a data provider based on what's provided:
 
-**Options:**
-- `auth` - GSC API auth token or credentials
-- `db` - Database instance from `@gscdump/db`
+| Options | Behavior |
+|---------|----------|
+| `{ auth }` | API only - fetches directly from GSC |
+| `{ db }` | DB only - reads from local database (errors if missing) |
+| `{ auth, db }` | Hybrid - uses DB as cache, syncs from API on miss |
 
 **Methods:**
-- `sites()` - List all sites
-- `pages(site, options)` - Query page metrics
-- `keywords(site, options)` - Query keyword metrics
-- `devices(site, options)` - Query device breakdown
-- `countries(site, options)` - Query country breakdown
-- `comparison(site, options)` - Period-over-period comparison
+
+- `getDatesWithComparison(site, range)` - Daily metrics with comparison
+- `getPages(site, range)` - All pages for period
+- `getPagesWithComparison(site, range)` - Pages with period comparison
+- `getKeywordsWithComparison(site, range)` - Keywords with comparison
+- `getCountriesWithComparison(site, range)` - Country breakdown
+- `getDevicesWithComparison(site, range)` - Device breakdown
+- `getPage(site, range, path)` - Single page details
+- `getKeyword(site, range, keyword)` - Single keyword details
+
+### Direct Providers
+
+For more control, use the provider factories directly:
+
+```ts
+import { createApiProvider, createDbProvider, createHybridProvider } from '@gscdump/query'
+
+const api = createApiProvider(auth)
+const db = createDbProvider(db)
+const hybrid = createHybridProvider(auth, db)
+```
 
 ## Related Packages
 

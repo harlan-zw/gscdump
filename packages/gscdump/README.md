@@ -23,13 +23,16 @@ npm install gscdump
 ## Usage
 
 ```ts
-import { fetchKeywordsWithComparison, fetchPagesWithComparison, userPeriodRange } from 'gscdump'
+import { daysAgo, today } from '@gscdump/query'
+import { fetchKeywordsWithComparison, fetchPagesWithComparison } from 'gscdump'
 
 // Auth accepts token string or object
 const auth = 'ya29.xxx...'
 // or: { accessToken: 'ya29.xxx...' }
 
-const range = userPeriodRange('28d')
+const range = {
+  period: { start: daysAgo(28), end: today() },
+}
 
 // Pages with top keyword per page
 const pages = await fetchPagesWithComparison(auth, site, range)
@@ -134,7 +137,7 @@ const cannibalization = analyzeCannibalization(keywordPageData)
 
 **Error Utilities:** `isQuotaError`, `isRateLimitError`, `isAuthError`, `getErrorCode`, `getErrorMessage`, `getRetryAfter`, `analyzeGscError`, `formatGscErrorForCli`
 
-**Utils:** `userPeriodRange`, `formatDateGsc`, `percentDifference`
+**Utils:** `formatDateGsc`, `percentDifference`
 
 ## Related Packages
 

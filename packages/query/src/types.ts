@@ -20,7 +20,6 @@ import type {
   SearchAppearanceData,
   SeasonalityOptions,
   SeasonalityResult,
-  // Analysis types for DB-optimized methods
   StrikingDistanceOptions,
   StrikingDistanceResult,
   ZeroClickOptions,
@@ -31,12 +30,12 @@ import type { DateMetrics, QueryPageRow } from './analysis/types'
 // Re-export for convenience
 export type { DateMetrics, QueryPageRow }
 
-export type DataSource = 'api' | 'db' | 'auto'
+export type DataSource = 'api' | 'db' | 'hybrid'
 
 export type { FetchKeywordResult, FetchPageResult }
 
 export interface DataProvider {
-  source: 'api' | 'db'
+  source: DataSource
 
   // Core comparison queries
   getDatesWithComparison: (siteUrl: string, range: ResolvedAnalyticsRange) => Promise<DatesComparisonResult>
@@ -64,18 +63,14 @@ export interface DataProvider {
   getDecayResults?: (siteUrl: string, range: ResolvedAnalyticsRange, options?: DecayOptions) => Promise<DecayResult[]>
   getMoversResults?: (siteUrl: string, range: ResolvedAnalyticsRange, options?: MoversOptions) => Promise<MoversResult>
   getSeasonalityResults?: (siteUrl: string, range: ResolvedAnalyticsRange, options?: SeasonalityOptions) => Promise<SeasonalityResult>
+
+  // Sync methods (hybrid provider only)
+  sync?: () => Promise<void>
+  discard?: () => void
+  pending?: () => number
 }
 
-export interface QueryContext {
-  auth: Auth
-  db?: GscDb | null
-  source?: DataSource
-}
-
-export interface CreateProviderOptions {
-  auth: Auth
-  db?: GscDb | null
-  source: DataSource
-  siteUrls: string[]
-  range: ResolvedAnalyticsRange
+export interface ProviderOptions {
+  auth?: Auth
+  db?: GscDb
 }

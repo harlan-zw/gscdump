@@ -63,9 +63,13 @@ vi.mock('gscdump', () => ({
     },
   }),
   fetchSites: vi.fn(),
-  userPeriodRange: vi.fn().mockReturnValue({
-    period: { startDate: '2024-01-01', endDate: '2024-01-31' },
-    prevPeriod: { startDate: '2023-12-01', endDate: '2023-12-31' },
+}))
+
+vi.mock('@gscdump/query', () => ({
+  daysAgo: vi.fn((n: number) => {
+    const d = new Date()
+    d.setDate(d.getDate() - n)
+    return d.toISOString().split('T')[0]
   }),
 }))
 

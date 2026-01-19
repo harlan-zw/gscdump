@@ -6,5 +6,11 @@ export default defineBuildConfig({
       type: 'bundle',
       input: ['./src/index.ts'],
     },
+    {
+      type: 'bundle',
+      input: ['./src/query/index.ts'],
+      outDir: './dist',
+      name: 'query',
+    },
   ],
 })

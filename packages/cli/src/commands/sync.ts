@@ -14,12 +14,23 @@ import {
   syncSites,
   updateLastSynced,
 } from '@gscdump/db'
+import { daysAgo } from '@gscdump/query'
 import { defineCommand } from 'citty'
 import dayjs from 'dayjs'
 import betterSqlite3 from 'db0/connectors/better-sqlite3'
-import { googleSearchConsole, userPeriodRange } from 'gscdump'
+import { googleSearchConsole } from 'gscdump'
 import { loadConfig } from '../config'
 import { clearLine, gscErrorHandler, logger, progressBar } from '../utils'
+
+function parsePeriodDays(period: string): number {
+  if (period === 'max')
+    return 480 // ~16 months GSC history
+  if (period.endsWith('y'))
+    return Number.parseInt(period) * 365
+  if (period.endsWith('m') || period.endsWith('mo'))
+    return Number.parseInt(period) * 30
+  return Number.parseInt(period.replace('d', ''))
+}
 
 interface SyncReport {
   database: string
@@ -98,15 +109,15 @@ async function runSync(
     }))
   }
 
-  const periodRange = userPeriodRange(period)
+  const periodDays = parsePeriodDays(period)
 
   // By default, exclude fresh/unfinalized data (last 3 days)
   // With --fresh, include up to yesterday (today has no data yet)
   const daysOffset = options.fresh ? 1 : 3
-  const adjustedEndDate = dayjs(periodRange.period.endDate).subtract(daysOffset, 'day').format('YYYY-MM-DD')
-  const baseStartDate = dayjs(periodRange.period.startDate).subtract(daysOffset, 'day').format('YYYY-MM-DD')
-  const adjustedPrevEndDate = dayjs(periodRange.prevPeriod.endDate).subtract(daysOffset, 'day').format('YYYY-MM-DD')
-  const adjustedPrevStartDate = dayjs(periodRange.prevPeriod.startDate).subtract(daysOffset, 'day').format('YYYY-MM-DD')
+  const adjustedEndDate = daysAgo(daysOffset)
+  const baseStartDate = daysAgo(periodDays + daysOffset)
+  const adjustedPrevEndDate = daysAgo(periodDays + daysOffset + 1)
+  const adjustedPrevStartDate = daysAgo(periodDays * 2 + daysOffset)
 
   // Helper to create range for a site (may vary with incremental sync)
 

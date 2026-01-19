@@ -1,4 +1,5 @@
 import type { OAuth2Client } from 'googleapis-common'
+import type { ResolvedAnalyticsRange } from '../src'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createQueryBody,
@@ -11,7 +12,6 @@ import {
   inspectUrl,
   percentDifference,
   queryRecursive,
-  userPeriodRange,
 } from '../src'
 import { createMockGoogleSearchConsoleClient } from './__fixtures__/mock-client-logic'
 import {
@@ -20,6 +20,18 @@ import {
   mockSites,
   mockUrlInspection,
 } from './__fixtures__/mock-responses'
+
+function createTestRange(days: number): ResolvedAnalyticsRange {
+  const end = new Date()
+  const start = new Date(end.getTime() - days * 86400000)
+  const prevEnd = new Date(start.getTime() - 86400000)
+  const prevStart = new Date(prevEnd.getTime() - days * 86400000)
+  const fmt = (d: Date) => d.toISOString().split('T')[0]
+  return {
+    period: { start: fmt(start), end: fmt(end) },
+    prevPeriod: { start: fmt(prevStart), end: fmt(prevEnd) },
+  }
+}
 
 const _mockAuth = {
   credentials: { access_token: 'test_token' },
@@ -91,7 +103,7 @@ describe('comprehensive E2E Tests', () => {
       vi.mocked(mockClient.searchAnalytics.query).mockResolvedValue(emptyResponse as any)
 
       const site = { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' as const }
-      const range = userPeriodRange('7d')
+      const range = createTestRange(7)
 
       const devices = await fetchDevicesWithComparison(mockClient, site.siteUrl, range)
       expect(devices.current).toEqual([])
@@ -189,7 +201,7 @@ describe('comprehensive E2E Tests', () => {
       const sites = await fetchSites(mockClient)
       expect(sites).toHaveLength(3)
 
-      const range = userPeriodRange('30d')
+      const range = createTestRange(30)
       const analyticsPromises = sites.map(site =>
         fetchDevicesWithComparison(mockClient, site.siteUrl, range),
       )
@@ -212,7 +224,7 @@ describe('comprehensive E2E Tests', () => {
       vi.mocked(mockClient.sitemaps.list).mockResolvedValue({ sitemap: mockSitemaps } as any)
 
       const site = { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' as const }
-      const range = userPeriodRange('7d')
+      const range = createTestRange(7)
       const urls = ['https://example.com/page1', 'https://example.com/page2', 'https://example.com/page3']
 
       // Run multiple operations concurrently
@@ -230,43 +242,6 @@ describe('comprehensive E2E Tests', () => {
       expect(mockClient.urlInspection.inspect).toHaveBeenCalledTimes(3)
 
       expect(concurrentOperations).toMatchSnapshot()
-    })
-
-    it('should handle period range edge cases and boundary conditions', async () => {
-      const edgeCases = [
-        '1d',
-        '365d',
-        '1mo',
-        '12mo',
-        'all',
-        { start: new Date('2024-01-01'), end: new Date('2024-01-01') }, // Same day
-        { start: new Date('2024-12-31'), end: new Date('2025-01-01') }, // Year boundary
-        { start: new Date('2024-02-28'), end: new Date('2024-03-01') }, // Month boundary
-        { start: new Date('2020-01-01'), end: new Date('2024-12-31') }, // Multi-year range
-      ]
-
-      const results = edgeCases.map((period) => {
-        try {
-          const range = userPeriodRange(period)
-          return {
-            input: period,
-            success: true,
-            periodDays: Math.ceil((range.period.end.getTime() - range.period.start.getTime()) / (1000 * 60 * 60 * 24)),
-            prevPeriodDays: Math.ceil((range.prevPeriod.end.getTime() - range.prevPeriod.start.getTime()) / (1000 * 60 * 60 * 24)),
-            hasValidDates: range.period.start < range.period.end,
-            prevPeriodEndsBeforeCurrent: range.prevPeriod.end <= range.period.start,
-          }
-        }
-        catch (error) {
-          return {
-            input: period,
-            success: false,
-            error: error.message,
-          }
-        }
-      })
-
-      expect(results).toMatchSnapshot()
     })
   })
 
@@ -297,7 +272,7 @@ describe('comprehensive E2E Tests', () => {
         .mockResolvedValueOnce({ rows: variations })
 
       const site = { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' as const }
-      const range = userPeriodRange('7d')
+      const range = createTestRange(7)
 
       const result = await fetchDevicesWithComparison(mockClient, site.siteUrl, range)
 
@@ -430,7 +405,7 @@ describe('comprehensive E2E Tests', () => {
         .mockResolvedValueOnce({ rows: largeKeywordData.slice(0, 5000) })
 
       const site = { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' as const }
-      const range = userPeriodRange('30d')
+      const range = createTestRange(30)
 
       const startMemory = process.memoryUsage()
       const result = await fetchKeywordsWithComparison(mockClient, site.siteUrl, range)

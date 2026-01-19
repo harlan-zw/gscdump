@@ -9,7 +9,6 @@ import {
   formatDateGsc,
   inspectUrl,
   percentDifference,
-  userPeriodRange,
   withPropertyAggregation,
 } from '../src'
 
@@ -313,60 +312,6 @@ describe('utility Functions', () => {
       expect(percentDifference(100, 0)).toBe(0)
       expect(percentDifference(undefined, 100)).toBe(0)
       expect(percentDifference(100, undefined)).toBe(0)
-    })
-  })
-
-  describe('userPeriodRange', () => {
-    it('should handle "30d" period string', () => {
-      const result = userPeriodRange('30d')
-
-      expect(result).toHaveProperty('period')
-      expect(result).toHaveProperty('prevPeriod')
-      expect(result.period).toHaveProperty('start')
-      expect(result.period).toHaveProperty('end')
-      expect(result.period).toHaveProperty('startDate')
-      expect(result.period).toHaveProperty('endDate')
-    })
-
-    it('should handle "7d" period string', () => {
-      const result = userPeriodRange('7d')
-
-      const daysDiff = Math.ceil((result.period.end.getTime() - result.period.start.getTime()) / (1000 * 60 * 60 * 24))
-      expect(daysDiff).toBe(7)
-    })
-
-    it('should handle "all" period', () => {
-      const result = userPeriodRange('all')
-
-      // Should go back about 100 years
-      const yearsDiff = result.period.end.getFullYear() - result.period.start.getFullYear()
-      expect(yearsDiff).toBeCloseTo(100, -1) // Within 10 years of 100
-    })
-
-    it('should handle "max" period (GSC history ~16 months)', () => {
-      const result = userPeriodRange('max')
-
-      const daysDiff = Math.ceil((result.period.end.getTime() - result.period.start.getTime()) / (1000 * 60 * 60 * 24))
-      expect(daysDiff).toBe(480) // 16 months
-    })
-
-    it('should handle month periods', () => {
-      const result = userPeriodRange('2mo')
-
-      const daysDiff = Math.ceil((result.period.end.getTime() - result.period.start.getTime()) / (1000 * 60 * 60 * 24))
-      expect(daysDiff).toBe(60) // 2 months * 30 days
-    })
-
-    it('should calculate previous periods correctly', () => {
-      const result = userPeriodRange('7d')
-
-      const currentDays = Math.ceil((result.period.end.getTime() - result.period.start.getTime()) / (1000 * 60 * 60 * 24))
-      // Previous period is calculated with periodDays + 1, so it's one day shorter
-      const prevDays = Math.ceil((result.prevPeriod.end.getTime() - result.prevPeriod.start.getTime()) / (1000 * 60 * 60 * 24))
-
-      expect(currentDays).toBe(7)
-      expect(prevDays).toBe(6) // endPrevPeriod uses periodDays + 1
-      expect(result.prevPeriod.end.getTime()).toBeLessThan(result.period.start.getTime())
     })
   })
 })

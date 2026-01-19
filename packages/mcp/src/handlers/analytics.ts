@@ -1,5 +1,8 @@
+import type { GscDb } from '@gscdump/db'
+import type { DataProvider } from '@gscdump/query'
 import type {
   AnalyticsData,
+  Auth,
   ComparisonResult,
   CountryData,
   DatesComparisonResult,
@@ -12,23 +15,28 @@ import type {
   SearchAppearanceData,
 } from 'gscdump'
 import type { z } from 'zod'
-import type { fetchAnalyticsInput, fetchKeywordInput, fetchPageInput, HandlerContext } from '../types'
+import type { fetchAnalyticsInput, fetchKeywordInput, fetchPageInput, HandlerContext, SourceOption } from '../types'
 import { createProvider } from '@gscdump/query'
 import { fetchAnalyticsWithComparison as fetchAnalyticsCore, fetchSearchAppearanceWithComparison } from 'gscdump'
 import { toAnalyticsRange, toPeriod } from '../types'
+
+function getProviderForSource(auth: Auth, db: GscDb | null | undefined, source: SourceOption): DataProvider {
+  if (source === 'api')
+    return createProvider({ auth })
+  if (source === 'db') {
+    if (!db)
+      throw new Error('Database required for db source')
+    return createProvider({ db })
+  }
+  return db ? createProvider({ auth, db }) : createProvider({ auth })
+}
 
 export async function fetchDates(
   input: z.infer<typeof fetchAnalyticsInput>,
   ctx: HandlerContext,
 ): Promise<DatesComparisonResult> {
   const range = toAnalyticsRange(toPeriod(input.period), input.comparePrevious)
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: ctx.source || 'api',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, ctx.source || 'api')
   return provider.getDatesWithComparison(input.siteUrl, range)
 }
 
@@ -37,13 +45,7 @@ export async function fetchDevices(
   ctx: HandlerContext,
 ): Promise<ComparisonResult<DeviceData>> {
   const range = toAnalyticsRange(toPeriod(input.period), input.comparePrevious)
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: ctx.source || 'api',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, ctx.source || 'api')
   return provider.getDevicesWithComparison(input.siteUrl, range)
 }
 
@@ -52,13 +54,7 @@ export async function fetchCountries(
   ctx: HandlerContext,
 ): Promise<ComparisonResult<CountryData>> {
   const range = toAnalyticsRange(toPeriod(input.period), input.comparePrevious)
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: ctx.source || 'api',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, ctx.source || 'api')
   return provider.getCountriesWithComparison(input.siteUrl, range)
 }
 
@@ -67,13 +63,7 @@ export async function fetchAllPages(
   ctx: HandlerContext,
 ): Promise<Page[]> {
   const range = toAnalyticsRange(toPeriod(input.period), false)
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: ctx.source || 'api',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, ctx.source || 'api')
   return provider.getPages(input.siteUrl, range)
 }
 
@@ -82,13 +72,7 @@ export async function fetchPagesComparison(
   ctx: HandlerContext,
 ): Promise<ComparisonResult<PageData>> {
   const range = toAnalyticsRange(toPeriod(input.period), input.comparePrevious)
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: ctx.source || 'api',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, ctx.source || 'api')
   return provider.getPagesWithComparison(input.siteUrl, range)
 }
 
@@ -97,13 +81,7 @@ export async function fetchKeywords(
   ctx: HandlerContext,
 ): Promise<ComparisonResult<KeywordData>> {
   const range = toAnalyticsRange(toPeriod(input.period), input.comparePrevious)
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: ctx.source || 'api',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, ctx.source || 'api')
   return provider.getKeywordsWithComparison(input.siteUrl, range)
 }
 
@@ -121,13 +99,7 @@ export async function fetchPageDetails(
   ctx: HandlerContext,
 ): Promise<FetchPageResult> {
   const range = toAnalyticsRange(toPeriod(input.period), false)
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: ctx.source || 'api',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, ctx.source || 'api')
   return provider.getPage(input.siteUrl, range, input.url)
 }
 
@@ -136,13 +108,7 @@ export async function fetchKeywordDetails(
   ctx: HandlerContext,
 ): Promise<FetchKeywordResult> {
   const range = toAnalyticsRange(toPeriod(input.period), false)
-  const provider = await createProvider({
-    auth: ctx.auth,
-    db: ctx.db,
-    source: ctx.source || 'api',
-    siteUrls: [input.siteUrl],
-    range,
-  })
+  const provider = getProviderForSource(ctx.auth, ctx.db, ctx.source || 'api')
   return provider.getKeyword(input.siteUrl, range, input.keyword)
 }
 

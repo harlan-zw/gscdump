@@ -19,7 +19,6 @@ import {
   listSitemapsInput,
   listSitesInput,
   moversAndShakersInput,
-  periodRangeInput,
   requestIndexingInput,
   sitemapInput,
   strikingDistanceInput,
@@ -392,19 +391,6 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
     async (args) => {
       const result = await handlers.customQuery(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  // Utility tools
-  server.registerTool(
-    'parse-period',
-    {
-      description: 'Parse period strings (30d, 3mo, max) to date ranges with comparison period',
-      inputSchema: periodRangeInput.shape,
-    },
-    (args) => {
-      const result = handlers.parsePeriod(args)
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )

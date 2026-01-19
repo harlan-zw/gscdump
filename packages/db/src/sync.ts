@@ -25,7 +25,7 @@ import {
   sites,
 } from './schema'
 
-function toGscMetrics(row: { clicks?: number | null, impressions?: number | null, ctr?: number | null, position?: number | null }): { clicks: number, impressions: number, ctr: number, position: number } {
+export function toGscMetrics(row: { clicks?: number | null, impressions?: number | null, ctr?: number | null, position?: number | null }): { clicks: number, impressions: number, ctr: number, position: number } {
   return {
     clicks: row.clicks ?? 0,
     impressions: row.impressions ?? 0,
@@ -269,6 +269,76 @@ export async function getLastSyncedDate(db: GscDb, siteId: number): Promise<stri
     return null
 
   return new Date(lastSynced).toISOString().split('T')[0]
+}
+
+// === Insert-only functions (for buffered sync) ===
+
+export async function insertPages(db: GscDb, rows: SitePathDateAnalyticsInsert[]): Promise<void> {
+  for (const row of rows) {
+    await db.insert(sitePathDateAnalytics)
+      .values(row)
+      .onConflictDoUpdate({
+        target: [sitePathDateAnalytics.siteId, sitePathDateAnalytics.date, sitePathDateAnalytics.path],
+        set: {
+          clicks: row.clicks,
+          impressions: row.impressions,
+          ctr: row.ctr,
+          position: row.position,
+          updatedAt: Date.now(),
+        },
+      })
+  }
+}
+
+export async function insertKeywords(db: GscDb, rows: SiteKeywordDateAnalyticsInsert[]): Promise<void> {
+  for (const row of rows) {
+    await db.insert(siteKeywordDateAnalytics)
+      .values(row)
+      .onConflictDoUpdate({
+        target: [siteKeywordDateAnalytics.siteId, siteKeywordDateAnalytics.date, siteKeywordDateAnalytics.keyword],
+        set: {
+          clicks: row.clicks,
+          impressions: row.impressions,
+          ctr: row.ctr,
+          position: row.position,
+          updatedAt: Date.now(),
+        },
+      })
+  }
+}
+
+export async function insertCountries(db: GscDb, rows: SiteDateCountryAnalyticsInsert[]): Promise<void> {
+  for (const row of rows) {
+    await db.insert(siteDateCountryAnalytics)
+      .values(row)
+      .onConflictDoUpdate({
+        target: [siteDateCountryAnalytics.siteId, siteDateCountryAnalytics.date, siteDateCountryAnalytics.country],
+        set: {
+          clicks: row.clicks,
+          impressions: row.impressions,
+          ctr: row.ctr,
+          position: row.position,
+          updatedAt: Date.now(),
+        },
+      })
+  }
+}
+
+export async function insertDevices(db: GscDb, rows: SiteDateDeviceAnalyticsInsert[]): Promise<void> {
+  for (const row of rows) {
+    await db.insert(siteDateDeviceAnalytics)
+      .values(row)
+      .onConflictDoUpdate({
+        target: [siteDateDeviceAnalytics.siteId, siteDateDeviceAnalytics.date, siteDateDeviceAnalytics.device],
+        set: {
+          clicks: row.clicks,
+          impressions: row.impressions,
+          ctr: row.ctr,
+          position: row.position,
+          updatedAt: Date.now(),
+        },
+      })
+  }
 }
 
 export async function syncAll(db: GscDb, client: GoogleSearchConsoleClient, siteId: number, siteUrl: string, range: ResolvedAnalyticsRange): Promise<void> {

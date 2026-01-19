@@ -1,4 +1,5 @@
 import type { OAuth2Client } from 'googleapis-common'
+import type { ResolvedAnalyticsRange } from '../src'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createQueryBody,
@@ -10,7 +11,6 @@ import {
   fetchSites,
   fetchSitesWithSitemaps,
   inspectUrl,
-  userPeriodRange,
 } from '../src'
 import { createMockGoogleSearchConsoleClient } from './__fixtures__/mock-client-logic'
 import {
@@ -23,6 +23,18 @@ import {
   mockSites,
   mockUrlInspection,
 } from './__fixtures__/mock-responses'
+
+function createTestRange(days: number): ResolvedAnalyticsRange {
+  const end = new Date()
+  const start = new Date(end.getTime() - days * 86400000)
+  const prevEnd = new Date(start.getTime() - 86400000)
+  const prevStart = new Date(prevEnd.getTime() - days * 86400000)
+  const fmt = (d: Date) => d.toISOString().split('T')[0]
+  return {
+    period: { start: fmt(start), end: fmt(end) },
+    prevPeriod: { start: fmt(prevStart), end: fmt(prevEnd) },
+  }
+}
 
 const _mockAuth = {
   credentials: {
@@ -92,7 +104,7 @@ describe('e2E Integration Tests', () => {
       expect(inspection).toMatchSnapshot()
 
       // Step 4: Fetch analytics data with date ranges
-      const range = userPeriodRange('30d')
+      const range = createTestRange(30)
 
       const devices = await fetchDevicesWithComparison(mockClient, mockSite.siteUrl, range)
       expect(devices).toMatchSnapshot()
@@ -108,7 +120,7 @@ describe('e2E Integration Tests', () => {
     })
 
     it('should handle comprehensive analytics data fetching', async () => {
-      const range = userPeriodRange('7d')
+      const range = createTestRange(7)
 
       // Mock all the different analytics calls
       vi.mocked(mockClient.searchAnalytics.query)
@@ -193,33 +205,6 @@ describe('e2E Integration Tests', () => {
       expect(complexQuery).toMatchSnapshot()
     })
 
-    it('should handle different period ranges correctly', () => {
-      const periods = [
-        '7d',
-        '30d',
-        '90d',
-        '2mo',
-        '6mo',
-      ]
-
-      // Test the structure of period ranges without exact dates
-      const results = periods.map((period) => {
-        const range = userPeriodRange(period)
-        return {
-          period,
-          structure: {
-            hasPeriod: !!range.period,
-            hasPrevPeriod: !!range.prevPeriod,
-            hasStartEnd: !!(range.period.start && range.period.end),
-            periodLength: Math.ceil((range.period.end.getTime() - range.period.start.getTime()) / (1000 * 60 * 60 * 24)),
-            prevPeriodLength: Math.ceil((range.prevPeriod.end.getTime() - range.prevPeriod.start.getTime()) / (1000 * 60 * 60 * 24)),
-          },
-        }
-      })
-
-      expect(results).toMatchSnapshot()
-    })
-
     it('should handle error scenarios gracefully', async () => {
       // Mock API errors
       vi.mocked(mockClient.sites.list).mockRejectedValue(new Error('API quota exceeded'))
@@ -234,7 +219,7 @@ describe('e2E Integration Tests', () => {
 
       // Mock null/undefined responses
       vi.mocked(mockClient.searchAnalytics.query).mockResolvedValue({ rows: null } as any)
-      const devices = await fetchDevicesWithComparison(mockClient, mockSite.siteUrl, userPeriodRange('7d'))
+      const devices = await fetchDevicesWithComparison(mockClient, mockSite.siteUrl, createTestRange(7))
       expect(devices.current).toEqual([])
       expect(devices).toMatchSnapshot()
     })
@@ -249,7 +234,7 @@ describe('e2E Integration Tests', () => {
       const result = await fetchDevicesWithComparison(
         mockClient,
         mockSite.siteUrl,
-        userPeriodRange('30d'),
+        createTestRange(30),
       )
 
       // Check that keys are removed and device property is added
@@ -272,7 +257,7 @@ describe('e2E Integration Tests', () => {
       const result = await fetchCountriesWithComparison(
         mockClient,
         mockSite.siteUrl,
-        userPeriodRange('30d'),
+        createTestRange(30),
       )
 
       // Check transformation includes country names and keyword counts

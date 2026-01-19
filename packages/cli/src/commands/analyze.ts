@@ -1,5 +1,6 @@
-import type { DataSource } from '@gscdump/query'
-import type { ResolvedAnalyticsRange } from 'gscdump'
+import type { GscDb } from '@gscdump/db'
+import type { DataProvider } from '@gscdump/query'
+import type { Auth, ResolvedAnalyticsRange } from 'gscdump'
 import path from 'node:path'
 import process from 'node:process'
 import { createGscDb } from '@gscdump/db'
@@ -18,6 +19,19 @@ import betterSqlite3 from 'db0/connectors/better-sqlite3'
 import { getAuth } from '../auth'
 import { loadConfig } from '../config'
 import { gscErrorHandler, logger, parsePeriod } from '../utils'
+
+type DataSource = 'api' | 'db' | 'auto'
+
+function getProviderForSource(auth: Auth, db: GscDb | null, source: DataSource): DataProvider {
+  if (source === 'api')
+    return createProvider({ auth })
+  if (source === 'db') {
+    if (!db)
+      throw new Error('Database required for db source')
+    return createProvider({ db })
+  }
+  return db ? createProvider({ auth, db }) : createProvider({ auth })
+}
 
 const ANALYSIS_TYPES = [
   'striking-distance',
@@ -135,13 +149,7 @@ export const analyzeCommand = defineCommand({
       ? createGscDb(betterSqlite3({ name: path.resolve(dbPath) })).db
       : null
 
-    const provider = await createProvider({
-      auth,
-      db,
-      source: args.source as DataSource,
-      siteUrls: [siteArg],
-      range,
-    })
+    const provider = getProviderForSource(auth, db, args.source as DataSource)
 
     const limit = Number.parseInt(args.limit, 10) || 20
 

@@ -1,6 +1,7 @@
-import type { DataProvider, DataSource } from '@gscdump/query'
+import type { GscDb } from '@gscdump/db'
+import type { DataProvider } from '@gscdump/query'
 import type { OAuth2Client } from 'google-auth-library'
-import type { DataType, GoogleSearchConsoleClient, ResolvedAnalyticsRange } from 'gscdump'
+import type { Auth, DataType, GoogleSearchConsoleClient, ResolvedAnalyticsRange } from 'gscdump'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
@@ -12,7 +13,27 @@ import dayjs from 'dayjs'
 import betterSqlite3 from 'db0/connectors/better-sqlite3'
 import { fetchSites, googleSearchConsole } from 'gscdump'
 import { loadConfig } from '../config'
-import { clearLine, exportToCSV, gscErrorHandler, logger, parsePeriod, progressBar } from '../utils'
+import { clearLine, exportToCSV, logger, parsePeriod, progressBar } from '../utils'
+
+type DataSource = 'api' | 'db' | 'auto'
+
+/**
+ * Maps CLI source option to provider options
+ * - 'api': API only (no db)
+ * - 'db': DB only (no auth, errors if data missing)
+ * - 'auto': Hybrid (both auth and db, syncs on cache miss)
+ */
+function getProviderForSource(auth: Auth, db: GscDb | null, source: DataSource): DataProvider {
+  if (source === 'api')
+    return createProvider({ auth })
+  if (source === 'db') {
+    if (!db)
+      throw new Error('Database required for db source')
+    return createProvider({ db })
+  }
+  // auto: use hybrid if db available, otherwise api-only
+  return db ? createProvider({ auth, db }) : createProvider({ auth })
+}
 
 const DUMP_DATA_TYPES = ['pages', 'keywords', 'countries', 'devices'] as const
 type DumpDataType = typeof DUMP_DATA_TYPES[number]
@@ -220,32 +241,15 @@ async function interactiveMode(auth: OAuth2Client, dbPath: string | null, source
 
   console.log()
 
-  // Build range for provider selection
-  const endDate = dayjs().subtract(3, 'days').format('YYYY-MM-DD')
-  const startDate = dayjs().subtract(period.amount, period.unit).subtract(3, 'days').format('YYYY-MM-DD')
-  const range: ResolvedAnalyticsRange = {
-    period: { start: startDate, end: endDate },
-    prevPeriod: {
-      start: dayjs(startDate).subtract(period.amount, period.unit).format('YYYY-MM-DD'),
-      end: dayjs(endDate).subtract(period.amount, period.unit).format('YYYY-MM-DD'),
-    },
-  }
-
   // Create provider
-  let db = null
+  let db: GscDb | null = null
   if (dbPath) {
     const dbExists = await fs.access(dbPath).then(() => true).catch(() => false)
     if (dbExists)
       db = createGscDb(betterSqlite3({ name: path.resolve(dbPath) })).db
   }
 
-  const provider = await createProvider({
-    auth,
-    db,
-    source: finalSource,
-    siteUrls: selectedSites,
-    range,
-  })
+  const provider = getProviderForSource(auth, db, finalSource)
 
   logger.info(`Using ${provider.source.toUpperCase()} as data source`)
   await runDump(provider, selectedSites, dataTypes, period, format, null)
@@ -311,20 +315,8 @@ async function nonInteractiveMode(
     normalizedSites.push(match)
   }
 
-  // Build range for provider selection
-  const daysOffset = options.fresh ? 1 : 3
-  const endDate = dayjs().subtract(daysOffset, 'days').format('YYYY-MM-DD')
-  const startDate = dayjs().subtract(period.amount, period.unit).subtract(daysOffset, 'days').format('YYYY-MM-DD')
-  const range: ResolvedAnalyticsRange = {
-    period: { start: startDate, end: endDate },
-    prevPeriod: {
-      start: dayjs(startDate).subtract(period.amount, period.unit).format('YYYY-MM-DD'),
-      end: dayjs(endDate).subtract(period.amount, period.unit).format('YYYY-MM-DD'),
-    },
-  }
-
   // Create provider
-  let db = null
+  let db: GscDb | null = null
   if (dbPath) {
     const dbExists = await fs.access(dbPath).then(() => true).catch(() => false)
     if (dbExists) {
@@ -337,13 +329,7 @@ async function nonInteractiveMode(
     }
   }
 
-  const provider = await createProvider({
-    auth,
-    db,
-    source,
-    siteUrls: normalizedSites,
-    range,
-  }).catch(gscErrorHandler)
+  const provider = getProviderForSource(auth, db, source)
 
   const extras: string[] = []
   if (options.fresh)

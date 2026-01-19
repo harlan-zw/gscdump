@@ -1,9 +1,11 @@
 import type { GscDb } from '@gscdump/db'
-import type { DataSource } from '@gscdump/query'
 import type { Auth, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site } from 'gscdump'
 import { z } from 'zod'
 
-export type { Auth, DataSource, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site }
+export type { Auth, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site }
+
+// Source option for MCP input (user-facing)
+export type SourceOption = 'api' | 'db' | 'auto'
 
 // Zod schemas for MCP tool inputs
 
@@ -27,7 +29,7 @@ export interface HandlerContext {
   auth: Auth
   client: GoogleSearchConsoleClient
   db?: GscDb | null
-  source?: DataSource
+  source?: SourceOption
 }
 
 // Common input schemas
@@ -154,10 +156,6 @@ export const zeroClickInput = z.object({
   minImpressions: z.number().optional().describe('Minimum impressions (default 1000)'),
   maxCtr: z.number().optional().describe('Maximum CTR (default 0.03 = 3%)'),
   maxPosition: z.number().optional().describe('Only consider queries in top X positions (default 10)'),
-})
-
-export const periodRangeInput = z.object({
-  period: z.string().optional().describe('Period string like "30d", "3mo", "max" (default 30d)'),
 })
 
 // Helper to convert zod period to gscdump Period

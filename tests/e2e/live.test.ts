@@ -1,3 +1,4 @@
+import type { ResolvedAnalyticsRange } from '../../packages/gscdump/src'
 import { resolve } from 'node:path'
 import { config } from 'dotenv'
 import { OAuth2Client } from 'google-auth-library'
@@ -11,8 +12,19 @@ import {
   fetchSites,
   fetchSitesWithSitemaps,
   inspectUrl,
-  userPeriodRange,
 } from '../../packages/gscdump/src'
+
+function createTestRange(days: number): ResolvedAnalyticsRange {
+  const end = new Date()
+  const start = new Date(end.getTime() - days * 86400000)
+  const prevEnd = new Date(start.getTime() - 86400000)
+  const prevStart = new Date(prevEnd.getTime() - days * 86400000)
+  const fmt = (d: Date) => d.toISOString().split('T')[0]
+  return {
+    period: { start: fmt(start), end: fmt(end) },
+    prevPeriod: { start: fmt(prevStart), end: fmt(prevEnd) },
+  }
+}
 
 config({ path: resolve(__dirname, '../../packages/gscdump/.env.test') })
 
@@ -101,7 +113,7 @@ describe.skipIf(!shouldRun)('e2e Real Credentials Tests', () => {
 
   it('should fetch device analytics with comparison', async () => {
     const site = { siteUrl: 'https://harlanzw.com/', permissionLevel: 'owner' as const }
-    const range = userPeriodRange('7d')
+    const range = createTestRange(7)
 
     const result = await fetchDevicesWithComparison(auth, site, range)
 
@@ -126,7 +138,7 @@ describe.skipIf(!shouldRun)('e2e Real Credentials Tests', () => {
 
   it('should fetch country analytics with comparison', async () => {
     const site = { siteUrl: 'https://harlanzw.com/', permissionLevel: 'owner' as const }
-    const range = userPeriodRange('7d')
+    const range = createTestRange(7)
 
     const result = await fetchCountriesWithComparison(auth, site, range)
 
@@ -149,7 +161,7 @@ describe.skipIf(!shouldRun)('e2e Real Credentials Tests', () => {
 
   it('should fetch comprehensive analytics', async () => {
     const site = { siteUrl: 'https://harlanzw.com/', permissionLevel: 'owner' as const }
-    const range = userPeriodRange('7d')
+    const range = createTestRange(7)
 
     const analytics = await fetchAnalyticsWithComparison(auth, site, range)
     const pages = await fetchPagesWithComparison(auth, site, range)
