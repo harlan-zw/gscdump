@@ -99,6 +99,10 @@ export function resolveToBody(state: BuilderState): SearchAnalyticsQuery {
     body.rowLimit = state.rowLimit
   }
 
+  if (state.startRow) {
+    body.startRow = state.startRow
+  }
+
   const filterGroups = resolveFilters(nonDateFilters)
   if (filterGroups.length > 0) {
     body.dimensionFilterGroups = filterGroups

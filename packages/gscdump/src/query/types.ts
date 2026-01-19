@@ -77,4 +77,5 @@ export interface BuilderState {
   filters: Filter<any>[]
   siteUrl?: string
   rowLimit?: number
+  startRow?: number
 }

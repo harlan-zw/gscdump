@@ -17,6 +17,8 @@ export interface GSCQueryBuilder<
 
   limit: (n: number) => GSCQueryBuilder<D, C>
 
+  offset: (n: number) => GSCQueryBuilder<D, C>
+
   execute: (client: GoogleSearchConsoleClient) => Promise<GSCResult<D, C>>
 
   toBody: () => SearchAnalyticsQuery
@@ -66,6 +68,10 @@ function createBuilder<D extends Dimension[], C>(
 
     limit(n: number) {
       return createBuilder<D, C>({ ...state, rowLimit: n })
+    },
+
+    offset(n: number) {
+      return createBuilder<D, C>({ ...state, startRow: n })
     },
 
     async execute(client: GoogleSearchConsoleClient): Promise<GSCResult<D, C>> {

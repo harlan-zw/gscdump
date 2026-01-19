@@ -132,6 +132,28 @@ describe('gSCQueryBuilder', () => {
       expect(body.rowLimit).toBe(100)
     })
 
+    it('sets startRow with offset', () => {
+      const body = gsc
+        .select('page')
+        .where(between(date, '2024-01-01', '2024-01-31'))
+        .offset(50)
+        .toBody()
+
+      expect(body.startRow).toBe(50)
+    })
+
+    it('sets both rowLimit and startRow for pagination', () => {
+      const body = gsc
+        .select('page')
+        .where(between(date, '2024-01-01', '2024-01-31'))
+        .limit(10)
+        .offset(20)
+        .toBody()
+
+      expect(body.rowLimit).toBe(10)
+      expect(body.startRow).toBe(20)
+    })
+
     it('does not include dimensionFilterGroups when only date filter', () => {
       const body = gsc
         .select('page')
@@ -220,6 +242,39 @@ describe('gSCQueryBuilder', () => {
         ctr: 0.1,
         position: 5.5,
       })
+    })
+
+    it('passes offset to client query', async () => {
+      const mockClient: GoogleSearchConsoleClient = {
+        sites: { list: vi.fn() },
+        sitemaps: {
+          list: vi.fn(),
+          get: vi.fn(),
+          submit: vi.fn(),
+          delete: vi.fn(),
+        },
+        searchAnalytics: {
+          query: vi.fn().mockResolvedValue({ rows: [] }),
+        },
+        urlInspection: { inspect: vi.fn() },
+        indexing: { publish: vi.fn(), getMetadata: vi.fn() },
+      }
+
+      await gsc
+        .select('page')
+        .where(between(date, '2024-01-01', '2024-01-31'))
+        .siteUrl('https://example.com')
+        .limit(10)
+        .offset(100)
+        .execute(mockClient)
+
+      expect(mockClient.searchAnalytics.query).toHaveBeenCalledWith(
+        'https://example.com',
+        expect.objectContaining({
+          rowLimit: 10,
+          startRow: 100,
+        }),
+      )
     })
 
     it('handles empty response', async () => {

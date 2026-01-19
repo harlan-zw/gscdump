@@ -232,7 +232,7 @@ export const analyzeCommand = defineCommand({
   },
 })
 
-function formatResultItem(type: AnalysisType, item: Record<string, unknown>) {
+function formatResultItem(type: AnalysisType, item: Record<string, unknown>): void {
   const keyword = (item.keyword || item.query || '') as string
   const page = (item.page || '') as string
 

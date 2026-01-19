@@ -64,16 +64,16 @@ for await (const batch of queryRecursiveStream(client, site, {
 Drizzle-style query builder with full type safety. Filter constraints flow through to result types.
 
 ```ts
-import { and, contains, country, Country, device, Device, eq, gsc, inArray, page } from 'gscdump/query'
+import { and, between, contains, country, Country, date, device, Device, eq, gsc, inArray, page } from 'gscdump/query'
 
 const result = await gsc
   .select('page', 'query', 'device', 'country')
   .where(and(
     eq(device, Device.MOBILE),
     inArray(country, [Country.USA, Country.GBR]),
-    contains(page, '/blog/')
+    contains(page, '/blog/'),
+    between(date, '2024-01-01', '2024-01-31')
   ))
-  .period('2024-01-01', '2024-01-31')
   .siteUrl('https://example.com')
   .execute(client)
 
@@ -82,6 +82,21 @@ result.rows[0].device // type: 'MOBILE' (narrowed by eq)
 result.rows[0].country // type: 'usa' | 'gbr' (narrowed by inArray)
 result.rows[0].page // type: string (contains doesn't narrow)
 result.rows[0].clicks // type: number
+```
+
+**With date helpers:**
+
+```ts
+import { daysAgo, today } from '@gscdump/query'
+import { and, between, date, gsc, query, regex } from 'gscdump/query'
+
+const q = gsc
+  .select('query', 'page')
+  .where(and(
+    between(date, daysAgo(28), today()),
+    regex(query, /how to/)
+  ))
+  .limit(100)
 ```
 
 **Operators:**
@@ -94,6 +109,12 @@ result.rows[0].clicks // type: number
 | `contains(col, str)` | ✗ | String contains |
 | `like(col, '%pattern%')` | ✗ | SQL LIKE pattern |
 | `regex(col, /pattern/)` | ✗ | Regex match |
+| `notRegex(col, /pattern/)` | ✗ | Regex exclusion |
+| `between(col, start, end)` | ✗ | Inclusive range (primarily for date) |
+| `gte(col, val)` | ✗ | Greater than or equal |
+| `lte(col, val)` | ✗ | Less than or equal |
+| `gt(col, val)` | ✗ | Greater than |
+| `lt(col, val)` | ✗ | Less than |
 | `and(...filters)` | ✓ | Merge constraints |
 | `or(...filters)` | ✗ | Any match |
 | `not(filter)` | ✗ | Invert filter |
@@ -133,7 +154,7 @@ const cannibalization = analyzeCannibalization(keywordPageData)
 
 **Low-level:** `gscClient`, `queryRecursive`, `queryRecursiveStream`, `createQueryBody`, `withPropertyAggregation`, `withSearchAppearance`, `withDataType`, `withFreshData`, `withFinalData`
 
-**Query Builder (`gscdump/query`):** `gsc`, `eq`, `ne`, `and`, `or`, `inArray`, `contains`, `like`, `regex`, `notRegex`, `not`, `page`, `query`, `device`, `country`, `searchAppearance`, `Device`, `Country`
+**Query Builder (`gscdump/query`):** `gsc`, `eq`, `ne`, `and`, `or`, `inArray`, `contains`, `like`, `regex`, `notRegex`, `not`, `between`, `gte`, `gt`, `lte`, `lt`, `page`, `query`, `device`, `country`, `date`, `searchAppearance`, `Device`, `Country`
 
 **Error Utilities:** `isQuotaError`, `isRateLimitError`, `isAuthError`, `getErrorCode`, `getErrorMessage`, `getRetryAfter`, `analyzeGscError`, `formatGscErrorForCli`
 
