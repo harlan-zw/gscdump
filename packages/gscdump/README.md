@@ -23,8 +23,8 @@ npm install gscdump
 ## Usage
 
 ```ts
-import { daysAgo, today } from '@gscdump/query'
 import { fetchKeywordsWithComparison, fetchPagesWithComparison } from 'gscdump'
+import { daysAgo, today } from 'gscdump/query'
 
 // Auth accepts token string or object
 const auth = 'ya29.xxx...'
@@ -87,8 +87,7 @@ result.rows[0].clicks // type: number
 **With date helpers:**
 
 ```ts
-import { daysAgo, today } from '@gscdump/query'
-import { and, between, date, gsc, query, regex } from 'gscdump/query'
+import { and, between, date, daysAgo, gsc, query, regex, today } from 'gscdump/query'
 
 const q = gsc
   .select('query', 'page')
@@ -154,7 +153,7 @@ const cannibalization = analyzeCannibalization(keywordPageData)
 
 **Low-level:** `gscClient`, `queryRecursive`, `queryRecursiveStream`, `createQueryBody`, `withPropertyAggregation`, `withSearchAppearance`, `withDataType`, `withFreshData`, `withFinalData`
 
-**Query Builder (`gscdump/query`):** `gsc`, `eq`, `ne`, `and`, `or`, `inArray`, `contains`, `like`, `regex`, `notRegex`, `not`, `between`, `gte`, `gt`, `lte`, `lt`, `page`, `query`, `device`, `country`, `date`, `searchAppearance`, `Device`, `Country`
+**Query Builder (`gscdump/query`):** `gsc`, `eq`, `ne`, `and`, `or`, `inArray`, `contains`, `like`, `regex`, `notRegex`, `not`, `between`, `gte`, `gt`, `lte`, `lt`, `page`, `query`, `device`, `country`, `date`, `searchAppearance`, `Device`, `Country`, `today`, `daysAgo`
 
 **Error Utilities:** `isQuotaError`, `isRateLimitError`, `isAuthError`, `getErrorCode`, `getErrorMessage`, `getRetryAfter`, `analyzeGscError`, `formatGscErrorForCli`
 

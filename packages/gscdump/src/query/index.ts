@@ -1,3 +1,14 @@
+import { currentPstDate, dayjsPst } from '../utils/dayjs'
+
+// Date helpers
+export function today(): string {
+  return currentPstDate()
+}
+
+export function daysAgo(n: number): string {
+  return dayjsPst().subtract(n, 'day').format('YYYY-MM-DD')
+}
+
 // Query builder
 export { gsc } from './builder'
 export type { GSCQueryBuilder } from './builder'
