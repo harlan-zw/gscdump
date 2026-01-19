@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/query",
   "type": "module",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Unified data provider for Google Search Console - routes queries to API or SQLite database",
   "author": {
     "name": "Harlan Wilton",
