@@ -1,5 +1,4 @@
 import type { $Fetch, FetchOptions } from 'ofetch'
-import { ofetch } from 'ofetch'
 import type {
   ApiSite,
   ApiSitemap,
@@ -9,6 +8,7 @@ import type {
   SearchAnalyticsResponse,
   UrlNotificationMetadata,
 } from './types'
+import { ofetch } from 'ofetch'
 
 const GSC_API = 'https://searchconsole.googleapis.com'
 const INDEXING_API = 'https://indexing.googleapis.com'

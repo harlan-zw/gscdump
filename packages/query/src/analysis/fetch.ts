@@ -5,40 +5,9 @@
  * then falls back to pure functions from gscdump (JS computation).
  */
 
-import type { ResolvedAnalyticsRange } from 'gscdump'
-import {
-  // Pure analysis functions
-  analyzeStrikingDistance,
-  analyzeOpportunity,
-  analyzeBrandSegmentation,
-  analyzePageConcentration,
-  analyzeKeywordConcentration,
-  analyzeDecay,
-  analyzeMovers,
-  analyzeCannibalization,
-  analyzeZeroClick,
-  analyzeSeasonality,
-  // Types
-  type StrikingDistanceOptions,
-  type StrikingDistanceResult,
-  type OpportunityOptions,
-  type OpportunityResult,
-  type BrandSegmentationOptions,
-  type BrandSegmentationResult,
-  type ConcentrationOptions,
-  type ConcentrationResult,
-  type DecayOptions,
-  type DecayResult,
-  type MoversOptions,
-  type MoversResult,
-  type CannibalizationOptions,
-  type CannibalizationResult,
-  type ZeroClickOptions,
-  type ZeroClickResult,
-  type SeasonalityOptions,
-  type SeasonalityResult,
-} from 'gscdump'
+import type { BrandSegmentationOptions, BrandSegmentationResult, CannibalizationOptions, CannibalizationResult, ConcentrationOptions, ConcentrationResult, DecayOptions, DecayResult, MoversOptions, MoversResult, OpportunityOptions, OpportunityResult, ResolvedAnalyticsRange, SeasonalityOptions, SeasonalityResult, StrikingDistanceOptions, StrikingDistanceResult, ZeroClickOptions, ZeroClickResult } from 'gscdump'
 import type { DataProvider } from '../types'
+import { analyzeBrandSegmentation, analyzeCannibalization, analyzeDecay, analyzeKeywordConcentration, analyzeMovers, analyzeOpportunity, analyzePageConcentration, analyzeSeasonality, analyzeStrikingDistance, analyzeZeroClick } from 'gscdump'
 
 // Striking distance: check for optimized method, else use keyword data
 export async function fetchStrikingDistanceAnalysis(

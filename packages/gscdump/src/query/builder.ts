@@ -1,28 +1,28 @@
-import type { Dimension, Filter, GSCResult, BuilderState } from './types'
 import type { GoogleSearchConsoleClient } from '../core/client'
 import type { SearchAnalyticsQuery, SearchAnalyticsResponse } from '../core/types'
+import type { BuilderState, Dimension, Filter, GSCResult } from './types'
 import { resolveToBody } from './resolver'
 
 export interface GSCQueryBuilder<
   D extends Dimension[] = [],
   C = object,
 > {
-  select<T extends Dimension[]>(...dims: T): GSCQueryBuilder<T, C>
+  select: <T extends Dimension[]>(...dims: T) => GSCQueryBuilder<T, C>
 
-  where<F extends Filter<any>>(
+  where: <F extends Filter<any>>(
     filter: F,
-  ): GSCQueryBuilder<D, C & F['_constraints']>
+  ) => GSCQueryBuilder<D, C & F['_constraints']>
 
-  siteUrl(url: string): GSCQueryBuilder<D, C>
+  siteUrl: (url: string) => GSCQueryBuilder<D, C>
 
-  limit(n: number): GSCQueryBuilder<D, C>
+  limit: (n: number) => GSCQueryBuilder<D, C>
 
-  execute(client: GoogleSearchConsoleClient): Promise<GSCResult<D, C>>
+  execute: (client: GoogleSearchConsoleClient) => Promise<GSCResult<D, C>>
 
-  toBody(): SearchAnalyticsQuery
+  toBody: () => SearchAnalyticsQuery
 
   /** Expose internal state for analysis functions to merge with */
-  getState(): BuilderState
+  getState: () => BuilderState
 }
 
 function transformResponse<D extends Dimension[], C>(

@@ -1,5 +1,5 @@
-import type { BuilderState, Filter, InternalFilter, DateOperator } from './types'
-import type { SearchAnalyticsQuery, DimensionFilterGroup } from '../core/types'
+import type { DimensionFilterGroup, SearchAnalyticsQuery } from '../core/types'
+import type { BuilderState, DateOperator, Filter, InternalFilter } from './types'
 
 const DATE_OPERATORS: DateOperator[] = ['gte', 'gt', 'lte', 'lt', 'between']
 

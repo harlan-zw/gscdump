@@ -1,11 +1,11 @@
+import type { GoogleSearchConsoleClient } from '../../src/core/client'
 import { describe, expect, it, vi } from 'vitest'
 import { gsc } from '../../src/query/builder'
-import { eq, and, inArray, contains, regex, between, gte, lte, lt, gt } from '../../src/query/operators'
-import { device, country, page, query, date } from '../../src/query/columns'
-import { Device, Country } from '../../src/query/constants'
-import type { GoogleSearchConsoleClient } from '../../src/core/client'
+import { country, date, device, page } from '../../src/query/columns'
+import { Country, Device } from '../../src/query/constants'
+import { and, between, contains, eq, gt, gte, inArray, lt, lte, regex } from '../../src/query/operators'
 
-describe('GSCQueryBuilder', () => {
+describe('gSCQueryBuilder', () => {
   describe('toBody', () => {
     it('builds correct query body with dimensions and between()', () => {
       const body = gsc

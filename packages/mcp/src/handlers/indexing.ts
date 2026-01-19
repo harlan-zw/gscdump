@@ -1,7 +1,7 @@
 import type { IndexingMetadata, IndexingResult, InspectUrlResult } from 'gscdump'
 import type { z } from 'zod'
 import type { batchInspectUrlsInput, batchRequestIndexingInput, HandlerContext, inspectUrlInput, requestIndexingInput } from '../types'
-import { getIndexingMetadata, batchRequestIndexing as gscBatchIndexing, batchInspectUrls as gscBatchInspect, requestIndexing as gscRequestIndexing, inspectUrl as gscInspectUrl } from 'gscdump'
+import { getIndexingMetadata, batchRequestIndexing as gscBatchIndexing, batchInspectUrls as gscBatchInspect, inspectUrl as gscInspectUrl, requestIndexing as gscRequestIndexing } from 'gscdump'
 
 export async function inspectUrl(
   input: z.infer<typeof inspectUrlInput>,
@@ -26,7 +26,7 @@ export async function requestIndexing(
     .catch((e: Error) => ({
       url: input.url,
       type: input.type || 'URL_UPDATED',
-      error: e.message
+      error: e.message,
     }))
 }
 
@@ -37,7 +37,7 @@ export async function getIndexingStatus(
   return getIndexingMetadata(ctx.client, input.url)
     .catch((e: Error) => ({
       url: input.url,
-      error: e.message
+      error: e.message,
     }))
 }
 

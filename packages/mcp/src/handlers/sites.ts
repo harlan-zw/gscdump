@@ -1,7 +1,7 @@
 import type { ApiSite, ApiSitemap, RequiredNonNullable, Site } from 'gscdump'
 import type { z } from 'zod'
 import type { HandlerContext, listSitemapsInput, listSitesInput, sitemapInput } from '../types'
-import { fetchSites, fetchSitesWithSitemaps, fetchSitemaps, deleteSitemap as gscDeleteSitemap, fetchSitemap as gscFetchSitemap, submitSitemap as gscSubmitSitemap } from 'gscdump'
+import { fetchSitemaps, fetchSites, fetchSitesWithSitemaps, deleteSitemap as gscDeleteSitemap, fetchSitemap as gscFetchSitemap, submitSitemap as gscSubmitSitemap } from 'gscdump'
 
 export async function listSites(
   _input: z.infer<typeof listSitesInput>,

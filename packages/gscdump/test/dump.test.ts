@@ -1,17 +1,17 @@
 import type { searchconsole_v1 } from '@googleapis/searchconsole/v1'
 import type { OAuth2Client } from 'googleapis-common'
+import type { AggregationType, DeviceData, GoogleSearchConsoleClient, KeywordData, PageData, QueryResultRow, Site } from '../src'
 import {
-  fetchSites,
-  fetchSitesWithSitemaps,
-  inspectUrl,
   createQueryBody,
   fetchDevicesWithComparison,
-  withPropertyAggregation,
+  fetchSites,
+  fetchSitesWithSitemaps,
   formatDateGsc,
+  inspectUrl,
   percentDifference,
   userPeriodRange,
+  withPropertyAggregation,
 } from '../src'
-import type { AggregationType, DeviceData, GoogleSearchConsoleClient, KeywordData, PageData, QueryResultRow, Site } from '../src'
 
 // Mock OAuth2Client
 const _mockAuth = {

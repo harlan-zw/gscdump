@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { eq, ne, and, or, inArray, like, contains, regex, notRegex, not } from '../../src/query/operators'
-import { device, page, country, query } from '../../src/query/columns'
-import { Device, Country } from '../../src/query/constants'
+import { country, device, page, query } from '../../src/query/columns'
+import { Country, Device } from '../../src/query/constants'
+import { and, contains, eq, inArray, like, ne, not, notRegex, or, regex } from '../../src/query/operators'
 
 describe('operators', () => {
   describe('eq', () => {

@@ -1,5 +1,8 @@
+// Analysis module - pure functions and provider-based wrappers
+export * from './analysis'
 // Providers
 export { createApiProvider } from './api-provider'
+
 export { createDbProvider } from './db-provider'
 
 // Factory
@@ -16,6 +19,3 @@ export type {
   QueryContext,
   QueryPageRow,
 } from './types'
-
-// Analysis module - pure functions and provider-based wrappers
-export * from './analysis'

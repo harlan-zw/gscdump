@@ -1,6 +1,6 @@
 import type { GoogleSearchConsoleClient } from '../src'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { analyzeMoversAndShakers, analyzeCannibalization, analyzeContentDecay, fetchYoYComparison, analyzeStrikingDistance, analyzeZeroClickQueries, gsc, between, date } from '../src'
+import { analyzeCannibalization, analyzeContentDecay, analyzeMoversAndShakers, analyzeStrikingDistance, analyzeZeroClickQueries, between, date, fetchYoYComparison, gsc } from '../src'
 
 const mockQuery = vi.fn()
 const mockClient = {

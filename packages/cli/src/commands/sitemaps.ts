@@ -1,5 +1,5 @@
 import { defineCommand } from 'citty'
-import { deleteSitemap, fetchSitemaps, fetchSitemap, googleSearchConsole, submitSitemap } from 'gscdump'
+import { deleteSitemap, fetchSitemap, fetchSitemaps, googleSearchConsole, submitSitemap } from 'gscdump'
 import { getAuth } from '../auth'
 import { gscErrorHandler, logger } from '../utils'
 

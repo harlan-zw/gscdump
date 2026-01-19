@@ -1,5 +1,5 @@
-import type { UrlInspectionResult as GscUrlInspectionResult } from '../core/types'
 import type { GoogleSearchConsoleClient } from '../core/client'
+import type { UrlInspectionResult as GscUrlInspectionResult } from '../core/types'
 
 export interface InspectUrlResult {
   url: string

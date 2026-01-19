@@ -4,7 +4,8 @@
  */
 
 import type { KeywordData } from '../api/search-analytics/types'
-import { type SortOrder, createSorter, num } from './types'
+import type { SortOrder } from './types'
+import { createSorter, num } from './types'
 
 export type StrikingDistanceSortMetric = 'clicks' | 'impressions' | 'ctr' | 'position' | 'potentialClicks'
 

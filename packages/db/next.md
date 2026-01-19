@@ -28,7 +28,7 @@ Functions to persist gscdump fetch results to database.
 ```ts
 // src/sync.ts
 import type { OAuth2Client } from 'google-auth-library'
-import { fetchSites, fetchKeywordsWithComparison, fetchPagesWithComparison } from 'gscdump'
+import { fetchKeywordsWithComparison, fetchPagesWithComparison, fetchSites } from 'gscdump'
 
 export async function syncSites(db: GscDb, auth: OAuth2Client) {
   const sites = await fetchSites(auth)

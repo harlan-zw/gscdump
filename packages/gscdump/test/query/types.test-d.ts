@@ -1,6 +1,6 @@
-import { assertType, describe, expectTypeOf, it } from 'vitest'
-import { gsc, eq, and, inArray, contains, between, device, country, page, query, date, Device, Country } from '../../src/query'
 import type { GSCRow } from '../../src/query'
+import { describe, expectTypeOf, it } from 'vitest'
+import { and, between, contains, country, Country, date, device, Device, eq, gsc, inArray, page } from '../../src/query'
 
 describe('type inference', () => {
   describe('eq narrowing', () => {

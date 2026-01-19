@@ -4,7 +4,8 @@
  */
 
 import type { KeywordData } from '../api/search-analytics/types'
-import { type SortOrder, createSorter, num } from './types'
+import type { SortOrder } from './types'
+import { createSorter, num } from './types'
 
 export type OpportunitySortMetric = 'opportunityScore' | 'potentialClicks' | 'impressions' | 'position'
 
@@ -150,11 +151,11 @@ export function analyzeOpportunity(
     // Composite opportunity score (weighted geometric mean, normalized to 0-100)
     const weightedProduct
       = (positionScore ** positionWeight)
-      * (impressionScore ** impressionsWeight)
-      * (ctrGapScore ** ctrGapWeight)
+        * (impressionScore ** impressionsWeight)
+        * (ctrGapScore ** ctrGapWeight)
 
     const totalWeight = positionWeight + impressionsWeight + ctrGapWeight
-    const geometricMean = Math.pow(weightedProduct, 1 / totalWeight)
+    const geometricMean = weightedProduct ** (1 / totalWeight)
     const opportunityScore = Math.round(geometricMean * 100)
 
     // Calculate potential clicks if position improved to 3

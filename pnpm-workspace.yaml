@@ -8,35 +8,35 @@ packages:
   - packages/*
 
 catalog:
-  '@modelcontextprotocol/sdk': ^1.25.0
-  '@types/node': ^25.0.6
+  '@modelcontextprotocol/sdk': ^1.25.2
+  '@types/node': ^25.0.9
   db0: ^0.3.4
-  drizzle-kit: ^0.30.0
+  drizzle-kit: ^0.31.8
   drizzle-orm: ^0.45.1
-  zod: ^3.25.49
+  zod: ^4.3.5
 catalogs:
   deps:
     '@clack/prompts': ^0.11.0
-    '@googleapis/indexing': ^4.0.1
+    '@googleapis/indexing': ^6.0.1
     '@googleapis/searchconsole': ^6.0.1
     citty: ^0.1.6
     consola: ^3.4.2
-    dayjs: ^1.11.18
+    dayjs: ^1.11.19
     defu: ^6.1.4
     google-auth-library: ^10.5.0
-    ofetch: ^1.4.1
-    open: ^10.1.0
-    ufo: ^1.6.1
+    ofetch: ^1.5.1
+    open: ^11.0.0
+    ufo: ^1.6.3
   dev-build:
-    bumpp: ^10.3.2
+    bumpp: ^10.4.0
     obuild: ^0.4.14
     typescript: ^5.9.3
   dev-lint:
-    '@antfu/eslint-config': ^6.7.3
+    '@antfu/eslint-config': ^7.0.1
     eslint: ^9.39.2
   dev-test:
-    dotenv: ^16.5.0
-    vitest: ^4.0.16
+    dotenv: ^17.2.3
+    vitest: ^4.0.17
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - better-sqlite3

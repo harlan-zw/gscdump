@@ -1,9 +1,9 @@
-import { withoutTrailingSlash } from 'ufo'
-import type { DataRow, DimensionFilter, SearchAnalyticsQuery } from '../../core/types'
 import type { GoogleSearchConsoleClient } from '../../core/client'
+import type { DataRow, DimensionFilter, SearchAnalyticsQuery } from '../../core/types'
+import type { DataType, QueryOptions } from './types'
+import { withoutTrailingSlash } from 'ufo'
 import { dayjs } from '../../utils/dayjs'
 import { formatDateGsc } from '../../utils/format'
-import type { DataType, QueryOptions } from './types'
 
 /**
  * Recursively queries GSC search analytics, automatically handling pagination for large datasets.

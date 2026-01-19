@@ -1,16 +1,16 @@
 import type { OAuth2Client } from 'googleapis-common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  fetchSites,
-  fetchSitesWithSitemaps,
-  inspectUrl,
   createQueryBody,
   fetchAnalyticsWithComparison,
   fetchCountriesWithComparison,
   fetchDevicesWithComparison,
   fetchKeywordsWithComparison,
-  queryRecursive,
+  fetchSites,
+  fetchSitesWithSitemaps,
+  inspectUrl,
   percentDifference,
+  queryRecursive,
   userPeriodRange,
 } from '../src'
 import { createMockGoogleSearchConsoleClient } from './__fixtures__/mock-client-logic'

@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
-  analyzeDecay,
-  analyzeMovers,
-  analyzeStrikingDistance,
-  analyzeOpportunity,
-  analyzeCannibalization,
-  analyzeZeroClick,
-  analyzeSeasonality,
-  analyzeConcentration,
-  analyzePageConcentration,
-  analyzeKeywordConcentration,
   analyzeBrandSegmentation,
+  analyzeCannibalization,
+  analyzeConcentration,
+  analyzeDecay,
+  analyzeKeywordConcentration,
+  analyzeMovers,
+  analyzeOpportunity,
+  analyzePageConcentration,
+  analyzeSeasonality,
+  analyzeStrikingDistance,
+  analyzeZeroClick,
 } from '../src/analysis'
 
 describe('analyzeDecay', () => {

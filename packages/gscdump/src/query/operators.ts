@@ -1,4 +1,4 @@
-import type { Column, Filter, Dimension, DimensionValueMap, MergeConstraints, FilterOperator } from './types'
+import type { Column, Dimension, DimensionValueMap, Filter, FilterOperator, MergeConstraints } from './types'
 
 // eq - narrows to exact value
 export function eq<D extends Dimension, V extends DimensionValueMap[D]>(

@@ -1,6 +1,6 @@
 import type { GoogleSearchConsoleClient } from '../../core/client'
-import { createQueryBody } from './query'
 import type { AnalyticsData, ComparisonResult, QueryOptions } from './types'
+import { createQueryBody } from './query'
 
 /**
  * Fetches overall site analytics summary with period comparison and keyword data.

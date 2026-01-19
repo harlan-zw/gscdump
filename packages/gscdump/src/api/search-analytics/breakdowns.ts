@@ -1,8 +1,8 @@
-import type { DataRow } from '../../core/types'
 import type { GoogleSearchConsoleClient } from '../../core/client'
+import type { DataRow } from '../../core/types'
+import type { ComparisonResult, CountryData, DeviceData, QueryOptions, SearchAppearanceData } from './types'
 import countries from '../../utils/countries'
 import { createQueryBody } from './query'
-import type { ComparisonResult, CountryData, DeviceData, QueryOptions, SearchAppearanceData } from './types'
 
 /**
  * Fetches device breakdown (desktop, mobile, tablet) with period comparison.

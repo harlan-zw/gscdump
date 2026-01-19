@@ -1,5 +1,5 @@
-import type { DataRow, SearchAnalyticsQuery } from '../../core/types'
 import type { GoogleSearchConsoleClient } from '../../core/client'
+import type { DataRow, SearchAnalyticsQuery } from '../../core/types'
 
 /**
  * Supported GSC dimensions for streaming queries.
@@ -11,7 +11,7 @@ export type DimensionKey = 'query' | 'page' | 'date' | 'device' | 'country'
  * Maps each dimension to its output field name.
  * Note: 'query' maps to 'keyword' to match existing API conventions.
  */
-type DimensionFields = {
+interface DimensionFields {
   query: { keyword: string }
   page: { page: string }
   date: { date: string }
@@ -23,8 +23,8 @@ type DimensionFields = {
  * Recursively extracts and merges fields for each dimension in a tuple.
  * Used for type inference from dimensions array.
  */
-type ExtractFields<D extends readonly DimensionKey[]> =
-  D extends readonly [infer First extends DimensionKey, ...infer Rest extends DimensionKey[]]
+type ExtractFields<D extends readonly DimensionKey[]>
+  = D extends readonly [infer First extends DimensionKey, ...infer Rest extends DimensionKey[]]
     ? DimensionFields[First] & ExtractFields<Rest>
     : object
 
@@ -37,9 +37,8 @@ type ExtractFields<D extends readonly DimensionKey[]> =
  * // For dimensions: ['query', 'page']
  * // StreamRow = { keyword: string, page: string, clicks?: number, impressions?: number, ctr?: number, position?: number }
  */
-export type StreamRow<D extends readonly DimensionKey[]> =
-  Omit<DataRow, 'keys'> & ExtractFields<D>
-
+export type StreamRow<D extends readonly DimensionKey[]>
+  = Omit<DataRow, 'keys'> & ExtractFields<D>
 
 // Map dimension name to field name for row transformation
 const DIMENSION_TO_FIELD: Record<DimensionKey, string> = {

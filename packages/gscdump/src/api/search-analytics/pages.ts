@@ -1,10 +1,10 @@
 import type { GoogleSearchConsoleClient } from '../../core/client'
+import type { ComparisonResult, FetchPageResult, PageData, QueryOptions } from './types'
 import { percentDifference } from '../../utils/format'
 import { createQueryBody, queryRecursive } from './query'
-import type { ComparisonResult, FetchPageResult, PageData, QueryOptions } from './types'
 import { extractDomain, formatPageForQuery } from './utils'
 
-export type Page = ({ page: string })
+export interface Page { page: string }
 
 /**
  * Fetches all pages with their performance data using recursive pagination.

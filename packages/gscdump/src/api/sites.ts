@@ -1,5 +1,5 @@
-import type { ApiSite, ApiSitemap, RequiredNonNullable, Site } from '../core/types'
 import type { GoogleSearchConsoleClient } from '../core/client'
+import type { ApiSite, ApiSitemap, RequiredNonNullable, Site } from '../core/types'
 
 /**
  * Fetches all sites the authenticated user has access to in Google Search Console.

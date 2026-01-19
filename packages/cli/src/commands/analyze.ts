@@ -251,12 +251,14 @@ function formatResultItem(type: AnalysisType, item: Record<string, unknown>) {
 }
 
 function formatNumber(val: number | null | undefined): string {
-  if (val === undefined || val === null) return '-'
+  if (val === undefined || val === null)
+    return '-'
   return val.toLocaleString()
 }
 
 function formatChange(val: number | null | undefined): string {
-  if (val === undefined || val === null || !Number.isFinite(val)) return '\x1B[90m-\x1B[0m'
+  if (val === undefined || val === null || !Number.isFinite(val))
+    return '\x1B[90m-\x1B[0m'
   const sign = val > 0 ? '+' : ''
   const color = val > 0 ? '\x1B[32m' : val < 0 ? '\x1B[31m' : '\x1B[90m'
   return `${color}${sign}${val.toFixed(1)}%\x1B[0m`

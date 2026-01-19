@@ -3,7 +3,7 @@ import type { DataSource } from '@gscdump/query'
 import type { Auth, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site } from 'gscdump'
 import { z } from 'zod'
 
-export type { DataSource, Auth, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site }
+export type { Auth, DataSource, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site }
 
 // Zod schemas for MCP tool inputs
 

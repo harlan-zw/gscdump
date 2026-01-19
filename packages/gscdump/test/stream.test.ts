@@ -139,7 +139,7 @@ describe('queryRecursiveStream', () => {
 
   it('should stop when batch is smaller than rowLimit', async () => {
     vi.mocked(mockClient.searchAnalytics.query)
-      .mockResolvedValueOnce({ rows: Array(100).fill({ keys: ['k'], clicks: 1, impressions: 10, ctr: 0.1, position: 5 }) })
+      .mockResolvedValueOnce({ rows: Array.from({ length: 100 }).fill({ keys: ['k'], clicks: 1, impressions: 10, ctr: 0.1, position: 5 }) })
 
     const batches = []
     for await (const batch of queryRecursiveStream(mockClient, 'https://example.com/', {
@@ -156,8 +156,8 @@ describe('queryRecursiveStream', () => {
 
   it('should pass startRow correctly for pagination', async () => {
     vi.mocked(mockClient.searchAnalytics.query)
-      .mockResolvedValueOnce({ rows: Array(25000).fill({ keys: ['k'], clicks: 1, impressions: 10, ctr: 0.1, position: 5 }) })
-      .mockResolvedValueOnce({ rows: Array(100).fill({ keys: ['k'], clicks: 1, impressions: 10, ctr: 0.1, position: 5 }) })
+      .mockResolvedValueOnce({ rows: Array.from({ length: 25000 }).fill({ keys: ['k'], clicks: 1, impressions: 10, ctr: 0.1, position: 5 }) })
+      .mockResolvedValueOnce({ rows: Array.from({ length: 100 }).fill({ keys: ['k'], clicks: 1, impressions: 10, ctr: 0.1, position: 5 }) })
 
     for await (const _ of queryRecursiveStream(mockClient, 'https://example.com/', {
       dimensions: ['query'] as const,
@@ -177,8 +177,8 @@ describe('queryRecursiveStream', () => {
 
   it('should respect custom rowLimit', async () => {
     vi.mocked(mockClient.searchAnalytics.query)
-      .mockResolvedValueOnce({ rows: Array(1000).fill({ keys: ['k'], clicks: 1, impressions: 10, ctr: 0.1, position: 5 }) })
-      .mockResolvedValueOnce({ rows: Array(100).fill({ keys: ['k'], clicks: 1, impressions: 10, ctr: 0.1, position: 5 }) })
+      .mockResolvedValueOnce({ rows: Array.from({ length: 1000 }).fill({ keys: ['k'], clicks: 1, impressions: 10, ctr: 0.1, position: 5 }) })
+      .mockResolvedValueOnce({ rows: Array.from({ length: 100 }).fill({ keys: ['k'], clicks: 1, impressions: 10, ctr: 0.1, position: 5 }) })
 
     for await (const _ of queryRecursiveStream(mockClient, 'https://example.com/', {
       dimensions: ['query'] as const,

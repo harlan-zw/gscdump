@@ -1,30 +1,30 @@
 import type { GscDb } from '@gscdump/db'
 import type {
   Auth,
+  CannibalizationOptions,
+  CannibalizationResult,
   ComparisonResult,
   CountryData,
   DatesComparisonResult,
+  DecayOptions,
+  DecayResult,
   DeviceData,
   FetchKeywordResult,
   FetchPageResult,
   KeywordData,
+  MoversOptions,
+  MoversResult,
   Page,
   PageData,
   ResolvedAnalyticsRange,
   SearchAppearanceData,
+  SeasonalityOptions,
+  SeasonalityResult,
   // Analysis types for DB-optimized methods
   StrikingDistanceOptions,
   StrikingDistanceResult,
-  CannibalizationOptions,
-  CannibalizationResult,
   ZeroClickOptions,
   ZeroClickResult,
-  DecayOptions,
-  DecayResult,
-  MoversOptions,
-  MoversResult,
-  SeasonalityOptions,
-  SeasonalityResult,
 } from 'gscdump'
 import type { DateMetrics, QueryPageRow } from './analysis/types'
 

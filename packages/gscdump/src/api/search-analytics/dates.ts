@@ -1,9 +1,9 @@
 import type { GoogleSearchConsoleClient } from '../../core/client'
 import type { Period } from '../../core/types'
+import type { DateData, QueryOptions } from './types'
 import { dayjs } from '../../utils/dayjs'
 import { formatDateGsc, percentDifference } from '../../utils/format'
 import { createQueryBody } from './query'
-import type { DateData, QueryOptions } from './types'
 
 export interface DatesComparisonResult {
   current: DateData[]

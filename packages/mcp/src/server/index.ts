@@ -1,5 +1,9 @@
-import { type Auth, googleSearchConsole } from 'gscdump'
+import type { Auth } from 'gscdump'
+import type {
+  HandlerContext,
+} from '../types'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { googleSearchConsole } from 'gscdump'
 import * as handlers from '../handlers'
 import {
   batchInspectUrlsInput,
@@ -11,7 +15,6 @@ import {
   fetchKeywordInput,
   fetchPageInput,
   getIndexingStatusInput,
-  HandlerContext,
   inspectUrlInput,
   listSitemapsInput,
   listSitesInput,

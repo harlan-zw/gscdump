@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { fetchSites, fetchKeywordsWithComparison, fetchPages } from 'gscdump'
+import { fetchKeywordsWithComparison, fetchPages, fetchSites } from 'gscdump'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { dumpCommand } from '../../src/commands/dump'

@@ -56,7 +56,7 @@ const INTENT_PREFIXES = [
 function extractIntentPrefix(keyword: string): string | null {
   const lower = keyword.toLowerCase()
   for (const prefix of INTENT_PREFIXES) {
-    if (lower.startsWith(prefix + ' ') || lower.startsWith(prefix))
+    if (lower.startsWith(`${prefix} `) || lower.startsWith(prefix))
       return prefix
   }
   return null

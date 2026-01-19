@@ -1,3 +1,5 @@
+import type { CannibalizationResult, DecayResult, MoversResult, StrikingDistanceResult, ZeroClickResult } from '@gscdump/query'
+import type { YoYComparisonResult } from 'gscdump'
 import type { z } from 'zod'
 import type {
   cannibalizationInput,
@@ -10,24 +12,22 @@ import type {
   zeroClickInput,
 } from '../types'
 import {
-  type CannibalizationResult,
+
   createProvider,
-  type DecayResult,
+
   fetchCannibalizationAnalysis,
   fetchDecayAnalysis,
   fetchMoversAnalysis,
   fetchStrikingDistanceAnalysis,
   fetchZeroClickAnalysis,
-  type MoversResult,
-  type StrikingDistanceResult,
-  type ZeroClickResult,
+
 } from '@gscdump/query'
+import dayjs from 'dayjs'
 import {
   fetchYoYComparison as gscFetchYoY,
-  type YoYComparisonResult,
+
 } from 'gscdump'
-import dayjs from 'dayjs'
-import { toPeriod, toAnalyticsRange } from '../types'
+import { toAnalyticsRange, toPeriod } from '../types'
 
 /** Default to last 28 days if no period specified */
 function defaultPeriod(): Period {

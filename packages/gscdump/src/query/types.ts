@@ -1,4 +1,4 @@
-import type { Device, Country } from './constants'
+import type { Country, Device } from './constants'
 
 // Dimension value mapping
 export interface DimensionValueMap {
@@ -20,13 +20,13 @@ export interface Column<D extends Dimension> {
 }
 
 // Filter operator types for GSC API
-export type FilterOperator =
-  | 'equals'
-  | 'notEquals'
-  | 'contains'
-  | 'notContains'
-  | 'includingRegex'
-  | 'excludingRegex'
+export type FilterOperator
+  = | 'equals'
+    | 'notEquals'
+    | 'contains'
+    | 'notContains'
+    | 'includingRegex'
+    | 'excludingRegex'
 
 // Date comparison operators (resolved to startDate/endDate)
 export type DateOperator = 'gte' | 'gt' | 'lte' | 'lt' | 'between'
@@ -54,8 +54,8 @@ export type MergeConstraints<F extends Filter<any>[]> = UnionToIntersection<
 >
 
 // UnionToIntersection helper
-export type UnionToIntersection<U> =
-  (U extends any ? (k: U) => void : never) extends ((k: infer I) => void) ? I : never
+export type UnionToIntersection<U>
+  = (U extends any ? (k: U) => void : never) extends ((k: infer I) => void) ? I : never
 
 // Result types
 export interface GSCResult<D extends Dimension[], C> {

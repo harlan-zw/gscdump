@@ -1,7 +1,7 @@
 import type { GoogleSearchConsoleClient } from '../../core/client'
+import type { ComparisonResult, FetchKeywordResult, KeywordData, QueryOptions } from './types'
 import { percentDifference } from '../../utils/format'
 import { createQueryBody, queryRecursive } from './query'
-import type { ComparisonResult, FetchKeywordResult, KeywordData, QueryOptions } from './types'
 import { extractDomain, normalizePagePath } from './utils'
 
 /**

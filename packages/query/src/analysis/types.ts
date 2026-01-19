@@ -5,7 +5,7 @@
  */
 
 // Re-export from gscdump for convenience
-export type { KeywordData, PageData, ComparisonResult, DateData } from 'gscdump'
+export type { ComparisonResult, DateData, KeywordData, PageData } from 'gscdump'
 
 /** Base search metrics present on all data rows */
 export interface BaseMetrics {
