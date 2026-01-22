@@ -1,6 +1,6 @@
-import type { Country, Device } from './constants'
+import type { Country, Device, SearchType } from './constants'
 
-// Dimension value mapping
+// Dimension value mapping (groupable dimensions)
 export interface DimensionValueMap {
   query: string
   page: string
@@ -12,11 +12,25 @@ export interface DimensionValueMap {
 
 export type Dimension = keyof DimensionValueMap
 
-// Branded column type
+// Query param value mapping (non-groupable, top-level query params)
+export interface QueryParamValueMap {
+  searchType: SearchType
+}
+
+export type QueryParamName = keyof QueryParamValueMap
+
+// Branded column type (for groupable dimensions)
 declare const ColumnBrand: unique symbol
 export interface Column<D extends Dimension> {
   readonly [ColumnBrand]: D
   readonly dimension: D
+}
+
+// Branded query param type (for non-groupable top-level params)
+declare const QueryParamBrand: unique symbol
+export interface QueryParam<P extends QueryParamName> {
+  readonly [QueryParamBrand]: P
+  readonly param: P
 }
 
 // Filter operator types for GSC API
@@ -33,7 +47,7 @@ export type DateOperator = 'gte' | 'gt' | 'lte' | 'lt' | 'between'
 
 // Internal filter representation
 export interface InternalFilter {
-  dimension: Dimension
+  dimension: Dimension | QueryParamName
   operator: FilterOperator | DateOperator
   expression: string
   expression2?: string // for between operator
@@ -45,6 +59,7 @@ export interface Filter<C = object> {
   readonly [FilterBrand]: true
   readonly _constraints: C
   readonly _filters: InternalFilter[]
+  readonly _nestedGroups?: Filter<any>[] // Preserve nested or/and groups
   readonly _groupType?: 'and' | 'or'
 }
 
@@ -74,8 +89,7 @@ export type GSCRow<D extends Dimension[], C> = {
 // Internal builder state
 export interface BuilderState {
   dimensions: Dimension[]
-  filters: Filter<any>[]
-  siteUrl?: string
+  filter?: Filter<any>
   rowLimit?: number
   startRow?: number
 }

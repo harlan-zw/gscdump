@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { country, device, page, query } from '../../src/query/columns'
-import { Country, Device } from '../../src/query/constants'
+import { Countries, Devices } from '../../src/query/constants'
 import { and, contains, eq, inArray, like, ne, not, notRegex, or, regex } from '../../src/query/operators'
 
 describe('operators', () => {
   describe('eq', () => {
     it('creates equals filter for device', () => {
-      const f = eq(device, Device.MOBILE)
+      const f = eq(device, Devices.MOBILE)
       expect(f._filters[0]).toEqual({
         dimension: 'device',
         operator: 'equals',
@@ -15,7 +15,7 @@ describe('operators', () => {
     })
 
     it('creates equals filter for country', () => {
-      const f = eq(country, Country.USA)
+      const f = eq(country, Countries.USA)
       expect(f._filters[0]).toEqual({
         dimension: 'country',
         operator: 'equals',
@@ -35,7 +35,7 @@ describe('operators', () => {
 
   describe('ne', () => {
     it('creates notEquals filter', () => {
-      const f = ne(device, Device.TABLET)
+      const f = ne(device, Devices.TABLET)
       expect(f._filters[0]).toEqual({
         dimension: 'device',
         operator: 'notEquals',
@@ -46,7 +46,7 @@ describe('operators', () => {
 
   describe('inArray', () => {
     it('creates OR group for multiple values', () => {
-      const f = inArray(country, [Country.USA, Country.GBR])
+      const f = inArray(country, [Countries.USA, Countries.GBR])
       expect(f._filters).toHaveLength(2)
       expect(f._groupType).toBe('or')
       expect(f._filters[0]).toEqual({
@@ -62,7 +62,7 @@ describe('operators', () => {
     })
 
     it('works with devices', () => {
-      const f = inArray(device, [Device.MOBILE, Device.DESKTOP])
+      const f = inArray(device, [Devices.MOBILE, Devices.DESKTOP])
       expect(f._filters).toHaveLength(2)
       expect(f._groupType).toBe('or')
     })
@@ -129,8 +129,8 @@ describe('operators', () => {
   describe('and', () => {
     it('merges filters from multiple filters', () => {
       const f = and(
-        eq(device, Device.MOBILE),
-        eq(country, Country.USA),
+        eq(device, Devices.MOBILE),
+        eq(country, Countries.USA),
       )
       expect(f._filters).toHaveLength(2)
       expect(f._groupType).toBe('and')
@@ -138,9 +138,9 @@ describe('operators', () => {
 
     it('handles nested filters', () => {
       const f = and(
-        eq(device, Device.MOBILE),
+        eq(device, Devices.MOBILE),
         contains(page, '/blog/'),
-        eq(country, Country.GBR),
+        eq(country, Countries.GBR),
       )
       expect(f._filters).toHaveLength(3)
     })
@@ -149,8 +149,8 @@ describe('operators', () => {
   describe('or', () => {
     it('creates OR group', () => {
       const f = or(
-        eq(device, Device.MOBILE),
-        eq(device, Device.TABLET),
+        eq(device, Devices.MOBILE),
+        eq(device, Devices.TABLET),
       )
       expect(f._filters).toHaveLength(2)
       expect(f._groupType).toBe('or')
@@ -159,7 +159,7 @@ describe('operators', () => {
 
   describe('not', () => {
     it('inverts equals to notEquals', () => {
-      const original = eq(device, Device.MOBILE)
+      const original = eq(device, Devices.MOBILE)
       const inverted = not(original)
       expect(inverted._filters[0].operator).toBe('notEquals')
     })
@@ -177,7 +177,7 @@ describe('operators', () => {
     })
 
     it('double negation restores original operator', () => {
-      const original = eq(device, Device.MOBILE)
+      const original = eq(device, Devices.MOBILE)
       const doubleInverted = not(not(original))
       expect(doubleInverted._filters[0].operator).toBe('equals')
     })

@@ -1,5 +1,5 @@
 import type { Database } from 'db0'
-import type { GscDb } from '../src/connector'
+import type { GoogleSearchConsoleDatabase } from '../src/connector'
 import { createDatabase } from 'db0'
 import betterSqlite3 from 'db0/connectors/better-sqlite3'
 import { drizzle } from 'db0/integrations/drizzle'
@@ -12,9 +12,9 @@ import {
   sites,
 } from '../src/schema'
 
-export function createTestDb(): { db0: Database, db: GscDb } {
+export function createTestDb(): { db0: Database, db: GoogleSearchConsoleDatabase } {
   const db0 = createDatabase(betterSqlite3({ name: ':memory:' }))
-  const db = drizzle(db0) as GscDb
+  const db = drizzle(db0) as GoogleSearchConsoleDatabase
   return { db0, db }
 }
 
@@ -130,7 +130,7 @@ export async function setupSchema(db0: Database): Promise<void> {
   `)
 }
 
-export async function seedTestData(db: GscDb): Promise<void> {
+export async function seedTestData(db: GoogleSearchConsoleDatabase): Promise<void> {
   // Site
   await db.insert(sites).values({
     siteId: 1,

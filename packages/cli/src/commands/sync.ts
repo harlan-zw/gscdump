@@ -1,4 +1,5 @@
-import type { GoogleSearchConsoleClient, ResolvedAnalyticsRange } from 'gscdump'
+import type { SyncTable } from '@gscdump/db'
+import type { GoogleSearchConsoleClient } from 'gscdump'
 import path from 'node:path'
 import process from 'node:process'
 import {
@@ -6,19 +7,13 @@ import {
   getLastSyncedDate,
   getSiteByProperty,
   setupSchema,
-  syncCountries,
-  syncDevices,
-  syncKeywordPaths,
-  syncKeywords,
-  syncPages,
   syncSites,
-  updateLastSynced,
+  syncTables,
 } from '@gscdump/db'
-import { daysAgo } from '@gscdump/query'
 import { defineCommand } from 'citty'
 import dayjs from 'dayjs'
 import betterSqlite3 from 'db0/connectors/better-sqlite3'
-import { googleSearchConsole } from 'gscdump'
+import { between, date, daysAgo, googleSearchConsole, gsc } from 'gscdump'
 import { loadConfig } from '../config'
 import { clearLine, gscErrorHandler, logger, progressBar } from '../utils'
 
@@ -37,7 +32,7 @@ interface SyncReport {
   period: { start: string, end: string }
   sites: Array<{
     site: string
-    rows: { pages: number, keywords: number, keywordPaths?: number, countries: number, devices: number, total: number }
+    rows: { pages?: number, keywords?: number, keywordPaths?: number, countries?: number, devices?: number, total: number }
   }>
   totalRows: number
 }
@@ -116,12 +111,9 @@ async function runSync(
   const daysOffset = options.fresh ? 1 : 3
   const adjustedEndDate = daysAgo(daysOffset)
   const baseStartDate = daysAgo(periodDays + daysOffset)
-  const adjustedPrevEndDate = daysAgo(periodDays + daysOffset + 1)
-  const adjustedPrevStartDate = daysAgo(periodDays * 2 + daysOffset)
 
-  // Helper to create range for a site (may vary with incremental sync)
-
-  const getRangeForSite = async (siteId: number): Promise<{ range: ResolvedAnalyticsRange, startDate: string, skipped: boolean }> => {
+  // Helper to create builder for a site (may vary with incremental sync)
+  const getBuilderForSite = async (siteId: number): Promise<{ builder: ReturnType<typeof gsc.where>, startDate: string, skipped: boolean }> => {
     let startDate = baseStartDate
 
     // --since takes precedence
@@ -142,17 +134,14 @@ async function runSync(
     // Skip if start date is after end date (already up to date)
     if (startDate > adjustedEndDate) {
       return {
-        range: { period: { start: startDate, end: adjustedEndDate }, prevPeriod: { start: adjustedPrevStartDate, end: adjustedPrevEndDate } },
+        builder: gsc.where(between(date, startDate, adjustedEndDate)),
         startDate,
         skipped: true,
       }
     }
 
     return {
-      range: {
-        period: { start: startDate, end: adjustedEndDate },
-        prevPeriod: { start: adjustedPrevStartDate, end: adjustedPrevEndDate },
-      },
+      builder: gsc.where(between(date, startDate, adjustedEndDate)),
       startDate,
       skipped: false,
     }
@@ -167,13 +156,13 @@ async function runSync(
     console.log()
   }
 
-  const dataTypes = granular
-    ? ['pages', 'keywords', 'keyword-paths', 'countries', 'devices'] as const
-    : ['pages', 'keywords', 'countries', 'devices'] as const
+  const tables: SyncTable[] = granular
+    ? ['dates', 'pages', 'keywords', 'keywordPaths', 'countries', 'devices', 'searchAppearances']
+    : ['dates', 'pages', 'keywords', 'countries', 'devices']
 
   for (const { siteId, siteUrl } of sitesToSync) {
     const siteName = siteUrl.replace(/^(sc-domain:|https?:\/\/)/, '')
-    const { range, startDate, skipped } = await getRangeForSite(siteId)
+    const { builder, startDate, skipped } = await getBuilderForSite(siteId)
 
     // Skip if already up to date (incremental mode)
     if (skipped) {
@@ -182,56 +171,37 @@ async function runSync(
       continue
     }
 
-    const siteReport: SyncReport['sites'][0] = {
-      site: siteUrl,
-      rows: { pages: 0, keywords: 0, countries: 0, devices: 0, total: 0 },
-    }
-
     if (!options.quiet && !options.json && (options.incremental || options.since))
       logger.info(`${siteName}: syncing ${startDate} to ${adjustedEndDate}`)
 
-    for (let i = 0; i < dataTypes.length; i++) {
-      const dataType = dataTypes[i]
-
-      if (!options.quiet && !options.json) {
-        clearLine()
-        process.stdout.write(progressBar(i + 1, dataTypes.length, `${dataType} (${siteName})`))
-      }
-
-      let rows: any[] = []
-      if (dataType === 'pages') {
-        rows = await syncPages(db, client, siteId, siteUrl, range)
-        siteReport.rows.pages = rows.length
-      }
-      else if (dataType === 'keywords') {
-        rows = await syncKeywords(db, client, siteId, siteUrl, range)
-        siteReport.rows.keywords = rows.length
-      }
-      else if (dataType === 'keyword-paths') {
-        rows = await syncKeywordPaths(db, client, siteId, siteUrl, range)
-        siteReport.rows.keywordPaths = rows.length
-      }
-      else if (dataType === 'countries') {
-        rows = await syncCountries(db, client, siteId, siteUrl, range)
-        siteReport.rows.countries = rows.length
-      }
-      else if (dataType === 'devices') {
-        rows = await syncDevices(db, client, siteId, siteUrl, range)
-        siteReport.rows.devices = rows.length
-      }
-
-      siteReport.rows.total += rows.length
-    }
+    let currentTableIndex = 0
+    const result = await syncTables(db, client, siteId, siteUrl, tables, {
+      builder,
+      onBatch: (table) => {
+        if (!options.quiet && !options.json) {
+          const tableIndex = tables.indexOf(table)
+          if (tableIndex !== currentTableIndex) {
+            currentTableIndex = tableIndex
+            clearLine()
+            process.stdout.write(progressBar(tableIndex + 1, tables.length, `${table} (${siteName})`))
+          }
+        }
+      },
+    })
 
     if (!options.quiet && !options.json)
       clearLine()
 
-    await updateLastSynced(db, siteId)
+    const siteReport: SyncReport['sites'][0] = {
+      site: siteUrl,
+      rows: { ...result },
+    }
+
     report.sites.push(siteReport)
-    report.totalRows += siteReport.rows.total
+    report.totalRows += result.total
 
     if (!options.quiet && !options.json)
-      logger.success(`Synced ${siteName} (${siteReport.rows.total.toLocaleString()} rows)`)
+      logger.success(`Synced ${siteName} (${result.total.toLocaleString()} rows)`)
   }
 
   if (!options.quiet && !options.json) {

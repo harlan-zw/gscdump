@@ -3,17 +3,21 @@ catalogMode: prefer
 shellEmulator: true
 
 trustPolicy: no-downgrade
-
 packages:
   - packages/*
 
 catalog:
   '@modelcontextprotocol/sdk': ^1.25.2
+  '@types/js-yaml': ^4.0.9
   '@types/node': ^25.0.9
   db0: ^0.3.4
-  drizzle-kit: ^0.31.8
-  drizzle-orm: ^0.45.1
+  drizzle-kit: beta
+  drizzle-orm: beta
+  js-yaml: ^4.1.1
+  tinyexec: ^1.0.2
+  vitest-package-exports: ^1.1.2
   zod: ^4.3.5
+
 catalogs:
   deps:
     '@clack/prompts': ^0.11.0
@@ -37,6 +41,7 @@ catalogs:
   dev-test:
     dotenv: ^17.2.3
     vitest: ^4.0.17
+
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - better-sqlite3

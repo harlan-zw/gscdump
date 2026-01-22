@@ -66,7 +66,7 @@ Drizzle-style query builder with full type safety. Filter constraints flow throu
 ```ts
 import { and, between, contains, country, Country, date, device, Device, eq, gsc, inArray, page } from 'gscdump/query'
 
-const result = await gsc
+const body = gsc
   .select('page', 'query', 'device', 'country')
   .where(and(
     eq(device, Device.MOBILE),
@@ -74,14 +74,9 @@ const result = await gsc
     contains(page, '/blog/'),
     between(date, '2024-01-01', '2024-01-31')
   ))
-  .siteUrl('https://example.com')
-  .execute(client)
+  .toBody()
 
-// Fully typed results - narrowed by filters
-result.rows[0].device // type: 'MOBILE' (narrowed by eq)
-result.rows[0].country // type: 'usa' | 'gbr' (narrowed by inArray)
-result.rows[0].page // type: string (contains doesn't narrow)
-result.rows[0].clicks // type: number
+// Use with client.searchAnalytics.query(siteUrl, body)
 ```
 
 **With date helpers:**

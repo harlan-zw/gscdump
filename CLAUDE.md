@@ -58,4 +58,26 @@ Floats stored as integers for precision:
 - `ctr`: stored as `ctr * 10000`
 - `position`: stored as `position * 100`
 
+## IMPORTANT: API vs DB Pagination
+
+**GSC API does NOT support offset/limit pagination.**
+
+The comparison functions (`fetchPagesWithComparison`, `fetchKeywordsWithComparison`) are for **analysis**, not paginated display:
+
+```ts
+// ❌ WRONG - rowLimit is max rows, not page size. offset NOT supported.
+fetchKeywordsWithComparison(client, siteUrl, { rowLimit: 50 })
+
+// ✅ CORRECT - Fetch top N, paginate client-side
+const data = await fetchKeywordsWithComparison(client, siteUrl, {
+  period: { start, end },
+  rowLimit: 100,
+})
+const page = data.current.slice(offset, offset + pageSize)
+```
+
+**For server-side pagination, use DB provider** (requires `gscdump sync` first).
+
+See `docs/API_COST_MATRIX.md` for full API cost breakdown.
+
 See `ARCHITECTURE.md` for detailed documentation.

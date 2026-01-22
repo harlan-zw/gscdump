@@ -1,4 +1,4 @@
-import type { GscDb } from './connector'
+import type { GoogleSearchConsoleDatabase } from './connector'
 import { and, desc, eq, gte, lt, lte, sql } from 'drizzle-orm'
 import {
   siteDateAnalytics,
@@ -9,25 +9,25 @@ import {
   sites,
 } from './schema'
 
-export function getSiteByProperty(db: GscDb, property: string): Promise<typeof sites.$inferSelect | undefined> {
+export function getSiteByProperty(db: GoogleSearchConsoleDatabase, property: string): Promise<typeof sites.$inferSelect | undefined> {
   return db.select()
     .from(sites)
     .where(eq(sites.property, property))
     .get()
 }
 
-export function getSiteById(db: GscDb, siteId: number): Promise<typeof sites.$inferSelect | undefined> {
+export function getSiteById(db: GoogleSearchConsoleDatabase, siteId: number): Promise<typeof sites.$inferSelect | undefined> {
   return db.select()
     .from(sites)
     .where(eq(sites.siteId, siteId))
     .get()
 }
 
-export function getAllSites(db: GscDb): Promise<typeof sites.$inferSelect[]> {
+export function getAllSites(db: GoogleSearchConsoleDatabase): Promise<typeof sites.$inferSelect[]> {
   return db.select().from(sites).all()
 }
 
-export function getPageTrend(db: GscDb, siteId: number, path: string, startDate: string, endDate: string): Promise<typeof sitePathDateAnalytics.$inferSelect[]> {
+export function getPageTrend(db: GoogleSearchConsoleDatabase, siteId: number, path: string, startDate: string, endDate: string): Promise<typeof sitePathDateAnalytics.$inferSelect[]> {
   return db.select()
     .from(sitePathDateAnalytics)
     .where(and(
@@ -40,7 +40,7 @@ export function getPageTrend(db: GscDb, siteId: number, path: string, startDate:
     .all()
 }
 
-export function getTopPages(db: GscDb, siteId: number, startDate: string, endDate: string, limit = 100): Promise<{ path: string, totalClicks: number, totalImpressions: number, avgPosition: number, avgCtr: number }[]> {
+export function getTopPages(db: GoogleSearchConsoleDatabase, siteId: number, startDate: string, endDate: string, limit = 100): Promise<{ path: string, totalClicks: number, totalImpressions: number, avgPosition: number, avgCtr: number }[]> {
   return db.select({
     path: sitePathDateAnalytics.path,
     totalClicks: sql<number>`sum(${sitePathDateAnalytics.clicks})`.as('total_clicks'),
@@ -60,7 +60,7 @@ export function getTopPages(db: GscDb, siteId: number, startDate: string, endDat
     .all()
 }
 
-export function getKeywordTrend(db: GscDb, siteId: number, keyword: string, startDate: string, endDate: string): Promise<typeof siteKeywordDateAnalytics.$inferSelect[]> {
+export function getKeywordTrend(db: GoogleSearchConsoleDatabase, siteId: number, keyword: string, startDate: string, endDate: string): Promise<typeof siteKeywordDateAnalytics.$inferSelect[]> {
   return db.select()
     .from(siteKeywordDateAnalytics)
     .where(and(
@@ -73,7 +73,7 @@ export function getKeywordTrend(db: GscDb, siteId: number, keyword: string, star
     .all()
 }
 
-export function getTopKeywords(db: GscDb, siteId: number, startDate: string, endDate: string, limit = 100): Promise<{ keyword: string, totalClicks: number, totalImpressions: number, avgPosition: number, avgCtr: number }[]> {
+export function getTopKeywords(db: GoogleSearchConsoleDatabase, siteId: number, startDate: string, endDate: string, limit = 100): Promise<{ keyword: string, totalClicks: number, totalImpressions: number, avgPosition: number, avgCtr: number }[]> {
   return db.select({
     keyword: siteKeywordDateAnalytics.keyword,
     totalClicks: sql<number>`sum(${siteKeywordDateAnalytics.clicks})`.as('total_clicks'),
@@ -93,7 +93,7 @@ export function getTopKeywords(db: GscDb, siteId: number, startDate: string, end
     .all()
 }
 
-export function getSiteDailyTotals(db: GscDb, siteId: number, startDate: string, endDate: string): Promise<typeof siteDateAnalytics.$inferSelect[]> {
+export function getSiteDailyTotals(db: GoogleSearchConsoleDatabase, siteId: number, startDate: string, endDate: string): Promise<typeof siteDateAnalytics.$inferSelect[]> {
   return db.select()
     .from(siteDateAnalytics)
     .where(and(
@@ -105,7 +105,7 @@ export function getSiteDailyTotals(db: GscDb, siteId: number, startDate: string,
     .all()
 }
 
-export function getCountryBreakdown(db: GscDb, siteId: number, startDate: string, endDate: string): Promise<{ country: string, totalClicks: number, totalImpressions: number }[]> {
+export function getCountryBreakdown(db: GoogleSearchConsoleDatabase, siteId: number, startDate: string, endDate: string): Promise<{ country: string, totalClicks: number, totalImpressions: number }[]> {
   return db.select({
     country: siteDateCountryAnalytics.country,
     totalClicks: sql<number>`sum(${siteDateCountryAnalytics.clicks})`.as('total_clicks'),
@@ -122,7 +122,7 @@ export function getCountryBreakdown(db: GscDb, siteId: number, startDate: string
     .all()
 }
 
-export function getDeviceBreakdown(db: GscDb, siteId: number, startDate: string, endDate: string): Promise<{ device: string, totalClicks: number, totalImpressions: number }[]> {
+export function getDeviceBreakdown(db: GoogleSearchConsoleDatabase, siteId: number, startDate: string, endDate: string): Promise<{ device: string, totalClicks: number, totalImpressions: number }[]> {
   return db.select({
     device: siteDateDeviceAnalytics.device,
     totalClicks: sql<number>`sum(${siteDateDeviceAnalytics.clicks})`.as('total_clicks'),
@@ -140,7 +140,7 @@ export function getDeviceBreakdown(db: GscDb, siteId: number, startDate: string,
 }
 
 export async function comparePeriods(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   current: { start: string, end: string },
   previous: { start: string, end: string },
@@ -185,7 +185,7 @@ export async function comparePeriods(
   }
 }
 
-export function pruneOldData(db: GscDb, cutoffDate: string): Promise<unknown[]> {
+export function pruneOldData(db: GoogleSearchConsoleDatabase, cutoffDate: string): Promise<unknown[]> {
   return Promise.all([
     db.delete(sitePathDateAnalytics).where(lte(sitePathDateAnalytics.date, cutoffDate)),
     db.delete(siteKeywordDateAnalytics).where(lte(siteKeywordDateAnalytics.date, cutoffDate)),
@@ -211,7 +211,7 @@ export interface RollupRow {
  * Get weekly aggregated metrics for a site.
  * Returns data grouped by ISO week (YYYY-Www format).
  */
-export function queryWeeklyRollup(db: GscDb, siteId: number, startDate: string, endDate: string): Promise<RollupRow[]> {
+export function queryWeeklyRollup(db: GoogleSearchConsoleDatabase, siteId: number, startDate: string, endDate: string): Promise<RollupRow[]> {
   return db.select({
     period: sql<string>`strftime('%Y-W%W', ${sitePathDateAnalytics.date})`.as('period'),
     clicks: sql<number>`sum(${sitePathDateAnalytics.clicks})`.as('clicks'),
@@ -234,7 +234,7 @@ export function queryWeeklyRollup(db: GscDb, siteId: number, startDate: string, 
  * Get monthly aggregated metrics for a site.
  * Returns data grouped by month (YYYY-MM format).
  */
-export function queryMonthlyRollup(db: GscDb, siteId: number, startDate: string, endDate: string): Promise<RollupRow[]> {
+export function queryMonthlyRollup(db: GoogleSearchConsoleDatabase, siteId: number, startDate: string, endDate: string): Promise<RollupRow[]> {
   return db.select({
     period: sql<string>`strftime('%Y-%m', ${sitePathDateAnalytics.date})`.as('period'),
     clicks: sql<number>`sum(${sitePathDateAnalytics.clicks})`.as('clicks'),
@@ -271,7 +271,7 @@ export interface SignificantChange {
  * Positive threshold finds increases, negative finds decreases.
  */
 export async function findSignificantChanges(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   current: { start: string, end: string },
   previous: { start: string, end: string },
@@ -395,7 +395,7 @@ export interface LostPage {
  * Find pages that had traffic in the previous period but not in the current period.
  */
 export async function findLostPages(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   current: { start: string, end: string },
   previous: { start: string, end: string },
@@ -459,7 +459,7 @@ export interface NewPage {
  * Find pages that have traffic in the current period but not in the previous period.
  */
 export async function findNewPages(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   current: { start: string, end: string },
   previous: { start: string, end: string },
@@ -520,7 +520,7 @@ export async function findNewPages(
  * Prune old data from all analytics tables, keeping only data newer than retentionDays.
  * Returns the cutoff date used.
  */
-export async function pruneOldDataByDays(db: GscDb, siteId: number, retentionDays: number): Promise<{ cutoffDate: string, deleted: number[] }> {
+export async function pruneOldDataByDays(db: GoogleSearchConsoleDatabase, siteId: number, retentionDays: number): Promise<{ cutoffDate: string, deleted: number[] }> {
   const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
   const results = await Promise.all([
@@ -553,6 +553,6 @@ export async function pruneOldDataByDays(db: GscDb, siteId: number, retentionDay
  * Vacuum the database to reclaim space after deleting data.
  * Note: This may take a while for large databases.
  */
-export async function vacuumDb(db: GscDb): Promise<void> {
+export async function vacuumDb(db: GoogleSearchConsoleDatabase): Promise<void> {
   await db.run(sql`VACUUM`)
 }

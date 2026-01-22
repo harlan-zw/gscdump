@@ -1,9 +1,8 @@
-import type { GoogleSearchConsoleClient } from '../../src/core/client'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { gsc } from '../../src/query/builder'
 import { country, date, device, page } from '../../src/query/columns'
-import { Country, Device } from '../../src/query/constants'
-import { and, between, contains, eq, gt, gte, inArray, lt, lte, regex } from '../../src/query/operators'
+import { Countries, Devices } from '../../src/query/constants'
+import { and, between, contains, eq, gt, gte, inArray, lt, lte, or, regex } from '../../src/query/operators'
 
 describe('gSCQueryBuilder', () => {
   describe('toBody', () => {
@@ -18,11 +17,13 @@ describe('gSCQueryBuilder', () => {
       expect(body.endDate).toBe('2024-01-31')
     })
 
-    it('builds correct query body with gte/lte', () => {
+    it('builds correct query body with gte/lte using and()', () => {
       const body = gsc
         .select('page')
-        .where(gte(date, '2024-01-01'))
-        .where(lte(date, '2024-01-31'))
+        .where(and(
+          gte(date, '2024-01-01'),
+          lte(date, '2024-01-31'),
+        ))
         .toBody()
 
       expect(body.startDate).toBe('2024-01-01')
@@ -32,8 +33,10 @@ describe('gSCQueryBuilder', () => {
     it('adjusts date for gt (adds 1 day)', () => {
       const body = gsc
         .select('page')
-        .where(gt(date, '2024-01-01'))
-        .where(lte(date, '2024-01-31'))
+        .where(and(
+          gt(date, '2024-01-01'),
+          lte(date, '2024-01-31'),
+        ))
         .toBody()
 
       expect(body.startDate).toBe('2024-01-02')
@@ -43,19 +46,23 @@ describe('gSCQueryBuilder', () => {
     it('adjusts date for lt (subtracts 1 day)', () => {
       const body = gsc
         .select('page')
-        .where(gte(date, '2024-01-01'))
-        .where(lt(date, '2024-02-01'))
+        .where(and(
+          gte(date, '2024-01-01'),
+          lt(date, '2024-02-01'),
+        ))
         .toBody()
 
       expect(body.startDate).toBe('2024-01-01')
       expect(body.endDate).toBe('2024-01-31')
     })
 
-    it('builds body with single eq filter', () => {
+    it('builds body with single eq filter and date', () => {
       const body = gsc
         .select('page', 'device')
-        .where(eq(device, Device.MOBILE))
-        .where(between(date, '2024-01-01', '2024-01-31'))
+        .where(and(
+          eq(device, Devices.MOBILE),
+          between(date, '2024-01-01', '2024-01-31'),
+        ))
         .toBody()
 
       expect(body.dimensions).toEqual(['page', 'device'])
@@ -72,10 +79,10 @@ describe('gSCQueryBuilder', () => {
       const body = gsc
         .select('page', 'device', 'country')
         .where(and(
-          eq(device, Device.MOBILE),
-          eq(country, Country.USA),
+          eq(device, Devices.MOBILE),
+          eq(country, Countries.USA),
+          between(date, '2024-01-01', '2024-01-31'),
         ))
-        .where(between(date, '2024-01-01', '2024-01-31'))
         .toBody()
 
       expect(body.dimensionFilterGroups).toHaveLength(1)
@@ -85,20 +92,64 @@ describe('gSCQueryBuilder', () => {
     it('builds body with inArray as OR group', () => {
       const body = gsc
         .select('country')
-        .where(inArray(country, [Country.USA, Country.GBR, Country.AUS]))
-        .where(between(date, '2024-01-01', '2024-01-31'))
+        .where(and(
+          inArray(country, [Countries.USA, Countries.GBR, Countries.AUS]),
+          between(date, '2024-01-01', '2024-01-31'),
+        ))
         .toBody()
 
+      // inArray creates an OR group that's preserved
       expect(body.dimensionFilterGroups).toHaveLength(1)
       expect(body.dimensionFilterGroups![0].groupType).toBe('or')
       expect(body.dimensionFilterGroups![0].filters).toHaveLength(3)
     })
 
+    it('builds body with nested or() preserved as OR group', () => {
+      const body = gsc
+        .select('country', 'device')
+        .where(and(
+          or(
+            eq(country, Countries.USA),
+            eq(country, Countries.GBR),
+          ),
+          eq(device, Devices.MOBILE),
+          between(date, '2024-01-01', '2024-01-31'),
+        ))
+        .toBody()
+
+      // Creates 2 groups: one AND for device, one OR for countries
+      expect(body.dimensionFilterGroups).toHaveLength(2)
+      // First group is AND with device filter
+      expect(body.dimensionFilterGroups![0].groupType).toBeUndefined() // AND is default
+      expect(body.dimensionFilterGroups![0].filters).toHaveLength(1)
+      // Second group is OR with country filters
+      expect(body.dimensionFilterGroups![1].groupType).toBe('or')
+      expect(body.dimensionFilterGroups![1].filters).toHaveLength(2)
+    })
+
+    it('builds body with standalone or() as OR group', () => {
+      const body = gsc
+        .select('country')
+        .where(and(
+          or(
+            eq(country, Countries.USA),
+            eq(country, Countries.GBR),
+          ),
+          between(date, '2024-01-01', '2024-01-31'),
+        ))
+        .toBody()
+
+      expect(body.dimensionFilterGroups).toHaveLength(1)
+      expect(body.dimensionFilterGroups![0].groupType).toBe('or')
+    })
+
     it('builds body with contains filter', () => {
       const body = gsc
         .select('page')
-        .where(contains(page, '/blog/'))
-        .where(between(date, '2024-01-01', '2024-01-31'))
+        .where(and(
+          contains(page, '/blog/'),
+          between(date, '2024-01-01', '2024-01-31'),
+        ))
         .toBody()
 
       expect(body.dimensionFilterGroups![0].filters![0]).toEqual({
@@ -111,8 +162,10 @@ describe('gSCQueryBuilder', () => {
     it('builds body with regex filter', () => {
       const body = gsc
         .select('page')
-        .where(regex(page, '^/blog/2024'))
-        .where(between(date, '2024-01-01', '2024-01-31'))
+        .where(and(
+          regex(page, '^/blog/2024'),
+          between(date, '2024-01-01', '2024-01-31'),
+        ))
         .toBody()
 
       expect(body.dimensionFilterGroups![0].filters![0]).toEqual({
@@ -169,137 +222,33 @@ describe('gSCQueryBuilder', () => {
   })
 
   describe('chaining', () => {
-    it('allows multiple where clauses', () => {
+    it('combines multiple filters with and()', () => {
       const body = gsc
         .select('page', 'device')
-        .where(eq(device, Device.MOBILE))
-        .where(contains(page, '/blog/'))
-        .where(between(date, '2024-01-01', '2024-01-31'))
+        .where(and(
+          eq(device, Devices.MOBILE),
+          contains(page, '/blog/'),
+          between(date, '2024-01-01', '2024-01-31'),
+        ))
         .toBody()
 
-      expect(body.dimensionFilterGroups).toHaveLength(2)
+      expect(body.dimensionFilterGroups).toHaveLength(1)
+      expect(body.dimensionFilterGroups![0].filters).toHaveLength(2)
     })
 
     it('allows chaining in any order', () => {
       const body = gsc
         .limit(50)
-        .siteUrl('https://example.com')
         .select('page', 'query')
-        .where(between(date, '2024-01-01', '2024-01-31'))
-        .where(eq(device, Device.DESKTOP))
+        .where(and(
+          between(date, '2024-01-01', '2024-01-31'),
+          eq(device, Devices.DESKTOP),
+        ))
         .toBody()
 
       expect(body.dimensions).toEqual(['page', 'query'])
       expect(body.rowLimit).toBe(50)
       expect(body.dimensionFilterGroups).toBeDefined()
-    })
-  })
-
-  describe('execute', () => {
-    it('calls client.searchAnalytics.query with correct args', async () => {
-      const mockClient: GoogleSearchConsoleClient = {
-        sites: { list: vi.fn() },
-        sitemaps: {
-          list: vi.fn(),
-          get: vi.fn(),
-          submit: vi.fn(),
-          delete: vi.fn(),
-        },
-        searchAnalytics: {
-          query: vi.fn().mockResolvedValue({
-            rows: [
-              { keys: ['/page1', 'MOBILE'], clicks: 100, impressions: 1000, ctr: 0.1, position: 5.5 },
-              { keys: ['/page2', 'MOBILE'], clicks: 50, impressions: 500, ctr: 0.1, position: 3.2 },
-            ],
-          }),
-        },
-        urlInspection: { inspect: vi.fn() },
-        indexing: { publish: vi.fn(), getMetadata: vi.fn() },
-      }
-
-      const result = await gsc
-        .select('page', 'device')
-        .where(eq(device, Device.MOBILE))
-        .where(between(date, '2024-01-01', '2024-01-31'))
-        .siteUrl('https://example.com')
-        .execute(mockClient)
-
-      expect(mockClient.searchAnalytics.query).toHaveBeenCalledWith(
-        'https://example.com',
-        expect.objectContaining({
-          dimensions: ['page', 'device'],
-          startDate: '2024-01-01',
-          endDate: '2024-01-31',
-        }),
-      )
-
-      expect(result.rows).toHaveLength(2)
-      expect(result.rows[0]).toEqual({
-        page: '/page1',
-        device: 'MOBILE',
-        clicks: 100,
-        impressions: 1000,
-        ctr: 0.1,
-        position: 5.5,
-      })
-    })
-
-    it('passes offset to client query', async () => {
-      const mockClient: GoogleSearchConsoleClient = {
-        sites: { list: vi.fn() },
-        sitemaps: {
-          list: vi.fn(),
-          get: vi.fn(),
-          submit: vi.fn(),
-          delete: vi.fn(),
-        },
-        searchAnalytics: {
-          query: vi.fn().mockResolvedValue({ rows: [] }),
-        },
-        urlInspection: { inspect: vi.fn() },
-        indexing: { publish: vi.fn(), getMetadata: vi.fn() },
-      }
-
-      await gsc
-        .select('page')
-        .where(between(date, '2024-01-01', '2024-01-31'))
-        .siteUrl('https://example.com')
-        .limit(10)
-        .offset(100)
-        .execute(mockClient)
-
-      expect(mockClient.searchAnalytics.query).toHaveBeenCalledWith(
-        'https://example.com',
-        expect.objectContaining({
-          rowLimit: 10,
-          startRow: 100,
-        }),
-      )
-    })
-
-    it('handles empty response', async () => {
-      const mockClient: GoogleSearchConsoleClient = {
-        sites: { list: vi.fn() },
-        sitemaps: {
-          list: vi.fn(),
-          get: vi.fn(),
-          submit: vi.fn(),
-          delete: vi.fn(),
-        },
-        searchAnalytics: {
-          query: vi.fn().mockResolvedValue({}),
-        },
-        urlInspection: { inspect: vi.fn() },
-        indexing: { publish: vi.fn(), getMetadata: vi.fn() },
-      }
-
-      const result = await gsc
-        .select('page')
-        .where(between(date, '2024-01-01', '2024-01-31'))
-        .siteUrl('https://example.com')
-        .execute(mockClient)
-
-      expect(result.rows).toEqual([])
     })
   })
 })

@@ -33,9 +33,9 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
     },
-    "./cloud": {
-      "types": "./dist/cloud.d.mts",
-      "import": "./dist/cloud.mjs"
+    "./schema": {
+      "types": "./dist/schema.d.mts",
+      "import": "./dist/schema.mjs"
     }
   },
   "files": [

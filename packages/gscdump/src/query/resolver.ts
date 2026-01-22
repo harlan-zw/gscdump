@@ -1,10 +1,15 @@
 import type { DimensionFilterGroup, SearchAnalyticsQuery } from '../core/types'
-import type { BuilderState, DateOperator, Filter, InternalFilter } from './types'
+import type { BuilderState, DateOperator, Filter, InternalFilter, QueryParamName } from './types'
 
 const DATE_OPERATORS: DateOperator[] = ['gte', 'gt', 'lte', 'lt', 'between']
+const QUERY_PARAMS: QueryParamName[] = ['searchType']
 
 function isDateOperator(op: string): op is DateOperator {
   return DATE_OPERATORS.includes(op as DateOperator)
+}
+
+function isQueryParam(dim: string): dim is QueryParamName {
+  return QUERY_PARAMS.includes(dim as QueryParamName)
 }
 
 function addDays(dateStr: string, days: number): string {
@@ -13,86 +18,107 @@ function addDays(dateStr: string, days: number): string {
   return d.toISOString().split('T')[0]
 }
 
-interface DateExtraction {
+interface FilterExtraction {
   startDate?: string
   endDate?: string
-  nonDateFilters: Filter<any>[]
+  searchType?: string
+  dimensionFilter?: Filter<any>
 }
 
-/**
- * Extract date range from filters. Used by analysis functions to get the period.
- */
-export function extractDateRange(filters: Filter<any>[]): { startDate?: string, endDate?: string } {
-  const { startDate, endDate } = extractDateFilters(filters)
-  return { startDate, endDate }
-}
+function extractSpecialFilters(filter?: Filter<any>): FilterExtraction {
+  if (!filter)
+    return {}
 
-function extractDateFilters(filters: Filter<any>[]): DateExtraction {
   let startDate: string | undefined
   let endDate: string | undefined
-  const nonDateFilters: Filter<any>[] = []
+  let searchType: string | undefined
+  const otherFilters: InternalFilter[] = []
+  const cleanedNestedGroups: Filter<any>[] = []
 
-  for (const filter of filters) {
-    const dateFilters: InternalFilter[] = []
-    const otherFilters: InternalFilter[] = []
-
-    for (const f of filter._filters) {
-      if (f.dimension === 'date' && isDateOperator(f.operator)) {
-        dateFilters.push(f)
-      }
-      else {
-        otherFilters.push(f)
-      }
-    }
-
-    // Process date filters
-    for (const df of dateFilters) {
-      switch (df.operator) {
+  // Process flat filters
+  for (const f of filter._filters) {
+    if (f.dimension === 'date' && isDateOperator(f.operator)) {
+      // Process date filters
+      switch (f.operator) {
         case 'gte':
-          startDate = df.expression
+          startDate = f.expression
           break
         case 'gt':
-          // gt = exclusive, so add 1 day
-          startDate = addDays(df.expression, 1)
+          startDate = addDays(f.expression, 1)
           break
         case 'lte':
-          endDate = df.expression
+          endDate = f.expression
           break
         case 'lt':
-          // lt = exclusive, so subtract 1 day
-          endDate = addDays(df.expression, -1)
+          endDate = addDays(f.expression, -1)
           break
         case 'between':
-          startDate = df.expression
-          endDate = df.expression2
+          startDate = f.expression
+          endDate = f.expression2
           break
       }
     }
-
-    // Keep non-date filters
-    if (otherFilters.length > 0) {
-      nonDateFilters.push({
-        ...filter,
-        _filters: otherFilters,
-      } as Filter<any>)
+    else if (isQueryParam(f.dimension)) {
+      // Process query param filters
+      if (f.dimension === 'searchType') {
+        searchType = f.expression
+      }
+    }
+    else {
+      otherFilters.push(f)
     }
   }
 
-  return { startDate, endDate, nonDateFilters }
+  // Process nested groups recursively
+  if (filter._nestedGroups) {
+    for (const nested of filter._nestedGroups) {
+      const extracted = extractSpecialFilters(nested)
+      // Merge date/searchType from nested
+      if (extracted.startDate)
+        startDate = extracted.startDate
+      if (extracted.endDate)
+        endDate = extracted.endDate
+      if (extracted.searchType)
+        searchType = extracted.searchType
+      // Keep cleaned nested filter if it has dimension filters
+      if (extracted.dimensionFilter) {
+        cleanedNestedGroups.push(extracted.dimensionFilter)
+      }
+    }
+  }
+
+  const dimensionFilter = (otherFilters.length > 0 || cleanedNestedGroups.length > 0)
+    ? {
+        ...filter,
+        _filters: otherFilters,
+        _nestedGroups: cleanedNestedGroups.length > 0 ? cleanedNestedGroups : undefined,
+      } as Filter<any>
+    : undefined
+
+  return { startDate, endDate, searchType, dimensionFilter }
+}
+
+export function extractDateRange(filter?: Filter<any>): { startDate?: string, endDate?: string } {
+  const { startDate, endDate } = extractSpecialFilters(filter)
+  return { startDate, endDate }
 }
 
 export function resolveToBody(state: BuilderState): SearchAnalyticsQuery {
-  // Extract date constraints from filters
-  const { startDate, endDate, nonDateFilters } = extractDateFilters(state.filters)
+  // Extract date constraints and query params from filter
+  const { startDate, endDate, searchType, dimensionFilter } = extractSpecialFilters(state.filter)
 
   if (!startDate || !endDate) {
-    throw new Error('Date range required: use .where(between(date, start, end)) or .where(gte(date, start)).where(lte(date, end))')
+    throw new Error('Date range required: use .where(between(date, start, end)) or .where(and(gte(date, start), lte(date, end)))')
   }
 
   const body: SearchAnalyticsQuery = {
     dimensions: state.dimensions,
     startDate,
     endDate,
+  }
+
+  if (searchType) {
+    body.searchType = searchType
   }
 
   if (state.rowLimit) {
@@ -103,7 +129,7 @@ export function resolveToBody(state: BuilderState): SearchAnalyticsQuery {
     body.startRow = state.startRow
   }
 
-  const filterGroups = resolveFilters(nonDateFilters)
+  const filterGroups = resolveFilter(dimensionFilter)
   if (filterGroups.length > 0) {
     body.dimensionFilterGroups = filterGroups
   }
@@ -111,15 +137,16 @@ export function resolveToBody(state: BuilderState): SearchAnalyticsQuery {
   return body
 }
 
-function resolveFilters(filters: Filter<any>[]): DimensionFilterGroup[] {
+function resolveFilter(filter?: Filter<any>): DimensionFilterGroup[] {
+  if (!filter)
+    return []
+
   const groups: DimensionFilterGroup[] = []
+  const groupType = filter._groupType ?? 'and'
 
-  for (const filter of filters) {
-    const groupType = filter._groupType ?? 'and'
-
-    if (groupType === 'or' && filter._filters.length > 1) {
-      // OR group - each filter becomes separate group with OR logic
-      // GSC API limitation: can only have AND between groups, OR within groups
+  if (groupType === 'or') {
+    // OR group - all filters in one group with OR logic
+    if (filter._filters.length > 0) {
       groups.push({
         groupType: 'or',
         filters: filter._filters.map(f => ({
@@ -129,8 +156,10 @@ function resolveFilters(filters: Filter<any>[]): DimensionFilterGroup[] {
         })),
       })
     }
-    else if (filter._filters.length > 0) {
-      // AND - add filters to default group
+  }
+  else {
+    // AND - flat filters become one AND group
+    if (filter._filters.length > 0) {
       groups.push({
         filters: filter._filters.map(f => ({
           dimension: f.dimension,
@@ -138,6 +167,13 @@ function resolveFilters(filters: Filter<any>[]): DimensionFilterGroup[] {
           expression: f.expression,
         })),
       })
+    }
+  }
+
+  // Process nested groups (preserved OR groups from and())
+  if (filter._nestedGroups) {
+    for (const nested of filter._nestedGroups) {
+      groups.push(...resolveFilter(nested))
     }
   }
 

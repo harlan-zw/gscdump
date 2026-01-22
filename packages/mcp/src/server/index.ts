@@ -8,22 +8,22 @@ import * as handlers from '../handlers'
 import {
   batchInspectUrlsInput,
   batchRequestIndexingInput,
-  cannibalizationInput,
-  contentDecayInput,
-  customQueryInput,
-  fetchAnalyticsInput,
-  fetchKeywordInput,
-  fetchPageInput,
+  // cannibalizationInput,
+  // contentDecayInput,
+  // customQueryInput,
+  // fetchAnalyticsInput,
+  // fetchKeywordInput,
+  // fetchPageInput,
   getIndexingStatusInput,
   inspectUrlInput,
   listSitemapsInput,
   listSitesInput,
-  moversAndShakersInput,
+  // moversAndShakersInput,
   requestIndexingInput,
   sitemapInput,
-  strikingDistanceInput,
-  yoyComparisonInput,
-  zeroClickInput,
+  // strikingDistanceInput,
+  // yoyComparisonInput,
+  // zeroClickInput,
 } from '../types'
 
 export interface CreateGscMcpServerOptions {
@@ -127,126 +127,8 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  // Analytics tools
-  server.registerTool(
-    'fetch-dates',
-    {
-      description: 'Fetch daily search analytics data with optional period comparison',
-      inputSchema: fetchAnalyticsInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchDates(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'fetch-devices',
-    {
-      description: 'Fetch device breakdown (desktop, mobile, tablet) with comparison',
-      inputSchema: fetchAnalyticsInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchDevices(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'fetch-countries',
-    {
-      description: 'Fetch top countries by traffic with comparison',
-      inputSchema: fetchAnalyticsInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchCountries(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'fetch-pages',
-    {
-      description: 'Fetch all pages with performance data',
-      inputSchema: fetchAnalyticsInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchAllPages(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'fetch-pages-comparison',
-    {
-      description: 'Fetch page performance with period comparison',
-      inputSchema: fetchAnalyticsInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchPagesComparison(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'fetch-keywords',
-    {
-      description: 'Fetch keyword performance with period comparison',
-      inputSchema: fetchAnalyticsInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchKeywords(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'fetch-search-appearance',
-    {
-      description: 'Fetch search appearance breakdown (AMP, rich results, etc.)',
-      inputSchema: fetchAnalyticsInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchSearchAppearance(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'fetch-page-details',
-    {
-      description: 'Fetch detailed data for a specific page including daily trends and top keywords',
-      inputSchema: fetchPageInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchPageDetails(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'fetch-keyword-details',
-    {
-      description: 'Fetch detailed data for a specific keyword including daily trends and top pages',
-      inputSchema: fetchKeywordInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchKeywordDetails(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'fetch-analytics-summary',
-    {
-      description: 'Fetch overall site analytics summary with keyword data and period comparison',
-      inputSchema: fetchAnalyticsInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchAnalyticsSummary(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
+  // TODO: Restore analytics tools once gscdump fetch* functions are re-implemented
+  // Analytics tools are temporarily disabled
 
   // Indexing tools
   server.registerTool(
@@ -309,91 +191,8 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  // Analysis tools
-  server.registerTool(
-    'detect-cannibalization',
-    {
-      description: 'Find queries ranking for multiple pages (keyword cannibalization)',
-      inputSchema: cannibalizationInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.detectCannibalization(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'find-striking-distance',
-    {
-      description: 'Find quick-win keywords (position 4-20, high impressions, low CTR)',
-      inputSchema: strikingDistanceInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.findStrikingDistance(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'fetch-yoy-comparison',
-    {
-      description: 'Year-over-year metrics comparison',
-      inputSchema: yoyComparisonInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchYoYComparison(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'analyze-movers-and-shakers',
-    {
-      description: 'Identify trending queries (rising and declining)',
-      inputSchema: moversAndShakersInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.analyzeMoversAndShakers(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'detect-content-decay',
-    {
-      description: 'Identify decaying content (pages losing traffic vs previous year)',
-      inputSchema: contentDecayInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.detectContentDecay(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'find-zero-click-queries',
-    {
-      description: 'Identify zero-click queries (high impressions, low CTR in top positions)',
-      inputSchema: zeroClickInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.findZeroClickQueries(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  // Query tool
-  server.registerTool(
-    'custom-query',
-    {
-      description: 'Execute a custom GSC search analytics query with specified dimensions',
-      inputSchema: customQueryInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.customQuery(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
+  // TODO: Restore analysis tools once gscdump fetch* functions are re-implemented
+  // Analysis tools are temporarily disabled
 
   return server
 }

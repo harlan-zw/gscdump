@@ -1,3 +1,4 @@
+import type { GoogleSearchConsoleDatabase } from './connector'
 import type {
   ComparisonResult,
   CountryData,
@@ -8,10 +9,9 @@ import type {
   FetchPageResult,
   KeywordData,
   PageData,
-} from 'gscdump'
-import type { GscDb } from './connector'
+} from './types'
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm'
-import { countries, percentDifference } from 'gscdump'
+import { Countries } from 'gscdump/query'
 import {
   siteDateAnalytics,
   siteDateCountryAnalytics,
@@ -48,7 +48,7 @@ function computeTotals(rows: DateData[]): { clicks: number, impressions: number,
 }
 
 export async function queryDatesWithComparison(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   current: DateRange,
   previous?: DateRange,
@@ -130,7 +130,7 @@ export async function queryDatesWithComparison(
 }
 
 export async function queryPagesWithComparison(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   current: DateRange,
   previous?: DateRange,
@@ -282,7 +282,7 @@ export async function queryPagesWithComparison(
 }
 
 export async function queryKeywordsWithComparison(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   current: DateRange,
   previous?: DateRange,
@@ -438,7 +438,7 @@ export async function queryKeywordsWithComparison(
 }
 
 export async function queryDevicesWithComparison(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   current: DateRange,
   previous?: DateRange,
@@ -519,7 +519,7 @@ export async function queryDevicesWithComparison(
 }
 
 export async function queryCountriesWithComparison(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   current: DateRange,
   previous?: DateRange,
@@ -621,7 +621,7 @@ export async function queryCountriesWithComparison(
 
 // Simple page list (mirrors fetchPages)
 export async function queryPages(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   range: DateRange,
 ): Promise<{ page: string, clicks: number, impressions: number, ctr: number, position: number }[]> {
@@ -657,7 +657,7 @@ export async function queryPages(
 
 // Keyword drill-down (mirrors fetchKeyword)
 export async function queryKeyword(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   range: DateRange,
   keyword: string,
@@ -719,7 +719,7 @@ export async function queryKeyword(
 
 // Page drill-down (mirrors fetchPage)
 export async function queryPage(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   range: DateRange,
   path: string,
@@ -781,7 +781,7 @@ export async function queryPage(
 
 // Check if DB has data for a given date range
 export async function hasDataForRange(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   range: DateRange,
 ): Promise<boolean> {
@@ -808,7 +808,7 @@ export interface QueryPageRow {
 }
 
 export async function queryQueryPageRows(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   range: DateRange,
 ): Promise<QueryPageRow[]> {
@@ -854,7 +854,7 @@ export interface DateRow {
 }
 
 export async function queryDateRows(
-  db: GscDb,
+  db: GoogleSearchConsoleDatabase,
   siteId: number,
   range: DateRange,
 ): Promise<DateRow[]> {

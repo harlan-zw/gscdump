@@ -1,4 +1,6 @@
 import type { $Fetch, FetchOptions } from 'ofetch'
+import type { GSCQueryBuilder } from '../query/builder'
+import type { Dimension, GSCRow } from '../query/types'
 import type {
   ApiSite,
   ApiSitemap,
@@ -9,6 +11,7 @@ import type {
   UrlNotificationMetadata,
 } from './types'
 import { ofetch } from 'ofetch'
+import { resolveToBody } from '../query/resolver'
 
 const GSC_API = 'https://searchconsole.googleapis.com'
 const INDEXING_API = 'https://indexing.googleapis.com'
@@ -126,23 +129,31 @@ export function createFetch(auth: Auth, options?: FetchOptions): $Fetch {
 }
 
 export interface GoogleSearchConsoleClient {
-  sites: { list: () => Promise<{ siteEntry?: ApiSite[] }> }
+  /** Query search analytics with builder, returns async generator yielding typed row batches */
+  query: <D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>) => AsyncGenerator<GSCRow<D, C>[]>
+
+  /** List all sites */
+  sites: () => Promise<ApiSite[]>
+
+  /** Inspect a URL */
+  inspect: (siteUrl: string, url: string) => Promise<InspectUrlIndexResponse>
+
+  /** Sitemap operations */
   sitemaps: {
-    list: (siteUrl: string) => Promise<{ sitemap?: ApiSitemap[] }>
+    list: (siteUrl: string) => Promise<ApiSitemap[]>
     get: (siteUrl: string, feedpath: string) => Promise<ApiSitemap>
     submit: (siteUrl: string, feedpath: string) => Promise<void>
     delete: (siteUrl: string, feedpath: string) => Promise<void>
   }
-  searchAnalytics: {
-    query: (siteUrl: string, body: SearchAnalyticsQuery) => Promise<SearchAnalyticsResponse>
-  }
-  urlInspection: {
-    inspect: (siteUrl: string, inspectionUrl: string) => Promise<InspectUrlIndexResponse>
-  }
+
+  /** Indexing API operations */
   indexing: {
     publish: (url: string, type: 'URL_UPDATED' | 'URL_DELETED') => Promise<PublishUrlNotificationResponse>
     getMetadata: (url: string) => Promise<UrlNotificationMetadata>
   }
+
+  /** @internal */
+  _rawQuery: (siteUrl: string, body: SearchAnalyticsQuery) => Promise<SearchAnalyticsResponse>
 }
 
 export interface GoogleSearchConsoleClientOptions {
@@ -185,15 +196,56 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
     fetch = createFetch(authState, fetchOptions)
   }
 
+  const rawQuery = (siteUrl: string, body: SearchAnalyticsQuery) =>
+    fetch<SearchAnalyticsResponse>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, {
+      method: 'POST',
+      body,
+    })
+
   return {
-    sites: {
-      list: () =>
-        fetch<{ siteEntry?: ApiSite[] }>(`${GSC_API}/webmasters/v3/sites`),
+    async* query<D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>): AsyncGenerator<GSCRow<D, C>[]> {
+      const state = builder.getState()
+      const body = resolveToBody(state)
+      const rowLimit = body.rowLimit || 25_000
+      let startRow = body.startRow || 0
+
+      while (true) {
+        const response = await rawQuery(siteUrl, { ...body, startRow, rowLimit })
+        const rows = (response.rows || []).map((row) => {
+          const result: any = {
+            clicks: row.clicks ?? 0,
+            impressions: row.impressions ?? 0,
+            ctr: row.ctr ?? 0,
+            position: row.position ?? 0,
+          }
+          state.dimensions.forEach((dim, i) => {
+            result[dim] = row.keys?.[i]
+          })
+          return result as GSCRow<D, C>
+        })
+        yield rows
+        if (rows.length < rowLimit)
+          break
+        startRow += rows.length
+      }
     },
 
+    sites: async () => {
+      const res = await fetch<{ siteEntry?: ApiSite[] }>(`${GSC_API}/webmasters/v3/sites`)
+      return res.siteEntry || []
+    },
+
+    inspect: (siteUrl: string, url: string) =>
+      fetch<InspectUrlIndexResponse>(`${GSC_API}/v1/urlInspection/index:inspect`, {
+        method: 'POST',
+        body: { inspectionUrl: url, siteUrl },
+      }),
+
     sitemaps: {
-      list: (siteUrl: string) =>
-        fetch<{ sitemap?: ApiSitemap[] }>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps`),
+      list: async (siteUrl: string) => {
+        const res = await fetch<{ sitemap?: ApiSitemap[] }>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps`)
+        return res.sitemap || []
+      },
 
       get: (siteUrl: string, feedpath: string) =>
         fetch<ApiSitemap>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps/${encodeURIComponent(feedpath)}`),
@@ -209,22 +261,6 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
         }),
     },
 
-    searchAnalytics: {
-      query: (siteUrl: string, body: SearchAnalyticsQuery) =>
-        fetch<SearchAnalyticsResponse>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, {
-          method: 'POST',
-          body,
-        }),
-    },
-
-    urlInspection: {
-      inspect: (siteUrl: string, inspectionUrl: string) =>
-        fetch<InspectUrlIndexResponse>(`${GSC_API}/v1/urlInspection/index:inspect`, {
-          method: 'POST',
-          body: { inspectionUrl, siteUrl },
-        }),
-    },
-
     indexing: {
       publish: (url: string, type: 'URL_UPDATED' | 'URL_DELETED') =>
         fetch<PublishUrlNotificationResponse>(`${INDEXING_API}/v3/urlNotifications:publish`, {
@@ -237,5 +273,7 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
           query: { url },
         }),
     },
+
+    _rawQuery: rawQuery,
   }
 }

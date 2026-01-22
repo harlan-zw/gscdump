@@ -15,7 +15,7 @@ export async function inspectUrl(
   siteUrl: string,
   inspectionUrl: string,
 ): Promise<{ inspection: GscUrlInspectionResult | undefined, isIndexed: boolean }> {
-  const response = await client.urlInspection.inspect(siteUrl, inspectionUrl)
+  const response = await client.inspect(siteUrl, inspectionUrl)
   const inspection = response.inspectionResult
   const isIndexed = inspection?.indexStatusResult?.verdict === 'PASS'
   return { inspection, isIndexed }

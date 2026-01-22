@@ -1,14 +1,16 @@
-import type { GSCRow } from '../../src/query'
+import type { Device, GSCRow } from '../../src/query'
 import { describe, expectTypeOf, it } from 'vitest'
-import { and, between, contains, country, Country, date, device, Device, eq, gsc, inArray, page, query, regex } from '../../src/query'
+import { and, between, contains, Countries, country, date, device, Devices, eq, gsc, inArray, page, query, regex } from '../../src/query'
 
 describe('type inference', () => {
   describe('eq narrowing', () => {
     it('narrows device type with eq', () => {
       const _builder = gsc
         .select('device')
-        .where(eq(device, Device.MOBILE))
-        .where(between(date, '2024-01-01', '2024-01-31'))
+        .where(and(
+          eq(device, Devices.MOBILE),
+          between(date, '2024-01-01', '2024-01-31'),
+        ))
 
       type ResultRow = Awaited<ReturnType<typeof _builder.execute>>['rows'][number]
 
@@ -19,8 +21,10 @@ describe('type inference', () => {
     it('narrows country type with eq', () => {
       const _builder = gsc
         .select('country')
-        .where(eq(country, Country.USA))
-        .where(between(date, '2024-01-01', '2024-01-31'))
+        .where(and(
+          eq(country, Countries.USA),
+          between(date, '2024-01-01', '2024-01-31'),
+        ))
 
       type ResultRow = Awaited<ReturnType<typeof _builder.execute>>['rows'][number]
 
@@ -33,8 +37,10 @@ describe('type inference', () => {
     it('narrows country to union with inArray', () => {
       const _builder = gsc
         .select('country')
-        .where(inArray(country, [Country.USA, Country.GBR] as const))
-        .where(between(date, '2024-01-01', '2024-01-31'))
+        .where(and(
+          inArray(country, [Countries.USA, Countries.GBR] as const),
+          between(date, '2024-01-01', '2024-01-31'),
+        ))
 
       type ResultRow = Awaited<ReturnType<typeof _builder.execute>>['rows'][number]
 
@@ -45,8 +51,10 @@ describe('type inference', () => {
     it('narrows device to union with inArray', () => {
       const _builder = gsc
         .select('device')
-        .where(inArray(device, [Device.MOBILE, Device.TABLET] as const))
-        .where(between(date, '2024-01-01', '2024-01-31'))
+        .where(and(
+          inArray(device, [Devices.MOBILE, Devices.TABLET] as const),
+          between(date, '2024-01-01', '2024-01-31'),
+        ))
 
       type ResultRow = Awaited<ReturnType<typeof _builder.execute>>['rows'][number]
 
@@ -59,10 +67,10 @@ describe('type inference', () => {
       const _builder = gsc
         .select('device', 'country')
         .where(and(
-          eq(device, Device.MOBILE),
-          eq(country, Country.GBR),
+          eq(device, Devices.MOBILE),
+          eq(country, Countries.GBR),
+          between(date, '2024-01-01', '2024-01-31'),
         ))
-        .where(between(date, '2024-01-01', '2024-01-31'))
 
       type ResultRow = Awaited<ReturnType<typeof _builder.execute>>['rows'][number]
 
@@ -74,10 +82,10 @@ describe('type inference', () => {
       const _builder = gsc
         .select('device', 'country')
         .where(and(
-          eq(device, Device.DESKTOP),
-          inArray(country, [Country.USA, Country.CAN] as const),
+          eq(device, Devices.DESKTOP),
+          inArray(country, [Countries.USA, Countries.CAN] as const),
+          between(date, '2024-01-01', '2024-01-31'),
         ))
-        .where(between(date, '2024-01-01', '2024-01-31'))
 
       type ResultRow = Awaited<ReturnType<typeof _builder.execute>>['rows'][number]
 
@@ -90,8 +98,10 @@ describe('type inference', () => {
     it('contains does not narrow type', () => {
       const _builder = gsc
         .select('page')
-        .where(contains(page, '/blog/'))
-        .where(between(date, '2024-01-01', '2024-01-31'))
+        .where(and(
+          contains(page, '/blog/'),
+          between(date, '2024-01-01', '2024-01-31'),
+        ))
 
       type ResultRow = Awaited<ReturnType<typeof _builder.execute>>['rows'][number]
 
@@ -103,10 +113,10 @@ describe('type inference', () => {
       const _builder = gsc
         .select('page', 'device')
         .where(and(
-          eq(device, Device.MOBILE),
+          eq(device, Devices.MOBILE),
           contains(page, '/blog/'),
+          between(date, '2024-01-01', '2024-01-31'),
         ))
-        .where(between(date, '2024-01-01', '2024-01-31'))
 
       type ResultRow = Awaited<ReturnType<typeof _builder.execute>>['rows'][number]
 

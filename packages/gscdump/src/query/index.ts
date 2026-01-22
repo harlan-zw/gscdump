@@ -1,4 +1,4 @@
-import { currentPstDate, dayjsPst } from '../utils/dayjs'
+import { currentPstDate, dayjsPst } from './utils/dayjs'
 
 // Date helpers
 export function today(): string {
@@ -13,18 +13,25 @@ export function daysAgo(n: number): string {
 export { gsc } from './builder'
 export type { GSCQueryBuilder } from './builder'
 
-// Column references
+// Column references (groupable dimensions)
 export { country, date, device, page, query, searchAppearance } from './columns'
 
-// Constants
-export { Country, Device } from './constants'
+// Query params (non-groupable filters)
+export { searchType } from './columns'
 
-export type { Country as CountryType, Device as DeviceType } from './constants'
+// Constants (value enums)
+export { Countries, Devices, SearchTypes } from './constants'
+
+// Types
+export type { Country, Device, SearchType } from './constants'
 
 // Operators
 export { and, between, contains, eq, gt, gte, inArray, like, lt, lte, ne, not, notRegex, or, regex } from './operators'
 
-// Resolver utilities
+// Resolver
 export { extractDateRange } from './resolver'
+
 // Types
-export type { BuilderState, Column, Dimension, DimensionValueMap, Filter, GSCResult, GSCRow } from './types'
+export type { BuilderState, Column, Dimension, DimensionValueMap, Filter, GSCResult, GSCRow, QueryParam, QueryParamName, QueryParamValueMap } from './types'
+
+export { currentPstDate, dayjs, dayjsPst } from './utils/dayjs'

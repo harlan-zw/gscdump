@@ -1,4 +1,5 @@
-import type { DateRange, GscDb, SiteDateCountryAnalyticsInsert, SiteDateDeviceAnalyticsInsert, SiteKeywordDateAnalyticsInsert, SitePathDateAnalyticsInsert } from '@gscdump/db'
+import type { DateRange, GscDb } from '@gscdump/db'
+import type { SiteDateCountryAnalyticsInsert, SiteDateDeviceAnalyticsInsert, SiteKeywordDateAnalyticsInsert, SitePathDateAnalyticsInsert } from '@gscdump/db/schema'
 import type { Auth } from 'gscdump'
 import type { DataProvider } from './types'
 import {

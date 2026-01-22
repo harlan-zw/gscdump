@@ -1,18 +1,27 @@
-import type { Column, Dimension, DimensionValueMap, Filter, FilterOperator, MergeConstraints } from './types'
+import type { Column, Dimension, DimensionValueMap, Filter, FilterOperator, MergeConstraints, QueryParam, QueryParamName, QueryParamValueMap } from './types'
 
-// eq - narrows to exact value
+// eq - narrows to exact value (works with both Column and QueryParam)
 export function eq<D extends Dimension, V extends DimensionValueMap[D]>(
   column: Column<D>,
   value: V,
-): Filter<Record<D, V>> {
+): Filter<Record<D, V>>
+export function eq<P extends QueryParamName, V extends QueryParamValueMap[P]>(
+  param: QueryParam<P>,
+  value: V,
+): Filter<Record<P, V>>
+export function eq(
+  columnOrParam: Column<any> | QueryParam<any>,
+  value: any,
+): Filter<any> {
+  const key = 'dimension' in columnOrParam ? columnOrParam.dimension : columnOrParam.param
   return {
-    _constraints: {} as Record<D, V>,
+    _constraints: {} as any,
     _filters: [{
-      dimension: column.dimension,
+      dimension: key,
       operator: 'equals',
       expression: String(value),
     }],
-  } as Filter<Record<D, V>>
+  } as Filter<any>
 }
 
 // ne - excludes value (no narrowing - can't express Exclude in result)
@@ -107,13 +116,32 @@ export function notRegex<D extends Dimension>(
   } as Filter<object>
 }
 
-// and - merges all constraints
+// and - merges all constraints, preserves nested OR groups
 export function and<F extends Filter<any>[]>(
   ...filters: F
 ): Filter<MergeConstraints<F>> {
+  const flatFilters: Filter<any>['_filters'] = []
+  const nestedGroups: Filter<any>[] = []
+
+  for (const f of filters) {
+    if (f._groupType === 'or') {
+      // Preserve OR groups as nested
+      nestedGroups.push(f)
+    }
+    else {
+      // Flatten AND filters
+      flatFilters.push(...f._filters)
+      // Also preserve any nested groups from this filter
+      if (f._nestedGroups) {
+        nestedGroups.push(...f._nestedGroups)
+      }
+    }
+  }
+
   return {
     _constraints: {} as MergeConstraints<F>,
-    _filters: filters.flatMap(f => f._filters),
+    _filters: flatFilters,
+    _nestedGroups: nestedGroups.length > 0 ? nestedGroups : undefined,
     _groupType: 'and',
   } as unknown as Filter<MergeConstraints<F>>
 }

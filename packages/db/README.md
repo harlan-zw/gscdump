@@ -22,43 +22,48 @@ npm install @gscdump/db
 ## Usage
 
 ```ts
-import { createDb, syncKeywords, syncPages, syncSites } from '@gscdump/db'
+import { createGscDb, setup, syncSites, syncTables } from '@gscdump/db'
+import sqliteConnector from 'db0/connectors/better-sqlite3'
 
-const db = createDb('./gsc.db')
+const { db, db0 } = createGscDb(sqliteConnector({ name: 'gsc.db' }))
 
-// Sync site data
-await syncSites(db, auth)
+// Create tables
+await setup(db0)
 
-// Sync page metrics for a site
-await syncPages(db, auth, 'https://example.com', {
-  startDate: '2024-01-01',
-  endDate: '2024-01-31',
-})
+// Sync sites
+await syncSites(db, client)
 
-// Sync keyword data
-await syncKeywords(db, auth, 'https://example.com', {
-  startDate: '2024-01-01',
-  endDate: '2024-01-31',
-})
+// Sync analytics for a site
+await syncTables(db, client, siteId, siteUrl, ['pages', 'keywords', 'countries'])
 ```
 
 ### Querying with Drizzle
 
-Access the Drizzle instance for custom queries:
+Access the schema for custom queries:
 
 ```ts
-import { createDb, schema } from '@gscdump/db'
+import { createGscDb } from '@gscdump/db'
+import * as schema from '@gscdump/db/schema'
 import { desc, eq } from 'drizzle-orm'
 
-const db = createDb('./gsc.db')
-
 // Get top pages by clicks
-const topPages = await db.drizzle
+const topPages = await db
   .select()
-  .from(schema.pages)
-  .where(eq(schema.pages.siteUrl, 'https://example.com'))
-  .orderBy(desc(schema.pages.clicks))
+  .from(schema.sitePathDateAnalytics)
+  .where(eq(schema.sitePathDateAnalytics.siteId, 1))
+  .orderBy(desc(schema.sitePathDateAnalytics.clicks))
   .limit(10)
+```
+
+## Exports
+
+```ts
+// Main exports
+import { createGscDb, setup, syncSites, syncTables, ... } from '@gscdump/db'
+
+// Schema (tables and types)
+import { sites, sitePathDateAnalytics, ... } from '@gscdump/db/schema'
+import type { SiteInsert, SiteSelect } from '@gscdump/db/schema'
 ```
 
 ## Metric Storage
@@ -76,9 +81,12 @@ The library handles conversion automatically when reading/writing.
 
 The database includes tables for:
 - `sites` - GSC properties
-- `pages` - Page-level metrics
-- `keywords` - Keyword-level metrics
-- `keyword_pages` - Keyword-page combinations
+- `sitePathDateAnalytics` - Page-level metrics by date
+- `siteKeywordDateAnalytics` - Keyword-level metrics by date
+- `siteKeywordPathDateAnalytics` - Keyword+page combinations by date
+- `siteDateCountryAnalytics` - Country breakdown by date
+- `siteDateDeviceAnalytics` - Device breakdown by date
+- `sitePathIndexing` - URL indexing status
 
 ## Related Packages
 
