@@ -1,0 +1,4 @@
+.:
+  createAuth: function
+  createFetch: function
+  googleSearchConsole: function
