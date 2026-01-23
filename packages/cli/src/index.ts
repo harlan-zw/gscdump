@@ -2,18 +2,14 @@
 
 import process from 'node:process'
 import { defineCommand, runMain } from 'citty'
-// TODO: Restore once gscdump fetch* functions are re-implemented
-// import { analyzeCommand } from './commands/analyze'
 import { authCommand } from './commands/auth'
-// import { compareCommand } from './commands/compare'
 import { configCommand } from './commands/config'
-// import { dumpCommand } from './commands/dump'
-// import { indexingCommand, inspectCommand } from './commands/indexing'
+import { dumpCommand } from './commands/dump'
 import { initCommand } from './commands/init'
 import { mcpCommand } from './commands/mcp'
+import { queryCommand } from './commands/query'
 import { sitemapsCommand } from './commands/sitemaps'
 import { sitesCommand } from './commands/sites'
-import { syncCommand } from './commands/sync'
 import { showSplash, VERSION } from './utils'
 
 const main = defineCommand({
@@ -24,14 +20,10 @@ const main = defineCommand({
   },
   subCommands: {
     init: initCommand,
-    // dump: dumpCommand, // TODO: restore
-    sync: syncCommand,
-    // compare: compareCommand, // TODO: restore
-    // analyze: analyzeCommand, // TODO: restore
+    dump: dumpCommand,
+    query: queryCommand,
     sites: sitesCommand,
     sitemaps: sitemapsCommand,
-    // index: indexingCommand, // TODO: restore
-    // inspect: inspectCommand, // TODO: restore
     auth: authCommand,
     config: configCommand,
     mcp: mcpCommand,

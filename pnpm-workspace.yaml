@@ -10,9 +10,6 @@ catalog:
   '@modelcontextprotocol/sdk': ^1.25.2
   '@types/js-yaml': ^4.0.9
   '@types/node': ^25.0.9
-  db0: ^0.3.4
-  drizzle-kit: beta
-  drizzle-orm: beta
   js-yaml: ^4.1.1
   tinyexec: ^1.0.2
   vitest-package-exports: ^1.1.2
@@ -44,7 +41,6 @@ catalogs:
 
 onlyBuiltDependencies:
   - '@parcel/watcher'
-  - better-sqlite3
   - esbuild
   - gtoken
   - unrs-resolver

@@ -39,6 +39,10 @@
     "./query": {
       "types": "./dist/query/index.d.mts",
       "import": "./dist/query/index.mjs"
+    },
+    "./analysis": {
+      "types": "./dist/analysis/index.d.mts",
+      "import": "./dist/analysis/index.mjs"
     }
   },
   "main": "./dist/index.mjs",

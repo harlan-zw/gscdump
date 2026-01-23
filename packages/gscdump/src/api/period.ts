@@ -32,12 +32,8 @@ export function userPeriodRange(period: string | { start: string, end: string })
 
   if (typeof period === 'object' && period.start && period.end) {
     // Custom date range
-    const start = dayjsPst().set('year', Number.parseInt(period.start.slice(0, 4)))
-      .set('month', Number.parseInt(period.start.slice(5, 7)) - 1)
-      .set('date', Number.parseInt(period.start.slice(8, 10)))
-    const end = dayjsPst().set('year', Number.parseInt(period.end.slice(0, 4)))
-      .set('month', Number.parseInt(period.end.slice(5, 7)) - 1)
-      .set('date', Number.parseInt(period.end.slice(8, 10)))
+    const start = dayjsPst().set('year', Number.parseInt(period.start.slice(0, 4))).set('month', Number.parseInt(period.start.slice(5, 7)) - 1).set('date', Number.parseInt(period.start.slice(8, 10)))
+    const end = dayjsPst().set('year', Number.parseInt(period.end.slice(0, 4))).set('month', Number.parseInt(period.end.slice(5, 7)) - 1).set('date', Number.parseInt(period.end.slice(8, 10)))
 
     const daysDiff = end.diff(start, 'day') + 1
     const prevEnd = start.subtract(1, 'day')
@@ -57,7 +53,6 @@ export function userPeriodRange(period: string | { start: string, end: string })
 
   // Preset periods
   let days: number
-  let unit: 'day' | 'month' = 'day'
 
   switch (period) {
     case '7d':
@@ -68,15 +63,12 @@ export function userPeriodRange(period: string | { start: string, end: string })
       break
     case '3mo':
       days = 90
-      unit = 'month'
       break
     case '6mo':
       days = 180
-      unit = 'month'
       break
     case '12mo':
       days = 365
-      unit = 'month'
       break
     default:
       // Try to parse as "Nd" format
@@ -86,7 +78,6 @@ export function userPeriodRange(period: string | { start: string, end: string })
       else if (period.endsWith('mo')) {
         const months = Number.parseInt(period.slice(0, -2)) || 1
         days = months * 30
-        unit = 'month'
       }
       else {
         days = 28

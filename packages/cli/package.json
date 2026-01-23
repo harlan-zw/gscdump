@@ -2,7 +2,7 @@
   "name": "@gscdump/cli",
   "type": "module",
   "version": "0.1.3",
-  "description": "CLI for Google Search Console - dump, sync, compare, analyze, and run MCP server",
+  "description": "CLI for Google Search Console - dump, query, and run MCP server",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
@@ -26,8 +26,7 @@
     "cli",
     "mcp",
     "search-analytics",
-    "data-export",
-    "sqlite"
+    "data-export"
   ],
   "bin": {
     "gscdump": "./dist/index.mjs"
@@ -44,17 +43,14 @@
   },
   "dependencies": {
     "@clack/prompts": "catalog:deps",
-    "@gscdump/db": "workspace:*",
-    "@gscdump/mcp": "workspace:*",
-    "@gscdump/query": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
     "citty": "catalog:deps",
     "consola": "catalog:deps",
     "dayjs": "catalog:deps",
-    "db0": "catalog:",
     "google-auth-library": "catalog:deps",
     "gscdump": "workspace:*",
-    "open": "catalog:deps"
+    "open": "catalog:deps",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "vitest": "catalog:dev-test"

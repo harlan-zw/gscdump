@@ -4,32 +4,48 @@ import process from 'node:process'
 import { cancel, isCancel, multiselect, select, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { googleSearchConsole } from 'gscdump'
-import { between, country, date, device, gsc, page, query } from 'gscdump/query'
+import { between, country, date, device, gsc, page, query, searchAppearance } from 'gscdump/query'
 import { loadConfig } from '../config'
 import { clearLine, exportToCSV, logger, progressBar } from '../utils'
 
-const DUMP_DATA_TYPES = ['pages', 'keywords', 'countries', 'devices'] as const
-type DumpDataType = typeof DUMP_DATA_TYPES[number]
-
-function getDimensions(dataType: DumpDataType): Dimension[] {
-  switch (dataType) {
-    case 'pages': return [page, date]
-    case 'keywords': return [query, date]
-    case 'countries': return [country, date]
-    case 'devices': return [device, date]
-  }
+const DIMENSION_MAP: Record<string, Dimension> = {
+  page,
+  query,
+  date,
+  country,
+  device,
+  searchAppearance,
 }
 
-export const dumpCommand = defineCommand({
+export const queryCommand = defineCommand({
   meta: {
-    name: 'dump',
-    description: 'Export search analytics data via GSC API',
+    name: 'query',
+    description: 'Run custom search analytics queries',
   },
   args: {
     site: {
       type: 'string',
       alias: 's',
       description: 'Site URL (e.g., sc-domain:example.com)',
+    },
+    dimensions: {
+      type: 'string',
+      alias: 'd',
+      description: 'Dimensions: page,query,date,country,device,searchAppearance',
+    },
+    start: {
+      type: 'string',
+      description: 'Start date (YYYY-MM-DD)',
+    },
+    end: {
+      type: 'string',
+      description: 'End date (YYYY-MM-DD)',
+    },
+    limit: {
+      type: 'string',
+      alias: 'l',
+      default: '1000',
+      description: 'Max rows (default: 1000)',
     },
     output: {
       type: 'string',
@@ -42,31 +58,6 @@ export const dumpCommand = defineCommand({
       default: 'json',
       description: 'Output format: json or csv',
     },
-    start: {
-      type: 'string',
-      description: 'Start date (YYYY-MM-DD)',
-    },
-    end: {
-      type: 'string',
-      description: 'End date (YYYY-MM-DD)',
-    },
-    days: {
-      type: 'string',
-      alias: 'd',
-      default: '28',
-      description: 'Number of days to fetch (default: 28)',
-    },
-    types: {
-      type: 'string',
-      alias: 't',
-      description: 'Data types: pages,keywords,countries,devices',
-    },
-    limit: {
-      type: 'string',
-      alias: 'l',
-      default: '25000',
-      description: 'Max rows per data type',
-    },
     quiet: {
       type: 'boolean',
       alias: 'q',
@@ -77,7 +68,7 @@ export const dumpCommand = defineCommand({
       type: 'boolean',
       alias: 'i',
       default: false,
-      description: 'Interactive mode - prompts for options',
+      description: 'Interactive mode',
     },
   },
   async run({ args }) {
@@ -111,6 +102,31 @@ export const dumpCommand = defineCommand({
       siteUrl = selected as string
     }
 
+    // Resolve dimensions
+    let dimensions: Dimension[]
+
+    if (args.dimensions) {
+      const dimNames = String(args.dimensions).split(',')
+      dimensions = dimNames
+        .filter(d => d in DIMENSION_MAP)
+        .map(d => DIMENSION_MAP[d])
+    }
+    else if (args.interactive) {
+      const selected = await multiselect({
+        message: 'Select dimensions',
+        options: Object.keys(DIMENSION_MAP).map(d => ({ value: d, label: d })),
+        initialValues: ['page', 'query'],
+      })
+      if (isCancel(selected)) {
+        cancel('Cancelled')
+        process.exit(0)
+      }
+      dimensions = (selected as string[]).map(d => DIMENSION_MAP[d])
+    }
+    else {
+      dimensions = [page, query]
+    }
+
     // Resolve date range
     let startDate: string
     let endDate: string
@@ -122,7 +138,7 @@ export const dumpCommand = defineCommand({
     else if (args.interactive) {
       const startInput = await text({
         message: 'Start date (YYYY-MM-DD)',
-        placeholder: new Date(Date.now() - Number(args.days) * 86400000).toISOString().split('T')[0],
+        placeholder: new Date(Date.now() - 28 * 86400000).toISOString().split('T')[0],
       })
       if (isCancel(startInput)) {
         cancel('Cancelled')
@@ -138,77 +154,51 @@ export const dumpCommand = defineCommand({
         process.exit(0)
       }
 
-      startDate = String(startInput) || new Date(Date.now() - Number(args.days) * 86400000).toISOString().split('T')[0]
+      startDate = String(startInput) || new Date(Date.now() - 28 * 86400000).toISOString().split('T')[0]
       endDate = String(endInput) || new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]
     }
     else {
-      const days = Number.parseInt(String(args.days), 10)
       endDate = new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]
-      startDate = new Date(Date.now() - (days + 3) * 86400000).toISOString().split('T')[0]
-    }
-
-    // Resolve data types
-    let dataTypes: DumpDataType[]
-
-    if (args.types) {
-      dataTypes = String(args.types).split(',').filter(t => DUMP_DATA_TYPES.includes(t as DumpDataType)) as DumpDataType[]
-    }
-    else if (args.interactive) {
-      const selected = await multiselect({
-        message: 'Select data types to export',
-        options: DUMP_DATA_TYPES.map(t => ({ value: t, label: t })),
-        initialValues: ['pages', 'keywords'],
-      })
-      if (isCancel(selected)) {
-        cancel('Cancelled')
-        process.exit(0)
-      }
-      dataTypes = selected as DumpDataType[]
-    }
-    else {
-      dataTypes = ['pages', 'keywords']
+      startDate = new Date(Date.now() - 31 * 86400000).toISOString().split('T')[0]
     }
 
     const rowLimit = Number.parseInt(String(args.limit), 10)
     const format = String(args.format) as 'json' | 'csv'
 
-    // Build output
-    const output: Record<string, unknown> = {
-      siteUrl,
-      dateRange: { start: startDate, end: endDate },
-      exportedAt: new Date().toISOString(),
+    // Build and execute query
+    const builder = gsc
+      .select(...dimensions)
+      .where(between(date, startDate, endDate))
+      .limit(rowLimit)
+
+    if (!args.quiet) {
+      logger.info(`Querying ${siteUrl}...`)
     }
 
-    const totalSteps = dataTypes.length
-    let currentStep = 0
+    const rows: Record<string, unknown>[] = []
 
-    for (const dataType of dataTypes) {
-      currentStep++
+    for await (const batch of client.query(siteUrl, builder)) {
+      rows.push(...batch)
       if (!args.quiet) {
         clearLine()
-        process.stdout.write(progressBar(currentStep, totalSteps, dataType))
+        process.stdout.write(progressBar(rows.length, rowLimit, `${rows.length} rows`))
       }
-
-      const dimensions = getDimensions(dataType)
-      const builder = gsc
-        .select(...dimensions)
-        .where(between(date, startDate, endDate))
-        .limit(rowLimit)
-
-      const rows: Record<string, unknown>[] = []
-      for await (const batch of client.query(siteUrl, builder)) {
-        rows.push(...batch)
-      }
-
-      output[dataType] = { total: rows.length, data: rows }
     }
 
     if (!args.quiet) {
       clearLine()
-      logger.success(`Exported ${dataTypes.join(', ')} for ${siteUrl}`)
+      logger.success(`Fetched ${rows.length} rows`)
     }
 
     // Output
+    const output = {
+      siteUrl,
+      dimensions: dimensions.map(d => String(d)),
+      dateRange: { start: startDate, end: endDate },
+      total: rows.length,
+      data: rows,
+    }
+
     const content = format === 'csv'
       ? exportToCSV(output)
       : JSON.stringify(output, null, 2)

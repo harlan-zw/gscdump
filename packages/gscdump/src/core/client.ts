@@ -196,7 +196,7 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
     fetch = createFetch(authState, fetchOptions)
   }
 
-  const rawQuery = (siteUrl: string, body: SearchAnalyticsQuery) =>
+  const rawQuery = (siteUrl: string, body: SearchAnalyticsQuery): Promise<SearchAnalyticsResponse> =>
     fetch<SearchAnalyticsResponse>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, {
       method: 'POST',
       body,

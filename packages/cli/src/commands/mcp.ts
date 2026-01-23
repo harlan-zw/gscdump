@@ -1,9 +1,9 @@
 import process from 'node:process'
-import { createGscMcpServer } from '@gscdump/mcp/server'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { defineCommand } from 'citty'
 import { getAuth, loadCloudTokens, loadTokens } from '../auth'
 import { loadConfig } from '../config'
+import { createGscMcpServer } from '../mcp/server'
 import { VERSION } from '../utils'
 
 async function checkAuth(): Promise<{ ok: boolean, error?: string }> {

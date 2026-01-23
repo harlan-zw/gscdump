@@ -12,5 +12,11 @@ export default defineBuildConfig({
       outDir: './dist',
       name: 'query',
     },
+    {
+      type: 'bundle',
+      input: ['./src/analysis/index.ts'],
+      outDir: './dist',
+      name: 'analysis',
+    },
   ],
 })

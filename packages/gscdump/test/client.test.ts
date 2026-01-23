@@ -101,26 +101,16 @@ describe('googleSearchConsole', () => {
   it('should create a client with methods', () => {
     const client = googleSearchConsole('test-token')
     expect(client.sites).toBeDefined()
-    expect(client.searchAnalytics).toBeDefined()
+    expect(client.query).toBeDefined()
   })
 
   // Removed 'create client without auth' test
 
   it('should accept custom fetch implementation', async () => {
-    const customFetch = vi.fn()
-    // We pass a dummy token because signature requires it even if options.fetch is used (though implementation might ignore it for auth logic if using custom fetch, signature demands it)
-    // Actually, googleSearchConsole implementation: if options.fetch is present, createGscFetch is NOT called with auth.
-    // But signature demands auth. So we pass 'dummy'.
+    const customFetch = vi.fn().mockResolvedValue({ siteEntry: [] })
     const client = googleSearchConsole('dummy', { fetch: customFetch as any })
-    await client.sites.list()
+    await client.sites()
     expect(customFetch).toHaveBeenCalledWith('https://searchconsole.googleapis.com/webmasters/v3/sites')
-  })
-
-  it('should call fetch with correct url and headers for sites.list', async () => {
-    googleSearchConsole('test-token')
-    // We need to re-mock or reset to test actual calls if we want, but checking internal fetch creation is hard without integration testing.
-    // However, the test above 'should create a client with methods' implicitly checks that createGscFetch was called or similar.
-    // Let's rely on the previous tests that createGscFetch is configured correctly.
   })
 
   it('should call onRateLimited on 429', async () => {

@@ -22,3 +22,31 @@ export async function fetchSitesWithSitemaps(client: GoogleSearchConsoleClient):
     return { ...site, sitemaps }
   }))
 }
+
+/**
+ * Fetches all sitemaps for a site.
+ */
+export async function fetchSitemaps(client: GoogleSearchConsoleClient, siteUrl: string): Promise<ApiSitemap[]> {
+  return client.sitemaps.list(siteUrl)
+}
+
+/**
+ * Fetches a specific sitemap.
+ */
+export async function fetchSitemap(client: GoogleSearchConsoleClient, siteUrl: string, feedpath: string): Promise<ApiSitemap> {
+  return client.sitemaps.get(siteUrl, feedpath)
+}
+
+/**
+ * Submits a sitemap to Google Search Console.
+ */
+export async function submitSitemap(client: GoogleSearchConsoleClient, siteUrl: string, feedpath: string): Promise<void> {
+  return client.sitemaps.submit(siteUrl, feedpath)
+}
+
+/**
+ * Deletes a sitemap from Google Search Console.
+ */
+export async function deleteSitemap(client: GoogleSearchConsoleClient, siteUrl: string, feedpath: string): Promise<void> {
+  return client.sitemaps.delete(siteUrl, feedpath)
+}

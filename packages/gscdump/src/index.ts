@@ -1,2 +1,6 @@
+export * from './api/indexing'
+export * from './api/inspection'
+export * from './api/sites'
 export * from './core/client'
+export * from './core/errors'
 export * from './core/types'

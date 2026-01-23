@@ -4,17 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## GSCDump
 
-Monorepo for Google Search Console data extraction. Core library, CLI, and database persistence.
+Google Search Console CLI and library. Real-time API queries, no local storage.
 
 ## Monorepo Structure
 
 ```
 gscdump/
 ├── packages/
-│   ├── gscdump/          # Core library - GSC API wrapper
-│   ├── cli/              # @gscdump/cli - Command-line interface
-│   └── db/               # @gscdump/db - SQLite persistence with Drizzle
-└── pnpm-workspace.yaml   # Workspace config with catalogs
+│   ├── gscdump/     # Core library - GSC API wrapper + query builder
+│   └── cli/         # @gscdump/cli - CLI + MCP server
+└── pnpm-workspace.yaml
 ```
 
 Web app lives separately at https://github.com/harlan-zw/gscdump.com
@@ -27,22 +26,38 @@ Web app lives separately at https://github.com/harlan-zw/gscdump.com
 - **Lint**: `pnpm lint` / `pnpm lint:fix`
 - **Typecheck**: `pnpm typecheck`
 
-## Key Packages
+## Packages
 
 ### gscdump (Core)
-GSC API wrapper. Pure functions, no persistence. Located at `packages/gscdump/src/`.
+GSC API wrapper with typed query builder. Pure functions, edge-compatible. Located at `packages/gscdump/src/`.
 
-Key exports: `fetchSites`, `fetchPages`, `fetchKeywordsWithComparison`, `fetchPagesWithComparison`, `queryRecursive`, `createQueryBody`
+Key exports:
+- `googleSearchConsole(auth)` - Create client
+- `client.query(siteUrl, builder)` - Async generator for search analytics
+- `client.sites()` - List sites
+- `client.inspect()` - URL inspection
+- `client.sitemaps.*` - Sitemap operations
+- `client.indexing.*` - Indexing API
+
+Query builder (`gscdump/query`):
+- `gsc.select(page, query).where(between(date, start, end)).limit(1000)`
+- Dimensions: `page`, `query`, `date`, `country`, `device`, `searchAppearance`
+- Operators: `eq`, `contains`, `regex`, `between`, `and`, `or`, etc.
 
 ### @gscdump/cli
-CLI built with citty. Located at `packages/cli/src/`.
+CLI + MCP server built with citty. Located at `packages/cli/src/`.
 
-Commands: `gscdump init`, `gscdump dump`, `gscdump sync`, `gscdump compare`, `gscdump sites`, `gscdump sitemaps`, `gscdump index`, `gscdump inspect`, `gscdump auth`, `gscdump config`
+Commands:
+- `gscdump init` - Set up authentication
+- `gscdump dump` - Export search analytics
+- `gscdump query` - Run custom queries
+- `gscdump sites` - List sites
+- `gscdump sitemaps` - Manage sitemaps
+- `gscdump auth` - Manage authentication
+- `gscdump config` - Manage configuration
+- `gscdump mcp` - Start MCP server
 
-### @gscdump/db
-SQLite persistence with Drizzle ORM. Located at `packages/db/src/`.
-
-Key exports: `syncSites`, `syncPages`, `syncKeywords`, `queryPagesWithComparison` (DB-backed API queries)
+MCP tools: `list-sites`, `fetch-pages`, `fetch-keywords`, `custom-query`, `inspect-url`, `request-indexing`, etc.
 
 ## Code Patterns
 
@@ -52,32 +67,20 @@ Key exports: `syncSites`, `syncPages`, `syncKeywords`, `queryPagesWithComparison
 - **ESM only**: All packages use `"type": "module"`
 - **pnpm catalogs**: Dependencies versioned in `pnpm-workspace.yaml`
 
-## Metric Storage (DB)
-
-Floats stored as integers for precision:
-- `ctr`: stored as `ctr * 10000`
-- `position`: stored as `position * 100`
-
-## IMPORTANT: API vs DB Pagination
-
-**GSC API does NOT support offset/limit pagination.**
-
-The comparison functions (`fetchPagesWithComparison`, `fetchKeywordsWithComparison`) are for **analysis**, not paginated display:
+## Query Builder Usage
 
 ```ts
-// ❌ WRONG - rowLimit is max rows, not page size. offset NOT supported.
-fetchKeywordsWithComparison(client, siteUrl, { rowLimit: 50 })
+import { googleSearchConsole } from 'gscdump'
+import { gsc, page, query, date, between } from 'gscdump/query'
 
-// ✅ CORRECT - Fetch top N, paginate client-side
-const data = await fetchKeywordsWithComparison(client, siteUrl, {
-  period: { start, end },
-  rowLimit: 100,
-})
-const page = data.current.slice(offset, offset + pageSize)
+const client = googleSearchConsole(auth)
+
+const builder = gsc
+  .select(page, query)
+  .where(between(date, '2024-01-01', '2024-01-31'))
+  .limit(1000)
+
+for await (const batch of client.query(siteUrl, builder)) {
+  // Process rows
+}
 ```
-
-**For server-side pagination, use DB provider** (requires `gscdump sync` first).
-
-See `docs/API_COST_MATRIX.md` for full API cost breakdown.
-
-See `ARCHITECTURE.md` for detailed documentation.
