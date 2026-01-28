@@ -32,9 +32,9 @@ export type { Country, Device, SearchType } from './constants'
 export { and, between, contains, eq, gt, gte, inArray, like, lt, lte, ne, not, notRegex, or, regex, topLevel } from './operators'
 
 // Resolver
-export { extractDateRange, extractMetricFilters, extractSpecialOperatorFilters } from './resolver'
+export { extractDateRange, extractMetricFilters, extractSpecialOperatorFilters, isJsonFilter, parseJsonFilter } from './resolver'
 
 // Types
-export type { BuilderState, Column, Dimension, DimensionValueMap, Filter, GSCResult, GSCRow, InternalFilter, Metric, MetricColumn, QueryParam, QueryParamName, QueryParamValueMap } from './types'
+export type { BuilderState, Column, Dimension, DimensionValueMap, Filter, FilterInput, GSCResult, GSCRow, InternalFilter, JsonFilter, JsonInternalFilter, Metric, MetricColumn, QueryParam, QueryParamName, QueryParamValueMap } from './types'
 
 export { currentPstDate, dayjs, dayjsPst } from './utils/dayjs'

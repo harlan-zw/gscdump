@@ -1,10 +1,44 @@
 import type { DimensionFilterGroup, SearchAnalyticsQuery } from '../core/types'
-import type { BuilderState, DateOperator, Filter, InternalFilter, MetricOperator, QueryParamName, SpecialOperator } from './types'
+import type { BuilderState, DateOperator, Filter, FilterInput, InternalFilter, JsonFilter, MetricOperator, QueryParamName, SpecialOperator } from './types'
 
 const DATE_OPERATORS: DateOperator[] = ['gte', 'gt', 'lte', 'lt', 'between']
 const METRIC_OPERATORS: MetricOperator[] = ['metricGte', 'metricGt', 'metricLte', 'metricLt', 'metricBetween']
 const SPECIAL_OPERATORS: SpecialOperator[] = ['topLevel']
 const QUERY_PARAMS: QueryParamName[] = ['searchType']
+
+// Check if value is a JSON filter (serialized) vs a real Filter object
+export function isJsonFilter(value: unknown): value is JsonFilter {
+  return (
+    typeof value === 'object'
+    && value !== null
+    && '_filters' in value
+    && Array.isArray((value as JsonFilter)._filters)
+  )
+}
+
+// Convert JSON filter to Filter object
+export function parseJsonFilter(json: JsonFilter): Filter<any> {
+  return {
+    _constraints: {},
+    _filters: json._filters.map(f => ({
+      dimension: f.dimension,
+      operator: f.operator,
+      expression: f.expression,
+      expression2: f.expression2,
+    } as InternalFilter)),
+    _nestedGroups: json._nestedGroups?.map(parseJsonFilter),
+    _groupType: json._groupType,
+  } as Filter<any>
+}
+
+// Normalize input to Filter (handles both Filter and JsonFilter)
+function normalizeFilter(input?: FilterInput): Filter<any> | undefined {
+  if (!input)
+    return undefined
+  // JsonFilter has _filters but lacks the symbol brand
+  // We can just treat it as Filter since we only access _filters/_nestedGroups/_groupType
+  return input as Filter<any>
+}
 
 function isMetricOperator(op: string): boolean {
   return METRIC_OPERATORS.includes(op as MetricOperator)
@@ -113,20 +147,25 @@ function extractSpecialFilters(filter?: Filter<any>): FilterExtraction {
   return { startDate, endDate, searchType, dimensionFilter }
 }
 
-export function extractDateRange(filter?: Filter<any>): { startDate?: string, endDate?: string } {
+export function extractDateRange(input?: FilterInput): { startDate?: string, endDate?: string } {
+  const filter = normalizeFilter(input)
   const { startDate, endDate } = extractSpecialFilters(filter)
   return { startDate, endDate }
 }
 
-export function extractMetricFilters(filter?: Filter<any>): InternalFilter[] {
-  if (!filter) return []
+export function extractMetricFilters(input?: FilterInput): InternalFilter[] {
+  const filter = normalizeFilter(input)
+  if (!filter)
+    return []
   const metricFilters = filter._filters.filter(f => isMetricOperator(f.operator))
   const nested = filter._nestedGroups?.flatMap(g => extractMetricFilters(g)) ?? []
   return [...metricFilters, ...nested]
 }
 
-export function extractSpecialOperatorFilters(filter?: Filter<any>): InternalFilter[] {
-  if (!filter) return []
+export function extractSpecialOperatorFilters(input?: FilterInput): InternalFilter[] {
+  const filter = normalizeFilter(input)
+  if (!filter)
+    return []
   const special = filter._filters.filter(f => isSpecialOperator(f.operator))
   const nested = filter._nestedGroups?.flatMap(g => extractSpecialOperatorFilters(g)) ?? []
   return [...special, ...nested]

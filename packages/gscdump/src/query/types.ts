@@ -115,3 +115,20 @@ export interface BuilderState {
   rowLimit?: number
   startRow?: number
 }
+
+// JSON-serialized filter (survives JSON.stringify/parse roundtrip)
+export interface JsonInternalFilter {
+  dimension: string
+  operator: string
+  expression: string
+  expression2?: string
+}
+
+export interface JsonFilter {
+  _filters: JsonInternalFilter[]
+  _nestedGroups?: JsonFilter[]
+  _groupType?: 'and' | 'or'
+}
+
+// Union type for functions that accept both formats
+export type FilterInput = Filter<any> | JsonFilter
