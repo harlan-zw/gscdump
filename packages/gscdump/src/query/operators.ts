@@ -1,4 +1,4 @@
-import type { Column, Dimension, DimensionValueMap, Filter, FilterOperator, MergeConstraints, QueryParam, QueryParamName, QueryParamValueMap } from './types'
+import type { Column, Dimension, DimensionValueMap, Filter, FilterOperator, MergeConstraints, Metric, MetricColumn, QueryParam, QueryParamName, QueryParamValueMap } from './types'
 
 // eq - narrows to exact value (works with both Column and QueryParam)
 export function eq<D extends Dimension, V extends DimensionValueMap[D]>(
@@ -185,11 +185,20 @@ function invertOperator(op: FilterOperator): FilterOperator {
   return inversions[op]
 }
 
-// gte - greater than or equal (primarily for date)
-export function gte<D extends Dimension>(
-  column: Column<D>,
-  value: DimensionValueMap[D],
-): Filter<object> {
+// gte - greater than or equal (for date dimensions or metric columns)
+export function gte<M extends Metric>(column: MetricColumn<M>, value: number): Filter<object>
+export function gte<D extends Dimension>(column: Column<D>, value: DimensionValueMap[D]): Filter<object>
+export function gte(column: Column<any> | MetricColumn<any>, value: any): Filter<object> {
+  if ('metric' in column) {
+    return {
+      _constraints: {},
+      _filters: [{
+        dimension: column.metric,
+        operator: 'metricGte',
+        expression: String(value),
+      }],
+    } as Filter<object>
+  }
   return {
     _constraints: {},
     _filters: [{
@@ -200,11 +209,20 @@ export function gte<D extends Dimension>(
   } as Filter<object>
 }
 
-// gt - greater than (primarily for date, adds 1 day)
-export function gt<D extends Dimension>(
-  column: Column<D>,
-  value: DimensionValueMap[D],
-): Filter<object> {
+// gt - greater than (for date dimensions or metric columns)
+export function gt<M extends Metric>(column: MetricColumn<M>, value: number): Filter<object>
+export function gt<D extends Dimension>(column: Column<D>, value: DimensionValueMap[D]): Filter<object>
+export function gt(column: Column<any> | MetricColumn<any>, value: any): Filter<object> {
+  if ('metric' in column) {
+    return {
+      _constraints: {},
+      _filters: [{
+        dimension: column.metric,
+        operator: 'metricGt',
+        expression: String(value),
+      }],
+    } as Filter<object>
+  }
   return {
     _constraints: {},
     _filters: [{
@@ -215,11 +233,20 @@ export function gt<D extends Dimension>(
   } as Filter<object>
 }
 
-// lte - less than or equal (primarily for date)
-export function lte<D extends Dimension>(
-  column: Column<D>,
-  value: DimensionValueMap[D],
-): Filter<object> {
+// lte - less than or equal (for date dimensions or metric columns)
+export function lte<M extends Metric>(column: MetricColumn<M>, value: number): Filter<object>
+export function lte<D extends Dimension>(column: Column<D>, value: DimensionValueMap[D]): Filter<object>
+export function lte(column: Column<any> | MetricColumn<any>, value: any): Filter<object> {
+  if ('metric' in column) {
+    return {
+      _constraints: {},
+      _filters: [{
+        dimension: column.metric,
+        operator: 'metricLte',
+        expression: String(value),
+      }],
+    } as Filter<object>
+  }
   return {
     _constraints: {},
     _filters: [{
@@ -230,11 +257,20 @@ export function lte<D extends Dimension>(
   } as Filter<object>
 }
 
-// lt - less than (primarily for date, subtracts 1 day)
-export function lt<D extends Dimension>(
-  column: Column<D>,
-  value: DimensionValueMap[D],
-): Filter<object> {
+// lt - less than (for date dimensions or metric columns)
+export function lt<M extends Metric>(column: MetricColumn<M>, value: number): Filter<object>
+export function lt<D extends Dimension>(column: Column<D>, value: DimensionValueMap[D]): Filter<object>
+export function lt(column: Column<any> | MetricColumn<any>, value: any): Filter<object> {
+  if ('metric' in column) {
+    return {
+      _constraints: {},
+      _filters: [{
+        dimension: column.metric,
+        operator: 'metricLt',
+        expression: String(value),
+      }],
+    } as Filter<object>
+  }
   return {
     _constraints: {},
     _filters: [{
@@ -245,12 +281,21 @@ export function lt<D extends Dimension>(
   } as Filter<object>
 }
 
-// between - inclusive range (primarily for date)
-export function between<D extends Dimension>(
-  column: Column<D>,
-  start: DimensionValueMap[D],
-  end: DimensionValueMap[D],
-): Filter<object> {
+// between - inclusive range (for date dimensions or metric columns)
+export function between<M extends Metric>(column: MetricColumn<M>, start: number, end: number): Filter<object>
+export function between<D extends Dimension>(column: Column<D>, start: DimensionValueMap[D], end: DimensionValueMap[D]): Filter<object>
+export function between(column: Column<any> | MetricColumn<any>, start: any, end: any): Filter<object> {
+  if ('metric' in column) {
+    return {
+      _constraints: {},
+      _filters: [{
+        dimension: column.metric,
+        operator: 'metricBetween',
+        expression: String(start),
+        expression2: String(end),
+      }],
+    } as Filter<object>
+  }
   return {
     _constraints: {},
     _filters: [{
@@ -258,6 +303,18 @@ export function between<D extends Dimension>(
       operator: 'between',
       expression: String(start),
       expression2: String(end),
+    }],
+  } as Filter<object>
+}
+
+// topLevel - filters to top-level pages only (slash counting heuristic)
+export function topLevel(column: Column<'page'>): Filter<object> {
+  return {
+    _constraints: {},
+    _filters: [{
+      dimension: column.dimension,
+      operator: 'topLevel',
+      expression: '',
     }],
   } as Filter<object>
 }

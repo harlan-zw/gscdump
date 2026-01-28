@@ -1,8 +1,18 @@
 import type { DimensionFilterGroup, SearchAnalyticsQuery } from '../core/types'
-import type { BuilderState, DateOperator, Filter, InternalFilter, QueryParamName } from './types'
+import type { BuilderState, DateOperator, Filter, InternalFilter, MetricOperator, QueryParamName, SpecialOperator } from './types'
 
 const DATE_OPERATORS: DateOperator[] = ['gte', 'gt', 'lte', 'lt', 'between']
+const METRIC_OPERATORS: MetricOperator[] = ['metricGte', 'metricGt', 'metricLte', 'metricLt', 'metricBetween']
+const SPECIAL_OPERATORS: SpecialOperator[] = ['topLevel']
 const QUERY_PARAMS: QueryParamName[] = ['searchType']
+
+function isMetricOperator(op: string): boolean {
+  return METRIC_OPERATORS.includes(op as MetricOperator)
+}
+
+function isSpecialOperator(op: string): boolean {
+  return SPECIAL_OPERATORS.includes(op as SpecialOperator)
+}
 
 function isDateOperator(op: string): op is DateOperator {
   return DATE_OPERATORS.includes(op as DateOperator)
@@ -64,6 +74,11 @@ function extractSpecialFilters(filter?: Filter<any>): FilterExtraction {
         searchType = f.expression
       }
     }
+    else if (isMetricOperator(f.operator) || isSpecialOperator(f.operator)) {
+      // Metric and special filters are server-side only, skip for GSC API body
+      // but preserve in otherFilters so getState() retains them
+      otherFilters.push(f)
+    }
     else {
       otherFilters.push(f)
     }
@@ -103,6 +118,20 @@ export function extractDateRange(filter?: Filter<any>): { startDate?: string, en
   return { startDate, endDate }
 }
 
+export function extractMetricFilters(filter?: Filter<any>): InternalFilter[] {
+  if (!filter) return []
+  const metricFilters = filter._filters.filter(f => isMetricOperator(f.operator))
+  const nested = filter._nestedGroups?.flatMap(g => extractMetricFilters(g)) ?? []
+  return [...metricFilters, ...nested]
+}
+
+export function extractSpecialOperatorFilters(filter?: Filter<any>): InternalFilter[] {
+  if (!filter) return []
+  const special = filter._filters.filter(f => isSpecialOperator(f.operator))
+  const nested = filter._nestedGroups?.flatMap(g => extractSpecialOperatorFilters(g)) ?? []
+  return [...special, ...nested]
+}
+
 export function resolveToBody(state: BuilderState): SearchAnalyticsQuery {
   // Extract date constraints and query params from filter
   const { startDate, endDate, searchType, dimensionFilter } = extractSpecialFilters(state.filter)
@@ -137,19 +166,24 @@ export function resolveToBody(state: BuilderState): SearchAnalyticsQuery {
   return body
 }
 
+function isApiFilter(f: InternalFilter): boolean {
+  return !isMetricOperator(f.operator) && !isSpecialOperator(f.operator)
+}
+
 function resolveFilter(filter?: Filter<any>): DimensionFilterGroup[] {
   if (!filter)
     return []
 
   const groups: DimensionFilterGroup[] = []
   const groupType = filter._groupType ?? 'and'
+  const apiFilters = filter._filters.filter(isApiFilter)
 
   if (groupType === 'or') {
     // OR group - all filters in one group with OR logic
-    if (filter._filters.length > 0) {
+    if (apiFilters.length > 0) {
       groups.push({
         groupType: 'or',
-        filters: filter._filters.map(f => ({
+        filters: apiFilters.map(f => ({
           dimension: f.dimension,
           operator: f.operator,
           expression: f.expression,
@@ -159,9 +193,9 @@ function resolveFilter(filter?: Filter<any>): DimensionFilterGroup[] {
   }
   else {
     // AND - flat filters become one AND group
-    if (filter._filters.length > 0) {
+    if (apiFilters.length > 0) {
       groups.push({
-        filters: filter._filters.map(f => ({
+        filters: apiFilters.map(f => ({
           dimension: f.dimension,
           operator: f.operator,
           expression: f.expression,

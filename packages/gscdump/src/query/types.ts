@@ -3,6 +3,7 @@ import type { Country, Device, SearchType } from './constants'
 // Dimension value mapping (groupable dimensions)
 export interface DimensionValueMap {
   query: string
+  queryCanonical: string
   page: string
   country: Country
   device: Device
@@ -45,10 +46,16 @@ export type FilterOperator
 // Date comparison operators (resolved to startDate/endDate)
 export type DateOperator = 'gte' | 'gt' | 'lte' | 'lt' | 'between'
 
+// Metric filter operator (for HAVING clauses)
+export type MetricOperator = 'metricGte' | 'metricGt' | 'metricLte' | 'metricLt' | 'metricBetween'
+
+// Special operators
+export type SpecialOperator = 'topLevel'
+
 // Internal filter representation
 export interface InternalFilter {
-  dimension: Dimension | QueryParamName
-  operator: FilterOperator | DateOperator
+  dimension: Dimension | QueryParamName | Metric
+  operator: FilterOperator | DateOperator | MetricOperator | SpecialOperator
   expression: string
   expression2?: string // for between operator
 }
@@ -86,10 +93,25 @@ export type GSCRow<D extends Dimension[], C> = {
   position: number
 }
 
+// Metric types (aggregated values, not groupable)
+export type Metric = 'clicks' | 'impressions' | 'ctr' | 'position'
+
+// Branded metric column type
+declare const MetricColumnBrand: unique symbol
+export interface MetricColumn<M extends Metric> {
+  readonly [MetricColumnBrand]: M
+  readonly metric: M
+}
+
 // Internal builder state
 export interface BuilderState {
   dimensions: Dimension[]
+  metrics?: Metric[]
   filter?: Filter<any>
+  orderBy?: {
+    column: Metric | 'date'
+    dir: 'asc' | 'desc'
+  }
   rowLimit?: number
   startRow?: number
 }
