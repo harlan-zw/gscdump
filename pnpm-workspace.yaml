@@ -7,7 +7,7 @@ packages:
   - packages/*
 
 catalog:
-  '@modelcontextprotocol/sdk': ^1.25.2
+  '@modelcontextprotocol/sdk': ^1.26.0
   '@types/js-yaml': ^4.0.9
   '@types/node': ^25.0.9
   js-yaml: ^4.1.1
