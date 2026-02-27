@@ -1,7 +1,7 @@
 import process from 'node:process'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { defineCommand } from 'citty'
-import { getAuth, loadCloudTokens, loadTokens } from '../auth'
+import { getAuth, getCloudClient, loadCloudTokens, loadTokens } from '../auth'
 import { loadConfig } from '../config'
 import { createGscMcpServer } from '../mcp/server'
 import { VERSION } from '../utils'
@@ -78,10 +78,14 @@ export const mcpCommand = defineCommand({
       process.exit(1)
     }
 
+    // Get cloud client if available (for cloud-specific MCP tools)
+    const cloudClient = await getCloudClient()
+
     const server = createGscMcpServer({
       name: 'gscdump',
       version: VERSION,
       getAuth: () => getAuth({ interactive: false }),
+      cloudClient,
     })
 
     const transport = new StdioServerTransport()

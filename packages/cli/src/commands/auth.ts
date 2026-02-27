@@ -29,6 +29,7 @@ const statusCommand = defineCommand({
         return
       }
 
+      const hasSession = !!tokens.sessionId
       const hasAccess = !!tokens.accessToken
       const hasRefresh = !!tokens.refreshToken
       const expiry = tokens.expiresAt ? new Date(tokens.expiresAt) : null
@@ -36,6 +37,15 @@ const statusCommand = defineCommand({
 
       logger.success('Authenticated')
       console.log()
+
+      if (tokens.user?.email) {
+        console.log(`  User:          \x1B[36m${tokens.user.email}\x1B[0m`)
+      }
+      if (tokens.user?.publicId) {
+        console.log(`  User ID:       \x1B[90m${tokens.user.publicId}\x1B[0m`)
+      }
+
+      console.log(`  Session:       ${hasSession ? '\x1B[32mactive\x1B[0m' : '\x1B[31mmissing\x1B[0m'}`)
       console.log(`  Access token:  ${hasAccess ? '\x1B[32mpresent\x1B[0m' : '\x1B[31mmissing\x1B[0m'}`)
       console.log(`  Refresh token: ${hasRefresh ? '\x1B[32mpresent\x1B[0m' : '\x1B[31mmissing\x1B[0m'}`)
       if (expiry) {

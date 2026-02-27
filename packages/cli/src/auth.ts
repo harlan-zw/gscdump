@@ -1,5 +1,6 @@
 import type { OAuth2Client } from 'google-auth-library'
 import type { Credentials } from 'google-auth-library/build/src/auth/credentials.js'
+import type { CloudClient } from './cloud'
 import type { GscdumpConfig } from './config'
 import fs from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -7,6 +8,7 @@ import path from 'node:path'
 import process from 'node:process'
 import { isCancel, text } from '@clack/prompts'
 import { OAuth2Client as OAuth2ClientClass } from 'google-auth-library'
+import { createCloudClient } from './cloud'
 import { DEFAULT_CLOUD_URL, getConfigDir, loadConfig } from './config'
 import { logger } from './utils'
 
@@ -14,6 +16,8 @@ export interface CloudTokens {
   accessToken: string
   refreshToken?: string
   expiresAt?: number
+  sessionId?: string
+  user?: { publicId: string, email: string }
 }
 
 function getTokensPath(): string {
@@ -303,13 +307,24 @@ export async function authenticateCloud(cloudUrl: string, interactive: boolean):
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise(r => setTimeout(r, pollInterval))
 
-    const pollRes: { status: string, tokens?: CloudTokens } = await fetch(`${cloudUrl}/api/cli/auth/poll?code=${initRes.code}`)
+    const pollRes: { status: string, tokens?: CloudTokens, sessionId?: string, user?: { publicId: string, email: string } } = await fetch(`${cloudUrl}/api/cli/auth/poll?code=${initRes.code}`)
       .then(r => r.json())
       .catch(() => ({ status: 'error' }))
 
     if (pollRes.status === 'complete' && pollRes.tokens) {
-      await saveCloudTokens(pollRes.tokens)
-      logger.success('Authenticated via cloud.gscdump.com')
+      const cloudTokens: CloudTokens = {
+        ...pollRes.tokens,
+        sessionId: pollRes.sessionId,
+        user: pollRes.user,
+      }
+      await saveCloudTokens(cloudTokens)
+
+      if (pollRes.user?.email) {
+        logger.success(`Authenticated as ${pollRes.user.email}`)
+      }
+      else {
+        logger.success('Authenticated via cloud.gscdump.com')
+      }
 
       const oauth2Client = new OAuth2ClientClass()
       oauth2Client.setCredentials({
@@ -360,6 +375,21 @@ export async function getAuth(opts: GetAuthOptions = {}): Promise<OAuth2Client> 
   // Local mode
   const credentials = await getAuthCredentials(interactive)
   return authenticate(credentials, interactive)
+}
+
+// Cloud client helper
+
+export async function getCloudClient(): Promise<CloudClient | null> {
+  const config = await loadConfig()
+  if (config.mode !== 'cloud')
+    return null
+
+  const tokens = await loadCloudTokens()
+  if (!tokens?.sessionId)
+    return null
+
+  const cloudUrl = config.cloudUrl || DEFAULT_CLOUD_URL
+  return createCloudClient(cloudUrl, tokens.sessionId)
 }
 
 export type { GscdumpConfig }
