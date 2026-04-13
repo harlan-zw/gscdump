@@ -5,39 +5,40 @@ shellEmulator: true
 trustPolicy: no-downgrade
 packages:
   - packages/*
-
+overrides:
+  '@types/node>undici-types': ^7.0.0
 catalog:
-  '@modelcontextprotocol/sdk': ^1.25.2
+  '@duckdb/duckdb-wasm': ^1.32.0
+  '@modelcontextprotocol/sdk': ^1.29.0
   '@types/js-yaml': ^4.0.9
-  '@types/node': ^25.0.9
+  '@types/node': ^25.6.0
   js-yaml: ^4.1.1
-  tinyexec: ^1.0.2
-  vitest-package-exports: ^1.1.2
-  zod: ^4.3.5
-
+  tinyexec: ^1.1.1
+  vitest-package-exports: ^1.2.0
+  zod: ^4.3.6
 catalogs:
   deps:
-    '@clack/prompts': ^0.11.0
+    '@clack/prompts': ^1.2.0
     '@googleapis/indexing': ^6.0.1
     '@googleapis/searchconsole': ^6.0.1
-    citty: ^0.1.6
+    citty: ^0.2.2
     consola: ^3.4.2
-    dayjs: ^1.11.19
-    defu: ^6.1.4
-    google-auth-library: ^10.5.0
+    dayjs: ^1.11.20
+    defu: ^6.1.7
+    google-auth-library: ^10.6.2
     ofetch: ^1.5.1
     open: ^11.0.0
     ufo: ^1.6.3
   dev-build:
-    bumpp: ^10.4.0
-    obuild: ^0.4.14
-    typescript: ^5.9.3
+    bumpp: ^11.0.1
+    obuild: ^0.4.33
+    typescript: ^6.0.2
   dev-lint:
-    '@antfu/eslint-config': ^7.0.1
-    eslint: ^9.39.2
+    '@antfu/eslint-config': ^8.1.1
+    eslint: ^10.2.0
   dev-test:
-    dotenv: ^17.2.3
-    vitest: ^4.0.17
+    dotenv: ^17.4.1
+    vitest: ^4.1.4
 
 onlyBuiltDependencies:
   - '@parcel/watcher'

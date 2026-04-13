@@ -30,7 +30,7 @@ export function userPeriodRange(period: string | { start: string, end: string })
   // GSC data has 3 day delay
   const dataEnd = today.subtract(3, 'day')
 
-  if (typeof period === 'object' && period.start && period.end) {
+  if (typeof period === 'object') {
     // Custom date range
     const start = dayjsPst().set('year', Number.parseInt(period.start.slice(0, 4))).set('month', Number.parseInt(period.start.slice(5, 7)) - 1).set('date', Number.parseInt(period.start.slice(8, 10)))
     const end = dayjsPst().set('year', Number.parseInt(period.end.slice(0, 4))).set('month', Number.parseInt(period.end.slice(5, 7)) - 1).set('date', Number.parseInt(period.end.slice(8, 10)))

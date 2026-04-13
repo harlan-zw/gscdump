@@ -1,45 +1,45 @@
-import type { CloudClient, CloudMeSite } from '../cloud'
 import process from 'node:process'
 import { cancel, isCancel, select } from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { googleSearchConsole, inspectUrl as gscInspectUrl } from 'gscdump'
-import { getAuth, getCloudClient } from '../auth'
+import { isCloudDriver } from 'gscdump/driver'
 import { loadConfig } from '../config'
+import { getDriver } from '../driver'
 import { logger } from '../utils'
 
-async function resolveCloudSite(cloud: CloudClient, target?: string): Promise<{ siteId: string, siteUrl: string }> {
-  const me = await cloud.me().catch((e: Error) => {
+async function resolveCloudSiteUrl(driver: Awaited<ReturnType<typeof getDriver>>, target?: string): Promise<string> {
+  if (!isCloudDriver(driver)) {
+    logger.error('This command requires cloud mode. Run gscdump init to set up.')
+    process.exit(1)
+  }
+
+  const sites = await driver.sitesWithSync().catch((e: Error) => {
     logger.error(`Failed to fetch sites: ${e.message}`)
     process.exit(1)
   })
 
-  if (me.sites.length === 0) {
+  if (sites.length === 0) {
     logger.error('No registered sites. Run gscdump register first.')
     process.exit(1)
   }
 
-  let site: CloudMeSite | undefined = target
-    ? me.sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
+  const match = target
+    ? sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
     : undefined
 
-  if (!site) {
-    if (me.sites.length === 1) {
-      site = me.sites[0]
-    }
-    else {
-      const selected = await select({
-        message: 'Select a site',
-        options: me.sites.map(s => ({ value: s.siteId, label: s.siteUrl })),
-      })
-      if (isCancel(selected)) {
-        cancel('Cancelled')
-        process.exit(0)
-      }
-      site = me.sites.find(s => s.siteId === selected)!
-    }
-  }
+  if (match)
+    return match.siteUrl
+  if (sites.length === 1)
+    return sites[0].siteUrl
 
-  return { siteId: site.siteId, siteUrl: site.siteUrl }
+  const selected = await select({
+    message: 'Select a site',
+    options: sites.map(s => ({ value: s.siteUrl, label: s.siteUrl })),
+  })
+  if (isCancel(selected)) {
+    cancel('Cancelled')
+    process.exit(0)
+  }
+  return selected as string
 }
 
 const statusCommand = defineCommand({
@@ -53,16 +53,16 @@ const statusCommand = defineCommand({
     json: { type: 'boolean', default: false, description: 'Output as JSON' },
   },
   async run({ args }) {
-    const cloud = await getCloudClient()
-    if (!cloud) {
+    const driver = await getDriver({ interactive: false })
+    if (!isCloudDriver(driver)) {
       logger.error('Indexing status requires cloud mode. Run gscdump init to set up.')
       process.exit(1)
     }
 
     const config = await loadConfig()
-    const { siteId, siteUrl } = await resolveCloudSite(cloud, args.site || config.defaultSite)
+    const siteUrl = await resolveCloudSiteUrl(driver, args.site || config.defaultSite)
 
-    const data = await cloud.indexing(siteId, { days: String(args.days) }).catch((e: Error) => {
+    const data = await driver.indexing(siteUrl, { days: Number(args.days) }).catch((e: Error) => {
       logger.error(`Failed to fetch indexing data: ${e.message}`)
       process.exit(1)
     })
@@ -82,7 +82,6 @@ const statusCommand = defineCommand({
     if (s.pending > 0)
       console.log(`  Pending:        \x1B[33m${s.pending.toLocaleString()}\x1B[0m`)
 
-    // Changes
     if (s.change7d !== null || s.change28d !== null) {
       console.log()
       if (s.change7d !== null) {
@@ -95,7 +94,6 @@ const statusCommand = defineCommand({
       }
     }
 
-    // Trend sparkline (last 14 days)
     if (data.trend.length > 1) {
       console.log()
       console.log('  \x1B[1mTrend (indexed %)\x1B[0m')
@@ -119,16 +117,16 @@ const diagnosticsCommand = defineCommand({
     json: { type: 'boolean', default: false, description: 'Output as JSON' },
   },
   async run({ args }) {
-    const cloud = await getCloudClient()
-    if (!cloud) {
+    const driver = await getDriver({ interactive: false })
+    if (!isCloudDriver(driver)) {
       logger.error('Indexing diagnostics requires cloud mode. Run gscdump init to set up.')
       process.exit(1)
     }
 
     const config = await loadConfig()
-    const { siteId, siteUrl } = await resolveCloudSite(cloud, args.site || config.defaultSite)
+    const siteUrl = await resolveCloudSiteUrl(driver, args.site || config.defaultSite)
 
-    const data = await cloud.indexingDiagnostics(siteId).catch((e: Error) => {
+    const data = await driver.indexingDiagnostics(siteUrl).catch((e: Error) => {
       logger.error(`Failed to fetch diagnostics: ${e.message}`)
       process.exit(1)
     })
@@ -173,27 +171,22 @@ const urlsCommand = defineCommand({
     json: { type: 'boolean', default: false, description: 'Output as JSON' },
   },
   async run({ args }) {
-    const cloud = await getCloudClient()
-    if (!cloud) {
+    const driver = await getDriver({ interactive: false })
+    if (!isCloudDriver(driver)) {
       logger.error('Indexing URLs requires cloud mode. Run gscdump init to set up.')
       process.exit(1)
     }
 
     const config = await loadConfig()
-    const { siteId, siteUrl } = await resolveCloudSite(cloud, args.site || config.defaultSite)
+    const siteUrl = await resolveCloudSiteUrl(driver, args.site || config.defaultSite)
 
-    const params: Record<string, string> = {
-      limit: String(args.limit),
-      offset: String(args.offset),
-    }
-    if (args.status)
-      params.status = String(args.status)
-    if (args.issue)
-      params.issue = String(args.issue)
-    if (args.search)
-      params.search = String(args.search)
-
-    const data = await cloud.indexingUrls(siteId, params).catch((e: Error) => {
+    const data = await driver.indexingUrls(siteUrl, {
+      status: args.status ? String(args.status) : undefined,
+      issue: args.issue ? String(args.issue) : undefined,
+      search: args.search ? String(args.search) : undefined,
+      limit: Number(args.limit),
+      offset: Number(args.offset),
+    }).catch((e: Error) => {
       logger.error(`Failed to fetch URLs: ${e.message}`)
       process.exit(1)
     })
@@ -224,7 +217,7 @@ const urlsCommand = defineCommand({
 const inspectCommand = defineCommand({
   meta: {
     name: 'inspect',
-    description: 'Inspect a specific URL\'s indexing status (local mode)',
+    description: 'Inspect a specific URL\'s indexing status',
   },
   args: {
     site: { type: 'string', alias: 's', required: true, description: 'Site URL (e.g., sc-domain:example.com)' },
@@ -232,9 +225,8 @@ const inspectCommand = defineCommand({
     json: { type: 'boolean', default: false, description: 'Output as JSON' },
   },
   async run({ args }) {
-    const auth = await getAuth({ interactive: false })
-    const client = googleSearchConsole(auth)
-    const result = await gscInspectUrl(client, args.site, args.url).catch((e: Error) => {
+    const driver = await getDriver({ interactive: false })
+    const result = await driver.inspect(args.site, args.url).catch((e: Error) => {
       logger.error(`Inspection failed: ${e.message}`)
       process.exit(1)
     })
@@ -244,35 +236,32 @@ const inspectCommand = defineCommand({
       return
     }
 
-    const r = result as Record<string, unknown>
-    const inspection = r.inspectionResult as Record<string, unknown> | undefined
-    const indexStatus = inspection?.indexStatusResult as Record<string, unknown> | undefined
-
     console.log()
     console.log(`  \x1B[1mURL:\x1B[0m ${args.url}`)
     console.log()
 
-    if (indexStatus) {
-      const verdict = indexStatus.verdict as string
-      const verdictColor = verdict === 'PASS' ? '\x1B[32m' : '\x1B[31m'
-      console.log(`  Verdict:        ${verdictColor}${verdict}\x1B[0m`)
-      if (indexStatus.coverageState)
-        console.log(`  Coverage:       ${indexStatus.coverageState}`)
-      if (indexStatus.robotsTxtState)
+    const verdictColor = result.verdict === 'PASS' ? '\x1B[32m' : '\x1B[31m'
+    console.log(`  Verdict:        ${verdictColor}${result.verdict || 'N/A'}\x1B[0m`)
+    if (result.coverageState)
+      console.log(`  Coverage:       ${result.coverageState}`)
+    if (result.indexingState)
+      console.log(`  Indexing:       ${result.indexingState}`)
+    if (result.lastCrawlTime)
+      console.log(`  Last Crawl:     ${result.lastCrawlTime}`)
+
+    // Show extra details from raw if available (local mode has richer raw data)
+    const raw = result.raw as Record<string, unknown> | null
+    if (raw) {
+      const inspection = raw.inspectionResult as Record<string, unknown> | undefined
+      const indexStatus = inspection?.indexStatusResult as Record<string, unknown> | undefined
+      if (indexStatus?.robotsTxtState)
         console.log(`  Robots.txt:     ${indexStatus.robotsTxtState}`)
-      if (indexStatus.indexingState)
-        console.log(`  Indexing:       ${indexStatus.indexingState}`)
-      if (indexStatus.lastCrawlTime)
-        console.log(`  Last Crawl:     ${indexStatus.lastCrawlTime}`)
-      if (indexStatus.pageFetchState)
+      if (indexStatus?.pageFetchState)
         console.log(`  Page Fetch:     ${indexStatus.pageFetchState}`)
-      if (indexStatus.googleCanonical)
+      if (indexStatus?.googleCanonical)
         console.log(`  Google Canon:   ${indexStatus.googleCanonical}`)
-      if (indexStatus.userCanonical)
+      if (indexStatus?.userCanonical)
         console.log(`  User Canon:     ${indexStatus.userCanonical}`)
-    }
-    else {
-      console.log(JSON.stringify(result, null, 2))
     }
     console.log()
   },
@@ -288,16 +277,16 @@ const indexPercentCommand = defineCommand({
     json: { type: 'boolean', default: false, description: 'Output as JSON' },
   },
   async run({ args }) {
-    const cloud = await getCloudClient()
-    if (!cloud) {
+    const driver = await getDriver({ interactive: false })
+    if (!isCloudDriver(driver)) {
       logger.error('Index percent requires cloud mode. Run gscdump init to set up.')
       process.exit(1)
     }
 
     const config = await loadConfig()
-    const { siteId, siteUrl } = await resolveCloudSite(cloud, args.site || config.defaultSite)
+    const siteUrl = await resolveCloudSiteUrl(driver, args.site || config.defaultSite)
 
-    const data = await cloud.indexPercent(siteId).catch((e: Error) => {
+    const data = await driver.indexPercent(siteUrl).catch((e: Error) => {
       logger.error(`Failed to fetch index percent: ${e.message}`)
       process.exit(1)
     })
@@ -324,7 +313,6 @@ const indexPercentCommand = defineCommand({
       console.log(`  28d change:        ${color}${s.change28d.toFixed(1)}%\x1B[0m`)
     }
 
-    // Invisible URLs
     if (data.invisibleCount > 0) {
       console.log()
       console.log(`  \x1B[1mInvisible URLs\x1B[0m (\x1B[33m${data.invisibleCount}\x1B[0m — in sitemap but no search traffic)`)
@@ -335,7 +323,6 @@ const indexPercentCommand = defineCommand({
         console.log(`    \x1B[90m... and ${data.invisibleCount - 10} more\x1B[0m`)
     }
 
-    // Orphan pages
     if (data.orphanCount > 0) {
       console.log()
       console.log(`  \x1B[1mOrphan Pages\x1B[0m (\x1B[33m${data.orphanCount}\x1B[0m — has traffic but not in sitemap)`)
@@ -346,7 +333,6 @@ const indexPercentCommand = defineCommand({
         console.log(`    \x1B[90m... and ${data.orphanCount - 10} more\x1B[0m`)
     }
 
-    // Sitemaps
     if (data.sitemaps.length > 0) {
       console.log()
       console.log('  \x1B[1mSitemaps\x1B[0m')

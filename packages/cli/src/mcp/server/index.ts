@@ -1,16 +1,14 @@
 import type { Auth } from 'gscdump'
-import type { CloudClient } from '../../cloud'
-import type {
-  HandlerContext,
-} from '../types'
+import type { GscDriver } from 'gscdump/driver'
+import type { HandlerContext } from '../types'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { googleSearchConsole } from 'gscdump'
+import { isCloudDriver } from 'gscdump/driver'
 import { z } from 'zod'
 import * as handlers from '../handlers'
 import {
   batchInspectUrlsInput,
   batchRequestIndexingInput,
-  customQueryInput,
   fetchAnalyticsInput,
   getIndexingStatusInput,
   inspectUrlInput,
@@ -23,18 +21,17 @@ import {
 export interface CreateGscMcpServerOptions {
   name?: string
   version?: string
-  /** Function to get auth for the current request context */
+  /** Function to get auth for the current request context (used for local GSC API tools) */
   getAuth: () => Promise<Auth> | Auth
-  /** Optional cloud client for platform features */
-  cloudClient?: CloudClient | null
+  /** Function to get the driver */
+  getDriver: () => Promise<GscDriver>
 }
 
 export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServer {
-  const { name = 'gscdump', version = '1.0.0', getAuth, cloudClient } = options
+  const { name = 'gscdump', version = '1.0.0', getAuth, getDriver } = options
 
   const server = new McpServer({ name, version })
 
-  // Helper to resolve auth with proper typing
   const auth = async (): Promise<Auth> => Promise.resolve(getAuth())
 
   const getContext = async (): Promise<HandlerContext> => {
@@ -45,16 +42,22 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     }
   }
 
-  // Sites tools
+  // === Shared tools (both modes) ===
+
   server.registerTool(
     'list-sites',
     {
-      description: 'List all Google Search Console sites the user has access to',
+      description: 'List all Google Search Console sites. In cloud mode, includes sync status and progress.',
       inputSchema: listSitesInput.shape,
     },
-    async (args) => {
-      const result = await handlers.listSites(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    async (_args) => {
+      const driver = await getDriver()
+      if (isCloudDriver(driver)) {
+        const sites = await driver.sitesWithSync()
+        return { content: [{ type: 'text', text: JSON.stringify(sites, null, 2) }] }
+      }
+      const sites = await driver.sites()
+      return { content: [{ type: 'text', text: JSON.stringify(sites, null, 2) }] }
     },
   )
 
@@ -77,8 +80,9 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: listSitemapsInput.shape,
     },
     async (args) => {
-      const result = await handlers.listSitemaps(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+      const driver = await getDriver()
+      const sitemaps = await driver.sitemaps(args.siteUrl as string)
+      return { content: [{ type: 'text', text: JSON.stringify(sitemaps, null, 2) }] }
     },
   )
 
@@ -102,7 +106,8 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: sitemapInput.shape,
     },
     async (args) => {
-      const result = await handlers.submitSitemap(args, await getContext())
+      const driver = await getDriver()
+      const result = await driver.submitSitemap(args.siteUrl as string, args.feedpath as string)
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -114,7 +119,8 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: sitemapInput.shape,
     },
     async (args) => {
-      const result = await handlers.deleteSitemap(args, await getContext())
+      const driver = await getDriver()
+      const result = await driver.deleteSitemap(args.siteUrl as string, args.feedpath as string)
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -168,31 +174,77 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
+  // Query tool (unified)
   server.registerTool(
-    'custom-query',
+    'query',
     {
-      description: 'Run a custom search analytics query with specified dimensions',
-      inputSchema: customQueryInput.shape,
+      description: 'Run a custom search analytics query with specified dimensions. Works in both local and cloud mode.',
+      inputSchema: z.object({
+        siteUrl: z.string().describe('GSC property URL (e.g., sc-domain:example.com)'),
+        startDate: z.string().describe('Start date (YYYY-MM-DD)'),
+        endDate: z.string().describe('End date (YYYY-MM-DD)'),
+        dimensions: z.array(z.enum(['date', 'query', 'page', 'country', 'device', 'searchAppearance'])).describe('Dimensions to group by'),
+        rowLimit: z.number().optional().describe('Max rows (default 25000)'),
+      }).shape,
     },
-    async (args) => {
-      const result = await handlers.customQuery(args, await getContext())
+    async ({ siteUrl, startDate, endDate, dimensions, rowLimit }) => {
+      const driver = await getDriver()
+      const result = await driver.query(siteUrl as string, {
+        startDate: startDate as string,
+        endDate: endDate as string,
+        dimensions: dimensions as string[],
+        rowLimit: rowLimit as number | undefined,
+      })
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
 
-  // Indexing tools
+  // Analysis tool (unified)
+  server.registerTool(
+    'analysis',
+    {
+      description: 'Run SEO analysis (striking-distance, opportunity, movers, decay, zero-click, brand, cannibalization, clustering, concentration, seasonality). Works in both modes - local queries Google API directly, cloud uses synced data.',
+      inputSchema: z.object({
+        siteUrl: z.string().describe('GSC property URL'),
+        tool: z.enum(['striking-distance', 'opportunity', 'movers', 'decay', 'zero-click', 'brand', 'cannibalization', 'clustering', 'concentration', 'seasonality']).describe('Analysis tool to run'),
+        startDate: z.string().optional().describe('Start date (YYYY-MM-DD)'),
+        endDate: z.string().optional().describe('End date (YYYY-MM-DD)'),
+        limit: z.number().optional().describe('Max results'),
+        brandTerms: z.array(z.string()).optional().describe('Brand terms (required for brand analysis)'),
+        prevStartDate: z.string().optional().describe('Previous period start (required for movers/decay)'),
+        prevEndDate: z.string().optional().describe('Previous period end (required for movers/decay)'),
+      }).shape,
+    },
+    async ({ siteUrl, tool, startDate, endDate, limit, brandTerms, prevStartDate, prevEndDate }) => {
+      const driver = await getDriver()
+      const result = await driver.analysis(siteUrl as string, {
+        type: tool as any,
+        startDate: startDate as string | undefined,
+        endDate: endDate as string | undefined,
+        limit: limit as number | undefined,
+        brandTerms: brandTerms as string[] | undefined,
+        prevStartDate: prevStartDate as string | undefined,
+        prevEndDate: prevEndDate as string | undefined,
+      })
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
+
+  // Inspect URL (unified)
   server.registerTool(
     'inspect-url',
     {
-      description: 'Inspect a URL in Google Search Console to check its indexing status',
+      description: 'Inspect a URL to check its indexing status in Google Search Console',
       inputSchema: inspectUrlInput.shape,
     },
     async (args) => {
-      const result = await handlers.inspectUrl(args, await getContext())
+      const driver = await getDriver()
+      const result = await driver.inspect(args.siteUrl as string, args.inspectionUrl as string)
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
 
+  // Indexing tools (local GSC API)
   server.registerTool(
     'request-indexing',
     {
@@ -241,227 +293,195 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  // Cloud-only tools (when authenticated via gscdump.com)
-  if (cloudClient) {
-    const siteIdSchema = z.object({
-      siteId: z.string().describe('Site ID from gscdump platform (use cloud-list-sites to find)'),
-    })
+  // === Cloud-only tools ===
+  // These check isCloudDriver at runtime and return helpful errors in local mode
 
-    const analysisSchema = z.object({
-      siteId: z.string().describe('Site ID from gscdump platform'),
-      tool: z.enum(['striking-distance', 'opportunity', 'movers', 'decay', 'zero-click', 'brand', 'cannibalization', 'clustering', 'concentration', 'seasonality']).describe('Analysis tool to run'),
-      startDate: z.string().optional().describe('Start date (YYYY-MM-DD)'),
-      endDate: z.string().optional().describe('End date (YYYY-MM-DD)'),
-      limit: z.number().optional().describe('Max results'),
-    })
+  server.registerTool(
+    'register-site',
+    {
+      description: 'Register a site for syncing on gscdump.com (cloud mode only)',
+      inputSchema: z.object({
+        siteUrl: z.string().describe('Site URL to register (e.g., sc-domain:example.com)'),
+      }).shape,
+    },
+    async ({ siteUrl }) => {
+      const driver = await getDriver()
+      if (!isCloudDriver(driver))
+        return { content: [{ type: 'text', text: 'Error: register-site requires cloud mode. Run gscdump init to set up.' }] }
+      const result = await driver.registerSite(siteUrl as string)
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
 
-    server.registerTool(
-      'cloud-list-sites',
-      {
-        description: 'List registered sites on gscdump.com with sync status and progress',
-        inputSchema: z.object({}).shape,
-      },
-      async () => {
-        const result = await cloudClient.me()
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
+  server.registerTool(
+    'sync-status',
+    {
+      description: 'Get detailed sync status for a site on gscdump.com (cloud mode only)',
+      inputSchema: z.object({
+        siteUrl: z.string().describe('Site URL'),
+      }).shape,
+    },
+    async ({ siteUrl }) => {
+      const driver = await getDriver()
+      if (!isCloudDriver(driver))
+        return { content: [{ type: 'text', text: 'Error: sync-status requires cloud mode. Run gscdump init to set up.' }] }
+      const result = await driver.syncStatus(siteUrl as string)
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
 
-    server.registerTool(
-      'cloud-sync-status',
-      {
-        description: 'Get detailed sync status for a site on gscdump.com',
-        inputSchema: siteIdSchema.shape,
-      },
-      async ({ siteId }) => {
-        const result = await cloudClient.syncStatus(siteId as string)
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
+  server.registerTool(
+    'trigger-sync',
+    {
+      description: 'Trigger a fresh data sync for a site on gscdump.com (cloud mode only)',
+      inputSchema: z.object({
+        siteUrl: z.string().describe('Site URL'),
+      }).shape,
+    },
+    async ({ siteUrl }) => {
+      const driver = await getDriver()
+      if (!isCloudDriver(driver))
+        return { content: [{ type: 'text', text: 'Error: trigger-sync requires cloud mode. Run gscdump init to set up.' }] }
+      const result = await driver.triggerSync(siteUrl as string)
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
 
-    server.registerTool(
-      'cloud-sitemaps',
-      {
-        description: 'Get sitemap health data for a site from gscdump.com (includes URL counts, error tracking, history)',
-        inputSchema: siteIdSchema.shape,
-      },
-      async ({ siteId }) => {
-        const result = await cloudClient.sitemaps(siteId as string)
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
+  server.registerTool(
+    'delete-site',
+    {
+      description: 'Unregister a site from gscdump.com (cloud mode only)',
+      inputSchema: z.object({
+        siteUrl: z.string().describe('Site URL'),
+      }).shape,
+    },
+    async ({ siteUrl }) => {
+      const driver = await getDriver()
+      if (!isCloudDriver(driver))
+        return { content: [{ type: 'text', text: 'Error: delete-site requires cloud mode. Run gscdump init to set up.' }] }
+      const result = await driver.deleteSite(siteUrl as string)
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
 
-    server.registerTool(
-      'cloud-analysis',
-      {
-        description: 'Run SEO analysis on synced data (striking-distance, opportunity, movers, decay, zero-click, brand, cannibalization, clustering, concentration, seasonality)',
-        inputSchema: analysisSchema.shape,
-      },
-      async ({ siteId, tool, startDate, endDate, limit }) => {
-        const params: Record<string, string> = {}
-        if (startDate)
-          params.startDate = startDate as string
-        if (endDate)
-          params.endDate = endDate as string
-        if (limit)
-          params.limit = String(limit)
-        const result = await cloudClient.analysis(siteId as string, tool as string, params)
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
+  server.registerTool(
+    'indexing',
+    {
+      description: 'Get indexing status trend and summary for a site (cloud mode only)',
+      inputSchema: z.object({
+        siteUrl: z.string().describe('Site URL'),
+        days: z.number().optional().describe('Days of trend data (default 28, max 90)'),
+      }).shape,
+    },
+    async ({ siteUrl, days }) => {
+      const driver = await getDriver()
+      if (!isCloudDriver(driver))
+        return { content: [{ type: 'text', text: 'Error: indexing requires cloud mode. Run gscdump init to set up.' }] }
+      const result = await driver.indexing(siteUrl as string, days ? { days: days as number } : undefined)
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
 
-    server.registerTool(
-      'cloud-register-site',
-      {
-        description: 'Register a site for syncing on gscdump.com',
-        inputSchema: z.object({
-          siteUrl: z.string().describe('Site URL to register (e.g., example.com)'),
-        }).shape,
-      },
-      async ({ siteUrl }) => {
-        const result = await cloudClient.registerSite(siteUrl as string)
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
+  server.registerTool(
+    'indexing-diagnostics',
+    {
+      description: 'Get indexing issue diagnostics with counts and severity (cloud mode only)',
+      inputSchema: z.object({
+        siteUrl: z.string().describe('Site URL'),
+      }).shape,
+    },
+    async ({ siteUrl }) => {
+      const driver = await getDriver()
+      if (!isCloudDriver(driver))
+        return { content: [{ type: 'text', text: 'Error: indexing-diagnostics requires cloud mode. Run gscdump init to set up.' }] }
+      const result = await driver.indexingDiagnostics(siteUrl as string)
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
 
-    server.registerTool(
-      'cloud-query',
-      {
-        description: 'Live GSC query via gscdump.com platform (bypasses synced data, queries Google directly)',
-        inputSchema: z.object({
-          siteId: z.string().describe('Site ID from gscdump platform'),
-          startDate: z.string().describe('Start date (YYYY-MM-DD)'),
-          endDate: z.string().describe('End date (YYYY-MM-DD)'),
-          dimensions: z.string().optional().describe('Comma-separated: page,query,country,device,date,searchAppearance'),
-          rowLimit: z.number().optional().describe('Max rows (default 1000, max 25000)'),
-        }).shape,
-      },
-      async ({ siteId, startDate, endDate, dimensions, rowLimit }) => {
-        const params: Record<string, string> = { startDate: startDate as string, endDate: endDate as string }
-        if (dimensions)
-          params.dimensions = dimensions as string
-        if (rowLimit)
-          params.rowLimit = String(rowLimit)
-        const result = await cloudClient.query(siteId as string, params)
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
+  server.registerTool(
+    'indexing-urls',
+    {
+      description: 'Get paginated URL list with indexing status details (cloud mode only)',
+      inputSchema: z.object({
+        siteUrl: z.string().describe('Site URL'),
+        status: z.enum(['indexed', 'not_indexed', 'pending']).optional().describe('Filter by status'),
+        issue: z.string().optional().describe('Filter by issue type'),
+        search: z.string().optional().describe('Search URLs'),
+        limit: z.number().optional().describe('Max results (default 100, max 500)'),
+        offset: z.number().optional().describe('Pagination offset'),
+      }).shape,
+    },
+    async ({ siteUrl, status, issue, search, limit, offset }) => {
+      const driver = await getDriver()
+      if (!isCloudDriver(driver))
+        return { content: [{ type: 'text', text: 'Error: indexing-urls requires cloud mode. Run gscdump init to set up.' }] }
+      const result = await driver.indexingUrls(siteUrl as string, {
+        status: status as string | undefined,
+        issue: issue as string | undefined,
+        search: search as string | undefined,
+        limit: limit as number | undefined,
+        offset: offset as number | undefined,
+      })
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
 
-    server.registerTool(
-      'cloud-indexing',
-      {
-        description: 'Get indexing status trend and summary for a site on gscdump.com',
-        inputSchema: z.object({
-          siteId: z.string().describe('Site ID from gscdump platform'),
-          days: z.number().optional().describe('Days of trend data (default 28, max 90)'),
-        }).shape,
-      },
-      async ({ siteId, days }) => {
-        const params: Record<string, string> = {}
-        if (days)
-          params.days = String(days)
-        const result = await cloudClient.indexing(siteId as string, params)
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
+  server.registerTool(
+    'index-percent',
+    {
+      description: 'Get index percent trend, invisible URLs, and orphan pages (cloud mode only)',
+      inputSchema: z.object({
+        siteUrl: z.string().describe('Site URL'),
+      }).shape,
+    },
+    async ({ siteUrl }) => {
+      const driver = await getDriver()
+      if (!isCloudDriver(driver))
+        return { content: [{ type: 'text', text: 'Error: index-percent requires cloud mode. Run gscdump init to set up.' }] }
+      const result = await driver.indexPercent(siteUrl as string)
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
 
-    server.registerTool(
-      'cloud-indexing-diagnostics',
-      {
-        description: 'Get indexing issue diagnostics with counts and severity for a site',
-        inputSchema: siteIdSchema.shape,
-      },
-      async ({ siteId }) => {
-        const result = await cloudClient.indexingDiagnostics(siteId as string)
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
+  server.registerTool(
+    'sitemap-health',
+    {
+      description: 'Get sitemap health data with URL counts, error tracking, history (cloud mode only)',
+      inputSchema: z.object({
+        siteUrl: z.string().describe('Site URL'),
+      }).shape,
+    },
+    async ({ siteUrl }) => {
+      const driver = await getDriver()
+      if (!isCloudDriver(driver))
+        return { content: [{ type: 'text', text: 'Error: sitemap-health requires cloud mode. Run gscdump init to set up.' }] }
+      const result = await driver.sitemapHealth(siteUrl as string)
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
 
-    server.registerTool(
-      'cloud-indexing-urls',
-      {
-        description: 'Get paginated URL list with indexing status, verdict, and coverage details',
-        inputSchema: z.object({
-          siteId: z.string().describe('Site ID from gscdump platform'),
-          status: z.enum(['indexed', 'not_indexed', 'pending']).optional().describe('Filter by status'),
-          issue: z.string().optional().describe('Filter by issue type'),
-          search: z.string().optional().describe('Search URLs'),
-          limit: z.number().optional().describe('Max results (default 100, max 500)'),
-          offset: z.number().optional().describe('Pagination offset'),
-        }).shape,
-      },
-      async ({ siteId, status, issue, search, limit, offset }) => {
-        const params: Record<string, string> = {}
-        if (status)
-          params.status = status as string
-        if (issue)
-          params.issue = issue as string
-        if (search)
-          params.search = search as string
-        if (limit)
-          params.limit = String(limit)
-        if (offset)
-          params.offset = String(offset)
-        const result = await cloudClient.indexingUrls(siteId as string, params)
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
-
-    server.registerTool(
-      'cloud-index-percent',
-      {
-        description: 'Get index percent trend, invisible URLs (in sitemap but no traffic), and orphan pages (traffic but not in sitemap)',
-        inputSchema: siteIdSchema.shape,
-      },
-      async ({ siteId }) => {
-        const result = await cloudClient.indexPercent(siteId as string)
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
-
-    server.registerTool(
-      'cloud-trigger-sync',
-      {
-        description: 'Trigger a fresh data sync for a site on gscdump.com',
-        inputSchema: siteIdSchema.shape,
-      },
-      async ({ siteId }) => {
-        const result = await cloudClient.triggerSync(siteId as string)
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
-
-    server.registerTool(
-      'cloud-delete-site',
-      {
-        description: 'Unregister a site from gscdump.com (stops syncing, removes pending jobs)',
-        inputSchema: siteIdSchema.shape,
-      },
-      async ({ siteId }) => {
-        const result = await cloudClient.deleteSite(siteId as string)
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
-
-    server.registerTool(
-      'cloud-sitemap-action',
-      {
-        description: 'Submit, delete, or refresh sitemaps via gscdump.com',
-        inputSchema: z.object({
-          siteId: z.string().describe('Site ID from gscdump platform'),
-          action: z.enum(['submit', 'delete', 'refresh']).describe('Action to perform'),
-          sitemapUrl: z.string().optional().describe('Sitemap URL (required for submit/delete)'),
-        }).shape,
-      },
-      async ({ siteId, action, sitemapUrl }) => {
-        const body: { action: string, sitemapUrl?: string } = { action: action as string }
-        if (sitemapUrl)
-          body.sitemapUrl = sitemapUrl as string
-        const result = await cloudClient.sitemapAction(siteId as string, body)
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-      },
-    )
-  }
+  server.registerTool(
+    'sitemap-action',
+    {
+      description: 'Submit, delete, or refresh sitemaps via gscdump.com (cloud mode only)',
+      inputSchema: z.object({
+        siteUrl: z.string().describe('Site URL'),
+        action: z.enum(['submit', 'delete', 'refresh']).describe('Action to perform'),
+        sitemapUrl: z.string().optional().describe('Sitemap URL (required for submit/delete)'),
+      }).shape,
+    },
+    async ({ siteUrl, action, sitemapUrl }) => {
+      const driver = await getDriver()
+      if (!isCloudDriver(driver))
+        return { content: [{ type: 'text', text: 'Error: sitemap-action requires cloud mode. Run gscdump init to set up.' }] }
+      const body: { action: string, sitemapUrl?: string } = { action: action as string }
+      if (sitemapUrl)
+        body.sitemapUrl = sitemapUrl as string
+      const result = await driver.sitemapAction(siteUrl as string, body)
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
 
   return server
 }

@@ -16,6 +16,7 @@
   getRetryAfter: function
   googleSearchConsole: function
   GSC_QUOTAS: object
+  gscdumpApi: function
   inspectUrl: function
   isAuthError: function
   isQuotaError: function
@@ -46,12 +47,49 @@
   num: function
   queryAnalytics: function
   queryComparison: function
+./analytics:
+  allTables: function
+  AnalyzerUnsupportedError: function
+  analyzeWithDuckDB: function
+  createDuckDBCodec: function
+  createDuckDBExecutor: function
+  createInMemoryDataSource: function
+  createInMemoryManifestStore: function
+  createJsonCodec: function
+  createStorageEngine: function
+  createUnionExecutor: function
+  dayPartition: function
+  dimensionToColumn: function
+  enumeratePartitions: function
+  FILES_PLACEHOLDER: string
+  inferTable: function
+  monthPartition: function
+  normalizeUrl: function
+  objectKey: function
+  resolveToSQL: function
+  schemaFor: function
+  SCHEMAS: object
+  substituteFiles: function
+  tenantPrefix: function
+./analytics/filesystem:
+  createFilesystemDataSource: function
+  createFilesystemManifestStore: function
+  filesystemStats: function
+./analytics/node:
+  createNodeDuckDBHandle: function
+  resetNodeDuckDB: function
+./driver:
+  createCloudDriver: function
+  createLocalDriver: function
+  isCloudDriver: function
 ./query:
   and: function
   between: function
+  clicks: object
   contains: function
   Countries: object
   country: object
+  ctr: object
   currentPstDate: function
   date: object
   dayjs: function
@@ -61,10 +99,14 @@
   Devices: object
   eq: function
   extractDateRange: function
+  extractMetricFilters: function
+  extractSpecialOperatorFilters: function
   gsc: object
   gt: function
   gte: function
+  impressions: object
   inArray: function
+  isJsonFilter: function
   like: function
   lt: function
   lte: function
@@ -73,9 +115,13 @@
   notRegex: function
   or: function
   page: object
+  parseJsonFilter: function
+  position: object
   query: object
+  queryCanonical: object
   regex: function
   searchAppearance: object
   searchType: object
   SearchTypes: object
   today: function
+  topLevel: function

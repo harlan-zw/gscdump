@@ -1,3 +1,4 @@
+import type { Dimension, GSCQueryBuilder } from 'gscdump/query'
 import type { z } from 'zod'
 import type { fetchAnalyticsInput, HandlerContext } from '../types'
 import { between, country, date, device, gsc, page, query } from 'gscdump/query'
@@ -10,10 +11,10 @@ interface MetricsRow {
   [key: string]: unknown
 }
 
-async function collectRows<T extends MetricsRow>(
+async function collectRows<T extends MetricsRow, D extends Dimension[], C>(
   ctx: HandlerContext,
   siteUrl: string,
-  builder: ReturnType<typeof gsc.select>,
+  builder: GSCQueryBuilder<D, C>,
 ): Promise<T[]> {
   const rows: T[] = []
   for await (const batch of ctx.client.query(siteUrl, builder)) {

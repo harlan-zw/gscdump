@@ -4,6 +4,7 @@ import process from 'node:process'
 import { defineCommand, runMain } from 'citty'
 import { analysisCommand } from './commands/analysis'
 import { authCommand } from './commands/auth'
+import { compactCommand } from './commands/compact'
 import { configCommand } from './commands/config'
 import { dumpCommand } from './commands/dump'
 import { indexingCommand } from './commands/indexing'
@@ -13,6 +14,7 @@ import { queryCommand } from './commands/query'
 import { registerCommand } from './commands/register'
 import { sitemapsCommand } from './commands/sitemaps'
 import { sitesCommand } from './commands/sites'
+import { statsCommand } from './commands/stats'
 import { syncCommand } from './commands/sync'
 import { unregisterCommand } from './commands/unregister'
 import { showSplash, VERSION } from './utils'
@@ -32,6 +34,8 @@ const main = defineCommand({
     register: registerCommand,
     unregister: unregisterCommand,
     sync: syncCommand,
+    stats: statsCommand,
+    compact: compactCommand,
     indexing: indexingCommand,
     analysis: analysisCommand,
     auth: authCommand,

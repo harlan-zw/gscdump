@@ -1,16 +1,15 @@
-import type { Dimension } from 'gscdump/query'
 import type { z } from 'zod'
 import type { customQueryInput, HandlerContext } from '../types'
 import { between, country, date, device, gsc, page, query, searchAppearance } from 'gscdump/query'
 
-const DIMENSION_MAP: Record<string, Dimension> = {
+const DIMENSION_MAP = {
   page,
   query,
   date,
   country,
   device,
   searchAppearance,
-}
+} as const
 
 interface MetricsRow {
   clicks: number

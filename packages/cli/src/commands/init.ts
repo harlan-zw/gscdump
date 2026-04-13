@@ -1,11 +1,25 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
-import { isCancel, select } from '@clack/prompts'
+import { isCancel, select, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { authenticate, authenticateCloud, getAuthCredentials, saveTokens } from '../auth'
-import { DEFAULT_CLOUD_URL, loadConfig, saveConfig } from '../config'
+import { DEFAULT_CLOUD_URL, defaultDataDir, loadConfig, saveConfig } from '../config'
 import { logger } from '../utils'
+
+const ENV_LINE_RE = /^([^=]+)=(.*)$/
+
+async function promptDataDir(existing?: string): Promise<string> {
+  const fallback = existing ?? defaultDataDir()
+  const answer = await text({
+    message: 'Where should Parquet data be stored?',
+    placeholder: fallback,
+    defaultValue: fallback,
+  })
+  if (isCancel(answer))
+    process.exit(1)
+  return String(answer) || fallback
+}
 
 async function loadEnvFile(): Promise<Record<string, string> | null> {
   const envPath = path.join(process.cwd(), '.env')
@@ -18,7 +32,7 @@ async function loadEnvFile(): Promise<Record<string, string> | null> {
     const trimmed = line.trim()
     if (!trimmed || trimmed.startsWith('#'))
       continue
-    const match = trimmed.match(/^([^=]+)=(.*)$/)
+    const match = trimmed.match(ENV_LINE_RE)
     if (match) {
       const key = match[1].trim()
       let value = match[2].trim()
@@ -69,6 +83,7 @@ export const initCommand = defineCommand({
         mode: 'local',
         clientId: envFile.GOOGLE_CLIENT_ID,
         clientSecret: envFile.GOOGLE_CLIENT_SECRET,
+        dataDir: config.dataDir ?? defaultDataDir(),
       })
 
       // Authenticate will auto-refresh the token
@@ -119,7 +134,8 @@ export const initCommand = defineCommand({
       await authenticateCloud(cloudUrl, true)
     }
     else {
-      await saveConfig({ ...config, mode: 'local' })
+      const dataDir = await promptDataDir(config.dataDir)
+      await saveConfig({ ...config, mode: 'local', dataDir })
       const credentials = await getAuthCredentials(true)
       await authenticate(credentials, true)
     }

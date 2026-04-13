@@ -1,10 +1,51 @@
 import process from 'node:process'
 import { cancel, isCancel, select } from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { deleteSitemap, fetchSitemap, fetchSitemaps, googleSearchConsole, submitSitemap } from 'gscdump'
-import { getAuth, getCloudClient } from '../auth'
+import { fetchSitemap, googleSearchConsole } from 'gscdump'
+import { isCloudDriver } from 'gscdump/driver'
+import { getAuth } from '../auth'
 import { loadConfig } from '../config'
+import { getDriver } from '../driver'
 import { gscErrorHandler, logger } from '../utils'
+
+async function resolveSiteUrl(driver: Awaited<ReturnType<typeof getDriver>>, target?: string): Promise<string> {
+  if (isCloudDriver(driver)) {
+    const sites = await driver.sitesWithSync().catch((e: Error) => {
+      logger.error(`Failed to fetch sites: ${e.message}`)
+      process.exit(1)
+    })
+
+    if (sites.length === 0) {
+      logger.warn('No registered sites. Run gscdump register first.')
+      process.exit(1)
+    }
+
+    const match = target
+      ? sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
+      : undefined
+
+    if (match)
+      return match.siteUrl
+    if (sites.length === 1)
+      return sites[0].siteUrl
+
+    const selected = await select({
+      message: 'Select a site',
+      options: sites.map(s => ({ value: s.siteUrl, label: s.siteUrl })),
+    })
+    if (isCancel(selected)) {
+      cancel('Cancelled')
+      process.exit(0)
+    }
+    return selected as string
+  }
+
+  if (!target) {
+    logger.error('Site URL required (-s)')
+    process.exit(1)
+  }
+  return target
+}
 
 const listCommand = defineCommand({
   meta: {
@@ -24,44 +65,13 @@ const listCommand = defineCommand({
     },
   },
   async run({ args }) {
-    // Cloud mode: richer sitemap data from platform
-    const cloud = await getCloudClient()
-    if (cloud) {
-      const config = await loadConfig()
-      const target = args.site || config.defaultSite
+    const config = await loadConfig()
+    const driver = await getDriver({ interactive: false })
+    const siteUrl = await resolveSiteUrl(driver, args.site || config.defaultSite)
 
-      const me = await cloud.me().catch((e: Error) => {
-        logger.error(`Failed to fetch sites: ${e.message}`)
-        process.exit(1)
-      })
-
-      if (me.sites.length === 0) {
-        logger.warn('No registered sites. Run gscdump register first.')
-        return
-      }
-
-      let site = target
-        ? me.sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
-        : undefined
-
-      if (!site) {
-        if (me.sites.length === 1) {
-          site = me.sites[0]
-        }
-        else {
-          const selected = await select({
-            message: 'Select a site',
-            options: me.sites.map(s => ({ value: s.siteId, label: s.siteUrl })),
-          })
-          if (isCancel(selected)) {
-            cancel('Cancelled')
-            process.exit(0)
-          }
-          site = me.sites.find(s => s.siteId === selected)!
-        }
-      }
-
-      const data = await cloud.sitemaps(site.siteId).catch((e: Error) => {
+    // Cloud mode: richer sitemap data
+    if (isCloudDriver(driver)) {
+      const data = await driver.sitemapHealth(siteUrl).catch((e: Error) => {
         logger.error(`Failed to fetch sitemaps: ${e.message}`)
         process.exit(1)
       })
@@ -99,14 +109,10 @@ const listCommand = defineCommand({
     }
 
     // Local mode: direct GSC API
-    if (!args.site) {
-      logger.error('Site URL required (-s)')
+    const sitemaps = await driver.sitemaps(siteUrl).catch((e: Error) => {
+      logger.error(`Failed to fetch sitemaps: ${e.message}`)
       process.exit(1)
-    }
-
-    const auth = await getAuth({ interactive: false })
-    const client = googleSearchConsole(auth)
-    const sitemaps = await fetchSitemaps(client, args.site).catch(gscErrorHandler)
+    })
 
     if (args.json) {
       console.log(JSON.stringify(sitemaps, null, 2))
@@ -153,6 +159,7 @@ const getCommand = defineCommand({
     },
   },
   async run({ args }) {
+    // Get command uses raw GSC client for detailed sitemap info
     const auth = await getAuth({ interactive: false })
     const client = googleSearchConsole(auth)
     const sitemap = await fetchSitemap(client, args.site, args.url).catch(gscErrorHandler)
@@ -200,32 +207,11 @@ const submitCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const cloud = await getCloudClient()
-    if (cloud) {
-      const config = await loadConfig()
-      const me = await cloud.me().catch((e: Error) => {
-        logger.error(`Failed to fetch sites: ${e.message}`)
-        process.exit(1)
-      })
-
-      const target = args.site || config.defaultSite
-      const site = me.sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
-      if (!site) {
-        logger.error(`Site not found: ${target}`)
-        process.exit(1)
-      }
-
-      await cloud.sitemapAction(site.siteId, { action: 'submit', sitemapUrl: args.url }).catch((e: Error) => {
-        logger.error(`Submit failed: ${e.message}`)
-        process.exit(1)
-      })
-      logger.success(`Submitted sitemap: ${args.url}`)
-      return
-    }
-
-    const auth = await getAuth({ interactive: false })
-    const client = googleSearchConsole(auth)
-    await submitSitemap(client, args.site, args.url).catch(gscErrorHandler)
+    const driver = await getDriver({ interactive: false })
+    await driver.submitSitemap(args.site, args.url).catch((e: Error) => {
+      logger.error(`Submit failed: ${e.message}`)
+      process.exit(1)
+    })
     logger.success(`Submitted sitemap: ${args.url}`)
   },
 })
@@ -249,32 +235,11 @@ const deleteCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const cloud = await getCloudClient()
-    if (cloud) {
-      const config = await loadConfig()
-      const me = await cloud.me().catch((e: Error) => {
-        logger.error(`Failed to fetch sites: ${e.message}`)
-        process.exit(1)
-      })
-
-      const target = args.site || config.defaultSite
-      const site = me.sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
-      if (!site) {
-        logger.error(`Site not found: ${target}`)
-        process.exit(1)
-      }
-
-      await cloud.sitemapAction(site.siteId, { action: 'delete', sitemapUrl: args.url }).catch((e: Error) => {
-        logger.error(`Delete failed: ${e.message}`)
-        process.exit(1)
-      })
-      logger.success(`Deleted sitemap: ${args.url}`)
-      return
-    }
-
-    const auth = await getAuth({ interactive: false })
-    const client = googleSearchConsole(auth)
-    await deleteSitemap(client, args.site, args.url).catch(gscErrorHandler)
+    const driver = await getDriver({ interactive: false })
+    await driver.deleteSitemap(args.site, args.url).catch((e: Error) => {
+      logger.error(`Delete failed: ${e.message}`)
+      process.exit(1)
+    })
     logger.success(`Deleted sitemap: ${args.url}`)
   },
 })
@@ -292,36 +257,16 @@ const refreshCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const cloud = await getCloudClient()
-    if (!cloud) {
+    const driver = await getDriver({ interactive: false })
+    if (!isCloudDriver(driver)) {
       logger.error('Sitemap refresh requires cloud mode. Run gscdump init to set up.')
       process.exit(1)
     }
 
     const config = await loadConfig()
-    const me = await cloud.me().catch((e: Error) => {
-      logger.error(`Failed to fetch sites: ${e.message}`)
-      process.exit(1)
-    })
+    const siteUrl = await resolveSiteUrl(driver, args.site || config.defaultSite)
 
-    const target = args.site || config.defaultSite
-    let site = target
-      ? me.sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
-      : me.sites.length === 1 ? me.sites[0] : undefined
-
-    if (!site) {
-      const selected = await select({
-        message: 'Select a site',
-        options: me.sites.map(s => ({ value: s.siteId, label: s.siteUrl })),
-      })
-      if (isCancel(selected)) {
-        cancel('Cancelled')
-        process.exit(0)
-      }
-      site = me.sites.find(s => s.siteId === selected)!
-    }
-
-    const result = await cloud.sitemapAction(site.siteId, { action: 'refresh' }).catch((e: Error) => {
+    const result = await driver.sitemapAction(siteUrl, { action: 'refresh' }).catch((e: Error) => {
       logger.error(`Refresh failed: ${e.message}`)
       process.exit(1)
     })

@@ -43,6 +43,22 @@
     "./analysis": {
       "types": "./dist/analysis/index.d.mts",
       "import": "./dist/analysis/index.mjs"
+    },
+    "./driver": {
+      "types": "./dist/driver/index.d.mts",
+      "import": "./dist/driver/index.mjs"
+    },
+    "./analytics": {
+      "types": "./dist/analytics/index.d.mts",
+      "import": "./dist/analytics/index.mjs"
+    },
+    "./analytics/node": {
+      "types": "./dist/analytics/adapters/duckdb-node.d.mts",
+      "import": "./dist/analytics/adapters/duckdb-node.mjs"
+    },
+    "./analytics/filesystem": {
+      "types": "./dist/analytics/adapters/filesystem.d.mts",
+      "import": "./dist/analytics/adapters/filesystem.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -63,7 +79,20 @@
     "test:real": "RUN_REAL_CREDENTIALS=true vitest run e2e/real-credentials.test.ts",
     "prepack": "pnpm run build"
   },
+  "peerDependencies": {
+    "@googleapis/indexing": "catalog:deps",
+    "@googleapis/searchconsole": "catalog:deps"
+  },
+  "peerDependenciesMeta": {
+    "@googleapis/indexing": {
+      "optional": true
+    },
+    "@googleapis/searchconsole": {
+      "optional": true
+    }
+  },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "catalog:",
     "dayjs": "catalog:deps",
     "defu": "catalog:deps",
     "ofetch": "catalog:deps",

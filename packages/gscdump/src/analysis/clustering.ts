@@ -60,8 +60,10 @@ function extractIntentPrefix(keyword: string): string | null {
   return null
 }
 
+const WHITESPACE_RE = /\s+/
+
 function extractWordPrefix(keyword: string, wordCount = 2): string | null {
-  const words = keyword.toLowerCase().split(/\s+/).filter(Boolean)
+  const words = keyword.toLowerCase().split(WHITESPACE_RE).filter(Boolean)
   if (words.length < wordCount + 1)
     return null
   return words.slice(0, wordCount).join(' ')

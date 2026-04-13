@@ -26,3 +26,12 @@ coverage
 .env
 .env.*
 !.env.example
+
+# DuckDB codec temp artifacts (belt-and-suspenders — should now land in
+# os.tmpdir(), but keep the rule so any stragglers stay out of commits).
+__in_*.json
+__out_*.parquet
+__decode_*.parquet
+
+# E2E script outputs
+tmp/

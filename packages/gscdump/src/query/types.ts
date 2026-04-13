@@ -21,16 +21,14 @@ export interface QueryParamValueMap {
 export type QueryParamName = keyof QueryParamValueMap
 
 // Branded column type (for groupable dimensions)
-declare const ColumnBrand: unique symbol
 export interface Column<D extends Dimension> {
-  readonly [ColumnBrand]: D
+  readonly __columnBrand: 'gscdump.Column'
   readonly dimension: D
 }
 
 // Branded query param type (for non-groupable top-level params)
-declare const QueryParamBrand: unique symbol
 export interface QueryParam<P extends QueryParamName> {
-  readonly [QueryParamBrand]: P
+  readonly __queryParamBrand: 'gscdump.QueryParam'
   readonly param: P
 }
 
@@ -61,9 +59,8 @@ export interface InternalFilter {
 }
 
 // Branded filter type with constraint tracking
-declare const FilterBrand: unique symbol
 export interface Filter<C = object> {
-  readonly [FilterBrand]: true
+  readonly __filterBrand: 'gscdump.Filter'
   readonly _constraints: C
   readonly _filters: InternalFilter[]
   readonly _nestedGroups?: Filter<any>[] // Preserve nested or/and groups
@@ -97,9 +94,8 @@ export type GSCRow<D extends Dimension[], C> = {
 export type Metric = 'clicks' | 'impressions' | 'ctr' | 'position'
 
 // Branded metric column type
-declare const MetricColumnBrand: unique symbol
 export interface MetricColumn<M extends Metric> {
-  readonly [MetricColumnBrand]: M
+  readonly __metricColumnBrand: 'gscdump.MetricColumn'
   readonly metric: M
 }
 

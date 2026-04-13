@@ -52,8 +52,10 @@ interface ApiSitesResponse {
  * }
  * ```
  */
+const TRAILING_SLASH_RE = /\/$/
+
 export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClient {
-  const baseUrl = options.baseUrl?.replace(/\/$/, '') || 'https://gscdump.com'
+  const baseUrl = options.baseUrl?.replace(TRAILING_SLASH_RE, '') || 'https://gscdump.com'
 
   const fetch: $Fetch = ofetch.create({
     baseURL: baseUrl,
@@ -66,7 +68,7 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
     },
   })
 
-  const rawQuery = async (siteId: string, body: SearchAnalyticsQuery) => {
+  const rawQuery = async (siteId: string, body: SearchAnalyticsQuery): Promise<{ rows: Array<{ keys: string[], clicks: number, impressions: number, ctr: number, position: number }> }> => {
     const response = await fetch<ApiQueryResponse>(`/api/sites/${encodeURIComponent(siteId)}/query`, {
       method: 'POST',
       body,

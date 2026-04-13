@@ -1,75 +1,47 @@
-import type { Dimension } from 'gscdump/query'
-import type { CloudClient, CloudMeSite } from '../cloud'
+import type { ManifestEntry, TableName } from 'gscdump/analytics'
+import type { DriverSite } from 'gscdump/driver'
+import type { AnalyticsHarness } from '../analytics'
+import { Buffer } from 'node:buffer'
 import fs from 'node:fs/promises'
+import path from 'node:path'
 import process from 'node:process'
-import { cancel, isCancel, multiselect, select, text } from '@clack/prompts'
+import { cancel, isCancel, select } from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { googleSearchConsole } from 'gscdump'
-import { between, country, date, device, gsc, page, query } from 'gscdump/query'
-import { getAuth, getCloudClient } from '../auth'
+import { allTables } from 'gscdump/analytics'
+import { createAnalyticsHarness } from '../analytics'
 import { loadConfig } from '../config'
-import { clearLine, exportToCSV, logger, progressBar } from '../utils'
+import { getDriver } from '../driver'
+import { logger } from '../utils'
 
-const DUMP_DATA_TYPES = ['pages', 'keywords', 'countries', 'devices'] as const
-type DumpDataType = typeof DUMP_DATA_TYPES[number]
+const DEFAULT_OUT = './gscdump-export'
+const MONTH_RE = /^(\d{4}-\d{2})$/
+const DAILY_PARTITION_RE = /^daily\/(\d{4}-\d{2})-\d{2}$/
+const MONTHLY_PARTITION_RE = /^monthly\/(\d{4}-\d{2})$/
 
-function getDimensions(dataType: DumpDataType): Dimension[] {
-  switch (dataType) {
-    case 'pages': return [page, date]
-    case 'keywords': return [query, date]
-    case 'countries': return [country, date]
-    case 'devices': return [device, date]
+async function resolveSiteUrl(sites: DriverSite[], target?: string): Promise<string> {
+  if (target) {
+    const match = sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
+    if (match)
+      return match.siteUrl
   }
-}
+  if (sites.length === 1)
+    return sites[0].siteUrl
 
-function getDimensionNames(dataType: DumpDataType): string {
-  switch (dataType) {
-    case 'pages': return 'page,date'
-    case 'keywords': return 'query,date'
-    case 'countries': return 'country,date'
-    case 'devices': return 'device,date'
-  }
-}
-
-async function resolveCloudSite(cloud: CloudClient, target?: string): Promise<{ siteId: string, siteUrl: string }> {
-  const me = await cloud.me().catch((e: Error) => {
-    logger.error(`Failed to fetch sites: ${e.message}`)
-    process.exit(1)
+  const selected = await select({
+    message: 'Select a site',
+    options: sites.map(s => ({ value: s.siteUrl, label: s.siteUrl })),
   })
-
-  if (me.sites.length === 0) {
-    logger.error('No registered sites. Run gscdump register first.')
-    process.exit(1)
+  if (isCancel(selected)) {
+    cancel('Cancelled')
+    process.exit(0)
   }
-
-  let site: CloudMeSite | undefined = target
-    ? me.sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
-    : undefined
-
-  if (!site) {
-    if (me.sites.length === 1) {
-      site = me.sites[0]
-    }
-    else {
-      const selected = await select({
-        message: 'Select a site',
-        options: me.sites.map(s => ({ value: s.siteId, label: s.siteUrl })),
-      })
-      if (isCancel(selected)) {
-        cancel('Cancelled')
-        process.exit(0)
-      }
-      site = me.sites.find(s => s.siteId === selected)!
-    }
-  }
-
-  return { siteId: site.siteId, siteUrl: site.siteUrl }
+  return selected as string
 }
 
 export const dumpCommand = defineCommand({
   meta: {
     name: 'dump',
-    description: 'Export search analytics data via GSC API',
+    description: 'Export live Parquet files from the local store to a directory',
   },
   args: {
     site: {
@@ -77,41 +49,16 @@ export const dumpCommand = defineCommand({
       alias: 's',
       description: 'Site URL (e.g., sc-domain:example.com)',
     },
-    output: {
+    out: {
       type: 'string',
       alias: 'o',
-      description: 'Output file path (default: stdout)',
+      default: DEFAULT_OUT,
+      description: `Output directory (default: ${DEFAULT_OUT})`,
     },
-    format: {
-      type: 'string',
-      alias: 'f',
-      default: 'json',
-      description: 'Output format: json or csv',
-    },
-    start: {
-      type: 'string',
-      description: 'Start date (YYYY-MM-DD)',
-    },
-    end: {
-      type: 'string',
-      description: 'End date (YYYY-MM-DD)',
-    },
-    days: {
-      type: 'string',
-      alias: 'd',
-      default: '28',
-      description: 'Number of days to fetch (default: 28)',
-    },
-    types: {
-      type: 'string',
-      alias: 't',
-      description: 'Data types: pages,keywords,countries,devices',
-    },
-    limit: {
-      type: 'string',
-      alias: 'l',
-      default: '25000',
-      description: 'Max rows per data type',
+    compact: {
+      type: 'boolean',
+      default: false,
+      description: 'Compact every closed month into a single file before exporting',
     },
     quiet: {
       type: 'boolean',
@@ -119,208 +66,111 @@ export const dumpCommand = defineCommand({
       default: false,
       description: 'Suppress progress output',
     },
-    interactive: {
-      type: 'boolean',
-      alias: 'i',
-      default: false,
-      description: 'Interactive mode - prompts for options',
-    },
   },
   async run({ args }) {
     const config = await loadConfig()
-
-    // Resolve date range (shared by cloud and local)
-    let startDate: string
-    let endDate: string
-
-    if (args.start && args.end) {
-      startDate = String(args.start)
-      endDate = String(args.end)
-    }
-    else if (args.interactive) {
-      const startInput = await text({
-        message: 'Start date (YYYY-MM-DD)',
-        placeholder: new Date(Date.now() - Number(args.days) * 86400000).toISOString().split('T')[0],
-      })
-      if (isCancel(startInput)) {
-        cancel('Cancelled')
-        process.exit(0)
-      }
-
-      const endInput = await text({
-        message: 'End date (YYYY-MM-DD)',
-        placeholder: new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0],
-      })
-      if (isCancel(endInput)) {
-        cancel('Cancelled')
-        process.exit(0)
-      }
-
-      startDate = String(startInput) || new Date(Date.now() - Number(args.days) * 86400000).toISOString().split('T')[0]
-      endDate = String(endInput) || new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]
-    }
-    else {
-      const days = Number.parseInt(String(args.days), 10)
-      endDate = new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]
-      startDate = new Date(Date.now() - (days + 3) * 86400000).toISOString().split('T')[0]
+    if (config.mode === 'cloud') {
+      logger.error('dump targets the local Parquet store; cloud mode is not supported.')
+      process.exit(1)
     }
 
-    // Resolve data types
-    let dataTypes: DumpDataType[]
+    const driver = await getDriver({ interactive: false })
+    const sites = await driver.sites().catch((e: Error) => {
+      logger.error(`Failed to fetch sites: ${e.message}`)
+      process.exit(1)
+    })
+    if (sites.length === 0) {
+      logger.error('No sites available')
+      process.exit(1)
+    }
+    const siteUrl = await resolveSiteUrl(sites, String(args.site || config.defaultSite || ''))
 
-    if (args.types) {
-      dataTypes = String(args.types).split(',').filter(t => DUMP_DATA_TYPES.includes(t as DumpDataType)) as DumpDataType[]
-    }
-    else if (args.interactive) {
-      const selected = await multiselect({
-        message: 'Select data types to export',
-        options: DUMP_DATA_TYPES.map(t => ({ value: t, label: t })),
-        initialValues: ['pages', 'keywords'],
-      })
-      if (isCancel(selected)) {
-        cancel('Cancelled')
-        process.exit(0)
-      }
-      dataTypes = selected as DumpDataType[]
-    }
-    else {
-      dataTypes = ['pages', 'keywords']
+    const harness = createAnalyticsHarness(config)
+    const outDir = path.resolve(String(args.out))
+
+    if (args.compact) {
+      await compactClosedMonths(harness, siteUrl, args.quiet)
     }
 
-    const rowLimit = Number.parseInt(String(args.limit), 10)
-    const format = String(args.format) as 'json' | 'csv'
-
-    // Cloud mode
-    const cloud = await getCloudClient()
-    if (cloud) {
-      const { siteId, siteUrl } = await resolveCloudSite(cloud, args.site || config.defaultSite)
-
-      const output: Record<string, unknown> = {
-        siteUrl,
-        dateRange: { start: startDate, end: endDate },
-        exportedAt: new Date().toISOString(),
-      }
-
-      const totalSteps = dataTypes.length
-      let currentStep = 0
-
-      for (const dataType of dataTypes) {
-        currentStep++
-        if (!args.quiet) {
-          clearLine()
-          process.stdout.write(progressBar(currentStep, totalSteps, dataType))
-        }
-
-        const dimensions = getDimensionNames(dataType)
-        const result = await cloud.query(siteId, {
-          startDate,
-          endDate,
-          dimensions,
-          rowLimit: String(rowLimit),
-        }).catch((e: Error) => {
-          logger.error(`Query failed: ${e.message}`)
-          process.exit(1)
-        })
-
-        output[dataType] = { total: result.rows.length, data: result.rows }
-      }
-
-      if (!args.quiet) {
-        clearLine()
-        logger.success(`Exported ${dataTypes.join(', ')} for ${siteUrl}`)
-      }
-
-      const content = format === 'csv'
-        ? exportToCSV(output)
-        : JSON.stringify(output, null, 2)
-
-      if (args.output) {
-        await fs.writeFile(String(args.output), content)
-        if (!args.quiet) {
-          logger.info(`Written to ${args.output}`)
-        }
-      }
-      else {
-        console.log(content)
-      }
-      return
+    const entries = await listLiveEntries(harness, siteUrl)
+    if (entries.length === 0) {
+      logger.warn(`No data for ${siteUrl}. Run \`gscdump sync\` first.`)
+      process.exit(0)
     }
 
-    // Local mode
-    const auth = await getAuth({ interactive: false, config })
-    const client = googleSearchConsole(auth)
-
-    let siteUrl = String(args.site || config.defaultSite || '')
-
-    if (!siteUrl || args.interactive) {
-      const sites = await client.sites()
-      const verified = sites.filter(s => s.permissionLevel !== 'siteUnverifiedUser')
-
-      if (verified.length === 0) {
-        logger.error('No verified sites found')
-        process.exit(1)
-      }
-
-      const selected = await select({
-        message: 'Select a site',
-        options: verified.map(s => ({ value: s.siteUrl!, label: s.siteUrl! })),
-        initialValue: siteUrl || verified[0]?.siteUrl,
-      })
-
-      if (isCancel(selected)) {
-        cancel('Cancelled')
-        process.exit(0)
-      }
-      siteUrl = selected as string
-    }
-
-    const output: Record<string, unknown> = {
-      siteUrl,
-      dateRange: { start: startDate, end: endDate },
-      exportedAt: new Date().toISOString(),
-    }
-
-    const totalSteps = dataTypes.length
-    let currentStep = 0
-
-    for (const dataType of dataTypes) {
-      currentStep++
-      if (!args.quiet) {
-        clearLine()
-        process.stdout.write(progressBar(currentStep, totalSteps, dataType))
-      }
-
-      const dimensions = getDimensions(dataType)
-      const builder = gsc
-        .select(...dimensions)
-        .where(between(date, startDate, endDate))
-        .limit(rowLimit)
-
-      const rows: Record<string, unknown>[] = []
-      for await (const batch of client.query(siteUrl, builder)) {
-        rows.push(...batch)
-      }
-
-      output[dataType] = { total: rows.length, data: rows }
+    await fs.mkdir(outDir, { recursive: true })
+    let copied = 0
+    for (const entry of entries) {
+      const bytes = await harness.dataSource.read(entry.objectKey)
+      const target = path.join(outDir, entry.objectKey)
+      await fs.mkdir(path.dirname(target), { recursive: true })
+      await fs.writeFile(target, Buffer.from(bytes))
+      copied++
     }
 
     if (!args.quiet) {
-      clearLine()
-      logger.success(`Exported ${dataTypes.join(', ')} for ${siteUrl}`)
-    }
-
-    const content = format === 'csv'
-      ? exportToCSV(output)
-      : JSON.stringify(output, null, 2)
-
-    if (args.output) {
-      await fs.writeFile(String(args.output), content)
-      if (!args.quiet) {
-        logger.info(`Written to ${args.output}`)
-      }
-    }
-    else {
-      console.log(content)
+      logger.success(`Exported ${copied} file(s) to ${outDir}`)
     }
   },
 })
+
+async function listLiveEntries(harness: AnalyticsHarness, siteUrl: string): Promise<ManifestEntry[]> {
+  const siteId = harness.siteIdFor(siteUrl)
+  const perTable = await Promise.all(
+    allTables().map(table => harness.manifestStore.listLive({
+      userId: harness.userId,
+      siteId,
+      table: table as TableName,
+    })),
+  )
+  return perTable.flat()
+}
+
+async function compactClosedMonths(harness: AnalyticsHarness, siteUrl: string, quiet: unknown): Promise<void> {
+  const siteId = harness.siteIdFor(siteUrl)
+  const closedMonths = new Map<string, Set<TableName>>()
+  const now = Date.now()
+  const thirtyFiveDaysMs = 35 * 86_400_000
+
+  for (const table of allTables()) {
+    const entries = await harness.manifestStore.listLive({
+      userId: harness.userId,
+      siteId,
+      table: table as TableName,
+    })
+    for (const e of entries) {
+      const month = monthFromPartition(e.partition)
+      if (!month)
+        continue
+      const monthEndMs = Date.parse(`${month}-28T23:59:59Z`) + 4 * 86_400_000
+      if (now - monthEndMs < thirtyFiveDaysMs)
+        continue
+      if (!closedMonths.has(month))
+        closedMonths.set(month, new Set())
+      closedMonths.get(month)!.add(table as TableName)
+    }
+  }
+
+  for (const [month, tables] of closedMonths) {
+    for (const table of tables) {
+      if (!quiet)
+        logger.info(`Compacting ${table} ${month}`)
+      await harness.engine.compactMonth({
+        userId: harness.userId,
+        siteId,
+        table,
+      }, month)
+    }
+  }
+}
+
+function monthFromPartition(partition: string): string | null {
+  const daily = partition.match(DAILY_PARTITION_RE)
+  if (daily)
+    return daily[1]
+  const monthly = partition.match(MONTHLY_PARTITION_RE)
+  if (monthly)
+    return monthly[1]
+  const any = partition.match(MONTH_RE)
+  return any ? any[1] : null
+}

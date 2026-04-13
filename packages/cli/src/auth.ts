@@ -1,6 +1,5 @@
 import type { OAuth2Client } from 'google-auth-library'
 import type { Credentials } from 'google-auth-library/build/src/auth/credentials.js'
-import type { CloudClient } from './cloud'
 import type { GscdumpConfig } from './config'
 import fs from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -8,7 +7,6 @@ import path from 'node:path'
 import process from 'node:process'
 import { isCancel, text } from '@clack/prompts'
 import { OAuth2Client as OAuth2ClientClass } from 'google-auth-library'
-import { createCloudClient } from './cloud'
 import { DEFAULT_CLOUD_URL, getConfigDir, loadConfig } from './config'
 import { logger } from './utils'
 
@@ -19,6 +17,8 @@ export interface CloudTokens {
   sessionId?: string
   user?: { publicId: string, email: string }
 }
+
+const REDIRECT_URI_RE = /redirect_uri=[^&]+/
 
 function getTokensPath(): string {
   return path.join(getConfigDir(), 'tokens.json')
@@ -141,7 +141,7 @@ async function getAuthCodeViaLoopback(authUrl: string): Promise<LoopbackAuthResu
 
       const port = addr.port
       resolvedRedirectUri = `http://127.0.0.1:${port}`
-      const fullAuthUrl = authUrl.replace(/redirect_uri=[^&]+/, `redirect_uri=${encodeURIComponent(resolvedRedirectUri)}`)
+      const fullAuthUrl = authUrl.replace(REDIRECT_URI_RE, `redirect_uri=${encodeURIComponent(resolvedRedirectUri)}`)
 
       console.log()
       console.log('  \x1B[1mOpening browser for authorization...\x1B[0m')
@@ -375,21 +375,6 @@ export async function getAuth(opts: GetAuthOptions = {}): Promise<OAuth2Client> 
   // Local mode
   const credentials = await getAuthCredentials(interactive)
   return authenticate(credentials, interactive)
-}
-
-// Cloud client helper
-
-export async function getCloudClient(): Promise<CloudClient | null> {
-  const config = await loadConfig()
-  if (config.mode !== 'cloud')
-    return null
-
-  const tokens = await loadCloudTokens()
-  if (!tokens?.sessionId)
-    return null
-
-  const cloudUrl = config.cloudUrl || DEFAULT_CLOUD_URL
-  return createCloudClient(cloudUrl, tokens.sessionId)
 }
 
 export type { GscdumpConfig }

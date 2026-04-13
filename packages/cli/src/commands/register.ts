@@ -1,7 +1,8 @@
 import process from 'node:process'
 import { cancel, isCancel, select } from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { getCloudClient } from '../auth'
+import { isCloudDriver } from 'gscdump/driver'
+import { getDriver } from '../driver'
 import { logger } from '../utils'
 
 export const registerCommand = defineCommand({
@@ -17,8 +18,8 @@ export const registerCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const cloud = await getCloudClient()
-    if (!cloud) {
+    const driver = await getDriver({ interactive: false })
+    if (!isCloudDriver(driver)) {
       logger.error('Register requires cloud mode. Run gscdump init to set up cloud mode.')
       process.exit(1)
     }
@@ -31,7 +32,7 @@ export const registerCommand = defineCommand({
     if (siteUrls.length > 1) {
       logger.info(`Registering ${siteUrls.length} sites...`)
 
-      const result = await cloud.bulkRegister(siteUrls).catch((e: Error) => {
+      const result = await driver.bulkRegister(siteUrls).catch((e: Error) => {
         logger.error(`Bulk registration failed: ${e.message}`)
         process.exit(1)
       })
@@ -57,12 +58,11 @@ export const registerCommand = defineCommand({
       return
     }
 
-    // Single site registration (existing behavior)
+    // Single site registration
     let siteUrl = siteUrls[0]
 
     if (!siteUrl) {
-      // Interactive: list available sites
-      const available = await cloud.availableSites().catch((e: Error) => {
+      const available = await driver.availableSites().catch((e: Error) => {
         logger.error(`Failed to fetch available sites: ${e.message}`)
         process.exit(1)
       })
@@ -98,7 +98,7 @@ export const registerCommand = defineCommand({
 
     logger.info(`Registering ${siteUrl}...`)
 
-    const result = await cloud.registerSite(siteUrl).catch((e: Error) => {
+    const result = await driver.registerSite(siteUrl).catch((e: Error) => {
       logger.error(`Registration failed: ${e.message}`)
       process.exit(1)
     })
