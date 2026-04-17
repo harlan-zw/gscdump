@@ -1,8 +1,22 @@
-// DuckDB integration, edge-compatible. Consumers (CLI, Workers) supply a
-// DuckDBHandle backed by whatever loader fits their runtime — async-over-
-// worker in browsers/CF, blocking-node bindings in Node.
+// DuckDB-backed codec + executor, edge-compatible. Consumers (CLI, Workers)
+// supply a DuckDBHandle backed by whatever loader fits their runtime —
+// async-over-worker in browsers, blocking-node bindings in Node.
+//
+// This file is the *virtual-FS* implementation: rows ↔ Parquet bytes round-
+// trip through DuckDB's in-memory FS, then through `dataSource.read`/`.write`.
+// Workers backends that prefer DuckDB-driven I/O (httpfs over R2) ship their
+// own codec/executor pair instead of this one.
 
-import type { ParquetCodec, QueryExecutor, Row, TableName } from './storage'
+import type {
+  CodecCtx,
+  DataSource,
+  ParquetCodec,
+  QueryExecutor,
+  Row,
+  TableName,
+  WriteResult,
+} from './storage'
+import { substituteNamedFiles } from './resolver'
 import { SCHEMAS } from './schema'
 
 export interface DuckDBHandle {
@@ -26,63 +40,202 @@ function sqlEscape(path: string): string {
   return path.replace(/'/g, '\'\'')
 }
 
+async function encodeBytes(
+  db: DuckDBHandle,
+  table: TableName,
+  rows: Row[],
+): Promise<Uint8Array> {
+  const inName = db.makeTempPath('json')
+  const outName = db.makeTempPath('parquet')
+  const jsonBytes = new TextEncoder().encode(JSON.stringify(rows))
+  const registered: string[] = []
+  await db.registerFileBuffer(inName, jsonBytes)
+  registered.push(inName)
+  try {
+    const sql = rows.length === 0
+      ? `COPY (SELECT * FROM ${emptyTableSchema(table)} WHERE FALSE) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`
+      : `COPY (SELECT * FROM read_json_auto('${sqlEscape(inName)}', format='array', columns=${columnsJson(table)})) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`
+    await db.query(sql)
+    registered.push(outName)
+    return await db.copyFileToBuffer(outName)
+  }
+  finally {
+    await db.dropFiles(registered)
+  }
+}
+
+async function decodeBytes(
+  db: DuckDBHandle,
+  bytes: Uint8Array,
+  table: TableName | undefined,
+): Promise<Row[]> {
+  const name = db.makeTempPath('parquet')
+  await db.registerFileBuffer(name, bytes)
+  try {
+    return await db.query(
+      `SELECT * ${dateReplaceClause(table)} FROM read_parquet('${sqlEscape(name)}')`,
+    )
+  }
+  finally {
+    await db.dropFiles([name])
+  }
+}
+
 export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
   return {
-    async encode(table: TableName, rows: Row[]): Promise<Uint8Array> {
+    async writeRows(ctx: CodecCtx, rows: Row[], key: string, dataSource: DataSource): Promise<WriteResult> {
       const db = await factory.getDuckDB()
-      const inName = db.makeTempPath('json')
-      const outName = db.makeTempPath('parquet')
+      const bytes = await encodeBytes(db, ctx.table, rows)
+      await dataSource.write(key, bytes)
+      return { bytes: bytes.byteLength, rowCount: rows.length }
+    },
 
-      const jsonBytes = new TextEncoder().encode(JSON.stringify(rows))
+    async readRows(ctx: CodecCtx, key: string, dataSource: DataSource): Promise<Row[]> {
+      const db = await factory.getDuckDB()
+      const bytes = await dataSource.read(key)
+      return decodeBytes(db, bytes, ctx.table)
+    },
+
+    async compactRows(
+      ctx: CodecCtx,
+      inputKeys: string[],
+      outputKey: string,
+      dataSource: DataSource,
+    ): Promise<WriteResult> {
+      const db = await factory.getDuckDB()
+      if (inputKeys.length === 0) {
+        const bytes = await encodeBytes(db, ctx.table, [])
+        await dataSource.write(outputKey, bytes)
+        return { bytes: bytes.byteLength, rowCount: 0 }
+      }
+
+      const inputUris = inputKeys.map(k => dataSource.uri?.(k))
+      const allInputsResolvable = inputUris.every(u => u !== undefined)
+
+      // URI-read fast path: DuckDB fetches inputs through its native URI
+      // layer (httpfs / native FS) without materialising bytes in JS. Output
+      // still round-trips through the virtual FS + dataSource.write so the
+      // adapter owns directory creation and auth-signed URLs stay internal.
+      if (allInputsResolvable) {
+        const outName = db.makeTempPath('parquet')
+        const fileList = (inputUris as string[])
+          .map(u => `'${sqlEscape(u)}'`)
+          .join(', ')
+        try {
+          await db.query(
+            `COPY (SELECT * FROM read_parquet([${fileList}], union_by_name=true)) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`,
+          )
+          const bytes = await db.copyFileToBuffer(outName)
+          const countRows = await db.query(
+            `SELECT count(*)::BIGINT AS n FROM read_parquet('${sqlEscape(outName)}')`,
+          ) as Array<{ n: number | bigint }>
+          const rowCount = Number(countRows[0]?.n ?? 0)
+          await dataSource.write(outputKey, bytes)
+          return { bytes: bytes.byteLength, rowCount }
+        }
+        finally {
+          await db.dropFiles([outName])
+        }
+      }
+
+      const inputs = await Promise.all(inputKeys.map(k => dataSource.read(k)))
+      const inNames: string[] = []
+      const outName = db.makeTempPath('parquet')
       const registered: string[] = []
-      await db.registerFileBuffer(inName, jsonBytes)
-      registered.push(inName)
+      for (let i = 0; i < inputs.length; i++) {
+        const name = db.makeTempPath('parquet')
+        await db.registerFileBuffer(name, inputs[i])
+        inNames.push(name)
+        registered.push(name)
+      }
 
       try {
-        const sql = rows.length === 0
-          ? `COPY (SELECT * FROM ${emptyTableSchema(table)} WHERE FALSE) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`
-          : `COPY (SELECT * FROM read_json_auto('${sqlEscape(inName)}', format='array', columns=${columnsJson(table)})) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`
-        await db.query(sql)
+        const fileList = inNames.map(n => `'${sqlEscape(n)}'`).join(', ')
+        // DuckDB streams read_parquet → COPY without materialising all rows in
+        // memory. Matches the read path.
+        await db.query(
+          `COPY (SELECT * FROM read_parquet([${fileList}])) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`,
+        )
         registered.push(outName)
-        return await db.copyFileToBuffer(outName)
+        const bytes = await db.copyFileToBuffer(outName)
+        const countRows = await db.query(
+          `SELECT count(*)::BIGINT AS n FROM read_parquet('${sqlEscape(outName)}')`,
+        ) as Array<{ n: number | bigint }>
+        const rowCount = Number(countRows[0]?.n ?? 0)
+        await dataSource.write(outputKey, bytes)
+        return { bytes: bytes.byteLength, rowCount }
       }
       finally {
         await db.dropFiles(registered)
       }
     },
-
-    async decode(bytes: Uint8Array, table?: TableName): Promise<Row[]> {
-      const db = await factory.getDuckDB()
-      const name = db.makeTempPath('parquet')
-      await db.registerFileBuffer(name, bytes)
-      try {
-        // Cast DATE columns → YYYY-MM-DD string so rows survive JSON round-trips
-        // and match the string shape the codec accepts on encode.
-        return await db.query(
-          `SELECT * ${dateReplaceClause(table)} FROM read_parquet('${sqlEscape(name)}')`,
-        )
-      }
-      finally {
-        await db.dropFiles([name])
-      }
-    },
   }
+}
+
+/**
+ * Replace every `read_parquet({{NAME}}, union_by_name = true)` occurrence
+ * (any whitespace, any `union_by_name` variant) with a schema-correct
+ * empty subquery when the named file set has no keys. Without this,
+ * DuckDB errors with a Binder Error on `read_parquet([])` because it
+ * can't infer the schema from an empty literal. Analyzers that use
+ * `{{FILES_PREV}}` against a prev-window that happens to have no parquets
+ * (e.g. movers/decay run on fresh data) hit this without the fallback.
+ */
+function rewriteEmptyFileSets(
+  sql: string,
+  placeholders: Record<string, string[]>,
+  table: TableName,
+): string {
+  const emptyFallback = `(SELECT * FROM ${emptyTableSchema(table)} WHERE FALSE)`
+  let out = sql
+  for (const [name, keys] of Object.entries(placeholders)) {
+    if (keys.length > 0)
+      continue
+    const pattern = new RegExp(
+      `read_parquet\\(\\s*\\{\\{${name}\\}\\}\\s*(?:,\\s*union_by_name\\s*=\\s*true\\s*)?\\)`,
+      'g',
+    )
+    out = out.replace(pattern, emptyFallback)
+  }
+  return out
 }
 
 export function createDuckDBExecutor(factory: DuckDBFactory): QueryExecutor {
   return {
-    async execute({ sql, params, files }) {
+    async execute({ sql, params, fileKeys, dataSource, table, signal }) {
+      signal?.throwIfAborted()
       const db = await factory.getDuckDB()
-      const names: string[] = []
-      for (const f of files) {
-        await db.registerFileBuffer(f.key, f.bytes)
-        names.push(f.key)
+
+      const placeholders: Record<string, string[]> = {}
+      const registered: string[] = []
+
+      for (const [name, keys] of Object.entries(fileKeys)) {
+        const resolved: string[] = []
+        for (const key of keys) {
+          const uri = dataSource.uri?.(key)
+          if (uri !== undefined) {
+            resolved.push(uri)
+          }
+          else {
+            const bytes = await dataSource.read(key, undefined, signal)
+            await db.registerFileBuffer(key, bytes)
+            registered.push(key)
+            resolved.push(key)
+          }
+        }
+        placeholders[name] = resolved
       }
+
       try {
-        return await db.query(sql, params)
+        signal?.throwIfAborted()
+        const rewritten = rewriteEmptyFileSets(sql, placeholders, table)
+        const finalSql = substituteNamedFiles(rewritten, placeholders)
+        const rows = await db.query(finalSql, params)
+        return { rows, sql: finalSql }
       }
       finally {
-        await db.dropFiles(names)
+        if (registered.length > 0)
+          await db.dropFiles(registered)
       }
     },
   }
@@ -90,6 +243,16 @@ export function createDuckDBExecutor(factory: DuckDBFactory): QueryExecutor {
 
 function emptyTableSchema(table: TableName): string {
   return `(FROM (VALUES ${placeholderValues(table)}) t(${columnList(table)}))`
+}
+
+/**
+ * Canonical "empty-file" SELECT clause for a table. Codecs that need to
+ * emit a schema-correct empty Parquet can wrap this in:
+ *   `COPY (SELECT * FROM <clause> WHERE FALSE) TO '<key>' (FORMAT PARQUET)`
+ * to satisfy the ParquetCodec empty-rows invariant.
+ */
+export function canonicalEmptyParquetSchema(table: TableName): string {
+  return emptyTableSchema(table)
 }
 
 function dateReplaceClause(table: TableName | undefined): string {
@@ -102,52 +265,12 @@ function dateReplaceClause(table: TableName | undefined): string {
   return `REPLACE (${replacements.join(', ')})`
 }
 
-const TABLE_COLUMNS: Record<TableName, Array<[string, string]>> = {
-  pages: [
-    ['url', 'VARCHAR'],
-    ['date', 'DATE'],
-    ['clicks', 'INTEGER'],
-    ['impressions', 'INTEGER'],
-    ['sum_position', 'DOUBLE'],
-  ],
-  keywords: [
-    ['query', 'VARCHAR'],
-    ['date', 'DATE'],
-    ['clicks', 'INTEGER'],
-    ['impressions', 'INTEGER'],
-    ['sum_position', 'DOUBLE'],
-  ],
-  countries: [
-    ['country', 'VARCHAR'],
-    ['date', 'DATE'],
-    ['clicks', 'INTEGER'],
-    ['impressions', 'INTEGER'],
-    ['sum_position', 'DOUBLE'],
-  ],
-  devices: [
-    ['device', 'VARCHAR'],
-    ['date', 'DATE'],
-    ['clicks', 'INTEGER'],
-    ['impressions', 'INTEGER'],
-    ['sum_position', 'DOUBLE'],
-  ],
-  page_keywords: [
-    ['url', 'VARCHAR'],
-    ['query', 'VARCHAR'],
-    ['date', 'DATE'],
-    ['clicks', 'INTEGER'],
-    ['impressions', 'INTEGER'],
-    ['sum_position', 'DOUBLE'],
-  ],
-}
-
 function columnList(table: TableName): string {
-  return TABLE_COLUMNS[table].map(([n]) => n).join(', ')
+  return SCHEMAS[table].columns.map(c => c.name).join(', ')
 }
 
 function placeholderValues(table: TableName): string {
-  const cols = TABLE_COLUMNS[table]
-  const defaults = cols.map(([, t]) => defaultForType(t))
+  const defaults = SCHEMAS[table].columns.map(c => defaultForType(c.type))
   return `(${defaults.join(', ')})`
 }
 
@@ -164,8 +287,6 @@ function defaultForType(t: string): string {
 }
 
 function columnsJson(table: TableName): string {
-  const obj: Record<string, string> = {}
-  for (const [name, type] of TABLE_COLUMNS[table])
-    obj[name] = type
-  return `{${Object.entries(obj).map(([k, v]) => `'${k}': '${v}'`).join(', ')}}`
+  const entries = SCHEMAS[table].columns.map(c => `'${c.name}': '${c.type}'`)
+  return `{${entries.join(', ')}}`
 }

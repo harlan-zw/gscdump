@@ -1,23 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sitesCommand } from '../../src/commands/sites'
-import { getDriver } from '../../src/driver'
 
 const mockSites = [
   { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' },
   { siteUrl: 'sc-domain:example.com', permissionLevel: 'siteOwner' },
   { siteUrl: 'https://test.example.com/', permissionLevel: 'siteFullUser' },
+  { siteUrl: 'https://unverified.example.com/', permissionLevel: 'siteUnverifiedUser' },
 ]
 
-vi.mock('gscdump/driver', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump/driver')>()
+const clientSitesMock = vi.fn()
+
+vi.mock('gscdump', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump')>()
   return {
     ...actual,
-    isCloudDriver: vi.fn(() => false),
+    googleSearchConsole: vi.fn(() => ({
+      sites: clientSitesMock,
+    })),
   }
 })
 
-vi.mock('../../src/driver', () => ({
-  getDriver: vi.fn(),
+vi.mock('../../src/auth', () => ({
+  getAuth: vi.fn().mockResolvedValue({ clientId: 'x', clientSecret: 'y' }),
 }))
 
 vi.mock('../../src/utils', () => ({
@@ -32,12 +36,6 @@ vi.mock('../../src/utils', () => ({
     start: vi.fn(),
   },
 }))
-
-function mockLocalDriver(sites: unknown[]): void {
-  vi.mocked(getDriver).mockResolvedValue({
-    sites: vi.fn().mockResolvedValue(sites),
-  } as never)
-}
 
 describe('sites command', () => {
   let consoleOutput: string[] = []
@@ -67,7 +65,7 @@ describe('sites command', () => {
   })
 
   it('should list sites in human-readable format', async () => {
-    mockLocalDriver(mockSites)
+    clientSitesMock.mockResolvedValue(mockSites)
 
     await sitesCommand.run!({
       args: { json: false },
@@ -79,10 +77,11 @@ describe('sites command', () => {
     expect(output).toContain('https://example.com/')
     expect(output).toContain('sc-domain:example.com')
     expect(output).toContain('https://test.example.com/')
+    expect(output).not.toContain('unverified.example.com')
   })
 
   it('should output JSON when --json flag is set', async () => {
-    mockLocalDriver(mockSites)
+    clientSitesMock.mockResolvedValue(mockSites)
 
     await sitesCommand.run!({
       args: { json: true },
@@ -100,7 +99,7 @@ describe('sites command', () => {
   })
 
   it('should handle empty sites list', async () => {
-    mockLocalDriver([])
+    clientSitesMock.mockResolvedValue([])
 
     await sitesCommand.run!({
       args: { json: false },
@@ -108,6 +107,6 @@ describe('sites command', () => {
       cmd: sitesCommand,
     })
 
-    expect(getDriver).toHaveBeenCalled()
+    expect(clientSitesMock).toHaveBeenCalled()
   })
 })

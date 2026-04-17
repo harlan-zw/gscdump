@@ -21,6 +21,7 @@
     "@antfu/eslint-config": "catalog:dev-lint",
     "@types/js-yaml": "catalog:",
     "@types/node": "catalog:",
+    "aws4fetch": "catalog:",
     "bumpp": "catalog:dev-build",
     "dotenv": "catalog:dev-test",
     "eslint": "catalog:dev-lint",

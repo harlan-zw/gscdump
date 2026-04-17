@@ -40,17 +40,57 @@
       "types": "./dist/query/index.d.mts",
       "import": "./dist/query/index.mjs"
     },
-    "./analysis": {
-      "types": "./dist/analysis/index.d.mts",
-      "import": "./dist/analysis/index.mjs"
-    },
     "./driver": {
       "types": "./dist/driver/index.d.mts",
       "import": "./dist/driver/index.mjs"
     },
+    "./shared": {
+      "types": "./dist/shared/index.d.mts",
+      "import": "./dist/shared/index.mjs"
+    },
+    "./shared/analysis": {
+      "types": "./dist/shared/analysis.d.mts",
+      "import": "./dist/shared/analysis.mjs"
+    },
+    "./shared/driver": {
+      "types": "./dist/shared/driver.d.mts",
+      "import": "./dist/shared/driver.mjs"
+    },
+    "./shared/snapshot": {
+      "types": "./dist/shared/snapshot.d.mts",
+      "import": "./dist/shared/snapshot.mjs"
+    },
     "./analytics": {
       "types": "./dist/analytics/index.d.mts",
       "import": "./dist/analytics/index.mjs"
+    },
+    "./analytics/contracts": {
+      "types": "./dist/analytics/contracts.d.mts",
+      "import": "./dist/analytics/contracts.mjs"
+    },
+    "./analytics/planner": {
+      "types": "./dist/analytics/planner.d.mts",
+      "import": "./dist/analytics/planner.mjs"
+    },
+    "./analytics/schema": {
+      "types": "./dist/analytics/schema.d.mts",
+      "import": "./dist/analytics/schema.mjs"
+    },
+    "./analytics/tenant": {
+      "types": "./dist/analytics/tenant.d.mts",
+      "import": "./dist/analytics/tenant.mjs"
+    },
+    "./analytics/normalize": {
+      "types": "./dist/analytics/normalize.d.mts",
+      "import": "./dist/analytics/normalize.mjs"
+    },
+    "./analytics/ingest": {
+      "types": "./dist/analytics/ingest.d.mts",
+      "import": "./dist/analytics/ingest.mjs"
+    },
+    "./analytics/sql": {
+      "types": "./dist/analytics/sql-bind.d.mts",
+      "import": "./dist/analytics/sql-bind.mjs"
     },
     "./analytics/node": {
       "types": "./dist/analytics/adapters/duckdb-node.d.mts",
@@ -59,6 +99,18 @@
     "./analytics/filesystem": {
       "types": "./dist/analytics/adapters/filesystem.d.mts",
       "import": "./dist/analytics/adapters/filesystem.mjs"
+    },
+    "./analytics/http": {
+      "types": "./dist/analytics/adapters/http.d.mts",
+      "import": "./dist/analytics/adapters/http.mjs"
+    },
+    "./analytics/hyparquet": {
+      "types": "./dist/analytics/adapters/hyparquet.d.mts",
+      "import": "./dist/analytics/adapters/hyparquet.mjs"
+    },
+    "./analytics/r2": {
+      "types": "./dist/analytics/adapters/r2.d.mts",
+      "import": "./dist/analytics/adapters/r2.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -80,26 +132,42 @@
     "prepack": "pnpm run build"
   },
   "peerDependencies": {
+    "@duckdb/duckdb-wasm": "catalog:",
     "@googleapis/indexing": "catalog:deps",
-    "@googleapis/searchconsole": "catalog:deps"
+    "@googleapis/searchconsole": "catalog:deps",
+    "hyparquet": "catalog:",
+    "hyparquet-writer": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@duckdb/duckdb-wasm": {
+      "optional": true
+    },
     "@googleapis/indexing": {
       "optional": true
     },
     "@googleapis/searchconsole": {
       "optional": true
+    },
+    "hyparquet": {
+      "optional": true
+    },
+    "hyparquet-writer": {
+      "optional": true
     }
   },
   "dependencies": {
-    "@duckdb/duckdb-wasm": "catalog:",
     "dayjs": "catalog:deps",
     "defu": "catalog:deps",
     "ofetch": "catalog:deps",
+    "proper-lockfile": "catalog:deps",
     "ufo": "catalog:deps"
   },
   "devDependencies": {
+    "@duckdb/duckdb-wasm": "catalog:",
     "@googleapis/indexing": "catalog:deps",
-    "@googleapis/searchconsole": "catalog:deps"
+    "@googleapis/searchconsole": "catalog:deps",
+    "@types/proper-lockfile": "catalog:",
+    "hyparquet": "catalog:",
+    "hyparquet-writer": "catalog:"
   }
 }

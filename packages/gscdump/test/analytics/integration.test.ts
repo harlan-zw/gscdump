@@ -6,7 +6,6 @@ import { join } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   createStorageEngine,
-  dayPartition,
 } from '../../src/analytics'
 import {
   createNodeDuckDBHandle,
@@ -63,8 +62,8 @@ describe('integration: real DuckDB + filesystem', () => {
     return { engine, dataSource, manifestStore, codec, executor }
   }
 
-  it('writeDay → query → compactDay → query → compactMonth → query', async () => {
-    const { engine, manifestStore } = await setup()
+  it('writeDay → query → compactOlderThan → query', async () => {
+    const { engine } = await setup()
 
     for (const day of ['2026-03-01', '2026-03-15', '2026-03-31']) {
       await engine.writeDay(
@@ -84,25 +83,11 @@ describe('integration: real DuckDB + filesystem', () => {
     expect(Number(root.clicks)).toBe(30)
     expect(Number(root.impressions)).toBe(300)
 
-    const dayEntries = await manifestStore.listLive({
-      userId: 'u1',
-      siteId: 's1',
-      table: 'pages',
-      partitions: [dayPartition('2026-03-15')],
-    })
-    await engine.compactDay(
-      { userId: 'u1', siteId: 's1', table: 'pages', date: '2026-03-15' },
-      dayEntries,
-    )
-
-    const q2 = await engine.query({ userId: 'u1', siteId: 's1' }, state)
-    expect(q2.rows.length).toBe(2)
-    const root2 = q2.rows.find(r => r.page === '/')!
-    expect(Number(root2.clicks)).toBe(30)
-
-    await engine.compactMonth(
-      { userId: 'u1', siteId: 's1', table: 'pages' },
-      '2026-03',
+    // Roll all March dailies into a single monthly file
+    const now = Date.UTC(2026, 3, 20)
+    await engine.compactOlderThan(
+      { userId: 'u1', siteId: 's1', table: 'pages', now: () => now },
+      15,
     )
 
     const q3 = await engine.query({ userId: 'u1', siteId: 's1' }, state)

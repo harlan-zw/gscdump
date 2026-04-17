@@ -1,9 +1,9 @@
-import type { Row, WriteCtx } from 'gscdump/analytics'
+import type { Row, WriteCtx } from 'gscdump/analytics/contracts'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { resetNodeDuckDB } from 'gscdump/analytics/node'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resetNodeDuckDB } from '../../gscdump/src/analytics/adapters/duckdb-node'
 import {
   hasLocalData,
   LocalStoreUnsupportedError,
@@ -80,13 +80,12 @@ describe('analysis-local', () => {
     expect((out.results[0] as { keyword: string }).keyword).toBe('near miss')
   })
 
-  it('runLocalAnalysis rejects unported tools with LocalStoreUnsupportedError', async () => {
+  it('runLocalAnalysis rejects unknown tool types with LocalStoreUnsupportedError', async () => {
     const harness = createAnalyticsHarness({ mode: 'local', dataDir: tmpDir })
+    // All current tools are wired; force the dispatcher's default branch with
+    // an unknown type to exercise the safety-net error path.
     await expect(
-      runLocalAnalysis(harness, SITE, { type: 'cannibalization' }),
-    ).rejects.toThrow(LocalStoreUnsupportedError)
-    await expect(
-      runLocalAnalysis(harness, SITE, { type: 'zero-click' }),
+      runLocalAnalysis(harness, SITE, { type: 'not-a-real-tool' as never }),
     ).rejects.toThrow(LocalStoreUnsupportedError)
   })
 

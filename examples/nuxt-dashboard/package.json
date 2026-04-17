@@ -1,0 +1,22 @@
+{
+  "name": "@gscdump/example-nuxt-dashboard",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "catalog:",
+    "@gscdump/analysis": "workspace:*",
+    "@huggingface/transformers": "catalog:",
+    "aws4fetch": "catalog:",
+    "gscdump": "workspace:*",
+    "hyparquet": "catalog:",
+    "hyparquet-writer": "catalog:",
+    "nuxt": "catalog:",
+    "vue": "catalog:"
+  }
+}

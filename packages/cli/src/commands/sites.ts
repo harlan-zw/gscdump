@@ -1,8 +1,8 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { isCloudDriver } from 'gscdump/driver'
-import { getDriver } from '../driver'
-import { logger, progressBar } from '../utils'
+import { googleSearchConsole } from 'gscdump'
+import { getAuth } from '../auth'
+import { logger } from '../utils'
 
 export const sitesCommand = defineCommand({
   meta: {
@@ -17,54 +17,20 @@ export const sitesCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const driver = await getDriver({ interactive: false })
+    const auth = await getAuth({ interactive: false })
+    const client = googleSearchConsole(auth)
 
-    // Cloud mode: show registered sites with sync status
-    if (isCloudDriver(driver)) {
-      const sites = await driver.sitesWithSync().catch((e: Error) => {
-        logger.error(`Failed to fetch sites: ${e.message}`)
-        process.exit(1)
-      })
-
-      if (args.json) {
-        console.log(JSON.stringify(sites, null, 2))
-        return
-      }
-
-      if (sites.length === 0) {
-        logger.warn('No registered sites. Run gscdump register to add a site.')
-        return
-      }
-
-      logger.success(`${sites.length} registered sites:`)
-      console.log()
-      for (const site of sites) {
-        const statusColor = site.syncStatus === 'synced'
-          ? '\x1B[32m'
-          : site.syncStatus === 'syncing'
-            ? '\x1B[33m'
-            : site.syncStatus === 'error'
-              ? '\x1B[31m'
-              : '\x1B[90m'
-
-        console.log(`  ${site.siteUrl} ${statusColor}(${site.syncStatus || 'pending'})\x1B[0m`)
-
-        if (site.syncProgress.percent > 0 && site.syncProgress.percent < 100) {
-          console.log(`    ${progressBar(site.syncProgress.percent, 100, `${site.syncProgress.percent}%`, 20)}`)
-        }
-
-        if (site.oldestDateSynced && site.newestDateSynced) {
-          console.log(`    \x1B[90m${site.oldestDateSynced} → ${site.newestDateSynced}\x1B[0m`)
-        }
-      }
-      return
-    }
-
-    // Local mode: direct GSC API
-    const sites = await driver.sites().catch((e: Error) => {
+    const gscSites = await client.sites().catch((e: Error) => {
       logger.error(`Failed to fetch sites: ${e.message}`)
       process.exit(1)
     })
+
+    const sites = gscSites
+      .filter(s => s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser')
+      .map(s => ({
+        siteUrl: s.siteUrl!,
+        permissionLevel: s.permissionLevel || 'unknown',
+      }))
 
     if (args.json) {
       console.log(JSON.stringify(sites, null, 2))

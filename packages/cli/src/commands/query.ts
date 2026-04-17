@@ -1,15 +1,15 @@
-import type { TableName } from 'gscdump/analytics'
-import type { DriverSite } from 'gscdump/driver'
+import type { TableName } from 'gscdump/analytics/contracts'
 import type { BuilderState, Column, Dimension } from 'gscdump/query'
 import fs from 'node:fs/promises'
 import process from 'node:process'
 import { cancel, isCancel, multiselect, select, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { allTables, inferTable } from 'gscdump/analytics'
+import { googleSearchConsole } from 'gscdump'
+import { allTables, inferTable } from 'gscdump/analytics/schema'
 import { between, country, date as dateCol, device, gsc, page, query as queryCol, searchAppearance } from 'gscdump/query'
 import { createAnalyticsHarness } from '../analytics'
+import { getAuth } from '../auth'
 import { loadConfig } from '../config'
-import { getDriver } from '../driver'
 import { exportToCSV, logger } from '../utils'
 
 const DIMENSIONS = ['page', 'query', 'date', 'country', 'device', 'searchAppearance'] as const
@@ -24,7 +24,22 @@ const DIM_COLUMNS: Record<DimensionName, Column<Dimension>> = {
   searchAppearance,
 }
 
-async function resolveSiteUrl(sites: DriverSite[], target?: string): Promise<string> {
+interface GscSite {
+  siteUrl: string
+  permissionLevel: string
+}
+
+async function loadSites(client: ReturnType<typeof googleSearchConsole>): Promise<GscSite[]> {
+  const gscSites = await client.sites().catch((e: Error) => {
+    logger.error(`Failed to fetch sites: ${e.message}`)
+    process.exit(1)
+  })
+  return gscSites
+    .filter(s => s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser')
+    .map(s => ({ siteUrl: s.siteUrl!, permissionLevel: s.permissionLevel || 'unknown' }))
+}
+
+async function resolveSiteUrl(sites: GscSite[], target?: string): Promise<string> {
   if (target) {
     const match = sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
     if (match)
@@ -42,6 +57,43 @@ async function resolveSiteUrl(sites: DriverSite[], target?: string): Promise<str
     process.exit(0)
   }
   return selected as string
+}
+
+async function runLiveQuery(
+  client: ReturnType<typeof googleSearchConsole>,
+  siteUrl: string,
+  opts: { startDate: string, endDate: string, dimensions: string[], rowLimit: number },
+): Promise<{ rows: Record<string, unknown>[] }> {
+  const allRows: Record<string, unknown>[] = []
+  let startRow = 0
+
+  while (true) {
+    const response = await client._rawQuery(siteUrl, {
+      startDate: opts.startDate,
+      endDate: opts.endDate,
+      dimensions: opts.dimensions,
+      rowLimit: opts.rowLimit,
+      startRow,
+    } as any)
+    const rows = (response.rows || []).map((row) => {
+      const result: Record<string, unknown> = {
+        clicks: row.clicks ?? 0,
+        impressions: row.impressions ?? 0,
+        ctr: row.ctr ?? 0,
+        position: row.position ?? 0,
+      }
+      opts.dimensions.forEach((dim, i) => {
+        result[dim] = row.keys?.[i]
+      })
+      return result
+    })
+    allRows.push(...rows)
+    if (rows.length < opts.rowLimit)
+      break
+    startRow += rows.length
+  }
+
+  return { rows: allRows }
 }
 
 export const queryCommand = defineCommand({
@@ -130,21 +182,19 @@ export const queryCommand = defineCommand({
     const rowLimit = Number.parseInt(String(args.limit), 10)
     const format = String(args.format) as 'json' | 'csv'
 
-    const driver = await getDriver({ interactive: Boolean(args.interactive) })
-    const sites = await driver.sites().catch((e: Error) => {
-      logger.error(`Failed to fetch sites: ${e.message}`)
-      process.exit(1)
-    })
+    const auth = await getAuth({ interactive: Boolean(args.interactive), config })
+    const client = googleSearchConsole(auth)
+    const sites = await loadSites(client)
     if (sites.length === 0) {
       logger.error('No sites found')
       process.exit(1)
     }
     const siteUrl = await resolveSiteUrl(sites, String(args.site || config.defaultSite || ''))
 
-    if (args.live || config.mode === 'cloud') {
+    if (args.live) {
       if (!args.quiet)
         logger.info(`Querying ${siteUrl} via live GSC API...`)
-      const result = await driver.query(siteUrl, {
+      const result = await runLiveQuery(client, siteUrl, {
         startDate,
         endDate,
         dimensions: dimNames,
@@ -174,6 +224,7 @@ export const queryCommand = defineCommand({
     const state = buildLocalState(dimNames, startDate, endDate, rowLimit)
     const harness = createAnalyticsHarness(config)
     const table = inferTable(dimNames)
+    await assertRangeCovered(harness, siteUrl, table, startDate, endDate)
     const result = await harness.engine.query(
       { userId: harness.userId, siteId: harness.siteIdFor(siteUrl), table },
       state,
@@ -268,6 +319,33 @@ function buildLocalState(
     .getState()
 }
 
+async function assertRangeCovered(
+  harness: ReturnType<typeof createAnalyticsHarness>,
+  siteUrl: string,
+  table: TableName,
+  startDate: string,
+  endDate: string,
+): Promise<void> {
+  const watermarks = await harness.engine.getWatermarks({
+    userId: harness.userId,
+    siteId: harness.siteIdFor(siteUrl),
+    table,
+  })
+  const wm = watermarks[0]
+  if (!wm) {
+    logger.error(`No data synced for ${siteUrl} / ${table}. Run \`gscdump sync\` first, or pass --live.`)
+    process.exit(1)
+  }
+  if (endDate > wm.newestDateSynced) {
+    logger.error(`Requested end=${endDate} is newer than last sync (${wm.newestDateSynced}). Run \`gscdump sync\` first, or pass --live.`)
+    process.exit(1)
+  }
+  if (startDate < wm.oldestDateSynced) {
+    logger.error(`Requested start=${startDate} is older than first sync (${wm.oldestDateSynced}). Run \`gscdump sync --start=${startDate}\` first, or pass --live.`)
+    process.exit(1)
+  }
+}
+
 async function runRawSqlMode(opts: {
   sql: string
   site: string | undefined
@@ -276,20 +354,14 @@ async function runRawSqlMode(opts: {
   quiet: boolean
 }): Promise<void> {
   const config = await loadConfig()
-  if (config.mode === 'cloud') {
-    logger.error('--sql only runs against the local Parquet store; cloud mode is not supported.')
-    process.exit(1)
-  }
   if (!isKnownTable(opts.table)) {
     logger.error(`Unknown table "${opts.table}". Known: ${allTables().join(', ')}`)
     process.exit(1)
   }
 
-  const driver = await getDriver({ interactive: false })
-  const sites = await driver.sites().catch((e: Error) => {
-    logger.error(`Failed to fetch sites: ${e.message}`)
-    process.exit(1)
-  })
+  const auth = await getAuth({ interactive: false, config })
+  const client = googleSearchConsole(auth)
+  const sites = await loadSites(client)
   const siteUrl = await resolveSiteUrl(sites, opts.site || config.defaultSite)
 
   const harness = createAnalyticsHarness(config)

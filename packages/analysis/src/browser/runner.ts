@@ -1,0 +1,95 @@
+/**
+ * Insight runner primitives: a mode-agnostic drizzle handle bound to an
+ * AsyncDuckDBConnection (snapshot buffer, snapshot over httpfs, hot/cold
+ * UNION, parquet-views, engine/manifest — whichever the caller already has
+ * attached), plus scope helpers that produce predicates for multi-tenant /
+ * windowed queries so consumers don't re-implement date math.
+ *
+ * Typed escape hatch via `db.execute(sql\`SELECT ...\`)` — use `sql<Row>\`\``
+ * from drizzle-orm for typed result rows on exotic queries that the builder
+ * can't express cleanly.
+ */
+
+import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm'
+import type { SQL } from 'drizzle-orm'
+
+import type { DuckDBWasmClient, DuckDBWasmDrizzleDatabase } from './drizzle-adapter'
+import type { Schema } from './schema'
+import type { ResolvedWindow } from './window'
+
+import { and, eq, gte, lte } from 'drizzle-orm'
+
+import { createClient, drizzle } from './drizzle-adapter'
+import { schema } from './schema'
+
+export interface InsightRunnerOptions {
+  db: AsyncDuckDB
+  conn: AsyncDuckDBConnection
+  logger?: boolean
+}
+
+export interface InsightRunner {
+  db: DuckDBWasmDrizzleDatabase<Schema>
+  client: Promise<DuckDBWasmClient>
+  close: () => Promise<void>
+}
+
+export async function createInsightRunner(opts: InsightRunnerOptions): Promise<InsightRunner> {
+  const client = await createClient(opts.db, opts.conn)
+  const clientPromise = Promise.resolve(client)
+  const db = drizzle(clientPromise, {
+    schema,
+    logger: opts.logger,
+  })
+
+  return {
+    db,
+    client: clientPromise,
+    close: () => client.close(),
+  }
+}
+
+export interface ScopedRunnerOptions {
+  siteId?: string
+  window?: ResolvedWindow
+}
+
+export interface TableScope {
+  wherePredicates: SQL[]
+  window?: ResolvedWindow
+  siteId?: string
+}
+
+/**
+ * Build a per-table predicate set from {siteId, window}. The returned
+ * `wherePredicates` composes with user-level filters via `mergeScope`.
+ *
+ * Note: the current SCHEMAS don't include `site_id` on any table (snapshots
+ * are already per-site), so `siteId` is a no-op for now — kept in the API
+ * so consumers can add the predicate without an interface change when
+ * multi-site snapshots land.
+ */
+export function scopeFor(
+  table: keyof Schema,
+  opts: ScopedRunnerOptions,
+): TableScope {
+  const t = schema[table] as Record<string, any>
+  const predicates: SQL[] = []
+
+  if (opts.siteId && 'site_id' in t)
+    predicates.push(eq(t.site_id, opts.siteId))
+
+  if (opts.window && 'date' in t) {
+    predicates.push(gte(t.date, opts.window.start))
+    predicates.push(lte(t.date, opts.window.end))
+  }
+
+  return { wherePredicates: predicates, window: opts.window, siteId: opts.siteId }
+}
+
+export function mergeScope(scope: TableScope, ...extra: SQL[]): SQL | undefined {
+  const all = [...scope.wherePredicates, ...extra].filter(Boolean) as SQL[]
+  if (all.length === 0)
+    return undefined
+  return and(...all)
+}

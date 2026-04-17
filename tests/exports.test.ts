@@ -1,19 +1,33 @@
+import { existsSync } from 'node:fs'
+import { readdir, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 // @ts-expect-error untyped
 import yaml from 'js-yaml'
-import { x } from 'tinyexec'
 import { describe, expect, it } from 'vitest'
 import { getPackageExportsManifest } from 'vitest-package-exports'
 
 describe('exports-snapshot', async () => {
-  const packages: { name: string, path: string, private?: boolean }[] = JSON.parse(
-    await x('pnpm', ['ls', '--only-projects', '-r', '--json']).then(r => r.stdout),
+  const packageDirs = await readdir(join(process.cwd(), 'packages'), { withFileTypes: true })
+  const packages = await Promise.all(
+    packageDirs
+      .filter(entry => entry.isDirectory())
+      .map(async (entry) => {
+        const path = join(process.cwd(), 'packages', entry.name)
+        const pkg = JSON.parse(await readFile(join(path, 'package.json'), 'utf8'))
+        return {
+          name: pkg.name as string,
+          path,
+          private: pkg.private as boolean | undefined,
+        }
+      }),
   )
 
   for (const pkg of packages) {
     // skip private packages and CLI (bin-only, calls process.exit on import)
     if (pkg.private || pkg.name === '@gscdump/cli')
       continue
-    it(`${pkg.name}`, async () => {
+    const hasDist = existsSync(join(pkg.path, 'dist', 'index.mjs'))
+    it.skipIf(!hasDist)(`${pkg.name}`, async () => {
       const manifest = await getPackageExportsManifest({
         importMode: 'dist',
         cwd: pkg.path,
@@ -22,5 +36,8 @@ describe('exports-snapshot', async () => {
       await expect(yaml.dump(manifest.exports, { sortKeys: (a, b) => a.localeCompare(b) }))
         .toMatchFileSnapshot(`./exports/${pkg.name.split('/').pop()}.yaml`)
     })
+    if (!hasDist) {
+      console.warn(`[exports-snapshot] skipping ${pkg.name} — no dist/. Run \`pnpm -r run build\` to exercise this test.`)
+    }
   }
 })

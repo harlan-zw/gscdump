@@ -3,121 +3,172 @@ import type {
   EngineOptions,
   GcCtx,
   ManifestEntry,
-  ParquetCodec,
   QueryCtx,
   QueryResult,
   Row,
+  RunSQLOptions,
   StorageEngine,
   TableName,
   WriteCtx,
 } from './storage'
-import { compactDayImpl, compactMonthImpl, enumeratePartitions } from './compaction'
+import { compactOlderThanImpl, enumeratePartitions } from './compaction'
 import { gcOrphansImpl } from './gc'
-import { resolveToSQL, substituteFiles } from './resolver'
-import { inferTable } from './schema'
+import { normalizeUrl } from './normalize'
+import { resolveToSQL } from './resolver'
+import { currentSchemaVersion, inferTable, SCHEMAS } from './schema'
 import { dayPartition, objectKey } from './storage'
 
-const DEFAULT_SHARD_BYTES = 50 * 1024 * 1024
+export const MAX_DAY_BYTES = 100 * 1024 * 1024
+
+const URL_COLUMNS = new Set<string>()
+for (const t of Object.keys(SCHEMAS) as TableName[]) {
+  for (const col of SCHEMAS[t].columns) {
+    if (col.name === 'url')
+      URL_COLUMNS.add(`${t}:url`)
+  }
+}
+
+function normalizeRow(table: TableName, row: Row): Row {
+  if (!URL_COLUMNS.has(`${table}:url`))
+    return row
+  const url = row.url
+  if (typeof url !== 'string')
+    return row
+  const normalized = normalizeUrl(url)
+  if (normalized === url)
+    return row
+  return { ...row, url: normalized }
+}
 
 export function createStorageEngine(opts: EngineOptions): StorageEngine {
   const { dataSource, manifestStore, codec, executor } = opts
-  const shardBytes = opts.shardBytes ?? DEFAULT_SHARD_BYTES
   const defaultNow = opts.now ?? (() => Date.now())
 
   async function writeDay(ctx: WriteCtx, rows: Row[]): Promise<void> {
     if (!ctx.date)
       throw new Error('writeDay requires ctx.date')
+    const date = ctx.date
     const now = (ctx.now ?? defaultNow)()
-    const partition = dayPartition(ctx.date)
+    const partition = dayPartition(date)
 
-    const superseding = await manifestStore.listLive({
-      userId: ctx.userId,
-      siteId: ctx.siteId,
-      table: ctx.table,
-      partitions: [partition],
+    return manifestStore.withLock(
+      { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table, partition },
+      async () => {
+        const superseding = await manifestStore.listLive({
+          userId: ctx.userId,
+          siteId: ctx.siteId,
+          table: ctx.table,
+          partitions: [partition],
+        })
+
+        const normalizedRows = rows.map(r => normalizeRow(ctx.table, r))
+        const key = objectKey(ctx, ctx.table, partition, now)
+        const { bytes: writtenBytes, rowCount } = await codec.writeRows(
+          { table: ctx.table },
+          normalizedRows,
+          key,
+          dataSource,
+        )
+        let bytes = writtenBytes
+
+        if (bytes === 0 && rowCount > 0 && dataSource.head) {
+          const probed = await dataSource.head(key)
+          if (probed)
+            bytes = probed.bytes
+        }
+
+        if (bytes > MAX_DAY_BYTES) {
+          await dataSource.delete([key]).catch(() => {})
+          throw new Error(
+            `writeDay payload ${bytes} bytes exceeds ${MAX_DAY_BYTES} hard ceiling (table=${ctx.table}, key=${key})`,
+          )
+        }
+
+        const entry: ManifestEntry = {
+          userId: ctx.userId,
+          siteId: ctx.siteId,
+          table: ctx.table,
+          partition,
+          objectKey: key,
+          rowCount,
+          bytes,
+          createdAt: now,
+          schemaVersion: currentSchemaVersion(ctx.table),
+        }
+        await manifestStore.registerVersion(entry, superseding)
+        await manifestStore.bumpWatermark(
+          { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table },
+          date,
+          now,
+        )
+      },
+    )
+  }
+
+  async function runSQL(opts: RunSQLOptions): Promise<QueryResult> {
+    opts.signal?.throwIfAborted()
+    const entries = Object.entries(opts.fileSets)
+    const perSet = await Promise.all(
+      entries.map(async ([name, ref]) => {
+        const list = await manifestStore.listLive({
+          userId: opts.ctx.userId,
+          siteId: opts.ctx.siteId,
+          table: ref.table,
+          partitions: ref.partitions,
+        })
+        return [name, list.map(e => e.objectKey)] as const
+      }),
+    )
+
+    opts.signal?.throwIfAborted()
+    const fileKeys: Record<string, string[]> = {}
+    for (const [name, keys] of perSet)
+      fileKeys[name] = keys
+
+    const uniqueKeys = [...new Set(perSet.flatMap(([, keys]) => keys))]
+    let table = opts.table
+    if (!table) {
+      const distinctTables = new Set(entries.map(([, ref]) => ref.table))
+      if (distinctTables.size > 1) {
+        throw new Error(
+          'runSQL requires explicit ctx.table when fileSets reference multiple tables.',
+        )
+      }
+      table = entries[0]?.[1].table
+    }
+    if (!table)
+      throw new Error('runSQL requires at least one fileSet or an explicit table')
+
+    const result = await executor.execute({
+      sql: opts.sql,
+      params: opts.params ?? [],
+      fileKeys,
+      dataSource,
+      table,
+      signal: opts.signal,
     })
 
-    const shards = await splitIntoShards(codec, ctx.table, rows, shardBytes)
-
-    if (shards.length === 1) {
-      const { bytes, rows: shardRows } = shards[0]
-      const key = objectKey(ctx, ctx.table, partition, now)
-      await dataSource.write(key, bytes)
-      const entry: ManifestEntry = {
-        userId: ctx.userId,
-        siteId: ctx.siteId,
-        table: ctx.table,
-        partition,
-        objectKey: key,
-        rowCount: shardRows.length,
-        bytes: bytes.byteLength,
-        createdAt: now,
-      }
-      await manifestStore.registerVersion(entry, superseding)
-      return
-    }
-
-    const newEntries: ManifestEntry[] = []
-    for (let i = 0; i < shards.length; i++) {
-      const { bytes, rows: shardRows } = shards[i]
-      const key = objectKey(ctx, ctx.table, partition, now, i)
-      await dataSource.write(key, bytes)
-      newEntries.push({
-        userId: ctx.userId,
-        siteId: ctx.siteId,
-        table: ctx.table,
-        partition,
-        objectKey: key,
-        rowCount: shardRows.length,
-        bytes: bytes.byteLength,
-        createdAt: now,
-      })
-    }
-    await manifestStore.registerVersions(newEntries, superseding)
+    return { rows: result.rows, sql: result.sql, objectKeys: uniqueKeys }
   }
 
   async function query(ctx: QueryCtx, state: BuilderState): Promise<QueryResult> {
     const table: TableName = ctx.table ?? inferTable(state.dimensions)
     const resolved = resolveToSQL(state, table)
-
-    const liveEntries = await manifestStore.listLive({
-      userId: ctx.userId,
-      siteId: ctx.siteId,
+    return runSQL({
+      ctx: { userId: ctx.userId, siteId: ctx.siteId },
       table,
-      partitions: resolved.partitions,
-    })
-
-    const keys = liveEntries.map(e => e.objectKey)
-    const files = await Promise.all(
-      keys.map(async key => ({ key, bytes: await dataSource.read(key) })),
-    )
-
-    const finalSql = substituteFiles(resolved.sql, keys)
-
-    const rows = await executor.execute({
-      sql: finalSql,
+      fileSets: { FILES: { table, partitions: resolved.partitions } },
+      sql: resolved.sql,
       params: resolved.params,
-      files,
-      table,
+      signal: ctx.signal,
     })
-
-    return { rows, sql: finalSql, objectKeys: keys }
   }
 
-  async function compactDay(ctx: WriteCtx, shards: ManifestEntry[]): Promise<void> {
-    return compactDayImpl(
+  async function compactOlderThan(ctx: WriteCtx, days: number): Promise<void> {
+    return compactOlderThanImpl(
       { dataSource, manifestStore, codec },
       ctx,
-      shards,
-      (ctx.now ?? defaultNow)(),
-    )
-  }
-
-  async function compactMonth(ctx: WriteCtx, month: string): Promise<void> {
-    return compactMonthImpl(
-      { dataSource, manifestStore, codec },
-      ctx,
-      month,
+      days,
       (ctx.now ?? defaultNow)(),
     )
   }
@@ -131,47 +182,19 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     )
   }
 
-  return { writeDay, query, compactDay, compactMonth, gcOrphans }
+  return {
+    writeDay,
+    query,
+    runSQL,
+    compactOlderThan,
+    gcOrphans,
+    listLive: filter => manifestStore.listLive(filter),
+    listAll: filter => manifestStore.listAll(filter),
+    getWatermarks: filter => manifestStore.getWatermarks(filter),
+    getSyncStates: filter => manifestStore.getSyncStates(filter),
+    setSyncState: (scope, state, detail) => manifestStore.setSyncState(scope, state, detail),
+    readObject: key => dataSource.read(key),
+  }
 }
 
 export { enumeratePartitions }
-
-interface Shard {
-  rows: Row[]
-  bytes: Uint8Array
-}
-
-async function splitIntoShards(
-  codec: ParquetCodec,
-  table: TableName,
-  rows: Row[],
-  maxBytes: number,
-): Promise<Shard[]> {
-  if (rows.length === 0) {
-    const bytes = await codec.encode(table, [])
-    return [{ rows: [], bytes }]
-  }
-
-  const single = await codec.encode(table, rows)
-  if (single.byteLength <= maxBytes)
-    return [{ rows, bytes: single }]
-
-  const shards: Shard[] = []
-  let candidate = rows
-  let remaining: Row[] = []
-
-  while (candidate.length > 0) {
-    const bytes = await codec.encode(table, candidate)
-    if (bytes.byteLength <= maxBytes || candidate.length === 1) {
-      shards.push({ rows: candidate, bytes })
-      candidate = remaining
-      remaining = []
-      continue
-    }
-    const mid = Math.ceil(candidate.length / 2)
-    remaining = candidate.slice(mid).concat(remaining)
-    candidate = candidate.slice(0, mid)
-  }
-
-  return shards
-}

@@ -1,6 +1,6 @@
 import type { BuilderState } from '../../src/query/types'
 import { describe, expect, it } from 'vitest'
-import { FILES_PLACEHOLDER, resolveToSQL, substituteFiles } from '../../src/analytics'
+import { FILES_PLACEHOLDER, resolveToSQL, substituteNamedFiles } from '../../src/analytics'
 
 function state(partial: Partial<BuilderState>): BuilderState {
   return {
@@ -44,7 +44,7 @@ describe('resolveToSQL', () => {
       } as any,
     }), 'pages')
     expect(r.sql).toMatch(/HAVING/)
-    expect(r.sql).toMatch(/SUM\(clicks\)\s*>=\s*\?/)
+    expect(r.sql).toMatch(/SUM\(clicks\)\s*AS\s+DOUBLE\)\s*>=\s*\?/)
     expect(r.params).toContain(100)
   })
 
@@ -66,20 +66,26 @@ describe('resolveToSQL', () => {
   })
 })
 
-describe('substituteFiles', () => {
-  it('replaces the placeholder with a SQL string-list', () => {
+describe('substituteNamedFiles', () => {
+  it('replaces the FILES placeholder with a SQL string-list', () => {
     const sql = `SELECT * FROM read_parquet(${FILES_PLACEHOLDER})`
-    const out = substituteFiles(sql, ['a.parquet', 'b.parquet'])
+    const out = substituteNamedFiles(sql, { FILES: ['a.parquet', 'b.parquet'] })
     expect(out).toBe('SELECT * FROM read_parquet([\'a.parquet\', \'b.parquet\'])')
   })
 
   it('escapes single quotes in keys', () => {
-    const out = substituteFiles(`read_parquet(${FILES_PLACEHOLDER})`, ['a\'b.parquet'])
+    const out = substituteNamedFiles(`read_parquet(${FILES_PLACEHOLDER})`, { FILES: ['a\'b.parquet'] })
     expect(out).toBe('read_parquet([\'a\'\'b.parquet\'])')
   })
 
   it('emits an empty list when no keys', () => {
-    const out = substituteFiles(`read_parquet(${FILES_PLACEHOLDER})`, [])
+    const out = substituteNamedFiles(`read_parquet(${FILES_PLACEHOLDER})`, { FILES: [] })
     expect(out).toBe('read_parquet([])')
+  })
+
+  it('supports multiple named placeholders', () => {
+    const sql = 'SELECT a FROM read_parquet({{FILES}}) UNION SELECT b FROM read_parquet({{FILES_PREV}})'
+    const out = substituteNamedFiles(sql, { FILES: ['a.parquet'], FILES_PREV: ['b.parquet'] })
+    expect(out).toBe('SELECT a FROM read_parquet([\'a.parquet\']) UNION SELECT b FROM read_parquet([\'b.parquet\'])')
   })
 })

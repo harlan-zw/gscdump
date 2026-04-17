@@ -13,8 +13,6 @@ export function getConfigDir(): string {
 }
 
 export interface GscdumpConfig {
-  mode?: 'cloud' | 'local'
-  cloudUrl?: string
   clientId?: string
   clientSecret?: string
   defaultSite?: string
@@ -23,8 +21,6 @@ export interface GscdumpConfig {
   defaultDb?: string
   dataDir?: string
 }
-
-export const DEFAULT_CLOUD_URL = 'https://gscdump.com'
 
 export function defaultDataDir(): string {
   return path.join(os.homedir(), '.gscdump', 'data')

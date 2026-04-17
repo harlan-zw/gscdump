@@ -1,0 +1,80 @@
+{
+  "name": "@gscdump/analysis",
+  "type": "module",
+  "version": "0.4.0",
+  "description": "GSC analyzers — striking-distance, opportunity, movers, decay, brand, clustering, concentration, seasonality. Pure row-based + DuckDB-native.",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/analysis#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/analysis"
+  },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./duckdb": {
+      "types": "./dist/duckdb/index.d.mts",
+      "import": "./dist/duckdb/index.mjs"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.mts",
+      "import": "./dist/browser/index.mjs"
+    },
+    "./sqlite": {
+      "types": "./dist/sqlite/index.d.mts",
+      "import": "./dist/sqlite/index.mjs"
+    },
+    "./query": {
+      "types": "./dist/query/index.d.mts",
+      "import": "./dist/query/index.mjs"
+    },
+    "./window": {
+      "types": "./dist/window/index.d.mts",
+      "import": "./dist/window/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "obuild",
+    "dev": "obuild --stub",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "prepack": "pnpm run build"
+  },
+  "peerDependencies": {
+    "@duckdb/duckdb-wasm": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@duckdb/duckdb-wasm": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "drizzle-orm": "catalog:",
+    "gscdump": "workspace:*"
+  },
+  "devDependencies": {
+    "@duckdb/duckdb-wasm": "catalog:",
+    "vitest": "catalog:dev-test"
+  }
+}

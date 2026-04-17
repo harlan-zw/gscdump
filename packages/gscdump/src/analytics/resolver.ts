@@ -15,9 +15,12 @@ export interface ResolvedQuery {
 export const FILES_PLACEHOLDER = '{{FILES}}'
 
 const METRIC_NAMES: Metric[] = ['clicks', 'impressions', 'ctr', 'position']
+// DuckDB SUM over INT32 returns BIGINT, which loses through the RPC+JSON
+// boundary (BigInt isn't JSON-safe; Workers RPC delivers null). Cast
+// everything JSON-safe at the SQL layer so consumers get plain numbers.
 const METRIC_EXPR: Record<Metric, string> = {
-  clicks: 'SUM(clicks)',
-  impressions: 'SUM(impressions)',
+  clicks: 'CAST(SUM(clicks) AS DOUBLE)',
+  impressions: 'CAST(SUM(impressions) AS DOUBLE)',
   ctr: 'CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0)',
   position: 'SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1',
 }
@@ -217,14 +220,9 @@ function fileList(keys: string[]): string {
     : `[${keys.map(k => `'${k.replace(/'/g, '\'\'')}'`).join(', ')}]`
 }
 
-export function substituteFiles(sql: string, keys: string[]): string {
-  return sql.replace(FILES_PLACEHOLDER, fileList(keys))
-}
-
 /**
- * Substitute multiple named file-list placeholders.
- * Keys in `sets` are used as `{{KEY}}` placeholders in the SQL
- * (e.g. `{{FILES}}`, `{{FILES_PREV}}`).
+ * Substitute named file-list placeholders in SQL.
+ * Keys in `sets` become `{{KEY}}` placeholders (e.g. `{{FILES}}`, `{{FILES_PREV}}`).
  */
 export function substituteNamedFiles(sql: string, sets: Record<string, string[]>): string {
   let out = sql

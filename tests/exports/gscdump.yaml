@@ -1,7 +1,7 @@
 .:
-  analyzeError: function
   batchInspectUrls: function
   batchRequestIndexing: function
+  classifyError: function
   createAuth: function
   createFetch: function
   deleteSitemap: function
@@ -10,78 +10,80 @@
   fetchSites: function
   fetchSitesWithSitemaps: function
   formatErrorForCli: function
-  getErrorCode: function
-  getErrorMessage: function
   getIndexingMetadata: function
-  getRetryAfter: function
   googleSearchConsole: function
   GSC_QUOTAS: object
   gscdumpApi: function
   inspectUrl: function
-  isAuthError: function
-  isQuotaError: function
-  isRateLimitError: function
   requestIndexing: function
+  storageError: function
   submitSitemap: function
-./analysis:
-  analyzeBrandSegmentation: function
-  analyzeClustering: function
-  analyzeConcentration: function
-  analyzeDecay: function
-  analyzeKeywordConcentration: function
-  analyzeMovers: function
-  analyzeOpportunity: function
-  analyzePageConcentration: function
-  analyzeSeasonality: function
-  analyzeStrikingDistance: function
-  createSorter: function
-  fetchBrandSegmentation: function
-  fetchClustering: function
-  fetchDecay: function
-  fetchKeywordConcentration: function
-  fetchMovers: function
-  fetchOpportunity: function
-  fetchPageConcentration: function
-  fetchSeasonality: function
-  fetchStrikingDistance: function
-  num: function
-  queryAnalytics: function
-  queryComparison: function
 ./analytics:
   allTables: function
-  AnalyzerUnsupportedError: function
-  analyzeWithDuckDB: function
+  bindLiterals: function
+  canonicalEmptyParquetSchema: function
   createDuckDBCodec: function
   createDuckDBExecutor: function
-  createInMemoryDataSource: function
-  createInMemoryManifestStore: function
-  createJsonCodec: function
+  createRowAccumulator: function
   createStorageEngine: function
-  createUnionExecutor: function
+  currentSchemaVersion: function
   dayPartition: function
   dimensionToColumn: function
+  encodeSiteId: function
   enumeratePartitions: function
   FILES_PLACEHOLDER: string
+  formatLiteral: function
   inferTable: function
-  monthPartition: function
+  MAX_DAY_BYTES: number
   normalizeUrl: function
-  objectKey: function
   resolveToSQL: function
-  schemaFor: function
   SCHEMAS: object
-  substituteFiles: function
-  tenantPrefix: function
+  substituteNamedFiles: function
+  toPath: function
+  toSumPosition: function
+  transformGscRow: function
+./analytics/contracts: {}
 ./analytics/filesystem:
   createFilesystemDataSource: function
   createFilesystemManifestStore: function
   filesystemStats: function
+./analytics/http:
+  createHttpDataSource: function
+  createHttpManifestStore: function
+./analytics/hyparquet:
+  createHyparquetCodec: function
+  decodeParquetToRows: function
+  encodeRowsToParquet: function
+./analytics/ingest:
+  createRowAccumulator: function
+  toPath: function
+  toSumPosition: function
+  transformGscRow: function
 ./analytics/node:
   createNodeDuckDBHandle: function
   resetNodeDuckDB: function
-./driver:
-  createCloudDriver: function
-  createLocalDriver: function
-  isCloudDriver: function
+./analytics/normalize:
+  normalizeUrl: function
+./analytics/planner:
+  enumeratePartitions: function
+  FILES_PLACEHOLDER: string
+  resolveToSQL: function
+  substituteNamedFiles: function
+./analytics/r2:
+  createR2DataSource: function
+./analytics/schema:
+  allTables: function
+  currentSchemaVersion: function
+  dimensionToColumn: function
+  inferTable: function
+  schemaFor: function
+  SCHEMAS: object
+./analytics/sql:
+  bindLiterals: function
+  formatLiteral: function
+./analytics/tenant:
+  encodeSiteId: function
+./driver: {}
 ./query:
   and: function
   between: function
@@ -125,3 +127,7 @@
   SearchTypes: object
   today: function
   topLevel: function
+./shared: {}
+./shared/analysis: {}
+./shared/driver: {}
+./shared/snapshot: {}

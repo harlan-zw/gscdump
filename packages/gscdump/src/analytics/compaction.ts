@@ -3,12 +3,13 @@ import type {
   ManifestEntry,
   ManifestStore,
   ParquetCodec,
-  Row,
   WriteCtx,
 } from './storage'
+import { currentSchemaVersion } from './schema'
 import { dayPartition, monthPartition, objectKey } from './storage'
 
-const MONTH_RE = /^\d{4}-\d{2}$/
+const DAILY_PARTITION_RE = /^daily\/(\d{4}-\d{2}-\d{2})$/
+const MONTHLY_PARTITION_RE = /^monthly\/(\d{4}-\d{2})$/
 
 export interface CompactionDeps {
   dataSource: DataSource
@@ -16,90 +17,77 @@ export interface CompactionDeps {
   codec: ParquetCodec
 }
 
-export async function compactDayImpl(
+export async function compactOlderThanImpl(
   deps: CompactionDeps,
   ctx: WriteCtx,
-  shards: ManifestEntry[],
+  days: number,
   now: number,
 ): Promise<void> {
-  if (shards.length === 0)
-    return
-  if (shards.length === 1)
-    return
-
-  const partitions = new Set(shards.map(s => s.partition))
-  if (partitions.size !== 1)
-    throw new Error(`compactDay requires shards from one partition, got ${partitions.size}`)
-  const partition = shards[0].partition
-
-  const allRows: Row[] = []
-  for (const shard of shards) {
-    const bytes = await deps.dataSource.read(shard.objectKey)
-    const decoded = await deps.codec.decode(bytes, ctx.table)
-    for (const r of decoded) allRows.push(r)
-  }
-
-  const merged = await deps.codec.encode(ctx.table, allRows)
-  const key = objectKey(ctx, ctx.table, partition, now)
-  await deps.dataSource.write(key, merged)
-
-  const entry: ManifestEntry = {
-    userId: ctx.userId,
-    siteId: ctx.siteId,
-    table: ctx.table,
-    partition,
-    objectKey: key,
-    rowCount: allRows.length,
-    bytes: merged.byteLength,
-    createdAt: now,
-  }
-  await deps.manifestStore.registerVersion(entry, shards)
-}
-
-export async function compactMonthImpl(
-  deps: CompactionDeps,
-  ctx: WriteCtx,
-  month: string,
-  now: number,
-): Promise<void> {
-  if (!MONTH_RE.test(month))
-    throw new Error(`compactMonth expects YYYY-MM, got ${month}`)
-
-  const dailyPartitions = daysInMonth(month).map(dayPartition)
-  const existingMonthly = monthPartition(month)
+  const cutoff = now - days * 86_400_000
 
   const candidates = await deps.manifestStore.listLive({
     userId: ctx.userId,
     siteId: ctx.siteId,
     table: ctx.table,
-    partitions: [...dailyPartitions, existingMonthly],
   })
 
-  if (candidates.length === 0)
-    return
-
-  const allRows: Row[] = []
+  const byMonth = new Map<string, ManifestEntry[]>()
   for (const entry of candidates) {
-    const bytes = await deps.dataSource.read(entry.objectKey)
-    const decoded = await deps.codec.decode(bytes, ctx.table)
-    for (const r of decoded) allRows.push(r)
+    const dailyMatch = entry.partition.match(DAILY_PARTITION_RE)
+    if (dailyMatch) {
+      const date = dailyMatch[1]
+      const dayStart = Date.parse(`${date}T00:00:00Z`)
+      if (dayStart >= cutoff)
+        continue
+      const month = date.slice(0, 7)
+      if (!byMonth.has(month))
+        byMonth.set(month, [])
+      byMonth.get(month)!.push(entry)
+      continue
+    }
+    const monthlyMatch = entry.partition.match(MONTHLY_PARTITION_RE)
+    if (monthlyMatch) {
+      const month = monthlyMatch[1]
+      const monthEnd = monthEndMs(month)
+      if (monthEnd >= cutoff)
+        continue
+      if (!byMonth.has(month))
+        byMonth.set(month, [])
+      byMonth.get(month)!.push(entry)
+    }
   }
 
-  const merged = await deps.codec.encode(ctx.table, allRows)
-  const key = objectKey(ctx, ctx.table, existingMonthly, now)
-  await deps.dataSource.write(key, merged)
+  for (const [month, entries] of byMonth) {
+    if (entries.length === 1 && entries[0].partition === monthPartition(month))
+      continue
 
-  const entry: ManifestEntry = {
-    userId: ctx.userId,
-    siteId: ctx.siteId,
-    table: ctx.table,
-    partition: existingMonthly,
-    objectKey: key,
-    rowCount: allRows.length,
-    bytes: merged.byteLength,
-    createdAt: now,
+    const partition = monthPartition(month)
+    await deps.manifestStore.withLock(
+      { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table, partition },
+      async () => {
+        const key = objectKey(ctx, ctx.table, partition, now)
+        const { bytes, rowCount } = await deps.codec.compactRows(
+          { table: ctx.table },
+          entries.map(e => e.objectKey),
+          key,
+          deps.dataSource,
+        )
+
+        const newEntry: ManifestEntry = {
+          userId: ctx.userId,
+          siteId: ctx.siteId,
+          table: ctx.table,
+          partition,
+          objectKey: key,
+          rowCount,
+          bytes,
+          createdAt: now,
+          schemaVersion: currentSchemaVersion(ctx.table),
+        }
+        await deps.manifestStore.registerVersion(newEntry, entries)
+      },
+    )
   }
-  await deps.manifestStore.registerVersion(entry, candidates)
 }
 
 export function enumeratePartitions(startDate: string, endDate: string): string[] {
@@ -128,12 +116,7 @@ export function enumeratePartitions(startDate: string, endDate: string): string[
   return out
 }
 
-function daysInMonth(month: string): string[] {
+function monthEndMs(month: string): number {
   const [y, m] = month.split('-').map(Number)
-  const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
-  const out: string[] = []
-  for (let d = 1; d <= last; d++) {
-    out.push(`${month}-${String(d).padStart(2, '0')}`)
-  }
-  return out
+  return Date.UTC(y, m, 0, 23, 59, 59, 999)
 }

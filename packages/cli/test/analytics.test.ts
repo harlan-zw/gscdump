@@ -1,8 +1,8 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { encodeSiteId } from 'gscdump/analytics/tenant'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { encodeSiteId } from '../src/analytics'
 import { defaultDataDir, resolveDataDir } from '../src/config'
 
 describe('encodeSiteId', () => {

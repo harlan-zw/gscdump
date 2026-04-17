@@ -3,9 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  createJsonCodec,
   createStorageEngine,
-  createUnionExecutor,
   dayPartition,
 } from '../../src/analytics'
 import {
@@ -13,6 +11,7 @@ import {
   createFilesystemManifestStore,
   filesystemStats,
 } from '../../src/analytics/adapters/filesystem'
+import { createJsonCodec, createUnionExecutor } from '../helpers/in-memory'
 
 describe('filesystemDataSource', () => {
   let dir: string
@@ -113,6 +112,121 @@ describe('filesystemManifestStore', () => {
     const live = await store.listLive({ userId: 'u1' })
     expect(live).toHaveLength(10)
   })
+
+  it('tracks sync watermarks per (userId, siteId, table)', async () => {
+    const store = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
+
+    // First bump seeds both bounds
+    await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'pages' }, '2026-03-15', 1000)
+
+    // Newer date extends the upper bound, preserves lower bound
+    await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'pages' }, '2026-03-20', 2000)
+
+    // Older date extends the lower bound, preserves upper bound
+    await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'pages' }, '2026-03-10', 3000)
+
+    // An out-of-order older timestamp must not regress lastSyncAt
+    await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'pages' }, '2026-03-12', 500)
+
+    // Different table keeps its own watermark
+    await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'keywords' }, '2026-04-01', 4000)
+
+    const ws = await store.getWatermarks({ userId: 'u1' })
+    expect(ws).toHaveLength(2)
+    const pages = ws.find(w => w.table === 'pages')!
+    expect(pages.oldestDateSynced).toBe('2026-03-10')
+    expect(pages.newestDateSynced).toBe('2026-03-20')
+    expect(pages.lastSyncAt).toBe(3000)
+
+    const scoped = await store.getWatermarks({ userId: 'u1', table: 'keywords' })
+    expect(scoped).toHaveLength(1)
+    expect(scoped[0].newestDateSynced).toBe('2026-04-01')
+  })
+
+  it('persists watermarks across manifest reloads', async () => {
+    const path = join(dir, 'manifest.json')
+    const a = createFilesystemManifestStore({ path })
+    await a.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'pages' }, '2026-04-10', 1000)
+
+    const b = createFilesystemManifestStore({ path })
+    const ws = await b.getWatermarks({ userId: 'u1' })
+    expect(ws).toHaveLength(1)
+    expect(ws[0].newestDateSynced).toBe('2026-04-10')
+  })
+
+  it('tracks sync state transitions per (userId, siteId, table, date)', async () => {
+    const store = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
+    const scope = { userId: 'u1', siteId: 's1', table: 'pages' as const, date: '2026-04-10' }
+
+    await store.setSyncState(scope, 'inflight', { at: 1000 })
+    let state = (await store.getSyncStates({ userId: 'u1' }))[0]
+    expect(state.state).toBe('inflight')
+    expect(state.attempts).toBe(1)
+
+    await store.setSyncState(scope, 'failed', { at: 2000, error: 'boom' })
+    state = (await store.getSyncStates({ userId: 'u1' }))[0]
+    expect(state.state).toBe('failed')
+    expect(state.error).toBe('boom')
+    expect(state.attempts).toBe(1)
+
+    // Re-entering inflight bumps attempts
+    await store.setSyncState(scope, 'inflight', { at: 3000 })
+    state = (await store.getSyncStates({ userId: 'u1' }))[0]
+    expect(state.state).toBe('inflight')
+    expect(state.attempts).toBe(2)
+    // failed-state error is preserved while we're mid-retry
+    expect(state.error).toBe('boom')
+
+    // done clears error
+    await store.setSyncState(scope, 'done', { at: 4000 })
+    state = (await store.getSyncStates({ userId: 'u1' }))[0]
+    expect(state.state).toBe('done')
+    expect(state.error).toBeUndefined()
+    expect(state.attempts).toBe(2)
+  })
+
+  it('withLock serializes two independent store instances on the same scope', async () => {
+    const path = join(dir, 'manifest.json')
+    const a = createFilesystemManifestStore({ path })
+    const b = createFilesystemManifestStore({ path })
+    const scope = { userId: 'u1', siteId: 's1', table: 'pages' as const, partition: 'daily/2026-04-10' }
+
+    const log: string[] = []
+    let aEntered = (): void => {}
+    const aEnteredSignal = new Promise<void>((r) => {
+      aEntered = r
+    })
+
+    const first = a.withLock(scope, async () => {
+      log.push('a:enter')
+      aEntered()
+      await new Promise(r => setTimeout(r, 80))
+      log.push('a:leave')
+    })
+
+    await aEnteredSignal
+
+    const second = b.withLock(scope, async () => {
+      log.push('b:enter')
+    })
+
+    await Promise.all([first, second])
+    expect(log).toEqual(['a:enter', 'a:leave', 'b:enter'])
+  })
+
+  it('filters sync states by state kind and table', async () => {
+    const store = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
+    await store.setSyncState({ userId: 'u1', siteId: 's1', table: 'pages', date: '2026-04-10' }, 'done', { at: 1 })
+    await store.setSyncState({ userId: 'u1', siteId: 's1', table: 'pages', date: '2026-04-11' }, 'failed', { at: 2, error: 'x' })
+    await store.setSyncState({ userId: 'u1', siteId: 's1', table: 'keywords', date: '2026-04-10' }, 'done', { at: 3 })
+
+    const done = await store.getSyncStates({ userId: 'u1', state: 'done' })
+    expect(done).toHaveLength(2)
+
+    const failedPages = await store.getSyncStates({ userId: 'u1', table: 'pages', state: 'failed' })
+    expect(failedPages).toHaveLength(1)
+    expect(failedPages[0].date).toBe('2026-04-11')
+  })
 })
 
 describe('integration: filesystem + JSON codec (no DuckDB)', () => {
@@ -124,7 +238,7 @@ describe('integration: filesystem + JSON codec (no DuckDB)', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  it('happy path: writeDay → query → compactDay → query → compactMonth → query', async () => {
+  it('happy path: writeDay → query → compactOlderThan → query', async () => {
     const codec = createJsonCodec()
     const dataSource = createFilesystemDataSource({ rootDir: dir })
     const manifestStore = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
@@ -150,25 +264,10 @@ describe('integration: filesystem + JSON codec (no DuckDB)', () => {
     expect(q1.rows).toHaveLength(3)
     expect(q1.objectKeys).toHaveLength(3)
 
-    // Compact one day (noop for single shards)
-    const dayEntries = await manifestStore.listLive({
-      userId: 'u1',
-      siteId: 's1',
-      table: 'pages',
-      partitions: [dayPartition('2026-03-15')],
-    })
-    await engine.compactDay(
-      { userId: 'u1', siteId: 's1', table: 'pages', date: '2026-03-15' },
-      dayEntries,
-    )
-
-    const q2 = await engine.query({ userId: 'u1', siteId: 's1' }, state)
-    expect(q2.rows).toHaveLength(3)
-
-    // Compact the whole month
-    await engine.compactMonth(
+    // Roll March dailies into the monthly partition (days=1 so any past day qualifies)
+    await engine.compactOlderThan(
       { userId: 'u1', siteId: 's1', table: 'pages' },
-      '2026-03',
+      1,
     )
 
     const q3 = await engine.query({ userId: 'u1', siteId: 's1' }, state)

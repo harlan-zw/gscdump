@@ -1,11 +1,9 @@
-import type { ManifestEntry, TableName } from 'gscdump/analytics'
-import process from 'node:process'
+import type { ManifestEntry, TableName, Watermark } from 'gscdump/analytics/contracts'
 import { defineCommand } from 'citty'
-import { allTables } from 'gscdump/analytics'
 import { filesystemStats } from 'gscdump/analytics/filesystem'
+import { allTables } from 'gscdump/analytics/schema'
 import { createAnalyticsHarness } from '../analytics'
 import { loadConfig } from '../config'
-import { logger } from '../utils'
 
 export const statsCommand = defineCommand({
   meta: {
@@ -18,19 +16,20 @@ export const statsCommand = defineCommand({
       default: false,
       description: 'Output as JSON',
     },
+    site: {
+      type: 'string',
+      description: 'Limit to one site URL (sc-domain:example.com, https://example.com/, ...)',
+    },
   },
   async run({ args }) {
     const config = await loadConfig()
-    if (config.mode === 'cloud') {
-      logger.error('stats queries the local Parquet store; cloud mode is not supported.')
-      process.exit(1)
-    }
-
     const harness = createAnalyticsHarness(config)
+    const siteId = args.site ? harness.siteIdFor(args.site) : undefined
     const perTable = await Promise.all(
       allTables().map(async (table) => {
-        const all = await harness.manifestStore.listAll({
+        const all = await harness.engine.listAll({
           userId: harness.userId,
+          siteId,
           table: table as TableName,
         })
         const live = all.filter(e => e.retiredAt === undefined)
@@ -39,6 +38,7 @@ export const statsCommand = defineCommand({
       }),
     )
 
+    const watermarks = await harness.engine.getWatermarks({ userId: harness.userId, siteId })
     const disk = await filesystemStats(harness.dataDir).catch(() => ({ files: 0, bytes: 0 }))
 
     if (args.json) {
@@ -52,6 +52,14 @@ export const statsCommand = defineCommand({
           liveBytes: sumBytes(live),
           retiredFiles: retired.length,
           retiredBytes: sumBytes(retired),
+          watermarks: watermarks
+            .filter(w => w.table === table)
+            .map(w => ({
+              siteId: w.siteId ?? null,
+              newestDateSynced: w.newestDateSynced,
+              oldestDateSynced: w.oldestDateSynced,
+              lastSyncAt: w.lastSyncAt,
+            })),
         })),
       }
       console.log(JSON.stringify(payload, null, 2))
@@ -82,9 +90,38 @@ export const statsCommand = defineCommand({
     console.log(`  \x1B[1mTotal:\x1B[0m ${totalFiles} files, ${totalRows.toLocaleString()} rows, ${formatBytes(totalBytes)} live`)
     if (totalRetiredFiles > 0)
       console.log(`  \x1B[90mRetired: ${totalRetiredFiles} files, ${formatBytes(totalRetiredBytes)} awaiting GC\x1B[0m`)
+
+    if (watermarks.length > 0) {
+      console.log()
+      console.log(`  \x1B[1mSync watermarks:\x1B[0m`)
+      for (const w of sortWatermarks(watermarks)) {
+        const scope = w.siteId ? `${w.table}@${w.siteId}` : w.table
+        console.log(`  ${scope.padEnd(24)} \x1B[36m${w.oldestDateSynced}\x1B[0m → \x1B[36m${w.newestDateSynced}\x1B[0m  \x1B[90m(last ${formatTimestamp(w.lastSyncAt)})\x1B[0m`)
+      }
+    }
+
     console.log()
   },
 })
+
+function sortWatermarks(ws: Watermark[]): Watermark[] {
+  return [...ws].sort((a, b) => {
+    if (a.table !== b.table)
+      return a.table.localeCompare(b.table)
+    return (a.siteId ?? '').localeCompare(b.siteId ?? '')
+  })
+}
+
+function formatTimestamp(ms: number): string {
+  const delta = Date.now() - ms
+  if (delta < 60_000)
+    return 'just now'
+  if (delta < 3_600_000)
+    return `${Math.floor(delta / 60_000)}m ago`
+  if (delta < 86_400_000)
+    return `${Math.floor(delta / 3_600_000)}h ago`
+  return `${Math.floor(delta / 86_400_000)}d ago`
+}
 
 function sumRows(entries: ManifestEntry[]): number {
   return entries.reduce((acc, e) => acc + e.rowCount, 0)

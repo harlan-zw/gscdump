@@ -12,6 +12,11 @@ export interface TableSchema {
   name: TableName
   columns: ColumnDef[]
   sortKey: string[]
+  /**
+   * Monotonically increasing version number. Tagged onto every manifest entry written for this table.
+   * Bump when columns are added/removed/retyped so readers can detect stale on-disk data and upgrade it.
+   */
+  version: number
 }
 
 const METRIC_COLS: ColumnDef[] = [
@@ -31,15 +36,18 @@ export const SCHEMAS: Record<TableName, TableSchema> = {
       ...METRIC_COLS,
     ],
     sortKey: ['date', 'url'],
+    version: 1,
   },
   keywords: {
     name: 'keywords',
     columns: [
       { name: 'query', type: 'VARCHAR', nullable: false },
+      { name: 'query_canonical', type: 'VARCHAR', nullable: true },
       DATE_COL,
       ...METRIC_COLS,
     ],
     sortKey: ['date', 'query'],
+    version: 2,
   },
   countries: {
     name: 'countries',
@@ -49,6 +57,7 @@ export const SCHEMAS: Record<TableName, TableSchema> = {
       ...METRIC_COLS,
     ],
     sortKey: ['date', 'country'],
+    version: 1,
   },
   devices: {
     name: 'devices',
@@ -58,17 +67,24 @@ export const SCHEMAS: Record<TableName, TableSchema> = {
       ...METRIC_COLS,
     ],
     sortKey: ['date', 'device'],
+    version: 1,
   },
   page_keywords: {
     name: 'page_keywords',
     columns: [
       { name: 'url', type: 'VARCHAR', nullable: false },
       { name: 'query', type: 'VARCHAR', nullable: false },
+      { name: 'query_canonical', type: 'VARCHAR', nullable: true },
       DATE_COL,
       ...METRIC_COLS,
     ],
     sortKey: ['date', 'url', 'query'],
+    version: 2,
   },
+}
+
+export function currentSchemaVersion(table: TableName): number {
+  return SCHEMAS[table].version
 }
 
 export function schemaFor(table: TableName): TableSchema {
@@ -84,7 +100,7 @@ export function allTables(): readonly TableName[] {
 export function inferTable(dimensions: readonly string[]): TableName {
   const dims = new Set(dimensions)
   const hasPage = dims.has('page')
-  const hasQuery = dims.has('query') || dims.has('queryCanonical')
+  const hasQuery = dims.has('query')
   if (hasPage && hasQuery)
     return 'page_keywords'
   if (hasQuery)
@@ -101,7 +117,5 @@ export function inferTable(dimensions: readonly string[]): TableName {
 export function dimensionToColumn(dim: string, _table: TableName): string {
   if (dim === 'page')
     return 'url'
-  if (dim === 'queryCanonical')
-    return 'query_canonical'
   return dim
 }

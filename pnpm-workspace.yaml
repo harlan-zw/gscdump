@@ -1,20 +1,36 @@
 catalogMode: prefer
-
 shellEmulator: true
 
 trustPolicy: no-downgrade
+# chokidar@4 dropped provenance attestation that 3.x had. It's pulled only
+# by Nuxt's vite-plugin-checker in the Nuxt dashboard example — dev-only,
+# Node-side file watcher. Accept the downgrade rather than pinning chokidar
+# across the whole workspace.
+trustPolicyExclude:
+  - chokidar
+  - semver
 packages:
   - packages/*
+  - examples/nuxt-dashboard
 overrides:
   '@types/node>undici-types': ^7.0.0
 catalog:
   '@duckdb/duckdb-wasm': ^1.32.0
+  '@duckdb/node-api': 1.5.1-r.2
+  '@huggingface/transformers': ^4.0.1
   '@modelcontextprotocol/sdk': ^1.29.0
   '@types/js-yaml': ^4.0.9
   '@types/node': ^25.6.0
+  '@types/proper-lockfile': ^4.1.4
+  aws4fetch: ^1.0.20
+  drizzle-orm: ^0.45.2
+  hyparquet: ^1.25.1
+  hyparquet-writer: ^0.13.0
   js-yaml: ^4.1.1
+  nuxt: ^4.4.2
   tinyexec: ^1.1.1
   vitest-package-exports: ^1.2.0
+  vue: ^3.5.20
   zod: ^4.3.6
 catalogs:
   deps:
@@ -28,6 +44,7 @@ catalogs:
     google-auth-library: ^10.6.2
     ofetch: ^1.5.1
     open: ^11.0.0
+    proper-lockfile: ^4.1.2
     ufo: ^1.6.3
   dev-build:
     bumpp: ^11.0.1

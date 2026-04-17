@@ -43,6 +43,9 @@
   },
   "dependencies": {
     "@clack/prompts": "catalog:deps",
+    "@duckdb/duckdb-wasm": "catalog:",
+    "@gscdump/analysis": "workspace:*",
+    "@gscdump/mcp": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
     "citty": "catalog:deps",
     "consola": "catalog:deps",
@@ -53,6 +56,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@duckdb/node-api": "catalog:",
     "vitest": "catalog:dev-test"
   }
 }

@@ -1,42 +1,47 @@
-export {
-  createInMemoryDataSource,
-  createInMemoryManifestStore,
-  createJsonCodec,
-  createUnionExecutor,
-} from './adapters/in-memory'
-export { enumeratePartitions } from './compaction'
-export { createDuckDBCodec, createDuckDBExecutor } from './duckdb'
+export { canonicalEmptyParquetSchema, createDuckDBCodec, createDuckDBExecutor } from './duckdb'
 export type { DuckDBFactory, DuckDBHandle } from './duckdb'
-export { AnalyzerUnsupportedError, analyzeWithDuckDB } from './duckdb-analyze'
-export type { DuckDBAnalyzeDeps } from './duckdb-analyze'
-export { createStorageEngine } from './engine'
+export { createStorageEngine, MAX_DAY_BYTES } from './engine'
+export type { GscApiRow, IngestOptions, RowAccumulator, RowAccumulatorOptions } from './ingest'
+export { createRowAccumulator, toPath, toSumPosition, transformGscRow } from './ingest'
 export { normalizeUrl } from './normalize'
-export { FILES_PLACEHOLDER, resolveToSQL, substituteFiles } from './resolver'
-export type { ResolvedQuery } from './resolver'
-export { allTables, dimensionToColumn, inferTable, schemaFor, SCHEMAS } from './schema'
+export { enumeratePartitions, FILES_PLACEHOLDER, resolveToSQL, substituteNamedFiles } from './planner'
+export type { ResolvedQuery } from './planner'
+export { allTables, currentSchemaVersion, dimensionToColumn, inferTable, SCHEMAS } from './schema'
 export type { ColumnDef, ColumnType, TableSchema } from './schema'
+export { bindLiterals, formatLiteral } from './sql-bind'
 export {
   dayPartition,
-  monthPartition,
-  objectKey,
-  tenantPrefix,
 } from './storage'
-
 export type {
+  CodecCtx,
   DataSource,
   EngineOptions,
+  FileSetRef,
   GcCtx,
   ListLiveFilter,
+  LockScope,
   ManifestEntry,
   ManifestStore,
   ParquetCodec,
   QueryCtx,
   QueryExecuteOptions,
+  QueryExecuteResult,
   QueryExecutor,
   QueryResult,
   Row,
+  RunSQLOptions,
   StorageEngine,
+  SyncState,
+  SyncStateDetail,
+  SyncStateFilter,
+  SyncStateKind,
+  SyncStateScope,
   TableName,
   TenantCtx,
+  Watermark,
+  WatermarkFilter,
+  WatermarkScope,
   WriteCtx,
+  WriteResult,
 } from './storage'
+export { encodeSiteId } from './tenant'

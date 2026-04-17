@@ -1,9 +1,8 @@
-import type { DriverQueryParams, DriverQueryResult, DriverSite } from 'gscdump/driver'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { resetNodeDuckDB } from 'gscdump/analytics/node'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resetNodeDuckDB } from '../../../gscdump/src/analytics/adapters/duckdb-node'
 import { createAnalyticsHarness } from '../../src/analytics'
 import { syncCommand } from '../../src/commands/sync'
 
@@ -11,61 +10,53 @@ const configState: { dataDir: string | null } = { dataDir: null }
 
 const SITE = 'sc-domain:example.com'
 
-const siteList: DriverSite[] = [{ siteUrl: SITE, permissionLevel: 'siteOwner' }]
+const gscSites = [{ siteUrl: SITE, permissionLevel: 'siteOwner' }]
 
-function buildQueryResult(_siteUrl: string, params: DriverQueryParams): DriverQueryResult {
+function buildRawResponse(params: { startDate: string, dimensions?: string[] }): {
+  rows: Array<{ keys?: string[], clicks: number, impressions: number, ctr: number, position: number }>
+} {
   const dims = params.dimensions ?? []
-  const row: Record<string, unknown> = {
-    date: params.startDate,
-    clicks: 5,
-    impressions: 50,
-    position: 3.4,
-    ctr: 0.1,
-  }
-  if (dims.includes('page'))
-    row.page = 'https://example.com/guide'
-  if (dims.includes('query'))
-    row.query = 'best practices'
-  if (dims.includes('country'))
-    row.country = 'usa'
-  if (dims.includes('device'))
-    row.device = 'desktop'
+  const keys = dims.map((dim) => {
+    if (dim === 'page')
+      return 'https://example.com/guide'
+    if (dim === 'query')
+      return 'best practices'
+    if (dim === 'country')
+      return 'usa'
+    if (dim === 'device')
+      return 'desktop'
+    if (dim === 'date')
+      return params.startDate
+    return ''
+  })
   return {
-    rows: [row],
-    meta: {
-      siteUrl: SITE,
-      dimensions: dims,
-      dateRange: { startDate: params.startDate, endDate: params.endDate },
-      rowCount: 1,
-      hasMore: false,
-    },
+    rows: [{
+      keys,
+      clicks: 5,
+      impressions: 50,
+      ctr: 0.1,
+      position: 3.4,
+    }],
   }
 }
 
-const querySpy = vi.fn<(siteUrl: string, params: DriverQueryParams) => Promise<DriverQueryResult>>()
-const sitesSpy = vi.fn<() => Promise<DriverSite[]>>()
+const rawQuerySpy = vi.fn()
+const clientSitesSpy = vi.fn()
 
-const mockDriver = {
-  mode: 'local' as const,
-  sites: sitesSpy,
-  query: querySpy,
-}
-
-vi.mock('../../src/driver', () => ({
-  getDriver: vi.fn(() => Promise.resolve(mockDriver)),
-}))
+vi.mock('gscdump', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump')>()
+  return {
+    ...actual,
+    googleSearchConsole: vi.fn(() => ({
+      sites: clientSitesSpy,
+      _rawQuery: rawQuerySpy,
+    })),
+  }
+})
 
 vi.mock('../../src/auth', () => ({
   getAuth: vi.fn(() => Promise.resolve({})),
 }))
-
-vi.mock('gscdump/driver', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump/driver')>()
-  return {
-    ...actual,
-    isCloudDriver: vi.fn(() => false),
-  }
-})
 
 vi.mock('../../src/utils', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/utils')>()
@@ -87,7 +78,7 @@ vi.mock('../../src/config', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/config')>()
   return {
     ...actual,
-    loadConfig: vi.fn(() => Promise.resolve({ mode: 'local', dataDir: configState.dataDir ?? undefined })),
+    loadConfig: vi.fn(() => Promise.resolve({ dataDir: configState.dataDir ?? undefined })),
   }
 })
 
@@ -101,10 +92,10 @@ describe('sync command (local analytics)', () => {
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-sync-'))
     configState.dataDir = tmpDir
-    querySpy.mockReset()
-    sitesSpy.mockReset()
-    querySpy.mockImplementation((siteUrl, params) => Promise.resolve(buildQueryResult(siteUrl, params)))
-    sitesSpy.mockResolvedValue(siteList)
+    rawQuerySpy.mockReset()
+    clientSitesSpy.mockReset()
+    rawQuerySpy.mockImplementation((_siteUrl, params) => Promise.resolve(buildRawResponse(params)))
+    clientSitesSpy.mockResolvedValue(gscSites)
   })
 
   afterEach(async () => {
@@ -128,14 +119,14 @@ describe('sync command (local analytics)', () => {
       cmd: syncCommand,
     })
 
-    expect(querySpy).toHaveBeenCalled()
+    expect(rawQuerySpy).toHaveBeenCalled()
     // 3 days x 2 tables = 6 calls
-    expect(querySpy).toHaveBeenCalledTimes(6)
+    expect(rawQuerySpy).toHaveBeenCalledTimes(6)
 
-    const harness = createAnalyticsHarness({ mode: 'local', dataDir: configState.dataDir! })
+    const harness = createAnalyticsHarness({ dataDir: configState.dataDir! })
     const siteId = harness.siteIdFor(SITE)
 
-    const pages = await harness.manifestStore.listLive({
+    const pages = await harness.engine.listLive({
       userId: harness.userId,
       siteId,
       table: 'pages',
@@ -149,14 +140,13 @@ describe('sync command (local analytics)', () => {
     ])
     expect(pages.every(e => e.rowCount === 1)).toBe(true)
 
-    const keywords = await harness.manifestStore.listLive({
+    const keywords = await harness.engine.listLive({
       userId: harness.userId,
       siteId,
       table: 'keywords',
     })
     expect(keywords).toHaveLength(3)
 
-    // files exist on disk under the tenant prefix
     for (const entry of pages) {
       const full = path.join(configState.dataDir!, entry.objectKey)
       const stat = await fs.stat(full)
@@ -166,26 +156,76 @@ describe('sync command (local analytics)', () => {
 
   it('replacing a day retires the prior version via writeDay atomicity', async () => {
     const day = '2026-04-05'
-    const args = { site: SITE, start: day, end: day, tables: 'pages', quiet: true }
+    // force=true so the second run re-syncs even though the first marked this date done.
+    const args = { site: SITE, start: day, end: day, tables: 'pages', quiet: true, force: true }
 
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
 
-    const harness = createAnalyticsHarness({ mode: 'local', dataDir: configState.dataDir! })
+    const harness = createAnalyticsHarness({ dataDir: configState.dataDir! })
     const siteId = harness.siteIdFor(SITE)
-    const live = await harness.manifestStore.listLive({
+    const live = await harness.engine.listLive({
       userId: harness.userId,
       siteId,
       table: 'pages',
     })
     expect(live).toHaveLength(1)
 
-    const all = await harness.manifestStore.listAll({
+    const all = await harness.engine.listAll({
       userId: harness.userId,
       siteId,
       table: 'pages',
     })
     expect(all).toHaveLength(2)
     expect(all.filter(e => e.retiredAt !== undefined)).toHaveLength(1)
+  })
+
+  it('skips dates already marked done on a second run (idempotent resume)', async () => {
+    const day = '2026-04-06'
+    const args = { site: SITE, start: day, end: day, tables: 'pages', quiet: true }
+
+    await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
+    expect(rawQuerySpy).toHaveBeenCalledTimes(1)
+
+    rawQuerySpy.mockClear()
+    await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
+    // Second run should see state=done and skip; no API calls.
+    expect(rawQuerySpy).not.toHaveBeenCalled()
+
+    const harness = createAnalyticsHarness({ dataDir: configState.dataDir! })
+    const states = await harness.engine.getSyncStates({
+      userId: harness.userId,
+      siteId: harness.siteIdFor(SITE),
+      table: 'pages',
+    })
+    expect(states).toHaveLength(1)
+    expect(states[0].state).toBe('done')
+  })
+
+  it('records failed state when the API throws, exits non-zero', async () => {
+    const day = '2026-04-07'
+    rawQuerySpy.mockRejectedValueOnce(new Error('quota exceeded'))
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`)
+    }) as never)
+
+    await expect(syncCommand.run!({
+      args: { site: SITE, start: day, end: day, tables: 'pages', quiet: true },
+      rawArgs: [],
+      cmd: syncCommand,
+    })).rejects.toThrow('process.exit(1)')
+
+    const harness = createAnalyticsHarness({ dataDir: configState.dataDir! })
+    const states = await harness.engine.getSyncStates({
+      userId: harness.userId,
+      siteId: harness.siteIdFor(SITE),
+      table: 'pages',
+    })
+    expect(states).toHaveLength(1)
+    expect(states[0].state).toBe('failed')
+    expect(states[0].error).toContain('quota exceeded')
+
+    exitSpy.mockRestore()
   })
 })

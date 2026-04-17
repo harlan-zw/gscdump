@@ -1,7 +1,7 @@
 import type { $Fetch } from 'ofetch'
 import type { GSCQueryBuilder } from '../query/builder'
 import type { Dimension, GSCRow } from '../query/types'
-import type { GoogleSearchConsoleClient } from './client'
+import type { CallOptions, GoogleSearchConsoleClient } from './client'
 import type { ApiSite, ApiSitemap, SearchAnalyticsQuery } from './types'
 import { ofetch } from 'ofetch'
 import { resolveToBody } from '../query/resolver'
@@ -68,10 +68,11 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
     },
   })
 
-  const rawQuery = async (siteId: string, body: SearchAnalyticsQuery): Promise<{ rows: Array<{ keys: string[], clicks: number, impressions: number, ctr: number, position: number }> }> => {
+  const rawQuery = async (siteId: string, body: SearchAnalyticsQuery, opts?: CallOptions): Promise<{ rows: Array<{ keys: string[], clicks: number, impressions: number, ctr: number, position: number }> }> => {
     const response = await fetch<ApiQueryResponse>(`/api/sites/${encodeURIComponent(siteId)}/query`, {
       method: 'POST',
       body,
+      signal: opts?.signal,
     })
 
     // Transform to GSC API format
@@ -90,16 +91,18 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
   }
 
   return {
-    async* query<D extends Dimension[], C>(siteId: string, builder: GSCQueryBuilder<D, C>): AsyncGenerator<GSCRow<D, C>[]> {
+    async* query<D extends Dimension[], C>(siteId: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions): AsyncGenerator<GSCRow<D, C>[]> {
       const state = builder.getState()
       const body = resolveToBody(state)
       const rowLimit = body.rowLimit || 25_000
       let startRow = body.startRow || 0
 
       while (true) {
+        opts?.signal?.throwIfAborted()
         const response = await fetch<ApiQueryResponse>(`/api/sites/${encodeURIComponent(siteId)}/query`, {
           method: 'POST',
           body: { ...body, startRow, rowLimit },
+          signal: opts?.signal,
         })
 
         const rows = response.rows.map((row) => {
@@ -123,8 +126,8 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
       }
     },
 
-    sites: async () => {
-      const response = await fetch<ApiSitesResponse>('/api/sites')
+    sites: async (opts) => {
+      const response = await fetch<ApiSitesResponse>('/api/sites', { signal: opts?.signal })
       return response.sites.map(s => ({
         siteUrl: s.gscSiteUrl,
         permissionLevel: s.permissionLevel || 'siteOwner',
@@ -137,8 +140,8 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
     },
 
     sitemaps: {
-      list: async (siteId: string) => {
-        const response = await fetch<{ sitemaps: ApiSitemap[] }>(`/api/sites/${encodeURIComponent(siteId)}/sitemaps`)
+      list: async (siteId, opts) => {
+        const response = await fetch<{ sitemaps: ApiSitemap[] }>(`/api/sites/${encodeURIComponent(siteId)}/sitemaps`, { signal: opts?.signal })
         return response.sitemaps || []
       },
       get: () => {
