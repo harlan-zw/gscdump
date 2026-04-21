@@ -14,11 +14,8 @@
     "@gscdump/engine": "workspace:*",
     "@gscdump/engine-sqlite": "workspace:*",
     "@gscdump/engine-wasm": "workspace:*",
-    "@huggingface/transformers": "catalog:",
     "aws4fetch": "catalog:",
     "gscdump": "workspace:*",
-    "hyparquet": "catalog:",
-    "hyparquet-writer": "catalog:",
     "nuxt": "catalog:",
     "vue": "catalog:"
   }

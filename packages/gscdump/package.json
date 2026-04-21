@@ -75,8 +75,6 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:e2e": "vitest run e2e/",
-    "test:real": "RUN_REAL_CREDENTIALS=true vitest run e2e/real-credentials.test.ts",
     "prepack": "pnpm run build"
   },
   "peerDependencies": {

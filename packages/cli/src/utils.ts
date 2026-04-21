@@ -10,7 +10,7 @@ export const logger = consola.withTag('gscdump')
  * Handles GSC API errors with helpful messages and suggestions.
  * Exits process with code 1.
  */
-export function handleGscError(error: unknown): never {
+function handleGscError(error: unknown): never {
   console.error()
   console.error(formatErrorForCli(error))
   console.error()

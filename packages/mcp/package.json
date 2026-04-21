@@ -47,8 +47,6 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
     "consola": "catalog:deps",
-    "dayjs": "catalog:deps",
-    "google-auth-library": "catalog:deps",
     "gscdump": "workspace:*",
     "zod": "catalog:"
   },

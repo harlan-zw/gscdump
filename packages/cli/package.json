@@ -43,7 +43,6 @@
   },
   "dependencies": {
     "@clack/prompts": "catalog:deps",
-    "@duckdb/duckdb-wasm": "catalog:",
     "@gscdump/analysis": "workspace:*",
     "@gscdump/engine": "workspace:*",
     "@gscdump/engine-duckdb-node": "workspace:*",
@@ -51,11 +50,9 @@
     "@modelcontextprotocol/sdk": "catalog:",
     "citty": "catalog:deps",
     "consola": "catalog:deps",
-    "dayjs": "catalog:deps",
     "google-auth-library": "catalog:deps",
     "gscdump": "workspace:*",
-    "open": "catalog:deps",
-    "zod": "catalog:"
+    "open": "catalog:deps"
   },
   "devDependencies": {
     "@duckdb/node-api": "catalog:",

@@ -39,6 +39,9 @@ tmp/
 # Local Claude Code scratch
 .claude/
 
+# fallow cache
+.fallow/
+
 # Generated demo artifacts
 examples/browser-http/_served
 examples/browser-http/bundle.mjs
@@ -47,3 +50,5 @@ examples/browser-http/screenshot*.png
 examples/browser-attach/analyzers.mjs
 examples/browser-attach/gscdump.duckdb
 examples/browser-attach/screenshot.png
+
+.nuxt

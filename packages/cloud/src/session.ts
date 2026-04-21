@@ -21,7 +21,7 @@ async function loadCloudTokensFile(): Promise<{ sessionId?: string } | null> {
     .catch(() => null)
 }
 
-export async function loadCloudSession(): Promise<CloudSession> {
+async function loadCloudSession(): Promise<CloudSession> {
   const cloudUrl = process.env.GSCDUMP_CLOUD_URL || DEFAULT_CLOUD_URL
   const envSession = process.env.GSCDUMP_CLOUD_SESSION
   if (envSession)

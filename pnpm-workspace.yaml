@@ -28,7 +28,6 @@ catalog:
   hyparquet-writer: ^0.13.0
   js-yaml: ^4.1.1
   nuxt: ^4.4.2
-  tinyexec: ^1.1.1
   vitest-package-exports: ^1.2.0
   vue: ^3.5.20
   zod: ^4.3.6
@@ -54,7 +53,6 @@ catalogs:
     '@antfu/eslint-config': ^8.1.1
     eslint: ^10.2.0
   dev-test:
-    dotenv: ^17.4.1
     vitest: ^4.1.4
 
 onlyBuiltDependencies:

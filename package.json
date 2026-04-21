@@ -23,11 +23,9 @@
     "@types/node": "catalog:",
     "aws4fetch": "catalog:",
     "bumpp": "catalog:dev-build",
-    "dotenv": "catalog:dev-test",
     "eslint": "catalog:dev-lint",
     "js-yaml": "catalog:",
     "obuild": "catalog:dev-build",
-    "tinyexec": "catalog:",
     "typescript": "catalog:dev-build",
     "vitest": "catalog:dev-test",
     "vitest-package-exports": "catalog:"

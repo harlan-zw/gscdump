@@ -13,7 +13,7 @@ import type {
 } from './storage'
 import { normalizeUrl } from 'gscdump/normalize'
 import { buildLogicalPlan } from 'gscdump/query/plan'
-import { compactOlderThanImpl, enumeratePartitions } from './compaction'
+import { compactOlderThanImpl } from './compaction'
 import { compileLogicalQueryPlan } from './compiler'
 import { gcOrphansImpl } from './gc'
 import { currentSchemaVersion, SCHEMAS } from './schema'
@@ -198,5 +198,3 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     readObject: key => dataSource.read(key),
   }
 }
-
-export { enumeratePartitions }

@@ -9,11 +9,12 @@
  * (re-exported from `source/engine.ts`) for the local-engine convenience path.
  */
 
+import type { FileSet } from '@gscdump/engine/resolver'
 import type { AnalysisQuerySource, QueryRow } from '../source/types'
 import type { AnalysisParams, AnalysisResult } from '../types'
-import type { AnalyzerRegistry } from './registry'
 
-import type { Analyzer, Capability, FileSet, RowQueriesPlan, SqlPlan } from './types'
+import type { AnalyzerRegistry } from './registry'
+import type { Analyzer, Capability, RowQueriesPlan, SqlPlan } from './types'
 
 // Analyzer-facing row type. Structurally equal to `QueryRow`; alias kept so
 // analyzer authors don't have to reach into the source layer for their

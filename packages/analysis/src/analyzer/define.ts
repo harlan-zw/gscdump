@@ -15,12 +15,12 @@
  */
 
 import type { Row } from '@gscdump/engine/contracts'
+import type { FileSet } from '@gscdump/engine/resolver'
 import type { BuilderState } from 'gscdump/query'
 import type { AnalysisParams } from '../types'
 import type {
   Analyzer,
   Capability,
-  FileSet,
   Plan,
   ReduceContext,
   RowQueriesPlan,

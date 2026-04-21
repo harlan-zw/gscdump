@@ -13,7 +13,8 @@
  *     queries executed against a source, with results reduced purely.
  */
 
-import type { Row, TableName } from '@gscdump/engine/contracts'
+import type { Row } from '@gscdump/engine/contracts'
+import type { FileSet } from '@gscdump/engine/resolver'
 import type { BuilderState } from 'gscdump/query'
 import type { AnalysisParams } from '../types'
 
@@ -28,11 +29,6 @@ export type Capability
     | 'regex' // regex predicates supported
     | 'windowTotals' // SQL window functions for totals
     | 'comparisonJoin' // JOIN-based comparison queries
-
-export interface FileSet {
-  table: TableName
-  partitions: string[]
-}
 
 export interface SqlExtraQuery {
   name: string

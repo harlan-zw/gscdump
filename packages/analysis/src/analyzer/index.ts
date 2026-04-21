@@ -14,7 +14,6 @@ export { ROW_ANALYZERS } from './row-analyzers'
 export type {
   Analyzer,
   Capability,
-  FileSet,
   Plan,
   ReduceContext,
   RowQueriesPlan,
@@ -22,3 +21,4 @@ export type {
   SqlPlan,
   TypedRowQuery,
 } from './types'
+export type { FileSet } from '@gscdump/engine/resolver'

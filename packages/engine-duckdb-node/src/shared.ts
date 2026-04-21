@@ -75,7 +75,7 @@ export function DEFAULT_END(): string {
   return new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]!
 }
 
-export function DEFAULT_START(): string {
+function DEFAULT_START(): string {
   return new Date(Date.now() - 31 * 86400000).toISOString().split('T')[0]!
 }
 
