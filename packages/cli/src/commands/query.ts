@@ -1,15 +1,13 @@
-import type { TableName } from 'gscdump/analytics/contracts'
+import type { googleSearchConsole } from 'gscdump'
 import type { BuilderState, Column, Dimension } from 'gscdump/query'
+import type { LocalStore, TableName } from '../local-store'
 import fs from 'node:fs/promises'
 import process from 'node:process'
-import { cancel, isCancel, multiselect, select, text } from '@clack/prompts'
+import { cancel, isCancel, multiselect, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { googleSearchConsole } from 'gscdump'
-import { allTables, inferTable } from 'gscdump/analytics/schema'
 import { between, country, date as dateCol, device, gsc, page, query as queryCol, searchAppearance } from 'gscdump/query'
-import { createAnalyticsHarness } from '../analytics'
-import { getAuth } from '../auth'
-import { loadConfig } from '../config'
+import { createCommandContext } from '../context'
+import { allTables, inferTable } from '../local-store'
 import { exportToCSV, logger } from '../utils'
 
 const DIMENSIONS = ['page', 'query', 'date', 'country', 'device', 'searchAppearance'] as const
@@ -22,41 +20,6 @@ const DIM_COLUMNS: Record<DimensionName, Column<Dimension>> = {
   country,
   device,
   searchAppearance,
-}
-
-interface GscSite {
-  siteUrl: string
-  permissionLevel: string
-}
-
-async function loadSites(client: ReturnType<typeof googleSearchConsole>): Promise<GscSite[]> {
-  const gscSites = await client.sites().catch((e: Error) => {
-    logger.error(`Failed to fetch sites: ${e.message}`)
-    process.exit(1)
-  })
-  return gscSites
-    .filter(s => s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser')
-    .map(s => ({ siteUrl: s.siteUrl!, permissionLevel: s.permissionLevel || 'unknown' }))
-}
-
-async function resolveSiteUrl(sites: GscSite[], target?: string): Promise<string> {
-  if (target) {
-    const match = sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
-    if (match)
-      return match.siteUrl
-  }
-  if (sites.length === 1)
-    return sites[0].siteUrl
-
-  const selected = await select({
-    message: 'Select a site',
-    options: sites.map(s => ({ value: s.siteUrl, label: s.siteUrl })),
-  })
-  if (isCancel(selected)) {
-    cancel('Cancelled')
-    process.exit(0)
-  }
-  return selected as string
 }
 
 async function runLiveQuery(
@@ -164,8 +127,6 @@ export const queryCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const config = await loadConfig()
-
     if (args.sql) {
       await runRawSqlMode({
         sql: String(args.sql),
@@ -182,19 +143,17 @@ export const queryCommand = defineCommand({
     const rowLimit = Number.parseInt(String(args.limit), 10)
     const format = String(args.format) as 'json' | 'csv'
 
-    const auth = await getAuth({ interactive: Boolean(args.interactive), config })
-    const client = googleSearchConsole(auth)
-    const sites = await loadSites(client)
-    if (sites.length === 0) {
-      logger.error('No sites found')
-      process.exit(1)
-    }
-    const siteUrl = await resolveSiteUrl(sites, String(args.site || config.defaultSite || ''))
+    const ctx = await createCommandContext({
+      needsAuth: true,
+      needsStore: !args.live,
+      interactive: Boolean(args.interactive),
+    })
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
 
     if (args.live) {
       if (!args.quiet)
         logger.info(`Querying ${siteUrl} via live GSC API...`)
-      const result = await runLiveQuery(client, siteUrl, {
+      const result = await runLiveQuery(ctx.client!, siteUrl, {
         startDate,
         endDate,
         dimensions: dimNames,
@@ -222,11 +181,11 @@ export const queryCommand = defineCommand({
       logger.info(`Querying ${siteUrl} from local Parquet store...`)
 
     const state = buildLocalState(dimNames, startDate, endDate, rowLimit)
-    const harness = createAnalyticsHarness(config)
+    const store = ctx.store!
     const table = inferTable(dimNames)
-    await assertRangeCovered(harness, siteUrl, table, startDate, endDate)
-    const result = await harness.engine.query(
-      { userId: harness.userId, siteId: harness.siteIdFor(siteUrl), table },
+    await assertRangeCovered(store, siteUrl, table, startDate, endDate)
+    const result = await store.engine.query(
+      { userId: store.userId, siteId: store.siteIdFor(siteUrl), table },
       state,
     ).catch((e: Error) => {
       logger.error(`Query failed: ${e.message}`)
@@ -320,15 +279,15 @@ function buildLocalState(
 }
 
 async function assertRangeCovered(
-  harness: ReturnType<typeof createAnalyticsHarness>,
+  store: LocalStore,
   siteUrl: string,
   table: TableName,
   startDate: string,
   endDate: string,
 ): Promise<void> {
-  const watermarks = await harness.engine.getWatermarks({
-    userId: harness.userId,
-    siteId: harness.siteIdFor(siteUrl),
+  const watermarks = await store.engine.getWatermarks({
+    userId: store.userId,
+    siteId: store.siteIdFor(siteUrl),
     table,
   })
   const wm = watermarks[0]
@@ -353,22 +312,19 @@ async function runRawSqlMode(opts: {
   output: string | undefined
   quiet: boolean
 }): Promise<void> {
-  const config = await loadConfig()
   if (!isKnownTable(opts.table)) {
     logger.error(`Unknown table "${opts.table}". Known: ${allTables().join(', ')}`)
     process.exit(1)
   }
 
-  const auth = await getAuth({ interactive: false, config })
-  const client = googleSearchConsole(auth)
-  const sites = await loadSites(client)
-  const siteUrl = await resolveSiteUrl(sites, opts.site || config.defaultSite)
+  const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
+  const siteUrl = await ctx.resolveSite(opts.site)
+  const store = ctx.store!
 
-  const harness = createAnalyticsHarness(config)
   if (!opts.quiet)
     logger.info(`Running raw SQL over table "${opts.table}" for ${siteUrl}`)
 
-  const { rows, sql } = await harness.runRawSql({
+  const { rows, sql } = await store.runRawSql({
     sql: opts.sql,
     siteUrl,
     table: opts.table,

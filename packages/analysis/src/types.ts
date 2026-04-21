@@ -1,8 +1,11 @@
 /**
- * Shared types for analysis functions.
+ * Row-level helpers for analysis functions. `AnalysisParams` / `AnalysisResult`
+ * / `AnalysisTool` live in `gscdump/contracts` — the canonical cross-package
+ * contract — and are re-exported here for backward-compatible imports from
+ * `@gscdump/analysis`.
  */
 
-export type { AnalysisParams, AnalysisResult, AnalysisTool } from 'gscdump/shared/analysis'
+export type { AnalysisParams, AnalysisResult, AnalysisTool } from 'gscdump/contracts'
 
 export type SortOrder = 'asc' | 'desc'
 

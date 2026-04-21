@@ -1,27 +1,14 @@
 /**
- * @gscdump/analysis/query — dialect-neutral SQL composers for `BuilderState`.
+ * @gscdump/analysis/query — query analyzer plan builders.
  *
- * Pass a {@link ResolverAdapter} from either `@gscdump/analysis/sqlite`
- * (site D1, `site_id` scoped) or `@gscdump/analysis/browser` (parquet, single
- * tenant). Composers stay identical; only the table/column bindings and the
- * dialect compilation differ.
+ * Dialect-neutral SQL composition primitives now live in
+ * `@gscdump/engine/resolver` (re-exported by `@gscdump/engine-wasm` /
+ * `@gscdump/engine-sqlite`). This module narrowly exposes the data-query
+ * / data-detail analyzer plans that `@gscdump/analysis` owns.
  */
 
 export {
-  buildExtrasQueries,
-  buildTotalsSql,
-  mergeExtras,
-  resolveComparisonSQL,
-  resolveToSQL,
-  resolveToSQLOptimized,
-} from './resolver'
-
-export type {
-  ComparisonFilter,
-  ExtraQuery,
-  ResolvedComparisonSQL,
-  ResolvedSQL,
-  ResolvedSQLOptimized,
-  ResolverAdapter,
-  ResolverOptions,
-} from './types'
+  buildDataDetailPlan,
+  buildDataQueryPlan,
+} from './analyzers'
+export type { QueryAnalyzerExtraQuery, QueryAnalyzerPlan } from './analyzers'

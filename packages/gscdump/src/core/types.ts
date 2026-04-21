@@ -1,5 +1,5 @@
-import type { indexing_v3 } from '@googleapis/indexing/v3'
-import type { searchconsole_v1 } from '@googleapis/searchconsole/v1'
+import type { indexing_v3 } from '@googleapis/indexing/build/v3'
+import type { searchconsole_v1 } from '@googleapis/searchconsole/build/v1'
 
 // Re-export GSC types for consumers
 export type ApiSite = searchconsole_v1.Schema$WmxSite

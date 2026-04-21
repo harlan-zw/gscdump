@@ -10,15 +10,14 @@
  * views in the app — if the SQL is correct here, it's correct there.
  */
 
-import type { AnalyzerRunner } from '../src/duckdb'
+import type { AnalyzerRunner } from '@gscdump/engine-duckdb-node'
 
+import { analyzeInBrowser } from '@gscdump/engine-duckdb-node'
 import {
   createNodeDuckDBHandle,
   resetNodeDuckDB,
-} from 'gscdump/analytics/node'
+} from '@gscdump/engine/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-
-import { analyzeInBrowser } from '../src/duckdb'
 
 afterAll(() => {
   resetNodeDuckDB()

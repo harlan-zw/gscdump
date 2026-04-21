@@ -52,6 +52,14 @@ const TABS: Array<RawTab | AnalyzerTab | SemanticTab | ActionTab> = [
   { kind: 'analyzer', id: 'change-point', label: 'Change points' },
   { kind: 'analyzer', id: 'bipartite-pagerank', label: 'PageRank' },
   { kind: 'analyzer', id: 'survival', label: 'Survival' },
+  { kind: 'analyzer', id: 'content-velocity', label: 'Velocity' },
+  { kind: 'analyzer', id: 'ctr-curve', label: 'CTR curve' },
+  { kind: 'analyzer', id: 'dark-traffic', label: 'Dark traffic' },
+  { kind: 'analyzer', id: 'device-gap', label: 'Device gap' },
+  { kind: 'analyzer', id: 'keyword-breadth', label: 'Breadth' },
+  { kind: 'analyzer', id: 'position-distribution', label: 'Position dist.' },
+  { kind: 'analyzer', id: 'trends', label: 'Trends' },
+  { kind: 'analyzer', id: 'zero-click', label: 'Zero-click' },
   { kind: 'semantic', id: 'content-gap', label: 'Content gaps ✨' },
   { kind: 'action', id: 'actions', label: 'Actions ⚡' },
 ]
@@ -74,13 +82,41 @@ const visibleMetrics = ref<Record<MetricCol, boolean>>({
   avg_position: true,
 })
 
-// Sort + pagination (raw tabs only)
-type SortCol = 'clicks' | 'impressions' | 'ctr' | 'avg_position'
-const SORT_COLS: SortCol[] = ['clicks', 'impressions', 'ctr', 'avg_position']
-const sortBy = ref<SortCol>('clicks')
+// Sort + pagination. `sortBy` applies universally: raw tabs push it into SQL
+// when the column is a known metric or the row dim; analyzer tabs apply it
+// client-side against the returned rows.
+const RAW_SQL_SORT_COLS = ['clicks', 'impressions', 'ctr', 'avg_position'] as const
+const sortBy = ref<string>('clicks')
 const sortDir = ref<'desc' | 'asc'>('desc')
 const pageSize = ref(25)
 const pageIdx = ref(0)
+
+// Fuzzy search (raw tabs only). Debounced to ~200ms so keystrokes don't each
+// fire a query — the debounced signal is what watchers react to.
+const search = ref('')
+const searchDebounced = ref('')
+let searchDebounceHandle: ReturnType<typeof setTimeout> | null = null
+watch(search, (v) => {
+  if (searchDebounceHandle)
+    clearTimeout(searchDebounceHandle)
+  searchDebounceHandle = setTimeout(() => {
+    searchDebounced.value = v
+  }, 200)
+})
+
+const WHITESPACE_RE = /\s+/
+function searchTokens(s: string): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const t of s.trim().split(WHITESPACE_RE).filter(Boolean)) {
+    const lower = t.toLowerCase()
+    if (!seen.has(lower)) {
+      seen.add(lower)
+      out.push(lower)
+    }
+  }
+  return out
+}
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -89,11 +125,47 @@ const totalRows = ref<number | null>(null)
 const queryMs = ref<number | null>(null)
 const meta = ref<Record<string, unknown> | null>(null)
 
-function buildSqlRaw(tab: RawTab): string {
+function rawSortKey(tab: RawTab): string {
+  if ((RAW_SQL_SORT_COLS as readonly string[]).includes(sortBy.value))
+    return sortBy.value
+  if (sortBy.value === tab.dim)
+    return tab.dim
+  return 'clicks'
+}
+
+interface RawQuery {
+  sql: string
+  params: unknown[]
+}
+
+// Builds `WHERE` fuzzy-filter + matched-token ranking for the active search.
+// Each whitespace token is OR-joined (typo tolerance on other tokens), and
+// rows are ranked by how many tokens they contain before falling back to the
+// user's chosen sort.
+function buildSearchClauses(dim: string, tokens: string[]): {
+  where: string
+  rank: string
+  params: unknown[]
+} {
+  if (tokens.length === 0)
+    return { where: '', rank: '', params: [] }
+  const patterns = tokens.map(t => `%${t}%`)
+  const ors = tokens.map(() => `${dim} ILIKE ?`).join(' OR ')
+  const cases = tokens.map(() => `(CASE WHEN ${dim} ILIKE ? THEN 1 ELSE 0 END)`).join(' + ')
+  return {
+    where: `WHERE (${ors})`,
+    rank: `${cases} DESC,`,
+    params: [...patterns, ...patterns],
+  }
+}
+
+function buildSqlRaw(tab: RawTab): RawQuery {
   const dir = sortDir.value.toUpperCase()
   const limit = pageSize.value
   const offset = pageIdx.value * pageSize.value
-  return `
+  const tokens = searchTokens(searchDebounced.value)
+  const { where, rank, params } = buildSearchClauses(tab.dim, tokens)
+  const sql = `
     SELECT ${tab.dim},
            SUM(clicks)::BIGINT AS clicks,
            SUM(impressions)::BIGINT AS impressions,
@@ -104,14 +176,23 @@ function buildSqlRaw(tab: RawTab): string {
                 THEN ROUND(SUM(sum_position) / SUM(impressions) + 1, 2)
                 ELSE 0 END AS avg_position
     FROM main.${tab.table}
+    ${where}
     GROUP BY ${tab.dim}
-    ORDER BY ${sortBy.value} ${dir}
+    ORDER BY ${rank} ${rawSortKey(tab)} ${dir}
     LIMIT ${limit} OFFSET ${offset}
   `
+  return { sql, params }
 }
 
-function buildCountSql(tab: RawTab): string {
-  return `SELECT COUNT(DISTINCT ${tab.dim})::BIGINT AS n FROM main.${tab.table}`
+function buildCountSql(tab: RawTab): RawQuery {
+  const tokens = searchTokens(searchDebounced.value)
+  const { where, params } = buildSearchClauses(tab.dim, tokens)
+  // Rank params aren't used here; strip the ORDER BY half.
+  const countParams = params.slice(0, tokens.length)
+  return {
+    sql: `SELECT COUNT(DISTINCT ${tab.dim})::BIGINT AS n FROM main.${tab.table} ${where}`,
+    params: countParams,
+  }
 }
 
 async function runActive(): Promise<void> {
@@ -127,9 +208,11 @@ async function runActive(): Promise<void> {
     if (activeTab.value.kind === 'raw') {
       const tab = activeTab.value
       // Fire count + page in parallel — they hit the same warm DuckDB connection.
+      const pageQ = buildSqlRaw(tab)
+      const countQ = buildCountSql(tab)
       const [pageRes, countRes] = await Promise.all([
-        query(buildSqlRaw(tab)),
-        query(buildCountSql(tab)),
+        query(pageQ.sql, pageQ.params),
+        query(countQ.sql, countQ.params),
       ])
       rows.value = pageRes.rows
       queryMs.value = pageRes.queryMs
@@ -152,29 +235,74 @@ async function runActive(): Promise<void> {
   }
 }
 
-// Reset pagination when tab changes.
+// Reset pagination + clear search when tab changes.
 watch(activeId, () => {
+  pageIdx.value = 0
+  search.value = ''
+  searchDebounced.value = ''
+})
+
+// A new search string resets pagination but keeps the sort.
+watch(searchDebounced, () => {
   pageIdx.value = 0
 })
 
 // Re-run when anything query-affecting changes (after boot).
-watch([activeId, sortBy, sortDir, pageSize, pageIdx, isReady], ([, , , , , ready]) => {
+watch([activeId, sortBy, sortDir, pageSize, pageIdx, searchDebounced, isReady], ([, , , , , , ready]) => {
   if (ready)
     void runActive()
 })
 
-function toggleSort(col: SortCol): void {
-  if (activeTab.value.kind !== 'raw')
+function isSortable(col: string): boolean {
+  const sample = rows.value[0]?.[col]
+  if (Array.isArray(sample) || (sample !== null && typeof sample === 'object'))
+    return false
+  return true
+}
+
+function toggleSort(col: string): void {
+  if (!isSortable(col))
     return
   if (sortBy.value === col) {
     sortDir.value = sortDir.value === 'desc' ? 'asc' : 'desc'
   }
   else {
     sortBy.value = col
-    sortDir.value = 'desc'
+    const sample = rows.value[0]?.[col]
+    const isNumeric = typeof sample === 'number' || typeof sample === 'bigint'
+    sortDir.value = isNumeric ? 'desc' : 'asc'
   }
-  pageIdx.value = 0
+  if (activeTab.value.kind === 'raw')
+    pageIdx.value = 0
 }
+
+function compareCell(a: unknown, b: unknown): number {
+  if (a == null && b == null)
+    return 0
+  if (a == null)
+    return -1
+  if (b == null)
+    return 1
+  if (typeof a === 'number' && typeof b === 'number')
+    return a - b
+  if (typeof a === 'bigint' && typeof b === 'bigint')
+    return a < b ? -1 : a > b ? 1 : 0
+  if (typeof a === 'boolean' && typeof b === 'boolean')
+    return Number(a) - Number(b)
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
+}
+
+// Raw tabs already return SQL-sorted + paginated rows; analyzer tabs return
+// the analyzer's native order, so client-side sort is applied here.
+const displayRows = computed(() => {
+  if (activeTab.value.kind === 'raw')
+    return rows.value
+  if (!sortBy.value || !rows.value.length)
+    return rows.value
+  const key = sortBy.value
+  const dir = sortDir.value === 'desc' ? -1 : 1
+  return [...rows.value].sort((ra, rb) => dir * compareCell(ra[key], rb[key]))
+})
 
 const visibleColumns = computed(() => {
   if (rows.value[0] == null)
@@ -514,6 +642,57 @@ const totalPages = computed(() => {
   return Math.max(1, Math.ceil(totalRows.value / pageSize.value))
 })
 
+const DISPLAY_KEYS = ['keyword', 'query', 'url', 'page', 'date', 'name', 'id', 'label', 'source', 'target']
+const SERIES_METRIC_KEYS = ['observed', 'value', 'clicks', 'impressions', 'ctr', 'position', 'count', 'volatility', 'clicksLost']
+
+function seriesValues(v: unknown): number[] | null {
+  if (!Array.isArray(v) || v.length < 2)
+    return null
+  const first = v[0]
+  if (first == null || typeof first !== 'object')
+    return null
+  const obj = first as Record<string, unknown>
+  const metric = SERIES_METRIC_KEYS.find(k => typeof obj[k] === 'number')
+  if (!metric)
+    return null
+  const out: number[] = []
+  for (const item of v) {
+    const n = (item as Record<string, unknown>)[metric]
+    out.push(typeof n === 'number' && Number.isFinite(n) ? n : Number.NaN)
+  }
+  return out
+}
+
+function pickDisplayKey(obj: Record<string, unknown>): string | null {
+  for (const k of DISPLAY_KEYS) {
+    if (k in obj && (typeof obj[k] === 'string' || typeof obj[k] === 'number'))
+      return k
+  }
+  return null
+}
+
+function fmtItem(v: unknown): string {
+  if (v == null)
+    return ''
+  if (typeof v === 'bigint')
+    return v.toLocaleString()
+  if (typeof v === 'number')
+    return Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)
+  if (typeof v === 'string')
+    return v
+  if (typeof v === 'object') {
+    const key = pickDisplayKey(v as Record<string, unknown>)
+    if (key)
+      return String((v as Record<string, unknown>)[key])
+    return JSON.stringify(v)
+  }
+  return String(v)
+}
+
+function truncate(s: string, max = 140): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s
+}
+
 function fmt(v: unknown): string {
   if (v == null)
     return ''
@@ -521,7 +700,20 @@ function fmt(v: unknown): string {
     return v.toLocaleString()
   if (typeof v === 'number')
     return Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)
+  if (Array.isArray(v)) {
+    if (v.length === 0)
+      return '[]'
+    return truncate(`${v.length}× ${v.map(fmtItem).join(', ')}`)
+  }
+  if (typeof v === 'object')
+    return truncate(JSON.stringify(v))
   return String(v)
+}
+
+function fmtTitle(v: unknown): string | undefined {
+  if (Array.isArray(v) || (v !== null && typeof v === 'object'))
+    return JSON.stringify(v, null, 2)
+  return undefined
 }
 </script>
 
@@ -557,11 +749,24 @@ function fmt(v: unknown): string {
       </span>
     </nav>
 
-    <div v-if="activeTab.kind === 'raw'" class="col-toggles">
-      <span class="col-label">columns</span>
-      <label v-for="col in METRIC_COLS" :key="col">
-        <input v-model="visibleMetrics[col]" type="checkbox">{{ col }}
-      </label>
+    <div v-if="activeTab.kind === 'raw'" class="raw-toolbar">
+      <div class="search">
+        <input
+          v-model="search"
+          type="search"
+          :placeholder="`fuzzy ${(activeTab as RawTab).dim} search — space-separated tokens`"
+          class="search-input"
+        >
+        <button v-if="search" class="search-clear" title="Clear" @click="search = ''">
+          ×
+        </button>
+      </div>
+      <div class="col-toggles">
+        <span class="col-label">columns</span>
+        <label v-for="col in METRIC_COLS" :key="col">
+          <input v-model="visibleMetrics[col]" type="checkbox">{{ col }}
+        </label>
+      </div>
     </div>
 
     <section v-if="activeId === 'cannibalization' && cannibalGraph && !loading && !error" class="cannibal-panel">
@@ -1013,18 +1218,21 @@ function fmt(v: unknown): string {
             <tr>
               <th
                 v-for="c in visibleColumns" :key="c"
-                :class="{ sortable: activeTab.kind === 'raw' && (SORT_COLS as readonly string[]).includes(c), active: sortBy === c }"
-                @click="activeTab.kind === 'raw' && (SORT_COLS as readonly string[]).includes(c) ? toggleSort(c as SortCol) : null"
+                :class="{ sortable: isSortable(c), active: sortBy === c }"
+                @click="toggleSort(c)"
               >
                 {{ c }}
-                <span v-if="activeTab.kind === 'raw' && sortBy === c" class="arrow">{{ sortDir === 'desc' ? '▼' : '▲' }}</span>
+                <span v-if="sortBy === c && isSortable(c)" class="arrow">{{ sortDir === 'desc' ? '▼' : '▲' }}</span>
               </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(row, i) in rows" :key="i">
-              <td v-for="c in visibleColumns" :key="c" :class="{ num: typeof row[c] === 'number' || typeof row[c] === 'bigint' }">
-                {{ fmt(row[c]) }}
+            <tr v-for="(row, i) in displayRows" :key="i">
+              <td v-for="c in visibleColumns" :key="c" :title="fmtTitle(row[c])" :class="{ num: typeof row[c] === 'number' || typeof row[c] === 'bigint' }">
+                <Sparkline v-if="seriesValues(row[c])" :values="seriesValues(row[c])!" />
+                <template v-else>
+                  {{ fmt(row[c]) }}
+                </template>
               </td>
             </tr>
           </tbody>
@@ -1090,7 +1298,13 @@ header p { margin: 0.25rem 0 0; color: #666; font-size: 0.9rem; }
 .tabs button:disabled { opacity: 0.4; cursor: not-allowed; }
 .tabs .timing { margin-left: auto; font-family: ui-monospace, monospace; font-size: 0.75rem; color: #888; padding: 0 0.25rem 0 0.5rem; white-space: nowrap; }
 
-.col-toggles { display: flex; gap: 0.9rem; align-items: center; padding: 0.55rem 0.9rem; background: #fafafb; border-bottom: 1px solid #ececef; font-size: 0.78rem; color: #555; flex-wrap: wrap; }
+.raw-toolbar { display: flex; gap: 1rem; align-items: center; padding: 0.55rem 0.9rem; background: #fafafb; border-bottom: 1px solid #ececef; font-size: 0.78rem; color: #555; flex-wrap: wrap; }
+.search { position: relative; flex: 1 1 260px; min-width: 200px; }
+.search-input { width: 100%; padding: 0.4rem 1.8rem 0.4rem 0.6rem; font: inherit; font-size: 0.82rem; border: 1px solid #ddd; border-radius: 4px; background: #fff; box-sizing: border-box; }
+.search-input:focus { outline: none; border-color: #7a6cd0; box-shadow: 0 0 0 2px rgba(122, 108, 208, 0.15); }
+.search-clear { position: absolute; right: 0.35rem; top: 50%; transform: translateY(-50%); width: 1.2rem; height: 1.2rem; padding: 0; border: none; background: transparent; color: #999; cursor: pointer; font-size: 1rem; line-height: 1; }
+.search-clear:hover { color: #333; }
+.col-toggles { display: flex; gap: 0.9rem; align-items: center; font-size: 0.78rem; color: #555; flex-wrap: wrap; }
 .col-toggles .col-label { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: #888; }
 .col-toggles label { display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; font-variant-numeric: tabular-nums; }
 .col-toggles input[type=checkbox] { margin: 0; cursor: pointer; }

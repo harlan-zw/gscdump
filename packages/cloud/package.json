@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@clack/prompts": "catalog:deps",
+    "@gscdump/analysis": "workspace:*",
     "citty": "catalog:deps",
     "consola": "catalog:deps",
     "gscdump": "workspace:*",

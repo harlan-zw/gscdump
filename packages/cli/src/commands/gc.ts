@@ -1,6 +1,5 @@
 import { defineCommand } from 'citty'
-import { createAnalyticsHarness } from '../analytics'
-import { loadConfig } from '../config'
+import { createCommandContext } from '../context'
 import { logger } from '../utils'
 
 const DEFAULT_GRACE_HOURS = 24
@@ -29,14 +28,14 @@ export const gcCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const config = await loadConfig()
-    const harness = createAnalyticsHarness(config)
-    const siteId = args.site ? harness.siteIdFor(String(args.site)) : undefined
+    const ctx = await createCommandContext({ needsStore: true })
+    const store = ctx.store!
+    const siteId = args.site ? store.siteIdFor(String(args.site)) : undefined
     const quiet = Boolean(args.quiet)
     const graceMs = Number(args['grace-hours']) * 3_600_000
 
-    const result = await harness.engine.gcOrphans(
-      { userId: harness.userId, siteId },
+    const result = await store.engine.gcOrphans(
+      { userId: store.userId, siteId },
       graceMs,
     )
 

@@ -3,7 +3,7 @@
 // merged (keyword, page) action with one or more source tags, a composite
 // priority score, and expandable raw-data inspection.
 
-import type { ActionSource, Effort, PriorityAction } from '~/composables/useActionPriority'
+import type { ActionSource, Effort, PriorityAction } from '../composables/useActionPriority'
 
 const props = defineProps<{ actions: PriorityAction[] }>()
 
@@ -47,7 +47,7 @@ const visible = computed<PriorityAction[]>(() => {
   const filter = activeSources.value
   const rows = filter.size === 0
     ? props.actions
-    : props.actions.filter(a => a.sources.some(s => filter.has(s)))
+    : props.actions.filter(a => a.sources.some((s: ActionSource) => filter.has(s)))
   const key = sortKey.value
   return [...rows].sort((a, b) => b[key] - a[key])
 })
@@ -121,7 +121,7 @@ function prettyJson(data: PriorityAction['data']): string {
             v-for="s in ALL_SOURCES" :key="s"
             class="ap-pill"
             :class="{ inactive: activeSources.size > 0 && !activeSources.has(s) }"
-            :style="{ background: SOURCE_COLOR[s].bg, color: SOURCE_COLOR[s].fg }"
+            :style="{ background: SOURCE_COLOR[s]!.bg, color: SOURCE_COLOR[s]!.fg }"
             @click="toggleSource(s)"
           >
             {{ SOURCE_LABEL[s] }}
@@ -143,7 +143,7 @@ function prettyJson(data: PriorityAction['data']): string {
             <div class="ap-body">
               <div class="ap-title-row">
                 <span class="ap-title">{{ a.title }}</span>
-                <span class="ap-effort" :style="{ background: EFFORT_COLOR[a.effort].bg, color: EFFORT_COLOR[a.effort].fg }">
+                <span class="ap-effort" :style="{ background: EFFORT_COLOR[a.effort]!.bg, color: EFFORT_COLOR[a.effort]!.fg }">
                   {{ a.effort }}
                 </span>
               </div>
@@ -159,7 +159,7 @@ function prettyJson(data: PriorityAction['data']): string {
                 <span
                   v-for="s in a.sources" :key="s"
                   class="ap-tag"
-                  :style="{ background: SOURCE_COLOR[s].bg, color: SOURCE_COLOR[s].fg }"
+                  :style="{ background: SOURCE_COLOR[s]!.bg, color: SOURCE_COLOR[s]!.fg }"
                 >
                   {{ SOURCE_LABEL[s] }}
                 </span>

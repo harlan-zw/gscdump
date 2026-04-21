@@ -1,44 +1,14 @@
-import type { ManifestEntry, TableName } from 'gscdump/analytics/contracts'
-import type { AnalyticsHarness } from '../analytics'
+import type { LocalStore, ManifestEntry, TableName } from '../local-store'
 import { Buffer } from 'node:buffer'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
-import { cancel, isCancel, select } from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { googleSearchConsole } from 'gscdump'
-import { allTables } from 'gscdump/analytics/schema'
-import { createAnalyticsHarness } from '../analytics'
-import { getAuth } from '../auth'
-import { loadConfig } from '../config'
+import { createCommandContext } from '../context'
+import { allTables } from '../local-store'
 import { logger } from '../utils'
 
-interface GscSite {
-  siteUrl: string
-  permissionLevel: string
-}
-
 const DEFAULT_OUT = './gscdump-export'
-
-async function resolveSiteUrl(sites: GscSite[], target?: string): Promise<string> {
-  if (target) {
-    const match = sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
-    if (match)
-      return match.siteUrl
-  }
-  if (sites.length === 1)
-    return sites[0].siteUrl
-
-  const selected = await select({
-    message: 'Select a site',
-    options: sites.map(s => ({ value: s.siteUrl, label: s.siteUrl })),
-  })
-  if (isCancel(selected)) {
-    cancel('Cancelled')
-    process.exit(0)
-  }
-  return selected as string
-}
 
 export const dumpCommand = defineCommand({
   meta: {
@@ -70,30 +40,16 @@ export const dumpCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const config = await loadConfig()
-    const auth = await getAuth({ interactive: false, config })
-    const client = googleSearchConsole(auth)
-    const gscSites = await client.sites().catch((e: Error) => {
-      logger.error(`Failed to fetch sites: ${e.message}`)
-      process.exit(1)
-    })
-    const sites: GscSite[] = gscSites
-      .filter(s => s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser')
-      .map(s => ({ siteUrl: s.siteUrl!, permissionLevel: s.permissionLevel || 'unknown' }))
-    if (sites.length === 0) {
-      logger.error('No sites available')
-      process.exit(1)
-    }
-    const siteUrl = await resolveSiteUrl(sites, String(args.site || config.defaultSite || ''))
-
-    const harness = createAnalyticsHarness(config)
+    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
+    const store = ctx.store!
     const outDir = path.resolve(String(args.out))
 
     if (args.compact) {
-      await compactClosedMonths(harness, siteUrl, args.quiet)
+      await compactClosedMonths(store, siteUrl, args.quiet)
     }
 
-    const entries = await listLiveEntries(harness, siteUrl)
+    const entries = await listLiveEntries(store, siteUrl)
     if (entries.length === 0) {
       logger.warn(`No data for ${siteUrl}. Run \`gscdump sync\` first.`)
       process.exit(0)
@@ -102,7 +58,7 @@ export const dumpCommand = defineCommand({
     await fs.mkdir(outDir, { recursive: true })
     let copied = 0
     for (const entry of entries) {
-      const bytes = await harness.engine.readObject(entry.objectKey)
+      const bytes = await store.engine.readObject(entry.objectKey)
       const target = path.join(outDir, entry.objectKey)
       await fs.mkdir(path.dirname(target), { recursive: true })
       await fs.writeFile(target, Buffer.from(bytes))
@@ -115,11 +71,11 @@ export const dumpCommand = defineCommand({
   },
 })
 
-async function listLiveEntries(harness: AnalyticsHarness, siteUrl: string): Promise<ManifestEntry[]> {
-  const siteId = harness.siteIdFor(siteUrl)
+async function listLiveEntries(store: LocalStore, siteUrl: string): Promise<ManifestEntry[]> {
+  const siteId = store.siteIdFor(siteUrl)
   const perTable = await Promise.all(
-    allTables().map(table => harness.engine.listLive({
-      userId: harness.userId,
+    allTables().map(table => store.engine.listLive({
+      userId: store.userId,
       siteId,
       table: table as TableName,
     })),
@@ -127,13 +83,13 @@ async function listLiveEntries(harness: AnalyticsHarness, siteUrl: string): Prom
   return perTable.flat()
 }
 
-async function compactClosedMonths(harness: AnalyticsHarness, siteUrl: string, quiet: unknown): Promise<void> {
-  const siteId = harness.siteIdFor(siteUrl)
+async function compactClosedMonths(store: LocalStore, siteUrl: string, quiet: unknown): Promise<void> {
+  const siteId = store.siteIdFor(siteUrl)
   for (const table of allTables()) {
     if (!quiet)
       logger.info(`Compacting ${table} older than 35d`)
-    await harness.engine.compactOlderThan({
-      userId: harness.userId,
+    await store.engine.compactOlderThan({
+      userId: store.userId,
       siteId,
       table: table as TableName,
     }, 35)

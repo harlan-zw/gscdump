@@ -5,12 +5,12 @@ import { resolve, dirname, join, normalize } from 'node:path';
 import nodeCrypto from 'node:crypto';
 import { parentPort, threadId } from 'node:worker_threads';
 import { escapeHtml } from 'file:///home/harlan/pkg/gscdump/node_modules/.pnpm/@vue+shared@3.5.32/node_modules/@vue/shared/dist/shared.cjs.js';
-import { analyzeWithDuckDB } from 'file:///home/harlan/pkg/gscdump/packages/analysis/dist/duckdb/index.mjs';
-import { createStorageEngine, createDuckDBExecutor, createDuckDBCodec } from 'file:///home/harlan/pkg/gscdump/packages/gscdump/dist/analytics/index.mjs';
-import { createHttpDataSource, createHttpManifestStore } from 'file:///home/harlan/pkg/gscdump/packages/gscdump/dist/analytics/adapters/http.mjs';
-import { createNodeDuckDBHandle } from 'file:///home/harlan/pkg/gscdump/packages/gscdump/dist/analytics/adapters/duckdb-node.mjs';
+import { runAnalyzerWithEngine, defaultAnalyzerRegistry, analyzeActionPriority } from 'file:///home/harlan/pkg/gscdump/packages/analysis/dist/index.mjs';
 import { readFile } from 'node:fs/promises';
 import { promises, statSync, createReadStream } from 'node:fs';
+import { createStorageEngine, createDuckDBExecutor, createDuckDBCodec } from 'file:///home/harlan/pkg/gscdump/packages/engine/dist/index.mjs';
+import { createHttpDataSource, createHttpManifestStore } from 'file:///home/harlan/pkg/gscdump/packages/engine/dist/adapters/http.mjs';
+import { createNodeDuckDBHandle } from 'file:///home/harlan/pkg/gscdump/packages/engine/dist/adapters/duckdb-node.mjs';
 import { AwsClient } from 'file:///home/harlan/pkg/gscdump/node_modules/.pnpm/aws4fetch@1.0.20/node_modules/aws4fetch/dist/aws4fetch.esm.mjs';
 import { createRenderer, getRequestDependencies, getPreloadLinks, getPrefetchLinks } from 'file:///home/harlan/pkg/gscdump/node_modules/.pnpm/vue-bundle-renderer@2.2.0/node_modules/vue-bundle-renderer/dist/runtime.mjs';
 import { parseURL, withoutBase, joinURL, getQuery, withQuery, withTrailingSlash, decodePath, withLeadingSlash, withoutTrailingSlash, joinRelativeURL } from 'file:///home/harlan/pkg/gscdump/node_modules/.pnpm/ufo@1.6.3/node_modules/ufo/dist/index.mjs';
@@ -2136,7 +2136,22 @@ const plugins = [
 _wH6JrtIxmaSoA8lCPWFnE9z4lQeXW6H5z3l5aymEQw
 ];
 
-const assets = {};
+const assets = {
+  "/index.mjs": {
+    "type": "text/javascript; charset=utf-8",
+    "etag": "\"1ee5d-EFAJq0qjOaOT/OcI22AgnfyoIWQ\"",
+    "mtime": "2026-04-21T02:35:13.491Z",
+    "size": 126557,
+    "path": "index.mjs"
+  },
+  "/index.mjs.map": {
+    "type": "application/json",
+    "etag": "\"7b33d-tXCwx7Aj5tW53mV6cA0YEExj7kw\"",
+    "mtime": "2026-04-21T02:35:13.491Z",
+    "size": 504637,
+    "path": "index.mjs.map"
+  }
+};
 
 function readAsset (id) {
   const serverDir = dirname$1(fileURLToPath(globalThis._importMeta_.url));
@@ -2600,6 +2615,7 @@ const _lazy_rQzRqz = () => Promise.resolve().then(function () { return analysisS
 const _lazy_wzcTCl = () => Promise.resolve().then(function () { return _analyzer__get$1; });
 const _lazy_lDTpWd = () => Promise.resolve().then(function () { return manifest_get$1; });
 const _lazy_mJbliE = () => Promise.resolve().then(function () { return ____path__get$1; });
+const _lazy_u7K5p0 = () => Promise.resolve().then(function () { return report_get$1; });
 const _lazy__Z8e7i = () => Promise.resolve().then(function () { return signUrl_get$1; });
 const _lazy_rGEGt4 = () => Promise.resolve().then(function () { return signUrls_post$1; });
 const _lazy_JkoQ3k = () => Promise.resolve().then(function () { return renderer; });
@@ -2610,6 +2626,7 @@ const handlers = [
   { route: '/api/analysis/:analyzer', handler: _lazy_wzcTCl, lazy: true, middleware: false, method: "get" },
   { route: '/api/manifest', handler: _lazy_lDTpWd, lazy: true, middleware: false, method: "get" },
   { route: '/api/r2-data/**:path', handler: _lazy_mJbliE, lazy: true, middleware: false, method: "get" },
+  { route: '/api/report', handler: _lazy_u7K5p0, lazy: true, middleware: false, method: "get" },
   { route: '/api/sign-url', handler: _lazy__Z8e7i, lazy: true, middleware: false, method: "get" },
   { route: '/api/sign-urls', handler: _lazy_rGEGt4, lazy: true, middleware: false, method: "post" },
   { route: '/__nuxt_error', handler: _lazy_JkoQ3k, lazy: true, middleware: false, method: undefined },
@@ -2955,6 +2972,8 @@ const styles$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
 }, Symbol.toStringTag, { value: 'Module' }));
 
 const TABLES = ["pages", "keywords", "countries", "devices", "page_keywords"];
+const MONTHLY_PARTITION_RE = /^monthly\/(\d{4}-\d{2})$/;
+const DAILY_PARTITION_RE = /^daily\/(\d{4}-\d{2})-\d{2}$/;
 const analysisSources_get = defineEventHandler(async (event) => {
   var _a, _b;
   const origin = getRequestURL(event).origin;
@@ -2970,7 +2989,7 @@ const analysisSources_get = defineEventHandler(async (event) => {
   }
   const coveredMonthsByTable = /* @__PURE__ */ new Map();
   for (const e of latestByKey.values()) {
-    const m = /^monthly\/(\d{4}-\d{2})$/.exec(e.partition);
+    const m = MONTHLY_PARTITION_RE.exec(e.partition);
     if (!m)
       continue;
     const set = (_a = coveredMonthsByTable.get(e.table)) != null ? _a : /* @__PURE__ */ new Set();
@@ -2983,7 +3002,7 @@ const analysisSources_get = defineEventHandler(async (event) => {
     const entries = [...latestByKey.values()].filter((e) => {
       if (e.table !== table)
         return false;
-      const daily = /^daily\/(\d{4}-\d{2})-\d{2}$/.exec(e.partition);
+      const daily = DAILY_PARTITION_RE.exec(e.partition);
       if (daily && monthsCovered.has(daily[1]))
         return false;
       return true;
@@ -2999,6 +3018,115 @@ const analysisSources_get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.def
   default: analysisSources_get
 }, Symbol.toStringTag, { value: 'Module' }));
 
+let cached = null;
+async function build(origin) {
+  const cfg = useRuntimeConfig();
+  const userId = cfg.gscUserId;
+  const siteId = cfg.gscSiteId || void 0;
+  if (!userId)
+    throw createError({ statusCode: 500, statusMessage: "GSCDUMP_USER_ID not set" });
+  const handle = createNodeDuckDBHandle();
+  const factory = { getDuckDB: async () => handle };
+  const dataSource = createHttpDataSource({
+    baseUrl: `${origin}/api/r2-data`,
+    signUrl: (key) => `${origin}/api/r2-data/${key}`,
+    useDuckDBHttpfs: false
+  });
+  dataSource.read = async (key, range, signal) => {
+    const headers = {};
+    if (range)
+      headers.Range = `bytes=${range.offset}-${range.offset + range.length - 1}`;
+    const res = await fetch(`${origin}/api/r2-data/${key}`, { headers, signal });
+    if (!res.ok)
+      throw new Error(`read failed ${res.status} for ${key}`);
+    return new Uint8Array(await res.arrayBuffer());
+  };
+  const manifestStore = createHttpManifestStore({
+    manifestUrl: `${origin}/api/manifest?user=${userId}${siteId ? `&site=${siteId}` : ""}`
+  });
+  const engine = createStorageEngine({
+    dataSource,
+    manifestStore,
+    codec: createDuckDBCodec(factory),
+    executor: createDuckDBExecutor(factory)
+  });
+  return { engine, ctx: { userId, siteId } };
+}
+function useAnalysisEngine(origin) {
+  if (!cached)
+    cached = build(origin);
+  return cached;
+}
+
+const VALID = /* @__PURE__ */ new Set([
+  "bayesian-ctr",
+  "bipartite-pagerank",
+  "brand",
+  "cannibalization",
+  "change-point",
+  "clustering",
+  "concentration",
+  "content-velocity",
+  "ctr-anomaly",
+  "ctr-curve",
+  "dark-traffic",
+  "decay",
+  "device-gap",
+  "intent-atlas",
+  "keyword-breadth",
+  "long-tail",
+  "movers",
+  "opportunity",
+  "position-distribution",
+  "position-volatility",
+  "query-migration",
+  "seasonality",
+  "stl-decompose",
+  "striking-distance",
+  "survival",
+  "trends",
+  "zero-click"
+]);
+const _analyzer__get = defineEventHandler(async (event) => {
+  const analyzer = getRouterParam(event, "analyzer");
+  if (!analyzer || !VALID.has(analyzer))
+    throw createError({ statusCode: 400, statusMessage: `unknown analyzer "${analyzer}"` });
+  const query = getQuery$1(event);
+  const params = {
+    type: analyzer,
+    // Forward per-analyzer params verbatim; analyzers validate their own shape.
+    ...query,
+    // Ensure numeric fields are numbers where callers pass strings.
+    limit: query.limit !== void 0 ? Number(query.limit) : void 0
+  };
+  const origin = getRequestURL(event).origin;
+  const t0 = performance.now();
+  const { engine, ctx } = await useAnalysisEngine(origin);
+  const setupMs = performance.now() - t0;
+  const t1 = performance.now();
+  const result = await runAnalyzerWithEngine({ engine }, ctx, params, defaultAnalyzerRegistry);
+  const queryMs = performance.now() - t1;
+  return {
+    ...result,
+    meta: {
+      ...result.meta,
+      source: "server",
+      timings: { setupMs, queryMs, totalMs: setupMs + queryMs }
+    }
+  };
+});
+
+const _analyzer__get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
+  __proto__: null,
+  default: _analyzer__get
+}, Symbol.toStringTag, { value: 'Module' }));
+
+const CONTENTS_RE = /<Contents>[\s\S]*?<\/Contents>/g;
+const KEY_RE$1 = /<Key>([^<]+)<\/Key>/;
+const SIZE_RE = /<Size>([^<]+)<\/Size>/;
+const LAST_MODIFIED_RE = /<LastModified>([^<]+)<\/LastModified>/;
+const NEXT_TOKEN_RE = /<NextContinuationToken>([^<]+)<\/NextContinuationToken>/;
+const IS_TRUNCATED_RE = /<IsTruncated>true<\/IsTruncated>/;
 const DEFAULT_EXPIRES_S = 3600;
 function createR2Client(opts) {
   const endpoint = `https://${opts.accountId}.r2.cloudflarestorage.com`;
@@ -3031,16 +3159,16 @@ function createR2Client(opts) {
       if (!res.ok)
         throw new Error(`r2 list failed ${res.status}: ${await res.text()}`);
       const xml = await res.text();
-      const contents = (_a = xml.match(/<Contents>[\s\S]*?<\/Contents>/g)) != null ? _a : [];
+      const contents = (_a = xml.match(CONTENTS_RE)) != null ? _a : [];
       for (const c of contents) {
-        const key = (_b = /<Key>([^<]+)<\/Key>/.exec(c)) == null ? void 0 : _b[1];
-        const size = Number((_d = (_c = /<Size>([^<]+)<\/Size>/.exec(c)) == null ? void 0 : _c[1]) != null ? _d : "0");
-        const lastModified = (_e = /<LastModified>([^<]+)<\/LastModified>/.exec(c)) == null ? void 0 : _e[1];
+        const key = (_b = KEY_RE$1.exec(c)) == null ? void 0 : _b[1];
+        const size = Number((_d = (_c = SIZE_RE.exec(c)) == null ? void 0 : _c[1]) != null ? _d : "0");
+        const lastModified = (_e = LAST_MODIFIED_RE.exec(c)) == null ? void 0 : _e[1];
         if (key && lastModified)
           yield { key, size, lastModified };
       }
-      const nextToken = (_f = /<NextContinuationToken>([^<]+)<\/NextContinuationToken>/.exec(xml)) == null ? void 0 : _f[1];
-      const isTruncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
+      const nextToken = (_f = NEXT_TOKEN_RE.exec(xml)) == null ? void 0 : _f[1];
+      const isTruncated = IS_TRUNCATED_RE.test(xml);
       if (!isTruncated || !nextToken)
         break;
       continuationToken = nextToken;
@@ -3072,98 +3200,7 @@ function useR2Client() {
   });
 }
 
-let cached = null;
-async function build(origin) {
-  const cfg = useRuntimeConfig();
-  const userId = cfg.gscUserId;
-  const siteId = cfg.gscSiteId || void 0;
-  if (!userId)
-    throw createError({ statusCode: 500, statusMessage: "GSCDUMP_USER_ID not set" });
-  const r2 = useR2Client();
-  const handle = createNodeDuckDBHandle();
-  const factory = { getDuckDB: async () => handle };
-  const dataSource = createHttpDataSource({
-    baseUrl: `https://${cfg.r2AccountId}.r2.cloudflarestorage.com/${cfg.r2Bucket}`,
-    // Every read signs a fresh URL locally — no round-trip back through our
-    // own /api/sign-url. The browser hits /api/sign-url because it doesn't
-    // have the R2 secret; the server has it, so call the R2 client directly.
-    signUrl: (key) => {
-      return `${cfg.r2AccountId}.r2.cloudflarestorage.com/${cfg.r2Bucket}/${key}`;
-    },
-    useDuckDBHttpfs: false
-  });
-  dataSource.read;
-  dataSource.read = async (key, range, signal) => {
-    const url = await r2.presignGet(key);
-    const headers = {};
-    if (range)
-      headers.Range = `bytes=${range.offset}-${range.offset + range.length - 1}`;
-    const res = await fetch(url, { headers, signal });
-    if (!res.ok)
-      throw new Error(`r2 read failed ${res.status} for ${key}`);
-    return new Uint8Array(await res.arrayBuffer());
-  };
-  const manifestStore = createHttpManifestStore({
-    manifestUrl: `${origin}/api/manifest?user=${userId}${siteId ? `&site=${siteId}` : ""}`
-  });
-  const engine = createStorageEngine({
-    dataSource,
-    manifestStore,
-    codec: createDuckDBCodec(factory),
-    executor: createDuckDBExecutor(factory)
-  });
-  return { engine, ctx: { userId, siteId } };
-}
-function useAnalysisEngine(origin) {
-  if (!cached)
-    cached = build(origin);
-  return cached;
-}
-
-const VALID = /* @__PURE__ */ new Set([
-  "striking-distance",
-  "opportunity",
-  "brand",
-  "clustering",
-  "concentration",
-  "seasonality",
-  "movers"
-]);
-const _analyzer__get = defineEventHandler(async (event) => {
-  const analyzer = getRouterParam(event, "analyzer");
-  if (!analyzer || !VALID.has(analyzer))
-    throw createError({ statusCode: 400, statusMessage: `unknown analyzer "${analyzer}"` });
-  const query = getQuery$1(event);
-  const params = {
-    type: analyzer,
-    // Forward per-analyzer params verbatim; analyzers validate their own shape.
-    ...query,
-    // Ensure numeric fields are numbers where callers pass strings.
-    limit: query.limit !== void 0 ? Number(query.limit) : void 0
-  };
-  const origin = getRequestURL(event).origin;
-  const t0 = performance.now();
-  const { engine, ctx } = await useAnalysisEngine(origin);
-  const setupMs = performance.now() - t0;
-  const t1 = performance.now();
-  const result = await analyzeWithDuckDB({ engine }, ctx, params);
-  const queryMs = performance.now() - t1;
-  return {
-    ...result,
-    meta: {
-      ...result.meta,
-      source: "server",
-      timings: { setupMs, queryMs, totalMs: setupMs + queryMs }
-    }
-  };
-});
-
-const _analyzer__get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
-  __proto__: null,
-  default: _analyzer__get
-}, Symbol.toStringTag, { value: 'Module' }));
-
-const KEY_RE = /^u_(?<userId>[^/]+)\/(?:(?<siteId>[^/]+)\/)?(?<table>pages|keywords|countries|devices|page_keywords)\/(?<partition>[^_]+)__v(?<version>\d+)\.parquet$/;
+const KEY_RE = /^u_(?<userId>[^/]+)\/(?:(?<siteId>[^/]+)\/)?(?<table>pages|keywords|countries|devices|page_keywords)\/(?<partition>[^_]+)__v\d+\.parquet$/;
 const manifest_get = defineEventHandler(async (event) => {
   var _a, _b;
   const cfg = useRuntimeConfig();
@@ -3203,6 +3240,7 @@ const manifest_get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProp
   default: manifest_get
 }, Symbol.toStringTag, { value: 'Module' }));
 
+const BYTE_RANGE_RE = /^bytes=(\d+)-(\d*)$/;
 const ____path__get = defineEventHandler(async (event) => {
   var _a;
   const segments = (_a = getRouterParam(event, "path")) != null ? _a : "";
@@ -3221,27 +3259,23 @@ const ____path__get = defineEventHandler(async (event) => {
     const st = statSync(abs);
     const range2 = getHeader(event, "range");
     if (range2) {
-      const m = /^bytes=(\d+)-(\d*)$/.exec(range2);
+      const m = BYTE_RANGE_RE.exec(range2);
       if (m) {
         const start = Number(m[1]);
         const end = m[2] ? Number(m[2]) : st.size - 1;
         setResponseStatus(event, 206);
-        setHeaders(event, {
-          "content-type": "application/octet-stream",
-          "content-length": String(end - start + 1),
-          "content-range": `bytes ${start}-${end}/${st.size}`,
-          "accept-ranges": "bytes",
-          "cache-control": "public, max-age=31536000, immutable"
-        });
+        setHeader(event, "content-type", "application/octet-stream");
+        setHeader(event, "content-length", end - start + 1);
+        setHeader(event, "content-range", `bytes ${start}-${end}/${st.size}`);
+        setHeader(event, "accept-ranges", "bytes");
+        setHeader(event, "cache-control", "public, max-age=31536000, immutable");
         return sendStream(event, createReadStream(abs, { start, end }));
       }
     }
-    setHeaders(event, {
-      "content-type": "application/octet-stream",
-      "content-length": String(st.size),
-      "accept-ranges": "bytes",
-      "cache-control": "public, max-age=31536000, immutable"
-    });
+    setHeader(event, "content-type", "application/octet-stream");
+    setHeader(event, "content-length", st.size);
+    setHeader(event, "accept-ranges", "bytes");
+    setHeader(event, "cache-control", "public, max-age=31536000, immutable");
     return sendStream(event, createReadStream(abs));
   }
   const r2 = useR2Client();
@@ -3249,11 +3283,9 @@ const ____path__get = defineEventHandler(async (event) => {
   const method = event.method;
   if (method === "HEAD" && typeof sizeHint === "string" && sizeHint) {
     setResponseStatus(event, 200);
-    setHeaders(event, {
-      "content-length": sizeHint,
-      "accept-ranges": "bytes",
-      "cache-control": "public, max-age=31536000, immutable"
-    });
+    setHeader(event, "content-length", Number(sizeHint));
+    setHeader(event, "accept-ranges", "bytes");
+    setHeader(event, "cache-control", "public, max-age=31536000, immutable");
     return null;
   }
   const signedUrl = await r2.presignGet(key);
@@ -3276,6 +3308,55 @@ const ____path__get = defineEventHandler(async (event) => {
 const ____path__get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
   __proto__: null,
   default: ____path__get
+}, Symbol.toStringTag, { value: 'Module' }));
+
+const report_get = defineEventHandler(async (event) => {
+  const query = getQuery$1(event);
+  const limit = query.limit !== void 0 ? Number(query.limit) : 40;
+  const origin = getRequestURL(event).origin;
+  const t0 = performance.now();
+  const { engine, ctx } = await useAnalysisEngine(origin);
+  const setupMs = performance.now() - t0;
+  const sourceStates = [];
+  let queue = Promise.resolve();
+  const serialized = (fn) => {
+    const next = queue.then(fn, fn);
+    queue = next.catch(() => void 0);
+    return next;
+  };
+  const t1 = performance.now();
+  const result = await analyzeActionPriority(
+    {
+      analyze: (params) => serialized(() => runAnalyzerWithEngine({ engine }, ctx, params, defaultAnalyzerRegistry))
+    },
+    {
+      limit,
+      onSourceStatus: (state) => {
+        const idx = sourceStates.findIndex((s) => s.source === state.source);
+        if (idx >= 0)
+          sourceStates[idx] = state;
+        else
+          sourceStates.push(state);
+      }
+    }
+  );
+  const analyzeMs = performance.now() - t1;
+  return {
+    actions: result.actions,
+    totalSignals: result.totalSignals,
+    sources: result.sources,
+    generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    timings: {
+      setupMs,
+      analyzeMs,
+      totalMs: setupMs + analyzeMs
+    }
+  };
+});
+
+const report_get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
+  __proto__: null,
+  default: report_get
 }, Symbol.toStringTag, { value: 'Module' }));
 
 const signUrl_get = defineEventHandler(async (event) => {

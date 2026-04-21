@@ -20,6 +20,8 @@
 npm install gscdump
 ```
 
+This package is the edge-safe surface: REST client + query builder + cross-package contracts. For the storage engine (Parquet/DuckDB, planner, adapters), install [`@gscdump/engine`](../engine). For analyzers, install [`@gscdump/analysis`](../analysis).
+
 ## Usage
 
 ```ts

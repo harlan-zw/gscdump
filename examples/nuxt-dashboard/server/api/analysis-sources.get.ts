@@ -6,7 +6,7 @@
 // Shape matches gscdump.com's /api/sites/:siteId/analysis-sources route:
 //   { tables: { [tableName]: string[] }, generatedAt: string }
 
-import type { ManifestEntry, TableName } from 'gscdump/analytics'
+import type { ManifestEntry, TableName } from '@gscdump/engine'
 
 const TABLES: TableName[] = ['pages', 'keywords', 'countries', 'devices', 'page_keywords']
 const MONTHLY_PARTITION_RE = /^monthly\/(\d{4}-\d{2})$/

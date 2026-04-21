@@ -1,17 +1,19 @@
 import antfu from '@antfu/eslint-config'
 
-// Layer lint — encodes the package DAG declared in ARCHITECTURE.md + NEXT_STEPS.md.
+// Layer lint — encodes the package DAG declared in ARCHITECTURE.md.
 // Edges allowed between sibling packages:
-//   gscdump    → (no @gscdump/* siblings; edge-compatible surface must stay node-free)
-//   analysis   → gscdump
-//   cloud      → gscdump
-//   mcp        → gscdump
-//   cli        → gscdump, analysis, mcp        (NOT cloud — cloud commands live in @gscdump/cloud bin)
+//   gscdump             → (no @gscdump/* siblings; edge-compatible surface must stay node-free)
+//   engine              → gscdump
+//   analysis            → gscdump, engine, engine-wasm, engine-sqlite, engine-duckdb-node
+//   engine-duckdb-node  → gscdump, engine, analysis (analyzer/query/source subpaths)
+//   cloud               → gscdump, analysis (type-only — `AnalysisParams`, `AnalysisResult`)
+//   mcp                 → gscdump
+//   cli                 → gscdump, engine, engine-duckdb-node, analysis, mcp
 function forbidSiblings(...siblings) {
   return {
     patterns: siblings.map(name => ({
       group: [`@gscdump/${name}`, `@gscdump/${name}/*`],
-      message: `Layer violation: this package may not import from @gscdump/${name}. See ARCHITECTURE.md / NEXT_STEPS.md for the allowed DAG.`,
+      message: `Layer violation: this package may not import from @gscdump/${name}. See ARCHITECTURE.md for the allowed DAG.`,
     })),
   }
 }
@@ -19,60 +21,55 @@ function forbidSiblings(...siblings) {
 const preferGranularCoreSubpaths = {
   paths: [
     {
-      name: 'gscdump/shared',
-      importNames: ['AnalysisParams', 'AnalysisResult', 'AnalysisTool'],
-      message: 'Import analysis contracts from gscdump/shared/analysis.',
-    },
-    {
-      name: 'gscdump/shared',
-      importNames: ['DriverInspectResult', 'DriverQueryParams', 'DriverQueryResult', 'DriverQueryRow', 'DriverSite', 'DriverSitemap', 'DriverSiteWithSync'],
-      message: 'Import driver contracts from gscdump/shared/driver.',
-    },
-    {
-      name: 'gscdump/shared',
-      importNames: ['SnapshotIndex'],
-      message: 'Import snapshot contracts from gscdump/shared/snapshot.',
-    },
-    {
-      name: 'gscdump/analytics',
+      name: '@gscdump/engine',
       importNames: ['Row', 'StorageEngine', 'TableName', 'TenantCtx', 'WriteCtx', 'ManifestEntry', 'Watermark'],
-      message: 'Import analytics contracts from gscdump/analytics/contracts.',
+      message: 'Import storage contracts from @gscdump/engine/contracts.',
     },
     {
-      name: 'gscdump/analytics',
+      name: '@gscdump/engine',
+      importNames: ['SnapshotIndex'],
+      message: 'Import snapshot contracts from @gscdump/engine/snapshot.',
+    },
+    {
+      name: '@gscdump/engine',
       importNames: ['SCHEMAS', 'allTables', 'currentSchemaVersion', 'dimensionToColumn', 'inferTable'],
-      message: 'Import analytics schema primitives from gscdump/analytics/schema.',
+      message: 'Import schema primitives from @gscdump/engine/schema.',
     },
     {
-      name: 'gscdump/analytics',
+      name: '@gscdump/engine',
       importNames: ['enumeratePartitions', 'FILES_PLACEHOLDER', 'resolveToSQL', 'substituteNamedFiles'],
-      message: 'Import analytics query-planning primitives from gscdump/analytics/planner.',
+      message: 'Import query-planning primitives from @gscdump/engine/planner.',
     },
     {
-      name: 'gscdump/analytics',
-      importNames: ['encodeSiteId'],
-      message: 'Import tenant helpers from gscdump/analytics/tenant.',
-    },
-    {
-      name: 'gscdump/analytics',
-      importNames: ['normalizeUrl'],
-      message: 'Import URL normalization from gscdump/analytics/normalize.',
-    },
-    {
-      name: 'gscdump/analytics',
+      name: '@gscdump/engine',
       importNames: ['createRowAccumulator', 'toPath', 'toSumPosition', 'transformGscRow'],
-      message: 'Import ingest helpers from gscdump/analytics/ingest.',
+      message: 'Import ingest helpers from @gscdump/engine/ingest.',
     },
     {
-      name: 'gscdump/analytics',
+      name: '@gscdump/engine',
       importNames: ['bindLiterals', 'formatLiteral'],
-      message: 'Import SQL literal helpers from gscdump/analytics/sql.',
+      message: 'Import SQL literal helpers from @gscdump/engine/sql.',
+    },
+    {
+      name: 'gscdump',
+      importNames: ['DriverInspectResult', 'DriverQueryParams', 'DriverQueryResult', 'DriverQueryRow', 'DriverSite', 'DriverSitemap', 'DriverSiteWithSync'],
+      message: 'Import driver contracts from gscdump/driver.',
+    },
+    {
+      name: 'gscdump',
+      importNames: ['encodeSiteId'],
+      message: 'Import tenant helpers from gscdump/tenant.',
+    },
+    {
+      name: 'gscdump',
+      importNames: ['normalizeUrl'],
+      message: 'Import URL normalization from gscdump/normalize.',
     },
   ],
   patterns: [
     {
-      group: ['**/gscdump/src/**'],
-      message: 'Import gscdump internals through its public subpath exports instead of reaching into packages/gscdump/src.',
+      group: ['**/gscdump/src/**', '**/engine/src/**'],
+      message: 'Import gscdump/engine internals through public subpath exports instead of reaching into packages/*/src.',
     },
   ],
 }
@@ -108,21 +105,32 @@ export default antfu({
     }],
   },
 }, {
-  // Core's edge-compatible surface (client + query builder + shared types + driver types + index).
+  // Core's edge-compatible surface (client + query builder + driver types + index).
   // Must never pull in node:* builtins on top of the sibling-package rule above.
-  // This config appears AFTER the broader one so the tighter `no-restricted-imports` wins for these files.
   files: [
     'packages/gscdump/src/core/**/*.ts',
     'packages/gscdump/src/query/**/*.ts',
-    'packages/gscdump/src/shared/**/*.ts',
-    'packages/gscdump/src/driver/**/*.ts',
+    'packages/gscdump/src/driver.ts',
+    'packages/gscdump/src/tenant.ts',
+    'packages/gscdump/src/normalize.ts',
     'packages/gscdump/src/index.ts',
   ],
   rules: {
     'no-restricted-imports': ['error', {
       patterns: [
-        { group: ['node:*'], message: 'Core\'s edge-compatible surface must not import node:* builtins. Move Node-only code into packages/gscdump/src/analytics/adapters/.' },
+        { group: ['node:*'], message: 'Core\'s edge-compatible surface must not import node:* builtins. Move Node-only code into @gscdump/engine adapters.' },
         { group: ['@gscdump/*'], message: 'Core (gscdump) must not depend on sibling @gscdump/* packages (would create a cycle).' },
+      ],
+    }],
+  },
+}, {
+  files: ['packages/engine/src/**/*.ts'],
+  rules: {
+    'no-restricted-imports': ['error', {
+      paths: preferGranularCoreSubpaths.paths,
+      patterns: [
+        ...forbidSiblings('cli', 'mcp', 'cloud', 'analysis', 'engine-wasm', 'engine-sqlite', 'engine-duckdb-node').patterns,
+        ...preferGranularCoreSubpaths.patterns,
       ],
     }],
   },
@@ -138,12 +146,23 @@ export default antfu({
     }],
   },
 }, {
+  files: ['packages/engine-duckdb-node/src/**/*.ts'],
+  rules: {
+    'no-restricted-imports': ['error', {
+      paths: preferGranularCoreSubpaths.paths,
+      patterns: [
+        ...forbidSiblings('cli', 'mcp', 'cloud').patterns,
+        ...preferGranularCoreSubpaths.patterns,
+      ],
+    }],
+  },
+}, {
   files: ['packages/cloud/src/**/*.ts'],
   rules: {
     'no-restricted-imports': ['error', {
       paths: preferGranularCoreSubpaths.paths,
       patterns: [
-        ...forbidSiblings('cli', 'mcp', 'analysis').patterns,
+        ...forbidSiblings('cli', 'mcp', 'engine', 'engine-wasm', 'engine-sqlite', 'engine-duckdb-node').patterns,
         ...preferGranularCoreSubpaths.patterns,
       ],
     }],
@@ -154,7 +173,7 @@ export default antfu({
     'no-restricted-imports': ['error', {
       paths: preferGranularCoreSubpaths.paths,
       patterns: [
-        ...forbidSiblings('cli', 'cloud', 'analysis').patterns,
+        ...forbidSiblings('cli', 'cloud', 'analysis', 'engine', 'engine-wasm', 'engine-sqlite', 'engine-duckdb-node').patterns,
         ...preferGranularCoreSubpaths.patterns,
       ],
     }],

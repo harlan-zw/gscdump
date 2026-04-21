@@ -3,10 +3,9 @@
 
 export {
   analyzeInBrowser,
-  analyzeWithDuckDB,
   attachParquetIndex,
   attachSnapshotIndex,
-} from '@gscdump/analysis/duckdb'
+} from '@gscdump/engine-duckdb-node'
 
 export {
   createInsightRunner,
@@ -16,16 +15,16 @@ export {
   schema,
   scopeFor,
   strikingMomentum,
-} from '@gscdump/analysis/browser'
+} from '@gscdump/engine-wasm'
 
+export { encodeSiteId } from 'gscdump/tenant'
 export {
   createDuckDBCodec,
   createDuckDBExecutor,
   createStorageEngine,
-  encodeSiteId,
-} from 'gscdump/analytics'
+} from '@gscdump/engine'
 
 export {
   createHttpDataSource,
   createHttpManifestStore,
-} from 'gscdump/analytics/http'
+} from '@gscdump/engine/http'

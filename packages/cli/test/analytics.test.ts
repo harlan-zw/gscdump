@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { encodeSiteId } from 'gscdump/analytics/tenant'
+import { encodeSiteId } from 'gscdump/tenant'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { defaultDataDir, resolveDataDir } from '../src/config'
 

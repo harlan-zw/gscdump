@@ -57,8 +57,8 @@ pnpm --filter gscdump --filter @gscdump/analysis run build
   --outfile=examples/browser-http/bundle.mjs \
   --alias:gscdump/analytics=./packages/gscdump/dist/analytics/index.mjs \
   --alias:gscdump/analytics/http=./packages/gscdump/dist/analytics/adapters/http.mjs \
-  --alias:@gscdump/analysis/duckdb=./packages/analysis/dist/duckdb/index.mjs \
-  --alias:@gscdump/analysis/browser=./packages/analysis/dist/browser/index.mjs \
+  --alias:@gscdump/engine-duckdb-node=./packages/engine-duckdb-node/dist/index.mjs \
+  --alias:@gscdump/engine-wasm=./packages/analysis/dist/browser/index.mjs \
   --alias:gscdump=./packages/gscdump/dist/index.mjs
 
 # build hot/cold snapshots (requires the proxy running on :8081)

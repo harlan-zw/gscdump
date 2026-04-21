@@ -1,23 +1,11 @@
-import type { Row, TableName, WriteCtx } from 'gscdump/analytics/contracts'
-import type { AnalyticsHarness } from '../analytics'
+import type { googleSearchConsole } from 'gscdump'
+import type { LocalStore, Row, TableName, WriteCtx } from '../local-store'
 import process from 'node:process'
-import { cancel, isCancel, select } from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { googleSearchConsole } from 'gscdump'
-import { allTables } from 'gscdump/analytics/schema'
-import { createAnalyticsHarness } from '../analytics'
-import { getAuth } from '../auth'
-import { loadConfig } from '../config'
-
+import { loadConfig, resolveDataDir } from '../config'
+import { createCommandContext } from '../context'
+import { allTables, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
 import { clearLine, logger, progressBar } from '../utils'
-
-const TABLE_DIMS: Record<TableName, string[]> = {
-  pages: ['page', 'date'],
-  keywords: ['query', 'date'],
-  countries: ['country', 'date'],
-  devices: ['device', 'date'],
-  page_keywords: ['page', 'query', 'date'],
-}
 
 const DEFAULT_TABLES: TableName[] = ['pages', 'keywords', 'countries', 'devices']
 const DEFAULT_PENDING_DAYS = 3
@@ -88,63 +76,8 @@ function enumerateDates(start: string, end: string): string[] {
   return out
 }
 
-function toRow(table: TableName, raw: Record<string, unknown>): Row {
-  const impressions = Number(raw.impressions ?? 0)
-  const position = Number(raw.position ?? 0)
-  const sumPosition = position > 0 ? (position - 1) * impressions : 0
-  const base: Row = {
-    date: String(raw.date ?? ''),
-    clicks: Number(raw.clicks ?? 0),
-    impressions,
-    sum_position: sumPosition,
-  }
-  switch (table) {
-    case 'pages':
-      base.url = String(raw.page ?? '')
-      return base
-    case 'keywords':
-      base.query = String(raw.query ?? '')
-      return base
-    case 'countries':
-      base.country = String(raw.country ?? '')
-      return base
-    case 'devices':
-      base.device = String(raw.device ?? '')
-      return base
-    case 'page_keywords':
-      base.url = String(raw.page ?? '')
-      base.query = String(raw.query ?? '')
-      return base
-  }
-}
-
-interface GscSite {
-  siteUrl: string
-  permissionLevel: string
-}
-
-async function resolveSiteUrl(sites: GscSite[], target?: string): Promise<string> {
-  if (target) {
-    const match = sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
-    if (match)
-      return match.siteUrl
-  }
-  if (sites.length === 1)
-    return sites[0].siteUrl
-
-  const selected = await select({
-    message: 'Select a site',
-    options: sites.map(s => ({ value: s.siteUrl, label: s.siteUrl })),
-  })
-  if (isCancel(selected)) {
-    cancel('Cancelled')
-    process.exit(0)
-  }
-  return selected as string
-}
-
 async function syncTable(
-  harness: AnalyticsHarness,
+  store: LocalStore,
   siteUrl: string,
   table: TableName,
   dates: string[],
@@ -154,13 +87,13 @@ async function syncTable(
   progress: ProgressTracker,
 ): Promise<{ rows: number, skipped: number, failed: number }> {
   const dims = TABLE_DIMS[table]
-  const siteId = harness.siteIdFor(siteUrl)
+  const siteId = store.siteIdFor(siteUrl)
   let totalRows = 0
   let skipped = 0
   let failed = 0
 
-  const priorStates = await harness.engine.getSyncStates({
-    userId: harness.userId,
+  const priorStates = await store.engine.getSyncStates({
+    userId: store.userId,
     siteId,
     table,
   })
@@ -174,20 +107,20 @@ async function syncTable(
       return
     }
 
-    const scope = { userId: harness.userId, siteId, table, date }
-    await harness.engine.setSyncState(scope, 'inflight')
+    const scope = { userId: store.userId, siteId, table, date }
+    await store.engine.setSyncState(scope, 'inflight')
 
-    const result = await runOneDate(harness, client, siteUrl, table, dims, date)
+    const result = await runOneDate(store, client, siteUrl, table, dims, date)
       .catch((err: Error) => ({ kind: 'error' as const, error: err }))
 
     if (result.kind === 'error') {
-      await harness.engine.setSyncState(scope, 'failed', { error: result.error.message })
+      await store.engine.setSyncState(scope, 'failed', { error: result.error.message })
       failed++
       progress.tick(`${table} ${date} (fail)`)
       return
     }
 
-    await harness.engine.setSyncState(scope, 'done')
+    await store.engine.setSyncState(scope, 'done')
     totalRows += result.rows
     progress.tick(`${table} ${date}`)
   })
@@ -196,7 +129,7 @@ async function syncTable(
 }
 
 async function runOneDate(
-  harness: AnalyticsHarness,
+  store: LocalStore,
   client: ReturnType<typeof googleSearchConsole>,
   siteUrl: string,
   table: TableName,
@@ -215,31 +148,30 @@ async function runOneDate(
       rowLimit,
       startRow,
     } as any)
-    const batch = (response.rows || []).map((row) => {
-      const raw: Record<string, unknown> = {
-        clicks: row.clicks ?? 0,
-        impressions: row.impressions ?? 0,
-        ctr: row.ctr ?? 0,
-        position: row.position ?? 0,
-      }
-      dims.forEach((dim, i) => {
-        raw[dim] = row.keys?.[i]
+    const batch = response.rows || []
+    for (const apiRow of batch) {
+      const transformed = transformGscRow(table, {
+        keys: (apiRow.keys ?? []) as string[],
+        clicks: apiRow.clicks ?? 0,
+        impressions: apiRow.impressions ?? 0,
+        ctr: apiRow.ctr ?? 0,
+        position: apiRow.position ?? 0,
       })
-      return toRow(table, raw)
-    })
-    rows.push(...batch)
+      if (transformed)
+        rows.push(transformed.row)
+    }
     if (batch.length < rowLimit)
       break
     startRow += batch.length
   }
 
   const writeCtx: WriteCtx = {
-    userId: harness.userId,
-    siteId: harness.siteIdFor(siteUrl),
+    userId: store.userId,
+    siteId: store.siteIdFor(siteUrl),
     table,
     date,
   }
-  await harness.engine.writeDay(writeCtx, rows)
+  await store.engine.writeDay(writeCtx, rows)
   return { kind: 'ok', rows: rows.length }
 }
 
@@ -308,31 +240,15 @@ export const syncCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const config = await loadConfig()
-
     if (args.status) {
+      const config = await loadConfig()
       await printSyncStatus(config, args.site ? String(args.site) : undefined, Boolean(args.json))
       return
     }
 
-    const auth = await getAuth({ interactive: false, config })
-    const client = googleSearchConsole(auth)
-
-    const gscSites = await client.sites().catch((e: Error) => {
-      logger.error(`Failed to fetch sites: ${e.message}`)
-      process.exit(1)
-    })
-
-    const sites: GscSite[] = gscSites
-      .filter(s => s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser')
-      .map(s => ({ siteUrl: s.siteUrl!, permissionLevel: s.permissionLevel || 'unknown' }))
-
-    if (sites.length === 0) {
-      logger.error('No GSC sites available.')
-      process.exit(1)
-    }
-
-    const siteUrl = await resolveSiteUrl(sites, args.site || config.defaultSite)
+    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
+    const client = ctx.client!
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
 
     const tables = args.tables
       ? String(args.tables).split(',').map(t => t.trim()).filter(isKnownTable)
@@ -359,9 +275,9 @@ export const syncCommand = defineCommand({
       process.exit(1)
     }
 
-    const harness = createAnalyticsHarness(config)
+    const store = ctx.store!
     if (!args.quiet) {
-      logger.info(`Syncing ${siteUrl} (${tables.join(', ')}) → ${harness.dataDir}`)
+      logger.info(`Syncing ${siteUrl} (${tables.join(', ')}) → ${store.dataDir}`)
       logger.info(`Range: ${startDate} → ${endDate} (${dates.length} days)`)
     }
 
@@ -376,12 +292,12 @@ export const syncCommand = defineCommand({
 
     if (serialTables) {
       for (const table of tables) {
-        totals[table] = await syncTable(harness, siteUrl, table, dates, client, concurrency, args.force, progress)
+        totals[table] = await syncTable(store, siteUrl, table, dates, client, concurrency, args.force, progress)
       }
     }
     else {
       const results = await Promise.all(
-        tables.map(table => syncTable(harness, siteUrl, table, dates, client, concurrency, args.force, progress)),
+        tables.map(table => syncTable(store, siteUrl, table, dates, client, concurrency, args.force, progress)),
       )
       tables.forEach((table, i) => {
         totals[table] = results[i]
@@ -418,17 +334,17 @@ async function printSyncStatus(
   siteFilter: string | undefined,
   asJson: boolean,
 ): Promise<void> {
-  const harness = createAnalyticsHarness(config)
-  const siteId = siteFilter ? harness.siteIdFor(siteFilter) : undefined
+  const store = createLocalStore({ dataDir: resolveDataDir(config) })
+  const siteId = siteFilter ? store.siteIdFor(siteFilter) : undefined
 
-  const watermarks = await harness.engine.getWatermarks({ userId: harness.userId, siteId })
-  const states = await harness.engine.getSyncStates({ userId: harness.userId, siteId })
+  const watermarks = await store.engine.getWatermarks({ userId: store.userId, siteId })
+  const states = await store.engine.getSyncStates({ userId: store.userId, siteId })
   const failed = states.filter(s => s.state === 'failed')
   const inflight = states.filter(s => s.state === 'inflight')
 
   if (asJson) {
     console.log(JSON.stringify({
-      dataDir: harness.dataDir,
+      dataDir: store.dataDir,
       siteFilter: siteFilter ?? null,
       watermarks,
       failed,
@@ -438,7 +354,7 @@ async function printSyncStatus(
   }
 
   console.log()
-  console.log(`  \x1B[1m${harness.dataDir}\x1B[0m`)
+  console.log(`  \x1B[1m${store.dataDir}\x1B[0m`)
   if (siteFilter)
     console.log(`  \x1B[90mSite: ${siteFilter}\x1B[0m`)
   console.log()

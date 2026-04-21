@@ -1,0 +1,128 @@
+{
+  "name": "@gscdump/engine",
+  "type": "module",
+  "version": "0.4.0",
+  "description": "Append-only Parquet/DuckDB storage engine + planner + adapters for the gscdump pipeline. Node + edge runtimes; opt-in heavy peers.",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/engine#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/engine"
+  },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.mts",
+      "import": "./dist/contracts.mjs"
+    },
+    "./snapshot": {
+      "types": "./dist/snapshot.d.mts",
+      "import": "./dist/snapshot.mjs"
+    },
+    "./planner": {
+      "types": "./dist/planner.d.mts",
+      "import": "./dist/planner.mjs"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.mts",
+      "import": "./dist/schema.mjs"
+    },
+    "./ingest": {
+      "types": "./dist/ingest.d.mts",
+      "import": "./dist/ingest.mjs"
+    },
+    "./sql": {
+      "types": "./dist/sql-bind.d.mts",
+      "import": "./dist/sql-bind.mjs"
+    },
+    "./sql-fragments": {
+      "types": "./dist/sql-fragments.d.mts",
+      "import": "./dist/sql-fragments.mjs"
+    },
+    "./node": {
+      "types": "./dist/adapters/duckdb-node.d.mts",
+      "import": "./dist/adapters/duckdb-node.mjs"
+    },
+    "./node-harness": {
+      "types": "./dist/adapters/node-harness.d.mts",
+      "import": "./dist/adapters/node-harness.mjs"
+    },
+    "./filesystem": {
+      "types": "./dist/adapters/filesystem.d.mts",
+      "import": "./dist/adapters/filesystem.mjs"
+    },
+    "./http": {
+      "types": "./dist/adapters/http.d.mts",
+      "import": "./dist/adapters/http.mjs"
+    },
+    "./hyparquet": {
+      "types": "./dist/adapters/hyparquet.d.mts",
+      "import": "./dist/adapters/hyparquet.mjs"
+    },
+    "./r2": {
+      "types": "./dist/adapters/r2.d.mts",
+      "import": "./dist/adapters/r2.mjs"
+    },
+    "./resolver": {
+      "types": "./dist/resolver/index.d.mts",
+      "import": "./dist/resolver/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "obuild --stub",
+    "build": "obuild",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "prepack": "pnpm run build"
+  },
+  "peerDependencies": {
+    "@duckdb/duckdb-wasm": "catalog:",
+    "hyparquet": "catalog:",
+    "hyparquet-writer": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@duckdb/duckdb-wasm": {
+      "optional": true
+    },
+    "hyparquet": {
+      "optional": true
+    },
+    "hyparquet-writer": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "drizzle-orm": "catalog:",
+    "gscdump": "workspace:*",
+    "proper-lockfile": "catalog:deps"
+  },
+  "devDependencies": {
+    "@duckdb/duckdb-wasm": "catalog:",
+    "@types/proper-lockfile": "catalog:",
+    "hyparquet": "catalog:",
+    "hyparquet-writer": "catalog:",
+    "vitest": "catalog:dev-test"
+  }
+}

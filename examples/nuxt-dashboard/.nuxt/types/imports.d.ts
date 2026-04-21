@@ -190,13 +190,13 @@ declare global {
   export type { PageMeta } from '../../../../node_modules/.pnpm/nuxt@4.4.2_@babel+core@7.29.0_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0__@emna_6635f9cd633ee1bd3fa811d4988c4b05/node_modules/nuxt/dist/app/composables/pages'
   import('../../../../node_modules/.pnpm/nuxt@4.4.2_@babel+core@7.29.0_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0__@emna_6635f9cd633ee1bd3fa811d4988c4b05/node_modules/nuxt/dist/app/composables/pages')
   // @ts-ignore
-  export type { ActionSource, Effort, PriorityAction, ActionPriorityProgress, ActionPriorityRunner } from '../../app/composables/useActionPriority'
+  export type { ActionPriorityProgress, ActionPriorityRunner, ActionSource, Effort, PriorityAction } from '../../app/composables/useActionPriority'
   import('../../app/composables/useActionPriority')
   // @ts-ignore
-  export type { ContentGapResult, ContentGapProgress, ContentGapOptions, ContentGapRunner } from '../../app/composables/useContentGap'
+  export type { ContentGapRunner, ContentGapOptions, ContentGapProgress, ContentGapResult } from '../../app/composables/useContentGap'
   import('../../app/composables/useContentGap')
   // @ts-ignore
-  export type { QueryResult, AnalyzeResult, InsightRunner } from '../../app/composables/useInsightRunner'
+  export type { InsightRunner } from '../../app/composables/useInsightRunner'
   import('../../app/composables/useInsightRunner')
 }
 // for vue template auto import

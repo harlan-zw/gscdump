@@ -15,6 +15,9 @@ declare module "nitropack/types" {
     '/api/r2-data/**:path': {
       'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/r2-data/[...path].get').default>>>>
     }
+    '/api/report': {
+      'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/report.get').default>>>>
+    }
     '/api/sign-url': {
       'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/sign-url.get').default>>>>
     }

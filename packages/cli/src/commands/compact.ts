@@ -1,8 +1,7 @@
-import type { TableName } from 'gscdump/analytics/contracts'
+import type { TableName } from '../local-store'
 import { defineCommand } from 'citty'
-import { allTables } from 'gscdump/analytics/schema'
-import { createAnalyticsHarness } from '../analytics'
-import { loadConfig } from '../config'
+import { createCommandContext } from '../context'
+import { allTables } from '../local-store'
 import { logger } from '../utils'
 
 const DEFAULT_DAYS = 35
@@ -31,15 +30,15 @@ export const compactCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const config = await loadConfig()
-    const harness = createAnalyticsHarness(config)
-    const siteId = args.site ? harness.siteIdFor(String(args.site)) : undefined
+    const ctx = await createCommandContext({ needsStore: true })
+    const store = ctx.store!
+    const siteId = args.site ? store.siteIdFor(String(args.site)) : undefined
     const quiet = Boolean(args.quiet)
     const days = Number(args.days)
 
     for (const table of allTables()) {
-      const entries = await harness.engine.listLive({
-        userId: harness.userId,
+      const entries = await store.engine.listLive({
+        userId: store.userId,
         siteId,
         table: table as TableName,
       })
@@ -47,8 +46,8 @@ export const compactCommand = defineCommand({
       for (const targetSite of siteIds) {
         if (!quiet)
           logger.info(`Compacting ${table} [${targetSite ?? '-'}] older than ${days}d`)
-        await harness.engine.compactOlderThan({
-          userId: harness.userId,
+        await store.engine.compactOlderThan({
+          userId: store.userId,
           siteId: targetSite,
           table: table as TableName,
         }, days)

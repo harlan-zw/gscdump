@@ -1,9 +1,9 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { resetNodeDuckDB } from 'gscdump/analytics/node'
+import { resetNodeDuckDB } from '@gscdump/engine/node'
+import { createNodeHarness } from '@gscdump/engine/node-harness'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createAnalyticsHarness } from '../../src/analytics'
 import { syncCommand } from '../../src/commands/sync'
 
 const configState: { dataDir: string | null } = { dataDir: null }
@@ -123,7 +123,7 @@ describe('sync command (local analytics)', () => {
     // 3 days x 2 tables = 6 calls
     expect(rawQuerySpy).toHaveBeenCalledTimes(6)
 
-    const harness = createAnalyticsHarness({ dataDir: configState.dataDir! })
+    const harness = createNodeHarness({ dataDir: configState.dataDir! })
     const siteId = harness.siteIdFor(SITE)
 
     const pages = await harness.engine.listLive({
@@ -162,7 +162,7 @@ describe('sync command (local analytics)', () => {
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
 
-    const harness = createAnalyticsHarness({ dataDir: configState.dataDir! })
+    const harness = createNodeHarness({ dataDir: configState.dataDir! })
     const siteId = harness.siteIdFor(SITE)
     const live = await harness.engine.listLive({
       userId: harness.userId,
@@ -192,7 +192,7 @@ describe('sync command (local analytics)', () => {
     // Second run should see state=done and skip; no API calls.
     expect(rawQuerySpy).not.toHaveBeenCalled()
 
-    const harness = createAnalyticsHarness({ dataDir: configState.dataDir! })
+    const harness = createNodeHarness({ dataDir: configState.dataDir! })
     const states = await harness.engine.getSyncStates({
       userId: harness.userId,
       siteId: harness.siteIdFor(SITE),
@@ -216,7 +216,7 @@ describe('sync command (local analytics)', () => {
       cmd: syncCommand,
     })).rejects.toThrow('process.exit(1)')
 
-    const harness = createAnalyticsHarness({ dataDir: configState.dataDir! })
+    const harness = createNodeHarness({ dataDir: configState.dataDir! })
     const states = await harness.engine.getSyncStates({
       userId: harness.userId,
       siteId: harness.siteIdFor(SITE),

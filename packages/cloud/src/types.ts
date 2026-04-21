@@ -1,7 +1,7 @@
 import type {
   AnalysisParams,
   AnalysisResult,
-} from 'gscdump/shared/analysis'
+} from '@gscdump/analysis'
 import type {
   DriverInspectResult,
   DriverQueryParams,
@@ -9,12 +9,12 @@ import type {
   DriverSite,
   DriverSitemap,
   DriverSiteWithSync,
-} from 'gscdump/shared/driver'
+} from 'gscdump/driver'
 
 export type {
   AnalysisParams,
   AnalysisResult,
-} from 'gscdump/shared/analysis'
+} from '@gscdump/analysis'
 export type {
   DriverInspectResult,
   DriverQueryParams,
@@ -22,7 +22,7 @@ export type {
   DriverSite,
   DriverSitemap,
   DriverSiteWithSync,
-} from 'gscdump/shared/driver'
+} from 'gscdump/driver'
 
 export interface CloudSyncStatus {
   siteUrl: string

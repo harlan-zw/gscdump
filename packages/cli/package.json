@@ -45,6 +45,8 @@
     "@clack/prompts": "catalog:deps",
     "@duckdb/duckdb-wasm": "catalog:",
     "@gscdump/analysis": "workspace:*",
+    "@gscdump/engine": "workspace:*",
+    "@gscdump/engine-duckdb-node": "workspace:*",
     "@gscdump/mcp": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
     "citty": "catalog:deps",

@@ -18,75 +18,15 @@
   requestIndexing: function
   storageError: function
   submitSitemap: function
-./analytics:
-  allTables: function
-  bindLiterals: function
-  canonicalEmptyParquetSchema: function
-  createDuckDBCodec: function
-  createDuckDBExecutor: function
-  createRowAccumulator: function
-  createStorageEngine: function
-  currentSchemaVersion: function
-  dayPartition: function
-  dimensionToColumn: function
-  encodeSiteId: function
-  enumeratePartitions: function
-  FILES_PLACEHOLDER: string
-  formatLiteral: function
-  inferTable: function
-  MAX_DAY_BYTES: number
-  normalizeUrl: function
-  resolveToSQL: function
-  SCHEMAS: object
-  substituteNamedFiles: function
-  toPath: function
-  toSumPosition: function
-  transformGscRow: function
-./analytics/contracts: {}
-./analytics/filesystem:
-  createFilesystemDataSource: function
-  createFilesystemManifestStore: function
-  filesystemStats: function
-./analytics/http:
-  createHttpDataSource: function
-  createHttpManifestStore: function
-./analytics/hyparquet:
-  createHyparquetCodec: function
-  decodeParquetToRows: function
-  encodeRowsToParquet: function
-./analytics/ingest:
-  createRowAccumulator: function
-  toPath: function
-  toSumPosition: function
-  transformGscRow: function
-./analytics/node:
-  createNodeDuckDBHandle: function
-  resetNodeDuckDB: function
-./analytics/normalize:
-  normalizeUrl: function
-./analytics/planner:
-  enumeratePartitions: function
-  FILES_PLACEHOLDER: string
-  resolveToSQL: function
-  substituteNamedFiles: function
-./analytics/r2:
-  createR2DataSource: function
-./analytics/schema:
-  allTables: function
-  currentSchemaVersion: function
-  dimensionToColumn: function
-  inferTable: function
-  schemaFor: function
-  SCHEMAS: object
-./analytics/sql:
-  bindLiterals: function
-  formatLiteral: function
-./analytics/tenant:
-  encodeSiteId: function
+./contracts: {}
 ./driver: {}
+./normalize:
+  normalizeUrl: function
 ./query:
   and: function
   between: function
+  buildLogicalComparisonPlan: function
+  buildLogicalPlan: function
   clicks: object
   contains: function
   Countries: object
@@ -127,7 +67,10 @@
   SearchTypes: object
   today: function
   topLevel: function
-./shared: {}
-./shared/analysis: {}
-./shared/driver: {}
-./shared/snapshot: {}
+  UnsupportedLogicalCapabilityError: function
+./query/plan:
+  buildLogicalComparisonPlan: function
+  buildLogicalPlan: function
+  UnsupportedLogicalCapabilityError: function
+./tenant:
+  encodeSiteId: function

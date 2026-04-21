@@ -96,7 +96,7 @@ function buildStepPath(curve: CurvePoint[]): string {
 function colorFor(cohort: string, idx: number): string {
   if (cohort === '__all__')
     return '#e7e8f0'
-  return PALETTE[idx % PALETTE.length]
+  return PALETTE[idx % PALETTE.length]!
 }
 
 const xTicks = computed(() => {

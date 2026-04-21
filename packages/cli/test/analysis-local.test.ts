@@ -1,15 +1,15 @@
-import type { Row, WriteCtx } from 'gscdump/analytics/contracts'
+import type { Row, WriteCtx } from '@gscdump/engine/contracts'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { resetNodeDuckDB } from 'gscdump/analytics/node'
+import { resetNodeDuckDB } from '@gscdump/engine/node'
+import { createNodeHarness } from '@gscdump/engine/node-harness'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   hasLocalData,
   LocalStoreUnsupportedError,
   runLocalAnalysis,
 } from '../src/analysis-local'
-import { createAnalyticsHarness } from '../src/analytics'
 
 const SITE = 'sc-domain:example.com'
 
@@ -18,7 +18,7 @@ afterAll(() => {
 })
 
 async function seedPageKeywords(
-  harness: ReturnType<typeof createAnalyticsHarness>,
+  harness: ReturnType<typeof createNodeHarness>,
   rows: Array<{ url: string, query: string, date: string, clicks: number, impressions: number, sum_position: number }>,
 ): Promise<void> {
   const byDate = new Map<string, Row[]>()
@@ -50,12 +50,12 @@ describe('analysis-local', () => {
   })
 
   it('hasLocalData returns false on an empty store', async () => {
-    const harness = createAnalyticsHarness({ mode: 'local', dataDir: tmpDir })
+    const harness = createNodeHarness({ dataDir: tmpDir })
     expect(await hasLocalData(harness, SITE)).toBe(false)
   })
 
   it('hasLocalData returns true once a partition is written', async () => {
-    const harness = createAnalyticsHarness({ mode: 'local', dataDir: tmpDir })
+    const harness = createNodeHarness({ dataDir: tmpDir })
     await seedPageKeywords(harness, [
       { url: '/guide', query: 'best practices', date: '2026-04-10', clicks: 5, impressions: 200, sum_position: 2000 },
     ])
@@ -63,7 +63,7 @@ describe('analysis-local', () => {
   })
 
   it('runLocalAnalysis dispatches striking-distance against the store', async () => {
-    const harness = createAnalyticsHarness({ mode: 'local', dataDir: tmpDir })
+    const harness = createNodeHarness({ dataDir: tmpDir })
     // One striking-distance candidate (position ~6, high impressions, low CTR)
     // and one row outside the window (position ~2).
     await seedPageKeywords(harness, [
@@ -81,7 +81,7 @@ describe('analysis-local', () => {
   })
 
   it('runLocalAnalysis rejects unknown tool types with LocalStoreUnsupportedError', async () => {
-    const harness = createAnalyticsHarness({ mode: 'local', dataDir: tmpDir })
+    const harness = createNodeHarness({ dataDir: tmpDir })
     // All current tools are wired; force the dispatcher's default branch with
     // an unknown type to exercise the safety-net error path.
     await expect(
@@ -90,7 +90,7 @@ describe('analysis-local', () => {
   })
 
   it('runLocalAnalysis dispatches opportunity against the store', async () => {
-    const harness = createAnalyticsHarness({ mode: 'local', dataDir: tmpDir })
+    const harness = createNodeHarness({ dataDir: tmpDir })
     await seedPageKeywords(harness, [
       // High-impression keyword, position ~11, low CTR: strong opportunity candidate.
       { url: '/guide', query: 'opportunity candidate', date: '2026-04-10', clicks: 5, impressions: 10000, sum_position: 100000 },
@@ -106,7 +106,7 @@ describe('analysis-local', () => {
   })
 
   it('runLocalAnalysis dispatches brand when brandTerms provided', async () => {
-    const harness = createAnalyticsHarness({ mode: 'local', dataDir: tmpDir })
+    const harness = createNodeHarness({ dataDir: tmpDir })
     await seedPageKeywords(harness, [
       { url: '/', query: 'acme shoes', date: '2026-04-10', clicks: 10, impressions: 200, sum_position: 200 },
       { url: '/', query: 'running shoes', date: '2026-04-10', clicks: 5, impressions: 200, sum_position: 600 },
@@ -124,14 +124,14 @@ describe('analysis-local', () => {
   })
 
   it('runLocalAnalysis brand throws when brandTerms missing', async () => {
-    const harness = createAnalyticsHarness({ mode: 'local', dataDir: tmpDir })
+    const harness = createNodeHarness({ dataDir: tmpDir })
     await expect(
       runLocalAnalysis(harness, SITE, { type: 'brand' }),
     ).rejects.toThrow('brandTerms')
   })
 
   it('runLocalAnalysis dispatches movers for comparison periods', async () => {
-    const harness = createAnalyticsHarness({ mode: 'local', dataDir: tmpDir })
+    const harness = createNodeHarness({ dataDir: tmpDir })
     await seedPageKeywords(harness, [
       { url: '/', query: 'rising term', date: '2026-04-10', clicks: 100, impressions: 1000, sum_position: 3000 },
       { url: '/', query: 'rising term', date: '2026-04-03', clicks: 10, impressions: 100, sum_position: 500 },
@@ -150,7 +150,7 @@ describe('analysis-local', () => {
   })
 
   it('runLocalAnalysis movers throws when comparison period missing', async () => {
-    const harness = createAnalyticsHarness({ mode: 'local', dataDir: tmpDir })
+    const harness = createNodeHarness({ dataDir: tmpDir })
     await expect(
       runLocalAnalysis(harness, SITE, { type: 'movers' }),
     ).rejects.toThrow('prevStartDate')

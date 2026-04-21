@@ -77,7 +77,7 @@ export function analyzeSeasonality(
   const avgValue = values.length > 0 ? totalValue / values.length : 0
 
   const monthlyBreakdown: MonthlyData[] = months.map((month, i) => {
-    const value = values[i]
+    const value = values[i] ?? 0
     const vsAverage = avgValue > 0 ? value / avgValue : 0
     return {
       month,

@@ -12,29 +12,39 @@ Flip the toggle, click through the seven analyzer tabs, watch the timing strip u
 ```
 client                                        server
 ──────                                        ──────
-pages/index.vue                               api/manifest.get.ts      ─┐
-  └─ useInsightRunner()                       api/sign-url.get.ts      ─┤ R2 S3 creds
-       ├─ @gscdump/analysis/browser           api/analysis/[x].get.ts  ─┘
-       ├─ @gscdump/analysis/duckdb              └─ utils/analysis-engine.ts
-       └─ DuckDB-WASM (worker)                      ├─ gscdump/analytics/node
-                                                    ├─ gscdump/analytics/http
-                                                    └─ gscdump/analytics (engine)
+pages/index.vue                               api/manifest.get.ts       ─┐
+  └─ useInsightRunner()                       api/analysis-sources.get.ts│ R2 S3 creds
+       ├─ @gscdump/engine-wasm                api/r2-data/[...path].get  ┤ (aws4fetch)
+       │    · bootDuckDBWasm                  api/analysis/[x].get.ts   ─┘
+       │    · attachParquetUrlTables               └─ utils/analysis-engine.ts
+       │    · createBrowserAnalysisRuntime            ├─ @gscdump/engine
+       └─ DuckDB-WASM (worker)                        │    (createStorageEngine,
+                                                      │     createDuckDBCodec,
+                                                      │     createDuckDBExecutor)
+                                                      ├─ @gscdump/engine/http
+                                                      ├─ @gscdump/engine/node
+                                                      └─ @gscdump/analysis
+                                                           · runAnalyzerWithEngine
+                                                           · defaultAnalyzerRegistry
                 ▲
-                └──── $fetch('/api/sign-url') + R2 presigned GETs
+                └──── $fetch('/api/r2-data/...') (same-origin, server-signed)
 ```
 
-Every piece except the Vue components is a production primitive from this monorepo. The composable is ~120 LoC; gscdump.com can copy it into its `app/composables/` directory unchanged.
+Every piece except the Vue components is a production primitive from this monorepo. The composables are ~120 LoC each; gscdump.com can copy them into its `app/composables/` directory unchanged.
 
 ## Which primitives does this exercise?
 
 | File | Primitive used | Where it lives |
 |---|---|---|
 | `server/api/manifest.get.ts` | `aws4fetch` R2 LIST | local helper |
-| `server/api/sign-url.get.ts` | `aws4fetch` SigV4 presign | local helper |
+| `server/api/analysis-sources.get.ts` | `ManifestEntry` + per-table same-origin URL assembly | `@gscdump/engine` type, local logic |
+| `server/api/r2-data/[...path].get.ts` | SigV4 presigned GET stream-through | `aws4fetch` |
 | `server/utils/r2-client.ts` | R2 LIST + presign | local helper |
-| `server/utils/analysis-engine.ts` | `createStorageEngine` + `createDuckDBCodec` + `createDuckDBExecutor` + `createHttpDataSource` + `createHttpManifestStore` + `createNodeDuckDBHandle` | `gscdump/analytics`, `gscdump/analytics/http`, `gscdump/analytics/node` |
-| `server/api/analysis/[analyzer].get.ts` | `analyzeWithDuckDB` | `@gscdump/analysis/duckdb` |
-| `app/composables/useInsightRunner.ts` | `attachParquetIndex` + `analyzeInBrowser` + `bindLiterals` | `@gscdump/analysis/duckdb`, `gscdump/analytics` |
+| `server/utils/analysis-engine.ts` | `createStorageEngine` + `createDuckDBCodec` + `createDuckDBExecutor` + `createHttpDataSource` + `createHttpManifestStore` + `createNodeDuckDBHandle` | `@gscdump/engine`, `@gscdump/engine/http`, `@gscdump/engine/node` |
+| `server/api/analysis/[analyzer].get.ts` | `runAnalyzerWithEngine` + `defaultAnalyzerRegistry` | `@gscdump/analysis` |
+| `app/composables/useInsightRunner.ts` | `bootDuckDBWasm` + `attachParquetUrlTables` + `createBrowserAnalysisRuntime` | `@gscdump/engine-wasm` |
+| `app/composables/useActionPriority.ts` | `analyzeActionPriority` | `@gscdump/analysis` |
+| `app/composables/useContentGap.ts` | `createBrowserQuerySource` + `analyzeContentGap` | `@gscdump/analysis`, `@gscdump/analysis/semantic` |
 | `app/pages/index.vue` | orchestration only | — |
 
 ## Setup
@@ -79,7 +89,7 @@ Cold-boot-plus-first-query on the browser path typically beats the server round-
 Works on anything Nuxt deploys to that supports Node:
 
 - **Node dev / node-server preset** — out of the box.
-- **CF Pages / CF Workers** — the server analysis route needs a DuckDB shape that runs on Workers. Swap `gscdump/analytics/node` for a service-binding-backed executor (see gscdump.com's `workers-duckdb.ts` for the pattern).
+- **CF Pages / CF Workers** — the server analysis route needs a DuckDB shape that runs on Workers. Swap `@gscdump/engine/node` for a service-binding-backed executor (see gscdump.com's `workers-duckdb.ts` for the pattern), or swap the whole server path for `@gscdump/engine-sqlite` against a D1 binding.
 - **Static deploys** — skip the server routes, host the manifest JSON as a static file, run browser-only. Same composable, just don't wire the fallback.
 
 ## Relation to `browser-http`

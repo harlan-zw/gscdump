@@ -36,22 +36,18 @@ export default defineEventHandler(async (event) => {
         const start = Number(m[1])
         const end = m[2] ? Number(m[2]) : st.size - 1
         setResponseStatus(event, 206)
-        setHeaders(event, {
-          'content-type': 'application/octet-stream',
-          'content-length': String(end - start + 1),
-          'content-range': `bytes ${start}-${end}/${st.size}`,
-          'accept-ranges': 'bytes',
-          'cache-control': 'public, max-age=31536000, immutable',
-        })
+        setHeader(event, 'content-type', 'application/octet-stream')
+        setHeader(event, 'content-length', end - start + 1)
+        setHeader(event, 'content-range', `bytes ${start}-${end}/${st.size}`)
+        setHeader(event, 'accept-ranges', 'bytes')
+        setHeader(event, 'cache-control', 'public, max-age=31536000, immutable')
         return sendStream(event, createReadStream(abs, { start, end }))
       }
     }
-    setHeaders(event, {
-      'content-type': 'application/octet-stream',
-      'content-length': String(st.size),
-      'accept-ranges': 'bytes',
-      'cache-control': 'public, max-age=31536000, immutable',
-    })
+    setHeader(event, 'content-type', 'application/octet-stream')
+    setHeader(event, 'content-length', st.size)
+    setHeader(event, 'accept-ranges', 'bytes')
+    setHeader(event, 'cache-control', 'public, max-age=31536000, immutable')
     return sendStream(event, createReadStream(abs))
   }
 
@@ -62,11 +58,9 @@ export default defineEventHandler(async (event) => {
 
   if (method === 'HEAD' && typeof sizeHint === 'string' && sizeHint) {
     setResponseStatus(event, 200)
-    setHeaders(event, {
-      'content-length': sizeHint,
-      'accept-ranges': 'bytes',
-      'cache-control': 'public, max-age=31536000, immutable',
-    })
+    setHeader(event, 'content-length', Number(sizeHint))
+    setHeader(event, 'accept-ranges', 'bytes')
+    setHeader(event, 'cache-control', 'public, max-age=31536000, immutable')
     return null
   }
 

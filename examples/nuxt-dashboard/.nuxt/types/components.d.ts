@@ -25,6 +25,7 @@ interface _GlobalComponents {
   LongTailFingerprint: typeof import("../../app/components/LongTailFingerprint.vue")['default']
   MigrationSankey: typeof import("../../app/components/MigrationSankey.vue")['default']
   ResultTable: typeof import("../../app/components/ResultTable.vue")['default']
+  Sparkline: typeof import("../../app/components/Sparkline.vue")['default']
   StlPanel: typeof import("../../app/components/StlPanel.vue")['default']
   SurvivalPanel: typeof import("../../app/components/SurvivalPanel.vue")['default']
   TimingPanel: typeof import("../../app/components/TimingPanel.vue")['default']
@@ -64,6 +65,7 @@ interface _GlobalComponents {
   LazyLongTailFingerprint: LazyComponent<typeof import("../../app/components/LongTailFingerprint.vue")['default']>
   LazyMigrationSankey: LazyComponent<typeof import("../../app/components/MigrationSankey.vue")['default']>
   LazyResultTable: LazyComponent<typeof import("../../app/components/ResultTable.vue")['default']>
+  LazySparkline: LazyComponent<typeof import("../../app/components/Sparkline.vue")['default']>
   LazyStlPanel: LazyComponent<typeof import("../../app/components/StlPanel.vue")['default']>
   LazySurvivalPanel: LazyComponent<typeof import("../../app/components/SurvivalPanel.vue")['default']>
   LazyTimingPanel: LazyComponent<typeof import("../../app/components/TimingPanel.vue")['default']>

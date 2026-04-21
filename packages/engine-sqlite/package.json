@@ -1,0 +1,53 @@
+{
+  "name": "@gscdump/engine-sqlite",
+  "type": "module",
+  "version": "0.4.0",
+  "description": "SQLite / D1 engine adapter for @gscdump/analysis — typed analytics over sqlite-proxy executors (Cloudflare D1, libsql).",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/engine-sqlite#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/engine-sqlite"
+  },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "obuild",
+    "dev": "obuild --stub",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "prepack": "pnpm run build"
+  },
+  "dependencies": {
+    "@gscdump/analysis": "workspace:*",
+    "@gscdump/engine": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "gscdump": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "catalog:dev-test"
+  }
+}

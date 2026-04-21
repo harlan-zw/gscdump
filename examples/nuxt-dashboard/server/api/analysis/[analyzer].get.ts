@@ -6,17 +6,37 @@
 // manifest is cached. Expect ~50-200 ms for typical insights on 1M rows.
 
 import type { AnalysisParams } from '@gscdump/analysis'
-import { analyzeWithDuckDB } from '@gscdump/analysis/duckdb'
+import { defaultAnalyzerRegistry, runAnalyzerWithEngine } from '@gscdump/analysis'
 import { useAnalysisEngine } from '../../utils/analysis-engine'
 
 const VALID = new Set([
-  'striking-distance',
-  'opportunity',
+  'bayesian-ctr',
+  'bipartite-pagerank',
   'brand',
+  'cannibalization',
+  'change-point',
   'clustering',
   'concentration',
-  'seasonality',
+  'content-velocity',
+  'ctr-anomaly',
+  'ctr-curve',
+  'dark-traffic',
+  'decay',
+  'device-gap',
+  'intent-atlas',
+  'keyword-breadth',
+  'long-tail',
   'movers',
+  'opportunity',
+  'position-distribution',
+  'position-volatility',
+  'query-migration',
+  'seasonality',
+  'stl-decompose',
+  'striking-distance',
+  'survival',
+  'trends',
+  'zero-click',
 ])
 
 export default defineEventHandler(async (event) => {
@@ -39,7 +59,7 @@ export default defineEventHandler(async (event) => {
   const setupMs = performance.now() - t0
 
   const t1 = performance.now()
-  const result = await analyzeWithDuckDB({ engine }, ctx, params)
+  const result = await runAnalyzerWithEngine({ engine }, ctx, params, defaultAnalyzerRegistry)
   const queryMs = performance.now() - t1
 
   return {

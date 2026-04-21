@@ -1,29 +1,38 @@
-import type { Row } from 'gscdump/analytics/contracts'
-import type { SnapshotIndex } from 'gscdump/shared/snapshot'
+import type { Row } from '@gscdump/engine/contracts'
+import type { SnapshotIndex } from '@gscdump/engine/snapshot'
 import { mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { DuckDBInstance } from '@duckdb/node-api'
-import { analyzeInBrowser, analyzeWithDuckDB, attachParquetIndex, attachSnapshotIndex } from '@gscdump/analysis/duckdb'
+import { defaultAnalyzerRegistry, runAnalyzerWithEngine as rawRunAnalyzerWithEngine } from '@gscdump/analysis'
 import {
   createDuckDBCodec,
   createDuckDBExecutor,
   createStorageEngine,
-} from 'gscdump/analytics'
+} from '@gscdump/engine'
+import { analyzeInBrowser, attachParquetIndex, attachSnapshotIndex } from '@gscdump/engine-duckdb-node'
 import {
   createFilesystemDataSource,
   createFilesystemManifestStore,
-} from 'gscdump/analytics/filesystem'
-import { createNodeDuckDBHandle, resetNodeDuckDB } from 'gscdump/analytics/node'
-import { encodeSiteId } from 'gscdump/analytics/tenant'
+} from '@gscdump/engine/filesystem'
+import { createNodeDuckDBHandle, resetNodeDuckDB } from '@gscdump/engine/node'
+import { encodeSiteId } from 'gscdump/tenant'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { exportToDuckDB } from '../../src/commands/export'
+
+function runAnalyzerWithEngine(
+  deps: Parameters<typeof rawRunAnalyzerWithEngine>[0],
+  ctx: Parameters<typeof rawRunAnalyzerWithEngine>[1],
+  params: Parameters<typeof rawRunAnalyzerWithEngine>[2],
+): ReturnType<typeof rawRunAnalyzerWithEngine> {
+  return rawRunAnalyzerWithEngine(deps, ctx, params, defaultAnalyzerRegistry)
+}
 
 const SITE = 'sc-domain:example.com'
 const USER = 'local'
 const siteId = encodeSiteId(SITE)
 
-describe('analyzeInBrowser ↔ analyzeWithDuckDB parity', () => {
+describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
   let dataDir: string
   let outPath: string
 
@@ -69,7 +78,7 @@ describe('analyzeInBrowser ↔ analyzeWithDuckDB parity', () => {
     )
 
     // Server-side path
-    const server = await analyzeWithDuckDB(
+    const server = await runAnalyzerWithEngine(
       { engine },
       { userId: USER, siteId },
       { type: 'striking-distance', startDate: '2026-04-10', endDate: '2026-04-10', limit: 100 },
@@ -155,7 +164,7 @@ describe('analyzeInBrowser ↔ analyzeWithDuckDB parity', () => {
       limit: 100,
     } as const
 
-    const server = await analyzeWithDuckDB({ engine }, { userId: USER, siteId }, params)
+    const server = await runAnalyzerWithEngine({ engine }, { userId: USER, siteId }, params)
     await exportToDuckDB({ engine, dataDir, userId: USER, siteId, outPath, force: true })
 
     const inst = await DuckDBInstance.create(':memory:')
@@ -211,7 +220,7 @@ describe('analyzeInBrowser ↔ analyzeWithDuckDB parity', () => {
       limit: 100,
     } as const
 
-    const server = await analyzeWithDuckDB({ engine }, { userId: USER, siteId }, params)
+    const server = await runAnalyzerWithEngine({ engine }, { userId: USER, siteId }, params)
     expect(server.results.length).toBeGreaterThan(0)
 
     await exportToDuckDB({ engine, dataDir, userId: USER, siteId, outPath, force: true })
@@ -261,7 +270,7 @@ describe('analyzeInBrowser ↔ analyzeWithDuckDB parity', () => {
     )
 
     const params = { type: 'opportunity', startDate: '2026-04-10', endDate: '2026-04-11', limit: 100 } as const
-    const server = await analyzeWithDuckDB(
+    const server = await runAnalyzerWithEngine(
       { engine },
       { userId: USER, siteId },
       params,
@@ -351,7 +360,7 @@ describe('attachSnapshotIndex', () => {
       limit: 100,
     } as const
 
-    const server = await analyzeWithDuckDB({ engine }, { userId: USER, siteId }, params)
+    const server = await runAnalyzerWithEngine({ engine }, { userId: USER, siteId }, params)
     expect(server.results.length).toBeGreaterThan(0)
 
     // Split live parquet URIs by month.
@@ -589,7 +598,7 @@ describe('attachParquetIndex', () => {
       limit: 100,
     } as const
 
-    const server = await analyzeWithDuckDB({ engine }, { userId: USER, siteId }, params)
+    const server = await runAnalyzerWithEngine({ engine }, { userId: USER, siteId }, params)
     expect(server.results.length).toBeGreaterThan(0)
 
     const live = await engine.listLive({ userId: USER, siteId, table: 'page_keywords' })

@@ -61,7 +61,7 @@ function buildPath(series: SeriesPoint[], pick: (p: SeriesPoint) => number | nul
   const segs: string[] = []
   let pending = false
   for (let i = 0; i < series.length; i++) {
-    const v = pick(series[i])
+    const v = pick(series[i]!)
     if (v == null || !Number.isFinite(v)) {
       pending = false
       continue
@@ -87,7 +87,7 @@ function anomalyDots(series: SeriesPoint[]): Array<{ x: number, y: number, p: Se
   const dom = domain(series.map(s => s.residual))
   const out: Array<{ x: number, y: number, p: SeriesPoint }> = []
   for (let i = 0; i < series.length; i++) {
-    const p = series[i]
+    const p = series[i]!
     if (p.anomaly && p.residual != null) {
       out.push({ x: xAt(i, series.length), y: yAt(p.residual, dom.lo, dom.hi), p })
     }

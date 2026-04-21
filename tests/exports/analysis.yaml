@@ -1,94 +1,101 @@
 .:
+  analyzeActionPriority: function
+  analyzeActionPriorityFromSource: function
   analyzeBrandSegmentation: function
+  analyzeBrandSegmentationFromSource: function
   analyzeClustering: function
+  analyzeClusteringFromSource: function
   analyzeConcentration: function
   analyzeDecay: function
+  analyzeDecayFromSource: function
+  analyzeFromSource: function
   analyzeKeywordConcentration: function
+  analyzeKeywordConcentrationFromSource: function
   analyzeMovers: function
+  analyzeMoversFromSource: function
   analyzeOpportunity: function
+  analyzeOpportunityFromSource: function
   analyzePageConcentration: function
+  analyzePageConcentrationFromSource: function
+  AnalyzerCapabilityError: function
   analyzeSeasonality: function
+  analyzeSeasonalityFromSource: function
   analyzeStrikingDistance: function
+  analyzeStrikingDistanceFromSource: function
+  comparisonOf: function
+  createAnalyzerRegistry: function
+  createBrowserQuerySource: function
+  createEngineQuerySource: function
+  createGscApiQuerySource: function
+  createInMemoryQuerySource: function
   createSorter: function
-  fetchBrandSegmentation: function
-  fetchClustering: function
-  fetchDecay: function
-  fetchKeywordConcentration: function
-  fetchMovers: function
-  fetchOpportunity: function
-  fetchPageConcentration: function
-  fetchSeasonality: function
-  fetchStrikingDistance: function
+  createSqliteQuerySource: function
+  defaultAnalyzerRegistry: object
+  isSqlQuerySource: function
+  mergePriorityActions: function
+  normalizePriorityActions: function
   num: function
   padTimeseries: function
-./browser:
-  browserResolverAdapter: object
-  countries: object
-  createClient: function
-  createInsightRunner: function
-  devices: object
-  drizzle: function
-  DuckDBWasmDatabase: function
-  keywords: object
-  mergeScope: function
-  page_keywords: object
-  pages: object
+  periodOf: function
+  queryAnalyticsFromSource: function
+  queryComparisonFromSource: function
+  queryComparisonRows: function
+  queryRows: function
   resolveWindow: function
-  schema: object
-  scopeFor: function
-  strikingMomentum: function
-./duckdb:
-  analyzeInBrowser: function
-  AnalyzerUnsupportedError: function
-  analyzeWithDuckDB: function
-  attachParquetIndex: function
-  attachSnapshotIndex: function
-  buildAnalyzerSpec: function
-  rewriteForTableSource: function
-  snapshotAlias: function
+  ROW_ANALYZERS: object
+  runAnalyzerFromSource: function
+  runAnalyzerWithEngine: function
+  scorePriorityActions: function
+  windowToComparisonPeriod: function
+  windowToPeriod: function
+./analyzer:
+  AnalyzerCapabilityError: function
+  createAnalyzerRegistry: function
+  defineAnalyzer: function
+  ROW_ANALYZERS: object
+  runAnalyzerFromSource: function
+  strikingDistanceAnalyzer: object
+./period:
+  comparisonOf: function
+  padTimeseries: function
+  periodOf: function
+  resolveWindow: function
+  windowToComparisonPeriod: function
+  windowToPeriod: function
 ./query:
-  buildExtrasQueries: function
-  buildTotalsSql: function
-  mergeExtras: function
-  resolveComparisonSQL: function
-  resolveToSQL: function
-  resolveToSQLOptimized: function
-./sqlite:
-  aggClicks: function
-  aggCtr: function
-  aggImpressions: function
-  aggPosition: function
-  and: function
-  colRef: function
-  compileSqlite: function
-  createSqliteInsightRunner: function
-  dateColRef: function
-  DIM_COLUMN_MAP: object
-  dimColumn: function
-  dimensionPredicates: function
-  dimExprSql: function
-  eq: function
-  gsc_countries: object
-  gsc_devices: object
-  gsc_keywords: object
-  gsc_page_keywords: object
-  gsc_pages: object
-  gte: function
-  havingPredicates: function
-  inferTable: function
-  isMetricDimension: function
-  lte: function
-  mergeScope: function
-  METRIC_NAMES: object
-  metricSql: function
-  resolveWindow: function
-  schema: object
-  scopeFor: function
-  siteIdColRef: function
-  sql: function
-  sqliteResolverAdapter: object
-  tableRef: function
-  topLevelPredicate: function
-  urlToPathExpr: function
-./window:
-  resolveWindow: function
+  buildDataDetailPlan: function
+  buildDataQueryPlan: function
+./semantic:
+  analyzeContentGap: function
+  ContentGapSourceUnsupportedError: function
+  cosineNormalized: function
+  deriveUrlText: function
+  normalizeUrl: function
+  rankContentGaps: function
+./source:
+  analyzeBrandSegmentationFromSource: function
+  analyzeClusteringFromSource: function
+  analyzeDecayFromSource: function
+  analyzeFromSource: function
+  analyzeKeywordConcentrationFromSource: function
+  analyzeMoversFromSource: function
+  analyzeOpportunityFromSource: function
+  analyzePageConcentrationFromSource: function
+  AnalyzerCapabilityError: function
+  analyzeSeasonalityFromSource: function
+  analyzeStrikingDistanceFromSource: function
+  createBrowserQuerySource: function
+  createEngineQuerySource: function
+  createGscApiQuerySource: function
+  createInMemoryQuerySource: function
+  createSqliteQuerySource: function
+  ENGINE_QUERY_CAPABILITIES: object
+  GSC_API_CAPABILITIES: object
+  IN_MEMORY_DEFAULT_CAPABILITIES: object
+  isSqlQuerySource: function
+  queryAnalyticsFromSource: function
+  queryComparisonFromSource: function
+  queryComparisonRows: function
+  queryRows: function
+  runAnalyzerWithEngine: function
+  typedQuery: function

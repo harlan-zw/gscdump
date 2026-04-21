@@ -1,11 +1,10 @@
-import type { StorageEngine, TableName } from 'gscdump/analytics/contracts'
+import type { StorageEngine, TableName } from '../local-store'
 import { rm } from 'node:fs/promises'
 import path from 'node:path'
 import { DuckDBInstance } from '@duckdb/node-api'
 import { defineCommand } from 'citty'
-import { allTables } from 'gscdump/analytics/schema'
-import { createAnalyticsHarness } from '../analytics'
-import { loadConfig } from '../config'
+import { createCommandContext } from '../context'
+import { allTables } from '../local-store'
 
 function sqlEscape(s: string): string {
   return s.replace(/'/g, '\'\'')
@@ -94,14 +93,14 @@ export const exportCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const config = await loadConfig()
-    const harness = createAnalyticsHarness(config)
-    const siteId = args.site ? harness.siteIdFor(args.site) : undefined
+    const ctx = await createCommandContext({ needsStore: true })
+    const store = ctx.store!
+    const siteId = args.site ? store.siteIdFor(args.site) : undefined
 
     const result = await exportToDuckDB({
-      engine: harness.engine,
-      dataDir: harness.dataDir,
-      userId: harness.userId,
+      engine: store.engine,
+      dataDir: store.dataDir,
+      userId: store.userId,
       siteId,
       outPath: args.out,
       force: args.force,

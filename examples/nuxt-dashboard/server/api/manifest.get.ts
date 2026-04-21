@@ -2,7 +2,7 @@
 //   - GSCDUMP_DATA_DIR set → read manifest.json from a local `gscdump sync` dump.
 //   - otherwise → live R2 LIST under u_<userId>/<siteId?>/.
 
-import type { ManifestEntry, TableName } from 'gscdump/analytics'
+import type { ManifestEntry, TableName } from '@gscdump/engine'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { useR2Client } from '../utils/r2-client'

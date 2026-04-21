@@ -31,6 +31,6 @@ export { requestIdleCallback, cancelIdleCallback } from '#app/compat/idle-callba
 export { setInterval } from '#app/compat/interval';
 export { definePageMeta, PageMeta } from '#app/composables/pages';
 export { defineLazyHydrationComponent } from '#app/composables/lazy-hydration';
-export { useActionPriority, ActionSource, Effort, PriorityAction, ActionPriorityProgress, ActionPriorityRunner } from '../app/composables/useActionPriority';
-export { useContentGap, ContentGapResult, ContentGapProgress, ContentGapOptions, ContentGapRunner } from '../app/composables/useContentGap';
-export { useInsightRunner, QueryResult, AnalyzeResult, InsightRunner } from '../app/composables/useInsightRunner';
+export { useActionPriority, ActionPriorityProgress, ActionPriorityRunner, ActionSource, Effort, PriorityAction } from '../app/composables/useActionPriority';
+export { useContentGap, ContentGapRunner, ContentGapOptions, ContentGapProgress, ContentGapResult } from '../app/composables/useContentGap';
+export { useInsightRunner, InsightRunner } from '../app/composables/useInsightRunner';

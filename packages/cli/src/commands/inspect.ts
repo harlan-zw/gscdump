@@ -1,7 +1,6 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { googleSearchConsole } from 'gscdump'
-import { getAuth } from '../auth'
+import { createCommandContext } from '../context'
 import { logger } from '../utils'
 
 export const inspectCommand = defineCommand({
@@ -15,8 +14,8 @@ export const inspectCommand = defineCommand({
     json: { type: 'boolean', default: false, description: 'Output as JSON' },
   },
   async run({ args }) {
-    const auth = await getAuth({ interactive: false })
-    const client = googleSearchConsole(auth)
+    const ctx = await createCommandContext({ needsAuth: true })
+    const client = ctx.client!
 
     const result = await client.inspect(args.site, args.url).catch((e: Error) => {
       logger.error(`Inspection failed: ${e.message}`)

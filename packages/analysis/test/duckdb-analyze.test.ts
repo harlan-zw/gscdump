@@ -1,4 +1,4 @@
-import type { Row, TableName } from 'gscdump/analytics/contracts'
+import type { Row, TableName } from '@gscdump/engine/contracts'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,17 +6,26 @@ import {
   createDuckDBCodec,
   createDuckDBExecutor,
   createStorageEngine,
-} from 'gscdump/analytics'
+} from '@gscdump/engine'
 import {
   createFilesystemDataSource,
   createFilesystemManifestStore,
-} from 'gscdump/analytics/filesystem'
+} from '@gscdump/engine/filesystem'
 import {
   createNodeDuckDBHandle,
   resetNodeDuckDB,
-} from 'gscdump/analytics/node'
+} from '@gscdump/engine/node'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { analyzeWithDuckDB } from '../src/duckdb'
+import { defaultAnalyzerRegistry } from '../src/default-registry'
+import { runAnalyzerWithEngine as rawRunAnalyzerWithEngine } from '../src/source/engine'
+
+function runAnalyzerWithEngine(
+  deps: Parameters<typeof rawRunAnalyzerWithEngine>[0],
+  ctx: Parameters<typeof rawRunAnalyzerWithEngine>[1],
+  params: Parameters<typeof rawRunAnalyzerWithEngine>[2],
+): ReturnType<typeof rawRunAnalyzerWithEngine> {
+  return rawRunAnalyzerWithEngine(deps, ctx, params, defaultAnalyzerRegistry)
+}
 
 afterAll(() => {
   resetNodeDuckDB()
@@ -48,7 +57,7 @@ async function seed(engine: ReturnType<typeof createStorageEngine>, userId: stri
 const USER = 'u1'
 const SITE = 's1'
 
-describe('analyzeWithDuckDB', () => {
+describe('runAnalyzerWithEngine', () => {
   let dir: string
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'gscdump-dba-'))
@@ -74,7 +83,7 @@ describe('analyzeWithDuckDB', () => {
       },
     ])
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'striking-distance', startDate: '2026-04-10', endDate: '2026-04-10' },
@@ -100,7 +109,7 @@ describe('analyzeWithDuckDB', () => {
       },
     ])
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'opportunity', startDate: '2026-04-10', endDate: '2026-04-10' },
@@ -126,7 +135,7 @@ describe('analyzeWithDuckDB', () => {
       },
     ])
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'brand', brandTerms: ['acme'], startDate: '2026-04-10', endDate: '2026-04-10' },
@@ -156,7 +165,7 @@ describe('analyzeWithDuckDB', () => {
       },
     ])
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'clustering', startDate: '2026-04-10', endDate: '2026-04-10' },
@@ -184,7 +193,7 @@ describe('analyzeWithDuckDB', () => {
       },
     ])
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'concentration', dimension: 'pages', topN: 2, startDate: '2026-04-10', endDate: '2026-04-10' },
@@ -238,7 +247,7 @@ describe('analyzeWithDuckDB', () => {
     }
     await seed(env.engine, USER, SITE, seeds)
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'seasonality', startDate: '2026-01-01', endDate: '2026-03-31' },
@@ -272,7 +281,7 @@ describe('analyzeWithDuckDB', () => {
       },
     ])
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       {
@@ -317,7 +326,7 @@ describe('analyzeWithDuckDB', () => {
       },
     ])
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       {
@@ -368,7 +377,7 @@ describe('analyzeWithDuckDB', () => {
     })
     await seed(env.engine, USER, SITE, seeds)
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'trends', weeks: 8, startDate: '2026-02-09', endDate: '2026-04-05', minImpressions: 100, minWeeksWithData: 2 },
@@ -407,7 +416,7 @@ describe('analyzeWithDuckDB', () => {
     }))
     await seed(env.engine, USER, SITE, seeds)
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'trends', dimension: 'keywords', weeks: 4, startDate: '2026-03-02', endDate: '2026-03-29', minImpressions: 100, minWeeksWithData: 2 },
@@ -446,7 +455,7 @@ describe('analyzeWithDuckDB', () => {
     }
     await seed(env.engine, USER, SITE, seeds)
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'ctr-anomaly', startDate: '2026-03-01', endDate: '2026-03-30' },
@@ -514,7 +523,7 @@ describe('analyzeWithDuckDB', () => {
     }
     await seed(env.engine, USER, SITE, seeds)
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'position-volatility', startDate: '2026-03-01', endDate: '2026-03-10', minWeeksWithData: 5 },
@@ -558,7 +567,7 @@ describe('analyzeWithDuckDB', () => {
     }
     await seed(env.engine, USER, SITE, [{ table: 'page_keywords', date: '2026-04-10', rows: rowsAll }])
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'long-tail', startDate: '2026-04-10', endDate: '2026-04-10' },
@@ -604,7 +613,7 @@ describe('analyzeWithDuckDB', () => {
       )
     }
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'intent-atlas', startDate: '2026-04-01', endDate: '2026-04-03', minImpressions: 100, minClusterSize: 2 },
@@ -644,7 +653,7 @@ describe('analyzeWithDuckDB', () => {
       },
     ])
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       {
@@ -693,7 +702,7 @@ describe('analyzeWithDuckDB', () => {
       },
     ])
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'cannibalization', startDate: '2026-04-10', endDate: '2026-04-10' },
@@ -764,7 +773,7 @@ describe('analyzeWithDuckDB', () => {
       { table: 'page_keywords', date: '2026-04-10', rows },
     ])
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'bayesian-ctr', startDate: '2026-04-10', endDate: '2026-04-10' },
@@ -840,7 +849,7 @@ describe('analyzeWithDuckDB', () => {
     }
     await seed(env.engine, USER, SITE, seeds)
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'stl-decompose', startDate: '2026-02-15', endDate: '2026-03-31' },
@@ -894,7 +903,7 @@ describe('analyzeWithDuckDB', () => {
     }
     await seed(env.engine, USER, SITE, seeds)
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'change-point', startDate: '2026-03-01', endDate: '2026-03-30' },
@@ -978,7 +987,7 @@ describe('analyzeWithDuckDB', () => {
     }
     await seed(env.engine, USER, SITE, seeds)
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'survival', startDate: '2026-02-01', endDate: '2026-04-01' },
@@ -1047,7 +1056,7 @@ describe('analyzeWithDuckDB', () => {
       { table: 'page_keywords', date: '2026-04-10', rows },
     ])
 
-    const out = await analyzeWithDuckDB(
+    const out = await runAnalyzerWithEngine(
       { engine: env.engine },
       { userId: USER, siteId: SITE },
       { type: 'bipartite-pagerank', startDate: '2026-04-10', endDate: '2026-04-10' },

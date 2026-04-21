@@ -6,13 +6,13 @@ import {
   createDuckDBCodec,
   createDuckDBExecutor,
   createStorageEngine,
-} from 'gscdump/analytics'
+} from '@gscdump/engine'
 import {
   createFilesystemDataSource,
   createFilesystemManifestStore,
-} from 'gscdump/analytics/filesystem'
-import { createNodeDuckDBHandle, resetNodeDuckDB } from 'gscdump/analytics/node'
-import { encodeSiteId } from 'gscdump/analytics/tenant'
+} from '@gscdump/engine/filesystem'
+import { createNodeDuckDBHandle, resetNodeDuckDB } from '@gscdump/engine/node'
+import { encodeSiteId } from 'gscdump/tenant'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { exportToDuckDB } from '../../src/commands/export'
 

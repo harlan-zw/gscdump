@@ -1,78 +1,15 @@
 import type { AnalysisParams } from '@gscdump/analysis'
 import type { CommandDef } from 'citty'
 import process from 'node:process'
-import { cancel, isCancel, select } from '@clack/prompts'
+import { defaultAnalyzerRegistry } from '@gscdump/analysis'
 import { defineCommand } from 'citty'
-import { googleSearchConsole } from 'gscdump'
 import { hasLocalData, LocalStoreEmptyError, LocalStoreUnsupportedError, runLiveAnalysis, runLocalAnalysis } from '../analysis-local'
-import { createAnalyticsHarness } from '../analytics'
-import { getAuth } from '../auth'
-import { loadConfig } from '../config'
+import { createCommandContext } from '../context'
 import { logger, toCSV } from '../utils'
 
-const ANALYSIS_TOOLS = [
-  'striking-distance',
-  'opportunity',
-  'movers',
-  'decay',
-  'zero-click',
-  'brand',
-  'cannibalization',
-  'ctr-anomaly',
-  'position-volatility',
-  'long-tail',
-  'intent-atlas',
-  'query-migration',
-  'bayesian-ctr',
-  'clustering',
-  'concentration',
-  'seasonality',
-  'trends',
-  'stl-decompose',
-  'change-point',
-  'survival',
-  'bipartite-pagerank',
-] as const
+const ANALYSIS_TOOLS = defaultAnalyzerRegistry.listAnalyzerIds()
 
-type AnalysisTool = typeof ANALYSIS_TOOLS[number]
-
-async function resolveSiteUrl(client: ReturnType<typeof googleSearchConsole>, siteUrl?: string): Promise<string> {
-  const config = await loadConfig()
-  const target = siteUrl || config.defaultSite
-
-  const gscSites = await client.sites().catch((e: Error) => {
-    logger.error(`Failed to fetch sites: ${e.message}`)
-    process.exit(1)
-  })
-
-  const sites = gscSites
-    .filter(s => s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser')
-    .map(s => ({ siteUrl: s.siteUrl!, permissionLevel: s.permissionLevel || 'unknown' }))
-
-  if (sites.length === 0) {
-    logger.error('No sites found')
-    process.exit(1)
-  }
-
-  const match = target
-    ? sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
-    : undefined
-
-  if (match)
-    return match.siteUrl
-  if (sites.length === 1)
-    return sites[0].siteUrl
-
-  const selected = await select({
-    message: 'Select a site',
-    options: sites.map(s => ({ value: s.siteUrl, label: s.siteUrl })),
-  })
-  if (isCancel(selected)) {
-    cancel('Cancelled')
-    process.exit(0)
-  }
-  return selected as string
-}
+type AnalysisTool = string
 
 // Tool-specific args and body builder
 const TOOL_EXTRA_ARGS: Partial<Record<AnalysisTool, Record<string, { type: string, description: string, alias?: string }>>> = {
@@ -105,7 +42,7 @@ const TOOL_EXTRA_ARGS: Partial<Record<AnalysisTool, Record<string, { type: strin
 
 function buildParams(tool: AnalysisTool, args: Record<string, unknown>): AnalysisParams {
   const params: AnalysisParams = {
-    type: tool,
+    type: tool as AnalysisParams['type'],
     startDate: args.start ? String(args.start) : undefined,
     endDate: args.end ? String(args.end) : undefined,
     limit: args.limit ? Number(args.limit) : undefined,
@@ -152,9 +89,11 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       ...extraArgs,
     },
     async run({ args }) {
-      const auth = await getAuth({ interactive: false })
-      const client = googleSearchConsole(auth)
-      const siteUrl = await resolveSiteUrl(client, args.site)
+      const ctx = await createCommandContext({
+        needsAuth: true,
+        needsStore: !args.live,
+      })
+      const siteUrl = await ctx.resolveSite(args.site)
 
       logger.info(`Running ${tool} analysis...`)
 
@@ -163,15 +102,14 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
 
       // Default: run against the local Parquet store (authoritative when present).
       // Pass --live to opt into the GSC API directly.
-      const config = await loadConfig()
       if (!args.live) {
-        const harness = createAnalyticsHarness(config)
-        const localAvailable = await hasLocalData(harness, siteUrl).catch(() => false)
+        const store = ctx.store!
+        const localAvailable = await hasLocalData(store, siteUrl).catch(() => false)
         if (!localAvailable) {
           logger.error(`No local data for ${siteUrl}. Run \`gscdump sync\` first, or pass --live.`)
           process.exit(1)
         }
-        const localResult = await runLocalAnalysis(harness, siteUrl, params).catch((e: Error) => {
+        const localResult = await runLocalAnalysis(store, siteUrl, params).catch((e: Error) => {
           if (e instanceof LocalStoreUnsupportedError) {
             logger.error(`${e.message}. Pass --live to run against the GSC API.`)
             process.exit(1)
@@ -192,7 +130,7 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       }
 
       // Live mode: query the Google API directly
-      const result = await runLiveAnalysis(client, siteUrl, params).catch((e: Error) => {
+      const result = await runLiveAnalysis(ctx.client!, siteUrl, params).catch((e: Error) => {
         logger.error(`Analysis failed: ${e.message}`)
         process.exit(1)
       })
@@ -451,6 +389,6 @@ export const analyzeCommand = defineCommand({
     description: 'SEO analysis tools',
   },
   subCommands: Object.fromEntries(
-    ANALYSIS_TOOLS.map(tool => [tool, makeToolCommand(tool)]),
+    ANALYSIS_TOOLS.map((tool: string) => [tool, makeToolCommand(tool)]),
   ),
 })

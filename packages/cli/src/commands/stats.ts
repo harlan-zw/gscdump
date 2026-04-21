@@ -1,9 +1,8 @@
-import type { ManifestEntry, TableName, Watermark } from 'gscdump/analytics/contracts'
+import type { ManifestEntry, TableName, Watermark } from '../local-store'
+import { filesystemStats } from '@gscdump/engine/filesystem'
 import { defineCommand } from 'citty'
-import { filesystemStats } from 'gscdump/analytics/filesystem'
-import { allTables } from 'gscdump/analytics/schema'
-import { createAnalyticsHarness } from '../analytics'
-import { loadConfig } from '../config'
+import { createCommandContext } from '../context'
+import { allTables } from '../local-store'
 
 export const statsCommand = defineCommand({
   meta: {
@@ -22,13 +21,13 @@ export const statsCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const config = await loadConfig()
-    const harness = createAnalyticsHarness(config)
-    const siteId = args.site ? harness.siteIdFor(args.site) : undefined
+    const ctx = await createCommandContext({ needsStore: true })
+    const store = ctx.store!
+    const siteId = args.site ? store.siteIdFor(args.site) : undefined
     const perTable = await Promise.all(
       allTables().map(async (table) => {
-        const all = await harness.engine.listAll({
-          userId: harness.userId,
+        const all = await store.engine.listAll({
+          userId: store.userId,
           siteId,
           table: table as TableName,
         })
@@ -38,12 +37,12 @@ export const statsCommand = defineCommand({
       }),
     )
 
-    const watermarks = await harness.engine.getWatermarks({ userId: harness.userId, siteId })
-    const disk = await filesystemStats(harness.dataDir).catch(() => ({ files: 0, bytes: 0 }))
+    const watermarks = await store.engine.getWatermarks({ userId: store.userId, siteId })
+    const disk = await filesystemStats(store.dataDir).catch(() => ({ files: 0, bytes: 0 }))
 
     if (args.json) {
       const payload = {
-        dataDir: harness.dataDir,
+        dataDir: store.dataDir,
         disk,
         tables: perTable.map(({ table, live, retired }) => ({
           table,
@@ -67,7 +66,7 @@ export const statsCommand = defineCommand({
     }
 
     console.log()
-    console.log(`  \x1B[1m${harness.dataDir}\x1B[0m`)
+    console.log(`  \x1B[1m${store.dataDir}\x1B[0m`)
     console.log(`  \x1B[90mDisk: ${disk.files} file(s), ${formatBytes(disk.bytes)}\x1B[0m`)
     console.log()
 

@@ -1,0 +1,26 @@
+.:
+  aggClicks: function
+  aggCtr: function
+  aggImpressions: function
+  aggPosition: function
+  and: function
+  compileSqlite: function
+  createEngine: function
+  createSqliteInsightRunner: function
+  createSqliteResolverAdapter: function
+  createSqliteResolverAdapterFromExecutor: function
+  eq: function
+  gsc_countries: object
+  gsc_devices: object
+  gsc_keywords: object
+  gsc_page_keywords: object
+  gsc_pages: object
+  gte: function
+  lte: function
+  mergeScope: function
+  probeSqliteRegex: function
+  resolveWindow: function
+  schema: object
+  scopeFor: function
+  sql: function
+  sqliteResolverAdapter: object

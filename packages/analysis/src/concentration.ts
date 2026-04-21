@@ -43,7 +43,7 @@ function calculateGini(values: number[]): number {
 
   let weightedSum = 0
   for (let i = 0; i < n; i++) {
-    weightedSum += (2 * (i + 1) - n - 1) * sorted[i]
+    weightedSum += (2 * (i + 1) - n - 1) * sorted[i]!
   }
   return weightedSum / (n * sum)
 }

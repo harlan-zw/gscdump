@@ -54,14 +54,14 @@ Append-only Parquet-on-object-store layer with pluggable `DataSource` + `Manifes
 - `ManifestStore`, truth for which objects are live + sync state + locks. `listLive` / `listAll` / `registerVersion` / `registerVersions` / `listRetired` / `delete` / `getWatermarks` / `bumpWatermark` / `getSyncStates` / `setSyncState` / `withLock`. Ships with filesystem (atomic JSON-on-disk).
 - `ParquetCodec`, pluggable encode/decode used by writes + compaction. `createDuckDBCodec` wraps DuckDB `COPY TO`; `createHyparquetCodec` (pure-JS, `gscdump/analytics/hyparquet`) avoids DuckDB on the write path.
 - `QueryExecutor`, runs resolved SQL against a set of file buffers. `createDuckDBExecutor` for prod.
-- `StorageEngine`: engine-owned behavior — `writeDay`, `query`, `runSQL`, `compactOlderThan`, `gcOrphans` — plus pass-through surface — `listLive`, `listAll`, `getWatermarks`, `getSyncStates`, `setSyncState`, `readObject`. Enforces the atomicity contract below. `writeDay` takes `withLock` across write + register so GC can't delete mid-flight bytes. `gcOrphans` re-checks under the same lock before deleting. `runSQL({ ctx, fileSets, sql, params })` is the single raw-SQL entry point used by `@gscdump/analysis/duckdb` — composes `manifestStore.listLive` + `dataSource.read` + `substituteNamedFiles` + `executor.execute` so consumers never reach the underlying ports directly.
+- `StorageEngine`: engine-owned behavior — `writeDay`, `query`, `runSQL`, `compactOlderThan`, `gcOrphans` — plus pass-through surface — `listLive`, `listAll`, `getWatermarks`, `getSyncStates`, `setSyncState`, `readObject`. Enforces the atomicity contract below. `writeDay` takes `withLock` across write + register so GC can't delete mid-flight bytes. `gcOrphans` re-checks under the same lock before deleting. `runSQL({ ctx, fileSets, sql, params })` is the single raw-SQL entry point used by `@gscdump/engine-duckdb-node` — composes `manifestStore.listLive` + `dataSource.read` + `substituteNamedFiles` + `executor.execute` so consumers never reach the underlying ports directly.
 - `createRowAccumulator({ maxRows?, normalizeQuery? })` / `transformGscRow(table, apiRow)` — GSC API row → storage `Row` + `{ table → date → Row[] }` bucketing. Per-table key indexing; `normalizeQuery` hook keeps SEO-opinionated canonicalization consumer-side.
 - `bindLiterals(sql, params)` / `formatLiteral(value)` — SQL-standard quote-aware `?` parameter inliner for HTTP/RPC executors that can't pass parameters separately.
 - `normalizeUrl(input)`, write-time URL normalizer that collapses GSC full URLs to pathname+search so read-side filters work uniformly across URL-prefix and domain properties. **The engine's `writeDay` applies this automatically** to any `url` column — callers should not double-normalize.
 - `encodeSiteId(siteUrl)`, deterministic GSC-site-URL → filesystem-safe string. Used by the CLI + any caller to build `TenantCtx.siteId` consistently.
-- `substituteNamedFiles(sql, sets)`, binds `{{FILES}}` / `{{FILES_PREV}}` / ... placeholders in raw SQL to concrete object-key lists. Used by raw-SQL consumers and by the SQL-native analyzers in `@gscdump/analysis/duckdb`.
+- `substituteNamedFiles(sql, sets)`, binds `{{FILES}}` / `{{FILES_PREV}}` / ... placeholders in raw SQL to concrete object-key lists. Used by raw-SQL consumers and by the SQL-native analyzers in `@gscdump/engine-duckdb-node`.
 
-SQL-native analyzers (`analyzeWithDuckDB`, `AnalyzerUnsupportedError`) moved to `@gscdump/analysis/duckdb`. Import from there instead of `gscdump/analytics`.
+SQL-native analyzers (`SQL_ANALYZERS`, `AnalyzerUnsupportedError`) live in `@gscdump/engine-duckdb-node`. Dispatch via `runAnalyzerFromSource` from `@gscdump/analysis/analyzer`.
 
 #### Atomicity contract (see `test/analytics/engine.test.ts`)
 
@@ -131,16 +131,34 @@ Boundary rule: sibling packages should import the narrowest `gscdump/analytics/*
 
 ### `@gscdump/analysis`
 
-Row-based analyzers + SQL-native dispatcher + typed query primitives for DuckDB-WASM / D1. Moved out of core in Phase 0. Exports:
+Row-based analyzers, analyzer registry/dispatcher, source factories. Exports:
 
 - `./` — `analyzeStrikingDistance`, `analyzeOpportunity`, `analyzeMovers`, `analyzeDecay`, `analyzeBrandSegmentation`, `analyzeClustering`, `analyzeConcentration`, `analyzeSeasonality`, fetch wrappers, `padTimeseries`, `AnalysisParams` / `AnalysisResult` / `AnalysisTool`, period + metric types.
-- `./duckdb` — `analyzeWithDuckDB(deps, ctx, params)` (21 analyzers wired), `buildAnalyzerSpec`, `attachParquetIndex`, `attachSnapshotIndex`. Throws `AnalyzerUnsupportedError` only for unknown types.
-- `./browser` — DuckDB-WASM primitives: `createInsightRunner({ db, conn })`, `resolveWindow`, `scopeFor` / `mergeScope`, drizzle schema (`schema`, `pages`, `keywords`, `page_keywords`, `countries`, `devices`), `strikingMomentum` insight helper, vendored drizzle-orm DuckDB-WASM adapter (~240 LoC, MIT). Bundle: 10.3 kB / 2.72 kB gz.
-- `./sqlite` — D1 / sqlite-proxy mirror: `createSqliteInsightRunner({ executor })`, `compileSqlite(sql)`, `aggClicks` / `aggImpressions` / `aggCtr` / `aggPosition`, runtime-builder primitives (`colRef`, `dimColumn`, `metricSql`, `havingPredicates`, ...), drizzle schema (`gsc_pages`, `gsc_keywords`, ...). Re-exports `sql` + `and` / `eq` / `gte` / `lte` so consumers bind to the package's drizzle-orm instance. Bundle: 5.3 kB / 1.4 kB gz.
+- `./analyzer` — `Analyzer` / `Plan` / `FileSet` / `Capability` contracts, `ROW_ANALYZERS`, `createAnalyzerRegistry`, `runAnalyzerFromSource`, `AnalyzerCapabilityError`.
+- `./source` — portable source factories (`createEngineQuerySource`, `createGscApiQuerySource`, `createBrowserQuerySource`, `createSqliteQuerySource`, `createInMemoryQuerySource`) + `analyzeFromSource` dispatcher. Source contracts re-exported from `@gscdump/engine/resolver`.
+- `./query` — `buildDataQueryPlan`, `buildDataDetailPlan` for the generic query analyzers.
+- `./period` — window primitives (`resolveWindow`, `windowToPeriod`, `windowToComparisonPeriod`, `padTimeseries`).
+- `./semantic` — embedding-backed analyzers (lazy `@huggingface/transformers`).
+
+### `@gscdump/engine-duckdb-node`
+
+Node DuckDB runtime + SQL-native analyzer collection. Exports `SQL_ANALYZERS` (29 analyzers), `createEngine({ engine, ctx }) → SqlQuerySource`, `analyzeInBrowser` (attached-table rewrite), `attachParquetIndex`, `attachSnapshotIndex`, `AnalyzerUnsupportedError`.
+
+### `@gscdump/engine-wasm`
+
+DuckDB-WASM primitives: `bootDuckDBWasm`, `attachParquetUrlTables`, `attachParquetTables`, `createBrowserAnalysisRuntime`, `createInsightRunner({ db, conn })`, `scopeFor` / `mergeScope`, `strikingMomentum` insight helper, vendored drizzle-orm DuckDB-WASM adapter (~240 LoC, MIT). Canonical drizzle schema + `browserResolverAdapter` (alias for `pgResolverAdapter`) re-exported from `@gscdump/engine`.
+
+### `@gscdump/engine-sqlite`
+
+D1 / sqlite-proxy mirror: `createSqliteInsightRunner({ executor })`, `sqliteResolverAdapter`, `aggClicks` / `aggImpressions` / `aggCtr` / `aggPosition`, runtime-builder primitives, drizzle schema (`gsc_pages`, `gsc_keywords`, ...). Re-exports `sql` + `and` / `eq` / `gte` / `lte` so consumers bind to the package's drizzle-orm instance. Bundle: 5.3 kB / 1.4 kB gz.
+- `./source` — portable `AnalysisQuerySource` layer: `createGscApiQuerySource`, `createBrowserQuerySource`, `createSqliteQuerySource`, `createEngineQuerySource`, `createInMemoryQuerySource`, generic `queryRows` / `queryComparisonRows`, and source-backed row analyzers (`analyzeStrikingDistanceFromSource`, `analyzeMoversFromSource`, ...).
+- `./semantic` — browser-only semantic analyzers that depend on client runtime capabilities (currently `analyzeContentGap()` with `@huggingface/transformers` + IndexedDB cache).
 - `./query` — dialect-neutral composers for runtime `BuilderState`: `resolveToSQL`, `resolveToSQLOptimized`, `buildTotalsSql`, `buildExtrasQueries`, `mergeExtras`, `resolveComparisonSQL`. Consumers pass a `ResolverAdapter` from `/sqlite` or `/browser`.
 - `./window` — `resolveWindow({ preset, comparison, anchor })`. Presets: `last-7d` / `last-28d` / `last-30d` / `last-90d` / `last-180d` / `last-365d` / `mtd` / `ytd` / `custom`. Comparison: `none` / `prev-period` / `yoy`.
 
 Peers: `gscdump`, `@duckdb/duckdb-wasm` (optional, for `/browser` + `/duckdb`).
+
+Internal boundary note: query semantics now live in a shared analysis core (`src/core/*`) rather than being duplicated independently in `/browser` and `/sqlite`. The new `./source` layer is the preferred scope boundary for row-based analyzers and generic `BuilderState` queries that should work across live GSC, sqlite, attached DuckDB, and the local storage engine. DuckDB-native SQL analyzers remain under `./duckdb` for capabilities that are not portable.
 
 ### `@gscdump/cloud` (frozen)
 
@@ -156,4 +174,4 @@ Dep: `gscdump`.
 
 ### `@gscdump/cli`
 
-CLI entry (`gscdump` bin). Owns config, auth, local engine wiring. Top-level verbs: `init`, `sync`, `query`, `dump`, `sites`, `sitemaps`, `inspect`, `analyze`, `auth`, `config`, `mcp`; plus `store {stats, compact, gc, export}` for local-store admin. `analyze` dispatches 21 tools via `@gscdump/analysis/duckdb`. No cloud-mode branching; cloud-scoped commands live in `@gscdump/cloud` behind the `gscdump-cloud` bin.
+CLI entry (`gscdump` bin). Owns config, auth, local engine wiring. Top-level verbs: `init`, `sync`, `query`, `dump`, `sites`, `sitemaps`, `inspect`, `analyze`, `auth`, `config`, `mcp`; plus `store {stats, compact, gc, export}` for local-store admin. `analyze` dispatches 21 tools via `@gscdump/engine-duckdb-node`. No cloud-mode branching; cloud-scoped commands live in `@gscdump/cloud` behind the `gscdump-cloud` bin.

@@ -1,0 +1,111 @@
+.:
+  allTables: function
+  bindLiterals: function
+  canonicalEmptyParquetSchema: function
+  countries: object
+  createDuckDBCodec: function
+  createDuckDBExecutor: function
+  createRowAccumulator: function
+  createStorageEngine: function
+  currentSchemaVersion: function
+  dayPartition: function
+  devices: object
+  dimensionToColumn: function
+  drizzleSchema: object
+  enumeratePartitions: function
+  FILES_PLACEHOLDER: string
+  formatLiteral: function
+  inferTable: function
+  keywords: object
+  MAX_DAY_BYTES: number
+  page_keywords: object
+  pages: object
+  resolveToSQL: function
+  SCHEMAS: object
+  substituteNamedFiles: function
+  TABLE_METADATA: object
+  toPath: function
+  toSumPosition: function
+  transformGscRow: function
+./contracts: {}
+./filesystem:
+  createFilesystemDataSource: function
+  createFilesystemManifestStore: function
+  filesystemStats: function
+./http:
+  createHttpDataSource: function
+  createHttpManifestStore: function
+./hyparquet:
+  createHyparquetCodec: function
+  decodeParquetToRows: function
+  encodeRowsToParquet: function
+./ingest:
+  createRowAccumulator: function
+  TABLE_DIMS: object
+  toPath: function
+  toSumPosition: function
+  transformGscRow: function
+./node:
+  createNodeDuckDBHandle: function
+  resetNodeDuckDB: function
+./node-harness:
+  createNodeHarness: function
+./planner:
+  compileLogicalQueryPlan: function
+  enumeratePartitions: function
+  FILES_PLACEHOLDER: string
+  resolveToSQL: function
+  substituteNamedFiles: function
+./r2:
+  createR2DataSource: function
+./resolver:
+  assertDimensionsSupported: function
+  assertSchemaInSync: function
+  buildExtrasQueries: function
+  buildTotalsSql: function
+  compilePg: function
+  compileSqlite: function
+  createResolverAdapter: function
+  createSqlFragments: function
+  createSqlQuerySource: function
+  DIMENSION_SURFACES: object
+  dimensionColumn: function
+  dimensionValue: function
+  getDimensionFilters: function
+  getFilterDimensions: function
+  getInternalFilters: function
+  inferLogicalDataset: function
+  isSqlQuerySource: function
+  LOGICAL_DATASETS: object
+  matchesDimensionFilter: function
+  matchesMetricFilter: function
+  matchesTopLevelPage: function
+  mergeExtras: function
+  metricValue: function
+  pgResolverAdapter: object
+  resolveComparisonSQL: function
+  resolveToSQL: function
+  resolveToSQLOptimized: function
+  supportsDimensionOnSurface: function
+./schema:
+  allTables: function
+  countries: object
+  currentSchemaVersion: function
+  devices: object
+  dimensionToColumn: function
+  drizzleSchema: object
+  inferTable: function
+  keywords: object
+  page_keywords: object
+  pages: object
+  schemaFor: function
+  SCHEMAS: object
+  TABLE_METADATA: object
+./snapshot: {}
+./sql:
+  bindLiterals: function
+  formatLiteral: function
+./sql-fragments:
+  escapeLike: function
+  METRIC_EXPR: object
+  topLevelPagePredicateSql: function

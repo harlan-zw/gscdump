@@ -11,12 +11,56 @@ const columns = computed(() => {
   return Object.keys(displayed.value[0]!)
 })
 
+const DISPLAY_KEYS = ['keyword', 'query', 'url', 'page', 'date', 'name', 'id', 'label', 'source', 'target']
+
+function pickDisplayKey(obj: Record<string, unknown>): string | null {
+  for (const k of DISPLAY_KEYS) {
+    if (k in obj && (typeof obj[k] === 'string' || typeof obj[k] === 'number'))
+      return k
+  }
+  return null
+}
+
+function fmtItem(v: unknown): string {
+  if (v == null)
+    return ''
+  if (typeof v === 'number')
+    return v < 1 && v > 0 ? v.toFixed(3) : String(Math.round(v * 100) / 100)
+  if (typeof v === 'string')
+    return v
+  if (typeof v === 'object') {
+    const key = pickDisplayKey(v as Record<string, unknown>)
+    if (key)
+      return String((v as Record<string, unknown>)[key])
+    return JSON.stringify(v)
+  }
+  return String(v)
+}
+
+function truncate(s: string, max = 120): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s
+}
+
 function fmt(v: unknown): string {
   if (v == null)
     return ''
   if (typeof v === 'number')
     return v < 1 && v > 0 ? v.toFixed(3) : String(Math.round(v * 100) / 100)
+  if (Array.isArray(v)) {
+    if (v.length === 0)
+      return '[]'
+    const parts = v.map(fmtItem).join(', ')
+    return truncate(`${v.length}× ${parts}`)
+  }
+  if (typeof v === 'object')
+    return truncate(JSON.stringify(v))
   return String(v)
+}
+
+function fmtTitle(v: unknown): string | undefined {
+  if (Array.isArray(v) || (v !== null && typeof v === 'object'))
+    return JSON.stringify(v, null, 2)
+  return undefined
 }
 </script>
 
@@ -35,7 +79,7 @@ function fmt(v: unknown): string {
       </thead>
       <tbody>
         <tr v-for="(row, i) in displayed" :key="i">
-          <td v-for="col in columns" :key="col">
+          <td v-for="col in columns" :key="col" :title="fmtTitle(row[col])">
             {{ fmt(row[col]) }}
           </td>
         </tr>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { padTimeseries } from '../src/pad-timeseries'
+import { padTimeseries } from '../src/period'
 
 describe('padTimeseries', () => {
   it('fills gaps between sparse dates', () => {

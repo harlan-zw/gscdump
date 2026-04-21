@@ -379,7 +379,7 @@
       runEl.disabled = false
     }
 
-    // Preset selector uses resolveWindow() from @gscdump/analysis/browser to
+    // Preset selector uses resolveWindow() from @gscdump/engine-wasm to
     // fill the start/end inputs with canonical ranges. 'custom' leaves them
     // editable so users can pick arbitrary dates.
     const presetEl = document.getElementById('preset')
@@ -420,7 +420,7 @@
       const t0 = performance.now()
       try {
         let res
-        // momentum-drizzle: typed query via @gscdump/analysis/browser primitives.
+        // momentum-drizzle: typed query via @gscdump/engine-wasm primitives.
         // Requires an attach mode (snapshot/snapshot-url/hotcold/parquet) — not
         // the engine-per-file 'http' path, because the drizzle schema maps to
         // plain tables, and the http mode expects schema-less read_parquet calls.

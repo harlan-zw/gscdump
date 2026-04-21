@@ -174,6 +174,15 @@ importers:
       '@gscdump/analysis':
         specifier: workspace:*
         version: link:../../packages/analysis
+      '@gscdump/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+      '@gscdump/engine-sqlite':
+        specifier: workspace:*
+        version: link:../../packages/engine-sqlite
+      '@gscdump/engine-wasm':
+        specifier: workspace:*
+        version: link:../../packages/engine-wasm
       '@huggingface/transformers':
         specifier: 'catalog:'
         version: 4.0.1
@@ -198,6 +207,21 @@ importers:
 
   packages/analysis:
     dependencies:
+      '@gscdump/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@gscdump/engine-duckdb-node':
+        specifier: workspace:*
+        version: link:../engine-duckdb-node
+      '@gscdump/engine-sqlite':
+        specifier: workspace:*
+        version: link:../engine-sqlite
+      '@gscdump/engine-wasm':
+        specifier: workspace:*
+        version: link:../engine-wasm
+      '@huggingface/transformers':
+        specifier: 'catalog:'
+        version: 4.0.1
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2
@@ -205,9 +229,6 @@ importers:
         specifier: workspace:*
         version: link:../gscdump
     devDependencies:
-      '@duckdb/duckdb-wasm':
-        specifier: 'catalog:'
-        version: 1.32.0
       vitest:
         specifier: catalog:dev-test
         version: 4.1.4(@types/node@25.6.0)(vite@7.3.1(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
@@ -223,6 +244,12 @@ importers:
       '@gscdump/analysis':
         specifier: workspace:*
         version: link:../analysis
+      '@gscdump/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@gscdump/engine-duckdb-node':
+        specifier: workspace:*
+        version: link:../engine-duckdb-node
       '@gscdump/mcp':
         specifier: workspace:*
         version: link:../mcp
@@ -263,6 +290,9 @@ importers:
       '@clack/prompts':
         specifier: catalog:deps
         version: 1.2.0
+      '@gscdump/analysis':
+        specifier: workspace:*
+        version: link:../analysis
       citty:
         specifier: catalog:deps
         version: 0.2.2
@@ -283,6 +313,97 @@ importers:
         specifier: catalog:dev-test
         version: 4.1.4(@types/node@25.6.0)(vite@7.3.1(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
 
+  packages/engine:
+    dependencies:
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.2
+      gscdump:
+        specifier: workspace:*
+        version: link:../gscdump
+      proper-lockfile:
+        specifier: catalog:deps
+        version: 4.1.2
+    devDependencies:
+      '@duckdb/duckdb-wasm':
+        specifier: 'catalog:'
+        version: 1.32.0
+      '@types/proper-lockfile':
+        specifier: 'catalog:'
+        version: 4.1.4
+      hyparquet:
+        specifier: 'catalog:'
+        version: 1.25.6
+      hyparquet-writer:
+        specifier: 'catalog:'
+        version: 0.13.0
+      vitest:
+        specifier: catalog:dev-test
+        version: 4.1.4(@types/node@25.6.0)(vite@7.3.1(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
+
+  packages/engine-duckdb-node:
+    dependencies:
+      '@gscdump/analysis':
+        specifier: workspace:*
+        version: link:../analysis
+      '@gscdump/engine':
+        specifier: workspace:*
+        version: link:../engine
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.2
+      gscdump:
+        specifier: workspace:*
+        version: link:../gscdump
+    devDependencies:
+      vitest:
+        specifier: catalog:dev-test
+        version: 4.1.4(@types/node@25.6.0)(vite@7.3.1(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
+
+  packages/engine-sqlite:
+    dependencies:
+      '@gscdump/analysis':
+        specifier: workspace:*
+        version: link:../analysis
+      '@gscdump/engine':
+        specifier: workspace:*
+        version: link:../engine
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.2
+      gscdump:
+        specifier: workspace:*
+        version: link:../gscdump
+    devDependencies:
+      vitest:
+        specifier: catalog:dev-test
+        version: 4.1.4(@types/node@25.6.0)(vite@7.3.1(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
+
+  packages/engine-wasm:
+    dependencies:
+      '@gscdump/analysis':
+        specifier: workspace:*
+        version: link:../analysis
+      '@gscdump/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@gscdump/engine-duckdb-node':
+        specifier: workspace:*
+        version: link:../engine-duckdb-node
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.2
+      gscdump:
+        specifier: workspace:*
+        version: link:../gscdump
+    devDependencies:
+      '@duckdb/duckdb-wasm':
+        specifier: 'catalog:'
+        version: 1.32.0
+      vitest:
+        specifier: catalog:dev-test
+        version: 4.1.4(@types/node@25.6.0)(vite@7.3.1(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
+
   packages/gscdump:
     dependencies:
       dayjs:
@@ -294,31 +415,16 @@ importers:
       ofetch:
         specifier: catalog:deps
         version: 1.5.1
-      proper-lockfile:
-        specifier: catalog:deps
-        version: 4.1.2
       ufo:
         specifier: catalog:deps
         version: 1.6.3
     devDependencies:
-      '@duckdb/duckdb-wasm':
-        specifier: 'catalog:'
-        version: 1.32.0
       '@googleapis/indexing':
         specifier: catalog:deps
         version: 6.0.1
       '@googleapis/searchconsole':
         specifier: catalog:deps
         version: 6.0.1
-      '@types/proper-lockfile':
-        specifier: 'catalog:'
-        version: 4.1.4
-      hyparquet:
-        specifier: 'catalog:'
-        version: 1.25.6
-      hyparquet-writer:
-        specifier: 'catalog:'
-        version: 0.13.0
 
   packages/mcp:
     dependencies:

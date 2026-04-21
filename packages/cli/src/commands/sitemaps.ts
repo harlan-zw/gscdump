@@ -1,8 +1,8 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { fetchSitemap, googleSearchConsole } from 'gscdump'
-import { getAuth } from '../auth'
+import { fetchSitemap } from 'gscdump'
 import { loadConfig } from '../config'
+import { createCommandContext } from '../context'
 import { gscErrorHandler, logger } from '../utils'
 
 function requireSite(target?: string): string {
@@ -33,8 +33,8 @@ const listCommand = defineCommand({
   async run({ args }) {
     const config = await loadConfig()
     const siteUrl = requireSite(args.site || config.defaultSite)
-    const auth = await getAuth({ interactive: false })
-    const client = googleSearchConsole(auth)
+    const ctx = await createCommandContext({ needsAuth: true })
+    const client = ctx.client!
 
     const raw = await client.sitemaps.list(siteUrl).catch((e: Error) => {
       logger.error(`Failed to fetch sitemaps: ${e.message}`)
@@ -95,8 +95,8 @@ const getCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const auth = await getAuth({ interactive: false })
-    const client = googleSearchConsole(auth)
+    const ctx = await createCommandContext({ needsAuth: true })
+    const client = ctx.client!
     const sitemap = await fetchSitemap(client, args.site, args.url).catch(gscErrorHandler)
 
     if (args.json) {
@@ -142,8 +142,8 @@ const submitCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const auth = await getAuth({ interactive: false })
-    const client = googleSearchConsole(auth)
+    const ctx = await createCommandContext({ needsAuth: true })
+    const client = ctx.client!
     await client.sitemaps.submit(args.site, args.url).catch((e: Error) => {
       logger.error(`Submit failed: ${e.message}`)
       process.exit(1)
@@ -171,8 +171,8 @@ const deleteCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const auth = await getAuth({ interactive: false })
-    const client = googleSearchConsole(auth)
+    const ctx = await createCommandContext({ needsAuth: true })
+    const client = ctx.client!
     await client.sitemaps.delete(args.site, args.url).catch((e: Error) => {
       logger.error(`Delete failed: ${e.message}`)
       process.exit(1)

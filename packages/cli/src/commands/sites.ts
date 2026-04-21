@@ -1,7 +1,5 @@
-import process from 'node:process'
 import { defineCommand } from 'citty'
-import { googleSearchConsole } from 'gscdump'
-import { getAuth } from '../auth'
+import { createCommandContext } from '../context'
 import { logger } from '../utils'
 
 export const sitesCommand = defineCommand({
@@ -17,20 +15,8 @@ export const sitesCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const auth = await getAuth({ interactive: false })
-    const client = googleSearchConsole(auth)
-
-    const gscSites = await client.sites().catch((e: Error) => {
-      logger.error(`Failed to fetch sites: ${e.message}`)
-      process.exit(1)
-    })
-
-    const sites = gscSites
-      .filter(s => s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser')
-      .map(s => ({
-        siteUrl: s.siteUrl!,
-        permissionLevel: s.permissionLevel || 'unknown',
-      }))
+    const ctx = await createCommandContext({ needsAuth: true })
+    const sites = await ctx.loadSites()
 
     if (args.json) {
       console.log(JSON.stringify(sites, null, 2))

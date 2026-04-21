@@ -1,0 +1,8 @@
+.:
+  analyzeInBrowser: function
+  attachParquetIndex: function
+  attachSnapshotIndex: function
+  createEngine: function
+  rewriteForTableSource: function
+  snapshotAlias: function
+  SQL_ANALYZERS: object

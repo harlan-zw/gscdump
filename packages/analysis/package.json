@@ -25,25 +25,25 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
     },
-    "./duckdb": {
-      "types": "./dist/duckdb/index.d.mts",
-      "import": "./dist/duckdb/index.mjs"
-    },
-    "./browser": {
-      "types": "./dist/browser/index.d.mts",
-      "import": "./dist/browser/index.mjs"
-    },
-    "./sqlite": {
-      "types": "./dist/sqlite/index.d.mts",
-      "import": "./dist/sqlite/index.mjs"
+    "./analyzer": {
+      "types": "./dist/analyzer/index.d.mts",
+      "import": "./dist/analyzer/index.mjs"
     },
     "./query": {
       "types": "./dist/query/index.d.mts",
       "import": "./dist/query/index.mjs"
     },
-    "./window": {
-      "types": "./dist/window/index.d.mts",
-      "import": "./dist/window/index.mjs"
+    "./source": {
+      "types": "./dist/source/index.d.mts",
+      "import": "./dist/source/index.mjs"
+    },
+    "./semantic": {
+      "types": "./dist/semantic/index.d.mts",
+      "import": "./dist/semantic/index.mjs"
+    },
+    "./period": {
+      "types": "./dist/period/index.d.mts",
+      "import": "./dist/period/index.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -62,19 +62,22 @@
     "prepack": "pnpm run build"
   },
   "peerDependencies": {
-    "@duckdb/duckdb-wasm": "catalog:"
+    "@huggingface/transformers": "catalog:"
   },
   "peerDependenciesMeta": {
-    "@duckdb/duckdb-wasm": {
+    "@huggingface/transformers": {
       "optional": true
     }
   },
   "dependencies": {
+    "@gscdump/engine": "workspace:*",
+    "@gscdump/engine-duckdb-node": "workspace:*",
+    "@gscdump/engine-sqlite": "workspace:*",
+    "@gscdump/engine-wasm": "workspace:*",
     "drizzle-orm": "catalog:",
     "gscdump": "workspace:*"
   },
   "devDependencies": {
-    "@duckdb/duckdb-wasm": "catalog:",
     "vitest": "catalog:dev-test"
   }
 }
