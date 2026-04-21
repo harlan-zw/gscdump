@@ -1,0 +1,83 @@
+{
+  "name": "@gscdump/analysis",
+  "type": "module",
+  "version": "0.4.0",
+  "description": "GSC analyzers — striking-distance, opportunity, movers, decay, brand, clustering, concentration, seasonality. Pure row-based + DuckDB-native.",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/analysis#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/analysis"
+  },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./analyzer": {
+      "types": "./dist/analyzer/index.d.mts",
+      "import": "./dist/analyzer/index.mjs"
+    },
+    "./query": {
+      "types": "./dist/query/index.d.mts",
+      "import": "./dist/query/index.mjs"
+    },
+    "./source": {
+      "types": "./dist/source/index.d.mts",
+      "import": "./dist/source/index.mjs"
+    },
+    "./semantic": {
+      "types": "./dist/semantic/index.d.mts",
+      "import": "./dist/semantic/index.mjs"
+    },
+    "./period": {
+      "types": "./dist/period/index.d.mts",
+      "import": "./dist/period/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "obuild",
+    "dev": "obuild --stub",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "prepack": "pnpm run build"
+  },
+  "peerDependencies": {
+    "@huggingface/transformers": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@huggingface/transformers": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@gscdump/engine": "workspace:*",
+    "@gscdump/engine-duckdb-node": "workspace:*",
+    "@gscdump/engine-sqlite": "workspace:*",
+    "@gscdump/engine-wasm": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "gscdump": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "catalog:dev-test"
+  }
+}

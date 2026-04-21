@@ -13,17 +13,30 @@ export function getConfigDir(): string {
 }
 
 export interface GscdumpConfig {
-  mode?: 'cloud' | 'local'
-  cloudUrl?: string
   clientId?: string
   clientSecret?: string
   defaultSite?: string
   defaultPeriod?: string
   defaultFormat?: 'json' | 'csv'
   defaultDb?: string
+  dataDir?: string
 }
 
-export const DEFAULT_CLOUD_URL = 'https://cloud.gscdump.com'
+export function defaultDataDir(): string {
+  return path.join(os.homedir(), '.gscdump', 'data')
+}
+
+export function resolveDataDir(config: GscdumpConfig): string {
+  return expandTilde(config.dataDir ?? defaultDataDir())
+}
+
+function expandTilde(p: string): string {
+  if (p === '~')
+    return os.homedir()
+  if (p.startsWith('~/'))
+    return path.join(os.homedir(), p.slice(2))
+  return p
+}
 
 export async function loadConfig(): Promise<GscdumpConfig> {
   return fs.readFile(path.join(configDir, 'config.json'), 'utf-8')

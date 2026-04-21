@@ -1,0 +1,4476 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`analyzer plan snapshots > rows plan: brand 1`] = `
+{
+  "kind": "rows",
+  "queries": {
+    "keywords": {
+      "state": {
+        "dimensions": [
+          "query",
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+  },
+}
+`;
+
+exports[`analyzer plan snapshots > rows plan: clustering 1`] = `
+{
+  "kind": "rows",
+  "queries": {
+    "keywords": {
+      "state": {
+        "dimensions": [
+          "query",
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+  },
+}
+`;
+
+exports[`analyzer plan snapshots > rows plan: concentration 1`] = `
+{
+  "kind": "rows",
+  "queries": {
+    "pages": {
+      "state": {
+        "dimensions": [
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+  },
+}
+`;
+
+exports[`analyzer plan snapshots > rows plan: decay 1`] = `
+{
+  "kind": "rows",
+  "queries": {
+    "current": {
+      "state": {
+        "dimensions": [
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+    "previous": {
+      "state": {
+        "dimensions": [
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-01-01",
+              "expression2": "2024-01-31",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+  },
+}
+`;
+
+exports[`analyzer plan snapshots > rows plan: movers 1`] = `
+{
+  "kind": "rows",
+  "queries": {
+    "current": {
+      "state": {
+        "dimensions": [
+          "query",
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+    "previous": {
+      "state": {
+        "dimensions": [
+          "query",
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-01-01",
+              "expression2": "2024-01-31",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+  },
+}
+`;
+
+exports[`analyzer plan snapshots > rows plan: opportunity 1`] = `
+{
+  "kind": "rows",
+  "queries": {
+    "keywords": {
+      "state": {
+        "dimensions": [
+          "query",
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+  },
+}
+`;
+
+exports[`analyzer plan snapshots > rows plan: seasonality 1`] = `
+{
+  "kind": "rows",
+  "queries": {
+    "dates": {
+      "state": {
+        "dimensions": [
+          "date",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+  },
+}
+`;
+
+exports[`analyzer plan snapshots > rows plan: striking-distance 1`] = `
+{
+  "kind": "rows",
+  "queries": {
+    "keywords": {
+      "state": {
+        "dimensions": [
+          "query",
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+  },
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: bayesian-ctr 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH entity AS (
+      SELECT
+        query,
+        url,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS observed_ctr,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position,
+        CAST(ROUND(LEAST(SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1, 30)) AS INTEGER) AS bucket
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+        AND query IS NOT NULL AND query <> ''
+        AND url IS NOT NULL AND url <> ''
+      GROUP BY query, url
+      HAVING SUM(impressions) >= ?
+        AND SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 <= 30
+    ),
+    bucket_mu AS (
+      SELECT
+        bucket,
+        COUNT(*) AS n_entities,
+        SUM(observed_ctr * impressions) / NULLIF(SUM(impressions), 0) AS mu,
+        SUM(impressions) AS total_impressions
+      FROM entity
+      GROUP BY bucket
+    ),
+    bucket_var AS (
+      SELECT
+        e.bucket,
+        GREATEST(
+          SUM(e.impressions * POWER(e.observed_ctr - b.mu, 2))
+            / NULLIF(SUM(e.impressions), 0),
+          1e-9
+        ) AS v
+      FROM entity e
+      JOIN bucket_mu b USING (bucket)
+      GROUP BY e.bucket
+    ),
+    priors AS (
+      SELECT
+        m.bucket,
+        m.n_entities,
+        m.mu,
+        v.v,
+        CASE
+          WHEN m.n_entities >= 5
+            AND v.v > 0
+            AND m.mu > 0 AND m.mu < 1
+            AND (m.mu * (1.0 - m.mu) / v.v - 1.0) > 0
+          THEN GREATEST(0.5, m.mu * (m.mu * (1.0 - m.mu) / v.v - 1.0))
+          ELSE 2.0
+        END AS alpha,
+        CASE
+          WHEN m.n_entities >= 5
+            AND v.v > 0
+            AND m.mu > 0 AND m.mu < 1
+            AND (m.mu * (1.0 - m.mu) / v.v - 1.0) > 0
+          THEN GREATEST(0.5, (1.0 - m.mu) * (m.mu * (1.0 - m.mu) / v.v - 1.0))
+          ELSE 48.0
+        END AS beta
+      FROM bucket_mu m
+      JOIN bucket_var v USING (bucket)
+    ),
+    posterior AS (
+      SELECT
+        e.query,
+        e.url,
+        e.clicks,
+        e.impressions,
+        e.observed_ctr,
+        e.position,
+        e.bucket,
+        p.alpha AS prior_alpha,
+        p.beta AS prior_beta,
+        p.mu AS bucket_prior_mean,
+        p.alpha + e.clicks AS alpha_post,
+        p.beta + (e.impressions - e.clicks) AS beta_post
+      FROM entity e
+      JOIN priors p USING (bucket)
+    ),
+    scored AS (
+      SELECT *,
+        alpha_post / (alpha_post + beta_post) AS posterior_mean,
+        SQRT((alpha_post * beta_post)
+          / (POWER(alpha_post + beta_post, 2) * (alpha_post + beta_post + 1))) AS posterior_sd
+      FROM posterior
+    )
+    SELECT
+      query AS keyword,
+      url AS page,
+      clicks,
+      impressions,
+      observed_ctr AS observedCtr,
+      position,
+      bucket,
+      prior_alpha AS priorAlpha,
+      prior_beta AS priorBeta,
+      bucket_prior_mean AS bucketPriorMean,
+      posterior_mean AS posteriorMean,
+      posterior_sd AS posteriorSd,
+      GREATEST(0.0, posterior_mean - 1.96 * posterior_sd) AS ciLow,
+      LEAST(1.0, posterior_mean + 1.96 * posterior_sd) AS ciHigh,
+      posterior_mean - observed_ctr AS shrinkageDelta,
+      (posterior_mean - observed_ctr) * impressions AS expectedClicksDelta,
+      ABS(observed_ctr - posterior_mean) / NULLIF(posterior_sd, 0) AS significance,
+      CASE
+        WHEN observed_ctr > LEAST(1.0, posterior_mean + 1.96 * posterior_sd) THEN 'overperforming'
+        WHEN observed_ctr < GREATEST(0.0, posterior_mean - 1.96 * posterior_sd) THEN 'underperforming'
+        ELSE 'expected'
+      END AS classification
+    FROM scored
+    ORDER BY significance DESC NULLS LAST
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: bipartite-pagerank 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH edges0 AS (
+      SELECT
+        query AS qid,
+        url   AS uid,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+        AND query IS NOT NULL AND query <> ''
+        AND url   IS NOT NULL AND url   <> ''
+      GROUP BY query, url
+      HAVING SUM(impressions) >= ?
+    ),
+    -- Top-N caps per side keep the iteration tractable.
+    query_totals AS (
+      SELECT qid, SUM(impressions) AS tot
+      FROM edges0 GROUP BY qid
+    ),
+    url_totals AS (
+      SELECT uid, SUM(impressions) AS tot
+      FROM edges0 GROUP BY uid
+    ),
+    top_queries AS (
+      SELECT qid FROM query_totals
+      ORDER BY tot DESC, qid ASC LIMIT 1000
+    ),
+    top_urls AS (
+      SELECT uid FROM url_totals
+      ORDER BY tot DESC, uid ASC LIMIT 500
+    ),
+    edges AS (
+      SELECT e.qid, e.uid, e.impressions
+      FROM edges0 e
+      JOIN top_queries tq USING (qid)
+      JOIN top_urls    tu USING (uid)
+    ),
+    query_nodes AS (SELECT DISTINCT qid FROM edges),
+    url_nodes   AS (SELECT DISTINCT uid FROM edges),
+    query_count AS (SELECT GREATEST(COUNT(*), 1) AS n FROM query_nodes),
+    url_count   AS (SELECT GREATEST(COUNT(*), 1) AS n FROM url_nodes),
+    -- Row-stochastic transition weights in each direction. For q->u the
+    -- weights out of a query sum to 1; symmetric for u->q.
+    q_out AS (SELECT qid, SUM(impressions) AS s FROM edges GROUP BY qid),
+    u_out AS (SELECT uid, SUM(impressions) AS s FROM edges GROUP BY uid),
+    q_to_u_weights AS (
+      SELECT e.qid, e.uid,
+        e.impressions / NULLIF(q.s, 0) AS w_q_to_u
+      FROM edges e JOIN q_out q USING (qid)
+    ),
+    u_to_q_weights AS (
+      SELECT e.qid, e.uid,
+        e.impressions / NULLIF(u.s, 0) AS w_u_to_q
+      FROM edges e JOIN u_out u USING (uid)
+    ),
+    -- Seed: uniform distribution per side. Total mass = 2 (one unit per side).
+    ranks_0 AS (
+      SELECT 'q' AS kind, q.qid AS id, 1.0 / (SELECT n FROM query_count) AS rank
+      FROM query_nodes q
+      UNION ALL
+      SELECT 'u' AS kind, u.uid AS id, 1.0 / (SELECT n FROM url_count) AS rank
+      FROM url_nodes u
+    ),
+    
+    ranks_1 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_0 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_0 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_2 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_1 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_1 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_3 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_2 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_2 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_4 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_3 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_3 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_5 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_4 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_4 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_6 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_5 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_5 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_7 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_6 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_6 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_8 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_7 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_7 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_9 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_8 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_8 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_10 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_9 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_9 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_11 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_10 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_10 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_12 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_11 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_11 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_13 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_12 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_12 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_14 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_13 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_13 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_15 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_14 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_14 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_16 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_15 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_15 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_17 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_16 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_16 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_18 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_17 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_17 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_19 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_18 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_18 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_20 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_19 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_19 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_21 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_20 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_20 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_22 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_21 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_21 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_23 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_22 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_22 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_24 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_23 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_23 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+
+    ranks_25 AS (
+      SELECT
+        'q' AS kind,
+        e.qid AS id,
+        (1.0 - 0.85) / (SELECT n FROM query_count)
+          + 0.85 * SUM(e.w_u_to_q * r.rank) AS rank
+      FROM u_to_q_weights e
+      JOIN ranks_24 r ON r.kind = 'u' AND r.id = e.uid
+      GROUP BY e.qid
+      UNION ALL
+      SELECT
+        'u' AS kind,
+        e.uid AS id,
+        (1.0 - 0.85) / (SELECT n FROM url_count)
+          + 0.85 * SUM(e.w_q_to_u * r.rank) AS rank
+      FROM q_to_u_weights e
+      JOIN ranks_24 r ON r.kind = 'q' AND r.id = e.qid
+      GROUP BY e.uid
+    ),
+    final_ranks AS (SELECT * FROM ranks_25),
+    -- Hub/anchor diagnostics computed from raw edge mass (not rank). A
+    -- query "bridges" URLs it sends >= 0.05 of its mass
+    -- to; a URL "anchors" queries that contribute >= 0.05
+    -- of its incoming mass.
+    q_bridging AS (
+      SELECT qid, COUNT(*) AS bridging
+      FROM q_to_u_weights
+      WHERE w_q_to_u >= 0.05
+      GROUP BY qid
+    ),
+    u_anchoring AS (
+      SELECT uid, COUNT(*) AS anchoring
+      FROM u_to_q_weights
+      WHERE w_u_to_q >= 0.05
+      GROUP BY uid
+    ),
+    q_degree AS (
+      SELECT qid, COUNT(*) AS degree, SUM(impressions) AS impressions
+      FROM edges GROUP BY qid
+    ),
+    u_degree AS (
+      SELECT uid, COUNT(*) AS degree, SUM(impressions) AS impressions
+      FROM edges GROUP BY uid
+    ),
+    deltas AS (
+      
+      SELECT 1 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_1 a
+         JOIN ranks_0 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 2 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_2 a
+         JOIN ranks_1 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 3 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_3 a
+         JOIN ranks_2 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 4 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_4 a
+         JOIN ranks_3 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 5 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_5 a
+         JOIN ranks_4 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 6 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_6 a
+         JOIN ranks_5 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 7 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_7 a
+         JOIN ranks_6 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 8 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_8 a
+         JOIN ranks_7 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 9 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_9 a
+         JOIN ranks_8 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 10 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_10 a
+         JOIN ranks_9 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 11 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_11 a
+         JOIN ranks_10 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 12 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_12 a
+         JOIN ranks_11 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 13 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_13 a
+         JOIN ranks_12 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 14 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_14 a
+         JOIN ranks_13 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 15 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_15 a
+         JOIN ranks_14 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 16 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_16 a
+         JOIN ranks_15 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 17 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_17 a
+         JOIN ranks_16 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 18 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_18 a
+         JOIN ranks_17 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 19 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_19 a
+         JOIN ranks_18 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 20 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_20 a
+         JOIN ranks_19 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 21 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_21 a
+         JOIN ranks_20 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 22 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_22 a
+         JOIN ranks_21 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 23 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_23 a
+         JOIN ranks_22 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 24 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_24 a
+         JOIN ranks_23 b USING (kind, id)) AS l1
+      UNION ALL
+
+      SELECT 25 AS step,
+        (SELECT COALESCE(SUM(ABS(a.rank - b.rank)), 0.0)
+         FROM ranks_25 a
+         JOIN ranks_24 b USING (kind, id)) AS l1
+    ),
+    query_rows AS (
+      SELECT
+        'query' AS kind, f.id, f.rank,
+        COALESCE(b.bridging, 0)      AS bridging,
+        0                             AS anchoring,
+        COALESCE(qd.degree, 0)       AS degree,
+        COALESCE(qd.impressions, 0)  AS impressions
+      FROM final_ranks f
+      LEFT JOIN q_bridging b ON b.qid = f.id
+      LEFT JOIN q_degree   qd ON qd.qid = f.id
+      WHERE f.kind = 'q'
+      ORDER BY f.rank DESC
+      LIMIT 100
+    ),
+    url_rows AS (
+      SELECT
+        'url' AS kind, f.id, f.rank,
+        0                             AS bridging,
+        COALESCE(a.anchoring, 0)     AS anchoring,
+        COALESCE(ud.degree, 0)       AS degree,
+        COALESCE(ud.impressions, 0)  AS impressions
+      FROM final_ranks f
+      LEFT JOIN u_anchoring a ON a.uid = f.id
+      LEFT JOIN u_degree   ud ON ud.uid = f.id
+      WHERE f.kind = 'u'
+      ORDER BY f.rank DESC
+      LIMIT 100
+    ),
+    nodes AS (
+      SELECT * FROM query_rows
+      UNION ALL
+      SELECT * FROM url_rows
+    ),
+    counts AS (
+      SELECT
+        (SELECT n FROM query_count) AS q_count,
+        (SELECT n FROM url_count)   AS u_count
+    ),
+    deltas_json AS (
+      SELECT to_json(list({ 'step': step, 'l1': l1 } ORDER BY step)) AS dj
+      FROM deltas
+    )
+    SELECT
+      n.kind,
+      n.id,
+      n.rank,
+      n.bridging,
+      n.anchoring,
+      n.degree,
+      n.impressions,
+      c.q_count AS queryCount,
+      c.u_count AS urlCount,
+      dj.dj     AS deltasJson
+    FROM nodes n
+    CROSS JOIN counts c
+    CROSS JOIN deltas_json dj
+    ORDER BY n.kind, n.rank DESC
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: brand 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+    "(acme|acme-corp)",
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH agg AS (
+      SELECT
+        query,
+        url AS page,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY query, url
+      HAVING SUM(impressions) >= ?
+    )
+    SELECT
+      query, page, clicks, impressions, ctr, position,
+      CASE WHEN regexp_matches(LOWER(query), ?) THEN 'brand' ELSE 'non-brand' END AS segment
+    FROM agg
+    ORDER BY clicks DESC
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: cannibalization 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+    2,
+    20,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH agg AS (
+      SELECT
+        query,
+        url,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+        AND query IS NOT NULL AND query <> ''
+        AND url IS NOT NULL AND url <> ''
+      GROUP BY query, url
+      HAVING SUM(impressions) >= ?
+    ),
+    query_totals AS (
+      SELECT
+        query,
+        SUM(impressions) AS total_impressions,
+        SUM(clicks) AS total_clicks,
+        COUNT(*) AS competitor_count
+      FROM agg
+      GROUP BY query
+      HAVING COUNT(*) >= ? AND SUM(impressions) >= ?
+    ),
+    ranked AS (
+      SELECT
+        a.query,
+        a.url,
+        a.clicks,
+        a.impressions,
+        a.ctr,
+        a.position,
+        a.impressions / NULLIF(t.total_impressions, 0) AS share,
+        ROW_NUMBER() OVER (
+          PARTITION BY a.query
+          ORDER BY a.impressions DESC, a.clicks DESC, a.url ASC
+        ) AS rnk
+      FROM agg a
+      JOIN query_totals t USING (query)
+    ),
+    leader AS (
+      SELECT query, url AS leader_url, ctr AS leader_ctr, position AS leader_position
+      FROM ranked WHERE rnk = 1
+    ),
+    events AS (
+      SELECT
+        r.query,
+        any_value(l.leader_url) AS leader_url,
+        any_value(l.leader_ctr) AS leader_ctr,
+        any_value(l.leader_position) AS leader_position,
+        SUM(POWER(r.share * 100.0, 2)) AS hhi,
+        SUM(CASE
+          WHEN r.rnk > 1 AND l.leader_ctr > r.ctr
+            THEN (l.leader_ctr - r.ctr) * r.impressions
+          ELSE 0.0
+        END) AS stolen_clicks,
+        to_json(list({
+          'url': r.url,
+          'clicks': r.clicks,
+          'impressions': r.impressions,
+          'ctr': r.ctr,
+          'position': r.position,
+          'share': r.share,
+          'rank': r.rnk
+        } ORDER BY r.rnk)) AS competitors
+      FROM ranked r
+      JOIN leader l USING (query)
+      GROUP BY r.query
+    )
+    SELECT
+      e.query AS keyword,
+      t.total_impressions AS totalImpressions,
+      t.total_clicks AS totalClicks,
+      t.competitor_count AS competitorCount,
+      e.leader_url AS leaderUrl,
+      e.leader_ctr AS leaderCtr,
+      e.leader_position AS leaderPosition,
+      e.hhi AS hhi,
+      GREATEST(0.0, 1.0 - e.hhi / 10000.0) AS fragmentation,
+      e.stolen_clicks AS stolenClicks,
+      e.competitors AS competitors,
+      CAST(ROUND(LEAST(100.0,
+        100.0 * POWER(
+          GREATEST(1.0 - e.hhi / 10000.0, 0.0)
+            * LEAST(e.stolen_clicks / GREATEST(t.total_clicks + e.stolen_clicks, 1.0), 1.0)
+            * LEAST(LOG10(GREATEST(t.total_impressions, 10.0)) / 5.0, 1.0),
+          1.0 / 3.0
+        )
+      )) AS DOUBLE) AS severity
+    FROM events e
+    JOIN query_totals t USING (query)
+    ORDER BY severity DESC, stolenClicks DESC
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: change-point 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH daily AS (
+      SELECT
+        query,
+        url AS page,
+        date,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) AS value
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+        AND query IS NOT NULL AND query <> ''
+        AND url IS NOT NULL AND url <> ''
+      GROUP BY query, url, date
+      HAVING SUM(impressions) >= 1
+    ),
+    entity_stats AS (
+      SELECT query, page,
+        COUNT(*) AS n_total,
+        SUM(impressions) AS total_impressions,
+        SUM(value) AS sum_total,
+        SUM(value * value) AS sumsq_total
+      FROM daily
+      GROUP BY query, page
+      HAVING COUNT(*) >= 21
+        AND SUM(impressions) >= ?
+    ),
+    filtered AS (
+      SELECT d.*,
+        e.n_total, e.sum_total, e.sumsq_total, e.total_impressions
+      FROM daily d
+      JOIN entity_stats e USING (query, page)
+    ),
+    cumulated AS (
+      SELECT *,
+        COUNT(*) OVER w AS n_left,
+        SUM(value) OVER w AS sum_left,
+        SUM(value * value) OVER w AS sumsq_left
+      FROM filtered
+      WINDOW w AS (
+        PARTITION BY query, page
+        ORDER BY date
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+      )
+    ),
+    llr_scored AS (
+      SELECT *,
+        (n_total - n_left) AS n_right,
+        (sum_total - sum_left) AS sum_right,
+        (sumsq_total - sumsq_left) AS sumsq_right,
+        GREATEST(
+          (sumsq_left / NULLIF(n_left, 0))
+            - (sum_left / NULLIF(n_left, 0)) * (sum_left / NULLIF(n_left, 0)),
+          1e-9
+        ) AS var_left,
+        GREATEST(
+          ((sumsq_total - sumsq_left) / NULLIF(n_total - n_left, 0))
+            - ((sum_total - sum_left) / NULLIF(n_total - n_left, 0))
+              * ((sum_total - sum_left) / NULLIF(n_total - n_left, 0)),
+          1e-9
+        ) AS var_right,
+        GREATEST(
+          (sumsq_total / NULLIF(n_total, 0))
+            - (sum_total / NULLIF(n_total, 0)) * (sum_total / NULLIF(n_total, 0)),
+          1e-9
+        ) AS var_single
+      FROM cumulated
+    ),
+    llr AS (
+      SELECT *,
+        CASE
+          WHEN n_left >= 7 AND (n_total - n_left) >= 7
+          THEN n_total * LN(var_single)
+            - n_left * LN(var_left)
+            - (n_total - n_left) * LN(var_right)
+          ELSE NULL
+        END AS llr
+      FROM llr_scored
+    ),
+    best AS (
+      SELECT query, page, n_total, total_impressions,
+        arg_max(date, llr) AS change_date,
+        MAX(llr) AS best_llr,
+        arg_max(sum_left / NULLIF(n_left, 0), llr) AS left_mean,
+        arg_max((sum_total - sum_left) / NULLIF(n_total - n_left, 0), llr) AS right_mean,
+        arg_max(sqrt(var_left), llr) AS left_std,
+        arg_max(sqrt(var_right), llr) AS right_std
+      FROM llr
+      WHERE llr IS NOT NULL
+      GROUP BY query, page, n_total, total_impressions
+      HAVING MAX(llr) > 0.3
+    ),
+    series AS (
+      SELECT query, page,
+        to_json(list({
+          'date': strftime(date, '%Y-%m-%d'),
+          'value': value
+        } ORDER BY date)) AS seriesJson
+      FROM daily
+      GROUP BY query, page
+    )
+    SELECT
+      b.query AS keyword,
+      b.page,
+      CAST(b.n_total AS DOUBLE) AS totalDays,
+      CAST(b.total_impressions AS DOUBLE) AS totalImpressions,
+      strftime(b.change_date, '%Y-%m-%d') AS changeDate,
+      b.best_llr AS llr,
+      b.left_mean AS leftMean,
+      b.right_mean AS rightMean,
+      (b.right_mean - b.left_mean) AS delta,
+      b.left_std AS leftStddev,
+      b.right_std AS rightStddev,
+      s.seriesJson
+    FROM best b
+    LEFT JOIN series s USING (query, page)
+    ORDER BY b.best_llr DESC
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: clustering 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+    3,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH agg AS (
+      SELECT
+        query,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY query
+      HAVING SUM(impressions) >= ?
+    ),
+    classified AS (
+      SELECT
+        query, clicks, impressions, ctr, position,
+        NULLIF(regexp_extract(LOWER(query), '^(how to|what is|what are|why is|why do|where to|when to|best|top|vs|versus|compare|review|buy|cheap|free|near me)(\\s|$)', 1), '') AS intent_prefix,
+        CASE WHEN len(regexp_split_to_array(LOWER(query), '\\s+')) >= 3
+        THEN array_to_string(list_slice(regexp_split_to_array(LOWER(query), '\\s+'), 1, 2), ' ')
+        ELSE CAST(NULL AS VARCHAR) END AS word_prefix
+      FROM agg
+    ),
+    keyed AS (
+      SELECT
+        query, clicks, impressions, ctr, position,
+        COALESCE(intent_prefix, word_prefix) AS cluster_name,
+        CASE WHEN intent_prefix IS NOT NULL THEN 'intent' ELSE 'prefix' END AS cluster_type
+      FROM classified
+      WHERE COALESCE(intent_prefix, word_prefix) IS NOT NULL
+    )
+    SELECT
+      cluster_name AS clusterName,
+      any_value(cluster_type) AS clusterType,
+      CAST(COUNT(*) AS DOUBLE) AS keywordCount,
+      CAST(SUM(clicks) AS DOUBLE) AS totalClicks,
+      CAST(SUM(impressions) AS DOUBLE) AS totalImpressions,
+      AVG(position) AS avgPosition,
+      to_json(list({ 'query': query, 'clicks': clicks, 'impressions': impressions, 'ctr': ctr, 'position': position })) AS keywords
+    FROM keyed
+    GROUP BY cluster_name
+    HAVING COUNT(*) >= ?
+    ORDER BY totalClicks DESC
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: concentration 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "pages",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH items AS (
+      SELECT
+        url AS key,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY url
+      HAVING SUM(clicks) > 0
+    ),
+    totals AS (
+      SELECT SUM(clicks) AS total_clicks, COUNT(*) AS total_items FROM items
+    ),
+    ranked AS (
+      SELECT
+        i.key, i.clicks,
+        i.clicks / NULLIF(t.total_clicks, 0) AS share,
+        ROW_NUMBER() OVER (ORDER BY i.clicks DESC, i.key ASC) AS rnk_desc,
+        ROW_NUMBER() OVER (ORDER BY i.clicks ASC, i.key ASC) AS rnk_asc,
+        t.total_clicks AS tclicks,
+        t.total_items AS titems
+      FROM items i, totals t
+    ),
+    gini_num AS (
+      SELECT SUM((2.0 * rnk_asc - titems - 1) * clicks) AS weighted_sum FROM ranked
+    ),
+    hhi_calc AS (
+      SELECT SUM(POWER(share * 100, 2)) AS hhi FROM ranked
+    ),
+    top_list AS (
+      SELECT
+        list({ 'key': key, 'clicks': clicks, 'share': share } ORDER BY clicks DESC, key ASC) AS items,
+        SUM(clicks) AS top_clicks
+      FROM ranked WHERE rnk_desc <= ?
+    )
+    SELECT
+      COALESCE(
+        (SELECT weighted_sum FROM gini_num)
+          / NULLIF((SELECT total_items FROM totals) * (SELECT total_clicks FROM totals), 0),
+        0.0
+      ) AS giniCoefficient,
+      COALESCE((SELECT hhi FROM hhi_calc), 0.0) AS hhi,
+      COALESCE(
+        CAST((SELECT top_clicks FROM top_list) AS DOUBLE)
+          / NULLIF((SELECT total_clicks FROM totals), 0),
+        0.0
+      ) AS topNConcentration,
+      COALESCE((SELECT to_json(items) FROM top_list), '[]') AS topNItems,
+      COALESCE((SELECT total_items FROM totals), 0) AS totalItems,
+      COALESCE((SELECT total_clicks FROM totals), 0.0) AS totalClicks,
+      CASE
+        WHEN COALESCE((SELECT hhi FROM hhi_calc), 0.0) > 2500 THEN 'high'
+        WHEN COALESCE((SELECT hhi FROM hhi_calc), 0.0) > 1500 THEN 'medium'
+        ELSE 'low'
+      END AS riskLevel
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: content-velocity 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2023-12-01",
+      "monthly/2023-12",
+      "daily/2023-12-02",
+      "daily/2023-12-03",
+      "daily/2023-12-04",
+      "daily/2023-12-05",
+      "daily/2023-12-06",
+      "daily/2023-12-07",
+      "daily/2023-12-08",
+      "daily/2023-12-09",
+      "daily/2023-12-10",
+      "daily/2023-12-11",
+      "daily/2023-12-12",
+      "daily/2023-12-13",
+      "daily/2023-12-14",
+      "daily/2023-12-15",
+      "daily/2023-12-16",
+      "daily/2023-12-17",
+      "daily/2023-12-18",
+      "daily/2023-12-19",
+      "daily/2023-12-20",
+      "daily/2023-12-21",
+      "daily/2023-12-22",
+      "daily/2023-12-23",
+      "daily/2023-12-24",
+      "daily/2023-12-25",
+      "daily/2023-12-26",
+      "daily/2023-12-27",
+      "daily/2023-12-28",
+      "daily/2023-12-29",
+      "daily/2023-12-30",
+      "daily/2023-12-31",
+      "daily/2024-01-01",
+      "monthly/2024-01",
+      "daily/2024-01-02",
+      "daily/2024-01-03",
+      "daily/2024-01-04",
+      "daily/2024-01-05",
+      "daily/2024-01-06",
+      "daily/2024-01-07",
+      "daily/2024-01-08",
+      "daily/2024-01-09",
+      "daily/2024-01-10",
+      "daily/2024-01-11",
+      "daily/2024-01-12",
+      "daily/2024-01-13",
+      "daily/2024-01-14",
+      "daily/2024-01-15",
+      "daily/2024-01-16",
+      "daily/2024-01-17",
+      "daily/2024-01-18",
+      "daily/2024-01-19",
+      "daily/2024-01-20",
+      "daily/2024-01-21",
+      "daily/2024-01-22",
+      "daily/2024-01-23",
+      "daily/2024-01-24",
+      "daily/2024-01-25",
+      "daily/2024-01-26",
+      "daily/2024-01-27",
+      "daily/2024-01-28",
+      "daily/2024-01-29",
+      "daily/2024-01-30",
+      "daily/2024-01-31",
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2023-12-01",
+    "2024-02-29",
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH src AS (
+      SELECT query, date
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ? AND impressions > 0
+    ),
+    first_seen AS (
+      SELECT query, MIN(date) AS first_date FROM src GROUP BY query
+    ),
+    per_week AS (
+      SELECT
+        strftime(date, '%G-W%V') AS week,
+        MIN(date) AS week_start,
+        CAST(COUNT(DISTINCT query) AS DOUBLE) AS totalKeywords
+      FROM src
+      GROUP BY week
+    ),
+    new_per_week AS (
+      SELECT
+        strftime(first_date, '%G-W%V') AS week,
+        CAST(COUNT(*) AS DOUBLE) AS newKeywords
+      FROM first_seen
+      GROUP BY week
+    )
+    SELECT
+      pw.week AS week,
+      COALESCE(npw.newKeywords, 0) AS newKeywords,
+      pw.totalKeywords AS totalKeywords
+    FROM per_week pw
+    LEFT JOIN new_per_week npw ON pw.week = npw.week
+    ORDER BY pw.week ASC
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: ctr-anomaly 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH daily AS (
+      SELECT
+        query,
+        url AS page,
+        date,
+        CAST(SUM(clicks) AS DOUBLE) AS day_clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS day_impressions,
+        CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS day_ctr,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS day_position
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+        AND query IS NOT NULL AND query <> ''
+        AND url IS NOT NULL AND url <> ''
+      GROUP BY query, url, date
+      HAVING SUM(impressions) >= ?
+    ),
+    rolled AS (
+      SELECT *,
+        AVG(day_ctr)           OVER w AS rolling_ctr,
+        STDDEV_POP(day_ctr)    OVER w AS rolling_stddev,
+        AVG(day_position)      OVER w AS rolling_position,
+        COUNT(*)               OVER w AS rolling_n
+      FROM daily
+      WINDOW w AS (
+        PARTITION BY query, page
+        ORDER BY date
+        ROWS BETWEEN 28 PRECEDING AND 1 PRECEDING
+      )
+    ),
+    flagged AS (
+      SELECT *,
+        CASE
+          WHEN rolling_n >= 14 AND rolling_stddev > 0
+            THEN (day_ctr - rolling_ctr) / rolling_stddev
+          ELSE 0.0
+        END AS z_score,
+        CASE
+          WHEN rolling_position IS NULL THEN 0.0
+          ELSE ABS(day_position - rolling_position)
+        END AS position_delta
+      FROM rolled
+    ),
+    breaches AS (
+      SELECT *,
+        CASE
+          WHEN ABS(z_score) >= 0.3
+            AND position_delta <= 1.5
+            AND rolling_n >= 14
+          THEN true ELSE false
+        END AS is_breach
+      FROM flagged
+    ),
+    per_entity AS (
+      SELECT
+        query, page,
+        COUNT(*) FILTER (WHERE is_breach AND z_score < 0) AS breach_days_down,
+        COUNT(*) FILTER (WHERE is_breach AND z_score > 0) AS breach_days_up,
+        SUM(CASE
+          WHEN is_breach AND z_score < 0
+            THEN (rolling_ctr - day_ctr) * day_impressions
+          ELSE 0.0
+        END) AS clicks_lost,
+        SUM(CASE
+          WHEN is_breach AND z_score < 0
+            THEN ABS(z_score) * day_impressions
+          ELSE 0.0
+        END) AS severity_raw,
+        MAX(CASE WHEN is_breach THEN ABS(z_score) ELSE 0.0 END) AS max_z,
+        AVG(rolling_ctr) FILTER (WHERE rolling_n >= 14) AS baseline_ctr,
+        AVG(rolling_position) FILTER (WHERE rolling_n >= 14) AS baseline_position,
+        SUM(day_impressions) AS total_impressions,
+        SUM(day_clicks) AS total_clicks
+      FROM breaches
+      GROUP BY query, page
+      HAVING COUNT(*) FILTER (WHERE is_breach AND z_score < 0) >= 2
+    ),
+    series AS (
+      SELECT query, page,
+        to_json(list({
+          'date': strftime(date, '%Y-%m-%d'),
+          'ctr': day_ctr,
+          'position': day_position,
+          'impressions': day_impressions,
+          'rollingCtr': rolling_ctr,
+          'rollingStddev': rolling_stddev,
+          'z': z_score,
+          'breach': is_breach AND z_score < 0
+        } ORDER BY date)) AS seriesJson
+      FROM breaches
+      GROUP BY query, page
+    )
+    SELECT
+      e.query AS keyword,
+      e.page,
+      CAST(e.breach_days_down AS DOUBLE) AS breachDaysDown,
+      CAST(e.breach_days_up AS DOUBLE) AS breachDaysUp,
+      CAST(ROUND(e.clicks_lost) AS DOUBLE) AS clicksLost,
+      e.severity_raw AS severityRaw,
+      e.max_z AS maxZ,
+      e.baseline_ctr AS baselineCtr,
+      e.baseline_position AS baselinePosition,
+      e.total_impressions AS totalImpressions,
+      e.total_clicks AS totalClicks,
+      s.seriesJson
+    FROM per_entity e
+    LEFT JOIN series s USING (query, page)
+    ORDER BY clicksLost DESC
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: ctr-curve 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH src AS (
+      SELECT
+        query,
+        clicks,
+        impressions,
+        sum_position,
+        (sum_position / NULLIF(impressions, 0) + 1) AS avg_pos
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ? AND impressions > 0
+    ),
+    curve AS (
+      SELECT
+        CASE
+          WHEN avg_pos <= 1.5 THEN '1'
+          WHEN avg_pos <= 2.5 THEN '2'
+          WHEN avg_pos <= 3.5 THEN '3'
+          WHEN avg_pos <= 5.5 THEN '4-5'
+          WHEN avg_pos <= 10.5 THEN '6-10'
+          WHEN avg_pos <= 20.5 THEN '11-20'
+          ELSE '20+'
+        END AS bucket,
+        AVG(CAST(clicks AS DOUBLE) / NULLIF(impressions, 0)) AS avgCtr,
+        AVG(avg_pos) AS medianPosition,
+        CAST(COUNT(DISTINCT query) AS DOUBLE) AS keywordCount,
+        CAST(SUM(clicks) AS DOUBLE) AS totalClicks,
+        CAST(SUM(impressions) AS DOUBLE) AS totalImpressions
+      FROM src
+      GROUP BY bucket
+    ),
+    ks AS (
+      SELECT
+        query,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position,
+        CASE
+          WHEN SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 <= 3.5 THEN 'top3'
+          WHEN SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 <= 10.5 THEN 'page1'
+          WHEN SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 <= 20.5 THEN 'page2'
+          ELSE 'deep'
+        END AS band
+      FROM src
+      GROUP BY query
+      HAVING SUM(impressions) >= 20
+    ),
+    band_avg AS (
+      SELECT band, AVG(ctr) AS band_avg_ctr FROM ks GROUP BY band
+    ),
+    outliers AS (
+      SELECT
+        ks.query, ks.clicks, ks.impressions, ks.ctr, ks.position,
+        ba.band_avg_ctr AS expectedCtr,
+        ks.ctr - ba.band_avg_ctr AS ctrDiff
+      FROM ks JOIN band_avg ba ON ks.band = ba.band
+      ORDER BY ABS(ks.ctr - ba.band_avg_ctr) DESC
+      LIMIT 50
+    )
+    SELECT
+      (SELECT to_json(list({
+        'bucket': bucket,
+        'avgCtr': avgCtr,
+        'medianPosition': medianPosition,
+        'keywordCount': keywordCount,
+        'totalClicks': totalClicks,
+        'totalImpressions': totalImpressions
+      })) FROM curve) AS curve_json,
+      (SELECT to_json(list({
+        'query': query,
+        'clicks': clicks,
+        'impressions': impressions,
+        'ctr': ctr,
+        'position': position,
+        'expectedCtr': expectedCtr,
+        'ctrDiff': ctrDiff
+      })) FROM outliers) AS outliers_json
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: dark-traffic 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "pages",
+  },
+  "extraFiles": {
+    "KEYWORDS": {
+      "partitions": [
+        "daily/2024-02-01",
+        "monthly/2024-02",
+        "daily/2024-02-02",
+        "daily/2024-02-03",
+        "daily/2024-02-04",
+        "daily/2024-02-05",
+        "daily/2024-02-06",
+        "daily/2024-02-07",
+        "daily/2024-02-08",
+        "daily/2024-02-09",
+        "daily/2024-02-10",
+        "daily/2024-02-11",
+        "daily/2024-02-12",
+        "daily/2024-02-13",
+        "daily/2024-02-14",
+        "daily/2024-02-15",
+        "daily/2024-02-16",
+        "daily/2024-02-17",
+        "daily/2024-02-18",
+        "daily/2024-02-19",
+        "daily/2024-02-20",
+        "daily/2024-02-21",
+        "daily/2024-02-22",
+        "daily/2024-02-23",
+        "daily/2024-02-24",
+        "daily/2024-02-25",
+        "daily/2024-02-26",
+        "daily/2024-02-27",
+        "daily/2024-02-28",
+        "daily/2024-02-29",
+      ],
+      "table": "keywords",
+    },
+    "PAGE_KEYWORDS": {
+      "partitions": [
+        "daily/2024-02-01",
+        "monthly/2024-02",
+        "daily/2024-02-02",
+        "daily/2024-02-03",
+        "daily/2024-02-04",
+        "daily/2024-02-05",
+        "daily/2024-02-06",
+        "daily/2024-02-07",
+        "daily/2024-02-08",
+        "daily/2024-02-09",
+        "daily/2024-02-10",
+        "daily/2024-02-11",
+        "daily/2024-02-12",
+        "daily/2024-02-13",
+        "daily/2024-02-14",
+        "daily/2024-02-15",
+        "daily/2024-02-16",
+        "daily/2024-02-17",
+        "daily/2024-02-18",
+        "daily/2024-02-19",
+        "daily/2024-02-20",
+        "daily/2024-02-21",
+        "daily/2024-02-22",
+        "daily/2024-02-23",
+        "daily/2024-02-24",
+        "daily/2024-02-25",
+        "daily/2024-02-26",
+        "daily/2024-02-27",
+        "daily/2024-02-28",
+        "daily/2024-02-29",
+      ],
+      "table": "page_keywords",
+    },
+  },
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    "2024-02-01",
+    "2024-02-29",
+    "2024-02-01",
+    "2024-02-29",
+    "2024-02-01",
+    "2024-02-29",
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH page_totals AS (
+      SELECT SUM(clicks) AS total_clicks, SUM(impressions) AS total_impressions
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+    ),
+    kw_totals AS (
+      SELECT SUM(clicks) AS total_clicks, SUM(impressions) AS total_impressions
+      FROM read_parquet({{FILES_KEYWORDS}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+    ),
+    per_page AS (
+      SELECT url, SUM(clicks) AS page_clicks
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY url
+      HAVING SUM(clicks) > 0
+    ),
+    per_page_kw AS (
+      SELECT url, SUM(clicks) AS attributed_clicks, COUNT(DISTINCT query) AS kw_count
+      FROM read_parquet({{FILES_PAGE_KEYWORDS}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY url
+    ),
+    page_rows AS (
+      SELECT
+        p.url AS url,
+        CAST(p.page_clicks AS DOUBLE) AS totalClicks,
+        CAST(COALESCE(k.attributed_clicks, 0) AS DOUBLE) AS attributedClicks,
+        CAST(p.page_clicks - COALESCE(k.attributed_clicks, 0) AS DOUBLE) AS darkClicks,
+        CAST(p.page_clicks - COALESCE(k.attributed_clicks, 0) AS DOUBLE)
+          / NULLIF(p.page_clicks, 0) AS darkPercent,
+        CAST(COALESCE(k.kw_count, 0) AS DOUBLE) AS keywordCount
+      FROM per_page p
+      LEFT JOIN per_page_kw k ON p.url = k.url
+      WHERE p.page_clicks - COALESCE(k.attributed_clicks, 0) > 0
+      ORDER BY darkClicks DESC
+      LIMIT 50
+    )
+    SELECT
+      (SELECT to_json({
+        'totalClicks': CAST(total_clicks AS DOUBLE),
+        'totalImpressions': CAST(total_impressions AS DOUBLE)
+      }) FROM page_totals) AS page_totals_json,
+      (SELECT to_json({
+        'attributedClicks': CAST(total_clicks AS DOUBLE),
+        'attributedImpressions': CAST(total_impressions AS DOUBLE)
+      }) FROM kw_totals) AS kw_totals_json,
+      (SELECT to_json(list({
+        'url': url,
+        'totalClicks': totalClicks,
+        'attributedClicks': attributedClicks,
+        'darkClicks': darkClicks,
+        'darkPercent': darkPercent,
+        'keywordCount': keywordCount
+      })) FROM page_rows) AS pages_json
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: data-detail 1`] = `
+{
+  "current": {
+    "partitions": [],
+    "table": "pages",
+  },
+  "extraFiles": undefined,
+  "extraQueries": [
+    {
+      "name": "totals",
+      "params": [
+        "2024-02-01",
+        "2024-02-29",
+      ],
+      "sql": "SELECT SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
+    },
+    {
+      "name": "prevTotals",
+      "params": [
+        "2024-01-01",
+        "2024-01-31",
+      ],
+      "sql": "SELECT SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
+    },
+  ],
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": true,
+  "sql": "SELECT CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END as page, "pages"."date", SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END, "pages"."date" ORDER BY clicks DESC LIMIT 100",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: data-query 1`] = `
+{
+  "current": {
+    "partitions": [],
+    "table": "pages",
+  },
+  "extraFiles": undefined,
+  "extraQueries": [
+    {
+      "name": "totals",
+      "params": [
+        "2024-02-01",
+        "2024-02-29",
+      ],
+      "sql": "SELECT SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
+    },
+    {
+      "name": "count",
+      "params": [
+        "2024-02-01",
+        "2024-02-29",
+        "2024-01-01",
+        "2024-01-31",
+      ],
+      "sql": "WITH current AS (SELECT CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END as page, SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END), previous AS (SELECT CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END as page, SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $3 AND "pages"."date" <= $4 GROUP BY CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END) SELECT COUNT(*) as total FROM (SELECT c.page FROM current c LEFT JOIN previous p ON c.page = p.page WHERE 1=1 AND c.clicks > COALESCE(p.clicks, 0))",
+    },
+  ],
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    "2024-01-01",
+    "2024-01-31",
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": true,
+  "sql": "WITH current AS (SELECT CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END as page, SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END), previous AS (SELECT CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END as page, SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $3 AND "pages"."date" <= $4 GROUP BY CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END) SELECT c.*, COALESCE(p.clicks, 0) as prevClicks, COALESCE(p.impressions, 0) as prevImpressions, COALESCE(p.ctr, 0) as prevCtr, COALESCE(p.position, 0) as prevPosition FROM current c LEFT JOIN previous p ON c.page = p.page WHERE 1=1 AND c.clicks > COALESCE(p.clicks, 0) ORDER BY c.clicks DESC LIMIT 100",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: decay 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "pages",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    "2024-01-01",
+    "2024-01-31",
+    10,
+    "2024-02-01",
+    "2024-02-29",
+    "2024-01-01",
+    "2024-01-31",
+    0.3,
+  ],
+  "previous": {
+    "partitions": [
+      "daily/2024-01-01",
+      "monthly/2024-01",
+      "daily/2024-01-02",
+      "daily/2024-01-03",
+      "daily/2024-01-04",
+      "daily/2024-01-05",
+      "daily/2024-01-06",
+      "daily/2024-01-07",
+      "daily/2024-01-08",
+      "daily/2024-01-09",
+      "daily/2024-01-10",
+      "daily/2024-01-11",
+      "daily/2024-01-12",
+      "daily/2024-01-13",
+      "daily/2024-01-14",
+      "daily/2024-01-15",
+      "daily/2024-01-16",
+      "daily/2024-01-17",
+      "daily/2024-01-18",
+      "daily/2024-01-19",
+      "daily/2024-01-20",
+      "daily/2024-01-21",
+      "daily/2024-01-22",
+      "daily/2024-01-23",
+      "daily/2024-01-24",
+      "daily/2024-01-25",
+      "daily/2024-01-26",
+      "daily/2024-01-27",
+      "daily/2024-01-28",
+      "daily/2024-01-29",
+      "daily/2024-01-30",
+      "daily/2024-01-31",
+    ],
+    "table": "pages",
+  },
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH cur AS (
+      SELECT
+        url,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY url
+    ),
+    prev AS (
+      SELECT
+        url,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+      FROM read_parquet({{FILES_PREV}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY url
+      HAVING SUM(clicks) >= ?
+    ),
+    weekly AS (
+      SELECT url, date_trunc('week', date) AS week,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions
+      FROM (
+        SELECT url, date, clicks, impressions
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+        UNION ALL
+        SELECT url, date, clicks, impressions
+        FROM read_parquet({{FILES_PREV}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+      )
+      GROUP BY url, week
+    ),
+    series_by_url AS (
+      SELECT url, to_json(list({
+        'week': strftime(week, '%Y-%m-%d'),
+        'clicks': clicks,
+        'impressions': impressions
+      } ORDER BY week)) AS seriesJson
+      FROM weekly GROUP BY url
+    ),
+    joined AS (
+      SELECT
+        p.url AS page,
+        COALESCE(c.clicks, 0.0) AS currentClicks,
+        p.clicks AS previousClicks,
+        (p.clicks - COALESCE(c.clicks, 0.0)) AS lostClicks,
+        (p.clicks - COALESCE(c.clicks, 0.0)) / NULLIF(p.clicks, 0) AS declinePercent,
+        COALESCE(c.position, 0.0) AS currentPosition,
+        p.position AS previousPosition,
+        (COALESCE(c.position, 0.0) - p.position) AS positionDrop,
+        s.seriesJson
+      FROM prev p
+      LEFT JOIN cur c ON p.url = c.url
+      LEFT JOIN series_by_url s ON p.url = s.url
+    )
+    SELECT *
+    FROM joined
+    WHERE declinePercent >= ? AND lostClicks > 0
+    ORDER BY lostClicks DESC
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: device-gap 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "devices",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    SELECT
+      date,
+      device,
+      CAST(SUM(clicks) AS DOUBLE) AS clicks,
+      CAST(SUM(impressions) AS DOUBLE) AS impressions,
+      CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+      SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+    FROM read_parquet({{FILES}}, union_by_name = true)
+    WHERE date >= ? AND date <= ?
+    GROUP BY date, device
+    ORDER BY date ASC
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: intent-atlas 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH queries AS (
+      SELECT
+        query,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+        AND query IS NOT NULL AND query <> ''
+      GROUP BY query
+      HAVING SUM(impressions) >= ?
+    ),
+    tokens AS (
+      SELECT q.query, q.impressions, q.clicks, q.position,
+        LOWER(t.token) AS token
+      FROM queries q,
+        unnest(regexp_split_to_array(LOWER(q.query), '\\s+')) AS t(token)
+      WHERE LENGTH(t.token) >= 3
+        AND LOWER(t.token) NOT IN ('the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'of', 'to', 'in', 'for', 'on', 'and', 'or', 'with', 'at', 'by', 'from', 'into', 'about', 'as', 'so', 'than', 'then', 'that', 'this', 'my', 'your', 'our', 'their', 'his', 'her', 'its', 'me', 'you', 'what', 'how', 'why', 'when', 'where', 'who', 'which', 'do', 'does')
+    ),
+    token_weights AS (
+      SELECT token,
+        SUM(impressions) AS token_impressions,
+        COUNT(DISTINCT query) AS query_count
+      FROM tokens
+      GROUP BY token
+      HAVING SUM(impressions) >= 50
+    ),
+    ranked_tokens AS (
+      SELECT t.query, t.token, tw.token_impressions,
+        ROW_NUMBER() OVER (
+          PARTITION BY t.query
+          ORDER BY tw.token_impressions DESC, t.token ASC
+        ) AS rnk
+      FROM tokens t
+      JOIN token_weights tw USING (token)
+    ),
+    cluster_keys AS (
+      SELECT query,
+        array_to_string(list(token ORDER BY token), ' + ') AS cluster_key
+      FROM ranked_tokens
+      WHERE rnk <= 2
+      GROUP BY query
+      HAVING COUNT(*) >= 2
+    ),
+    clustered AS (
+      SELECT q.query, q.impressions, q.clicks, q.position, ck.cluster_key
+      FROM queries q
+      JOIN cluster_keys ck USING (query)
+    )
+    SELECT
+      cluster_key AS clusterKey,
+      COUNT(*) AS keywordCount,
+      SUM(impressions) AS totalImpressions,
+      SUM(clicks) AS totalClicks,
+      SUM(clicks) / NULLIF(SUM(impressions), 0) AS ctr,
+      AVG(position) AS avgPosition,
+      to_json(list({
+        'query': query,
+        'impressions': impressions,
+        'clicks': clicks,
+        'position': position
+      } ORDER BY impressions DESC)) AS keywords
+    FROM clustered
+    GROUP BY cluster_key
+    HAVING COUNT(*) >= 3
+    ORDER BY totalImpressions DESC
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: keyword-breadth 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH per_page AS (
+      SELECT
+        url,
+        CAST(COUNT(DISTINCT query) AS DOUBLE) AS keywordCount,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ? AND impressions > 0
+      GROUP BY url
+    ),
+    bucketed AS (
+      SELECT
+        CASE
+          WHEN keywordCount = 1 THEN '1'
+          WHEN keywordCount BETWEEN 2 AND 5 THEN '2-5'
+          WHEN keywordCount BETWEEN 6 AND 15 THEN '6-15'
+          WHEN keywordCount BETWEEN 16 AND 50 THEN '16-50'
+          ELSE '50+'
+        END AS bucket,
+        MIN(keywordCount) AS sort_key,
+        CAST(COUNT(*) AS DOUBLE) AS pageCount
+      FROM per_page
+      GROUP BY bucket
+    ),
+    fragile AS (
+      SELECT url, keywordCount, clicks, impressions
+      FROM per_page
+      WHERE keywordCount <= 2 AND clicks >= 5
+      ORDER BY clicks DESC
+      LIMIT 20
+    ),
+    authority AS (
+      SELECT url, keywordCount, clicks, impressions
+      FROM per_page
+      WHERE keywordCount >= 20
+      ORDER BY keywordCount DESC
+      LIMIT 20
+    ),
+    stats AS (
+      SELECT
+        CAST(COUNT(*) AS DOUBLE) AS totalPages,
+        CAST(AVG(keywordCount) AS DOUBLE) AS avgKeywordsPerPage,
+        CAST(SUM(CASE WHEN keywordCount <= 2 THEN 1 ELSE 0 END) AS DOUBLE) AS fragileCount,
+        CAST(SUM(CASE WHEN keywordCount >= 20 THEN 1 ELSE 0 END) AS DOUBLE) AS authorityCount
+      FROM per_page
+    )
+    SELECT
+      (SELECT to_json(list({ 'bucket': bucket, 'pageCount': pageCount, 'sortKey': sort_key })
+        ORDER BY sort_key ASC) FROM bucketed) AS distribution_json,
+      (SELECT to_json(list({ 'url': url, 'keywordCount': keywordCount, 'clicks': clicks, 'impressions': impressions })) FROM fragile) AS fragile_json,
+      (SELECT to_json(list({ 'url': url, 'keywordCount': keywordCount, 'clicks': clicks, 'impressions': impressions })) FROM authority) AS authority_json,
+      (SELECT to_json({
+        'totalPages': totalPages,
+        'avgKeywordsPerPage': avgKeywordsPerPage,
+        'fragileCount': fragileCount,
+        'authorityCount': authorityCount
+      }) FROM stats) AS stats_json
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: long-tail 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH page_queries AS (
+      SELECT
+        url AS page,
+        query,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+        AND query IS NOT NULL AND query <> ''
+        AND url IS NOT NULL AND url <> ''
+      GROUP BY url, query
+      HAVING SUM(impressions) >= ?
+    ),
+    ranked AS (
+      SELECT
+        page, query, impressions, clicks,
+        ROW_NUMBER() OVER (PARTITION BY page ORDER BY impressions DESC, query ASC) AS rnk
+      FROM page_queries
+    ),
+    log_space AS (
+      SELECT *,
+        LN(rnk) AS log_rank,
+        LN(impressions) AS log_impr
+      FROM ranked
+    ),
+    fit AS (
+      SELECT
+        page,
+        COUNT(*) AS query_count,
+        SUM(impressions) AS total_impressions,
+        SUM(clicks) AS total_clicks,
+        REGR_SLOPE(log_impr, log_rank) AS slope,
+        REGR_INTERCEPT(log_impr, log_rank) AS intercept,
+        REGR_R2(log_impr, log_rank) AS r2,
+        MAX(impressions) AS head_impressions,
+        MAX(CASE WHEN rnk = 1 THEN impressions END) / NULLIF(SUM(impressions), 0) AS head_share
+      FROM log_space
+      GROUP BY page
+      HAVING COUNT(*) >= 10
+    ),
+    scatter AS (
+      SELECT
+        l.page,
+        to_json(list({
+          'rank': l.rnk,
+          'impressions': l.impressions,
+          'clicks': l.clicks,
+          'query': l.query
+        } ORDER BY l.rnk)) AS pointsJson
+      FROM log_space l
+      JOIN fit f USING (page)
+      GROUP BY l.page
+    )
+    SELECT
+      f.page,
+      f.query_count AS queryCount,
+      f.total_impressions AS totalImpressions,
+      f.total_clicks AS totalClicks,
+      f.slope AS slope,
+      f.intercept AS intercept,
+      f.r2 AS r2,
+      f.head_impressions AS headImpressions,
+      f.head_share AS headShare,
+      s.pointsJson AS pointsJson,
+      CASE
+        WHEN f.slope > -0.6 THEN 'flat-tail'
+        WHEN f.slope > -1.2 THEN 'balanced'
+        ELSE 'head-heavy'
+      END AS fingerprint
+    FROM fit f
+    LEFT JOIN scatter s USING (page)
+    ORDER BY f.total_impressions DESC
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: movers 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    "2024-01-01",
+    "2024-01-31",
+    "2024-02-01",
+    "2024-02-29",
+    "2024-01-01",
+    "2024-01-31",
+    10,
+    0.2,
+    0.2,
+  ],
+  "previous": {
+    "partitions": [
+      "daily/2024-01-01",
+      "monthly/2024-01",
+      "daily/2024-01-02",
+      "daily/2024-01-03",
+      "daily/2024-01-04",
+      "daily/2024-01-05",
+      "daily/2024-01-06",
+      "daily/2024-01-07",
+      "daily/2024-01-08",
+      "daily/2024-01-09",
+      "daily/2024-01-10",
+      "daily/2024-01-11",
+      "daily/2024-01-12",
+      "daily/2024-01-13",
+      "daily/2024-01-14",
+      "daily/2024-01-15",
+      "daily/2024-01-16",
+      "daily/2024-01-17",
+      "daily/2024-01-18",
+      "daily/2024-01-19",
+      "daily/2024-01-20",
+      "daily/2024-01-21",
+      "daily/2024-01-22",
+      "daily/2024-01-23",
+      "daily/2024-01-24",
+      "daily/2024-01-25",
+      "daily/2024-01-26",
+      "daily/2024-01-27",
+      "daily/2024-01-28",
+      "daily/2024-01-29",
+      "daily/2024-01-30",
+      "daily/2024-01-31",
+    ],
+    "table": "page_keywords",
+  },
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH cur AS (
+      SELECT
+        query, url,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY query, url
+    ),
+    prev AS (
+      SELECT
+        query, url,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+      FROM read_parquet({{FILES_PREV}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY query, url
+    ),
+    weekly AS (
+      SELECT query, url, date_trunc('week', date) AS week,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions
+      FROM (
+        SELECT query, url, date, clicks, impressions
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+        UNION ALL
+        SELECT query, url, date, clicks, impressions
+        FROM read_parquet({{FILES_PREV}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+      )
+      GROUP BY query, url, week
+    ),
+    series_by_entity AS (
+      SELECT query, url, to_json(list({
+        'week': strftime(week, '%Y-%m-%d'),
+        'clicks': clicks,
+        'impressions': impressions
+      } ORDER BY week)) AS seriesJson
+      FROM weekly GROUP BY query, url
+    ),
+    joined AS (
+      SELECT
+        c.query AS keyword,
+        c.url AS page,
+        c.clicks AS recentClicks,
+        c.impressions AS recentImpressions,
+        c.position AS recentPosition,
+        COALESCE(p.clicks, 0.0) AS baselineClicks,
+        COALESCE(p.impressions, 0.0) AS baselineImpressions,
+        COALESCE(p.position, 0.0) AS baselinePosition,
+        (c.clicks - COALESCE(p.clicks, 0.0)) AS clicksChange,
+        CASE
+          WHEN COALESCE(p.clicks, 0.0) = 0 THEN CASE WHEN c.clicks > 0 THEN 100.0 ELSE 0.0 END
+          ELSE (c.clicks - p.clicks) * 100.0 / p.clicks
+        END AS clicksChangePercent,
+        CASE
+          WHEN COALESCE(p.impressions, 0.0) = 0 THEN CASE WHEN c.impressions > 0 THEN 100.0 ELSE 0.0 END
+          ELSE (c.impressions - p.impressions) * 100.0 / p.impressions
+        END AS impressionsChangePercent,
+        (c.position - COALESCE(p.position, 0.0)) AS positionChange,
+        s.seriesJson
+      FROM cur c
+      LEFT JOIN prev p ON c.query = p.query AND c.url = p.url
+      LEFT JOIN series_by_entity s ON c.query = s.query AND c.url = s.url
+      WHERE c.impressions >= ?
+    )
+    SELECT *,
+      CASE
+        WHEN clicksChangePercent > 0 AND ABS(clicksChangePercent) / 100.0 >= ? THEN 'rising'
+        WHEN clicksChangePercent < 0 AND ABS(clicksChangePercent) / 100.0 >= ? THEN 'declining'
+        ELSE 'stable'
+      END AS direction
+    FROM joined
+    ORDER BY ABS(clicksChangePercent) DESC
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: opportunity 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH agg AS (
+      SELECT
+        query AS keyword,
+        url AS page,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY query, url
+      HAVING SUM(impressions) >= ?
+    ),
+    scored AS (
+      SELECT
+        keyword, page, clicks, impressions, ctr, position,
+        CASE
+          WHEN position <= 3 THEN 0.2
+          WHEN position > 50 THEN 0.1
+          ELSE GREATEST(0.0, 1.0 - ABS(position - 11.0) / 15.0)
+        END AS positionScore,
+        CASE WHEN impressions <= 0 THEN 0.0 ELSE LEAST(LOG10(impressions) / 5.0, 1.0) END AS impressionScore,
+        CASE CAST(ROUND(GREATEST(LEAST(position, 10.0), 1.0)) AS INTEGER)
+          WHEN 1 THEN 0.30
+          WHEN 2 THEN 0.15
+          WHEN 3 THEN 0.10
+          WHEN 4 THEN 0.07
+          WHEN 5 THEN 0.05
+          WHEN 6 THEN 0.04
+          WHEN 7 THEN 0.03
+          WHEN 8 THEN 0.025
+          WHEN 9 THEN 0.02
+          WHEN 10 THEN 0.015
+          ELSE 0.01
+        END AS expectedCtr
+      FROM agg
+    ),
+    gapped AS (
+      SELECT
+        *,
+        CASE WHEN ctr >= expectedCtr THEN 0.0 ELSE LEAST((expectedCtr - ctr) / expectedCtr, 1.0) END AS ctrGapScore
+      FROM scored
+    )
+    SELECT
+      keyword, page, clicks, impressions, ctr, position,
+      CAST(ROUND(POWER(
+        POWER(positionScore, 1) * POWER(impressionScore, 1) * POWER(ctrGapScore, 1),
+        1.0 / 3
+      ) * 100) AS DOUBLE) AS opportunityScore,
+      CAST(ROUND(impressions * (
+        CASE CAST(ROUND(GREATEST(LEAST(position, 3.0), 1.0)) AS INTEGER)
+          WHEN 1 THEN 0.30
+          WHEN 2 THEN 0.15
+          WHEN 3 THEN 0.10
+          ELSE 0.10
+        END
+      )) AS DOUBLE) AS potentialClicks,
+      positionScore, impressionScore, ctrGapScore
+    FROM gapped
+    ORDER BY opportunityScore DESC
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: position-distribution 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH pos AS (
+      SELECT
+        date,
+        (sum_position / NULLIF(impressions, 0) + 1) AS avg_pos
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ? AND impressions > 0
+    )
+    SELECT
+      date,
+      CAST(SUM(CASE WHEN avg_pos <= 3 THEN 1 ELSE 0 END) AS DOUBLE) AS pos_1_3,
+      CAST(SUM(CASE WHEN avg_pos > 3 AND avg_pos <= 10 THEN 1 ELSE 0 END) AS DOUBLE) AS pos_4_10,
+      CAST(SUM(CASE WHEN avg_pos > 10 AND avg_pos <= 20 THEN 1 ELSE 0 END) AS DOUBLE) AS pos_11_20,
+      CAST(SUM(CASE WHEN avg_pos > 20 THEN 1 ELSE 0 END) AS DOUBLE) AS pos_20_plus,
+      CAST(COUNT(*) AS DOUBLE) AS total
+    FROM pos
+    GROUP BY date
+    ORDER BY date ASC
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: position-volatility 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+    6,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH query_day AS (
+      SELECT
+        url AS page,
+        query,
+        date,
+        CAST(SUM(impressions) AS DOUBLE) AS q_impressions,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS q_position
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+        AND query IS NOT NULL AND query <> ''
+        AND url IS NOT NULL AND url <> ''
+      GROUP BY url, query, date
+      HAVING SUM(impressions) >= 1
+    ),
+    daily AS (
+      SELECT
+        page, date,
+        COUNT(*) AS query_count,
+        SUM(q_impressions) AS day_impressions,
+        SUM(q_position * q_impressions) / NULLIF(SUM(q_impressions), 0) AS avg_position,
+        COALESCE(STDDEV_POP(q_position), 0.0) AS pos_stddev,
+        MIN(q_position) AS best_position,
+        MAX(q_position) AS worst_position
+      FROM query_day
+      GROUP BY page, date
+      HAVING SUM(q_impressions) >= ?
+    ),
+    with_shift AS (
+      SELECT *,
+        LAG(avg_position) OVER (PARTITION BY page ORDER BY date) AS prev_position,
+        COALESCE(
+          ABS(avg_position - LAG(avg_position) OVER (PARTITION BY page ORDER BY date)),
+          0.0
+        ) AS dod_shift
+      FROM daily
+    ),
+    scored AS (
+      SELECT *,
+        pos_stddev + dod_shift AS volatility
+      FROM with_shift
+    ),
+    top_pages AS (
+      SELECT page,
+        SUM(day_impressions) AS total_impressions,
+        AVG(volatility) AS avg_volatility,
+        MAX(volatility) AS peak_volatility,
+        COUNT(*) AS days_with_data
+      FROM scored
+      GROUP BY page
+      HAVING COUNT(*) >= ?
+      ORDER BY avg_volatility DESC
+      LIMIT 10
+    )
+    SELECT
+      s.page,
+      strftime(s.date, '%Y-%m-%d') AS date,
+      s.query_count AS queryCount,
+      s.day_impressions AS dayImpressions,
+      s.avg_position AS avgPosition,
+      s.pos_stddev AS posStddev,
+      s.best_position AS bestPosition,
+      s.worst_position AS worstPosition,
+      s.dod_shift AS dodShift,
+      s.volatility AS volatility,
+      t.avg_volatility AS pageAvgVolatility,
+      t.peak_volatility AS pagePeakVolatility,
+      t.total_impressions AS pageTotalImpressions
+    FROM scored s
+    JOIN top_pages t USING (page)
+    ORDER BY t.avg_volatility DESC, s.date ASC
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: query-migration 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+    "2024-01-01",
+    "2024-01-31",
+    10,
+  ],
+  "previous": {
+    "partitions": [
+      "daily/2024-01-01",
+      "monthly/2024-01",
+      "daily/2024-01-02",
+      "daily/2024-01-03",
+      "daily/2024-01-04",
+      "daily/2024-01-05",
+      "daily/2024-01-06",
+      "daily/2024-01-07",
+      "daily/2024-01-08",
+      "daily/2024-01-09",
+      "daily/2024-01-10",
+      "daily/2024-01-11",
+      "daily/2024-01-12",
+      "daily/2024-01-13",
+      "daily/2024-01-14",
+      "daily/2024-01-15",
+      "daily/2024-01-16",
+      "daily/2024-01-17",
+      "daily/2024-01-18",
+      "daily/2024-01-19",
+      "daily/2024-01-20",
+      "daily/2024-01-21",
+      "daily/2024-01-22",
+      "daily/2024-01-23",
+      "daily/2024-01-24",
+      "daily/2024-01-25",
+      "daily/2024-01-26",
+      "daily/2024-01-27",
+      "daily/2024-01-28",
+      "daily/2024-01-29",
+      "daily/2024-01-30",
+      "daily/2024-01-31",
+    ],
+    "table": "page_keywords",
+  },
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH cur AS (
+      SELECT query, url AS page,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+        AND query IS NOT NULL AND query <> ''
+        AND url IS NOT NULL AND url <> ''
+      GROUP BY query, url
+      HAVING SUM(impressions) >= ?
+    ),
+    prev AS (
+      SELECT query, url AS page,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+      FROM read_parquet({{FILES_PREV}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+        AND query IS NOT NULL AND query <> ''
+        AND url IS NOT NULL AND url <> ''
+      GROUP BY query, url
+      HAVING SUM(impressions) >= ?
+    ),
+    lost AS (
+      SELECT p.page AS source_page, p.query AS source_query, p.impressions AS source_impressions
+      FROM prev p
+      LEFT JOIN cur c ON p.page = c.page AND p.query = c.query
+      WHERE c.query IS NULL
+    ),
+    gained AS (
+      SELECT c.page AS target_page, c.query AS target_query, c.impressions AS target_impressions
+      FROM cur c
+      LEFT JOIN prev p ON p.page = c.page AND p.query = c.query
+      WHERE p.query IS NULL
+    ),
+    matched AS (
+      SELECT
+        l.source_page, l.source_query, l.source_impressions,
+        g.target_page, g.target_query, g.target_impressions,
+        CASE
+          WHEN l.source_query = g.target_query THEN 'exact'
+          ELSE 'fuzzy'
+        END AS match_type,
+        LEAST(l.source_impressions, g.target_impressions) AS absorbed_impressions
+      FROM lost l
+      JOIN gained g
+        ON l.source_page <> g.target_page
+        AND ABS(LENGTH(l.source_query) - LENGTH(g.target_query)) <= 2
+        AND (
+          l.source_query = g.target_query
+          OR levenshtein(l.source_query, g.target_query) <= 2
+        )
+    ),
+    edges AS (
+      SELECT
+        source_page, target_page,
+        SUM(absorbed_impressions) AS weight,
+        COUNT(*) AS query_count,
+        SUM(CASE WHEN match_type = 'exact' THEN 1 ELSE 0 END) AS exact_count,
+        to_json(list({
+          'sourceQuery': source_query,
+          'targetQuery': target_query,
+          'absorbed': absorbed_impressions,
+          'matchType': match_type
+        } ORDER BY absorbed_impressions DESC)) AS examplesJson
+      FROM matched
+      GROUP BY source_page, target_page
+    )
+    SELECT *
+    FROM edges
+    ORDER BY weight DESC
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: seasonality 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "pages",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH monthly AS (
+      SELECT
+        strftime(date, '%Y-%m') AS month,
+        CAST(SUM(clicks) AS DOUBLE) AS value
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY month
+    ),
+    stats AS (
+      SELECT
+        AVG(value) AS avg_val,
+        COALESCE(STDDEV_POP(value), 0.0) AS std_val,
+        CAST(COUNT(*) AS DOUBLE) AS month_count
+      FROM monthly
+    )
+    SELECT
+      m.month AS month,
+      m.value AS value,
+      CASE WHEN s.avg_val > 0 THEN m.value / s.avg_val ELSE 0.0 END AS vsAverage,
+      (s.avg_val > 0 AND m.value / s.avg_val > 1.5) AS isPeak,
+      (s.avg_val > 0 AND m.value / s.avg_val < 0.5) AS isTrough,
+      CASE WHEN s.avg_val > 0 THEN LEAST(s.std_val / s.avg_val, 1.0) ELSE 0.0 END AS strength,
+      s.month_count AS monthCount
+    FROM monthly m, stats s
+    ORDER BY m.month
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: stl-decompose 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH daily AS (
+      SELECT
+        query,
+        url AS page,
+        date,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) AS observed
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+        AND query IS NOT NULL AND query <> ''
+        AND url IS NOT NULL AND url <> ''
+      GROUP BY query, url, date
+    ),
+    entity_stats AS (
+      SELECT query, page,
+        COUNT(*) AS days,
+        SUM(impressions) AS total_impressions
+      FROM daily
+      GROUP BY query, page
+      HAVING COUNT(*) >= 21
+        AND SUM(impressions) >= ?
+    ),
+    filtered AS (
+      SELECT d.*
+      FROM daily d
+      JOIN entity_stats e USING (query, page)
+    ),
+    trended AS (
+      SELECT *,
+        CASE
+          WHEN COUNT(*) OVER w = 7
+            THEN AVG(observed) OVER w
+          ELSE NULL
+        END AS trend
+      FROM filtered
+      WINDOW w AS (
+        PARTITION BY query, page
+        ORDER BY date
+        ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING
+      )
+    ),
+    detrended AS (
+      SELECT *,
+        observed - trend AS detrended,
+        dayofweek(date) AS dow
+      FROM trended
+    ),
+    seasonal_raw AS (
+      SELECT *,
+        AVG(detrended) OVER (PARTITION BY query, page, dow) AS seasonal_dow
+      FROM detrended
+    ),
+    seasonal_centered AS (
+      SELECT *,
+        seasonal_dow - AVG(seasonal_dow) OVER (PARTITION BY query, page) AS seasonal
+      FROM seasonal_raw
+    ),
+    residualed AS (
+      SELECT *,
+        CASE
+          WHEN trend IS NULL OR seasonal IS NULL THEN NULL
+          ELSE observed - trend - seasonal
+        END AS residual
+      FROM seasonal_centered
+    ),
+    scored AS (
+      SELECT *,
+        STDDEV_POP(residual) OVER (PARTITION BY query, page) AS resid_std,
+        CASE
+          WHEN residual IS NOT NULL
+            AND STDDEV_POP(residual) OVER (PARTITION BY query, page) > 0
+            AND ABS(residual) > 2.0 * STDDEV_POP(residual) OVER (PARTITION BY query, page)
+          THEN true ELSE false
+        END AS anomaly
+      FROM residualed
+    ),
+    per_entity AS (
+      SELECT query, page,
+        COUNT(*) AS days,
+        SUM(impressions) AS total_impressions,
+        VAR_POP(detrended) AS var_detrended,
+        VAR_POP(seasonal) AS var_seasonal,
+        VAR_POP(residual) AS var_residual,
+        COUNT(*) FILTER (WHERE anomaly) AS residual_anomalies,
+        REGR_SLOPE(observed, epoch(date) / 86400.0) AS trend_slope
+      FROM scored
+      GROUP BY query, page
+    ),
+    series AS (
+      SELECT query, page,
+        to_json(list({
+          'date': strftime(date, '%Y-%m-%d'),
+          'observed': observed,
+          'trend': trend,
+          'seasonal': seasonal,
+          'residual': residual,
+          'anomaly': anomaly
+        } ORDER BY date)) AS seriesJson
+      FROM scored
+      GROUP BY query, page
+    )
+    SELECT
+      e.query AS keyword,
+      e.page,
+      CAST(e.total_impressions AS DOUBLE) AS totalImpressions,
+      CAST(e.days AS DOUBLE) AS days,
+      CASE
+        WHEN e.var_detrended IS NULL OR e.var_detrended = 0 THEN 0.0
+        ELSE LEAST(e.var_seasonal / NULLIF(e.var_detrended, 0), 1.0)
+      END AS seasonalStrength,
+      CASE
+        WHEN e.var_detrended IS NULL OR e.var_detrended = 0 THEN 0.0
+        ELSE GREATEST(0.0, 1.0 - e.var_residual / NULLIF(e.var_detrended, 0))
+      END AS trendStrength,
+      CAST(e.residual_anomalies AS DOUBLE) AS residualAnomalies,
+      COALESCE(e.trend_slope, 0.0) AS trendSlope,
+      s.seriesJson
+    FROM per_entity e
+    LEFT JOIN series s USING (query, page)
+    ORDER BY seasonalStrength DESC, ABS(COALESCE(e.trend_slope, 0.0)) DESC
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: striking-distance 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    SELECT
+      query,
+      url AS page,
+      CAST(SUM(clicks) AS DOUBLE) AS clicks,
+      CAST(SUM(impressions) AS DOUBLE) AS impressions,
+      CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+      SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+    FROM read_parquet({{FILES}}, union_by_name = true)
+    WHERE date >= ? AND date <= ?
+    GROUP BY query, url
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: survival 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH daily AS (
+      SELECT
+        query,
+        url,
+        date,
+        CAST(SUM(clicks) AS DOUBLE) AS day_clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS day_impressions,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS day_position
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+        AND query IS NOT NULL AND query <> ''
+        AND url IS NOT NULL AND url <> ''
+      GROUP BY query, url, date
+      HAVING SUM(impressions) >= ?
+    ),
+    classified AS (
+      SELECT *,
+        (day_position <= 10) AS in_top10
+      FROM daily
+    ),
+    transitions AS (
+      SELECT *,
+        CASE
+          WHEN in_top10 AND (LAG(in_top10) OVER w IS NULL OR NOT LAG(in_top10) OVER w)
+            THEN 1 ELSE 0
+        END AS is_entry
+      FROM classified
+      WINDOW w AS (PARTITION BY query, url ORDER BY date)
+    ),
+    run_ids AS (
+      SELECT *,
+        SUM(is_entry) OVER (PARTITION BY query, url ORDER BY date) AS run_id
+      FROM transitions
+      WHERE in_top10
+    ),
+    window_bounds AS (
+      SELECT MIN(date) AS window_start, MAX(date) AS window_end FROM daily
+    ),
+    episodes_raw AS (
+      SELECT
+        query, url, run_id,
+        MIN(date) AS entry_date,
+        MAX(date) AS exit_date,
+        DATEDIFF('day', MIN(date), MAX(date)) + 1 AS tenure
+      FROM run_ids
+      GROUP BY query, url, run_id
+    ),
+    episodes AS (
+      SELECT
+        e.query, e.url, e.run_id, e.entry_date, e.exit_date, e.tenure,
+        (e.exit_date >= wb.window_end - INTERVAL 2 DAY) AS censored,
+        CASE
+          WHEN regexp_extract(e.url, '^(?:https?://[^/]+)?(/[^/?#]*)', 1) = '/' OR e.url = '/'
+            THEN 'home'
+          WHEN regexp_extract(e.url, '^(?:https?://[^/]+)?/([^/?#]+)', 1) = ''
+            THEN 'home'
+          ELSE regexp_extract(e.url, '^(?:https?://[^/]+)?/([^/?#]+)', 1)
+        END AS cohort
+      FROM episodes_raw e
+      CROSS JOIN window_bounds wb
+    ),
+    episodes_all AS (
+      SELECT query, url, tenure, censored, cohort FROM episodes
+      UNION ALL
+      SELECT query, url, tenure, censored, '__all__' AS cohort FROM episodes
+    ),
+    cohort_totals AS (
+      SELECT cohort, COUNT(*) AS n_total
+      FROM episodes_all
+      GROUP BY cohort
+    ),
+    events AS (
+      SELECT
+        cohort,
+        tenure,
+        COUNT(*) FILTER (WHERE NOT censored) AS d_t,
+        COUNT(*) AS n_ending_at_t
+      FROM episodes_all
+      GROUP BY cohort, tenure
+    ),
+    km AS (
+      SELECT
+        e.cohort,
+        e.tenure,
+        e.d_t,
+        e.n_ending_at_t,
+        SUM(e.n_ending_at_t) OVER (PARTITION BY e.cohort ORDER BY e.tenure DESC
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS at_risk
+      FROM events e
+    ),
+    km_surv AS (
+      SELECT
+        cohort, tenure, d_t, at_risk,
+        EXP(SUM(LN(GREATEST(1.0 - CAST(d_t AS DOUBLE) / NULLIF(at_risk, 0), 1e-9)))
+          OVER (PARTITION BY cohort ORDER BY tenure
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) AS survival
+      FROM km
+    ),
+    curve_agg AS (
+      SELECT
+        cohort,
+        to_json(list({
+          'tenure': tenure,
+          'survival': survival,
+          'atRisk': at_risk,
+          'events': d_t
+        } ORDER BY tenure)) AS curveJson
+      FROM km_surv
+      GROUP BY cohort
+    ),
+    cohort_stats AS (
+      SELECT
+        ea.cohort,
+        COUNT(*) AS episode_count,
+        AVG(CASE WHEN ea.censored THEN 1.0 ELSE 0.0 END) AS censoring_rate
+      FROM episodes_all ea
+      GROUP BY ea.cohort
+    )
+    SELECT
+      cs.cohort,
+      cs.episode_count AS episodeCount,
+      cs.censoring_rate AS censoringRate,
+      ca.curveJson
+    FROM cohort_stats cs
+    LEFT JOIN curve_agg ca USING (cohort)
+    ORDER BY cs.cohort
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: trends 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "pages",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+    6,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH bucketed AS (
+      SELECT
+        url AS entity,
+        date_trunc('week', date) AS week,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        SUM(sum_position) AS sum_position_sum
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY entity, week
+    ),
+    with_meta AS (
+      SELECT
+        entity, week, clicks, impressions, sum_position_sum,
+        ROW_NUMBER() OVER (PARTITION BY entity ORDER BY week) - 1 AS week_idx,
+        COUNT(*) OVER (PARTITION BY entity) AS n_weeks,
+        (ROW_NUMBER() OVER (PARTITION BY entity ORDER BY week) - 1)
+          < (COUNT(*) OVER (PARTITION BY entity) / 2) AS is_first_half
+      FROM bucketed
+    ),
+    agg AS (
+      SELECT
+        entity,
+        SUM(clicks) AS totalClicks,
+        SUM(impressions) AS totalImpressions,
+        any_value(n_weeks) AS weeksWithData,
+        COALESCE(regr_slope(clicks, CAST(week_idx AS DOUBLE)), 0.0) AS slope,
+        SUM(CASE WHEN is_first_half THEN clicks ELSE 0 END) AS firstHalfClicks,
+        SUM(CASE WHEN NOT is_first_half THEN clicks ELSE 0 END) AS secondHalfClicks,
+        SUM(sum_position_sum) / NULLIF(SUM(impressions), 0) + 1 AS avgPosition,
+        to_json(list({
+          'week': strftime(week, '%Y-%m-%d'),
+          'clicks': clicks,
+          'impressions': impressions
+        } ORDER BY week)) AS seriesJson
+      FROM with_meta
+      GROUP BY entity
+      HAVING SUM(impressions) >= ? AND any_value(n_weeks) >= ?
+    ),
+    classified AS (
+      SELECT
+        *,
+        CASE
+          WHEN firstHalfClicks = 0 AND secondHalfClicks > 0 THEN 10.0
+          WHEN firstHalfClicks = 0 THEN 1.0
+          ELSE secondHalfClicks / firstHalfClicks
+        END AS growthRatio
+      FROM agg
+    )
+    SELECT
+      entity,
+      totalClicks,
+      totalImpressions,
+      weeksWithData,
+      slope,
+      growthRatio,
+      avgPosition,
+      CASE
+        WHEN growthRatio >= 1.5 AND slope > 0 THEN 'accelerating'
+        WHEN growthRatio >= 1.1 AND slope >= 0 THEN 'growing'
+        WHEN growthRatio < 0.5 THEN 'cratering'
+        WHEN growthRatio < 0.9 AND slope < 0 THEN 'declining'
+        ELSE 'steady'
+      END AS trend,
+      seriesJson
+    FROM classified
+    ORDER BY
+      CASE
+        WHEN growthRatio >= 1.5 AND slope > 0 THEN 0
+        WHEN growthRatio < 0.5 THEN 1
+        WHEN growthRatio >= 1.1 AND slope >= 0 THEN 2
+        WHEN growthRatio < 0.9 AND slope < 0 THEN 3
+        ELSE 4
+      END,
+      ABS(growthRatio - 1) DESC,
+      totalClicks DESC
+    LIMIT 100
+  ",
+}
+`;
+
+exports[`analyzer plan snapshots > sql plan: zero-click 1`] = `
+{
+  "current": {
+    "partitions": [
+      "daily/2024-02-01",
+      "monthly/2024-02",
+      "daily/2024-02-02",
+      "daily/2024-02-03",
+      "daily/2024-02-04",
+      "daily/2024-02-05",
+      "daily/2024-02-06",
+      "daily/2024-02-07",
+      "daily/2024-02-08",
+      "daily/2024-02-09",
+      "daily/2024-02-10",
+      "daily/2024-02-11",
+      "daily/2024-02-12",
+      "daily/2024-02-13",
+      "daily/2024-02-14",
+      "daily/2024-02-15",
+      "daily/2024-02-16",
+      "daily/2024-02-17",
+      "daily/2024-02-18",
+      "daily/2024-02-19",
+      "daily/2024-02-20",
+      "daily/2024-02-21",
+      "daily/2024-02-22",
+      "daily/2024-02-23",
+      "daily/2024-02-24",
+      "daily/2024-02-25",
+      "daily/2024-02-26",
+      "daily/2024-02-27",
+      "daily/2024-02-28",
+      "daily/2024-02-29",
+    ],
+    "table": "page_keywords",
+  },
+  "extraFiles": undefined,
+  "extraQueries": undefined,
+  "kind": "sql",
+  "params": [
+    "2024-02-01",
+    "2024-02-29",
+    10,
+    20,
+    0.05,
+  ],
+  "previous": undefined,
+  "requiresAttachedTables": undefined,
+  "sql": "
+    WITH agg AS (
+      SELECT
+        query,
+        url AS page,
+        CAST(SUM(clicks) AS DOUBLE) AS clicks,
+        CAST(SUM(impressions) AS DOUBLE) AS impressions,
+        CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+      GROUP BY query, url
+      HAVING SUM(impressions) >= ?
+    )
+    SELECT
+      query, page, clicks, impressions, ctr, position,
+      CAST(GREATEST(0, ROUND(impressions * (
+        CASE
+          WHEN position <= 1 THEN 0.30
+          WHEN position <= 3 THEN 0.15
+          WHEN position <= 5 THEN 0.08
+          ELSE 0.04
+        END
+      )) - clicks) AS DOUBLE) AS missedClicks
+    FROM agg
+    WHERE position <= ? AND ctr < ?
+    ORDER BY impressions DESC
+    LIMIT 100
+  ",
+}
+`;

@@ -20,6 +20,8 @@
 npm install gscdump
 ```
 
+This package is the edge-safe surface: REST client + query builder + cross-package contracts. For the storage engine (Parquet/DuckDB, planner, adapters), install [`@gscdump/engine`](../engine). For analyzers, install [`@gscdump/analysis`](../analysis).
+
 ## Usage
 
 ```ts
@@ -156,10 +158,8 @@ const cannibalization = analyzeCannibalization(keywordPageData)
 
 ## Related Packages
 
-- [`@gscdump/cli`](../cli) - CLI for dump, sync, compare, analyze
-- [`@gscdump/mcp`](../mcp) - MCP server for AI agents
-- [`@gscdump/db`](../db) - SQLite persistence
-- [`@gscdump/query`](../query) - Unified data provider
+- [`@gscdump/cli`](../cli) — CLI: `sync`, `query`, `dump`, `analyze`, `mcp`, `store` admin.
+- [`@gscdump/analysis`](../analysis) — SEO analyzers (row-based + DuckDB-native + D1-ready).
 
 ## License
 

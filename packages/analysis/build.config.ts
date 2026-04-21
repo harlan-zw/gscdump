@@ -1,0 +1,35 @@
+import { defineBuildConfig } from 'obuild/config'
+
+export default defineBuildConfig({
+  entries: [
+    {
+      type: 'bundle',
+      input: ['./src/index.ts'],
+    },
+    {
+      type: 'bundle',
+      input: ['./src/analyzer/index.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/query/index.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/source/index.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/semantic/index.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/period/index.ts'],
+      outDir: './dist',
+    },
+  ],
+})

@@ -1,4 +1,4 @@
-import type { indexing_v3 } from '@googleapis/indexing/v3'
+import type { indexing_v3 } from '@googleapis/indexing/build/v3'
 import type { GoogleSearchConsoleClient } from '../core/client'
 
 export type IndexingNotificationType = 'URL_UPDATED' | 'URL_DELETED'

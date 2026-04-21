@@ -110,7 +110,7 @@ describe('googleSearchConsole', () => {
     const customFetch = vi.fn().mockResolvedValue({ siteEntry: [] })
     const client = googleSearchConsole('dummy', { fetch: customFetch as any })
     await client.sites()
-    expect(customFetch).toHaveBeenCalledWith('https://searchconsole.googleapis.com/webmasters/v3/sites')
+    expect(customFetch).toHaveBeenCalledWith('https://searchconsole.googleapis.com/webmasters/v3/sites', { signal: undefined })
   })
 
   it('should call onRateLimited on 429', async () => {

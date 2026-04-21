@@ -1,11 +1,25 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
-import { isCancel, select } from '@clack/prompts'
+import { isCancel, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { authenticate, authenticateCloud, getAuthCredentials, saveTokens } from '../auth'
-import { DEFAULT_CLOUD_URL, loadConfig, saveConfig } from '../config'
+import { authenticate, getAuthCredentials, saveTokens } from '../auth'
+import { defaultDataDir, loadConfig, saveConfig } from '../config'
 import { logger } from '../utils'
+
+const ENV_LINE_RE = /^([^=]+)=(.*)$/
+
+async function promptDataDir(existing?: string): Promise<string> {
+  const fallback = existing ?? defaultDataDir()
+  const answer = await text({
+    message: 'Where should Parquet data be stored?',
+    placeholder: fallback,
+    defaultValue: fallback,
+  })
+  if (isCancel(answer))
+    process.exit(1)
+  return String(answer) || fallback
+}
 
 async function loadEnvFile(): Promise<Record<string, string> | null> {
   const envPath = path.join(process.cwd(), '.env')
@@ -18,11 +32,10 @@ async function loadEnvFile(): Promise<Record<string, string> | null> {
     const trimmed = line.trim()
     if (!trimmed || trimmed.startsWith('#'))
       continue
-    const match = trimmed.match(/^([^=]+)=(.*)$/)
+    const match = trimmed.match(ENV_LINE_RE)
     if (match) {
       const key = match[1].trim()
       let value = match[2].trim()
-      // Remove quotes
       if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith('\'') && value.endsWith('\'')))
         value = value.slice(1, -1)
       env[key] = value
@@ -34,7 +47,7 @@ async function loadEnvFile(): Promise<Record<string, string> | null> {
 export const initCommand = defineCommand({
   meta: {
     name: 'init',
-    description: 'Set up GSCDump (choose cloud or local mode)',
+    description: 'Set up GSCDump authentication',
   },
   args: {
     force: {
@@ -46,18 +59,16 @@ export const initCommand = defineCommand({
   async run({ args }) {
     const config = await loadConfig()
 
-    if (config.mode && !args.force) {
-      logger.info(`Already configured in ${config.mode} mode`)
+    if (config.clientId && config.clientSecret && !args.force) {
+      logger.info('Already configured')
       logger.info('Run with --force to reconfigure')
       return
     }
 
-    // Check for .env file with tokens
     const envFile = await loadEnvFile()
     if (envFile?.GOOGLE_CLIENT_ID && envFile?.GOOGLE_CLIENT_SECRET && envFile?.GOOGLE_REFRESH_TOKEN) {
       logger.info('Found .env file with Google credentials')
 
-      // Set env vars so authenticate() can use them
       process.env.GOOGLE_CLIENT_ID = envFile.GOOGLE_CLIENT_ID
       process.env.GOOGLE_CLIENT_SECRET = envFile.GOOGLE_CLIENT_SECRET
       process.env.GOOGLE_REFRESH_TOKEN = envFile.GOOGLE_REFRESH_TOKEN
@@ -66,15 +77,13 @@ export const initCommand = defineCommand({
 
       await saveConfig({
         ...config,
-        mode: 'local',
         clientId: envFile.GOOGLE_CLIENT_ID,
         clientSecret: envFile.GOOGLE_CLIENT_SECRET,
+        dataDir: config.dataDir ?? defaultDataDir(),
       })
 
-      // Authenticate will auto-refresh the token
       const auth = await authenticate({ clientId: envFile.GOOGLE_CLIENT_ID, clientSecret: envFile.GOOGLE_CLIENT_SECRET }, false)
 
-      // Save tokens for future use without env vars
       const creds = auth.credentials
       if (creds.access_token) {
         await saveTokens({
@@ -94,35 +103,15 @@ export const initCommand = defineCommand({
     console.log('  \x1B[90mGoogle Search Console data extraction CLI\x1B[0m')
     console.log()
 
-    const mode = await select({
-      message: 'Choose your setup mode:',
-      options: [
-        {
-          value: 'cloud',
-          label: 'Cloud (Recommended)',
-          hint: 'Easy setup via cloud.gscdump.com - no API keys needed',
-        },
-        {
-          value: 'local',
-          label: 'Local',
-          hint: 'Use your own Google OAuth credentials',
-        },
-      ],
+    const dataDir = await promptDataDir(config.dataDir)
+    const credentials = await getAuthCredentials(true)
+    await saveConfig({
+      ...config,
+      dataDir,
+      clientId: credentials.clientId,
+      clientSecret: credentials.clientSecret,
     })
-
-    if (isCancel(mode))
-      process.exit(1)
-
-    if (mode === 'cloud') {
-      const cloudUrl = config.cloudUrl || DEFAULT_CLOUD_URL
-      await saveConfig({ ...config, mode: 'cloud', cloudUrl })
-      await authenticateCloud(cloudUrl, true)
-    }
-    else {
-      await saveConfig({ ...config, mode: 'local' })
-      const credentials = await getAuthCredentials(true)
-      await authenticate(credentials, true)
-    }
+    await authenticate(credentials, true)
 
     console.log()
     logger.success('Setup complete! Run gscdump to get started.')

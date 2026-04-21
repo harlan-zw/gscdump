@@ -12,7 +12,11 @@
   },
   "references": [
     { "path": "./packages/gscdump" },
-    { "path": "./packages/cli" }
+    { "path": "./packages/engine" },
+    { "path": "./packages/cli" },
+    { "path": "./packages/analysis" },
+    { "path": "./packages/cloud" },
+    { "path": "./packages/mcp" }
   ],
   "include": [],
   "exclude": ["node_modules", "dist"]

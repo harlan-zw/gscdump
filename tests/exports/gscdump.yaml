@@ -1,7 +1,7 @@
 .:
-  analyzeError: function
   batchInspectUrls: function
   batchRequestIndexing: function
+  classifyError: function
   createAuth: function
   createFetch: function
   deleteSitemap: function
@@ -10,48 +10,28 @@
   fetchSites: function
   fetchSitesWithSitemaps: function
   formatErrorForCli: function
-  getErrorCode: function
-  getErrorMessage: function
   getIndexingMetadata: function
-  getRetryAfter: function
   googleSearchConsole: function
   GSC_QUOTAS: object
+  gscdumpApi: function
   inspectUrl: function
-  isAuthError: function
-  isQuotaError: function
-  isRateLimitError: function
   requestIndexing: function
+  storageError: function
   submitSitemap: function
-./analysis:
-  analyzeBrandSegmentation: function
-  analyzeClustering: function
-  analyzeConcentration: function
-  analyzeDecay: function
-  analyzeKeywordConcentration: function
-  analyzeMovers: function
-  analyzeOpportunity: function
-  analyzePageConcentration: function
-  analyzeSeasonality: function
-  analyzeStrikingDistance: function
-  createSorter: function
-  fetchBrandSegmentation: function
-  fetchClustering: function
-  fetchDecay: function
-  fetchKeywordConcentration: function
-  fetchMovers: function
-  fetchOpportunity: function
-  fetchPageConcentration: function
-  fetchSeasonality: function
-  fetchStrikingDistance: function
-  num: function
-  queryAnalytics: function
-  queryComparison: function
+./contracts: {}
+./driver: {}
+./normalize:
+  normalizeUrl: function
 ./query:
   and: function
   between: function
+  buildLogicalComparisonPlan: function
+  buildLogicalPlan: function
+  clicks: object
   contains: function
   Countries: object
   country: object
+  ctr: object
   currentPstDate: function
   date: object
   dayjs: function
@@ -61,10 +41,14 @@
   Devices: object
   eq: function
   extractDateRange: function
+  extractMetricFilters: function
+  extractSpecialOperatorFilters: function
   gsc: object
   gt: function
   gte: function
+  impressions: object
   inArray: function
+  isJsonFilter: function
   like: function
   lt: function
   lte: function
@@ -73,9 +57,20 @@
   notRegex: function
   or: function
   page: object
+  parseJsonFilter: function
+  position: object
   query: object
+  queryCanonical: object
   regex: function
   searchAppearance: object
   searchType: object
   SearchTypes: object
   today: function
+  topLevel: function
+  UnsupportedLogicalCapabilityError: function
+./query/plan:
+  buildLogicalComparisonPlan: function
+  buildLogicalPlan: function
+  UnsupportedLogicalCapabilityError: function
+./tenant:
+  encodeSiteId: function

@@ -1,4 +1,4 @@
-import type { searchconsole_v1 } from '@googleapis/searchconsole/v1'
+import type { searchconsole_v1 } from '@googleapis/searchconsole/build/v1'
 import type { GoogleSearchConsoleClient } from '../../src/client'
 import { vi } from 'vitest'
 import {

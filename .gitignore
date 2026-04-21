@@ -26,3 +26,24 @@ coverage
 .env
 .env.*
 !.env.example
+
+# DuckDB codec temp artifacts (belt-and-suspenders — should now land in
+# os.tmpdir(), but keep the rule so any stragglers stay out of commits).
+__in_*.json
+__out_*.parquet
+__decode_*.parquet
+
+# E2E script outputs
+tmp/
+
+# Local Claude Code scratch
+.claude/
+
+# Generated demo artifacts
+examples/browser-http/_served
+examples/browser-http/bundle.mjs
+examples/browser-http/snapshot.duckdb
+examples/browser-http/screenshot*.png
+examples/browser-attach/analyzers.mjs
+examples/browser-attach/gscdump.duckdb
+examples/browser-attach/screenshot.png

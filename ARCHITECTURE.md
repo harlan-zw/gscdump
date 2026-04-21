@@ -1,303 +1,183 @@
 # Architecture
 
-## Monorepo Structure
+Pipeline: **GSC API → DuckDB → analysis → CLI**. See [`ROADMAP.md`](./ROADMAP.md) for current status and next actions.
+
+## Monorepo layout
 
 ```
 gscdump/
 ├── packages/
-│   ├── gscdump/     # Core library - GSC API wrapper + query builder
-│   └── cli/         # CLI + MCP server
+│   ├── gscdump/              # Core: REST client, query builder, driver/tenant/normalize primitives (edge-safe)
+│   ├── engine/               # @gscdump/engine: Parquet/DuckDB storage engine + canonical drizzle pg-core schema + SQL resolver kit
+│   ├── engine-wasm/          # @gscdump/engine-wasm: DuckDB-WASM engine adapter (browser + R2 parquet)
+│   ├── engine-sqlite/        # @gscdump/engine-sqlite: SQLite / D1 engine adapter
+│   ├── engine-duckdb-node/   # @gscdump/engine-duckdb-node: Node DuckDB engine + SQL-native analyzers (browser-attached + server-side)
+│   ├── analysis/             # @gscdump/analysis: row-based analyzers + analyzer registry + source/dispatcher
+│   ├── cli/                  # @gscdump/cli: CLI entry (gscdump bin)
+│   ├── cloud/                # @gscdump/cloud: cloud SDK + cloud CLI (frozen)
+│   └── mcp/                  # @gscdump/mcp: MCP server (frozen)
 └── pnpm-workspace.yaml
 ```
 
-Web app lives separately at https://github.com/harlan-zw/gscdump.com
+Web app lives separately at https://github.com/harlan-zw/gscdump.com.
+
+Dependency graph:
+
+- `@gscdump/cli` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-duckdb-node`, `@gscdump/analysis`, `@gscdump/mcp`
+- `@gscdump/analysis` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-wasm`, `@gscdump/engine-sqlite`, `@gscdump/engine-duckdb-node`
+- `@gscdump/engine-duckdb-node` → `gscdump`, `@gscdump/engine`, `@gscdump/analysis` (query + source + analyzer subpaths)
+- `@gscdump/engine-wasm` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-duckdb-node`, `@gscdump/analysis/period` (type-only)
+- `@gscdump/engine-sqlite` → `gscdump`, `@gscdump/engine`, `@gscdump/analysis` (source + period subpaths)
+- `@gscdump/engine` → `gscdump`
+- `@gscdump/cloud` → `gscdump`, `@gscdump/analysis` (type-only); frozen
+- `@gscdump/mcp` → `gscdump` (frozen)
+
+Canonical schema source of truth: `@gscdump/engine/schema` exports drizzle pg-core tables (`pages`, `keywords`, `countries`, `devices`, `page_keywords`). Every other representation — the abstract `SCHEMAS: Record<TableName, TableSchema>` for parquet writer / planner, the sqlite-core tables in `@gscdump/engine-sqlite` — is derived from or validated against this.
+
+`@gscdump/cloud` and `@gscdump/mcp` are `private: true` and frozen; builds + tests pass, no new features.
 
 ## Packages
 
-### gscdump (Core Library)
+### `gscdump` (core)
 
-Google Search Console API wrapper with typed query builder. Pure functions, **edge-compatible** (works in Cloudflare Workers, Deno, etc).
+Edge-safe GSC REST wrapper + typed query builder + cross-package contract primitives. No `node:*`, no `@duckdb/*`, no `hyparquet*` — install on workers, edge runtimes, browsers.
 
-```
-packages/gscdump/src/
-├── index.ts              # Public API exports
-├── core/
-│   ├── client.ts         # ofetch-based GSC/Indexing API client
-│   ├── errors.ts         # Error handling utilities
-│   └── types.ts          # Core TypeScript interfaces
-├── api/
-│   ├── indexing.ts       # Indexing API requests
-│   ├── inspection.ts     # URL inspection APIs
-│   └── sites.ts          # Site/sitemap listing APIs
-└── query/
-    ├── index.ts          # Query builder exports
-    ├── builder.ts        # Fluent query builder
-    ├── columns.ts        # Dimension column definitions
-    ├── constants.ts      # Device/Country/SearchType enums
-    ├── operators.ts      # Filter operators (eq, contains, etc.)
-    ├── resolver.ts       # Query resolution to API body
-    ├── types.ts          # Query types
-    └── utils/
-        ├── countries.ts  # ISO country code mappings
-        ├── dayjs.ts      # Configured dayjs with PST timezone
-        └── format.ts     # Date formatting utilities
-```
+Subpath exports:
 
-**Authentication:**
+| Export | Purpose |
+|---|---|
+| `gscdump` | `googleSearchConsole(auth)` client + REST helpers |
+| `gscdump/query` | Builder, columns, operators, resolver, date helpers, planner types (`BuilderState`, `LogicalQueryPlan`, `PlannerCapabilities`) |
+| `gscdump/query/plan` | Logical planner internals (`buildLogicalPlan`, comparison plans) |
+| `gscdump/driver` | Driver contracts (`DriverSite`, `DriverQueryResult`, `DriverInspectResult`, `DriverSitemap`, ...) |
+| `gscdump/tenant` | Tenant/site key primitive (`encodeSiteId`) |
+| `gscdump/normalize` | URL normalization primitive (`normalizeUrl`) |
 
-```ts
-import { googleSearchConsole } from 'gscdump'
+Optional peers: `@googleapis/indexing`, `@googleapis/searchconsole` (only needed if you call REST helpers).
 
-// Token string
-const client = googleSearchConsole('ya29.xxx...')
+### `@gscdump/engine`
 
-// Or object with accessToken
-const client = googleSearchConsole({ accessToken: 'ya29.xxx...' })
+Append-only Parquet/DuckDB storage engine. Storage runtime, planner, schema, adapters — extracted from `gscdump` so edge consumers don't pay the install cost.
 
-// Or OAuth credentials (auto-refreshes)
-const client = googleSearchConsole({
-  clientId: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
-})
-```
+| Export | Purpose |
+|---|---|
+| `@gscdump/engine` | Barrel: `createStorageEngine`, codec/executor, storage contracts, drizzle schema tables. |
+| `@gscdump/engine/contracts` | Storage contracts (`StorageEngine`, `Row`, `TableName`, `WriteCtx`, ...). |
+| `@gscdump/engine/snapshot` | Snapshot metadata contract (`SnapshotIndex`). |
+| `@gscdump/engine/schema` | Canonical drizzle pg-core tables (`pages`, `keywords`, ...) + derived `SCHEMAS` + `TABLE_METADATA` (sortKey, version). Source of truth. |
+| `@gscdump/engine/resolver` | SQL composition kit: `pgResolverAdapter`, `createResolverAdapter`, `compilePg`/`compileSqlite`, `resolveToSQL` + comparison composers, `createSqlQuerySource`, source contracts (`SqlQuerySource`, `RowQuerySource`, `AnalysisQuerySource`, `QueryRow`, `FileSet`), `assertSchemaInSync`. |
+| `@gscdump/engine/planner` | Logical → SQL compiler + partition planning (`resolveToSQL`, `enumeratePartitions`). |
+| `@gscdump/engine/ingest` | GSC row → storage row (`createRowAccumulator`, `transformGscRow`). |
+| `@gscdump/engine/sql` | SQL literal binding (`bindLiterals`, `formatLiteral`). |
+| `@gscdump/engine/node` | Node-only DuckDB handle. |
+| `@gscdump/engine/node-harness` | Node-only: `createNodeHarness({ dataDir, userId? })` — wires filesystem + DuckDB into a ready `StorageEngine` in one call. |
+| `@gscdump/engine/filesystem` | Node-only `DataSource` + `ManifestStore` adapters. |
+| `@gscdump/engine/http` | Read-only HTTP `DataSource` (signed URLs, Range). |
+| `@gscdump/engine/hyparquet` | Pure-JS `ParquetCodec`. |
+| `@gscdump/engine/r2` | Cloudflare R2 `DataSource` (structurally typed against `R2Bucket`). |
 
-**Client Methods:**
+Optional peers: `@duckdb/duckdb-wasm`, `hyparquet`, `hyparquet-writer`.
 
-| Method | Purpose |
-|--------|---------|
-| `client.query(siteUrl, builder)` | Async generator for search analytics |
-| `client.sites()` | List all GSC properties |
-| `client.inspect(siteUrl, url)` | Check URL indexing status |
-| `client.sitemaps.list(siteUrl)` | List sitemaps |
-| `client.sitemaps.get(siteUrl, feedpath)` | Get sitemap details |
-| `client.sitemaps.submit(siteUrl, feedpath)` | Submit sitemap |
-| `client.sitemaps.delete(siteUrl, feedpath)` | Delete sitemap |
-| `client.indexing.publish(url, type)` | Request indexing |
-| `client.indexing.getMetadata(url)` | Get indexing metadata |
-| `client._rawQuery(siteUrl, body)` | Low-level query (internal) |
+Boundary rule: sibling packages should prefer the narrowest subpath that matches the primitive they need. Analysis contracts (`AnalysisParams`, `AnalysisResult`, `AnalysisTool`) live in `@gscdump/analysis` (not core, not engine).
 
-**Helper Functions:**
+See [`packages/gscdump/ARCHITECTURE.md`](./packages/gscdump/ARCHITECTURE.md) for subsystem detail.
 
-| Function | Purpose |
-|----------|---------|
-| `fetchSites(client)` | List all GSC properties |
-| `fetchSitesWithSitemaps(client)` | Properties + sitemaps |
-| `fetchSitemaps(client, siteUrl)` | Sitemaps for a site |
-| `fetchSitemap(client, siteUrl, feedpath)` | Single sitemap |
-| `submitSitemap(client, siteUrl, feedpath)` | Submit sitemap |
-| `deleteSitemap(client, siteUrl, feedpath)` | Delete sitemap |
-| `inspectUrl(client, siteUrl, url)` | URL inspection |
-| `batchInspectUrls(client, siteUrl, urls, opts?)` | Batch inspection |
-| `requestIndexing(client, url, opts?)` | Request indexing |
-| `getIndexingMetadata(client, url)` | Indexing metadata |
-| `batchRequestIndexing(client, urls, opts?)` | Batch indexing |
+### `@gscdump/analysis`
 
-**Error Utilities:**
+Row-based analyzers, analyzer registry/dispatcher, source factories, typed query-analyzer plans.
 
-| Function | Purpose |
-|----------|---------|
-| `isQuotaError(error)` | Check if quota exceeded |
-| `isRateLimitError(error)` | Check if rate limited |
-| `isAuthError(error)` | Check if auth failure |
-| `getErrorCode(error)` | Extract HTTP status |
-| `getErrorMessage(error)` | Extract error message |
-| `getRetryAfter(error)` | Get retry-after seconds |
-| `analyzeError(error)` | Full error analysis |
-| `formatErrorForCli(error)` | CLI-friendly message |
+| Export | Purpose |
+|---|---|
+| `@gscdump/analysis` | Row-based analyzers (`analyzeStrikingDistance`, `analyzeOpportunity`, `analyzeMovers`, `analyzeDecay`, `analyzeBrandSegmentation`, `analyzeClustering`, `analyzeConcentration`, `analyzeSeasonality`); contract types (`AnalysisParams`, `AnalysisResult`, `AnalysisTool`); re-exports from `/period`, `/source`, `/analyzer`. |
+| `/analyzer` | Analyzer contracts (`Analyzer`, `Capability`, `Plan`, `SqlPlan`, `RowQueriesPlan`, `FileSet`), `ROW_ANALYZERS`, `createAnalyzerRegistry`, dispatcher (`runAnalyzerFromSource`, `AnalyzerCapabilityError`). Consumed by engine packages that contribute analyzers. |
+| `/period` | Window primitives: `resolveWindow`, `AnalysisPeriod`, `ComparisonPeriod`, `padTimeseries`, `windowToPeriod`, `windowToComparisonPeriod`. |
+| `/query` | Query-analyzer plan builders (`buildDataQueryPlan`, `buildDataDetailPlan`) for `data-query` / `data-detail` analyzers. SQL composition primitives moved to `@gscdump/engine/resolver`. |
+| `/source` | `AnalysisQuerySource` discriminated union, source factories (`createGscApiQuerySource`, `createBrowserQuerySource`, `createSqliteQuerySource`, `createEngineQuerySource`, `createInMemoryQuerySource`), unified dispatcher (`analyzeFromSource`). Re-exports source contracts from `@gscdump/engine/resolver`. |
+| `/semantic` | Embedding-backed analyzers (e.g. `analyzeContentGap`). Lazy `@huggingface/transformers` peer. |
 
-**Query Builder (`gscdump/query`):**
+Peer: `gscdump`, `@gscdump/engine`, `@gscdump/engine-duckdb-node` (for `defaultAnalyzerRegistry` only).
 
-```ts
-import { and, between, contains, date, eq, gsc, page, query } from 'gscdump/query'
+### `@gscdump/engine-wasm`
 
-const builder = gsc
-  .select(page, query, date)
-  .where(and(
-    eq(device, 'MOBILE'),
-    contains(page, '/blog/')
-  ))
-  .where(between(date, '2024-01-01', '2024-01-31'))
-  .limit(25000)
+Browser DuckDB-WASM engine adapter: `createEngine({ runner }) → SqlQuerySource`, plus primitives (`createInsightRunner({ db, conn })`, `scopeFor`/`mergeScope`, `strikingMomentum`, `bootDuckDBWasm`, `attachParquetTables`/`attachParquetUrlTables`, `createBrowserAnalysisRuntime`, vendored drizzle-orm DuckDB-WASM adapter). Re-exports canonical drizzle schema + `browserResolverAdapter` (alias for `pgResolverAdapter`) from `@gscdump/engine`. Optional peer: `@duckdb/duckdb-wasm`.
 
-// Use with client
-for await (const batch of client.query(siteUrl, builder)) {
-  // Process batch of rows
-}
+### `@gscdump/engine-sqlite`
 
-// Or get raw API body
-const body = builder.toBody()
-```
+D1 / sqlite-proxy engine adapter: `createEngine({ executor, siteId }) → SqlQuerySource`, plus `createSqliteInsightRunner({ executor })`, `sqliteResolverAdapter`, `agg*` helpers, drizzle sqlite-core schema (superset of canonical columns; drift-checked).
 
-**Dimensions:** `page`, `query`, `date`, `country`, `device`, `searchAppearance`
+### `@gscdump/engine-duckdb-node`
 
-**Operators:**
+Node DuckDB engine + SQL-native analyzer collection (`SQL_ANALYZERS`, 29 analyzers). Exports `createEngine({ engine, ctx }) → SqlQuerySource`, `analyzeInBrowser` (browser attached-table runner), `attachParquetIndex`, `attachSnapshotIndex`. Consumed by CLI's local-analyze path and by `defaultAnalyzerRegistry`.
 
-| Operator | Type Narrowing | Description |
-|----------|----------------|-------------|
-| `eq(col, val)` | ✓ | Exact match |
-| `ne(col, val)` | ✗ | Not equal |
-| `inArray(col, [a, b])` | ✓ | Value in array |
-| `contains(col, str)` | ✗ | String contains |
-| `like(col, '%pattern%')` | ✗ | SQL LIKE pattern |
-| `regex(col, /pattern/)` | ✗ | Regex match |
-| `notRegex(col, /pattern/)` | ✗ | Regex not match |
-| `between(col, start, end)` | ✗ | Range (dates) |
-| `and(...filters)` | ✓ | Merge constraints |
-| `or(...filters)` | ✗ | Any match |
-| `not(filter)` | ✗ | Invert filter |
+### `@gscdump/cli`
 
-### @gscdump/cli
+CLI entry, `gscdump` bin. Owns config, auth, local engine wiring.
 
-Command-line interface with built-in MCP server.
+| Command | Role |
+|---|---|
+| `init` | Set up Google OAuth credentials |
+| `sync` | GSC API → DuckDB ingestion |
+| `query` | Read from DuckDB (`--live` hits GSC directly) |
+| `dump` | Export DuckDB rows to stdout/file |
+| `sites` | List GSC properties (live) |
+| `sitemaps` | Manage sitemaps (live) |
+| `inspect` | URL inspection (live) |
+| `analyze` | Run analyzers from `@gscdump/analysis` against DuckDB (`--live` for row-based against fresh API) |
+| `store stats` / `store compact` / `store gc` / `store export` | Local store admin |
+| `auth` | Manage credentials |
+| `config` | Manage CLI config |
+| `mcp` | Wraps `@gscdump/mcp` with CLI-side auth/config |
 
-```
-packages/cli/src/
-├── index.ts              # Main entry, command registration
-├── auth.ts               # OAuth2 flows (local + cloud)
-├── config.ts             # Config file handling
-├── utils.ts              # Progress bars, CSV export
-├── commands/
-│   ├── init.ts           # First-run setup
-│   ├── dump.ts           # Export to JSON/CSV
-│   ├── query.ts          # Custom queries
-│   ├── sites.ts          # List GSC properties
-│   ├── sitemaps.ts       # Sitemap management
-│   ├── auth.ts           # Auth status/logout
-│   ├── config.ts         # Config management
-│   └── mcp.ts            # Start MCP server
-└── mcp/
-    ├── index.ts          # MCP exports
-    ├── types.ts          # Zod input schemas
-    ├── server/
-    │   └── index.ts      # createGscMcpServer factory
-    └── handlers/
-        ├── analytics.ts  # Analytics fetch handlers
-        ├── indexing.ts   # URL inspection/indexing
-        ├── query.ts      # Custom query handler
-        ├── sites.ts      # Site/sitemap handlers
-        └── utils.ts      # Period parsing
-```
+**Read-path default:** `query`, `dump`, `analyze` read from DuckDB. If the request's date range isn't covered by the sync watermark, fail with an actionable `run gscdump sync first`. `--live` opts into the live GSC API. `sites`, `sitemaps`, `inspect` are always live; they don't store.
 
-**Commands:**
+### `@gscdump/cloud` (frozen)
 
-| Command | Purpose |
-|---------|---------|
-| `gscdump init` | First-run setup (cloud/local mode) |
-| `gscdump dump` | Export search analytics |
-| `gscdump query` | Run custom queries |
-| `gscdump sites` | List GSC properties |
-| `gscdump sitemaps` | Manage sitemaps |
-| `gscdump auth` | Manage authentication |
-| `gscdump config` | Manage configuration |
-| `gscdump mcp` | Start MCP server |
+Cloud SDK + cloud CLI. Owns `CloudGscDriver` interface, all `Cloud*` types, `createCloudDriver`, `isCloudDriver`. Ships `gscdump-cloud` bin with `register` / `unregister` / `sync` / `sitemaps` / `indexing` subcommands. Loads session from `GSCDUMP_CLOUD_SESSION` env or `~/.config/gscdump/cloud-tokens.json`.
 
-**MCP Tools:**
+Revival trigger: when gscdump.com's web app needs to import runtime code from `@gscdump/cloud` (not just shared types).
 
-| Tool | Description |
-|------|-------------|
-| `list-sites` | List all GSC properties |
-| `list-sites-with-sitemaps` | Sites with sitemaps |
-| `list-sitemaps` | Sitemaps for a site |
-| `get-sitemap` | Sitemap details |
-| `submit-sitemap` | Submit sitemap |
-| `delete-sitemap` | Delete sitemap |
-| `fetch-pages` | Page analytics |
-| `fetch-keywords` | Keyword analytics |
-| `fetch-countries` | Country analytics |
-| `fetch-devices` | Device analytics |
-| `custom-query` | Custom dimension query |
-| `inspect-url` | URL indexing status |
-| `request-indexing` | Request indexing |
-| `get-indexing-status` | Indexing metadata |
-| `batch-request-indexing` | Batch indexing |
-| `batch-inspect-urls` | Batch inspection |
+### `@gscdump/mcp` (frozen)
 
-## Data Flow
+MCP server. Ships `gscdump-mcp` bin (env-var auth only); `@gscdump/cli`'s `mcp` command wraps the same server with interactive auth/config loading.
+
+MCP tools: `list-sites`, `list-sites-with-sitemaps`, `list-sitemaps`, `get-sitemap`, `submit-sitemap`, `delete-sitemap`, `fetch-pages`, `fetch-keywords`, `fetch-countries`, `fetch-devices`, `query`, `inspect-url`, `request-indexing`, `get-indexing-status`, `batch-request-indexing`, `batch-inspect-urls`.
+
+## Data flow
 
 ```
 Auth (token or OAuth credentials)
-     │
-     ▼
-┌─────────────────────────────────────┐
-│           gscdump (core)            │
-│  client.ts: googleSearchConsole()   │
-│  query/: typed query builder        │
-│  api/: sites, indexing, inspection  │
-└─────────────────────────────────────┘
-     │
-     ▼
-┌─────────────────────────────────────┐
-│           @gscdump/cli              │
-│  commands: dump, query, sites, etc. │
-│  mcp/: MCP server for AI assistants │
-└─────────────────────────────────────┘
+        │
+        ▼
+┌────────────────────────────────────────┐
+│  gscdump (core)                        │
+│  REST client · query builder · engine  │
+└────────────────────────────────────────┘
+        │                      │
+        │ live API             │ DuckDB / Parquet
+        ▼                      ▼
+┌────────────────┐   ┌─────────────────────────┐
+│ live commands  │   │  sync → store → query   │
+│ sites · sitemaps│  │  analyze · dump         │
+│ inspect        │   │  store {stats,compact,  │
+│                │   │         gc,export}      │
+└────────────────┘   └─────────────────────────┘
+        │                      │
+        └──────────┬───────────┘
+                   ▼
+            @gscdump/cli
 ```
 
-## Key Patterns
+## Glossary
 
-### Streaming Pagination
+- **Schema** — canonical drizzle pg-core tables in `@gscdump/engine/schema`. DuckDB (both wasm + node) executes pg-flavored SQL natively. Abstract `SCHEMAS: Record<TableName, TableSchema>` for the parquet writer is *derived* from drizzle via `getTableConfig`; `TABLE_METADATA` carries sortKey + schema version.
+- **Engine** — storage runtime. DuckDB-Node at `@gscdump/engine-duckdb-node`; DuckDB-WASM at `@gscdump/engine-wasm`; SQLite/D1 at `@gscdump/engine-sqlite`. Each exposes `createEngine(config) → QuerySource`.
+- **Source** (`AnalysisQuerySource`) — query abstraction in `@gscdump/engine/resolver`, consumed by analyzers. Discriminated union of `RowQuerySource` (typed `BuilderState` only — GSC API, in-memory) and `SqlQuerySource` (typed `BuilderState` + raw SQL — DuckDB-WASM, SQLite, Node engine). `executeSql` takes optional `fileSets` for `{{FILES}}` substitution.
+- **Adapter** (`ResolverAdapter<TableKey>`) — dialect-specific translator in `@gscdump/engine/resolver`. Compiles `BuilderState` → `{ sql, params }` against a drizzle schema. `pgResolverAdapter` is shared by DuckDB (wasm + node) — single-tenant; `sqliteResolverAdapter` in `@gscdump/engine-sqlite` scopes by `site_id`. Built via `createResolverAdapter`.
+- **Driver** — low-level runtime binding (e.g. DuckDB-WASM `AsyncDuckDB` handle, sqlite-proxy executor, R2 bucket). The engine wraps a driver; analyzers never see one.
+- **Analyzer** (`Analyzer<P, R>`) — pure contract `{ id, params, requires, build, reduce }` in `@gscdump/analysis/analyzer`. `ROW_ANALYZERS` (8, for GSC live API + in-memory) + `SQL_ANALYZERS` (29, in `@gscdump/engine-duckdb-node`). Dispatched by `runAnalyzerFromSource`; capability mismatches throw `AnalyzerCapabilityError`.
 
-GSC limits responses to 25k rows. The client's `query()` method handles pagination automatically via async generator:
+## Build system
 
-```ts
-for await (const batch of client.query(siteUrl, builder)) {
-  // Each batch is up to rowLimit rows (default 25k)
-  // Generator continues until all data is fetched
-}
-```
-
-### Query Builder
-
-The `gscdump/query` module provides a fluent, type-safe query builder:
-
-```ts
-import { between, date, gsc, page, query } from 'gscdump/query'
-
-const builder = gsc
-  .select(page, query) // Dimensions to include
-  .where(between(date, start, end)) // Filters
-  .limit(10000) // Max rows per batch
-
-const body = builder.toBody() // Get raw API body
-```
-
-### Error Handling
-
-Uses `.catch()` on promises per project convention. No try/catch blocks.
-
-```ts
-await client.sites()
-  .catch((err) => {
-    if (isQuotaError(err)) {
-      console.log('Quota exceeded, try tomorrow')
-    }
-  })
-```
-
-## Dependencies
-
-### gscdump (core)
-
-| Package | Purpose |
-|---------|---------|
-| `ofetch` | HTTP client (edge-compatible) |
-| `dayjs` | Date manipulation |
-
-### @gscdump/cli
-
-| Package | Purpose |
-|---------|---------|
-| `gscdump` | Core library |
-| `@modelcontextprotocol/sdk` | MCP SDK |
-| `google-auth-library` | OAuth2 flows |
-| `citty` | CLI framework |
-| `@clack/prompts` | Interactive prompts |
-| `consola` | Logging |
-| `zod` | Schema validation (MCP) |
-
-## Build System
-
-- **obuild**: TypeScript build tool for all packages
-- **pnpm catalogs**: Centralized dependency versions in `pnpm-workspace.yaml`
-- **ESM only**: All packages use `"type": "module"`
+- **obuild** for all packages
+- **pnpm catalogs** for centralized dependency versions
+- **ESM only** (`"type": "module"`)

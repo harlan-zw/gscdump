@@ -59,8 +59,10 @@ export function clearLine(): void {
   process.stdout.write('\r\x1B[K')
 }
 
+const PERIOD_RE = /^(\d+)([dmy])$/i
+
 export function parsePeriod(periodStr: string): { amount: number, unit: 'days' | 'months' | 'years' } | null {
-  const match = periodStr.match(/^(\d+)([dmy])$/i)
+  const match = periodStr.match(PERIOD_RE)
   if (!match)
     return null
 

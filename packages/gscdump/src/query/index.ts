@@ -31,6 +31,20 @@ export type { Country, Device, SearchType } from './constants'
 // Operators
 export { and, between, contains, eq, gt, gte, inArray, like, lt, lte, ne, not, notRegex, or, regex, topLevel } from './operators'
 
+export {
+  buildLogicalComparisonPlan,
+  buildLogicalPlan,
+  UnsupportedLogicalCapabilityError,
+} from './plan'
+export type {
+  ComparisonFilter,
+  LogicalComparisonPlan,
+  LogicalDataset,
+  LogicalDimensionFilter,
+  LogicalMetricFilter,
+  LogicalQueryPlan,
+  PlannerCapabilities,
+} from './plan'
 // Resolver
 export { extractDateRange, extractMetricFilters, extractSpecialOperatorFilters, isJsonFilter, parseJsonFilter } from './resolver'
 

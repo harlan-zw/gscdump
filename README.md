@@ -21,7 +21,7 @@
 - 💾 Own your data - export to any SQL database. No BigQuery, no 16-month expiry.
 - 📊 Unlimited queries and row limits - GSC UI caps at 1k, API at 25k.
 - 🤖 MCP Server - let Claude, Cursor, or any AI agent query your search data directly.
-- 🔍 SEO analysis built-in - cannibalization, striking distance, movers & shakers, decay detection.
+- 🔍 SEO analysis built-in - striking distance, opportunity, movers & shakers, decay, brand/non-brand, clustering, concentration, seasonality.
 - ⚡ Indexing API - check index status, request indexing, batch operations.
 - 🎯 Typed query builder - Drizzle-style API with streaming pagination.
 - 🌐 Edge-compatible - works in Cloudflare Workers, Deno, etc.
@@ -30,7 +30,7 @@
 
 Google's export options are broken for developers. The UI caps at 1,000 rows, the API stops at 25k per request, and bulk export locks you into BigQuery. Worse, GSC deletes your data after 16 months.
 
-With gscdump you get an MCP server that lets AI agents query your search data directly, a CLI for scripting and automation, built-in SEO analysis like keyword cannibalization and striking distance, plus indexing tools to check status and request indexing.
+With gscdump you get an MCP server that lets AI agents query your search data directly, a CLI for scripting and automation, built-in SEO analysis (striking distance, movers, decay, brand/non-brand, clustering, concentration, opportunity, seasonality), plus indexing tools to check status and request indexing.
 
 Export complete data with no row limits to any database you control. Your data, your infrastructure, forever.
 
@@ -57,14 +57,38 @@ npx gscdump mcp
 
 | Command | Description |
 |---------|-------------|
-| `init` | Set up authentication (cloud or local) |
+| `init` | Set up Google OAuth credentials |
 | `dump` | Export search analytics to stdout/file |
-| `query` | Run custom queries with dimensions |
+| `query` | Run custom queries (reads local store by default; `--live` hits GSC) |
+| `sync` | Pull GSC rows into the local DuckDB/Parquet store |
 | `sites` | List GSC properties |
 | `sitemaps` | List/manage sitemaps |
+| `inspect` | URL inspection |
+| `analyze` | Run SEO analyzers against local data (`--live` for row-based via API) |
+| `store stats` | Show row/byte counts, disk footprint, sync watermarks |
+| `store compact` | Roll daily partitions older than N days into monthly files |
+| `store gc` | Delete orphaned object-store files |
 | `auth` | Manage authentication |
 | `config` | Manage CLI configuration |
 | `mcp` | Start MCP server for AI assistants |
+
+### Analyzers
+
+`gscdump analyze <tool>` runs one of:
+
+| Tool | What it surfaces |
+|------|------------------|
+| `striking-distance` | Keywords ranking just outside page 1 |
+| `opportunity` | High-impression, low-CTR pages worth optimizing |
+| `movers` | Biggest clicks/impressions gainers and losers vs. a prior period |
+| `decay` | Pages losing traffic over time |
+| `brand` | Brand vs. non-brand share of clicks |
+| `cannibalization` | Multiple pages competing for the same query |
+| `clustering` | Groups of related queries by prefix or intent |
+| `concentration` | How traffic concentrates across pages/keywords |
+| `seasonality` | Monthly/weekly cyclicality in traffic |
+| `zero-click` | High-impression queries with no clicks |
+| `trends` | Rolling-window clicks/impressions trajectory |
 
 ## MCP Server
 
@@ -163,17 +187,12 @@ const metadata = await client.indexing.getMetadata(url)
 
 ## Auth Setup
 
-**Cloud mode** (recommended):
-```bash
-npx gscdump init  # Select "cloud"
-```
-Easy setup via cloud.gscdump.com - no API keys needed.
+Bring your own Google OAuth credentials:
 
-**Local mode** (bring your own credentials):
 1. Create a Google Cloud project
 2. Enable "Search Console API" and "Web Search Indexing API"
 3. Create OAuth2 credentials (Desktop app)
-4. Run `npx gscdump init` and select "local"
+4. Run `npx gscdump init`
 
 **Environment variables:**
 ```bash
@@ -186,8 +205,10 @@ GOOGLE_REFRESH_TOKEN=...
 
 | Package | Description |
 |---------|-------------|
-| [`gscdump`](./packages/gscdump) | Core library - GSC API wrapper + query builder |
-| [`@gscdump/cli`](./packages/cli) | CLI + MCP server |
+| [`gscdump`](./packages/gscdump) | Core library: REST client + typed query builder + storage engine |
+| [`@gscdump/analysis`](./packages/analysis) | SEO analyzers (row-based + SQL-native) |
+| [`@gscdump/cli`](./packages/cli) | CLI entry (`gscdump`) |
+| [`@gscdump/mcp`](./packages/mcp) | MCP server (`gscdump-mcp` bin, also wrapped by `gscdump mcp`) |
 
 ## License
 

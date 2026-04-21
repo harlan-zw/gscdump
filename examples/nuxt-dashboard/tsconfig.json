@@ -1,0 +1,36 @@
+{
+  "extends": "./.nuxt/tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@gscdump/analysis": ["../../packages/analysis/src/index.ts"],
+      "@gscdump/engine-wasm": ["../../packages/engine-wasm/src/index.ts"],
+      "@gscdump/engine-sqlite": ["../../packages/engine-sqlite/src/index.ts"],
+      "@gscdump/engine-duckdb-node": ["../../packages/engine-duckdb-node/src/index.ts"],
+      "@gscdump/analysis/analyzer": ["../../packages/analysis/src/analyzer/index.ts"],
+      "@gscdump/analysis/query": ["../../packages/analysis/src/query/index.ts"],
+      "@gscdump/analysis/semantic": ["../../packages/analysis/src/semantic/index.ts"],
+      "@gscdump/analysis/source": ["../../packages/analysis/src/source/index.ts"],
+      "@gscdump/analysis/period": ["../../packages/analysis/src/period/index.ts"],
+      "@gscdump/engine": ["../../packages/engine/src/index.ts"],
+      "@gscdump/engine/contracts": ["../../packages/engine/src/contracts.ts"],
+      "@gscdump/engine/snapshot": ["../../packages/engine/src/snapshot.ts"],
+      "@gscdump/engine/planner": ["../../packages/engine/src/planner.ts"],
+      "@gscdump/engine/schema": ["../../packages/engine/src/schema.ts"],
+      "@gscdump/engine/resolver": ["../../packages/engine/src/resolver/index.ts"],
+      "@gscdump/engine/ingest": ["../../packages/engine/src/ingest.ts"],
+      "@gscdump/engine/sql": ["../../packages/engine/src/sql-bind.ts"],
+      "@gscdump/engine/node": ["../../packages/engine/src/adapters/duckdb-node.ts"],
+      "@gscdump/engine/filesystem": ["../../packages/engine/src/adapters/filesystem.ts"],
+      "@gscdump/engine/http": ["../../packages/engine/src/adapters/http.ts"],
+      "@gscdump/engine/hyparquet": ["../../packages/engine/src/adapters/hyparquet.ts"],
+      "@gscdump/engine/r2": ["../../packages/engine/src/adapters/r2.ts"]
+    },
+    "skipLibCheck": true
+  },
+  "exclude": [
+    "../../node_modules/**",
+    "**/node_modules",
+    "**/dist",
+    "**/.output"
+  ]
+}

@@ -1,217 +1,163 @@
-/**
- * GSC API error detection and formatting utilities.
- * Provides helpful messages for quota exceeded and rate limit errors.
- */
+// GSC API error classification + formatting.
+// Classify `unknown` into a discriminated `GscError` union once, then
+// downstream code switches on `kind` instead of string-matching.
 
-export interface ErrorInfo {
-  isQuotaError: boolean
-  isRateLimitError: boolean
-  isAuthError: boolean
-  code?: number
-  message: string
-  retryAfter?: number
-  suggestion: string
-}
+export type GscErrorKind
+  = | 'auth-expired'
+    | 'rate-limited'
+    | 'not-found'
+    | 'validation'
+    | 'storage'
+    | 'transport'
 
-/** GSC API quota limits (approximate) */
+export type GscError
+  = | { kind: 'auth-expired', message: string, cause: unknown }
+    | { kind: 'rate-limited', message: string, retryAfter?: number, cause: unknown }
+    | { kind: 'not-found', message: string, cause: unknown }
+    | { kind: 'validation', message: string, cause: unknown }
+    | { kind: 'storage', message: string, cause: unknown }
+    | { kind: 'transport', message: string, status?: number, cause: unknown }
+
+/** Approximate per-day GSC API quotas, used in CLI messaging. */
 export const GSC_QUOTAS = {
-  /** Search Analytics API: ~25,000 requests/day per project */
   searchAnalytics: 25_000,
-  /** URL Inspection API: ~2,000 requests/day per property */
   urlInspection: 2_000,
-  /** Indexing API: ~200 requests/day per property */
   indexing: 200,
 } as const
 
-/**
- * Detects if an error is a quota exceeded error (403 quotaExceeded).
- */
-export function isQuotaError(error: unknown): boolean {
-  const msg = getErrorMessage(error).toLowerCase()
-  const code = getErrorCode(error)
-  return code === 403 && (
-    msg.includes('quota')
-    || msg.includes('limit exceeded')
-    || msg.includes('rate limit')
-    || msg.includes('quotaexceeded')
-  )
-}
-
-/**
- * Detects if an error is a rate limit error (429 Too Many Requests).
- */
-export function isRateLimitError(error: unknown): boolean {
-  const code = getErrorCode(error)
-  return code === 429
-}
-
-/**
- * Detects if an error is an authentication error (401/403 without quota).
- */
-export function isAuthError(error: unknown): boolean {
-  const code = getErrorCode(error)
-  const msg = getErrorMessage(error).toLowerCase()
-  if (code === 401)
-    return true
-  if (code === 403 && !isQuotaError(error))
-    return msg.includes('access') || msg.includes('permission') || msg.includes('forbidden')
-  return false
-}
-
-/**
- * Extracts HTTP status code from various error formats.
- */
-export function getErrorCode(error: unknown): number | undefined {
+/** Extract the HTTP status from any of the shapes we've seen in the wild. */
+function extractStatus(error: unknown): number | undefined {
   if (!error || typeof error !== 'object')
     return undefined
   const e = error as Record<string, unknown>
-  // ofetch error format
-  if ('statusCode' in e && typeof e.statusCode === 'number')
+  if (typeof e.statusCode === 'number')
     return e.statusCode
-  // Standard response format
-  if ('status' in e && typeof e.status === 'number')
+  if (typeof e.status === 'number')
     return e.status
-  // Nested response
-  if ('response' in e && e.response && typeof e.response === 'object') {
+  if (e.response && typeof e.response === 'object') {
     const resp = e.response as Record<string, unknown>
-    if ('status' in resp && typeof resp.status === 'number')
+    if (typeof resp.status === 'number')
       return resp.status
   }
-  // Google API error format
-  if ('code' in e && typeof e.code === 'number')
+  if (typeof e.code === 'number')
     return e.code
   return undefined
 }
 
-/**
- * Extracts error message from various error formats.
- */
-export function getErrorMessage(error: unknown): string {
+function extractMessage(error: unknown): string {
   if (!error)
     return 'Unknown error'
   if (typeof error === 'string')
     return error
   if (error instanceof Error)
     return error.message
-  if (typeof error === 'object') {
-    const e = error as Record<string, unknown>
-    if ('message' in e && typeof e.message === 'string')
-      return e.message
-    if ('statusMessage' in e && typeof e.statusMessage === 'string')
-      return e.statusMessage
-    // Google API nested error
-    if ('data' in e && e.data && typeof e.data === 'object') {
-      const data = e.data as Record<string, unknown>
-      if ('error' in data && data.error && typeof data.error === 'object') {
-        const err = data.error as Record<string, unknown>
-        if ('message' in err && typeof err.message === 'string')
-          return err.message
-      }
+  if (typeof error !== 'object')
+    return String(error)
+  const e = error as Record<string, unknown>
+  // Google API nested error takes priority — its message is more specific than the ofetch wrapper's.
+  if (e.data && typeof e.data === 'object') {
+    const data = e.data as Record<string, unknown>
+    if (data.error && typeof data.error === 'object') {
+      const inner = data.error as Record<string, unknown>
+      if (typeof inner.message === 'string')
+        return inner.message
     }
   }
+  if (typeof e.message === 'string')
+    return e.message
+  if (typeof e.statusMessage === 'string')
+    return e.statusMessage
   return String(error)
 }
 
-/**
- * Extracts retry-after value from error headers (in seconds).
- */
-export function getRetryAfter(error: unknown): number | undefined {
+function extractRetryAfter(error: unknown): number | undefined {
   if (!error || typeof error !== 'object')
     return undefined
   const e = error as Record<string, unknown>
-  // Check headers
-  if ('headers' in e && e.headers && typeof e.headers === 'object') {
-    const headers = e.headers as Record<string, unknown>
-    const retryAfter = headers['retry-after'] || headers['Retry-After']
-    if (typeof retryAfter === 'string') {
-      const seconds = Number.parseInt(retryAfter, 10)
-      return Number.isNaN(seconds) ? undefined : seconds
-    }
-    if (typeof retryAfter === 'number')
-      return retryAfter
+  const container = (e.headers && typeof e.headers === 'object')
+    ? e.headers as Record<string, unknown>
+    : (e.response && typeof e.response === 'object')
+        ? ((e.response as Record<string, unknown>).headers as Record<string, unknown> | undefined)
+        : undefined
+  if (!container)
+    return undefined
+  const raw = container['retry-after'] ?? container['Retry-After']
+  if (typeof raw === 'number')
+    return raw
+  if (typeof raw === 'string') {
+    const seconds = Number.parseInt(raw, 10)
+    return Number.isNaN(seconds) ? undefined : seconds
   }
   return undefined
 }
 
-function formatQuotaSuggestion(message: string, retryAfter?: number): string {
-  if (message.includes('Search Console API'))
-    return `You exceeded the Search Analytics quota (${GSC_QUOTAS.searchAnalytics}/day). Try again tomorrow.`
-  if (message.includes('Indexing API'))
-    return `You exceeded the Indexing API quota (${GSC_QUOTAS.indexing}/day). Try again tomorrow.`
-  return `Quota exceeded. Try again in ${retryAfter ? `${retryAfter}s` : '24 hours'}.`
-}
-
-function formatRateLimitSuggestion(retryAfter?: number): string {
-  return `Rate limited. Slow down requests. Try again in ${retryAfter ? `${retryAfter}s` : 'a few minutes'}.`
-}
+const QUOTA_MESSAGE_RE = /quota|rate\s*limit/i
 
 /**
- * Analyzes an error and returns structured information with suggestions.
+ * Classify an unknown error into a `GscError` discriminated union.
+ * Transport is the catch-all — anything without a recognizable status ends up there.
  */
-export function analyzeError(error: unknown): ErrorInfo {
-  const code = getErrorCode(error)
-  const message = getErrorMessage(error)
-  const retryAfter = getRetryAfter(error)
+export function classifyError(cause: unknown): GscError {
+  const status = extractStatus(cause)
+  const message = extractMessage(cause)
 
-  if (isQuotaError(error)) {
-    return {
-      isQuotaError: true,
-      isRateLimitError: false,
-      isAuthError: false,
-      code,
-      message,
-      retryAfter,
-      suggestion: formatQuotaSuggestion(message, retryAfter),
-    }
+  if (status === 401)
+    return { kind: 'auth-expired', message, cause }
+
+  if (status === 429)
+    return { kind: 'rate-limited', message, retryAfter: extractRetryAfter(cause), cause }
+
+  if (status === 403) {
+    // GSC folds daily-quota exhaustion into 403. If the message mentions quota or rate limit,
+    // it's a retry-later condition; otherwise it's a real permission failure.
+    if (QUOTA_MESSAGE_RE.test(message))
+      return { kind: 'rate-limited', message, retryAfter: extractRetryAfter(cause), cause }
+    return { kind: 'auth-expired', message, cause }
   }
 
-  if (isRateLimitError(error)) {
-    return {
-      isQuotaError: false,
-      isRateLimitError: true,
-      isAuthError: false,
-      code,
-      message,
-      retryAfter: retryAfter || 60,
-      suggestion: formatRateLimitSuggestion(retryAfter),
-    }
-  }
+  if (status === 404)
+    return { kind: 'not-found', message, cause }
 
-  if (isAuthError(error)) {
-    return {
-      isQuotaError: false,
-      isRateLimitError: false,
-      isAuthError: true,
-      code,
-      message,
-      suggestion: 'Run `gscdump auth` to re-authenticate.',
-    }
-  }
+  if (status === 400 || status === 422)
+    return { kind: 'validation', message, cause }
 
-  return {
-    isQuotaError: false,
-    isRateLimitError: false,
-    isAuthError: false,
-    code,
-    message,
-    suggestion: '',
+  return { kind: 'transport', message, status, cause }
+}
+
+/** Construct a storage-kind error from inside the analytics engine / adapters. */
+export function storageError(message: string, cause?: unknown): GscError {
+  return { kind: 'storage', message, cause }
+}
+
+function suggestionFor(err: GscError): string {
+  switch (err.kind) {
+    case 'auth-expired':
+      return 'Run `gscdump auth` to re-authenticate.'
+    case 'rate-limited': {
+      const retryIn = err.retryAfter ? `${err.retryAfter}s` : 'a few minutes'
+      if (QUOTA_MESSAGE_RE.test(err.message)) {
+        if (err.message.includes('Indexing API'))
+          return `Indexing API quota exhausted (~${GSC_QUOTAS.indexing}/day). Try again tomorrow.`
+        return `Quota or rate limit hit (Search Analytics ~${GSC_QUOTAS.searchAnalytics}/day). Try again in ${retryIn}.`
+      }
+      return `Rate limited. Slow down requests. Try again in ${retryIn}.`
+    }
+    case 'not-found':
+    case 'validation':
+    case 'storage':
+    case 'transport':
+      return ''
   }
 }
 
-/**
- * Formats an error for CLI display with color codes.
- */
-export function formatErrorForCli(error: unknown): string {
-  const info = analyzeError(error)
-  const lines: string[] = []
-
-  // Error message in red
-  lines.push(`\x1B[31m${info.message}\x1B[0m`)
-
-  if (info.suggestion) {
+/** CLI-facing formatter. Returns an ANSI-colored multi-line string. */
+export function formatErrorForCli(cause: unknown): string {
+  const err = classifyError(cause)
+  const lines: string[] = [`\x1B[31m${err.message}\x1B[0m`]
+  const suggestion = suggestionFor(err)
+  if (suggestion) {
     lines.push('')
-    lines.push(info.suggestion)
+    lines.push(suggestion)
   }
-
   return lines.join('\n')
 }

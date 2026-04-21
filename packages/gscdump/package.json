@@ -40,9 +40,25 @@
       "types": "./dist/query/index.d.mts",
       "import": "./dist/query/index.mjs"
     },
-    "./analysis": {
-      "types": "./dist/analysis/index.d.mts",
-      "import": "./dist/analysis/index.mjs"
+    "./query/plan": {
+      "types": "./dist/query/plan.d.mts",
+      "import": "./dist/query/plan.mjs"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.mts",
+      "import": "./dist/contracts.mjs"
+    },
+    "./driver": {
+      "types": "./dist/driver.d.mts",
+      "import": "./dist/driver.mjs"
+    },
+    "./tenant": {
+      "types": "./dist/tenant.d.mts",
+      "import": "./dist/tenant.mjs"
+    },
+    "./normalize": {
+      "types": "./dist/normalize.d.mts",
+      "import": "./dist/normalize.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -62,6 +78,18 @@
     "test:e2e": "vitest run e2e/",
     "test:real": "RUN_REAL_CREDENTIALS=true vitest run e2e/real-credentials.test.ts",
     "prepack": "pnpm run build"
+  },
+  "peerDependencies": {
+    "@googleapis/indexing": "catalog:deps",
+    "@googleapis/searchconsole": "catalog:deps"
+  },
+  "peerDependenciesMeta": {
+    "@googleapis/indexing": {
+      "optional": true
+    },
+    "@googleapis/searchconsole": {
+      "optional": true
+    }
   },
   "dependencies": {
     "dayjs": "catalog:deps",

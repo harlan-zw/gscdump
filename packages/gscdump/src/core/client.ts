@@ -128,32 +128,37 @@ export function createFetch(auth: Auth, options?: FetchOptions): $Fetch {
   })
 }
 
+/** Per-call options. `signal` cancels the in-flight request (and, for `query`, the next page too). */
+export interface CallOptions {
+  signal?: AbortSignal
+}
+
 export interface GoogleSearchConsoleClient {
   /** Query search analytics with builder, returns async generator yielding typed row batches */
-  query: <D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>) => AsyncGenerator<GSCRow<D, C>[]>
+  query: <D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions) => AsyncGenerator<GSCRow<D, C>[]>
 
   /** List all sites */
-  sites: () => Promise<ApiSite[]>
+  sites: (opts?: CallOptions) => Promise<ApiSite[]>
 
   /** Inspect a URL */
-  inspect: (siteUrl: string, url: string) => Promise<InspectUrlIndexResponse>
+  inspect: (siteUrl: string, url: string, opts?: CallOptions) => Promise<InspectUrlIndexResponse>
 
   /** Sitemap operations */
   sitemaps: {
-    list: (siteUrl: string) => Promise<ApiSitemap[]>
-    get: (siteUrl: string, feedpath: string) => Promise<ApiSitemap>
-    submit: (siteUrl: string, feedpath: string) => Promise<void>
-    delete: (siteUrl: string, feedpath: string) => Promise<void>
+    list: (siteUrl: string, opts?: CallOptions) => Promise<ApiSitemap[]>
+    get: (siteUrl: string, feedpath: string, opts?: CallOptions) => Promise<ApiSitemap>
+    submit: (siteUrl: string, feedpath: string, opts?: CallOptions) => Promise<void>
+    delete: (siteUrl: string, feedpath: string, opts?: CallOptions) => Promise<void>
   }
 
   /** Indexing API operations */
   indexing: {
-    publish: (url: string, type: 'URL_UPDATED' | 'URL_DELETED') => Promise<PublishUrlNotificationResponse>
-    getMetadata: (url: string) => Promise<UrlNotificationMetadata>
+    publish: (url: string, type: 'URL_UPDATED' | 'URL_DELETED', opts?: CallOptions) => Promise<PublishUrlNotificationResponse>
+    getMetadata: (url: string, opts?: CallOptions) => Promise<UrlNotificationMetadata>
   }
 
   /** @internal */
-  _rawQuery: (siteUrl: string, body: SearchAnalyticsQuery) => Promise<SearchAnalyticsResponse>
+  _rawQuery: (siteUrl: string, body: SearchAnalyticsQuery, opts?: CallOptions) => Promise<SearchAnalyticsResponse>
 }
 
 export interface GoogleSearchConsoleClientOptions {
@@ -196,21 +201,23 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
     fetch = createFetch(authState, fetchOptions)
   }
 
-  const rawQuery = (siteUrl: string, body: SearchAnalyticsQuery): Promise<SearchAnalyticsResponse> =>
+  const rawQuery = (siteUrl: string, body: SearchAnalyticsQuery, opts?: CallOptions): Promise<SearchAnalyticsResponse> =>
     fetch<SearchAnalyticsResponse>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, {
       method: 'POST',
       body,
+      signal: opts?.signal,
     })
 
   return {
-    async* query<D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>): AsyncGenerator<GSCRow<D, C>[]> {
+    async* query<D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions): AsyncGenerator<GSCRow<D, C>[]> {
       const state = builder.getState()
       const body = resolveToBody(state)
       const rowLimit = body.rowLimit || 25_000
       let startRow = body.startRow || 0
 
       while (true) {
-        const response = await rawQuery(siteUrl, { ...body, startRow, rowLimit })
+        opts?.signal?.throwIfAborted()
+        const response = await rawQuery(siteUrl, { ...body, startRow, rowLimit }, opts)
         const rows = (response.rows || []).map((row) => {
           const result: any = {
             clicks: row.clicks ?? 0,
@@ -230,47 +237,52 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
       }
     },
 
-    sites: async () => {
-      const res = await fetch<{ siteEntry?: ApiSite[] }>(`${GSC_API}/webmasters/v3/sites`)
+    sites: async (opts) => {
+      const res = await fetch<{ siteEntry?: ApiSite[] }>(`${GSC_API}/webmasters/v3/sites`, { signal: opts?.signal })
       return res.siteEntry || []
     },
 
-    inspect: (siteUrl: string, url: string) =>
+    inspect: (siteUrl, url, opts) =>
       fetch<InspectUrlIndexResponse>(`${GSC_API}/v1/urlInspection/index:inspect`, {
         method: 'POST',
         body: { inspectionUrl: url, siteUrl },
+        signal: opts?.signal,
       }),
 
     sitemaps: {
-      list: async (siteUrl: string) => {
-        const res = await fetch<{ sitemap?: ApiSitemap[] }>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps`)
+      list: async (siteUrl, opts) => {
+        const res = await fetch<{ sitemap?: ApiSitemap[] }>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps`, { signal: opts?.signal })
         return res.sitemap || []
       },
 
-      get: (siteUrl: string, feedpath: string) =>
-        fetch<ApiSitemap>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps/${encodeURIComponent(feedpath)}`),
+      get: (siteUrl, feedpath, opts) =>
+        fetch<ApiSitemap>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps/${encodeURIComponent(feedpath)}`, { signal: opts?.signal }),
 
-      submit: (siteUrl: string, feedpath: string) =>
+      submit: (siteUrl, feedpath, opts) =>
         fetch<void>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps/${encodeURIComponent(feedpath)}`, {
           method: 'PUT',
+          signal: opts?.signal,
         }),
 
-      delete: (siteUrl: string, feedpath: string) =>
+      delete: (siteUrl, feedpath, opts) =>
         fetch<void>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps/${encodeURIComponent(feedpath)}`, {
           method: 'DELETE',
+          signal: opts?.signal,
         }),
     },
 
     indexing: {
-      publish: (url: string, type: 'URL_UPDATED' | 'URL_DELETED') =>
+      publish: (url, type, opts) =>
         fetch<PublishUrlNotificationResponse>(`${INDEXING_API}/v3/urlNotifications:publish`, {
           method: 'POST',
           body: { url, type },
+          signal: opts?.signal,
         }),
 
-      getMetadata: (url: string) =>
+      getMetadata: (url, opts) =>
         fetch<UrlNotificationMetadata>(`${INDEXING_API}/v3/urlNotifications/metadata`, {
           query: { url },
+          signal: opts?.signal,
         }),
     },
 

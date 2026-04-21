@@ -1,0 +1,55 @@
+{
+  "name": "@gscdump/cloud",
+  "type": "module",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Cloud SDK + cloud CLI for Google Search Console (frozen — not under active development).",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/cloud"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "bin": {
+    "gscdump-cloud": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "obuild",
+    "dev": "obuild --stub",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "prepack": "pnpm run build"
+  },
+  "dependencies": {
+    "@clack/prompts": "catalog:deps",
+    "@gscdump/analysis": "workspace:*",
+    "citty": "catalog:deps",
+    "consola": "catalog:deps",
+    "gscdump": "workspace:*",
+    "ofetch": "catalog:deps"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "vitest": "catalog:dev-test"
+  }
+}

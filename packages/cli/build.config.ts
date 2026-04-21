@@ -5,6 +5,12 @@ export default defineBuildConfig({
     {
       type: 'bundle',
       input: ['./src/index.ts'],
+      rolldown: {
+        external: [
+          /@duckdb\/node-api/,
+          /@duckdb\/node-bindings/,
+        ],
+      },
     },
   ],
 })

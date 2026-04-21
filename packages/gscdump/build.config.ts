@@ -14,9 +14,33 @@ export default defineBuildConfig({
     },
     {
       type: 'bundle',
-      input: ['./src/analysis/index.ts'],
+      input: ['./src/query/plan.ts'],
       outDir: './dist',
-      name: 'analysis',
+      name: 'query-plan',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/contracts.ts'],
+      outDir: './dist',
+      name: 'contracts',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/driver.ts'],
+      outDir: './dist',
+      name: 'driver',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/tenant.ts'],
+      outDir: './dist',
+      name: 'tenant',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/normalize.ts'],
+      outDir: './dist',
+      name: 'normalize',
     },
   ],
 })

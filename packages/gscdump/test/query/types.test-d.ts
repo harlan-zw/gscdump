@@ -2,6 +2,8 @@ import type { Device, GSCRow } from '../../src/query'
 import { describe, expectTypeOf, it } from 'vitest'
 import { and, between, contains, Countries, country, date, device, Devices, eq, gsc, inArray, page, query, regex } from '../../src/query'
 
+const HOW_TO_RE = /how to/
+
 describe('type inference', () => {
   describe('eq narrowing', () => {
     it('narrows device type with eq', () => {
@@ -131,7 +133,7 @@ describe('type inference', () => {
         .select('query', 'page')
         .where(and(
           between(date, '2024-01-01', '2024-01-31'),
-          regex(query, /how to/),
+          regex(query, HOW_TO_RE),
         ))
         .limit(100)
 
