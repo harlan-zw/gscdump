@@ -43,6 +43,16 @@ export default defineBuildConfig({
     },
     {
       type: 'bundle',
+      input: ['./src/rollups.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/entities.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
       input: ['./src/adapters/duckdb-node.ts'],
       outDir: './dist',
     },
@@ -69,6 +79,11 @@ export default defineBuildConfig({
     {
       type: 'bundle',
       input: ['./src/adapters/r2.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/adapters/r2-manifest.ts'],
       outDir: './dist',
     },
     {

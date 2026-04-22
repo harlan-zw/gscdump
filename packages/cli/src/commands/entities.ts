@@ -1,0 +1,464 @@
+import type { IndexingMetadataRecord, InspectionRecord, SitemapRecord } from '@gscdump/engine/entities'
+import { Buffer } from 'node:buffer'
+import { readFile } from 'node:fs/promises'
+import process from 'node:process'
+import {
+  createIndexingMetadataStore,
+  createInspectionStore,
+  createSitemapStore,
+} from '@gscdump/engine/entities'
+import { defineCommand } from 'citty'
+import { createCommandContext } from '../context'
+import { logger, progressBar } from '../utils'
+
+const INSPECTION_QPD_PER_PROPERTY = 2000
+const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
+
+async function readUrlList(opts: { file?: string }): Promise<string[]> {
+  if (opts.file) {
+    const text = await readFile(opts.file, 'utf8')
+    return text.split('\n').map(l => l.trim()).filter(Boolean)
+  }
+  // Read URLs from stdin (one per line) so this composes with `gscdump query`,
+  // `cat sitemap.txt`, etc.
+  const chunks: Buffer[] = []
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
+  return Buffer.concat(chunks).toString('utf8').split('\n').map(l => l.trim()).filter(Boolean)
+}
+
+const inspectSubCommand = defineCommand({
+  meta: {
+    name: 'inspect',
+    description: 'Run URL Inspection for a list of URLs and persist results to the local entity store',
+  },
+  args: {
+    site: {
+      type: 'string',
+      alias: 's',
+      required: true,
+      description: 'Site URL (e.g., sc-domain:example.com)',
+    },
+    file: {
+      type: 'string',
+      alias: 'f',
+      description: 'Path to a file with one URL per line. If omitted, reads from stdin.',
+    },
+    limit: {
+      type: 'string',
+      description: `Max URLs to inspect this run (default: ${INSPECTION_QPD_PER_PROPERTY}, the per-property GSC daily quota)`,
+    },
+    concurrency: {
+      type: 'string',
+      alias: 'c',
+      default: '4',
+      description: 'Concurrent in-flight inspect calls (default: 4)',
+    },
+    quiet: {
+      type: 'boolean',
+      alias: 'q',
+      default: false,
+      description: 'Suppress progress output',
+    },
+  },
+  async run({ args }) {
+    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
+    const client = ctx.client!
+    const store = ctx.store!
+    const siteUrl = String(args.site)
+    const limit = args.limit ? Number.parseInt(String(args.limit), 10) : INSPECTION_QPD_PER_PROPERTY
+    const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 4)
+    const quiet = Boolean(args.quiet)
+
+    const urls = (await readUrlList({ file: args.file ? String(args.file) : undefined })).slice(0, limit)
+    if (urls.length === 0) {
+      logger.warn('No URLs to inspect.')
+      return
+    }
+    if (urls.length === limit && limit < INSPECTION_QPD_PER_PROPERTY)
+      logger.info(`Capping at --limit ${limit}`)
+    if (urls.length === INSPECTION_QPD_PER_PROPERTY)
+      logger.info(`Hit per-property daily inspection quota (${INSPECTION_QPD_PER_PROPERTY}); remaining URLs will be queued for tomorrow.`)
+
+    const inspector = createInspectionStore({ dataSource: store.dataSource })
+
+    let completed = 0
+    let failed = 0
+    const records: InspectionRecord[] = []
+    const failures: Array<{ url: string, error: string }> = []
+    const cursor = { i: 0 }
+
+    async function worker(): Promise<void> {
+      while (true) {
+        const i = cursor.i++
+        if (i >= urls.length)
+          return
+        const url = urls[i]!
+        const result = await client.inspect(siteUrl, url).catch((err: Error) => err)
+        if (result instanceof Error) {
+          failed++
+          failures.push({ url, error: result.message })
+        }
+        else {
+          const ix = result.inspectionResult
+          const indexStatus = ix?.indexStatusResult
+          records.push({
+            url,
+            inspectedAt: new Date().toISOString(),
+            indexStatus: indexStatus?.verdict ?? undefined,
+            lastCrawlTime: indexStatus?.lastCrawlTime ?? undefined,
+            googleCanonical: indexStatus?.googleCanonical ?? undefined,
+            userCanonical: indexStatus?.userCanonical ?? undefined,
+            coverageState: indexStatus?.coverageState ?? undefined,
+            robotsTxtState: indexStatus?.robotsTxtState ?? undefined,
+            indexingState: indexStatus?.indexingState ?? undefined,
+            pageFetchState: indexStatus?.pageFetchState ?? undefined,
+            mobileUsabilityVerdict: ix?.mobileUsabilityResult?.verdict ?? undefined,
+            richResultsVerdict: ix?.richResultsResult?.verdict ?? undefined,
+            raw: ix,
+          })
+        }
+        completed++
+        if (!quiet)
+          process.stdout.write(`\r${progressBar(completed, urls.length, `${url.slice(0, 60)}`)}`)
+      }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, worker))
+
+    if (!quiet)
+      process.stdout.write('\n')
+
+    await inspector.writeBatch(
+      { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
+      records,
+    )
+
+    if (!quiet) {
+      logger.success(`Inspected ${records.length}/${urls.length} URL(s)`)
+      if (failed > 0) {
+        logger.warn(`${failed} failed:`)
+        for (const f of failures.slice(0, 5))
+          console.log(`  ${f.url}: ${f.error}`)
+        if (failures.length > 5)
+          console.log(`  ... and ${failures.length - 5} more`)
+      }
+    }
+
+    if (failed > 0)
+      process.exit(1)
+  },
+})
+
+const showSubCommand = defineCommand({
+  meta: {
+    name: 'show',
+    description: 'Print the latest inspection record for a URL from the local entity store',
+  },
+  args: {
+    site: { type: 'string', alias: 's', required: true, description: 'Site URL' },
+    url: { type: 'positional', required: true, description: 'URL to look up' },
+    json: { type: 'boolean', default: false, description: 'Output as JSON' },
+  },
+  async run({ args }) {
+    const ctx = await createCommandContext({ needsStore: true })
+    const store = ctx.store!
+    const inspector = createInspectionStore({ dataSource: store.dataSource })
+    const record = await inspector.getLatest(
+      { userId: store.userId, siteId: store.siteIdFor(String(args.site)) },
+      String(args.url),
+    )
+    if (!record) {
+      logger.warn(`No inspection record for ${args.url}`)
+      process.exit(1)
+    }
+    if (args.json) {
+      console.log(JSON.stringify(record, null, 2))
+      return
+    }
+    console.log()
+    console.log(`  \x1B[1m${record.url}\x1B[0m`)
+    console.log(`  Inspected:    ${record.inspectedAt}`)
+    if (record.indexStatus)
+      console.log(`  Index:        ${record.indexStatus}`)
+    if (record.lastCrawlTime)
+      console.log(`  Last crawl:   ${record.lastCrawlTime}`)
+    if (record.googleCanonical)
+      console.log(`  Canonical:    ${record.googleCanonical}`)
+    if (record.coverageState)
+      console.log(`  Coverage:     ${record.coverageState}`)
+    if (record.mobileUsabilityVerdict)
+      console.log(`  Mobile:       ${record.mobileUsabilityVerdict}`)
+    if (record.richResultsVerdict)
+      console.log(`  Rich results: ${record.richResultsVerdict}`)
+    console.log()
+  },
+})
+
+const sitemapsSnapshotSubCommand = defineCommand({
+  meta: {
+    name: 'snapshot',
+    description: 'Fetch current sitemap state from GSC and persist to the local entity store',
+  },
+  args: {
+    site: {
+      type: 'string',
+      alias: 's',
+      required: true,
+      description: 'Site URL (e.g., sc-domain:example.com)',
+    },
+    quiet: {
+      type: 'boolean',
+      alias: 'q',
+      default: false,
+      description: 'Suppress progress output',
+    },
+    json: {
+      type: 'boolean',
+      default: false,
+      description: 'Emit the snapshot JSON to stdout',
+    },
+  },
+  async run({ args }) {
+    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
+    const client = ctx.client!
+    const store = ctx.store!
+    const siteUrl = String(args.site)
+    const quiet = Boolean(args.quiet)
+
+    const apiSitemaps = await client.sitemaps.list(siteUrl)
+    const capturedAt = new Date().toISOString()
+    const records: SitemapRecord[] = apiSitemaps
+      .filter(s => typeof s.path === 'string')
+      .map(s => ({
+        path: s.path as string,
+        capturedAt,
+        lastDownloaded: s.lastDownloaded ?? undefined,
+        lastSubmitted: s.lastSubmitted ?? undefined,
+        type: s.type ?? undefined,
+        isPending: s.isPending ?? undefined,
+        isSitemapsIndex: s.isSitemapsIndex ?? undefined,
+        errors: s.errors ?? undefined,
+        warnings: s.warnings ?? undefined,
+        contents: s.contents?.map(c => ({
+          type: c.type ?? undefined,
+          submitted: c.submitted ?? undefined,
+          indexed: c.indexed ?? undefined,
+        })),
+        raw: s,
+      }))
+
+    const sitemaps = createSitemapStore({ dataSource: store.dataSource })
+    await sitemaps.writeSnapshot(
+      { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
+      records,
+    )
+
+    if (args.json) {
+      console.log(JSON.stringify({ site: siteUrl, capturedAt, records }, null, 2))
+      return
+    }
+    if (!quiet) {
+      logger.success(`Captured ${records.length} sitemap(s) for ${siteUrl}`)
+      for (const r of records) {
+        const errors = r.errors && r.errors !== '0' ? ` \x1B[31merr=${r.errors}\x1B[0m` : ''
+        const warnings = r.warnings && r.warnings !== '0' ? ` \x1B[33mwarn=${r.warnings}\x1B[0m` : ''
+        const downloaded = r.lastDownloaded ? ` last=${r.lastDownloaded}` : ''
+        console.log(`  ${r.path}${downloaded}${errors}${warnings}`)
+      }
+    }
+  },
+})
+
+const sitemapsShowSubCommand = defineCommand({
+  meta: {
+    name: 'show',
+    description: 'Print the latest captured sitemap state for a feedpath',
+  },
+  args: {
+    site: { type: 'string', alias: 's', required: true, description: 'Site URL' },
+    path: { type: 'positional', required: true, description: 'Sitemap path (feedpath)' },
+    json: { type: 'boolean', default: false, description: 'Output as JSON' },
+  },
+  async run({ args }) {
+    const ctx = await createCommandContext({ needsStore: true })
+    const store = ctx.store!
+    const sitemaps = createSitemapStore({ dataSource: store.dataSource })
+    const record = await sitemaps.getLatest(
+      { userId: store.userId, siteId: store.siteIdFor(String(args.site)) },
+      String(args.path),
+    )
+    if (!record) {
+      logger.warn(`No sitemap record for ${args.path}`)
+      process.exit(1)
+    }
+    if (args.json) {
+      console.log(JSON.stringify(record, null, 2))
+      return
+    }
+    console.log()
+    console.log(`  \x1B[1m${record.path}\x1B[0m`)
+    console.log(`  Captured:     ${record.capturedAt}`)
+    if (record.lastDownloaded)
+      console.log(`  Downloaded:   ${record.lastDownloaded}`)
+    if (record.lastSubmitted)
+      console.log(`  Submitted:    ${record.lastSubmitted}`)
+    if (record.type)
+      console.log(`  Type:         ${record.type}`)
+    if (record.errors)
+      console.log(`  Errors:       ${record.errors}`)
+    if (record.warnings)
+      console.log(`  Warnings:     ${record.warnings}`)
+    if (record.contents?.length) {
+      console.log(`  Contents:`)
+      for (const c of record.contents) {
+        const bits = [c.type, c.submitted && `submitted=${c.submitted}`, c.indexed && `indexed=${c.indexed}`]
+          .filter(Boolean)
+          .join('  ')
+        console.log(`    ${bits}`)
+      }
+    }
+    console.log()
+  },
+})
+
+const indexingSnapshotSubCommand = defineCommand({
+  meta: {
+    name: 'snapshot',
+    description: 'Fetch Indexing API metadata (latest update/remove per URL) and persist to the local entity store',
+  },
+  args: {
+    site: {
+      type: 'string',
+      alias: 's',
+      required: true,
+      description: 'Site URL (e.g., sc-domain:example.com)',
+    },
+    file: {
+      type: 'string',
+      alias: 'f',
+      description: 'Path to a file with one URL per line. If omitted, reads from stdin.',
+    },
+    concurrency: {
+      type: 'string',
+      alias: 'c',
+      default: '4',
+      description: 'Concurrent in-flight getMetadata calls (default: 4)',
+    },
+    quiet: {
+      type: 'boolean',
+      alias: 'q',
+      default: false,
+      description: 'Suppress progress output',
+    },
+  },
+  async run({ args }) {
+    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
+    const client = ctx.client!
+    const store = ctx.store!
+    const siteUrl = String(args.site)
+    const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 4)
+    const quiet = Boolean(args.quiet)
+
+    const urls = await readUrlList({ file: args.file ? String(args.file) : undefined })
+    if (urls.length === 0) {
+      logger.warn('No URLs to fetch metadata for.')
+      return
+    }
+
+    const records: IndexingMetadataRecord[] = []
+    const failures: Array<{ url: string, error: string }> = []
+    let completed = 0
+    const cursor = { i: 0 }
+
+    async function worker(): Promise<void> {
+      while (true) {
+        const i = cursor.i++
+        if (i >= urls.length)
+          return
+        const url = urls[i]!
+        const result = await client.indexing.getMetadata(url).catch((err: Error) => err)
+        if (result instanceof Error) {
+          // 404 from the API just means "no notification on record" — treat
+          // as a recorded absence, not a failure.
+          if (INDEXING_NOT_FOUND_RE.test(result.message)) {
+            records.push({ url, capturedAt: new Date().toISOString() })
+          }
+          else {
+            failures.push({ url, error: result.message })
+          }
+        }
+        else {
+          records.push({
+            url,
+            capturedAt: new Date().toISOString(),
+            latestUpdateAt: result.latestUpdate?.notifyTime ?? undefined,
+            latestRemoveAt: result.latestRemove?.notifyTime ?? undefined,
+            raw: result,
+          })
+        }
+        completed++
+        if (!quiet)
+          process.stdout.write(`\r${progressBar(completed, urls.length, url.slice(0, 60))}`)
+      }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, worker))
+
+    if (!quiet)
+      process.stdout.write('\n')
+
+    const indexing = createIndexingMetadataStore({ dataSource: store.dataSource })
+    await indexing.writeBatch(
+      { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
+      records,
+    )
+
+    if (!quiet) {
+      logger.success(`Captured metadata for ${records.length}/${urls.length} URL(s)`)
+      if (failures.length > 0) {
+        logger.warn(`${failures.length} failed:`)
+        for (const f of failures.slice(0, 5))
+          console.log(`  ${f.url}: ${f.error}`)
+        if (failures.length > 5)
+          console.log(`  ... and ${failures.length - 5} more`)
+      }
+    }
+
+    if (failures.length > 0)
+      process.exit(1)
+  },
+})
+
+const indexingSubCommand = defineCommand({
+  meta: {
+    name: 'indexing',
+    description: 'Snapshot Indexing API metadata per URL',
+  },
+  subCommands: {
+    snapshot: indexingSnapshotSubCommand,
+  },
+})
+
+const sitemapsSubCommand = defineCommand({
+  meta: {
+    name: 'sitemaps',
+    description: 'Snapshot and inspect sitemap state per site',
+  },
+  subCommands: {
+    snapshot: sitemapsSnapshotSubCommand,
+    show: sitemapsShowSubCommand,
+  },
+})
+
+export const entitiesCommand = defineCommand({
+  meta: {
+    name: 'entities',
+    description: 'Manage local entity snapshots (URL inspections, sitemaps, indexing metadata)',
+  },
+  subCommands: {
+    inspect: inspectSubCommand,
+    show: showSubCommand,
+    sitemaps: sitemapsSubCommand,
+    indexing: indexingSubCommand,
+  },
+})

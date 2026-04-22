@@ -68,9 +68,9 @@ describe('engine empty-parquet handling', () => {
       [],
     )
 
-    await engine.compactOlderThan(
+    await engine.compactTiered(
       { userId: 'u1', siteId: 's1', table: 'pages', now: () => Date.UTC(2026, 4, 1) },
-      15,
+      { raw: 15, d7: 15, d30: 999 },
     )
 
     // An empty-only month doesn't actually need compaction (one input already at monthly).
@@ -85,9 +85,9 @@ describe('engine empty-parquet handling', () => {
       },
       [],
     )
-    await engine.compactOlderThan(
+    await engine.compactTiered(
       { userId: 'u1', siteId: 's1', table: 'pages', now: () => Date.UTC(2026, 4, 1) + 60_000 },
-      15,
+      { raw: 15, d7: 15, d30: 999 },
     )
 
     const live = manifestStore.snapshot()

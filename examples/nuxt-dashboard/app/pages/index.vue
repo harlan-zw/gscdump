@@ -71,6 +71,37 @@ const runner = useInsightRunner()
 const { query, analyze, isReady, bootError, bootTimings } = runner
 const contentGap = useContentGap()
 const actionPriority = useActionPriority()
+const anonymization = useAnonymization()
+
+// Tabs whose data is query-grained (reads the `keywords` table). These
+// widgets sum per-query rows and so silently drop GSC-anonymized impressions;
+// we surface the dropped fraction so users don't compare them to page totals.
+const QUERY_GRAINED_TABS = new Set<string>([
+  'queries',
+  'striking-distance',
+  'opportunity',
+  'clustering',
+  'concentration',
+  'movers',
+  'brand',
+  'cannibalization',
+  'ctr-anomaly',
+  'long-tail',
+  'intent-atlas',
+  'query-migration',
+  'bayesian-ctr',
+  'stl-decompose',
+  'change-point',
+  'bipartite-pagerank',
+  'survival',
+  'content-velocity',
+  'ctr-curve',
+  'keyword-breadth',
+  'trends',
+  'zero-click',
+  'content-gap',
+])
+const showAnonymizationWarning = computed(() => QUERY_GRAINED_TABS.has(activeId.value))
 
 // Metric column toggles (raw tabs only)
 const METRIC_COLS = ['clicks', 'impressions', 'ctr', 'avg_position'] as const
@@ -727,11 +758,17 @@ function fmtTitle(v: unknown): string | undefined {
     <div class="boot">
       <span v-if="bootError" class="err">Boot failed: {{ bootError.message }}</span>
       <span v-else-if="!isReady" class="dim">Booting DuckDB-WASM, fetching parquets…</span>
-      <span v-else-if="bootTimings" class="dim">
-        ready · boot {{ Math.round(bootTimings.bootMs) }} ms ·
-        manifest {{ Math.round(bootTimings.manifestMs) }} ms ·
-        attach {{ Math.round(bootTimings.attachMs) }} ms
-      </span>
+      <TimingPanel
+        v-else
+        :timings="{
+          bootMs: bootTimings?.bootMs,
+          manifestMs: bootTimings?.manifestMs,
+          attachMs: bootTimings?.attachMs,
+          rollupMs: anonymization.fetchMs.value ?? undefined,
+          queryMs: queryMs ?? undefined,
+        }"
+        source="browser"
+      />
     </div>
 
     <nav class="tabs">
@@ -748,6 +785,20 @@ function fmtTitle(v: unknown): string | undefined {
         <template v-if="totalRows != null"> of {{ totalRows.toLocaleString() }}</template>
       </span>
     </nav>
+
+    <div
+      v-if="showAnonymizationWarning && anonymization.trailingPct.value != null"
+      class="anon-banner"
+      title="GSC anonymizes query data below a threshold. Summing query-grained rows will undercount total impressions by roughly this fraction."
+    >
+      <span class="anon-icon">⚠</span>
+      <span>
+        ~<b>{{ Math.round(anonymization.trailingPct.value * 100) }}%</b>
+        of impressions are anonymized by Google over the last
+        {{ anonymization.windowDays.value }} days — query-grained breakdowns
+        do not sum to page totals.
+      </span>
+    </div>
 
     <div v-if="activeTab.kind === 'raw'" class="raw-toolbar">
       <div class="search">
@@ -1329,6 +1380,10 @@ tbody tr:hover { background: #fbfbfc; }
 .pager button:disabled { opacity: 0.4; cursor: not-allowed; }
 .pager .pagesize { margin-left: auto; display: inline-flex; align-items: center; gap: 0.4rem; color: #888; font-size: 0.78rem; }
 .pager select { padding: 0.2rem 0.3rem; border: 1px solid #e2e2e5; border-radius: 4px; font-size: 0.82rem; background: #fff; }
+
+.anon-banner { display: flex; align-items: center; gap: 0.55rem; padding: 0.5rem 0.85rem; background: #fff7ec; border: 1px solid #f4d9a8; border-top: 0; font-size: 0.8rem; color: #6b4a15; line-height: 1.35; }
+.anon-banner .anon-icon { font-size: 0.95rem; line-height: 1; color: #b88324; }
+.anon-banner b { font-weight: 700; color: #1d1d1f; font-variant-numeric: tabular-nums; }
 
 .cannibal-panel { background: #fff; border: 1px solid #ececef; border-top: 0; border-radius: 0 0 6px 6px; padding: 1rem 1rem 0.9rem; }
 .cannibal-headline { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 0.85rem; padding: 0 0.15rem; }

@@ -1,12 +1,27 @@
 import type { Row, TableName, TenantCtx } from 'gscdump/contracts'
-import type { BuilderState } from 'gscdump/query'
+import type { BuilderState, SearchType } from 'gscdump/query'
 
 export type { Row, TableName, TenantCtx } from 'gscdump/contracts'
+export type { SearchType } from 'gscdump/query'
+
+/**
+ * Default `searchType` for entries written before the field landed and for
+ * sync paths that don't request a specific type. GSC's own default; the
+ * vast majority of stored data is web-search.
+ */
+export const DEFAULT_SEARCH_TYPE: SearchType = 'web'
 
 export interface WriteCtx extends TenantCtx {
   table: TableName
   date?: string
   now?: () => number
+  /**
+   * GSC search-type partition this write belongs to. Defaults to `'web'`.
+   * Non-web values (`discover`, `news`, `googleNews`, `image`, `video`)
+   * cause the writer to insert the type into the object key path so files
+   * for different search types coexist without colliding.
+   */
+  searchType?: SearchType
 }
 
 export interface QueryCtx extends TenantCtx {
@@ -20,6 +35,21 @@ export interface GcCtx {
   siteId?: string
 }
 
+/**
+ * Compaction tier of a manifest entry. Determines which compactor stage may
+ * pick it up as input:
+ * - `raw`: per-day file produced by `writeDay`. Eligible for raw→d7 merge at 7d.
+ * - `d7`: weekly compaction output. Eligible for d7→d30 merge at 30d.
+ * - `d30`: monthly compaction output (matches the legacy `monthly/` partition
+ *   shape — pre-tier entries are read as `d30`). Eligible for d30→d90 at 90d.
+ * - `d90`: quarterly cold-tier output. Terminal; never recompacted.
+ *
+ * Without an explicit tier, entries written before this field landed default
+ * to `raw` for `daily/` partitions and `d30` for `monthly/` partitions, so
+ * the tiered compactor picks the right inputs without a backfill rewrite.
+ */
+export type CompactionTier = 'raw' | 'd7' | 'd30' | 'd90'
+
 export interface ManifestEntry {
   userId: string
   siteId?: string
@@ -32,6 +62,43 @@ export interface ManifestEntry {
   retiredAt?: number
   /** Table schema version at write time. Omitted on pre-#27 entries — treat as 1. */
   schemaVersion?: number
+  /**
+   * Compaction tier. Omitted on entries written before tiered compaction —
+   * treat as `raw` for `daily/` partitions and `d30` for `monthly/` partitions
+   * (see {@link inferLegacyTier}).
+   */
+  tier?: CompactionTier
+  /**
+   * GSC search-type this entry covers (web | discover | news | googleNews |
+   * image | video). Omitted on entries written before per-type partitioning
+   * landed — treat as `web` (see {@link inferSearchType}). Compaction merges
+   * only entries with the same searchType.
+   */
+  searchType?: SearchType
+}
+
+/**
+ * Resolve the search type for an entry, defaulting legacy entries to `web`.
+ * Use this anywhere code needs to bucket entries by searchType.
+ */
+export function inferSearchType(entry: Pick<ManifestEntry, 'searchType'>): SearchType {
+  return entry.searchType ?? DEFAULT_SEARCH_TYPE
+}
+
+/**
+ * Infer the tier for an entry that pre-dates the `tier` field. Daily files
+ * are `raw`; monthly files are `d30`. Anything else (already migrated, or
+ * a partition shape we haven't seen) returns undefined and the caller must
+ * decide how to handle it.
+ */
+export function inferLegacyTier(entry: Pick<ManifestEntry, 'partition' | 'tier'>): CompactionTier | undefined {
+  if (entry.tier !== undefined)
+    return entry.tier
+  if (entry.partition.startsWith('daily/'))
+    return 'raw'
+  if (entry.partition.startsWith('monthly/'))
+    return 'd30'
+  return undefined
 }
 
 export interface ListLiveFilter {
@@ -39,6 +106,13 @@ export interface ListLiveFilter {
   siteId?: string
   table?: TableName
   partitions?: string[]
+  /**
+   * Narrow to a single compaction tier. Tier-aware compaction stages set this
+   * so the store doesn't have to return (and the caller doesn't have to scan)
+   * the entire manifest just to compact the raw cohort. Legacy entries without
+   * an explicit `tier` field match on {@link inferLegacyTier}.
+   */
+  tier?: CompactionTier
 }
 
 export interface DataSource {
@@ -113,6 +187,13 @@ export interface SyncStateScope {
   siteId?: string
   table: TableName
   date: string
+  /**
+   * GSC search-type this sync state covers. Omitted = `web` (the legacy
+   * default; matches pre-#5 sync states stored before per-type sync landed).
+   * Lookups must compare via {@link inferSearchType} so a missing field
+   * matches an explicit `'web'` and vice versa.
+   */
+  searchType?: SearchType
 }
 
 export interface SyncState extends SyncStateScope {
@@ -127,6 +208,7 @@ export interface SyncStateFilter {
   siteId?: string
   table?: TableName
   state?: SyncStateKind
+  searchType?: SearchType
 }
 
 export interface SyncStateDetail {
@@ -271,7 +353,7 @@ export interface StorageEngine {
    * directly.
    */
   runSQL: (opts: RunSQLOptions) => Promise<QueryResult>
-  compactOlderThan: (ctx: WriteCtx, days: number) => Promise<void>
+  compactTiered: (ctx: WriteCtx, thresholds?: import('./compaction').CompactionThresholds) => Promise<void>
   gcOrphans: (ctx: GcCtx, graceMs: number) => Promise<{ deleted: number }>
   listLive: (filter: ListLiveFilter) => Promise<ManifestEntry[]>
   listAll: (filter: ListLiveFilter) => Promise<ManifestEntry[]>
@@ -298,16 +380,58 @@ export function monthPartition(month: string): string {
   return `monthly/${month}`
 }
 
+/**
+ * Weekly partition keyed by the Monday-of-week ISO date (e.g. `weekly/2026-04-20`
+ * for the ISO week containing 2026-04-22). Names are stable + sortable; the
+ * dashboard never parses them, only reads via the manifest.
+ */
+export function weekPartition(mondayIsoDate: string): string {
+  return `weekly/${mondayIsoDate}`
+}
+
+/**
+ * Quarterly partition (e.g. `quarterly/2026-Q2` for Apr-Jun 2026). Used as the
+ * cold-tier shape for `d90` compaction outputs.
+ */
+export function quarterPartition(quarter: string): string {
+  return `quarterly/${quarter}`
+}
+
+/**
+ * Monday-of-week as a YYYY-MM-DD string for the ISO week containing `isoDate`.
+ * Used by tiered compaction to bucket raw daily files into weekly groups.
+ */
+export function mondayOfWeek(isoDate: string): string {
+  const ms = Date.parse(`${isoDate}T00:00:00Z`)
+  const dow = new Date(ms).getUTCDay() // 0=Sun, 1=Mon, ... 6=Sat
+  const offset = dow === 0 ? -6 : 1 - dow
+  const monday = new Date(ms + offset * 86_400_000)
+  return monday.toISOString().slice(0, 10)
+}
+
+/** YYYY-Qq for the quarter containing the given YYYY-MM month string. */
+export function quarterOfMonth(month: string): string {
+  const [y, m] = month.split('-').map(Number) as [number, number]
+  const q = Math.floor((m - 1) / 3) + 1
+  return `${y}-Q${q}`
+}
+
 export function objectKey(
   ctx: TenantCtx,
   table: TableName,
   partition: string,
   version: number,
+  searchType?: SearchType,
 ): string {
   const prefix = ctx.siteId
     ? `u_${ctx.userId}/${ctx.siteId}/${table}`
     : `u_${ctx.userId}/${table}`
-  return `${prefix}/${partition}__v${version}.parquet`
+  // Web is the implicit default and stays at the legacy path so old data
+  // (and any reader that doesn't know about searchType) keeps working.
+  // Non-web types get an extra path segment so they can never collide with
+  // web files in the same partition.
+  const typeSegment = searchType !== undefined && searchType !== DEFAULT_SEARCH_TYPE ? `${searchType}/` : ''
+  return `${prefix}/${typeSegment}${partition}__v${version}.parquet`
 }
 
 export function tenantPrefix(ctx: TenantCtx): string {

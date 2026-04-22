@@ -98,6 +98,7 @@ declare global {
   const updateAppConfig: typeof import('../../../../node_modules/.pnpm/nuxt@4.4.2_@babel+core@7.29.0_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0__@emna_6635f9cd633ee1bd3fa811d4988c4b05/node_modules/nuxt/dist/app/config').updateAppConfig
   const useActionPriority: typeof import('../../app/composables/useActionPriority').useActionPriority
   const useAnnouncer: typeof import('../../../../node_modules/.pnpm/nuxt@4.4.2_@babel+core@7.29.0_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0__@emna_6635f9cd633ee1bd3fa811d4988c4b05/node_modules/nuxt/dist/app/composables/announcer').useAnnouncer
+  const useAnonymization: typeof import('../../app/composables/useAnonymization').useAnonymization
   const useAppConfig: typeof import('../../../../node_modules/.pnpm/nuxt@4.4.2_@babel+core@7.29.0_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0__@emna_6635f9cd633ee1bd3fa811d4988c4b05/node_modules/nuxt/dist/app/config').useAppConfig
   const useAsyncData: typeof import('../../../../node_modules/.pnpm/nuxt@4.4.2_@babel+core@7.29.0_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0__@emna_6635f9cd633ee1bd3fa811d4988c4b05/node_modules/nuxt/dist/app/composables/asyncData').useAsyncData
   const useAttrs: typeof import('vue').useAttrs
@@ -192,6 +193,9 @@ declare global {
   // @ts-ignore
   export type { ActionPriorityProgress, ActionPriorityRunner, ActionSource, Effort, PriorityAction } from '../../app/composables/useActionPriority'
   import('../../app/composables/useActionPriority')
+  // @ts-ignore
+  export type { AnonymizationState } from '../../app/composables/useAnonymization'
+  import('../../app/composables/useAnonymization')
   // @ts-ignore
   export type { ContentGapRunner, ContentGapOptions, ContentGapProgress, ContentGapResult } from '../../app/composables/useContentGap'
   import('../../app/composables/useContentGap')
@@ -300,6 +304,7 @@ declare module 'vue' {
     readonly updateAppConfig: UnwrapRef<typeof import('../../../../node_modules/.pnpm/nuxt@4.4.2_@babel+core@7.29.0_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0__@emna_6635f9cd633ee1bd3fa811d4988c4b05/node_modules/nuxt/dist/app/config')['updateAppConfig']>
     readonly useActionPriority: UnwrapRef<typeof import('../../app/composables/useActionPriority')['useActionPriority']>
     readonly useAnnouncer: UnwrapRef<typeof import('../../../../node_modules/.pnpm/nuxt@4.4.2_@babel+core@7.29.0_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0__@emna_6635f9cd633ee1bd3fa811d4988c4b05/node_modules/nuxt/dist/app/composables/announcer')['useAnnouncer']>
+    readonly useAnonymization: UnwrapRef<typeof import('../../app/composables/useAnonymization')['useAnonymization']>
     readonly useAppConfig: UnwrapRef<typeof import('../../../../node_modules/.pnpm/nuxt@4.4.2_@babel+core@7.29.0_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0__@emna_6635f9cd633ee1bd3fa811d4988c4b05/node_modules/nuxt/dist/app/config')['useAppConfig']>
     readonly useAsyncData: UnwrapRef<typeof import('../../../../node_modules/.pnpm/nuxt@4.4.2_@babel+core@7.29.0_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0__@emna_6635f9cd633ee1bd3fa811d4988c4b05/node_modules/nuxt/dist/app/composables/asyncData')['useAsyncData']>
     readonly useAttrs: UnwrapRef<typeof import('vue')['useAttrs']>

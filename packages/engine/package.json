@@ -53,6 +53,14 @@
       "types": "./dist/sql-fragments.d.mts",
       "import": "./dist/sql-fragments.mjs"
     },
+    "./rollups": {
+      "types": "./dist/rollups.d.mts",
+      "import": "./dist/rollups.mjs"
+    },
+    "./entities": {
+      "types": "./dist/entities.d.mts",
+      "import": "./dist/entities.mjs"
+    },
     "./node": {
       "types": "./dist/adapters/duckdb-node.d.mts",
       "import": "./dist/adapters/duckdb-node.mjs"
@@ -76,6 +84,10 @@
     "./r2": {
       "types": "./dist/adapters/r2.d.mts",
       "import": "./dist/adapters/r2.mjs"
+    },
+    "./r2-manifest": {
+      "types": "./dist/adapters/r2-manifest.d.mts",
+      "import": "./dist/adapters/r2-manifest.mjs"
     },
     "./resolver": {
       "types": "./dist/resolver/index.d.mts",

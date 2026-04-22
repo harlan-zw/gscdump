@@ -1,3 +1,4 @@
+export type { CompactionThresholds } from './compaction'
 export { canonicalEmptyParquetSchema, createDuckDBCodec, createDuckDBExecutor } from './duckdb'
 export type { DuckDBFactory, DuckDBHandle } from './duckdb'
 export { createStorageEngine, MAX_DAY_BYTES } from './engine'
@@ -23,9 +24,19 @@ export type { ColumnDef, ColumnType, DrizzleSchema, TableSchema } from './schema
 export { bindLiterals, formatLiteral } from './sql-bind'
 export {
   dayPartition,
+  DEFAULT_SEARCH_TYPE,
+  inferLegacyTier,
+  inferSearchType,
+  mondayOfWeek,
+  monthPartition,
+  objectKey,
+  quarterOfMonth,
+  quarterPartition,
+  weekPartition,
 } from './storage'
 export type {
   CodecCtx,
+  CompactionTier,
   DataSource,
   EngineOptions,
   FileSetRef,
@@ -42,6 +53,7 @@ export type {
   QueryResult,
   Row,
   RunSQLOptions,
+  SearchType,
   StorageEngine,
   SyncState,
   SyncStateDetail,

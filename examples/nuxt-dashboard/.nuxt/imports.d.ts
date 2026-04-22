@@ -32,5 +32,6 @@ export { setInterval } from '#app/compat/interval';
 export { definePageMeta, PageMeta } from '#app/composables/pages';
 export { defineLazyHydrationComponent } from '#app/composables/lazy-hydration';
 export { useActionPriority, ActionPriorityProgress, ActionPriorityRunner, ActionSource, Effort, PriorityAction } from '../app/composables/useActionPriority';
+export { useAnonymization, AnonymizationState } from '../app/composables/useAnonymization';
 export { useContentGap, ContentGapRunner, ContentGapOptions, ContentGapProgress, ContentGapResult } from '../app/composables/useContentGap';
 export { useInsightRunner, InsightRunner } from '../app/composables/useInsightRunner';

@@ -87,11 +87,11 @@ async function compactClosedMonths(store: LocalStore, siteUrl: string, quiet: un
   const siteId = store.siteIdFor(siteUrl)
   for (const table of allTables()) {
     if (!quiet)
-      logger.info(`Compacting ${table} older than 35d`)
-    await store.engine.compactOlderThan({
+      logger.info(`Compacting ${table} (raw→d7→d30→d90)`)
+    await store.engine.compactTiered({
       userId: store.userId,
       siteId,
       table: table as TableName,
-    }, 35)
+    })
   }
 }

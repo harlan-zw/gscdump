@@ -62,10 +62,13 @@ describe('integration: real DuckDB + filesystem', () => {
     return { engine, dataSource, manifestStore, codec, executor }
   }
 
-  it('writeDay → query → compactOlderThan → query', async () => {
+  it('writeDay → query → compactTiered → query', async () => {
     const { engine } = await setup()
 
-    for (const day of ['2026-03-01', '2026-03-15', '2026-03-31']) {
+    // Three contiguous days within a single ISO week (Mon 2026-03-09 → Sun 2026-03-15)
+    // so raw→d7 promotes them into one weekly file, then d7→d30 collapses that
+    // sole weekly into the matching monthly file.
+    for (const day of ['2026-03-09', '2026-03-10', '2026-03-11']) {
       await engine.writeDay(
         { userId: 'u1', siteId: 's1', table: 'pages', date: day },
         [
@@ -83,11 +86,11 @@ describe('integration: real DuckDB + filesystem', () => {
     expect(Number(root.clicks)).toBe(30)
     expect(Number(root.impressions)).toBe(300)
 
-    // Roll all March dailies into a single monthly file
+    // Force every tier transition by setting all cutoffs to the same recent value.
     const now = Date.UTC(2026, 3, 20)
-    await engine.compactOlderThan(
+    await engine.compactTiered(
       { userId: 'u1', siteId: 's1', table: 'pages', now: () => now },
-      15,
+      { raw: 15, d7: 15, d30: 999 },
     )
 
     const q3 = await engine.query({ userId: 'u1', siteId: 's1' }, state)

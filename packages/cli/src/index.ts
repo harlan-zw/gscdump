@@ -6,6 +6,7 @@ import { analyzeCommand } from './commands/analyze'
 import { authCommand } from './commands/auth'
 import { configCommand } from './commands/config'
 import { dumpCommand } from './commands/dump'
+import { entitiesCommand } from './commands/entities'
 import { initCommand } from './commands/init'
 import { inspectCommand } from './commands/inspect'
 import { mcpCommand } from './commands/mcp'
@@ -31,6 +32,7 @@ const main = defineCommand({
     sync: syncCommand,
     store: storeCommand,
     inspect: inspectCommand,
+    entities: entitiesCommand,
     analyze: analyzeCommand,
     auth: authCommand,
     config: configCommand,

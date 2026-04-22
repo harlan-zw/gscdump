@@ -26,7 +26,13 @@ import type {
 } from '../storage'
 import { parquetReadObjects } from 'hyparquet'
 import { parquetWriteBuffer } from 'hyparquet-writer'
-import { SCHEMAS } from '../schema'
+import { SCHEMAS, TABLE_METADATA } from '../schema'
+
+// 25k rows/group keeps a typical day file in 2-10 row groups so DuckDB's
+// stats-based row-group pruning has something to skip. The hyparquet-writer
+// default of 100k yields one giant group for most days, which makes the
+// declared `sortKey` worthless at query time.
+const ROW_GROUP_SIZE = 25000
 
 function basicTypeFor(colType: ColumnType): BasicType {
   if (colType === 'VARCHAR' || colType === 'DATE')
@@ -60,19 +66,51 @@ function coerceValue(value: unknown, type: BasicType): unknown {
   return value
 }
 
+function compareValues(a: unknown, b: unknown): number {
+  if (a === b)
+    return 0
+  if (a === null || a === undefined)
+    return -1
+  if (b === null || b === undefined)
+    return 1
+  if (typeof a === 'number' && typeof b === 'number')
+    return a - b
+  return String(a) < String(b) ? -1 : 1
+}
+
+function sortRowsBySortKey(table: TableName, rows: readonly Row[]): readonly Row[] {
+  const sortKey = TABLE_METADATA[table].sortKey
+  if (sortKey.length === 0 || rows.length <= 1)
+    return rows
+  const copy = rows.slice()
+  copy.sort((a, b) => {
+    for (const col of sortKey) {
+      const cmp = compareValues(a[col], b[col])
+      if (cmp !== 0)
+        return cmp
+    }
+    return 0
+  })
+  return copy
+}
+
 export function encodeRowsToParquet(table: TableName, rows: readonly Row[]): Uint8Array {
   const schema = SCHEMAS[table]
+  const sorted = sortRowsBySortKey(table, rows)
   const columnData: ColumnSource[] = schema.columns.map((col) => {
     const type = basicTypeFor(col.type)
-    const data = rows.map(r => coerceValue(r[col.name], type))
+    const data = sorted.map(r => coerceValue(r[col.name], type))
     return {
       name: col.name,
       data,
       type,
       nullable: col.nullable,
+      // Page-level statistics let DuckDB prune below the row-group granularity
+      // for high-cardinality columns (url, query). Cheap to write, free to skip.
+      columnIndex: true,
     }
   })
-  const buffer = parquetWriteBuffer({ columnData })
+  const buffer = parquetWriteBuffer({ columnData, rowGroupSize: ROW_GROUP_SIZE })
   return new Uint8Array(buffer)
 }
 

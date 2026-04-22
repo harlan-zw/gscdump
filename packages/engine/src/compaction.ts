@@ -1,4 +1,5 @@
 import type {
+  CompactionTier,
   DataSource,
   ManifestEntry,
   ManifestStore,
@@ -6,9 +7,19 @@ import type {
   WriteCtx,
 } from './storage'
 import { currentSchemaVersion } from './schema'
-import { dayPartition, monthPartition, objectKey } from './storage'
+import {
+  dayPartition,
+  inferSearchType,
+  mondayOfWeek,
+  monthPartition,
+  objectKey,
+  quarterOfMonth,
+  quarterPartition,
+  weekPartition,
+} from './storage'
 
 const DAILY_PARTITION_RE = /^daily\/(\d{4}-\d{2}-\d{2})$/
+const WEEKLY_PARTITION_RE = /^weekly\/(\d{4}-\d{2}-\d{2})$/
 const MONTHLY_PARTITION_RE = /^monthly\/(\d{4}-\d{2})$/
 
 export interface CompactionDeps {
@@ -17,55 +28,145 @@ export interface CompactionDeps {
   codec: ParquetCodec
 }
 
-export async function compactOlderThanImpl(
+/**
+ * Per-tier age threshold in days. Default ladder collapses on these gates:
+ * - raw → d7 once a daily file is older than `raw` days (default 7).
+ * - d7 → d30 once the entire weekly bucket sits behind `d7` days (default 30).
+ * - d30 → d90 once the entire monthly bucket sits behind `d30` days (default 90).
+ */
+export interface CompactionThresholds {
+  raw?: number
+  d7?: number
+  d30?: number
+}
+
+const DEFAULT_THRESHOLDS: Required<CompactionThresholds> = {
+  raw: 7,
+  d7: 30,
+  d30: 90,
+}
+
+interface StageDef {
+  inputTier: CompactionTier
+  outputTier: CompactionTier
+  cutoffDays: number
+  /** Bucket key for an input entry; entries sharing a key merge together. */
+  bucketKey: (entry: ManifestEntry) => string | undefined
+  /** Latest representative date of a bucket (UTC ms); compared against the cutoff. */
+  bucketLatestMs: (bucketKey: string) => number
+  /** Resulting partition string for a bucket key. */
+  outputPartition: (bucketKey: string) => string
+}
+
+const RAW_TO_D7: StageDef = {
+  inputTier: 'raw',
+  outputTier: 'd7',
+  cutoffDays: DEFAULT_THRESHOLDS.raw,
+  bucketKey: (e) => {
+    const m = e.partition.match(DAILY_PARTITION_RE)
+    if (!m)
+      return undefined
+    return mondayOfWeek(m[1]!)
+  },
+  bucketLatestMs: monday => Date.parse(`${monday}T00:00:00Z`) + 6 * 86_400_000,
+  outputPartition: weekPartition,
+}
+
+const D7_TO_D30: StageDef = {
+  inputTier: 'd7',
+  outputTier: 'd30',
+  cutoffDays: DEFAULT_THRESHOLDS.d7,
+  bucketKey: (e) => {
+    const m = e.partition.match(WEEKLY_PARTITION_RE)
+    if (!m)
+      return undefined
+    return m[1]!.slice(0, 7)
+  },
+  bucketLatestMs: monthEndMs,
+  outputPartition: monthPartition,
+}
+
+const D30_TO_D90: StageDef = {
+  inputTier: 'd30',
+  outputTier: 'd90',
+  cutoffDays: DEFAULT_THRESHOLDS.d30,
+  bucketKey: (e) => {
+    const m = e.partition.match(MONTHLY_PARTITION_RE)
+    if (!m)
+      return undefined
+    return quarterOfMonth(m[1]!)
+  },
+  bucketLatestMs: quarterEndMs,
+  outputPartition: quarterPartition,
+}
+
+const STAGES: readonly StageDef[] = [RAW_TO_D7, D7_TO_D30, D30_TO_D90]
+
+export async function compactTieredImpl(
   deps: CompactionDeps,
   ctx: WriteCtx,
-  days: number,
+  now: number,
+  overrides: CompactionThresholds = {},
+): Promise<void> {
+  const thresholds = { ...DEFAULT_THRESHOLDS, ...overrides }
+  const stagesWithThresholds = STAGES.map(s => ({
+    ...s,
+    cutoffDays:
+      s.outputTier === 'd7'
+        ? thresholds.raw
+        : s.outputTier === 'd30'
+          ? thresholds.d7
+          : thresholds.d30,
+  }))
+
+  for (const stage of stagesWithThresholds)
+    await runStage(deps, ctx, stage, now)
+}
+
+async function runStage(
+  deps: CompactionDeps,
+  ctx: WriteCtx,
+  stage: StageDef,
   now: number,
 ): Promise<void> {
-  const cutoff = now - days * 86_400_000
+  const cutoff = now - stage.cutoffDays * 86_400_000
 
   const candidates = await deps.manifestStore.listLive({
     userId: ctx.userId,
     siteId: ctx.siteId,
     table: ctx.table,
+    tier: stage.inputTier,
   })
 
-  const byMonth = new Map<string, ManifestEntry[]>()
+  // Bucket key includes searchType so files for different types never merge
+  // into a single output. Each (bucketKey, searchType) combination produces
+  // its own compacted file.
+  const buckets = new Map<string, ManifestEntry[]>()
   for (const entry of candidates) {
-    const dailyMatch = entry.partition.match(DAILY_PARTITION_RE)
-    if (dailyMatch) {
-      const date = dailyMatch[1]!
-      const dayStart = Date.parse(`${date}T00:00:00Z`)
-      if (dayStart >= cutoff)
-        continue
-      const month = date.slice(0, 7)
-      if (!byMonth.has(month))
-        byMonth.set(month, [])
-      byMonth.get(month)!.push(entry)
+    const key = stage.bucketKey(entry)
+    if (!key)
       continue
-    }
-    const monthlyMatch = entry.partition.match(MONTHLY_PARTITION_RE)
-    if (monthlyMatch) {
-      const month = monthlyMatch[1]!
-      const monthEnd = monthEndMs(month)
-      if (monthEnd >= cutoff)
-        continue
-      if (!byMonth.has(month))
-        byMonth.set(month, [])
-      byMonth.get(month)!.push(entry)
-    }
+    if (stage.bucketLatestMs(key) >= cutoff)
+      continue
+    const searchType = inferSearchType(entry)
+    const compositeKey = `${searchType}\0${key}`
+    if (!buckets.has(compositeKey))
+      buckets.set(compositeKey, [])
+    buckets.get(compositeKey)!.push(entry)
   }
 
-  for (const [month, entries] of byMonth) {
-    if (entries.length === 1 && entries[0]!.partition === monthPartition(month))
+  for (const [compositeKey, entries] of buckets) {
+    const [searchType, bucket] = compositeKey.split('\0') as [string, string]
+    // Single-file bucket whose partition already matches the target shape
+    // is already compacted at this tier; no work to do.
+    const targetPartition = stage.outputPartition(bucket)
+    if (entries.length === 1 && entries[0]!.partition === targetPartition)
       continue
 
-    const partition = monthPartition(month)
     await deps.manifestStore.withLock(
-      { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table, partition },
+      { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table, partition: targetPartition },
       async () => {
-        const key = objectKey(ctx, ctx.table, partition, now)
+        const key = objectKey(ctx, ctx.table, targetPartition, now, searchType as ReturnType<typeof inferSearchType>)
         const { bytes, rowCount } = await deps.codec.compactRows(
           { table: ctx.table },
           entries.map(e => e.objectKey),
@@ -77,12 +178,14 @@ export async function compactOlderThanImpl(
           userId: ctx.userId,
           siteId: ctx.siteId,
           table: ctx.table,
-          partition,
+          partition: targetPartition,
           objectKey: key,
           rowCount,
           bytes,
           createdAt: now,
           schemaVersion: currentSchemaVersion(ctx.table),
+          tier: stage.outputTier,
+          ...(searchType !== 'web' ? { searchType: searchType as ReturnType<typeof inferSearchType> } : {}),
         }
         await deps.manifestStore.registerVersion(newEntry, entries)
       },
@@ -99,7 +202,9 @@ export function enumeratePartitions(startDate: string, endDate: string): string[
   if (end < start)
     return out
 
+  const seenWeeks = new Set<string>()
   const seenMonths = new Set<string>()
+  const seenQuarters = new Set<string>()
   for (let t = start; t <= end; t += 86400_000) {
     const d = new Date(t)
     const y = d.getUTCFullYear()
@@ -108,9 +213,19 @@ export function enumeratePartitions(startDate: string, endDate: string): string[
     const isoDay = `${y}-${m}-${day}`
     const isoMonth = `${y}-${m}`
     out.push(dayPartition(isoDay))
+    const monday = mondayOfWeek(isoDay)
+    if (!seenWeeks.has(monday)) {
+      seenWeeks.add(monday)
+      out.push(weekPartition(monday))
+    }
     if (!seenMonths.has(isoMonth)) {
       seenMonths.add(isoMonth)
       out.push(monthPartition(isoMonth))
+    }
+    const quarter = quarterOfMonth(isoMonth)
+    if (!seenQuarters.has(quarter)) {
+      seenQuarters.add(quarter)
+      out.push(quarterPartition(quarter))
     }
   }
   return out
@@ -119,4 +234,12 @@ export function enumeratePartitions(startDate: string, endDate: string): string[
 function monthEndMs(month: string): number {
   const [y, m] = month.split('-').map(Number) as [number, number]
   return Date.UTC(y, m, 0, 23, 59, 59, 999)
+}
+
+function quarterEndMs(quarter: string): number {
+  const [yStr, qStr] = quarter.split('-Q') as [string, string]
+  const y = Number(yStr)
+  const q = Number(qStr)
+  // Quarter q ends at the last instant of month q*3.
+  return Date.UTC(y, q * 3, 0, 23, 59, 59, 999)
 }

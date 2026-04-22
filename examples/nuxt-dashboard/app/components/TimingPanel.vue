@@ -4,6 +4,7 @@ interface Timings {
   manifestMs?: number
   attachMs?: number
   queryMs?: number
+  rollupMs?: number
   setupMs?: number
   totalMs?: number
 }
@@ -37,6 +38,7 @@ function fmt(n?: number | null): string {
       <span>boot <b>{{ fmt(t('bootMs')) }}</b></span>
       <span>manifest <b>{{ fmt(t('manifestMs')) }}</b></span>
       <span>attach <b>{{ fmt(t('attachMs')) }}</b></span>
+      <span>rollup <b>{{ fmt(t('rollupMs')) }}</b></span>
       <span>query <b>{{ fmt(t('queryMs')) }}</b></span>
     </template>
     <template v-else-if="source === 'server' && timings">

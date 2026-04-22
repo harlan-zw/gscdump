@@ -4,10 +4,11 @@
 // one place and makes future backend swaps a factory change, not a sweep
 // across every command file.
 
-import type { StorageEngine } from '@gscdump/engine/contracts'
+import type { DataSource, StorageEngine } from '@gscdump/engine/contracts'
 import { createNodeHarness } from '@gscdump/engine/node-harness'
 
 export type {
+  DataSource,
   ManifestEntry,
   Row,
   StorageEngine,
@@ -31,6 +32,7 @@ export { allTables, inferTable } from '@gscdump/engine/schema'
  */
 export interface LocalStore {
   readonly engine: StorageEngine
+  readonly dataSource: DataSource
   readonly dataDir: string
   readonly userId: string
   siteIdFor: (siteUrl: string) => string

@@ -1,4 +1,5 @@
 import type { BuilderState } from 'gscdump/query'
+import type { CompactionThresholds } from './compaction'
 import type {
   EngineOptions,
   GcCtx,
@@ -13,11 +14,11 @@ import type {
 } from './storage'
 import { normalizeUrl } from 'gscdump/normalize'
 import { buildLogicalPlan } from 'gscdump/query/plan'
-import { compactOlderThanImpl } from './compaction'
+import { compactTieredImpl } from './compaction'
 import { compileLogicalQueryPlan } from './compiler'
 import { gcOrphansImpl } from './gc'
 import { currentSchemaVersion, SCHEMAS } from './schema'
-import { dayPartition, objectKey } from './storage'
+import { dayPartition, inferSearchType, objectKey } from './storage'
 
 export const MAX_DAY_BYTES = 100 * 1024 * 1024
 
@@ -51,19 +52,25 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     const date = ctx.date
     const now = (ctx.now ?? defaultNow)()
     const partition = dayPartition(date)
+    const searchType = ctx.searchType
 
     return manifestStore.withLock(
       { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table, partition },
       async () => {
-        const superseding = await manifestStore.listLive({
+        const liveForPartition = await manifestStore.listLive({
           userId: ctx.userId,
           siteId: ctx.siteId,
           table: ctx.table,
           partitions: [partition],
         })
+        // Only supersede entries that share the same searchType — different
+        // search types coexist in the same date partition.
+        const superseding = liveForPartition.filter(
+          e => inferSearchType(e) === inferSearchType({ searchType }),
+        )
 
         const normalizedRows = rows.map(r => normalizeRow(ctx.table, r))
-        const key = objectKey(ctx, ctx.table, partition, now)
+        const key = objectKey(ctx, ctx.table, partition, now, searchType)
         const { bytes: writtenBytes, rowCount } = await codec.writeRows(
           { table: ctx.table },
           normalizedRows,
@@ -95,6 +102,8 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
           bytes,
           createdAt: now,
           schemaVersion: currentSchemaVersion(ctx.table),
+          tier: 'raw',
+          ...(searchType !== undefined ? { searchType } : {}),
         }
         await manifestStore.registerVersion(entry, superseding)
         await manifestStore.bumpWatermark(
@@ -166,12 +175,12 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     })
   }
 
-  async function compactOlderThan(ctx: WriteCtx, days: number): Promise<void> {
-    return compactOlderThanImpl(
+  async function compactTiered(ctx: WriteCtx, thresholds?: CompactionThresholds): Promise<void> {
+    return compactTieredImpl(
       { dataSource, manifestStore, codec },
       ctx,
-      days,
       (ctx.now ?? defaultNow)(),
+      thresholds,
     )
   }
 
@@ -188,7 +197,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     writeDay,
     query,
     runSQL,
-    compactOlderThan,
+    compactTiered,
     gcOrphans,
     listLive: filter => manifestStore.listLive(filter),
     listAll: filter => manifestStore.listAll(filter),

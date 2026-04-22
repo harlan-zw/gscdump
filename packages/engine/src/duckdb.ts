@@ -152,9 +152,10 @@ export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
       try {
         const fileList = inNames.map(n => `'${sqlEscape(n)}'`).join(', ')
         // DuckDB streams read_parquet → COPY without materialising all rows in
-        // memory. Matches the read path.
+        // memory. Matches the read path. `union_by_name` lets us merge files
+        // with column-additive schema drift without a binder error.
         await db.query(
-          `COPY (SELECT * FROM read_parquet([${fileList}])) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`,
+          `COPY (SELECT * FROM read_parquet([${fileList}], union_by_name = true)) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`,
         )
         registered.push(outName)
         const bytes = await db.copyFileToBuffer(outName)

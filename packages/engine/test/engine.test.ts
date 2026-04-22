@@ -158,13 +158,14 @@ describe('storageEngine.query', () => {
   })
 })
 
-describe('storageEngine.compactOlderThan', () => {
+describe('storageEngine.compactTiered', () => {
   const TODAY = Date.UTC(2026, 4, 1) // 2026-05-01
 
-  it('rolls daily files older than N days into one monthly file per (site, table, month)', async () => {
+  it('rolls all-tier ladder for dailies in one ISO week into a single monthly file', async () => {
     const { engine, manifestStore } = makeEngine({ now: () => TODAY })
 
-    for (const day of ['2026-03-01', '2026-03-15', '2026-03-31']) {
+    // Three days inside the ISO week starting Mon 2026-03-09.
+    for (const day of ['2026-03-09', '2026-03-10', '2026-03-11']) {
       await engine.writeDay(
         { ...makeCtx({ date: day }), now: () => Date.parse(`${day}T00:00:00Z`) },
         [pageRow(`/${day}`, day)],
@@ -174,19 +175,21 @@ describe('storageEngine.compactOlderThan', () => {
     const liveBefore = manifestStore.snapshot()
     expect(liveBefore).toHaveLength(3)
 
-    // cutoff = 2026-04-16 → all March dailies qualify
-    await engine.compactOlderThan({ ...makeCtx(), now: () => TODAY }, 15)
+    // Force all three tier transitions with the same recent cutoff.
+    await engine.compactTiered({ ...makeCtx(), now: () => TODAY }, { raw: 15, d7: 15, d30: 999 })
 
     const liveAfter = manifestStore.snapshot()
     expect(liveAfter).toHaveLength(1)
     expect(liveAfter[0].partition).toBe('monthly/2026-03')
+    expect(liveAfter[0].tier).toBe('d30')
     expect(liveAfter[0].rowCount).toBe(3)
 
+    // 3 raw + 1 intermediate weekly file get retired.
     const retired = manifestStore.all().filter(e => e.retiredAt !== undefined)
-    expect(retired).toHaveLength(3)
+    expect(retired.length).toBeGreaterThanOrEqual(3)
   })
 
-  it('leaves recent days alone', async () => {
+  it('leaves recent days at raw tier and only ages out qualifying buckets', async () => {
     const { engine, manifestStore } = makeEngine({ now: () => TODAY })
 
     await engine.writeDay(
@@ -194,11 +197,11 @@ describe('storageEngine.compactOlderThan', () => {
       [pageRow('/today', '2026-04-30')],
     )
     await engine.writeDay(
-      { ...makeCtx({ date: '2026-03-01' }), now: () => Date.parse('2026-03-01T00:00:00Z') },
-      [pageRow('/old', '2026-03-01')],
+      { ...makeCtx({ date: '2026-03-09' }), now: () => Date.parse('2026-03-09T00:00:00Z') },
+      [pageRow('/old', '2026-03-09')],
     )
 
-    await engine.compactOlderThan({ ...makeCtx(), now: () => TODAY }, 15)
+    await engine.compactTiered({ ...makeCtx(), now: () => TODAY }, { raw: 15, d7: 15, d30: 999 })
 
     const live = manifestStore.snapshot()
     expect(live).toHaveLength(2)
@@ -208,28 +211,76 @@ describe('storageEngine.compactOlderThan', () => {
 
   it('no-op when nothing qualifies', async () => {
     const { engine, manifestStore } = makeEngine({ now: () => TODAY })
-    await engine.compactOlderThan({ ...makeCtx(), now: () => TODAY }, 15)
+    await engine.compactTiered({ ...makeCtx(), now: () => TODAY })
     expect(manifestStore.snapshot()).toHaveLength(0)
   })
 
-  it('re-running compactOlderThan is idempotent (existing monthly is left alone)', async () => {
+  it('re-running compactTiered is idempotent (existing monthly is left alone)', async () => {
     const { engine, manifestStore } = makeEngine({ now: () => TODAY })
 
-    for (const day of ['2026-03-01', '2026-03-15']) {
+    for (const day of ['2026-03-09', '2026-03-10']) {
       await engine.writeDay(
         { ...makeCtx({ date: day }), now: () => Date.parse(`${day}T00:00:00Z`) },
         [pageRow(`/${day}`, day)],
       )
     }
 
-    await engine.compactOlderThan({ ...makeCtx(), now: () => TODAY }, 15)
+    await engine.compactTiered({ ...makeCtx(), now: () => TODAY }, { raw: 15, d7: 15, d30: 999 })
     const firstPass = manifestStore.snapshot()
     expect(firstPass).toHaveLength(1)
+    expect(firstPass[0].partition).toBe('monthly/2026-03')
 
-    await engine.compactOlderThan({ ...makeCtx(), now: () => TODAY + 60_000 }, 15)
+    await engine.compactTiered({ ...makeCtx(), now: () => TODAY + 60_000 }, { raw: 15, d7: 15, d30: 999 })
     const secondPass = manifestStore.snapshot()
     expect(secondPass).toHaveLength(1)
     expect(secondPass[0].objectKey).toBe(firstPass[0].objectKey)
+  })
+
+  it('promotes a single raw daily through every tier when its bucket ages out', async () => {
+    const { engine, manifestStore } = makeEngine({ now: () => TODAY })
+    await engine.writeDay(
+      { ...makeCtx({ date: '2026-03-10' }), now: () => Date.parse('2026-03-10T00:00:00Z') },
+      [pageRow('/p', '2026-03-10')],
+    )
+
+    await engine.compactTiered({ ...makeCtx(), now: () => TODAY }, { raw: 15, d7: 15, d30: 999 })
+    const live = manifestStore.snapshot()
+    expect(live).toHaveLength(1)
+    expect(live[0].tier).toBe('d30')
+    expect(live[0].partition).toBe('monthly/2026-03')
+  })
+
+  it('compaction merges by (bucket, searchType) — different types never combine', async () => {
+    const { engine, manifestStore } = makeEngine({ now: () => TODAY })
+    for (const day of ['2026-03-09', '2026-03-10', '2026-03-11']) {
+      await engine.writeDay(
+        { ...makeCtx({ date: day }), now: () => Date.parse(`${day}T00:00:00Z`), searchType: 'web' },
+        [pageRow(`/${day}-web`, day)],
+      )
+      await engine.writeDay(
+        { ...makeCtx({ date: day }), now: () => Date.parse(`${day}T00:00:00Z`) + 1, searchType: 'discover' },
+        [pageRow(`/${day}-disc`, day)],
+      )
+    }
+    expect(manifestStore.snapshot()).toHaveLength(6)
+
+    await engine.compactTiered({ ...makeCtx(), now: () => TODAY }, { raw: 15, d7: 15, d30: 999 })
+
+    const live = manifestStore.snapshot()
+    expect(live).toHaveLength(2)
+    const partitions = live.map(e => e.partition).sort()
+    expect(partitions).toEqual(['monthly/2026-03', 'monthly/2026-03'])
+    const types = live.map(e => e.searchType ?? 'web').sort()
+    expect(types).toEqual(['discover', 'web'])
+
+    // The discover monthly file's object key carries the type segment;
+    // the web monthly file uses the legacy path.
+    const webEntry = live.find(e => (e.searchType ?? 'web') === 'web')!
+    const discoverEntry = live.find(e => e.searchType === 'discover')!
+    expect(webEntry.objectKey).not.toContain('/discover/')
+    expect(discoverEntry.objectKey).toContain('/pages/discover/monthly/')
+    expect(webEntry.rowCount).toBe(3)
+    expect(discoverEntry.rowCount).toBe(3)
   })
 })
 

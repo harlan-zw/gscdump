@@ -27,6 +27,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { lock as lockFile } from 'proper-lockfile'
+import { inferLegacyTier, inferSearchType } from '../storage'
 
 export interface FilesystemDataSourceOptions {
   rootDir: string
@@ -147,7 +148,7 @@ function matchesWatermarkFilter(w: Watermark, filter: WatermarkFilter): boolean 
 }
 
 function syncStateKey(s: SyncStateScope): string {
-  return `${s.userId}|${s.siteId ?? ''}|${s.table}|${s.date}`
+  return `${s.userId}|${s.siteId ?? ''}|${s.table}|${s.date}|${inferSearchType(s)}`
 }
 
 function matchesSyncStateFilter(s: SyncState, filter: SyncStateFilter): boolean {
@@ -158,6 +159,8 @@ function matchesSyncStateFilter(s: SyncState, filter: SyncStateFilter): boolean 
   if (filter.table !== undefined && s.table !== filter.table)
     return false
   if (filter.state !== undefined && s.state !== filter.state)
+    return false
+  if (filter.searchType !== undefined && inferSearchType(s) !== filter.searchType)
     return false
   return true
 }
@@ -181,6 +184,7 @@ function mergeSyncState(
       updatedAt: at,
       attempts: attemptsBump,
       error: detail?.error,
+      ...(scope.searchType !== undefined ? { searchType: scope.searchType } : {}),
     }
   }
   return {
@@ -201,6 +205,8 @@ function matchesFilter(entry: ManifestEntry, filter: ListLiveFilter): boolean {
   if (filter.table !== undefined && entry.table !== filter.table)
     return false
   if (filter.partitions && !filter.partitions.includes(entry.partition))
+    return false
+  if (filter.tier !== undefined && inferLegacyTier(entry) !== filter.tier)
     return false
   return true
 }

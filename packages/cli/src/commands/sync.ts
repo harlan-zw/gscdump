@@ -1,16 +1,29 @@
 import type { googleSearchConsole } from 'gscdump'
+import type { SearchType } from 'gscdump/query'
 import type { LocalStore, Row, TableName, WriteCtx } from '../local-store'
 import process from 'node:process'
+import { createEmptyTypesStore } from '@gscdump/engine/entities'
+import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
+import { SearchTypes } from 'gscdump/query'
 import { loadConfig, resolveDataDir } from '../config'
 import { createCommandContext } from '../context'
 import { allTables, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
 import { clearLine, logger, progressBar } from '../utils'
 
 const DEFAULT_TABLES: TableName[] = ['pages', 'keywords', 'countries', 'devices']
+const DEFAULT_TYPES: readonly SearchType[] = ['web']
+const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
 const DEFAULT_PENDING_DAYS = 3
 const DEFAULT_CONCURRENCY = 8
 const DAY_MS = 86_400_000
+// Minimum days synced before we trust a zero-row result enough to persist
+// an empty-type marker. Shorter windows fire false positives on intermittent
+// outages or low-traffic sites that happen to have zero clicks one day.
+const EMPTY_TYPE_PROBE_MIN_DAYS = 7
+// `web` is never skipped — it's the default coverage surface and users
+// almost always want it even when the detector sees a transient zero week.
+const EMPTY_TYPE_PROTECTED: readonly SearchType[] = ['web']
 
 async function runPool<T>(
   items: T[],
@@ -80,6 +93,7 @@ async function syncTable(
   store: LocalStore,
   siteUrl: string,
   table: TableName,
+  searchType: SearchType,
   dates: string[],
   client: ReturnType<typeof googleSearchConsole>,
   concurrency: number,
@@ -96,33 +110,35 @@ async function syncTable(
     userId: store.userId,
     siteId,
     table,
+    searchType,
   })
   const stateByDate = new Map(priorStates.map(s => [s.date, s]))
+  const label = searchType === 'web' ? table : `${table}/${searchType}`
 
   await runPool(dates, concurrency, async (date) => {
     const prior = stateByDate.get(date)
     if (!force && prior?.state === 'done') {
       skipped++
-      progress.tick(`${table} ${date} (skip)`)
+      progress.tick(`${label} ${date} (skip)`)
       return
     }
 
-    const scope = { userId: store.userId, siteId, table, date }
+    const scope = { userId: store.userId, siteId, table, date, searchType }
     await store.engine.setSyncState(scope, 'inflight')
 
-    const result = await runOneDate(store, client, siteUrl, table, dims, date)
+    const result = await runOneDate(store, client, siteUrl, table, searchType, dims, date)
       .catch((err: Error) => ({ kind: 'error' as const, error: err }))
 
     if (result.kind === 'error') {
       await store.engine.setSyncState(scope, 'failed', { error: result.error.message })
       failed++
-      progress.tick(`${table} ${date} (fail)`)
+      progress.tick(`${label} ${date} (fail)`)
       return
     }
 
     await store.engine.setSyncState(scope, 'done')
     totalRows += result.rows
-    progress.tick(`${table} ${date}`)
+    progress.tick(`${label} ${date}`)
   })
 
   return { rows: totalRows, skipped, failed }
@@ -133,6 +149,7 @@ async function runOneDate(
   client: ReturnType<typeof googleSearchConsole>,
   siteUrl: string,
   table: TableName,
+  searchType: SearchType,
   dims: string[],
   date: string,
 ): Promise<{ kind: 'ok', rows: number }> {
@@ -145,6 +162,9 @@ async function runOneDate(
       startDate: date,
       endDate: date,
       dimensions: dims,
+      // GSC accepts `searchType` (legacy) and the newer `type`. Both work;
+      // sending `searchType` is documented and broadly compatible.
+      searchType,
       rowLimit,
       startRow,
     } as any)
@@ -170,6 +190,7 @@ async function runOneDate(
     siteId: store.siteIdFor(siteUrl),
     table,
     date,
+    searchType,
   }
   await store.engine.writeDay(writeCtx, rows)
   return { kind: 'ok', rows: rows.length }
@@ -202,6 +223,20 @@ export const syncCommand = defineCommand({
       type: 'string',
       alias: 't',
       description: `Tables to sync (default: ${DEFAULT_TABLES.join(',')}); comma-separated`,
+    },
+    'types': {
+      type: 'string',
+      description: `GSC search types to sync (default: ${DEFAULT_TYPES.join(',')}); comma-separated. Allowed: ${ALL_SEARCH_TYPES.join(',')}.`,
+    },
+    'force-types': {
+      type: 'boolean',
+      default: false,
+      description: 'Ignore stored empty-type markers and re-probe every requested type',
+    },
+    'no-rollups': {
+      type: 'boolean',
+      default: false,
+      description: 'Skip the post-sync rollup rebuild (daily/weekly totals, top-N tables)',
     },
     'full': {
       type: 'boolean',
@@ -254,6 +289,39 @@ export const syncCommand = defineCommand({
       ? String(args.tables).split(',').map(t => t.trim()).filter(isKnownTable)
       : DEFAULT_TABLES
 
+    const requestedTypes = args.types
+      ? String(args.types).split(',').map(t => t.trim()).filter(isKnownSearchType)
+      : DEFAULT_TYPES
+    if (requestedTypes.length === 0) {
+      logger.error(`No valid search types specified. Allowed: ${ALL_SEARCH_TYPES.join(',')}`)
+      process.exit(1)
+    }
+
+    const siteId = ctx.store!.siteIdFor(siteUrl)
+    const emptyTypesStore = createEmptyTypesStore({ dataSource: ctx.store!.dataSource })
+    const emptyTypesDoc = await emptyTypesStore.load({ userId: ctx.store!.userId, siteId })
+    const forceTypes = Boolean(args['force-types'])
+    const skippedTypes: SearchType[] = []
+    const types: SearchType[] = []
+    for (const t of requestedTypes) {
+      if (!forceTypes && emptyTypesDoc.emptyTypes.includes(t) && !EMPTY_TYPE_PROTECTED.includes(t)) {
+        skippedTypes.push(t)
+        continue
+      }
+      types.push(t)
+    }
+    if (types.length === 0) {
+      logger.warn(
+        `All requested types (${requestedTypes.join(', ')}) are marked empty for this site. Pass --force-types to re-probe.`,
+      )
+      return
+    }
+    if (skippedTypes.length > 0 && !args.quiet) {
+      logger.info(
+        `Skipping ${skippedTypes.join(', ')} (marked empty for this site; pass --force-types to re-probe).`,
+      )
+    }
+
     const endDate = args.end ? String(args.end) : isoDay(DEFAULT_PENDING_DAYS)
     let startDate: string
     if (args.start) {
@@ -277,7 +345,7 @@ export const syncCommand = defineCommand({
 
     const store = ctx.store!
     if (!args.quiet) {
-      logger.info(`Syncing ${siteUrl} (${tables.join(', ')}) → ${store.dataDir}`)
+      logger.info(`Syncing ${siteUrl} (${tables.join(', ')}) [${types.join(', ')}] → ${store.dataDir}`)
       logger.info(`Range: ${startDate} → ${endDate} (${dates.length} days)`)
     }
 
@@ -288,19 +356,49 @@ export const syncCommand = defineCommand({
 
     const start = Date.now()
     const totals: Record<string, { rows: number, skipped: number, failed: number }> = {}
-    const progress = createProgressTracker(dates.length * tables.length, Boolean(args.quiet))
+    // Build the (table, searchType) work list. Each pair is an independent
+    // sync stream — runs in parallel by default, sequentially with
+    // --serial-tables for predictable ordering / debug.
+    const jobs: Array<{ table: TableName, type: SearchType, label: string }> = []
+    for (const table of tables) {
+      for (const type of types) {
+        const label = type === 'web' ? table : `${table}/${type}`
+        jobs.push({ table, type, label })
+      }
+    }
+    const progress = createProgressTracker(dates.length * jobs.length, Boolean(args.quiet))
 
     if (serialTables) {
-      for (const table of tables) {
-        totals[table] = await syncTable(store, siteUrl, table, dates, client, concurrency, args.force, progress)
+      for (const job of jobs) {
+        totals[job.label] = await syncTable(
+          store,
+          siteUrl,
+          job.table,
+          job.type,
+          dates,
+          client,
+          concurrency,
+          args.force,
+          progress,
+        )
       }
     }
     else {
       const results = await Promise.all(
-        tables.map(table => syncTable(store, siteUrl, table, dates, client, concurrency, args.force, progress)),
+        jobs.map(job => syncTable(
+          store,
+          siteUrl,
+          job.table,
+          job.type,
+          dates,
+          client,
+          concurrency,
+          args.force,
+          progress,
+        )),
       )
-      tables.forEach((table, i) => {
-        totals[table] = results[i]
+      jobs.forEach((job, i) => {
+        totals[job.label] = results[i]
       })
     }
     progress.done()
@@ -320,6 +418,75 @@ export const syncCommand = defineCommand({
     }
 
     const anyFailed = Object.values(totals).some(t => t.failed > 0)
+
+    // Empty-type detection: a type whose full sync window yielded zero rows
+    // (across every table, every date) almost certainly has no coverage for
+    // this site. Persist a marker so future syncs skip it until --force-types
+    // is passed. Requires a wide-enough window (`EMPTY_TYPE_PROBE_MIN_DAYS`)
+    // to avoid false positives on outages / low-traffic sites.
+    const rowsByType = new Map<SearchType, number>()
+    const failedByType = new Map<SearchType, number>()
+    for (const job of jobs) {
+      const t = totals[job.label]
+      rowsByType.set(job.type, (rowsByType.get(job.type) ?? 0) + t.rows)
+      failedByType.set(job.type, (failedByType.get(job.type) ?? 0) + t.failed)
+    }
+    if (!forceTypes && dates.length >= EMPTY_TYPE_PROBE_MIN_DAYS) {
+      const toMark: SearchType[] = []
+      for (const type of types) {
+        if (EMPTY_TYPE_PROTECTED.includes(type))
+          continue
+        if ((failedByType.get(type) ?? 0) > 0)
+          continue
+        if ((rowsByType.get(type) ?? 0) === 0)
+          toMark.push(type)
+      }
+      if (toMark.length > 0) {
+        await emptyTypesStore.mark({ userId: store.userId, siteId }, toMark)
+        if (!args.quiet)
+          logger.info(`Marked empty for future syncs: ${toMark.join(', ')} (0 rows across ${dates.length} days; pass --force-types to re-probe).`)
+      }
+    }
+    // If --force-types surfaced real data for a type we previously marked,
+    // drop that marker so subsequent plain syncs pick it up automatically.
+    if (forceTypes && emptyTypesDoc.emptyTypes.length > 0) {
+      const toClear: SearchType[] = []
+      for (const type of types) {
+        if (emptyTypesDoc.emptyTypes.includes(type) && (rowsByType.get(type) ?? 0) > 0)
+          toClear.push(type)
+      }
+      if (toClear.length > 0) {
+        await emptyTypesStore.clear({ userId: store.userId, siteId }, toClear)
+        if (!args.quiet)
+          logger.info(`Cleared empty markers for: ${toClear.join(', ')} (re-probe found data).`)
+      }
+    }
+
+    // Post-sync rollups: rebuild aggregates so the dashboard's cached widgets
+    // reflect the sync we just ran. Skipped on --no-rollups, on zero-row syncs
+    // (nothing to aggregate), and on full-failure runs (would read stale data).
+    const noRollups = Boolean(args['no-rollups'])
+    const anyRowsSynced = Object.values(totals).some(t => t.rows > 0)
+    if (!noRollups && anyRowsSynced) {
+      if (!args.quiet)
+        logger.info(`Rebuilding rollups for [${siteId}] (${DEFAULT_ROLLUPS.length} rollups)…`)
+      const rollupStart = Date.now()
+      const results = await rebuildRollups({
+        engine: store.engine,
+        dataSource: store.dataSource,
+        ctx: { userId: store.userId, siteId },
+        defs: DEFAULT_ROLLUPS,
+      }).catch((err: Error) => {
+        logger.warn(`Rollup rebuild failed: ${err.message}`)
+        return [] as Awaited<ReturnType<typeof rebuildRollups>>
+      })
+      if (!args.quiet && results.length > 0) {
+        const kb = results.reduce((a, r) => a + r.bytes, 0) / 1024
+        const ms = Date.now() - rollupStart
+        logger.success(`Rebuilt ${results.length} rollup(s) in ${ms}ms — ${kb.toFixed(1)} KB`)
+      }
+    }
+
     if (anyFailed)
       process.exit(1)
   },
@@ -327,6 +494,10 @@ export const syncCommand = defineCommand({
 
 function isKnownTable(name: string): name is TableName {
   return (allTables() as readonly string[]).includes(name)
+}
+
+function isKnownSearchType(name: string): name is SearchType {
+  return (ALL_SEARCH_TYPES as readonly string[]).includes(name)
 }
 
 async function printSyncStatus(

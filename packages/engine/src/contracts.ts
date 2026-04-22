@@ -1,5 +1,6 @@
 export type {
   CodecCtx,
+  CompactionTier,
   DataSource,
   EngineOptions,
   FileSetRef,
@@ -16,6 +17,7 @@ export type {
   QueryResult,
   Row,
   RunSQLOptions,
+  SearchType,
   StorageEngine,
   SyncState,
   SyncStateDetail,

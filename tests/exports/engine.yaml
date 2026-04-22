@@ -9,17 +9,25 @@
   createStorageEngine: function
   currentSchemaVersion: function
   dayPartition: function
+  DEFAULT_SEARCH_TYPE: string
   devices: object
   dimensionToColumn: function
   drizzleSchema: object
   enumeratePartitions: function
   FILES_PLACEHOLDER: string
   formatLiteral: function
+  inferLegacyTier: function
+  inferSearchType: function
   inferTable: function
   keywords: object
   MAX_DAY_BYTES: number
+  mondayOfWeek: function
+  monthPartition: function
+  objectKey: function
   page_keywords: object
   pages: object
+  quarterOfMonth: function
+  quarterPartition: function
   resolveToSQL: function
   SCHEMAS: object
   substituteNamedFiles: function
@@ -27,7 +35,20 @@
   toPath: function
   toSumPosition: function
   transformGscRow: function
+  weekPartition: function
 ./contracts: {}
+./entities:
+  createEmptyTypesStore: function
+  createIndexingMetadataStore: function
+  createInspectionStore: function
+  createSitemapStore: function
+  emptyTypesKey: function
+  hashUrl: function
+  indexingMetadataIndexKey: function
+  inspectionHistoryKey: function
+  inspectionIndexKey: function
+  sitemapHistoryKey: function
+  sitemapIndexKey: function
 ./filesystem:
   createFilesystemDataSource: function
   createFilesystemManifestStore: function
@@ -58,6 +79,8 @@
   substituteNamedFiles: function
 ./r2:
   createR2DataSource: function
+./r2-manifest:
+  createR2ManifestStore: function
 ./resolver:
   assertDimensionsSupported: function
   assertSchemaInSync: function
@@ -87,6 +110,15 @@
   resolveToSQL: function
   resolveToSQLOptimized: function
   supportsDimensionOnSurface: function
+./rollups:
+  dailyTotalsRollup: object
+  DEFAULT_ROLLUPS: object
+  indexingMetadataRollup: object
+  rebuildRollups: function
+  rollupKey: function
+  topKeywords28dRollup: object
+  topPages28dRollup: object
+  weeklyTotalsRollup: object
 ./schema:
   allTables: function
   countries: object

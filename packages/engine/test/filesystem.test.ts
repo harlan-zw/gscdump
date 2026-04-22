@@ -185,6 +185,45 @@ describe('filesystemManifestStore', () => {
     expect(state.attempts).toBe(2)
   })
 
+  it('sync state is keyed per searchType — different types do not collide', async () => {
+    const store = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
+    const baseScope = { userId: 'u1', siteId: 's1', table: 'pages' as const, date: '2026-04-10' }
+
+    await store.setSyncState({ ...baseScope, searchType: 'web' }, 'done', { at: 1000 })
+    await store.setSyncState({ ...baseScope, searchType: 'discover' }, 'inflight', { at: 2000 })
+
+    const all = await store.getSyncStates({ userId: 'u1' })
+    expect(all).toHaveLength(2)
+
+    const web = await store.getSyncStates({ userId: 'u1', searchType: 'web' })
+    expect(web).toHaveLength(1)
+    expect(web[0].state).toBe('done')
+
+    const discover = await store.getSyncStates({ userId: 'u1', searchType: 'discover' })
+    expect(discover).toHaveLength(1)
+    expect(discover[0].state).toBe('inflight')
+
+    // Updating discover does not touch web.
+    await store.setSyncState({ ...baseScope, searchType: 'discover' }, 'done', { at: 3000 })
+    const webAfter = (await store.getSyncStates({ userId: 'u1', searchType: 'web' }))[0]
+    expect(webAfter.state).toBe('done')
+    expect(webAfter.updatedAt).toBe(1000)
+  })
+
+  it('sync state with omitted searchType matches an explicit `web` filter (legacy compat)', async () => {
+    const store = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
+    const scope = { userId: 'u1', siteId: 's1', table: 'pages' as const, date: '2026-04-10' }
+    // Pre-#5 sync state: no searchType field.
+    await store.setSyncState(scope, 'done', { at: 1000 })
+
+    const web = await store.getSyncStates({ userId: 'u1', searchType: 'web' })
+    expect(web).toHaveLength(1)
+    expect(web[0].state).toBe('done')
+
+    const discover = await store.getSyncStates({ userId: 'u1', searchType: 'discover' })
+    expect(discover).toHaveLength(0)
+  })
+
   it('withLock serializes two independent store instances on the same scope', async () => {
     const path = join(dir, 'manifest.json')
     const a = createFilesystemManifestStore({ path })
@@ -238,15 +277,17 @@ describe('integration: filesystem + JSON codec (no DuckDB)', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  it('happy path: writeDay → query → compactOlderThan → query', async () => {
+  it('happy path: writeDay → query → compactTiered → query', async () => {
     const codec = createJsonCodec()
     const dataSource = createFilesystemDataSource({ rootDir: dir })
     const manifestStore = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
     const executor = createUnionExecutor(codec)
     const engine = createStorageEngine({ dataSource, manifestStore, codec, executor })
 
-    // writeDay for three days in March
-    for (const day of ['2026-03-01', '2026-03-15', '2026-03-31']) {
+    // Three contiguous days within ISO week starting Mon 2026-03-09. Tiered
+    // compaction promotes them through raw→d7 (one weekly) then d7→d30
+    // (single weekly bucket per month → one monthly file).
+    for (const day of ['2026-03-09', '2026-03-10', '2026-03-11']) {
       await engine.writeDay(
         { userId: 'u1', siteId: 's1', table: 'pages', date: day },
         [{ url: `/p${day}`, date: day, clicks: 1, impressions: 10, sum_position: 50 }],
@@ -264,10 +305,10 @@ describe('integration: filesystem + JSON codec (no DuckDB)', () => {
     expect(q1.rows).toHaveLength(3)
     expect(q1.objectKeys).toHaveLength(3)
 
-    // Roll March dailies into the monthly partition (days=1 so any past day qualifies)
-    await engine.compactOlderThan(
+    // Force every tier transition by collapsing all cutoffs to 1 day.
+    await engine.compactTiered(
       { userId: 'u1', siteId: 's1', table: 'pages' },
-      1,
+      { raw: 1, d7: 1, d30: 999 },
     )
 
     const q3 = await engine.query({ userId: 'u1', siteId: 's1' }, state)

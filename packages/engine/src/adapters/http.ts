@@ -17,6 +17,7 @@ import type {
   Watermark,
   WatermarkFilter,
 } from '../storage'
+import { inferLegacyTier } from '../storage'
 
 function readOnly(name: string): never {
   throw new Error(`http adapter is read-only: ${name} is not supported`)
@@ -111,6 +112,8 @@ function matchesFilter(entry: ManifestEntry, filter: ListLiveFilter): boolean {
   if (filter.table !== undefined && entry.table !== filter.table)
     return false
   if (filter.partitions && !filter.partitions.includes(entry.partition))
+    return false
+  if (filter.tier !== undefined && inferLegacyTier(entry) !== filter.tier)
     return false
   return true
 }

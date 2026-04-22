@@ -12,6 +12,8 @@ export const SearchTypes = {
   IMAGE: 'image',
   VIDEO: 'video',
   NEWS: 'news',
+  DISCOVER: 'discover',
+  GOOGLE_NEWS: 'googleNews',
 } as const
 export type SearchType = typeof SearchTypes[keyof typeof SearchTypes]
 

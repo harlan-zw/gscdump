@@ -69,12 +69,16 @@ Append-only Parquet/DuckDB storage engine. Storage runtime, planner, schema, ada
 | `@gscdump/engine/planner` | Logical → SQL compiler + partition planning (`resolveToSQL`, `enumeratePartitions`). |
 | `@gscdump/engine/ingest` | GSC row → storage row (`createRowAccumulator`, `transformGscRow`). |
 | `@gscdump/engine/sql` | SQL literal binding (`bindLiterals`, `formatLiteral`). |
+| `@gscdump/engine/sql-fragments` | Reusable SQL fragments for resolver/analyzer composition. |
+| `@gscdump/engine/rollups` | Post-sync rollup builders: `RollupDef`, `DEFAULT_ROLLUPS`, `rebuildRollups`, `rollupKey`, `RollupEnvelope` (JSON-backed daily/weekly totals + top-N pages/keywords + indexing metadata). |
+| `@gscdump/engine/entities` | Per-site entity stores: `createInspectionStore`, `createSitemapStore`, `createIndexingMetadataStore`, `createEmptyTypesStore` + record types (`InspectionRecord`, `SitemapRecord`, `IndexingMetadataRecord`). JSON-backed, one index per site + monthly history shards. |
 | `@gscdump/engine/node` | Node-only DuckDB handle. |
 | `@gscdump/engine/node-harness` | Node-only: `createNodeHarness({ dataDir, userId? })` — wires filesystem + DuckDB into a ready `StorageEngine` in one call. |
 | `@gscdump/engine/filesystem` | Node-only `DataSource` + `ManifestStore` adapters. |
 | `@gscdump/engine/http` | Read-only HTTP `DataSource` (signed URLs, Range). |
-| `@gscdump/engine/hyparquet` | Pure-JS `ParquetCodec`. |
+| `@gscdump/engine/hyparquet` | Pure-JS `ParquetCodec` (sort-on-write by `TABLE_METADATA[table].sortKey`, multi-row-group output, `columnIndex: true`). |
 | `@gscdump/engine/r2` | Cloudflare R2 `DataSource` (structurally typed against `R2Bucket`). |
+| `@gscdump/engine/r2-manifest` | R2-native `ManifestStore`: HEAD pointer + immutable snapshots per `(siteId, table)`, CAS via `onlyIf.etagMatches` for concurrent writers. |
 
 Optional peers: `@duckdb/duckdb-wasm`, `hyparquet`, `hyparquet-writer`.
 
@@ -123,12 +127,13 @@ CLI entry, `gscdump` bin. Owns config, auth, local engine wiring.
 | `sitemaps` | Manage sitemaps (live) |
 | `inspect` | URL inspection (live) |
 | `analyze` | Run analyzers from `@gscdump/analysis` against DuckDB (`--live` for row-based against fresh API) |
-| `store stats` / `store compact` / `store gc` / `store export` | Local store admin |
+| `entities inspect` / `entities show` / `entities sitemaps {snapshot,show}` / `entities indexing snapshot` | Snapshot slow-changing GSC state (URL inspection, sitemap state, indexing metadata) into the per-site entity store |
+| `store stats` / `store compact` / `store gc` / `store export` / `store rollups rebuild` | Local store admin |
 | `auth` | Manage credentials |
 | `config` | Manage CLI config |
 | `mcp` | Wraps `@gscdump/mcp` with CLI-side auth/config |
 
-**Read-path default:** `query`, `dump`, `analyze` read from DuckDB. If the request's date range isn't covered by the sync watermark, fail with an actionable `run gscdump sync first`. `--live` opts into the live GSC API. `sites`, `sitemaps`, `inspect` are always live; they don't store.
+**Read-path default:** `query`, `dump`, `analyze` read from DuckDB. If the request's date range isn't covered by the sync watermark, fail with an actionable `run gscdump sync first`. `--live` opts into the live GSC API. `sites`, `sitemaps`, `inspect` are always live; they don't store. `sync --types web,discover,news,googleNews,image,video` fans out across searchType partitions (non-`web` types get a `<table>/<searchType>/` path segment). `entities *` commands persist slow-changing state to the per-site entity store.
 
 ### `@gscdump/cloud` (frozen)
 
@@ -175,6 +180,11 @@ Auth (token or OAuth credentials)
 - **Adapter** (`ResolverAdapter<TableKey>`) — dialect-specific translator in `@gscdump/engine/resolver`. Compiles `BuilderState` → `{ sql, params }` against a drizzle schema. `pgResolverAdapter` is shared by DuckDB (wasm + node) — single-tenant; `sqliteResolverAdapter` in `@gscdump/engine-sqlite` scopes by `site_id`. Built via `createResolverAdapter`.
 - **Driver** — low-level runtime binding (e.g. DuckDB-WASM `AsyncDuckDB` handle, sqlite-proxy executor, R2 bucket). The engine wraps a driver; analyzers never see one.
 - **Analyzer** (`Analyzer<P, R>`) — pure contract `{ id, params, requires, build, reduce }` in `@gscdump/analysis/analyzer`. `ROW_ANALYZERS` (8, for GSC live API + in-memory) + `SQL_ANALYZERS` (29, in `@gscdump/engine-duckdb-node`). Dispatched by `runAnalyzerFromSource`; capability mismatches throw `AnalyzerCapabilityError`.
+- **Rollup** (`RollupDef`) — post-sync JSON aggregate in `@gscdump/engine/rollups`. Each rollup runs a SQL aggregation against the tenant's facts via `engine.runSQL` and writes a `RollupEnvelope<T>` to `u_<u>/<s>/rollups/<id>__v<ts>.json`. `DEFAULT_ROLLUPS` ships `daily_totals` (with `anonymizedImpressionsPct`), `weekly_totals`, `top_pages_28d`, `top_keywords_28d`, `indexing_metadata`. Format rule documented in `rollups.ts`: JSON for small/aggregate; parquet reserved for future top-N tables that need server-side WHERE filtering.
+- **Entity** — per-site slow-changing state, distinct family from the time-series facts. Three stores in `@gscdump/engine/entities`: URL inspections (per-URL latest + monthly history shards, keyed by FNV-1a hash), sitemap snapshots, indexing-metadata events. Point-lookup-by-id, not scanned. JSON-backed v1; SQLite-per-site swap is a backend change behind the same interface.
+- **Manifest authority** — R2-native `ManifestStore` (`@gscdump/engine/r2-manifest`) uses a HEAD pointer + immutable snapshot per `(siteId, table)` shard. Concurrent writers CAS on HEAD via `onlyIf.etagMatches`; readers fetch pointer + snapshot (both cacheable). Filesystem `ManifestStore` stays the single-writer default for CLI use.
+- **searchType partition** — first-class partition dimension on `WriteCtx`/`ManifestEntry`/`SyncStateScope`. Non-`web` types (`discover`, `news`, `googleNews`, `image`, `video`) get a `<table>/<searchType>/` path segment; `web` preserves legacy paths for back-compat. Compaction and sync state are keyed per-(bucket, searchType).
+- **Compaction tier** (`CompactionTier`) — `raw | d7 | d30 | d90` on each `ManifestEntry`. `compactTiered` in `compaction.ts` runs raw→d7 (weekly) / d7→d30 (monthly) / d30→d90 (quarterly) based on per-tier age thresholds. The `tier` field makes input cohorts unambiguous so later tiers don't re-pick their own output.
 
 ## Build system
 

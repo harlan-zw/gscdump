@@ -6,7 +6,7 @@
 // so the CLI, tests, and any downstream Node consumer don't rewrite the
 // 20-line wiring block.
 
-import type { Row, StorageEngine, TableName } from '../storage'
+import type { DataSource, Row, StorageEngine, TableName } from '../storage'
 import path from 'node:path'
 import { encodeSiteId } from 'gscdump/tenant'
 import { createDuckDBCodec, createDuckDBExecutor } from '../duckdb'
@@ -24,6 +24,11 @@ export interface NodeHarnessOptions {
 
 export interface NodeHarness {
   engine: StorageEngine
+  /**
+   * Underlying filesystem-backed DataSource. Exposed so commands that write
+   *  derivative artifacts (rollups, exports) don't have to re-instantiate it.
+   */
+  dataSource: DataSource
   dataDir: string
   userId: string
   siteIdFor: (siteUrl: string) => string
@@ -69,6 +74,7 @@ export function createNodeHarness(opts: NodeHarnessOptions): NodeHarness {
 
   return {
     engine,
+    dataSource,
     dataDir,
     userId,
     siteIdFor: encodeSiteId,

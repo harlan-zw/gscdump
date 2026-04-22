@@ -2,6 +2,7 @@ import { defineCommand } from 'citty'
 import { compactCommand } from './compact'
 import { exportCommand } from './export'
 import { gcCommand } from './gc'
+import { rollupsCommand } from './rollups'
 import { statsCommand } from './stats'
 
 export const storeCommand = defineCommand({
@@ -14,5 +15,6 @@ export const storeCommand = defineCommand({
     compact: compactCommand,
     gc: gcCommand,
     export: exportCommand,
+    rollups: rollupsCommand,
   },
 })
