@@ -1,8 +1,7 @@
-import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm'
+import type { AsyncDuckDB, AsyncDuckDBConnection, DuckDBBundles } from '@duckdb/duckdb-wasm'
 import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
 
 import { analyzeInBrowser } from '@gscdump/engine-duckdb-node'
-import { bindLiterals } from '@gscdump/engine/sql'
 
 export interface QueryResult {
   rows: Record<string, unknown>[]
@@ -22,6 +21,12 @@ export interface DuckDBWasmBootResult {
 
 export interface BootDuckDBWasmOptions {
   logger?: unknown
+  /**
+   * Override the jsDelivr-hosted bundle map. Required in environments where
+   * the default CDN is unreachable or where hosts must serve the WASM +
+   * worker assets themselves (e.g. Cloudflare Workers' 25 MB per-asset cap).
+   */
+  bundles?: DuckDBBundles
 }
 
 export interface BrowserParquetFile {
@@ -98,7 +103,7 @@ export async function bootDuckDBWasm(
   options: BootDuckDBWasmOptions = {},
 ): Promise<DuckDBWasmBootResult> {
   const { getJsDelivrBundles, selectBundle, AsyncDuckDB, ConsoleLogger } = await import('@duckdb/duckdb-wasm')
-  const bundles = getJsDelivrBundles()
+  const bundles = options.bundles ?? getJsDelivrBundles()
   const bundle = await selectBundle(bundles)
   const workerUrl = URL.createObjectURL(
     new Blob([`importScripts("${bundle.mainWorker!}");`], { type: 'text/javascript' }),
@@ -172,13 +177,24 @@ export function createBrowserAnalysisRuntime(
   const { db, conn } = boot
   const schema = options.schema ?? 'main'
 
+  async function runParameterized(sql: string, params?: readonly unknown[]) {
+    if (!params || params.length === 0)
+      return conn.query(sql)
+    const stmt = await conn.prepare(sql)
+    try {
+      return await stmt.query(...(params as unknown[]))
+    }
+    finally {
+      await stmt.close()
+    }
+  }
+
   return {
     db,
     conn,
     async query(sql: string, params?: unknown[]): Promise<QueryResult> {
       const t0 = performance.now()
-      const finalSql = params && params.length > 0 ? bindLiterals(sql, params) : sql
-      const result = await conn.query(finalSql)
+      const result = await runParameterized(sql, params)
       return {
         rows: toRows(result),
         queryMs: performance.now() - t0,
@@ -188,8 +204,7 @@ export function createBrowserAnalysisRuntime(
       const t0 = performance.now()
       const result: AnalysisResult = await analyzeInBrowser({
         query: async (sql, bindParams) => {
-          const finalSql = bindParams && bindParams.length > 0 ? bindLiterals(sql, bindParams) : sql
-          return toRows(await conn.query(finalSql))
+          return toRows(await runParameterized(sql, bindParams))
         },
       }, { schema }, params)
       return {
