@@ -41,9 +41,9 @@ export function formatLiteral(value: unknown): string {
 
 /**
  * Replace `?` placeholders with inline SQL literals. Single-quoted string
- * regions are left untouched — a `?` inside `'foo?bar'` is not a placeholder.
- * SQL-standard `''` escape handling; no `\`-escape or dialect-specific
- * identifier quoting.
+ * regions and SQL comments (`-- line`, `/* block *\/`) are left untouched —
+ * a `?` inside `'foo?bar'` or a comment is not a placeholder. SQL-standard
+ * `''` escape handling; no `\`-escape or dialect-specific identifier quoting.
  *
  * Throws when placeholder count and params length disagree.
  */
@@ -67,6 +67,20 @@ export function bindLiterals(sql: string, params: readonly unknown[]): string {
         inString = false
       }
       i++
+      continue
+    }
+    if (c === '-' && sql[i + 1] === '-') {
+      const nl = sql.indexOf('\n', i + 2)
+      const end = nl === -1 ? sql.length : nl
+      out += sql.slice(i, end)
+      i = end
+      continue
+    }
+    if (c === '/' && sql[i + 1] === '*') {
+      const close = sql.indexOf('*/', i + 2)
+      const end = close === -1 ? sql.length : close + 2
+      out += sql.slice(i, end)
+      i = end
       continue
     }
     if (c === '\'') {

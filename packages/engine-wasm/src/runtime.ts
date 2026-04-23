@@ -58,13 +58,51 @@ export interface AttachParquetUrlTablesOptions {
   fetch?: typeof fetch
   schema?: string
   fetchInit?: RequestInit
+  /**
+   * Manifest version the caller associates with this set of URLs. Returned
+   * on the resulting handle so callers can compare against a fresh manifest
+   * probe without re-attaching. Purely advisory — the runtime never derives
+   * behavior from the value itself.
+   */
+  version?: number | string
+}
+
+export interface AttachSingleTableOptions {
+  db: AsyncDuckDB
+  conn: AsyncDuckDBConnection
+  table: string
+  urls: string[]
+  fetch?: typeof fetch
+  schema?: string
+  fetchInit?: RequestInit
+}
+
+/**
+ * Handle returned from {@link attachParquetUrlTables}. Lets callers detach
+ * the created views (for lazy re-attach on a new manifest version) or cheap-
+ * check the embedded version against a fresh probe.
+ */
+export interface AttachedTablesHandle {
+  version: number | string | undefined
+  tables: string[]
+  schema: string
+  detach: () => Promise<void>
 }
 
 export interface BrowserAnalysisRuntime {
   db: AsyncDuckDB
   conn: AsyncDuckDBConnection
-  query: (sql: string, params?: unknown[]) => Promise<QueryResult>
-  analyze: (params: AnalysisParams) => Promise<AnalyzeResult>
+  query: (sql: string, params?: unknown[], signal?: AbortSignal) => Promise<QueryResult>
+  analyze: (params: AnalysisParams, options?: { signal?: AbortSignal }) => Promise<AnalyzeResult>
+  /**
+   * Returns true when `expected` doesn't match the version the runtime was
+   * attached with — cheap check callers can run before each query to decide
+   * whether to detach + re-attach against a fresher manifest. Undefined
+   * values on either side compare equal so the no-version path is a no-op.
+   */
+  isStale: (expected: number | string | undefined) => boolean
+  /** Update the runtime's cached manifest version in-place (e.g. after a re-attach). */
+  setVersion: (version: number | string | undefined) => void
   close: () => Promise<void>
 }
 
@@ -97,6 +135,38 @@ function fileName(table: string, index: number, provided?: string): string {
 function readParquetViewSql(schema: string, table: string, files: string[]): string {
   const escaped = files.map(name => `'${escapeSqlString(name)}'`).join(', ')
   return `CREATE OR REPLACE VIEW ${schema}.${table} AS SELECT * FROM read_parquet([${escaped}], union_by_name = true)`
+}
+
+/**
+ * Build a `DuckDBBundles` map from a single base URL hosting the standard
+ * DuckDB-WASM asset set (matches the names jsDelivr + `@duckdb/duckdb-wasm`
+ * ship). Callers pointing at a Worker / R2 / self-hosted origin can pass
+ * just the origin instead of duplicating the URL layout across apps.
+ *
+ * Omits `coi` (pthread) by default; most hosts don't serve the
+ * cross-origin-isolation headers needed to use it and requesting a missing
+ * asset fails bundle selection on Safari/Firefox.
+ */
+export function createDuckDBBundlesFromBase(baseUrl: string, options: { includeCoi?: boolean } = {}): DuckDBBundles {
+  const base = baseUrl.replace(/\/+$/, '')
+  const bundles: DuckDBBundles = {
+    mvp: {
+      mainModule: `${base}/duckdb-mvp.wasm`,
+      mainWorker: `${base}/duckdb-browser-mvp.worker.js`,
+    },
+    eh: {
+      mainModule: `${base}/duckdb-eh.wasm`,
+      mainWorker: `${base}/duckdb-browser-eh.worker.js`,
+    },
+  }
+  if (options.includeCoi) {
+    bundles.coi = {
+      mainModule: `${base}/duckdb-coi.wasm`,
+      mainWorker: `${base}/duckdb-browser-coi.worker.js`,
+      pthreadWorker: `${base}/duckdb-browser-coi.pthread.worker.js`,
+    }
+  }
+  return bundles
 }
 
 export async function bootDuckDBWasm(
@@ -134,7 +204,7 @@ export async function attachParquetTables(
 
 export async function attachParquetUrlTables(
   options: AttachParquetUrlTablesOptions,
-): Promise<void> {
+): Promise<AttachedTablesHandle> {
   const {
     db,
     conn,
@@ -142,6 +212,7 @@ export async function attachParquetUrlTables(
     fetch: fetchImpl = globalThis.fetch.bind(globalThis),
     schema = 'main',
     fetchInit,
+    version,
   } = options
 
   const flat: Array<{ table: string, url: string, index: number }> = []
@@ -162,56 +233,161 @@ export async function attachParquetUrlTables(
     await db.registerFileBuffer(fileName(table, index), bytes)
   }))
 
+  const attached: string[] = []
   for (const table of Object.keys(counts)) {
     const names: string[] = []
     for (let i = 0; i < counts[table]!; i++)
       names.push(fileName(table, i))
     await conn.query(readParquetViewSql(schema, table, names))
+    attached.push(table)
   }
+
+  return {
+    version,
+    tables: attached,
+    schema,
+    async detach() {
+      for (const table of attached)
+        await conn.query(`DROP VIEW IF EXISTS ${schema}.${table}`)
+    },
+  }
+}
+
+/**
+ * Incremental attach — fetch + register a single table's URLs and create the
+ * view, without touching any other table. Use this for lazy attach when a
+ * page only needs one of several available tables.
+ */
+export async function attachSingleTable(options: AttachSingleTableOptions): Promise<void> {
+  const {
+    db,
+    conn,
+    table,
+    urls,
+    fetch: fetchImpl = globalThis.fetch.bind(globalThis),
+    schema = 'main',
+    fetchInit,
+  } = options
+  if (urls.length === 0)
+    return
+  await Promise.all(urls.map(async (url, index) => {
+    const response = await fetchImpl(url, fetchInit)
+    if (!response.ok)
+      throw new Error(`fetch ${url} failed: ${response.status}`)
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    await db.registerFileBuffer(fileName(table, index), bytes)
+  }))
+  const names = urls.map((_, i) => fileName(table, i))
+  await conn.query(readParquetViewSql(schema, table, names))
+}
+
+/**
+ * List the views currently attached under `schema` via DuckDB's
+ * `information_schema`. Lets callers decide whether to call
+ * `attachSingleTable` before each query without guessing at state.
+ */
+export async function listAttachedTables(
+  conn: AsyncDuckDBConnection,
+  schema: string = 'main',
+): Promise<string[]> {
+  const result = await conn.query(
+    `SELECT table_name FROM information_schema.tables WHERE table_schema = '${escapeSqlString(schema)}'`,
+  )
+  return toRows(result).map(r => String(r.table_name))
 }
 
 export function createBrowserAnalysisRuntime(
   boot: DuckDBWasmBootResult,
-  options: { schema?: string } = {},
+  options: { schema?: string, version?: number | string } = {},
 ): BrowserAnalysisRuntime {
   const { db, conn } = boot
   const schema = options.schema ?? 'main'
+  let version: number | string | undefined = options.version
 
-  async function runParameterized(sql: string, params?: readonly unknown[]) {
-    if (!params || params.length === 0)
-      return conn.query(sql)
-    const stmt = await conn.prepare(sql)
+  // Serialize every `analyze()` call against the shared connection. DuckDB's
+  // AsyncDuckDBConnection is not concurrency-safe (async ≠ parallel); two
+  // simultaneous callers corrupt prepared-statement state. Chain on a
+  // rolling promise so later callers queue behind earlier ones.
+  let chain: Promise<unknown> = Promise.resolve()
+
+  async function cancelOnAbort(signal: AbortSignal | undefined, work: Promise<unknown>) {
+    if (!signal)
+      return work
+    if (signal.aborted) {
+      // Fire-and-forget: best-effort cancel, then surface the abort reason.
+      conn.cancelSent().catch(() => {})
+      throw signal.reason ?? new DOMException('aborted', 'AbortError')
+    }
+    const onAbort = () => {
+      conn.cancelSent().catch(() => {})
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
     try {
-      return await stmt.query(...(params as unknown[]))
+      return await work
     }
     finally {
-      await stmt.close()
+      signal.removeEventListener('abort', onAbort)
     }
+  }
+
+  async function runParameterized(sql: string, params: readonly unknown[] | undefined, signal?: AbortSignal) {
+    signal?.throwIfAborted()
+    const work = (async () => {
+      if (!params || params.length === 0)
+        return conn.query(sql)
+      const stmt = await conn.prepare(sql)
+      try {
+        return await stmt.query(...(params as unknown[]))
+      }
+      finally {
+        await stmt.close()
+      }
+    })()
+    return cancelOnAbort(signal, work)
   }
 
   return {
     db,
     conn,
-    async query(sql: string, params?: unknown[]): Promise<QueryResult> {
+    async query(sql: string, params?: unknown[], signal?: AbortSignal): Promise<QueryResult> {
       const t0 = performance.now()
-      const result = await runParameterized(sql, params)
+      const result = await runParameterized(sql, params, signal)
       return {
         rows: toRows(result),
         queryMs: performance.now() - t0,
       }
     },
-    async analyze(params: AnalysisParams): Promise<AnalyzeResult> {
-      const t0 = performance.now()
-      const result: AnalysisResult = await analyzeInBrowser({
-        query: async (sql, bindParams) => {
-          return toRows(await runParameterized(sql, bindParams))
-        },
-      }, { schema }, params)
-      return {
-        results: result.results as Record<string, unknown>[],
-        meta: result.meta,
-        queryMs: performance.now() - t0,
+    async analyze(params: AnalysisParams, options: { signal?: AbortSignal } = {}): Promise<AnalyzeResult> {
+      const signal = options.signal
+      const run = async (): Promise<AnalyzeResult> => {
+        signal?.throwIfAborted()
+        const t0 = performance.now()
+        const result: AnalysisResult = await analyzeInBrowser(
+          {
+            query: async (sql, bindParams, innerSignal) => {
+              return toRows(await runParameterized(sql, bindParams, innerSignal ?? signal))
+            },
+          },
+          { schema, signal },
+          params,
+        )
+        return {
+          results: result.results as Record<string, unknown>[],
+          meta: result.meta,
+          queryMs: performance.now() - t0,
+        }
       }
+      const next = chain.then(run, run)
+      // Keep the chain alive even on rejection so later callers don't
+      // inherit the failure, but don't surface unhandled rejections.
+      chain = next.catch(() => {})
+      return next
+    },
+    isStale(expected) {
+      return expected !== version
+    },
+    setVersion(next) {
+      version = next
     },
     async close(): Promise<void> {
       await conn.close()

@@ -17,13 +17,23 @@ export interface AnalyzerRunner {
    * Run a query with positional (`?`) bound parameters. Return objects keyed
    * by column name. The runner MUST coerce BIGINT → number and DATE → ISO
    * string (or let the shape function handle both via `num(v)`/`str(v)`).
+   *
+   * Optional `signal` lets long queries abort when a caller unmounts mid-run.
+   * Runners that ignore the signal remain correct; the upside of honoring it
+   * is letting DuckDB interrupt in-flight work rather than keep burning CPU.
    */
-  query: (sql: string, params?: unknown[]) => Promise<Row[]>
+  query: (sql: string, params?: unknown[], signal?: AbortSignal) => Promise<Row[]>
 }
 
 export interface BrowserAnalyzeOptions {
   /** Schema name the exported DuckDB file was attached under — e.g. `gsc`. */
   schema: string
+  /**
+   * Abort in-flight queries when the caller no longer cares about the
+   * result. Every `runner.query` call receives the same signal; runners
+   * that wire it through to `conn.cancelSent()` will free the worker.
+   */
+  signal?: AbortSignal
 }
 
 export async function analyzeInBrowser(
@@ -31,15 +41,17 @@ export async function analyzeInBrowser(
   opts: BrowserAnalyzeOptions,
   params: AnalysisParams,
 ): Promise<AnalysisResult> {
+  opts.signal?.throwIfAborted()
   const spec = buildSqlSpec(params)
   const sql = rewriteForTableSource(spec.sql, opts.schema, spec)
-  const rows = await runner.query(sql, spec.params)
+  const rows = await runner.query(sql, spec.params, opts.signal)
 
   const extras: Record<string, Row[]> = {}
   if (spec.extraQueries) {
     for (const q of spec.extraQueries) {
+      opts.signal?.throwIfAborted()
       const qSql = rewriteForTableSource(q.sql, opts.schema, spec)
-      extras[q.name] = await runner.query(qSql, q.params)
+      extras[q.name] = await runner.query(qSql, q.params, opts.signal)
     }
   }
 

@@ -35,13 +35,18 @@ export type { InsightRunner, InsightRunnerOptions, ScopedRunnerOptions, TableSco
 export {
   attachParquetTables,
   attachParquetUrlTables,
+  attachSingleTable,
   bootDuckDBWasm,
   createBrowserAnalysisRuntime,
+  createDuckDBBundlesFromBase,
+  listAttachedTables,
 } from './runtime'
 export type {
   AnalyzeResult,
+  AttachedTablesHandle,
   AttachParquetTablesOptions,
   AttachParquetUrlTablesOptions,
+  AttachSingleTableOptions,
   BootDuckDBWasmOptions,
   BrowserAnalysisRuntime,
   BrowserParquetFile,

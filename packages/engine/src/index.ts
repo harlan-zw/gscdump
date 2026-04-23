@@ -1,3 +1,4 @@
+export { coerceRow, coerceRows } from './coerce'
 export type { CompactionThresholds } from './compaction'
 export { canonicalEmptyParquetSchema, createDuckDBCodec, createDuckDBExecutor } from './duckdb'
 export type { DuckDBFactory, DuckDBHandle } from './duckdb'

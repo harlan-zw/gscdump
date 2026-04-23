@@ -71,4 +71,18 @@ describe('bindLiterals', () => {
     const out = bindLiterals(sql, [null, 1, 'hi', true, new Date('2026-04-10T00:00:00Z')])
     expect(out).toBe('INSERT INTO t VALUES (NULL, 1, \'hi\', TRUE, \'2026-04-10T00:00:00.000Z\')')
   })
+
+  it('leaves ? inside -- line comments alone', () => {
+    const sql = 'SELECT ? -- x = ?\nFROM t WHERE y = ?'
+    expect(bindLiterals(sql, [1, 2])).toBe('SELECT 1 -- x = ?\nFROM t WHERE y = 2')
+  })
+
+  it('leaves ? inside /* block */ comments alone', () => {
+    const sql = 'SELECT ? /* hey ? there ? */ , ?'
+    expect(bindLiterals(sql, [1, 2])).toBe('SELECT 1 /* hey ? there ? */ , 2')
+  })
+
+  it('handles unterminated block comment to end of input', () => {
+    expect(bindLiterals('SELECT ? /* ? ? ', [1])).toBe('SELECT 1 /* ? ? ')
+  })
 })

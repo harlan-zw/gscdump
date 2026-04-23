@@ -310,12 +310,35 @@ export interface QueryExecuteOptions {
   dataSource: DataSource
   table: TableName
   signal?: AbortSignal
+  /**
+   * Optional callback invoked by the executor when it detects the DuckDB
+   * process is approaching a memory ceiling (e.g. ingesting rows after
+   * httpfs decode, or materialising a large temp relation). Callers can
+   * shed work, warm a spillover path, or warn the user. Advisory only —
+   * not all executors implement it.
+   */
+  onMemoryPressure?: (info: { bytes?: number, reason: string }) => void
 }
 
 export interface QueryExecuteResult {
   rows: Row[]
   /** The final SQL actually run (after placeholder substitution). */
   sql: string
+  /**
+   * Optional diagnostics the executor may emit for observability + capacity
+   * planning. Undefined on executors that don't instrument their runtime.
+   *
+   * - `peakBytes`: highest resident memory the engine reported during the
+   *   query. Callers may use this to decide whether to drop / compact state
+   *   before the next call.
+   * - `resetRecommended`: executor thinks the underlying connection should
+   *   be recycled (fragmented, near ceiling). Caller-owned decision —
+   *   honored by `BrowserAnalysisRuntime` consumers but not enforced.
+   */
+  diagnostics?: {
+    peakBytes?: number
+    resetRecommended?: boolean
+  }
 }
 
 export interface QueryExecutor {
