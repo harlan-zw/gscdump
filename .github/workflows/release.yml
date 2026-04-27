@@ -39,6 +39,9 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 
+      # Each package's `prepack` re-runs `pnpm run build`, which OOMs at
+      # the default 2 GB heap (same root cause as the build step above).
       - run: pnpm publish -r --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+          NODE_OPTIONS: --max-old-space-size=6144
