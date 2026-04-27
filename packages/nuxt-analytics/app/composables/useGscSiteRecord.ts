@@ -3,13 +3,11 @@
 // prop-drilling. Independent of any query composable; pair with
 // `useGscQuery` by passing `site: () => useSiteRecord().value?.id`.
 //
-// Reuses the canonical SiteRecord/ReadBackend types from useGscAnalytics so
-// auto-imports don't collide.
+// SiteRecord / ReadBackend live in useGscAnalytics — both files re-exporting
+// them tripped Nuxt's auto-import scanner ("Duplicated imports").
 
 import type { InjectionKey, Ref } from 'vue'
-import type { ReadBackend, SiteRecord } from './useGscAnalytics'
-
-export type { ReadBackend, SiteRecord }
+import type { SiteRecord } from './useGscAnalytics'
 
 const SITE_RECORD_KEY = Symbol('gscSiteRecord') as InjectionKey<Ref<SiteRecord | null>>
 
