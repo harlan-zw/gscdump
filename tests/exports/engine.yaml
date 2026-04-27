@@ -101,6 +101,7 @@
   buildTotalsSql: function
   compilePg: function
   compileSqlite: function
+  createParquetResolverAdapter: function
   createResolverAdapter: function
   createSqlFragments: function
   createSqlQuerySource: function
@@ -158,6 +159,7 @@
 ./sql:
   bindLiterals: function
   formatLiteral: function
+  sqlEscape: function
 ./sql-fragments:
   escapeLike: function
   METRIC_EXPR: object

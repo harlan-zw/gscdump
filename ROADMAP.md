@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-27
+Last updated: 2026-04-27 (afternoon)
 
 Unified successor to `PIVOT.md`, `NEXT_STEPS.md`, `NEXT_STEPS-example.md`,
 `PORTING_PLAN.md`, `EXTRACTION_PLAN.md`. Only open work lives here; shipped
@@ -69,16 +69,15 @@ each layer mode.
 
 ### P3 — polish
 
-4. **Playwright smoke on example** — boot under each mode and assert the
-   `[data-testid=analytics-mode]` indicator matches. Pairs with the
-   existing layer-mode contract test in `tests/example-modes.test.ts` to
-   cover behavior beyond config-time validation.
-5. **Layer page-primitive refactor** — `PageHeader`, `DashboardPage`,
-   `SectionHeader` primitives already in use on countries, insights,
-   search-appearance, indexing (list + drill-down), sitemaps (list +
-   drill-down). Remaining 6 pages with inline markup: overview
-   (`index.vue`), analyze, pages list/detail, queries list/detail.
-   Refactor alongside 1 / 2 adoption.
+4. **Playwright smoke on example** — DONE (downscoped to SSR smoke).
+   `tests/e2e/example-modes-render.test.ts` boots the example via
+   `@nuxt/test-utils`, bounces the server per mode with
+   `NUXT_PUBLIC_ANALYTICS_MODE`, and asserts the rendered
+   `[data-testid=analytics-mode]` block. Build runs once, ~26s for all
+   3 modes. Run via `pnpm test:e2e`.
+5. **Layer page-primitive refactor** — DONE. All 11 site pages now use
+   `GscDashboardPage` + `GscPageHeader`. Added `#icon` slot to
+   `GscPageHeader` to support the favicon-as-title-icon on overview.
 6. **Ongoing policy**: every layer change updates example in same PR;
    breaking = major bump; shared telemetry.
 
@@ -151,9 +150,36 @@ each layer mode.
   nuxt-analytics, gscdump, cli, mcp). gscdump.com now has a real npm
   source to pull from instead of `link:`.
 
+## Last session (2026-04-27 afternoon)
+
+- P3.5 page-primitive refactor: shipped `GscDashboardPage` +
+  `GscPageHeader` across the last 6 inline-markup pages (overview,
+  analyze, pages list/detail, queries list/detail). Layer now has a
+  consistent shell on all 11 site pages.
+- `GscPageHeader` gained an `#icon` slot so the overview page can render
+  `GscFavicon` (domain favicon) in place of a static lucide icon while
+  keeping the `icon` prop fallback for the other pages.
+- P3.4 Playwright smoke: downscoped to an SSR smoke under
+  `@nuxt/test-utils`. Added `tests/e2e/vitest.config.ts` (root-scoped
+  to `tests/e2e/`) and `tests/e2e/example-modes-render.test.ts`. Build
+  runs once; server bounces per mode via `NUXT_PUBLIC_ANALYTICS_MODE`,
+  asserting the layout's `[data-testid=analytics-mode]` block surfaces
+  the active mode. Wired `pnpm test:e2e`. ~26s wall clock.
+- Fixed a real chunk-splitting bug surfaced by the smoke build: the
+  layer's `useGscPeriod` composable referenced `GSC_STABLE_LATENCY_DAYS`
+  via auto-import only, and Vite's chunk splitter dropped the constant
+  from `GscDateRangePicker`'s SSR chunk (the constant was inlined into
+  a sibling chunk instead). Added an explicit `import` in
+  `useGscPeriod.ts`. Without this, any SSR render of `/` 500'd with
+  `GSC_STABLE_LATENCY_DAYS is not defined`.
+- Typecheck clean; `tests/layer-file-count.test.ts` and
+  `tests/example-modes.test.ts` still pass. Pre-existing snapshot drift
+  in `packages/analysis/test/analyzer-plan-snapshots.test.ts` (SQL
+  whitespace in CTR shortfall plans) is unchanged by this work.
+
 ## Next action
 
-`@gscdump/*@0.5.0` shipped 2026-04-27 (analysis, engine, engine-wasm,
-engine-duckdb-node, engine-sqlite, nuxt-analytics, gscdump, cli, mcp).
-Phase 0 audit fixes on `gscdump.com` are the unblock for P1.1; once
-green, swap `link:` → `^0.5.0` and start the file-deduplication pass.
+P3.4 + P3.5 both done. P1.1 is the next big lever once `gscdump.com`
+Phase 0 audit fixes land — then swap `link:` → `^0.5.0` and start the
+file-deduplication pass. Adjacent in-repo work: refresh the stale
+analyzer-plan snapshots if the SQL drift is intended.

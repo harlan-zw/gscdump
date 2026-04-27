@@ -37,7 +37,9 @@ const { crumbs = [], title, icon, description } = defineProps<{
             </template>
           </div>
           <h1 class="text-xl font-semibold tracking-tight text-default flex items-center gap-2 min-w-0">
-            <UIcon v-if="icon" :name="icon" class="size-4 text-dimmed shrink-0" />
+            <slot name="icon">
+              <UIcon v-if="icon" :name="icon" class="size-4 text-dimmed shrink-0" />
+            </slot>
             <span class="truncate">{{ title }}</span>
           </h1>
           <p v-if="description" class="text-[13px] text-muted mt-0.5 leading-snug">

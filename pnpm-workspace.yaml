@@ -63,6 +63,7 @@ catalogs:
     '@antfu/eslint-config': ^8.2.0
     eslint: ^10.2.1
   dev-test:
+    '@nuxt/test-utils': ^4.0.2
     vitest: ^4.1.5
 onlyBuiltDependencies:
   - '@parcel/watcher'

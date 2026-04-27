@@ -11,6 +11,8 @@
 // UTC-today minus the GSC stable-data latency, which is close enough until
 // a consumer proves otherwise.
 
+import { GSC_STABLE_LATENCY_DAYS } from '../utils/gsc-constants'
+
 export type Period = '7d' | '28d' | '3m' | '6m' | '12m'
 export type CompareMode = 'previous' | 'year' | 'none'
 

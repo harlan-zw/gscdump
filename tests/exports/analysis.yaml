@@ -14,7 +14,6 @@
   analyzeKeywordConcentrationFromSource: function
   analyzeMovers: function
   analyzeMoversFromSource: function
-  analyzeOpportunity: function
   analyzeOpportunityFromSource: function
   analyzePageConcentration: function
   analyzePageConcentrationFromSource: function
@@ -23,7 +22,6 @@
   analyzeSeasonalityFromSource: function
   analyzeStrikingDistance: function
   analyzeStrikingDistanceFromSource: function
-  analyzeZeroClick: function
   comparisonOf: function
   createAnalyzerRegistry: function
   createBrowserQuerySource: function
@@ -32,10 +30,10 @@
   createInMemoryQuerySource: function
   createSorter: function
   createSqliteQuerySource: function
-  defaultAnalyzerRegistry: object
   isSqlQuerySource: function
   mergePriorityActions: function
   normalizePriorityActions: function
+  normalizeQuery: function
   num: function
   padTimeseries: function
   periodOf: function
@@ -51,18 +49,52 @@
   windowToComparisonPeriod: function
   windowToPeriod: function
 ./analyzer:
-  adaptRowAnalyzer: function
   AnalyzerCapabilityError: function
+  bayesianCtrAnalyzer: object
+  bipartitePagerankAnalyzer: object
+  brandAnalyzer: object
+  cannibalizationAnalyzer: object
+  changePointAnalyzer: object
+  clampLimit: function
+  clampOffset: function
+  clusteringAnalyzer: object
+  concentrationAnalyzer: object
+  contentVelocityAnalyzer: object
   createAnalyzerRegistry: function
+  ctrAnomalyAnalyzer: object
+  ctrCurveAnalyzer: object
+  darkTrafficAnalyzer: object
+  dataDetailAnalyzer: object
+  dataQueryAnalyzer: object
   datesQueryState: function
+  decayAnalyzer: object
   defineAnalyzer: function
+  deviceGapAnalyzer: object
+  intentAtlasAnalyzer: object
+  keywordBreadthAnalyzer: object
   keywordsQueryState: function
+  longTailAnalyzer: object
+  moversAnalyzer: object
+  opportunityAnalyzer: object
   pagesQueryState: function
+  paginateClause: function
+  paginateInMemory: function
+  positionDistributionAnalyzer: object
+  positionVolatilityAnalyzer: object
+  queryMigrationAnalyzer: object
+  resolveSort: function
   ROW_ANALYZERS: object
   runAnalyzerFromSource: function
+  seasonalityAnalyzer: object
+  stlDecomposeAnalyzer: object
   strikingDistanceAnalyzer: object
+  survivalAnalyzer: object
+  trendsAnalyzer: object
+  zeroClickAnalyzer: object
 ./period:
   comparisonOf: function
+  defaultEndDate: function
+  defaultStartDate: function
   padTimeseries: function
   periodOf: function
   resolveWindow: function
@@ -71,6 +103,9 @@
 ./query:
   buildDataDetailPlan: function
   buildDataQueryPlan: function
+  normalizeQuery: function
+./registry:
+  defaultAnalyzerRegistry: object
 ./semantic:
   analyzeContentGap: function
   ContentGapSourceUnsupportedError: function

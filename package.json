@@ -14,11 +14,12 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm run -r typecheck",
     "test": "vitest --run",
-    "test:e2e": "vitest --project e2e",
+    "test:e2e": "vitest --run --config tests/e2e/vitest.config.ts",
     "release": "pnpm build && bumpp --output=CHANGELOG.md packages/*/package.json"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev-lint",
+    "@nuxt/test-utils": "catalog:dev-test",
     "@types/js-yaml": "catalog:",
     "@types/node": "catalog:",
     "aws4fetch": "catalog:",

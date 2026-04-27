@@ -795,637 +795,622 @@ function fmtTitle(v: unknown): string | undefined {
 </script>
 
 <template>
-  <div class="flex flex-col min-h-screen">
-    <header class="max-w-[1128px] px-4 sm:px-6 lg:px-9 border-b border-default pb-3">
-      <div class="flex items-start gap-4 pt-5">
-        <div class="flex flex-col sm:flex-row justify-between min-w-0 w-full gap-3 sm:gap-0">
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 text-xs text-dimmed mb-1">
-              <NuxtLink to="/" class="hover:text-default">
-                Overview
-              </NuxtLink>
-              <UIcon name="i-lucide-chevron-right" class="size-3" />
-              <NuxtLink :to="`/sites/${encodeURIComponent(siteId)}`" class="hover:text-default">
-                {{ currentSite?.hostname ?? siteId }}
-              </NuxtLink>
-              <UIcon name="i-lucide-chevron-right" class="size-3" />
-              <span class="text-muted">Analyze</span>
-            </div>
-            <h1 class="text-xl font-semibold tracking-tight text-default flex items-center gap-2">
-              <UIcon name="i-lucide-flask-conical" class="size-4 text-dimmed" />
-              Analyzer playground
-            </h1>
-            <p class="text-[13px] text-muted mt-0.5 leading-snug">
-              DuckDB-WASM analytics playground — parquet attached in the browser.
-            </p>
-          </div>
-          <div class="flex items-center gap-3 flex-wrap">
-            <GscDateRangePicker
-              v-model:period="period"
-              v-model:compare-mode="compareMode"
-              v-model:stable-data="stableData"
+  <GscDashboardPage>
+    <template #header>
+      <GscPageHeader
+        :crumbs="[
+          { label: 'Overview', to: '/' },
+          { label: currentSite?.hostname ?? siteId, to: `/sites/${encodeURIComponent(siteId)}` },
+          { label: 'Analyze' },
+        ]"
+        title="Analyzer playground"
+        icon="i-lucide-flask-conical"
+        description="DuckDB-WASM analytics playground — parquet attached in the browser."
+      >
+        <template #actions>
+          <GscDateRangePicker
+            v-model:period="period"
+            v-model:compare-mode="compareMode"
+            v-model:stable-data="stableData"
+          />
+          <div class="flex items-center gap-2 text-xs font-mono">
+            <UBadge v-if="bootError" color="error" variant="soft" icon="i-lucide-alert-circle">
+              Boot failed
+            </UBadge>
+            <UBadge v-else-if="!isReady" color="neutral" variant="soft" icon="i-lucide-loader">
+              Booting…
+            </UBadge>
+            <TimingPanel
+              v-else
+              :timings="{
+                bootMs: bootTimings?.bootMs,
+                manifestMs: bootTimings?.manifestMs,
+                attachMs: bootTimings?.attachMs,
+                rollupMs: undefined,
+                queryMs: queryMs ?? undefined,
+              }"
+              source="browser"
             />
-            <div class="flex items-center gap-2 text-xs font-mono">
-              <UBadge v-if="bootError" color="error" variant="soft" icon="i-lucide-alert-circle">
-                Boot failed
-              </UBadge>
-              <UBadge v-else-if="!isReady" color="neutral" variant="soft" icon="i-lucide-loader">
-                Booting…
-              </UBadge>
-              <TimingPanel
-                v-else
-                :timings="{
-                  bootMs: bootTimings?.bootMs,
-                  manifestMs: bootTimings?.manifestMs,
-                  attachMs: bootTimings?.attachMs,
-                  rollupMs: undefined,
-                  queryMs: queryMs ?? undefined,
-                }"
-                source="browser"
-              />
-            </div>
           </div>
-        </div>
-      </div>
-    </header>
+        </template>
+      </GscPageHeader>
+    </template>
 
-    <div class="max-w-[1128px] px-4 sm:px-6 lg:px-9 pt-4 pb-10 flex flex-col gap-4 flex-1 w-full">
-      <SiteTabs :site-id="siteId" />
+    <SiteTabs :site-id="siteId" />
 
-      <UAlert
-        v-if="bootError"
-        color="error"
-        icon="i-lucide-alert-circle"
-        title="Failed to boot DuckDB-WASM"
-        :description="bootError.message"
-      />
+    <UAlert
+      v-if="bootError"
+      color="error"
+      icon="i-lucide-alert-circle"
+      title="Failed to boot DuckDB-WASM"
+      :description="bootError.message"
+    />
 
-      <!-- Analyzer sub-nav: raw + analyzer + semantic + action -->
-      <nav class="flex items-center gap-0.5 border-b border-default -mb-px overflow-x-auto">
-        <button
-          v-for="t in TABS"
-          :key="t.id"
-          class="px-3 py-2 text-sm whitespace-nowrap border-b-2 transition-colors"
-          :class="[
-            activeId === t.id
-              ? 'border-primary text-default font-medium'
-              : 'border-transparent text-muted hover:text-default',
-            t.kind === 'analyzer' && activeId !== t.id ? 'text-muted/80' : '',
-            (!isReady || loading) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
-          ]"
-          :disabled="!isReady || loading"
-          @click="activeId = t.id"
-        >
-          {{ t.label }}
-        </button>
-        <span v-if="queryMs != null" class="ml-auto pl-2 text-[11px] font-mono text-dimmed tabular-nums whitespace-nowrap">
-          {{ Math.round(queryMs) }} ms · {{ rows.length }} rows
-          <template v-if="totalRows != null"> of {{ totalRows.toLocaleString() }}</template>
-        </span>
-      </nav>
+    <!-- Analyzer sub-nav: raw + analyzer + semantic + action -->
+    <nav class="flex items-center gap-0.5 border-b border-default -mb-px overflow-x-auto">
+      <button
+        v-for="t in TABS"
+        :key="t.id"
+        class="px-3 py-2 text-sm whitespace-nowrap border-b-2 transition-colors"
+        :class="[
+          activeId === t.id
+            ? 'border-primary text-default font-medium'
+            : 'border-transparent text-muted hover:text-default',
+          t.kind === 'analyzer' && activeId !== t.id ? 'text-muted/80' : '',
+          (!isReady || loading) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+        ]"
+        :disabled="!isReady || loading"
+        @click="activeId = t.id"
+      >
+        {{ t.label }}
+      </button>
+      <span v-if="queryMs != null" class="ml-auto pl-2 text-[11px] font-mono text-dimmed tabular-nums whitespace-nowrap">
+        {{ Math.round(queryMs) }} ms · {{ rows.length }} rows
+        <template v-if="totalRows != null"> of {{ totalRows.toLocaleString() }}</template>
+      </span>
+    </nav>
 
-      <UAlert
-        v-if="showAnonymizationWarning && anonymizationPct != null"
-        color="warning"
-        variant="soft"
-        icon="i-lucide-alert-triangle"
-        :title="`~${Math.round(anonymizationPct * 100)}% of impressions are anonymized by Google over the last 28 days`"
-        description="Query-grained breakdowns sum to less than page-grained totals — GSC drops low-volume queries before you ever see them."
-      />
+    <UAlert
+      v-if="showAnonymizationWarning && anonymizationPct != null"
+      color="warning"
+      variant="soft"
+      icon="i-lucide-alert-triangle"
+      :title="`~${Math.round(anonymizationPct * 100)}% of impressions are anonymized by Google over the last 28 days`"
+      description="Query-grained breakdowns sum to less than page-grained totals — GSC drops low-volume queries before you ever see them."
+    />
 
-      <div v-if="activeTab.kind === 'raw'" class="flex items-center gap-3 flex-wrap rounded-lg border border-default bg-default px-3 py-2">
-        <UInput
-          v-model="search"
-          icon="i-lucide-search"
-          size="sm"
-          :placeholder="`fuzzy ${(activeTab as RawTab).dim} search — space-separated tokens`"
-          class="flex-1 min-w-[200px]"
-          :ui="{ trailing: 'pr-1' }"
-        >
-          <template #trailing>
-            <UButton
-              v-if="search"
-              color="neutral"
-              variant="link"
-              size="xs"
-              icon="i-lucide-x"
-              @click="search = ''"
-            />
-          </template>
-        </UInput>
-        <div class="flex items-center gap-3 text-xs">
-          <span class="text-[11px] font-semibold text-dimmed uppercase tracking-widest">columns</span>
-          <label v-for="col in METRIC_COLS" :key="col" class="flex items-center gap-1.5 cursor-pointer">
-            <UCheckbox v-model="visibleMetrics[col]" size="xs" />
-            <span class="text-muted tabular-nums">{{ col }}</span>
-          </label>
-        </div>
-      </div>
-
-      <section v-if="activeId === 'cannibalization' && cannibalGraph && !loading && !error" class="cannibal-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">events</span>
-            <span class="cannibal-stat-value">{{ cannibalEvents.length }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">stolen clicks</span>
-            <span class="cannibal-stat-value">{{ cannibalSummary ? Math.round(cannibalSummary.totalStolen).toLocaleString() : '—' }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">avg fragmentation</span>
-            <span class="cannibal-stat-value">{{ cannibalSummary ? `${(cannibalSummary.avgFrag * 100).toFixed(1)}%` : '—' }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">nodes · edges</span>
-            <span class="cannibal-stat-value">{{ cannibalGraph.nodes.length }} · {{ cannibalGraph.edges.length }}</span>
-          </div>
-        </div>
-        <CannibalizationGraph
-          :nodes="cannibalGraph.nodes"
-          :edges="cannibalGraph.edges"
-          :events="cannibalEvents"
-        />
-        <p class="cannibal-caption">
-          Multi-URL competition per query, computed via SQL self-join in-browser.
-          The GSC API can only tell you queries-per-page; never page-vs-page-per-query.
-        </p>
-      </section>
-
-      <section v-else-if="activeId === 'ctr-anomaly' && !loading && !error && anomalies.length > 0" class="anomaly-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">flagged entities</span>
-            <span class="cannibal-stat-value">{{ anomalies.length }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">clicks lost</span>
-            <span class="cannibal-stat-value">{{ anomalySummary ? Math.round(anomalySummary.totalClicksLost).toLocaleString() : '—' }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">breach days (Σ)</span>
-            <span class="cannibal-stat-value">{{ anomalySummary?.totalBreachDays ?? '—' }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">z threshold</span>
-            <span class="cannibal-stat-value">±{{ anomalySummary?.zThreshold ?? '—' }}σ</span>
-          </div>
-        </div>
-        <div class="anomaly-list">
-          <div v-for="a in anomalies.slice(0, 30)" :key="`${a.keyword}|${a.page}`" class="anomaly-row">
-            <div class="anomaly-meta">
-              <div class="anomaly-kw">
-                {{ a.keyword }}
-              </div>
-              <div class="anomaly-page">
-                {{ a.page }}
-              </div>
-              <div class="anomaly-metrics">
-                <span><b>{{ Math.round(a.clicksLost) }}</b> clicks lost</span>
-                <span>·</span>
-                <span><b>{{ a.breachDaysDown }}</b> breach days</span>
-                <span>·</span>
-                <span>max |z|=<b>{{ a.maxZ.toFixed(1) }}</b></span>
-                <span>·</span>
-                <span>pos <b>{{ a.baselinePosition.toFixed(1) }}</b></span>
-              </div>
-            </div>
-            <AnomalyChart :series="a.series" />
-          </div>
-        </div>
-        <p class="cannibal-caption">
-          CTR envelope = 28-day rolling mean ±2σ via window functions. Red dots =
-          days where CTR collapsed while position held (likely SERP feature theft).
-        </p>
-      </section>
-
-      <section v-else-if="activeId === 'position-volatility' && !loading && !error && volatilityPages.length > 0" class="anomaly-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">volatile pages</span>
-            <span class="cannibal-stat-value">{{ volatilityPages.length }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">days</span>
-            <span class="cannibal-stat-value">{{ volatilityMeta?.dates.length ?? 0 }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">peak volatility</span>
-            <span class="cannibal-stat-value">{{ volatilityMeta ? volatilityMeta.maxVolatility.toFixed(2) : '—' }}</span>
-          </div>
-        </div>
-        <VolatilityHeatmap
-          :pages="volatilityPages"
-          :dates="volatilityMeta?.dates ?? []"
-          :max-volatility="volatilityMeta?.maxVolatility ?? 1"
-        />
-        <p class="cannibal-caption">
-          Per-page per-day position σ + DoD shift. Bright cells = pages whose
-          ranking was genuinely noisy that day — not just pages that rank well.
-        </p>
-      </section>
-
-      <section v-else-if="activeId === 'long-tail' && !loading && !error && longTailPages.length > 0" class="anomaly-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">pages fit</span>
-            <span class="cannibal-stat-value">{{ longTailPages.length }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">flat-tail</span>
-            <span class="cannibal-stat-value" style="color:#2d9a6a">{{ longTailSummary?.counts['flat-tail'] ?? 0 }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">balanced</span>
-            <span class="cannibal-stat-value" style="color:#4c3ca0">{{ longTailSummary?.counts.balanced ?? 0 }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">head-heavy</span>
-            <span class="cannibal-stat-value" style="color:#c52d45">{{ longTailSummary?.counts['head-heavy'] ?? 0 }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">avg slope</span>
-            <span class="cannibal-stat-value">{{ longTailSummary ? longTailSummary.avgSlope.toFixed(2) : '—' }}</span>
-          </div>
-        </div>
-        <LongTailFingerprint :pages="longTailPages" />
-        <p class="cannibal-caption">
-          Power-law fit: slope of log(rank) vs log(impressions) via
-          REGR_SLOPE/REGR_INTERCEPT/REGR_R2. Flat = topic authority,
-          steep = single-keyword dependency risk.
-        </p>
-      </section>
-
-      <section v-else-if="activeId === 'intent-atlas' && !loading && !error && intentClusters.length > 0" class="anomaly-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">clusters</span>
-            <span class="cannibal-stat-value">{{ intentClusters.length }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">keywords clustered</span>
-            <span class="cannibal-stat-value">{{ intentSummary?.totalKeywords.toLocaleString() ?? '—' }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">impressions</span>
-            <span class="cannibal-stat-value">{{ intentSummary ? Math.round(intentSummary.totalImpressions).toLocaleString() : '—' }}</span>
-          </div>
-        </div>
-        <IntentTreemap :clusters="intentClusters" />
-        <p class="cannibal-caption">
-          Token-cooccurrence clusters via <code>regexp_split_to_array</code> +
-          <code>unnest</code>. Each tile's name is its top-2 most-impression
-          tokens — queries with no shared prefix still group if they share their
-          dominant tokens.
-        </p>
-      </section>
-
-      <section v-else-if="activeId === 'query-migration' && !loading && !error && migrationEdges.length > 0" class="anomaly-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">migration edges</span>
-            <span class="cannibal-stat-value">{{ migrationEdges.length }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">absorbed impressions</span>
-            <span class="cannibal-stat-value">{{ migrationMeta ? Math.round(migrationMeta.totalAbsorbed).toLocaleString() : '—' }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">URLs in flow</span>
-            <span class="cannibal-stat-value">{{ migrationMeta?.nodes.length ?? 0 }}</span>
-          </div>
-          <div v-if="migrationMeta?.period" class="cannibal-stat">
-            <span class="cannibal-stat-label">prev → curr</span>
-            <span class="cannibal-stat-value periods">
-              {{ migrationMeta.period.previous.startDate }}…{{ migrationMeta.period.previous.endDate }}
-              <br>{{ migrationMeta.period.current.startDate }}…{{ migrationMeta.period.current.endDate }}
-            </span>
-          </div>
-        </div>
-        <MigrationSankey :edges="migrationEdges" :nodes="migrationMeta?.nodes ?? []" />
-        <p class="cannibal-caption">
-          Lost ↔ gained queries fuzzy-matched via DuckDB's
-          <code>levenshtein()</code>. Edges show which URL absorbed the
-          impressions Google reassigned across the two periods.
-        </p>
-      </section>
-
-      <section v-else-if="activeId === 'bayesian-ctr' && !loading && !error && bayesianRows.length > 0" class="anomaly-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">entities</span>
-            <span class="cannibal-stat-value">{{ bayesianRows.length }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">underperforming</span>
-            <span class="cannibal-stat-value" style="color:#c52d45">{{ bayesianSummary?.under ?? 0 }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">overperforming</span>
-            <span class="cannibal-stat-value" style="color:#2d9a6a">{{ bayesianSummary?.over ?? 0 }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">expected-click gap</span>
-            <span class="cannibal-stat-value">{{ bayesianSummary ? Math.round(bayesianSummary.expectedClicksGap).toLocaleString() : '—' }}</span>
-          </div>
-        </div>
-        <BayesianCtrPanel :rows="bayesianRows" />
-        <p class="cannibal-caption">
-          Empirical Beta-Binomial shrinkage. Prior fit per position bucket via
-          method-of-moments on impression-weighted CTR; posterior = Beta(α+clicks, β+impr-clicks).
-          95% CI = normal approx around posterior mean. Only flags entities
-          where the observed rate is outside its prior-informed credible range.
-        </p>
-      </section>
-
-      <section v-else-if="activeId === 'stl-decompose' && !loading && !error && stlEntities.length > 0" class="anomaly-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">entities</span>
-            <span class="cannibal-stat-value">{{ stlEntities.length }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">avg seasonal strength</span>
-            <span class="cannibal-stat-value">{{ (stlEntities.reduce((s, e) => s + e.seasonalStrength, 0) / stlEntities.length).toFixed(2) }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">residual anomalies (Σ)</span>
-            <span class="cannibal-stat-value">{{ stlEntities.reduce((s, e) => s + e.residualAnomalies, 0) }}</span>
-          </div>
-        </div>
-        <StlPanel :entities="stlEntities" metric="impressions" />
-        <p class="cannibal-caption">
-          Classical additive decomposition: trend = centered 7-day MA, seasonal =
-          AVG of detrended per weekday, residual = observed − trend − seasonal.
-          Residual anomalies survive both trend + weekly seasonality.
-        </p>
-      </section>
-
-      <section v-if="activeId === 'bipartite-pagerank' && !loading && !error && pageRankNodes.length > 0 && pageRankMeta" class="anomaly-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">iterations</span>
-            <span class="cannibal-stat-value">{{ pageRankMeta.iterations }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">damping</span>
-            <span class="cannibal-stat-value">{{ pageRankMeta.damping }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">L1 Δ (final)</span>
-            <span class="cannibal-stat-value">{{ pageRankMeta.convergenceDelta.toExponential(2) }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">queries · URLs</span>
-            <span class="cannibal-stat-value">{{ pageRankMeta.queryCount }} · {{ pageRankMeta.urlCount }}</span>
-          </div>
-        </div>
-        <BipartitePageRankPanel :nodes="pageRankNodes" :meta="pageRankMeta" />
-        <p class="cannibal-caption">
-          Personalized PageRank on the query↔URL bipartite graph via DuckDB
-          recursive-style CTE chain (bounded-unroll power iteration, 25 steps).
-          Hub queries bridge many URLs; hub URLs anchor many queries.
-        </p>
-      </section>
-
-      <section v-else-if="activeId === 'survival' && !loading && !error && survivalCohorts.length > 0" class="anomaly-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">episodes</span>
-            <span class="cannibal-stat-value">{{ survivalMeta?.totalEpisodes ?? 0 }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">cohorts</span>
-            <span class="cannibal-stat-value">{{ survivalMeta?.cohortCount ?? 0 }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">window</span>
-            <span class="cannibal-stat-value">{{ survivalMeta?.windowDays ?? 180 }}d</span>
-          </div>
-        </div>
-        <SurvivalPanel :cohorts="survivalCohorts" :window-days="survivalMeta?.windowDays" />
-        <p class="cannibal-caption">
-          Kaplan-Meier survival curves. An episode starts when a keyword
-          enters the top 10; it dies when position rises above 10. S(t) =
-          Π(1 − d/n) computed in SQL via
-          <code>EXP(SUM(LN(...)))</code>; at-risk via reverse cumulative sum.
-        </p>
-      </section>
-
-      <section v-else-if="activeId === 'actions'" class="anomaly-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">status</span>
-            <span class="cannibal-stat-value contgap-phase">{{ actionPriority.progress.value.phase }}</span>
-          </div>
-          <div v-if="actionPriority.progress.value.total" class="cannibal-stat">
-            <span class="cannibal-stat-label">progress</span>
-            <span class="cannibal-stat-value">{{ actionPriority.progress.value.completed ?? 0 }} / {{ actionPriority.progress.value.total }}</span>
-          </div>
-          <div v-if="actionPriority.actions.value.length > 0" class="cannibal-stat">
-            <span class="cannibal-stat-label">actions</span>
-            <span class="cannibal-stat-value">{{ actionPriority.actions.value.length }}</span>
-          </div>
-          <button
-            class="cg-run"
-            :disabled="!isReady || actionPriority.running.value"
-            @click="actionPriority.run(runner)"
-          >
-            {{ actionPriority.running.value ? 'Running…' : actionPriority.actions.value.length > 0 ? 'Re-run' : 'Generate action plan' }}
-          </button>
-        </div>
-        <div v-if="actionPriority.error.value" class="err-box">
-          {{ actionPriority.error.value.message }}
-        </div>
-        <div v-else-if="actionPriority.progress.value.phase === 'running'" class="cg-status">
-          {{ actionPriority.progress.value.message }}
-        </div>
-        <ActionPriorityPanel v-if="actionPriority.actions.value.length > 0" :actions="actionPriority.actions.value" />
-        <div v-else-if="actionPriority.progress.value.phase === 'idle'" class="cg-intro">
-          <h3>Action priority dashboard</h3>
-          <p>
-            Runs five analyzers in parallel (striking-distance, opportunity,
-            cannibalization, ctr-anomaly, change-point), dedupes by keyword+page,
-            and ranks by composite <code>impact × severity × effortMultiplier</code>.
-          </p>
-          <p>
-            One tab to rule them all: the top 40 actions across the whole site.
-          </p>
-        </div>
-        <p class="cannibal-caption">
-          Actions are deduped across sources — a keyword flagged by both
-          striking-distance and cannibalization surfaces as one action with
-          both source tags. Effort heuristic picks the lowest (fixing the
-          on-page lever usually unblocks the SERP one).
-        </p>
-      </section>
-
-      <section v-else-if="activeId === 'content-gap'" class="anomaly-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">status</span>
-            <span class="cannibal-stat-value contgap-phase">{{ contentGap.progress.value.phase }}</span>
-          </div>
-          <div v-if="contentGap.progress.value.total" class="cannibal-stat">
-            <span class="cannibal-stat-label">progress</span>
-            <span class="cannibal-stat-value">{{ contentGap.progress.value.done ?? 0 }} / {{ contentGap.progress.value.total }}</span>
-          </div>
-          <div v-if="contentGap.progress.value.modelMs" class="cannibal-stat">
-            <span class="cannibal-stat-label">model load</span>
-            <span class="cannibal-stat-value">{{ Math.round(contentGap.progress.value.modelMs) }}ms</span>
-          </div>
-          <div v-if="contentGap.progress.value.embedMs" class="cannibal-stat">
-            <span class="cannibal-stat-label">embed</span>
-            <span class="cannibal-stat-value">{{ Math.round(contentGap.progress.value.embedMs) }}ms</span>
-          </div>
-          <div v-if="contentGap.results.value.length > 0" class="cannibal-stat">
-            <span class="cannibal-stat-label">gaps found</span>
-            <span class="cannibal-stat-value">{{ contentGap.results.value.length }}</span>
-          </div>
-          <button
-            class="cg-run"
-            :disabled="!isReady || contentGap.running.value"
-            @click="contentGap.run(runner)"
-          >
-            {{ contentGap.running.value ? 'Running…' : contentGap.results.value.length > 0 ? 'Re-run' : 'Detect content gaps' }}
-          </button>
-        </div>
-
-        <div v-if="contentGap.error.value" class="err-box">
-          {{ contentGap.error.value.message }}
-        </div>
-
-        <div v-if="contentGap.progress.value.phase !== 'done' && contentGap.progress.value.phase !== 'idle'" class="cg-status">
-          {{ contentGap.progress.value.message }}
-          <div v-if="contentGap.progress.value.total" class="cg-progress-bar">
-            <div class="cg-progress-fill" :style="{ width: `${((contentGap.progress.value.done ?? 0) / contentGap.progress.value.total) * 100}%` }" />
-          </div>
-        </div>
-
-        <ContentGapPanel v-if="contentGap.results.value.length > 0" :rows="contentGap.results.value" />
-
-        <div v-else-if="contentGap.progress.value.phase === 'idle'" class="cg-intro">
-          <h3>Semantic content-gap detection</h3>
-          <p>
-            Embeds every top query and every URL via a local MiniLM model (22MB,
-            cached in IndexedDB after first run). Cosine-matches each query to
-            its best semantic URL, then flags queries where Google ranks you on
-            a different URL than the one that <em>topically</em> fits best.
-          </p>
-          <p>
-            Runs 100% in-browser. No API calls, no data leaves the tab.
-            After first download, re-runs take seconds.
-          </p>
-        </div>
-
-        <p class="cannibal-caption">
-          Embeddings: <code>Xenova/bge-base-en-v1.5</code> (fp32, 768-dim) via
-          <code>@huggingface/transformers</code>, WebGPU if available. Queries
-          use the BGE retrieval prefix; URL passages don't. Embeddings cached
-          in IndexedDB, URLs deduped by canonical pathname. Divergence =
-          cosine(query, bestUrl) − cosine(query, currentUrl).
-        </p>
-      </section>
-
-      <section v-else-if="activeId === 'change-point' && !loading && !error && changePointEntities.length > 0" class="anomaly-panel">
-        <div class="cannibal-headline">
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">change points</span>
-            <span class="cannibal-stat-value">{{ changePointEntities.length }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">improved</span>
-            <span class="cannibal-stat-value" style="color:#2d9a6a">{{ changePointEntities.filter(e => e.direction === 'improved').length }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">worsened</span>
-            <span class="cannibal-stat-value" style="color:#c52d45">{{ changePointEntities.filter(e => e.direction === 'worsened').length }}</span>
-          </div>
-          <div class="cannibal-stat">
-            <span class="cannibal-stat-label">max LLR</span>
-            <span class="cannibal-stat-value">{{ changePointEntities.length > 0 ? changePointEntities[0]!.llr.toFixed(1) : '—' }}</span>
-          </div>
-        </div>
-        <ChangePointPanel :entities="changePointEntities" metric="position" />
-        <p class="cannibal-caption">
-          Binary-segmentation change-point detection: at each candidate split
-          date, compare Gaussian log-likelihood of one-segment vs two-segment
-          fits. LLR = Σ n·log(σ²) differential. High LLR = the regime genuinely
-          flipped on that date; low LLR = gradual drift.
-        </p>
-      </section>
-
-      <section v-else class="panel">
-        <div v-if="loading" class="loading">
-          Running query…
-        </div>
-        <div v-else-if="error" class="err-box">
-          {{ error }}
-        </div>
-        <div v-else-if="rows.length === 0 && isReady" class="empty">
-          No rows.
-        </div>
-        <div v-else-if="rows.length > 0" class="wrap">
-          <table>
-            <thead>
-              <tr>
-                <th
-                  v-for="c in visibleColumns" :key="c"
-                  :class="{ sortable: isSortable(c), active: sortBy === c }"
-                  @click="toggleSort(c)"
-                >
-                  {{ c }}
-                  <span v-if="sortBy === c && isSortable(c)" class="arrow">{{ sortDir === 'desc' ? '▼' : '▲' }}</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, i) in displayRows" :key="i">
-                <td v-for="c in visibleColumns" :key="c" :title="fmtTitle(row[c])" :class="{ num: typeof row[c] === 'number' || typeof row[c] === 'bigint' }">
-                  <Sparkline v-if="seriesValues(row[c])" :values="seriesValues(row[c])!" />
-                  <template v-else>
-                    {{ fmt(row[c]) }}
-                  </template>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <div v-if="activeTab.kind === 'raw' && totalPages != null" class="pager">
-        <button :disabled="pageIdx === 0 || loading" @click="pageIdx = 0">
-          ⟪
-        </button>
-        <button :disabled="pageIdx === 0 || loading" @click="pageIdx--">
-          ‹
-        </button>
-        <span>Page {{ pageIdx + 1 }} / {{ totalPages }}</span>
-        <button :disabled="pageIdx + 1 >= totalPages || loading" @click="pageIdx++">
-          ›
-        </button>
-        <button :disabled="pageIdx + 1 >= totalPages || loading" @click="pageIdx = totalPages - 1">
-          ⟫
-        </button>
-        <label class="pagesize">per page
-          <select v-model.number="pageSize">
-            <option :value="10">
-              10
-            </option>
-            <option :value="25">
-              25
-            </option>
-            <option :value="50">
-              50
-            </option>
-            <option :value="100">
-              100
-            </option>
-          </select>
+    <div v-if="activeTab.kind === 'raw'" class="flex items-center gap-3 flex-wrap rounded-lg border border-default bg-default px-3 py-2">
+      <UInput
+        v-model="search"
+        icon="i-lucide-search"
+        size="sm"
+        :placeholder="`fuzzy ${(activeTab as RawTab).dim} search — space-separated tokens`"
+        class="flex-1 min-w-[200px]"
+        :ui="{ trailing: 'pr-1' }"
+      >
+        <template #trailing>
+          <UButton
+            v-if="search"
+            color="neutral"
+            variant="link"
+            size="xs"
+            icon="i-lucide-x"
+            @click="search = ''"
+          />
+        </template>
+      </UInput>
+      <div class="flex items-center gap-3 text-xs">
+        <span class="text-[11px] font-semibold text-dimmed uppercase tracking-widest">columns</span>
+        <label v-for="col in METRIC_COLS" :key="col" class="flex items-center gap-1.5 cursor-pointer">
+          <UCheckbox v-model="visibleMetrics[col]" size="xs" />
+          <span class="text-muted tabular-nums">{{ col }}</span>
         </label>
       </div>
     </div>
-  </div>
+
+    <section v-if="activeId === 'cannibalization' && cannibalGraph && !loading && !error" class="cannibal-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">events</span>
+          <span class="cannibal-stat-value">{{ cannibalEvents.length }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">stolen clicks</span>
+          <span class="cannibal-stat-value">{{ cannibalSummary ? Math.round(cannibalSummary.totalStolen).toLocaleString() : '—' }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">avg fragmentation</span>
+          <span class="cannibal-stat-value">{{ cannibalSummary ? `${(cannibalSummary.avgFrag * 100).toFixed(1)}%` : '—' }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">nodes · edges</span>
+          <span class="cannibal-stat-value">{{ cannibalGraph.nodes.length }} · {{ cannibalGraph.edges.length }}</span>
+        </div>
+      </div>
+      <CannibalizationGraph
+        :nodes="cannibalGraph.nodes"
+        :edges="cannibalGraph.edges"
+        :events="cannibalEvents"
+      />
+      <p class="cannibal-caption">
+        Multi-URL competition per query, computed via SQL self-join in-browser.
+        The GSC API can only tell you queries-per-page; never page-vs-page-per-query.
+      </p>
+    </section>
+
+    <section v-else-if="activeId === 'ctr-anomaly' && !loading && !error && anomalies.length > 0" class="anomaly-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">flagged entities</span>
+          <span class="cannibal-stat-value">{{ anomalies.length }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">clicks lost</span>
+          <span class="cannibal-stat-value">{{ anomalySummary ? Math.round(anomalySummary.totalClicksLost).toLocaleString() : '—' }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">breach days (Σ)</span>
+          <span class="cannibal-stat-value">{{ anomalySummary?.totalBreachDays ?? '—' }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">z threshold</span>
+          <span class="cannibal-stat-value">±{{ anomalySummary?.zThreshold ?? '—' }}σ</span>
+        </div>
+      </div>
+      <div class="anomaly-list">
+        <div v-for="a in anomalies.slice(0, 30)" :key="`${a.keyword}|${a.page}`" class="anomaly-row">
+          <div class="anomaly-meta">
+            <div class="anomaly-kw">
+              {{ a.keyword }}
+            </div>
+            <div class="anomaly-page">
+              {{ a.page }}
+            </div>
+            <div class="anomaly-metrics">
+              <span><b>{{ Math.round(a.clicksLost) }}</b> clicks lost</span>
+              <span>·</span>
+              <span><b>{{ a.breachDaysDown }}</b> breach days</span>
+              <span>·</span>
+              <span>max |z|=<b>{{ a.maxZ.toFixed(1) }}</b></span>
+              <span>·</span>
+              <span>pos <b>{{ a.baselinePosition.toFixed(1) }}</b></span>
+            </div>
+          </div>
+          <AnomalyChart :series="a.series" />
+        </div>
+      </div>
+      <p class="cannibal-caption">
+        CTR envelope = 28-day rolling mean ±2σ via window functions. Red dots =
+        days where CTR collapsed while position held (likely SERP feature theft).
+      </p>
+    </section>
+
+    <section v-else-if="activeId === 'position-volatility' && !loading && !error && volatilityPages.length > 0" class="anomaly-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">volatile pages</span>
+          <span class="cannibal-stat-value">{{ volatilityPages.length }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">days</span>
+          <span class="cannibal-stat-value">{{ volatilityMeta?.dates.length ?? 0 }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">peak volatility</span>
+          <span class="cannibal-stat-value">{{ volatilityMeta ? volatilityMeta.maxVolatility.toFixed(2) : '—' }}</span>
+        </div>
+      </div>
+      <VolatilityHeatmap
+        :pages="volatilityPages"
+        :dates="volatilityMeta?.dates ?? []"
+        :max-volatility="volatilityMeta?.maxVolatility ?? 1"
+      />
+      <p class="cannibal-caption">
+        Per-page per-day position σ + DoD shift. Bright cells = pages whose
+        ranking was genuinely noisy that day — not just pages that rank well.
+      </p>
+    </section>
+
+    <section v-else-if="activeId === 'long-tail' && !loading && !error && longTailPages.length > 0" class="anomaly-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">pages fit</span>
+          <span class="cannibal-stat-value">{{ longTailPages.length }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">flat-tail</span>
+          <span class="cannibal-stat-value" style="color:#2d9a6a">{{ longTailSummary?.counts['flat-tail'] ?? 0 }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">balanced</span>
+          <span class="cannibal-stat-value" style="color:#4c3ca0">{{ longTailSummary?.counts.balanced ?? 0 }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">head-heavy</span>
+          <span class="cannibal-stat-value" style="color:#c52d45">{{ longTailSummary?.counts['head-heavy'] ?? 0 }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">avg slope</span>
+          <span class="cannibal-stat-value">{{ longTailSummary ? longTailSummary.avgSlope.toFixed(2) : '—' }}</span>
+        </div>
+      </div>
+      <LongTailFingerprint :pages="longTailPages" />
+      <p class="cannibal-caption">
+        Power-law fit: slope of log(rank) vs log(impressions) via
+        REGR_SLOPE/REGR_INTERCEPT/REGR_R2. Flat = topic authority,
+        steep = single-keyword dependency risk.
+      </p>
+    </section>
+
+    <section v-else-if="activeId === 'intent-atlas' && !loading && !error && intentClusters.length > 0" class="anomaly-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">clusters</span>
+          <span class="cannibal-stat-value">{{ intentClusters.length }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">keywords clustered</span>
+          <span class="cannibal-stat-value">{{ intentSummary?.totalKeywords.toLocaleString() ?? '—' }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">impressions</span>
+          <span class="cannibal-stat-value">{{ intentSummary ? Math.round(intentSummary.totalImpressions).toLocaleString() : '—' }}</span>
+        </div>
+      </div>
+      <IntentTreemap :clusters="intentClusters" />
+      <p class="cannibal-caption">
+        Token-cooccurrence clusters via <code>regexp_split_to_array</code> +
+        <code>unnest</code>. Each tile's name is its top-2 most-impression
+        tokens — queries with no shared prefix still group if they share their
+        dominant tokens.
+      </p>
+    </section>
+
+    <section v-else-if="activeId === 'query-migration' && !loading && !error && migrationEdges.length > 0" class="anomaly-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">migration edges</span>
+          <span class="cannibal-stat-value">{{ migrationEdges.length }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">absorbed impressions</span>
+          <span class="cannibal-stat-value">{{ migrationMeta ? Math.round(migrationMeta.totalAbsorbed).toLocaleString() : '—' }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">URLs in flow</span>
+          <span class="cannibal-stat-value">{{ migrationMeta?.nodes.length ?? 0 }}</span>
+        </div>
+        <div v-if="migrationMeta?.period" class="cannibal-stat">
+          <span class="cannibal-stat-label">prev → curr</span>
+          <span class="cannibal-stat-value periods">
+            {{ migrationMeta.period.previous.startDate }}…{{ migrationMeta.period.previous.endDate }}
+            <br>{{ migrationMeta.period.current.startDate }}…{{ migrationMeta.period.current.endDate }}
+          </span>
+        </div>
+      </div>
+      <MigrationSankey :edges="migrationEdges" :nodes="migrationMeta?.nodes ?? []" />
+      <p class="cannibal-caption">
+        Lost ↔ gained queries fuzzy-matched via DuckDB's
+        <code>levenshtein()</code>. Edges show which URL absorbed the
+        impressions Google reassigned across the two periods.
+      </p>
+    </section>
+
+    <section v-else-if="activeId === 'bayesian-ctr' && !loading && !error && bayesianRows.length > 0" class="anomaly-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">entities</span>
+          <span class="cannibal-stat-value">{{ bayesianRows.length }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">underperforming</span>
+          <span class="cannibal-stat-value" style="color:#c52d45">{{ bayesianSummary?.under ?? 0 }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">overperforming</span>
+          <span class="cannibal-stat-value" style="color:#2d9a6a">{{ bayesianSummary?.over ?? 0 }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">expected-click gap</span>
+          <span class="cannibal-stat-value">{{ bayesianSummary ? Math.round(bayesianSummary.expectedClicksGap).toLocaleString() : '—' }}</span>
+        </div>
+      </div>
+      <BayesianCtrPanel :rows="bayesianRows" />
+      <p class="cannibal-caption">
+        Empirical Beta-Binomial shrinkage. Prior fit per position bucket via
+        method-of-moments on impression-weighted CTR; posterior = Beta(α+clicks, β+impr-clicks).
+        95% CI = normal approx around posterior mean. Only flags entities
+        where the observed rate is outside its prior-informed credible range.
+      </p>
+    </section>
+
+    <section v-else-if="activeId === 'stl-decompose' && !loading && !error && stlEntities.length > 0" class="anomaly-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">entities</span>
+          <span class="cannibal-stat-value">{{ stlEntities.length }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">avg seasonal strength</span>
+          <span class="cannibal-stat-value">{{ (stlEntities.reduce((s, e) => s + e.seasonalStrength, 0) / stlEntities.length).toFixed(2) }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">residual anomalies (Σ)</span>
+          <span class="cannibal-stat-value">{{ stlEntities.reduce((s, e) => s + e.residualAnomalies, 0) }}</span>
+        </div>
+      </div>
+      <StlPanel :entities="stlEntities" metric="impressions" />
+      <p class="cannibal-caption">
+        Classical additive decomposition: trend = centered 7-day MA, seasonal =
+        AVG of detrended per weekday, residual = observed − trend − seasonal.
+        Residual anomalies survive both trend + weekly seasonality.
+      </p>
+    </section>
+
+    <section v-if="activeId === 'bipartite-pagerank' && !loading && !error && pageRankNodes.length > 0 && pageRankMeta" class="anomaly-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">iterations</span>
+          <span class="cannibal-stat-value">{{ pageRankMeta.iterations }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">damping</span>
+          <span class="cannibal-stat-value">{{ pageRankMeta.damping }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">L1 Δ (final)</span>
+          <span class="cannibal-stat-value">{{ pageRankMeta.convergenceDelta.toExponential(2) }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">queries · URLs</span>
+          <span class="cannibal-stat-value">{{ pageRankMeta.queryCount }} · {{ pageRankMeta.urlCount }}</span>
+        </div>
+      </div>
+      <BipartitePageRankPanel :nodes="pageRankNodes" :meta="pageRankMeta" />
+      <p class="cannibal-caption">
+        Personalized PageRank on the query↔URL bipartite graph via DuckDB
+        recursive-style CTE chain (bounded-unroll power iteration, 25 steps).
+        Hub queries bridge many URLs; hub URLs anchor many queries.
+      </p>
+    </section>
+
+    <section v-else-if="activeId === 'survival' && !loading && !error && survivalCohorts.length > 0" class="anomaly-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">episodes</span>
+          <span class="cannibal-stat-value">{{ survivalMeta?.totalEpisodes ?? 0 }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">cohorts</span>
+          <span class="cannibal-stat-value">{{ survivalMeta?.cohortCount ?? 0 }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">window</span>
+          <span class="cannibal-stat-value">{{ survivalMeta?.windowDays ?? 180 }}d</span>
+        </div>
+      </div>
+      <SurvivalPanel :cohorts="survivalCohorts" :window-days="survivalMeta?.windowDays" />
+      <p class="cannibal-caption">
+        Kaplan-Meier survival curves. An episode starts when a keyword
+        enters the top 10; it dies when position rises above 10. S(t) =
+        Π(1 − d/n) computed in SQL via
+        <code>EXP(SUM(LN(...)))</code>; at-risk via reverse cumulative sum.
+      </p>
+    </section>
+
+    <section v-else-if="activeId === 'actions'" class="anomaly-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">status</span>
+          <span class="cannibal-stat-value contgap-phase">{{ actionPriority.progress.value.phase }}</span>
+        </div>
+        <div v-if="actionPriority.progress.value.total" class="cannibal-stat">
+          <span class="cannibal-stat-label">progress</span>
+          <span class="cannibal-stat-value">{{ actionPriority.progress.value.completed ?? 0 }} / {{ actionPriority.progress.value.total }}</span>
+        </div>
+        <div v-if="actionPriority.actions.value.length > 0" class="cannibal-stat">
+          <span class="cannibal-stat-label">actions</span>
+          <span class="cannibal-stat-value">{{ actionPriority.actions.value.length }}</span>
+        </div>
+        <button
+          class="cg-run"
+          :disabled="!isReady || actionPriority.running.value"
+          @click="actionPriority.run(runner)"
+        >
+          {{ actionPriority.running.value ? 'Running…' : actionPriority.actions.value.length > 0 ? 'Re-run' : 'Generate action plan' }}
+        </button>
+      </div>
+      <div v-if="actionPriority.error.value" class="err-box">
+        {{ actionPriority.error.value.message }}
+      </div>
+      <div v-else-if="actionPriority.progress.value.phase === 'running'" class="cg-status">
+        {{ actionPriority.progress.value.message }}
+      </div>
+      <ActionPriorityPanel v-if="actionPriority.actions.value.length > 0" :actions="actionPriority.actions.value" />
+      <div v-else-if="actionPriority.progress.value.phase === 'idle'" class="cg-intro">
+        <h3>Action priority dashboard</h3>
+        <p>
+          Runs five analyzers in parallel (striking-distance, opportunity,
+          cannibalization, ctr-anomaly, change-point), dedupes by keyword+page,
+          and ranks by composite <code>impact × severity × effortMultiplier</code>.
+        </p>
+        <p>
+          One tab to rule them all: the top 40 actions across the whole site.
+        </p>
+      </div>
+      <p class="cannibal-caption">
+        Actions are deduped across sources — a keyword flagged by both
+        striking-distance and cannibalization surfaces as one action with
+        both source tags. Effort heuristic picks the lowest (fixing the
+        on-page lever usually unblocks the SERP one).
+      </p>
+    </section>
+
+    <section v-else-if="activeId === 'content-gap'" class="anomaly-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">status</span>
+          <span class="cannibal-stat-value contgap-phase">{{ contentGap.progress.value.phase }}</span>
+        </div>
+        <div v-if="contentGap.progress.value.total" class="cannibal-stat">
+          <span class="cannibal-stat-label">progress</span>
+          <span class="cannibal-stat-value">{{ contentGap.progress.value.done ?? 0 }} / {{ contentGap.progress.value.total }}</span>
+        </div>
+        <div v-if="contentGap.progress.value.modelMs" class="cannibal-stat">
+          <span class="cannibal-stat-label">model load</span>
+          <span class="cannibal-stat-value">{{ Math.round(contentGap.progress.value.modelMs) }}ms</span>
+        </div>
+        <div v-if="contentGap.progress.value.embedMs" class="cannibal-stat">
+          <span class="cannibal-stat-label">embed</span>
+          <span class="cannibal-stat-value">{{ Math.round(contentGap.progress.value.embedMs) }}ms</span>
+        </div>
+        <div v-if="contentGap.results.value.length > 0" class="cannibal-stat">
+          <span class="cannibal-stat-label">gaps found</span>
+          <span class="cannibal-stat-value">{{ contentGap.results.value.length }}</span>
+        </div>
+        <button
+          class="cg-run"
+          :disabled="!isReady || contentGap.running.value"
+          @click="contentGap.run(runner)"
+        >
+          {{ contentGap.running.value ? 'Running…' : contentGap.results.value.length > 0 ? 'Re-run' : 'Detect content gaps' }}
+        </button>
+      </div>
+
+      <div v-if="contentGap.error.value" class="err-box">
+        {{ contentGap.error.value.message }}
+      </div>
+
+      <div v-if="contentGap.progress.value.phase !== 'done' && contentGap.progress.value.phase !== 'idle'" class="cg-status">
+        {{ contentGap.progress.value.message }}
+        <div v-if="contentGap.progress.value.total" class="cg-progress-bar">
+          <div class="cg-progress-fill" :style="{ width: `${((contentGap.progress.value.done ?? 0) / contentGap.progress.value.total) * 100}%` }" />
+        </div>
+      </div>
+
+      <ContentGapPanel v-if="contentGap.results.value.length > 0" :rows="contentGap.results.value" />
+
+      <div v-else-if="contentGap.progress.value.phase === 'idle'" class="cg-intro">
+        <h3>Semantic content-gap detection</h3>
+        <p>
+          Embeds every top query and every URL via a local MiniLM model (22MB,
+          cached in IndexedDB after first run). Cosine-matches each query to
+          its best semantic URL, then flags queries where Google ranks you on
+          a different URL than the one that <em>topically</em> fits best.
+        </p>
+        <p>
+          Runs 100% in-browser. No API calls, no data leaves the tab.
+          After first download, re-runs take seconds.
+        </p>
+      </div>
+
+      <p class="cannibal-caption">
+        Embeddings: <code>Xenova/bge-base-en-v1.5</code> (fp32, 768-dim) via
+        <code>@huggingface/transformers</code>, WebGPU if available. Queries
+        use the BGE retrieval prefix; URL passages don't. Embeddings cached
+        in IndexedDB, URLs deduped by canonical pathname. Divergence =
+        cosine(query, bestUrl) − cosine(query, currentUrl).
+      </p>
+    </section>
+
+    <section v-else-if="activeId === 'change-point' && !loading && !error && changePointEntities.length > 0" class="anomaly-panel">
+      <div class="cannibal-headline">
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">change points</span>
+          <span class="cannibal-stat-value">{{ changePointEntities.length }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">improved</span>
+          <span class="cannibal-stat-value" style="color:#2d9a6a">{{ changePointEntities.filter(e => e.direction === 'improved').length }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">worsened</span>
+          <span class="cannibal-stat-value" style="color:#c52d45">{{ changePointEntities.filter(e => e.direction === 'worsened').length }}</span>
+        </div>
+        <div class="cannibal-stat">
+          <span class="cannibal-stat-label">max LLR</span>
+          <span class="cannibal-stat-value">{{ changePointEntities.length > 0 ? changePointEntities[0]!.llr.toFixed(1) : '—' }}</span>
+        </div>
+      </div>
+      <ChangePointPanel :entities="changePointEntities" metric="position" />
+      <p class="cannibal-caption">
+        Binary-segmentation change-point detection: at each candidate split
+        date, compare Gaussian log-likelihood of one-segment vs two-segment
+        fits. LLR = Σ n·log(σ²) differential. High LLR = the regime genuinely
+        flipped on that date; low LLR = gradual drift.
+      </p>
+    </section>
+
+    <section v-else class="panel">
+      <div v-if="loading" class="loading">
+        Running query…
+      </div>
+      <div v-else-if="error" class="err-box">
+        {{ error }}
+      </div>
+      <div v-else-if="rows.length === 0 && isReady" class="empty">
+        No rows.
+      </div>
+      <div v-else-if="rows.length > 0" class="wrap">
+        <table>
+          <thead>
+            <tr>
+              <th
+                v-for="c in visibleColumns" :key="c"
+                :class="{ sortable: isSortable(c), active: sortBy === c }"
+                @click="toggleSort(c)"
+              >
+                {{ c }}
+                <span v-if="sortBy === c && isSortable(c)" class="arrow">{{ sortDir === 'desc' ? '▼' : '▲' }}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, i) in displayRows" :key="i">
+              <td v-for="c in visibleColumns" :key="c" :title="fmtTitle(row[c])" :class="{ num: typeof row[c] === 'number' || typeof row[c] === 'bigint' }">
+                <Sparkline v-if="seriesValues(row[c])" :values="seriesValues(row[c])!" />
+                <template v-else>
+                  {{ fmt(row[c]) }}
+                </template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div v-if="activeTab.kind === 'raw' && totalPages != null" class="pager">
+      <button :disabled="pageIdx === 0 || loading" @click="pageIdx = 0">
+        ⟪
+      </button>
+      <button :disabled="pageIdx === 0 || loading" @click="pageIdx--">
+        ‹
+      </button>
+      <span>Page {{ pageIdx + 1 }} / {{ totalPages }}</span>
+      <button :disabled="pageIdx + 1 >= totalPages || loading" @click="pageIdx++">
+        ›
+      </button>
+      <button :disabled="pageIdx + 1 >= totalPages || loading" @click="pageIdx = totalPages - 1">
+        ⟫
+      </button>
+      <label class="pagesize">per page
+        <select v-model.number="pageSize">
+          <option :value="10">
+            10
+          </option>
+          <option :value="25">
+            25
+          </option>
+          <option :value="50">
+            50
+          </option>
+          <option :value="100">
+            100
+          </option>
+        </select>
+      </label>
+    </div>
+  </GscDashboardPage>
 </template>
 
 <style scoped>

@@ -1,24 +1,55 @@
 .:
+  addDays: function
   batchInspectUrls: function
   batchRequestIndexing: function
   classifyError: function
+  countDays: function
   createAuth: function
   createFetch: function
+  DAYS_PER_RANGE: number
+  daysAgo: function
   deleteSitemap: function
   fetchSitemap: function
   fetchSitemaps: function
   fetchSites: function
   fetchSitesWithSitemaps: function
   formatErrorForCli: function
+  generateGscDateRange: function
+  getBackfillProgress: function
+  getDateRange: function
+  getFreshestGscDate: function
   getIndexingMetadata: function
+  getLatestGscDate: function
+  getNextDate: function
+  getOldestGscDate: function
+  getPendingDates: function
+  getPreviousDate: function
+  getPstDate: function
   googleSearchConsole: function
+  groupIntoRanges: function
+  GSC_FINALIZED_LAG_DAYS: number
+  GSC_FRESHEST_LAG_DAYS: number
   GSC_QUOTAS: object
+  GSC_RETENTION_MONTHS: number
   gscdumpApi: function
+  hasGscReadScope: function
+  hasGscWriteScope: function
+  hasIndexingScope: function
+  INDEXING_DAILY_LIMIT: number
+  INDEXING_EFFECTIVE_LIMIT: number
+  INDEXING_ISSUE_FILTERS: object
+  INDEXING_ISSUE_LABELS: object
+  INDEXING_ISSUE_SEVERITY: object
   inspectUrl: function
+  isPermissionDeniedError: function
+  isValidGscDate: function
+  MS_PER_DAY: number
   progressBar: function
   requestIndexing: function
+  rowWithMetricDefaults: function
   storageError: function
   submitSitemap: function
+  toIsoDate: function
 ./contracts: {}
 ./driver: {}
 ./normalize:
@@ -74,6 +105,11 @@
   buildLogicalComparisonPlan: function
   buildLogicalPlan: function
   UnsupportedLogicalCapabilityError: function
+./sitemap:
+  discoverSitemap: function
 ./tenant:
   decodeSiteId: function
   encodeSiteId: function
+  normalizeSiteUrl: function
+./url:
+  urlMatchKey: function

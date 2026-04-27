@@ -1485,101 +1485,101 @@ exports[`analyzer plan snapshots > sql plan: cannibalization 1`] = `
   "previous": undefined,
   "requiresAttachedTables": undefined,
   "sql": "
-    WITH agg AS (
+      WITH agg AS (
+        SELECT
+          query,
+          url,
+          CAST(SUM(clicks) AS DOUBLE) AS clicks,
+          CAST(SUM(impressions) AS DOUBLE) AS impressions,
+          CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+          SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+          AND query IS NOT NULL AND query <> ''
+          AND url IS NOT NULL AND url <> ''
+        GROUP BY query, url
+        HAVING SUM(impressions) >= ?
+      ),
+      query_totals AS (
+        SELECT
+          query,
+          SUM(impressions) AS total_impressions,
+          SUM(clicks) AS total_clicks,
+          COUNT(*) AS competitor_count
+        FROM agg
+        GROUP BY query
+        HAVING COUNT(*) >= ? AND SUM(impressions) >= ?
+      ),
+      ranked AS (
+        SELECT
+          a.query,
+          a.url,
+          a.clicks,
+          a.impressions,
+          a.ctr,
+          a.position,
+          a.impressions / NULLIF(t.total_impressions, 0) AS share,
+          ROW_NUMBER() OVER (
+            PARTITION BY a.query
+            ORDER BY a.impressions DESC, a.clicks DESC, a.url ASC
+          ) AS rnk
+        FROM agg a
+        JOIN query_totals t USING (query)
+      ),
+      leader AS (
+        SELECT query, url AS leader_url, ctr AS leader_ctr, position AS leader_position
+        FROM ranked WHERE rnk = 1
+      ),
+      events AS (
+        SELECT
+          r.query,
+          any_value(l.leader_url) AS leader_url,
+          any_value(l.leader_ctr) AS leader_ctr,
+          any_value(l.leader_position) AS leader_position,
+          SUM(POWER(r.share * 100.0, 2)) AS hhi,
+          SUM(CASE
+            WHEN r.rnk > 1 AND l.leader_ctr > r.ctr
+              THEN (l.leader_ctr - r.ctr) * r.impressions
+            ELSE 0.0
+          END) AS stolen_clicks,
+          to_json(list({
+            'url': r.url,
+            'clicks': r.clicks,
+            'impressions': r.impressions,
+            'ctr': r.ctr,
+            'position': r.position,
+            'share': r.share,
+            'rank': r.rnk
+          } ORDER BY r.rnk)) AS competitors
+        FROM ranked r
+        JOIN leader l USING (query)
+        GROUP BY r.query
+      )
       SELECT
-        query,
-        url,
-        CAST(SUM(clicks) AS DOUBLE) AS clicks,
-        CAST(SUM(impressions) AS DOUBLE) AS impressions,
-        CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
-        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
-      FROM read_parquet({{FILES}}, union_by_name = true)
-      WHERE date >= ? AND date <= ?
-        AND query IS NOT NULL AND query <> ''
-        AND url IS NOT NULL AND url <> ''
-      GROUP BY query, url
-      HAVING SUM(impressions) >= ?
-    ),
-    query_totals AS (
-      SELECT
-        query,
-        SUM(impressions) AS total_impressions,
-        SUM(clicks) AS total_clicks,
-        COUNT(*) AS competitor_count
-      FROM agg
-      GROUP BY query
-      HAVING COUNT(*) >= ? AND SUM(impressions) >= ?
-    ),
-    ranked AS (
-      SELECT
-        a.query,
-        a.url,
-        a.clicks,
-        a.impressions,
-        a.ctr,
-        a.position,
-        a.impressions / NULLIF(t.total_impressions, 0) AS share,
-        ROW_NUMBER() OVER (
-          PARTITION BY a.query
-          ORDER BY a.impressions DESC, a.clicks DESC, a.url ASC
-        ) AS rnk
-      FROM agg a
+        e.query AS keyword,
+        t.total_impressions AS totalImpressions,
+        t.total_clicks AS totalClicks,
+        t.competitor_count AS competitorCount,
+        e.leader_url AS leaderUrl,
+        e.leader_ctr AS leaderCtr,
+        e.leader_position AS leaderPosition,
+        e.hhi AS hhi,
+        GREATEST(0.0, 1.0 - e.hhi / 10000.0) AS fragmentation,
+        e.stolen_clicks AS stolenClicks,
+        e.competitors AS competitors,
+        CAST(ROUND(LEAST(100.0,
+          100.0 * POWER(
+            GREATEST(1.0 - e.hhi / 10000.0, 0.0)
+              * LEAST(e.stolen_clicks / GREATEST(t.total_clicks + e.stolen_clicks, 1.0), 1.0)
+              * LEAST(LOG10(GREATEST(t.total_impressions, 10.0)) / 5.0, 1.0),
+            1.0 / 3.0
+          )
+        )) AS DOUBLE) AS severity
+      FROM events e
       JOIN query_totals t USING (query)
-    ),
-    leader AS (
-      SELECT query, url AS leader_url, ctr AS leader_ctr, position AS leader_position
-      FROM ranked WHERE rnk = 1
-    ),
-    events AS (
-      SELECT
-        r.query,
-        any_value(l.leader_url) AS leader_url,
-        any_value(l.leader_ctr) AS leader_ctr,
-        any_value(l.leader_position) AS leader_position,
-        SUM(POWER(r.share * 100.0, 2)) AS hhi,
-        SUM(CASE
-          WHEN r.rnk > 1 AND l.leader_ctr > r.ctr
-            THEN (l.leader_ctr - r.ctr) * r.impressions
-          ELSE 0.0
-        END) AS stolen_clicks,
-        to_json(list({
-          'url': r.url,
-          'clicks': r.clicks,
-          'impressions': r.impressions,
-          'ctr': r.ctr,
-          'position': r.position,
-          'share': r.share,
-          'rank': r.rnk
-        } ORDER BY r.rnk)) AS competitors
-      FROM ranked r
-      JOIN leader l USING (query)
-      GROUP BY r.query
-    )
-    SELECT
-      e.query AS keyword,
-      t.total_impressions AS totalImpressions,
-      t.total_clicks AS totalClicks,
-      t.competitor_count AS competitorCount,
-      e.leader_url AS leaderUrl,
-      e.leader_ctr AS leaderCtr,
-      e.leader_position AS leaderPosition,
-      e.hhi AS hhi,
-      GREATEST(0.0, 1.0 - e.hhi / 10000.0) AS fragmentation,
-      e.stolen_clicks AS stolenClicks,
-      e.competitors AS competitors,
-      CAST(ROUND(LEAST(100.0,
-        100.0 * POWER(
-          GREATEST(1.0 - e.hhi / 10000.0, 0.0)
-            * LEAST(e.stolen_clicks / GREATEST(t.total_clicks + e.stolen_clicks, 1.0), 1.0)
-            * LEAST(LOG10(GREATEST(t.total_impressions, 10.0)) / 5.0, 1.0),
-          1.0 / 3.0
-        )
-      )) AS DOUBLE) AS severity
-    FROM events e
-    JOIN query_totals t USING (query)
-    ORDER BY severity DESC, stolenClicks DESC
-    LIMIT 100
-  ",
+      ORDER BY severity DESC, stolenClicks DESC
+      LIMIT 100
+    ",
 }
 `;
 
@@ -1813,48 +1813,48 @@ exports[`analyzer plan snapshots > sql plan: clustering 1`] = `
   "previous": undefined,
   "requiresAttachedTables": undefined,
   "sql": "
-    WITH agg AS (
+      WITH agg AS (
+        SELECT
+          query,
+          CAST(SUM(clicks) AS DOUBLE) AS clicks,
+          CAST(SUM(impressions) AS DOUBLE) AS impressions,
+          CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+          SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+        GROUP BY query
+        HAVING SUM(impressions) >= ?
+      ),
+      classified AS (
+        SELECT
+          query, clicks, impressions, ctr, position,
+          NULLIF(regexp_extract(LOWER(query), '^(how to|what is|what are|why is|why do|where to|when to|best|top|vs|versus|compare|review|buy|cheap|free|near me)(\\s|$)', 1), '') AS intent_prefix,
+          CASE WHEN len(regexp_split_to_array(LOWER(query), '\\s+')) >= 3
+          THEN array_to_string(list_slice(regexp_split_to_array(LOWER(query), '\\s+'), 1, 2), ' ')
+          ELSE CAST(NULL AS VARCHAR) END AS word_prefix
+        FROM agg
+      ),
+      keyed AS (
+        SELECT
+          query, clicks, impressions, ctr, position,
+          COALESCE(intent_prefix, word_prefix) AS cluster_name,
+          CASE WHEN intent_prefix IS NOT NULL THEN 'intent' ELSE 'prefix' END AS cluster_type
+        FROM classified
+        WHERE COALESCE(intent_prefix, word_prefix) IS NOT NULL
+      )
       SELECT
-        query,
-        CAST(SUM(clicks) AS DOUBLE) AS clicks,
-        CAST(SUM(impressions) AS DOUBLE) AS impressions,
-        CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
-        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
-      FROM read_parquet({{FILES}}, union_by_name = true)
-      WHERE date >= ? AND date <= ?
-      GROUP BY query
-      HAVING SUM(impressions) >= ?
-    ),
-    classified AS (
-      SELECT
-        query, clicks, impressions, ctr, position,
-        NULLIF(regexp_extract(LOWER(query), '^(how to|what is|what are|why is|why do|where to|when to|best|top|vs|versus|compare|review|buy|cheap|free|near me)(\\s|$)', 1), '') AS intent_prefix,
-        CASE WHEN len(regexp_split_to_array(LOWER(query), '\\s+')) >= 3
-        THEN array_to_string(list_slice(regexp_split_to_array(LOWER(query), '\\s+'), 1, 2), ' ')
-        ELSE CAST(NULL AS VARCHAR) END AS word_prefix
-      FROM agg
-    ),
-    keyed AS (
-      SELECT
-        query, clicks, impressions, ctr, position,
-        COALESCE(intent_prefix, word_prefix) AS cluster_name,
-        CASE WHEN intent_prefix IS NOT NULL THEN 'intent' ELSE 'prefix' END AS cluster_type
-      FROM classified
-      WHERE COALESCE(intent_prefix, word_prefix) IS NOT NULL
-    )
-    SELECT
-      cluster_name AS clusterName,
-      any_value(cluster_type) AS clusterType,
-      CAST(COUNT(*) AS DOUBLE) AS keywordCount,
-      CAST(SUM(clicks) AS DOUBLE) AS totalClicks,
-      CAST(SUM(impressions) AS DOUBLE) AS totalImpressions,
-      AVG(position) AS avgPosition,
-      to_json(list({ 'query': query, 'clicks': clicks, 'impressions': impressions, 'ctr': ctr, 'position': position })) AS keywords
-    FROM keyed
-    GROUP BY cluster_name
-    HAVING COUNT(*) >= ?
-    ORDER BY totalClicks DESC
-  ",
+        cluster_name AS clusterName,
+        any_value(cluster_type) AS clusterType,
+        CAST(COUNT(*) AS DOUBLE) AS keywordCount,
+        CAST(SUM(clicks) AS DOUBLE) AS totalClicks,
+        CAST(SUM(impressions) AS DOUBLE) AS totalImpressions,
+        AVG(position) AS avgPosition,
+        to_json(list({ 'query': query, 'clicks': clicks, 'impressions': impressions, 'ctr': ctr, 'position': position })) AS keywords
+      FROM keyed
+      GROUP BY cluster_name
+      HAVING COUNT(*) >= ?
+      ORDER BY totalClicks DESC
+    ",
 }
 `;
 
@@ -2645,7 +2645,7 @@ exports[`analyzer plan snapshots > sql plan: data-detail 1`] = `
         "2024-02-01",
         "2024-02-29",
       ],
-      "sql": "SELECT SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
+      "sql": "SELECT CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
     },
     {
       "name": "prevTotals",
@@ -2653,7 +2653,7 @@ exports[`analyzer plan snapshots > sql plan: data-detail 1`] = `
         "2024-01-01",
         "2024-01-31",
       ],
-      "sql": "SELECT SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
+      "sql": "SELECT CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
     },
   ],
   "kind": "sql",
@@ -2663,7 +2663,7 @@ exports[`analyzer plan snapshots > sql plan: data-detail 1`] = `
   ],
   "previous": undefined,
   "requiresAttachedTables": true,
-  "sql": "SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", "pages"."date", SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END, "pages"."date" ORDER BY clicks DESC LIMIT 100",
+  "sql": "SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", "pages"."date", CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END, "pages"."date" ORDER BY clicks DESC LIMIT 100",
 }
 `;
 
@@ -2681,7 +2681,7 @@ exports[`analyzer plan snapshots > sql plan: data-query 1`] = `
         "2024-02-01",
         "2024-02-29",
       ],
-      "sql": "SELECT SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
+      "sql": "SELECT CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
     },
     {
       "name": "count",
@@ -2691,7 +2691,7 @@ exports[`analyzer plan snapshots > sql plan: data-query 1`] = `
         "2024-01-01",
         "2024-01-31",
       ],
-      "sql": "WITH current AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END), previous AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $3 AND "pages"."date" <= $4 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END) SELECT COUNT(*) as total FROM (SELECT c.page FROM current c LEFT JOIN previous p ON c.page = p.page WHERE 1=1 AND c.clicks > COALESCE(p.clicks, 0))",
+      "sql": "WITH current AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END), previous AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $3 AND "pages"."date" <= $4 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END) SELECT COUNT(*) as total FROM (SELECT c.page FROM current c LEFT JOIN previous p ON c.page = p.page WHERE 1=1 AND c.clicks > COALESCE(p.clicks, 0))",
     },
   ],
   "kind": "sql",
@@ -2703,7 +2703,7 @@ exports[`analyzer plan snapshots > sql plan: data-query 1`] = `
   ],
   "previous": undefined,
   "requiresAttachedTables": true,
-  "sql": "WITH current AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END), previous AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $3 AND "pages"."date" <= $4 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END) SELECT c.page as "page", CAST(c.clicks AS DOUBLE) as "clicks", CAST(c.impressions AS DOUBLE) as "impressions", c.ctr as "ctr", c.position as "position", COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition" FROM current c LEFT JOIN previous p ON c.page = p.page WHERE 1=1 AND c.clicks > COALESCE(p.clicks, 0) ORDER BY c.clicks DESC LIMIT 100",
+  "sql": "WITH current AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END), previous AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $3 AND "pages"."date" <= $4 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END) SELECT c.page as "page", CAST(c.clicks AS DOUBLE) as "clicks", CAST(c.impressions AS DOUBLE) as "impressions", c.ctr as "ctr", c.position as "position", COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition" FROM current c LEFT JOIN previous p ON c.page = p.page WHERE 1=1 AND c.clicks > COALESCE(p.clicks, 0) ORDER BY c.clicks DESC LIMIT 100",
 }
 `;
 
@@ -2810,69 +2810,69 @@ exports[`analyzer plan snapshots > sql plan: decay 1`] = `
   },
   "requiresAttachedTables": undefined,
   "sql": "
-    WITH cur AS (
-      SELECT
-        url,
-        CAST(SUM(clicks) AS DOUBLE) AS clicks,
-        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
-      FROM read_parquet({{FILES}}, union_by_name = true)
-      WHERE date >= ? AND date <= ?
-      GROUP BY url
-    ),
-    prev AS (
-      SELECT
-        url,
-        CAST(SUM(clicks) AS DOUBLE) AS clicks,
-        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
-      FROM read_parquet({{FILES_PREV}}, union_by_name = true)
-      WHERE date >= ? AND date <= ?
-      GROUP BY url
-      HAVING SUM(clicks) >= ?
-    ),
-    weekly AS (
-      SELECT url, date_trunc('week', CAST(date AS DATE)) AS week,
-        CAST(SUM(clicks) AS DOUBLE) AS clicks,
-        CAST(SUM(impressions) AS DOUBLE) AS impressions
-      FROM (
-        SELECT url, date, clicks, impressions
+      WITH cur AS (
+        SELECT
+          url,
+          CAST(SUM(clicks) AS DOUBLE) AS clicks,
+          SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
         FROM read_parquet({{FILES}}, union_by_name = true)
         WHERE date >= ? AND date <= ?
-        UNION ALL
-        SELECT url, date, clicks, impressions
+        GROUP BY url
+      ),
+      prev AS (
+        SELECT
+          url,
+          CAST(SUM(clicks) AS DOUBLE) AS clicks,
+          SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
         FROM read_parquet({{FILES_PREV}}, union_by_name = true)
         WHERE date >= ? AND date <= ?
+        GROUP BY url
+        HAVING SUM(clicks) >= ?
+      ),
+      weekly AS (
+        SELECT url, date_trunc('week', CAST(date AS DATE)) AS week,
+          CAST(SUM(clicks) AS DOUBLE) AS clicks,
+          CAST(SUM(impressions) AS DOUBLE) AS impressions
+        FROM (
+          SELECT url, date, clicks, impressions
+          FROM read_parquet({{FILES}}, union_by_name = true)
+          WHERE date >= ? AND date <= ?
+          UNION ALL
+          SELECT url, date, clicks, impressions
+          FROM read_parquet({{FILES_PREV}}, union_by_name = true)
+          WHERE date >= ? AND date <= ?
+        )
+        GROUP BY url, week
+      ),
+      series_by_url AS (
+        SELECT url, to_json(list({
+          'week': strftime(week, '%Y-%m-%d'),
+          'clicks': clicks,
+          'impressions': impressions
+        } ORDER BY week)) AS seriesJson
+        FROM weekly GROUP BY url
+      ),
+      joined AS (
+        SELECT
+          p.url AS page,
+          COALESCE(c.clicks, 0.0) AS currentClicks,
+          p.clicks AS previousClicks,
+          (p.clicks - COALESCE(c.clicks, 0.0)) AS lostClicks,
+          (p.clicks - COALESCE(c.clicks, 0.0)) / NULLIF(p.clicks, 0) AS declinePercent,
+          COALESCE(c.position, 0.0) AS currentPosition,
+          p.position AS previousPosition,
+          (COALESCE(c.position, 0.0) - p.position) AS positionDrop,
+          s.seriesJson
+        FROM prev p
+        LEFT JOIN cur c ON p.url = c.url
+        LEFT JOIN series_by_url s ON p.url = s.url
       )
-      GROUP BY url, week
-    ),
-    series_by_url AS (
-      SELECT url, to_json(list({
-        'week': strftime(week, '%Y-%m-%d'),
-        'clicks': clicks,
-        'impressions': impressions
-      } ORDER BY week)) AS seriesJson
-      FROM weekly GROUP BY url
-    ),
-    joined AS (
-      SELECT
-        p.url AS page,
-        COALESCE(c.clicks, 0.0) AS currentClicks,
-        p.clicks AS previousClicks,
-        (p.clicks - COALESCE(c.clicks, 0.0)) AS lostClicks,
-        (p.clicks - COALESCE(c.clicks, 0.0)) / NULLIF(p.clicks, 0) AS declinePercent,
-        COALESCE(c.position, 0.0) AS currentPosition,
-        p.position AS previousPosition,
-        (COALESCE(c.position, 0.0) - p.position) AS positionDrop,
-        s.seriesJson
-      FROM prev p
-      LEFT JOIN cur c ON p.url = c.url
-      LEFT JOIN series_by_url s ON p.url = s.url
-    )
-    SELECT *
-    FROM joined
-    WHERE declinePercent >= ? AND lostClicks > 0
-    ORDER BY lostClicks DESC
-    LIMIT 100
-  ",
+      SELECT *
+      FROM joined
+      WHERE declinePercent >= ? AND lostClicks > 0
+      ORDER BY lostClicks DESC
+      LIMIT 100
+    ",
 }
 `;
 
@@ -3419,85 +3419,85 @@ exports[`analyzer plan snapshots > sql plan: movers 1`] = `
   },
   "requiresAttachedTables": undefined,
   "sql": "
-    WITH cur AS (
-      SELECT
-        query, url,
-        CAST(SUM(clicks) AS DOUBLE) AS clicks,
-        CAST(SUM(impressions) AS DOUBLE) AS impressions,
-        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
-      FROM read_parquet({{FILES}}, union_by_name = true)
-      WHERE date >= ? AND date <= ?
-      GROUP BY query, url
-    ),
-    prev AS (
-      SELECT
-        query, url,
-        CAST(SUM(clicks) AS DOUBLE) AS clicks,
-        CAST(SUM(impressions) AS DOUBLE) AS impressions,
-        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
-      FROM read_parquet({{FILES_PREV}}, union_by_name = true)
-      WHERE date >= ? AND date <= ?
-      GROUP BY query, url
-    ),
-    weekly AS (
-      SELECT query, url, date_trunc('week', CAST(date AS DATE)) AS week,
-        CAST(SUM(clicks) AS DOUBLE) AS clicks,
-        CAST(SUM(impressions) AS DOUBLE) AS impressions
-      FROM (
-        SELECT query, url, date, clicks, impressions
+      WITH cur AS (
+        SELECT
+          query, url,
+          CAST(SUM(clicks) AS DOUBLE) AS clicks,
+          CAST(SUM(impressions) AS DOUBLE) AS impressions,
+          SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
         FROM read_parquet({{FILES}}, union_by_name = true)
         WHERE date >= ? AND date <= ?
-        UNION ALL
-        SELECT query, url, date, clicks, impressions
+        GROUP BY query, url
+      ),
+      prev AS (
+        SELECT
+          query, url,
+          CAST(SUM(clicks) AS DOUBLE) AS clicks,
+          CAST(SUM(impressions) AS DOUBLE) AS impressions,
+          SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
         FROM read_parquet({{FILES_PREV}}, union_by_name = true)
         WHERE date >= ? AND date <= ?
+        GROUP BY query, url
+      ),
+      weekly AS (
+        SELECT query, url, date_trunc('week', CAST(date AS DATE)) AS week,
+          CAST(SUM(clicks) AS DOUBLE) AS clicks,
+          CAST(SUM(impressions) AS DOUBLE) AS impressions
+        FROM (
+          SELECT query, url, date, clicks, impressions
+          FROM read_parquet({{FILES}}, union_by_name = true)
+          WHERE date >= ? AND date <= ?
+          UNION ALL
+          SELECT query, url, date, clicks, impressions
+          FROM read_parquet({{FILES_PREV}}, union_by_name = true)
+          WHERE date >= ? AND date <= ?
+        )
+        GROUP BY query, url, week
+      ),
+      series_by_entity AS (
+        SELECT query, url, to_json(list({
+          'week': strftime(week, '%Y-%m-%d'),
+          'clicks': clicks,
+          'impressions': impressions
+        } ORDER BY week)) AS seriesJson
+        FROM weekly GROUP BY query, url
+      ),
+      joined AS (
+        SELECT
+          c.query AS keyword,
+          c.url AS page,
+          c.clicks AS recentClicks,
+          c.impressions AS recentImpressions,
+          c.position AS recentPosition,
+          COALESCE(p.clicks, 0.0) AS baselineClicks,
+          COALESCE(p.impressions, 0.0) AS baselineImpressions,
+          COALESCE(p.position, 0.0) AS baselinePosition,
+          (c.clicks - COALESCE(p.clicks, 0.0)) AS clicksChange,
+          CASE
+            WHEN COALESCE(p.clicks, 0.0) = 0 THEN CASE WHEN c.clicks > 0 THEN 100.0 ELSE 0.0 END
+            ELSE (c.clicks - p.clicks) * 100.0 / p.clicks
+          END AS clicksChangePercent,
+          CASE
+            WHEN COALESCE(p.impressions, 0.0) = 0 THEN CASE WHEN c.impressions > 0 THEN 100.0 ELSE 0.0 END
+            ELSE (c.impressions - p.impressions) * 100.0 / p.impressions
+          END AS impressionsChangePercent,
+          (c.position - COALESCE(p.position, 0.0)) AS positionChange,
+          s.seriesJson
+        FROM cur c
+        LEFT JOIN prev p ON c.query = p.query AND c.url = p.url
+        LEFT JOIN series_by_entity s ON c.query = s.query AND c.url = s.url
+        WHERE c.impressions >= ?
       )
-      GROUP BY query, url, week
-    ),
-    series_by_entity AS (
-      SELECT query, url, to_json(list({
-        'week': strftime(week, '%Y-%m-%d'),
-        'clicks': clicks,
-        'impressions': impressions
-      } ORDER BY week)) AS seriesJson
-      FROM weekly GROUP BY query, url
-    ),
-    joined AS (
-      SELECT
-        c.query AS keyword,
-        c.url AS page,
-        c.clicks AS recentClicks,
-        c.impressions AS recentImpressions,
-        c.position AS recentPosition,
-        COALESCE(p.clicks, 0.0) AS baselineClicks,
-        COALESCE(p.impressions, 0.0) AS baselineImpressions,
-        COALESCE(p.position, 0.0) AS baselinePosition,
-        (c.clicks - COALESCE(p.clicks, 0.0)) AS clicksChange,
+      SELECT *,
         CASE
-          WHEN COALESCE(p.clicks, 0.0) = 0 THEN CASE WHEN c.clicks > 0 THEN 100.0 ELSE 0.0 END
-          ELSE (c.clicks - p.clicks) * 100.0 / p.clicks
-        END AS clicksChangePercent,
-        CASE
-          WHEN COALESCE(p.impressions, 0.0) = 0 THEN CASE WHEN c.impressions > 0 THEN 100.0 ELSE 0.0 END
-          ELSE (c.impressions - p.impressions) * 100.0 / p.impressions
-        END AS impressionsChangePercent,
-        (c.position - COALESCE(p.position, 0.0)) AS positionChange,
-        s.seriesJson
-      FROM cur c
-      LEFT JOIN prev p ON c.query = p.query AND c.url = p.url
-      LEFT JOIN series_by_entity s ON c.query = s.query AND c.url = s.url
-      WHERE c.impressions >= ?
-    )
-    SELECT *,
-      CASE
-        WHEN clicksChangePercent > 0 AND ABS(clicksChangePercent) / 100.0 >= ? THEN 'rising'
-        WHEN clicksChangePercent < 0 AND ABS(clicksChangePercent) / 100.0 >= ? THEN 'declining'
-        ELSE 'stable'
-      END AS direction
-    FROM joined
-    ORDER BY ABS(clicksChangePercent) DESC
-    LIMIT 100
-  ",
+          WHEN clicksChangePercent > 0 AND ABS(clicksChangePercent) / 100.0 >= ? THEN 'rising'
+          WHEN clicksChangePercent < 0 AND ABS(clicksChangePercent) / 100.0 >= ? THEN 'declining'
+          ELSE 'stable'
+        END AS direction
+      FROM joined
+      ORDER BY ABS(clicksChangePercent) DESC
+      LIMIT 100
+    ",
 }
 `;
 
@@ -4052,32 +4052,32 @@ exports[`analyzer plan snapshots > sql plan: seasonality 1`] = `
   "previous": undefined,
   "requiresAttachedTables": undefined,
   "sql": "
-    WITH monthly AS (
+      WITH monthly AS (
+        SELECT
+          strftime(date, '%Y-%m') AS month,
+          CAST(SUM(clicks) AS DOUBLE) AS value
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+        GROUP BY month
+      ),
+      stats AS (
+        SELECT
+          AVG(value) AS avg_val,
+          COALESCE(STDDEV_POP(value), 0.0) AS std_val,
+          CAST(COUNT(*) AS DOUBLE) AS month_count
+        FROM monthly
+      )
       SELECT
-        strftime(date, '%Y-%m') AS month,
-        CAST(SUM(clicks) AS DOUBLE) AS value
-      FROM read_parquet({{FILES}}, union_by_name = true)
-      WHERE date >= ? AND date <= ?
-      GROUP BY month
-    ),
-    stats AS (
-      SELECT
-        AVG(value) AS avg_val,
-        COALESCE(STDDEV_POP(value), 0.0) AS std_val,
-        CAST(COUNT(*) AS DOUBLE) AS month_count
-      FROM monthly
-    )
-    SELECT
-      m.month AS month,
-      m.value AS value,
-      CASE WHEN s.avg_val > 0 THEN m.value / s.avg_val ELSE 0.0 END AS vsAverage,
-      (s.avg_val > 0 AND m.value / s.avg_val > 1.5) AS isPeak,
-      (s.avg_val > 0 AND m.value / s.avg_val < 0.5) AS isTrough,
-      CASE WHEN s.avg_val > 0 THEN LEAST(s.std_val / s.avg_val, 1.0) ELSE 0.0 END AS strength,
-      s.month_count AS monthCount
-    FROM monthly m, stats s
-    ORDER BY m.month
-  ",
+        m.month AS month,
+        m.value AS value,
+        CASE WHEN s.avg_val > 0 THEN m.value / s.avg_val ELSE 0.0 END AS vsAverage,
+        (s.avg_val > 0 AND m.value / s.avg_val > 1.5) AS isPeak,
+        (s.avg_val > 0 AND m.value / s.avg_val < 0.5) AS isTrough,
+        CASE WHEN s.avg_val > 0 THEN LEAST(s.std_val / s.avg_val, 1.0) ELSE 0.0 END AS strength,
+        s.month_count AS monthCount
+      FROM monthly m, stats s
+      ORDER BY m.month
+    ",
 }
 `;
 
@@ -4704,33 +4704,33 @@ exports[`analyzer plan snapshots > sql plan: zero-click 1`] = `
   "previous": undefined,
   "requiresAttachedTables": undefined,
   "sql": "
-    WITH agg AS (
+      WITH agg AS (
+        SELECT
+          query,
+          url AS page,
+          CAST(SUM(clicks) AS DOUBLE) AS clicks,
+          CAST(SUM(impressions) AS DOUBLE) AS impressions,
+          CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+          SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= ? AND date <= ?
+        GROUP BY query, url
+        HAVING SUM(impressions) >= ?
+      )
       SELECT
-        query,
-        url AS page,
-        CAST(SUM(clicks) AS DOUBLE) AS clicks,
-        CAST(SUM(impressions) AS DOUBLE) AS impressions,
-        CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
-        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
-      FROM read_parquet({{FILES}}, union_by_name = true)
-      WHERE date >= ? AND date <= ?
-      GROUP BY query, url
-      HAVING SUM(impressions) >= ?
-    )
-    SELECT
-      query, page, clicks, impressions, ctr, position,
-      CAST(GREATEST(0, ROUND(impressions * (
-        CASE
-          WHEN position <= 1 THEN 0.30
-          WHEN position <= 3 THEN 0.15
-          WHEN position <= 5 THEN 0.08
-          ELSE 0.04
-        END
-      )) - clicks) AS DOUBLE) AS missedClicks
-    FROM agg
-    WHERE position <= ? AND ctr < ?
-    ORDER BY impressions DESC
-    LIMIT 100
-  ",
+        query, page, clicks, impressions, ctr, position,
+        CAST(GREATEST(0, ROUND(impressions * (
+          CASE
+            WHEN position <= 1 THEN 0.30
+            WHEN position <= 3 THEN 0.15
+            WHEN position <= 5 THEN 0.08
+            ELSE 0.04
+          END
+        )) - clicks) AS DOUBLE) AS missedClicks
+      FROM agg
+      WHERE position <= ? AND ctr < ?
+      ORDER BY impressions DESC
+      LIMIT 100
+    ",
 }
 `;
