@@ -6,6 +6,7 @@ import type { QueryRow, RowQuerySource } from './types'
 
 import { assertDimensionsSupported, getFilterDimensions } from '@gscdump/engine/resolver'
 import { buildLogicalPlan } from 'gscdump/query/plan'
+import { collectRows } from './gsc-rollup-synth'
 import { applyBuilderStatePostProcessing } from './post-process'
 
 /**
@@ -24,13 +25,6 @@ export const GSC_API_CAPABILITIES: PlannerCapabilities = {
 
 function isMetricDimension(dim: string): dim is 'clicks' | 'impressions' | 'ctr' | 'position' {
   return ['clicks', 'impressions', 'ctr', 'position'].includes(dim)
-}
-
-async function collectRows<T>(generator: AsyncGenerator<T[]>): Promise<T[]> {
-  const rows: T[] = []
-  for await (const batch of generator)
-    rows.push(...batch)
-  return rows
 }
 
 function builderFromState(state: BuilderState): GSCQueryBuilder<any, any> {

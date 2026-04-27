@@ -1,40 +1,6 @@
-import type { CloudGscDriver } from '../types'
-import process from 'node:process'
-import { cancel, isCancel, select } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { getDriver } from '../session'
-import { logger } from '../utils'
-
-async function resolveSiteUrl(driver: CloudGscDriver, target?: string): Promise<string> {
-  const sites = await driver.sitesWithSync().catch((e: Error) => {
-    logger.error(`Failed to fetch sites: ${e.message}`)
-    process.exit(1)
-  })
-
-  if (sites.length === 0) {
-    logger.error('No registered sites. Run gscdump-cloud register first.')
-    process.exit(1)
-  }
-
-  const match = target
-    ? sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
-    : undefined
-
-  if (match)
-    return match.siteUrl
-  if (sites.length === 1)
-    return sites[0].siteUrl
-
-  const selected = await select({
-    message: 'Select a site',
-    options: sites.map(s => ({ value: s.siteUrl, label: s.siteUrl })),
-  })
-  if (isCancel(selected)) {
-    cancel('Cancelled')
-    process.exit(0)
-  }
-  return selected as string
-}
+import { exitOnError, loadSites, logger, resolveSiteUrl } from '../utils'
 
 const listCommand = defineCommand({
   meta: {
@@ -47,12 +13,10 @@ const listCommand = defineCommand({
   },
   async run({ args }) {
     const driver = await getDriver()
-    const siteUrl = await resolveSiteUrl(driver, args.site)
+    const sites = await loadSites(driver)
+    const siteUrl = await resolveSiteUrl(sites, args.site)
 
-    const data = await driver.sitemapHealth(siteUrl).catch((e: Error) => {
-      logger.error(`Failed to fetch sitemaps: ${e.message}`)
-      process.exit(1)
-    })
+    const data = await exitOnError(driver.sitemapHealth(siteUrl), 'Failed to fetch sitemaps')
 
     if (args.json) {
       console.log(JSON.stringify(data, null, 2))
@@ -95,12 +59,10 @@ const refreshCommand = defineCommand({
   },
   async run({ args }) {
     const driver = await getDriver()
-    const siteUrl = await resolveSiteUrl(driver, args.site)
+    const sites = await loadSites(driver)
+    const siteUrl = await resolveSiteUrl(sites, args.site)
 
-    const result = await driver.sitemapAction(siteUrl, { action: 'refresh' }).catch((e: Error) => {
-      logger.error(`Refresh failed: ${e.message}`)
-      process.exit(1)
-    })
+    const result = await exitOnError(driver.sitemapAction(siteUrl, { action: 'refresh' }), 'Refresh failed')
 
     logger.success(`Refreshed sitemaps (${result.sitemapCount} found)`)
   },

@@ -50,7 +50,7 @@ export {
 } from './filter-utils'
 export { createSqlFragments } from './fragments'
 export type { SqlFragments, SqlFragmentsConfig } from './fragments'
-export { pgResolverAdapter } from './pg-adapter'
+export { createParquetResolverAdapter, pgResolverAdapter } from './pg-adapter'
 export type { PgTableKey } from './pg-adapter'
 export { assertSchemaInSync } from './schema-drift'
 export type { AssertSchemaInSyncOptions } from './schema-drift'

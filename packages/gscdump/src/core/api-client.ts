@@ -5,6 +5,7 @@ import type { CallOptions, GoogleSearchConsoleClient } from './client'
 import type { ApiSite, ApiSitemap, SearchAnalyticsQuery } from './types'
 import { ofetch } from 'ofetch'
 import { resolveToBody } from '../query/resolver'
+import { rowWithMetricDefaults } from './cli-format'
 
 export interface GscdumpApiOptions {
   /** API key (gsd_user_xxx or gsd_prod_xxx) */
@@ -106,12 +107,7 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
         })
 
         const rows = response.rows.map((row) => {
-          const result: any = {
-            clicks: row.clicks ?? 0,
-            impressions: row.impressions ?? 0,
-            ctr: row.ctr ?? 0,
-            position: row.position ?? 0,
-          }
+          const result: any = rowWithMetricDefaults(row)
           state.dimensions.forEach((dim) => {
             result[dim] = row[dim]
           })

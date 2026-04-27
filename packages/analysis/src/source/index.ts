@@ -5,6 +5,17 @@ export { createEngineQuerySource, ENGINE_QUERY_CAPABILITIES, runAnalyzerWithEngi
 export type { EngineQuerySourceOptions } from './engine'
 export { createGscApiQuerySource, GSC_API_CAPABILITIES } from './gsc'
 export type { GscApiQuerySourceOptions } from './gsc'
+export {
+  collectRows as collectGscRows,
+  fetchGscDaily,
+  fetchGscTopN,
+} from './gsc-rollup-synth'
+export type {
+  FetchTopNOptions,
+  GscDailyRow,
+  GscRange,
+  GscTopNRow,
+} from './gsc-rollup-synth'
 export { createInMemoryQuerySource, IN_MEMORY_DEFAULT_CAPABILITIES } from './in-memory'
 export type { InMemoryQuerySourceOptions } from './in-memory'
 export {

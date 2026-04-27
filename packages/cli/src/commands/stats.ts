@@ -3,6 +3,7 @@ import { filesystemStats } from '@gscdump/engine/filesystem'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
+import { formatAge } from '../utils'
 
 export const statsCommand = defineCommand({
   meta: {
@@ -95,7 +96,7 @@ export const statsCommand = defineCommand({
       console.log(`  \x1B[1mSync watermarks:\x1B[0m`)
       for (const w of sortWatermarks(watermarks)) {
         const scope = w.siteId ? `${w.table}@${w.siteId}` : w.table
-        console.log(`  ${scope.padEnd(24)} \x1B[36m${w.oldestDateSynced}\x1B[0m → \x1B[36m${w.newestDateSynced}\x1B[0m  \x1B[90m(last ${formatTimestamp(w.lastSyncAt)})\x1B[0m`)
+        console.log(`  ${scope.padEnd(24)} \x1B[36m${w.oldestDateSynced}\x1B[0m → \x1B[36m${w.newestDateSynced}\x1B[0m  \x1B[90m(last ${formatAge(w.lastSyncAt)})\x1B[0m`)
       }
     }
 
@@ -109,17 +110,6 @@ function sortWatermarks(ws: Watermark[]): Watermark[] {
       return a.table.localeCompare(b.table)
     return (a.siteId ?? '').localeCompare(b.siteId ?? '')
   })
-}
-
-function formatTimestamp(ms: number): string {
-  const delta = Date.now() - ms
-  if (delta < 60_000)
-    return 'just now'
-  if (delta < 3_600_000)
-    return `${Math.floor(delta / 60_000)}m ago`
-  if (delta < 86_400_000)
-    return `${Math.floor(delta / 3_600_000)}h ago`
-  return `${Math.floor(delta / 86_400_000)}d ago`
 }
 
 function sumRows(entries: ManifestEntry[]): number {

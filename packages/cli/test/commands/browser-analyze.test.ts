@@ -4,7 +4,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { DuckDBInstance } from '@duckdb/node-api'
-import { defaultAnalyzerRegistry, runAnalyzerWithEngine as rawRunAnalyzerWithEngine } from '@gscdump/analysis'
+import { runAnalyzerWithEngine as rawRunAnalyzerWithEngine } from '@gscdump/analysis'
+import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import {
   createDuckDBCodec,
   createDuckDBExecutor,

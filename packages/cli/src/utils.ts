@@ -7,22 +7,14 @@ export const VERSION = '1.0.0'
 export const logger = consola.withTag('gscdump')
 
 /**
- * Handles GSC API errors with helpful messages and suggestions.
- * Exits process with code 1.
+ * .catch() handler for GSC API errors — prints a formatted message and exits 1.
+ * Use: somePromise.catch(gscErrorHandler)
  */
-function handleGscError(error: unknown): never {
+export function gscErrorHandler(error: unknown): never {
   console.error()
   console.error(formatErrorForCli(error))
   console.error()
   process.exit(1)
-}
-
-/**
- * Creates a .catch() handler for GSC API errors.
- * Use: somePromise.catch(gscErrorHandler)
- */
-export function gscErrorHandler(error: unknown): never {
-  return handleGscError(error)
 }
 
 // Gradient colors for splash (green -> cyan -> blue)
@@ -47,16 +39,45 @@ export function showSplash(): void {
   console.log()
 }
 
-export function progressBar(current: number, total: number, label: string, width = 30): string {
-  const percent = Math.min(current / total, 1)
-  const filled = Math.round(width * percent)
-  const empty = width - filled
-  const bar = `\x1B[36m${'█'.repeat(filled)}\x1B[0m\x1B[90m${'░'.repeat(empty)}\x1B[0m`
-  return `  ${bar} \x1B[90m${current}/${total}\x1B[0m ${label}`
-}
-
 export function clearLine(): void {
   process.stdout.write('\r\x1B[K')
+}
+
+/**
+ * Human-readable "X ago" for a millisecond timestamp.
+ * Returns "just now", "Nm ago", "Nh ago", or "Nd ago".
+ */
+export function formatAge(ms: number): string {
+  const delta = Date.now() - ms
+  if (delta < 60_000)
+    return 'just now'
+  if (delta < 3_600_000)
+    return `${Math.floor(delta / 60_000)}m ago`
+  if (delta < 86_400_000)
+    return `${Math.floor(delta / 3_600_000)}h ago`
+  return `${Math.floor(delta / 86_400_000)}d ago`
+}
+
+/**
+ * Run an async processor across a list with bounded concurrency.
+ * Workers share a cursor so each item is processed exactly once; processor
+ * exceptions propagate.
+ */
+export async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  processor: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  const cursor = { i: 0 }
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = cursor.i++
+      if (i >= items.length)
+        return
+      await processor(items[i]!, i)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker))
 }
 
 const PERIOD_RE = /^(\d+)([dmy])$/i

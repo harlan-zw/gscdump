@@ -24,36 +24,40 @@ export type { AnalyzerRegistry, AnalyzerRegistryInit, AnalyzerVariants } from '.
 export { createAnalyzerRegistry } from './analyzer/registry'
 export { ROW_ANALYZERS } from './analyzer/row-analyzers'
 // Pure analysis functions
-export type { BrandSegmentationOptions, BrandSegmentationResult, BrandSummary } from './brand'
-export { analyzeBrandSegmentation } from './brand'
-export type { ClusteringOptions, ClusteringResult, ClusterType, KeywordCluster } from './clustering'
-export { analyzeClustering } from './clustering'
+export type { BrandSegmentationOptions, BrandSegmentationResult, BrandSummary } from './analyzers/brand'
+export { analyzeBrandSegmentation } from './analyzers/brand'
+export type {
+  CannibalizationCompetitor,
+  CannibalizationEvent,
+  CannibalizationOptions,
+  CannibalizationPage,
+  CannibalizationResult,
+  CannibalizationSortMetric,
+} from './analyzers/cannibalization'
+export { analyzeCannibalization } from './analyzers/cannibalization'
+export type { ClusteringOptions, ClusteringResult, ClusterType, KeywordCluster } from './analyzers/clustering'
+export { analyzeClustering } from './analyzers/clustering'
 export type {
   ConcentrationInput,
   ConcentrationItem,
   ConcentrationOptions,
   ConcentrationResult,
   ConcentrationRiskLevel,
-} from './concentration'
+} from './analyzers/concentration'
 
-export { analyzeConcentration, analyzeKeywordConcentration, analyzePageConcentration } from './concentration'
+export { analyzeConcentration, analyzeKeywordConcentration, analyzePageConcentration } from './analyzers/concentration'
 
-export type { DecayInput, DecayOptions, DecayResult, DecaySortMetric } from './decay'
-export { analyzeDecay } from './decay'
+export type { DecayInput, DecayOptions, DecayResult, DecaySeriesPoint, DecaySortMetric } from './analyzers/decay'
+export { analyzeDecay } from './analyzers/decay'
 
-export { defaultAnalyzerRegistry } from './default-registry'
+export type { MoverData, MoversInput, MoversOptions, MoversResult, MoversSortMetric } from './analyzers/movers'
 
-export type { MoverData, MoversInput, MoversOptions, MoversResult, MoversSortMetric } from './movers'
-export { analyzeMovers } from './movers'
+export { analyzeMovers } from './analyzers/movers'
+export type { OpportunityResult } from './analyzers/opportunity'
 
-export type {
-  OpportunityFactors,
-  OpportunityOptions,
-  OpportunityResult,
-  OpportunitySortMetric,
-  OpportunityWeights,
-} from './opportunity'
-export { analyzeOpportunity } from './opportunity'
+export type { MonthlyData, SeasonalityMetric, SeasonalityOptions, SeasonalityResult } from './analyzers/seasonality'
+export { analyzeSeasonality } from './analyzers/seasonality'
+export type { ZeroClickResult } from './analyzers/zero-click'
 
 export type {
   AnalysisPeriod,
@@ -73,9 +77,7 @@ export {
   windowToPeriod,
 } from './period'
 
-export type { MonthlyData, SeasonalityMetric, SeasonalityOptions, SeasonalityResult } from './seasonality'
-export { analyzeSeasonality } from './seasonality'
-
+export { normalizeQuery } from './query/normalize'
 // Source-based analyzer entrypoints
 export type {
   AnalysisQuerySource,
@@ -88,6 +90,7 @@ export type {
   SourceCapabilities,
   SqlQuerySource,
 } from './source'
+
 export {
   analyzeBrandSegmentationFromSource,
   analyzeClusteringFromSource,
@@ -110,15 +113,14 @@ export {
   queryComparisonRows,
   queryRows,
 } from './source'
-
 export { runAnalyzerWithEngine } from './source/engine'
+
 export type {
   StrikingDistanceOptions,
   StrikingDistanceResult,
   StrikingDistanceSortMetric,
 } from './striking-distance'
 export { analyzeStrikingDistance } from './striking-distance'
-
 // Analyzer contract types (used by CLI, MCP, cloud)
 export type {
   AnalysisParams,
@@ -128,6 +130,8 @@ export type {
   DateRow,
   KeywordRow,
   PageRow,
+  QueryPageRow,
   SortOrder,
 } from './types'
+
 export { createSorter, num } from './types'

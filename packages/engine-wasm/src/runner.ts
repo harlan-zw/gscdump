@@ -11,16 +11,17 @@
  */
 
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm'
-import type { ResolvedWindow } from '@gscdump/analysis/period'
+import type { ScopedRunnerOptions, TableScope } from '@gscdump/engine/scope'
 
-import type { SQL } from 'drizzle-orm'
 import type { DuckDBWasmClient, DuckDBWasmDrizzleDatabase } from './drizzle-adapter'
 import type { Schema } from './schema'
 
-import { and, eq, gte, lte } from 'drizzle-orm'
+import { createScopedHelpers } from '@gscdump/engine/scope'
 
 import { createClient, drizzle } from './drizzle-adapter'
 import { schema } from './schema'
+
+export type { ScopedRunnerOptions, TableScope }
 
 export interface InsightRunnerOptions {
   db: AsyncDuckDB
@@ -49,17 +50,6 @@ export async function createInsightRunner(opts: InsightRunnerOptions): Promise<I
   }
 }
 
-export interface ScopedRunnerOptions {
-  siteId?: string
-  window?: ResolvedWindow
-}
-
-export interface TableScope {
-  wherePredicates: SQL[]
-  window?: ResolvedWindow
-  siteId?: string
-}
-
 /**
  * Build a per-table predicate set from {siteId, window}. The returned
  * `wherePredicates` composes with user-level filters via `mergeScope`.
@@ -69,27 +59,4 @@ export interface TableScope {
  * so consumers can add the predicate without an interface change when
  * multi-site snapshots land.
  */
-export function scopeFor(
-  table: keyof Schema,
-  opts: ScopedRunnerOptions,
-): TableScope {
-  const t = schema[table] as Record<string, any>
-  const predicates: SQL[] = []
-
-  if (opts.siteId && 'site_id' in t)
-    predicates.push(eq(t.site_id, opts.siteId))
-
-  if (opts.window && 'date' in t) {
-    predicates.push(gte(t.date, opts.window.start))
-    predicates.push(lte(t.date, opts.window.end))
-  }
-
-  return { wherePredicates: predicates, window: opts.window, siteId: opts.siteId }
-}
-
-export function mergeScope(scope: TableScope, ...extra: SQL[]): SQL | undefined {
-  const all = [...scope.wherePredicates, ...extra].filter(Boolean) as SQL[]
-  if (all.length === 0)
-    return undefined
-  return and(...all)
-}
+export const { scopeFor, mergeScope } = createScopedHelpers(schema)

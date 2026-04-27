@@ -75,6 +75,10 @@ function makeFakeBucket(): FakeR2Bucket {
         truncated: false,
       }
     },
+    async delete(keys) {
+      const batch = typeof keys === 'string' ? [keys] : keys
+      for (const k of batch) store.delete(k)
+    },
   }
   return bucket
 }
@@ -350,5 +354,61 @@ describe('createR2ManifestStore — invariants', () => {
       async () => 42,
     )
     expect(result).toBe(42)
+  })
+})
+
+describe('createR2ManifestStore — purgeTenant', () => {
+  it('deletes every shard object for the tenant and reports counts', async () => {
+    const bucket = makeFakeBucket()
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+
+    await store.registerVersions([
+      makeEntry({ siteId: 's1', table: 'pages', objectKey: 'k1' }),
+      makeEntry({ siteId: 's1', table: 'keywords', objectKey: 'k2' }),
+      makeEntry({ siteId: 's2', table: 'pages', objectKey: 'k3' }),
+    ])
+    await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'pages' }, '2026-04-10')
+    await store.setSyncState(
+      { userId: 'u1', siteId: 's1', table: 'pages', date: '2026-04-10' },
+      'done',
+    )
+
+    const keysBefore = Array.from(bucket.store.keys()).filter(k => k.startsWith('u_u1/manifest/'))
+    expect(keysBefore.length).toBeGreaterThan(0)
+
+    const result = await store.purgeTenant({ userId: 'u1' })
+    expect(result.entriesRemoved).toBe(3)
+    expect(result.watermarksRemoved).toBe(1)
+    expect(result.syncStatesRemoved).toBe(1)
+
+    const keysAfter = Array.from(bucket.store.keys()).filter(k => k.startsWith('u_u1/manifest/'))
+    expect(keysAfter).toEqual([])
+
+    expect(await store.listLive({ userId: 'u1' })).toEqual([])
+    expect(await store.getWatermarks({ userId: 'u1' })).toEqual([])
+    expect(await store.getSyncStates({ userId: 'u1' })).toEqual([])
+  })
+
+  it('purges one siteId without touching sibling sites', async () => {
+    const bucket = makeFakeBucket()
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+
+    await store.registerVersions([
+      makeEntry({ siteId: 's1', objectKey: 'k1' }),
+      makeEntry({ siteId: 's2', objectKey: 'k2' }),
+    ])
+
+    const result = await store.purgeTenant({ userId: 'u1', siteId: 's1' })
+    expect(result.entriesRemoved).toBe(1)
+
+    const live = await store.listLive({ userId: 'u1' })
+    expect(live).toHaveLength(1)
+    expect(live[0]!.siteId).toBe('s2')
+  })
+
+  it('rejects purge for a userId that does not match the store scope', async () => {
+    const bucket = makeFakeBucket()
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+    await expect(store.purgeTenant({ userId: 'u2' })).rejects.toThrow(/scoped to userId=u1/)
   })
 })

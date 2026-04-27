@@ -1,17 +1,9 @@
-import type { Dimension, GSCQueryBuilder } from 'gscdump/query'
+import type { Column, Dimension, GSCQueryBuilder } from 'gscdump/query'
 import type { z } from 'zod'
-import type { fetchAnalyticsInput, HandlerContext } from '../types'
+import type { fetchAnalyticsInput, HandlerContext, MetricsRow } from '../types'
 import { between, country, date, device, gsc, page, query } from 'gscdump/query'
 
-interface MetricsRow {
-  clicks: number
-  impressions: number
-  ctr: number
-  position: number
-  [key: string]: unknown
-}
-
-async function collectRows<T extends MetricsRow, D extends Dimension[], C>(
+export async function collectRows<T extends MetricsRow, D extends Dimension[], C>(
   ctx: HandlerContext,
   siteUrl: string,
   builder: GSCQueryBuilder<D, C>,
@@ -23,12 +15,13 @@ async function collectRows<T extends MetricsRow, D extends Dimension[], C>(
   return rows
 }
 
-export async function fetchPages(
+async function fetchByDimension<D extends Dimension>(
+  dimension: Column<D>,
   input: z.infer<typeof fetchAnalyticsInput>,
   ctx: HandlerContext,
 ): Promise<{ total: number, data: MetricsRow[] }> {
   const builder = gsc
-    .select(page, date)
+    .select(dimension, date)
     .where(between(date, input.period.start, input.period.end))
     .limit(25000)
 
@@ -36,41 +29,20 @@ export async function fetchPages(
   return { total: rows.length, data: rows }
 }
 
-export async function fetchKeywords(
-  input: z.infer<typeof fetchAnalyticsInput>,
-  ctx: HandlerContext,
-): Promise<{ total: number, data: MetricsRow[] }> {
-  const builder = gsc
-    .select(query, date)
-    .where(between(date, input.period.start, input.period.end))
-    .limit(25000)
+type FetchResult = Promise<{ total: number, data: MetricsRow[] }>
 
-  const rows = await collectRows(ctx, input.siteUrl, builder)
-  return { total: rows.length, data: rows }
+export function fetchPages(input: z.infer<typeof fetchAnalyticsInput>, ctx: HandlerContext): FetchResult {
+  return fetchByDimension(page, input, ctx)
 }
 
-export async function fetchCountries(
-  input: z.infer<typeof fetchAnalyticsInput>,
-  ctx: HandlerContext,
-): Promise<{ total: number, data: MetricsRow[] }> {
-  const builder = gsc
-    .select(country, date)
-    .where(between(date, input.period.start, input.period.end))
-    .limit(25000)
-
-  const rows = await collectRows(ctx, input.siteUrl, builder)
-  return { total: rows.length, data: rows }
+export function fetchKeywords(input: z.infer<typeof fetchAnalyticsInput>, ctx: HandlerContext): FetchResult {
+  return fetchByDimension(query, input, ctx)
 }
 
-export async function fetchDevices(
-  input: z.infer<typeof fetchAnalyticsInput>,
-  ctx: HandlerContext,
-): Promise<{ total: number, data: MetricsRow[] }> {
-  const builder = gsc
-    .select(device, date)
-    .where(between(date, input.period.start, input.period.end))
-    .limit(25000)
+export function fetchCountries(input: z.infer<typeof fetchAnalyticsInput>, ctx: HandlerContext): FetchResult {
+  return fetchByDimension(country, input, ctx)
+}
 
-  const rows = await collectRows(ctx, input.siteUrl, builder)
-  return { total: rows.length, data: rows }
+export function fetchDevices(input: z.infer<typeof fetchAnalyticsInput>, ctx: HandlerContext): FetchResult {
+  return fetchByDimension(device, input, ctx)
 }

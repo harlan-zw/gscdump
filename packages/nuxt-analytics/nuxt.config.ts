@@ -1,0 +1,44 @@
+// Layer-mode Nuxt config for @gscdump/nuxt-analytics.
+//
+// Consuming apps pull this in via `extends: ['@gscdump/nuxt-analytics']` in
+// their own nuxt.config.ts. Anything declared here is a shared default; hosts
+// can override in the normal Nuxt fashion (defu-merged, app config wins).
+//
+// Contract: the layer assumes every consumer is a Nuxt UI v4 app. We register
+// `@nuxt/ui` here and ship the shared main.css so hosts don't have to
+// rediscover the setup — components in this layer freely use UButton,
+// UPopover, UIcon, etc.
+
+import { fileURLToPath } from 'node:url'
+
+export default defineNuxtConfig({
+  // Register the layer's module so hooks + runtime config land on host apps
+  // without them having to wire each module individually.
+  modules: [
+    fileURLToPath(new URL('./module.ts', import.meta.url)),
+    '@nuxt/ui',
+    '@vueuse/nuxt',
+  ],
+
+  css: [
+    fileURLToPath(new URL('./app/assets/css/main.css', import.meta.url)),
+  ],
+
+  // Sensible defaults for every consumer. Hosts override as needed.
+  runtimeConfig: {
+    public: {
+      analytics: {
+        duckdbBundleBase: '',
+        apiBase: '',
+      },
+    },
+  },
+
+  vite: {
+    optimizeDeps: {
+      // DuckDB-WASM workers use URL imports Vite's prebundler cannot resolve.
+      // Keep them outside optimizeDeps so they stream as-is.
+      exclude: ['@duckdb/duckdb-wasm'],
+    },
+  },
+})

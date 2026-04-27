@@ -15,6 +15,7 @@ import type {
 import type {
   LogicalComparisonPlan,
   LogicalDimensionFilter,
+  LogicalFilterNode,
   LogicalMetricFilter,
   LogicalQueryPlan,
 } from 'gscdump/query/plan'
@@ -66,9 +67,12 @@ function limitOffsetClause(state: BuilderState): SQL {
   return sql.raw(offset > 0 ? `LIMIT ${rowLimit} OFFSET ${offset}` : `LIMIT ${rowLimit}`)
 }
 
+// Double-quote the alias so DuckDB preserves the original case in result row
+// keys (DuckDB folds unquoted identifiers to lowercase). SQLite preserves
+// case either way, so quoting is safe across both dialects.
 function aliasRaw(name: string): SQL {
   const safe = name.replace(/\W/g, '')
-  return sql.raw(safe)
+  return sql.raw(`"${safe}"`)
 }
 
 interface BuiltScope<TK extends string> {
@@ -108,6 +112,43 @@ function topLevelFilters(plan: LogicalQueryPlan): InternalFilter[] {
   return [{ dimension: 'page', operator: 'topLevel', expression: '' }]
 }
 
+function logicalFilterToInternal(filter: LogicalDimensionFilter): InternalFilter {
+  return {
+    dimension: filter.dimension,
+    operator: filter.operator,
+    expression: filter.expression,
+    expression2: filter.expression2,
+  }
+}
+
+// Compile a dimension-filter tree into a single SQL expression that respects
+// AND/OR group boundaries. Per-leaf SQL is delegated to the adapter's existing
+// `dimensionPredicates` (called with a single-element list) so dialects don't
+// need a new entry point.
+function compileFilterTree<TK extends string>(
+  node: LogicalFilterNode | undefined,
+  adapter: ResolverOptions<TK>['adapter'],
+  tableKey: TK,
+): SQL | undefined {
+  if (!node)
+    return undefined
+
+  if (node.kind === 'leaf') {
+    const preds = adapter.dimensionPredicates([logicalFilterToInternal(node.filter)], tableKey)
+    return preds[0]
+  }
+
+  const childSqls = node.children
+    .map(child => compileFilterTree(child, adapter, tableKey))
+    .filter((s): s is SQL => s !== undefined)
+  if (childSqls.length === 0)
+    return undefined
+  if (childSqls.length === 1)
+    return childSqls[0]
+  const sep = node.groupType === 'or' ? sql` OR ` : sql` AND `
+  return sql`(${sql.join(childSqls, sep)})`
+}
+
 function buildScope<TK extends string>(
   state: BuilderState,
   options: ResolverOptions<TK>,
@@ -127,7 +168,17 @@ function buildScope<TK extends string>(
     wherePredicates.push(sql`${adapter.siteIdColRef(tableKey)} = ${siteId}`)
   wherePredicates.push(sql`${adapter.dateColRef(tableKey)} >= ${plan.dateRange.startDate}`)
   wherePredicates.push(sql`${adapter.dateColRef(tableKey)} <= ${plan.dateRange.endDate}`)
-  wherePredicates.push(...adapter.dimensionPredicates(dimFilters, tableKey))
+  // Prefer the tree (preserves OR groups); fall back to flat AND of leaves
+  // for plans built without tree support (older callers).
+  const dimSql = plan.dimensionFilterTree
+    ? compileFilterTree(plan.dimensionFilterTree, adapter, tableKey)
+    : undefined
+  if (dimSql) {
+    wherePredicates.push(dimSql)
+  }
+  else if (!plan.dimensionFilterTree) {
+    wherePredicates.push(...adapter.dimensionPredicates(dimFilters, tableKey))
+  }
   const tl = adapter.topLevelPredicate(topLevelFilters(plan), tableKey)
   if (tl)
     wherePredicates.push(tl)
@@ -348,10 +399,18 @@ export function resolveComparisonSQL<TK extends string>(
     prevWhere.push(sql`${adapter.dateColRef(tableKey)} >= ${previousScope.startDate}`)
   if (previousScope.endDate)
     prevWhere.push(sql`${adapter.dateColRef(tableKey)} <= ${previousScope.endDate}`)
-  prevWhere.push(...adapter.dimensionPredicates(
-    toInternalDimensionFilters(comparisonPlan.current.dimensionFilters),
-    tableKey,
-  ))
+  const prevDimSql = comparisonPlan.current.dimensionFilterTree
+    ? compileFilterTree(comparisonPlan.current.dimensionFilterTree, adapter, tableKey)
+    : undefined
+  if (prevDimSql) {
+    prevWhere.push(prevDimSql)
+  }
+  else if (!comparisonPlan.current.dimensionFilterTree) {
+    prevWhere.push(...adapter.dimensionPredicates(
+      toInternalDimensionFilters(comparisonPlan.current.dimensionFilters),
+      tableKey,
+    ))
+  }
 
   let currentCte = currentWhere.length > 0
     ? sql`SELECT ${joinComma(currentSelect)} FROM ${table} WHERE ${joinAnd(currentWhere)}`
@@ -376,7 +435,22 @@ export function resolveComparisonSQL<TK extends string>(
   const orderSql = orderByClause(current, 'c.')
   const limitSql = limitOffsetClause(current)
 
-  const mainQuery = sql`WITH current AS (${currentCte}), previous AS (${previousCte}) SELECT c.*, COALESCE(p.clicks, 0) as prevClicks, COALESCE(p.impressions, 0) as prevImpressions, COALESCE(p.ctr, 0) as prevCtr, COALESCE(p.position, 0) as prevPosition FROM current c LEFT JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause} ${orderSql} ${limitSql}`
+  // Outer SELECT enumerates columns explicitly (not `c.*`) and casts the
+  // integer metrics to DOUBLE. The cast bridges a DuckDB-WASM serialization
+  // quirk where SUM(integer)→BIGINT/HUGEINT columns surfaced via a CTE
+  // arrive as null at the JS boundary; casting forces the result to a
+  // DOUBLE column (always a finite Number in JS).
+  const outerCurrentCols: SQL[] = []
+  for (const d of groupByDims) {
+    const colName = d.replace(/\W/g, '')
+    outerCurrentCols.push(sql.raw(`c.${colName} as "${colName}"`))
+  }
+  outerCurrentCols.push(sql.raw('CAST(c.clicks AS DOUBLE) as "clicks"'))
+  outerCurrentCols.push(sql.raw('CAST(c.impressions AS DOUBLE) as "impressions"'))
+  outerCurrentCols.push(sql.raw('c.ctr as "ctr"'))
+  outerCurrentCols.push(sql.raw('c.position as "position"'))
+
+  const mainQuery = sql`WITH current AS (${currentCte}), previous AS (${previousCte}) SELECT ${joinComma(outerCurrentCols)}, COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition" FROM current c LEFT JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause} ${orderSql} ${limitSql}`
 
   const firstGroupBy = groupByDims[0] ? groupByDims[0].replace(/\W/g, '') : 'clicks'
   const countInnerSelect = sql.raw(`c.${firstGroupBy}`)

@@ -41,13 +41,16 @@
     "test": "vitest",
     "prepack": "pnpm run build"
   },
+  "peerDependencies": {
+    "drizzle-orm": "catalog:"
+  },
   "dependencies": {
     "@gscdump/analysis": "workspace:*",
     "@gscdump/engine": "workspace:*",
-    "drizzle-orm": "catalog:",
     "gscdump": "workspace:*"
   },
   "devDependencies": {
+    "drizzle-orm": "catalog:",
     "vitest": "catalog:dev-test"
   }
 }

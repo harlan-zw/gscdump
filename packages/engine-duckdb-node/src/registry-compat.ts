@@ -9,74 +9,76 @@
 import type { Analyzer } from '@gscdump/analysis/analyzer'
 import type { Row } from '@gscdump/engine/contracts'
 import type { AnalysisParams, AnalyzerSpec } from './shared'
-import { strikingDistanceAnalyzer } from '@gscdump/analysis/analyzer'
-import { buildBayesianCtr } from './analyzers/bayesian-ctr'
-import { buildBipartitePageRank } from './analyzers/bipartite-pagerank'
-import { buildBrand } from './analyzers/brand'
-import { buildCannibalization } from './analyzers/cannibalization'
-import { buildChangePoint } from './analyzers/change-point'
-import { buildClustering } from './analyzers/clustering'
-import { buildConcentration } from './analyzers/concentration'
-import { buildContentVelocity } from './analyzers/content-velocity'
-import { buildCtrAnomaly } from './analyzers/ctr-anomaly'
-import { buildCtrCurve } from './analyzers/ctr-curve'
-import { buildDarkTraffic } from './analyzers/dark-traffic'
-import { buildDataDetail } from './analyzers/data-detail'
-import { buildDataQuery } from './analyzers/data-query'
-import { buildDecay } from './analyzers/decay'
-import { buildDeviceGap } from './analyzers/device-gap'
-import { buildIntentAtlas } from './analyzers/intent-atlas'
-import { buildKeywordBreadth } from './analyzers/keyword-breadth'
-import { buildLongTail } from './analyzers/long-tail'
-import { buildMovers } from './analyzers/movers'
-import { buildOpportunity } from './analyzers/opportunity'
-import { buildPositionDistribution } from './analyzers/position-distribution'
-import { buildPositionVolatility } from './analyzers/position-volatility'
-import { buildQueryMigration } from './analyzers/query-migration'
-import { buildSeasonality } from './analyzers/seasonality'
-import { buildStlDecompose } from './analyzers/stl-decompose'
-import { buildSurvival } from './analyzers/survival'
-import { buildTrends } from './analyzers/trends'
-import { buildZeroClick } from './analyzers/zero-click'
+import {
+  bayesianCtrAnalyzer,
+  bipartitePagerankAnalyzer,
+  brandAnalyzer,
+  cannibalizationAnalyzer,
+  changePointAnalyzer,
+  clusteringAnalyzer,
+  concentrationAnalyzer,
+  contentVelocityAnalyzer,
+  ctrAnomalyAnalyzer,
+  ctrCurveAnalyzer,
+  darkTrafficAnalyzer,
+  dataDetailAnalyzer,
+  dataQueryAnalyzer,
+  decayAnalyzer,
+  deviceGapAnalyzer,
+  intentAtlasAnalyzer,
+  keywordBreadthAnalyzer,
+  longTailAnalyzer,
+  moversAnalyzer,
+  opportunityAnalyzer,
+  positionDistributionAnalyzer,
+  positionVolatilityAnalyzer,
+  queryMigrationAnalyzer,
+  seasonalityAnalyzer,
+  stlDecomposeAnalyzer,
+  strikingDistanceAnalyzer,
+  survivalAnalyzer,
+  trendsAnalyzer,
+  zeroClickAnalyzer,
+} from '@gscdump/analysis/analyzer'
 import { AnalyzerUnsupportedError } from './shared'
 
-const BUILDERS: Record<string, (p: AnalysisParams) => AnalyzerSpec> = {
-  'bayesian-ctr': buildBayesianCtr,
-  'bipartite-pagerank': buildBipartitePageRank,
-  'brand': buildBrand,
-  'cannibalization': buildCannibalization,
-  'change-point': buildChangePoint,
-  'clustering': buildClustering,
-  'concentration': buildConcentration,
-  'content-velocity': buildContentVelocity,
-  'ctr-anomaly': buildCtrAnomaly,
-  'ctr-curve': buildCtrCurve,
-  'dark-traffic': buildDarkTraffic,
-  'data-detail': buildDataDetail,
-  'data-query': buildDataQuery,
-  'decay': buildDecay,
-  'device-gap': buildDeviceGap,
-  'intent-atlas': buildIntentAtlas,
-  'keyword-breadth': buildKeywordBreadth,
-  'long-tail': buildLongTail,
-  'movers': buildMovers,
-  'opportunity': buildOpportunity,
-  'position-distribution': buildPositionDistribution,
-  'position-volatility': buildPositionVolatility,
-  'query-migration': buildQueryMigration,
-  'seasonality': buildSeasonality,
-  'stl-decompose': buildStlDecompose,
-  'striking-distance': (params: AnalysisParams) => unifiedToSpec(strikingDistanceAnalyzer.sql!, params),
-  'survival': buildSurvival,
-  'trends': buildTrends,
-  'zero-click': buildZeroClick,
+const ANALYZERS: Record<string, Analyzer> = {
+  'bayesian-ctr': bayesianCtrAnalyzer.sql!,
+  'bipartite-pagerank': bipartitePagerankAnalyzer.sql!,
+  'brand': brandAnalyzer.sql!,
+  'cannibalization': cannibalizationAnalyzer.sql!,
+  'change-point': changePointAnalyzer.sql!,
+  'clustering': clusteringAnalyzer.sql!,
+  'concentration': concentrationAnalyzer.sql!,
+  'content-velocity': contentVelocityAnalyzer.sql!,
+  'ctr-anomaly': ctrAnomalyAnalyzer.sql!,
+  'ctr-curve': ctrCurveAnalyzer.sql!,
+  'dark-traffic': darkTrafficAnalyzer.sql!,
+  'data-detail': dataDetailAnalyzer.sql!,
+  'data-query': dataQueryAnalyzer.sql!,
+  'decay': decayAnalyzer.sql!,
+  'device-gap': deviceGapAnalyzer.sql!,
+  'intent-atlas': intentAtlasAnalyzer.sql!,
+  'keyword-breadth': keywordBreadthAnalyzer.sql!,
+  'long-tail': longTailAnalyzer.sql!,
+  'movers': moversAnalyzer.sql!,
+  'opportunity': opportunityAnalyzer.sql!,
+  'position-distribution': positionDistributionAnalyzer.sql!,
+  'position-volatility': positionVolatilityAnalyzer.sql!,
+  'query-migration': queryMigrationAnalyzer.sql!,
+  'seasonality': seasonalityAnalyzer.sql!,
+  'stl-decompose': stlDecomposeAnalyzer.sql!,
+  'striking-distance': strikingDistanceAnalyzer.sql!,
+  'survival': survivalAnalyzer.sql!,
+  'trends': trendsAnalyzer.sql!,
+  'zero-click': zeroClickAnalyzer.sql!,
 }
 
 export function buildSqlSpec(params: AnalysisParams): AnalyzerSpec {
-  const builder = BUILDERS[params.type]
-  if (!builder)
+  const a = ANALYZERS[params.type]
+  if (!a)
     throw new AnalyzerUnsupportedError(params.type)
-  return builder(params)
+  return unifiedToSpec(a, params)
 }
 
 /**

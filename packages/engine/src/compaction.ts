@@ -6,6 +6,7 @@ import type {
   ParquetCodec,
   WriteCtx,
 } from './storage'
+import { MS_PER_DAY } from 'gscdump'
 import { currentSchemaVersion } from './schema'
 import {
   dayPartition,
@@ -46,6 +47,16 @@ const DEFAULT_THRESHOLDS: Required<CompactionThresholds> = {
   d30: 90,
 }
 
+/**
+ * GSC `dataState='all'` finalizes ~3 days after a date. Until that grace
+ * elapses, sync may still write fresh dailies into a bucket, so compacting
+ * on bucket-end alone produces a partition that later collides with re-sync
+ * dailies (double-counts at query time, since the resolver unions every
+ * live tier). Every stage's effective cutoff is floored at this many days
+ * past `bucketLatestMs` regardless of caller-supplied thresholds.
+ */
+const PENDING_WINDOW_DAYS = 4
+
 interface StageDef {
   inputTier: CompactionTier
   outputTier: CompactionTier
@@ -68,7 +79,7 @@ const RAW_TO_D7: StageDef = {
       return undefined
     return mondayOfWeek(m[1]!)
   },
-  bucketLatestMs: monday => Date.parse(`${monday}T00:00:00Z`) + 6 * 86_400_000,
+  bucketLatestMs: monday => Date.parse(`${monday}T00:00:00Z`) + 6 * MS_PER_DAY,
   outputPartition: weekPartition,
 }
 
@@ -129,7 +140,8 @@ async function runStage(
   stage: StageDef,
   now: number,
 ): Promise<void> {
-  const cutoff = now - stage.cutoffDays * 86_400_000
+  const effectiveDays = Math.max(stage.cutoffDays, PENDING_WINDOW_DAYS)
+  const cutoff = now - effectiveDays * MS_PER_DAY
 
   const candidates = await deps.manifestStore.listLive({
     userId: ctx.userId,

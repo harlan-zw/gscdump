@@ -1,41 +1,7 @@
-import type { CloudGscDriver, DriverSiteWithSync } from '../types'
-import process from 'node:process'
-import { cancel, isCancel, select } from '@clack/prompts'
 import { defineCommand } from 'citty'
+import { progressBar } from 'gscdump'
 import { getDriver } from '../session'
-import { logger, progressBar } from '../utils'
-
-async function resolveSiteUrl(sites: DriverSiteWithSync[], target?: string): Promise<string> {
-  if (target) {
-    const match = sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
-    if (match)
-      return match.siteUrl
-  }
-  if (sites.length === 1)
-    return sites[0].siteUrl
-
-  const selected = await select({
-    message: 'Select a site',
-    options: sites.map(s => ({ value: s.siteUrl, label: s.siteUrl })),
-  })
-  if (isCancel(selected)) {
-    cancel('Cancelled')
-    process.exit(0)
-  }
-  return selected as string
-}
-
-async function loadSites(driver: CloudGscDriver): Promise<DriverSiteWithSync[]> {
-  const sites = await driver.sitesWithSync().catch((e: Error) => {
-    logger.error(`Failed to fetch sites: ${e.message}`)
-    process.exit(1)
-  })
-  if (sites.length === 0) {
-    logger.error('No registered sites. Run gscdump-cloud register first.')
-    process.exit(1)
-  }
-  return sites
-}
+import { exitOnError, loadSites, logger, resolveSiteUrl } from '../utils'
 
 const statusCommand = defineCommand({
   meta: {
@@ -51,10 +17,7 @@ const statusCommand = defineCommand({
     const sites = await loadSites(driver)
     const siteUrl = await resolveSiteUrl(sites, args.site)
 
-    const status = await driver.syncStatus(siteUrl).catch((e: Error) => {
-      logger.error(`Failed to fetch sync status: ${e.message}`)
-      process.exit(1)
-    })
+    const status = await exitOnError(driver.syncStatus(siteUrl), 'Failed to fetch sync status')
 
     if (args.json) {
       console.log(JSON.stringify(status, null, 2))
@@ -124,10 +87,7 @@ const triggerCommand = defineCommand({
     const sites = await loadSites(driver)
     const siteUrl = await resolveSiteUrl(sites, args.site)
 
-    const result = await driver.triggerSync(siteUrl).catch((e: Error) => {
-      logger.error(`Failed to trigger sync: ${e.message}`)
-      process.exit(1)
-    })
+    const result = await exitOnError(driver.triggerSync(siteUrl), 'Failed to trigger sync')
 
     logger.success(`Sync triggered for ${siteUrl}`)
     console.log(`  ${result.message}`)

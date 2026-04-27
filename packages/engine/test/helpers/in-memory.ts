@@ -244,6 +244,33 @@ export function createInMemoryManifestStore(): ManifestStore & {
       lockChains.set(key, result.catch(() => {}))
       return result
     },
+    purgeTenant(filter) {
+      const match = <T extends { userId: string, siteId?: string }>(r: T): boolean =>
+        r.userId === filter.userId
+        && (filter.siteId === undefined || r.siteId === filter.siteId)
+      let entriesRemoved = 0
+      let watermarksRemoved = 0
+      let syncStatesRemoved = 0
+      for (const [k, e] of entries) {
+        if (match(e)) {
+          entries.delete(k)
+          entriesRemoved++
+        }
+      }
+      for (const [k, w] of watermarks) {
+        if (match(w)) {
+          watermarks.delete(k)
+          watermarksRemoved++
+        }
+      }
+      for (const [k, s] of syncStates) {
+        if (match(s)) {
+          syncStates.delete(k)
+          syncStatesRemoved++
+        }
+      }
+      return Promise.resolve({ entriesRemoved, watermarksRemoved, syncStatesRemoved })
+    },
     snapshot() {
       return Array.from(entries.values()).filter(e => e.retiredAt === undefined)
     },

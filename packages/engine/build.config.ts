@@ -91,5 +91,25 @@ export default defineBuildConfig({
       input: ['./src/resolver/index.ts'],
       outDir: './dist',
     },
+    {
+      type: 'bundle',
+      input: ['./src/scope.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/arrow-utils.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/adapters/inspection-sqlite-node.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/adapters/inspection-sqlite-browser.ts'],
+      outDir: './dist',
+    },
   ],
 })

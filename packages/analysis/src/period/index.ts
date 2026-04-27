@@ -8,6 +8,7 @@
  */
 
 import type { AnalysisParams } from '../types'
+import { daysAgo, MS_PER_DAY, toIsoDate } from 'gscdump'
 
 export type WindowPreset
   = | 'last-7d'
@@ -50,12 +51,12 @@ export interface ComparisonPeriod {
   previous: AnalysisPeriod
 }
 
-function defaultEndDate(): string {
-  return new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]!
+export function defaultEndDate(): string {
+  return daysAgo(3)
 }
 
-function defaultStartDate(): string {
-  return new Date(Date.now() - 31 * 86400000).toISOString().split('T')[0]!
+export function defaultStartDate(): string {
+  return daysAgo(31)
 }
 
 export function periodOf(params: AnalysisParams): AnalysisPeriod {
@@ -74,27 +75,21 @@ export function comparisonOf(params: AnalysisParams): ComparisonPeriod {
   }
 }
 
-function toIso(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
-
 function parseIso(s: string): Date {
   return new Date(`${s}T00:00:00Z`)
 }
 
 function addDays(d: Date, n: number): Date {
-  const out = new Date(d.getTime())
-  out.setUTCDate(out.getUTCDate() + n)
-  return out
+  return new Date(d.getTime() + n * MS_PER_DAY)
 }
 
 function daysBetween(start: string, end: string): number {
-  return Math.round((parseIso(end).getTime() - parseIso(start).getTime()) / 86400000) + 1
+  return Math.round((parseIso(end).getTime() - parseIso(start).getTime()) / MS_PER_DAY) + 1
 }
 
 export function resolveWindow(opts: ResolveWindowOptions): ResolvedWindow {
   const anchor = opts.anchor ? parseIso(opts.anchor) : new Date()
-  const anchorIso = toIso(anchor)
+  const anchorIso = toIsoDate(anchor)
 
   let start: string
   let end: string
@@ -102,35 +97,35 @@ export function resolveWindow(opts: ResolveWindowOptions): ResolvedWindow {
   switch (opts.preset) {
     case 'last-7d':
       end = anchorIso
-      start = toIso(addDays(anchor, -6))
+      start = toIsoDate(addDays(anchor, -6))
       break
     case 'last-28d':
       end = anchorIso
-      start = toIso(addDays(anchor, -27))
+      start = toIsoDate(addDays(anchor, -27))
       break
     case 'last-30d':
       end = anchorIso
-      start = toIso(addDays(anchor, -29))
+      start = toIsoDate(addDays(anchor, -29))
       break
     case 'last-90d':
       end = anchorIso
-      start = toIso(addDays(anchor, -89))
+      start = toIsoDate(addDays(anchor, -89))
       break
     case 'last-180d':
       end = anchorIso
-      start = toIso(addDays(anchor, -179))
+      start = toIsoDate(addDays(anchor, -179))
       break
     case 'last-365d':
       end = anchorIso
-      start = toIso(addDays(anchor, -364))
+      start = toIsoDate(addDays(anchor, -364))
       break
     case 'mtd':
       end = anchorIso
-      start = toIso(new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1)))
+      start = toIsoDate(new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1)))
       break
     case 'ytd':
       end = anchorIso
-      start = toIso(new Date(Date.UTC(anchor.getUTCFullYear(), 0, 1)))
+      start = toIsoDate(new Date(Date.UTC(anchor.getUTCFullYear(), 0, 1)))
       break
     case 'custom':
       if (!opts.start || !opts.end)
@@ -145,13 +140,13 @@ export function resolveWindow(opts: ResolveWindowOptions): ResolvedWindow {
 
   const mode = opts.comparison ?? 'none'
   if (mode === 'prev-period') {
-    const prevEnd = toIso(addDays(parseIso(start), -1))
-    const prevStart = toIso(addDays(parseIso(prevEnd), -(days - 1)))
+    const prevEnd = toIsoDate(addDays(parseIso(start), -1))
+    const prevStart = toIsoDate(addDays(parseIso(prevEnd), -(days - 1)))
     result.comparison = { start: prevStart, end: prevEnd }
   }
   else if (mode === 'yoy') {
-    const prevEnd = toIso(addDays(parseIso(end), -365))
-    const prevStart = toIso(addDays(parseIso(start), -365))
+    const prevEnd = toIsoDate(addDays(parseIso(end), -365))
+    const prevStart = toIsoDate(addDays(parseIso(start), -365))
     result.comparison = { start: prevStart, end: prevEnd }
   }
 
@@ -218,8 +213,8 @@ export function padTimeseries<T extends DateRowShape = DateRowShape>(
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()))
     throw new Error(`padTimeseries: invalid date range ${startDate}..${endDate}`)
 
-  for (let cursorMs = start.getTime(), endMs = end.getTime(); cursorMs <= endMs; cursorMs += 86_400_000) {
-    const dateStr = new Date(cursorMs).toISOString().slice(0, 10)
+  for (let cursorMs = start.getTime(), endMs = end.getTime(); cursorMs <= endMs; cursorMs += MS_PER_DAY) {
+    const dateStr = toIsoDate(new Date(cursorMs))
     const existing = byDate.get(dateStr)
     if (existing)
       result.push(...existing)

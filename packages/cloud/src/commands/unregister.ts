@@ -2,7 +2,7 @@ import process from 'node:process'
 import { cancel, confirm, isCancel, select } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { getDriver } from '../session'
-import { logger } from '../utils'
+import { exitOnError, logger } from '../utils'
 
 export const unregisterCommand = defineCommand({
   meta: {
@@ -20,10 +20,7 @@ export const unregisterCommand = defineCommand({
     const driver = await getDriver()
     const target = args.site as string | undefined
 
-    const sites = await driver.sitesWithSync().catch((e: Error) => {
-      logger.error(`Failed to fetch sites: ${e.message}`)
-      process.exit(1)
-    })
+    const sites = await exitOnError(driver.sitesWithSync(), 'Failed to fetch sites')
 
     if (sites.length === 0) {
       logger.warn('No registered sites.')
@@ -61,10 +58,7 @@ export const unregisterCommand = defineCommand({
       process.exit(0)
     }
 
-    const result = await driver.deleteSite(site.siteUrl).catch((e: Error) => {
-      logger.error(`Failed to unregister: ${e.message}`)
-      process.exit(1)
-    })
+    const result = await exitOnError(driver.deleteSite(site.siteUrl), 'Failed to unregister')
 
     logger.success(`Unregistered ${result.siteUrl}`)
   },

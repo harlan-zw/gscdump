@@ -1,4 +1,5 @@
 import type { Auth, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site } from 'gscdump'
+import { MS_PER_DAY, toIsoDate } from 'gscdump'
 import { z } from 'zod'
 
 export type { Auth, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site }
@@ -22,6 +23,14 @@ export const queryOptionsSchema = z.object({
 export interface HandlerContext {
   auth: Auth
   client: GoogleSearchConsoleClient
+}
+
+export interface MetricsRow {
+  clicks: number
+  impressions: number
+  ctr: number
+  position: number
+  [key: string]: unknown
 }
 
 // Common input schemas
@@ -103,18 +112,16 @@ export function toAnalyticsRange(period: Period, comparePrevious?: boolean): Res
 
   const start = new Date(period.start as string)
   const end = new Date(period.end as string)
-  const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+  const days = Math.ceil((end.getTime() - start.getTime()) / MS_PER_DAY)
 
-  const prevEnd = new Date(start)
-  prevEnd.setDate(prevEnd.getDate() - 1)
-  const prevStart = new Date(prevEnd)
-  prevStart.setDate(prevStart.getDate() - days)
+  const prevEnd = new Date(start.getTime() - MS_PER_DAY)
+  const prevStart = new Date(prevEnd.getTime() - days * MS_PER_DAY)
 
   return {
     period,
     prevPeriod: {
-      start: prevStart.toISOString().split('T')[0],
-      end: prevEnd.toISOString().split('T')[0],
+      start: toIsoDate(prevStart),
+      end: toIsoDate(prevEnd),
     },
   }
 }

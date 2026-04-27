@@ -15,7 +15,7 @@
 
 import type { AsyncBuffer } from 'hyparquet'
 import type { BasicType, ColumnSource } from 'hyparquet-writer'
-import type { ColumnType } from '../schema'
+import type { ColumnDef, ColumnType } from '../schema'
 import type {
   CodecCtx,
   DataSource,
@@ -51,11 +51,19 @@ function coerceValue(value: unknown, type: BasicType): unknown {
     return null
   if (type === 'STRING')
     return typeof value === 'string' ? value : String(value)
-  if (type === 'INT32' || type === 'INT64') {
+  if (type === 'INT32') {
     const n = typeof value === 'number' ? value : Number(value)
     if (!Number.isFinite(n))
-      throw new Error(`non-finite number for ${type}: ${String(value)}`)
+      throw new Error(`non-finite number for INT32: ${String(value)}`)
     return Math.trunc(n)
+  }
+  if (type === 'INT64') {
+    if (typeof value === 'bigint')
+      return value
+    const n = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(n))
+      throw new Error(`non-finite number for INT64: ${String(value)}`)
+    return BigInt(Math.trunc(n))
   }
   if (type === 'DOUBLE') {
     const n = typeof value === 'number' ? value : Number(value)
@@ -111,6 +119,49 @@ export function encodeRowsToParquet(table: TableName, rows: readonly Row[]): Uin
     }
   })
   const buffer = parquetWriteBuffer({ columnData, rowGroupSize: ROW_GROUP_SIZE })
+  return new Uint8Array(buffer)
+}
+
+export interface EncodeFlexOptions {
+  /** Columns defining the output schema + order. */
+  columns: readonly ColumnDef[]
+  /** Sort key columns (subset of `columns` by name). Empty = preserve input order. */
+  sortKey?: readonly string[]
+  /** Row-group size; smaller groups = more prunable DuckDB stats. Default 25000. */
+  rowGroupSize?: number
+}
+
+/**
+ * Schema-free encoder for rollups + auxiliary tables whose column set isn't
+ * in `SCHEMAS`. Caller supplies column definitions; types must be one of
+ * `VARCHAR | DATE | BIGINT | INTEGER | DOUBLE` — same physical mappings as
+ * the canonical encoder so DuckDB `read_parquet(union_by_name = true)`
+ * merges cleanly with fact-table reads.
+ */
+export function encodeRowsToParquetFlex(rows: readonly Row[], opts: EncodeFlexOptions): Uint8Array {
+  const { columns, sortKey = [], rowGroupSize = ROW_GROUP_SIZE } = opts
+  const sorted = sortKey.length === 0 || rows.length <= 1
+    ? rows
+    : [...rows].sort((a, b) => {
+        for (const col of sortKey) {
+          const cmp = compareValues(a[col], b[col])
+          if (cmp !== 0)
+            return cmp
+        }
+        return 0
+      })
+  const columnData: ColumnSource[] = columns.map((col) => {
+    const type = basicTypeFor(col.type)
+    const data = sorted.map(r => coerceValue(r[col.name], type))
+    return {
+      name: col.name,
+      data,
+      type,
+      nullable: col.nullable,
+      columnIndex: true,
+    }
+  })
+  const buffer = parquetWriteBuffer({ columnData, rowGroupSize })
   return new Uint8Array(buffer)
 }
 

@@ -18,6 +18,7 @@ import type {
 } from './storage'
 import { substituteNamedFiles } from './compiler'
 import { SCHEMAS } from './schema'
+import { sqlEscape } from './sql-bind'
 
 export interface DuckDBHandle {
   query: (sql: string, params?: unknown[]) => Promise<Row[]>
@@ -34,10 +35,6 @@ export interface DuckDBHandle {
 
 export interface DuckDBFactory {
   getDuckDB: () => Promise<DuckDBHandle>
-}
-
-function sqlEscape(path: string): string {
-  return path.replace(/'/g, '\'\'')
 }
 
 async function encodeBytes(

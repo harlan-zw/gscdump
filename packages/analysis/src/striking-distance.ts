@@ -2,8 +2,11 @@
  * Striking distance analysis - finds keywords close to page 1.
  */
 
+import type { StrikingDistanceResult } from './analyzers/striking-distance'
 import type { KeywordRow, SortOrder } from './types'
 import { createSorter, num } from './types'
+
+export type { StrikingDistanceResult } from './analyzers/striking-distance'
 
 export type StrikingDistanceSortMetric = 'clicks' | 'impressions' | 'ctr' | 'position' | 'potentialClicks'
 
@@ -20,17 +23,6 @@ export interface StrikingDistanceOptions {
   sortBy?: StrikingDistanceSortMetric
   /** Sort order. Default: desc */
   sortOrder?: SortOrder
-}
-
-export interface StrikingDistanceResult {
-  keyword: string
-  page: string | null
-  clicks: number
-  impressions: number
-  ctr: number
-  position: number
-  /** Estimated clicks if position improved to top 3 */
-  potentialClicks: number
 }
 
 const sortResults = createSorter<StrikingDistanceResult, StrikingDistanceSortMetric>(

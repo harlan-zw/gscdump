@@ -15,6 +15,7 @@
   GSC_QUOTAS: object
   gscdumpApi: function
   inspectUrl: function
+  progressBar: function
   requestIndexing: function
   storageError: function
   submitSitemap: function
@@ -53,6 +54,7 @@
   lt: function
   lte: function
   ne: function
+  normalizeFilter: function
   not: function
   notRegex: function
   or: function
@@ -73,4 +75,5 @@
   buildLogicalPlan: function
   UnsupportedLogicalCapabilityError: function
 ./tenant:
+  decodeSiteId: function
   encodeSiteId: function

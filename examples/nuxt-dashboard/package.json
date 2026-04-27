@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "nuxt dev",
+    "dev:local": "GSCDUMP_ANALYTICS_MODE=local nuxt dev",
+    "dev:origin": "GSCDUMP_ANALYTICS_MODE=origin nuxt dev",
+    "dev:consumer": "GSCDUMP_ANALYTICS_MODE=consumer nuxt dev",
     "build": "nuxt build",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare"
@@ -14,9 +17,12 @@
     "@gscdump/engine": "workspace:*",
     "@gscdump/engine-sqlite": "workspace:*",
     "@gscdump/engine-wasm": "workspace:*",
+    "@gscdump/nuxt-analytics": "workspace:*",
+    "@nuxt/ui": "catalog:",
     "aws4fetch": "catalog:",
     "gscdump": "workspace:*",
     "nuxt": "catalog:",
+    "tailwindcss": "catalog:",
     "vue": "catalog:"
   }
 }

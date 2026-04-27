@@ -1,40 +1,7 @@
-import type { CloudGscDriver } from '../types'
-import process from 'node:process'
-import { cancel, isCancel, select } from '@clack/prompts'
 import { defineCommand } from 'citty'
+import { deltaColor, GREEN, RED, severityColor, YELLOW } from '../ansi'
 import { getDriver } from '../session'
-import { logger } from '../utils'
-
-async function resolveSiteUrl(driver: CloudGscDriver, target?: string): Promise<string> {
-  const sites = await driver.sitesWithSync().catch((e: Error) => {
-    logger.error(`Failed to fetch sites: ${e.message}`)
-    process.exit(1)
-  })
-
-  if (sites.length === 0) {
-    logger.error('No registered sites. Run gscdump-cloud register first.')
-    process.exit(1)
-  }
-
-  const match = target
-    ? sites.find(s => s.siteUrl === target || s.siteUrl.includes(target))
-    : undefined
-
-  if (match)
-    return match.siteUrl
-  if (sites.length === 1)
-    return sites[0].siteUrl
-
-  const selected = await select({
-    message: 'Select a site',
-    options: sites.map(s => ({ value: s.siteUrl, label: s.siteUrl })),
-  })
-  if (isCancel(selected)) {
-    cancel('Cancelled')
-    process.exit(0)
-  }
-  return selected as string
-}
+import { exitOnError, loadSites, logger, resolveSiteUrl } from '../utils'
 
 const statusCommand = defineCommand({
   meta: {
@@ -48,12 +15,10 @@ const statusCommand = defineCommand({
   },
   async run({ args }) {
     const driver = await getDriver()
-    const siteUrl = await resolveSiteUrl(driver, args.site)
+    const sites = await loadSites(driver)
+    const siteUrl = await resolveSiteUrl(sites, args.site)
 
-    const data = await driver.indexing(siteUrl, { days: Number(args.days) }).catch((e: Error) => {
-      logger.error(`Failed to fetch indexing data: ${e.message}`)
-      process.exit(1)
-    })
+    const data = await exitOnError(driver.indexing(siteUrl, { days: Number(args.days) }), 'Failed to fetch indexing data')
 
     if (args.json) {
       console.log(JSON.stringify(data, null, 2))
@@ -73,12 +38,12 @@ const statusCommand = defineCommand({
     if (s.change7d !== null || s.change28d !== null) {
       console.log()
       if (s.change7d !== null) {
-        const color = s.change7d > 0 ? '\x1B[32m+' : s.change7d < 0 ? '\x1B[31m' : '\x1B[90m'
-        console.log(`  7d change:      ${color}${s.change7d}%\x1B[0m`)
+        const sign = s.change7d > 0 ? '+' : ''
+        console.log(`  7d change:      ${deltaColor(s.change7d)}${sign}${s.change7d}%\x1B[0m`)
       }
       if (s.change28d !== null) {
-        const color = s.change28d > 0 ? '\x1B[32m+' : s.change28d < 0 ? '\x1B[31m' : '\x1B[90m'
-        console.log(`  28d change:     ${color}${s.change28d}%\x1B[0m`)
+        const sign = s.change28d > 0 ? '+' : ''
+        console.log(`  28d change:     ${deltaColor(s.change28d)}${sign}${s.change28d}%\x1B[0m`)
       }
     }
 
@@ -106,12 +71,10 @@ const diagnosticsCommand = defineCommand({
   },
   async run({ args }) {
     const driver = await getDriver()
-    const siteUrl = await resolveSiteUrl(driver, args.site)
+    const sites = await loadSites(driver)
+    const siteUrl = await resolveSiteUrl(sites, args.site)
 
-    const data = await driver.indexingDiagnostics(siteUrl).catch((e: Error) => {
-      logger.error(`Failed to fetch diagnostics: ${e.message}`)
-      process.exit(1)
-    })
+    const data = await exitOnError(driver.indexingDiagnostics(siteUrl), 'Failed to fetch diagnostics')
 
     if (args.json) {
       console.log(JSON.stringify(data, null, 2))
@@ -131,7 +94,7 @@ const diagnosticsCommand = defineCommand({
 
     console.log('  \x1B[1mIssues\x1B[0m')
     for (const issue of data.issues) {
-      const color = issue.severity === 'error' ? '\x1B[31m' : issue.severity === 'warning' ? '\x1B[33m' : '\x1B[90m'
+      const color = severityColor(issue.severity)
       console.log(`  ${color}${issue.severity.toUpperCase().padEnd(7)}\x1B[0m ${issue.label} — \x1B[36m${issue.count.toLocaleString()}\x1B[0m URLs`)
     }
     console.log()
@@ -154,18 +117,16 @@ const urlsCommand = defineCommand({
   },
   async run({ args }) {
     const driver = await getDriver()
-    const siteUrl = await resolveSiteUrl(driver, args.site)
+    const sites = await loadSites(driver)
+    const siteUrl = await resolveSiteUrl(sites, args.site)
 
-    const data = await driver.indexingUrls(siteUrl, {
+    const data = await exitOnError(driver.indexingUrls(siteUrl, {
       status: args.status ? String(args.status) : undefined,
       issue: args.issue ? String(args.issue) : undefined,
       search: args.search ? String(args.search) : undefined,
       limit: Number(args.limit),
       offset: Number(args.offset),
-    }).catch((e: Error) => {
-      logger.error(`Failed to fetch URLs: ${e.message}`)
-      process.exit(1)
-    })
+    }), 'Failed to fetch URLs')
 
     if (args.json) {
       console.log(JSON.stringify(data, null, 2))
@@ -177,7 +138,7 @@ const urlsCommand = defineCommand({
     console.log()
 
     for (const url of data.urls) {
-      const verdictColor = url.verdict === 'PASS' ? '\x1B[32m' : url.verdict ? '\x1B[31m' : '\x1B[33m'
+      const verdictColor = url.verdict === 'PASS' ? GREEN : url.verdict ? RED : YELLOW
       const verdictLabel = url.verdict === 'PASS' ? 'INDEXED' : url.verdict ? 'NOT INDEXED' : 'PENDING'
       console.log(`  ${verdictColor}${verdictLabel.padEnd(12)}\x1B[0m ${url.url}`)
       if (url.coverageState && url.coverageState !== 'Submitted and indexed')
@@ -201,12 +162,10 @@ const indexPercentCommand = defineCommand({
   },
   async run({ args }) {
     const driver = await getDriver()
-    const siteUrl = await resolveSiteUrl(driver, args.site)
+    const sites = await loadSites(driver)
+    const siteUrl = await resolveSiteUrl(sites, args.site)
 
-    const data = await driver.indexPercent(siteUrl).catch((e: Error) => {
-      logger.error(`Failed to fetch index percent: ${e.message}`)
-      process.exit(1)
-    })
+    const data = await exitOnError(driver.indexPercent(siteUrl), 'Failed to fetch index percent')
 
     if (args.json) {
       console.log(JSON.stringify(data, null, 2))
@@ -222,12 +181,12 @@ const indexPercentCommand = defineCommand({
     console.log(`  Visible in Search: \x1B[32m${s.visibleUrls.toLocaleString()}\x1B[0m`)
 
     if (s.change7d !== null) {
-      const color = s.change7d > 0 ? '\x1B[32m+' : s.change7d < 0 ? '\x1B[31m' : '\x1B[90m'
-      console.log(`  7d change:         ${color}${s.change7d.toFixed(1)}%\x1B[0m`)
+      const sign = s.change7d > 0 ? '+' : ''
+      console.log(`  7d change:         ${deltaColor(s.change7d)}${sign}${s.change7d.toFixed(1)}%\x1B[0m`)
     }
     if (s.change28d !== null) {
-      const color = s.change28d > 0 ? '\x1B[32m+' : s.change28d < 0 ? '\x1B[31m' : '\x1B[90m'
-      console.log(`  28d change:        ${color}${s.change28d.toFixed(1)}%\x1B[0m`)
+      const sign = s.change28d > 0 ? '+' : ''
+      console.log(`  28d change:        ${deltaColor(s.change28d)}${sign}${s.change28d.toFixed(1)}%\x1B[0m`)
     }
 
     if (data.invisibleCount > 0) {

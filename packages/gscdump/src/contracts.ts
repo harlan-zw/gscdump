@@ -14,7 +14,7 @@ import type { BuilderState } from './query'
 // ------------------------------------------------------------------
 
 /** Logical table / dataset identifier. Canonical across query builder + storage engine. */
-export type TableName = 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords'
+export type TableName = 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords' | 'search_appearance'
 
 /** Untyped row shape crossing storage/query boundaries. */
 export type Row = Record<string, unknown>
@@ -69,6 +69,10 @@ export interface AnalysisParams {
   brandTerms?: string[]
   limit?: number
   offset?: number
+  /** Sort column. Each analyzer enforces its own whitelist. */
+  sortBy?: string
+  /** Sort direction. Default per-analyzer. */
+  sortDir?: 'asc' | 'desc'
   minPosition?: number
   maxPosition?: number
   minImpressions?: number

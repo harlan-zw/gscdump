@@ -63,9 +63,12 @@ export function createAnalyzerRegistry(init: AnalyzerRegistryInit = {}): Analyze
     const variants = byId.get(id)
     if (!variants)
       return undefined
-    if (sourceSupportsSql && variants.sql)
-      return variants.sql
-    return variants.rows ?? variants.sql
+    if (sourceSupportsSql)
+      return variants.sql ?? variants.rows
+    // Row sources can't run SQL plans. Returning `variants.sql` here made
+    // `listAnalyzerIdsFor` overcount by including analyzers that would
+    // throw AnalyzerCapabilityError at dispatch time.
+    return variants.rows
   }
 
   const listAnalyzersFor = (sourceSupportsSql: boolean): readonly Analyzer[] => {

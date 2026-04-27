@@ -92,6 +92,22 @@
     "./resolver": {
       "types": "./dist/resolver/index.d.mts",
       "import": "./dist/resolver/index.mjs"
+    },
+    "./scope": {
+      "types": "./dist/scope.d.mts",
+      "import": "./dist/scope.mjs"
+    },
+    "./arrow": {
+      "types": "./dist/arrow-utils.d.mts",
+      "import": "./dist/arrow-utils.mjs"
+    },
+    "./inspection-sqlite-node": {
+      "types": "./dist/adapters/inspection-sqlite-node.d.mts",
+      "import": "./dist/adapters/inspection-sqlite-node.mjs"
+    },
+    "./inspection-sqlite-browser": {
+      "types": "./dist/adapters/inspection-sqlite-browser.d.mts",
+      "import": "./dist/adapters/inspection-sqlite-browser.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -107,21 +123,31 @@
     "build": "obuild",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
+    "r2-harness": "tsx scripts/r2-contention-harness.ts",
+    "backfill-audit": "tsx scripts/backfill-audit.ts",
     "prepack": "pnpm run build"
   },
   "peerDependencies": {
     "@duckdb/duckdb-wasm": "catalog:",
+    "better-sqlite3": "catalog:",
     "hyparquet": "catalog:",
-    "hyparquet-writer": "catalog:"
+    "hyparquet-writer": "catalog:",
+    "wa-sqlite": "catalog:"
   },
   "peerDependenciesMeta": {
     "@duckdb/duckdb-wasm": {
+      "optional": true
+    },
+    "better-sqlite3": {
       "optional": true
     },
     "hyparquet": {
       "optional": true
     },
     "hyparquet-writer": {
+      "optional": true
+    },
+    "wa-sqlite": {
       "optional": true
     }
   },
@@ -133,8 +159,11 @@
   "devDependencies": {
     "@duckdb/duckdb-wasm": "catalog:",
     "@types/proper-lockfile": "catalog:",
+    "aws4fetch": "catalog:",
+    "better-sqlite3": "catalog:",
     "hyparquet": "catalog:",
     "hyparquet-writer": "catalog:",
+    "tsx": "catalog:",
     "vitest": "catalog:dev-test"
   }
 }

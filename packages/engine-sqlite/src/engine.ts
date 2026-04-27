@@ -6,15 +6,12 @@
  */
 
 import type { QueryRow, SqlQuerySource } from '@gscdump/engine/resolver'
+import type { SqliteRowExecutor } from './runner'
 
 import { createSqlQuerySource } from '@gscdump/engine/resolver'
 import { createSqliteResolverAdapter, sqliteResolverAdapter } from './resolver-adapter'
 
-export type SqliteQueryExecutor = (
-  sql: string,
-  params: unknown[],
-  method: 'run' | 'all' | 'values' | 'get',
-) => Promise<{ rows: unknown[] }>
+export type SqliteQueryExecutor = SqliteRowExecutor
 
 export interface EngineConfig {
   executor: SqliteQueryExecutor

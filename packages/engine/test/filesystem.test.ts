@@ -327,4 +327,57 @@ describe('integration: filesystem + JSON codec (no DuckDB)', () => {
     const stats = await filesystemStats(dir)
     expect(stats.files).toBeGreaterThan(0)
   })
+
+  it('purgeTenant deletes bytes + manifest records for a tenant', async () => {
+    const codec = createJsonCodec()
+    const dataSource = createFilesystemDataSource({ rootDir: dir })
+    const manifestStore = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
+    const executor = createUnionExecutor(codec)
+    const engine = createStorageEngine({ dataSource, manifestStore, codec, executor })
+
+    for (const userId of ['u1', 'u2']) {
+      await engine.writeDay(
+        { userId, siteId: 's1', table: 'pages', date: '2026-03-09' },
+        [{ url: '/p', date: '2026-03-09', clicks: 1, impressions: 10, sum_position: 50 }],
+      )
+    }
+
+    expect((await dataSource.list('u_u1/')).length).toBeGreaterThan(0)
+
+    const result = await engine.purgeTenant({ userId: 'u1' })
+    expect(result.userId).toBe('u1')
+    expect(result.prefix).toBe('u_u1/')
+    expect(result.objectsDeleted).toBeGreaterThan(0)
+    expect(result.entriesRemoved).toBe(1)
+
+    expect(await dataSource.list('u_u1/')).toEqual([])
+    expect(await engine.listLive({ userId: 'u1' })).toEqual([])
+
+    expect(await engine.listLive({ userId: 'u2' })).toHaveLength(1)
+    expect((await dataSource.list('u_u2/')).length).toBeGreaterThan(0)
+  })
+
+  it('purgeTenant scoped to siteId spares sibling sites', async () => {
+    const codec = createJsonCodec()
+    const dataSource = createFilesystemDataSource({ rootDir: dir })
+    const manifestStore = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
+    const executor = createUnionExecutor(codec)
+    const engine = createStorageEngine({ dataSource, manifestStore, codec, executor })
+
+    for (const siteId of ['s1', 's2']) {
+      await engine.writeDay(
+        { userId: 'u1', siteId, table: 'pages', date: '2026-03-09' },
+        [{ url: '/p', date: '2026-03-09', clicks: 1, impressions: 10, sum_position: 50 }],
+      )
+    }
+
+    const result = await engine.purgeTenant({ userId: 'u1', siteId: 's1' })
+    expect(result.entriesRemoved).toBe(1)
+
+    const live = await engine.listLive({ userId: 'u1' })
+    expect(live).toHaveLength(1)
+    expect(live[0]!.siteId).toBe('s2')
+    expect((await dataSource.list('u_u1/s2/')).length).toBeGreaterThan(0)
+    expect(await dataSource.list('u_u1/s1/')).toEqual([])
+  })
 })

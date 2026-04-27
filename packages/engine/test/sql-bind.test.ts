@@ -85,4 +85,34 @@ describe('bindLiterals', () => {
   it('handles unterminated block comment to end of input', () => {
     expect(bindLiterals('SELECT ? /* ? ? ', [1])).toBe('SELECT 1 /* ? ? ')
   })
+
+  it('binds Postgres-style $N placeholders', () => {
+    expect(bindLiterals('SELECT $1, $2', ['a', 42])).toBe('SELECT \'a\', 42')
+  })
+
+  it('binds the same $N multiple times', () => {
+    expect(bindLiterals('SELECT $1, $1', ['x'])).toBe('SELECT \'x\', \'x\'')
+  })
+
+  it('rejects mixed ? and $N placeholders', () => {
+    expect(() => bindLiterals('SELECT ?, $1', ['a', 'b']))
+      .toThrow(/cannot mix/)
+  })
+
+  it('throws when $N is out of range', () => {
+    expect(() => bindLiterals('SELECT $5', ['a']))
+      .toThrow(/\$5 out of range/)
+  })
+
+  it('throws when a $N param is unused', () => {
+    expect(() => bindLiterals('SELECT $1', ['a', 'b']))
+      .toThrow(/1 params unused/)
+  })
+
+  it('leaves $N inside strings and comments untouched', () => {
+    expect(bindLiterals('SELECT \'$1\', $1', ['x']))
+      .toBe('SELECT \'$1\', \'x\'')
+    expect(bindLiterals('SELECT $1 -- $2 keep\n', ['y']))
+      .toBe('SELECT \'y\' -- $2 keep\n')
+  })
 })

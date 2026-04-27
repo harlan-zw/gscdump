@@ -13,6 +13,7 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 // @ts-expect-error - blocking variant ships as CJS, no type export published
 import { ConsoleLogger, createDuckDB, NODE_RUNTIME, VoidLogger } from '@duckdb/duckdb-wasm/dist/duckdb-node-blocking.cjs'
+import { arrowToRows } from '../arrow-utils'
 
 const require_ = createRequire(typeof __filename !== 'undefined' ? __filename : (typeof import.meta !== 'undefined' ? fileURLToPath(import.meta.url) : process.cwd()))
 
@@ -71,13 +72,13 @@ export function createNodeDuckDBHandle(opts: NodeDuckDBOptions = {}): DuckDBHand
     async query(sql: string, params?: unknown[]): Promise<Row[]> {
       const { conn } = await singleton!
       if (!params || params.length === 0) {
-        const result = conn.query(sql) as ArrowTableLike
-        return arrowToRows(result)
+        const result = conn.query(sql)
+        return arrowToRows(result) as Row[]
       }
       const stmt = conn.prepare(sql)
       try {
-        const result = stmt.query(...params) as ArrowTableLike
-        return arrowToRows(result)
+        const result = stmt.query(...params)
+        return arrowToRows(result) as Row[]
       }
       finally {
         stmt.close()
@@ -119,18 +120,4 @@ export function createNodeDuckDBHandle(opts: NodeDuckDBOptions = {}): DuckDBHand
 
 export function resetNodeDuckDB(): void {
   singleton = null
-}
-
-interface ArrowTableLike {
-  toArray: () => Array<{ toJSON: () => Row }>
-  schema?: { fields: Array<{ name: string }> }
-}
-
-function arrowToRows(table: ArrowTableLike): Row[] {
-  const arr = table.toArray()
-  if (arr.length === 0)
-    return []
-  if (typeof arr[0]?.toJSON === 'function')
-    return arr.map(r => r.toJSON())
-  return arr as unknown as Row[]
 }

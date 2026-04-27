@@ -45,6 +45,11 @@ describe('transformGscRow', () => {
     expect(out?.row).toEqual({ country: 'usa', date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 10 })
   })
 
+  it('maps search_appearance', () => {
+    const out = transformGscRow('search_appearance', { keys: ['AMP_TOP_STORIES', '2026-04-10'], clicks: 2, impressions: 20, position: 5 })
+    expect(out?.row).toEqual({ searchAppearance: 'AMP_TOP_STORIES', date: '2026-04-10', clicks: 2, impressions: 20, sum_position: 80 })
+  })
+
   it('maps devices', () => {
     const out = transformGscRow('devices', { keys: ['mobile', '2026-04-10'], clicks: 0, impressions: 3, position: 1 })
     expect(out?.row).toEqual({ device: 'mobile', date: '2026-04-10', clicks: 0, impressions: 3, sum_position: 0 })
@@ -147,5 +152,81 @@ describe('createRowAccumulator', () => {
       { keys: ['/a'], clicks: 0, impressions: 0, position: 0 },
     ])
     expect(acc.totalRows).toBe(0)
+  })
+
+  it('drainCompleted is a no-op when trackDateBoundary is off', () => {
+    const acc = createRowAccumulator()
+    acc.push('pages', [
+      { keys: ['/a', '2026-04-10'], clicks: 0, impressions: 0, position: 0 },
+      { keys: ['/b', '2026-04-11'], clicks: 0, impressions: 0, position: 0 },
+    ])
+    expect(acc.drainCompleted().size).toBe(0)
+    expect(acc.totalRows).toBe(2)
+  })
+
+  it('drainCompleted returns older dates and keeps the latest', () => {
+    const acc = createRowAccumulator({ trackDateBoundary: true })
+    acc.push('pages', [
+      { keys: ['/a', '2026-04-10'], clicks: 0, impressions: 0, position: 0 },
+      { keys: ['/b', '2026-04-10'], clicks: 0, impressions: 0, position: 0 },
+      { keys: ['/c', '2026-04-11'], clicks: 0, impressions: 0, position: 0 },
+    ])
+    const completed = acc.drainCompleted()
+    expect(completed.get('pages')?.get('2026-04-10')).toHaveLength(2)
+    expect(completed.get('pages')?.has('2026-04-11')).toBe(false)
+    expect(acc.totalRows).toBe(1)
+
+    const remaining = acc.drain()
+    expect(remaining.get('pages')?.get('2026-04-11')).toHaveLength(1)
+  })
+
+  it('drainCompleted advances the boundary across multiple pushes', () => {
+    const acc = createRowAccumulator({ trackDateBoundary: true })
+    acc.push('keywords', [
+      { keys: ['foo', '2026-04-10'], clicks: 0, impressions: 0, position: 0 },
+    ])
+    expect(acc.drainCompleted().size).toBe(0)
+
+    acc.push('keywords', [
+      { keys: ['bar', '2026-04-11'], clicks: 0, impressions: 0, position: 0 },
+    ])
+    const first = acc.drainCompleted()
+    expect(first.get('keywords')?.get('2026-04-10')).toHaveLength(1)
+    expect(acc.totalRows).toBe(1)
+
+    acc.push('keywords', [
+      { keys: ['baz', '2026-04-12'], clicks: 0, impressions: 0, position: 0 },
+    ])
+    const second = acc.drainCompleted()
+    expect(second.get('keywords')?.get('2026-04-11')).toHaveLength(1)
+    expect(acc.totalRows).toBe(1)
+  })
+
+  it('drainCompleted tracks boundary per-table', () => {
+    const acc = createRowAccumulator({ trackDateBoundary: true })
+    acc.push('pages', [
+      { keys: ['/a', '2026-04-10'], clicks: 0, impressions: 0, position: 0 },
+      { keys: ['/b', '2026-04-12'], clicks: 0, impressions: 0, position: 0 },
+    ])
+    acc.push('keywords', [
+      { keys: ['foo', '2026-04-09'], clicks: 0, impressions: 0, position: 0 },
+    ])
+    const completed = acc.drainCompleted()
+    expect(completed.get('pages')?.get('2026-04-10')).toHaveLength(1)
+    expect(completed.has('keywords')).toBe(false)
+    expect(acc.totalRows).toBe(2)
+  })
+
+  it('drain() resets boundary state', () => {
+    const acc = createRowAccumulator({ trackDateBoundary: true })
+    acc.push('pages', [
+      { keys: ['/a', '2026-04-10'], clicks: 0, impressions: 0, position: 0 },
+      { keys: ['/b', '2026-04-11'], clicks: 0, impressions: 0, position: 0 },
+    ])
+    acc.drain()
+    acc.push('pages', [
+      { keys: ['/c', '2026-04-09'], clicks: 0, impressions: 0, position: 0 },
+    ])
+    expect(acc.drainCompleted().size).toBe(0)
   })
 })

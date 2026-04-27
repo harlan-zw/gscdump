@@ -156,10 +156,12 @@ const cannibalization = analyzeCannibalization(keywordPageData)
 
 **Utils:** `formatDateGsc`, `percentDifference`
 
-## Related Packages
+## Related
 
 - [`@gscdump/cli`](../cli) — CLI: `sync`, `query`, `dump`, `analyze`, `mcp`, `store` admin.
+- [`@gscdump/engine`](../engine) — Append-only Parquet/DuckDB storage engine.
 - [`@gscdump/analysis`](../analysis) — SEO analyzers (row-based + DuckDB-native + D1-ready).
+- [`@gscdump/nuxt-analytics`](../nuxt-analytics) — Nuxt layer wrapping the full stack.
 
 ## License
 

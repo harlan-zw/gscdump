@@ -1,17 +1,17 @@
 /**
- * `defineAnalyzer` — single authoring site for an analyzer that can be
+ * `defineAnalyzer` — single colocation site for an analyzer that can be
  * executed via SQL (against a `SqlQuerySource`) or via a row query plan
  * (against a `RowQuerySource` — e.g. GSC live API, in-memory rows).
  *
- * The goal is parity: a single typed `InputRow` describes the rows both
- * plans feed into one shared `reduce`. Derivation + filtering + sorting
- * live in `reduce`, so the SQL query stays minimal (aggregation only) and
- * the row path reuses the same logic. Authors only restate the plan-side
- * work; the reducer is written once.
+ * Authors provide either:
+ *   - a shared `reduce` (parity-mode: SQL emits raw aggregation; reducer does
+ *     filter/sort/derive once for both paths), OR
+ *   - separate `reduceSql` and `reduceRows` (mechanical-colocation mode: each
+ *     path keeps its tuned implementation, just lives in one file).
  *
  * Returned `sql` / `rows` are plain `Analyzer` values — the existing
- * `AnalyzerRegistry` pipeline, dispatcher, and variant-resolution logic
- * consume them unchanged.
+ * `AnalyzerRegistry`, dispatcher, and variant-resolution logic consume them
+ * unchanged.
  */
 
 import type { Row } from '@gscdump/engine/contracts'
@@ -38,6 +38,17 @@ export interface SqlPlanSpec {
   requiresAttachedTables?: boolean
 }
 
+export interface ReduceCtx<InputRow> {
+  /** Extra SQL-query results keyed by `SqlExtraQuery.name` (SQL path only). */
+  extras?: Record<string, InputRow[]>
+}
+
+export type Reducer<Params, InputRow, Result> = (
+  rows: InputRow[] | Record<string, InputRow[]>,
+  params: Params,
+  ctx: ReduceCtx<InputRow>,
+) => { results: Result, meta?: Record<string, unknown> }
+
 export interface DefineAnalyzerOptions<
   Params extends AnalysisParams,
   InputRow,
@@ -45,15 +56,15 @@ export interface DefineAnalyzerOptions<
 > {
   id: string
   /**
-   * Pure reducer: typed rows → `{ results, meta }`. Shared by SQL + row
-   * plans. Receives a flat array when `buildRows` returns a single-query
-   * plan (and for SQL plans), or a keyed record matching the query names
-   * for multi-query plans.
+   * Shared reducer used by both SQL and row paths. Use this when the
+   * post-aggregation row count is small and filter/sort/derive can live in
+   * one place. Mutually exclusive with `reduceSql` / `reduceRows`.
    */
-  reduce: (
-    rows: InputRow[] | Record<string, InputRow[]>,
-    params: Params,
-  ) => { results: Result[], meta?: Record<string, unknown> }
+  reduce?: Reducer<Params, InputRow, Result>
+  /** SQL-only reducer. Required when `buildSql` is set without `reduce`. */
+  reduceSql?: Reducer<Params, InputRow, Result>
+  /** Row-only reducer. Required when `buildRows` is set without `reduce`. */
+  reduceRows?: Reducer<Params, InputRow, Result>
   /** SQL plan builder. Omit if the analyzer has no SQL path. */
   buildSql?: (params: Params) => SqlPlanSpec
   /** Row plan builder. Omit if the analyzer has no row path. */
@@ -80,20 +91,32 @@ export function defineAnalyzer<
   const {
     id,
     reduce,
+    reduceSql,
+    reduceRows,
     buildSql,
     buildRows,
     sqlRequires = DEFAULT_SQL_REQUIRES,
     rowsRequires = [],
   } = opts
 
-  const callReduce = (rows: Row[] | Record<string, Row[]>, params: Params): { results: Result[], meta?: Record<string, unknown> } => {
+  const sqlReducer = reduceSql ?? reduce
+  const rowsReducer = reduceRows ?? reduce
+
+  if (buildSql && !sqlReducer)
+    throw new Error(`defineAnalyzer(${id}): buildSql requires reduce or reduceSql`)
+  if (buildRows && !rowsReducer)
+    throw new Error(`defineAnalyzer(${id}): buildRows requires reduce or reduceRows`)
+
+  const wrap = (
+    fn: Reducer<Params, InputRow, Result>,
+  ) => (rows: Row[] | Record<string, Row[]>, params: Params, ctx: ReduceCtx<InputRow>) => {
     const input: unknown = Array.isArray(rows)
       ? rows
       : pickSingle(rows) ?? rows
-    return reduce(input as InputRow[] | Record<string, InputRow[]>, params)
+    return fn(input as InputRow[] | Record<string, InputRow[]>, params, ctx)
   }
 
-  const sqlAnalyzer: Analyzer | undefined = buildSql
+  const sqlAnalyzer: Analyzer | undefined = buildSql && sqlReducer
     ? {
         id,
         requires: sqlRequires,
@@ -112,12 +135,15 @@ export function defineAnalyzer<
           return plan
         },
         reduce(rows: Row[] | Record<string, Row[]>, ctx: ReduceContext) {
-          return callReduce(rows, ctx.params as Params)
+          const { results, meta } = wrap(sqlReducer)(rows, ctx.params as Params, {
+            extras: ctx.extras as Record<string, InputRow[]> | undefined,
+          })
+          return { results: results as unknown as Row[], meta }
         },
       }
     : undefined
 
-  const rowsAnalyzer: Analyzer | undefined = buildRows
+  const rowsAnalyzer: Analyzer | undefined = buildRows && rowsReducer
     ? {
         id,
         requires: rowsRequires,
@@ -132,7 +158,8 @@ export function defineAnalyzer<
           return plan
         },
         reduce(rows: Row[] | Record<string, Row[]>, ctx: ReduceContext) {
-          return callReduce(rows, ctx.params as Params)
+          const { results, meta } = wrap(rowsReducer)(rows, ctx.params as Params, {})
+          return { results: results as unknown as Row[], meta }
         },
       }
     : undefined

@@ -8,8 +8,9 @@ import {
   createSitemapStore,
 } from '@gscdump/engine/entities'
 import { defineCommand } from 'citty'
+import { progressBar } from 'gscdump'
 import { createCommandContext } from '../context'
-import { logger, progressBar } from '../utils'
+import { logger, runWithConcurrency } from '../utils'
 
 const INSPECTION_QPD_PER_PROPERTY = 2000
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
@@ -85,45 +86,36 @@ const inspectSubCommand = defineCommand({
     let failed = 0
     const records: InspectionRecord[] = []
     const failures: Array<{ url: string, error: string }> = []
-    const cursor = { i: 0 }
 
-    async function worker(): Promise<void> {
-      while (true) {
-        const i = cursor.i++
-        if (i >= urls.length)
-          return
-        const url = urls[i]!
-        const result = await client.inspect(siteUrl, url).catch((err: Error) => err)
-        if (result instanceof Error) {
-          failed++
-          failures.push({ url, error: result.message })
-        }
-        else {
-          const ix = result.inspectionResult
-          const indexStatus = ix?.indexStatusResult
-          records.push({
-            url,
-            inspectedAt: new Date().toISOString(),
-            indexStatus: indexStatus?.verdict ?? undefined,
-            lastCrawlTime: indexStatus?.lastCrawlTime ?? undefined,
-            googleCanonical: indexStatus?.googleCanonical ?? undefined,
-            userCanonical: indexStatus?.userCanonical ?? undefined,
-            coverageState: indexStatus?.coverageState ?? undefined,
-            robotsTxtState: indexStatus?.robotsTxtState ?? undefined,
-            indexingState: indexStatus?.indexingState ?? undefined,
-            pageFetchState: indexStatus?.pageFetchState ?? undefined,
-            mobileUsabilityVerdict: ix?.mobileUsabilityResult?.verdict ?? undefined,
-            richResultsVerdict: ix?.richResultsResult?.verdict ?? undefined,
-            raw: ix,
-          })
-        }
-        completed++
-        if (!quiet)
-          process.stdout.write(`\r${progressBar(completed, urls.length, `${url.slice(0, 60)}`)}`)
+    await runWithConcurrency(urls, concurrency, async (url) => {
+      const result = await client.inspect(siteUrl, url).catch((err: Error) => err)
+      if (result instanceof Error) {
+        failed++
+        failures.push({ url, error: result.message })
       }
-    }
-
-    await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, worker))
+      else {
+        const ix = result.inspectionResult
+        const indexStatus = ix?.indexStatusResult
+        records.push({
+          url,
+          inspectedAt: new Date().toISOString(),
+          indexStatus: indexStatus?.verdict ?? undefined,
+          lastCrawlTime: indexStatus?.lastCrawlTime ?? undefined,
+          googleCanonical: indexStatus?.googleCanonical ?? undefined,
+          userCanonical: indexStatus?.userCanonical ?? undefined,
+          coverageState: indexStatus?.coverageState ?? undefined,
+          robotsTxtState: indexStatus?.robotsTxtState ?? undefined,
+          indexingState: indexStatus?.indexingState ?? undefined,
+          pageFetchState: indexStatus?.pageFetchState ?? undefined,
+          mobileUsabilityVerdict: ix?.mobileUsabilityResult?.verdict ?? undefined,
+          richResultsVerdict: ix?.richResultsResult?.verdict ?? undefined,
+          raw: ix,
+        })
+      }
+      completed++
+      if (!quiet)
+        process.stdout.write(`\r${progressBar(completed, urls.length, `${url.slice(0, 60)}`)}`)
+    })
 
     if (!quiet)
       process.stdout.write('\n')
@@ -368,41 +360,32 @@ const indexingSnapshotSubCommand = defineCommand({
     const records: IndexingMetadataRecord[] = []
     const failures: Array<{ url: string, error: string }> = []
     let completed = 0
-    const cursor = { i: 0 }
 
-    async function worker(): Promise<void> {
-      while (true) {
-        const i = cursor.i++
-        if (i >= urls.length)
-          return
-        const url = urls[i]!
-        const result = await client.indexing.getMetadata(url).catch((err: Error) => err)
-        if (result instanceof Error) {
-          // 404 from the API just means "no notification on record" — treat
-          // as a recorded absence, not a failure.
-          if (INDEXING_NOT_FOUND_RE.test(result.message)) {
-            records.push({ url, capturedAt: new Date().toISOString() })
-          }
-          else {
-            failures.push({ url, error: result.message })
-          }
+    await runWithConcurrency(urls, concurrency, async (url) => {
+      const result = await client.indexing.getMetadata(url).catch((err: Error) => err)
+      if (result instanceof Error) {
+        // 404 from the API just means "no notification on record" — treat
+        // as a recorded absence, not a failure.
+        if (INDEXING_NOT_FOUND_RE.test(result.message)) {
+          records.push({ url, capturedAt: new Date().toISOString() })
         }
         else {
-          records.push({
-            url,
-            capturedAt: new Date().toISOString(),
-            latestUpdateAt: result.latestUpdate?.notifyTime ?? undefined,
-            latestRemoveAt: result.latestRemove?.notifyTime ?? undefined,
-            raw: result,
-          })
+          failures.push({ url, error: result.message })
         }
-        completed++
-        if (!quiet)
-          process.stdout.write(`\r${progressBar(completed, urls.length, url.slice(0, 60))}`)
       }
-    }
-
-    await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, worker))
+      else {
+        records.push({
+          url,
+          capturedAt: new Date().toISOString(),
+          latestUpdateAt: result.latestUpdate?.notifyTime ?? undefined,
+          latestRemoveAt: result.latestRemove?.notifyTime ?? undefined,
+          raw: result,
+        })
+      }
+      completed++
+      if (!quiet)
+        process.stdout.write(`\r${progressBar(completed, urls.length, url.slice(0, 60))}`)
+    })
 
     if (!quiet)
       process.stdout.write('\n')

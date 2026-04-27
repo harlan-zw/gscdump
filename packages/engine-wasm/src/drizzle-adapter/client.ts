@@ -8,21 +8,13 @@
  */
 
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm'
+import { arrowToRows } from '@gscdump/engine/arrow'
 
 export interface DuckDBWasmClient {
   db: AsyncDuckDB
   conn: AsyncDuckDBConnection
   query: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>
   close: () => Promise<void>
-}
-
-function arrowToRows(arrow: any): Record<string, unknown>[] {
-  const arr = typeof arrow.toArray === 'function' ? arrow.toArray() : arrow
-  if (!arr || arr.length === 0)
-    return []
-  if (typeof arr[0]?.toJSON === 'function')
-    return arr.map((r: any) => r.toJSON())
-  return arr as Record<string, unknown>[]
 }
 
 export async function createClient(

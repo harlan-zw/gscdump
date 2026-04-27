@@ -2,12 +2,17 @@ import type {
   ActionPriorityAnalyzer,
   ActionPrioritySourceState,
   ActionSource,
+  AnalysisParams,
+  AnalysisResult,
   Effort,
   PriorityAction,
 } from '@gscdump/analysis'
-import type { InsightRunner } from './useInsightRunner'
 
 import { analyzeActionPriority } from '@gscdump/analysis'
+
+interface AnalysisRunner {
+  analyze: (params: AnalysisParams) => Promise<AnalysisResult>
+}
 
 export type { ActionSource, Effort, PriorityAction }
 
@@ -24,7 +29,7 @@ export interface ActionPriorityRunner {
   actions: Ref<PriorityAction[]>
   error: Ref<Error | null>
   running: Ref<boolean>
-  run: (runner: InsightRunner) => Promise<void>
+  run: (runner: AnalysisRunner) => Promise<void>
 }
 
 const SOURCES: ActionSource[] = [
@@ -71,7 +76,7 @@ export function useActionPriority(): ActionPriorityRunner {
   const error = ref<Error | null>(null)
   const running = ref(false)
 
-  async function run(runner: InsightRunner): Promise<void> {
+  async function run(runner: AnalysisRunner): Promise<void> {
     if (running.value)
       return
 
@@ -85,7 +90,7 @@ export function useActionPriority(): ActionPriorityRunner {
     }
 
     const analyzer: ActionPriorityAnalyzer = {
-      analyze: params => runner.analyze(params as Record<string, unknown> & { type: string }),
+      analyze: params => runner.analyze(params as AnalysisParams),
     }
 
     try {

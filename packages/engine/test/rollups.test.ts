@@ -1,6 +1,7 @@
 import type { RollupDef, RollupEngine } from '../src/rollups'
 import type { DataSource, Row, TableName } from '../src/storage'
 import { describe, expect, it } from 'vitest'
+import { decodeParquetToRows } from '../src/adapters/hyparquet'
 import { createIndexingMetadataStore } from '../src/entities'
 import {
   dailyTotalsRollup,
@@ -8,6 +9,9 @@ import {
   indexingMetadataRollup,
   rebuildRollups,
   rollupKey,
+  rollupParquetKey,
+  topCountries28dRollup,
+  topKeywords28dParquetRollup,
   topPages28dRollup,
   weeklyTotalsRollup,
 } from '../src/rollups'
@@ -38,7 +42,7 @@ function makeFakeDataSource(): {
 }
 
 function makeFakeEngine(
-  responses: Record<TableName, Row[]>,
+  responses: Partial<Record<TableName, Row[]>>,
 ): RollupEngine {
   return {
     async runSQL({ table }) {
@@ -281,10 +285,6 @@ describe('topPages28dRollup', () => {
         { url: '/a', clicks: 100, impressions: 1000, sum_position: 5000 },
         { url: '/b', clicks: 50, impressions: 500, sum_position: 2500 },
       ],
-      keywords: [],
-      countries: [],
-      devices: [],
-      page_keywords: [],
     })
     const { ds: buildDs } = makeFakeDataSource()
     const result = (await topPages28dRollup.build({
@@ -296,5 +296,81 @@ describe('topPages28dRollup', () => {
     expect(result).toHaveLength(2)
     expect(result[0].url).toBe('/a')
     expect(result[0].clicks).toBe(100)
+  })
+})
+
+describe('topCountries28dRollup', () => {
+  it('forwards top-N country rows from the engine result', async () => {
+    const engine = makeFakeEngine({
+      countries: [
+        { country: 'usa', clicks: 200, impressions: 2000, sum_position: 10000 },
+        { country: 'gbr', clicks: 80, impressions: 800, sum_position: 4000 },
+      ],
+    })
+    const { ds: buildDs } = makeFakeDataSource()
+    const result = (await topCountries28dRollup.build({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource: buildDs,
+      builtAt: 1_700_000_000_000,
+    })) as Array<{ country: string, clicks: number }>
+    expect(result).toHaveLength(2)
+    expect(result[0].country).toBe('usa')
+    expect(result[0].clicks).toBe(200)
+  })
+})
+
+describe('parquet rollups', () => {
+  it('writes parquet bytes + JSON sidecar pointer', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const engine = makeFakeEngine({
+      keywords: [
+        { query: 'foo', clicks: 500, impressions: 5000, sum_position: 10000 },
+        { query: 'bar', clicks: 100, impressions: 1000, sum_position: 5000 },
+      ],
+    })
+    const results = await rebuildRollups({
+      engine,
+      dataSource: ds,
+      ctx: { userId: 'u1', siteId: 's1' },
+      defs: [topKeywords28dParquetRollup],
+      now: () => 1_700_000_000_000,
+    })
+
+    expect(results).toHaveLength(1)
+    const r = results[0]
+    expect(r.parquetKey).toBe(rollupParquetKey({ userId: 'u1', siteId: 's1' }, 'top_keywords_28d_parquet', 1_700_000_000_000))
+    expect(r.objectKey).toBe(rollupKey({ userId: 'u1', siteId: 's1' }, 'top_keywords_28d_parquet', 1_700_000_000_000))
+    expect(r.parquetBytes).toBeGreaterThan(0)
+
+    const envelope = JSON.parse(new TextDecoder().decode(store.get(r.objectKey)!))
+    expect(envelope.version).toBe(1)
+    expect(envelope.payload.parquetKey).toBe(r.parquetKey)
+    expect(envelope.payload.rowCount).toBe(2)
+
+    const rows = await decodeParquetToRows(store.get(r.parquetKey!)!)
+    expect(rows).toHaveLength(2)
+    expect(rows.map(x => x.query).sort()).toEqual(['bar', 'foo'])
+  })
+
+  it('throws if format=parquet def is missing parquetColumns', async () => {
+    const { ds } = makeFakeDataSource()
+    const broken: RollupDef = {
+      id: 'broken',
+      windowDays: 7,
+      format: 'parquet',
+      async build() {
+        return []
+      },
+    }
+    await expect(
+      rebuildRollups({
+        engine: makeFakeEngine({}),
+        dataSource: ds,
+        ctx: { userId: 'u1' },
+        defs: [broken],
+        now: () => 1_700_000_000_000,
+      }),
+    ).rejects.toThrow(/parquetColumns/)
   })
 })

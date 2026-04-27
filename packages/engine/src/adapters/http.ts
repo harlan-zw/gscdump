@@ -171,5 +171,6 @@ export function createHttpManifestStore(opts: HttpManifestStoreOptions): Manifes
       // Reads don't need locking; pass through so engine.runSQL doesn't break.
       return fn()
     },
+    async purgeTenant() { readOnly('purgeTenant') },
   }
 }

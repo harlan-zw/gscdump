@@ -1,7 +1,6 @@
 import type { TableName } from '../contracts'
 import type {
   BuilderState,
-  DateOperator,
   Dimension,
   FilterInput,
   FilterOperator,
@@ -11,10 +10,12 @@ import type {
   QueryParamName,
 } from './types'
 
+import { isDateOperator, isMetric, isQueryParam, isRegexOperator } from './operator-meta'
 import {
   extractDateRange,
   extractMetricFilters,
   extractSpecialOperatorFilters,
+  normalizeFilter,
 } from './resolver'
 
 export type { TableName } from '../contracts'
@@ -47,6 +48,23 @@ export interface LogicalMetricFilter {
   expression2?: number
 }
 
+// Tree representation of dimension filters that preserves AND/OR group
+// structure. The compiler uses this to emit `(a OR b)`-style SQL; the flat
+// `dimensionFilters` list is retained for callers that only need the leaves
+// (e.g. dataset inference).
+export interface LogicalFilterLeaf {
+  kind: 'leaf'
+  filter: LogicalDimensionFilter
+}
+
+export interface LogicalFilterGroup {
+  kind: 'group'
+  groupType: 'and' | 'or'
+  children: LogicalFilterNode[]
+}
+
+export type LogicalFilterNode = LogicalFilterLeaf | LogicalFilterGroup
+
 export interface LogicalQueryPlan {
   dataset: LogicalDataset
   dimensions: Dimension[]
@@ -58,6 +76,7 @@ export interface LogicalQueryPlan {
     endDate: string
   }
   dimensionFilters: LogicalDimensionFilter[]
+  dimensionFilterTree?: LogicalFilterNode
   metricFilters: LogicalMetricFilter[]
   specialFilters: {
     topLevel: boolean
@@ -81,26 +100,6 @@ export class UnsupportedLogicalCapabilityError extends Error {
   }
 }
 
-const QUERY_PARAMS: QueryParamName[] = ['searchType']
-const DATE_OPERATORS: DateOperator[] = ['gte', 'gt', 'lte', 'lt', 'between']
-const FILTER_METRICS: Metric[] = ['clicks', 'impressions', 'ctr', 'position']
-
-function isMetric(value: string): value is Metric {
-  return FILTER_METRICS.includes(value as Metric)
-}
-
-function isQueryParam(value: string): value is QueryParamName {
-  return QUERY_PARAMS.includes(value as QueryParamName)
-}
-
-function isRegexOperator(operator: string): boolean {
-  return operator === 'includingRegex' || operator === 'excludingRegex'
-}
-
-function isDateOperator(operator: string): operator is DateOperator {
-  return DATE_OPERATORS.includes(operator as DateOperator)
-}
-
 function collectInternalFilters(filter: FilterInput | undefined): InternalFilter[] {
   if (!filter || !('_filters' in filter))
     return []
@@ -117,12 +116,8 @@ function inferDataset(
   const allDims = new Set<Dimension>([...dimensions, ...filterDims])
   const has = (dimension: Dimension): boolean => allDims.has(dimension)
 
-  if (has('searchAppearance')) {
-    throw new Error(
-      'searchAppearance is only supported by the live GSC API; offline logical planning does not expose a matching dataset',
-    )
-  }
-
+  if (has('searchAppearance'))
+    return 'search_appearance'
   if (has('page') && (has('query') || has('queryCanonical')))
     return 'page_keywords'
   if (has('query') || has('queryCanonical'))
@@ -146,17 +141,77 @@ function requireCapability(
     throw new UnsupportedLogicalCapabilityError(capability, context)
 }
 
+// True iff the leaf is a real dimension predicate (not a date window, query
+// param, metric HAVING, or topLevel marker). These get extracted onto the
+// plan's top-level fields and must NOT appear in the dimension filter tree.
+function isDimensionLeaf(filter: InternalFilter): boolean {
+  if (isMetric(filter.dimension))
+    return false
+  if (filter.dimension === 'date' && isDateOperator(filter.operator))
+    return false
+  if (filter.operator === 'topLevel' || filter.operator.startsWith('metric'))
+    return false
+  if (isQueryParam(filter.dimension))
+    return false
+  return true
+}
+
+function toLogicalDimensionFilter(filter: InternalFilter): LogicalDimensionFilter {
+  return {
+    dimension: filter.dimension as Dimension,
+    operator: filter.operator as FilterOperator,
+    expression: filter.expression,
+    expression2: filter.expression2,
+  }
+}
+
+function buildDimensionFilterTree(
+  filter: FilterInput | undefined,
+  capabilities: PlannerCapabilities,
+): LogicalFilterNode | undefined {
+  if (!filter || !('_filters' in filter))
+    return undefined
+
+  const groupType = (filter._groupType ?? 'and') as 'and' | 'or'
+  const children: LogicalFilterNode[] = []
+
+  for (const f of filter._filters as InternalFilter[]) {
+    if (!isDimensionLeaf(f))
+      continue
+    requireCapability(capabilities, 'regex', isRegexOperator(f.operator), 'logical plan')
+    children.push({ kind: 'leaf', filter: toLogicalDimensionFilter(f) })
+  }
+
+  for (const g of filter._nestedGroups ?? []) {
+    const sub = buildDimensionFilterTree(g, capabilities)
+    if (sub)
+      children.push(sub)
+  }
+
+  if (children.length === 0)
+    return undefined
+  if (children.length === 1)
+    return children[0]
+  return { kind: 'group', groupType, children }
+}
+
 export function buildLogicalPlan(
   state: BuilderState,
   capabilities: PlannerCapabilities = {},
 ): LogicalQueryPlan {
-  const { startDate, endDate } = extractDateRange(state.filter)
+  // Coerce wire-format filters (`{ type, filters | column, value, from, to }`)
+  // up-front so every downstream traversal sees the SDK's `_filters` shape.
+  // Browser path (engine-wasm) feeds raw consumer state; server path is
+  // already pre-normalized by gscdump.com but normalizing twice is a no-op.
+  const normalizedFilter = normalizeFilter(state.filter) as FilterInput | undefined
+
+  const { startDate, endDate } = extractDateRange(normalizedFilter)
   if (!startDate || !endDate)
     throw new Error('logical plan requires date range (use between(date, ...) or gte/lte)')
 
-  const allFilters = collectInternalFilters(state.filter)
-  const metricFilters = extractMetricFilters(state.filter)
-  const specialFilters = extractSpecialOperatorFilters(state.filter)
+  const allFilters = collectInternalFilters(normalizedFilter)
+  const metricFilters = extractMetricFilters(normalizedFilter)
+  const specialFilters = extractSpecialOperatorFilters(normalizedFilter)
 
   const queryParams: Partial<Record<QueryParamName, string>> = {}
   const dimensionFilters: LogicalDimensionFilter[] = []
@@ -183,6 +238,8 @@ export function buildLogicalPlan(
     })
   }
 
+  const dimensionFilterTree = buildDimensionFilterTree(normalizedFilter, capabilities)
+
   const filterDims = dimensionFilters.map(filter => filter.dimension)
   const dataset = inferDataset(state.dimensions, filterDims)
 
@@ -194,6 +251,7 @@ export function buildLogicalPlan(
     metrics: state.metrics ? [...state.metrics] : ['clicks', 'impressions', 'ctr', 'position'],
     dateRange: { startDate, endDate },
     dimensionFilters,
+    dimensionFilterTree,
     metricFilters: metricFilters.map(filter => ({
       metric: filter.dimension as Metric,
       operator: filter.operator as MetricOperator,

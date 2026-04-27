@@ -67,7 +67,13 @@ export const page_keywords = pgTable('page_keywords', {
   ...metricCols(),
 })
 
-export const drizzleSchema = { pages, keywords, countries, devices, page_keywords }
+export const search_appearance = pgTable('search_appearance', {
+  searchAppearance: varchar('searchAppearance').notNull(),
+  date: dateCol(),
+  ...metricCols(),
+})
+
+export const drizzleSchema = { pages, keywords, countries, devices, page_keywords, search_appearance }
 export type DrizzleSchema = typeof drizzleSchema
 
 export const TABLE_METADATA: Record<TableName, { sortKey: string[], version: number }> = {
@@ -76,4 +82,5 @@ export const TABLE_METADATA: Record<TableName, { sortKey: string[], version: num
   countries: { sortKey: ['date', 'country'], version: 1 },
   devices: { sortKey: ['date', 'device'], version: 1 },
   page_keywords: { sortKey: ['date', 'url', 'query'], version: 2 },
+  search_appearance: { sortKey: ['date', 'searchAppearance'], version: 1 },
 }

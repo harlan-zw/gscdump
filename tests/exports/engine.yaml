@@ -2,9 +2,12 @@
   allTables: function
   bindLiterals: function
   canonicalEmptyParquetSchema: function
+  coerceRow: function
+  coerceRows: function
   countries: object
   createDuckDBCodec: function
   createDuckDBExecutor: function
+  createInspectionStoreSqlite: function
   createRowAccumulator: function
   createStorageEngine: function
   currentSchemaVersion: function
@@ -19,6 +22,7 @@
   inferLegacyTier: function
   inferSearchType: function
   inferTable: function
+  inspectionSqliteKey: function
   keywords: object
   MAX_DAY_BYTES: number
   mondayOfWeek: function
@@ -36,17 +40,21 @@
   toSumPosition: function
   transformGscRow: function
   weekPartition: function
+./arrow:
+  arrowToRows: function
 ./contracts: {}
 ./entities:
   createEmptyTypesStore: function
   createIndexingMetadataStore: function
   createInspectionStore: function
+  createInspectionStoreSqlite: function
   createSitemapStore: function
   emptyTypesKey: function
   hashUrl: function
   indexingMetadataIndexKey: function
   inspectionHistoryKey: function
   inspectionIndexKey: function
+  inspectionSqliteKey: function
   sitemapHistoryKey: function
   sitemapIndexKey: function
 ./filesystem:
@@ -60,12 +68,17 @@
   createHyparquetCodec: function
   decodeParquetToRows: function
   encodeRowsToParquet: function
+  encodeRowsToParquetFlex: function
 ./ingest:
   createRowAccumulator: function
   TABLE_DIMS: object
   toPath: function
   toSumPosition: function
   transformGscRow: function
+./inspection-sqlite-browser:
+  createWaSqliteDriver: function
+./inspection-sqlite-node:
+  createBetterSqliteDriver: function
 ./node:
   createNodeDuckDBHandle: function
   resetNodeDuckDB: function
@@ -116,6 +129,9 @@
   indexingMetadataRollup: object
   rebuildRollups: function
   rollupKey: function
+  rollupParquetKey: function
+  topCountries28dRollup: object
+  topKeywords28dParquetRollup: object
   topKeywords28dRollup: object
   topPages28dRollup: object
   weeklyTotalsRollup: object
@@ -132,7 +148,12 @@
   pages: object
   schemaFor: function
   SCHEMAS: object
+  search_appearance: object
   TABLE_METADATA: object
+./scope:
+  buildTableScope: function
+  createScopedHelpers: function
+  mergeScope: function
 ./snapshot: {}
 ./sql:
   bindLiterals: function

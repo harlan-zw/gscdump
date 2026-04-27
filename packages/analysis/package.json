@@ -29,6 +29,10 @@
       "types": "./dist/analyzer/index.d.mts",
       "import": "./dist/analyzer/index.mjs"
     },
+    "./registry": {
+      "types": "./dist/default-registry.d.mts",
+      "import": "./dist/default-registry.mjs"
+    },
     "./query": {
       "types": "./dist/query/index.d.mts",
       "import": "./dist/query/index.mjs"

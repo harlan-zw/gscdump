@@ -13,28 +13,19 @@
  * regardless.
  */
 
-import type { ResolvedWindow } from '@gscdump/analysis/period'
-import type { SQL } from 'drizzle-orm'
+import type { ScopedRunnerOptions, TableScope } from '@gscdump/engine/scope'
 
 import type { AsyncRemoteCallback, SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy'
 import type { Schema } from './schema'
 
-import { compileSqlite as compileSqliteShared } from '@gscdump/engine/resolver'
-import { and, eq, gte, lte } from 'drizzle-orm'
+import { createScopedHelpers } from '@gscdump/engine/scope'
 
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 
 import { schema } from './schema'
 
-/**
- * Compile a drizzle `sql` expression to `{ sql, params }` for executors
- * that don't go through the runner (e.g. D1 HTTP via queryUserD1). Column
- * refs from the sqlite schema serialize with quoted names, so typed refs
- * stay honest without constructing a full drizzle query.
- */
-export function compileSqlite(query: SQL): { sql: string, params: unknown[] } {
-  return compileSqliteShared(query)
-}
+export type { ScopedRunnerOptions, TableScope }
+export { compileSqlite } from '@gscdump/engine/resolver'
 
 export type SqliteRowExecutor = (
   sql: string,
@@ -42,7 +33,7 @@ export type SqliteRowExecutor = (
   method: 'run' | 'all' | 'values' | 'get',
 ) => Promise<{ rows: unknown[] }>
 
-export interface SqliteInsightRunnerOptions {
+export interface SqliteInsightRunnerOptions<TSchema extends Record<string, unknown> = Schema> {
   executor: SqliteRowExecutor
   logger?: boolean
   /**
@@ -51,14 +42,22 @@ export interface SqliteInsightRunnerOptions {
    * executor yields `{ col: value }` rows.
    */
   rowsAsArrays?: boolean
+  /**
+   * Override the bundled gsc_* schema. Pass an extended schema (superset
+   * of the upstream tables) when the consumer DB carries additional tables
+   * like sitemaps or indexing state. Defaults to the bundled schema.
+   */
+  schema?: TSchema
 }
 
-export interface SqliteInsightRunner {
-  db: SqliteRemoteDatabase<Schema>
+export interface SqliteInsightRunner<TSchema extends Record<string, unknown> = Schema> {
+  db: SqliteRemoteDatabase<TSchema>
 }
 
-export function createSqliteInsightRunner(opts: SqliteInsightRunnerOptions): SqliteInsightRunner {
-  const { executor, logger, rowsAsArrays } = opts
+export function createSqliteInsightRunner<TSchema extends Record<string, unknown> = Schema>(
+  opts: SqliteInsightRunnerOptions<TSchema>,
+): SqliteInsightRunner<TSchema> {
+  const { executor, logger, rowsAsArrays, schema: schemaOverride } = opts
 
   const callback: AsyncRemoteCallback = async (sql, params, method) => {
     const result = await executor(sql, params, method)
@@ -75,23 +74,9 @@ export function createSqliteInsightRunner(opts: SqliteInsightRunnerOptions): Sql
     return { rows: mapped as any[] }
   }
 
-  const db = drizzle<Schema>(callback, { schema, logger })
+  const finalSchema = (schemaOverride ?? schema) as TSchema
+  const db = drizzle<TSchema>(callback, { schema: finalSchema, logger })
   return { db }
-}
-
-export interface ScopedRunnerOptions {
-  siteId?: string
-  window?: ResolvedWindow
-  /** Inclusive lower bound for `date`. Ignored if `window` is supplied. */
-  startDate?: string
-  /** Inclusive upper bound for `date`. Ignored if `window` is supplied. */
-  endDate?: string
-}
-
-export interface TableScope {
-  wherePredicates: SQL[]
-  window?: ResolvedWindow
-  siteId?: string
 }
 
 /**
@@ -103,31 +88,4 @@ export interface TableScope {
  * (one or both). This lets callers pass unbounded query-string params
  * through without first normalizing them.
  */
-export function scopeFor(
-  table: keyof Schema,
-  opts: ScopedRunnerOptions,
-): TableScope {
-  const t = schema[table] as Record<string, any>
-  const predicates: SQL[] = []
-
-  if (opts.siteId && 'site_id' in t)
-    predicates.push(eq(t.site_id, opts.siteId))
-
-  if ('date' in t) {
-    const start = opts.window?.start ?? opts.startDate
-    const end = opts.window?.end ?? opts.endDate
-    if (start)
-      predicates.push(gte(t.date, start))
-    if (end)
-      predicates.push(lte(t.date, end))
-  }
-
-  return { wherePredicates: predicates, window: opts.window, siteId: opts.siteId }
-}
-
-export function mergeScope(scope: TableScope, ...extra: SQL[]): SQL | undefined {
-  const all = [...scope.wherePredicates, ...extra].filter(Boolean) as SQL[]
-  if (all.length === 0)
-    return undefined
-  return and(...all)
-}
+export const { scopeFor, mergeScope } = createScopedHelpers(schema)

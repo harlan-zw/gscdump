@@ -19,6 +19,7 @@
 import type { InsightRunner } from '../runner'
 
 import { sql } from 'drizzle-orm'
+import { toIsoDate } from 'gscdump'
 
 import { page_keywords } from '../schema'
 
@@ -50,7 +51,7 @@ export async function strikingMomentum(
   opts: StrikingMomentumOptions = {},
 ): Promise<StrikingMomentumRow[]> {
   const windowDays = opts.windowDays ?? 90
-  const anchor = opts.anchor ?? new Date().toISOString().slice(0, 10)
+  const anchor = opts.anchor ?? toIsoDate(new Date())
   const minPrior = opts.minPriorImpressions ?? 10
   const minRecent = opts.minRecentImpressions ?? 50
   const limit = opts.limit ?? 20

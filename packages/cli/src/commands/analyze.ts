@@ -1,7 +1,7 @@
 import type { AnalysisParams } from '@gscdump/analysis'
 import type { CommandDef } from 'citty'
 import process from 'node:process'
-import { defaultAnalyzerRegistry } from '@gscdump/analysis'
+import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { defineCommand } from 'citty'
 import { hasLocalData, LocalStoreEmptyError, LocalStoreUnsupportedError, runLiveAnalysis, runLocalAnalysis } from '../analysis-local'
 import { createCommandContext } from '../context'

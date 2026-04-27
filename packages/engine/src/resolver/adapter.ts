@@ -34,6 +34,7 @@ export function createResolverAdapter<TableKey extends string>(
     isMetricDimension: runtime.isMetricDimension,
     tableRef: runtime.tableRef,
     dateColRef: runtime.dateColRef,
+    urlToPathExpr: runtime.urlToPathExpr,
     siteIdColRef: runtime.siteIdColRef,
     dimExprSql: runtime.dimExprSql,
     metricSql: runtime.metricSql,

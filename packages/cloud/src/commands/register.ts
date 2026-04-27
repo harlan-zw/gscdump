@@ -2,7 +2,7 @@ import process from 'node:process'
 import { cancel, isCancel, select } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { getDriver } from '../session'
-import { logger } from '../utils'
+import { exitOnError, logger } from '../utils'
 
 export const registerCommand = defineCommand({
   meta: {
@@ -27,10 +27,7 @@ export const registerCommand = defineCommand({
     if (siteUrls.length > 1) {
       logger.info(`Registering ${siteUrls.length} sites...`)
 
-      const result = await driver.bulkRegister(siteUrls).catch((e: Error) => {
-        logger.error(`Bulk registration failed: ${e.message}`)
-        process.exit(1)
-      })
+      const result = await exitOnError(driver.bulkRegister(siteUrls), 'Bulk registration failed')
 
       logger.log('')
       for (const r of result.results) {
@@ -57,10 +54,7 @@ export const registerCommand = defineCommand({
     let siteUrl = siteUrls[0]
 
     if (!siteUrl) {
-      const available = await driver.availableSites().catch((e: Error) => {
-        logger.error(`Failed to fetch available sites: ${e.message}`)
-        process.exit(1)
-      })
+      const available = await exitOnError(driver.availableSites(), 'Failed to fetch available sites')
 
       const unregistered = available.filter(s => !s.registered)
 
@@ -93,10 +87,7 @@ export const registerCommand = defineCommand({
 
     logger.info(`Registering ${siteUrl}...`)
 
-    const result = await driver.registerSite(siteUrl).catch((e: Error) => {
-      logger.error(`Registration failed: ${e.message}`)
-      process.exit(1)
-    })
+    const result = await exitOnError(driver.registerSite(siteUrl), 'Registration failed')
 
     if (result.existing) {
       logger.info(`Site already registered (${result.status})`)

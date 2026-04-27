@@ -244,6 +244,9 @@ Presets: `last-7d`, `last-28d`, `last-30d`, `last-90d`, `last-180d`, `last-365d`
 
 - [`gscdump`](../gscdump) — REST client + query builder (edge-safe).
 - [`@gscdump/engine`](../engine) — Parquet/DuckDB storage engine.
+- [`@gscdump/engine-duckdb-node`](../engine-duckdb-node) — Node DuckDB analyzer dispatch.
+- [`@gscdump/engine-wasm`](../engine-wasm) — DuckDB-WASM browser runtime.
+- [`@gscdump/engine-sqlite`](../engine-sqlite) — SQLite / D1 dialect adapter.
 - [`@gscdump/cli`](../cli) — CLI wrapping `gscdump` + `@gscdump/engine` + `@gscdump/analysis`.
 
 ## License

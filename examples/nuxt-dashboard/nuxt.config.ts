@@ -1,25 +1,42 @@
-// Nuxt 4 config for the gscdump Phase 3 reference dashboard.
-// Target: Node dev + deploys to CF Pages or Node. DuckDB-WASM lives client-only.
+// Nuxt 4 config for the gscdump reference dashboard.
+//
+// Three layer modes, switched via `GSCDUMP_ANALYTICS_MODE`:
+//  - `local`    (default) — client-side DuckDB-WASM reads parquet directly.
+//                            No server proxy, no apiBase.
+//  - `origin`              — same-origin Nitro hosts the data (R2 + DuckDB).
+//                            Empty apiBase; layer's `/api/__gsc/*` resolves
+//                            against this host.
+//  - `consumer`            — proxies to a remote origin (e.g. gscdump.com).
+//                            apiBase defaults to GSCDUMP_ANALYTICS_API_BASE
+//                            or `https://gscdump.com`.
+//
+// Picked at build time so the resulting bundle is mode-stable — flipping
+// modes requires a fresh `nuxt dev` / `nuxt build`, which is what each
+// `dev:*` script in package.json drives.
 
 import process from 'node:process'
 
+const VALID_MODES = ['local', 'origin', 'consumer'] as const
+type AnalyticsMode = typeof VALID_MODES[number]
+
+const rawMode = process.env.GSCDUMP_ANALYTICS_MODE ?? 'local'
+if (!VALID_MODES.includes(rawMode as AnalyticsMode))
+  throw new Error(`GSCDUMP_ANALYTICS_MODE must be one of ${VALID_MODES.join(', ')} — got "${rawMode}"`)
+const mode = rawMode as AnalyticsMode
+
+const apiBase = mode === 'consumer'
+  ? (process.env.GSCDUMP_ANALYTICS_API_BASE ?? 'https://gscdump.com')
+  : ''
+
 export default defineNuxtConfig({
   future: { compatibilityVersion: 4 },
+  extends: ['../../packages/nuxt-analytics'],
   runtimeConfig: {
-    // Set GSCDUMP_DATA_DIR (e.g. ~/.gscdump/data) to serve from a local
-    // `gscdump sync` dump instead of R2. R2 vars ignored when this is set.
-    gscDataDir: process.env.GSCDUMP_DATA_DIR ?? '',
-    r2AccountId: process.env.R2_ACCOUNT_ID ?? '',
-    r2AccessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
-    r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
-    r2Bucket: process.env.R2_BUCKET ?? '',
-    gscUserId: process.env.GSCDUMP_USER_ID ?? '',
-    gscSiteId: process.env.GSCDUMP_SITE_ID ?? '',
     public: {
-      // Re-used by useRuntimeConfig() on the client — the manifest + sign-url
-      // routes are same-origin so the client never needs R2 creds directly.
-      defaultUserId: process.env.GSCDUMP_USER_ID ?? '',
-      defaultSiteId: process.env.GSCDUMP_SITE_ID ?? '',
+      analytics: {
+        mode,
+        apiBase,
+      },
     },
   },
   vite: {

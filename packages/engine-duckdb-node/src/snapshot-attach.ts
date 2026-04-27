@@ -51,7 +51,7 @@ export function snapshotAlias(fileName: string): string {
   if (fileName === 'hot.duckdb')
     return 'hot'
   const m = fileName.match(COLD_FILENAME_RE)
-  if (!m)
+  if (!m?.[1])
     throw new TypeError(`snapshotAlias: unrecognised filename ${JSON.stringify(fileName)}`)
   return `cold_${m[1].replace('-', '_')}`
 }

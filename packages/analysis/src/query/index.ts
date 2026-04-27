@@ -12,3 +12,4 @@ export {
   buildDataQueryPlan,
 } from './analyzers'
 export type { QueryAnalyzerExtraQuery, QueryAnalyzerPlan } from './analyzers'
+export { normalizeQuery } from './normalize'

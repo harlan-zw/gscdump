@@ -17,6 +17,11 @@ function containsDisallowedControlChars(value: string): boolean {
   return false
 }
 
+/** Escape single quotes for inlining inside a SQL string literal (SQL-standard `''` escaping). */
+export function sqlEscape(s: string): string {
+  return s.replace(/'/g, '\'\'')
+}
+
 export function formatLiteral(value: unknown): string {
   if (value == null)
     return 'NULL'
@@ -40,19 +45,26 @@ export function formatLiteral(value: unknown): string {
 }
 
 /**
- * Replace `?` placeholders with inline SQL literals. Single-quoted string
- * regions and SQL comments (`-- line`, `/* block *\/`) are left untouched —
- * a `?` inside `'foo?bar'` or a comment is not a placeholder. SQL-standard
- * `''` escape handling; no `\`-escape or dialect-specific identifier quoting.
+ * Replace `?` and `$N` placeholders with inline SQL literals. Single-quoted
+ * string regions and SQL comments (`-- line`, `/* block *\/`) are left
+ * untouched — a `?` or `$1` inside `'foo?bar'` or a comment is not a
+ * placeholder. SQL-standard `''` escape handling; no `\`-escape or
+ * dialect-specific identifier quoting.
  *
- * Throws when placeholder count and params length disagree.
+ * `?` placeholders bind sequentially against `params`. `$N` (Postgres-style)
+ * binds explicitly to `params[N-1]`. The two styles must not be mixed in the
+ * same query.
+ *
+ * Throws when placeholder count and params length disagree, or when a `$N`
+ * index is out of range.
  */
 export function bindLiterals(sql: string, params: readonly unknown[]): string {
   if (params.length === 0)
     return sql
   let out = ''
   let i = 0
-  let paramIdx = 0
+  let qmarkIdx = 0
+  const usedDollar = new Set<number>()
   let inString = false
   while (i < sql.length) {
     const c = sql[i]!
@@ -90,16 +102,30 @@ export function bindLiterals(sql: string, params: readonly unknown[]): string {
       continue
     }
     if (c === '?') {
-      if (paramIdx >= params.length)
+      if (qmarkIdx >= params.length)
         throw new Error(`bindLiterals: more '?' placeholders than params (have ${params.length})`)
-      out += formatLiteral(params[paramIdx++])
+      out += formatLiteral(params[qmarkIdx++])
       i++
+      continue
+    }
+    if (c === '$' && sql[i + 1] && sql[i + 1]! >= '0' && sql[i + 1]! <= '9') {
+      let j = i + 1
+      while (j < sql.length && sql[j]! >= '0' && sql[j]! <= '9') j++
+      const n = Number(sql.slice(i + 1, j))
+      if (n < 1 || n > params.length)
+        throw new Error(`bindLiterals: $${n} out of range (have ${params.length} params)`)
+      usedDollar.add(n - 1)
+      out += formatLiteral(params[n - 1])
+      i = j
       continue
     }
     out += c
     i++
   }
-  if (paramIdx !== params.length)
-    throw new Error(`bindLiterals: ${params.length - paramIdx} params unused`)
+  if (qmarkIdx > 0 && usedDollar.size > 0)
+    throw new Error('bindLiterals: cannot mix \'?\' and \'$N\' placeholders in the same query')
+  const used = qmarkIdx > 0 ? qmarkIdx : usedDollar.size
+  if (used !== params.length)
+    throw new Error(`bindLiterals: ${params.length - used} params unused`)
   return out
 }

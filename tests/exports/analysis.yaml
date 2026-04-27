@@ -3,6 +3,7 @@
   analyzeActionPriorityFromSource: function
   analyzeBrandSegmentation: function
   analyzeBrandSegmentationFromSource: function
+  analyzeCannibalization: function
   analyzeClustering: function
   analyzeClusteringFromSource: function
   analyzeConcentration: function
@@ -22,6 +23,7 @@
   analyzeSeasonalityFromSource: function
   analyzeStrikingDistance: function
   analyzeStrikingDistanceFromSource: function
+  analyzeZeroClick: function
   comparisonOf: function
   createAnalyzerRegistry: function
   createBrowserQuerySource: function
@@ -49,9 +51,13 @@
   windowToComparisonPeriod: function
   windowToPeriod: function
 ./analyzer:
+  adaptRowAnalyzer: function
   AnalyzerCapabilityError: function
   createAnalyzerRegistry: function
+  datesQueryState: function
   defineAnalyzer: function
+  keywordsQueryState: function
+  pagesQueryState: function
   ROW_ANALYZERS: object
   runAnalyzerFromSource: function
   strikingDistanceAnalyzer: object
@@ -84,12 +90,15 @@
   AnalyzerCapabilityError: function
   analyzeSeasonalityFromSource: function
   analyzeStrikingDistanceFromSource: function
+  collectGscRows: function
   createBrowserQuerySource: function
   createEngineQuerySource: function
   createGscApiQuerySource: function
   createInMemoryQuerySource: function
   createSqliteQuerySource: function
   ENGINE_QUERY_CAPABILITIES: object
+  fetchGscDaily: function
+  fetchGscTopN: function
   GSC_API_CAPABILITIES: object
   IN_MEMORY_DEFAULT_CAPABILITIES: object
   isSqlQuerySource: function

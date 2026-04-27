@@ -42,5 +42,17 @@ export default defineBuildConfig({
       outDir: './dist',
       name: 'normalize',
     },
+    {
+      type: 'bundle',
+      input: ['./src/url.ts'],
+      outDir: './dist',
+      name: 'url',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/sitemap.ts'],
+      outDir: './dist',
+      name: 'sitemap',
+    },
   ],
 })

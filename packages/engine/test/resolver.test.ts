@@ -1,6 +1,8 @@
 import type { BuilderState } from 'gscdump/query'
 import { describe, expect, it } from 'vitest'
 import { FILES_PLACEHOLDER, resolveToSQL, substituteNamedFiles } from '../src/index'
+import { resolveToSQL as resolverResolveToSQL } from '../src/resolver/compiler'
+import { createParquetResolverAdapter, pgResolverAdapter } from '../src/resolver/pg-adapter'
 
 function state(partial: Partial<BuilderState>): BuilderState {
   return {
@@ -87,5 +89,56 @@ describe('substituteNamedFiles', () => {
     const sql = 'SELECT a FROM read_parquet({{FILES}}) UNION SELECT b FROM read_parquet({{FILES_PREV}})'
     const out = substituteNamedFiles(sql, { FILES: ['a.parquet'], FILES_PREV: ['b.parquet'] })
     expect(out).toBe('SELECT a FROM read_parquet([\'a.parquet\']) UNION SELECT b FROM read_parquet([\'b.parquet\'])')
+  })
+})
+
+describe('pgResolverAdapter url-to-path dialect', () => {
+  // Regression guard: pgResolverAdapter must override the SQLite-default
+  // urlToPathExpr (INSTR/SUBSTR) with DuckDB's regexp_replace, or every
+  // page-dimension query against R2 dies with a parse error.
+  it('emits regexp_replace (not INSTR) for the page dimension', () => {
+    const r = resolverResolveToSQL(state({}), { adapter: pgResolverAdapter })
+    expect(r.sql).toContain('regexp_replace')
+    expect(r.sql).not.toContain('INSTR')
+  })
+
+  it('emits regexp_replace for page-equals predicates (path normalization)', () => {
+    const r = resolverResolveToSQL(state({
+      dimensions: [],
+      filter: {
+        _filters: [
+          { dimension: 'date', operator: 'between', expression: '2026-03-01', expression2: '2026-03-31' },
+          { dimension: 'page', operator: 'equals', expression: '/blog/' },
+        ],
+      } as any,
+    }), { adapter: pgResolverAdapter })
+    expect(r.sql).toContain('regexp_replace')
+    expect(r.sql).not.toContain('INSTR')
+  })
+})
+
+describe('createParquetResolverAdapter', () => {
+  it('emits read_parquet({{FILES}}, ...) AS "<table>" with bound col refs intact', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolverResolveToSQL(state({}), { adapter })
+    expect(r.sql).toContain('read_parquet({{FILES}}, union_by_name = true)')
+    expect(r.sql).toContain('AS "pages"')
+    // drizzle-bound colRefs compile to "pages"."<col>" — alias keeps them
+    // resolvable against the parquet FROM. (urlToPathExpr emits bare `url`,
+    // which DuckDB resolves unambiguously via the single FROM target.)
+    expect(r.sql).toContain('"pages"."clicks"')
+    expect(r.sql).toContain('"pages"."impressions"')
+    expect(r.sql).toContain('"pages"."date"')
+  })
+
+  it('inherits DuckDB regexp_replace path normalization from pgResolverAdapter', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolverResolveToSQL(state({}), { adapter })
+    expect(r.sql).toContain('regexp_replace')
+    expect(r.sql).not.toContain('INSTR')
+  })
+
+  it('produces a fresh adapter instance per call (no caching)', () => {
+    expect(createParquetResolverAdapter()).not.toBe(createParquetResolverAdapter())
   })
 })

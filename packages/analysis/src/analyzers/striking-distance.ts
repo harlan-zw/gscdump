@@ -13,9 +13,11 @@
 
 import type { AnalysisParams } from '../types'
 import { enumeratePartitions } from '@gscdump/engine/planner'
-import { between, date as dateCol, gsc, page as pageCol, query as queryCol } from 'gscdump/query'
+import { keywordsQueryState } from '../analyzer/adapt-rows'
 import { defineAnalyzer } from '../analyzer/define'
+import { paginateInMemory } from '../analyzer/paginate'
 import { periodOf } from '../period'
+import { num } from '../types'
 
 const DEFAULT_ROW_LIMIT = 25_000
 
@@ -43,20 +45,10 @@ export interface StrikingDistanceResult {
   potentialClicks: number
 }
 
-function num(v: unknown): number {
-  if (typeof v === 'number')
-    return v
-  if (typeof v === 'bigint')
-    return Number(v)
-  if (v == null)
-    return 0
-  return Number(v)
-}
-
 export const strikingDistanceAnalyzer = defineAnalyzer<
   AnalysisParams,
   StrikingDistanceInputRow,
-  StrikingDistanceResult
+  StrikingDistanceResult[]
 >({
   id: 'striking-distance',
 
@@ -94,9 +86,8 @@ export const strikingDistanceAnalyzer = defineAnalyzer<
     }
 
     results.sort((a, b) => b.potentialClicks - a.potentialClicks)
-    if (results.length > limit)
-      results.length = limit
-    return { results, meta: { total: results.length } }
+    const paged = paginateInMemory(results, { limit, offset: params.offset })
+    return { results: paged, meta: { total: results.length, returned: paged.length } }
   },
 
   buildSql(params) {
@@ -120,14 +111,8 @@ export const strikingDistanceAnalyzer = defineAnalyzer<
   },
 
   buildRows(params) {
-    const period = periodOf(params)
-    const limit = params.limit ?? DEFAULT_ROW_LIMIT
     return {
-      keywords: gsc
-        .select(queryCol, pageCol)
-        .where(between(dateCol, period.startDate, period.endDate))
-        .limit(limit)
-        .getState(),
+      keywords: keywordsQueryState(periodOf(params), params.limit ?? DEFAULT_ROW_LIMIT),
     }
   },
 })

@@ -29,6 +29,35 @@ exports[`analyzer plan snapshots > rows plan: brand 1`] = `
 }
 `;
 
+exports[`analyzer plan snapshots > rows plan: cannibalization 1`] = `
+{
+  "kind": "rows",
+  "queries": {
+    "rows": {
+      "state": {
+        "dimensions": [
+          "query",
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+  },
+}
+`;
+
 exports[`analyzer plan snapshots > rows plan: clustering 1`] = `
 {
   "kind": "rows",
@@ -246,6 +275,35 @@ exports[`analyzer plan snapshots > rows plan: striking-distance 1`] = `
   "kind": "rows",
   "queries": {
     "keywords": {
+      "state": {
+        "dimensions": [
+          "query",
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+  },
+}
+`;
+
+exports[`analyzer plan snapshots > rows plan: zero-click 1`] = `
+{
+  "kind": "rows",
+  "queries": {
+    "rows": {
       "state": {
         "dimensions": [
           "query",
@@ -2587,7 +2645,7 @@ exports[`analyzer plan snapshots > sql plan: data-detail 1`] = `
         "2024-02-01",
         "2024-02-29",
       ],
-      "sql": "SELECT SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
+      "sql": "SELECT SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
     },
     {
       "name": "prevTotals",
@@ -2595,7 +2653,7 @@ exports[`analyzer plan snapshots > sql plan: data-detail 1`] = `
         "2024-01-01",
         "2024-01-31",
       ],
-      "sql": "SELECT SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
+      "sql": "SELECT SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
     },
   ],
   "kind": "sql",
@@ -2605,7 +2663,7 @@ exports[`analyzer plan snapshots > sql plan: data-detail 1`] = `
   ],
   "previous": undefined,
   "requiresAttachedTables": true,
-  "sql": "SELECT CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END as page, "pages"."date", SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END, "pages"."date" ORDER BY clicks DESC LIMIT 100",
+  "sql": "SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", "pages"."date", SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END, "pages"."date" ORDER BY clicks DESC LIMIT 100",
 }
 `;
 
@@ -2623,7 +2681,7 @@ exports[`analyzer plan snapshots > sql plan: data-query 1`] = `
         "2024-02-01",
         "2024-02-29",
       ],
-      "sql": "SELECT SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
+      "sql": "SELECT SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
     },
     {
       "name": "count",
@@ -2633,7 +2691,7 @@ exports[`analyzer plan snapshots > sql plan: data-query 1`] = `
         "2024-01-01",
         "2024-01-31",
       ],
-      "sql": "WITH current AS (SELECT CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END as page, SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END), previous AS (SELECT CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END as page, SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $3 AND "pages"."date" <= $4 GROUP BY CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END) SELECT COUNT(*) as total FROM (SELECT c.page FROM current c LEFT JOIN previous p ON c.page = p.page WHERE 1=1 AND c.clicks > COALESCE(p.clicks, 0))",
+      "sql": "WITH current AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END), previous AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $3 AND "pages"."date" <= $4 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END) SELECT COUNT(*) as total FROM (SELECT c.page FROM current c LEFT JOIN previous p ON c.page = p.page WHERE 1=1 AND c.clicks > COALESCE(p.clicks, 0))",
     },
   ],
   "kind": "sql",
@@ -2645,7 +2703,7 @@ exports[`analyzer plan snapshots > sql plan: data-query 1`] = `
   ],
   "previous": undefined,
   "requiresAttachedTables": true,
-  "sql": "WITH current AS (SELECT CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END as page, SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END), previous AS (SELECT CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END as page, SUM("pages"."clicks") as clicks, SUM("pages"."impressions") as impressions, CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as ctr, SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as position FROM "pages" WHERE "pages"."date" >= $3 AND "pages"."date" <= $4 GROUP BY CASE WHEN url LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/') > 0 THEN SUBSTR(url, INSTR(url, '://') + 2 + INSTR(SUBSTR(url, INSTR(url, '://') + 3), '/')) ELSE '/' END ELSE url END) SELECT c.*, COALESCE(p.clicks, 0) as prevClicks, COALESCE(p.impressions, 0) as prevImpressions, COALESCE(p.ctr, 0) as prevCtr, COALESCE(p.position, 0) as prevPosition FROM current c LEFT JOIN previous p ON c.page = p.page WHERE 1=1 AND c.clicks > COALESCE(p.clicks, 0) ORDER BY c.clicks DESC LIMIT 100",
+  "sql": "WITH current AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END), previous AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", SUM("pages"."clicks") as "clicks", SUM("pages"."impressions") as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $3 AND "pages"."date" <= $4 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END) SELECT c.page as "page", CAST(c.clicks AS DOUBLE) as "clicks", CAST(c.impressions AS DOUBLE) as "impressions", c.ctr as "ctr", c.position as "position", COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition" FROM current c LEFT JOIN previous p ON c.page = p.page WHERE 1=1 AND c.clicks > COALESCE(p.clicks, 0) ORDER BY c.clicks DESC LIMIT 100",
 }
 `;
 
@@ -2772,7 +2830,7 @@ exports[`analyzer plan snapshots > sql plan: decay 1`] = `
       HAVING SUM(clicks) >= ?
     ),
     weekly AS (
-      SELECT url, date_trunc('week', date) AS week,
+      SELECT url, date_trunc('week', CAST(date AS DATE)) AS week,
         CAST(SUM(clicks) AS DOUBLE) AS clicks,
         CAST(SUM(impressions) AS DOUBLE) AS impressions
       FROM (
@@ -3382,7 +3440,7 @@ exports[`analyzer plan snapshots > sql plan: movers 1`] = `
       GROUP BY query, url
     ),
     weekly AS (
-      SELECT query, url, date_trunc('week', date) AS week,
+      SELECT query, url, date_trunc('week', CAST(date AS DATE)) AS week,
         CAST(SUM(clicks) AS DOUBLE) AS clicks,
         CAST(SUM(impressions) AS DOUBLE) AS impressions
       FROM (
@@ -4512,7 +4570,7 @@ exports[`analyzer plan snapshots > sql plan: trends 1`] = `
     WITH bucketed AS (
       SELECT
         url AS entity,
-        date_trunc('week', date) AS week,
+        date_trunc('week', CAST(date AS DATE)) AS week,
         CAST(SUM(clicks) AS DOUBLE) AS clicks,
         CAST(SUM(impressions) AS DOUBLE) AS impressions,
         SUM(sum_position) AS sum_position_sum

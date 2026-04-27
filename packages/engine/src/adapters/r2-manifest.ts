@@ -77,7 +77,23 @@ export interface R2ManifestBucketLike {
     options?: R2ConditionalPutOptions,
   ) => Promise<R2ObjectMetadata | null>
   list: (options?: { prefix?: string, cursor?: string, limit?: number }) => Promise<R2ListResult>
+  /**
+   * Bulk delete. Required by {@link ManifestStore.purgeTenant}. Cloudflare's
+   * `R2Bucket.delete` accepts a single key or a string[] batch; both shapes
+   * work here.
+   */
+  delete: (keys: string | string[]) => Promise<void>
 }
+
+/**
+ * CAS lifecycle events emitted by the manifest store. Consumers wire these
+ * into metrics (prom-client, console.table, the contention harness) to
+ * measure rejection rate and latency under real R2 load.
+ */
+export type R2ManifestEvent
+  = | { kind: 'cas-attempt', siteId: string, table: TableName, attempt: number }
+    | { kind: 'cas-rejected', siteId: string, table: TableName, attempt: number }
+    | { kind: 'cas-committed', siteId: string, table: TableName, attempts: number }
 
 export interface CreateR2ManifestStoreOptions {
   bucket: R2ManifestBucketLike
@@ -88,6 +104,12 @@ export interface CreateR2ManifestStoreOptions {
   now?: () => number
   /** Maximum CAS retries before giving up. Defaults to 8. */
   maxRetries?: number
+  /**
+   * Optional telemetry hook. Fired synchronously from the CAS loop on each
+   * attempt, rejection, and successful commit. Must not throw; exceptions
+   * propagate and will fail the mutation.
+   */
+  onEvent?: (event: R2ManifestEvent) => void
 }
 
 const SHARD_RE = /^u_[^/]+\/manifest\/(?<siteId>[^/]+)\/(?<table>[^/]+)\/HEAD$/
@@ -161,6 +183,7 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
   const newSnapshotId = opts.newSnapshotId ?? defaultSnapshotId
   const now = opts.now ?? (() => Date.now())
   const maxRetries = opts.maxRetries ?? 8
+  const onEvent = opts.onEvent
 
   async function readShard(siteId: string, table: TableName): Promise<{
     snapshot: ManifestSnapshot
@@ -207,11 +230,15 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
   ): Promise<void> {
     let attempt = 0
     while (attempt < maxRetries) {
+      onEvent?.({ kind: 'cas-attempt', siteId, table, attempt })
       const { snapshot, headEtag } = await readShard(siteId, table)
       await mutate(snapshot)
       const { ok } = await writeShard(siteId, table, snapshot, headEtag)
-      if (ok)
+      if (ok) {
+        onEvent?.({ kind: 'cas-committed', siteId, table, attempts: attempt + 1 })
         return
+      }
+      onEvent?.({ kind: 'cas-rejected', siteId, table, attempt })
       attempt++
     }
     throw new Error(`R2 manifest CAS exceeded ${maxRetries} retries for ${siteId}/${table}`)
@@ -466,6 +493,34 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
      */
     async withLock<T>(_scope: LockScope, fn: () => Promise<T>): Promise<T> {
       return fn()
+    },
+
+    async purgeTenant(filter) {
+      if (filter.userId !== userId)
+        throw new Error(`purgeTenant: store is scoped to userId=${userId}, got ${filter.userId}`)
+      const shards = await shardsForFilter({ siteId: filter.siteId })
+      let entriesRemoved = 0
+      let watermarksRemoved = 0
+      let syncStatesRemoved = 0
+      for (const { siteId, table } of shards) {
+        const { snapshot } = await readShard(siteId, table)
+        entriesRemoved += snapshot.entries.length
+        watermarksRemoved += snapshot.watermarks.length
+        syncStatesRemoved += snapshot.syncStates.length
+        // Drop every object under the shard prefix: HEAD + all immutable
+        // snapshot files. Paginate in case historical snapshots accumulated.
+        const prefix = shardPrefix(userId, siteId, table)
+        const keys: string[] = []
+        let cursor: string | undefined
+        do {
+          const res = await bucket.list({ prefix, cursor, limit: 1000 })
+          for (const obj of res.objects) keys.push(obj.key)
+          cursor = res.truncated ? res.cursor : undefined
+        } while (cursor)
+        if (keys.length > 0)
+          await bucket.delete(keys)
+      }
+      return { entriesRemoved, watermarksRemoved, syncStatesRemoved }
     },
   }
 }

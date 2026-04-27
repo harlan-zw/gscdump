@@ -1,5 +1,6 @@
 import type { GoogleSearchConsoleClient } from '../core/client'
 import type { UrlInspectionResult as GscUrlInspectionResult } from '../core/types'
+import { runSequentialBatch } from './batch'
 
 export interface InspectUrlResult {
   url: string
@@ -35,17 +36,12 @@ export async function batchInspectUrls(
   } = {},
 ): Promise<InspectUrlResult[]> {
   const { delayMs = 200, onProgress } = options
-  const results: InspectUrlResult[] = []
-
-  for (let i = 0; i < urls.length; i++) {
-    const url = urls[i]
-    const { inspection, isIndexed } = await inspectUrl(client, siteUrl, url)
-    const result: InspectUrlResult = { url, inspection, isIndexed }
-    results.push(result)
-    onProgress?.(result, i, urls.length)
-    if (i < urls.length - 1 && delayMs > 0)
-      await new Promise(r => setTimeout(r, delayMs))
-  }
-
-  return results
+  return runSequentialBatch(
+    urls,
+    async (url) => {
+      const { inspection, isIndexed } = await inspectUrl(client, siteUrl, url)
+      return { url, inspection, isIndexed } satisfies InspectUrlResult
+    },
+    { delayMs, onProgress },
+  )
 }

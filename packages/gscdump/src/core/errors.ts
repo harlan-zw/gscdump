@@ -25,23 +25,39 @@ export const GSC_QUOTAS = {
   indexing: 200,
 } as const
 
-/** Extract the HTTP status from any of the shapes we've seen in the wild. */
-function extractStatus(error: unknown): number | undefined {
+/**
+ * Walk `error` along each `path` (e.g. `['response', 'status']`) and return the
+ * first value that satisfies `is`. Lets the field extractors share a single
+ * traversal instead of hand-rolling nested optional-chain checks.
+ */
+function pickField<T>(
+  error: unknown,
+  paths: ReadonlyArray<readonly string[]>,
+  is: (v: unknown) => v is T,
+): T | undefined {
   if (!error || typeof error !== 'object')
     return undefined
-  const e = error as Record<string, unknown>
-  if (typeof e.statusCode === 'number')
-    return e.statusCode
-  if (typeof e.status === 'number')
-    return e.status
-  if (e.response && typeof e.response === 'object') {
-    const resp = e.response as Record<string, unknown>
-    if (typeof resp.status === 'number')
-      return resp.status
+  for (const path of paths) {
+    let current: unknown = error
+    for (const key of path) {
+      if (!current || typeof current !== 'object') {
+        current = undefined
+        break
+      }
+      current = (current as Record<string, unknown>)[key]
+    }
+    if (is(current))
+      return current
   }
-  if (typeof e.code === 'number')
-    return e.code
   return undefined
+}
+
+const isNumber = (v: unknown): v is number => typeof v === 'number'
+const isString = (v: unknown): v is string => typeof v === 'string'
+
+/** Extract the HTTP status from any of the shapes we've seen in the wild. */
+function extractStatus(error: unknown): number | undefined {
+  return pickField(error, [['statusCode'], ['status'], ['response', 'status'], ['code']], isNumber)
 }
 
 function extractMessage(error: unknown): string {
@@ -53,35 +69,22 @@ function extractMessage(error: unknown): string {
     return error.message
   if (typeof error !== 'object')
     return String(error)
-  const e = error as Record<string, unknown>
   // Google API nested error takes priority — its message is more specific than the ofetch wrapper's.
-  if (e.data && typeof e.data === 'object') {
-    const data = e.data as Record<string, unknown>
-    if (data.error && typeof data.error === 'object') {
-      const inner = data.error as Record<string, unknown>
-      if (typeof inner.message === 'string')
-        return inner.message
-    }
-  }
-  if (typeof e.message === 'string')
-    return e.message
-  if (typeof e.statusMessage === 'string')
-    return e.statusMessage
-  return String(error)
+  return pickField(error, [['data', 'error', 'message'], ['message'], ['statusMessage']], isString)
+    ?? String(error)
 }
 
 function extractRetryAfter(error: unknown): number | undefined {
-  if (!error || typeof error !== 'object')
-    return undefined
-  const e = error as Record<string, unknown>
-  const container = (e.headers && typeof e.headers === 'object')
-    ? e.headers as Record<string, unknown>
-    : (e.response && typeof e.response === 'object')
-        ? ((e.response as Record<string, unknown>).headers as Record<string, unknown> | undefined)
-        : undefined
-  if (!container)
-    return undefined
-  const raw = container['retry-after'] ?? container['Retry-After']
+  const raw = pickField(
+    error,
+    [
+      ['headers', 'retry-after'],
+      ['headers', 'Retry-After'],
+      ['response', 'headers', 'retry-after'],
+      ['response', 'headers', 'Retry-After'],
+    ],
+    (v): v is number | string => typeof v === 'number' || typeof v === 'string',
+  )
   if (typeof raw === 'number')
     return raw
   if (typeof raw === 'string') {
@@ -127,6 +130,24 @@ export function classifyError(cause: unknown): GscError {
 /** Construct a storage-kind error from inside the analytics engine / adapters. */
 export function storageError(message: string, cause?: unknown): GscError {
   return { kind: 'storage', message, cause }
+}
+
+const PERMISSION_SIGNALS = [
+  '403 forbidden',
+  'permission_denied',
+  'does not have sufficient permission',
+  'insufficient permission',
+]
+
+/**
+ * String-matches an error against the signals Google returns when a token
+ * has lost access to a property (revoked, downgraded, or never had it).
+ * Cheaper than a full {@link classifyError} call when the caller only
+ * needs the permission verdict.
+ */
+export function isPermissionDeniedError(err: unknown): boolean {
+  const msg = String((err as { message?: string } | null)?.message ?? err ?? '').toLowerCase()
+  return PERMISSION_SIGNALS.some(s => msg.includes(s))
 }
 
 function suggestionFor(err: GscError): string {

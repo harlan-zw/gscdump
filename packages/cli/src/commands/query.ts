@@ -5,6 +5,7 @@ import fs from 'node:fs/promises'
 import process from 'node:process'
 import { cancel, isCancel, multiselect, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
+import { daysAgo } from 'gscdump'
 import { between, country, date as dateCol, device, gsc, page, query as queryCol, searchAppearance } from 'gscdump/query'
 import { createCommandContext } from '../context'
 import { allTables, inferTable } from '../local-store'
@@ -234,7 +235,7 @@ async function resolveRange(args: Record<string, unknown>): Promise<{ startDate:
   if (args.interactive) {
     const startInput = await text({
       message: 'Start date (YYYY-MM-DD)',
-      placeholder: new Date(Date.now() - 28 * 86400000).toISOString().split('T')[0],
+      placeholder: daysAgo(28),
     })
     if (isCancel(startInput)) {
       cancel('Cancelled')
@@ -242,21 +243,21 @@ async function resolveRange(args: Record<string, unknown>): Promise<{ startDate:
     }
     const endInput = await text({
       message: 'End date (YYYY-MM-DD)',
-      placeholder: new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0],
+      placeholder: daysAgo(3),
     })
     if (isCancel(endInput)) {
       cancel('Cancelled')
       process.exit(0)
     }
     return {
-      startDate: String(startInput) || new Date(Date.now() - 28 * 86400000).toISOString().split('T')[0],
-      endDate: String(endInput) || new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0],
+      startDate: String(startInput) || daysAgo(28),
+      endDate: String(endInput) || daysAgo(3),
     }
   }
 
   return {
-    startDate: new Date(Date.now() - 31 * 86400000).toISOString().split('T')[0],
-    endDate: new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0],
+    startDate: daysAgo(31),
+    endDate: daysAgo(3),
   }
 }
 

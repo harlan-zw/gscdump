@@ -27,6 +27,7 @@ export function createSqliteResolverAdapter(
       page_keywords: 'gsc_page_keywords',
       countries: 'gsc_countries',
       devices: 'gsc_devices',
+      search_appearance: 'gsc_search_appearance',
     },
     metricCast: 'REAL',
     regexPredicate: (expr, pattern, negate) => negate

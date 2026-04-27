@@ -12,6 +12,7 @@ import type {
 } from './types'
 import { ofetch } from 'ofetch'
 import { resolveToBody } from '../query/resolver'
+import { rowWithMetricDefaults } from './cli-format'
 
 const GSC_API = 'https://searchconsole.googleapis.com'
 const INDEXING_API = 'https://indexing.googleapis.com'
@@ -219,12 +220,7 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
         opts?.signal?.throwIfAborted()
         const response = await rawQuery(siteUrl, { ...body, startRow, rowLimit }, opts)
         const rows = (response.rows || []).map((row) => {
-          const result: any = {
-            clicks: row.clicks ?? 0,
-            impressions: row.impressions ?? 0,
-            ctr: row.ctr ?? 0,
-            position: row.position ?? 0,
-          }
+          const result: any = rowWithMetricDefaults(row)
           state.dimensions.forEach((dim, i) => {
             result[dim] = row.keys?.[i]
           })

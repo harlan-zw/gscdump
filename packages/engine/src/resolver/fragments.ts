@@ -17,6 +17,15 @@ export interface SqlFragmentsConfig<TableKey extends string> {
   regexPredicate: (expr: SQL, pattern: string, negate: boolean) => SQL
   tableLabel: string
   includeSiteId: boolean
+  urlToPathExpr?: (col: string) => string
+  /**
+   * Override the FROM-clause table reference. Default emits the bound drizzle
+   * table (e.g. `"pages"`). Parquet/R2 adapter overrides this to emit
+   * `read_parquet({{FILES}}, ...) AS "${tk}"` so the runSQL pipeline can swap
+   * in an object-key list while column refs (`"pages"."url"`) still resolve
+   * against the alias.
+   */
+  tableRef?: (tableKey: TableKey) => SQL
 }
 
 export interface SqlFragments<TableKey extends string> {
@@ -39,6 +48,10 @@ export interface SqlFragments<TableKey extends string> {
 }
 
 const METRIC_NAMES: Metric[] = ['clicks', 'impressions', 'ctr', 'position']
+
+function defaultSqliteUrlToPathExpr(col: string): string {
+  return `CASE WHEN ${col} LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(${col}, INSTR(${col}, '://') + 3), '/') > 0 THEN SUBSTR(${col}, INSTR(${col}, '://') + 2 + INSTR(SUBSTR(${col}, INSTR(${col}, '://') + 3), '/')) ELSE '/' END ELSE ${col} END`
+}
 
 function buildDimensionColumnMap<TableKey extends string>(
   datasetToTableKey: Record<keyof typeof LOGICAL_DATASETS, TableKey>,
@@ -63,6 +76,8 @@ export function createSqlFragments<TableKey extends string>(
     regexPredicate,
     tableLabel,
     includeSiteId,
+    urlToPathExpr: urlToPathExprOverride,
+    tableRef: tableRefOverride,
   } = config
   const DIM_COLUMN_MAP = buildDimensionColumnMap(datasetToTableKey)
 
@@ -83,9 +98,7 @@ export function createSqlFragments<TableKey extends string>(
     return tableKeyForDataset(dataset)
   }
 
-  function urlToPathExpr(col: string): string {
-    return `CASE WHEN ${col} LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(${col}, INSTR(${col}, '://') + 3), '/') > 0 THEN SUBSTR(${col}, INSTR(${col}, '://') + 2 + INSTR(SUBSTR(${col}, INSTR(${col}, '://') + 3), '/')) ELSE '/' END ELSE ${col} END`
-  }
+  const urlToPathExpr = urlToPathExprOverride ?? defaultSqliteUrlToPathExpr
 
   function colRef(tableKey: TableKey, colName: string): SQL {
     const t = schema[tableKey] as unknown as Record<string, unknown>
@@ -96,6 +109,8 @@ export function createSqlFragments<TableKey extends string>(
   }
 
   function tableRef(tableKey: TableKey): SQL {
+    if (tableRefOverride)
+      return tableRefOverride(tableKey)
     return sql`${schema[tableKey]}`
   }
 
@@ -118,9 +133,9 @@ export function createSqlFragments<TableKey extends string>(
     const t = schema[tableKey] as unknown as Record<string, SQL>
     switch (metric) {
       case 'clicks':
-        return sql`SUM(${t.clicks})`
+        return sql`CAST(SUM(${t.clicks}) AS ${sql.raw(metricCast)})`
       case 'impressions':
-        return sql`SUM(${t.impressions})`
+        return sql`CAST(SUM(${t.impressions}) AS ${sql.raw(metricCast)})`
       case 'ctr':
         return sql`CAST(SUM(${t.clicks}) AS ${sql.raw(metricCast)}) / NULLIF(SUM(${t.impressions}), 0)`
       case 'position':

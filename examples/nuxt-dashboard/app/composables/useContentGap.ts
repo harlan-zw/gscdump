@@ -3,19 +3,23 @@ import type {
   ContentGapProgress,
   ContentGapResult,
 } from '@gscdump/analysis/semantic'
-import type { InsightRunner } from './useInsightRunner'
+import type { QueryResult } from '@gscdump/engine-wasm'
 
 import { createBrowserQuerySource } from '@gscdump/analysis'
 import { analyzeContentGap } from '@gscdump/analysis/semantic'
 
 export type { ContentGapOptions, ContentGapProgress, ContentGapResult }
 
+interface AnalysisRunner {
+  query: (sql: string, params?: unknown[]) => Promise<QueryResult>
+}
+
 export interface ContentGapRunner {
   progress: Ref<ContentGapProgress>
   results: Ref<ContentGapResult[]>
   error: Ref<Error | null>
   running: Ref<boolean>
-  run: (runner: InsightRunner, opts?: ContentGapOptions) => Promise<void>
+  run: (runner: AnalysisRunner, opts?: ContentGapOptions) => Promise<void>
 }
 
 export function useContentGap(): ContentGapRunner {
@@ -27,7 +31,7 @@ export function useContentGap(): ContentGapRunner {
   const error = ref<Error | null>(null)
   const running = ref(false)
 
-  async function run(runner: InsightRunner, opts: ContentGapOptions = {}): Promise<void> {
+  async function run(runner: AnalysisRunner, opts: ContentGapOptions = {}): Promise<void> {
     if (running.value)
       return
 

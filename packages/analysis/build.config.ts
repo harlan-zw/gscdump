@@ -13,6 +13,11 @@ export default defineBuildConfig({
     },
     {
       type: 'bundle',
+      input: ['./src/default-registry.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
       input: ['./src/query/index.ts'],
       outDir: './dist',
     },

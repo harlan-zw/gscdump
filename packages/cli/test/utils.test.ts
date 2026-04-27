@@ -1,5 +1,6 @@
+import { progressBar } from 'gscdump'
 import { describe, expect, it } from 'vitest'
-import { exportToCSV, parsePeriod, progressBar, toCSV } from '../src/utils'
+import { exportToCSV, parsePeriod, toCSV } from '../src/utils'
 
 describe('parsePeriod', () => {
   it('should parse days correctly', () => {

@@ -2,13 +2,10 @@ import type { StorageEngine, TableName } from '../local-store'
 import { rm } from 'node:fs/promises'
 import path from 'node:path'
 import { DuckDBInstance } from '@duckdb/node-api'
+import { sqlEscape } from '@gscdump/engine/sql'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
-
-function sqlEscape(s: string): string {
-  return s.replace(/'/g, '\'\'')
-}
 
 export interface ExportOptions {
   engine: StorageEngine

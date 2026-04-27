@@ -19,7 +19,7 @@ export const DIMENSION_SURFACES: Record<Dimension, readonly DimensionSurface[]> 
   queryCanonical: ['stored', 'derived'],
   country: ['api', 'stored'],
   device: ['api', 'stored'],
-  searchAppearance: ['api'],
+  searchAppearance: ['api', 'stored'],
   date: ['api', 'stored'],
 }
 
@@ -57,6 +57,12 @@ export const LOGICAL_DATASETS: Record<LogicalDataset, LogicalDatasetDefinition> 
       date: { column: 'date', surfaces: ['api', 'stored'] },
     },
   },
+  search_appearance: {
+    dimensions: {
+      searchAppearance: { column: 'searchAppearance', surfaces: ['api', 'stored'] },
+      date: { column: 'date', surfaces: ['api', 'stored'] },
+    },
+  },
 }
 
 export function inferLogicalDataset(
@@ -66,12 +72,8 @@ export function inferLogicalDataset(
   const allDims = new Set<Dimension>([...dimensions, ...filterDims])
   const has = (d: Dimension): boolean => allDims.has(d)
 
-  if (has('searchAppearance')) {
-    throw new Error(
-      'searchAppearance is only supported by the live GSC API; offline analysis sources do not expose a matching dataset',
-    )
-  }
-
+  if (has('searchAppearance'))
+    return 'search_appearance'
   if (has('page') && (has('query') || has('queryCanonical')))
     return 'page_keywords'
   if (has('query') || has('queryCanonical'))

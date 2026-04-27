@@ -223,19 +223,17 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
   const locksDir = join(dirname(manifestPath), 'locks')
 
   async function load(): Promise<ManifestFile> {
-    try {
-      const content = await readFile(manifestPath, 'utf8')
-      const parsed = JSON.parse(content) as ManifestFile
-      if (parsed.version !== 1)
-        throw new Error(`unsupported manifest version ${parsed.version}`)
-      return parsed
-    }
-    catch (err) {
-      const e = err as NodeJS.ErrnoException
-      if (e.code === 'ENOENT')
-        return { version: 1, entries: [] }
+    const content = await readFile(manifestPath, 'utf8').catch((err: NodeJS.ErrnoException) => {
+      if (err.code === 'ENOENT')
+        return null
       throw err
-    }
+    })
+    if (content === null)
+      return { version: 1, entries: [] }
+    const parsed = JSON.parse(content) as ManifestFile
+    if (parsed.version !== 1)
+      throw new Error(`unsupported manifest version ${parsed.version}`)
+    return parsed
   }
 
   async function save(data: ManifestFile): Promise<void> {
@@ -351,12 +349,29 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
         stale: 30_000,
         retries: { retries: 20, minTimeout: 50, maxTimeout: 500, factor: 1.5 },
       })
-      try {
-        return await fn()
-      }
-      finally {
-        await release().catch(() => {})
-      }
+      return await fn().finally(() => release().catch(() => {}))
+    },
+    async purgeTenant(filter) {
+      return enqueue(async () => {
+        const data = await load()
+        const matches = <T extends { userId: string, siteId?: string }>(r: T): boolean =>
+          r.userId === filter.userId
+          && (filter.siteId === undefined || r.siteId === filter.siteId)
+        const before = {
+          entries: data.entries.length,
+          watermarks: (data.watermarks ?? []).length,
+          syncStates: (data.syncStates ?? []).length,
+        }
+        data.entries = data.entries.filter(e => !matches(e))
+        data.watermarks = (data.watermarks ?? []).filter(w => !matches(w))
+        data.syncStates = (data.syncStates ?? []).filter(s => !matches(s))
+        await save(data)
+        return {
+          entriesRemoved: before.entries - data.entries.length,
+          watermarksRemoved: before.watermarks - data.watermarks.length,
+          syncStatesRemoved: before.syncStates - data.syncStates.length,
+        }
+      })
     },
     async bumpWatermark(scope, date, at) {
       return enqueue(async () => {

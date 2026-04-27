@@ -1,0 +1,89 @@
+{
+  "name": "@gscdump/nuxt-analytics",
+  "type": "module",
+  "version": "0.4.0",
+  "description": "Nuxt layer: GSC analytics UI + server handlers + DuckDB integration. Consumed by gscdump.com (origin mode) and nuxtseo.com (consumer mode).",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/nuxt-analytics"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./types.ts",
+      "import": "./nuxt.config.ts"
+    },
+    "./types": {
+      "types": "./types.ts",
+      "import": "./types.ts"
+    },
+    "./module": {
+      "types": "./module.ts",
+      "import": "./module.ts"
+    },
+    "./schema": {
+      "types": "./server/utils/analytics/schema.ts",
+      "import": "./server/utils/analytics/schema.ts"
+    },
+    "./routing": {
+      "types": "./server/utils/routing.ts",
+      "import": "./server/utils/routing.ts"
+    },
+    "./internal/*": {
+      "types": "./server/internal/*.ts",
+      "import": "./server/internal/*.ts"
+    },
+    "./server/utils/*": {
+      "types": "./server/utils/*.ts",
+      "import": "./server/utils/*.ts"
+    }
+  },
+  "main": "./nuxt.config.ts",
+  "types": "./types.ts",
+  "files": [
+    "README.md",
+    "app",
+    "module.ts",
+    "nuxt.config.ts",
+    "server",
+    "types.ts"
+  ],
+  "scripts": {
+    "build": "nuxt prepare",
+    "typecheck": "nuxt prepare && tsc --noEmit"
+  },
+  "peerDependencies": {
+    "nuxt": "catalog:",
+    "vue": "catalog:"
+  },
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "catalog:",
+    "@gscdump/analysis": "workspace:*",
+    "@gscdump/engine": "workspace:*",
+    "@gscdump/engine-wasm": "workspace:*",
+    "@nuxt/ui": "catalog:",
+    "@unovis/ts": "catalog:",
+    "@unovis/vue": "catalog:",
+    "@vueuse/core": "catalog:",
+    "@vueuse/nuxt": "catalog:",
+    "aws4fetch": "catalog:",
+    "defu": "catalog:deps",
+    "drizzle-orm": "catalog:",
+    "gscdump": "workspace:*",
+    "ofetch": "catalog:deps",
+    "tailwindcss": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "nuxt": "catalog:",
+    "typescript": "catalog:dev-build",
+    "vue": "catalog:"
+  }
+}

@@ -5,18 +5,18 @@ import process from 'node:process'
 import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
+import { daysAgo, getDateRange, progressBar } from 'gscdump'
 import { SearchTypes } from 'gscdump/query'
 import { loadConfig, resolveDataDir } from '../config'
 import { createCommandContext } from '../context'
 import { allTables, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
-import { clearLine, logger, progressBar } from '../utils'
+import { clearLine, formatAge, logger, runWithConcurrency } from '../utils'
 
 const DEFAULT_TABLES: TableName[] = ['pages', 'keywords', 'countries', 'devices']
 const DEFAULT_TYPES: readonly SearchType[] = ['web']
 const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
 const DEFAULT_PENDING_DAYS = 3
 const DEFAULT_CONCURRENCY = 8
-const DAY_MS = 86_400_000
 // Minimum days synced before we trust a zero-row result enough to persist
 // an empty-type marker. Shorter windows fire false positives on intermittent
 // outages or low-traffic sites that happen to have zero clicks one day.
@@ -24,23 +24,6 @@ const EMPTY_TYPE_PROBE_MIN_DAYS = 7
 // `web` is never skipped — it's the default coverage surface and users
 // almost always want it even when the detector sees a transient zero week.
 const EMPTY_TYPE_PROTECTED: readonly SearchType[] = ['web']
-
-async function runPool<T>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T, index: number) => Promise<void>,
-): Promise<void> {
-  let cursor = 0
-  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, async () => {
-    while (true) {
-      const i = cursor++
-      if (i >= items.length)
-        return
-      await fn(items[i], i)
-    }
-  })
-  await Promise.all(workers)
-}
 
 interface ProgressTracker {
   tick: (label: string) => void
@@ -74,21 +57,6 @@ function createProgressTracker(total: number, quiet: boolean): ProgressTracker {
   }
 }
 
-function isoDay(offsetDays: number): string {
-  return new Date(Date.now() - offsetDays * DAY_MS).toISOString().split('T')[0]
-}
-
-function enumerateDates(start: string, end: string): string[] {
-  const out: string[] = []
-  const endMs = Date.parse(end)
-  let cursor = Date.parse(start)
-  while (cursor <= endMs) {
-    out.push(new Date(cursor).toISOString().split('T')[0])
-    cursor += DAY_MS
-  }
-  return out
-}
-
 async function syncTable(
   store: LocalStore,
   siteUrl: string,
@@ -115,7 +83,7 @@ async function syncTable(
   const stateByDate = new Map(priorStates.map(s => [s.date, s]))
   const label = searchType === 'web' ? table : `${table}/${searchType}`
 
-  await runPool(dates, concurrency, async (date) => {
+  await runWithConcurrency(dates, concurrency, async (date) => {
     const prior = stateByDate.get(date)
     if (!force && prior?.state === 'done') {
       skipped++
@@ -322,22 +290,22 @@ export const syncCommand = defineCommand({
       )
     }
 
-    const endDate = args.end ? String(args.end) : isoDay(DEFAULT_PENDING_DAYS)
+    const endDate = args.end ? String(args.end) : daysAgo(DEFAULT_PENDING_DAYS)
     let startDate: string
     if (args.start) {
       startDate = String(args.start)
     }
     else if (args.full) {
-      startDate = isoDay(450)
+      startDate = daysAgo(450)
     }
     else if (args.days) {
-      startDate = isoDay(Number.parseInt(String(args.days), 10) + DEFAULT_PENDING_DAYS - 1)
+      startDate = daysAgo(Number.parseInt(String(args.days), 10) + DEFAULT_PENDING_DAYS - 1)
     }
     else {
-      startDate = isoDay(DEFAULT_PENDING_DAYS + DEFAULT_PENDING_DAYS - 1)
+      startDate = daysAgo(DEFAULT_PENDING_DAYS + DEFAULT_PENDING_DAYS - 1)
     }
 
-    const dates = enumerateDates(startDate, endDate)
+    const dates = getDateRange(startDate, endDate)
     if (dates.length === 0) {
       logger.error(`No dates to sync (start=${startDate}, end=${endDate})`)
       process.exit(1)
@@ -564,15 +532,4 @@ async function printSyncStatus(
   }
 
   console.log()
-}
-
-function formatAge(ms: number): string {
-  const delta = Date.now() - ms
-  if (delta < 60_000)
-    return 'just now'
-  if (delta < 3_600_000)
-    return `${Math.floor(delta / 60_000)}m ago`
-  if (delta < 86_400_000)
-    return `${Math.floor(delta / 3_600_000)}h ago`
-  return `${Math.floor(delta / 86_400_000)}d ago`
 }

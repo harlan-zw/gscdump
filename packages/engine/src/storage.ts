@@ -1,5 +1,7 @@
 import type { Row, TableName, TenantCtx } from 'gscdump/contracts'
 import type { BuilderState, SearchType } from 'gscdump/query'
+import type { ComparisonFilter } from './resolver/types'
+import { MS_PER_DAY, toIsoDate } from 'gscdump'
 
 export type { Row, TableName, TenantCtx } from 'gscdump/contracts'
 export type { SearchType } from 'gscdump/query'
@@ -223,6 +225,38 @@ export interface LockScope {
   partition: string
 }
 
+export interface PurgeFilter {
+  userId: string
+  siteId?: string
+}
+
+export interface ManifestPurgeResult {
+  entriesRemoved: number
+  watermarksRemoved: number
+  syncStatesRemoved: number
+}
+
+export interface PurgeResult {
+  userId: string
+  siteId?: string
+  prefix: string
+  objectsDeleted: number
+  entriesRemoved: number
+  watermarksRemoved: number
+  syncStatesRemoved: number
+  at: number
+}
+
+export interface PurgeUrlsResult {
+  userId: string
+  siteId?: string
+  urlsRequested: number
+  entriesRewritten: number
+  rowsRemoved: number
+  bytesAfter: number
+  at: number
+}
+
 export interface ManifestStore {
   listLive: (filter: ListLiveFilter) => Promise<ManifestEntry[]>
   listAll: (filter: ListLiveFilter) => Promise<ManifestEntry[]>
@@ -241,6 +275,17 @@ export interface ManifestStore {
    * Scope = tenant × table × partition.
    */
   withLock: <T>(scope: LockScope, fn: () => Promise<T>) => Promise<T>
+  /**
+   * GDPR-grade tenant purge. Removes every manifest entry, watermark, and
+   * sync-state record matching the filter. Does NOT touch the underlying
+   * data-source bytes; callers (typically {@link StorageEngine.purgeTenant})
+   * must sweep the tenant prefix separately before invoking this so that
+   * mid-flight failures can't leave orphan parquet with no manifest record.
+   *
+   * On stores with CAS-backed sharding (R2 manifest) this may issue one
+   * mutation per shard. On read-only stores (HTTP) this throws.
+   */
+  purgeTenant: (filter: PurgeFilter) => Promise<ManifestPurgeResult>
 }
 
 export interface WriteResult {
@@ -295,6 +340,17 @@ export interface QueryResult {
   rows: Row[]
   sql: string
   objectKeys: string[]
+}
+
+export interface ComparisonResult {
+  rows: Row[]
+  totalCount: number
+  totals: Record<string, unknown>
+}
+
+export interface ExtraResult {
+  key: string
+  rows: Row[]
 }
 
 export interface QueryExecuteOptions {
@@ -370,6 +426,30 @@ export interface StorageEngine {
   writeDay: (ctx: WriteCtx, rows: Row[]) => Promise<void>
   query: (ctx: QueryCtx, state: BuilderState) => Promise<QueryResult>
   /**
+   * Two-window comparison query (resolver-compiled). Joins a `current` and
+   * `previous` window CTE on dimensions, applies an optional row filter
+   * (`new`/`lost`/`improving`/`declining`), and returns the merged rows plus
+   * total count and unfiltered totals.
+   *
+   * Tenant scoping comes from `ctx.userId`/`ctx.siteId` (manifest lookup) —
+   * the SQL itself is single-tenant against the parquet adapter, which has
+   * `includeSiteId: false`.
+   *
+   * Throws if `current` and `previous` resolve to different tables.
+   */
+  queryComparison: (
+    ctx: QueryCtx,
+    current: BuilderState,
+    previous: BuilderState,
+    filter?: ComparisonFilter,
+  ) => Promise<ComparisonResult>
+  /**
+   * Canonical-variant enrichment queries. Returns one result per extra
+   * surface; today only `queryCanonical` triggers an extra. Empty array
+   * when the state has no extras-eligible dimensions.
+   */
+  queryExtras: (ctx: QueryCtx, state: BuilderState) => Promise<ExtraResult[]>
+  /**
    * Run arbitrary SQL resolved against named partition sets. Composes
    * manifest lookup + object reads + placeholder substitution + execution
    * so callers don't need to reach into `ManifestStore`/`DataSource`
@@ -378,6 +458,36 @@ export interface StorageEngine {
   runSQL: (opts: RunSQLOptions) => Promise<QueryResult>
   compactTiered: (ctx: WriteCtx, thresholds?: import('./compaction').CompactionThresholds) => Promise<void>
   gcOrphans: (ctx: GcCtx, graceMs: number) => Promise<{ deleted: number }>
+  /**
+   * GDPR-grade tenant purge. Deletes every object under the tenant prefix
+   * (parquet, rollups, entity stores), then removes manifest/watermark/
+   * sync-state records via {@link ManifestStore.purgeTenant}.
+   *
+   * Order matters: bytes are deleted before manifest entries, so a
+   * crash mid-purge leaves orphan manifest records (detectable via the
+   * normal orphan sweep) rather than orphan bytes with no record.
+   *
+   * Returns counters suitable for an audit log. Caller is responsible
+   * for persisting the audit entry.
+   */
+  purgeTenant: (ctx: TenantCtx) => Promise<PurgeResult>
+  /**
+   * GDPR URL-matcher purge. Deletes rows whose `url` column matches one of
+   * `urls` across every live parquet entry for the tenant in tables that
+   * carry a `url` column (`pages`, `page_keywords`). Tables without a `url`
+   * column (`keywords`, `countries`, `devices`, `search_appearance`) are
+   * untouched — they never store per-URL data.
+   *
+   * For each affected entry the engine reads the file, filters the matching
+   * rows out, writes a replacement parquet at a new object key, and registers
+   * the new entry as a supersede of the old. Entries with no matches are
+   * left untouched. Entries with all rows matching are replaced by a
+   * schema-bearing empty-rows file.
+   *
+   * Narrower counterpart to {@link purgeTenant}: use this for a per-URL
+   * takedown request; use `purgeTenant` for full-account deletion.
+   */
+  purgeUrls: (ctx: TenantCtx, urls: readonly string[]) => Promise<PurgeUrlsResult>
   listLive: (filter: ListLiveFilter) => Promise<ManifestEntry[]>
   listAll: (filter: ListLiveFilter) => Promise<ManifestEntry[]>
   getWatermarks: (filter: WatermarkFilter) => Promise<Watermark[]>
@@ -428,8 +538,7 @@ export function mondayOfWeek(isoDate: string): string {
   const ms = Date.parse(`${isoDate}T00:00:00Z`)
   const dow = new Date(ms).getUTCDay() // 0=Sun, 1=Mon, ... 6=Sat
   const offset = dow === 0 ? -6 : 1 - dow
-  const monday = new Date(ms + offset * 86_400_000)
-  return monday.toISOString().slice(0, 10)
+  return toIsoDate(new Date(ms + offset * MS_PER_DAY))
 }
 
 /** YYYY-Qq for the quarter containing the given YYYY-MM month string. */

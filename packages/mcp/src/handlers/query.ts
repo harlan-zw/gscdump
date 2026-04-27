@@ -1,6 +1,7 @@
 import type { z } from 'zod'
-import type { customQueryInput, HandlerContext } from '../types'
+import type { customQueryInput, HandlerContext, MetricsRow } from '../types'
 import { between, country, date, device, gsc, page, query, searchAppearance } from 'gscdump/query'
+import { collectRows } from './analytics'
 
 const DIMENSION_MAP = {
   page,
@@ -10,14 +11,6 @@ const DIMENSION_MAP = {
   device,
   searchAppearance,
 } as const
-
-interface MetricsRow {
-  clicks: number
-  impressions: number
-  ctr: number
-  position: number
-  [key: string]: unknown
-}
 
 export async function customQuery(
   input: z.infer<typeof customQueryInput>,
@@ -36,10 +29,7 @@ export async function customQuery(
     .where(between(date, input.period.start, input.period.end))
     .limit(input.rowLimit || 25000)
 
-  const rows: MetricsRow[] = []
-  for await (const batch of ctx.client.query(input.siteUrl, builder)) {
-    rows.push(...(batch as MetricsRow[]))
-  }
+  const rows = await collectRows<MetricsRow, any, any>(ctx, input.siteUrl, builder)
 
   return { total: rows.length, data: rows }
 }

@@ -28,14 +28,45 @@ export interface PageRow extends BaseMetrics {
   page: string
 }
 
+/** Row with both query and page dimensions, both required */
+export interface QueryPageRow extends BaseMetrics {
+  query: string
+  page: string
+}
+
 /** Date row from query */
 export interface DateRow extends BaseMetrics {
   date: string
 }
 
-/** Coerce nullable number to number, defaulting to 0 */
-export function num(value: number | null | undefined): number {
-  return value ?? 0
+/** Coerce arbitrary value (number, bigint, string, null) to number, defaulting to 0. */
+export function num(v: unknown): number {
+  if (typeof v === 'number')
+    return v
+  if (typeof v === 'bigint')
+    return Number(v)
+  if (v == null)
+    return 0
+  return Number(v)
+}
+
+/**
+ * Build a lookup Map from rows, keyed by some property and projected via `value`.
+ * Optional filter drops rows before insertion (e.g. minimum-clicks gates).
+ */
+export function buildPeriodMap<T, V>(
+  rows: readonly T[],
+  key: (row: T) => string,
+  value: (row: T) => V,
+  filter?: (row: T) => boolean,
+): Map<string, V> {
+  const out = new Map<string, V>()
+  for (const row of rows) {
+    if (filter && !filter(row))
+      continue
+    out.set(key(row), value(row))
+  }
+  return out
 }
 
 /** Create a generic sorter for any metric type */
@@ -47,5 +78,21 @@ export function createSorter<T, M extends string>(
   return (items: T[], sortBy: M = defaultMetric, sortOrder: SortOrder = defaultOrder): T[] => {
     const mult = sortOrder === 'desc' ? -1 : 1
     return [...items].sort((a, b) => (getValue(a, sortBy) - getValue(b, sortBy)) * mult)
+  }
+}
+
+/**
+ * Sorter for analyzers whose metrics are direct numeric properties on `T`
+ * and whose default order varies by metric (e.g. `position: 'asc'`, others
+ * `'desc'`). Collapses the `SORT_ORDER + createSorter + sortResults(...,
+ * SORT_ORDER[sortBy])` boilerplate into a single declaration.
+ */
+export function createMetricSorter<T, M extends keyof T & string>(
+  defaultMetric: M,
+  orderByMetric: Record<M, SortOrder>,
+): (items: T[], sortBy?: M) => T[] {
+  return (items, sortBy = defaultMetric) => {
+    const mult = orderByMetric[sortBy] === 'desc' ? -1 : 1
+    return [...items].sort((a, b) => ((a[sortBy] as unknown as number) - (b[sortBy] as unknown as number)) * mult)
   }
 }

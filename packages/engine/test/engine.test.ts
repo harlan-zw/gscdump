@@ -282,6 +282,64 @@ describe('storageEngine.compactTiered', () => {
     expect(webEntry.rowCount).toBe(3)
     expect(discoverEntry.rowCount).toBe(3)
   })
+
+  it('refuses to compact a bucket whose latest day is inside the GSC pending window', async () => {
+    // Simulate: April just ended, sync is still backfilling the last 3 days,
+    // someone runs compactTiered with aggressive overrides. The April monthly
+    // must NOT be created — otherwise re-sync of April 28-30 produces
+    // daily/2026-04-{28,29,30} alongside monthly/2026-04 and the resolver
+    // double-counts.
+    const MAY_FIRST = Date.UTC(2026, 4, 1, 6) // 2026-05-01 06:00 UTC
+    const { engine, manifestStore } = makeEngine({ now: () => MAY_FIRST })
+
+    for (const day of ['2026-04-27', '2026-04-28', '2026-04-29', '2026-04-30']) {
+      await engine.writeDay(
+        { ...makeCtx({ date: day }), now: () => Date.parse(`${day}T00:00:00Z`) },
+        [pageRow(`/${day}`, day)],
+      )
+    }
+
+    await engine.compactTiered(
+      { ...makeCtx(), now: () => MAY_FIRST },
+      { raw: 0, d7: 0, d30: 0 },
+    )
+
+    const live = manifestStore.snapshot()
+    const partitions = live.map(e => e.partition).sort()
+    // All four April dailies remain at the raw tier; nothing rolled up.
+    expect(partitions).toEqual([
+      'daily/2026-04-27',
+      'daily/2026-04-28',
+      'daily/2026-04-29',
+      'daily/2026-04-30',
+    ])
+  })
+
+  it('compacts a bucket once the pending window has cleared', async () => {
+    // Same shape as the previous test but `now` is May 10 — past the 4-day
+    // floor for both the ISO week ending May 3 (raw→d7) AND the April month
+    // (d7→d30). April should now be eligible and roll all the way to monthly
+    // via the d7=0/d30=999 overrides.
+    const MAY_TENTH = Date.UTC(2026, 4, 10, 6)
+    const { engine, manifestStore } = makeEngine({ now: () => MAY_TENTH })
+
+    for (const day of ['2026-04-27', '2026-04-28', '2026-04-29', '2026-04-30']) {
+      await engine.writeDay(
+        { ...makeCtx({ date: day }), now: () => Date.parse(`${day}T00:00:00Z`) },
+        [pageRow(`/${day}`, day)],
+      )
+    }
+
+    await engine.compactTiered(
+      { ...makeCtx(), now: () => MAY_TENTH },
+      { raw: 0, d7: 0, d30: 999 },
+    )
+
+    const live = manifestStore.snapshot()
+    expect(live).toHaveLength(1)
+    expect(live[0].partition).toBe('monthly/2026-04')
+    expect(live[0].rowCount).toBe(4)
+  })
 })
 
 describe('storageEngine.gcOrphans', () => {

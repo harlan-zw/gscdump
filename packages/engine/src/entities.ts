@@ -198,6 +198,240 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
 }
 
 // ---------------------------------------------------------------------------
+// SQLite-backed InspectionStore
+// ---------------------------------------------------------------------------
+//
+// Same InspectionStore contract, persisted to a per-site SQLite file in the
+// DataSource at `.../entities/inspections/inspections.db`. Dependency-free:
+// the caller supplies an `openDriver` that wraps better-sqlite3 (node) or
+// wa-sqlite (browser/worker). The driver surface is the minimum we need
+// (exec / run / all / serialize / close) so we don't couple to a specific
+// SQLite binding.
+//
+// Drop-in drivers ship as subpath exports to keep edge bundles slim:
+//   - `@gscdump/engine/inspection-sqlite-node` → `createBetterSqliteDriver`
+//   - `@gscdump/engine/inspection-sqlite-browser` → `createWaSqliteDriver`
+
+export interface InspectionSqlDriver {
+  exec: (sql: string) => void | Promise<void>
+  run: (sql: string, params: unknown[]) => void | Promise<void>
+  all: (sql: string, params: unknown[]) => unknown[] | Promise<unknown[]>
+  serialize: () => Uint8Array | Promise<Uint8Array>
+  close: () => void | Promise<void>
+}
+
+export interface CreateInspectionStoreSqliteOptions {
+  dataSource: DataSource
+  openDriver: (bytes: Uint8Array | undefined) => InspectionSqlDriver | Promise<InspectionSqlDriver>
+  hash?: (url: string) => string
+}
+
+export function inspectionSqliteKey(ctx: TenantCtx): string {
+  return ctx.siteId
+    ? `u_${ctx.userId}/${ctx.siteId}/entities/inspections/inspections.db`
+    : `u_${ctx.userId}/entities/inspections/inspections.db`
+}
+
+const INSPECTION_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS inspections (
+  url_hash TEXT PRIMARY KEY,
+  url TEXT NOT NULL,
+  inspected_at TEXT NOT NULL,
+  index_status TEXT,
+  last_crawl_time TEXT,
+  google_canonical TEXT,
+  user_canonical TEXT,
+  coverage_state TEXT,
+  robots_txt_state TEXT,
+  indexing_state TEXT,
+  page_fetch_state TEXT,
+  mobile_usability_verdict TEXT,
+  rich_results_verdict TEXT,
+  raw TEXT
+);
+CREATE TABLE IF NOT EXISTS inspection_history (
+  year_month TEXT NOT NULL,
+  url_hash TEXT NOT NULL,
+  url TEXT NOT NULL,
+  inspected_at TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  PRIMARY KEY (year_month, url_hash, inspected_at)
+);
+CREATE INDEX IF NOT EXISTS inspection_history_by_month ON inspection_history(year_month);
+`
+
+interface InspectionRow {
+  url_hash: string
+  url: string
+  inspected_at: string
+  index_status: string | null
+  last_crawl_time: string | null
+  google_canonical: string | null
+  user_canonical: string | null
+  coverage_state: string | null
+  robots_txt_state: string | null
+  indexing_state: string | null
+  page_fetch_state: string | null
+  mobile_usability_verdict: string | null
+  rich_results_verdict: string | null
+  raw: string | null
+}
+
+interface InspectionHistoryRow {
+  year_month: string
+  url_hash: string
+  url: string
+  inspected_at: string
+  payload: string
+}
+
+function rowToRecord(r: InspectionRow): InspectionRecord {
+  const out: InspectionRecord = {
+    url: r.url,
+    inspectedAt: r.inspected_at,
+  }
+  if (r.index_status != null)
+    out.indexStatus = r.index_status
+  if (r.last_crawl_time != null)
+    out.lastCrawlTime = r.last_crawl_time
+  if (r.google_canonical != null)
+    out.googleCanonical = r.google_canonical
+  if (r.user_canonical != null)
+    out.userCanonical = r.user_canonical
+  if (r.coverage_state != null)
+    out.coverageState = r.coverage_state
+  if (r.robots_txt_state != null)
+    out.robotsTxtState = r.robots_txt_state
+  if (r.indexing_state != null)
+    out.indexingState = r.indexing_state
+  if (r.page_fetch_state != null)
+    out.pageFetchState = r.page_fetch_state
+  if (r.mobile_usability_verdict != null)
+    out.mobileUsabilityVerdict = r.mobile_usability_verdict
+  if (r.rich_results_verdict != null)
+    out.richResultsVerdict = r.rich_results_verdict
+  if (r.raw != null)
+    out.raw = JSON.parse(r.raw)
+  return out
+}
+
+function shardForRecord(record: InspectionRecord): string {
+  const m = YEAR_MONTH_RE.exec(record.inspectedAt)
+  return m ? `${m[1]}-${m[2]}` : 'unknown'
+}
+
+export function createInspectionStoreSqlite(
+  opts: CreateInspectionStoreSqliteOptions,
+): InspectionStore {
+  const ds = opts.dataSource
+  const hash = opts.hash ?? hashUrl
+
+  async function withDriver<T>(ctx: TenantCtx, fn: (driver: InspectionSqlDriver) => Promise<T>, persist: boolean): Promise<T> {
+    const key = inspectionSqliteKey(ctx)
+    const bytes = await ds.read(key).catch(() => undefined)
+    const driver = await opts.openDriver(bytes)
+    await driver.exec(INSPECTION_SCHEMA_SQL)
+    const result = await fn(driver)
+    if (persist) {
+      const out = await driver.serialize()
+      await ds.write(key, out)
+    }
+    await driver.close()
+    return result
+  }
+
+  return {
+    async writeBatch(ctx, records) {
+      if (records.length === 0)
+        return
+      await withDriver(ctx, async (driver) => {
+        for (const r of records) {
+          const h = hash(r.url)
+          await driver.run(
+            `INSERT INTO inspections (
+              url_hash, url, inspected_at, index_status, last_crawl_time,
+              google_canonical, user_canonical, coverage_state, robots_txt_state,
+              indexing_state, page_fetch_state, mobile_usability_verdict,
+              rich_results_verdict, raw
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(url_hash) DO UPDATE SET
+              url = excluded.url,
+              inspected_at = excluded.inspected_at,
+              index_status = excluded.index_status,
+              last_crawl_time = excluded.last_crawl_time,
+              google_canonical = excluded.google_canonical,
+              user_canonical = excluded.user_canonical,
+              coverage_state = excluded.coverage_state,
+              robots_txt_state = excluded.robots_txt_state,
+              indexing_state = excluded.indexing_state,
+              page_fetch_state = excluded.page_fetch_state,
+              mobile_usability_verdict = excluded.mobile_usability_verdict,
+              rich_results_verdict = excluded.rich_results_verdict,
+              raw = excluded.raw`,
+            [
+              h,
+              r.url,
+              r.inspectedAt,
+              r.indexStatus ?? null,
+              r.lastCrawlTime ?? null,
+              r.googleCanonical ?? null,
+              r.userCanonical ?? null,
+              r.coverageState ?? null,
+              r.robotsTxtState ?? null,
+              r.indexingState ?? null,
+              r.pageFetchState ?? null,
+              r.mobileUsabilityVerdict ?? null,
+              r.richResultsVerdict ?? null,
+              r.raw === undefined ? null : JSON.stringify(r.raw),
+            ],
+          )
+          await driver.run(
+            `INSERT OR REPLACE INTO inspection_history
+               (year_month, url_hash, url, inspected_at, payload)
+               VALUES (?,?,?,?,?)`,
+            [shardForRecord(r), h, r.url, r.inspectedAt, JSON.stringify(r)],
+          )
+        }
+      }, true)
+    },
+
+    async getLatest(ctx, url) {
+      return await withDriver(ctx, async (driver) => {
+        const rows = await driver.all(
+          'SELECT * FROM inspections WHERE url_hash = ? LIMIT 1',
+          [hash(url)],
+        ) as InspectionRow[]
+        return rows.length === 0 ? undefined : rowToRecord(rows[0]!)
+      }, false)
+    },
+
+    async loadIndex(ctx) {
+      return await withDriver(ctx, async (driver) => {
+        const rows = await driver.all('SELECT * FROM inspections', []) as InspectionRow[]
+        const records: Record<string, InspectionRecord> = {}
+        for (const r of rows) records[r.url_hash] = rowToRecord(r)
+        return { version: 1 as const, records }
+      }, false)
+    },
+
+    async loadHistory(ctx, yearMonth) {
+      return await withDriver(ctx, async (driver) => {
+        const rows = await driver.all(
+          'SELECT * FROM inspection_history WHERE year_month = ? ORDER BY inspected_at ASC',
+          [yearMonth],
+        ) as InspectionHistoryRow[]
+        if (rows.length === 0)
+          return undefined
+        return {
+          version: 1 as const,
+          records: rows.map(r => JSON.parse(r.payload) as InspectionRecord),
+        }
+      }, false)
+    },
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Sitemap snapshots
 // ---------------------------------------------------------------------------
 //

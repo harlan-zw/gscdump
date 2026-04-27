@@ -59,6 +59,14 @@
     "./normalize": {
       "types": "./dist/normalize.d.mts",
       "import": "./dist/normalize.mjs"
+    },
+    "./url": {
+      "types": "./dist/url.d.mts",
+      "import": "./dist/url.mjs"
+    },
+    "./sitemap": {
+      "types": "./dist/sitemap.d.mts",
+      "import": "./dist/sitemap.mjs"
     }
   },
   "main": "./dist/index.mjs",

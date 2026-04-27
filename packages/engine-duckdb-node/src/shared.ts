@@ -68,23 +68,11 @@ export interface AnalyzerSpec {
 }
 
 // ---------------------------------------------------------------------------
-// Date helpers — defaults match GSC's typical 3-day reporting lag.
+// Date helpers — re-exported from @gscdump/analysis to keep one source of truth.
+// `DEFAULT_END()` matches GSC's typical 3-day reporting lag.
 // ---------------------------------------------------------------------------
 
-export function DEFAULT_END(): string {
-  return new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]!
-}
-
-function DEFAULT_START(): string {
-  return new Date(Date.now() - 31 * 86400000).toISOString().split('T')[0]!
-}
-
-export function period(params: AnalysisParams): { startDate: string, endDate: string } {
-  return {
-    startDate: params.startDate || DEFAULT_START(),
-    endDate: params.endDate || DEFAULT_END(),
-  }
-}
+export { num } from '@gscdump/analysis'
 
 export function previous(params: AnalysisParams): { startDate: string, endDate: string } {
   if (!params.prevStartDate || !params.prevEndDate)
@@ -97,15 +85,8 @@ export function previous(params: AnalysisParams): { startDate: string, endDate: 
 // doesn't, so every shape function normalizes through these.
 // ---------------------------------------------------------------------------
 
-export function num(v: unknown): number {
-  if (typeof v === 'number')
-    return v
-  if (typeof v === 'bigint')
-    return Number(v)
-  if (v == null)
-    return 0
-  return Number(v)
-}
+export { defaultEndDate as DEFAULT_END, periodOf as period } from '@gscdump/analysis/period'
+export { daysAgo } from 'gscdump'
 
 export function str(v: unknown): string {
   return v == null ? '' : String(v)

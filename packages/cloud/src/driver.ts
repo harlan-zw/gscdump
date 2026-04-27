@@ -196,7 +196,7 @@ export function createCloudDriver(options: {
     async analysis(siteUrl: string, params: AnalysisParams): Promise<AnalysisResult> {
       const siteId = await resolveSiteId(siteUrl)
       return cloudFetch<AnalysisResult>(
-        buildUrl(cloudUrl, `/api/sites/${siteId}/analysis`),
+        buildUrl(cloudUrl, `/api/__gsc/sites/${siteId}/analyze`),
         { method: 'POST', headers, body: JSON.stringify(params) },
       )
     },
@@ -325,7 +325,7 @@ export function createCloudDriver(options: {
     async analysisPost(siteUrl: string, body: AnalysisParams): Promise<Record<string, unknown>> {
       const siteId = await resolveSiteId(siteUrl)
       return cloudFetch<Record<string, unknown>>(
-        buildUrl(cloudUrl, `/api/sites/${siteId}/analysis`),
+        buildUrl(cloudUrl, `/api/__gsc/sites/${siteId}/analyze`),
         { method: 'POST', headers, body: JSON.stringify(body) },
       )
     },

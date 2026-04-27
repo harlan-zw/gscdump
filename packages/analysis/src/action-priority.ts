@@ -1,6 +1,7 @@
 import type { AnalyzerRegistry } from './analyzer/registry'
 import type { AnalysisQuerySource } from './source/types'
 import type { AnalysisParams, AnalysisResult, AnalysisTool } from './types'
+import { clamp, clamp01 } from './scoring'
 import { analyzeFromSource } from './source/analyze-from-source'
 
 export type ActionSource
@@ -86,6 +87,35 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, n - 1)}...`
 }
 
+interface ActionSpec<S extends ActionSource> {
+  source: S
+  keyword: string
+  page: string
+  title: string
+  why: string
+  severity: number
+  impressions: number
+  impact: number
+  data: unknown
+}
+
+function buildAction<S extends ActionSource>(spec: ActionSpec<S>): PriorityAction {
+  return {
+    id: idKey(spec.keyword, spec.page),
+    title: spec.title,
+    keyword: spec.keyword,
+    page: spec.page,
+    sources: [spec.source],
+    severity: spec.severity,
+    impressions: spec.impressions,
+    impact: spec.impact,
+    effort: EFFORT_BY_SOURCE[spec.source],
+    why: spec.why,
+    priorityScore: 0,
+    data: { [spec.source]: spec.data as Record<string, unknown> } as PriorityAction['data'],
+  }
+}
+
 interface StrikingDistanceRow {
   keyword: string
   page: string | null
@@ -104,23 +134,19 @@ function fromStrikingDistance(rows: StrikingDistanceRow[]): PriorityAction[] {
     const impact = Math.max(0, r.potentialClicks)
     if (impact <= 0)
       continue
-    const posScore = Math.max(0, Math.min(1, (20 - r.position) / 16))
+    const posScore = clamp01((20 - r.position) / 16)
     const imprScore = Math.min(1, r.impressions / 5000)
-    const severity = Math.round(100 * Math.sqrt(posScore * imprScore))
-    out.push({
-      id: idKey(r.keyword, r.page),
-      title: `Push "${truncate(r.keyword, 40)}" onto page 1`,
+    out.push(buildAction({
+      source: 'striking-distance',
       keyword: r.keyword,
       page: r.page,
-      sources: ['striking-distance'],
-      severity,
+      title: `Push "${truncate(r.keyword, 40)}" onto page 1`,
+      why: `Ranks #${r.position.toFixed(1)} with ${Math.round(r.impressions)} impressions; small gains unlock page-1 clicks.`,
+      severity: Math.round(100 * Math.sqrt(posScore * imprScore)),
       impressions: r.impressions,
       impact,
-      effort: EFFORT_BY_SOURCE['striking-distance'],
-      why: `Ranks #${r.position.toFixed(1)} with ${Math.round(r.impressions)} impressions; small gains unlock page-1 clicks.`,
-      priorityScore: 0,
-      data: { 'striking-distance': r as unknown as Record<string, unknown> },
-    })
+      data: r,
+    }))
   }
   return out
 }
@@ -145,20 +171,17 @@ function fromOpportunity(rows: OpportunityRow[]): PriorityAction[] {
     const impact = Math.max(0, r.potentialClicks)
     if (impact <= 0)
       continue
-    out.push({
-      id: idKey(r.keyword, r.page),
-      title: `Improve on-page for "${truncate(r.keyword, 40)}"`,
+    out.push(buildAction({
+      source: 'opportunity',
       keyword: r.keyword,
       page: r.page,
-      sources: ['opportunity'],
+      title: `Improve on-page for "${truncate(r.keyword, 40)}"`,
+      why: `Opportunity score ${Math.round(r.opportunityScore)}; CTR ${(r.ctr * 100).toFixed(1)}% vs expected at pos ${r.position.toFixed(1)}.`,
       severity: Math.round(r.opportunityScore),
       impressions: r.impressions,
       impact,
-      effort: EFFORT_BY_SOURCE.opportunity,
-      why: `Opportunity score ${Math.round(r.opportunityScore)}; CTR ${(r.ctr * 100).toFixed(1)}% vs expected at pos ${r.position.toFixed(1)}.`,
-      priorityScore: 0,
-      data: { opportunity: r as unknown as Record<string, unknown> },
-    })
+      data: r,
+    }))
   }
   return out
 }
@@ -193,21 +216,17 @@ function fromCannibalization(events: CannibalizationEvent[]): PriorityAction[] {
   for (const ev of events) {
     if (ev.severity < 30)
       continue
-    const impact = Math.max(0, ev.stolenClicks)
-    out.push({
-      id: idKey(ev.keyword, ev.leaderUrl),
-      title: `Consolidate cannibalization on "${truncate(ev.keyword, 36)}"`,
+    out.push(buildAction({
+      source: 'cannibalization',
       keyword: ev.keyword,
       page: ev.leaderUrl,
-      sources: ['cannibalization'],
+      title: `Consolidate cannibalization on "${truncate(ev.keyword, 36)}"`,
+      why: `${ev.competitorCount} URLs split ${Math.round(ev.totalImpressions)} impressions; leader loses ~${Math.round(ev.stolenClicks)} clicks to siblings.`,
       severity: Math.round(ev.severity),
       impressions: ev.totalImpressions,
-      impact,
-      effort: EFFORT_BY_SOURCE.cannibalization,
-      why: `${ev.competitorCount} URLs split ${Math.round(ev.totalImpressions)} impressions; leader loses ~${Math.round(ev.stolenClicks)} clicks to siblings.`,
-      priorityScore: 0,
-      data: { cannibalization: ev as unknown as Record<string, unknown> },
-    })
+      impact: Math.max(0, ev.stolenClicks),
+      data: ev,
+    }))
   }
   return out
 }
@@ -237,21 +256,17 @@ function fromCtrAnomaly(rows: CtrAnomalyRow[]): PriorityAction[] {
     const impact = Math.max(0, r.clicksLost)
     if (impact <= 0)
       continue
-    const sev = maxRaw > 0 ? Math.round((r.severity / maxRaw) * 100) : 0
-    out.push({
-      id: idKey(r.keyword, r.page),
-      title: `Lift CTR on "${truncate(r.keyword, 36)}"`,
+    out.push(buildAction({
+      source: 'ctr-anomaly',
       keyword: r.keyword,
       page: r.page,
-      sources: ['ctr-anomaly'],
-      severity: sev,
+      title: `Lift CTR on "${truncate(r.keyword, 36)}"`,
+      why: `CTR collapsed ${r.breachDaysDown} days at flat position; ~${Math.round(r.clicksLost)} clicks lost vs baseline ${(r.baselineCtr * 100).toFixed(1)}%.`,
+      severity: maxRaw > 0 ? Math.round((r.severity / maxRaw) * 100) : 0,
       impressions: r.totalImpressions,
       impact,
-      effort: EFFORT_BY_SOURCE['ctr-anomaly'],
-      why: `CTR collapsed ${r.breachDaysDown} days at flat position; ~${Math.round(r.clicksLost)} clicks lost vs baseline ${(r.baselineCtr * 100).toFixed(1)}%.`,
-      priorityScore: 0,
-      data: { 'ctr-anomaly': r as unknown as Record<string, unknown> },
-    })
+      data: r,
+    }))
   }
   return out
 }
@@ -281,21 +296,17 @@ function fromChangePoint(rows: ChangePointRow[]): PriorityAction[] {
     const impact = drift * days
     if (impact <= 0)
       continue
-    const sev = Math.min(100, Math.max(0, Math.round((Math.log10(Math.max(10, r.llr)) / 3) * 100)))
-    out.push({
-      id: idKey(r.keyword, r.page),
-      title: `Diagnose drop on "${truncate(r.keyword, 34)}"`,
+    out.push(buildAction({
+      source: 'change-point',
       keyword: r.keyword,
       page: r.page,
-      sources: ['change-point'],
-      severity: sev,
+      title: `Diagnose drop on "${truncate(r.keyword, 34)}"`,
+      why: `Significant regression around ${r.changeDate} (${r.leftMean.toFixed(1)} -> ${r.rightMean.toFixed(1)}, LLR ${r.llr.toFixed(0)}).`,
+      severity: clamp(Math.round((Math.log10(Math.max(10, r.llr)) / 3) * 100), 0, 100),
       impressions: r.totalImpressions,
       impact,
-      effort: EFFORT_BY_SOURCE['change-point'],
-      why: `Significant regression around ${r.changeDate} (${r.leftMean.toFixed(1)} -> ${r.rightMean.toFixed(1)}, LLR ${r.llr.toFixed(0)}).`,
-      priorityScore: 0,
-      data: { 'change-point': r as unknown as Record<string, unknown> },
-    })
+      data: r,
+    }))
   }
   return out
 }
@@ -383,23 +394,21 @@ export async function analyzeActionPriority(
 
   const runOne = async (source: ActionSource): Promise<PriorityAction[]> => {
     update(source, { status: 'running', error: undefined })
-    try {
-      const params = { type: source as AnalysisTool, ...(paramsBySource[source] ?? {}) } as AnalysisParams
-      const result = await analyzer.analyze(params)
+    const params = { type: source as AnalysisTool, ...(paramsBySource[source] ?? {}) } as AnalysisParams
+    return analyzer.analyze(params).then((result) => {
       const normalized = normalizePriorityActions(source, result)
       update(source, {
         status: normalized.length === 0 ? 'skipped' : 'done',
         count: normalized.length,
       })
       return normalized
-    }
-    catch (error) {
+    }).catch((error) => {
       const message = error instanceof Error ? error.message : String(error)
       update(source, { status: 'error', count: 0, error: message })
       if (!continueOnError)
         throw error
       return []
-    }
+    })
   }
 
   const all = (await Promise.all(sources.map(runOne))).flat()

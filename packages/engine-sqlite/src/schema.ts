@@ -76,12 +76,19 @@ export const gsc_page_keywords = sqliteTable('gsc_page_keywords', {
   ...metricCols(),
 })
 
+export const gsc_search_appearance = sqliteTable('gsc_search_appearance', {
+  ...baseCols(),
+  searchAppearance: text('searchAppearance').notNull(),
+  ...metricCols(),
+})
+
 export const schema = {
   gsc_pages,
   gsc_keywords,
   gsc_countries,
   gsc_devices,
   gsc_page_keywords,
+  gsc_search_appearance,
 }
 
 export type Schema = typeof schema

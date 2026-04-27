@@ -8,7 +8,7 @@ import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm'
 
 import { resolveToSQL } from '@gscdump/engine/resolver'
 import { desc, eq, sum } from 'drizzle-orm'
-import { and, between, date, gsc, page, regex } from 'gscdump/query'
+import { and, between, contains, date, gsc, or, page, query, regex } from 'gscdump/query'
 
 import { describe, expect, it } from 'vitest'
 import {
@@ -133,6 +133,47 @@ describe('@gscdump/engine-wasm', () => {
     const resolved = resolveToSQL(state, { adapter: browserResolverAdapter })
     expect(resolved.sql).toMatch(/regexp_matches/i)
     expect(resolved.params).toContain('^https://example.com/blog/\\d+$')
+  })
+
+  it('oR group emits parenthesized OR-joined predicates (regression: was silently AND-flattened)', () => {
+    const state = gsc
+      .select(query)
+      .where(and(
+        between(date, '2026-04-01', '2026-04-30'),
+        or(contains(query, 'nuxt'), contains(query, 'seo'), contains(query, 'vue')),
+      ))
+      .getState()
+
+    const resolved = resolveToSQL(state, { adapter: browserResolverAdapter })
+    // All three OR branches present
+    expect(resolved.params).toContain('%nuxt%')
+    expect(resolved.params).toContain('%seo%')
+    expect(resolved.params).toContain('%vue%')
+    // Critical: an OR appears between the contains predicates inside parens.
+    // Pre-fix the compiler joined every leaf with AND, returning ~zero rows
+    // for any multi-keyword brand query.
+    expect(resolved.sql).toMatch(/\(.+\bOR\b.+\bOR\b.+\)/i)
+    // Date predicates remain AND'd at the top level
+    expect(resolved.params).toContain('2026-04-01')
+    expect(resolved.params).toContain('2026-04-30')
+  })
+
+  it('aND group still AND-joins leaves (no regression for default semantics)', () => {
+    const state = gsc
+      .select(query)
+      .where(and(
+        between(date, '2026-04-01', '2026-04-30'),
+        contains(query, 'nuxt'),
+        contains(page, '/docs/'),
+      ))
+      .getState()
+
+    const resolved = resolveToSQL(state, { adapter: browserResolverAdapter })
+    expect(resolved.params).toContain('%nuxt%')
+    expect(resolved.params).toContain('%/docs/%')
+    // No OR introduced when the user only used AND
+    const wherePart = resolved.sql.split(/group by/i)[0]!
+    expect(wherePart).not.toMatch(/\bOR\b/i)
   })
 
   it('strikingMomentum compiles to DuckDB-flavored SQL', async () => {

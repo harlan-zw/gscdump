@@ -1,11 +1,11 @@
-import type { BrandSegmentationOptions, BrandSegmentationResult } from '../brand'
-import type { ClusteringOptions, ClusteringResult } from '../clustering'
-import type { ConcentrationOptions, ConcentrationResult } from '../concentration'
-import type { DecayOptions, DecayResult } from '../decay'
-import type { MoversOptions, MoversResult } from '../movers'
-import type { OpportunityOptions, OpportunityResult } from '../opportunity'
+import type { BrandSegmentationOptions, BrandSegmentationResult } from '../analyzers/brand'
+import type { ClusteringOptions, ClusteringResult } from '../analyzers/clustering'
+import type { ConcentrationOptions, ConcentrationResult } from '../analyzers/concentration'
+import type { DecayOptions, DecayResult } from '../analyzers/decay'
+import type { MoversOptions, MoversResult } from '../analyzers/movers'
+import type { OpportunityResult } from '../analyzers/opportunity'
+import type { SeasonalityOptions, SeasonalityResult } from '../analyzers/seasonality'
 import type { AnalysisPeriod, ComparisonPeriod } from '../period'
-import type { SeasonalityOptions, SeasonalityResult } from '../seasonality'
 
 import type { StrikingDistanceOptions, StrikingDistanceResult } from '../striking-distance'
 import type { DateRow, KeywordRow, PageRow } from '../types'
@@ -16,33 +16,31 @@ import type {
 } from './shared-types'
 
 import type { AnalysisQuerySource, TypedQuery } from './types'
-import { between, date, gsc, page, query } from 'gscdump/query'
-import { analyzeBrandSegmentation } from '../brand'
-import { analyzeClustering } from '../clustering'
-import { analyzeKeywordConcentration, analyzePageConcentration } from '../concentration'
-import { analyzeDecay } from '../decay'
-import { analyzeMovers } from '../movers'
-import { analyzeOpportunity } from '../opportunity'
-import { analyzeSeasonality } from '../seasonality'
+import { datesQueryState, keywordsQueryState, pagesQueryState } from '../analyzer/adapt-rows'
+import { analyzeBrandSegmentation } from '../analyzers/brand'
+import { analyzeClustering } from '../analyzers/clustering'
+import { analyzeKeywordConcentration, analyzePageConcentration } from '../analyzers/concentration'
+import { analyzeDecay } from '../analyzers/decay'
+import { analyzeMovers } from '../analyzers/movers'
+import { opportunityAnalyzer } from '../analyzers/opportunity'
+import { analyzeSeasonality } from '../analyzers/seasonality'
 import { analyzeStrikingDistance } from '../striking-distance'
 import { queryRows, typedQuery } from './types'
 
+interface OpportunityOptions {
+  minImpressions?: number
+}
+
 function keywordQuery(period: AnalysisPeriod, limit: number): TypedQuery<KeywordRow> {
-  return typedQuery<KeywordRow>(
-    gsc.select(query, page).where(between(date, period.startDate, period.endDate)).limit(limit).getState(),
-  )
+  return typedQuery<KeywordRow>(keywordsQueryState(period, limit))
 }
 
 function pageQuery(period: AnalysisPeriod, limit: number): TypedQuery<PageRow> {
-  return typedQuery<PageRow>(
-    gsc.select(page).where(between(date, period.startDate, period.endDate)).limit(limit).getState(),
-  )
+  return typedQuery<PageRow>(pagesQueryState(period, limit))
 }
 
 function dateQuery(period: AnalysisPeriod, limit: number): TypedQuery<DateRow> {
-  return typedQuery<DateRow>(
-    gsc.select(date).where(between(date, period.startDate, period.endDate)).limit(limit).getState(),
-  )
+  return typedQuery<DateRow>(datesQueryState(period, limit))
 }
 
 type PortableQueryMap = Record<string, TypedQuery<unknown>>
@@ -92,8 +90,12 @@ const PORTABLE_ANALYZERS = {
     requiredQueries: (period: AnalysisPeriod, limit: number) => ({
       keywords: keywordQuery(period, limit),
     }),
-    run: ({ keywords }, options?: OpportunityOptions) =>
-      analyzeOpportunity(keywords, options),
+    run: ({ keywords }, options?: OpportunityOptions) => {
+      const { results } = opportunityAnalyzer.rows!.reduce(keywords as any, {
+        params: { type: 'opportunity', minImpressions: options?.minImpressions } as any,
+      })
+      return results as unknown as OpportunityResult[]
+    },
   }),
   brandSegmentation: definePortableAnalyzer({
     requiredQueries: (period: AnalysisPeriod, limit: number) => ({

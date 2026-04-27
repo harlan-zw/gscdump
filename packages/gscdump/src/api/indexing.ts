@@ -1,5 +1,6 @@
 import type { indexing_v3 } from '@googleapis/indexing/build/v3'
 import type { GoogleSearchConsoleClient } from '../core/client'
+import { runSequentialBatch } from './batch'
 
 export type IndexingNotificationType = 'URL_UPDATED' | 'URL_DELETED'
 
@@ -64,15 +65,9 @@ export async function batchRequestIndexing(
   } = {},
 ): Promise<IndexingResult[]> {
   const { type = 'URL_UPDATED', delayMs = 100, onProgress } = options
-  const results: IndexingResult[] = []
-
-  for (let i = 0; i < urls.length; i++) {
-    const result = await requestIndexing(client, urls[i], { type })
-    results.push(result)
-    onProgress?.(result, i, urls.length)
-    if (i < urls.length - 1 && delayMs > 0)
-      await new Promise(r => setTimeout(r, delayMs))
-  }
-
-  return results
+  return runSequentialBatch(
+    urls,
+    url => requestIndexing(client, url, { type }),
+    { delayMs, onProgress },
+  )
 }

@@ -28,6 +28,7 @@ export const TABLE_DIMS: Record<TableName, string[]> = {
   countries: ['country', 'date'],
   devices: ['device', 'date'],
   page_keywords: ['page', 'query', 'date'],
+  search_appearance: ['searchAppearance', 'date'],
 }
 
 export interface GscApiRow {
@@ -123,6 +124,14 @@ export function transformGscRow(
     }
   }
 
+  if (table === 'search_appearance') {
+    const date = String(keys[1] ?? '')
+    return {
+      date,
+      row: { searchAppearance: String(keys[0] ?? ''), date, clicks, impressions, sum_position },
+    }
+  }
+
   // page_keywords
   const query = String(keys[1] ?? '')
   const date = String(keys[2] ?? '')
@@ -153,6 +162,18 @@ export interface RowAccumulator {
    * internal state; subsequent pushes behave as on a fresh accumulator.
    */
   drain: () => Map<TableName, Map<string, Row[]>>
+  /**
+   * Drain only buckets for dates strictly older than the most-recent date
+   * seen for each table. Requires `trackDateBoundary` to be enabled — without
+   * it, returns an empty map. GSC's date-as-dimension queries return rows
+   * sorted by date, so any date older than the latest seen is logically
+   * complete within the current job slice and safe to flush mid-job.
+   *
+   * Returned buckets are removed from internal state and `totalRows` is
+   * decremented accordingly. Latest-date buckets stay in place for the
+   * eventual `drain()` at job end.
+   */
+  drainCompleted: () => Map<TableName, Map<string, Row[]>>
   /** Total row count across all tables/dates since last drain. */
   readonly totalRows: number
   /** Whether the accumulator has overflowed since last drain. */
@@ -166,13 +187,26 @@ export interface RowAccumulatorOptions extends IngestOptions {
    * ~128 MB CF Workers isolate budget at ~200 bytes/row with headroom.
    */
   maxRows?: number
+  /**
+   * Track the most-recent date seen per table so `drainCompleted()` can
+   * return older-date buckets mid-job. Off by default — callers that don't
+   * stream-flush pay zero overhead for the bookkeeping.
+   *
+   * Caller contract: only safe when GSC dimensions include `date` so the
+   * API returns rows in date-ascending order; without that ordering,
+   * "older than latest" doesn't mean "complete" and partial buckets would
+   * be flushed prematurely.
+   */
+  trackDateBoundary?: boolean
 }
 
 const DEFAULT_MAX_ROWS = 500_000
 
 export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAccumulator {
   const maxRows = options.maxRows ?? DEFAULT_MAX_ROWS
+  const trackDateBoundary = options.trackDateBoundary === true
   let buckets = new Map<TableName, Map<string, Row[]>>()
+  const latestDate = new Map<TableName, string>()
   let total = 0
   let overflowed = false
 
@@ -206,6 +240,11 @@ export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAc
           continue
         bucketFor(table, t.date).push(t.row)
         total++
+        if (trackDateBoundary) {
+          const prev = latestDate.get(table)
+          if (!prev || t.date > prev)
+            latestDate.set(table, t.date)
+        }
         if (total > maxRows) {
           overflowed = true
           return false
@@ -216,8 +255,35 @@ export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAc
     drain() {
       const out = buckets
       buckets = new Map()
+      latestDate.clear()
       total = 0
       overflowed = false
+      return out
+    },
+    drainCompleted() {
+      const out = new Map<TableName, Map<string, Row[]>>()
+      if (!trackDateBoundary)
+        return out
+      for (const [table, byDate] of buckets) {
+        const latest = latestDate.get(table)
+        if (!latest)
+          continue
+        let outBy: Map<string, Row[]> | undefined
+        for (const [date, dateRows] of byDate) {
+          if (date < latest) {
+            if (!outBy) {
+              outBy = new Map()
+              out.set(table, outBy)
+            }
+            outBy.set(date, dateRows)
+            total -= dateRows.length
+          }
+        }
+        if (outBy) {
+          for (const date of outBy.keys())
+            byDate.delete(date)
+        }
+      }
       return out
     },
   }

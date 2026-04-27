@@ -2,6 +2,8 @@ import type { AsyncDuckDB, AsyncDuckDBConnection, DuckDBBundles } from '@duckdb/
 import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
 
 import { analyzeInBrowser } from '@gscdump/engine-duckdb-node'
+import { arrowToRows as toRows } from '@gscdump/engine/arrow'
+import { sqlEscape } from '@gscdump/engine/sql'
 
 export interface QueryResult {
   rows: Record<string, unknown>[]
@@ -65,6 +67,13 @@ export interface AttachParquetUrlTablesOptions {
    * behavior from the value itself.
    */
   version?: number | string
+  /**
+   * Called once per parquet file after it's been fetched and registered with
+   * DuckDB. Fires in non-deterministic order (Promise.all under the hood).
+   * Used by UI progress indicators to tick a per-site counter; a no-op
+   * default keeps the hot path free.
+   */
+  onFileAttached?: (info: { table: string, index: number, total: number }) => void
 }
 
 export interface AttachSingleTableOptions {
@@ -106,34 +115,12 @@ export interface BrowserAnalysisRuntime {
   close: () => Promise<void>
 }
 
-interface ArrowLikeRow {
-  toJSON?: () => Record<string, unknown>
-}
-
-interface ArrowLikeTable {
-  toArray: () => ArrowLikeRow[]
-}
-
-function escapeSqlString(value: string): string {
-  return value.replace(/'/g, '\'\'')
-}
-
-function toRows(result: unknown): Record<string, unknown>[] {
-  return (result as ArrowLikeTable)
-    .toArray()
-    .map((row) => {
-      if (typeof row.toJSON === 'function')
-        return row.toJSON()
-      return row as Record<string, unknown>
-    })
-}
-
 function fileName(table: string, index: number, provided?: string): string {
   return provided ?? `${table}_${index}.parquet`
 }
 
 function readParquetViewSql(schema: string, table: string, files: string[]): string {
-  const escaped = files.map(name => `'${escapeSqlString(name)}'`).join(', ')
+  const escaped = files.map(name => `'${sqlEscape(name)}'`).join(', ')
   return `CREATE OR REPLACE VIEW ${schema}.${table} AS SELECT * FROM read_parquet([${escaped}], union_by_name = true)`
 }
 
@@ -213,6 +200,7 @@ export async function attachParquetUrlTables(
     schema = 'main',
     fetchInit,
     version,
+    onFileAttached,
   } = options
 
   const flat: Array<{ table: string, url: string, index: number }> = []
@@ -225,21 +213,42 @@ export async function attachParquetUrlTables(
       flat.push({ table, url: urls[i]!, index: i })
   }
 
+  // Per-table fetch resilience: a single 404/500 in one table's URL list
+  // must not take down every other table's view. Track failures by table
+  // and drop only the offenders — the surviving tables still get a view.
+  const tableFailures = new Map<string, Error>()
+  const total = flat.length
   await Promise.all(flat.map(async ({ table, url, index }) => {
-    const response = await fetchImpl(url, fetchInit)
-    if (!response.ok)
-      throw new Error(`fetch ${url} failed: ${response.status}`)
-    const bytes = new Uint8Array(await response.arrayBuffer())
-    await db.registerFileBuffer(fileName(table, index), bytes)
+    if (tableFailures.has(table))
+      return
+    await fetchImpl(url, fetchInit).then(async (response) => {
+      if (!response.ok)
+        throw new Error(`fetch ${url} failed: ${response.status}`)
+      const bytes = new Uint8Array(await response.arrayBuffer())
+      await db.registerFileBuffer(fileName(table, index), bytes)
+      onFileAttached?.({ table, index, total })
+    }).catch((err) => {
+      tableFailures.set(table, err instanceof Error ? err : new Error(String(err)))
+    })
   }))
 
   const attached: string[] = []
   for (const table of Object.keys(counts)) {
+    if (tableFailures.has(table))
+      continue
     const names: string[] = []
     for (let i = 0; i < counts[table]!; i++)
       names.push(fileName(table, i))
     await conn.query(readParquetViewSql(schema, table, names))
     attached.push(table)
+  }
+  if (tableFailures.size > 0) {
+    // Surface the failures so consumers can log / warn rather than silently
+    // miss a view. The runtime throws later with a clear "does not exist"
+    // error when a query hits the missing table; this is the authoritative
+    // upstream signal for why.
+    for (const [table, err] of tableFailures)
+      console.warn(`[gscdump/engine-wasm] dropped table "${table}" — ${err.message}`)
   }
 
   return {
@@ -291,7 +300,7 @@ export async function listAttachedTables(
   schema: string = 'main',
 ): Promise<string[]> {
   const result = await conn.query(
-    `SELECT table_name FROM information_schema.tables WHERE table_schema = '${escapeSqlString(schema)}'`,
+    `SELECT table_name FROM information_schema.tables WHERE table_schema = '${sqlEscape(schema)}'`,
   )
   return toRows(result).map(r => String(r.table_name))
 }
@@ -310,7 +319,7 @@ export function createBrowserAnalysisRuntime(
   // rolling promise so later callers queue behind earlier ones.
   let chain: Promise<unknown> = Promise.resolve()
 
-  async function cancelOnAbort(signal: AbortSignal | undefined, work: Promise<unknown>) {
+  async function cancelOnAbort(signal: AbortSignal | undefined, work: Promise<unknown>): Promise<unknown> {
     if (!signal)
       return work
     if (signal.aborted) {
@@ -318,7 +327,7 @@ export function createBrowserAnalysisRuntime(
       conn.cancelSent().catch(() => {})
       throw signal.reason ?? new DOMException('aborted', 'AbortError')
     }
-    const onAbort = () => {
+    const onAbort = (): void => {
       conn.cancelSent().catch(() => {})
     }
     signal.addEventListener('abort', onAbort, { once: true })
@@ -330,7 +339,7 @@ export function createBrowserAnalysisRuntime(
     }
   }
 
-  async function runParameterized(sql: string, params: readonly unknown[] | undefined, signal?: AbortSignal) {
+  async function runParameterized(sql: string, params: readonly unknown[] | undefined, signal?: AbortSignal): Promise<unknown> {
     signal?.throwIfAborted()
     const work = (async () => {
       if (!params || params.length === 0)

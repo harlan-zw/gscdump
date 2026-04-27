@@ -1,10 +1,7 @@
 import type { DimensionFilterGroup, SearchAnalyticsQuery } from '../core/types'
-import type { BuilderState, DateOperator, Filter, FilterInput, InternalFilter, JsonFilter, MetricOperator, QueryParamName, SpecialOperator } from './types'
-
-const DATE_OPERATORS: DateOperator[] = ['gte', 'gt', 'lte', 'lt', 'between']
-const METRIC_OPERATORS: MetricOperator[] = ['metricGte', 'metricGt', 'metricLte', 'metricLt', 'metricBetween']
-const SPECIAL_OPERATORS: SpecialOperator[] = ['topLevel']
-const QUERY_PARAMS: QueryParamName[] = ['searchType']
+import type { BuilderState, Filter, FilterInput, InternalFilter, JsonFilter } from './types'
+import { addDays } from '../core/gsc-dates'
+import { isDateOperator, isMetricOperator, isQueryParam, isSpecialOperator } from './operator-meta'
 
 // Check if value is a JSON filter (serialized) vs a real Filter object
 export function isJsonFilter(value: unknown): value is JsonFilter {
@@ -31,35 +28,85 @@ export function parseJsonFilter(json: JsonFilter): Filter<any> {
   } as Filter<any>
 }
 
-// Normalize input to Filter (handles both Filter and JsonFilter)
-function normalizeFilter(input?: FilterInput): Filter<any> | undefined {
+// Wire-format filter shape used by partner clients (e.g. nuxtseo.com pro).
+// Groups are `{ type: 'and' | 'or', filters: [...] }`; leaves are
+// `{ type: <op>, column, value, from, to }`. The SDK's branded `Filter<any>`
+// shape has `_filters`, `_nestedGroups`, `_groupType` and `dimension`/
+// `operator`/`expression` on leaves. Convert here so a single normalize step
+// handles both formats uniformly.
+interface AltFilter {
+  type?: string
+  column?: string
+  from?: string
+  to?: string
+  value?: string
+  filters?: AltFilter[]
+}
+
+function isWireGroupType(type: string | undefined): type is 'and' | 'or' {
+  return type === 'and' || type === 'or'
+}
+
+function convertWireLeaf(alt: AltFilter): InternalFilter | null {
+  if (!alt.column || !alt.type || isWireGroupType(alt.type))
+    return null
+  const f: InternalFilter = {
+    dimension: alt.column as InternalFilter['dimension'],
+    operator: alt.type as InternalFilter['operator'],
+    expression: alt.type === 'between' ? (alt.from ?? '') : (alt.value ?? ''),
+  }
+  if (alt.type === 'between' && alt.to)
+    f.expression2 = alt.to
+  return f
+}
+
+function convertWireGroup(alt: AltFilter): Filter<any> | null {
+  if (!isWireGroupType(alt.type)) {
+    const leaf = convertWireLeaf(alt)
+    return leaf ? ({ _filters: [leaf] } as Filter<any>) : null
+  }
+  const leaves: InternalFilter[] = []
+  const nested: Filter<any>[] = []
+  for (const child of alt.filters ?? []) {
+    if (isWireGroupType(child.type)) {
+      const sub = convertWireGroup(child)
+      if (sub)
+        nested.push(sub)
+    }
+    else {
+      const leaf = convertWireLeaf(child)
+      if (leaf)
+        leaves.push(leaf)
+    }
+  }
+  if (leaves.length === 0 && nested.length === 0)
+    return null
+  return {
+    _filters: leaves,
+    _nestedGroups: nested.length > 0 ? nested : undefined,
+    _groupType: alt.type,
+  } as Filter<any>
+}
+
+function isWireFilter(input: unknown): input is AltFilter {
+  if (!input || typeof input !== 'object')
+    return false
+  const o = input as Record<string, unknown>
+  if ('_filters' in o)
+    return false
+  return ('type' in o && typeof o.type === 'string')
+    || ('filters' in o && Array.isArray(o.filters))
+}
+
+// Normalize input to Filter (handles SDK Filter, JsonFilter, and partner
+// wire format `{ type, filters | column, value, from, to }`).
+export function normalizeFilter(input?: FilterInput): Filter<any> | undefined {
   if (!input)
     return undefined
-  // JsonFilter has _filters but lacks the symbol brand
-  // We can just treat it as Filter since we only access _filters/_nestedGroups/_groupType
+  if (isWireFilter(input))
+    return convertWireGroup(input as AltFilter) ?? undefined
+  // SDK Filter / JsonFilter both expose `_filters` — pass through.
   return input as Filter<any>
-}
-
-function isMetricOperator(op: string): boolean {
-  return METRIC_OPERATORS.includes(op as MetricOperator)
-}
-
-function isSpecialOperator(op: string): boolean {
-  return SPECIAL_OPERATORS.includes(op as SpecialOperator)
-}
-
-function isDateOperator(op: string): op is DateOperator {
-  return DATE_OPERATORS.includes(op as DateOperator)
-}
-
-function isQueryParam(dim: string): dim is QueryParamName {
-  return QUERY_PARAMS.includes(dim as QueryParamName)
-}
-
-function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr)
-  d.setDate(d.getDate() + days)
-  return d.toISOString().split('T')[0]
 }
 
 interface FilterExtraction {
