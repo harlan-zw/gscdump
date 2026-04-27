@@ -49,42 +49,37 @@ each layer mode.
 
 ## Open work (prioritized)
 
-### P0 — ship blockers
+### P1 — consumer adoption
 
-1. **Publish `@gscdump/analysis` to npm.** Still `link:` in gscdump.com.
-   Blocks deploys and keeps the `SQL<unknown>` module-identity trap alive.
-   Zero prerequisites. Run `pnpm release` (bumpp across `packages/*`).
-
-### P1 — layer 1.0 path
-
-2. **Publish `@gscdump/nuxt-analytics@1.0.0`.** Engine + layer contract
-   tests now in place; remaining gates are P0.1 publish + a green CI run
-   that exercises all three layer modes end-to-end.
-
-### P2 — consumer adoption
-
-3. **Phase 3: migrate `gscdump.com` to consume `@gscdump/nuxt-analytics`**
-   — delete duplicated files, register session auth provider, origin-mode
-   config, feature-flagged rollout. Blocked on Phase 0 audit fixes in the
-   `gscdump.com` repo.
-4. **Phase 5: onboard `nuxtseo.com` as consumer-mode adopter** — layer
+1. **Phase 3: migrate `gscdump.com` to consume `@gscdump/nuxt-analytics@^0.5`**
+   — swap `link:@gscdump/*` for `^0.5.0`, delete duplicated files,
+   register session auth provider, origin-mode config, feature-flagged
+   rollout. Blocked on Phase 0 audit fixes in the `gscdump.com` repo.
+2. **Phase 5: onboard `nuxtseo.com` as consumer-mode adopter** — layer
    auth provider resolving pro-user GSC credentials, delete ~1000 lines of
    `useProGscdump*` composables, snapshot-test pro dashboard pages.
-   Depends on 2.
+   Depends on 1.
+
+### P2 — 1.0 cut
+
+3. **Publish `@gscdump/nuxt-analytics@1.0.0`** once the gscdump.com
+   adoption proves the API surface in production. Engine + layer contract
+   tests already in place; the major bump signals API stability after at
+   least one real consumer migration validates it.
 
 ### P3 — polish
 
-5. **Playwright smoke on example** — boot under each mode and assert the
+4. **Playwright smoke on example** — boot under each mode and assert the
    `[data-testid=analytics-mode]` indicator matches. Pairs with the
    existing layer-mode contract test in `tests/example-modes.test.ts` to
    cover behavior beyond config-time validation.
-6. **Layer page-primitive refactor** — `PageHeader`, `DashboardPage`,
+5. **Layer page-primitive refactor** — `PageHeader`, `DashboardPage`,
    `SectionHeader` primitives already in use on countries, insights,
    search-appearance, indexing (list + drill-down), sitemaps (list +
    drill-down). Remaining 6 pages with inline markup: overview
    (`index.vue`), analyze, pages list/detail, queries list/detail.
-   Refactor alongside 3 / 4 adoption.
-7. **Ongoing policy**: every layer change updates example in same PR;
+   Refactor alongside 1 / 2 adoption.
+6. **Ongoing policy**: every layer change updates example in same PR;
    breaking = major bump; shared telemetry.
 
 ### Deferred
@@ -152,8 +147,13 @@ each layer mode.
 - `tests/layer-file-count.test.ts` enforces a 90-file budget on
   `@gscdump/nuxt-analytics`; currently at 74 — flags inadvertent layer
   growth.
+- Released `@gscdump/*@0.5.0` (analysis, engine + adapters,
+  nuxt-analytics, gscdump, cli, mcp). gscdump.com now has a real npm
+  source to pull from instead of `link:`.
 
 ## Next action
 
-Publish `@gscdump/analysis` (P0.1). Layer 1.0 publish then unblocks once
-CI runs the new contract + mode tests on a clean main.
+`@gscdump/*@0.5.0` shipped 2026-04-27 (analysis, engine, engine-wasm,
+engine-duckdb-node, engine-sqlite, nuxt-analytics, gscdump, cli, mcp).
+Phase 0 audit fixes on `gscdump.com` are the unblock for P1.1; once
+green, swap `link:` → `^0.5.0` and start the file-deduplication pass.

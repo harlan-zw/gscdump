@@ -10,8 +10,7 @@
  * shift introduced a discrepancy.
  */
 
-import type { Row } from '@gscdump/engine'
-import type { TenantCtx } from '@gscdump/engine/contracts'
+import type { Row, TenantCtx } from '@gscdump/engine/contracts'
 import type { BuilderState } from 'gscdump/query'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
