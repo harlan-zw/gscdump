@@ -1,6 +1,8 @@
 export { analyzeFromSource, AnalyzerCapabilityError } from './analyze-from-source'
 export { createBrowserQuerySource } from './browser'
 export type { BrowserQueryRunner } from './browser'
+export { createCompositeSource } from './composite'
+export type { CompositeSourceOptions } from './composite'
 export { createEngineQuerySource, ENGINE_QUERY_CAPABILITIES, runAnalyzerWithEngine } from './engine'
 export type { EngineQuerySourceOptions } from './engine'
 export { createGscApiQuerySource, GSC_API_CAPABILITIES } from './gsc'
@@ -18,6 +20,8 @@ export type {
 } from './gsc-rollup-synth'
 export { createInMemoryQuerySource, IN_MEMORY_DEFAULT_CAPABILITIES } from './in-memory'
 export type { InMemoryQuerySourceOptions } from './in-memory'
+export { canProxyToGsc, createLiveGscSource } from './live'
+export type { CreateLiveGscSourceOptions } from './live'
 export {
   analyzeBrandSegmentationFromSource,
   analyzeClusteringFromSource,

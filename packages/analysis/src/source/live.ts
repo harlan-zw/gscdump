@@ -1,19 +1,19 @@
-// Live GSC API query source. Wraps `@gscdump/analysis`'s
-// `createGscApiQuerySource` with a host-supplied access-token getter so
-// token refresh stays the host's concern (encryption, partner credentials,
-// session lifetime — none of which the layer should know about).
+// Live GSC API query source. Wraps `createGscApiQuerySource` with a
+// host-supplied access-token getter so token refresh stays the host's concern
+// (encryption, partner credentials, session lifetime — none of which this
+// package should know about).
 //
-// Used by:
+// Used by host apps:
 //   - free-tier flows (no engine data → everything goes live)
 //   - pro flows when a query's date range falls outside the synced window
 //     and is GSC-answerable (via `createCompositeSource`)
 
-import type { AnalysisQuerySource } from '@gscdump/analysis'
 import type { GoogleSearchConsoleClient } from 'gscdump'
 import type { BuilderState } from 'gscdump/query'
-import { createGscApiQuerySource } from '@gscdump/analysis'
+import type { AnalysisQuerySource } from './types'
 import { googleSearchConsole } from 'gscdump'
 import { extractMetricFilters, extractSpecialOperatorFilters } from 'gscdump/query'
+import { createGscApiQuerySource } from './gsc'
 
 // Dimensions the GSC API can't produce (engine-derived).
 const PRO_ONLY_DIMENSIONS = new Set<string>(['queryCanonical', 'page_keywords'])

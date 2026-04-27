@@ -2,7 +2,7 @@
   "name": "@gscdump/nuxt-analytics",
   "type": "module",
   "version": "0.6.2",
-  "description": "Nuxt layer: GSC analytics UI + server handlers + DuckDB integration. Consumed by gscdump.com (origin mode) and nuxtseo.com (consumer mode).",
+  "description": "Nuxt layer: GSC analytics UI + DuckDB-WASM integration. Frontend-only; server primitives live in @gscdump/analysis, gscdump, and host apps.",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
@@ -28,10 +28,6 @@
       "types": "./module.ts",
       "import": "./module.ts"
     },
-    "./schema": {
-      "types": "./server/utils/analytics/schema.ts",
-      "import": "./server/utils/analytics/schema.ts"
-    },
     "./routing": {
       "types": "./server/utils/routing.ts",
       "import": "./server/utils/routing.ts"
@@ -43,10 +39,6 @@
     "./internal/*": {
       "types": "./server/internal/*.ts",
       "import": "./server/internal/*.ts"
-    },
-    "./server/utils/*": {
-      "types": "./server/utils/*.ts",
-      "import": "./server/utils/*.ts"
     }
   },
   "main": "./nuxt.config.ts",

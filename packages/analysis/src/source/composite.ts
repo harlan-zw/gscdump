@@ -1,13 +1,13 @@
 // Composite analytics source: engine first, live GSC fallback for queries
-// whose date range falls outside the site's synced window AND can be
-// answered by GSC's native API (no metric filters, no engine-derived dimensions).
+// whose date range falls outside the site's synced window AND can be answered
+// by GSC's native API (no metric filters, no engine-derived dimensions).
 //
 // SQL execution always routes to the engine (GSC API has no SQL surface).
 
-import type { AnalysisQuerySource, SqlQuerySource } from '@gscdump/analysis'
 import type { BuilderState } from 'gscdump/query'
+import type { AnalysisQuerySource, SqlQuerySource } from './types'
 import { extractDateRange } from 'gscdump/query'
-import { canProxyToGsc } from './live-source'
+import { canProxyToGsc } from './live'
 
 export interface CompositeSourceOptions {
   engine: SqlQuerySource
