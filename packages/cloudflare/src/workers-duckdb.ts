@@ -15,7 +15,7 @@ import type {
   QueryExecutor,
   Row,
 } from '@gscdump/engine'
-import type { AnalyticsEnv } from '../utils/analytics/env'
+import type { AnalyticsEnv } from './env'
 import { bindLiterals, canonicalEmptyParquetSchema } from '@gscdump/engine'
 import { createHyparquetCodec, decodeParquetToRows } from '@gscdump/engine/hyparquet'
 

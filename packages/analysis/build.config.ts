@@ -36,5 +36,10 @@ export default defineBuildConfig({
       input: ['./src/period/index.ts'],
       outDir: './dist',
     },
+    {
+      type: 'bundle',
+      input: ['./src/routing/index.ts'],
+      outDir: './dist',
+    },
   ],
 })

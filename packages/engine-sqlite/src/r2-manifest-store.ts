@@ -19,7 +19,7 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import { inferSearchType } from '@gscdump/engine'
 import { and, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm'
-import { r2Locks, r2Manifest, r2SyncStates, r2Watermarks } from './schema'
+import { r2Locks, r2Manifest, r2SyncStates, r2Watermarks } from './r2-manifest-schema'
 
 // Minimal DB contract — we only need .select / .insert / .update / .delete / .batch
 // over the four tables the store touches. DrizzleD1Database covers all of them

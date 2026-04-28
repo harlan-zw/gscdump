@@ -7,7 +7,7 @@
 // Requires R2 S3 API token (secrets: R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)
 // plus CLOUDFLARE_ACCOUNT_ID to build the endpoint hostname.
 
-import type { AnalyticsEnv } from '../utils/analytics/env'
+import type { AnalyticsEnv } from './env'
 import { AwsClient } from 'aws4fetch'
 import { createError } from 'h3'
 

@@ -54,6 +54,9 @@ catalogs:
     drizzle-orm:
       specifier: ^0.45.2
       version: 0.45.2
+    h3:
+      specifier: ^1.15.11
+      version: 1.15.11
     hyparquet:
       specifier: ^1.25.6
       version: 1.25.6
@@ -328,6 +331,28 @@ importers:
         specifier: catalog:dev-test
         version: 4.1.5(@types/node@25.6.0)(vite@7.3.1(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3))
 
+  packages/cloudflare:
+    dependencies:
+      '@gscdump/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@gscdump/engine-sqlite':
+        specifier: workspace:*
+        version: link:../engine-sqlite
+      aws4fetch:
+        specifier: 'catalog:'
+        version: 1.0.20
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: 'catalog:'
+        version: 4.20260426.1
+      h3:
+        specifier: 'catalog:'
+        version: 1.15.11
+      typescript:
+        specifier: catalog:dev-build
+        version: 6.0.3
+
   packages/engine:
     dependencies:
       drizzle-orm:
@@ -483,12 +508,6 @@ importers:
       '@gscdump/analysis':
         specifier: workspace:*
         version: link:../analysis
-      '@gscdump/engine':
-        specifier: workspace:*
-        version: link:../engine
-      '@gscdump/engine-wasm':
-        specifier: workspace:*
-        version: link:../engine-wasm
       '@nuxt/ui':
         specifier: 'catalog:'
         version: 4.7.0(@internationalized/date@3.12.1)(@internationalized/number@3.6.6)(@tiptap/extensions@3.22.4(@tiptap/core@3.22.4(@tiptap/pm@3.22.4))(@tiptap/pm@3.22.4))(@tiptap/y-tiptap@3.0.3(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.8)(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30))(aws4fetch@1.0.20)(change-case@5.4.4)(db0@0.3.4(better-sqlite3@12.9.0)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260426.1)(better-sqlite3@12.9.0)))(embla-carousel@8.6.0)(ioredis@5.10.1)(magicast@0.5.2)(tailwindcss@4.2.4)(typescript@6.0.3)(vite@7.3.1(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3))(vue-router@5.0.4(@vue/compiler-sfc@3.5.33)(vue@3.5.33(typescript@6.0.3)))(vue@3.5.33(typescript@6.0.3))(yjs@13.6.30)(zod@4.3.6)
@@ -504,15 +523,9 @@ importers:
       '@vueuse/nuxt':
         specifier: 'catalog:'
         version: 14.2.1(magicast@0.5.2)(nuxt@4.4.2(@babel/core@7.29.0)(@babel/plugin-syntax-jsx@7.28.6(@babel/core@7.29.0))(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@parcel/watcher@2.5.6)(@types/node@25.6.0)(@vue/compiler-sfc@3.5.33)(aws4fetch@1.0.20)(better-sqlite3@12.9.0)(cac@6.7.14)(db0@0.3.4(better-sqlite3@12.9.0)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260426.1)(better-sqlite3@12.9.0)))(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260426.1)(better-sqlite3@12.9.0))(eslint@10.2.1(jiti@2.6.1))(ioredis@5.10.1)(lightningcss@1.32.0)(magicast@0.5.2)(optionator@0.9.4)(rolldown@1.0.0-rc.17)(rollup-plugin-visualizer@7.0.1(rolldown@1.0.0-rc.17)(rollup@4.60.1))(rollup@4.60.1)(srvx@0.11.15)(terser@5.44.1)(tsx@4.21.0)(typescript@6.0.3)(vite@7.3.1(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3))(vue-tsc@3.2.2(typescript@6.0.3))(yaml@2.8.3))(vue@3.5.33(typescript@6.0.3))
-      aws4fetch:
-        specifier: 'catalog:'
-        version: 1.0.20
       defu:
         specifier: catalog:deps
         version: 6.1.7
-      drizzle-orm:
-        specifier: 'catalog:'
-        version: 0.45.2(@cloudflare/workers-types@4.20260426.1)(better-sqlite3@12.9.0)
       gscdump:
         specifier: workspace:*
         version: link:../gscdump
@@ -523,9 +536,6 @@ importers:
         specifier: 'catalog:'
         version: 4.2.4
     devDependencies:
-      '@cloudflare/workers-types':
-        specifier: 'catalog:'
-        version: 4.20260426.1
       nuxt:
         specifier: 'catalog:'
         version: 4.4.2(@babel/core@7.29.0)(@babel/plugin-syntax-jsx@7.28.6(@babel/core@7.29.0))(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@parcel/watcher@2.5.6)(@types/node@25.6.0)(@vue/compiler-sfc@3.5.33)(aws4fetch@1.0.20)(better-sqlite3@12.9.0)(cac@6.7.14)(db0@0.3.4(better-sqlite3@12.9.0)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260426.1)(better-sqlite3@12.9.0)))(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260426.1)(better-sqlite3@12.9.0))(eslint@10.2.1(jiti@2.6.1))(ioredis@5.10.1)(lightningcss@1.32.0)(magicast@0.5.2)(optionator@0.9.4)(rolldown@1.0.0-rc.17)(rollup-plugin-visualizer@7.0.1(rolldown@1.0.0-rc.17)(rollup@4.60.1))(rollup@4.60.1)(srvx@0.11.15)(terser@5.44.1)(tsx@4.21.0)(typescript@6.0.3)(vite@7.3.1(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3))(vue-tsc@3.2.2(typescript@6.0.3))(yaml@2.8.3)

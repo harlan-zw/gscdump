@@ -19,8 +19,6 @@
 // migrationReadFrom is a separate knob so we can keep dual-writing while
 // flipping read path on/off during incident response.
 
-import type { AnalyticsEnv } from './analytics/env'
-
 export type MigrationPhase = 'd1' | 'dual' | 'r2'
 export type MigrationReadFrom = 'd1' | 'r2'
 
@@ -29,6 +27,15 @@ export interface RoutingInputs {
   userReadFrom: MigrationReadFrom | string | null | undefined
   sitePhase?: MigrationPhase | string | null
   siteReadFrom?: MigrationReadFrom | string | null
+}
+
+// Structural env shape — only the routing flags this module reads.
+// Decouples this package from `@gscdump/cloudflare`'s `AnalyticsEnv`, which
+// is a superset. The full type structurally satisfies this one, so callers
+// pass it directly.
+export interface RoutingEnv {
+  ANALYTICS_FORCE_D1?: string
+  R2_READS_ENABLED?: string
 }
 
 function isPhase(v: unknown): v is MigrationPhase {
@@ -55,7 +62,7 @@ export function resolveReadFrom(inputs: Pick<RoutingInputs, 'userReadFrom' | 'si
   return 'd1'
 }
 
-export function forceD1(env: Pick<AnalyticsEnv, 'ANALYTICS_FORCE_D1'>): boolean {
+export function forceD1(env: Pick<RoutingEnv, 'ANALYTICS_FORCE_D1'>): boolean {
   return env.ANALYTICS_FORCE_D1 === '1'
 }
 
@@ -63,13 +70,13 @@ export function forceD1(env: Pick<AnalyticsEnv, 'ANALYTICS_FORCE_D1'>): boolean 
 // D1 unless this env flag is explicitly set. Introduced after the ducklings
 // R2 httpfs incident (2026-04) so a stray UPDATE can't silently re-enable
 // the broken path.
-export function r2ReadsEnabled(env: Pick<AnalyticsEnv, 'R2_READS_ENABLED'>): boolean {
+export function r2ReadsEnabled(env: Pick<RoutingEnv, 'R2_READS_ENABLED'>): boolean {
   return env.R2_READS_ENABLED === '1'
 }
 
 export function shouldDualWrite(
   inputs: RoutingInputs,
-  env: Pick<AnalyticsEnv, 'ANALYTICS_FORCE_D1'>,
+  env: Pick<RoutingEnv, 'ANALYTICS_FORCE_D1'>,
 ): boolean {
   if (forceD1(env))
     return false
@@ -93,7 +100,7 @@ export function isAnalyticsTable(table: string): table is AnalyticsTable {
 // indexing, anything during forced-D1 mode) still go to D1.
 export function shouldWriteToD1(
   inputs: RoutingInputs,
-  env: Pick<AnalyticsEnv, 'ANALYTICS_FORCE_D1'>,
+  env: Pick<RoutingEnv, 'ANALYTICS_FORCE_D1'>,
   table: string,
 ): boolean {
   if (forceD1(env))
@@ -106,7 +113,7 @@ export function shouldWriteToD1(
 
 export function shouldReadFromR2(
   inputs: RoutingInputs,
-  env: Pick<AnalyticsEnv, 'ANALYTICS_FORCE_D1' | 'R2_READS_ENABLED'>,
+  env: Pick<RoutingEnv, 'ANALYTICS_FORCE_D1' | 'R2_READS_ENABLED'>,
 ): boolean {
   if (forceD1(env))
     return false

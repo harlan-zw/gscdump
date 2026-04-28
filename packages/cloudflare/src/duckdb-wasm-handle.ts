@@ -19,7 +19,7 @@ let handle: Promise<DuckDBHandle> | null = null
 async function initHandle(): Promise<DuckDBHandle> {
   throw new Error(
     'DuckDB-WASM handle not wired for Cloudflare Workers yet. '
-    + 'Complete server/internal/duckdb-wasm-handle.ts before enabling '
+    + 'Complete duckdb-wasm-handle.ts before enabling '
     + 'dual-write (user.migration_phase != \'d1\').',
   )
 }

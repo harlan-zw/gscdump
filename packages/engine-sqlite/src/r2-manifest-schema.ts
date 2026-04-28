@@ -8,15 +8,16 @@
 //
 // Host apps import these directly:
 //
-//   import { r2Manifest, r2Locks } from '@gscdump/nuxt-analytics/schema'
+//   import { r2Manifest, r2Locks } from '@gscdump/engine-sqlite'
 //
 // and include them in their drizzle config / migrations. Owning them here
 // keeps the migration story simple — the host's drizzle-kit picks up the
 // tables wherever they're imported from.
 //
-// The layer does NOT export `users` or `userSites` — those are host-identity
-// concerns. Routing helpers take the relevant fields (migrationPhase,
-// migrationReadFrom) as plain values, so the layer never sees a host user row.
+// The store does NOT export `users` or `userSites` — those are host-identity
+// concerns. Routing helpers (in @gscdump/analysis) take the relevant fields
+// (migrationPhase, migrationReadFrom) as plain values, so this layer never
+// sees a host user row.
 
 import { sql } from 'drizzle-orm'
 import { index, integer, primaryKey, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core'

@@ -31,6 +31,7 @@ catalog:
   aws4fetch: ^1.0.20
   better-sqlite3: ^12.9.0
   drizzle-orm: ^0.45.2
+  h3: ^1.15.11
   hyparquet: ^1.25.6
   hyparquet-writer: ^0.13.0
   js-yaml: ^4.1.1

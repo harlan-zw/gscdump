@@ -14,6 +14,32 @@ export {
   aggImpressions,
   aggPosition,
 } from './metrics'
+// R2 manifest mirror tables + D1-backed ManifestStore implementation.
+// Imported directly by host apps for drizzle-kit migration discovery.
+export {
+  r2Locks,
+  r2Manifest,
+  r2ShadowDiffs,
+  r2SyncStates,
+  r2Watermarks,
+  r2WriteErrors,
+} from './r2-manifest-schema'
+export type {
+  R2LockInsert,
+  R2LockSelect,
+  R2ManifestInsert,
+  R2ManifestSelect,
+  R2ShadowDiffInsert,
+  R2ShadowDiffSelect,
+  R2SyncStateInsert,
+  R2SyncStateSelect,
+  R2WatermarkInsert,
+  R2WatermarkSelect,
+  R2WriteErrorInsert,
+  R2WriteErrorSelect,
+} from './r2-manifest-schema'
+export { createD1ManifestStore } from './r2-manifest-store'
+export type { AnalyticsManifestDb } from './r2-manifest-store'
 export {
   createSqliteResolverAdapter,
   createSqliteResolverAdapterFromExecutor,
@@ -43,6 +69,7 @@ export {
   schema,
 } from './schema'
 export type { Schema } from './schema'
+
 export { resolveWindow } from '@gscdump/analysis/period'
 export type {
   ComparisonMode,

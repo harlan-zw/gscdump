@@ -5,7 +5,7 @@
 // range reads; a misaligned hint corrupts the reader. Signing pins the
 // (key, bytes) pair to something the server vouched for.
 
-import type { AnalyticsEnv } from '../utils/analytics/env'
+import type { AnalyticsEnv } from './env'
 
 const SIG_HEX_LEN = 16
 const keyCache = new WeakMap<object, Promise<CryptoKey>>()

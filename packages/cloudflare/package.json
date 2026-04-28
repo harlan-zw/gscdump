@@ -1,8 +1,8 @@
 {
-  "name": "@gscdump/engine-duckdb-node",
+  "name": "@gscdump/cloudflare",
   "type": "module",
   "version": "0.7.0",
-  "description": "Node DuckDB engine adapter for @gscdump/analysis — SQL analyzer dispatch over parquet via duckdb-node.",
+  "description": "Cloudflare-Workers-flavored helpers for the gscdump analytics stack: AnalyticsEnv binding contract, R2 SigV4 presigner, size-hint HMAC, DuckDB Workers shims, engine factory.",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
@@ -10,11 +10,11 @@
   },
   "license": "MIT",
   "funding": "https://github.com/sponsors/harlan-zw",
-  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/engine-duckdb-node#readme",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/cloudflare#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/harlan-zw/gscdump.git",
-    "directory": "packages/engine-duckdb-node"
+    "directory": "packages/cloudflare"
   },
   "bugs": {
     "url": "https://github.com/harlan-zw/gscdump/issues"
@@ -38,16 +38,19 @@
     "build": "obuild",
     "dev": "obuild --stub",
     "typecheck": "tsc --noEmit",
-    "test": "vitest --passWithNoTests",
     "prepack": "pnpm run build"
   },
+  "peerDependencies": {
+    "h3": "^1.15.0"
+  },
   "dependencies": {
-    "@gscdump/analysis": "workspace:*",
     "@gscdump/engine": "workspace:*",
-    "drizzle-orm": "catalog:",
-    "gscdump": "workspace:*"
+    "@gscdump/engine-sqlite": "workspace:*",
+    "aws4fetch": "catalog:"
   },
   "devDependencies": {
-    "vitest": "catalog:dev-test"
+    "@cloudflare/workers-types": "catalog:",
+    "h3": "catalog:",
+    "typescript": "catalog:dev-build"
   }
 }

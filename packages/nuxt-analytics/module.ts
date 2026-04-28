@@ -5,10 +5,10 @@
 //    with env-var fallbacks. The layer is a portable client; hosts pick where
 //    `/api/__gsc/*` calls go via `GSCDUMP_ANALYTICS_API_BASE`.
 //
-// Auth-provider wiring is NOT a Nuxt module hook — it's a direct function
-// call at Nitro boot. See server/utils/analytics/auth.ts for the contract.
-// Using a hook here would fire at build time, before the host's plugin has
-// a chance to register.
+// Auth-provider wiring is NOT a Nuxt module hook; the host wires its own
+// Nitro server handlers using primitives from @gscdump/cloudflare,
+// @gscdump/engine-sqlite, and @gscdump/analysis. Using a build-time hook
+// here would fire before the host's plugin has a chance to register.
 
 import process from 'node:process'
 import { defineNuxtModule } from '@nuxt/kit'
