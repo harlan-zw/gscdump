@@ -17,11 +17,23 @@ export function gscConsoleUrl(opts: GscConsoleUrlOpts): string {
   const base = 'https://search.google.com/search-console'
   const resource = opts.resource ?? 'performance'
   const params = new URLSearchParams()
-  params.set('resource_id', opts.siteLabel)
-  if (opts.page)
-    params.set('page', `*${opts.page}`)
-  if (opts.query)
-    params.set('query', `*${opts.query}`)
+  // Default `sc-domain:` prefix when caller passes a bare hostname.
+  const siteLabel = /^(https?:|sc-domain:)/.test(opts.siteLabel)
+    ? opts.siteLabel
+    : `sc-domain:${opts.siteLabel}`
+  params.set('resource_id', siteLabel)
+  if (resource === 'url-inspection') {
+    // Inspect tool expects the absolute URL under `id`, not Performance's
+    // `page=*<url>` wildcard filter.
+    if (opts.page)
+      params.set('id', opts.page)
+  }
+  else {
+    if (opts.page)
+      params.set('page', `*${opts.page}`)
+    if (opts.query)
+      params.set('query', `*${opts.query}`)
+  }
   const path = resource === 'performance'
     ? '/performance/search-analytics'
     : resource === 'url-inspection'
