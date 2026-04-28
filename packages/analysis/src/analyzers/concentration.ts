@@ -6,16 +6,16 @@
  * shapes and reduces over the corresponding row set.
  */
 
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row, TableName } from '@gscdump/engine/contracts'
 import type { BuilderState } from 'gscdump/query'
 import type { KeywordRow, PageRow } from '../types'
-import type { AnalysisParams } from '@gscdump/engine/analysis-types'
+import { num } from '@gscdump/engine/analysis-types'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
+import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { keywordsQueryState, pagesQueryState } from '../analyzer/adapt-rows'
-import { defineAnalyzer } from '@gscdump/engine/analyzer'
-import { periodOf } from '@gscdump/engine/period'
-import { num } from '@gscdump/engine/analysis-types'
 
 export type ConcentrationRiskLevel = 'low' | 'medium' | 'high'
 

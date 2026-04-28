@@ -12,12 +12,12 @@
  */
 
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
+import { num } from '@gscdump/engine/analysis-types'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
+import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { keywordsQueryState } from '../analyzer/adapt-rows'
-import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { paginateInMemory } from '../analyzer/paginate'
-import { periodOf } from '@gscdump/engine/period'
-import { num } from '@gscdump/engine/analysis-types'
 
 const DEFAULT_ROW_LIMIT = 25_000
 

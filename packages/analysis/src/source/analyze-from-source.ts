@@ -7,8 +7,8 @@
  * isolation foot-guns that come with side-effect registration.
  */
 
-import type { AnalyzerRegistry } from '@gscdump/engine/analyzer'
 import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
+import type { AnalyzerRegistry } from '@gscdump/engine/analyzer'
 import type { AnalysisQuerySource } from '@gscdump/engine/resolver'
 
 import { runAnalyzerFromSource } from '@gscdump/engine/analyzer'

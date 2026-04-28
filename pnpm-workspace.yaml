@@ -20,7 +20,7 @@ catalog:
   '@duckdb/node-api': 1.5.1-r.2
   '@huggingface/transformers': ^4.2.0
   '@modelcontextprotocol/sdk': ^1.29.0
-  '@nuxt/ui': ^4.7.0
+  '@nuxt/ui': ^4.7.1
   '@types/js-yaml': ^4.0.9
   '@types/node': ^25.6.0
   '@types/proper-lockfile': ^4.1.4
@@ -33,7 +33,7 @@ catalog:
   drizzle-orm: ^0.45.2
   h3: ^1.15.11
   hyparquet: ^1.25.6
-  hyparquet-writer: ^0.13.0
+  hyparquet-writer: ^0.14.0
   js-yaml: ^4.1.1
   nuxt: ^4.4.2
   tailwindcss: ^4.2.4
@@ -64,7 +64,7 @@ catalogs:
     '@antfu/eslint-config': ^8.2.0
     eslint: ^10.2.1
   dev-test:
-    '@nuxt/test-utils': ^4.0.2
+    '@nuxt/test-utils': ^4.0.3
     vitest: ^4.1.5
 onlyBuiltDependencies:
   - '@parcel/watcher'

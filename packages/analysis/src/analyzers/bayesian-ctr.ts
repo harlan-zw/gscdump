@@ -4,12 +4,12 @@
  * Migrated from `engine-duckdb-node/src/analyzers/bayesian-ctr.ts`.
  */
 
-import type { Row } from '@gscdump/engine/contracts'
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
-import { enumeratePartitions } from '@gscdump/engine/planner'
-import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
+import type { Row } from '@gscdump/engine/contracts'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
+import { enumeratePartitions } from '@gscdump/engine/planner'
+import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 
 function num(v: unknown): number {
   if (typeof v === 'number')

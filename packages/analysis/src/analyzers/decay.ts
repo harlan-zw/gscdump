@@ -5,16 +5,16 @@
  * the row reducer omits `series` (matches existing live-GSC behavior).
  */
 
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
 import type { PageRow } from '../types'
-import type { AnalysisParams } from '@gscdump/engine/analysis-types'
+import { num } from '@gscdump/engine/analysis-types'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
+import { comparisonOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { pagesQueryState } from '../analyzer/adapt-rows'
-import { defineAnalyzer } from '@gscdump/engine/analyzer'
-import { comparisonOf } from '@gscdump/engine/period'
 import { buildPeriodMap, createMetricSorter } from '../types'
-import { num } from '@gscdump/engine/analysis-types'
 
 export type DecaySortMetric = 'lostClicks' | 'declinePercent' | 'currentClicks'
 

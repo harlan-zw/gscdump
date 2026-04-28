@@ -4,13 +4,13 @@
  * Migrated from `engine-duckdb-node/src/analyzers/ctr-anomaly.ts`.
  */
 
-import type { Row } from '@gscdump/engine/contracts'
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
+import type { Row } from '@gscdump/engine/contracts'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
+import { defaultEndDate } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { daysAgo } from 'gscdump'
-import { defineAnalyzer } from '@gscdump/engine/analyzer'
-import { defaultEndDate } from '@gscdump/engine/period'
 
 function num(v: unknown): number {
   if (typeof v === 'number')

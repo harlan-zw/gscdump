@@ -15,9 +15,9 @@ import {
   createNodeDuckDBHandle,
   resetNodeDuckDB,
 } from '@gscdump/engine/node'
+import { runAnalyzerWithEngine as rawRunAnalyzerWithEngine } from '@gscdump/engine/source'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { defaultAnalyzerRegistry } from '../src/default-registry'
-import { runAnalyzerWithEngine as rawRunAnalyzerWithEngine } from '@gscdump/engine/source'
 
 function runAnalyzerWithEngine(
   deps: Parameters<typeof rawRunAnalyzerWithEngine>[0],

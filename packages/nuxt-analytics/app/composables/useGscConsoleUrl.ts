@@ -18,7 +18,7 @@ export function gscConsoleUrl(opts: GscConsoleUrlOpts): string {
   const resource = opts.resource ?? 'performance'
   const params = new URLSearchParams()
   // Default `sc-domain:` prefix when caller passes a bare hostname.
-  const siteLabel = /^(https?:|sc-domain:)/.test(opts.siteLabel)
+  const siteLabel = /^(?:https?:|sc-domain:)/.test(opts.siteLabel)
     ? opts.siteLabel
     : `sc-domain:${opts.siteLabel}`
   params.set('resource_id', siteLabel)

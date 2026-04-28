@@ -1,22 +1,23 @@
+import type { AnalysisPeriod, ComparisonPeriod } from '@gscdump/engine/period'
+import type { AnalysisQuerySource } from '@gscdump/engine/resolver'
+import type { TypedQuery } from '@gscdump/engine/source'
 import type { BrandSegmentationOptions, BrandSegmentationResult } from '../analyzers/brand'
 import type { ClusteringOptions, ClusteringResult } from '../analyzers/clustering'
 import type { ConcentrationOptions, ConcentrationResult } from '../analyzers/concentration'
 import type { DecayOptions, DecayResult } from '../analyzers/decay'
 import type { MoversOptions, MoversResult } from '../analyzers/movers'
+
 import type { OpportunityResult } from '../analyzers/opportunity'
 import type { SeasonalityOptions, SeasonalityResult } from '../analyzers/seasonality'
-import type { AnalysisPeriod, ComparisonPeriod } from '@gscdump/engine/period'
-
 import type { StrikingDistanceOptions, StrikingDistanceResult } from '../striking-distance'
+
 import type { DateRow, KeywordRow, PageRow } from '../types'
 import type {
   ComparisonQueryResult,
   QueryOptions,
   QueryResult,
 } from './shared-types'
-
-import type { AnalysisQuerySource } from '@gscdump/engine/resolver'
-import type { TypedQuery } from '@gscdump/engine/source'
+import { queryRows, typedQuery } from '@gscdump/engine/source'
 import { datesQueryState, keywordsQueryState, pagesQueryState } from '../analyzer/adapt-rows'
 import { analyzeBrandSegmentation } from '../analyzers/brand'
 import { analyzeClustering } from '../analyzers/clustering'
@@ -26,7 +27,6 @@ import { analyzeMovers } from '../analyzers/movers'
 import { opportunityAnalyzer } from '../analyzers/opportunity'
 import { analyzeSeasonality } from '../analyzers/seasonality'
 import { analyzeStrikingDistance } from '../striking-distance'
-import { queryRows, typedQuery } from '@gscdump/engine/source'
 
 interface OpportunityOptions {
   minImpressions?: number

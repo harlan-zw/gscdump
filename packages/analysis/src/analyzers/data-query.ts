@@ -6,10 +6,10 @@
  * (`"pages"`, `"keywords"`, ...) resolved against the attached schema.
  */
 
-import type { Row } from '@gscdump/engine/contracts'
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
-import { pgResolverAdapter } from '@gscdump/engine/resolver'
+import type { Row } from '@gscdump/engine/contracts'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
+import { pgResolverAdapter } from '@gscdump/engine/resolver'
 import { buildDataQueryPlan } from '../query'
 
 export type DataQueryResult = Row

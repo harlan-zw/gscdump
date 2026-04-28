@@ -6,15 +6,15 @@
  * downstream consumers continue to receive the same `meta.summary`.
  */
 
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
 import type { KeywordRow } from '../types'
-import type { AnalysisParams } from '@gscdump/engine/analysis-types'
+import { num } from '@gscdump/engine/analysis-types'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
+import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { keywordsQueryState } from '../analyzer/adapt-rows'
-import { defineAnalyzer } from '@gscdump/engine/analyzer'
-import { periodOf } from '@gscdump/engine/period'
-import { num } from '@gscdump/engine/analysis-types'
 
 export interface BrandSegmentationOptions {
   /** Brand terms to match against keywords (case-insensitive) */

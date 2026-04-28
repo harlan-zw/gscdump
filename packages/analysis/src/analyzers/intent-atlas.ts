@@ -7,14 +7,14 @@
  * joined as the cluster key).
  */
 
-import type { Row } from '@gscdump/engine/contracts'
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
+import type { Row } from '@gscdump/engine/contracts'
+import { num } from '@gscdump/engine/analysis-types'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
+import { defaultEndDate } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { daysAgo } from 'gscdump'
-import { defineAnalyzer } from '@gscdump/engine/analyzer'
-import { defaultEndDate } from '@gscdump/engine/period'
-import { num } from '@gscdump/engine/analysis-types'
 
 function str(v: unknown): string {
   return v == null ? '' : String(v)

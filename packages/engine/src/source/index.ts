@@ -4,9 +4,6 @@
  * dispatch uniformly via `runAnalyzerFromSource`.
  */
 
-export type { AttachedTableRunner, AttachedTableSourceOptions } from './attached-table'
-export { AttachedTableMissingError, createAttachedTableSource, rewriteForTableSource } from './attached-table'
-
 import type { BuilderState } from 'gscdump/query'
 import type { PlannerCapabilities } from 'gscdump/query/plan'
 import type { AnalysisParams, AnalysisResult } from '../analysis-types'
@@ -21,6 +18,9 @@ import type {
 import type { StorageEngine, TenantCtx } from '../storage'
 import { runAnalyzerFromSource } from '../analyzer/dispatch'
 import { assertDimensionsSupported, getFilterDimensions } from '../resolver'
+
+export type { AttachedTableRunner, AttachedTableSourceOptions } from './attached-table'
+export { AttachedTableMissingError, createAttachedTableSource, rewriteForTableSource } from './attached-table'
 
 function isMetricDimension(dim: string): dim is 'clicks' | 'impressions' | 'ctr' | 'position' {
   return ['clicks', 'impressions', 'ctr', 'position'].includes(dim)
