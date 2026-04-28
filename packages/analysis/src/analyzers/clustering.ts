@@ -8,13 +8,14 @@
  */
 
 import type { Row } from '@gscdump/engine/contracts'
-import type { AnalysisParams, KeywordRow } from '../types'
+import type { KeywordRow } from '../types'
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { keywordsQueryState } from '../analyzer/adapt-rows'
-import { defineAnalyzer } from '../analyzer/define'
-import { periodOf } from '../period'
-import { num } from '../types'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
+import { periodOf } from '@gscdump/engine/period'
+import { num } from '@gscdump/engine/analysis-types'
 
 export type ClusterType = 'prefix' | 'intent' | 'both'
 

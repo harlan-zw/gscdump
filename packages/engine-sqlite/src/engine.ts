@@ -1,7 +1,7 @@
 /**
  * SQLite engine: wraps a sqlite-proxy-style executor (D1, libsql, sqlite3+
  * regexp) as a {@link SqlQuerySource} bound to a tenant siteId. Driver glue
- * only — `createSqlQuerySource` in `@gscdump/analysis/query` owns the typed
+ * only; `createSqlQuerySource` in `@gscdump/engine/resolver` owns the typed
  * builder + raw-SQL plumbing.
  */
 

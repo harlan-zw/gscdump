@@ -13,7 +13,7 @@ Bundle: **5.3 kB / 1.4 kB gzipped**.
 ## Install
 
 ```bash
-npm install @gscdump/engine-sqlite @gscdump/analysis drizzle-orm
+npm install @gscdump/engine-sqlite @gscdump/engine drizzle-orm
 ```
 
 ## Usage
@@ -66,14 +66,14 @@ Always import `sql` from `@gscdump/engine-sqlite` — not `drizzle-orm` directly
 - `scopeFor(table, { siteId, window })` / `mergeScope()` — tenant scope predicates.
 - `gsc_pages` / `gsc_keywords` / `gsc_page_keywords` / `gsc_countries` / `gsc_devices` / `schema` — drizzle schema mirroring `gscdump/analytics` `SCHEMAS`.
 - `sqliteResolverAdapter` / `createSqliteResolverAdapter` / `probeSqliteRegex` — dialect adapter for the resolver kit.
-- `resolveWindow` (re-exported from `@gscdump/analysis/period`).
+- `resolveWindow` (re-exported from `@gscdump/engine/period`).
 
 ## Related
 
 - [`@gscdump/engine`](../engine) — Storage contracts + dialect-neutral resolver.
 - [`@gscdump/analysis`](../analysis) — Analyzer registry + dispatcher.
 - [`@gscdump/engine-duckdb-node`](../engine-duckdb-node) — Node DuckDB counterpart.
-- [`@gscdump/engine-wasm`](../engine-wasm) — Browser DuckDB-WASM counterpart.
+- [`@gscdump/engine-duckdb-wasm`](../engine-duckdb-wasm) — Browser DuckDB-WASM counterpart.
 
 ## License
 

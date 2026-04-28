@@ -23,35 +23,43 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
     },
     "./analyzer": {
       "types": "./dist/analyzer/index.d.mts",
-      "import": "./dist/analyzer/index.mjs"
+      "import": "./dist/analyzer/index.mjs",
+      "default": "./dist/analyzer/index.mjs"
     },
     "./registry": {
       "types": "./dist/default-registry.d.mts",
-      "import": "./dist/default-registry.mjs"
+      "import": "./dist/default-registry.mjs",
+      "default": "./dist/default-registry.mjs"
     },
     "./query": {
       "types": "./dist/query/index.d.mts",
-      "import": "./dist/query/index.mjs"
+      "import": "./dist/query/index.mjs",
+      "default": "./dist/query/index.mjs"
     },
     "./source": {
       "types": "./dist/source/index.d.mts",
-      "import": "./dist/source/index.mjs"
+      "import": "./dist/source/index.mjs",
+      "default": "./dist/source/index.mjs"
     },
     "./semantic": {
       "types": "./dist/semantic/index.d.mts",
-      "import": "./dist/semantic/index.mjs"
-    },
-    "./period": {
-      "types": "./dist/period/index.d.mts",
-      "import": "./dist/period/index.mjs"
+      "import": "./dist/semantic/index.mjs",
+      "default": "./dist/semantic/index.mjs"
     },
     "./routing": {
       "types": "./dist/routing/index.d.mts",
-      "import": "./dist/routing/index.mjs"
+      "import": "./dist/routing/index.mjs",
+      "default": "./dist/routing/index.mjs"
+    },
+    "./rollups": {
+      "types": "./dist/rollups.d.mts",
+      "import": "./dist/rollups.mjs",
+      "default": "./dist/rollups.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -79,9 +87,7 @@
   },
   "dependencies": {
     "@gscdump/engine": "workspace:*",
-    "@gscdump/engine-duckdb-node": "workspace:*",
-    "@gscdump/engine-sqlite": "workspace:*",
-    "@gscdump/engine-wasm": "workspace:*",
+    "@gscdump/engine-gsc-api": "workspace:*",
     "drizzle-orm": "catalog:",
     "gscdump": "workspace:*"
   },

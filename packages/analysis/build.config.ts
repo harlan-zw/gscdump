@@ -33,12 +33,12 @@ export default defineBuildConfig({
     },
     {
       type: 'bundle',
-      input: ['./src/period/index.ts'],
+      input: ['./src/routing/index.ts'],
       outDir: './dist',
     },
     {
       type: 'bundle',
-      input: ['./src/routing/index.ts'],
+      input: ['./src/rollups.ts'],
       outDir: './dist',
     },
   ],

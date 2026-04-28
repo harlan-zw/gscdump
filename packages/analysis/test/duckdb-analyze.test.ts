@@ -17,7 +17,7 @@ import {
 } from '@gscdump/engine/node'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { defaultAnalyzerRegistry } from '../src/default-registry'
-import { runAnalyzerWithEngine as rawRunAnalyzerWithEngine } from '../src/source/engine'
+import { runAnalyzerWithEngine as rawRunAnalyzerWithEngine } from '@gscdump/engine/source'
 
 function runAnalyzerWithEngine(
   deps: Parameters<typeof rawRunAnalyzerWithEngine>[0],

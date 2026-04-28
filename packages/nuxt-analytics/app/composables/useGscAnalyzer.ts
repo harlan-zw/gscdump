@@ -12,9 +12,10 @@
 // on boot regardless of mode.
 
 import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
-import type { AttachedTablesHandle, BrowserAnalysisRuntime, DuckDBWasmBootResult, QueryResult } from '@gscdump/engine-wasm'
+import type { AttachedTablesHandle, BrowserAnalysisRuntime, DuckDBWasmBootResult, QueryResult } from '@gscdump/engine-duckdb-wasm'
 import type { SiteLoadProgress } from './useGscAnalytics'
-import { attachParquetUrlTables, bootDuckDBWasm, createBrowserAnalysisRuntime } from '@gscdump/engine-wasm'
+import { defaultAnalyzerRegistry } from '@gscdump/analysis'
+import { attachParquetUrlTables, bootDuckDBWasm, createBrowserAnalysisRuntime } from '@gscdump/engine-duckdb-wasm'
 import { getGscFetchHeaders, useGscFetch } from '../utils/gsc-fetch'
 import { _useGscAnalyticsContext } from './useGscAnalytics'
 
@@ -246,7 +247,11 @@ function createInstance(
       },
     })
     attachedHandle = handle
-    attachedTables.value = tables.map(t => t.table)
+    // `handle.tables` reflects what *actually* attached — `attachParquetUrlTables`
+    // drops tables on fetch failure, so the requested list can over-report.
+    // Use the authoritative list so downstream pre-checks (e.g. the engine's
+    // AttachedTableMissingError fast-fail) get an accurate view.
+    attachedTables.value = handle.tables
     manifestVersion.value = sources.manifestVersion
     return { attached, total }
   }
@@ -295,7 +300,7 @@ function createInstance(
     const { total } = await attachFromSources(sources)
     const attachMs = performance.now() - t2
 
-    runtime = createBrowserAnalysisRuntime(bootedDb, { schema: 'main' })
+    runtime = createBrowserAnalysisRuntime(bootedDb, { schema: 'main', attachedTables: attachedTables.value })
     runtime.setVersion(sources.manifestVersion)
     timings.value = { bootMs, manifestMs, attachMs }
     ready.value = true
@@ -346,7 +351,7 @@ function createInstance(
     const p = (async () => {
       if (!rt)
         return runServerAnalyze(params, opts?.signal)
-      const out = await rt.analyze(params as never)
+      const out = await rt.analyze(params as never, defaultAnalyzerRegistry)
       opts?.signal?.throwIfAborted?.()
       return {
         results: coerceResults(out.results) as AnalysisResult['results'],
@@ -380,6 +385,7 @@ function createInstance(
     attachedHandle = null
     await attachFromSources(sources)
     runtime.setVersion(sources.manifestVersion)
+    runtime.setAttachedTables(attachedTables.value)
     return true
   }
 

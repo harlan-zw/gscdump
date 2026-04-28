@@ -201,7 +201,7 @@ export function buildLogicalPlan(
 ): LogicalQueryPlan {
   // Coerce wire-format filters (`{ type, filters | column, value, from, to }`)
   // up-front so every downstream traversal sees the SDK's `_filters` shape.
-  // Browser path (engine-wasm) feeds raw consumer state; server path is
+  // Browser path (engine-duckdb-wasm) feeds raw consumer state; server path is
   // already pre-normalized by gscdump.com but normalizing twice is a no-op.
   const normalizedFilter = normalizeFilter(state.filter) as FilterInput | undefined
 

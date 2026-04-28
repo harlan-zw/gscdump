@@ -23,7 +23,13 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./r2-manifest-schema": {
+      "types": "./dist/r2-manifest-schema.d.mts",
+      "import": "./dist/r2-manifest-schema.mjs",
+      "default": "./dist/r2-manifest-schema.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -45,7 +51,6 @@
     "drizzle-orm": "catalog:"
   },
   "dependencies": {
-    "@gscdump/analysis": "workspace:*",
     "@gscdump/engine": "workspace:*",
     "gscdump": "workspace:*"
   },

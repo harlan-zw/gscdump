@@ -4,21 +4,20 @@
 [![npm downloads](https://img.shields.io/npm/dm/@gscdump/engine-duckdb-node?color=yellow)](https://npm.chart.dev/@gscdump/engine-duckdb-node)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-> Node DuckDB engine adapter for `@gscdump/analysis` — SQL analyzer dispatch over parquet via duckdb-node.
-
-Wraps the append-only Parquet storage engine as a `SqlQuerySource`. SQL-native analyzers dispatch uniformly via `runAnalyzerFromSource`; row-based analyzers stay in `@gscdump/analysis`.
+> Node DuckDB engine adapter — wraps the parquet storage engine as a `SqlQuerySource` and ships parquet/snapshot attach helpers for the browser-style attached-table path.
 
 ## Install
 
 ```bash
-npm install @gscdump/engine-duckdb-node @gscdump/engine @gscdump/analysis
+npm install @gscdump/engine-duckdb-node @gscdump/engine
 ```
 
 ## Usage
 
 ```ts
-import { createAnalyzerRegistry, ROW_ANALYZERS, runAnalyzerFromSource } from '@gscdump/analysis/analyzer'
-import { createEngine, SQL_ANALYZERS } from '@gscdump/engine-duckdb-node'
+import { ROW_ANALYZERS, SQL_ANALYZERS } from '@gscdump/analysis'
+import { createEngine } from '@gscdump/engine-duckdb-node'
+import { createAnalyzerRegistry, runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 
 const source = createEngine({ engine, ctx })
 const registry = createAnalyzerRegistry({ rows: ROW_ANALYZERS, sql: SQL_ANALYZERS })
@@ -30,29 +29,34 @@ const result = await runAnalyzerFromSource(
 )
 ```
 
-### Attaching parquet for browser-style queries
+### Attaching parquet for the browser-style path
 
 ```ts
-import { analyzeInBrowser, attachParquetIndex, attachSnapshotIndex } from '@gscdump/engine-duckdb-node'
+import { analyzeInBrowser } from '@gscdump/analysis'
+import { attachParquetIndex, attachSnapshotIndex } from '@gscdump/engine-duckdb-node'
 
 await attachParquetIndex(conn, { files }) // per-day or per-month parquet
 await attachSnapshotIndex(conn, { snapshot }) // pre-baked .duckdb snapshot
 
-const result = await analyzeInBrowser(conn, { type: 'striking-distance' })
+const result = await analyzeInBrowser(
+  { query: (sql, params) => conn.runAndReadAll(sql, params).then(r => r.getRowObjects()) },
+  { schema: 'gsc' },
+  { type: 'striking-distance' },
+)
 ```
 
 ## Exports
 
-- `createEngine({ engine, ctx })` — builds a `SqlQuerySource` from a `StorageEngine` + `TenantCtx`.
-- `SQL_ANALYZERS` — registry of SQL-native analyzer specs.
-- `analyzeInBrowser` / `rewriteForTableSource` — attached-table dispatch path.
+- `createEngine({ engine, ctx })` — builds a `SqlQuerySource` from a `StorageEngine` + `TenantCtx` (delegates to `createEngineQuerySource` from `@gscdump/engine/source`).
 - `attachParquetIndex` / `attachSnapshotIndex` / `snapshotAlias` — DuckDB session attach helpers.
+
+`SQL_ANALYZERS`, `analyzeInBrowser`, and `rewriteForTableSource` moved to `@gscdump/analysis` (they reference the analyzer instances and don't belong on the engine boundary).
 
 ## Related
 
-- [`@gscdump/engine`](../engine) — Storage engine + contracts this adapter binds to.
-- [`@gscdump/analysis`](../analysis) — Analyzer registry + dispatcher.
-- [`@gscdump/engine-wasm`](../engine-wasm) — Browser counterpart (DuckDB-WASM).
+- [`@gscdump/engine`](../engine) — Storage engine + analyzer/source contracts.
+- [`@gscdump/analysis`](../analysis) — Analyzer instances + `analyzeInBrowser` + `SQL_ANALYZERS`.
+- [`@gscdump/engine-duckdb-wasm`](../engine-duckdb-wasm) — Browser counterpart (DuckDB-WASM).
 - [`@gscdump/engine-sqlite`](../engine-sqlite) — SQLite / D1 counterpart.
 
 ## License

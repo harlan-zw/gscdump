@@ -7,7 +7,7 @@
  */
 
 import type { BuilderState } from 'gscdump/query'
-import type { AnalysisPeriod } from '../period'
+import type { AnalysisPeriod } from '@gscdump/engine/period'
 
 import { between, date as dateCol, gsc, page as pageCol, query as queryCol } from 'gscdump/query'
 

@@ -61,7 +61,7 @@ Optional peers (install only what your runtime needs):
 - [`gscdump`](../gscdump) — REST client + query builder (edge-safe peer dep).
 - [`@gscdump/analysis`](../analysis) — analyzers; consumes `StorageEngine` via `createEngine` factories.
 - [`@gscdump/engine-duckdb-node`](../engine-duckdb-node) — Node DuckDB analyzer adapter.
-- [`@gscdump/engine-wasm`](../engine-wasm) — DuckDB-WASM browser adapter.
+- [`@gscdump/engine-duckdb-wasm`](../engine-duckdb-wasm) — DuckDB-WASM browser adapter.
 - [`@gscdump/engine-sqlite`](../engine-sqlite) — SQLite / D1 adapter.
 - [`@gscdump/cli`](../cli) — CLI wrapping engine + analysis.
 

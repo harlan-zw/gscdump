@@ -1,5 +1,5 @@
 /**
- * Engine adapter contract: engine-duckdb-node and engine-wasm wrap the
+ * Engine adapter contract: engine-duckdb-node and engine-duckdb-wasm wrap the
  * shared `pgResolverAdapter` over different runtimes (analytics planner vs.
  * resolver SQL), but must agree on row sets given the same fixture parquet.
  *
@@ -94,7 +94,7 @@ function normalizeNumeric(rows: Array<Record<string, unknown>>): Array<Record<st
   })
 }
 
-describe('contract: engine-duckdb-node vs engine-wasm', () => {
+describe('contract: engine-duckdb-node vs engine-duckdb-wasm', () => {
   let dir: string
 
   beforeEach(async () => {
@@ -148,10 +148,10 @@ describe('contract: engine-duckdb-node vs engine-wasm', () => {
     const wasmRunner = {
       query: (sql: string, params?: unknown[]) => handle.query(sql, params).then(rows => rows as Array<Record<string, unknown>>),
     }
-    // Build a parallel SqlQuerySource the way engine-wasm does, but skip the
+    // Build a parallel SqlQuerySource the way engine-duckdb-wasm does, but skip the
     // duckdb-wasm dependency: same `createSqlQuerySource` factory + same
     // `pgResolverAdapter`, executed against the Node handle directly. This is
-    // the contract surface that engine-wasm publishes.
+    // the contract surface that engine-duckdb-wasm publishes.
     const { createSqlQuerySource, pgResolverAdapter } = await import('@gscdump/engine/resolver')
     const wasmSource = createSqlQuerySource({
       name: 'wasm-contract',

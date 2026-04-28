@@ -1,7 +1,7 @@
 import type { Row } from '@gscdump/engine/contracts'
 import type { ResolverOptions } from '@gscdump/engine/resolver'
 import type { BuilderState } from 'gscdump/query'
-import type { AnalysisParams } from '../types'
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 
 import {
   buildExtrasQueries,
@@ -12,7 +12,7 @@ import {
   resolveToSQLOptimized,
 } from '@gscdump/engine/resolver'
 import { extractDateRange } from 'gscdump/query'
-import { padTimeseries } from '../period'
+import { padTimeseries } from '@gscdump/engine/period'
 
 export interface QueryAnalyzerExtraQuery {
   name: string

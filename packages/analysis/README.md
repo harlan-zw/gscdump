@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/@gscdump/analysis?color=yellow)](https://npm.chart.dev/@gscdump/analysis)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-> SEO analyzers + typed query primitives for Google Search Console data. Row-based, DuckDB-native, D1-ready.
+> SEO analyzers for Google Search Console data. Row-based, DuckDB-native, D1-ready.
 
 ## Install
 
@@ -16,15 +16,16 @@ npm install @gscdump/analysis
 
 | Subpath | Use when |
 |---|---|
-| `@gscdump/analysis` | You have arrays of rows (GSC API responses, D1 query results). Pure functions, no DB. |
-| `@gscdump/analysis/analyzer` | Analyzer contracts (`Analyzer`, `Plan`, `FileSet`), `ROW_ANALYZERS`, registry, dispatcher. |
-| `@gscdump/engine-duckdb-node` | You have a Node DuckDB handle over parquet. Ships `SQL_ANALYZERS` + `analyzeInBrowser` for attached-table parquet. |
-| `@gscdump/engine-wasm` | Nuxt / React / vanilla app running DuckDB-WASM client-side against R2 parquets. |
-| `@gscdump/engine-sqlite` | Cloudflare Workers / anywhere routing through sqlite-proxy (D1). |
-| `@gscdump/engine/resolver` | Dialect-neutral SQL composition kit: `ResolverAdapter`, `pgResolverAdapter`, `compilePg`/`compileSqlite`, `resolveToSQL`, source contracts. |
-| `@gscdump/analysis/source` | Portable query sources + source-backed analyzers shared across GSC API, sqlite, DuckDB, and tests. |
+| `@gscdump/analysis` | Top-level barrel: row analyzers, source-backed analyzers, `SQL_ANALYZERS`, `analyzeInBrowser`, `defaultAnalyzerRegistry`, contract types re-exported from engine. |
+| `@gscdump/analysis/analyzer` | `ROW_ANALYZERS` array + `paginate*` / `adapt-rows` helpers used by analyzer authors. |
+| `@gscdump/analysis/registry` | Pre-built `defaultAnalyzerRegistry` (rows + sql). Convenience for callers who don't care about bundle size. |
+| `@gscdump/analysis/source` | Portable query sources (`createInMemoryQuerySource`, `createCompositeSource`) + source-backed analyzers. |
 | `@gscdump/analysis/semantic` | Browser-only semantic analyzers such as content-gap; optional `@huggingface/transformers` peer. |
 | `@gscdump/analysis/query` | `buildDataQueryPlan` / `buildDataDetailPlan` for the generic query analyzers. |
+| `@gscdump/analysis/routing` | Phase-aware D1 ↔ R2 routing helpers. |
+| `@gscdump/analysis/rollups` | Pre-baked rollup definitions + rebuild orchestration. |
+
+The contract layer (`Analyzer`, `Plan`, `Capability`, `AnalysisParams`, `AnalysisResult`, `AnalysisQuerySource`, `runAnalyzerFromSource`, `createAnalyzerRegistry`, `defineAnalyzer`, period helpers, `createEngineQuerySource`) lives in `@gscdump/engine` under the `/analyzer`, `/analysis-types`, `/period`, `/source`, and `/resolver` subpaths. Most are re-exported from `@gscdump/analysis` for convenience.
 
 ## Row-based analyzers
 
@@ -61,11 +62,8 @@ const prioritized = await analyzeActionPriority({
 Source adapters compose a GSC client + analyzer in one call:
 
 ```ts
-import {
-  analyzeMoversFromSource,
-  analyzeStrikingDistanceFromSource,
-  createGscApiQuerySource,
-} from '@gscdump/analysis'
+import { analyzeMoversFromSource, analyzeStrikingDistanceFromSource } from '@gscdump/analysis'
+import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 
 const source = createGscApiQuerySource({ client, siteUrl })
 const movers = await analyzeMoversFromSource(source, { current, previous })
@@ -76,92 +74,39 @@ const movers = await analyzeMoversFromSource(source, { current, previous })
 SQL-native path. `SQL_ANALYZERS` dispatch through `runAnalyzerFromSource` against an engine-backed source.
 
 ```ts
-import { createAnalyzerRegistry, ROW_ANALYZERS, runAnalyzerFromSource } from '@gscdump/analysis/analyzer'
-import { createEngine, SQL_ANALYZERS } from '@gscdump/engine-duckdb-node'
+import { ROW_ANALYZERS, SQL_ANALYZERS } from '@gscdump/analysis'
+import { createAnalyzerRegistry, runAnalyzerFromSource } from '@gscdump/engine/analyzer'
+import { createEngineQuerySource } from '@gscdump/engine/source'
 
-const source = createEngine({ engine, ctx })
+const source = createEngineQuerySource({ engine, ctx })
 const registry = createAnalyzerRegistry({ rows: ROW_ANALYZERS, sql: SQL_ANALYZERS })
 const result = await runAnalyzerFromSource(source, { type: 'striking-distance', minImpressions: 100 }, registry)
 ```
 
-`attachParquetIndex` and `attachSnapshotIndex` wire parquet files (per-day, per-month, or pre-baked `.duckdb` snapshots) into a DuckDB session for `analyzeInBrowser` (attached-table path).
+`attachParquetIndex` and `attachSnapshotIndex` from `@gscdump/engine-duckdb-node` wire parquet files (per-day, per-month, or pre-baked `.duckdb` snapshots) into a DuckDB session. Pair with `analyzeInBrowser` from `@gscdump/analysis` for the attached-table dispatch path.
 
 ## Browser (DuckDB-WASM)
 
-Three primitives for client-side analytics:
-
 ```ts
-import {
-  createInsightRunner,
-  resolveWindow,
-  scopeFor,
-  strikingMomentum,
-} from '@gscdump/engine-wasm'
+import { analyzeInBrowser } from '@gscdump/analysis'
+import { createEngine } from '@gscdump/engine-duckdb-wasm'
 
-const runner = createInsightRunner({ db, conn }) // AsyncDuckDB + connection
-const window = resolveWindow({ preset: 'last-30d', comparison: 'prev-period' })
-const scope = scopeFor('pages', { siteId, window })
-
-const rows = await strikingMomentum(runner, { ...scope, limit: 50 })
+const result = await analyzeInBrowser(runner, { schema: 'gsc' }, { type: 'striking-distance' })
 ```
 
-- `createInsightRunner({ db, conn })` — drizzle-orm handle over DuckDB-WASM. Typed `.select()` / window functions, or drop to `sql\`...\`` raw.
-- `bootDuckDBWasm()` / `attachParquetUrlTables()` / `attachParquetTables()` / `createBrowserAnalysisRuntime()` — reusable browser runtime primitives for booting DuckDB-WASM, attaching parquet-backed views, and exposing `query()` / `analyze()` helpers without rewriting the same glue in every app.
-- `resolveWindow({ preset, comparison, anchor })` — canonical date windows, no DB.
-- `scopeFor(table, { siteId, window })` + `mergeScope()` — boundary predicates for multi-tenant queries.
-- `schema`, `pages`, `keywords`, `page_keywords`, `countries`, `devices` — drizzle schema mirroring `gscdump/analytics` `SCHEMAS`. Drift fails loudly at load.
+`analyzeInBrowser` wraps any runner with `query(sql, params, signal?)` in an `AnalysisQuerySource` with the `attachedTables` capability and dispatches via `runAnalyzerFromSource`.
 
-Vendors a stripped-down drizzle-orm DuckDB-WASM adapter (~240 LoC, adapted from `@proj-airi/drizzle-duckdb-wasm`, MIT). Transactions throw — analytics workload is read-only.
-
-`@duckdb/duckdb-wasm` is an optional peer dep. Bundle: **10.3 kB / 2.72 kB gzipped**.
+For typed drizzle-style access, `@gscdump/engine-duckdb-wasm` exports `createEngine` (a `SqlQuerySource`) plus `bootDuckDBWasm`, `attachParquetUrlTables`, `createBrowserAnalysisRuntime`, and `resolveWindow` (re-export from `@gscdump/engine/period`).
 
 ## SQLite (D1 / Cloudflare Workers)
 
-Mirror of `/browser`, dialect-targeted at sqlite-core.
-
-```ts
-import {
-  aggClicks,
-  aggCtr,
-  aggImpressions,
-  aggPosition,
-  compileSqlite,
-  createSqliteInsightRunner,
-  gsc_keywords,
-  sql,
-} from '@gscdump/engine-sqlite'
-
-const queryExpr = sql`
-  SELECT ${gsc_keywords.query} as keyword,
-         SUM(${gsc_keywords.clicks}) as clicks,
-         ${aggCtr(gsc_keywords)} as ctr
-  FROM ${gsc_keywords}
-  WHERE ${gsc_keywords.site_id} = ${siteId}
-  GROUP BY ${gsc_keywords.query}
-`
-const { sql: compiledSql, params } = compileSqlite(queryExpr)
-const rows = await executor(compiledSql, params) // queryUserD1, etc.
-```
-
-- `createSqliteInsightRunner({ executor })` — sqlite-proxy drizzle adapter.
-- `compileSqlite(sql)` — compile to `{ sql, params }` for any HTTP executor.
-- `aggClicks` / `aggImpressions` / `aggCtr` / `aggPosition` — aggregate helpers replacing hand-rolled `METRICS_SQL`.
-- Runtime builder exports (`colRef`, `dimColumn`, `metricSql`, `havingPredicates`, …) for dimension/metric driven query builders.
-
-Always import `sql` from `@gscdump/engine-sqlite` — not `drizzle-orm` directly — so consumers bind to the package's drizzle-orm instance and avoid cross-install `SQL<unknown>` mismatches.
-
-Bundle: **5.3 kB / 1.4 kB gzipped**.
+Mirror of the DuckDB path, dialect-targeted at sqlite-core. `@gscdump/engine-sqlite` exports `createEngine` (a `SqlQuerySource` over `executor + siteId`), `compileSqlite`, drizzle helpers (`gsc_keywords`, etc.), and `resolveWindow` (re-export from `@gscdump/engine/period`).
 
 ## Query composers (dialect-neutral)
 
 ```ts
 import { sqliteResolverAdapter } from '@gscdump/engine-sqlite'
-import {
-  buildTotalsSql,
-  pgResolverAdapter,
-  resolveToSQL,
-  resolveToSQLOptimized,
-} from '@gscdump/engine/resolver'
+import { pgResolverAdapter, resolveToSQL } from '@gscdump/engine/resolver'
 
 const resolved = resolveToSQL(builderState, { adapter: sqliteResolverAdapter, siteId })
 ```
@@ -173,16 +118,10 @@ Pass `sqliteResolverAdapter` from `@gscdump/engine-sqlite` (D1, `site_id`-scoped
 `/source` is the cross-implementation seam:
 
 ```ts
-import {
-  analyzeMoversFromSource,
-  createEngineQuerySource,
-  queryRows,
-} from '@gscdump/analysis/source'
+import { analyzeMoversFromSource } from '@gscdump/analysis'
+import { createEngineQuerySource, queryRows } from '@gscdump/engine/source'
 
-const source = createEngineQuerySource({
-  engine,
-  ctx: { userId, siteId },
-})
+const source = createEngineQuerySource({ engine, ctx: { userId, siteId } })
 
 const rows = await queryRows(source, builderState)
 const movers = await analyzeMoversFromSource(source, periods)
@@ -190,20 +129,18 @@ const movers = await analyzeMoversFromSource(source, periods)
 
 Available source factories:
 
-- `createGscApiQuerySource({ client, siteUrl })`
-- `createBrowserQuerySource({ query(sql, params) })`
-- `createSqliteQuerySource({ executor, siteId })`
-- `createEngineQuerySource({ engine, ctx })`
-- `createInMemoryQuerySource({ queryRows })`
+- `createGscApiQuerySource({ client, siteUrl })` — `@gscdump/engine-gsc-api`
+- `createLiveGscSource({ accessToken, siteUrl })` — `@gscdump/engine-gsc-api`
+- `createCompositeSource({ engine, gsc })` — `@gscdump/analysis/source`; engine first, GSC fallback
+- `createInMemoryQuerySource({ queryRows })` — `@gscdump/analysis/source`
+- `createEngineQuerySource({ engine, ctx })` — `@gscdump/engine/source`
+- `createEngine({ ... })` — `@gscdump/engine-duckdb-wasm`, `@gscdump/engine-sqlite`, `@gscdump/engine-duckdb-node`
 
 Portable analyzers currently cover the row-based tools:
 `striking-distance`, `opportunity`, `brand`, `clustering`, `concentration`,
 `seasonality`, `movers`, and `decay`.
 
 ## Semantic (browser-only)
-
-`/semantic` holds browser-only analysis that depends on client runtime
-capabilities rather than SQL backends alone.
 
 ```ts
 import { analyzeContentGap } from '@gscdump/analysis/semantic'
@@ -214,14 +151,12 @@ const result = await analyzeContentGap(runner, {
 })
 ```
 
-`analyzeContentGap()` loads a MiniLM/BGE embedding model via
-`@huggingface/transformers`, caches vectors in IndexedDB, and compares top
-queries to candidate URLs derived from `page_keywords`.
+Loads a MiniLM/BGE embedding model via `@huggingface/transformers`, caches vectors in IndexedDB, and compares top queries to candidate URLs derived from `page_keywords`.
 
 ## Window resolution
 
 ```ts
-import { resolveWindow } from '@gscdump/engine-wasm'
+import { resolveWindow } from '@gscdump/analysis'
 
 const w = resolveWindow({ preset: 'last-30d', comparison: 'yoy' })
 // { start: '...', end: '...', days: 30, comparison: { start, end } }
@@ -234,19 +169,19 @@ Presets: `last-7d`, `last-28d`, `last-30d`, `last-90d`, `last-180d`, `last-365d`
 | Surface | Stability |
 |---|---|
 | Row analyzers (`analyzeStrikingDistance`, `analyzeMovers`, ...) | Public |
-| Source factories (`create*QuerySource`) + `analyzeFromSource` | Public |
-| Engine factories (`@gscdump/analysis/engine/<name>`'s `createEngine`) | Public |
-| `Analyzer<P, R>` contract + `analyzerRegistry` | Public |
-| `/period`, `/query`, `/source`, `/semantic` subpaths | Public |
-| Internals reached through `@gscdump/analysis/engine/<name>/<file>` not listed above | Private |
+| Source factories + `analyzeFromSource` | Public |
+| `Analyzer<P, R>` contract + `createAnalyzerRegistry` (re-exported from `@gscdump/engine/analyzer`) | Public |
+| `/source`, `/semantic`, `/query`, `/routing`, `/rollups` subpaths | Public |
+| Per-analyzer modules under `analysis/src/analyzers/<name>` | Private |
 
 ## Related
 
 - [`gscdump`](../gscdump) — REST client + query builder (edge-safe).
-- [`@gscdump/engine`](../engine) — Parquet/DuckDB storage engine.
-- [`@gscdump/engine-duckdb-node`](../engine-duckdb-node) — Node DuckDB analyzer dispatch.
-- [`@gscdump/engine-wasm`](../engine-wasm) — DuckDB-WASM browser runtime.
+- [`@gscdump/engine`](../engine) — Parquet/DuckDB storage engine + analyzer/source/period contracts.
+- [`@gscdump/engine-duckdb-node`](../engine-duckdb-node) — Node DuckDB engine factory + parquet/snapshot attach helpers.
+- [`@gscdump/engine-duckdb-wasm`](../engine-duckdb-wasm) — DuckDB-WASM browser runtime + drizzle adapter.
 - [`@gscdump/engine-sqlite`](../engine-sqlite) — SQLite / D1 dialect adapter.
+- [`@gscdump/engine-gsc-api`](../engine-gsc-api) — GSC live-API engine adapter.
 - [`@gscdump/cli`](../cli) — CLI wrapping `gscdump` + `@gscdump/engine` + `@gscdump/analysis`.
 
 ## License

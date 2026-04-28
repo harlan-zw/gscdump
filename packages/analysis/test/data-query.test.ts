@@ -10,9 +10,9 @@
  * views in the app — if the SQL is correct here, it's correct there.
  */
 
-import type { AnalyzerRunner } from '@gscdump/engine-duckdb-node'
+import type { AnalyzerRunner } from '@gscdump/analysis'
 
-import { analyzeInBrowser } from '@gscdump/engine-duckdb-node'
+import { analyzeInBrowser } from '@gscdump/analysis'
 import {
   createNodeDuckDBHandle,
   resetNodeDuckDB,

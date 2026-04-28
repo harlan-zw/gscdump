@@ -3,7 +3,7 @@
  *
  * Builds per-table predicates from {siteId, window} that compose with user-
  * level filters via `mergeScope`. Generic over the schema so engine-sqlite
- * (every table has site_id) and engine-wasm (per-site snapshots, site_id
+ * (every table has site_id) and engine-duckdb-wasm (per-site snapshots, site_id
  * usually absent) can both use it.
  */
 
@@ -12,8 +12,8 @@ import type { SQL } from 'drizzle-orm'
 import { and, eq, gte, lte } from 'drizzle-orm'
 
 /**
- * Structural subset of `ResolvedWindow` from `@gscdump/analysis/period`.
- * Inlined here so engine doesn't take a downstream dependency on analysis;
+ * Structural subset of `ResolvedWindow` from `@gscdump/engine/period`.
+ * Inlined here to avoid the cross-module type import in this leaf module;
  * any object with `start`/`end` strings (and optional `days`) satisfies it.
  */
 export interface ResolvedWindow {
@@ -67,7 +67,7 @@ export function mergeScope(scope: TableScope, ...extra: SQL[]): SQL | undefined 
 
 /**
  * Bind `buildTableScope` + `mergeScope` to a specific drizzle schema. Engine
- * adapters (`engine-sqlite`, `engine-wasm`) call this once at module load and
+ * adapters (`engine-sqlite`, `engine-duckdb-wasm`) call this once at module load and
  * re-export the returned `scopeFor` / `mergeScope` so consumers get a typed
  * `keyof Schema` table parameter without each adapter re-implementing the
  * pass-through wrapper.

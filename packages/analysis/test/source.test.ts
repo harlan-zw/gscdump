@@ -10,6 +10,7 @@ import {
   createDuckDBExecutor,
   createStorageEngine,
 } from '@gscdump/engine'
+import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 import {
   createFilesystemDataSource,
   createFilesystemManifestStore,
@@ -18,6 +19,8 @@ import {
   createNodeDuckDBHandle,
   resetNodeDuckDB,
 } from '@gscdump/engine/node'
+import { createEngineQuerySource, queryRows } from '@gscdump/engine/source'
+
 import {
   and,
   between,
@@ -31,14 +34,10 @@ import {
   topLevel,
 } from 'gscdump/query'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
-
 import {
   analyzeMoversFromSource,
-  createEngineQuerySource,
-  createGscApiQuerySource,
   createInMemoryQuerySource,
   queryAnalyticsFromSource,
-  queryRows,
 } from '../src/source'
 
 afterAll(() => {

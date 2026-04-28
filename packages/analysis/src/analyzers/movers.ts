@@ -8,14 +8,16 @@
  */
 
 import type { Row } from '@gscdump/engine/contracts'
-import type { AnalysisParams, KeywordRow } from '../types'
+import type { KeywordRow } from '../types'
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { keywordsQueryState } from '../analyzer/adapt-rows'
-import { defineAnalyzer } from '../analyzer/define'
-import { comparisonOf } from '../period'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
+import { comparisonOf } from '@gscdump/engine/period'
 import { percentDifference } from '../scoring'
-import { buildPeriodMap, num } from '../types'
+import { buildPeriodMap } from '../types'
+import { num } from '@gscdump/engine/analysis-types'
 
 export type MoversSortMetric = 'clicks' | 'impressions' | 'clicksChange' | 'impressionsChange' | 'positionChange'
 

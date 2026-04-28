@@ -117,7 +117,7 @@ calls. Allow-headers must include `x-api-key`, `Cache-Control`, and `Range`
 
 - [`gscdump`](../gscdump) — REST client + query builder.
 - [`@gscdump/engine`](../engine) — Storage engine consumed in origin mode.
-- [`@gscdump/engine-wasm`](../engine-wasm) — DuckDB-WASM browser runtime used by client-side widgets.
+- [`@gscdump/engine-duckdb-wasm`](../engine-duckdb-wasm) — DuckDB-WASM browser runtime used by client-side widgets.
 - [`@gscdump/analysis`](../analysis) — Analyzers powering `/analyze` endpoints.
 
 ## License

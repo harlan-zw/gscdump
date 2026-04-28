@@ -1,7 +1,7 @@
 import type { BuilderState } from 'gscdump/query'
 import type { PlannerCapabilities } from 'gscdump/query/plan'
 
-import type { QueryRow, RowQuerySource } from './types'
+import type { QueryRow, RowQuerySource } from '@gscdump/engine/resolver'
 
 /**
  * Permissive defaults: in-memory sources are usually test doubles, so they

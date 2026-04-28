@@ -1,0 +1,10 @@
+.:
+  createDucklingsCodec: function
+  createDucklingsExecutor: function
+  createR2Presigner: function
+  getAnalyticsEngine: function
+  getWasmDuckDBFactory: function
+  resetWasmDuckDB: function
+  signSizeHint: function
+  useAnalyticsEnv: function
+  verifySizeHint: function

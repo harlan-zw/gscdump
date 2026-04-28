@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { padTimeseries } from '../src/period'
+import { padTimeseries } from '@gscdump/engine/period'
 
 describe('padTimeseries', () => {
   it('fills gaps between sparse dates', () => {

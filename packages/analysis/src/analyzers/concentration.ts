@@ -8,13 +8,14 @@
 
 import type { Row, TableName } from '@gscdump/engine/contracts'
 import type { BuilderState } from 'gscdump/query'
-import type { AnalysisParams, KeywordRow, PageRow } from '../types'
+import type { KeywordRow, PageRow } from '../types'
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { keywordsQueryState, pagesQueryState } from '../analyzer/adapt-rows'
-import { defineAnalyzer } from '../analyzer/define'
-import { periodOf } from '../period'
-import { num } from '../types'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
+import { periodOf } from '@gscdump/engine/period'
+import { num } from '@gscdump/engine/analysis-types'
 
 export type ConcentrationRiskLevel = 'low' | 'medium' | 'high'
 

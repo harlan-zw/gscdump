@@ -1,7 +1,7 @@
 /**
  * @gscdump/engine-sqlite — typed D1/SQLite analytics primitives.
  *
- * Mirror of @gscdump/engine-wasm but dialect-targeted at sqlite-core. Use this when
+ * Mirror of @gscdump/engine-duckdb-wasm but dialect-targeted at sqlite-core. Use this when
  * analytics queries run against D1 (Cloudflare Workers) or any remote
  * sqlite surface accessible via an async executor (`sql, params) => rows`).
  */
@@ -70,12 +70,12 @@ export {
 } from './schema'
 export type { Schema } from './schema'
 
-export { resolveWindow } from '@gscdump/analysis/period'
+export { resolveWindow } from '@gscdump/engine/period'
 export type {
   ComparisonMode,
   ResolvedWindow,
   ResolveWindowOptions,
   WindowPreset,
-} from '@gscdump/analysis/period'
+} from '@gscdump/engine/period'
 export type { SQL } from 'drizzle-orm'
 export { and, eq, gte, lte, sql } from 'drizzle-orm'

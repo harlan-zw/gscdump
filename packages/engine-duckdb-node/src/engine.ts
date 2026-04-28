@@ -7,7 +7,7 @@
 
 import type { StorageEngine, TenantCtx } from '@gscdump/engine/contracts'
 import type { SqlQuerySource } from '@gscdump/engine/resolver'
-import { createEngineQuerySource } from '@gscdump/analysis/source'
+import { createEngineQuerySource } from '@gscdump/engine/source'
 
 export interface EngineConfig {
   engine: StorageEngine

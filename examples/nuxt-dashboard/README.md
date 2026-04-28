@@ -14,7 +14,7 @@ client                                        server
 ──────                                        ──────
 pages/index.vue                               api/manifest.get.ts       ─┐
   └─ useInsightRunner()                       api/analysis-sources.get.ts│ R2 S3 creds
-       ├─ @gscdump/engine-wasm                api/r2-data/[...path].get  ┤ (aws4fetch)
+       ├─ @gscdump/engine-duckdb-wasm                api/r2-data/[...path].get  ┤ (aws4fetch)
        │    · bootDuckDBWasm                  api/analysis/[x].get.ts   ─┘
        │    · attachParquetUrlTables               └─ utils/analysis-engine.ts
        │    · createBrowserAnalysisRuntime            ├─ @gscdump/engine
@@ -42,7 +42,7 @@ Every piece except the Vue components is a production primitive from this monore
 | `server/utils/r2-client.ts` | R2 LIST + presign | local helper |
 | `server/utils/analysis-engine.ts` | `createStorageEngine` + `createDuckDBCodec` + `createDuckDBExecutor` + `createHttpDataSource` + `createHttpManifestStore` + `createNodeDuckDBHandle` | `@gscdump/engine`, `@gscdump/engine/http`, `@gscdump/engine/node` |
 | `server/api/analysis/[analyzer].get.ts` | `runAnalyzerWithEngine` + `defaultAnalyzerRegistry` | `@gscdump/analysis` |
-| `app/composables/useInsightRunner.ts` | `bootDuckDBWasm` + `attachParquetUrlTables` + `createBrowserAnalysisRuntime` | `@gscdump/engine-wasm` |
+| `app/composables/useInsightRunner.ts` | `bootDuckDBWasm` + `attachParquetUrlTables` + `createBrowserAnalysisRuntime` | `@gscdump/engine-duckdb-wasm` |
 | `app/composables/useActionPriority.ts` | `analyzeActionPriority` | `@gscdump/analysis` |
 | `app/composables/useContentGap.ts` | `createBrowserQuerySource` + `analyzeContentGap` | `@gscdump/analysis`, `@gscdump/analysis/semantic` |
 | `app/pages/index.vue` | orchestration only | — |

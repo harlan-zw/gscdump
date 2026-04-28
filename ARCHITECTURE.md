@@ -8,11 +8,12 @@ Pipeline: **GSC API → DuckDB → analysis → CLI**. See [`ROADMAP.md`](./ROAD
 gscdump/
 ├── packages/
 │   ├── gscdump/              # Core: REST client, query builder, driver/tenant/normalize primitives (edge-safe)
-│   ├── engine/               # @gscdump/engine: Parquet/DuckDB storage engine + canonical drizzle pg-core schema + SQL resolver kit
-│   ├── engine-wasm/          # @gscdump/engine-wasm: DuckDB-WASM engine adapter (browser + R2 parquet)
+│   ├── engine/               # @gscdump/engine: Parquet/DuckDB storage engine + canonical drizzle pg-core schema + SQL resolver kit + analyzer/source/period contracts
+│   ├── engine-duckdb-wasm/   # @gscdump/engine-duckdb-wasm: DuckDB-WASM engine adapter (browser + R2 parquet)
 │   ├── engine-sqlite/        # @gscdump/engine-sqlite: SQLite / D1 engine adapter
-│   ├── engine-duckdb-node/   # @gscdump/engine-duckdb-node: Node DuckDB engine + SQL-native analyzers (browser-attached + server-side)
-│   ├── analysis/             # @gscdump/analysis: row-based analyzers + analyzer registry + source/dispatcher
+│   ├── engine-duckdb-node/   # @gscdump/engine-duckdb-node: Node DuckDB engine factory + parquet/snapshot attach helpers
+│   ├── engine-gsc-api/       # @gscdump/engine-gsc-api: GSC live-API engine adapter
+│   ├── analysis/             # @gscdump/analysis: analyzer instances (row + sql) + composite source + browser dispatcher
 │   ├── cli/                  # @gscdump/cli: CLI entry (gscdump bin)
 │   ├── cloud/                # @gscdump/cloud: cloud SDK + cloud CLI (frozen)
 │   └── mcp/                  # @gscdump/mcp: MCP server (frozen)
@@ -21,13 +22,14 @@ gscdump/
 
 Web app lives separately at https://github.com/harlan-zw/gscdump.com.
 
-Dependency graph:
+Dependency graph (acyclic; engine packages no longer depend on `@gscdump/analysis`):
 
 - `@gscdump/cli` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-duckdb-node`, `@gscdump/analysis`, `@gscdump/mcp`
-- `@gscdump/analysis` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-wasm`, `@gscdump/engine-sqlite`, `@gscdump/engine-duckdb-node`
-- `@gscdump/engine-duckdb-node` → `gscdump`, `@gscdump/engine`, `@gscdump/analysis` (query + source + analyzer subpaths)
-- `@gscdump/engine-wasm` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-duckdb-node`, `@gscdump/analysis/period` (type-only)
-- `@gscdump/engine-sqlite` → `gscdump`, `@gscdump/engine`, `@gscdump/analysis` (source + period subpaths)
+- `@gscdump/analysis` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-gsc-api`
+- `@gscdump/engine-duckdb-node` → `gscdump`, `@gscdump/engine`
+- `@gscdump/engine-duckdb-wasm` → `gscdump`, `@gscdump/engine`, `@gscdump/analysis` (`analyzeInBrowser` for the in-runtime dispatch path)
+- `@gscdump/engine-sqlite` → `gscdump`, `@gscdump/engine`
+- `@gscdump/engine-gsc-api` → `gscdump`, `@gscdump/engine`
 - `@gscdump/engine` → `gscdump`
 - `@gscdump/cloud` → `gscdump`, `@gscdump/analysis` (type-only); frozen
 - `@gscdump/mcp` → `gscdump` (frozen)
@@ -66,6 +68,10 @@ Append-only Parquet/DuckDB storage engine. Storage runtime, planner, schema, ada
 | `@gscdump/engine/snapshot` | Snapshot metadata contract (`SnapshotIndex`). |
 | `@gscdump/engine/schema` | Canonical drizzle pg-core tables (`pages`, `keywords`, ...) + derived `SCHEMAS` + `TABLE_METADATA` (sortKey, version). Source of truth. |
 | `@gscdump/engine/resolver` | SQL composition kit: `pgResolverAdapter`, `createResolverAdapter`, `compilePg`/`compileSqlite`, `resolveToSQL` + comparison composers, `createSqlQuerySource`, source contracts (`SqlQuerySource`, `RowQuerySource`, `AnalysisQuerySource`, `QueryRow`, `FileSet`), `assertSchemaInSync`. |
+| `@gscdump/engine/analyzer` | Analyzer contracts (`Analyzer`, `Capability`, `Plan`, `SqlPlan`, `RowQueriesPlan`), `defineAnalyzer` factory, `runAnalyzerFromSource` dispatcher, `createAnalyzerRegistry`. |
+| `@gscdump/engine/analysis-types` | Analyzer call contracts (`AnalysisParams`, `AnalysisResult`, `AnalysisTool`) + `num` coercion. |
+| `@gscdump/engine/period` | Window primitives: `resolveWindow`, `AnalysisPeriod`, `ComparisonPeriod`, `padTimeseries`, `windowToPeriod`, `windowToComparisonPeriod`. Dialect-agnostic. |
+| `@gscdump/engine/source` | Engine-backed source factory: `createEngineQuerySource`, `runAnalyzerWithEngine`, `typedQuery`/`queryRows`/`queryComparisonRows` ergonomics. |
 | `@gscdump/engine/planner` | Logical → SQL compiler + partition planning (`resolveToSQL`, `enumeratePartitions`). |
 | `@gscdump/engine/ingest` | GSC row → storage row (`createRowAccumulator`, `transformGscRow`). |
 | `@gscdump/engine/sql` | SQL literal binding (`bindLiterals`, `formatLiteral`). |
@@ -82,26 +88,28 @@ Append-only Parquet/DuckDB storage engine. Storage runtime, planner, schema, ada
 
 Optional peers: `@duckdb/duckdb-wasm`, `hyparquet`, `hyparquet-writer`.
 
-Boundary rule: sibling packages should prefer the narrowest subpath that matches the primitive they need. Analysis contracts (`AnalysisParams`, `AnalysisResult`, `AnalysisTool`) live in `@gscdump/analysis` (not core, not engine).
+Boundary rule: sibling packages should prefer the narrowest subpath that matches the primitive they need. Analyzer call contracts (`AnalysisParams`, `AnalysisResult`, `AnalysisTool`) live in `@gscdump/engine/analysis-types`; the `Analyzer` interface, dispatcher, registry, and `defineAnalyzer` factory live in `@gscdump/engine/analyzer`; window primitives in `@gscdump/engine/period`; the engine-backed source factory in `@gscdump/engine/source`. `@gscdump/analysis` re-exports the public surface for ergonomics but doesn't own the contracts.
 
 See [`packages/gscdump/ARCHITECTURE.md`](./packages/gscdump/ARCHITECTURE.md) for subsystem detail.
 
 ### `@gscdump/analysis`
 
-Row-based analyzers, analyzer registry/dispatcher, source factories, typed query-analyzer plans.
+Analyzer instances (row + SQL), composite source, browser dispatcher, semantic analyzers. Public-API barrel re-exports the contract layer from `@gscdump/engine` for ergonomics.
 
 | Export | Purpose |
 |---|---|
-| `@gscdump/analysis` | Row-based analyzers (`analyzeStrikingDistance`, `analyzeOpportunity`, `analyzeMovers`, `analyzeDecay`, `analyzeBrandSegmentation`, `analyzeClustering`, `analyzeConcentration`, `analyzeSeasonality`); contract types (`AnalysisParams`, `AnalysisResult`, `AnalysisTool`); re-exports from `/period`, `/source`, `/analyzer`. |
-| `/analyzer` | Analyzer contracts (`Analyzer`, `Capability`, `Plan`, `SqlPlan`, `RowQueriesPlan`, `FileSet`), `ROW_ANALYZERS`, `createAnalyzerRegistry`, dispatcher (`runAnalyzerFromSource`, `AnalyzerCapabilityError`). Consumed by engine packages that contribute analyzers. |
-| `/period` | Window primitives: `resolveWindow`, `AnalysisPeriod`, `ComparisonPeriod`, `padTimeseries`, `windowToPeriod`, `windowToComparisonPeriod`. |
-| `/query` | Query-analyzer plan builders (`buildDataQueryPlan`, `buildDataDetailPlan`) for `data-query` / `data-detail` analyzers. SQL composition primitives moved to `@gscdump/engine/resolver`. |
-| `/source` | `AnalysisQuerySource` discriminated union, source factories (`createGscApiQuerySource`, `createBrowserQuerySource`, `createSqliteQuerySource`, `createEngineQuerySource`, `createInMemoryQuerySource`), unified dispatcher (`analyzeFromSource`). Re-exports source contracts from `@gscdump/engine/resolver`. |
+| `@gscdump/analysis` | Row analyzers (`analyzeStrikingDistance`, `analyzeOpportunity`, `analyzeMovers`, `analyzeDecay`, `analyzeBrandSegmentation`, `analyzeClustering`, `analyzeConcentration`, `analyzeSeasonality`); `SQL_ANALYZERS` array; `analyzeInBrowser` (attached-table dispatcher); `defaultAnalyzerRegistry`; re-exports from `@gscdump/engine/analyzer`, `/analysis-types`, `/period`, `/source`, `/resolver` for one-import ergonomics. |
+| `/analyzer` | `ROW_ANALYZERS` array + `paginate*` / `adapt-rows` helpers used by analyzer authors. |
+| `/registry` | Pre-built `defaultAnalyzerRegistry` (rows + sql); transitively pulls in all analyzer SQL strings. |
+| `/query` | Query-analyzer plan builders (`buildDataQueryPlan`, `buildDataDetailPlan`) for `data-query` / `data-detail` analyzers. |
+| `/source` | Composite + in-memory source factories (`createCompositeSource`, `createInMemoryQuerySource`), source-backed analyzers (`analyzeFromSource`, `analyze*FromSource`), `AttachedTableRunner` source. Re-exports GSC-API factories from `@gscdump/engine-gsc-api`. |
 | `/semantic` | Embedding-backed analyzers (e.g. `analyzeContentGap`). Lazy `@huggingface/transformers` peer. |
+| `/routing` | Phase-aware D1 ↔ R2 routing helpers. |
+| `/rollups` | Pre-baked rollup definitions + rebuild orchestration. |
 
-Peer: `gscdump`, `@gscdump/engine`, `@gscdump/engine-duckdb-node` (for `defaultAnalyzerRegistry` only).
+Deps: `gscdump`, `@gscdump/engine`, `@gscdump/engine-gsc-api`. No engine-adapter deps (cycle broken).
 
-### `@gscdump/engine-wasm`
+### `@gscdump/engine-duckdb-wasm`
 
 Browser DuckDB-WASM engine adapter: `createEngine({ runner }) → SqlQuerySource`, plus primitives (`createInsightRunner({ db, conn })`, `scopeFor`/`mergeScope`, `strikingMomentum`, `bootDuckDBWasm`, `attachParquetTables`/`attachParquetUrlTables`, `createBrowserAnalysisRuntime`, vendored drizzle-orm DuckDB-WASM adapter). Re-exports canonical drizzle schema + `browserResolverAdapter` (alias for `pgResolverAdapter`) from `@gscdump/engine`. Optional peer: `@duckdb/duckdb-wasm`.
 
@@ -111,7 +119,11 @@ D1 / sqlite-proxy engine adapter: `createEngine({ executor, siteId }) → SqlQue
 
 ### `@gscdump/engine-duckdb-node`
 
-Node DuckDB engine + SQL-native analyzer collection (`SQL_ANALYZERS`, 29 analyzers). Exports `createEngine({ engine, ctx }) → SqlQuerySource`, `analyzeInBrowser` (browser attached-table runner), `attachParquetIndex`, `attachSnapshotIndex`. Consumed by CLI's local-analyze path and by `defaultAnalyzerRegistry`.
+Node DuckDB engine adapter. Exports `createEngine({ engine, ctx }) → SqlQuerySource` (delegates to `createEngineQuerySource` from `@gscdump/engine/source`), `attachParquetIndex`, `attachSnapshotIndex`, `snapshotAlias`. Consumed by CLI's local-analyze path. The SQL-analyzer collection (`SQL_ANALYZERS`) and the attached-table dispatcher (`analyzeInBrowser`) live in `@gscdump/analysis` since they reference the analyzer instances.
+
+### `@gscdump/engine-gsc-api`
+
+GSC live-API engine adapter. Wraps the Search Analytics REST API as a `RowQuerySource` so row-based analyzers dispatch through `runAnalyzerFromSource`. Exports `createGscApiQuerySource`, `createLiveGscSource`, `canProxyToGsc` (composite-source guard), `fetchGscTopN` / `fetchGscDaily` / `collectGscRows` rollup helpers, `applyBuilderStatePostProcessing`, `GSC_API_CAPABILITIES`. Used by `createCompositeSource` for date-out-of-range fallback and by gscdump.com / CLI for free-tier flows.
 
 ### `@gscdump/cli`
 
@@ -175,11 +187,11 @@ Auth (token or OAuth credentials)
 ## Glossary
 
 - **Schema** — canonical drizzle pg-core tables in `@gscdump/engine/schema`. DuckDB (both wasm + node) executes pg-flavored SQL natively. Abstract `SCHEMAS: Record<TableName, TableSchema>` for the parquet writer is *derived* from drizzle via `getTableConfig`; `TABLE_METADATA` carries sortKey + schema version.
-- **Engine** — storage runtime. DuckDB-Node at `@gscdump/engine-duckdb-node`; DuckDB-WASM at `@gscdump/engine-wasm`; SQLite/D1 at `@gscdump/engine-sqlite`. Each exposes `createEngine(config) → QuerySource`.
+- **Engine** — storage runtime. DuckDB-Node at `@gscdump/engine-duckdb-node`; DuckDB-WASM at `@gscdump/engine-duckdb-wasm`; SQLite/D1 at `@gscdump/engine-sqlite`; GSC live-API at `@gscdump/engine-gsc-api`. Each exposes a factory (`createEngine` / `createGscApiQuerySource` / `createLiveGscSource`) returning a `QuerySource`.
 - **Source** (`AnalysisQuerySource`) — query abstraction in `@gscdump/engine/resolver`, consumed by analyzers. Discriminated union of `RowQuerySource` (typed `BuilderState` only — GSC API, in-memory) and `SqlQuerySource` (typed `BuilderState` + raw SQL — DuckDB-WASM, SQLite, Node engine). `executeSql` takes optional `fileSets` for `{{FILES}}` substitution.
 - **Adapter** (`ResolverAdapter<TableKey>`) — dialect-specific translator in `@gscdump/engine/resolver`. Compiles `BuilderState` → `{ sql, params }` against a drizzle schema. `pgResolverAdapter` is shared by DuckDB (wasm + node) — single-tenant; `sqliteResolverAdapter` in `@gscdump/engine-sqlite` scopes by `site_id`. Built via `createResolverAdapter`.
 - **Driver** — low-level runtime binding (e.g. DuckDB-WASM `AsyncDuckDB` handle, sqlite-proxy executor, R2 bucket). The engine wraps a driver; analyzers never see one.
-- **Analyzer** (`Analyzer<P, R>`) — pure contract `{ id, params, requires, build, reduce }` in `@gscdump/analysis/analyzer`. `ROW_ANALYZERS` (8, for GSC live API + in-memory) + `SQL_ANALYZERS` (29, in `@gscdump/engine-duckdb-node`). Dispatched by `runAnalyzerFromSource`; capability mismatches throw `AnalyzerCapabilityError`.
+- **Analyzer** (`Analyzer<P, R>`) — pure contract `{ id, requires, build, reduce }` in `@gscdump/engine/analyzer`. `ROW_ANALYZERS` (10, for GSC live API + in-memory) + `SQL_ANALYZERS` (29) — both arrays exported from `@gscdump/analysis`. Dispatched by `runAnalyzerFromSource(source, params, registry)`; capability mismatches throw `AnalyzerCapabilityError`.
 - **Rollup** (`RollupDef`) — post-sync JSON aggregate in `@gscdump/engine/rollups`. Each rollup runs a SQL aggregation against the tenant's facts via `engine.runSQL` and writes a `RollupEnvelope<T>` to `u_<u>/<s>/rollups/<id>__v<ts>.json`. `DEFAULT_ROLLUPS` ships `daily_totals` (with `anonymizedImpressionsPct`), `weekly_totals`, `top_pages_28d`, `top_keywords_28d`, `indexing_metadata`. Format rule documented in `rollups.ts`: JSON for small/aggregate; parquet reserved for future top-N tables that need server-side WHERE filtering.
 - **Entity** — per-site slow-changing state, distinct family from the time-series facts. Three stores in `@gscdump/engine/entities`: URL inspections (per-URL latest + monthly history shards, keyed by FNV-1a hash), sitemap snapshots, indexing-metadata events. Point-lookup-by-id, not scanned. JSON-backed v1; SQLite-per-site swap is a backend change behind the same interface.
 - **Manifest authority** — R2-native `ManifestStore` (`@gscdump/engine/r2-manifest`) uses a HEAD pointer + immutable snapshot per `(siteId, table)` shard. Concurrent writers CAS on HEAD via `onlyIf.etagMatches`; readers fetch pointer + snapshot (both cacheable). Filesystem `ManifestStore` stays the single-writer default for CLI use.

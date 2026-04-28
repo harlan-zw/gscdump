@@ -8,9 +8,9 @@ import {
   analyzeFromSource,
   AnalyzerCapabilityError,
   createEngineQuerySource,
-  createGscApiQuerySource,
 } from '@gscdump/analysis'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
+import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 
 export class LocalStoreUnsupportedError extends Error {
   constructor(tool: string) {

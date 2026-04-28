@@ -1,0 +1,52 @@
+{
+  "name": "@gscdump/engine-gsc-api",
+  "type": "module",
+  "version": "0.7.1",
+  "description": "GSC live-API engine adapter — wraps the Search Analytics REST API as an AnalysisQuerySource for typed analyzer dispatch.",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/engine-gsc-api#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/engine-gsc-api"
+  },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "obuild",
+    "dev": "obuild --stub",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest --passWithNoTests",
+    "prepack": "pnpm run build"
+  },
+  "dependencies": {
+    "@gscdump/engine": "workspace:*",
+    "gscdump": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "catalog:dev-test"
+  }
+}

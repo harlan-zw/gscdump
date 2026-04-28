@@ -23,91 +23,128 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
     },
     "./contracts": {
       "types": "./dist/contracts.d.mts",
-      "import": "./dist/contracts.mjs"
+      "import": "./dist/contracts.mjs",
+      "default": "./dist/contracts.mjs"
     },
     "./snapshot": {
       "types": "./dist/snapshot.d.mts",
-      "import": "./dist/snapshot.mjs"
+      "import": "./dist/snapshot.mjs",
+      "default": "./dist/snapshot.mjs"
     },
     "./planner": {
       "types": "./dist/planner.d.mts",
-      "import": "./dist/planner.mjs"
+      "import": "./dist/planner.mjs",
+      "default": "./dist/planner.mjs"
     },
     "./schema": {
       "types": "./dist/schema.d.mts",
-      "import": "./dist/schema.mjs"
+      "import": "./dist/schema.mjs",
+      "default": "./dist/schema.mjs"
     },
     "./ingest": {
       "types": "./dist/ingest.d.mts",
-      "import": "./dist/ingest.mjs"
+      "import": "./dist/ingest.mjs",
+      "default": "./dist/ingest.mjs"
     },
     "./sql": {
       "types": "./dist/sql-bind.d.mts",
-      "import": "./dist/sql-bind.mjs"
+      "import": "./dist/sql-bind.mjs",
+      "default": "./dist/sql-bind.mjs"
     },
     "./sql-fragments": {
       "types": "./dist/sql-fragments.d.mts",
-      "import": "./dist/sql-fragments.mjs"
-    },
-    "./rollups": {
-      "types": "./dist/rollups.d.mts",
-      "import": "./dist/rollups.mjs"
+      "import": "./dist/sql-fragments.mjs",
+      "default": "./dist/sql-fragments.mjs"
     },
     "./entities": {
       "types": "./dist/entities.d.mts",
-      "import": "./dist/entities.mjs"
+      "import": "./dist/entities.mjs",
+      "default": "./dist/entities.mjs"
     },
     "./node": {
       "types": "./dist/adapters/duckdb-node.d.mts",
-      "import": "./dist/adapters/duckdb-node.mjs"
+      "import": "./dist/adapters/duckdb-node.mjs",
+      "default": "./dist/adapters/duckdb-node.mjs"
     },
     "./node-harness": {
       "types": "./dist/adapters/node-harness.d.mts",
-      "import": "./dist/adapters/node-harness.mjs"
+      "import": "./dist/adapters/node-harness.mjs",
+      "default": "./dist/adapters/node-harness.mjs"
     },
     "./filesystem": {
       "types": "./dist/adapters/filesystem.d.mts",
-      "import": "./dist/adapters/filesystem.mjs"
+      "import": "./dist/adapters/filesystem.mjs",
+      "default": "./dist/adapters/filesystem.mjs"
     },
     "./http": {
       "types": "./dist/adapters/http.d.mts",
-      "import": "./dist/adapters/http.mjs"
+      "import": "./dist/adapters/http.mjs",
+      "default": "./dist/adapters/http.mjs"
     },
     "./hyparquet": {
       "types": "./dist/adapters/hyparquet.d.mts",
-      "import": "./dist/adapters/hyparquet.mjs"
+      "import": "./dist/adapters/hyparquet.mjs",
+      "default": "./dist/adapters/hyparquet.mjs"
     },
     "./r2": {
       "types": "./dist/adapters/r2.d.mts",
-      "import": "./dist/adapters/r2.mjs"
+      "import": "./dist/adapters/r2.mjs",
+      "default": "./dist/adapters/r2.mjs"
     },
     "./r2-manifest": {
       "types": "./dist/adapters/r2-manifest.d.mts",
-      "import": "./dist/adapters/r2-manifest.mjs"
+      "import": "./dist/adapters/r2-manifest.mjs",
+      "default": "./dist/adapters/r2-manifest.mjs"
     },
     "./resolver": {
       "types": "./dist/resolver/index.d.mts",
-      "import": "./dist/resolver/index.mjs"
+      "import": "./dist/resolver/index.mjs",
+      "default": "./dist/resolver/index.mjs"
+    },
+    "./analyzer": {
+      "types": "./dist/analyzer/index.d.mts",
+      "import": "./dist/analyzer/index.mjs",
+      "default": "./dist/analyzer/index.mjs"
+    },
+    "./analysis-types": {
+      "types": "./dist/analysis-types.d.mts",
+      "import": "./dist/analysis-types.mjs",
+      "default": "./dist/analysis-types.mjs"
+    },
+    "./period": {
+      "types": "./dist/period/index.d.mts",
+      "import": "./dist/period/index.mjs",
+      "default": "./dist/period/index.mjs"
+    },
+    "./source": {
+      "types": "./dist/source/index.d.mts",
+      "import": "./dist/source/index.mjs",
+      "default": "./dist/source/index.mjs"
     },
     "./scope": {
       "types": "./dist/scope.d.mts",
-      "import": "./dist/scope.mjs"
+      "import": "./dist/scope.mjs",
+      "default": "./dist/scope.mjs"
     },
     "./arrow": {
       "types": "./dist/arrow-utils.d.mts",
-      "import": "./dist/arrow-utils.mjs"
+      "import": "./dist/arrow-utils.mjs",
+      "default": "./dist/arrow-utils.mjs"
     },
     "./inspection-sqlite-node": {
       "types": "./dist/adapters/inspection-sqlite-node.d.mts",
-      "import": "./dist/adapters/inspection-sqlite-node.mjs"
+      "import": "./dist/adapters/inspection-sqlite-node.mjs",
+      "default": "./dist/adapters/inspection-sqlite-node.mjs"
     },
     "./inspection-sqlite-browser": {
       "types": "./dist/adapters/inspection-sqlite-browser.d.mts",
-      "import": "./dist/adapters/inspection-sqlite-browser.mjs"
+      "import": "./dist/adapters/inspection-sqlite-browser.mjs",
+      "default": "./dist/adapters/inspection-sqlite-browser.mjs"
     }
   },
   "main": "./dist/index.mjs",

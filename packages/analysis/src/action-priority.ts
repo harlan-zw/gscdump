@@ -1,6 +1,6 @@
-import type { AnalyzerRegistry } from './analyzer/registry'
-import type { AnalysisQuerySource } from './source/types'
-import type { AnalysisParams, AnalysisResult, AnalysisTool } from './types'
+import type { AnalysisParams, AnalysisResult, AnalysisTool } from '@gscdump/engine/analysis-types'
+import type { AnalyzerRegistry } from '@gscdump/engine/analyzer'
+import type { AnalysisQuerySource } from '@gscdump/engine/resolver'
 import { clamp, clamp01 } from './scoring'
 import { analyzeFromSource } from './source/analyze-from-source'
 

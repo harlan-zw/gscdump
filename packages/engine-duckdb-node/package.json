@@ -23,7 +23,8 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -42,7 +43,6 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
-    "@gscdump/analysis": "workspace:*",
     "@gscdump/engine": "workspace:*",
     "drizzle-orm": "catalog:",
     "gscdump": "workspace:*"

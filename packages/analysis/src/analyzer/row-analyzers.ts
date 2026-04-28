@@ -7,7 +7,7 @@
  * triggering side effects. Pass to `createAnalyzerRegistry({ rows: ROW_ANALYZERS })`.
  */
 
-import type { Analyzer } from './types'
+import type { Analyzer } from '@gscdump/engine/analyzer'
 
 import { brandAnalyzer } from '../analyzers/brand'
 import { cannibalizationAnalyzer } from '../analyzers/cannibalization'

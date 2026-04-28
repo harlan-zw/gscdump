@@ -4,12 +4,12 @@
  * Migrated from `engine-duckdb-node/src/analyzers/content-velocity.ts`.
  */
 
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
-import type { AnalysisParams } from '../types'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
+import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { toIsoDate } from 'gscdump'
-import { defineAnalyzer } from '../analyzer/define'
-import { periodOf } from '../period'
 
 function num(v: unknown): number {
   if (typeof v === 'number')
@@ -53,7 +53,7 @@ export const contentVelocityAnalyzer = defineAnalyzer<AnalysisParams, Row, Conte
     ),
     per_week AS (
       SELECT
-        strftime(date, '%G-W%V') AS week,
+        strftime(CAST(date AS DATE), '%G-W%V') AS week,
         MIN(date) AS week_start,
         CAST(COUNT(DISTINCT query) AS DOUBLE) AS totalKeywords
       FROM src
@@ -61,7 +61,7 @@ export const contentVelocityAnalyzer = defineAnalyzer<AnalysisParams, Row, Conte
     ),
     new_per_week AS (
       SELECT
-        strftime(first_date, '%G-W%V') AS week,
+        strftime(CAST(first_date AS DATE), '%G-W%V') AS week,
         CAST(COUNT(*) AS DOUBLE) AS newKeywords
       FROM first_seen
       GROUP BY week

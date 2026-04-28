@@ -4,14 +4,14 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { DuckDBInstance } from '@duckdb/node-api'
-import { runAnalyzerWithEngine as rawRunAnalyzerWithEngine } from '@gscdump/analysis'
+import { analyzeInBrowser, runAnalyzerWithEngine as rawRunAnalyzerWithEngine } from '@gscdump/analysis'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import {
   createDuckDBCodec,
   createDuckDBExecutor,
   createStorageEngine,
 } from '@gscdump/engine'
-import { analyzeInBrowser, attachParquetIndex, attachSnapshotIndex } from '@gscdump/engine-duckdb-node'
+import { attachParquetIndex, attachSnapshotIndex } from '@gscdump/engine-duckdb-node'
 import {
   createFilesystemDataSource,
   createFilesystemManifestStore,

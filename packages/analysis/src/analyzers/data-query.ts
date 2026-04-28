@@ -7,9 +7,9 @@
  */
 
 import type { Row } from '@gscdump/engine/contracts'
-import type { AnalysisParams } from '../types'
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import { pgResolverAdapter } from '@gscdump/engine/resolver'
-import { defineAnalyzer } from '../analyzer/define'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { buildDataQueryPlan } from '../query'
 
 export type DataQueryResult = Row

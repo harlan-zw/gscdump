@@ -40,6 +40,13 @@
   toSumPosition: function
   transformGscRow: function
   weekPartition: function
+./analysis-types:
+  num: function
+./analyzer:
+  AnalyzerCapabilityError: function
+  createAnalyzerRegistry: function
+  defineAnalyzer: function
+  runAnalyzerFromSource: function
 ./arrow:
   arrowToRows: function
 ./contracts: {}
@@ -84,6 +91,15 @@
   resetNodeDuckDB: function
 ./node-harness:
   createNodeHarness: function
+./period:
+  comparisonOf: function
+  defaultEndDate: function
+  defaultStartDate: function
+  padTimeseries: function
+  periodOf: function
+  resolveWindow: function
+  windowToComparisonPeriod: function
+  windowToPeriod: function
 ./planner:
   compileLogicalQueryPlan: function
   enumeratePartitions: function
@@ -124,18 +140,6 @@
   resolveToSQL: function
   resolveToSQLOptimized: function
   supportsDimensionOnSurface: function
-./rollups:
-  dailyTotalsRollup: object
-  DEFAULT_ROLLUPS: object
-  indexingMetadataRollup: object
-  rebuildRollups: function
-  rollupKey: function
-  rollupParquetKey: function
-  topCountries28dRollup: object
-  topKeywords28dParquetRollup: object
-  topKeywords28dRollup: object
-  topPages28dRollup: object
-  weeklyTotalsRollup: object
 ./schema:
   allTables: function
   countries: object
@@ -156,6 +160,16 @@
   createScopedHelpers: function
   mergeScope: function
 ./snapshot: {}
+./source:
+  AttachedTableMissingError: function
+  createAttachedTableSource: function
+  createEngineQuerySource: function
+  ENGINE_QUERY_CAPABILITIES: object
+  queryComparisonRows: function
+  queryRows: function
+  rewriteForTableSource: function
+  runAnalyzerWithEngine: function
+  typedQuery: function
 ./sql:
   bindLiterals: function
   formatLiteral: function

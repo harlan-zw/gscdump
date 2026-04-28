@@ -6,14 +6,16 @@
  */
 
 import type { Row } from '@gscdump/engine/contracts'
-import type { AnalysisParams, QueryPageRow } from '../types'
+import type { QueryPageRow } from '../types'
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { between, date as dateCol, gsc, page as pageCol, query as queryCol } from 'gscdump/query'
-import { defineAnalyzer } from '../analyzer/define'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { paginateClause, paginateInMemory } from '../analyzer/paginate'
-import { periodOf } from '../period'
-import { createSorter, num } from '../types'
+import { periodOf } from '@gscdump/engine/period'
+import { createSorter } from '../types'
+import { num } from '@gscdump/engine/analysis-types'
 
 const DEFAULT_ROW_LIMIT = 25_000
 

@@ -18,19 +18,23 @@
   "exports": {
     ".": {
       "types": "./types.ts",
-      "import": "./nuxt.config.ts"
+      "import": "./nuxt.config.ts",
+      "default": "./nuxt.config.ts"
     },
     "./types": {
       "types": "./types.ts",
-      "import": "./types.ts"
+      "import": "./types.ts",
+      "default": "./types.ts"
     },
     "./module": {
       "types": "./module.ts",
-      "import": "./module.ts"
+      "import": "./module.ts",
+      "default": "./module.ts"
     },
     "./site-url": {
       "types": "./site-url.ts",
-      "import": "./site-url.ts"
+      "import": "./site-url.ts",
+      "default": "./site-url.ts"
     }
   },
   "main": "./nuxt.config.ts",
@@ -45,7 +49,7 @@
   ],
   "scripts": {
     "build": "nuxt prepare",
-    "typecheck": "nuxt prepare && tsc --noEmit"
+    "typecheck": "nuxt typecheck"
   },
   "peerDependencies": {
     "nuxt": "catalog:",
@@ -54,6 +58,7 @@
   "dependencies": {
     "@duckdb/duckdb-wasm": "catalog:",
     "@gscdump/analysis": "workspace:*",
+    "@gscdump/engine-duckdb-wasm": "workspace:*",
     "@nuxt/ui": "catalog:",
     "@unovis/ts": "catalog:",
     "@unovis/vue": "catalog:",

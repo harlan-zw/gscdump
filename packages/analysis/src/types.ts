@@ -1,11 +1,8 @@
 /**
- * Row-level helpers for analysis functions. `AnalysisParams` / `AnalysisResult`
- * / `AnalysisTool` live in `gscdump/contracts` — the canonical cross-package
- * contract — and are re-exported here for backward-compatible imports from
- * `@gscdump/analysis`.
+ * Domain row shapes + analysis utilities. Analyzer-call contracts
+ * (`AnalysisParams`, `AnalysisResult`, `AnalysisTool`, `num`) live in
+ * `@gscdump/engine/analysis-types`.
  */
-
-export type { AnalysisParams, AnalysisResult, AnalysisTool } from 'gscdump/contracts'
 
 export type SortOrder = 'asc' | 'desc'
 
@@ -37,17 +34,6 @@ export interface QueryPageRow extends BaseMetrics {
 /** Date row from query */
 export interface DateRow extends BaseMetrics {
   date: string
-}
-
-/** Coerce arbitrary value (number, bigint, string, null) to number, defaulting to 0. */
-export function num(v: unknown): number {
-  if (typeof v === 'number')
-    return v
-  if (typeof v === 'bigint')
-    return Number(v)
-  if (v == null)
-    return 0
-  return Number(v)
 }
 
 /**

@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-27 (afternoon)
+Last updated: 2026-04-28
 
 Unified successor to `PIVOT.md`, `NEXT_STEPS.md`, `NEXT_STEPS-example.md`,
 `PORTING_PLAN.md`, `EXTRACTION_PLAN.md`. Only open work lives here; shipped
@@ -8,15 +8,19 @@ items are recorded in git history.
 
 ## Where we are
 
-Seven packages:
+Eleven packages:
 
 - **`gscdump`** — REST client + query builder. Edge-compatible.
 - **`@gscdump/engine`** — parquet/R2 storage + tiered compaction + R2 manifest
-  CAS + rollups + entity stores + tenant-scoped GDPR purge. All 7 PIVOT items
-  shipped v1.
-- **`@gscdump/engine-wasm`**, **`@gscdump/engine-sqlite`**,
-  **`@gscdump/engine-duckdb-node`** — engine adapters.
-- **`@gscdump/analysis`** — analyzers + insight runners + drizzle schemas.
+  CAS + rollups + entity stores + tenant-scoped GDPR purge. Now also owns the
+  contract layer: `Analyzer` interface, `defineAnalyzer`, dispatcher, registry,
+  `AnalysisParams`/`AnalysisResult`, period helpers, `createEngineQuerySource`.
+- **`@gscdump/engine-duckdb-wasm`**, **`@gscdump/engine-sqlite`**,
+  **`@gscdump/engine-duckdb-node`** — engine adapters (parquet/R2 backends).
+- **`@gscdump/engine-gsc-api`** — GSC live-API engine adapter.
+- **`@gscdump/analysis`** — analyzer instances (row + sql), composite source,
+  attached-table dispatcher, semantic analyzers. Re-exports the contract layer
+  from `@gscdump/engine` for ergonomics.
 - **`@gscdump/nuxt-analytics`** — Nuxt layer (`extends`). Source provider seam,
   capability gates, design-system components (`GscHero`, `DataList`,
   `QueryLabel`, `CommandPalette`, `PerformanceChart`, `Ui*`), entity routes.
@@ -130,7 +134,7 @@ each layer mode.
 ## Last session (2026-04-27)
 
 - Engine adapter contract test (`packages/engine-duckdb-node/test/contract.test.ts`)
-  asserts engine-duckdb-node and engine-wasm yield identical rows for the
+  asserts engine-duckdb-node and engine-duckdb-wasm yield identical rows for the
   same builder state over fixture parquet. Surfaced + fixed a metric-cast
   divergence in `pgResolverAdapter`: `clicks` / `impressions` weren't
   wrapped in `CAST(... AS DOUBLE)`, so the wasm path returned
@@ -177,9 +181,47 @@ each layer mode.
   in `packages/analysis/test/analyzer-plan-snapshots.test.ts` (SQL
   whitespace in CTR shortfall plans) is unchanged by this work.
 
+## Last session (2026-04-28)
+
+- Phase 4 of the package-scope refactor: extracted `@gscdump/engine-gsc-api`
+  from `@gscdump/analysis/source/{gsc,live,gsc-rollup-synth,post-process}`.
+  GSC live-API now sits behind a real package boundary alongside the other
+  three engine adapters.
+- Broke the analysis ↔ engine-adapter cycle that was blocking the Phase 4
+  extract. Lifted the contract layer to `@gscdump/engine`: `Analyzer`,
+  `Plan`, `Capability`, `defineAnalyzer`, `runAnalyzerFromSource`,
+  `createAnalyzerRegistry` under `/analyzer`; `AnalysisParams` /
+  `AnalysisResult` / `AnalysisTool` under `/analysis-types`; period
+  primitives under `/period`; `createEngineQuerySource` +
+  `runAnalyzerWithEngine` + `typedQuery`/`queryRows` under `/source`.
+  Moved `SQL_ANALYZERS` and `analyzeInBrowser` from `@gscdump/engine-duckdb-node`
+  into `@gscdump/analysis` (they reference analyzer instances and don't
+  belong on the engine boundary). Dropped `analysis/source/{browser,sqlite,
+  engine,types}.ts` re-export shims; consumers import directly from the
+  engine packages they need.
+- Killed the legacy `AnalyzerSpec` / `registry-compat` / `analyzer-runtime`
+  bridge inside `analyzeInBrowser` (~250 lines). Replaced with a thin
+  `createAttachedTableSource(runner, { schema })` factory that wraps the
+  runner in an `AnalysisQuerySource` with the `attachedTables` capability
+  and lets `runAnalyzerFromSource` do the dispatch. `analyzeInBrowser` is
+  now ~10 lines over the unified pipeline; analyzer-parity tests still
+  pass byte-for-byte.
+- pnpm cyclic-deps warning gone. 13 packages typecheck, 635 tests pass.
+  gscdump.com lockstep updated (`seam.ts` imports `createEngineQuerySource`
+  from `@gscdump/engine/source`, `createLiveGscSource` from
+  `@gscdump/engine-gsc-api`); workspace catalog + override added for
+  `engine-gsc-api`. nuxtseo.com untouched (declares `@gscdump/analysis` but
+  no source-level imports).
+
 ## Next action
 
-P3.4 + P3.5 both done. P1.1 is the next big lever once `gscdump.com`
-Phase 0 audit fixes land — then swap `link:` → `^0.5.0` and start the
-file-deduplication pass. Adjacent in-repo work: refresh the stale
-analyzer-plan snapshots if the SQL drift is intended.
+The 5-phase package-scope refactor is done. Open levers:
+
+1. P1.1 (`gscdump.com` Phase 3 adoption) is still the biggest consumer
+   move once Phase 0 audit fixes land — swap `link:` → `^0.7.x` once the
+   refactor is published and start the file-deduplication pass.
+2. Bundle-size audit: now that `analyzeInBrowser` lives in `@gscdump/analysis`,
+   the analysis bundle pulls in every SQL analyzer's SQL strings even for
+   row-only consumers. Worth checking whether the `/analyzer` (rows only)
+   subpath can stay slim.
+3. Refresh stale analyzer-plan snapshots if the SQL drift is intended.

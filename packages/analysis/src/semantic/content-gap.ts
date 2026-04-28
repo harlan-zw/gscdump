@@ -1,4 +1,4 @@
-import type { AnalysisQuerySource, QueryRow } from '../source/types'
+import type { AnalysisQuerySource, QueryRow } from '@gscdump/engine/resolver'
 
 export interface ContentGapResult {
   query: string

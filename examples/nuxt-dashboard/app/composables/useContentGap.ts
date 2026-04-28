@@ -3,10 +3,10 @@ import type {
   ContentGapProgress,
   ContentGapResult,
 } from '@gscdump/analysis/semantic'
-import type { QueryResult } from '@gscdump/engine-wasm'
+import type { QueryResult } from '@gscdump/engine-duckdb-wasm'
 
-import { createBrowserQuerySource } from '@gscdump/analysis'
 import { analyzeContentGap } from '@gscdump/analysis/semantic'
+import { createEngine as createBrowserQuerySource } from '@gscdump/engine-duckdb-wasm'
 
 export type { ContentGapOptions, ContentGapProgress, ContentGapResult }
 

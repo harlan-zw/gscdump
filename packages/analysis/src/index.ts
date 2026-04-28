@@ -16,16 +16,11 @@ export {
   scorePriorityActions,
 } from './action-priority'
 
-export {
-  AnalyzerCapabilityError,
-  runAnalyzerFromSource,
-} from './analyzer/dispatch'
-export type { AnalyzerRegistry, AnalyzerRegistryInit, AnalyzerVariants } from './analyzer/registry'
-export { createAnalyzerRegistry } from './analyzer/registry'
 export { ROW_ANALYZERS } from './analyzer/row-analyzers'
 // Pure analysis functions
 export type { BrandSegmentationOptions, BrandSegmentationResult, BrandSummary } from './analyzers/brand'
 export { analyzeBrandSegmentation } from './analyzers/brand'
+
 export type {
   CannibalizationCompetitor,
   CannibalizationEvent,
@@ -35,8 +30,10 @@ export type {
   CannibalizationSortMetric,
 } from './analyzers/cannibalization'
 export { analyzeCannibalization } from './analyzers/cannibalization'
+
 export type { ClusteringOptions, ClusteringResult, ClusterType, KeywordCluster } from './analyzers/clustering'
 export { analyzeClustering } from './analyzers/clustering'
+
 export type {
   ConcentrationInput,
   ConcentrationItem,
@@ -44,7 +41,6 @@ export type {
   ConcentrationResult,
   ConcentrationRiskLevel,
 } from './analyzers/concentration'
-
 export { analyzeConcentration, analyzeKeywordConcentration, analyzePageConcentration } from './analyzers/concentration'
 
 export type { DecayInput, DecayOptions, DecayResult, DecaySeriesPoint, DecaySortMetric } from './analyzers/decay'
@@ -54,41 +50,22 @@ export type { MoverData, MoversInput, MoversOptions, MoversResult, MoversSortMet
 
 export { analyzeMovers } from './analyzers/movers'
 export type { OpportunityResult } from './analyzers/opportunity'
-
 export type { MonthlyData, SeasonalityMetric, SeasonalityOptions, SeasonalityResult } from './analyzers/seasonality'
 export { analyzeSeasonality } from './analyzers/seasonality'
 export type { ZeroClickResult } from './analyzers/zero-click'
+// Browser dispatcher (legacy AnalyzerSpec path)
+export { analyzeInBrowser, rewriteForTableSource } from './browser'
+export type { AnalyzerRunner, BrowserAnalyzeOptions } from './browser'
 
-export type {
-  AnalysisPeriod,
-  ComparisonMode,
-  ComparisonPeriod,
-  PadTimeseriesOptions,
-  ResolvedWindow,
-  ResolveWindowOptions,
-  WindowPreset,
-} from './period'
-export {
-  comparisonOf,
-  padTimeseries,
-  periodOf,
-  resolveWindow,
-  windowToComparisonPeriod,
-  windowToPeriod,
-} from './period'
+export { defaultAnalyzerRegistry } from './default-registry'
 
 export { normalizeQuery } from './query/normalize'
 // Source-based analyzer entrypoints
 export type {
-  AnalysisQuerySource,
   ComparisonQueryResult,
   QueryDimension,
   QueryOptions,
   QueryResult,
-  QueryRow,
-  RowQuerySource,
-  SourceCapabilities,
-  SqlQuerySource,
 } from './source'
 
 export {
@@ -102,18 +79,18 @@ export {
   analyzePageConcentrationFromSource,
   analyzeSeasonalityFromSource,
   analyzeStrikingDistanceFromSource,
-  createBrowserQuerySource,
-  createEngineQuerySource,
-  createGscApiQuerySource,
+  createCompositeSource,
   createInMemoryQuerySource,
-  createSqliteQuerySource,
-  isSqlQuerySource,
+  IN_MEMORY_DEFAULT_CAPABILITIES,
   queryAnalyticsFromSource,
   queryComparisonFromSource,
-  queryComparisonRows,
-  queryRows,
 } from './source'
-export { runAnalyzerWithEngine } from './source/engine'
+export type {
+  CompositeSourceOptions,
+  InMemoryQuerySourceOptions,
+} from './source'
+
+export { SQL_ANALYZERS } from './sql-analyzers'
 
 export type {
   StrikingDistanceOptions,
@@ -121,11 +98,8 @@ export type {
   StrikingDistanceSortMetric,
 } from './striking-distance'
 export { analyzeStrikingDistance } from './striking-distance'
-// Analyzer contract types (used by CLI, MCP, cloud)
+// Domain row shapes + utilities
 export type {
-  AnalysisParams,
-  AnalysisResult,
-  AnalysisTool,
   BaseMetrics,
   DateRow,
   KeywordRow,
@@ -134,4 +108,87 @@ export type {
   SortOrder,
 } from './types'
 
-export { createSorter, num } from './types'
+export { createSorter } from './types'
+// Analyzer call contracts
+export type {
+  AnalysisParams,
+  AnalysisResult,
+  AnalysisTool,
+} from '@gscdump/engine/analysis-types'
+
+export { num } from '@gscdump/engine/analysis-types'
+
+// Analyzer contracts + dispatcher (lifted to @gscdump/engine, re-exported here as the public surface)
+export type {
+  Analyzer,
+  AnalyzerRegistry,
+  AnalyzerRegistryInit,
+  AnalyzerVariants,
+  Capability,
+  Plan,
+  ReduceContext,
+  RowQueriesPlan,
+  SqlExtraQuery,
+  SqlPlan,
+  TypedRowQuery,
+} from '@gscdump/engine/analyzer'
+
+export {
+  AnalyzerCapabilityError,
+  createAnalyzerRegistry,
+  defineAnalyzer,
+  runAnalyzerFromSource,
+} from '@gscdump/engine/analyzer'
+
+export type {
+  DefineAnalyzerOptions,
+  DefinedAnalyzer,
+  ReduceCtx,
+  Reducer,
+  SqlPlanSpec,
+} from '@gscdump/engine/analyzer'
+// Period helpers
+export type {
+  AnalysisPeriod,
+  ComparisonMode,
+  ComparisonPeriod,
+  PadTimeseriesOptions,
+  ResolvedWindow,
+  ResolveWindowOptions,
+  WindowPreset,
+} from '@gscdump/engine/period'
+
+export {
+  comparisonOf,
+  padTimeseries,
+  periodOf,
+  resolveWindow,
+  windowToComparisonPeriod,
+  windowToPeriod,
+} from '@gscdump/engine/period'
+
+// Source contracts (resolver-owned)
+export type {
+  AnalysisQuerySource,
+  ExecuteSqlOptions,
+  FileSet,
+  QueryRow,
+  RowQuerySource,
+  SourceCapabilities,
+  SqlQuerySource,
+} from '@gscdump/engine/resolver'
+export { isSqlQuerySource } from '@gscdump/engine/resolver'
+
+// Engine-backed source + typed-query helpers
+export type {
+  EngineQuerySourceOptions,
+  TypedQuery,
+} from '@gscdump/engine/source'
+export {
+  createEngineQuerySource,
+  ENGINE_QUERY_CAPABILITIES,
+  queryComparisonRows,
+  queryRows,
+  runAnalyzerWithEngine,
+  typedQuery,
+} from '@gscdump/engine/source'

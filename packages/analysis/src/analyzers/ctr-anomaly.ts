@@ -5,12 +5,12 @@
  */
 
 import type { Row } from '@gscdump/engine/contracts'
-import type { AnalysisParams } from '../types'
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { daysAgo } from 'gscdump'
-import { defineAnalyzer } from '../analyzer/define'
-import { defaultEndDate } from '../period'
+import { defineAnalyzer } from '@gscdump/engine/analyzer'
+import { defaultEndDate } from '@gscdump/engine/period'
 
 function num(v: unknown): number {
   if (typeof v === 'number')

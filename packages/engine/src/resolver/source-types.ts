@@ -1,7 +1,7 @@
 /**
  * Source-layer contracts. Lives in engine because `createSqlQuerySource`
- * (engine-side factory) produces `SqlQuerySource`; analyzers in analysis
- * re-export these via `@gscdump/analysis/source` for their own dispatcher.
+ * (engine-side factory) produces `SqlQuerySource`; analyzer dispatch in
+ * `@gscdump/engine/analyzer` consumes these directly.
  *
  * Kept dialect- and storage-agnostic: only the bare SQL-source contract
  * plus file-set refs for `{{FILES}}` substitution over partitioned parquet.

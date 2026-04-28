@@ -5,6 +5,7 @@
   aggPosition: function
   and: function
   compileSqlite: function
+  createD1ManifestStore: function
   createEngine: function
   createSqliteInsightRunner: function
   createSqliteResolverAdapter: function
@@ -19,8 +20,21 @@
   lte: function
   mergeScope: function
   probeSqliteRegex: function
+  r2Locks: object
+  r2Manifest: object
+  r2ShadowDiffs: object
+  r2SyncStates: object
+  r2Watermarks: object
+  r2WriteErrors: object
   resolveWindow: function
   schema: object
   scopeFor: function
   sql: function
   sqliteResolverAdapter: object
+./r2-manifest-schema:
+  r2Locks: object
+  r2Manifest: object
+  r2ShadowDiffs: object
+  r2SyncStates: object
+  r2Watermarks: object
+  r2WriteErrors: object

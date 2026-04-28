@@ -1,6 +1,6 @@
 /**
  * Canonical drizzle pg-core schema — single source of truth for the GSC
- * analytics storage shape. Consumed directly by engine-wasm / DuckDB-WASM
+ * analytics storage shape. Consumed directly by engine-duckdb-wasm / DuckDB-WASM
  * (runs Postgres-flavored SQL natively) and by the node DuckDB adapter.
  * The engine-sqlite schema declares its own sqlite-core tables, but its
  * column set must be a superset of these (enforced by `assertSchemaInSync`

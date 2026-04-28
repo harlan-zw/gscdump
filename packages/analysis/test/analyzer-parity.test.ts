@@ -34,7 +34,7 @@ import {
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { defaultAnalyzerRegistry } from '../src/default-registry'
 import { analyzeFromSource } from '../src/source/analyze-from-source'
-import { runAnalyzerWithEngine } from '../src/source/engine'
+import { runAnalyzerWithEngine } from '@gscdump/engine/source'
 import { createInMemoryQuerySource } from '../src/source/in-memory'
 
 afterAll(() => {

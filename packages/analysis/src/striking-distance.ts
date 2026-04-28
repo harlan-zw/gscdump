@@ -4,7 +4,8 @@
 
 import type { StrikingDistanceResult } from './analyzers/striking-distance'
 import type { KeywordRow, SortOrder } from './types'
-import { createSorter, num } from './types'
+import { createSorter } from './types'
+import { num } from '@gscdump/engine/analysis-types'
 
 export type { StrikingDistanceResult } from './analyzers/striking-distance'
 

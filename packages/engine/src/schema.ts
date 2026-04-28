@@ -3,7 +3,7 @@
  * schema (`./drizzle-schema`). Consumers that need dialect-agnostic
  * column metadata (parquet writer, manifest versioning, planner) read
  * `SCHEMAS`; consumers that need drizzle-native tables (query builder,
- * engine-wasm, node DuckDB adapter) import from `./drizzle-schema`.
+ * engine-duckdb-wasm, node DuckDB adapter) import from `./drizzle-schema`.
  *
  * Deriving at module load means adding a column to a drizzle table
  * automatically updates `SCHEMAS`, no hand-maintained mirror.

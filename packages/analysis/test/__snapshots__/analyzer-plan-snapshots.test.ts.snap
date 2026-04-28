@@ -2107,7 +2107,7 @@ exports[`analyzer plan snapshots > sql plan: content-velocity 1`] = `
     ),
     per_week AS (
       SELECT
-        strftime(date, '%G-W%V') AS week,
+        strftime(CAST(date AS DATE), '%G-W%V') AS week,
         MIN(date) AS week_start,
         CAST(COUNT(DISTINCT query) AS DOUBLE) AS totalKeywords
       FROM src
@@ -2115,7 +2115,7 @@ exports[`analyzer plan snapshots > sql plan: content-velocity 1`] = `
     ),
     new_per_week AS (
       SELECT
-        strftime(first_date, '%G-W%V') AS week,
+        strftime(CAST(first_date AS DATE), '%G-W%V') AS week,
         CAST(COUNT(*) AS DOUBLE) AS newKeywords
       FROM first_seen
       GROUP BY week

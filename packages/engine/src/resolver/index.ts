@@ -6,9 +6,8 @@
  * `resolveComparisonSQL`, etc), the `createSqlQuerySource` factory, and
  * the source-layer types analyzers consume.
  *
- * Engine adapter packages (`@gscdump/engine-wasm`, `@gscdump/engine-sqlite`)
- * import from here. `@gscdump/analysis` re-exports the source types and
- * uses the composers internally.
+ * Engine adapter packages (`@gscdump/engine-duckdb-wasm`, `@gscdump/engine-sqlite`)
+ * and analyzer dispatch (`@gscdump/engine/analyzer`) import from here.
  */
 
 export { createResolverAdapter } from './adapter'

@@ -34,39 +34,48 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
     },
     "./query": {
       "types": "./dist/query/index.d.mts",
-      "import": "./dist/query/index.mjs"
+      "import": "./dist/query/index.mjs",
+      "default": "./dist/query/index.mjs"
     },
     "./query/plan": {
       "types": "./dist/query/plan.d.mts",
-      "import": "./dist/query/plan.mjs"
+      "import": "./dist/query/plan.mjs",
+      "default": "./dist/query/plan.mjs"
     },
     "./contracts": {
       "types": "./dist/contracts.d.mts",
-      "import": "./dist/contracts.mjs"
+      "import": "./dist/contracts.mjs",
+      "default": "./dist/contracts.mjs"
     },
     "./driver": {
       "types": "./dist/driver.d.mts",
-      "import": "./dist/driver.mjs"
+      "import": "./dist/driver.mjs",
+      "default": "./dist/driver.mjs"
     },
     "./tenant": {
       "types": "./dist/tenant.d.mts",
-      "import": "./dist/tenant.mjs"
+      "import": "./dist/tenant.mjs",
+      "default": "./dist/tenant.mjs"
     },
     "./normalize": {
       "types": "./dist/normalize.d.mts",
-      "import": "./dist/normalize.mjs"
+      "import": "./dist/normalize.mjs",
+      "default": "./dist/normalize.mjs"
     },
     "./url": {
       "types": "./dist/url.d.mts",
-      "import": "./dist/url.mjs"
+      "import": "./dist/url.mjs",
+      "default": "./dist/url.mjs"
     },
     "./sitemap": {
       "types": "./dist/sitemap.d.mts",
-      "import": "./dist/sitemap.mjs"
+      "import": "./dist/sitemap.mjs",
+      "default": "./dist/sitemap.mjs"
     }
   },
   "main": "./dist/index.mjs",
