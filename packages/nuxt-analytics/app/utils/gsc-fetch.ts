@@ -16,9 +16,37 @@
 // Nitro narrowing would mis-type every call site.
 
 import type { $Fetch } from 'ofetch'
+import { classifyGscError } from './gsc-error'
 
 let cached: $Fetch | null = null
 const _headers = ref<Record<string, string>>({})
+
+const TOAST_DEDUP_MS = 5000
+const _recentToasts = new Map<string, number>()
+
+function shouldEmitToast(key: string): boolean {
+  const now = Date.now()
+  const last = _recentToasts.get(key) ?? 0
+  if (now - last < TOAST_DEDUP_MS)
+    return false
+  _recentToasts.set(key, now)
+  // Cap entries so the map never grows unbounded.
+  if (_recentToasts.size > 32) {
+    const oldest = [..._recentToasts.entries()].sort((a, b) => a[1] - b[1])[0]
+    if (oldest)
+      _recentToasts.delete(oldest[0])
+  }
+  return true
+}
+
+function defaultToastTitle(status: string): string {
+  switch (status) {
+    case 'auth-missing': return 'Sign in required'
+    case 'rate-limited': return 'Rate limit exceeded'
+    case 'network': return 'Network error'
+    default: return 'Request failed'
+  }
+}
 
 /**
  * Set request headers the layer should attach to every `/api/__gsc/*` call.
@@ -42,8 +70,9 @@ export function getGscFetchHeaders(): Record<string, string> {
 export function useGscFetch(): $Fetch {
   if (cached)
     return cached
-  const cfg = useRuntimeConfig().public.analytics as { apiBase?: string } | undefined
+  const cfg = useRuntimeConfig().public.analytics as { apiBase?: string, toastErrors?: boolean } | undefined
   const apiBase = cfg?.apiBase ?? ''
+  const toastErrors = cfg?.toastErrors === true
   cached = $fetch.create({
     baseURL: apiBase,
     onRequest: ({ options }) => {
@@ -64,6 +93,20 @@ export function useGscFetch(): $Fetch {
         // session-backed deployments.
         options.credentials = 'include'
       }
+    },
+    onResponseError: (ctx) => {
+      if (!toastErrors || !import.meta.client)
+        return
+      const c = classifyGscError(ctx.error ?? ctx.response)
+      const key = `${c.status}:${c.code ?? '-'}:${c.message ?? ''}`
+      if (!shouldEmitToast(key))
+        return
+      const toast = useToast()
+      toast.add({
+        title: defaultToastTitle(c.status),
+        description: c.message,
+        color: c.status === 'rate-limited' ? 'warning' : 'error',
+      })
     },
   }) as unknown as $Fetch
   return cached

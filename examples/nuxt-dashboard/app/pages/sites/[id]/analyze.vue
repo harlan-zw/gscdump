@@ -90,7 +90,7 @@ type CompareMode = typeof COMPARE_OPTIONS[number]['value']
 const period = ref<Period>('28d')
 const compareMode = ref<CompareMode>('previous')
 const stableData = ref(true)
-const dateRange = computed(() => periodToDateRange(period.value, stableData.value))
+const dateRange = computed(() => periodToDateRange(period.value, { stableData: stableData.value }))
 
 // Tabs whose data is query-grained (reads the `keywords` table). These
 // widgets sum per-query rows and so silently drop GSC-anonymized impressions;
@@ -132,18 +132,18 @@ const visibleMetrics = ref<Record<MetricCol, boolean>>({
   avg_position: true,
 })
 
-// Sort + pagination. `sortBy` applies universally: raw tabs push it into SQL
+// Sort + pagination. `sort` applies universally: raw tabs push it into SQL
 // when the column is a known metric or the row dim; analyzer tabs apply it
 // client-side against the returned rows.
 const RAW_SQL_SORT_COLS = ['clicks', 'impressions', 'ctr', 'avg_position'] as const
-const sortBy = ref<string>('clicks')
-const sortDir = ref<'desc' | 'asc'>('desc')
-const pageSize = ref(25)
-const pageIdx = ref(0)
+
+// URL-synced table state (search/sort/page deep-linking).
+const { q: search, sort, page, pageSize } = useGscTableState({
+  defaultSort: { column: 'clicks', direction: 'desc' },
+})
 
 // Fuzzy search (raw tabs only). Debounced to ~200ms so keystrokes don't each
 // fire a query — the debounced signal is what watchers react to.
-const search = ref('')
 const searchDebounced = ref('')
 let searchDebounceHandle: ReturnType<typeof setTimeout> | null = null
 watch(search, (v) => {
@@ -176,9 +176,10 @@ const queryMs = ref<number | null>(null)
 const meta = ref<Record<string, unknown> | null>(null)
 
 function rawSortKey(tab: RawTab): string {
-  if ((RAW_SQL_SORT_COLS as readonly string[]).includes(sortBy.value))
-    return sortBy.value
-  if (sortBy.value === tab.dim)
+  const col = sort.value?.column ?? 'clicks'
+  if ((RAW_SQL_SORT_COLS as readonly string[]).includes(col))
+    return col
+  if (col === tab.dim)
     return tab.dim
   return 'clicks'
 }
@@ -221,9 +222,9 @@ function withDateFilter(searchWhere: string, searchParams: unknown[]): { where: 
 }
 
 function buildSqlRaw(tab: RawTab): RawQuery {
-  const dir = sortDir.value.toUpperCase()
+  const dir = (sort.value?.direction ?? 'desc').toUpperCase()
   const limit = pageSize.value
-  const offset = pageIdx.value * pageSize.value
+  const offset = (page.value - 1) * pageSize.value
   const tokens = searchTokens(searchDebounced.value)
   const { where: searchWhere, rank, params: searchParams } = buildSearchClauses(tab.dim, tokens)
   const { where, params: whereParams } = withDateFilter(searchWhere, searchParams.slice(0, tokens.length))
@@ -307,21 +308,17 @@ async function runActive(): Promise<void> {
   }
 }
 
-// Reset pagination + clear search when tab changes.
+// Reset pagination + clear search when tab changes. Layer auto-resets `page`
+// when `q` changes, so we only need to clear `search` here.
 watch(activeId, () => {
-  pageIdx.value = 0
+  page.value = 1
   search.value = ''
   searchDebounced.value = ''
 })
 
-// A new search string resets pagination but keeps the sort.
-watch(searchDebounced, () => {
-  pageIdx.value = 0
-})
-
 // Re-run when anything query-affecting changes (after boot).
 watch(
-  [activeId, sortBy, sortDir, pageSize, pageIdx, searchDebounced, period, stableData, isReady],
+  [activeId, sort, pageSize, page, searchDebounced, period, stableData, isReady],
   (_, __, onCleanup) => {
     if (!isReady.value)
       return
@@ -340,17 +337,17 @@ function isSortable(col: string): boolean {
 function toggleSort(col: string): void {
   if (!isSortable(col))
     return
-  if (sortBy.value === col) {
-    sortDir.value = sortDir.value === 'desc' ? 'asc' : 'desc'
+  const cur = sort.value
+  if (cur && cur.column === col) {
+    sort.value = { column: col, direction: cur.direction === 'desc' ? 'asc' : 'desc' }
   }
   else {
-    sortBy.value = col
     const sample = rows.value[0]?.[col]
     const isNumeric = typeof sample === 'number' || typeof sample === 'bigint'
-    sortDir.value = isNumeric ? 'desc' : 'asc'
+    sort.value = { column: col, direction: isNumeric ? 'desc' : 'asc' }
   }
   if (activeTab.value.kind === 'raw')
-    pageIdx.value = 0
+    page.value = 1
 }
 
 function compareCell(a: unknown, b: unknown): number {
@@ -374,10 +371,10 @@ function compareCell(a: unknown, b: unknown): number {
 const displayRows = computed(() => {
   if (activeTab.value.kind === 'raw')
     return rows.value
-  if (!sortBy.value || !rows.value.length)
+  if (!sort.value || !rows.value.length)
     return rows.value
-  const key = sortBy.value
-  const dir = sortDir.value === 'desc' ? -1 : 1
+  const key = sort.value.column
+  const dir = sort.value.direction === 'desc' ? -1 : 1
   return [...rows.value].sort((ra, rb) => dir * compareCell(ra[key], rb[key]))
 })
 
@@ -1357,11 +1354,11 @@ function fmtTitle(v: unknown): string | undefined {
             <tr>
               <th
                 v-for="c in visibleColumns" :key="c"
-                :class="{ sortable: isSortable(c), active: sortBy === c }"
+                :class="{ sortable: isSortable(c), active: sort?.column === c }"
                 @click="toggleSort(c)"
               >
                 {{ c }}
-                <span v-if="sortBy === c && isSortable(c)" class="arrow">{{ sortDir === 'desc' ? '▼' : '▲' }}</span>
+                <span v-if="sort?.column === c && isSortable(c)" class="arrow">{{ sort.direction === 'desc' ? '▼' : '▲' }}</span>
               </th>
             </tr>
           </thead>
@@ -1380,17 +1377,17 @@ function fmtTitle(v: unknown): string | undefined {
     </section>
 
     <div v-if="activeTab.kind === 'raw' && totalPages != null" class="pager">
-      <button :disabled="pageIdx === 0 || loading" @click="pageIdx = 0">
+      <button :disabled="page === 1 || loading" @click="page = 1">
         ⟪
       </button>
-      <button :disabled="pageIdx === 0 || loading" @click="pageIdx--">
+      <button :disabled="page === 1 || loading" @click="page--">
         ‹
       </button>
-      <span>Page {{ pageIdx + 1 }} / {{ totalPages }}</span>
-      <button :disabled="pageIdx + 1 >= totalPages || loading" @click="pageIdx++">
+      <span>Page {{ page }} / {{ totalPages }}</span>
+      <button :disabled="page >= totalPages || loading" @click="page++">
         ›
       </button>
-      <button :disabled="pageIdx + 1 >= totalPages || loading" @click="pageIdx = totalPages - 1">
+      <button :disabled="page >= totalPages || loading" @click="page = totalPages">
         ⟫
       </button>
       <label class="pagesize">per page

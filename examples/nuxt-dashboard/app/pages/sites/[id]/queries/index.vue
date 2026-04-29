@@ -17,7 +17,7 @@ const period = ref<Period>('28d')
 const compareMode = ref<CompareMode>('none')
 const stableData = ref(true)
 const windowRange = computed(() => {
-  const r = periodToDateRange(period.value, stableData.value)
+  const r = periodToDateRange(period.value, { stableData: stableData.value })
   return { start: r.start, end: r.end }
 })
 
@@ -26,10 +26,12 @@ const { data: payload, loading } = useGscRollup<TopKeywordRow[]>(
   'top_keywords_28d',
   { range: windowRange },
 )
-const search = ref('')
+
+// URL-synced table state (useGscTableState handles q/sort/page deep-linking).
+const { q, sort, toggleSort } = useGscTableState({ defaultSort: { column: 'clicks', direction: 'desc' } })
 const searchDebounced = ref('')
 let handle: ReturnType<typeof setTimeout> | null = null
-watch(search, (v) => {
+watch(q, (v) => {
   if (handle)
     clearTimeout(handle)
   handle = setTimeout(() => {
@@ -37,16 +39,25 @@ watch(search, (v) => {
   }, 150)
 })
 
-const rows = computed(() => {
-  const q = searchDebounced.value.trim().toLowerCase()
-  const list = (payload.value ?? []).slice()
-  const filtered = q ? list.filter(r => r.query.toLowerCase().includes(q)) : list
-  return filtered.slice(0, 100)
-})
-
 function positionFor(r: TopKeywordRow): number {
   return r.impressions > 0 ? r.sum_position / r.impressions + 1 : 0
 }
+
+const rows = computed(() => {
+  const needle = searchDebounced.value.trim().toLowerCase()
+  const list = (payload.value ?? []).slice()
+  const filtered = needle ? list.filter(r => r.query.toLowerCase().includes(needle)) : list
+  const s = sort.value
+  if (s) {
+    const dir = s.direction === 'desc' ? -1 : 1
+    filtered.sort((a, b) => {
+      const av = s.column === 'position' ? positionFor(a) : (a as any)[s.column]
+      const bv = s.column === 'position' ? positionFor(b) : (b as any)[s.column]
+      return av < bv ? -1 * dir : av > bv ? 1 * dir : 0
+    })
+  }
+  return filtered.slice(0, 100)
+})
 
 function hrefFor(keyword: string): string {
   return `/sites/${encodeURIComponent(siteId.value)}/queries/${encodeURIComponent(keyword)}`
@@ -80,7 +91,7 @@ function hrefFor(keyword: string): string {
 
     <div class="flex items-center gap-3 flex-wrap rounded-lg border border-default bg-default px-3 py-2">
       <UInput
-        v-model="search"
+        v-model="q"
         icon="i-lucide-search"
         size="sm"
         placeholder="Filter queries"
@@ -107,14 +118,17 @@ function hrefFor(keyword: string): string {
             <th class="px-4 py-2.5 text-left">
               Query
             </th>
-            <th class="px-4 py-2.5 text-right w-[110px]">
+            <th class="px-4 py-2.5 text-right w-[110px] cursor-pointer select-none hover:text-default" @click="toggleSort('clicks')">
               Clicks
+              <span v-if="sort?.column === 'clicks'" class="ml-1">{{ sort.direction === 'desc' ? '↓' : '↑' }}</span>
             </th>
-            <th class="px-4 py-2.5 text-right w-[130px]">
+            <th class="px-4 py-2.5 text-right w-[130px] cursor-pointer select-none hover:text-default" @click="toggleSort('impressions')">
               Impressions
+              <span v-if="sort?.column === 'impressions'" class="ml-1">{{ sort.direction === 'desc' ? '↓' : '↑' }}</span>
             </th>
-            <th class="px-4 py-2.5 text-right w-[100px]">
+            <th class="px-4 py-2.5 text-right w-[100px] cursor-pointer select-none hover:text-default" @click="toggleSort('position')">
               Avg. pos
+              <span v-if="sort?.column === 'position'" class="ml-1">{{ sort.direction === 'desc' ? '↓' : '↑' }}</span>
             </th>
           </tr>
         </thead>

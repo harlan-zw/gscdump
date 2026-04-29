@@ -26,6 +26,9 @@ export default defineNuxtModule({
       {
         duckdbBundleBase: process.env.GSCDUMP_DUCKDB_BUNDLE_BASE ?? '',
         apiBase: process.env.GSCDUMP_ANALYTICS_API_BASE ?? '',
+        timezone: process.env.GSCDUMP_ANALYTICS_TIMEZONE ?? '',
+        toastErrors: process.env.GSCDUMP_ANALYTICS_TOAST_ERRORS === 'true',
+        defaultEngine: (process.env.GSCDUMP_ANALYTICS_DEFAULT_ENGINE as 'auto' | 'browser' | 'server' | undefined) ?? 'auto',
       },
     )
   },

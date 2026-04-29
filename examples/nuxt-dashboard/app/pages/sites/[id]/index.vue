@@ -26,7 +26,7 @@ type CompareMode = typeof COMPARE_OPTIONS[number]['value']
 const period = ref<Period>('28d')
 const compareMode = ref<CompareMode>('previous')
 const stableData = ref(true)
-const range = computed(() => periodToDateRange(period.value, stableData.value))
+const range = computed(() => periodToDateRange(period.value, { stableData: stableData.value }))
 
 const windowRange = computed(() => ({ start: range.value.start, end: range.value.end }))
 const { payload, loading } = useGscRollups<unknown>(

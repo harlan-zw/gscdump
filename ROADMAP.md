@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
 Unified successor to `PIVOT.md`, `NEXT_STEPS.md`, `NEXT_STEPS-example.md`,
 `PORTING_PLAN.md`, `EXTRACTION_PLAN.md`. Only open work lives here; shipped
@@ -55,35 +55,113 @@ each layer mode.
 
 ### P1 — consumer adoption
 
-1. **Phase 3: migrate `gscdump.com` to consume `@gscdump/nuxt-analytics@^0.5`**
-   — swap `link:@gscdump/*` for `^0.5.0`, delete duplicated files,
-   register session auth provider, origin-mode config, feature-flagged
-   rollout. Blocked on Phase 0 audit fixes in the `gscdump.com` repo.
-2. **Phase 5: onboard `nuxtseo.com` as consumer-mode adopter** — layer
-   auth provider resolving pro-user GSC credentials, delete ~1000 lines of
-   `useProGscdump*` composables, snapshot-test pro dashboard pages.
-   Depends on 1.
+1. **Phase 3: migrate `gscdump.com` to consume `@gscdump/nuxt-analytics`** —
+   DONE. `gscdump.com` catalog pins all `@gscdump/*` to `^0.7.5` with no
+   `link:` overrides; session auth provider + origin-mode config wired.
+2. **Phase 5: onboard `nuxtseo.com` as consumer-mode adopter** — catalog
+   bumped to `@gscdump/*@^0.7.5` and `link:` overrides dropped
+   (2026-04-29). Architecture: nuxtseo.com becomes a thin consumer
+   hitting gscdump.com endpoints via the layer's `apiBase` routing; only
+   non-GSC composition (Lighthouse/CWV/AI briefs) stays in nuxtseo.
+   Auth endpoint `/api/pro/me/gscdump-credentials` already exists.
+   Still open:
+   - delete `useProGscdump.ts` (1029 LOC) + refactor 44 call sites
+   - drop `@gscdump/engine` / `@gscdump/analysis` from package.json
+   - snapshot-test pro dashboard pages (`@nuxt/test-utils`)
 
-### P2 — 1.0 cut
+### P2 — layer widening (unblocks P1.2)
 
-3. **Publish `@gscdump/nuxt-analytics@1.0.0`** once the gscdump.com
-   adoption proves the API surface in production. Engine + layer contract
-   tests already in place; the major bump signals API stability after at
-   least one real consumer migration validates it.
+Cold swap from `useProGscdump.ts` to layer composables would regress 7
+user-facing features. Widen the layer first; assumes all consumers use
+`@nuxt/ui` and the same layer.
+
+1. **L1 — calendar + custom periods in `useGscPeriod`** — DONE
+   (2026-04-29). Added `RollingPeriod | CalendarPeriod | CustomPeriod`
+   union; new presets `this-week`, `this-month`, `last-month`,
+   `this-quarter`, `this-year`; `custom:start:end` and
+   `custom:start:end:prevStart:prevEnd` parsing. Helpers:
+   `isCustomPeriod`, `parseCustomPeriod`, `periodToDays`, `compareRange`.
+   `periodToDateRange(period, opts)` signature changed (positional
+   `stableData` → options object). Timezone via
+   `runtimeConfig.public.analytics.timezone` (env
+   `GSCDUMP_ANALYTICS_TIMEZONE`).
+2. **L2 — `useGscTableState`** — DONE (2026-04-29). `q`/`page`/
+   `pageSize`/`sort`/`filter` refs with URL-sync via `useRoute` +
+   `useRouter` (avoids `@vueuse/router` dep). Generic over row shape;
+   prefix option for multi-table pages; `toggleSort(column)` cycles
+   desc → asc → off; auto page-reset on q/filter change.
+3. **L3 — indexing wrappers** — DONE (2026-04-29).
+   `useGscIndexingDiagnostics`, `useGscIndexingUrls`,
+   `useGscSitemapChanges`. All call `/api/__gsc/sites/[siteId]/...`;
+   gscdump.com has 3 new alias handlers under `server/api/__gsc/sites/
+   [siteId]/{indexing/diagnostics,indexing/urls,sitemaps/changes}.get.ts`
+   that re-export the existing `/api/sites/[siteId]/...` handlers.
+   Pattern matches the prior `backfill` alias.
+
+   **Shape gap closed (2026-04-29)** — added 5 entity-store-shaped
+   adapters on gscdump.com:
+   - `__gsc/sites/[siteId]/sitemaps.get.ts` → `SitemapIndex` (maps
+     `gsc_sitemaps` rows, keyed by `hashUrl(path)`).
+   - `__gsc/sites/[siteId]/sitemaps/[hash].get.ts` →
+     `SitemapHistoryResponse` from `sitemap_daily_stats`; falls back to
+     a single-element snapshot when no daily history exists yet.
+   - `__gsc/sites/[siteId]/inspections.get.ts` → `InspectionIndex` from
+     `url_indexing_status`. Capped at 5k rows; pagination needs go via
+     `/indexing/urls`.
+   - `__gsc/sites/[siteId]/inspections/[hash].get.ts` →
+     `InspectionHistoryResponse`. Returns `[latest]` since the schema
+     keeps only latest-per-URL; scans up to 50k rows for hash → URL
+     lookup. Add a hash column when very large sites surface.
+   - `__gsc/whoami.get.ts` → `WhoamiResponse` with `siteIds` and
+     `identityAttrs.plan`.
+
+   **Still deferred:** `useGscRowQuery` (`/api/__gsc/sites/[id]/rows`).
+   Re-pointing isn't a one-liner — gscdump.com's `/api/sites/[id]/query.post`
+   is a GSC live-API proxy taking `{ startDate, endDate, dimensions, … }`,
+   not a `BuilderState` translator. To support row queries in consumer
+   mode either (a) add a `BuilderState` → SQL translator under `__gsc/rows`
+   on gscdump.com, or (b) change the layer composable to send the simpler
+   shape (breaks entity-store-mode hosts). Defer until a real consumer
+   needs it.
+4. **L4 — toast integration in `gsc-fetch` error path** — DONE
+   (2026-04-29). `onResponseError` classifies via `classifyGscError`,
+   emits `useToast()` from `@nuxt/ui`. 5s dedup keyed on
+   `status:code:message`. Opt-in via
+   `runtimeConfig.public.analytics.toastErrors` (env
+   `GSCDUMP_ANALYTICS_TOAST_ERRORS=true`).
+5. **L5 — broader `classifyError`** — DONE (2026-04-29). Extracted to
+   `app/utils/gsc-error.ts` as `classifyGscError`; added `network`
+   status (no statusCode + non-abort), `code` and `message` extraction
+   (server `data.message` / `data.error` / native `message`). New
+   `network` value added to `GscQueryStatus`.
+6. **L6 — global engine override** — DONE (2026-04-29). Replaces
+   `useProBrowserAnalyzerFlag()`. Two layers of override:
+   `runtimeConfig.public.analytics.defaultEngine` (env
+   `GSCDUMP_ANALYTICS_DEFAULT_ENGINE`, build-time) and `useGscEngine()`
+   composable backed by `useState` (runtime). `useGscQuery` resolves
+   `opts.engine ?? useGscEngine().value ?? cfg.defaultEngine ?? 'auto'`.
+7. **L7 — filter operator re-exports** — DONE (2026-04-29).
+   `app/utils/gsc-filters.ts` re-exports `and`, `or`, `between`, `eq`,
+   `ne`, `gt`, `gte`, `lt`, `lte`, `contains`, `regex`, `notRegex`,
+   `inArray`, `like`, `not`, `topLevel` from `gscdump/query`.
+   Auto-imported via Nuxt's `app/utils/*` convention. Replaces
+   nuxtseo's wire-format `dateFilter`/`andFilter` (both shapes coerce
+   server-side, typed primitives are strictly better).
 
 ### P3 — polish
 
-4. **Playwright smoke on example** — DONE (downscoped to SSR smoke).
+1. **Playwright smoke on example** — DONE (downscoped to SSR smoke).
    `tests/e2e/example-modes-render.test.ts` boots the example via
    `@nuxt/test-utils`, bounces the server per mode with
    `NUXT_PUBLIC_ANALYTICS_MODE`, and asserts the rendered
    `[data-testid=analytics-mode]` block. Build runs once, ~26s for all
    3 modes. Run via `pnpm test:e2e`.
-5. **Layer page-primitive refactor** — DONE. All 11 site pages now use
+2. **Layer page-primitive refactor** — DONE. All 11 site pages now use
    `GscDashboardPage` + `GscPageHeader`. Added `#icon` slot to
    `GscPageHeader` to support the favicon-as-title-icon on overview.
-6. **Ongoing policy**: every layer change updates example in same PR;
-   breaking = major bump; shared telemetry.
+3. **Ongoing policy**: every layer change updates example in same PR;
+   breaking = major bump; shared telemetry. No 1.0 cut planned for now —
+   `0.7.x` is the working line.
 
 ### Deferred
 
@@ -213,15 +291,52 @@ each layer mode.
   `engine-gsc-api`. nuxtseo.com untouched (declares `@gscdump/analysis` but
   no source-level imports).
 
+## Last session (2026-04-29)
+
+- Confirmed `gscdump.com` is fully on `@gscdump/*@^0.7.5` via catalog with
+  no `link:` overrides — P1.1 Phase 3 adoption DONE.
+- Bumped `nuxtseo.com` catalog to `@gscdump/*@^0.7.5` and dropped the
+  three `link:` overrides on `analysis`, `engine-duckdb-wasm`,
+  `nuxt-analytics`. Needs `pnpm install` in the `nuxtseo.com` repo to
+  resolve. Layer auth provider + `useProGscdump*` deletion still open
+  under P1.2.
+- Dropped P2 1.0 cut from the plan — `0.7.x` is the working line for now.
+- Engine cleanup pass — kill dead code, push driver-specific adapters
+  into their drivers. Cross-checked against `gscdump.com` and
+  `nuxtseo.com` to confirm zero production callers before deleting.
+  - Deleted `engine/adapters/http.ts` (~176 LOC, zero references).
+  - Deleted the SQLite-backed `InspectionStore`:
+    `engine/adapters/inspection-sqlite-{node,browser}.ts` plus
+    `createInspectionStoreSqlite`, `inspectionSqliteKey`,
+    `InspectionSqlDriver`, `CreateInspectionStoreSqliteOptions` from
+    `entities.ts` (~233 LOC). JSON-backed `createInspectionStore` is
+    what cli + nuxt-analytics actually use; the SQLite track had no
+    consumers.
+  - Dropped `engine` peer deps `better-sqlite3` + `wa-sqlite` and the
+    matching catalog entries / `onlyBuiltDependencies` slot.
+  - Dropped 4 dead subpath exports from `engine`: `/http`,
+    `/inspection-sqlite-node`, `/inspection-sqlite-browser`,
+    `/node-harness`.
+  - Moved `node-harness.ts` → `@gscdump/engine-duckdb-node`.
+    `createNodeHarness` is the Node-side turnkey primitive (filesystem
+    DataSource + DuckDB executor + manifest store in one call); native
+    home is the Node driver, not the dialect-neutral engine. cli imports
+    swapped (`@gscdump/engine/node-harness` → `@gscdump/engine-duckdb-node`).
+  - Net: ~924 lines removed across 7 deleted files; 13 packages
+    typecheck; engine 222/222 tests, cli 102/102 tests; lint clean.
+
 ## Next action
 
-The 5-phase package-scope refactor is done. Open levers:
-
-1. P1.1 (`gscdump.com` Phase 3 adoption) is still the biggest consumer
-   move once Phase 0 audit fixes land — swap `link:` → `^0.7.x` once the
-   refactor is published and start the file-deduplication pass.
-2. Bundle-size audit: now that `analyzeInBrowser` lives in `@gscdump/analysis`,
-   the analysis bundle pulls in every SQL analyzer's SQL strings even for
-   row-only consumers. Worth checking whether the `/analyzer` (rows only)
+1. Run `pnpm install` in `nuxtseo.com` to resolve the new catalog ranges,
+   then continue P1.2: layer auth provider for pro-user GSC credentials,
+   delete `useProGscdump*` composables, snapshot-test pro dashboard
+   pages.
+2. **Bundle-size audit**: `analyzeInBrowser` lives in `@gscdump/analysis`,
+   so the analysis bundle pulls in every SQL analyzer's SQL strings even
+   for row-only consumers. Check whether the `/analyzer` (rows only)
    subpath can stay slim.
 3. Refresh stale analyzer-plan snapshots if the SQL drift is intended.
+4. Continued driver-primitive expansion (mirror the wasm shape):
+   `engine-sqlite` could gain D1+R2 wiring helpers; `engine-gsc-api`
+   could gain request batching / range planning so callers don't compose
+   `rollup-synth` + `post-process` manually.

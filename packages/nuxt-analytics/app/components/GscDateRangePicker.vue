@@ -11,6 +11,10 @@
 import type { CompareMode, Period } from '../composables/useGscPeriod'
 import { COMPARE_OPTIONS, getPeriodLabel, PERIOD_PRESETS, periodToDateRange } from '../composables/useGscPeriod'
 
+const ROLLING_VALUES = new Set(['7d', '28d', '3m', '6m', '12m'])
+const rollingPresets = PERIOD_PRESETS.filter(p => ROLLING_VALUES.has(p.value))
+const calendarPresets = PERIOD_PRESETS.filter(p => !ROLLING_VALUES.has(p.value))
+
 const period = defineModel<Period>('period', { required: true })
 const compareMode = defineModel<CompareMode>('compareMode', { required: true })
 const stableData = defineModel<boolean>('stableData', { required: true })
@@ -21,7 +25,7 @@ const rangeFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeri
 const rangeFmtYear = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 const numFmt = new Intl.NumberFormat('en-US')
 
-const dateRange = computed(() => periodToDateRange(period.value, stableData.value))
+const dateRange = computed(() => periodToDateRange(period.value, { stableData: stableData.value }))
 
 function formatRange(start: string, end: string): string {
   const s = new Date(`${start}T00:00:00`)
@@ -69,7 +73,37 @@ function selectPeriod(p: Period) {
             </div>
             <div>
               <button
-                v-for="preset in PERIOD_PRESETS"
+                v-for="preset in rollingPresets"
+                :key="preset.value"
+                role="option"
+                :aria-selected="period === preset.value"
+                class="cursor-pointer group w-full flex items-center gap-2 pl-3 pr-3 py-[5px] text-xs transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset relative"
+                :class="[
+                  period === preset.value
+                    ? 'text-default bg-elevated'
+                    : 'text-muted hover:text-default hover:bg-elevated/50',
+                ]"
+                @click="selectPeriod(preset.value)"
+              >
+                <span
+                  v-if="period === preset.value"
+                  class="absolute left-0 inset-y-0.5 w-[2px] rounded-full bg-primary"
+                />
+                <span class="flex-1 text-left">{{ preset.label }}</span>
+                <UIcon
+                  v-if="period === preset.value"
+                  name="i-lucide-check"
+                  class="size-3 text-primary"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+            <div class="px-3 pt-3 pb-2">
+              <span class="text-[10px] font-semibold text-dimmed uppercase tracking-widest">Calendar</span>
+            </div>
+            <div>
+              <button
+                v-for="preset in calendarPresets"
                 :key="preset.value"
                 role="option"
                 :aria-selected="period === preset.value"

@@ -17,7 +17,7 @@ const period = ref<Period>('28d')
 const compareMode = ref<CompareMode>('none')
 const stableData = ref(true)
 const windowRange = computed(() => {
-  const r = periodToDateRange(period.value, stableData.value)
+  const r = periodToDateRange(period.value, { stableData: stableData.value })
   return { start: r.start, end: r.end }
 })
 
@@ -26,7 +26,8 @@ const { data: payload, loading } = useGscRollup<TopPageRow[]>(
   'top_pages_28d',
   { range: windowRange },
 )
-const search = ref('')
+// URL-synced table state (useGscTableState handles q deep-linking).
+const { q: search } = useGscTableState()
 const searchDebounced = ref('')
 let handle: ReturnType<typeof setTimeout> | null = null
 watch(search, (v) => {

@@ -8,9 +8,11 @@
 
 import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
 import type { ComputedRef, Ref, WatchSource } from 'vue'
+import { classifyGscError } from '../utils/gsc-error'
 import { useGscFetch } from '../utils/gsc-fetch'
 import { useGscAnalyzer } from './useGscAnalyzer'
 import { useGscBackfill } from './useGscBackfill'
+import { resolveDefaultEngine } from './useGscEngine'
 
 export type GscQueryEngine = 'auto' | 'browser' | 'server'
 
@@ -22,6 +24,7 @@ export type GscQueryStatus
     | 'error'
     | 'auth-missing'
     | 'rate-limited'
+    | 'network'
 
 export interface GscQueryMeta {
   raw: Record<string, unknown> | null
@@ -116,15 +119,8 @@ function reportFallback(reason: string): void {
 }
 
 function classifyError(e: unknown): { status: GscQueryStatus, retryAfter?: number } {
-  const code = (e as { statusCode?: number, status?: number })?.statusCode
-    ?? (e as { status?: number })?.status
-  if (code === 401 || code === 403)
-    return { status: 'auth-missing' }
-  if (code === 429) {
-    const retry = (e as { data?: { retryAfter?: number } })?.data?.retryAfter
-    return { status: 'rate-limited', retryAfter: typeof retry === 'number' ? retry : undefined }
-  }
-  return { status: 'error' }
+  const c = classifyGscError(e)
+  return { status: c.status as GscQueryStatus, retryAfter: c.retryAfter }
 }
 
 function isEmpty(v: unknown): boolean {
@@ -224,7 +220,7 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
     error.value = null
     fallbackReason.value = null
 
-    const mode = opts.engine ?? 'auto'
+    const mode = opts.engine ?? resolveDefaultEngine()
 
     try {
       if (mode === 'server') {

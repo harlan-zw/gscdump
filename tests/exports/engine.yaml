@@ -7,7 +7,6 @@
   countries: object
   createDuckDBCodec: function
   createDuckDBExecutor: function
-  createInspectionStoreSqlite: function
   createRowAccumulator: function
   createStorageEngine: function
   currentSchemaVersion: function
@@ -22,7 +21,6 @@
   inferLegacyTier: function
   inferSearchType: function
   inferTable: function
-  inspectionSqliteKey: function
   keywords: object
   MAX_DAY_BYTES: number
   mondayOfWeek: function
@@ -54,23 +52,18 @@
   createEmptyTypesStore: function
   createIndexingMetadataStore: function
   createInspectionStore: function
-  createInspectionStoreSqlite: function
   createSitemapStore: function
   emptyTypesKey: function
   hashUrl: function
   indexingMetadataIndexKey: function
   inspectionHistoryKey: function
   inspectionIndexKey: function
-  inspectionSqliteKey: function
   sitemapHistoryKey: function
   sitemapIndexKey: function
 ./filesystem:
   createFilesystemDataSource: function
   createFilesystemManifestStore: function
   filesystemStats: function
-./http:
-  createHttpDataSource: function
-  createHttpManifestStore: function
 ./hyparquet:
   createHyparquetCodec: function
   decodeParquetToRows: function
@@ -82,15 +75,9 @@
   toPath: function
   toSumPosition: function
   transformGscRow: function
-./inspection-sqlite-browser:
-  createWaSqliteDriver: function
-./inspection-sqlite-node:
-  createBetterSqliteDriver: function
 ./node:
   createNodeDuckDBHandle: function
   resetNodeDuckDB: function
-./node-harness:
-  createNodeHarness: function
 ./period:
   comparisonOf: function
   defaultEndDate: function

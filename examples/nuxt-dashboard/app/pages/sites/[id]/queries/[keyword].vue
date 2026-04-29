@@ -17,7 +17,7 @@ type CompareMode = typeof COMPARE_OPTIONS[number]['value']
 const period = ref<Period>('28d')
 const compareMode = ref<CompareMode>('none')
 const stableData = ref(true)
-const range = computed(() => periodToDateRange(period.value, stableData.value))
+const range = computed(() => periodToDateRange(period.value, { stableData: stableData.value }))
 
 interface DailyRow { date: string, clicks: number, impressions: number, sum_position?: number, position?: number }
 interface PageRowShape { page: string, clicks: number, impressions: number, sum_position?: number, position?: number }

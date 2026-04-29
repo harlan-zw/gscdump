@@ -14,7 +14,7 @@ type Period = typeof PERIOD_PRESETS[number]['value']
 const period = ref<Period>('28d')
 const stableData = ref(true)
 const compareMode = ref<'previous' | 'year' | 'none'>('none')
-const range = computed(() => periodToDateRange(period.value, stableData.value))
+const range = computed(() => periodToDateRange(period.value, { stableData: stableData.value }))
 
 const { analyze, ready: isReady, error: bootError } = useGscAnalyzer(siteId)
 

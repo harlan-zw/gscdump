@@ -14,7 +14,7 @@ type CompareMode = typeof COMPARE_OPTIONS[number]['value']
 const period = ref<Period>('28d')
 const compareMode = ref<CompareMode>('none')
 const stableData = ref(true)
-const range = computed(() => periodToDateRange(period.value, stableData.value))
+const range = computed(() => periodToDateRange(period.value, { stableData: stableData.value }))
 
 interface CountryRow {
   country: string

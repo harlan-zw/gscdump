@@ -27,7 +27,6 @@ export default defineBuildConfig({
         './src/scope.ts',
         './src/arrow-utils.ts',
         './src/adapters/duckdb-node.ts',
-        './src/adapters/node-harness.ts',
         './src/adapters/filesystem.ts',
         './src/adapters/hyparquet.ts',
         './src/adapters/r2.ts',

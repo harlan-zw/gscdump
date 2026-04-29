@@ -36,6 +36,10 @@ export default defineNuxtConfig({
       analytics: {
         mode,
         apiBase,
+        // Auto-toast errors via classifyGscError + useToast (Nuxt UI).
+        // Off in `local` mode where there's no remote and toasts would be
+        // noise; on for origin/consumer which actually hit a server.
+        toastErrors: mode !== 'local',
       },
     },
   },

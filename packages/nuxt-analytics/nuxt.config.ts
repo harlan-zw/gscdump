@@ -30,6 +30,9 @@ export default defineNuxtConfig({
       analytics: {
         duckdbBundleBase: '',
         apiBase: '',
+        timezone: '',
+        toastErrors: false,
+        defaultEngine: 'auto' as 'auto' | 'browser' | 'server',
       },
     },
   },

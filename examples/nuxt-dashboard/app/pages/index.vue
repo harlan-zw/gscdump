@@ -47,7 +47,7 @@ const sitesCap = ref(EAGER_CAP)
 const fanoutSites = computed(() => (sites.value ?? []).slice(0, sitesCap.value))
 const pendingLazyCount = computed(() => Math.max(0, (sites.value?.length ?? 0) - sitesCap.value))
 
-const range = computed(() => periodToDateRange(period.value, stableData.value))
+const range = computed(() => periodToDateRange(period.value, { stableData: stableData.value }))
 
 // Widen the server-side fetch to cover whichever comparison window is active
 // — previous-period needs prevStart, YoY needs yearStart. Free-tier rollups

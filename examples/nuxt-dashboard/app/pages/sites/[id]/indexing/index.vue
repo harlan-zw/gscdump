@@ -21,7 +21,10 @@ const { envelope: metadata } = useGscRollup<{
   days: Array<{ date: string, updates: number, removes: number }>
 }>(siteId, 'indexing_metadata')
 
-const search = ref('')
+// URL-synced table state (useGscTableState handles q + status filter deep-linking).
+const { q: search, filter } = useGscTableState<{ status: 'all' | 'PASS' | 'NEUTRAL' | 'FAIL' }>({
+  defaultFilter: { status: 'all' },
+})
 const searchDebounced = ref('')
 let handle: ReturnType<typeof setTimeout> | null = null
 watch(search, (v) => {
@@ -32,13 +35,11 @@ watch(search, (v) => {
   }, 150)
 })
 
-const statusFilter = ref<'all' | 'PASS' | 'NEUTRAL' | 'FAIL'>('all')
-
 const filtered = computed<InspectionRecord[]>(() => {
   const q = searchDebounced.value.trim().toLowerCase()
   let rows = records.value
-  if (statusFilter.value !== 'all')
-    rows = rows.filter(r => r.indexStatus === statusFilter.value)
+  if (filter.value.status !== 'all')
+    rows = rows.filter(r => r.indexStatus === filter.value.status)
   if (q) {
     rows = rows.filter(r =>
       r.url.toLowerCase().includes(q)
@@ -181,10 +182,10 @@ const summary = computed(() => {
               v-for="opt in (['all', 'PASS', 'NEUTRAL', 'FAIL'] as const)"
               :key="opt"
               class="px-2 py-1 rounded-md text-xs transition-colors"
-              :class="statusFilter === opt
+              :class="filter.status === opt
                 ? 'bg-elevated text-default font-medium'
                 : 'text-muted hover:text-default hover:bg-elevated/50'"
-              @click="statusFilter = opt"
+              @click="filter.status = opt"
             >
               {{ opt === 'all' ? 'All' : opt.toLowerCase() }}
             </button>

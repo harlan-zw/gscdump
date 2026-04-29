@@ -1,8 +1,8 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { createNodeHarness } from '@gscdump/engine-duckdb-node'
 import { resetNodeDuckDB } from '@gscdump/engine/node'
-import { createNodeHarness } from '@gscdump/engine/node-harness'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { syncCommand } from '../../src/commands/sync'
 

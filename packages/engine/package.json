@@ -71,11 +71,6 @@
       "import": "./dist/adapters/duckdb-node.mjs",
       "default": "./dist/adapters/duckdb-node.mjs"
     },
-    "./node-harness": {
-      "types": "./dist/adapters/node-harness.d.mts",
-      "import": "./dist/adapters/node-harness.mjs",
-      "default": "./dist/adapters/node-harness.mjs"
-    },
     "./filesystem": {
       "types": "./dist/adapters/filesystem.d.mts",
       "import": "./dist/adapters/filesystem.mjs",
