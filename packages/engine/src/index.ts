@@ -3,11 +3,6 @@ export type { CompactionThresholds } from './compaction'
 export { canonicalEmptyParquetSchema, createDuckDBCodec, createDuckDBExecutor } from './duckdb'
 export type { DuckDBFactory, DuckDBHandle } from './duckdb'
 export { createStorageEngine, MAX_DAY_BYTES } from './engine'
-export { createInspectionStoreSqlite, inspectionSqliteKey } from './entities'
-export type {
-  CreateInspectionStoreSqliteOptions,
-  InspectionSqlDriver,
-} from './entities'
 export type { GscApiRow, IngestOptions, RowAccumulator, RowAccumulatorOptions } from './ingest'
 export { createRowAccumulator, toPath, toSumPosition, transformGscRow } from './ingest'
 export { enumeratePartitions, FILES_PLACEHOLDER, resolveToSQL, substituteNamedFiles } from './planner'
