@@ -1,8 +1,9 @@
-import type { TableName } from '../local-store'
+import type { ManifestEntry, TableName } from '../local-store'
+import { inferLegacyTier } from '@gscdump/engine'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
-import { logger } from '../utils'
+import { logger, setQuiet } from '../utils'
 
 export const compactCommand = defineCommand({
   meta: {
@@ -27,6 +28,16 @@ export const compactCommand = defineCommand({
       type: 'string',
       description: 'Override d30→d90 age threshold in days (default: 90)',
     },
+    'dry-run': {
+      type: 'boolean',
+      default: false,
+      description: 'Report tier counts per (table, site) without compacting',
+    },
+    'json': {
+      type: 'boolean',
+      default: false,
+      description: 'Output a JSON summary',
+    },
     'quiet': {
       type: 'boolean',
       alias: 'q',
@@ -35,10 +46,11 @@ export const compactCommand = defineCommand({
     },
   },
   async run({ args }) {
+    setQuiet(Boolean(args.quiet) || Boolean(args.json))
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
     const siteId = args.site ? store.siteIdFor(String(args.site)) : undefined
-    const quiet = Boolean(args.quiet)
+    const dryRun = Boolean(args['dry-run'])
     const thresholds: { raw?: number, d7?: number, d30?: number } = {}
     if (args['raw-days'])
       thresholds.raw = Number(args['raw-days'])
@@ -47,6 +59,32 @@ export const compactCommand = defineCommand({
     if (args['d30-days'])
       thresholds.d30 = Number(args['d30-days'])
 
+    if (dryRun) {
+      const report: Array<{ table: string, siteId: string | undefined, raw: number, d7: number, d30: number, d90: number }> = []
+      for (const table of allTables()) {
+        const entries = await store.engine.listLive({
+          userId: store.userId,
+          siteId,
+          table: table as TableName,
+        })
+        const bySite = groupBySite(entries)
+        for (const [s, group] of bySite)
+          report.push({ table, siteId: s, ...countByTier(group) })
+      }
+      if (args.json) {
+        console.log(JSON.stringify({ thresholds, plan: report }, null, 2))
+        return
+      }
+      console.log()
+      console.log(`  table                site                 raw    d7   d30   d90`)
+      for (const r of report)
+        console.log(`  ${r.table.padEnd(20)} ${(r.siteId ?? '-').padEnd(20)} ${String(r.raw).padStart(4)}  ${String(r.d7).padStart(4)}  ${String(r.d30).padStart(4)}  ${String(r.d90).padStart(4)}`)
+      console.log()
+      logger.info(`compact --dry-run: ${report.length} (table, site) pair(s) — pass without --dry-run to apply`)
+      return
+    }
+
+    const summary: Array<{ table: string, siteId: string | undefined }> = []
     for (const table of allTables()) {
       const entries = await store.engine.listLive({
         userId: store.userId,
@@ -55,17 +93,49 @@ export const compactCommand = defineCommand({
       })
       const siteIds = new Set<string | undefined>(entries.map(e => e.siteId))
       for (const targetSite of siteIds) {
-        if (!quiet)
-          logger.info(`Compacting ${table} [${targetSite ?? '-'}] (raw→d7→d30→d90)`)
+        logger.info(`Compacting ${table} [${targetSite ?? '-'}] (raw→d7→d30→d90)`)
         await store.engine.compactTiered({
           userId: store.userId,
           siteId: targetSite,
           table: table as TableName,
         }, thresholds)
+        summary.push({ table, siteId: targetSite })
       }
     }
 
-    if (!quiet)
-      logger.success(`compact: done`)
+    if (args.json) {
+      console.log(JSON.stringify({ thresholds, compacted: summary }, null, 2))
+      return
+    }
+    logger.success(`compact: done`)
   },
 })
+
+function groupBySite(entries: ManifestEntry[]): Map<string | undefined, ManifestEntry[]> {
+  const m = new Map<string | undefined, ManifestEntry[]>()
+  for (const e of entries) {
+    const arr = m.get(e.siteId) ?? []
+    arr.push(e)
+    m.set(e.siteId, arr)
+  }
+  return m
+}
+
+function countByTier(entries: ManifestEntry[]): { raw: number, d7: number, d30: number, d90: number } {
+  let raw = 0
+  let d7 = 0
+  let d30 = 0
+  let d90 = 0
+  for (const e of entries) {
+    const tier = e.tier ?? inferLegacyTier(e) ?? 'raw'
+    if (tier === 'raw')
+      raw++
+    else if (tier === 'd7')
+      d7++
+    else if (tier === 'd30')
+      d30++
+    else if (tier === 'd90')
+      d90++
+  }
+  return { raw, d7, d30, d90 }
+}

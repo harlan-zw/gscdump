@@ -1,3 +1,5 @@
+// Re-exports of raw codes; honoured at write time by the stdout wrapper in
+// utils.ts (which strips ANSI when colour is disabled).
 export const BOLD = '\x1B[1m'
 export const DIM = '\x1B[2m'
 export const RED = '\x1B[31m'

@@ -6,6 +6,7 @@ import { sqlEscape } from '@gscdump/engine/sql'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
+import { displayPath, setQuiet } from '../utils'
 
 export interface ExportOptions {
   engine: StorageEngine
@@ -88,8 +89,20 @@ export const exportCommand = defineCommand({
       default: false,
       description: 'Overwrite the output file if it already exists',
     },
+    json: {
+      type: 'boolean',
+      default: false,
+      description: 'Output a JSON summary instead of formatted text',
+    },
+    quiet: {
+      type: 'boolean',
+      alias: 'q',
+      default: false,
+      description: 'Suppress info/success output',
+    },
   },
   async run({ args }) {
+    setQuiet(Boolean(args.quiet) || Boolean(args.json))
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
     const siteId = args.site ? store.siteIdFor(args.site) : undefined
@@ -103,6 +116,11 @@ export const exportCommand = defineCommand({
       force: args.force,
     })
 
+    if (args.json) {
+      console.log(JSON.stringify(result, null, 2))
+      return
+    }
+
     if (result.tables.length === 0) {
       console.log(`\n  No data to export. Run \`gscdump sync\` first.`)
       return
@@ -111,7 +129,9 @@ export const exportCommand = defineCommand({
     for (const t of result.tables)
       console.log(`  ${t.table.padEnd(15)} ${String(t.files).padStart(4)} parquet → ${t.table}  (${t.rows.toLocaleString()} rows)`)
 
-    console.log(`\n  Exported ${result.tables.length} table(s), ${result.totalRows.toLocaleString()} rows → ${result.outPath}`)
+    console.log(`\n  Exported ${result.tables.length} table(s), ${result.totalRows.toLocaleString()} rows → ${displayPath(result.outPath)}`)
+    // Keep absolute path in the SQL example: the user copy-pastes this into
+    // DuckDB which doesn't share our cwd.
     console.log(`\n  Attach from DuckDB:     \x1B[36mATTACH '${result.outPath}' AS gsc (READ_ONLY); SELECT * FROM gsc.pages LIMIT 10;\x1B[0m`)
     console.log(`  Attach in a browser:    use DuckDB-WASM registerFileBuffer + \x1B[36mATTACH 'gsc.duckdb' AS gsc (READ_ONLY)\x1B[0m`)
   },

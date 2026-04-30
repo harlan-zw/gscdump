@@ -1,17 +1,9 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
 import { fetchSitemap } from 'gscdump'
-import { loadConfig } from '../config'
 import { createCommandContext } from '../context'
-import { gscErrorHandler, logger } from '../utils'
-
-function requireSite(target?: string): string {
-  if (!target) {
-    logger.error('Site URL required (-s)')
-    process.exit(1)
-  }
-  return target
-}
+import { gscErrorHandler } from '../error-handler'
+import { logger } from '../utils'
 
 const listCommand = defineCommand({
   meta: {
@@ -29,11 +21,20 @@ const listCommand = defineCommand({
       default: false,
       description: 'Output as JSON',
     },
+    pending: {
+      type: 'boolean',
+      default: false,
+      description: 'Show only sitemaps with isPending=true',
+    },
+    errored: {
+      type: 'boolean',
+      default: false,
+      description: 'Show only sitemaps with errors > 0',
+    },
   },
   async run({ args }) {
-    const config = await loadConfig()
-    const siteUrl = requireSite(args.site || config.defaultSite)
     const ctx = await createCommandContext({ needsAuth: true })
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const client = ctx.client!
 
     const raw = await client.sitemaps.list(siteUrl).catch((e: Error) => {
@@ -41,14 +42,20 @@ const listCommand = defineCommand({
       process.exit(1)
     })
 
-    const sitemaps = raw.map(sm => ({
+    let sitemaps = raw.map(sm => ({
       path: sm.path!,
       type: sm.type || undefined,
       isPending: sm.isPending || false,
       errors: Number(sm.errors) || 0,
       warnings: Number(sm.warnings) || 0,
       lastDownloaded: sm.lastDownloaded || null,
+      lastSubmitted: sm.lastSubmitted || null,
     }))
+
+    if (args.pending)
+      sitemaps = sitemaps.filter(sm => sm.isPending)
+    if (args.errored)
+      sitemaps = sitemaps.filter(sm => sm.errors > 0)
 
     if (args.json) {
       console.log(JSON.stringify(sitemaps, null, 2))
@@ -66,7 +73,8 @@ const listCommand = defineCommand({
       const pending = sm.isPending ? ' \x1B[33m(pending)\x1B[0m' : ''
       const errors = sm.errors ? ` \x1B[31m${sm.errors} errors\x1B[0m` : ''
       const warnings = sm.warnings ? ` \x1B[33m${sm.warnings} warnings\x1B[0m` : ''
-      console.log(`  ${sm.path}${pending}${errors}${warnings}`)
+      const submitted = sm.lastSubmitted ? ` \x1B[90msubmitted ${sm.lastSubmitted}\x1B[0m` : ''
+      console.log(`  ${sm.path}${pending}${errors}${warnings}${submitted}`)
     }
   },
 })
@@ -80,8 +88,7 @@ const getCommand = defineCommand({
     site: {
       type: 'string',
       alias: 's',
-      required: true,
-      description: 'Site URL',
+      description: 'Site URL (defaults to config.defaultSite or prompt)',
     },
     url: {
       type: 'positional',
@@ -96,8 +103,9 @@ const getCommand = defineCommand({
   },
   async run({ args }) {
     const ctx = await createCommandContext({ needsAuth: true })
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const client = ctx.client!
-    const sitemap = await fetchSitemap(client, args.site, args.url).catch(gscErrorHandler)
+    const sitemap = await fetchSitemap(client, siteUrl, args.url).catch(gscErrorHandler)
 
     if (args.json) {
       console.log(JSON.stringify(sitemap, null, 2))
@@ -132,8 +140,7 @@ const submitCommand = defineCommand({
     site: {
       type: 'string',
       alias: 's',
-      required: true,
-      description: 'Site URL',
+      description: 'Site URL (defaults to config.defaultSite or prompt)',
     },
     url: {
       type: 'positional',
@@ -143,8 +150,9 @@ const submitCommand = defineCommand({
   },
   async run({ args }) {
     const ctx = await createCommandContext({ needsAuth: true })
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const client = ctx.client!
-    await client.sitemaps.submit(args.site, args.url).catch((e: Error) => {
+    await client.sitemaps.submit(siteUrl, args.url).catch((e: Error) => {
       logger.error(`Submit failed: ${e.message}`)
       process.exit(1)
     })
@@ -161,8 +169,7 @@ const deleteCommand = defineCommand({
     site: {
       type: 'string',
       alias: 's',
-      required: true,
-      description: 'Site URL',
+      description: 'Site URL (defaults to config.defaultSite or prompt)',
     },
     url: {
       type: 'positional',
@@ -172,8 +179,9 @@ const deleteCommand = defineCommand({
   },
   async run({ args }) {
     const ctx = await createCommandContext({ needsAuth: true })
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const client = ctx.client!
-    await client.sitemaps.delete(args.site, args.url).catch((e: Error) => {
+    await client.sitemaps.delete(siteUrl, args.url).catch((e: Error) => {
       logger.error(`Delete failed: ${e.message}`)
       process.exit(1)
     })

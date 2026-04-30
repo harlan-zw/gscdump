@@ -16,6 +16,26 @@ import { rowWithMetricDefaults } from './cli-format'
 
 const GSC_API = 'https://searchconsole.googleapis.com'
 const INDEXING_API = 'https://indexing.googleapis.com'
+const SITE_VERIFICATION_API = 'https://www.googleapis.com/siteVerification/v1'
+
+export type VerificationMethod = 'META' | 'FILE' | 'DNS_TXT' | 'DNS_CNAME' | 'ANALYTICS' | 'TAG_MANAGER'
+export type VerificationSiteType = 'SITE' | 'INET_DOMAIN' | 'ANDROID_APP'
+
+export interface VerificationSite {
+  type: VerificationSiteType
+  identifier: string
+}
+
+export interface VerificationToken {
+  method: string
+  token: string
+}
+
+export interface VerificationWebResource {
+  id?: string
+  site: VerificationSite
+  owners?: string[]
+}
 
 /**
  * Compatible interface with OAuth2Client from google-auth-library
@@ -138,8 +158,29 @@ export interface GoogleSearchConsoleClient {
   /** Query search analytics with builder, returns async generator yielding typed row batches */
   query: <D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions) => AsyncGenerator<GSCRow<D, C>[]>
 
-  /** List all sites */
-  sites: (opts?: CallOptions) => Promise<ApiSite[]>
+  /**
+   * List all sites. Also exposes write ops as `client.sites.add(siteUrl)` and
+   * `client.sites.delete(siteUrl)`. Calling `client.sites()` is equivalent to
+   * `client.sites.list()`.
+   */
+  sites: ((opts?: CallOptions) => Promise<ApiSite[]>) & {
+    list: (opts?: CallOptions) => Promise<ApiSite[]>
+    /** Add a property in unverified state. Caller must verify ownership separately. */
+    add: (siteUrl: string, opts?: CallOptions) => Promise<void>
+    /** Remove a property from the user's account. */
+    delete: (siteUrl: string, opts?: CallOptions) => Promise<void>
+  }
+
+  /** Site Verification API (siteverification.googleapis.com). Required to flip a property from unverified to verified. */
+  verification: {
+    /** Returns the token to place on the site/DNS, plus the resolved method. */
+    getToken: (params: { site: VerificationSite, verificationMethod: VerificationMethod }, opts?: CallOptions) => Promise<VerificationToken>
+    /** Triggers Google to fetch + validate; returns the verified WebResource. */
+    insert: (params: { site: VerificationSite, verificationMethod: VerificationMethod }, opts?: CallOptions) => Promise<VerificationWebResource>
+    list: (opts?: CallOptions) => Promise<VerificationWebResource[]>
+    get: (id: string, opts?: CallOptions) => Promise<VerificationWebResource>
+    delete: (id: string, opts?: CallOptions) => Promise<void>
+  }
 
   /** Inspect a URL */
   inspect: (siteUrl: string, url: string, opts?: CallOptions) => Promise<InspectUrlIndexResponse>
@@ -233,9 +274,51 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
       }
     },
 
-    sites: async (opts) => {
-      const res = await fetch<{ siteEntry?: ApiSite[] }>(`${GSC_API}/webmasters/v3/sites`, { signal: opts?.signal })
-      return res.siteEntry || []
+    sites: (() => {
+      const list = async (opts?: CallOptions): Promise<ApiSite[]> => {
+        const res = await fetch<{ siteEntry?: ApiSite[] }>(`${GSC_API}/webmasters/v3/sites`, { signal: opts?.signal })
+        return res.siteEntry || []
+      }
+      return Object.assign(list, {
+        list,
+        add: (siteUrl: string, opts?: CallOptions) =>
+          fetch<void>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}`, {
+            method: 'PUT',
+            signal: opts?.signal,
+          }),
+        delete: (siteUrl: string, opts?: CallOptions) =>
+          fetch<void>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}`, {
+            method: 'DELETE',
+            signal: opts?.signal,
+          }),
+      })
+    })(),
+
+    verification: {
+      getToken: (params, opts) =>
+        fetch<VerificationToken>(`${SITE_VERIFICATION_API}/token`, {
+          method: 'POST',
+          body: params,
+          signal: opts?.signal,
+        }),
+      insert: (params, opts) =>
+        fetch<VerificationWebResource>(`${SITE_VERIFICATION_API}/webResource`, {
+          method: 'POST',
+          query: { verificationMethod: params.verificationMethod },
+          body: { site: params.site },
+          signal: opts?.signal,
+        }),
+      list: async (opts) => {
+        const res = await fetch<{ items?: VerificationWebResource[] }>(`${SITE_VERIFICATION_API}/webResource`, { signal: opts?.signal })
+        return res.items || []
+      },
+      get: (id, opts) =>
+        fetch<VerificationWebResource>(`${SITE_VERIFICATION_API}/webResource/${encodeURIComponent(id)}`, { signal: opts?.signal }),
+      delete: (id, opts) =>
+        fetch<void>(`${SITE_VERIFICATION_API}/webResource/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          signal: opts?.signal,
+        }),
     },
 
     inspect: (siteUrl, url, opts) =>

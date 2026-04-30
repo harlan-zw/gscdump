@@ -273,6 +273,18 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
+  server.registerTool(
+    'diagnostics',
+    {
+      description: 'Run health checks on the active GSC connection: auth/scopes, time skew, API reachability, sites count.',
+      inputSchema: listSitesInput.shape,
+    },
+    async (args) => {
+      const result = await handlers.diagnostics(args, await getContext())
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    },
+  )
+
   return server
 }
 

@@ -2,14 +2,14 @@ import process from 'node:process'
 import { createGscMcpServer } from '@gscdump/mcp/server'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { defineCommand } from 'citty'
-import { getAuth, loadTokens } from '../auth'
+import { getAuth, loadTokens, resolveBYOK } from '../auth'
 import { loadConfig } from '../config'
 import { VERSION } from '../utils'
 
 async function checkAuth(): Promise<{ ok: boolean, error?: string }> {
-  if ((process.env.GOOGLE_ACCESS_TOKEN || process.env.GOOGLE_REFRESH_TOKEN) && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  // BYOK (GSC_* or GOOGLE_* env vars) is sufficient on its own.
+  if (resolveBYOK())
     return { ok: true }
-  }
 
   const config = await loadConfig()
   if (!config.clientId && !config.clientSecret) {
@@ -21,7 +21,8 @@ Run this command to set up authentication:
 
   npx @gscdump/cli init
 
-Or provide env vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_ACCESS_TOKEN
+Or set BYOK env vars: GSC_ACCESS_TOKEN, or GSC_CLIENT_ID + GSC_CLIENT_SECRET + GSC_REFRESH_TOKEN
+(GOOGLE_* aliases also accepted).
 
 Then restart your MCP client.`,
     }
@@ -35,7 +36,7 @@ Then restart your MCP client.`,
 
 Run this command to authenticate:
 
-  npx @gscdump/cli auth
+  npx @gscdump/cli auth login
 
 Then restart your MCP client.`,
     }

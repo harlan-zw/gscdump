@@ -1,11 +1,13 @@
 import type { OAuth2Client } from 'google-auth-library'
-import type { googleSearchConsole } from 'gscdump'
+import type { googleSearchConsole, Auth as GscAuth } from 'gscdump'
+import type { FetchOptions } from 'ofetch'
+import type { BYOKOptions } from './auth'
 import type { GscdumpConfig } from './config'
 import type { LocalStore } from './local-store'
 import process from 'node:process'
 import { cancel, isCancel, select } from '@clack/prompts'
 import { googleSearchConsole as createGsc } from 'gscdump'
-import { getAuth } from './auth'
+import { resolveAuth } from './auth'
 import { loadConfig, resolveDataDir } from './config'
 import { createLocalStore } from './local-store'
 import { logger } from './utils'
@@ -19,8 +21,8 @@ type GscClient = ReturnType<typeof googleSearchConsole>
 
 export interface CommandContext {
   config: GscdumpConfig
-  /** Non-null only when `needsAuth: true`. */
-  auth: OAuth2Client | null
+  /** Auth used to construct the GSC client; OAuth2Client for saved-token flow, lightweight `Auth` for BYOK. */
+  auth: OAuth2Client | GscAuth | null
   /** Non-null only when `needsAuth: true`; wraps `auth`. */
   client: GscClient | null
   /** Non-null only when `needsStore: true`. */
@@ -42,15 +44,19 @@ export interface CommandContextOptions {
   needsStore?: boolean
   /** Allow interactive OAuth prompts. Default false (CLI commands opt-in). */
   interactive?: boolean
+  /** Per-call BYOK overrides; falls back to env vars. */
+  byok?: BYOKOptions
+  /** Forwarded to googleSearchConsole(); used to surface --retries on commands. */
+  fetchOptions?: FetchOptions
 }
 
 export async function createCommandContext(
   opts: CommandContextOptions = {},
 ): Promise<CommandContext> {
-  const { needsAuth = false, needsStore = false, interactive = false } = opts
+  const { needsAuth = false, needsStore = false, interactive = false, byok, fetchOptions } = opts
   const config = await loadConfig()
-  const auth = needsAuth ? await getAuth({ interactive, config }) : null
-  const client = auth ? createGsc(auth) : null
+  const auth = needsAuth ? await resolveAuth({ interactive, config, byok }) : null
+  const client = auth ? createGsc(auth as GscAuth, { fetchOptions }) : null
   const store = needsStore ? createLocalStore({ dataDir: resolveDataDir(config) }) : null
 
   const loadSites = async (): Promise<GscSite[]> => {

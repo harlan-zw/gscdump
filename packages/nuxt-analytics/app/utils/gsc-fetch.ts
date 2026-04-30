@@ -16,6 +16,7 @@
 // Nitro narrowing would mis-type every call site.
 
 import type { $Fetch } from 'ofetch'
+import { readGscAuth } from '../composables/useGscAuth'
 import { classifyGscError } from './gsc-error'
 
 let cached: $Fetch | null = null
@@ -71,20 +72,41 @@ export function useGscFetch(): $Fetch {
   if (cached)
     return cached
   const cfg = useRuntimeConfig().public.analytics as { apiBase?: string, toastErrors?: boolean } | undefined
-  const apiBase = cfg?.apiBase ?? ''
+  const cfgApiBase = cfg?.apiBase ?? ''
   const toastErrors = cfg?.toastErrors === true
   cached = $fetch.create({
-    baseURL: apiBase,
     onRequest: ({ options }) => {
-      const extra = _headers.value
-      const hasExtra = Object.keys(extra).length > 0
-      if (hasExtra) {
-        const merged = new Headers(options.headers as HeadersInit | undefined)
-        for (const [k, v] of Object.entries(extra))
-          merged.set(k, v)
-        options.headers = merged
-        // Cookies aren't useful when the host supplies an explicit auth header
-        // (cross-origin call against a different session realm).
+      // Resolve auth state per-request so reactive updates land without
+      // re-creating the $fetch instance. `useGscAuth` (when populated by
+      // the host) wins over the legacy `_headers` ref; `apiBase` from auth
+      // overrides the runtime-config default.
+      const auth = readGscAuth()
+      const apiBase = (auth.apiBase || cfgApiBase) ?? ''
+
+      const merged = new Headers(options.headers as HeadersInit | undefined)
+      let hasAuth = false
+      if (auth.apiKey) {
+        merged.set('x-api-key', auth.apiKey)
+        hasAuth = true
+      }
+      const legacy = _headers.value
+      if (Object.keys(legacy).length > 0) {
+        for (const [k, v] of Object.entries(legacy)) {
+          if (!merged.has(k))
+            merged.set(k, v)
+        }
+        hasAuth = true
+      }
+      options.headers = merged
+
+      // Resolve relative URLs against the resolved apiBase. We can't rely on
+      // baseURL here because it's locked at $fetch.create time.
+      if (apiBase && typeof options.baseURL !== 'string')
+        options.baseURL = apiBase
+
+      if (hasAuth) {
+        // Explicit auth header — no cookies needed (cross-origin different
+        // session realm).
         if (!options.credentials)
           options.credentials = 'omit'
       }

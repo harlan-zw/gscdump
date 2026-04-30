@@ -47,15 +47,29 @@ Query builder (`gscdump/query`):
 ### @gscdump/cli
 CLI + MCP server built with citty. Located at `packages/cli/src/`.
 
-Commands:
-- `gscdump init` - Set up authentication
-- `gscdump dump` - Export search analytics
-- `gscdump query` - Run custom queries
-- `gscdump sites` - List sites
-- `gscdump sitemaps` - Manage sitemaps
-- `gscdump auth` - Manage authentication
-- `gscdump config` - Manage configuration
+Commands (full API parity with core lib):
+- `gscdump init` - Full setup (auth + dataDir)
+- `gscdump auth login|logout|status` - OAuth flow / status
+- `gscdump config show|set|unset|path` - Manage configuration
+- `gscdump sites [--with-sitemaps]` - List sites (optionally with sitemaps)
+- `gscdump sitemaps list|get|submit|delete` - Sitemap CRUD
+- `gscdump query` - Search analytics (local store + `--live`)
+- `gscdump dump` - Export to file
+- `gscdump inspect <url>` / `gscdump inspect batch` - URL inspection (single + batch)
+- `gscdump indexing submit|remove|status|batch` - Indexing API
+- `gscdump sync` - Sync GSC data into local store
+- `gscdump store stats|compact|gc|export|rollups` - Local store ops
+- `gscdump analyze <tool>` - Run analyzers (brand, movers, decay, ...)
+- `gscdump entities` - Entity extraction
 - `gscdump mcp` - Start MCP server
+
+### BYOK (Bring Your Own Key)
+The CLI runs without `init` if any of these env vars are set (also accept `GOOGLE_*` aliases):
+
+- `GSC_ACCESS_TOKEN` - raw bearer token (e.g., from gcloud or another OAuth flow)
+- `GSC_CLIENT_ID` + `GSC_CLIENT_SECRET` + `GSC_REFRESH_TOKEN` - OAuth refresh-token flow (no google-auth-library)
+
+When BYOK is detected, `auth status` reports `byok` as the source and `auth login` is a no-op.
 
 MCP tools: `list-sites`, `fetch-pages`, `fetch-keywords`, `custom-query`, `inspect-url`, `request-indexing`, etc.
 

@@ -10,7 +10,7 @@ import { SearchTypes } from 'gscdump/query'
 import { loadConfig, resolveDataDir } from '../config'
 import { createCommandContext } from '../context'
 import { allTables, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
-import { clearLine, formatAge, logger, runWithConcurrency } from '../utils'
+import { clearLine, displayPath, formatAge, logger, runWithConcurrency } from '../utils'
 
 const DEFAULT_TABLES: TableName[] = ['pages', 'keywords', 'countries', 'devices']
 const DEFAULT_TYPES: readonly SearchType[] = ['web']
@@ -241,6 +241,16 @@ export const syncCommand = defineCommand({
       default: false,
       description: 'Run tables sequentially (default: run all tables in parallel)',
     },
+    'retry-failed': {
+      type: 'boolean',
+      default: false,
+      description: 'Only re-run dates currently in `failed` state (cheaper than --force)',
+    },
+    'dry-run': {
+      type: 'boolean',
+      default: false,
+      description: 'Print the planned (table, searchType, date) work and exit without hitting the API',
+    },
   },
   async run({ args }) {
     if (args.status) {
@@ -305,15 +315,76 @@ export const syncCommand = defineCommand({
       startDate = daysAgo(DEFAULT_PENDING_DAYS + DEFAULT_PENDING_DAYS - 1)
     }
 
-    const dates = getDateRange(startDate, endDate)
+    let dates = getDateRange(startDate, endDate)
     if (dates.length === 0) {
       logger.error(`No dates to sync (start=${startDate}, end=${endDate})`)
       process.exit(1)
     }
 
     const store = ctx.store!
+
+    // --retry-failed shrinks the date list to exactly the dates currently in
+    // `failed` state for the requested (table, type) jobs. Force-mode is
+    // implied; the loop will re-run those dates and overwrite their state.
+    if (args['retry-failed']) {
+      const failedSet = new Set<string>()
+      for (const table of tables) {
+        for (const type of types) {
+          const states = await store.engine.getSyncStates({
+            userId: store.userId,
+            siteId,
+            table,
+            searchType: type,
+          })
+          for (const s of states) {
+            if (s.state === 'failed' && s.date >= startDate && s.date <= endDate)
+              failedSet.add(s.date)
+          }
+        }
+      }
+      dates = dates.filter(d => failedSet.has(d))
+      if (dates.length === 0) {
+        logger.success('No failed dates in range — nothing to retry.')
+        return
+      }
+      // Force-mode is implied so the syncer overwrites the existing `failed`
+      // state instead of skipping it as already-attempted.
+      ;(args as Record<string, unknown>).force = true
+      if (!args.quiet)
+        logger.info(`--retry-failed: ${dates.length} date(s) to retry`)
+    }
+
+    if (args['dry-run']) {
+      const plan: Array<{ table: string, searchType: string, date: string }> = []
+      for (const table of tables) {
+        for (const type of types) {
+          for (const date of dates)
+            plan.push({ table, searchType: type, date })
+        }
+      }
+      if (args.json) {
+        console.log(JSON.stringify({
+          siteUrl,
+          range: { start: startDate, end: endDate },
+          tables,
+          types,
+          totalCalls: plan.length,
+          plan,
+        }, null, 2))
+        return
+      }
+      console.log()
+      logger.info(`Plan: ${plan.length} API call(s) for ${siteUrl}`)
+      console.log(`  Tables:   ${tables.join(', ')}`)
+      console.log(`  Types:    ${types.join(', ')}`)
+      console.log(`  Range:    ${startDate} → ${endDate} (${dates.length} days)`)
+      console.log()
+      logger.info('Pass without --dry-run to execute.')
+      return
+    }
+
     if (!args.quiet) {
-      logger.info(`Syncing ${siteUrl} (${tables.join(', ')}) [${types.join(', ')}] → ${store.dataDir}`)
+      logger.info(`Syncing ${siteUrl} (${tables.join(', ')}) [${types.join(', ')}] → ${displayPath(store.dataDir)}`)
       logger.info(`Range: ${startDate} → ${endDate} (${dates.length} days)`)
     }
 
@@ -493,7 +564,7 @@ async function printSyncStatus(
   }
 
   console.log()
-  console.log(`  \x1B[1m${store.dataDir}\x1B[0m`)
+  console.log(`  \x1B[1m${displayPath(store.dataDir)}\x1B[0m`)
   if (siteFilter)
     console.log(`  \x1B[90mSite: ${siteFilter}\x1B[0m`)
   console.log()

@@ -1,11 +1,13 @@
+import type { OAuth2Client } from 'google-auth-library'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
-import { isCancel, text } from '@clack/prompts'
+import { confirm, isCancel, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { authenticate, getAuthCredentials, saveTokens } from '../auth'
+import { googleSearchConsole } from 'gscdump'
+import { authenticate, getAuthCredentials, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { defaultDataDir, loadConfig, saveConfig } from '../config'
-import { logger } from '../utils'
+import { displayPath, logger, setQuiet } from '../utils'
 
 const ENV_LINE_RE = /^([^=]+)=(.*)$/
 
@@ -50,13 +52,25 @@ export const initCommand = defineCommand({
     description: 'Set up GSCDump authentication',
   },
   args: {
-    force: {
+    'force': {
       type: 'boolean',
       alias: 'f',
       description: 'Force re-initialization',
     },
+    'no-store': {
+      type: 'boolean',
+      default: false,
+      description: 'Skip dataDir prompt (auth-only setup)',
+    },
+    'quiet': {
+      type: 'boolean',
+      alias: 'q',
+      default: false,
+      description: 'Suppress info/success output',
+    },
   },
   async run({ args }) {
+    setQuiet(Boolean(args.quiet))
     const config = await loadConfig()
 
     if (config.clientId && config.clientSecret && !args.force) {
@@ -65,30 +79,45 @@ export const initCommand = defineCommand({
       return
     }
 
-    const envFile = await loadEnvFile()
-    if (envFile?.GOOGLE_CLIENT_ID && envFile?.GOOGLE_CLIENT_SECRET && envFile?.GOOGLE_REFRESH_TOKEN) {
-      logger.info('Found .env file with Google credentials')
+    // BYOK shortcut: env vars already provide credentials, skip OAuth setup.
+    const byok = resolveBYOK()
+    if (byok) {
+      const dataDir = args['no-store'] ? undefined : await promptDataDir(config.dataDir)
+      await saveConfig({ ...config, dataDir: dataDir ?? config.dataDir })
+      logger.success(`BYOK detected (${typeof byok === 'string' ? 'access-token' : 'refresh-token'}) — auth setup skipped`)
+      logger.success('Setup complete! Run gscdump to get started.')
+      return
+    }
 
-      process.env.GOOGLE_CLIENT_ID = envFile.GOOGLE_CLIENT_ID
-      process.env.GOOGLE_CLIENT_SECRET = envFile.GOOGLE_CLIENT_SECRET
-      process.env.GOOGLE_REFRESH_TOKEN = envFile.GOOGLE_REFRESH_TOKEN
-      if (envFile.GOOGLE_ACCESS_TOKEN)
-        process.env.GOOGLE_ACCESS_TOKEN = envFile.GOOGLE_ACCESS_TOKEN
+    // .env shortcut: pick up credentials from a project-local .env file.
+    const envFile = await loadEnvFile()
+    const envCid = envFile?.GSC_CLIENT_ID ?? envFile?.GOOGLE_CLIENT_ID
+    const envSec = envFile?.GSC_CLIENT_SECRET ?? envFile?.GOOGLE_CLIENT_SECRET
+    const envRef = envFile?.GSC_REFRESH_TOKEN ?? envFile?.GOOGLE_REFRESH_TOKEN
+    const envAcc = envFile?.GSC_ACCESS_TOKEN ?? envFile?.GOOGLE_ACCESS_TOKEN
+    if (envCid && envSec && envRef) {
+      logger.info('Found .env file with credentials')
+
+      process.env.GOOGLE_CLIENT_ID = envCid
+      process.env.GOOGLE_CLIENT_SECRET = envSec
+      process.env.GOOGLE_REFRESH_TOKEN = envRef
+      if (envAcc)
+        process.env.GOOGLE_ACCESS_TOKEN = envAcc
 
       await saveConfig({
         ...config,
-        clientId: envFile.GOOGLE_CLIENT_ID,
-        clientSecret: envFile.GOOGLE_CLIENT_SECRET,
+        clientId: envCid,
+        clientSecret: envSec,
         dataDir: config.dataDir ?? defaultDataDir(),
       })
 
-      const auth = await authenticate({ clientId: envFile.GOOGLE_CLIENT_ID, clientSecret: envFile.GOOGLE_CLIENT_SECRET }, false)
+      const auth = await authenticate({ clientId: envCid, clientSecret: envSec }, false)
 
       const creds = auth.credentials
       if (creds.access_token) {
         await saveTokens({
           access_token: creds.access_token,
-          refresh_token: creds.refresh_token || envFile.GOOGLE_REFRESH_TOKEN,
+          refresh_token: creds.refresh_token || envRef,
           expiry_date: creds.expiry_date,
         })
       }
@@ -103,17 +132,68 @@ export const initCommand = defineCommand({
     console.log('  \x1B[90mGoogle Search Console data extraction CLI\x1B[0m')
     console.log()
 
-    const dataDir = await promptDataDir(config.dataDir)
+    const dataDir = args['no-store'] ? undefined : await promptDataDir(config.dataDir)
     const credentials = await getAuthCredentials(true)
     await saveConfig({
       ...config,
-      dataDir,
+      ...(dataDir ? { dataDir } : {}),
       clientId: credentials.clientId,
       clientSecret: credentials.clientSecret,
     })
-    await authenticate(credentials, true)
+    const oauth = await authenticate(credentials, true)
+
+    // Smoke-test the new credentials by listing sites. Catches missing scopes
+    // (e.g., user enabled Search Console API but didn't tick the indexing
+    // scope) before the user runs an unrelated command and gets a 403 they
+    // can't immediately attribute.
+    await smokeTest(oauth)
+
+    await maybeWriteEnvFile(credentials.clientId, credentials.clientSecret)
 
     console.log()
     logger.success('Setup complete! Run gscdump to get started.')
   },
 })
+
+async function smokeTest(oauth: OAuth2Client): Promise<void> {
+  const client = googleSearchConsole(oauth)
+  const sites = await client.sites().catch((e: Error) => e)
+  if (sites instanceof Error) {
+    logger.warn(`Smoke test failed: ${sites.message}`)
+    logger.info('Auth saved, but verify scopes via `gscdump auth status` / `gscdump doctor`.')
+    return
+  }
+  logger.success(`Verified: ${sites.length} GSC site(s) accessible`)
+}
+
+async function maybeWriteEnvFile(clientId: string, clientSecret: string): Promise<void> {
+  const tokens = await loadTokens()
+  if (!tokens?.refresh_token)
+    return
+  const wants = await confirm({
+    message: 'Write a `.env` file with these credentials? (handy for CI / other machines)',
+    initialValue: false,
+  })
+  if (isCancel(wants) || !wants)
+    return
+  const envPath = path.join(process.cwd(), '.env')
+  const exists = await fs.stat(envPath).then(() => true).catch(() => false)
+  if (exists) {
+    const overwrite = await confirm({
+      message: `${displayPath(envPath)} exists. Overwrite?`,
+      initialValue: false,
+    })
+    if (isCancel(overwrite) || !overwrite) {
+      logger.info(`Skipped — keep credentials at ${displayPath(envPath)} manually if needed`)
+      return
+    }
+  }
+  const content = [
+    `GSC_CLIENT_ID=${clientId}`,
+    `GSC_CLIENT_SECRET=${clientSecret}`,
+    `GSC_REFRESH_TOKEN=${tokens.refresh_token}`,
+    '',
+  ].join('\n')
+  await fs.writeFile(envPath, content, { mode: 0o600 })
+  logger.success(`Wrote ${displayPath(envPath)}`)
+}

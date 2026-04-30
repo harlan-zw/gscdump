@@ -57,18 +57,22 @@ npx gscdump mcp
 
 | Command | Description |
 |---------|-------------|
-| `init` | Set up Google OAuth credentials |
+| `init` | Full setup (OAuth + data dir) |
+| `auth` | Manage authentication (`status`, `login`, `logout`) |
 | `dump` | Export search analytics to stdout/file |
 | `query` | Run custom queries (reads local store by default; `--live` hits GSC) |
 | `sync` | Pull GSC rows into the local DuckDB/Parquet store |
-| `sites` | List GSC properties |
+| `sites [--with-sitemaps]` | List GSC properties |
 | `sitemaps` | List/manage sitemaps |
-| `inspect` | URL inspection |
+| `inspect <url>` / `inspect batch` | URL inspection (single or batch) |
+| `indexing` | Indexing API: `submit`, `remove`, `status`, `batch` |
 | `analyze` | Run SEO analyzers against local data (`--live` for row-based via API) |
+| `entities` | Entity extraction over local data |
 | `store stats` | Show row/byte counts, disk footprint, sync watermarks |
 | `store compact` | Roll daily partitions older than N days into monthly files |
 | `store gc` | Delete orphaned object-store files |
-| `auth` | Manage authentication |
+| `store export` | Export raw Parquet files |
+| `store rollups` | Rebuild post-sync rollup tables |
 | `config` | Manage CLI configuration |
 | `mcp` | Start MCP server for AI assistants |
 
@@ -192,14 +196,23 @@ Bring your own Google OAuth credentials:
 1. Create a Google Cloud project
 2. Enable "Search Console API" and "Web Search Indexing API"
 3. Create OAuth2 credentials (Desktop app)
-4. Run `npx gscdump init`
+4. Run `npx gscdump init` (or `npx gscdump auth login` if you don't want to write config)
 
-**Environment variables:**
+### BYOK environment variables
+
+The CLI runs without `init` if any of these env vars are set (`GSC_*` preferred, `GOOGLE_*` accepted):
+
 ```bash
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_REFRESH_TOKEN=...
+# Option A: raw bearer token (e.g., from gcloud)
+GSC_ACCESS_TOKEN=ya29...
+
+# Option B: refresh-token flow
+GSC_CLIENT_ID=...
+GSC_CLIENT_SECRET=...
+GSC_REFRESH_TOKEN=...
 ```
+
+When BYOK is detected, `gscdump auth status` reports `byok` as the source.
 
 ## Packages
 

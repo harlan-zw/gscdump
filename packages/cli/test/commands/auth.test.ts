@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { authCommand } from '../../src/commands/auth'
 
 import { logger } from '../../src/utils'
@@ -6,6 +6,8 @@ import { mockCredentials, mockExpiredCredentials } from '../__fixtures__/mocks'
 
 // Mock the logger
 vi.mock('../../src/utils', () => ({
+  setQuiet: vi.fn(),
+  setNoColor: vi.fn(),
   logger: {
     info: vi.fn(),
     success: vi.fn(),
@@ -26,6 +28,9 @@ const mocks = vi.hoisted(() => ({
   clearTokens: vi.fn(),
   loadCloudTokens: vi.fn(),
   clearCloudTokens: vi.fn(),
+  resolveBYOK: vi.fn(() => null),
+  getAuth: vi.fn(),
+  resolveAuth: vi.fn(),
 }))
 
 vi.mock('../../src/auth', () => ({
@@ -33,6 +38,9 @@ vi.mock('../../src/auth', () => ({
   clearTokens: mocks.clearTokens,
   loadCloudTokens: mocks.loadCloudTokens,
   clearCloudTokens: mocks.clearCloudTokens,
+  resolveBYOK: mocks.resolveBYOK,
+  getAuth: mocks.getAuth,
+  resolveAuth: mocks.resolveAuth,
 }))
 
 describe('auth command', () => {
@@ -58,8 +66,9 @@ describe('auth command', () => {
     expect(authCommand.meta?.description).toBe('Manage authentication')
   })
 
-  it('should have status and logout subcommands', () => {
+  it('should have status, login, and logout subcommands', () => {
     expect(authCommand.subCommands?.status).toBeDefined()
+    expect(authCommand.subCommands?.login).toBeDefined()
     expect(authCommand.subCommands?.logout).toBeDefined()
   })
 
@@ -85,7 +94,7 @@ describe('auth command', () => {
         cmd: authCommand.subCommands!.status,
       })
 
-      expect(logger.success).toHaveBeenCalledWith('Authenticated')
+      expect(logger.success).toHaveBeenCalledWith('Authenticated (saved tokens)')
     })
 
     it('should show token details', async () => {

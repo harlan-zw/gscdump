@@ -1,6 +1,7 @@
 export * from './api/indexing'
 export * from './api/inspection'
 export * from './api/sites'
+export * from './api/verification'
 export * from './core/api-client'
 export * from './core/cli-format'
 export * from './core/client'

@@ -122,12 +122,30 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
       }
     },
 
-    sites: async (opts) => {
-      const response = await fetch<ApiSitesResponse>('/api/sites', { signal: opts?.signal })
-      return response.sites.map(s => ({
-        siteUrl: s.gscSiteUrl,
-        permissionLevel: s.permissionLevel || 'siteOwner',
-      })) as ApiSite[]
+    sites: (() => {
+      const list = async (opts?: CallOptions): Promise<ApiSite[]> => {
+        const response = await fetch<ApiSitesResponse>('/api/sites', { signal: opts?.signal })
+        return response.sites.map(s => ({
+          siteUrl: s.gscSiteUrl,
+          permissionLevel: s.permissionLevel || 'siteOwner',
+        })) as ApiSite[]
+      }
+      const unsupported = (op: string) => () => {
+        throw new Error(`sites.${op} not available via gscdump API. Use googleSearchConsole() with OAuth credentials.`)
+      }
+      return Object.assign(list, {
+        list,
+        add: unsupported('add'),
+        delete: unsupported('delete'),
+      })
+    })(),
+
+    verification: {
+      getToken: () => { throw new Error('Site Verification API not available via gscdump API. Use googleSearchConsole() with OAuth credentials.') },
+      insert: () => { throw new Error('Site Verification API not available via gscdump API. Use googleSearchConsole() with OAuth credentials.') },
+      list: () => { throw new Error('Site Verification API not available via gscdump API. Use googleSearchConsole() with OAuth credentials.') },
+      get: () => { throw new Error('Site Verification API not available via gscdump API. Use googleSearchConsole() with OAuth credentials.') },
+      delete: () => { throw new Error('Site Verification API not available via gscdump API. Use googleSearchConsole() with OAuth credentials.') },
     },
 
     // These operations aren't supported via API yet - throw helpful errors

@@ -5,6 +5,7 @@ import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { defineCommand } from 'citty'
 import { hasLocalData, LocalStoreEmptyError, LocalStoreUnsupportedError, runLiveAnalysis, runLocalAnalysis } from '../analysis-local'
 import { createCommandContext } from '../context'
+import { gscErrorHandler } from '../error-handler'
 import { logger, toCSV } from '../utils'
 
 const ANALYSIS_TOOLS = defaultAnalyzerRegistry.listAnalyzerIds()
@@ -130,10 +131,7 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       }
 
       // Live mode: query the Google API directly
-      const result = await runLiveAnalysis(ctx.client!, siteUrl, params).catch((e: Error) => {
-        logger.error(`Analysis failed: ${e.message}`)
-        process.exit(1)
-      })
+      const result = await runLiveAnalysis(ctx.client!, siteUrl, params).catch(gscErrorHandler)
 
       if (format === 'json') {
         console.log(JSON.stringify(result, null, 2))

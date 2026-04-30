@@ -50,3 +50,21 @@ export async function submitSitemap(client: GoogleSearchConsoleClient, siteUrl: 
 export async function deleteSitemap(client: GoogleSearchConsoleClient, siteUrl: string, feedpath: string): Promise<void> {
   return client.sitemaps.delete(siteUrl, feedpath)
 }
+
+/**
+ * Add a property to the user's Search Console account.
+ *
+ * Note: this only registers the property in an unverified state. Ownership
+ * must be proven via the Site Verification API (see `verifySite`) before any
+ * data is accessible.
+ */
+export async function addSite(client: GoogleSearchConsoleClient, siteUrl: string): Promise<void> {
+  return client.sites.add(siteUrl)
+}
+
+/**
+ * Remove a property from the user's Search Console account.
+ */
+export async function deleteSite(client: GoogleSearchConsoleClient, siteUrl: string): Promise<void> {
+  return client.sites.delete(siteUrl)
+}

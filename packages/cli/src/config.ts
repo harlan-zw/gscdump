@@ -20,6 +20,9 @@ export interface GscdumpConfig {
   defaultFormat?: 'json' | 'csv'
   defaultDb?: string
   dataDir?: string
+  defaultLimit?: number
+  defaultSearchType?: string
+  defaultDataState?: string
 }
 
 export function defaultDataDir(): string {

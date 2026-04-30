@@ -9,25 +9,52 @@ const mockSites = [
 ]
 
 const clientSitesMock = vi.fn()
+const sitesAddMock = vi.fn()
+const sitesDeleteMock = vi.fn()
+const verificationGetTokenMock = vi.fn()
+const verificationInsertMock = vi.fn()
 
 vi.mock('gscdump', async (importOriginal) => {
   const actual = await importOriginal<typeof import('gscdump')>()
   return {
     ...actual,
-    googleSearchConsole: vi.fn(() => ({
-      sites: clientSitesMock,
-    })),
+    googleSearchConsole: vi.fn(() => {
+      // Build lazily so the mock vars exist by the time this runs.
+      const sites = Object.assign((...args: unknown[]) => clientSitesMock(...args), {
+        list: clientSitesMock,
+        add: sitesAddMock,
+        delete: sitesDeleteMock,
+      })
+      return {
+        sites,
+        verification: {
+          getToken: verificationGetTokenMock,
+          insert: verificationInsertMock,
+          list: vi.fn(),
+          get: vi.fn(),
+          delete: vi.fn(),
+        },
+      }
+    }),
   }
 })
 
 vi.mock('../../src/auth', () => ({
   getAuth: vi.fn().mockResolvedValue({ clientId: 'x', clientSecret: 'y' }),
+  resolveAuth: vi.fn().mockResolvedValue({ clientId: 'x', clientSecret: 'y' }),
+  resolveBYOK: vi.fn(() => null),
+}))
+
+vi.mock('../../src/error-handler', () => ({
+  gscErrorHandler: vi.fn((e: unknown) => { throw e }),
 }))
 
 vi.mock('../../src/utils', () => ({
   showSplash: vi.fn(),
   VERSION: '1.0.0',
   progressBar: vi.fn(() => ''),
+  setQuiet: vi.fn(),
+  setNoColor: vi.fn(),
   logger: {
     info: vi.fn(),
     success: vi.fn(),
@@ -55,7 +82,14 @@ describe('sites command', () => {
 
   it('should have correct metadata', () => {
     expect(sitesCommand.meta?.name).toBe('sites')
-    expect(sitesCommand.meta?.description).toBe('List available GSC sites')
+    expect(sitesCommand.meta?.description).toContain('List')
+  })
+
+  it('should expose add/delete/verify-token/verify subcommands', () => {
+    expect(sitesCommand.subCommands?.add).toBeDefined()
+    expect(sitesCommand.subCommands?.delete).toBeDefined()
+    expect(sitesCommand.subCommands?.['verify-token']).toBeDefined()
+    expect(sitesCommand.subCommands?.verify).toBeDefined()
   })
 
   it('should have json flag', () => {
@@ -108,5 +142,199 @@ describe('sites command', () => {
     })
 
     expect(clientSitesMock).toHaveBeenCalled()
+  })
+})
+
+describe('sites add', () => {
+  let consoleOutput: string[] = []
+  const originalLog = console.log
+
+  beforeEach(() => {
+    consoleOutput = []
+    console.log = (...args: unknown[]) => {
+      consoleOutput.push(args.map(String).join(' '))
+    }
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    console.log = originalLog
+  })
+
+  it('calls client.sites.add and emits JSON', async () => {
+    sitesAddMock.mockResolvedValue(undefined)
+    const cmd = sitesCommand.subCommands!.add
+    await cmd.run!({
+      args: { url: 'https://example.com/', json: true, quiet: false },
+      rawArgs: [],
+      cmd,
+    } as any)
+
+    expect(sitesAddMock).toHaveBeenCalledWith('https://example.com/')
+    const jsonOutput = consoleOutput.find(l => l.startsWith('{'))
+    expect(jsonOutput).toBeDefined()
+    const parsed = JSON.parse(jsonOutput!)
+    expect(parsed).toEqual({ siteUrl: 'https://example.com/', status: 'added', verified: false })
+  })
+
+  it('handles sc-domain: properties', async () => {
+    sitesAddMock.mockResolvedValue(undefined)
+    const cmd = sitesCommand.subCommands!.add
+    await cmd.run!({
+      args: { url: 'sc-domain:example.com', json: true, quiet: false },
+      rawArgs: [],
+      cmd,
+    } as any)
+
+    expect(sitesAddMock).toHaveBeenCalledWith('sc-domain:example.com')
+  })
+})
+
+describe('sites delete', () => {
+  let consoleOutput: string[] = []
+  const originalLog = console.log
+
+  beforeEach(() => {
+    consoleOutput = []
+    console.log = (...args: unknown[]) => {
+      consoleOutput.push(args.map(String).join(' '))
+    }
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    console.log = originalLog
+  })
+
+  it('calls client.sites.delete with --yes (no prompt)', async () => {
+    sitesDeleteMock.mockResolvedValue(undefined)
+    const cmd = sitesCommand.subCommands!.delete
+    await cmd.run!({
+      args: { url: 'https://example.com/', yes: true, json: true, quiet: false },
+      rawArgs: [],
+      cmd,
+    } as any)
+
+    expect(sitesDeleteMock).toHaveBeenCalledWith('https://example.com/')
+    const jsonOutput = consoleOutput.find(l => l.startsWith('{'))
+    expect(jsonOutput).toBeDefined()
+    const parsed = JSON.parse(jsonOutput!)
+    expect(parsed.status).toBe('deleted')
+  })
+})
+
+describe('sites verify-token', () => {
+  let consoleOutput: string[] = []
+  const originalLog = console.log
+
+  beforeEach(() => {
+    consoleOutput = []
+    console.log = (...args: unknown[]) => {
+      consoleOutput.push(args.map(String).join(' '))
+    }
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    console.log = originalLog
+  })
+
+  it('defaults to META for URL-prefix and DNS_TXT for sc-domain:', async () => {
+    verificationGetTokenMock.mockResolvedValue({ method: 'META', token: 'meta-tok' })
+    const cmd = sitesCommand.subCommands!['verify-token']
+
+    await cmd.run!({
+      args: { url: 'https://example.com/', json: true, quiet: false },
+      rawArgs: [],
+      cmd,
+    } as any)
+
+    expect(verificationGetTokenMock).toHaveBeenCalledWith({
+      site: { type: 'SITE', identifier: 'https://example.com/' },
+      verificationMethod: 'META',
+    })
+
+    verificationGetTokenMock.mockResolvedValue({ method: 'DNS_TXT', token: 'google-site-verification=dns-tok' })
+    await cmd.run!({
+      args: { url: 'sc-domain:example.com', json: true, quiet: false },
+      rawArgs: [],
+      cmd,
+    } as any)
+
+    expect(verificationGetTokenMock).toHaveBeenLastCalledWith({
+      site: { type: 'INET_DOMAIN', identifier: 'example.com' },
+      verificationMethod: 'DNS_TXT',
+    })
+  })
+
+  it('rejects invalid method/site combinations', async () => {
+    const cmd = sitesCommand.subCommands!['verify-token']
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined as never) as never)
+
+    await cmd.run!({
+      args: { url: 'sc-domain:example.com', method: 'META', json: true, quiet: false },
+      rawArgs: [],
+      cmd,
+    } as any).catch(() => {})
+
+    expect(exit).toHaveBeenCalledWith(1)
+    exit.mockRestore()
+  })
+
+  it('emits placement instructions for META', async () => {
+    verificationGetTokenMock.mockResolvedValue({ method: 'META', token: 'abc123' })
+    const cmd = sitesCommand.subCommands!['verify-token']
+
+    await cmd.run!({
+      args: { url: 'https://example.com/', method: 'META', json: false, quiet: false },
+      rawArgs: [],
+      cmd,
+    } as any)
+
+    const output = consoleOutput.join('\n')
+    expect(output).toContain('google-site-verification')
+    expect(output).toContain('abc123')
+  })
+})
+
+describe('sites verify', () => {
+  let consoleOutput: string[] = []
+  const originalLog = console.log
+
+  beforeEach(() => {
+    consoleOutput = []
+    console.log = (...args: unknown[]) => {
+      consoleOutput.push(args.map(String).join(' '))
+    }
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    console.log = originalLog
+  })
+
+  it('calls verification.insert with resolved site shape', async () => {
+    verificationInsertMock.mockResolvedValue({
+      id: 'https://example.com/',
+      site: { type: 'SITE', identifier: 'https://example.com/' },
+      owners: ['user@example.com'],
+    })
+    const cmd = sitesCommand.subCommands!.verify
+
+    await cmd.run!({
+      args: { url: 'https://example.com/', method: 'META', json: true, quiet: false },
+      rawArgs: [],
+      cmd,
+    } as any)
+
+    expect(verificationInsertMock).toHaveBeenCalledWith({
+      site: { type: 'SITE', identifier: 'https://example.com/' },
+      verificationMethod: 'META',
+    })
+
+    const jsonOutput = consoleOutput.find(l => l.startsWith('{'))
+    expect(jsonOutput).toBeDefined()
+    const parsed = JSON.parse(jsonOutput!)
+    expect(parsed.resource.owners).toEqual(['user@example.com'])
   })
 })

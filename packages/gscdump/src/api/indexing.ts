@@ -61,13 +61,14 @@ export async function batchRequestIndexing(
   options: {
     type?: IndexingNotificationType
     delayMs?: number
+    concurrency?: number
     onProgress?: (result: IndexingResult, index: number, total: number) => void
   } = {},
 ): Promise<IndexingResult[]> {
-  const { type = 'URL_UPDATED', delayMs = 100, onProgress } = options
+  const { type = 'URL_UPDATED', delayMs = 100, concurrency, onProgress } = options
   return runSequentialBatch(
     urls,
     url => requestIndexing(client, url, { type }),
-    { delayMs, onProgress },
+    { delayMs, concurrency, onProgress },
   )
 }

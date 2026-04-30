@@ -11,6 +11,7 @@ import type { ComputedRef, Ref, WatchSource } from 'vue'
 import { classifyGscError } from '../utils/gsc-error'
 import { useGscFetch } from '../utils/gsc-fetch'
 import { useGscAnalyzer } from './useGscAnalyzer'
+import { _useGscAuthInternal } from './useGscAuth'
 import { useGscBackfill } from './useGscBackfill'
 import { resolveDefaultEngine } from './useGscEngine'
 
@@ -220,7 +221,16 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
     error.value = null
     fallbackReason.value = null
 
-    const mode = opts.engine ?? resolveDefaultEngine()
+    const requested = opts.engine ?? resolveDefaultEngine()
+    let mode: GscQueryEngine = requested
+    if (requested === 'auto') {
+      // When the host has wired `setGscAuth`, derive from the per-user
+      // `browserAnalyzerEnabled` flag — false skips the browser path. When
+      // unwired (no host plugin), preserve legacy 'auto' = probe behavior.
+      const auth = _useGscAuthInternal().value
+      if (auth._initialized && !auth.browserAnalyzerEnabled)
+        mode = 'server'
+    }
 
     try {
       if (mode === 'server') {

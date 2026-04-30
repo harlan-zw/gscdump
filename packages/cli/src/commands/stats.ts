@@ -1,9 +1,10 @@
 import type { ManifestEntry, TableName, Watermark } from '../local-store'
+import process from 'node:process'
 import { filesystemStats } from '@gscdump/engine/filesystem'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
-import { formatAge } from '../utils'
+import { displayPath, formatAge, logger, setQuiet } from '../utils'
 
 export const statsCommand = defineCommand({
   meta: {
@@ -20,11 +21,29 @@ export const statsCommand = defineCommand({
       type: 'string',
       description: 'Limit to one site URL (sc-domain:example.com, https://example.com/, ...)',
     },
+    quiet: {
+      type: 'boolean',
+      alias: 'q',
+      default: false,
+      description: 'Suppress info/success output',
+    },
   },
   async run({ args }) {
+    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    // Validate --site against the set of sites with local data so a typo
+    // surfaces an error instead of silently showing zero.
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
-    const siteId = args.site ? store.siteIdFor(args.site) : undefined
+    let siteId: string | undefined
+    if (args.site) {
+      const known = await listKnownSiteIds(store)
+      const candidate = store.siteIdFor(args.site)
+      if (!known.has(candidate)) {
+        logger.error(`No local data for --site=${args.site}. Known site IDs: ${known.size === 0 ? '(none — run \`gscdump sync\` first)' : Array.from(known).join(', ')}`)
+        process.exit(1)
+      }
+      siteId = candidate
+    }
     const perTable = await Promise.all(
       allTables().map(async (table) => {
         const all = await store.engine.listAll({
@@ -67,7 +86,7 @@ export const statsCommand = defineCommand({
     }
 
     console.log()
-    console.log(`  \x1B[1m${store.dataDir}\x1B[0m`)
+    console.log(`  \x1B[1m${displayPath(store.dataDir)}\x1B[0m`)
     console.log(`  \x1B[90mDisk: ${disk.files} file(s), ${formatBytes(disk.bytes)}\x1B[0m`)
     console.log()
 
@@ -103,6 +122,18 @@ export const statsCommand = defineCommand({
     console.log()
   },
 })
+
+async function listKnownSiteIds(store: { userId: string, engine: { listLive: (f: any) => Promise<ManifestEntry[]> } }): Promise<Set<string>> {
+  const ids = new Set<string>()
+  for (const table of allTables()) {
+    const entries = await store.engine.listLive({ userId: store.userId, table: table as TableName })
+    for (const e of entries) {
+      if (e.siteId)
+        ids.add(e.siteId)
+    }
+  }
+  return ids
+}
 
 function sortWatermarks(ws: Watermark[]): Watermark[] {
   return [...ws].sort((a, b) => {

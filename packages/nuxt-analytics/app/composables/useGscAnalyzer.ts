@@ -18,6 +18,7 @@ import { defaultAnalyzerRegistry } from '@gscdump/analysis'
 import { attachParquetUrlTables, bootDuckDBWasm, createBrowserAnalysisRuntime } from '@gscdump/engine-duckdb-wasm'
 import { getGscFetchHeaders, useGscFetch } from '../utils/gsc-fetch'
 import { _useGscAnalyticsContext } from './useGscAnalytics'
+import { readGscAuth } from './useGscAuth'
 
 export interface GscAnalyzerTimings {
   bootMs: number
@@ -208,7 +209,8 @@ function createInstance(
   // rather than the consumer's own host. Same-origin / absolute URLs pass
   // through unchanged.
   function rewriteParquetUrl(url: string): string {
-    const apiBase = (useRuntimeConfig().public.analytics as { apiBase?: string } | undefined)?.apiBase ?? ''
+    const cfgBase = (useRuntimeConfig().public.analytics as { apiBase?: string } | undefined)?.apiBase ?? ''
+    const apiBase = readGscAuth().apiBase || cfgBase
     if (!apiBase || !url.startsWith('/'))
       return url
     return `${apiBase.replace(/\/+$/, '')}${url}`
@@ -230,7 +232,10 @@ function createInstance(
     // under the hood, so we pass the header through fetchInit. Cookies aren't
     // useful here — the parquet origin (gscdump.com) and the host page sit in
     // different session realms when the consumer mode is active.
-    const extraHeaders = getGscFetchHeaders()
+    const auth = readGscAuth()
+    const authHeaders: Record<string, string> = auth.apiKey ? { 'x-api-key': auth.apiKey } : {}
+    const legacyHeaders = getGscFetchHeaders()
+    const extraHeaders: Record<string, string> = { ...legacyHeaders, ...authHeaders }
     const hasExtra = Object.keys(extraHeaders).length > 0
     let attached = 0
     const handle = await attachParquetUrlTables({

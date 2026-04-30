@@ -11,6 +11,9 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
 
 // Mock the logger
 vi.mock('../../src/utils', () => ({
+  setQuiet: vi.fn(),
+  setNoColor: vi.fn(),
+  displayPath: (p: string) => p,
   logger: {
     info: vi.fn(),
     success: vi.fn(),
@@ -175,7 +178,8 @@ describe('config command', () => {
       expect(logger.success).toHaveBeenCalledWith('Removed defaultPeriod')
     })
 
-    it('should handle non-existent key', async () => {
+    it('should reject unknown keys', async () => {
+      // unset is whitelist-validated like set, so an unknown key exits 1.
       await fs.mkdir(CONFIG_DIR, { recursive: true })
       await fs.writeFile(CONFIG_FILE, JSON.stringify({ defaultPeriod: '30d' }))
 
@@ -185,7 +189,7 @@ describe('config command', () => {
           rawArgs: [],
           cmd: configCommand.subCommands!.unset,
         }),
-      ).resolves.not.toThrow()
+      ).rejects.toThrow(/process.exit/)
     })
   })
 

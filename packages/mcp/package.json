@@ -50,6 +50,7 @@
     "@modelcontextprotocol/sdk": "catalog:",
     "consola": "catalog:deps",
     "gscdump": "workspace:*",
+    "ofetch": "catalog:deps",
     "zod": "catalog:"
   },
   "devDependencies": {

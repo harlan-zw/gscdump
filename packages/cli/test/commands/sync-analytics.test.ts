@@ -56,6 +56,8 @@ vi.mock('gscdump', async (importOriginal) => {
 
 vi.mock('../../src/auth', () => ({
   getAuth: vi.fn(() => Promise.resolve({})),
+  resolveAuth: vi.fn(() => Promise.resolve({})),
+  resolveBYOK: vi.fn(() => null),
 }))
 
 vi.mock('../../src/utils', async (importOriginal) => {

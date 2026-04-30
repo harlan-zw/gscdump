@@ -1,13 +1,15 @@
 import type { googleSearchConsole } from 'gscdump'
-import type { BuilderState, Column, Dimension } from 'gscdump/query'
+import type { BuilderState, Column, Dimension, Filter, SearchType } from 'gscdump/query'
 import type { LocalStore, TableName } from '../local-store'
 import fs from 'node:fs/promises'
 import process from 'node:process'
 import { cancel, isCancel, multiselect, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { daysAgo } from 'gscdump'
-import { between, country, date as dateCol, device, gsc, page, query as queryCol, searchAppearance } from 'gscdump/query'
+import { and, between, contains, country, date as dateCol, device, eq, gsc, notRegex, page, query as queryCol, regex, searchAppearance, SearchTypes } from 'gscdump/query'
+import { loadConfig } from '../config'
 import { createCommandContext } from '../context'
+import { gscErrorHandler } from '../error-handler'
 import { allTables, inferTable } from '../local-store'
 import { exportToCSV, logger } from '../utils'
 
@@ -23,22 +25,90 @@ const DIM_COLUMNS: Record<DimensionName, Column<Dimension>> = {
   searchAppearance,
 }
 
+const FILTER_DIMS = ['query', 'page', 'country', 'device', 'searchAppearance'] as const
+type FilterDim = typeof FILTER_DIMS[number]
+const FILTER_COL: Record<FilterDim, Column<Dimension>> = {
+  query: queryCol,
+  page,
+  country,
+  device,
+  searchAppearance,
+}
+const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
+const DATA_STATES = ['all', 'final', 'hourly_all'] as const
+const AGGREGATION_TYPES = ['auto', 'byPage', 'byProperty'] as const
+
+// Filter expression prefixes for `--query`, `--page`, `--country`, `--device`,
+// `--search-appearance`. Bare values default to equals.
+//   ~foo         contains
+//   !~foo        not contains
+//   re:foo       regex
+//   !re:foo      not regex
+//   contains:foo contains (verbose form)
+//   eq:foo       equals (verbose form)
+//   !foo         not equals
+function buildFilterFromArg(col: Column<Dimension>, raw: string): Filter<any> {
+  if (raw.startsWith('!~'))
+    return makeLeaf(col, 'notContains', raw.slice(2))
+  if (raw.startsWith('!re:'))
+    return notRegex(col as Column<'page'>, raw.slice(4))
+  if (raw.startsWith('!'))
+    return makeLeaf(col, 'notEquals', raw.slice(1))
+  if (raw.startsWith('~'))
+    return contains(col as Column<'page'>, raw.slice(1))
+  if (raw.startsWith('re:'))
+    return regex(col as Column<'page'>, raw.slice(3))
+  if (raw.startsWith('contains:'))
+    return contains(col as Column<'page'>, raw.slice(9))
+  if (raw.startsWith('eq:'))
+    return eq(col as Column<'page'>, raw.slice(3) as any)
+  return eq(col as Column<'page'>, raw as any)
+}
+
+function makeLeaf(col: Column<Dimension>, operator: 'notEquals' | 'notContains', value: string): Filter<any> {
+  return {
+    _constraints: {},
+    _filters: [{ dimension: col.dimension, operator, expression: value }],
+  } as unknown as Filter<any>
+}
+
 async function runLiveQuery(
   client: ReturnType<typeof googleSearchConsole>,
   siteUrl: string,
-  opts: { startDate: string, endDate: string, dimensions: string[], rowLimit: number },
+  opts: {
+    startDate: string
+    endDate: string
+    dimensions: string[]
+    rowLimit: number
+    searchType?: SearchType
+    dataState?: string
+    aggregationType?: string
+    dimensionFilter?: Filter<any>
+  },
 ): Promise<{ rows: Record<string, unknown>[] }> {
   const allRows: Record<string, unknown>[] = []
   let startRow = 0
+  // Use the builder to derive a body so we get filterGroups for free.
+  const baseBody: Record<string, unknown> = {
+    startDate: opts.startDate,
+    endDate: opts.endDate,
+    dimensions: opts.dimensions,
+    rowLimit: opts.rowLimit,
+  }
+  if (opts.searchType)
+    baseBody.searchType = opts.searchType
+  if (opts.dataState)
+    baseBody.dataState = opts.dataState
+  if (opts.aggregationType)
+    baseBody.aggregationType = opts.aggregationType
+  if (opts.dimensionFilter) {
+    const groups = filterToGroups(opts.dimensionFilter)
+    if (groups.length > 0)
+      baseBody.dimensionFilterGroups = groups
+  }
 
   while (true) {
-    const response = await client._rawQuery(siteUrl, {
-      startDate: opts.startDate,
-      endDate: opts.endDate,
-      dimensions: opts.dimensions,
-      rowLimit: opts.rowLimit,
-      startRow,
-    } as any)
+    const response = await client._rawQuery(siteUrl, { ...baseBody, startRow } as any)
     const rows = (response.rows || []).map((row) => {
       const result: Record<string, unknown> = {
         clicks: row.clicks ?? 0,
@@ -60,71 +130,123 @@ async function runLiveQuery(
   return { rows: allRows }
 }
 
+// Flatten a single AND filter (one or more leaf filters) into one
+// dimensionFilterGroups entry. Mixed and/or aren't expressed via these CLI
+// args, so we emit a single AND group.
+function filterToGroups(f: Filter<any>): Array<{ groupType?: string, filters: Array<{ dimension: string, operator: string, expression: string }> }> {
+  if (f._filters.length === 0)
+    return []
+  return [{
+    filters: f._filters.map(leaf => ({
+      dimension: leaf.dimension,
+      operator: leaf.operator,
+      expression: leaf.expression,
+    })),
+  }]
+}
+
 export const queryCommand = defineCommand({
   meta: {
     name: 'query',
     description: 'Run a search analytics query (local Parquet by default, --live hits GSC API)',
   },
   args: {
-    site: {
+    'site': {
       type: 'string',
       alias: 's',
       description: 'Site URL (e.g., sc-domain:example.com)',
     },
-    dimensions: {
+    'dimensions': {
       type: 'string',
       alias: 'd',
       description: `Dimensions: ${DIMENSIONS.join(',')}`,
     },
-    start: {
+    'start': {
       type: 'string',
       description: 'Start date (YYYY-MM-DD)',
     },
-    end: {
+    'end': {
       type: 'string',
       description: 'End date (YYYY-MM-DD)',
     },
-    limit: {
+    'limit': {
       type: 'string',
       alias: 'l',
       default: '1000',
       description: 'Max rows (default: 1000)',
     },
-    output: {
+    'output': {
       type: 'string',
       alias: 'o',
       description: 'Output file path (default: stdout)',
     },
-    format: {
+    'format': {
       type: 'string',
       alias: 'f',
       default: 'json',
       description: 'Output format: json or csv',
     },
-    sql: {
+    'sql': {
       type: 'string',
       description: 'Raw DuckDB SQL using {{FILES}} as the file list placeholder (bypasses builder)',
     },
-    table: {
+    'table': {
       type: 'string',
       description: 'Analytics table for --sql (default: pages)',
     },
-    live: {
+    'live': {
       type: 'boolean',
       default: false,
       description: 'Bypass local store; hit the GSC API directly',
     },
-    quiet: {
+    'quiet': {
       type: 'boolean',
       alias: 'q',
       default: false,
       description: 'Suppress progress output',
     },
-    interactive: {
+    'interactive': {
       type: 'boolean',
       alias: 'i',
       default: false,
       description: 'Interactive mode',
+    },
+    'query': {
+      type: 'string',
+      description: 'Filter by query (prefix: ~contains, !exclude, re:regex, !re:not-regex)',
+    },
+    'page': {
+      type: 'string',
+      description: 'Filter by page (same prefix syntax as --query)',
+    },
+    'country': {
+      type: 'string',
+      description: 'Filter by country (ISO-3 lowercase, e.g. usa). Same prefix syntax as --query',
+    },
+    'device': {
+      type: 'string',
+      description: 'Filter by device (DESKTOP/MOBILE/TABLET). Same prefix syntax',
+    },
+    'search-appearance': {
+      type: 'string',
+      description: 'Filter by search appearance feature. Same prefix syntax',
+    },
+    'type': {
+      type: 'string',
+      description: `Search type (live mode only). One of: ${ALL_SEARCH_TYPES.join(',')}`,
+    },
+    'data-state': {
+      type: 'string',
+      description: `Data state (live mode only). One of: ${DATA_STATES.join(',')} (default: final)`,
+    },
+    'aggregation-type': {
+      type: 'string',
+      description: `Aggregation type (live mode only). One of: ${AGGREGATION_TYPES.join(',')}`,
+    },
+    'explain': {
+      type: 'boolean',
+      default: false,
+      description: 'Print the request body / planned local SQL and exit without executing',
     },
   },
   async run({ args }) {
@@ -139,10 +261,31 @@ export const queryCommand = defineCommand({
       return
     }
 
+    const ctxConfig = await loadConfig()
     const dimNames = await resolveDimensions(args)
     const { startDate, endDate } = await resolveRange(args)
-    const rowLimit = Number.parseInt(String(args.limit), 10)
+    await promptFilters(args as Record<string, unknown>)
+    // --limit takes precedence; fall back to config.defaultLimit before the hardcoded 1000.
+    const limitArg = args.limit != null ? String(args.limit) : null
+    const rowLimit = limitArg != null && limitArg !== '1000'
+      ? Number.parseInt(limitArg, 10)
+      : (ctxConfig.defaultLimit ?? 1000)
     const format = String(args.format) as 'json' | 'csv'
+    const dimensionFilter = buildDimensionFilter(args)
+    const searchType = parseSearchType(args.type ?? ctxConfig.defaultSearchType)
+    const dataState = args['data-state']
+      ? String(args['data-state'])
+      : ctxConfig.defaultDataState
+    const aggregationType = args['aggregation-type'] ? String(args['aggregation-type']) : undefined
+
+    if (dataState && !DATA_STATES.includes(dataState as any)) {
+      logger.error(`Invalid --data-state: ${dataState}. Allowed: ${DATA_STATES.join(', ')}`)
+      process.exit(1)
+    }
+    if (aggregationType && !AGGREGATION_TYPES.includes(aggregationType as any)) {
+      logger.error(`Invalid --aggregation-type: ${aggregationType}. Allowed: ${AGGREGATION_TYPES.join(', ')}`)
+      process.exit(1)
+    }
 
     const ctx = await createCommandContext({
       needsAuth: true,
@@ -152,6 +295,24 @@ export const queryCommand = defineCommand({
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
 
     if (args.live) {
+      if (args.explain) {
+        const body: Record<string, unknown> = {
+          startDate,
+          endDate,
+          dimensions: dimNames,
+          rowLimit,
+        }
+        if (searchType)
+          body.searchType = searchType
+        if (dataState)
+          body.dataState = dataState
+        if (aggregationType)
+          body.aggregationType = aggregationType
+        if (dimensionFilter)
+          body.dimensionFilterGroups = filterToGroups(dimensionFilter)
+        console.log(JSON.stringify({ siteUrl, body }, null, 2))
+        return
+      }
       if (!args.quiet)
         logger.info(`Querying ${siteUrl} via live GSC API...`)
       const result = await runLiveQuery(ctx.client!, siteUrl, {
@@ -159,10 +320,11 @@ export const queryCommand = defineCommand({
         endDate,
         dimensions: dimNames,
         rowLimit,
-      }).catch((e: Error) => {
-        logger.error(`Query failed: ${e.message}`)
-        process.exit(1)
-      })
+        searchType,
+        dataState,
+        aggregationType,
+        dimensionFilter,
+      }).catch(gscErrorHandler)
       await writeOutput({
         output: {
           siteUrl,
@@ -178,12 +340,24 @@ export const queryCommand = defineCommand({
       return
     }
 
+    if (searchType && searchType !== 'web') {
+      logger.error(`--type=${searchType} requires --live (local store query path is web-only).`)
+      process.exit(1)
+    }
+    if (dataState || aggregationType) {
+      logger.warn('--data-state / --aggregation-type are ignored without --live')
+    }
+
     if (!args.quiet)
       logger.info(`Querying ${siteUrl} from local Parquet store...`)
 
-    const state = buildLocalState(dimNames, startDate, endDate, rowLimit)
+    const state = buildLocalState(dimNames, startDate, endDate, rowLimit, dimensionFilter)
     const store = ctx.store!
     const table = inferTable(dimNames)
+    if (args.explain) {
+      console.log(JSON.stringify({ siteUrl, table, state }, null, 2))
+      return
+    }
     await assertRangeCovered(store, siteUrl, table, startDate, endDate)
     const result = await store.engine.query(
       { userId: store.userId, siteId: store.siteIdFor(siteUrl), table },
@@ -261,22 +435,97 @@ async function resolveRange(args: Record<string, unknown>): Promise<{ startDate:
   }
 }
 
+// Interactive mode fills in args.query/page/country/device/searchAppearance/type/data-state
+// from prompts when the user hasn't already passed them. Mutates `args` in place.
+async function promptFilters(args: Record<string, unknown>): Promise<void> {
+  if (!args.interactive)
+    return
+  for (const dim of FILTER_DIMS) {
+    if (args[dim])
+      continue
+    const v = await text({
+      message: `Filter by ${dim} (blank to skip; prefix ~ for contains, ! for not-equals, re: for regex)`,
+      placeholder: '',
+    })
+    if (isCancel(v)) {
+      cancel('Cancelled')
+      process.exit(0)
+    }
+    if (v && String(v).length > 0)
+      args[dim] = String(v)
+  }
+  if (!args.type) {
+    const t = await text({
+      message: `Search type (blank for default web; allowed: ${ALL_SEARCH_TYPES.join(', ')})`,
+      placeholder: '',
+    })
+    if (isCancel(t)) {
+      cancel('Cancelled')
+      process.exit(0)
+    }
+    if (t && String(t).length > 0)
+      args.type = String(t)
+  }
+  if (!args['data-state']) {
+    const ds = await text({
+      message: `Data state (blank for default 'final'; allowed: ${DATA_STATES.join(', ')})`,
+      placeholder: '',
+    })
+    if (isCancel(ds)) {
+      cancel('Cancelled')
+      process.exit(0)
+    }
+    if (ds && String(ds).length > 0)
+      args['data-state'] = String(ds)
+  }
+}
+
 function buildLocalState(
   dimNames: string[],
   startDate: string,
   endDate: string,
   rowLimit: number,
+  dimensionFilter?: Filter<any>,
 ): BuilderState {
   const dims = dimNames
     .map(d => DIM_COLUMNS[d as DimensionName])
     .filter((c): c is Column<Dimension> => Boolean(c))
 
+  const dateFilter = between(dateCol, startDate, endDate)
+  const filter = dimensionFilter ? and(dateFilter, dimensionFilter) : dateFilter
+
   return (gsc
     .select(...(dims as [Column<Dimension>, ...Column<Dimension>[]]))
-    .where(between(dateCol, startDate, endDate))
+    .where(filter)
     .limit(rowLimit)
   )
     .getState()
+}
+
+function buildDimensionFilter(args: Record<string, unknown>): Filter<any> | undefined {
+  const leaves: Filter<any>[] = []
+  for (const dim of FILTER_DIMS) {
+    const raw = args[dim]
+    if (raw == null || raw === '')
+      continue
+    leaves.push(buildFilterFromArg(FILTER_COL[dim], String(raw)))
+  }
+  if (leaves.length === 0)
+    return undefined
+  if (leaves.length === 1)
+    return leaves[0]
+  return and(...leaves)
+}
+
+function parseSearchType(value: unknown): SearchType | undefined {
+  if (!value)
+    return undefined
+  const v = String(value)
+  if (!ALL_SEARCH_TYPES.includes(v as SearchType)) {
+    logger.error(`Invalid --type: ${v}. Allowed: ${ALL_SEARCH_TYPES.join(', ')}`)
+    process.exit(1)
+  }
+  return v as SearchType
 }
 
 async function assertRangeCovered(
@@ -335,7 +584,7 @@ async function runRawSqlMode(opts: {
   })
 
   const payload = JSON.stringify({ sql, total: rows.length, data: rows }, null, 2)
-  if (opts.output) {
+  if (opts.output && opts.output !== '-') {
     await fs.writeFile(opts.output, payload)
     if (!opts.quiet)
       logger.info(`Written to ${opts.output}`)
@@ -352,7 +601,8 @@ async function writeOutput(opts: {
   quiet: boolean
 }): Promise<void> {
   const content = opts.format === 'csv' ? exportToCSV(opts.output) : JSON.stringify(opts.output, null, 2)
-  if (opts.path) {
+  // `--output -` is the conventional stdout sentinel; everything else is a path.
+  if (opts.path && opts.path !== '-') {
     await fs.writeFile(opts.path, content)
     if (!opts.quiet)
       logger.info(`Written to ${opts.path}`)

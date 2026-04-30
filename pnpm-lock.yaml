@@ -475,6 +475,9 @@ importers:
       gscdump:
         specifier: workspace:*
         version: link:../gscdump
+      ofetch:
+        specifier: catalog:deps
+        version: 1.5.1
       zod:
         specifier: 'catalog:'
         version: 4.3.6

@@ -40,21 +40,53 @@ gscdump mcp
 
 | Command | Description |
 |---|---|
-| `init` | Set up GSCDump authentication |
-| `auth` | Manage authentication (`status`, `logout`) |
-| `config` | Manage CLI configuration (`show`, `set`, `unset`, `path`) |
-| `sites` | List available GSC sites |
-| `sitemaps` | List/manage sitemaps for a site |
-| `inspect` | Inspect a URL's indexing status |
-| `sync` | Sync GSC data to the local Parquet store |
-| `query` | Run a search analytics query (local store by default; `--live` hits GSC API) |
-| `dump` | Export live Parquet files from the store to a directory |
+| `init` | Full setup (OAuth + dataDir; offers to write a `.env` for portability) |
+| `auth` | Manage authentication (`status`, `login`, `logout`, `refresh`) |
+| `config` | Manage CLI configuration (`show`, `set`, `unset`, `path`, `validate`) |
+| `doctor` | Health checks: auth, scopes, dataDir writability, API reachability |
+| `sites [--owner-only] [--with-sitemaps]` | List available GSC sites |
+| `sites add <url>` / `sites delete <url> [--yes]` | Register / remove a property in Search Console (add registers in unverified state) |
+| `sites verify-token <url> [--method]` / `sites verify <url> [--method]` | Get a verification token, then trigger ownership verification (META/FILE/DNS_TXT/DNS_CNAME/ANALYTICS/TAG_MANAGER) |
+| `sitemaps` | Sitemap CRUD (`list [--pending] [--errored]`, `get`, `submit`, `delete`) |
+| `inspect <url>` / `inspect batch [--concurrency]` | URL inspection (single URL or batch from file/stdin); renders index status, rich results, AMP, mobile usability |
+| `indexing` | Notify Google about URL changes (`submit`, `remove`, `status`, `batch [--concurrency] [--yes]`); supports `--retries` |
+| `sync` | Sync GSC data to the local Parquet store; `--retry-failed`, `--dry-run` |
+| `query` | Run a search analytics query (local store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. |
+| `dump` | Export from the store to a directory (`--format parquet\|json\|ndjson\|csv`, `--tables`, `--all-sites`) |
 | `analyze <tool>` | Run an SEO analyzer against the store (`--live` for row-based against fresh API) |
+| `entities` | Snapshot URL inspections / sitemaps / indexing metadata into the local entity store |
 | `store stats` | Show row/byte counts per table and on-disk footprint |
-| `store compact` | Roll daily partitions older than N days into monthly files |
-| `store gc` | Delete orphaned objects past the grace window |
-| `store export` | Export raw Parquet files |
+| `store compact` | Roll daily partitions older than N days into monthly files (`--dry-run`) |
+| `store gc` | Delete orphaned objects past the grace window (`--dry-run`) |
+| `store export` | Export the live store to a single `.duckdb` file |
+| `store rollups rebuild` | Rebuild post-sync rollup tables |
 | `mcp` | Start the MCP server for AI assistants |
+
+### Filter expressions
+
+`query` accepts prefix-encoded filter expressions for `--query`, `--page`, `--country`, `--device`, `--search-appearance`:
+
+| Prefix | Operator |
+|---|---|
+| (bare) | equals |
+| `~foo` | contains |
+| `!~foo` | not contains |
+| `re:foo` | regex |
+| `!re:foo` | not regex |
+| `!foo` | not equals |
+
+```bash
+# pages under /blog/ with brand mentions in the query
+gscdump query --live --site sc-domain:example.com \
+  --page '~/blog/' --query '~brand' --dimensions page,query
+```
+
+### Global flags
+
+- `--no-color` / `NO_COLOR` env: strip ANSI from stdout (stderr keeps colour for interactive use).
+- `--config-dir <path>` / `GSCDUMP_CONFIG_DIR`: override `~/.config/gscdump`.
+- `--profile <name>` / `GSCDUMP_PROFILE`: scope tokens + config to a profile under `~/.config/gscdump/profiles/<name>` (juggle multiple GSC accounts).
+- Most commands accept `--quiet` and `--json` for scripted use; `logger` writes to stderr so `--json` output is safe to pipe.
 
 ## Analyzers
 
@@ -119,14 +151,49 @@ Then ask questions like:
 
 ## Auth
 
-`gscdump init` walks you through OAuth2 with Google. Credentials are stored locally under `~/.config/gscdump/` (XDG) or equivalent.
+`gscdump init` walks you through full setup (OAuth + data dir). Credentials are stored locally under `~/.config/gscdump/` (XDG) or equivalent. Use `gscdump auth login` if you only want to refresh OAuth tokens without touching config.
 
 For manual setup:
 
 1. Create a Google Cloud project.
 2. Enable **Search Console API** and **Web Search Indexing API**.
 3. Create OAuth2 credentials (Desktop app).
-4. Run `gscdump init`.
+4. Run `gscdump init` (or `gscdump auth login`).
+
+### BYOK (Bring Your Own Key)
+
+Skip `init` entirely by setting env vars. Either path works (`GSC_*` preferred, `GOOGLE_*` accepted):
+
+```bash
+# Option A: raw bearer token (e.g., from gcloud or another OAuth flow)
+export GSC_ACCESS_TOKEN=ya29...
+
+# Option B: refresh-token flow (no google-auth-library dep used)
+export GSC_CLIENT_ID=...
+export GSC_CLIENT_SECRET=...
+export GSC_REFRESH_TOKEN=...
+```
+
+When BYOK is detected, `gscdump auth status` reports `byok` as the source and `gscdump auth login` is a no-op.
+
+### Service account
+
+For CI / headless usage, point `gscdump` at a service-account JSON key. The service account must be granted access to each property in Search Console (Settings → Users and permissions).
+
+```bash
+gscdump auth login --service-account ./gsc-sa.json   # smoke-test the key
+export GOOGLE_APPLICATION_CREDENTIALS=$(realpath ./gsc-sa.json)
+gscdump sites
+```
+
+### Headless OAuth
+
+When the loopback flow can't open a browser (servers, containers, WSL2 without forwarding), use the device-code flow:
+
+```bash
+gscdump auth login --no-browser
+# → opens a verification URL on any device; type the displayed user code
+```
 
 ## Related
 

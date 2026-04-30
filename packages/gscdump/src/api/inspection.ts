@@ -32,16 +32,17 @@ export async function batchInspectUrls(
   urls: string[],
   options: {
     delayMs?: number
+    concurrency?: number
     onProgress?: (result: InspectUrlResult, index: number, total: number) => void
   } = {},
 ): Promise<InspectUrlResult[]> {
-  const { delayMs = 200, onProgress } = options
+  const { delayMs = 200, concurrency, onProgress } = options
   return runSequentialBatch(
     urls,
     async (url) => {
       const { inspection, isIndexed } = await inspectUrl(client, siteUrl, url)
       return { url, inspection, isIndexed } satisfies InspectUrlResult
     },
-    { delayMs, onProgress },
+    { delayMs, concurrency, onProgress },
   )
 }

@@ -10,7 +10,7 @@ import {
 import { defineCommand } from 'citty'
 import { progressBar } from 'gscdump'
 import { createCommandContext } from '../context'
-import { logger, runWithConcurrency } from '../utils'
+import { logger, runWithConcurrency, setQuiet } from '../utils'
 
 const INSPECTION_QPD_PER_PROPERTY = 2000
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
@@ -36,8 +36,7 @@ const inspectSubCommand = defineCommand({
     site: {
       type: 'string',
       alias: 's',
-      required: true,
-      description: 'Site URL (e.g., sc-domain:example.com)',
+      description: 'Site URL (e.g., sc-domain:example.com); defaults to config.defaultSite or prompt',
     },
     file: {
       type: 'string',
@@ -54,6 +53,11 @@ const inspectSubCommand = defineCommand({
       default: '4',
       description: 'Concurrent in-flight inspect calls (default: 4)',
     },
+    json: {
+      type: 'boolean',
+      default: false,
+      description: 'Emit a JSON summary of inspection results',
+    },
     quiet: {
       type: 'boolean',
       alias: 'q',
@@ -62,13 +66,14 @@ const inspectSubCommand = defineCommand({
     },
   },
   async run({ args }) {
+    setQuiet(Boolean(args.quiet) || Boolean(args.json))
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const client = ctx.client!
     const store = ctx.store!
-    const siteUrl = String(args.site)
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const limit = args.limit ? Number.parseInt(String(args.limit), 10) : INSPECTION_QPD_PER_PROPERTY
     const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 4)
-    const quiet = Boolean(args.quiet)
+    const quiet = Boolean(args.quiet) || Boolean(args.json)
 
     const urls = (await readUrlList({ file: args.file ? String(args.file) : undefined })).slice(0, limit)
     if (urls.length === 0) {
@@ -125,7 +130,16 @@ const inspectSubCommand = defineCommand({
       records,
     )
 
-    if (!quiet) {
+    if (args.json) {
+      console.log(JSON.stringify({
+        site: siteUrl,
+        inspected: records.length,
+        failed,
+        failures,
+        records,
+      }, null, 2))
+    }
+    else if (!quiet) {
       logger.success(`Inspected ${records.length}/${urls.length} URL(s)`)
       if (failed > 0) {
         logger.warn(`${failed} failed:`)
@@ -147,16 +161,17 @@ const showSubCommand = defineCommand({
     description: 'Print the latest inspection record for a URL from the local entity store',
   },
   args: {
-    site: { type: 'string', alias: 's', required: true, description: 'Site URL' },
+    site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
     url: { type: 'positional', required: true, description: 'URL to look up' },
     json: { type: 'boolean', default: false, description: 'Output as JSON' },
   },
   async run({ args }) {
-    const ctx = await createCommandContext({ needsStore: true })
+    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const store = ctx.store!
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const inspector = createInspectionStore({ dataSource: store.dataSource })
     const record = await inspector.getLatest(
-      { userId: store.userId, siteId: store.siteIdFor(String(args.site)) },
+      { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
       String(args.url),
     )
     if (!record) {
@@ -195,8 +210,7 @@ const sitemapsSnapshotSubCommand = defineCommand({
     site: {
       type: 'string',
       alias: 's',
-      required: true,
-      description: 'Site URL (e.g., sc-domain:example.com)',
+      description: 'Site URL (e.g., sc-domain:example.com); defaults to config.defaultSite or prompt',
     },
     quiet: {
       type: 'boolean',
@@ -214,7 +228,7 @@ const sitemapsSnapshotSubCommand = defineCommand({
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const client = ctx.client!
     const store = ctx.store!
-    const siteUrl = String(args.site)
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const quiet = Boolean(args.quiet)
 
     const apiSitemaps = await client.sitemaps.list(siteUrl)
@@ -267,16 +281,17 @@ const sitemapsShowSubCommand = defineCommand({
     description: 'Print the latest captured sitemap state for a feedpath',
   },
   args: {
-    site: { type: 'string', alias: 's', required: true, description: 'Site URL' },
+    site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
     path: { type: 'positional', required: true, description: 'Sitemap path (feedpath)' },
     json: { type: 'boolean', default: false, description: 'Output as JSON' },
   },
   async run({ args }) {
-    const ctx = await createCommandContext({ needsStore: true })
+    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const store = ctx.store!
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const sitemaps = createSitemapStore({ dataSource: store.dataSource })
     const record = await sitemaps.getLatest(
-      { userId: store.userId, siteId: store.siteIdFor(String(args.site)) },
+      { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
       String(args.path),
     )
     if (!record) {
@@ -322,8 +337,7 @@ const indexingSnapshotSubCommand = defineCommand({
     site: {
       type: 'string',
       alias: 's',
-      required: true,
-      description: 'Site URL (e.g., sc-domain:example.com)',
+      description: 'Site URL (e.g., sc-domain:example.com); defaults to config.defaultSite or prompt',
     },
     file: {
       type: 'string',
@@ -347,7 +361,7 @@ const indexingSnapshotSubCommand = defineCommand({
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const client = ctx.client!
     const store = ctx.store!
-    const siteUrl = String(args.site)
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 4)
     const quiet = Boolean(args.quiet)
 

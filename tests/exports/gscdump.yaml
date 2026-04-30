@@ -1,5 +1,6 @@
 .:
   addDays: function
+  addSite: function
   batchInspectUrls: function
   batchRequestIndexing: function
   classifyError: function
@@ -8,6 +9,7 @@
   createFetch: function
   DAYS_PER_RANGE: number
   daysAgo: function
+  deleteSite: function
   deleteSitemap: function
   fetchSitemap: function
   fetchSitemaps: function
@@ -25,6 +27,7 @@
   getPendingDates: function
   getPreviousDate: function
   getPstDate: function
+  getVerificationToken: function
   googleSearchConsole: function
   groupIntoRanges: function
   GSC_FINALIZED_LAG_DAYS: number
@@ -43,13 +46,17 @@
   inspectUrl: function
   isPermissionDeniedError: function
   isValidGscDate: function
+  listVerifiedSites: function
   MS_PER_DAY: number
   progressBar: function
   requestIndexing: function
   rowWithMetricDefaults: function
+  siteUrlToVerificationSite: function
   storageError: function
   submitSitemap: function
   toIsoDate: function
+  verificationMethodsFor: function
+  verifySite: function
 ./contracts: {}
 ./driver: {}
 ./normalize:
