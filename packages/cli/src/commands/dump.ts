@@ -8,7 +8,7 @@ import { sqlEscape } from '@gscdump/engine/sql'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
-import { displayPath, logger, setQuiet, toCSV } from '../utils'
+import { applyOutputMode, displayPath, logger, OUTPUT_ARGS, toCSV } from '../utils'
 
 const DEFAULT_OUT = './gscdump-export'
 const FORMATS = ['parquet', 'json', 'ndjson', 'csv'] as const
@@ -52,20 +52,10 @@ export const dumpCommand = defineCommand({
       default: false,
       description: 'Compact every closed month into a single file before exporting',
     },
-    'json': {
-      type: 'boolean',
-      default: false,
-      description: 'Emit a JSON summary of what was exported',
-    },
-    'quiet': {
-      type: 'boolean',
-      alias: 'q',
-      default: false,
-      description: 'Suppress progress output',
-    },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    const { json, quiet } = applyOutputMode(args)
     const format = String(args.format) as DumpFormat
     if (!(FORMATS as readonly string[]).includes(format)) {
       logger.error(`Invalid --format: ${format}. Allowed: ${FORMATS.join(', ')}`)
@@ -88,7 +78,7 @@ export const dumpCommand = defineCommand({
 
     if (args.compact) {
       for (const siteUrl of targets)
-        await compactClosedMonths(store, siteUrl, args.quiet)
+        await compactClosedMonths(store, siteUrl, quiet)
     }
 
     const summary: Array<{ site: string, files: number, rows: number, format: DumpFormat, outPath: string }> = []
@@ -96,7 +86,7 @@ export const dumpCommand = defineCommand({
       const entries = (await listLiveEntries(store, siteUrl))
         .filter(e => !tablesFilter || tablesFilter.has(e.table))
       if (entries.length === 0) {
-        if (!args.json && !args.quiet)
+        if (!quiet)
           logger.warn(`No data for ${siteUrl}; skipping`)
         continue
       }
@@ -110,7 +100,7 @@ export const dumpCommand = defineCommand({
       }
     }
 
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify({ outDir, sites: summary }, null, 2))
       return
     }

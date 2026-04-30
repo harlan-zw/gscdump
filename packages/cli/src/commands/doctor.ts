@@ -8,7 +8,7 @@ import { loadTokens, resolveAuth, resolveBYOK } from '../auth'
 import { loadConfig, resolveDataDir } from '../config'
 import { parseEnvFile } from '../env-file'
 import { createLocalStore } from '../local-store'
-import { displayPath, logger } from '../utils'
+import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
 
 interface Check {
   name: string
@@ -298,9 +298,10 @@ export const doctorCommand = defineCommand({
     description: 'Run health checks (env, auth, scopes, time, dataDir, store, GSC reachability + ping, defaultSite)',
   },
   args: {
-    json: { type: 'boolean', default: false, description: 'Output as JSON' },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
+    const { json } = applyOutputMode(args)
     // Cheap probes run unconditionally and in parallel. The auth check yields
     // the live token used by gsc.sites, so it stays sequential to that.
     // env runs first so the auth check can report which env var drives BYOK.
@@ -332,7 +333,7 @@ export const doctorCommand = defineCommand({
       ...sitesChecks,
     ]
 
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify({ checks: all, ok: all.every(c => c.status !== 'fail') }, null, 2))
       return
     }

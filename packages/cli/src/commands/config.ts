@@ -1,7 +1,7 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
 import { getConfigPath, loadConfig, saveConfig } from '../config'
-import { displayPath, logger, setQuiet } from '../utils'
+import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
 
 const showCommand = defineCommand({
   meta: {
@@ -9,15 +9,14 @@ const showCommand = defineCommand({
     description: 'Show current config',
   },
   args: {
-    json: { type: 'boolean', default: false, description: 'Output config as a single JSON object (suppresses path header)' },
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    const { json } = applyOutputMode(args)
     const config = await loadConfig()
     const configPath = getConfigPath()
 
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify({ path: configPath, config }, null, 2))
       return
     }
@@ -43,6 +42,7 @@ const VALID_KEYS = [
   'defaultLimit',
   'defaultSearchType',
   'defaultDataState',
+  'serviceAccountPath',
 ] as const
 
 const NUMERIC_KEYS = new Set(['defaultLimit'])
@@ -63,10 +63,10 @@ const setCommand = defineCommand({
       description: 'Value to set',
       required: true,
     },
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet))
+    applyOutputMode(args)
     if (!(VALID_KEYS as readonly string[]).includes(args.key)) {
       logger.error(`Invalid key: ${args.key}`)
       logger.info(`Valid keys: ${VALID_KEYS.join(', ')}`)
@@ -97,10 +97,10 @@ const unsetCommand = defineCommand({
       description: `Config key to remove (${VALID_KEYS.join(', ')})`,
       required: true,
     },
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet))
+    applyOutputMode(args)
     if (!(VALID_KEYS as readonly string[]).includes(args.key)) {
       logger.error(`Invalid key: ${args.key}`)
       logger.info(`Valid keys: ${VALID_KEYS.join(', ')}`)
@@ -130,11 +130,10 @@ const validateCommand = defineCommand({
     description: 'Validate the saved config (defaultSite is verified, dataDir exists/writable)',
   },
   args: {
-    json: { type: 'boolean', default: false, description: 'Output as JSON' },
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    const { json } = applyOutputMode(args)
     const { resolveDataDir } = await import('../config')
     const fs = await import('node:fs/promises')
     const config = await loadConfig()
@@ -179,7 +178,22 @@ const validateCommand = defineCommand({
     if (config.defaultFormat && !['json', 'csv'].includes(config.defaultFormat))
       issues.push({ key: 'defaultFormat', level: 'fail', message: `unknown format: ${config.defaultFormat}` })
 
-    if (args.json) {
+    const { SearchTypes } = await import('gscdump/query')
+    const allowedSearchTypes = Object.values(SearchTypes)
+    if (config.defaultSearchType && !allowedSearchTypes.includes(config.defaultSearchType as any))
+      issues.push({ key: 'defaultSearchType', level: 'fail', message: `unknown search type: ${config.defaultSearchType} (allowed: ${allowedSearchTypes.join(', ')})` })
+
+    const allowedDataStates = ['all', 'final', 'hourly_all']
+    if (config.defaultDataState && !allowedDataStates.includes(config.defaultDataState))
+      issues.push({ key: 'defaultDataState', level: 'fail', message: `unknown data state: ${config.defaultDataState} (allowed: ${allowedDataStates.join(', ')})` })
+
+    if (config.serviceAccountPath) {
+      const sa = await fs.stat(config.serviceAccountPath).catch(() => null)
+      if (!sa)
+        issues.push({ key: 'serviceAccountPath', level: 'fail', message: `${displayPath(config.serviceAccountPath)} does not exist` })
+    }
+
+    if (json) {
       console.log(JSON.stringify({ ok: !issues.some(i => i.level === 'fail'), issues }, null, 2))
       return
     }

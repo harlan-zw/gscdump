@@ -1,10 +1,10 @@
 import type { UrlInspectionResult } from 'gscdump'
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { batchInspectUrls } from 'gscdump'
+import { batchInspectUrls, fetchSitemapUrls } from 'gscdump'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
-import { logger, readUrlList, setQuiet } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS, readUrlList } from '../utils'
 
 function verdictTone(verdict: string | null | undefined): string {
   if (verdict === 'PASS')
@@ -127,42 +127,59 @@ const batchCommand = defineCommand({
     description: 'Inspect many URLs from a file or stdin (one URL per line)',
   },
   args: {
+    ...OUTPUT_ARGS,
     'site': { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
-    'urls': { type: 'positional', required: false, description: 'URLs (or use --file/stdin)' },
+    'urls': { type: 'positional', required: false, description: 'URLs (or use --file/--from-sitemap/stdin)' },
     'file': { type: 'string', alias: 'f', description: 'File with URLs (one per line)' },
+    'from-sitemap': { type: 'string', description: 'Sitemap URL (or sitemap index) to pull URLs from' },
     'delay-ms': { type: 'string', default: '200', description: 'Delay between requests' },
     'concurrency': { type: 'string', alias: 'c', default: '1', description: 'Concurrent in-flight requests' },
-    'quiet': { type: 'boolean', alias: 'q', default: false, description: 'Suppress progress output' },
-    'json': { type: 'boolean', default: false, description: 'Output as JSON' },
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
-    const urls = await readUrlList(args)
+    const { json, quiet } = applyOutputMode(args)
+    const urls = args['from-sitemap']
+      ? await fetchSitemapUrls(String(args['from-sitemap'])).catch((e: Error) => {
+          logger.error(`Sitemap fetch failed: ${e.message}`)
+          process.exit(1)
+        })
+      : await readUrlList(args)
     if (urls.length === 0) {
-      logger.error('No URLs provided. Pass URLs as args, --file, or stdin.')
+      logger.error('No URLs provided. Pass URLs as args, --file, --from-sitemap, or stdin.')
       process.exit(1)
     }
     const ctx = await createCommandContext({ needsAuth: true })
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const delayMs = Number.parseInt(String(args['delay-ms']), 10)
     const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 1)
-    if (!args.json && !args.quiet)
+    if (!quiet)
       logger.info(`Inspecting ${urls.length} URLs ...`)
 
     const results = await batchInspectUrls(ctx.client!, siteUrl, urls, {
       delayMs,
       concurrency,
-      onProgress: (args.json || args.quiet)
+      onProgress: quiet
         ? undefined
         : (r, i, total) => logger.info(`[${i + 1}/${total}] ${r.url} ${r.isIndexed ? 'PASS' : 'FAIL'}`),
     }).catch(gscErrorHandler)
 
-    if (args.json) {
-      console.log(JSON.stringify(results, null, 2))
+    if (json) {
+      const flattened = results.map((r) => {
+        const indexStatus = r.inspection?.indexStatusResult
+        return {
+          url: r.url,
+          verdict: indexStatus?.verdict || null,
+          coverageState: indexStatus?.coverageState || null,
+          indexingState: indexStatus?.indexingState || null,
+          lastCrawlTime: indexStatus?.lastCrawlTime || null,
+          isIndexed: r.isIndexed,
+          raw: r.inspection,
+        }
+      })
+      console.log(JSON.stringify(flattened, null, 2))
       return
     }
     const indexed = results.filter(r => r.isIndexed).length
-    if (!args.quiet)
+    if (!quiet)
       logger.success(`Inspected ${results.length} URLs (${indexed} indexed, ${results.length - indexed} not)`)
   },
 })
@@ -173,23 +190,22 @@ export const inspectCommand = defineCommand({
     description: 'Inspect URL indexing status (single URL; use `inspect batch` for many)',
   },
   args: {
+    ...OUTPUT_ARGS,
     site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
     url: { type: 'positional', required: true, description: 'URL to inspect' },
-    json: { type: 'boolean', default: false, description: 'Output as JSON' },
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
   },
   subCommands: {
     batch: batchCommand,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true })
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const result = await ctx.client!.inspect(siteUrl, args.url).catch(gscErrorHandler)
     const inspection = result?.inspectionResult
     const indexStatus = inspection?.indexStatusResult
 
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify({
         url: args.url,
         verdict: indexStatus?.verdict || null,

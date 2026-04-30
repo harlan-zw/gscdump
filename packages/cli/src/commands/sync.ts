@@ -10,7 +10,7 @@ import { SearchTypes } from 'gscdump/query'
 import { loadConfig, resolveDataDir } from '../config'
 import { createCommandContext } from '../context'
 import { allTables, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
-import { clearLine, displayPath, formatAge, logger, runWithConcurrency } from '../utils'
+import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, runWithConcurrency } from '../utils'
 
 const DEFAULT_TABLES: TableName[] = ['pages', 'keywords', 'countries', 'devices']
 const DEFAULT_TYPES: readonly SearchType[] = ['web']
@@ -210,12 +210,7 @@ export const syncCommand = defineCommand({
       type: 'boolean',
       description: 'Sync the last 450 days (full GSC history)',
     },
-    'quiet': {
-      type: 'boolean',
-      alias: 'q',
-      default: false,
-      description: 'Suppress progress output',
-    },
+    ...OUTPUT_ARGS,
     'force': {
       type: 'boolean',
       default: false,
@@ -225,11 +220,6 @@ export const syncCommand = defineCommand({
       type: 'boolean',
       default: false,
       description: 'Print watermarks + sync-state summary instead of syncing',
-    },
-    'json': {
-      type: 'boolean',
-      default: false,
-      description: 'With --status: emit JSON',
     },
     'concurrency': {
       type: 'string',
@@ -253,9 +243,10 @@ export const syncCommand = defineCommand({
     },
   },
   async run({ args }) {
+    const { json, quiet } = applyOutputMode(args)
     if (args.status) {
       const config = await loadConfig()
-      await printSyncStatus(config, args.site ? String(args.site) : undefined, Boolean(args.json))
+      await printSyncStatus(config, args.site ? String(args.site) : undefined, json)
       return
     }
 
@@ -294,7 +285,7 @@ export const syncCommand = defineCommand({
       )
       return
     }
-    if (skippedTypes.length > 0 && !args.quiet) {
+    if (skippedTypes.length > 0 && !quiet) {
       logger.info(
         `Skipping ${skippedTypes.join(', ')} (marked empty for this site; pass --force-types to re-probe).`,
       )
@@ -350,7 +341,7 @@ export const syncCommand = defineCommand({
       // Force-mode is implied so the syncer overwrites the existing `failed`
       // state instead of skipping it as already-attempted.
       ;(args as Record<string, unknown>).force = true
-      if (!args.quiet)
+      if (!quiet)
         logger.info(`--retry-failed: ${dates.length} date(s) to retry`)
     }
 
@@ -362,7 +353,7 @@ export const syncCommand = defineCommand({
             plan.push({ table, searchType: type, date })
         }
       }
-      if (args.json) {
+      if (json) {
         console.log(JSON.stringify({
           siteUrl,
           range: { start: startDate, end: endDate },
@@ -383,7 +374,7 @@ export const syncCommand = defineCommand({
       return
     }
 
-    if (!args.quiet) {
+    if (!quiet) {
       logger.info(`Syncing ${siteUrl} (${tables.join(', ')}) [${types.join(', ')}] → ${displayPath(store.dataDir)}`)
       logger.info(`Range: ${startDate} → ${endDate} (${dates.length} days)`)
     }
@@ -405,7 +396,7 @@ export const syncCommand = defineCommand({
         jobs.push({ table, type, label })
       }
     }
-    const progress = createProgressTracker(dates.length * jobs.length, Boolean(args.quiet))
+    const progress = createProgressTracker(dates.length * jobs.length, quiet)
 
     if (serialTables) {
       for (const job of jobs) {
@@ -443,7 +434,7 @@ export const syncCommand = defineCommand({
     progress.done()
 
     const seconds = ((Date.now() - start) / 1000).toFixed(1)
-    if (!args.quiet) {
+    if (!quiet) {
       logger.success(`Synced ${siteUrl} in ${seconds}s`)
       for (const [t, n] of Object.entries(totals)) {
         const suffix = [
@@ -482,7 +473,7 @@ export const syncCommand = defineCommand({
       }
       if (toMark.length > 0) {
         await emptyTypesStore.mark({ userId: store.userId, siteId }, toMark)
-        if (!args.quiet)
+        if (!quiet)
           logger.info(`Marked empty for future syncs: ${toMark.join(', ')} (0 rows across ${dates.length} days; pass --force-types to re-probe).`)
       }
     }
@@ -496,7 +487,7 @@ export const syncCommand = defineCommand({
       }
       if (toClear.length > 0) {
         await emptyTypesStore.clear({ userId: store.userId, siteId }, toClear)
-        if (!args.quiet)
+        if (!quiet)
           logger.info(`Cleared empty markers for: ${toClear.join(', ')} (re-probe found data).`)
       }
     }
@@ -507,7 +498,7 @@ export const syncCommand = defineCommand({
     const noRollups = Boolean(args['no-rollups'])
     const anyRowsSynced = Object.values(totals).some(t => t.rows > 0)
     if (!noRollups && anyRowsSynced) {
-      if (!args.quiet)
+      if (!quiet)
         logger.info(`Rebuilding rollups for [${siteId}] (${DEFAULT_ROLLUPS.length} rollups)…`)
       const rollupStart = Date.now()
       const results = await rebuildRollups({
@@ -519,7 +510,7 @@ export const syncCommand = defineCommand({
         logger.warn(`Rollup rebuild failed: ${err.message}`)
         return [] as Awaited<ReturnType<typeof rebuildRollups>>
       })
-      if (!args.quiet && results.length > 0) {
+      if (!quiet && results.length > 0) {
         const kb = results.reduce((a, r) => a + r.bytes, 0) / 1024
         const ms = Date.now() - rollupStart
         logger.success(`Rebuilt ${results.length} rollup(s) in ${ms}ms — ${kb.toFixed(1)} KB`)

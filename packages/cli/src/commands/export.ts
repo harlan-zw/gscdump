@@ -6,7 +6,7 @@ import { sqlEscape } from '@gscdump/engine/sql'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
-import { displayPath, setQuiet } from '../utils'
+import { applyOutputMode, displayPath, OUTPUT_ARGS } from '../utils'
 
 export interface ExportOptions {
   engine: StorageEngine
@@ -89,20 +89,10 @@ export const exportCommand = defineCommand({
       default: false,
       description: 'Overwrite the output file if it already exists',
     },
-    json: {
-      type: 'boolean',
-      default: false,
-      description: 'Output a JSON summary instead of formatted text',
-    },
-    quiet: {
-      type: 'boolean',
-      alias: 'q',
-      default: false,
-      description: 'Suppress info/success output',
-    },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
     const siteId = args.site ? store.siteIdFor(args.site) : undefined
@@ -116,7 +106,7 @@ export const exportCommand = defineCommand({
       force: args.force,
     })
 
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify(result, null, 2))
       return
     }

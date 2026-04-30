@@ -3,7 +3,7 @@ import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/analysis/rollups'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
-import { logger, setQuiet } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 
 const rebuildSubCommand = defineCommand({
   meta: {
@@ -11,25 +11,15 @@ const rebuildSubCommand = defineCommand({
     description: 'Rebuild post-sync rollups (daily totals, weekly totals, top-N tables) for a site',
   },
   args: {
+    ...OUTPUT_ARGS,
     site: {
       type: 'string',
       alias: 's',
       description: 'Restrict to a single site (default: all sites with local data)',
     },
-    json: {
-      type: 'boolean',
-      default: false,
-      description: 'Output a JSON summary',
-    },
-    quiet: {
-      type: 'boolean',
-      alias: 'q',
-      default: false,
-      description: 'Suppress progress output',
-    },
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
     const explicitSiteId = args.site ? store.siteIdFor(String(args.site)) : undefined
@@ -54,7 +44,7 @@ const rebuildSubCommand = defineCommand({
     }
 
     if (allSiteIds.size === 0) {
-      if (args.json)
+      if (json)
         console.log(JSON.stringify({ sites: [], totalBytes: 0 }, null, 2))
       else
         logger.warn('No sites with local data. Run `gscdump sync` first.')
@@ -75,13 +65,13 @@ const rebuildSubCommand = defineCommand({
       for (const r of results) {
         totalBytes += r.bytes
         site.rollups.push({ id: r.id, bytes: r.bytes, objectKey: r.objectKey })
-        if (!args.json)
+        if (!json)
           console.log(`  ${r.id.padEnd(20)} ${(r.bytes / 1024).toFixed(1).padStart(8)} KB  ${r.objectKey}`)
       }
       summary.push(site)
     }
 
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify({ sites: summary, totalBytes }, null, 2))
       return
     }

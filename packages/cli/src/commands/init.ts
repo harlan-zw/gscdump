@@ -7,7 +7,7 @@ import { defineCommand } from 'citty'
 import { googleSearchConsole } from 'gscdump'
 import { authenticate, getAuthCredentials, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { defaultDataDir, loadConfig, saveConfig } from '../config'
-import { displayPath, logger, setQuiet } from '../utils'
+import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
 
 const ENV_LINE_RE = /^([^=]+)=(.*)$/
 
@@ -62,15 +62,10 @@ export const initCommand = defineCommand({
       default: false,
       description: 'Skip dataDir prompt (auth-only setup)',
     },
-    'quiet': {
-      type: 'boolean',
-      alias: 'q',
-      default: false,
-      description: 'Suppress info/success output',
-    },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet))
+    applyOutputMode(args)
     const config = await loadConfig()
 
     if (config.clientId && config.clientSecret && !args.force) {

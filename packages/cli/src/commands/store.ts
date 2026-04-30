@@ -4,6 +4,7 @@ import { exportCommand } from './export'
 import { gcCommand } from './gc'
 import { rollupsCommand } from './rollups'
 import { statsCommand } from './stats'
+import { resetCommand, rmSiteCommand } from './store-purge'
 
 export const storeCommand = defineCommand({
   meta: {
@@ -11,10 +12,12 @@ export const storeCommand = defineCommand({
     description: 'Manage the local DuckDB/Parquet store',
   },
   subCommands: {
-    stats: statsCommand,
-    compact: compactCommand,
-    gc: gcCommand,
-    export: exportCommand,
-    rollups: rollupsCommand,
+    'stats': statsCommand,
+    'compact': compactCommand,
+    'gc': gcCommand,
+    'export': exportCommand,
+    'rollups': rollupsCommand,
+    'rm-site': rmSiteCommand,
+    'reset': resetCommand,
   },
 })

@@ -59,3 +59,66 @@ export async function discoverSitemap(
 
   return null
 }
+
+const LOC_RE = /<loc>([^<]+)<\/loc>/gi
+const SITEMAPINDEX_RE = /<sitemapindex\b/i
+
+export interface FetchSitemapUrlsOptions extends DiscoverSitemapOptions {
+  /** Maximum nested sitemap-index depth to follow. Default 3. */
+  maxDepth?: number
+  /** Stop after this many URLs (across all nested sitemaps). Default unlimited. */
+  limit?: number
+}
+
+/**
+ * Fetch a sitemap (or sitemap index) and return the list of `<loc>` URLs.
+ * Sitemap-index files are followed up to `maxDepth` levels. Duplicates are
+ * de-duplicated. The XML parser is regex-based — it handles the common
+ * `<loc>https://...</loc>` shape but doesn't validate the schema.
+ */
+export async function fetchSitemapUrls(
+  sitemapUrl: string,
+  options: FetchSitemapUrlsOptions = {},
+): Promise<string[]> {
+  const userAgent = options.userAgent ?? 'gscdump sitemap fetcher'
+  const maxDepth = options.maxDepth ?? 3
+  const limit = options.limit
+  const signalFor = (): AbortSignal => options.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS)
+  const seen = new Set<string>()
+  const out: string[] = []
+
+  const visit = async (url: string, depth: number): Promise<void> => {
+    if (limit != null && out.length >= limit)
+      return
+    if (depth > maxDepth)
+      return
+    const res = await fetch(url, {
+      headers: { 'User-Agent': userAgent },
+      signal: signalFor(),
+    })
+    if (!res.ok)
+      throw new Error(`Fetch ${url} failed: ${res.status}`)
+    const text = await res.text()
+    const isIndex = SITEMAPINDEX_RE.test(text)
+    const matches = [...text.matchAll(LOC_RE)].map(m => m[1].trim()).filter(Boolean)
+    if (isIndex) {
+      for (const child of matches) {
+        if (limit != null && out.length >= limit)
+          return
+        await visit(child, depth + 1)
+      }
+      return
+    }
+    for (const u of matches) {
+      if (seen.has(u))
+        continue
+      seen.add(u)
+      out.push(u)
+      if (limit != null && out.length >= limit)
+        return
+    }
+  }
+
+  await visit(sitemapUrl, 0)
+  return out
+}

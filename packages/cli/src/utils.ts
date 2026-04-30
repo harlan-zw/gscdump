@@ -27,6 +27,23 @@ export function setQuiet(quiet: boolean): void {
     baseLogger.level = 1 // errors only (LogLevels.error = 0, .warn = 1; pause warns too if called explicitly)
 }
 
+/** Standard JSON/quiet args; spread into citty `args` blocks. */
+export const OUTPUT_ARGS = {
+  json: { type: 'boolean' as const, default: false, description: 'Output as JSON' },
+  quiet: { type: 'boolean' as const, alias: 'q' as const, default: false, description: 'Suppress info/success output' },
+}
+
+/**
+ * Apply `--json` / `--quiet` semantics: JSON implies quiet. Returns booleans
+ * so callers can branch output without re-deriving them.
+ */
+export function applyOutputMode(args: { json?: unknown, quiet?: unknown }): { json: boolean, quiet: boolean } {
+  const json = Boolean(args.json)
+  const quiet = json || Boolean(args.quiet)
+  setQuiet(quiet)
+  return { json, quiet }
+}
+
 // ANSI helpers honour NO_COLOR (https://no-color.org), `--no-color` argv,
 // and non-TTY stdout. `setNoColor(true)` lets the top-level CLI override.
 let colorEnabled: boolean = (() => {

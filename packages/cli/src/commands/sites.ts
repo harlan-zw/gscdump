@@ -2,10 +2,10 @@ import type { VerificationMethod } from 'gscdump'
 import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { addSite, deleteSite, fetchSitesWithSitemaps, getVerificationToken, siteUrlToVerificationSite, verificationMethodsFor, verifySite } from 'gscdump'
+import { addSite, deleteSite, fetchSitesWithSitemaps, getVerificationToken, getVerifiedSite, listVerifiedSites, siteUrlToVerificationSite, unverifySite, verificationMethodsFor, verifySite } from 'gscdump'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
-import { logger, setQuiet } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 
 const ALL_METHODS: VerificationMethod[] = ['META', 'FILE', 'DNS_TXT', 'DNS_CNAME', 'ANALYTICS', 'TAG_MANAGER']
 
@@ -57,10 +57,16 @@ function printPlacementInstructions(method: VerificationMethod, siteUrl: string,
       break
     }
     case 'ANALYTICS':
-      console.log(`  Make sure your Google Analytics tracking tag is installed on the site, then run \`gscdump sites verify\`.`)
+      console.log(`  Make sure the Google Analytics tracking tag is installed on the site.`)
+      console.log(`  Expected tracking ID:`)
+      console.log()
+      console.log(`    \x1B[2m${token}\x1B[0m`)
       break
     case 'TAG_MANAGER':
-      console.log(`  Make sure your Google Tag Manager container snippet is installed on the site, then run \`gscdump sites verify\`.`)
+      console.log(`  Make sure the Google Tag Manager container snippet is installed on the site.`)
+      console.log(`  Expected container ID:`)
+      console.log()
+      console.log(`    \x1B[2m${token}\x1B[0m`)
       break
   }
   console.log()
@@ -71,26 +77,69 @@ function printPlacementInstructions(method: VerificationMethod, siteUrl: string,
 const addCommand = defineCommand({
   meta: {
     name: 'add',
-    description: 'Register a property in Search Console (unverified state — verify ownership separately)',
+    description: 'Register a property in Search Console (pass --verify to chain token + verify in one call)',
   },
   args: {
     url: { type: 'positional', required: true, description: 'Property URL (https://example.com/ or sc-domain:example.com)' },
-    json: { type: 'boolean', default: false, description: 'Output as JSON' },
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    verify: { type: 'boolean', default: false, description: 'After adding, fetch a verification token and trigger Google\'s validation' },
+    method: { type: 'string', alias: 'm', description: 'Verification method (used with --verify; default: META for URL-prefix, DNS_TXT for sc-domain:)' },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true })
     await addSite(ctx.client!, args.url).catch(gscErrorHandler)
 
-    if (args.json) {
-      console.log(JSON.stringify({ siteUrl: args.url, status: 'added', verified: false }, null, 2))
+    if (!args.verify) {
+      if (args.json) {
+        console.log(JSON.stringify({ siteUrl: args.url, status: 'added', verified: false }, null, 2))
+        return
+      }
+      logger.success(`Added: ${args.url}`)
+      logger.info(`Property is in unverified state. Verify ownership next:`)
+      const method = pickDefaultMethod(args.url)
+      console.log(`    \x1B[2mgscdump sites verify-token ${args.url} --method ${method}\x1B[0m`)
       return
     }
+
+    // --verify: chain getToken → user-facing placement instructions → triggers verifySite.
+    const method = validateMethod(args.url, args.method ?? pickDefaultMethod(args.url))
+    const tokenResult = await getVerificationToken(ctx.client!, args.url, method).catch(gscErrorHandler)
+
+    if (args.json) {
+      // JSON mode: emit the token, do not run verify (caller can't place it before we trigger).
+      console.log(JSON.stringify({
+        siteUrl: args.url,
+        status: 'added',
+        method,
+        token: tokenResult.token,
+        site: tokenResult.site,
+        verified: false,
+        next: 'Place the token, then run `gscdump sites verify <url> --method <m>`',
+      }, null, 2))
+      return
+    }
+
     logger.success(`Added: ${args.url}`)
-    logger.info(`Property is in unverified state. Verify ownership next:`)
-    const method = pickDefaultMethod(args.url)
-    console.log(`    \x1B[2mgscdump sites verify-token ${args.url} --method ${method}\x1B[0m`)
+    printPlacementInstructions(method, args.url, tokenResult.token)
+
+    const ok = await confirm({
+      message: 'Token placed? Trigger Google verification now?',
+      initialValue: true,
+    })
+    if (isCancel(ok) || !ok) {
+      logger.info('Skipped verification. Run `gscdump sites verify` once the token is live.')
+      return
+    }
+
+    const resource = await verifySite(ctx.client!, args.url, method).catch(gscErrorHandler)
+    logger.success(`Verified: ${args.url}`)
+    if (resource.owners?.length) {
+      console.log()
+      console.log(`  Owners:`)
+      for (const o of resource.owners)
+        console.log(`    \x1B[90m└─\x1B[0m ${o}`)
+    }
   },
 })
 
@@ -102,11 +151,10 @@ const deleteCommand = defineCommand({
   args: {
     url: { type: 'positional', required: true, description: 'Property URL to remove' },
     yes: { type: 'boolean', alias: 'y', default: false, description: 'Skip confirmation prompt' },
-    json: { type: 'boolean', default: false, description: 'Output as JSON' },
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    applyOutputMode(args)
 
     if (!args.yes && !args.json) {
       const ok = await confirm({
@@ -138,11 +186,10 @@ const verifyTokenCommand = defineCommand({
   args: {
     url: { type: 'positional', required: true, description: 'Property URL' },
     method: { type: 'string', alias: 'm', description: 'META, FILE, DNS_TXT, DNS_CNAME, ANALYTICS, TAG_MANAGER (default: META for URL-prefix, DNS_TXT for sc-domain:)' },
-    json: { type: 'boolean', default: false, description: 'Output as JSON' },
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    applyOutputMode(args)
     const method = validateMethod(args.url, args.method ?? pickDefaultMethod(args.url))
     const ctx = await createCommandContext({ needsAuth: true })
     const result = await getVerificationToken(ctx.client!, args.url, method).catch(gscErrorHandler)
@@ -163,11 +210,10 @@ const verifyCommand = defineCommand({
   args: {
     url: { type: 'positional', required: true, description: 'Property URL' },
     method: { type: 'string', alias: 'm', description: 'Verification method to validate (must match the one used for verify-token)' },
-    json: { type: 'boolean', default: false, description: 'Output as JSON' },
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    applyOutputMode(args)
     const method = validateMethod(args.url, args.method ?? pickDefaultMethod(args.url))
     const ctx = await createCommandContext({ needsAuth: true })
     const resource = await verifySite(ctx.client!, args.url, method).catch(gscErrorHandler)
@@ -186,98 +232,235 @@ const verifyCommand = defineCommand({
   },
 })
 
+const verifyGetCommand = defineCommand({
+  meta: {
+    name: 'verify-get',
+    description: 'Get a single verified WebResource by id',
+  },
+  args: {
+    id: { type: 'positional', required: true, description: 'WebResource id (from `sites verify-list`)' },
+    ...OUTPUT_ARGS,
+  },
+  async run({ args }) {
+    applyOutputMode(args)
+    const ctx = await createCommandContext({ needsAuth: true })
+    const resource = await getVerifiedSite(ctx.client!, args.id).catch(gscErrorHandler)
+
+    if (args.json) {
+      console.log(JSON.stringify(resource, null, 2))
+      return
+    }
+    const ident = resource.site?.identifier ?? resource.id ?? '?'
+    const type = resource.site?.type === 'INET_DOMAIN' ? 'domain' : 'site'
+    console.log()
+    console.log(`  \x1B[1m${ident}\x1B[0m \x1B[90m(${type})\x1B[0m`)
+    console.log(`  \x1B[90mid:\x1B[0m ${resource.id ?? '?'}`)
+    if (resource.owners?.length) {
+      console.log(`  Owners:`)
+      for (const o of resource.owners)
+        console.log(`    \x1B[90m└─\x1B[0m ${o}`)
+    }
+    console.log()
+  },
+})
+
+const unverifyCommand = defineCommand({
+  meta: {
+    name: 'unverify',
+    description: 'Drop your verified ownership of a WebResource (remove the placed token first!)',
+  },
+  args: {
+    id: { type: 'positional', required: true, description: 'WebResource id (from `sites verify-list`)' },
+    yes: { type: 'boolean', alias: 'y', default: false, description: 'Skip confirmation prompt' },
+    ...OUTPUT_ARGS,
+  },
+  async run({ args }) {
+    applyOutputMode(args)
+
+    if (!args.yes && !args.json) {
+      const ok = await confirm({
+        message: `Unverify WebResource ${args.id}? Remove any placed verification token first or Google may re-verify.`,
+        initialValue: false,
+      })
+      if (isCancel(ok) || !ok) {
+        logger.info('Cancelled')
+        process.exit(0)
+      }
+    }
+
+    const ctx = await createCommandContext({ needsAuth: true })
+    await unverifySite(ctx.client!, args.id).catch(gscErrorHandler)
+
+    if (args.json) {
+      console.log(JSON.stringify({ id: args.id, status: 'unverified' }, null, 2))
+      return
+    }
+    logger.success(`Unverified: ${args.id}`)
+  },
+})
+
+const verifyListCommand = defineCommand({
+  meta: {
+    name: 'verify-list',
+    description: 'List verified WebResources from the Site Verification API (distinct from Search Console properties)',
+  },
+  args: {
+    ...OUTPUT_ARGS,
+  },
+  async run({ args }) {
+    applyOutputMode(args)
+    const ctx = await createCommandContext({ needsAuth: true })
+    const resources = await listVerifiedSites(ctx.client!).catch(gscErrorHandler)
+
+    if (args.json) {
+      console.log(JSON.stringify(resources, null, 2))
+      return
+    }
+    if (resources.length === 0) {
+      logger.warn('No verified WebResources found')
+      return
+    }
+    logger.success(`${resources.length} verified WebResources:`)
+    console.log()
+    for (const r of resources) {
+      const id = r.id ?? '?'
+      const site = r.site
+      const ident = site?.identifier ?? id
+      const type = site?.type === 'INET_DOMAIN' ? 'domain' : 'site'
+      console.log(`  \x1B[1m${ident}\x1B[0m \x1B[90m(${type})\x1B[0m`)
+      if (r.owners?.length) {
+        for (const o of r.owners)
+          console.log(`    \x1B[90m└─\x1B[0m ${o}`)
+      }
+    }
+  },
+})
+
+const getCommand = defineCommand({
+  meta: {
+    name: 'get',
+    description: 'Show a single property\'s permissionLevel from the sites list',
+  },
+  args: {
+    url: { type: 'positional', required: true, description: 'Property URL' },
+    ...OUTPUT_ARGS,
+  },
+  async run({ args }) {
+    applyOutputMode(args)
+    const ctx = await createCommandContext({ needsAuth: true })
+    const all = await ctx.loadSites()
+    const site = all.find(s => s.siteUrl === args.url)
+    if (!site) {
+      if (args.json) {
+        console.log(JSON.stringify(null))
+        process.exit(1)
+      }
+      logger.error(`Not found: ${args.url}`)
+      process.exit(1)
+    }
+    if (args.json) {
+      console.log(JSON.stringify(site, null, 2))
+      return
+    }
+    const perm = site.permissionLevel === 'siteOwner' ? '\x1B[32m' : '\x1B[90m'
+    console.log()
+    console.log(`  \x1B[1m${site.siteUrl}\x1B[0m`)
+    console.log(`  Permission: ${perm}${site.permissionLevel}\x1B[0m`)
+    console.log()
+  },
+})
+
+const LIST_ARGS = {
+  ...OUTPUT_ARGS,
+  'with-sitemaps': { type: 'boolean' as const, default: false, description: 'Include sitemaps for each owned site' },
+  'owner-only': { type: 'boolean' as const, default: false, description: 'Filter to permissionLevel=siteOwner' },
+}
+
+async function runListSites(args: Record<string, unknown>): Promise<void> {
+  applyOutputMode(args)
+  const ctx = await createCommandContext({ needsAuth: true })
+
+  const ownerOnly = Boolean(args['owner-only'])
+
+  if (args['with-sitemaps']) {
+    const all = await fetchSitesWithSitemaps(ctx.client!).catch(gscErrorHandler)
+    const sites = ownerOnly ? all.filter(s => s.permissionLevel === 'siteOwner') : all
+    if (args.json) {
+      const enriched = sites.map(s => ({
+        ...s,
+        sitemapCounts: {
+          total: s.sitemaps.length,
+          pending: s.sitemaps.filter(sm => sm.isPending).length,
+          errored: s.sitemaps.filter(sm => Number(sm.errors) > 0).length,
+        },
+      }))
+      console.log(JSON.stringify(enriched, null, 2))
+      return
+    }
+    if (sites.length === 0) {
+      logger.warn(ownerOnly ? 'No owned sites found' : 'No verified sites found')
+      return
+    }
+    logger.success(`Found ${sites.length} ${ownerOnly ? 'owned' : 'verified'} sites:`)
+    console.log()
+    for (const site of sites) {
+      const perm = site.permissionLevel === 'siteOwner' ? '\x1B[32m' : '\x1B[90m'
+      console.log(`  ${site.siteUrl} ${perm}(${site.permissionLevel})\x1B[0m`)
+      for (const sm of site.sitemaps) {
+        const pending = sm.isPending ? ' \x1B[33m(pending)\x1B[0m' : ''
+        console.log(`    \x1B[90m└─\x1B[0m ${sm.path}${pending}`)
+      }
+    }
+    return
+  }
+
+  const all = await ctx.loadSites()
+  const sites = ownerOnly ? all.filter(s => s.permissionLevel === 'siteOwner') : all
+
+  if (args.json) {
+    console.log(JSON.stringify(sites, null, 2))
+    return
+  }
+
+  if (sites.length === 0) {
+    logger.warn(ownerOnly ? 'No owned sites found' : 'No verified sites found')
+    return
+  }
+
+  logger.success(`Found ${sites.length} ${ownerOnly ? 'owned ' : ''}sites:`)
+  console.log()
+  for (const site of sites) {
+    const perm = site.permissionLevel === 'siteOwner' ? '\x1B[32m' : '\x1B[90m'
+    console.log(`  ${site.siteUrl} ${perm}(${site.permissionLevel})\x1B[0m`)
+  }
+}
+
+const listCommand = defineCommand({
+  meta: { name: 'list', description: 'List GSC sites (alias of bare `sites`)' },
+  args: LIST_ARGS,
+  async run({ args }) {
+    await runListSites(args as Record<string, unknown>)
+  },
+})
+
 export const sitesCommand = defineCommand({
   meta: {
     name: 'sites',
     description: 'List GSC sites; manage properties (add/delete) and verify ownership',
   },
-  args: {
-    'json': {
-      type: 'boolean',
-      default: false,
-      description: 'Output as JSON for scripting',
-    },
-    'with-sitemaps': {
-      type: 'boolean',
-      default: false,
-      description: 'Include sitemaps for each owned site',
-    },
-    'owner-only': {
-      type: 'boolean',
-      default: false,
-      description: 'Filter to permissionLevel=siteOwner',
-    },
-    'quiet': {
-      type: 'boolean',
-      alias: 'q',
-      default: false,
-      description: 'Suppress info/success output',
-    },
-  },
+  args: LIST_ARGS,
   subCommands: {
+    'list': listCommand,
     'add': addCommand,
     'delete': deleteCommand,
+    'get': getCommand,
     'verify-token': verifyTokenCommand,
     'verify': verifyCommand,
+    'verify-list': verifyListCommand,
+    'verify-get': verifyGetCommand,
+    'unverify': unverifyCommand,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
-    const ctx = await createCommandContext({ needsAuth: true })
-
-    const ownerOnly = Boolean(args['owner-only'])
-
-    if (args['with-sitemaps']) {
-      const all = await fetchSitesWithSitemaps(ctx.client!).catch(gscErrorHandler)
-      const sites = ownerOnly ? all.filter(s => s.permissionLevel === 'siteOwner') : all
-      if (args.json) {
-        // Decorate each site with sitemap counts so scripts don't have to
-        // walk the array again.
-        const enriched = sites.map(s => ({
-          ...s,
-          sitemapCounts: {
-            total: s.sitemaps.length,
-            pending: s.sitemaps.filter(sm => sm.isPending).length,
-            errored: s.sitemaps.filter(sm => Number(sm.errors) > 0).length,
-          },
-        }))
-        console.log(JSON.stringify(enriched, null, 2))
-        return
-      }
-      if (sites.length === 0) {
-        logger.warn(ownerOnly ? 'No owned sites found' : 'No verified sites found')
-        return
-      }
-      logger.success(`Found ${sites.length} ${ownerOnly ? 'owned' : 'verified'} sites:`)
-      console.log()
-      for (const site of sites) {
-        const perm = site.permissionLevel === 'siteOwner' ? '\x1B[32m' : '\x1B[90m'
-        console.log(`  ${site.siteUrl} ${perm}(${site.permissionLevel})\x1B[0m`)
-        for (const sm of site.sitemaps) {
-          const pending = sm.isPending ? ' \x1B[33m(pending)\x1B[0m' : ''
-          console.log(`    \x1B[90m└─\x1B[0m ${sm.path}${pending}`)
-        }
-      }
-      return
-    }
-
-    const all = await ctx.loadSites()
-    const sites = ownerOnly ? all.filter(s => s.permissionLevel === 'siteOwner') : all
-
-    if (args.json) {
-      console.log(JSON.stringify(sites, null, 2))
-      return
-    }
-
-    if (sites.length === 0) {
-      logger.warn(ownerOnly ? 'No owned sites found' : 'No verified sites found')
-      return
-    }
-
-    logger.success(`Found ${sites.length} ${ownerOnly ? 'owned ' : ''}sites:`)
-    console.log()
-    for (const site of sites) {
-      const perm = site.permissionLevel === 'siteOwner' ? '\x1B[32m' : '\x1B[90m'
-      console.log(`  ${site.siteUrl} ${perm}(${site.permissionLevel})\x1B[0m`)
-    }
+    await runListSites(args as Record<string, unknown>)
   },
 })

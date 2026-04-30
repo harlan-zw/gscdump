@@ -23,6 +23,7 @@ export interface GscdumpConfig {
   defaultLimit?: number
   defaultSearchType?: string
   defaultDataState?: string
+  serviceAccountPath?: string
 }
 
 export function defaultDataDir(): string {

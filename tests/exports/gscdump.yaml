@@ -11,8 +11,10 @@
   daysAgo: function
   deleteSite: function
   deleteSitemap: function
+  discoverSitemap: function
   fetchSitemap: function
   fetchSitemaps: function
+  fetchSitemapUrls: function
   fetchSites: function
   fetchSitesWithSitemaps: function
   formatErrorForCli: function
@@ -28,6 +30,7 @@
   getPreviousDate: function
   getPstDate: function
   getVerificationToken: function
+  getVerifiedSite: function
   googleSearchConsole: function
   groupIntoRanges: function
   GSC_FINALIZED_LAG_DAYS: number
@@ -51,10 +54,12 @@
   progressBar: function
   requestIndexing: function
   rowWithMetricDefaults: function
+  runSequentialBatch: function
   siteUrlToVerificationSite: function
   storageError: function
   submitSitemap: function
   toIsoDate: function
+  unverifySite: function
   verificationMethodsFor: function
   verifySite: function
 ./contracts: {}
@@ -114,6 +119,7 @@
   UnsupportedLogicalCapabilityError: function
 ./sitemap:
   discoverSitemap: function
+  fetchSitemapUrls: function
 ./tenant:
   decodeSiteId: function
   encodeSiteId: function

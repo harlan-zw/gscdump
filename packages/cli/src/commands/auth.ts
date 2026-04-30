@@ -1,8 +1,11 @@
+import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
 import { ofetch } from 'ofetch'
 import { authenticate, clearTokens, formatAuthProvenance, getAuth, getAuthCredentials, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
-import { logger, setQuiet } from '../utils'
+import { loadConfig, saveConfig } from '../config'
+import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
+import { adoptCurrentConfigAsProfile, profileNameFromEmail, resolveActiveProfile } from './profile'
 
 interface TokenInfo {
   scope?: string
@@ -11,10 +14,47 @@ interface TokenInfo {
   audience?: string
 }
 
+const REQUIRED_SCOPES = [
+  'https://www.googleapis.com/auth/webmasters',
+  'https://www.googleapis.com/auth/indexing',
+  'https://www.googleapis.com/auth/siteverification',
+]
+
 async function fetchTokenInfo(accessToken: string): Promise<TokenInfo | null> {
   return ofetch<TokenInfo>('https://oauth2.googleapis.com/tokeninfo', {
     query: { access_token: accessToken },
   }).catch(() => null)
+}
+
+/**
+ * Resolve the effective live access token (BYOK takes precedence over saved
+ * tokens) and pull tokeninfo + parsed scopes + the missing-scopes diff.
+ * Returns null token when nothing is configured.
+ */
+async function resolveLiveAuthState(): Promise<{
+  byok: ReturnType<typeof resolveBYOK>
+  tokens: Awaited<ReturnType<typeof loadTokens>>
+  liveToken: string | null
+  tokenInfo: TokenInfo | null
+  scopes: string[]
+  missing: string[]
+}> {
+  const tokens = await loadTokens()
+  const byok = resolveBYOK()
+  let liveToken: string | null = null
+  if (typeof byok === 'string')
+    liveToken = byok
+  else if (byok && 'getAccessToken' in byok)
+    liveToken = await byok.getAccessToken().then(r => r.token ?? null).catch(() => null)
+  else if (tokens?.access_token)
+    liveToken = tokens.access_token
+
+  const tokenInfo = liveToken ? await fetchTokenInfo(liveToken) : null
+  const scopes = tokenInfo?.scope ? tokenInfo.scope.split(/\s+/).filter(Boolean) : []
+  const has = (s: string): boolean => scopes.includes(s) || scopes.includes(s.replace('.readonly', ''))
+  const missing = REQUIRED_SCOPES.filter(s => !has(s))
+
+  return { byok, tokens, liveToken, tokenInfo, scopes, missing }
 }
 
 const statusCommand = defineCommand({
@@ -23,32 +63,16 @@ const statusCommand = defineCommand({
     description: 'Show current authentication status',
   },
   args: {
-    json: { type: 'boolean', default: false, description: 'Output as JSON' },
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
-    const tokens = await loadTokens()
-    const byok = resolveBYOK()
+    const { json } = applyOutputMode(args)
+    const { byok, tokens, tokenInfo, scopes, missing } = await resolveLiveAuthState()
     const byokKind = byok
       ? typeof byok === 'string' ? 'access-token' : 'refresh-token'
       : null
 
-    // Resolve a live access token to query tokeninfo for scopes.
-    let liveToken: string | null = null
-    if (typeof byok === 'string') {
-      liveToken = byok
-    }
-    else if (byok && 'getAccessToken' in byok) {
-      liveToken = await byok.getAccessToken().then(r => r.token ?? null).catch(() => null)
-    }
-    else if (tokens?.access_token) {
-      liveToken = tokens.access_token
-    }
-    const tokenInfo = liveToken ? await fetchTokenInfo(liveToken) : null
-    const scopes = tokenInfo?.scope ? tokenInfo.scope.split(/\s+/).filter(Boolean) : []
-
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify({
         authenticated: !!tokens || !!byok,
         source: byok ? 'byok' : tokens ? 'saved-tokens' : null,
@@ -71,15 +95,8 @@ const statusCommand = defineCommand({
       if (scopes.length === 0)
         return
       console.log(`  Scopes:`)
-      const required = [
-        'https://www.googleapis.com/auth/webmasters',
-        'https://www.googleapis.com/auth/indexing',
-        'https://www.googleapis.com/auth/siteverification',
-      ]
-      const has = (s: string): boolean => scopes.includes(s) || scopes.includes(s.replace('.readonly', ''))
       for (const s of scopes)
         console.log(`    \x1B[90m└─\x1B[0m ${s}`)
-      const missing = required.filter(s => !has(s))
       if (missing.length > 0) {
         console.log(`  \x1B[33mMissing scopes:\x1B[0m`)
         for (const s of missing)
@@ -128,10 +145,10 @@ const refreshCommand = defineCommand({
     description: 'Force-refresh saved OAuth tokens (no-op for BYOK)',
   },
   args: {
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet))
+    applyOutputMode(args)
     if (resolveBYOK()) {
       logger.info('BYOK detected; refresh handled per-call by the SDK')
       return
@@ -165,13 +182,13 @@ const loginCommand = defineCommand({
     description: 'Run OAuth flow and persist tokens (skip if BYOK env vars set)',
   },
   args: {
+    ...OUTPUT_ARGS,
     'force': { type: 'boolean', alias: 'f', default: false, description: 'Re-run OAuth even if tokens already exist' },
     'browser': { type: 'boolean', default: true, description: 'Use loopback browser flow. Pass --no-browser for device-code (headless).' },
     'service-account': { type: 'string', description: 'Path to a service-account JSON key (skips OAuth)' },
-    'quiet': { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet))
+    applyOutputMode(args)
     const byok = resolveBYOK()
     if (byok && !args.force) {
       logger.info('BYOK env vars detected, no login needed (--force to override)')
@@ -180,7 +197,8 @@ const loginCommand = defineCommand({
     // Service-account "login" is just persisting which file to use; tokens
     // are minted on-demand by the JWT client.
     if (args['service-account']) {
-      const jwt = await loadServiceAccount(String(args['service-account'])).catch((e: Error) => {
+      const saPath = path.resolve(String(args['service-account']))
+      const jwt = await loadServiceAccount(saPath).catch((e: Error) => {
         logger.error(`Service-account load failed: ${e.message}`)
         process.exit(1)
       })
@@ -189,8 +207,11 @@ const loginCommand = defineCommand({
         logger.error(`Service-account auth failed: ${e.message}`)
         process.exit(1)
       })
+      const config = await loadConfig()
+      config.serviceAccountPath = saPath
+      await saveConfig(config)
       logger.success(`Service-account verified: ${(jwt as any).email ?? 'OK'}`)
-      logger.info(`Set GOOGLE_APPLICATION_CREDENTIALS=${args['service-account']} to use it across sessions.`)
+      logger.info(`Saved path to config: ${saPath}`)
       return
     }
     if (args.force)
@@ -200,6 +221,20 @@ const loginCommand = defineCommand({
       process.exit(1)
     })
     logger.success('Logged in')
+
+    // Auto-adopt: if no profile was active, derive one from the Google account
+    // email so subsequent runs are scoped per-account without manual setup.
+    if (!resolveActiveProfile()) {
+      const tokens = await loadTokens()
+      const info = tokens?.access_token ? await fetchTokenInfo(tokens.access_token) : null
+      if (info?.email) {
+        const name = profileNameFromEmail(info.email)
+        const dir = await adoptCurrentConfigAsProfile(name).catch(() => null)
+        if (dir)
+          logger.success(`Saved as profile "${name}" (active)`)
+      }
+    }
+
     // After login, show the full provenance breakdown — surfaces the common
     // footgun where stale BYOK env vars (from .env or shell) shadow the
     // tokens we just saved.
@@ -216,11 +251,51 @@ const logoutCommand = defineCommand({
     description: 'Clear stored OAuth tokens',
   },
   args: {
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet))
+    applyOutputMode(args)
     await clearTokens()
+    const config = await loadConfig()
+    if (config.serviceAccountPath) {
+      delete config.serviceAccountPath
+      await saveConfig(config)
+      logger.info('Cleared saved service-account path')
+    }
+  },
+})
+
+const scopesCommand = defineCommand({
+  meta: {
+    name: 'scopes',
+    description: 'Print granted OAuth scopes (one per line); exits 1 if any required scope is missing',
+  },
+  args: {
+    ...OUTPUT_ARGS,
+  },
+  async run({ args }) {
+    const { json } = applyOutputMode(args)
+    const { liveToken, scopes, missing } = await resolveLiveAuthState()
+
+    if (!liveToken) {
+      if (json) {
+        console.log(JSON.stringify({ scopes: [], missing: null }, null, 2))
+      }
+      else {
+        logger.error('Not authenticated')
+      }
+      process.exit(1)
+    }
+
+    if (json) {
+      console.log(JSON.stringify({ scopes, missing }, null, 2))
+    }
+    else {
+      for (const s of scopes)
+        console.log(s)
+    }
+    if (missing.length > 0)
+      process.exit(1)
   },
 })
 
@@ -234,5 +309,6 @@ export const authCommand = defineCommand({
     login: loginCommand,
     logout: logoutCommand,
     refresh: refreshCommand,
+    scopes: scopesCommand,
   },
 })

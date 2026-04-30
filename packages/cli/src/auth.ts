@@ -54,13 +54,17 @@ export async function loadServiceAccount(jsonPath: string): Promise<GoogleJWT> {
 
 /**
  * Resolve a service-account auth client from `--service-account <path>`,
- * `GOOGLE_APPLICATION_CREDENTIALS`, or `GSC_SERVICE_ACCOUNT_JSON`. Returns
- * null when no service-account source is configured.
+ * `GOOGLE_APPLICATION_CREDENTIALS`, `GSC_SERVICE_ACCOUNT_JSON`, or
+ * `config.serviceAccountPath`. Returns null when no source is configured.
  */
 export async function resolveServiceAccount(opts: { path?: string } = {}): Promise<GoogleJWT | null> {
-  const p = opts.path
+  let p = opts.path
     || process.env.GSC_SERVICE_ACCOUNT_JSON
     || process.env.GOOGLE_APPLICATION_CREDENTIALS
+  if (!p) {
+    const config = await loadConfig().catch(() => null)
+    p = config?.serviceAccountPath
+  }
   if (!p)
     return null
   return loadServiceAccount(p)
@@ -482,10 +486,15 @@ export async function describeAuthProvenance(): Promise<{
   const warnings: string[] = []
 
   // service account
-  const saPath = process.env.GSC_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS
-  if (saPath) {
+  const saEnvPath = process.env.GSC_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS
+  const saConfigPath = !saEnvPath ? (await loadConfig().catch(() => null))?.serviceAccountPath : undefined
+  const saPath = saEnvPath || saConfigPath
+  if (saEnvPath) {
     const saEnv = process.env.GSC_SERVICE_ACCOUNT_JSON ? 'GSC_SERVICE_ACCOUNT_JSON' : 'GOOGLE_APPLICATION_CREDENTIALS'
-    rows.push({ field: 'service_account', source: envSourceLabel(saEnv), value: displayPath(saPath) })
+    rows.push({ field: 'service_account', source: envSourceLabel(saEnv), value: displayPath(saEnvPath) })
+  }
+  else if (saConfigPath) {
+    rows.push({ field: 'service_account', source: `${displayPath(`${getConfigDir()}/config.json`)}`, value: displayPath(saConfigPath) })
   }
 
   // OAuth client id / secret

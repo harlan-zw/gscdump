@@ -1,9 +1,9 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { batchRequestIndexing, getIndexingMetadata, requestIndexing } from 'gscdump'
+import { batchRequestIndexing, fetchSitemapUrls, getIndexingMetadata, requestIndexing, runSequentialBatch } from 'gscdump'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
-import { logger, readUrlList, setQuiet } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS, readUrlList } from '../utils'
 
 const RETRIES_ARG = {
   retries: { type: 'string' as const, description: 'Override per-call retry count (default: 3)' },
@@ -16,6 +16,17 @@ function parseRetries(v: unknown): number | undefined {
   return Number.isFinite(n) && n >= 0 ? n : undefined
 }
 
+async function resolveUrlSource(args: { 'urls'?: unknown, 'file'?: unknown, 'from-sitemap'?: unknown }): Promise<string[]> {
+  const fromSitemap = args['from-sitemap']
+  if (fromSitemap) {
+    return fetchSitemapUrls(String(fromSitemap)).catch((e: Error) => {
+      logger.error(`Sitemap fetch failed: ${e.message}`)
+      process.exit(1)
+    })
+  }
+  return readUrlList(args)
+}
+
 const submitCommand = defineCommand({
   meta: {
     name: 'submit',
@@ -23,12 +34,11 @@ const submitCommand = defineCommand({
   },
   args: {
     url: { type: 'positional', required: true, description: 'URL to submit' },
-    json: { type: 'boolean', default: false, description: 'Output as JSON' },
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    ...OUTPUT_ARGS,
     ...RETRIES_ARG,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: parseRetries(args.retries) } })
     const result = await requestIndexing(ctx.client!, args.url, { type: 'URL_UPDATED' }).catch(gscErrorHandler)
     if (args.json) {
@@ -48,12 +58,11 @@ const removeCommand = defineCommand({
   },
   args: {
     url: { type: 'positional', required: true, description: 'URL to mark removed' },
-    json: { type: 'boolean', default: false, description: 'Output as JSON' },
-    quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
+    ...OUTPUT_ARGS,
     ...RETRIES_ARG,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: parseRetries(args.retries) } })
     const result = await requestIndexing(ctx.client!, args.url, { type: 'URL_DELETED' }).catch(gscErrorHandler)
     if (args.json) {
@@ -77,7 +86,7 @@ const statusCommand = defineCommand({
     quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' },
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true })
     const meta = await getIndexingMetadata(ctx.client!, args.url).catch(gscErrorHandler)
     if (args.json) {
@@ -100,6 +109,38 @@ const statusCommand = defineCommand({
 })
 
 const INDEXING_DAILY_QUOTA = 200
+const INDEXING_PER_MINUTE_QUOTA = 600
+
+const quotaCommand = defineCommand({
+  meta: {
+    name: 'quota',
+    description: 'Show documented Indexing API quotas (no live counters; quota usage is not exposed by the API)',
+  },
+  args: {
+    ...OUTPUT_ARGS,
+  },
+  async run({ args }) {
+    const { json } = applyOutputMode(args)
+    const payload = {
+      perDay: INDEXING_DAILY_QUOTA,
+      perMinute: INDEXING_PER_MINUTE_QUOTA,
+      note: 'Documented defaults. Google does not expose live counters; track yours by counting submit calls.',
+      docs: 'https://developers.google.com/search/apis/indexing-api/v3/quota-pricing',
+    }
+    if (json) {
+      console.log(JSON.stringify(payload, null, 2))
+      return
+    }
+    console.log()
+    console.log(`  \x1B[1mIndexing API quota\x1B[0m`)
+    console.log(`    Per day:    ${payload.perDay}`)
+    console.log(`    Per minute: ${payload.perMinute}`)
+    console.log()
+    console.log(`  \x1B[90m${payload.note}\x1B[0m`)
+    console.log(`  \x1B[90mDocs: ${payload.docs}\x1B[0m`)
+    console.log()
+  },
+})
 
 const batchCommand = defineCommand({
   meta: {
@@ -107,21 +148,21 @@ const batchCommand = defineCommand({
     description: 'Submit many URLs from a file or stdin (one URL per line)',
   },
   args: {
-    'urls': { type: 'positional', required: false, description: 'URLs (or use --file/stdin)' },
+    ...OUTPUT_ARGS,
+    'urls': { type: 'positional', required: false, description: 'URLs (or use --file/--from-sitemap/stdin)' },
     'file': { type: 'string', alias: 'f', description: 'File with URLs (one per line)' },
+    'from-sitemap': { type: 'string', description: 'Sitemap URL (or sitemap index) to pull URLs from' },
     'type': { type: 'string', default: 'URL_UPDATED', description: 'URL_UPDATED or URL_DELETED' },
     'delay-ms': { type: 'string', default: '100', description: 'Delay between requests' },
     'concurrency': { type: 'string', alias: 'c', default: '1', description: 'Concurrent in-flight requests' },
-    'quiet': { type: 'boolean', alias: 'q', default: false, description: 'Suppress progress output' },
-    'json': { type: 'boolean', default: false, description: 'Output as JSON' },
     'yes': { type: 'boolean', alias: 'y', default: false, description: 'Skip the over-quota confirmation prompt' },
     'retries': { type: 'string', description: 'Override per-call retry count (default: 3)' },
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
-    const urls = await readUrlList(args)
+    applyOutputMode(args)
+    const urls = await resolveUrlSource(args)
     if (urls.length === 0) {
-      logger.error('No URLs provided. Pass URLs as args, --file, or stdin.')
+      logger.error('No URLs provided. Pass URLs as args, --file, --from-sitemap, or stdin.')
       process.exit(1)
     }
     const type = String(args.type) as 'URL_UPDATED' | 'URL_DELETED'
@@ -163,15 +204,66 @@ const batchCommand = defineCommand({
   },
 })
 
+const batchStatusCommand = defineCommand({
+  meta: {
+    name: 'batch-status',
+    description: 'Get indexing notification metadata for many URLs',
+  },
+  args: {
+    ...OUTPUT_ARGS,
+    'urls': { type: 'positional', required: false, description: 'URLs (or use --file/--from-sitemap/stdin)' },
+    'file': { type: 'string', alias: 'f', description: 'File with URLs (one per line)' },
+    'from-sitemap': { type: 'string', description: 'Sitemap URL (or sitemap index) to pull URLs from' },
+    'delay-ms': { type: 'string', default: '100', description: 'Delay between requests' },
+    'concurrency': { type: 'string', alias: 'c', default: '1', description: 'Concurrent in-flight requests' },
+    'retries': { type: 'string', description: 'Override per-call retry count (default: 3)' },
+  },
+  async run({ args }) {
+    applyOutputMode(args)
+    const urls = await resolveUrlSource(args)
+    if (urls.length === 0) {
+      logger.error('No URLs provided. Pass URLs as args, --file, --from-sitemap, or stdin.')
+      process.exit(1)
+    }
+    const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: parseRetries(args.retries) } })
+    const delayMs = Number.parseInt(String(args['delay-ms']), 10)
+    const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 1)
+
+    if (!args.json && !args.quiet)
+      logger.info(`Fetching status for ${urls.length} URLs ...`)
+
+    const results = await runSequentialBatch(
+      urls,
+      url => getIndexingMetadata(ctx.client!, url),
+      {
+        delayMs,
+        concurrency,
+        onProgress: (args.json || args.quiet)
+          ? undefined
+          : (r, i, total) => logger.info(`[${i + 1}/${total}] ${r.url}`),
+      },
+    ).catch(gscErrorHandler)
+
+    if (args.json) {
+      console.log(JSON.stringify(results, null, 2))
+      return
+    }
+    if (!args.quiet)
+      logger.success(`Fetched ${results.length}/${urls.length} URLs`)
+  },
+})
+
 export const indexingCommand = defineCommand({
   meta: {
     name: 'indexing',
     description: 'Notify Google about URL updates/removals (Indexing API)',
   },
   subCommands: {
-    submit: submitCommand,
-    remove: removeCommand,
-    status: statusCommand,
-    batch: batchCommand,
+    'submit': submitCommand,
+    'remove': removeCommand,
+    'status': statusCommand,
+    'batch': batchCommand,
+    'batch-status': batchStatusCommand,
+    'quota': quotaCommand,
   },
 })

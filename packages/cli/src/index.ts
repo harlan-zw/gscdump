@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 
-import os from 'node:os'
-import path from 'node:path'
 import process from 'node:process'
 import { defineCommand, runMain } from 'citty'
 import { analyzeCommand } from './commands/analyze'
@@ -14,12 +12,12 @@ import { indexingCommand } from './commands/indexing'
 import { initCommand } from './commands/init'
 import { inspectCommand } from './commands/inspect'
 import { mcpCommand } from './commands/mcp'
+import { applyProfileFromCli, profileCommand } from './commands/profile'
 import { queryCommand } from './commands/query'
 import { sitemapsCommand } from './commands/sitemaps'
 import { sitesCommand } from './commands/sites'
 import { storeCommand } from './commands/store'
 import { syncCommand } from './commands/sync'
-import { setConfigDir } from './config'
 import { loadEnvFromCwd } from './env-file'
 import { setNoColor, showSplash, VERSION } from './utils'
 
@@ -46,17 +44,14 @@ function applyGlobalArgs(): void {
   if (argv.includes('--no-color') || process.env.NO_COLOR)
     setNoColor(true)
 
-  const profile = pluckArgValue(argv, '--profile') ?? process.env.GSCDUMP_PROFILE
-  const configDir = pluckArgValue(argv, '--config-dir') ?? process.env.GSCDUMP_CONFIG_DIR
+  const profile = pluckArgValue(argv, '--profile')
+  const configDir = pluckArgValue(argv, '--config-dir') ?? process.env.GSCDUMP_CONFIG_DIR ?? null
 
-  if (configDir) {
-    setConfigDir(configDir)
-  }
-  else if (profile) {
-    // Profiles live under ~/.config/gscdump/profiles/<name>; tokens.json and
-    // config.json are isolated per profile, letting users juggle accounts.
-    setConfigDir(path.join(os.homedir(), '.config', 'gscdump', 'profiles', profile))
-  }
+  // Profiles live under ~/.config/gscdump/profiles/<name>; tokens.json and
+  // config.json are isolated per profile, letting users juggle accounts.
+  // The profile module owns the resolution: --profile flag > GSCDUMP_PROFILE
+  // env > persisted active marker > root dir.
+  applyProfileFromCli({ configDir, profile })
 
   // -v as an alias for --version (citty doesn't auto-add it).
   if (argv.includes('-v') && !argv.includes('--version')) {
@@ -107,6 +102,7 @@ const main = defineCommand({
     analyze: analyzeCommand,
     auth: authCommand,
     config: configCommand,
+    profile: profileCommand,
     doctor: doctorCommand,
     mcp: mcpCommand,
   },

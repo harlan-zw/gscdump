@@ -10,7 +10,7 @@ import {
 import { defineCommand } from 'citty'
 import { progressBar } from 'gscdump'
 import { createCommandContext } from '../context'
-import { logger, runWithConcurrency, setQuiet } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS, runWithConcurrency } from '../utils'
 
 const INSPECTION_QPD_PER_PROPERTY = 2000
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
@@ -53,27 +53,16 @@ const inspectSubCommand = defineCommand({
       default: '4',
       description: 'Concurrent in-flight inspect calls (default: 4)',
     },
-    json: {
-      type: 'boolean',
-      default: false,
-      description: 'Emit a JSON summary of inspection results',
-    },
-    quiet: {
-      type: 'boolean',
-      alias: 'q',
-      default: false,
-      description: 'Suppress progress output',
-    },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    const { json, quiet } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const client = ctx.client!
     const store = ctx.store!
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const limit = args.limit ? Number.parseInt(String(args.limit), 10) : INSPECTION_QPD_PER_PROPERTY
     const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 4)
-    const quiet = Boolean(args.quiet) || Boolean(args.json)
 
     const urls = (await readUrlList({ file: args.file ? String(args.file) : undefined })).slice(0, limit)
     if (urls.length === 0) {
@@ -130,7 +119,7 @@ const inspectSubCommand = defineCommand({
       records,
     )
 
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify({
         site: siteUrl,
         inspected: records.length,
@@ -161,11 +150,12 @@ const showSubCommand = defineCommand({
     description: 'Print the latest inspection record for a URL from the local entity store',
   },
   args: {
+    ...OUTPUT_ARGS,
     site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
     url: { type: 'positional', required: true, description: 'URL to look up' },
-    json: { type: 'boolean', default: false, description: 'Output as JSON' },
   },
   async run({ args }) {
+    const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const store = ctx.store!
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
@@ -178,7 +168,7 @@ const showSubCommand = defineCommand({
       logger.warn(`No inspection record for ${args.url}`)
       process.exit(1)
     }
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify(record, null, 2))
       return
     }
@@ -207,29 +197,19 @@ const sitemapsSnapshotSubCommand = defineCommand({
     description: 'Fetch current sitemap state from GSC and persist to the local entity store',
   },
   args: {
+    ...OUTPUT_ARGS,
     site: {
       type: 'string',
       alias: 's',
       description: 'Site URL (e.g., sc-domain:example.com); defaults to config.defaultSite or prompt',
     },
-    quiet: {
-      type: 'boolean',
-      alias: 'q',
-      default: false,
-      description: 'Suppress progress output',
-    },
-    json: {
-      type: 'boolean',
-      default: false,
-      description: 'Emit the snapshot JSON to stdout',
-    },
   },
   async run({ args }) {
+    const { json, quiet } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const client = ctx.client!
     const store = ctx.store!
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-    const quiet = Boolean(args.quiet)
 
     const apiSitemaps = await client.sitemaps.list(siteUrl)
     const capturedAt = new Date().toISOString()
@@ -259,7 +239,7 @@ const sitemapsSnapshotSubCommand = defineCommand({
       records,
     )
 
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify({ site: siteUrl, capturedAt, records }, null, 2))
       return
     }
@@ -281,11 +261,12 @@ const sitemapsShowSubCommand = defineCommand({
     description: 'Print the latest captured sitemap state for a feedpath',
   },
   args: {
+    ...OUTPUT_ARGS,
     site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
     path: { type: 'positional', required: true, description: 'Sitemap path (feedpath)' },
-    json: { type: 'boolean', default: false, description: 'Output as JSON' },
   },
   async run({ args }) {
+    const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const store = ctx.store!
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
@@ -298,7 +279,7 @@ const sitemapsShowSubCommand = defineCommand({
       logger.warn(`No sitemap record for ${args.path}`)
       process.exit(1)
     }
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify(record, null, 2))
       return
     }
@@ -350,20 +331,15 @@ const indexingSnapshotSubCommand = defineCommand({
       default: '4',
       description: 'Concurrent in-flight getMetadata calls (default: 4)',
     },
-    quiet: {
-      type: 'boolean',
-      alias: 'q',
-      default: false,
-      description: 'Suppress progress output',
-    },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
+    const { quiet } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const client = ctx.client!
     const store = ctx.store!
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 4)
-    const quiet = Boolean(args.quiet)
 
     const urls = await readUrlList({ file: args.file ? String(args.file) : undefined })
     if (urls.length === 0) {

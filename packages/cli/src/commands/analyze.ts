@@ -381,12 +381,33 @@ function renderResults(results: Record<string, unknown>[], total: number, format
     logger.info(`Total: ${total} (showing ${results.length})`)
 }
 
+const listCommand = defineCommand({
+  meta: {
+    name: 'list',
+    description: 'List available analyzer ids',
+  },
+  args: {
+    json: { type: 'boolean', default: false, description: 'Output as JSON' },
+  },
+  async run({ args }) {
+    if (args.json) {
+      console.log(JSON.stringify(ANALYSIS_TOOLS, null, 2))
+      return
+    }
+    for (const id of ANALYSIS_TOOLS)
+      console.log(id)
+  },
+})
+
 export const analyzeCommand = defineCommand({
   meta: {
     name: 'analyze',
     description: 'SEO analysis tools',
   },
-  subCommands: Object.fromEntries(
-    ANALYSIS_TOOLS.map((tool: string) => [tool, makeToolCommand(tool)]),
-  ),
+  subCommands: {
+    list: listCommand,
+    ...Object.fromEntries(
+      ANALYSIS_TOOLS.map((tool: string) => [tool, makeToolCommand(tool)]),
+    ),
+  },
 })

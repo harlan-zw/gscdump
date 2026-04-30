@@ -11,6 +11,8 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
 
 // Mock the logger
 vi.mock('../../src/utils', () => ({
+  OUTPUT_ARGS: { json: { type: 'boolean', default: false, description: 'Output as JSON' }, quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' } },
+  applyOutputMode: vi.fn((a: any) => ({ json: Boolean(a?.json), quiet: Boolean(a?.json) || Boolean(a?.quiet) })),
   setQuiet: vi.fn(),
   setNoColor: vi.fn(),
   displayPath: (p: string) => p,

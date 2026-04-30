@@ -1,9 +1,9 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { fetchSitemap } from 'gscdump'
+import { discoverSitemap, fetchSitemap, fetchSitemapUrls } from 'gscdump'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
-import { logger } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 
 const listCommand = defineCommand({
   meta: {
@@ -11,36 +11,18 @@ const listCommand = defineCommand({
     description: 'List sitemaps for a site',
   },
   args: {
-    site: {
-      type: 'string',
-      alias: 's',
-      description: 'Site URL (e.g., sc-domain:example.com or https://example.com/)',
-    },
-    json: {
-      type: 'boolean',
-      default: false,
-      description: 'Output as JSON',
-    },
-    pending: {
-      type: 'boolean',
-      default: false,
-      description: 'Show only sitemaps with isPending=true',
-    },
-    errored: {
-      type: 'boolean',
-      default: false,
-      description: 'Show only sitemaps with errors > 0',
-    },
+    ...OUTPUT_ARGS,
+    site: { type: 'string', alias: 's', description: 'Site URL (e.g., sc-domain:example.com or https://example.com/)' },
+    pending: { type: 'boolean', default: false, description: 'Show only sitemaps with isPending=true' },
+    errored: { type: 'boolean', default: false, description: 'Show only sitemaps with errors > 0' },
   },
   async run({ args }) {
+    const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true })
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const client = ctx.client!
 
-    const raw = await client.sitemaps.list(siteUrl).catch((e: Error) => {
-      logger.error(`Failed to fetch sitemaps: ${e.message}`)
-      process.exit(1)
-    })
+    const raw = await client.sitemaps.list(siteUrl).catch(gscErrorHandler)
 
     let sitemaps = raw.map(sm => ({
       path: sm.path!,
@@ -57,7 +39,7 @@ const listCommand = defineCommand({
     if (args.errored)
       sitemaps = sitemaps.filter(sm => sm.errors > 0)
 
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify(sitemaps, null, 2))
       return
     }
@@ -85,29 +67,18 @@ const getCommand = defineCommand({
     description: 'Get details for a specific sitemap',
   },
   args: {
-    site: {
-      type: 'string',
-      alias: 's',
-      description: 'Site URL (defaults to config.defaultSite or prompt)',
-    },
-    url: {
-      type: 'positional',
-      required: true,
-      description: 'Sitemap URL',
-    },
-    json: {
-      type: 'boolean',
-      default: false,
-      description: 'Output as JSON',
-    },
+    ...OUTPUT_ARGS,
+    site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
+    url: { type: 'positional', required: true, description: 'Sitemap URL' },
   },
   async run({ args }) {
+    const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true })
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const client = ctx.client!
     const sitemap = await fetchSitemap(client, siteUrl, args.url).catch(gscErrorHandler)
 
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify(sitemap, null, 2))
       return
     }
@@ -137,25 +108,20 @@ const submitCommand = defineCommand({
     description: 'Submit a sitemap to GSC',
   },
   args: {
-    site: {
-      type: 'string',
-      alias: 's',
-      description: 'Site URL (defaults to config.defaultSite or prompt)',
-    },
-    url: {
-      type: 'positional',
-      required: true,
-      description: 'Sitemap URL to submit',
-    },
+    ...OUTPUT_ARGS,
+    site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
+    url: { type: 'positional', required: true, description: 'Sitemap URL to submit' },
   },
   async run({ args }) {
+    const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true })
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const client = ctx.client!
-    await client.sitemaps.submit(siteUrl, args.url).catch((e: Error) => {
-      logger.error(`Submit failed: ${e.message}`)
-      process.exit(1)
-    })
+    await client.sitemaps.submit(siteUrl, args.url).catch(gscErrorHandler)
+    if (json) {
+      console.log(JSON.stringify({ siteUrl, feedpath: args.url, status: 'submitted' }, null, 2))
+      return
+    }
     logger.success(`Submitted sitemap: ${args.url}`)
   },
 })
@@ -166,26 +132,74 @@ const deleteCommand = defineCommand({
     description: 'Delete a sitemap from GSC',
   },
   args: {
-    site: {
-      type: 'string',
-      alias: 's',
-      description: 'Site URL (defaults to config.defaultSite or prompt)',
-    },
-    url: {
-      type: 'positional',
-      required: true,
-      description: 'Sitemap URL to delete',
-    },
+    ...OUTPUT_ARGS,
+    site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
+    url: { type: 'positional', required: true, description: 'Sitemap URL to delete' },
   },
   async run({ args }) {
+    const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true })
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const client = ctx.client!
-    await client.sitemaps.delete(siteUrl, args.url).catch((e: Error) => {
-      logger.error(`Delete failed: ${e.message}`)
+    await client.sitemaps.delete(siteUrl, args.url).catch(gscErrorHandler)
+    if (json) {
+      console.log(JSON.stringify({ siteUrl, feedpath: args.url, status: 'deleted' }, null, 2))
+      return
+    }
+    logger.success(`Deleted sitemap: ${args.url}`)
+  },
+})
+
+const discoverCommand = defineCommand({
+  meta: {
+    name: 'discover',
+    description: 'Probe a domain\'s robots.txt + common paths for an advertised sitemap (no auth needed)',
+  },
+  args: {
+    ...OUTPUT_ARGS,
+    domain: { type: 'positional', required: true, description: 'Domain (e.g., example.com)' },
+  },
+  async run({ args }) {
+    const { json } = applyOutputMode(args)
+    const domain = String(args.domain).replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+    const url = await discoverSitemap(domain).catch(() => null)
+    if (json) {
+      console.log(JSON.stringify({ domain, sitemap: url }, null, 2))
+      return
+    }
+    if (!url) {
+      logger.warn(`No sitemap discovered for ${domain}`)
+      process.exit(1)
+    }
+    logger.success(`Discovered sitemap: ${url}`)
+  },
+})
+
+const urlsCommand = defineCommand({
+  meta: {
+    name: 'urls',
+    description: 'Fetch a sitemap (or sitemap index) and dump its <loc> URLs (no auth needed)',
+  },
+  args: {
+    ...OUTPUT_ARGS,
+    'url': { type: 'positional', required: true, description: 'Sitemap URL (index files are followed)' },
+    'limit': { type: 'string', alias: 'l', description: 'Stop after N URLs across all nested sitemaps' },
+    'max-depth': { type: 'string', description: 'Max sitemap-index nesting depth (default: 3)' },
+  },
+  async run({ args }) {
+    const { json } = applyOutputMode(args)
+    const limit = args.limit ? Number.parseInt(String(args.limit), 10) : undefined
+    const maxDepth = args['max-depth'] ? Number.parseInt(String(args['max-depth']), 10) : undefined
+    const urls = await fetchSitemapUrls(String(args.url), { limit, maxDepth }).catch((e: Error) => {
+      logger.error(`Sitemap fetch failed: ${e.message}`)
       process.exit(1)
     })
-    logger.success(`Deleted sitemap: ${args.url}`)
+    if (json) {
+      console.log(JSON.stringify({ sitemap: args.url, count: urls.length, urls }, null, 2))
+      return
+    }
+    for (const u of urls)
+      console.log(u)
   },
 })
 
@@ -199,5 +213,7 @@ export const sitemapsCommand = defineCommand({
     get: getCommand,
     submit: submitCommand,
     delete: deleteCommand,
+    discover: discoverCommand,
+    urls: urlsCommand,
   },
 })

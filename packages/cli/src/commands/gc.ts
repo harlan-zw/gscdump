@@ -2,7 +2,7 @@ import type { TableName } from '../local-store'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
-import { logger, setQuiet } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 
 const DEFAULT_GRACE_HOURS = 24
 
@@ -27,20 +27,10 @@ export const gcCommand = defineCommand({
       default: false,
       description: 'List retired manifest entries past the grace window without deleting',
     },
-    'json': {
-      type: 'boolean',
-      default: false,
-      description: 'Output a JSON summary',
-    },
-    'quiet': {
-      type: 'boolean',
-      alias: 'q',
-      default: false,
-      description: 'Suppress progress output',
-    },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
     const siteId = args.site ? store.siteIdFor(String(args.site)) : undefined
@@ -67,7 +57,7 @@ export const gcCommand = defineCommand({
           }
         }
       }
-      if (args.json) {
+      if (json) {
         console.log(JSON.stringify({ graceHours: Number(args['grace-hours']), candidates }, null, 2))
         return
       }
@@ -84,7 +74,7 @@ export const gcCommand = defineCommand({
       graceMs,
     )
 
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify({ graceHours: Number(args['grace-hours']), deleted: result.deleted }, null, 2))
       return
     }

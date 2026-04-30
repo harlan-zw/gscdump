@@ -62,3 +62,26 @@ export async function listVerifiedSites(
 ): Promise<VerificationWebResource[]> {
   return client.verification.list()
 }
+
+/**
+ * Fetch a single verified WebResource by id.
+ */
+export async function getVerifiedSite(
+  client: GoogleSearchConsoleClient,
+  id: string,
+): Promise<VerificationWebResource> {
+  return client.verification.get(id)
+}
+
+/**
+ * Drop the calling user's verified ownership of a WebResource. The placed
+ * verification token (meta tag / file / DNS record) MUST be removed first,
+ * otherwise Google may auto-re-verify and the call will fail. Other owners
+ * on the property are unaffected.
+ */
+export async function unverifySite(
+  client: GoogleSearchConsoleClient,
+  id: string,
+): Promise<void> {
+  return client.verification.delete(id)
+}

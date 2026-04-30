@@ -3,7 +3,7 @@ import { inferLegacyTier } from '@gscdump/engine'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
-import { logger, setQuiet } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 
 export const compactCommand = defineCommand({
   meta: {
@@ -33,20 +33,10 @@ export const compactCommand = defineCommand({
       default: false,
       description: 'Report tier counts per (table, site) without compacting',
     },
-    'json': {
-      type: 'boolean',
-      default: false,
-      description: 'Output a JSON summary',
-    },
-    'quiet': {
-      type: 'boolean',
-      alias: 'q',
-      default: false,
-      description: 'Suppress progress output',
-    },
+    ...OUTPUT_ARGS,
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
     const siteId = args.site ? store.siteIdFor(String(args.site)) : undefined
@@ -71,7 +61,7 @@ export const compactCommand = defineCommand({
         for (const [s, group] of bySite)
           report.push({ table, siteId: s, ...countByTier(group) })
       }
-      if (args.json) {
+      if (json) {
         console.log(JSON.stringify({ thresholds, plan: report }, null, 2))
         return
       }
@@ -103,7 +93,7 @@ export const compactCommand = defineCommand({
       }
     }
 
-    if (args.json) {
+    if (json) {
       console.log(JSON.stringify({ thresholds, compacted: summary }, null, 2))
       return
     }

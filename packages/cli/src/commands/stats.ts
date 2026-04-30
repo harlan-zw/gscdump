@@ -4,7 +4,7 @@ import { filesystemStats } from '@gscdump/engine/filesystem'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
-import { displayPath, formatAge, logger, setQuiet } from '../utils'
+import { applyOutputMode, displayPath, formatAge, logger, OUTPUT_ARGS } from '../utils'
 
 export const statsCommand = defineCommand({
   meta: {
@@ -12,24 +12,14 @@ export const statsCommand = defineCommand({
     description: 'Show row/byte counts per table and on-disk footprint',
   },
   args: {
-    json: {
-      type: 'boolean',
-      default: false,
-      description: 'Output as JSON',
-    },
+    ...OUTPUT_ARGS,
     site: {
       type: 'string',
       description: 'Limit to one site URL (sc-domain:example.com, https://example.com/, ...)',
     },
-    quiet: {
-      type: 'boolean',
-      alias: 'q',
-      default: false,
-      description: 'Suppress info/success output',
-    },
   },
   async run({ args }) {
-    setQuiet(Boolean(args.quiet) || Boolean(args.json))
+    const { json } = applyOutputMode(args)
     // Validate --site against the set of sites with local data so a typo
     // surfaces an error instead of silently showing zero.
     const ctx = await createCommandContext({ needsStore: true })
@@ -60,7 +50,7 @@ export const statsCommand = defineCommand({
     const watermarks = await store.engine.getWatermarks({ userId: store.userId, siteId })
     const disk = await filesystemStats(store.dataDir).catch(() => ({ files: 0, bytes: 0 }))
 
-    if (args.json) {
+    if (json) {
       const payload = {
         dataDir: store.dataDir,
         disk,
