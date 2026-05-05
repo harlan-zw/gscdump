@@ -7,6 +7,7 @@ import type {
   ExtraResult,
   GcCtx,
   ManifestEntry,
+  OptimizedQueryResult,
   PurgeResult,
   PurgeUrlsResult,
   QueryCtx,
@@ -23,7 +24,7 @@ import { buildLogicalPlan } from 'gscdump/query/plan'
 import { compactTieredImpl, enumeratePartitions } from './compaction'
 import { compileLogicalQueryPlan } from './compiler'
 import { gcOrphansImpl } from './gc'
-import { buildExtrasQueries, buildTotalsSql, resolveComparisonSQL } from './resolver/compiler'
+import { buildExtrasQueries, buildTotalsSql, resolveComparisonSQL, resolveToSQLOptimized } from './resolver/compiler'
 import { createParquetResolverAdapter } from './resolver/pg-adapter'
 import { currentSchemaVersion, SCHEMAS } from './schema'
 import { dayPartition, inferSearchType, objectKey, tenantPrefix } from './storage'
@@ -240,6 +241,45 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     }
   }
 
+  async function queryOptimized(ctx: QueryCtx, state: BuilderState): Promise<OptimizedQueryResult> {
+    const adapter = createParquetResolverAdapter()
+    const plan = buildLogicalPlan(state, adapter.capabilities)
+    const table: TableName = ctx.table ?? plan.dataset
+    const partitions = enumeratePartitions(plan.dateRange.startDate, plan.dateRange.endDate)
+    const { sql, params } = resolveToSQLOptimized(state, { adapter, siteId: undefined })
+
+    const result = await runSQL({
+      ctx: { userId: ctx.userId, siteId: ctx.siteId },
+      table,
+      fileSets: { FILES: { table, partitions } },
+      sql,
+      params,
+      signal: ctx.signal,
+    })
+
+    const firstRow = result.rows[0] as Record<string, unknown> | undefined
+    const totalCount = Number(firstRow?.totalCount ?? 0)
+    const totals = {
+      clicks: Number(firstRow?.totalClicks ?? 0),
+      impressions: Number(firstRow?.totalImpressions ?? 0),
+      ctr: Number(firstRow?.totalCtr ?? 0),
+      position: Number(firstRow?.totalPosition ?? 0),
+    }
+    const rows = result.rows.map((r) => {
+      const {
+        totalCount: _tc,
+        totalClicks: _tcl,
+        totalImpressions: _ti,
+        totalCtr: _tr,
+        totalPosition: _tp,
+        ...rest
+      } = r as Record<string, unknown>
+      return rest as Row
+    })
+
+    return { rows, totalCount, totals }
+  }
+
   async function queryExtras(ctx: QueryCtx, state: BuilderState): Promise<ExtraResult[]> {
     const adapter = createParquetResolverAdapter()
     const extras = buildExtrasQueries(state, { adapter, siteId: undefined })
@@ -380,6 +420,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     query,
     queryComparison,
     queryExtras,
+    queryOptimized,
     runSQL,
     compactTiered,
     gcOrphans,

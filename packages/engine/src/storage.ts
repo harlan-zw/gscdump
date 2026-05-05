@@ -353,6 +353,17 @@ export interface ExtraResult {
   rows: Row[]
 }
 
+export interface OptimizedQueryResult {
+  rows: Row[]
+  totalCount: number
+  totals: {
+    clicks: number
+    impressions: number
+    ctr: number
+    position: number
+  }
+}
+
 export interface QueryExecuteOptions {
   sql: string
   params: unknown[]
@@ -456,6 +467,16 @@ export interface StorageEngine {
    * when the state has no extras-eligible dimensions.
    */
   queryExtras: (ctx: QueryCtx, state: BuilderState) => Promise<ExtraResult[]>
+  /**
+   * Single-scan variant of {@link query} that piggy-backs `totalCount` and
+   * unfiltered metric totals onto the dimensioned result via window functions.
+   * Replaces the host-side rows + totals + count fan-out with one DuckDB
+   * execution. Window-function output columns (`totalCount`, `totalClicks`,
+   * `totalImpressions`, `totalCtr`, `totalPosition`) are stripped from `rows`
+   * before return; missing per-metric totals (when the metric was not
+   * requested in `state.metrics`) default to 0.
+   */
+  queryOptimized: (ctx: QueryCtx, state: BuilderState) => Promise<OptimizedQueryResult>
   /**
    * Run arbitrary SQL resolved against named partition sets. Composes
    * manifest lookup + object reads + placeholder substitution + execution

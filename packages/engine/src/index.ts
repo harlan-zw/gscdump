@@ -49,6 +49,7 @@ export type {
   ManifestEntry,
   ManifestPurgeResult,
   ManifestStore,
+  OptimizedQueryResult,
   ParquetCodec,
   PurgeFilter,
   PurgeResult,
