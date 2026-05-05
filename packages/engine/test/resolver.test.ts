@@ -1,7 +1,7 @@
 import type { BuilderState } from 'gscdump/query'
 import { describe, expect, it } from 'vitest'
 import { FILES_PLACEHOLDER, resolveToSQL, substituteNamedFiles } from '../src/index'
-import { resolveToSQL as resolverResolveToSQL } from '../src/resolver/compiler'
+import { resolveToSQL as resolverResolveToSQL, resolveToSQLOptimized } from '../src/resolver/compiler'
 import { createParquetResolverAdapter, pgResolverAdapter } from '../src/resolver/pg-adapter'
 
 function state(partial: Partial<BuilderState>): BuilderState {
@@ -140,5 +140,34 @@ describe('createParquetResolverAdapter', () => {
 
   it('produces a fresh adapter instance per call (no caching)', () => {
     expect(createParquetResolverAdapter()).not.toBe(createParquetResolverAdapter())
+  })
+})
+
+describe('resolveToSQLOptimized SUM casts', () => {
+  // Regression guard: DuckDB returns SUM() over INTEGER as HUGEINT which fails
+  // to serialize through the DUCKDB_SVC service binding (returns null on the
+  // host side). Every metric SUM in the optimized SQL must be wrapped in a
+  // CAST so DuckDB returns DOUBLE instead.
+  it('cTE SUM(clicks)/SUM(impressions)/SUM(sum_position) projections are CAST AS DOUBLE', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolveToSQLOptimized(state({
+      metrics: ['clicks', 'impressions', 'ctr', 'position'],
+    }), { adapter })
+    expect(r.sql).toMatch(/CAST\(SUM\("pages"\."clicks"\) AS DOUBLE\)\s+as\s+clicks/)
+    expect(r.sql).toMatch(/CAST\(SUM\("pages"\."impressions"\) AS DOUBLE\)\s+as\s+impressions/)
+    expect(r.sql).toMatch(/CAST\(SUM\("pages"\."sum_position"\) AS DOUBLE\)\s+as\s+sum_position/)
+  })
+
+  it('outer totalClicks / totalImpressions window SUMs are CAST AS DOUBLE (not bare HUGEINT)', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolveToSQLOptimized(state({
+      metrics: ['clicks', 'impressions'],
+    }), { adapter })
+    expect(r.sql).toContain('CAST(SUM(clicks) OVER() AS DOUBLE) as totalClicks')
+    expect(r.sql).toContain('CAST(SUM(impressions) OVER() AS DOUBLE) as totalImpressions')
+    // Negative guard: a bare `SUM(clicks) OVER()` projection would serialize
+    // as null through the DUCKDB_SVC binding.
+    expect(r.sql).not.toMatch(/(?<!CAST\()SUM\(clicks\) OVER\(\) as totalClicks/)
+    expect(r.sql).not.toMatch(/(?<!CAST\()SUM\(impressions\) OVER\(\) as totalImpressions/)
   })
 })

@@ -240,9 +240,12 @@ export function resolveToSQLOptimized<TK extends string>(
   if (hasDate)
     cteSelect.push(adapter.dateColRef(tableKey))
   const t = schema[tableKey]!
-  cteSelect.push(sql`SUM(${t.clicks}) as clicks`)
-  cteSelect.push(sql`SUM(${t.impressions}) as impressions`)
-  cteSelect.push(sql`SUM(${t.sum_position}) as sum_position`)
+  // CAST AS DOUBLE: DuckDB returns SUM() over INTEGER as HUGEINT which fails to
+  // serialize through the DUCKDB_SVC service binding (comes back as null).
+  // Harmless on SQLite (becomes REAL semantically).
+  cteSelect.push(sql`CAST(SUM(${t.clicks}) AS DOUBLE) as clicks`)
+  cteSelect.push(sql`CAST(SUM(${t.impressions}) AS DOUBLE) as impressions`)
+  cteSelect.push(sql`CAST(SUM(${t.sum_position}) AS DOUBLE) as sum_position`)
 
   const groupByExprs: SQL[] = groupByDims.map(d => adapter.dimExprSql(d, tableKey))
   if (hasDate)
@@ -257,11 +260,11 @@ export function resolveToSQLOptimized<TK extends string>(
     switch (m) {
       case 'clicks':
         outerSelect.push(sql.raw('clicks'))
-        outerTotals.push(sql.raw('SUM(clicks) OVER() as totalClicks'))
+        outerTotals.push(sql.raw('CAST(SUM(clicks) OVER() AS DOUBLE) as totalClicks'))
         break
       case 'impressions':
         outerSelect.push(sql.raw('impressions'))
-        outerTotals.push(sql.raw('SUM(impressions) OVER() as totalImpressions'))
+        outerTotals.push(sql.raw('CAST(SUM(impressions) OVER() AS DOUBLE) as totalImpressions'))
         break
       case 'ctr':
         outerSelect.push(sql.raw('CAST(clicks AS REAL) / NULLIF(impressions, 0) as ctr'))
