@@ -1,17 +1,68 @@
 import type {
-  ActionPriorityAnalyzer,
   ActionPrioritySourceState,
   ActionSource,
   AnalysisParams,
   AnalysisResult,
+  AnalysisTool,
   Effort,
   PriorityAction,
 } from '@gscdump/analysis'
 
-import { analyzeActionPriority } from '@gscdump/analysis'
+import {
+  mergePriorityActions,
+  normalizePriorityActions,
+  scorePriorityActions,
+} from '@gscdump/analysis'
 
 interface AnalysisRunner {
   analyze: (params: AnalysisParams) => Promise<AnalysisResult>
+}
+
+interface ActionPriorityAnalyzer {
+  analyze: (params: AnalysisParams) => Promise<AnalysisResult>
+}
+
+interface ActionPriorityResult {
+  actions: PriorityAction[]
+  totalSignals: number
+}
+
+async function analyzeActionPriority(
+  analyzer: ActionPriorityAnalyzer,
+  options: {
+    sources: ActionSource[]
+    limit?: number
+    onSourceStatus?: (state: ActionPrioritySourceState) => void
+  },
+): Promise<ActionPriorityResult> {
+  const { sources, limit = 40, onSourceStatus } = options
+  const counts = new Map<ActionSource, number>()
+  for (const source of sources) {
+    counts.set(source, 0)
+    onSourceStatus?.({ source, status: 'pending', count: 0 })
+  }
+
+  const runOne = (source: ActionSource): Promise<PriorityAction[]> => {
+    onSourceStatus?.({ source, status: 'running', count: 0 })
+    const params = { type: source as AnalysisTool } as AnalysisParams
+    return analyzer.analyze(params).then((result) => {
+      const normalized = normalizePriorityActions(source, result)
+      onSourceStatus?.({
+        source,
+        status: normalized.length === 0 ? 'skipped' : 'done',
+        count: normalized.length,
+      })
+      return normalized
+    }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      onSourceStatus?.({ source, status: 'error', count: 0, error: message })
+      return []
+    })
+  }
+
+  const all = (await Promise.all(sources.map(runOne))).flat()
+  const actions = scorePriorityActions(mergePriorityActions(all)).slice(0, limit)
+  return { actions, totalSignals: all.length }
 }
 
 export type { ActionSource, Effort, PriorityAction }

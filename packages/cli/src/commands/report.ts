@@ -55,7 +55,7 @@ function resolveComparison(input: string | undefined, fallback: ComparisonMode):
   return mode
 }
 
-function reportArgsToCitty(spec: ReportArgsSpec) {
+function reportArgsToCitty(spec: ReportArgsSpec): Record<string, { type: 'string' | 'boolean', description?: string, default?: unknown, alias?: string, required?: boolean }> {
   // citty doesn't support type: 'number' — numeric flags must be declared as
   // 'string' and coerced later. Otherwise citty silently drops every arg.
   const out: Record<string, { type: 'string' | 'boolean', description?: string, default?: unknown, alias?: string, required?: boolean }> = {}

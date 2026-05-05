@@ -113,7 +113,7 @@ function buildMigrationSection(
   kind: ResolveTargetKind,
   matches: (val: string) => boolean,
   max: number,
-  rawTarget: string,
+  _rawTarget: string,
 ): ReportSection {
   const rows = ((res?.results ?? []) as unknown as MigrationRow[])
     // For pages, match either side of the migration; query-mode this section

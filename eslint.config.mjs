@@ -7,7 +7,7 @@ import antfu from '@antfu/eslint-config'
 //   analysis            → gscdump, engine, engine-wasm, engine-sqlite, engine-duckdb-node
 //   engine-duckdb-node  → gscdump, engine, analysis (analyzer/query/source subpaths)
 //   cloud               → gscdump, analysis (type-only — `AnalysisParams`, `AnalysisResult`)
-//   mcp                 → gscdump
+//   mcp                 → gscdump, engine, engine-gsc-api, analysis
 //   cli                 → gscdump, engine, engine-duckdb-node, analysis, mcp
 function forbidSiblings(...siblings) {
   return {
@@ -173,7 +173,7 @@ export default antfu({
     'no-restricted-imports': ['error', {
       paths: preferGranularCoreSubpaths.paths,
       patterns: [
-        ...forbidSiblings('cli', 'cloud', 'analysis', 'engine', 'engine-wasm', 'engine-sqlite', 'engine-duckdb-node').patterns,
+        ...forbidSiblings('cli', 'cloud', 'engine-wasm', 'engine-sqlite', 'engine-duckdb-node').patterns,
         ...preferGranularCoreSubpaths.patterns,
       ],
     }],

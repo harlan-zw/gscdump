@@ -178,7 +178,7 @@ export async function resolveAnalysisSource(
       engine: store.engine,
       ctx: { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
     })
-    const runAnalysis = (params: AnalysisParams) =>
+    const runAnalysis = (params: AnalysisParams): Promise<AnalysisResult> =>
       analyzeFromSource(source, params, defaultAnalyzerRegistry).catch((e: Error) => {
         if (e instanceof AnalyzerCapabilityError) {
           logger.error(`${new LocalStoreUnsupportedError(params.type).message}. Pass --live to run against the GSC API.`)
@@ -193,7 +193,7 @@ export async function resolveAnalysisSource(
   const ctx = await createCommandContext({ needsAuth: true, needsStore: false })
   const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
   const source = createGscApiQuerySource({ client: ctx.client!, siteUrl })
-  const runAnalysis = (params: AnalysisParams) =>
+  const runAnalysis = (params: AnalysisParams): Promise<AnalysisResult> =>
     analyzeFromSource(source, params, defaultAnalyzerRegistry).catch((e: Error) => {
       if (e instanceof AnalyzerCapabilityError)
         throw new LocalStoreUnsupportedError(params.type)
