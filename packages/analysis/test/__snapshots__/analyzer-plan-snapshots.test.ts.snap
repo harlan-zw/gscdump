@@ -3170,8 +3170,7 @@ exports[`analyzer plan snapshots > sql plan: keyword-breadth 1`] = `
       FROM per_page
     )
     SELECT
-      (SELECT to_json(list({ 'bucket': bucket, 'pageCount': pageCount, 'sortKey': sort_key })
-        ORDER BY sort_key ASC) FROM bucketed) AS distribution_json,
+      (SELECT to_json(list({ 'bucket': bucket, 'pageCount': pageCount, 'sortKey': sort_key })) FROM bucketed) AS distribution_json,
       (SELECT to_json(list({ 'url': url, 'keywordCount': keywordCount, 'clicks': clicks, 'impressions': impressions })) FROM fragile) AS fragile_json,
       (SELECT to_json(list({ 'url': url, 'keywordCount': keywordCount, 'clicks': clicks, 'impressions': impressions })) FROM authority) AS authority_json,
       (SELECT to_json({

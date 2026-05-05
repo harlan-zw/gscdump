@@ -363,6 +363,13 @@ export interface QueryExecuteOptions {
    * `dataSource.uri` is available.
    */
   fileKeys: Record<string, string[]>
+  /**
+   * Per-placeholder table identity. Used by the executor to emit a
+   * schema-correct empty fallback when a named file set is empty: an
+   * `extraFiles` placeholder against `page_keywords` should fall back to
+   * the page_keywords schema, not the analyzer's primary `table`.
+   */
+  placeholderTables?: Record<string, TableName>
   dataSource: DataSource
   table: TableName
   signal?: AbortSignal

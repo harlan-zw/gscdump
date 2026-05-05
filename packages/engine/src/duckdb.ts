@@ -182,13 +182,15 @@ export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
 function rewriteEmptyFileSets(
   sql: string,
   placeholders: Record<string, string[]>,
-  table: TableName,
+  defaultTable: TableName,
+  placeholderTables?: Record<string, TableName>,
 ): string {
-  const emptyFallback = `(SELECT * FROM ${emptyTableSchema(table)} WHERE FALSE)`
   let out = sql
   for (const [name, keys] of Object.entries(placeholders)) {
     if (keys.length > 0)
       continue
+    const tableForName = placeholderTables?.[name] ?? defaultTable
+    const emptyFallback = `(SELECT * FROM ${emptyTableSchema(tableForName)} WHERE FALSE)`
     const pattern = new RegExp(
       `read_parquet\\(\\s*\\{\\{${name}\\}\\}\\s*(?:,\\s*union_by_name\\s*=\\s*true\\s*)?\\)`,
       'g',
@@ -200,7 +202,7 @@ function rewriteEmptyFileSets(
 
 export function createDuckDBExecutor(factory: DuckDBFactory): QueryExecutor {
   return {
-    async execute({ sql, params, fileKeys, dataSource, table, signal }) {
+    async execute({ sql, params, fileKeys, placeholderTables, dataSource, table, signal }) {
       signal?.throwIfAborted()
       const db = await factory.getDuckDB()
 
@@ -226,7 +228,7 @@ export function createDuckDBExecutor(factory: DuckDBFactory): QueryExecutor {
 
       try {
         signal?.throwIfAborted()
-        const rewritten = rewriteEmptyFileSets(sql, placeholders, table)
+        const rewritten = rewriteEmptyFileSets(sql, placeholders, table, placeholderTables)
         const finalSql = substituteNamedFiles(rewritten, placeholders)
         const rows = await db.query(finalSql, params)
         return { rows, sql: finalSql }

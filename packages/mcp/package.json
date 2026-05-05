@@ -47,6 +47,9 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
+    "@gscdump/analysis": "workspace:*",
+    "@gscdump/engine": "workspace:*",
+    "@gscdump/engine-gsc-api": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
     "consola": "catalog:deps",
     "gscdump": "workspace:*",

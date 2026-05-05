@@ -100,6 +100,21 @@ export const batchInspectUrlsInput = z.object({
   delayMs: z.number().optional().describe('Delay between requests in ms (default 200)'),
 })
 
+// Reports
+export const listReportsInput = z.object({})
+
+export const runReportInput = z.object({
+  siteUrl: siteUrlSchema,
+  id: z.string().describe('Report id (e.g. health, movers, opportunities, risks). See list-reports.'),
+  period: z.string().optional().describe('Window: 7d|28d|30d|90d|180d|365d|mtd|ytd|custom (default per report).'),
+  comparison: z.string().optional().describe('Comparison: none|prev-period|yoy (default per report).'),
+  start: z.string().optional().describe('Custom window start (YYYY-MM-DD); requires period=custom.'),
+  end: z.string().optional().describe('Custom window end (YYYY-MM-DD); requires period=custom.'),
+  prevStart: z.string().optional().describe('Override comparison-window start.'),
+  prevEnd: z.string().optional().describe('Override comparison-window end.'),
+  maxFindings: z.number().optional().describe('Cap findings per section (per-report default ~5).'),
+})
+
 // Helper to convert zod period to gscdump Period
 export function toPeriod(input: z.infer<typeof periodSchema>): Period {
   return { start: input.start, end: input.end }

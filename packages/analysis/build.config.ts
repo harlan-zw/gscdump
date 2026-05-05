@@ -41,5 +41,10 @@ export default defineBuildConfig({
       input: ['./src/rollups.ts'],
       outDir: './dist',
     },
+    {
+      type: 'bundle',
+      input: ['./src/report/index.ts'],
+      outDir: './dist',
+    },
   ],
 })

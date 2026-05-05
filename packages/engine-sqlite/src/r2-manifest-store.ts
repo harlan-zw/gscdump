@@ -110,22 +110,36 @@ function tierMatchCond(target: CompactionTier): ReturnType<typeof or> | ReturnTy
 
 export function createD1ManifestStore(db: AnalyticsManifestDb): ManifestStore {
   async function listByFilter(filter: ListLiveFilter, liveOnly: boolean): Promise<ManifestEntry[]> {
-    const conds = [eq(r2Manifest.userId, Number(filter.userId))]
+    const baseConds = [eq(r2Manifest.userId, Number(filter.userId))]
     if (liveOnly)
-      conds.push(isNull(r2Manifest.retiredAt))
+      baseConds.push(isNull(r2Manifest.retiredAt))
     if (filter.siteId !== undefined)
-      conds.push(eq(r2Manifest.siteId, filter.siteId))
+      baseConds.push(eq(r2Manifest.siteId, filter.siteId))
     if (filter.table !== undefined)
-      conds.push(eq(r2Manifest.table, filter.table))
-    if (filter.partitions && filter.partitions.length > 0)
-      conds.push(inArray(r2Manifest.partition, filter.partitions))
+      baseConds.push(eq(r2Manifest.table, filter.table))
     if (filter.tier !== undefined) {
       const cond = tierMatchCond(filter.tier)
       if (cond)
-        conds.push(cond)
+        baseConds.push(cond)
     }
 
-    const rows = await db.select().from(r2Manifest).where(and(...conds))
+    // D1 has a 100-bound-param-per-query limit. Chunk partition IN-clauses
+    // (each value is one bound param) to stay safely under that ceiling
+    // while leaving headroom for the other conditions above. A multi-month
+    // date range expands to 200+ partitions across daily/weekly/monthly/quarterly tiers.
+    const PARTITION_CHUNK = 80
+    if (filter.partitions && filter.partitions.length > 0) {
+      const out: ManifestEntry[] = []
+      for (let i = 0; i < filter.partitions.length; i += PARTITION_CHUNK) {
+        const slice = filter.partitions.slice(i, i + PARTITION_CHUNK)
+        const conds = [...baseConds, inArray(r2Manifest.partition, slice)]
+        const rows = await db.select().from(r2Manifest).where(and(...conds))
+        for (const r of rows) out.push(fromRow(r))
+      }
+      return out
+    }
+
+    const rows = await db.select().from(r2Manifest).where(and(...baseConds))
     return rows.map(fromRow)
   }
 

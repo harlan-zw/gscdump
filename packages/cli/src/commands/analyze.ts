@@ -1,11 +1,8 @@
 import type { AnalysisParams } from '@gscdump/analysis'
 import type { CommandDef } from 'citty'
-import process from 'node:process'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { defineCommand } from 'citty'
-import { hasLocalData, LocalStoreEmptyError, LocalStoreUnsupportedError, runLiveAnalysis, runLocalAnalysis } from '../analysis-local'
-import { createCommandContext } from '../context'
-import { gscErrorHandler } from '../error-handler'
+import { resolveAnalysisSource } from '../analysis-local'
 import { logger, toCSV } from '../utils'
 
 const ANALYSIS_TOOLS = defaultAnalyzerRegistry.listAnalyzerIds()
@@ -90,48 +87,17 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       ...extraArgs,
     },
     async run({ args }) {
-      const ctx = await createCommandContext({
-        needsAuth: true,
-        needsStore: !args.live,
+      const { format, runAnalysis } = await resolveAnalysisSource({
+        site: args.site,
+        live: !!args.live,
+        json: !!args.json,
+        format: args.format,
       })
-      const siteUrl = await ctx.resolveSite(args.site)
 
       logger.info(`Running ${tool} analysis...`)
 
       const params = buildParams(tool, args)
-      const format = args.json ? 'json' : String(args.format)
-
-      // Default: run against the local Parquet store (authoritative when present).
-      // Pass --live to opt into the GSC API directly.
-      if (!args.live) {
-        const store = ctx.store!
-        const localAvailable = await hasLocalData(store, siteUrl).catch(() => false)
-        if (!localAvailable) {
-          logger.error(`No local data for ${siteUrl}. Run \`gscdump sync\` first, or pass --live.`)
-          process.exit(1)
-        }
-        const localResult = await runLocalAnalysis(store, siteUrl, params).catch((e: Error) => {
-          if (e instanceof LocalStoreUnsupportedError) {
-            logger.error(`${e.message}. Pass --live to run against the GSC API.`)
-            process.exit(1)
-          }
-          if (e instanceof LocalStoreEmptyError) {
-            logger.error(`${e.message}`)
-            process.exit(1)
-          }
-          logger.error(`Local analysis failed: ${e.message}`)
-          process.exit(1)
-        })
-        if (format === 'json') {
-          console.log(JSON.stringify(localResult, null, 2))
-          return
-        }
-        renderResults(localResult.results, localResult.results.length, format)
-        return
-      }
-
-      // Live mode: query the Google API directly
-      const result = await runLiveAnalysis(ctx.client!, siteUrl, params).catch(gscErrorHandler)
+      const result = await runAnalysis(params)
 
       if (format === 'json') {
         console.log(JSON.stringify(result, null, 2))

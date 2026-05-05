@@ -101,6 +101,11 @@
       "import": "./dist/analyzer/index.mjs",
       "default": "./dist/analyzer/index.mjs"
     },
+    "./report": {
+      "types": "./dist/report/index.d.mts",
+      "import": "./dist/report/index.mjs",
+      "default": "./dist/report/index.mjs"
+    },
     "./analysis-types": {
       "types": "./dist/analysis-types.d.mts",
       "import": "./dist/analysis-types.mjs",

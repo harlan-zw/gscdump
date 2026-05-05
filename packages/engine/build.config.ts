@@ -21,6 +21,7 @@ export default defineBuildConfig({
         './src/entities.ts',
         './src/resolver/index.ts',
         './src/analyzer/index.ts',
+        './src/report/index.ts',
         './src/analysis-types.ts',
         './src/period/index.ts',
         './src/source/index.ts',

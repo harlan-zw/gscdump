@@ -1,7 +1,9 @@
+// `analyzeActionPriority` / `analyzeActionPriorityFromSource` were removed;
+// callers should `runReport({ id: 'priority' })` from `@gscdump/analysis/report`.
+// Domain types + scoring helpers stay public for advanced consumers
+// reimplementing the composition.
 export type {
-  ActionPriorityAnalyzer,
   ActionPriorityResult,
-  ActionPriorityRunOptions,
   ActionPrioritySourceState,
   ActionPrioritySourceStatus,
   ActionSource,
@@ -9,8 +11,7 @@ export type {
   PriorityAction,
 } from './action-priority'
 export {
-  analyzeActionPriority,
-  analyzeActionPriorityFromSource,
+  DEFAULT_PRIORITY_SOURCES,
   mergePriorityActions,
   normalizePriorityActions,
   scorePriorityActions,
@@ -60,6 +61,21 @@ export type { AnalyzerRunner, BrowserAnalyzeOptions } from './browser'
 export { defaultAnalyzerRegistry } from './default-registry'
 
 export { normalizeQuery } from './query/normalize'
+// Reports — public surface. `defineReport` lives at `@gscdump/engine/report`
+// so the contract is readable without pulling the runtime in.
+export {
+  defaultReportRegistry,
+  dryRunReport,
+  formatReport,
+  REPORTS,
+  runReport,
+} from './report'
+
+export type {
+  DryRunReportResult,
+  FormatReportOptions,
+  RunReportOptions,
+} from './report'
 // Source-based analyzer entrypoints
 export type {
   ComparisonQueryResult,
@@ -85,18 +101,18 @@ export {
   queryAnalyticsFromSource,
   queryComparisonFromSource,
 } from './source'
+
 export type {
   CompositeSourceOptions,
   InMemoryQuerySourceOptions,
 } from './source'
-
 export { SQL_ANALYZERS } from './sql-analyzers'
-
 export type {
   StrikingDistanceOptions,
   StrikingDistanceResult,
   StrikingDistanceSortMetric,
 } from './striking-distance'
+
 export { analyzeStrikingDistance } from './striking-distance'
 // Domain row shapes + utilities
 export type {
@@ -109,6 +125,7 @@ export type {
 } from './types'
 
 export { createSorter } from './types'
+
 // Analyzer call contracts
 export type {
   AnalysisParams,
@@ -132,7 +149,6 @@ export type {
   SqlPlan,
   TypedRowQuery,
 } from '@gscdump/engine/analyzer'
-
 export {
   AnalyzerCapabilityError,
   createAnalyzerRegistry,
@@ -147,6 +163,7 @@ export type {
   Reducer,
   SqlPlanSpec,
 } from '@gscdump/engine/analyzer'
+
 // Period helpers
 export type {
   AnalysisPeriod,
@@ -157,7 +174,6 @@ export type {
   ResolveWindowOptions,
   WindowPreset,
 } from '@gscdump/engine/period'
-
 export {
   comparisonOf,
   padTimeseries,
@@ -167,6 +183,16 @@ export {
   windowToPeriod,
 } from '@gscdump/engine/period'
 
+export type {
+  DefinedReport,
+  DefineReportOptions,
+  ReportAction,
+  ReportContext,
+  ReportFinding,
+  ReportPlanStep,
+  ReportResult,
+  ReportSection,
+} from '@gscdump/engine/report'
 // Source contracts (resolver-owned)
 export type {
   AnalysisQuerySource,
@@ -177,8 +203,8 @@ export type {
   SourceCapabilities,
   SqlQuerySource,
 } from '@gscdump/engine/resolver'
-export { isSqlQuerySource } from '@gscdump/engine/resolver'
 
+export { isSqlQuerySource } from '@gscdump/engine/resolver'
 // Engine-backed source + typed-query helpers
 export type {
   EngineQuerySourceOptions,

@@ -14,6 +14,7 @@ import { inspectCommand } from './commands/inspect'
 import { mcpCommand } from './commands/mcp'
 import { applyProfileFromCli, profileCommand } from './commands/profile'
 import { queryCommand } from './commands/query'
+import { reportCommand } from './commands/report'
 import { sitemapsCommand } from './commands/sitemaps'
 import { sitesCommand } from './commands/sites'
 import { storeCommand } from './commands/store'
@@ -100,6 +101,7 @@ const main = defineCommand({
     indexing: indexingCommand,
     entities: entitiesCommand,
     analyze: analyzeCommand,
+    report: reportCommand,
     auth: authCommand,
     config: configCommand,
     profile: profileCommand,

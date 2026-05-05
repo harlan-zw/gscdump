@@ -49,14 +49,24 @@ const movers = analyzeMovers(currentRows, previousRows)
 const decay = analyzeDecay(currentRows, previousRows)
 ```
 
-Meta-analysis helpers are available too:
+Meta-analyses live in the report layer. Run a composed, ranked priority list via `runReport`:
 
 ```ts
-import { analyzeActionPriority } from '@gscdump/analysis'
+import {
+  defaultAnalyzerRegistry,
+  defaultReportRegistry,
+  runReport,
+} from '@gscdump/analysis'
+import { resolveWindow } from '@gscdump/engine/period'
 
-const prioritized = await analyzeActionPriority({
-  analyze: params => runner.analyze(params),
+const report = defaultReportRegistry.getReport('priority')!
+const window = resolveWindow({ preset: 'last-28d', comparison: 'prev-period' })
+const result = await runReport(report, {
+  source,
+  analyzers: defaultAnalyzerRegistry,
+  ctx: { site: siteUrl, window, params: {}, registryVersion: defaultReportRegistry.version },
 })
+// result.sections[0].findings — ranked priority actions, page+query keyed.
 ```
 
 Source adapters compose a GSC client + analyzer in one call:

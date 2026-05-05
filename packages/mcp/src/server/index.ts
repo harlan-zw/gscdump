@@ -19,12 +19,13 @@ import * as handlers from '../handlers'
 import {
   batchInspectUrlsInput,
   batchRequestIndexingInput,
-  fetchAnalyticsInput,
   getIndexingStatusInput,
   inspectUrlInput,
+  listReportsInput,
   listSitemapsInput,
   listSitesInput,
   requestIndexingInput,
+  runReportInput,
   sitemapInput,
 } from '../types'
 
@@ -131,49 +132,25 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
   )
 
   server.registerTool(
-    'fetch-pages',
+    'list-reports',
     {
-      description: 'Fetch page analytics data for a site',
-      inputSchema: fetchAnalyticsInput.shape,
+      description: 'List available reports (intent-keyed analyzer compositions). Returns id, description, default period/comparison, and per-report argsSpec.',
+      inputSchema: listReportsInput.shape,
     },
-    async (args) => {
-      const result = await handlers.fetchPages(args, await getContext())
+    async () => {
+      const result = handlers.listReports()
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
 
   server.registerTool(
-    'fetch-keywords',
+    'run-report',
     {
-      description: 'Fetch keyword/query analytics data for a site',
-      inputSchema: fetchAnalyticsInput.shape,
+      description: 'Run a report against the GSC API. Returns a structured ReportResult with bounded findings per section. See list-reports for ids.',
+      inputSchema: runReportInput.shape,
     },
     async (args) => {
-      const result = await handlers.fetchKeywords(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'fetch-countries',
-    {
-      description: 'Fetch country analytics data for a site',
-      inputSchema: fetchAnalyticsInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchCountries(args, await getContext())
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
-    },
-  )
-
-  server.registerTool(
-    'fetch-devices',
-    {
-      description: 'Fetch device analytics data for a site',
-      inputSchema: fetchAnalyticsInput.shape,
-    },
-    async (args) => {
-      const result = await handlers.fetchDevices(args, await getContext())
+      const result = await handlers.runReportHandler(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )

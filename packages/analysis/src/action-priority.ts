@@ -1,8 +1,13 @@
-import type { AnalysisParams, AnalysisResult, AnalysisTool } from '@gscdump/engine/analysis-types'
-import type { AnalyzerRegistry } from '@gscdump/engine/analyzer'
-import type { AnalysisQuerySource } from '@gscdump/engine/resolver'
+/**
+ * `action-priority` — internal scoring/merging primitives for the `priority`
+ * report. The orchestration entry-points (`analyzeActionPriority` /
+ * `analyzeActionPriorityFromSource`) were removed in favour of
+ * `runReport({ id: 'priority' })`. The exports kept here are the building
+ * blocks the report consumes plus stable types describing the domain.
+ */
+
+import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import { clamp, clamp01 } from './scoring'
-import { analyzeFromSource } from './source/analyze-from-source'
 
 export type ActionSource
   = | 'cannibalization'
@@ -43,19 +48,7 @@ export interface ActionPriorityResult {
   sources: ActionPrioritySourceState[]
 }
 
-export interface ActionPriorityRunOptions {
-  sources?: ActionSource[]
-  limit?: number
-  continueOnError?: boolean
-  paramsBySource?: Partial<Record<ActionSource, Omit<AnalysisParams, 'type'>>>
-  onSourceStatus?: (state: ActionPrioritySourceState) => void
-}
-
-export interface ActionPriorityAnalyzer {
-  analyze: (params: AnalysisParams) => Promise<AnalysisResult>
-}
-
-const DEFAULT_SOURCES: ActionSource[] = [
+export const DEFAULT_PRIORITY_SOURCES: ActionSource[] = [
   'striking-distance',
   'opportunity',
   'cannibalization',
@@ -365,77 +358,4 @@ export function scorePriorityActions(actions: PriorityAction[]): PriorityAction[
   }
   actions.sort((a, b) => b.priorityScore - a.priorityScore)
   return actions
-}
-
-export async function analyzeActionPriority(
-  analyzer: ActionPriorityAnalyzer,
-  options: ActionPriorityRunOptions = {},
-): Promise<ActionPriorityResult> {
-  const {
-    sources = DEFAULT_SOURCES,
-    limit = 40,
-    continueOnError = true,
-    paramsBySource = {},
-    onSourceStatus,
-  } = options
-
-  const states = new Map<ActionSource, ActionPrioritySourceState>()
-  for (const source of sources) {
-    const state: ActionPrioritySourceState = { source, status: 'pending', count: 0 }
-    states.set(source, state)
-    onSourceStatus?.(state)
-  }
-
-  const update = (source: ActionSource, patch: Partial<ActionPrioritySourceState>): void => {
-    const next = { ...(states.get(source) ?? { source, status: 'pending', count: 0 }), ...patch }
-    states.set(source, next)
-    onSourceStatus?.(next)
-  }
-
-  const runOne = async (source: ActionSource): Promise<PriorityAction[]> => {
-    update(source, { status: 'running', error: undefined })
-    const params = { type: source as AnalysisTool, ...(paramsBySource[source] ?? {}) } as AnalysisParams
-    return analyzer.analyze(params).then((result) => {
-      const normalized = normalizePriorityActions(source, result)
-      update(source, {
-        status: normalized.length === 0 ? 'skipped' : 'done',
-        count: normalized.length,
-      })
-      return normalized
-    }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error)
-      update(source, { status: 'error', count: 0, error: message })
-      if (!continueOnError)
-        throw error
-      return []
-    })
-  }
-
-  const all = (await Promise.all(sources.map(runOne))).flat()
-  const actions = scorePriorityActions(mergePriorityActions(all)).slice(0, limit)
-
-  return {
-    actions,
-    totalSignals: all.length,
-    sources: sources.map(source => states.get(source) ?? { source, status: 'pending', count: 0 }),
-  }
-}
-
-/**
- * Convenience wrapper: build the analyzer callback from an
- * {@link AnalysisQuerySource} so consumers don't hand-roll the adapter.
- * SQL-only tools (e.g. `cannibalization`, `ctr-anomaly`, `change-point`) will
- * surface as `status: 'error'` on their source state when the source lacks a
- * row-based implementation — `continueOnError` defaults to true, so the
- * overall run still produces whatever the other analyzers found.
- */
-export async function analyzeActionPriorityFromSource(
-  source: AnalysisQuerySource,
-  registry: AnalyzerRegistry,
-  options: ActionPriorityRunOptions = {},
-): Promise<ActionPriorityResult> {
-  return analyzeActionPriority(
-    { analyze: (params: AnalysisParams) => analyzeFromSource(source, params, registry) },
-    options,
-  )
 }

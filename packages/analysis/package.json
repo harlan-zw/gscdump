@@ -60,6 +60,11 @@
       "types": "./dist/rollups.d.mts",
       "import": "./dist/rollups.mjs",
       "default": "./dist/rollups.mjs"
+    },
+    "./report": {
+      "types": "./dist/report/index.d.mts",
+      "import": "./dist/report/index.mjs",
+      "default": "./dist/report/index.mjs"
     }
   },
   "main": "./dist/index.mjs",

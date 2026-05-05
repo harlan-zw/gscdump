@@ -159,10 +159,15 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     if (!table)
       throw new Error('runSQL requires at least one fileSet or an explicit table')
 
+    const placeholderTables: Record<string, TableName> = {}
+    for (const [name, ref] of entries)
+      placeholderTables[name] = ref.table
+
     const result = await executor.execute({
       sql: opts.sql,
       params: opts.params ?? [],
       fileKeys,
+      placeholderTables,
       dataSource,
       table,
       signal: opts.signal,
