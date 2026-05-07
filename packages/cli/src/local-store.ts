@@ -5,7 +5,7 @@
 // across every command file.
 
 import type { DataSource, StorageEngine } from '@gscdump/engine/contracts'
-import { createNodeHarness } from '@gscdump/engine-duckdb-node'
+import { createNodeHarness } from '@gscdump/engine/node'
 
 export type {
   DataSource,

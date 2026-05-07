@@ -6,12 +6,14 @@
 // so the CLI, tests, and any downstream Node consumer don't rewrite the
 // 20-line wiring block.
 
-import type { DataSource, Row, StorageEngine, TableName } from '@gscdump/engine/contracts'
+import type { Row, TableName } from 'gscdump/contracts'
+import type { DataSource, StorageEngine } from '../storage'
 import path from 'node:path'
-import { createDuckDBCodec, createDuckDBExecutor, createStorageEngine } from '@gscdump/engine'
-import { createFilesystemDataSource, createFilesystemManifestStore } from '@gscdump/engine/filesystem'
-import { createNodeDuckDBHandle } from '@gscdump/engine/node'
 import { encodeSiteId } from 'gscdump/tenant'
+import { createDuckDBCodec, createDuckDBExecutor } from '../duckdb'
+import { createStorageEngine } from '../engine'
+import { createNodeDuckDBHandle } from './duckdb-node'
+import { createFilesystemDataSource, createFilesystemManifestStore } from './filesystem'
 
 export interface NodeHarnessOptions {
   dataDir: string

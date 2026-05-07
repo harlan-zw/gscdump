@@ -29,9 +29,9 @@ import {
   createNodeDuckDBHandle,
   resetNodeDuckDB,
 } from '@gscdump/engine/node'
+import { createEngineQuerySource } from '@gscdump/engine/source'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createEngine as createNodeEngine } from '../src/engine'
-import { attachParquetIndex } from '../src/parquet-attach'
+import { attachParquetIndex } from '../src/adapters/parquet-attach'
 
 afterAll(() => {
   resetNodeDuckDB()
@@ -143,7 +143,7 @@ describe('contract: engine-duckdb-node vs engine-duckdb-wasm', () => {
     const runner = (sql: string): Promise<Array<Record<string, unknown>>> => handle.query(sql).then(rows => rows as Array<Record<string, unknown>>)
     await attachParquetIndex(runner, { tables })
 
-    const nodeSource = createNodeEngine({ engine, ctx: CTX })
+    const nodeSource = createEngineQuerySource({ engine, ctx: CTX })
 
     const wasmRunner = {
       query: (sql: string, params?: unknown[]) => handle.query(sql, params).then(rows => rows as Array<Record<string, unknown>>),
@@ -152,7 +152,8 @@ describe('contract: engine-duckdb-node vs engine-duckdb-wasm', () => {
     // duckdb-wasm dependency: same `createSqlQuerySource` factory + same
     // `pgResolverAdapter`, executed against the Node handle directly. This is
     // the contract surface that engine-duckdb-wasm publishes.
-    const { createSqlQuerySource, pgResolverAdapter } = await import('@gscdump/engine/resolver')
+    const { createSqlQuerySource } = await import('@gscdump/engine/source')
+    const { pgResolverAdapter } = await import('@gscdump/engine/resolver')
     const wasmSource = createSqlQuerySource({
       name: 'wasm-contract',
       adapter: pgResolverAdapter,

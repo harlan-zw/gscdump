@@ -33,7 +33,7 @@ Optional peers (install only what your runtime needs):
 | `@gscdump/engine/sql-fragments` | Reusable SQL fragments shared across analyzers. |
 | `@gscdump/engine/rollups` | Pre-aggregated rollup contracts + helpers. |
 | `@gscdump/engine/entities` | Entity helpers (sites, tenants, scope keys). |
-| `@gscdump/engine/resolver` | Dialect-neutral SQL composition: `ResolverAdapter`, `pgResolverAdapter`, `compilePg`/`compileSqlite`, `resolveToSQL`. |
+| `@gscdump/engine/resolver` | Dialect-neutral SQL composition: `ResolverAdapter`, `pgResolverAdapter`, `resolveToSQL`. |
 | `@gscdump/engine/scope` | Multi-tenant scope predicates. |
 | `@gscdump/engine/arrow` | Apache Arrow utilities for engine result conversion. |
 | `@gscdump/engine/node` | Node-only DuckDB handle. |

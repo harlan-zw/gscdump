@@ -25,28 +25,21 @@ export { createClient } from './drizzle-adapter'
 export type { DuckDBWasmClient } from './drizzle-adapter'
 export { drizzle, DuckDBWasmDatabase } from './drizzle-adapter'
 export type { DuckDBWasmDrizzleDatabase } from './drizzle-adapter'
-export { createEngine } from './engine'
-export type { BrowserQueryRunner, EngineConfig } from './engine'
 export { strikingMomentum } from './insights/striking-momentum'
 export type { StrikingMomentumOptions, StrikingMomentumRow } from './insights/striking-momentum'
-export { browserResolverAdapter } from './resolver-adapter'
 export { createInsightRunner, mergeScope, scopeFor } from './runner'
 export type { InsightRunner, InsightRunnerOptions, ScopedRunnerOptions, TableScope } from './runner'
 export {
   attachParquetTables,
   attachParquetUrlTables,
-  attachSingleTable,
   bootDuckDBWasm,
   createBrowserAnalysisRuntime,
-  createDuckDBBundlesFromBase,
-  listAttachedTables,
 } from './runtime'
 export type {
   AnalyzeResult,
   AttachedTablesHandle,
   AttachParquetTablesOptions,
   AttachParquetUrlTablesOptions,
-  AttachSingleTableOptions,
   BootDuckDBWasmOptions,
   BrowserAnalysisRuntime,
   BrowserParquetFile,

@@ -1,4 +1,5 @@
 import type { AnalysisParams } from '../src/types'
+import { pgResolverAdapter } from '@gscdump/engine/resolver'
 import { between, date, gsc, page } from 'gscdump/query'
 import { describe, expect, it } from 'vitest'
 import { defaultAnalyzerRegistry } from '../src/default-registry'
@@ -84,12 +85,12 @@ describe('analyzer plan snapshots', () => {
     }
     if (variants.sql) {
       it(`sql plan: ${id}`, () => {
-        expect(variants.sql!.build(params)).toMatchSnapshot()
+        expect(variants.sql!.build(params, { adapter: pgResolverAdapter })).toMatchSnapshot()
       })
     }
     if (variants.rows) {
       it(`rows plan: ${id}`, () => {
-        expect(variants.rows!.build(params)).toMatchSnapshot()
+        expect(variants.rows!.build(params, { adapter: pgResolverAdapter })).toMatchSnapshot()
       })
     }
   }

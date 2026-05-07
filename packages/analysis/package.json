@@ -51,16 +51,6 @@
       "import": "./dist/semantic/index.mjs",
       "default": "./dist/semantic/index.mjs"
     },
-    "./routing": {
-      "types": "./dist/routing/index.d.mts",
-      "import": "./dist/routing/index.mjs",
-      "default": "./dist/routing/index.mjs"
-    },
-    "./rollups": {
-      "types": "./dist/rollups.d.mts",
-      "import": "./dist/rollups.mjs",
-      "default": "./dist/rollups.mjs"
-    },
     "./report": {
       "types": "./dist/report/index.d.mts",
       "import": "./dist/report/index.mjs",

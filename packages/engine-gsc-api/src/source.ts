@@ -1,4 +1,4 @@
-import type { QueryRow, RowQuerySource } from '@gscdump/engine/resolver'
+import type { AnalysisQuerySource, QueryRow } from '@gscdump/engine/source'
 import type { GoogleSearchConsoleClient } from 'gscdump'
 import type { BuilderState, GSCQueryBuilder } from 'gscdump/query'
 
@@ -40,11 +40,12 @@ export interface GscApiQuerySourceOptions {
 
 export function createGscApiQuerySource(
   options: GscApiQuerySourceOptions,
-): RowQuerySource {
+): AnalysisQuerySource {
   const { client, siteUrl } = options
 
   return {
     name: 'gsc-api',
+    kind: 'live',
     capabilities: GSC_API_CAPABILITIES,
     async queryRows(state): Promise<QueryRow[]> {
       // Plan-time gating: throws UnsupportedLogicalCapabilityError on filters

@@ -10,7 +10,8 @@
  */
 
 import type { Row } from '../contracts'
-import type { AnalysisQuerySource, ExecuteSqlOptions, FileSet, QueryRow, SourceCapabilities } from '../resolver/source-types'
+import type { ResolverAdapter } from '../resolver/types'
+import type { AnalysisQuerySource, ExecuteSqlOptions, FileSet, QueryRow, SourceCapabilities } from './source-types'
 
 export interface AttachedTableRunner {
   /**
@@ -37,6 +38,13 @@ export interface AttachedTableSourceOptions {
    * paying the SQL execution cost. Omit to disable the check.
    */
   attachedTables?: readonly string[]
+  /**
+   * Dialect adapter surfaced on the source for analyzers that compose SQL
+   * from a `BuilderState` at plan-build time (e.g. `data-query`,
+   * `data-detail`). Attached-table sources execute pg-flavored DuckDB SQL,
+   * so callers should pass `pgResolverAdapter` here.
+   */
+  adapter?: ResolverAdapter<any>
 }
 
 export class AttachedTableMissingError extends Error {
@@ -50,6 +58,12 @@ const ATTACHED_TABLE_CAPABILITIES: SourceCapabilities = {
   fileSets: true,
   attachedTables: true,
   regex: true,
+  executeSql: true,
+}
+
+const ATTACHED_TABLE_CAPABILITIES_WITH_ADAPTER: SourceCapabilities = {
+  ...ATTACHED_TABLE_CAPABILITIES,
+  adapter: true,
 }
 
 /**
@@ -76,11 +90,13 @@ export function createAttachedTableSource(
   runner: AttachedTableRunner,
   options: AttachedTableSourceOptions,
 ): AnalysisQuerySource {
-  const { schema, signal, attachedTables } = options
+  const { schema, signal, attachedTables, adapter } = options
   const attachedSet = attachedTables ? new Set(attachedTables) : null
   return {
     name: 'attached-table',
-    capabilities: ATTACHED_TABLE_CAPABILITIES,
+    kind: 'browser',
+    capabilities: adapter ? ATTACHED_TABLE_CAPABILITIES_WITH_ADAPTER : ATTACHED_TABLE_CAPABILITIES,
+    adapter,
     async queryRows() {
       throw new Error('attached-table source: queryRows is not supported; use SQL analyzers')
     },

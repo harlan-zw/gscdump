@@ -1,6 +1,0 @@
-.:
-  attachParquetIndex: function
-  attachSnapshotIndex: function
-  createEngine: function
-  createNodeHarness: function
-  snapshotAlias: function

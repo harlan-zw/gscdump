@@ -3,38 +3,23 @@ import type {
   AnalysisQuerySource,
   AnalysisResult,
 } from '@gscdump/analysis'
-import type { googleSearchConsole } from 'gscdump'
 import type { LocalStore } from './local-store'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
 import {
-  analyzeFromSource,
   AnalyzerCapabilityError,
   createEngineQuerySource,
+  runAnalyzerFromSource,
 } from '@gscdump/analysis'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 import { decodeSiteId, normalizeSiteUrl } from 'gscdump/tenant'
 import { loadConfig, resolveDataDir } from './config'
 import { createCommandContext } from './context'
-import { gscErrorHandler } from './error-handler'
+import { LocalStoreUnsupportedError } from './error-handler'
 import { createLocalStore } from './local-store'
 import { logger } from './utils'
-
-export class LocalStoreUnsupportedError extends Error {
-  constructor(tool: string) {
-    super(`analysis "${tool}" is not yet implemented against the local Parquet store`)
-    this.name = 'LocalStoreUnsupportedError'
-  }
-}
-
-export class LocalStoreEmptyError extends Error {
-  constructor(siteUrl: string) {
-    super(`no local data synced for ${siteUrl} (run \`gscdump sync\` first)`)
-    this.name = 'LocalStoreEmptyError'
-  }
-}
 
 export async function hasLocalData(
   store: LocalStore,
@@ -47,52 +32,16 @@ export async function hasLocalData(
   return entries.length > 0
 }
 
-export async function runLocalAnalysis(
-  store: LocalStore,
-  siteUrl: string,
-  params: AnalysisParams,
-): Promise<AnalysisResult> {
-  const source = createEngineQuerySource({
-    engine: store.engine,
-    ctx: { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
-  })
-  return analyzeFromSource(source, params, defaultAnalyzerRegistry).catch((e: Error) => {
-    if (e instanceof AnalyzerCapabilityError)
-      throw new LocalStoreUnsupportedError(params.type)
-    throw e
-  })
-}
-
-/**
- * Live mode: hand the GSC API source to the unified dispatcher in
- * `@gscdump/analysis`. Tools with no row-based implementation throw
- * `AnalyzerCapabilityError`; we translate that into
- * `LocalStoreUnsupportedError` so the CLI's "run sync first" message stays
- * put.
- */
-export async function runLiveAnalysis(
-  client: ReturnType<typeof googleSearchConsole>,
-  siteUrl: string,
-  params: AnalysisParams,
-): Promise<AnalysisResult> {
-  const source = createGscApiQuerySource({ client, siteUrl })
-  return analyzeFromSource(source, params, defaultAnalyzerRegistry).catch((e: Error) => {
-    if (e instanceof AnalyzerCapabilityError)
-      throw new LocalStoreUnsupportedError(params.type)
-    throw e
-  })
-}
-
 export interface ResolvedAnalysisSource {
   source: AnalysisQuerySource
   siteUrl: string
   format: string
   isLive: boolean
   /**
-   * Run a single analysis through this resolved source. Maps
-   * `AnalyzerCapabilityError` to `LocalStoreUnsupportedError` when in local
-   * mode and applies `gscErrorHandler` in live mode so callers get the same
-   * error UX regardless of source.
+   * Run a single analysis through this resolved source. Translates
+   * `AnalyzerCapabilityError` from the dispatcher into
+   * `LocalStoreUnsupportedError` carrying the mode; commands attach
+   * `gscErrorHandler` to render + exit.
    */
   runAnalysis: (params: AnalysisParams) => Promise<AnalysisResult>
 }
@@ -135,11 +84,24 @@ function pickLocalSite(siteUrls: readonly string[], hint: string | undefined): s
   return partial ?? null
 }
 
+function makeRunAnalysis(
+  source: AnalysisQuerySource,
+  mode: 'live' | 'local',
+): (params: AnalysisParams) => Promise<AnalysisResult> {
+  return params =>
+    runAnalyzerFromSource(source, params, defaultAnalyzerRegistry).catch((e: Error) => {
+      if (e instanceof AnalyzerCapabilityError)
+        throw new LocalStoreUnsupportedError(params.type, mode)
+      throw e
+    })
+}
+
 /**
  * Single entry point used by `analyze` and `report` commands. Picks live vs.
  * local-store source from `--live`, ensures local data exists when running
- * locally, and returns a `runAnalysis` shim that applies the same
- * error-mapping the CLI has always done.
+ * locally, and returns a `runAnalysis` shim that maps capability errors to
+ * `LocalStoreUnsupportedError`. Commands chain `.catch(gscErrorHandler)` for
+ * the final render + exit.
  *
  * Local mode does NOT require live auth: the local store is the
  * authoritative source by design. Site resolution falls back to scanning
@@ -160,12 +122,10 @@ export async function resolveAnalysisSource(
     const localSites = await listLocalSites(dataDir, store.userId)
     const siteUrl = pickLocalSite(localSites, siteHint)
     if (!siteUrl) {
-      if (localSites.length === 0) {
+      if (localSites.length === 0)
         logger.error(`No local data found in ${dataDir}. Run \`gscdump sync\` first, or pass --live.`)
-      }
-      else {
+      else
         logger.error(`Could not resolve site${siteHint ? ` from "${siteHint}"` : ''}. Local sites: ${localSites.join(', ')}`)
-      }
       process.exit(1)
     }
 
@@ -178,26 +138,11 @@ export async function resolveAnalysisSource(
       engine: store.engine,
       ctx: { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
     })
-    const runAnalysis = (params: AnalysisParams): Promise<AnalysisResult> =>
-      analyzeFromSource(source, params, defaultAnalyzerRegistry).catch((e: Error) => {
-        if (e instanceof AnalyzerCapabilityError) {
-          logger.error(`${new LocalStoreUnsupportedError(params.type).message}. Pass --live to run against the GSC API.`)
-          process.exit(1)
-        }
-        logger.error(`Local analysis failed: ${e.message}`)
-        process.exit(1)
-      })
-    return { source, siteUrl, format, isLive, runAnalysis }
+    return { source, siteUrl, format, isLive, runAnalysis: makeRunAnalysis(source, 'local') }
   }
 
   const ctx = await createCommandContext({ needsAuth: true, needsStore: false })
   const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
   const source = createGscApiQuerySource({ client: ctx.client!, siteUrl })
-  const runAnalysis = (params: AnalysisParams): Promise<AnalysisResult> =>
-    analyzeFromSource(source, params, defaultAnalyzerRegistry).catch((e: Error) => {
-      if (e instanceof AnalyzerCapabilityError)
-        throw new LocalStoreUnsupportedError(params.type)
-      return gscErrorHandler(e)
-    })
-  return { source, siteUrl, format, isLive, runAnalysis }
+  return { source, siteUrl, format, isLive, runAnalysis: makeRunAnalysis(source, 'live') }
 }

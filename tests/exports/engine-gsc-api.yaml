@@ -1,9 +1,6 @@
 .:
-  applyBuilderStatePostProcessing: function
   canProxyToGsc: function
-  collectGscRows: function
   createGscApiQuerySource: function
   createLiveGscSource: function
   fetchGscDaily: function
   fetchGscTopN: function
-  GSC_API_CAPABILITIES: object

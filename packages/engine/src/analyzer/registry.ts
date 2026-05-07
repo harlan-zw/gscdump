@@ -12,6 +12,7 @@
  *   })
  */
 
+import type { DefinedAnalyzer } from './define'
 import type { Analyzer } from './types'
 
 export interface AnalyzerVariants {
@@ -20,7 +21,14 @@ export interface AnalyzerVariants {
 }
 
 export interface AnalyzerRegistryInit {
+  /**
+   * Preferred for in-tree composition: pass `DefinedAnalyzer[]` directly so
+   * SQL/row variants can never drift apart from their `defineAnalyzer` site.
+   */
+  defined?: readonly DefinedAnalyzer[]
+  /** Flat-array path retained for narrow tree-shaken registry composition. */
   rows?: readonly Analyzer[]
+  /** Flat-array path retained for narrow tree-shaken registry composition. */
   sql?: readonly Analyzer[]
 }
 
@@ -40,6 +48,14 @@ export interface AnalyzerRegistry {
 export function createAnalyzerRegistry(init: AnalyzerRegistryInit = {}): AnalyzerRegistry {
   const byId = new Map<string, AnalyzerVariants>()
 
+  for (const d of init.defined ?? []) {
+    const entry = byId.get(d.id) ?? {}
+    if (d.sql)
+      entry.sql = d.sql
+    if (d.rows)
+      entry.rows = d.rows
+    byId.set(d.id, entry)
+  }
   for (const a of init.rows ?? []) {
     const entry = byId.get(a.id) ?? {}
     entry.rows = a

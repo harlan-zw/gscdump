@@ -4,6 +4,7 @@ import type { AnalyzerRegistry } from '@gscdump/engine/analyzer'
 
 import { runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import { arrowToRows as toRows } from '@gscdump/engine/arrow'
+import { pgResolverAdapter } from '@gscdump/engine/resolver'
 import { createAttachedTableSource } from '@gscdump/engine/source'
 import { sqlEscape } from '@gscdump/engine/sql'
 
@@ -78,16 +79,6 @@ export interface AttachParquetUrlTablesOptions {
   onFileAttached?: (info: { table: string, index: number, total: number }) => void
 }
 
-export interface AttachSingleTableOptions {
-  db: AsyncDuckDB
-  conn: AsyncDuckDBConnection
-  table: string
-  urls: string[]
-  fetch?: typeof fetch
-  schema?: string
-  fetchInit?: RequestInit
-}
-
 /**
  * Handle returned from {@link attachParquetUrlTables}. Lets callers detach
  * the created views (for lazy re-attach on a new manifest version) or cheap-
@@ -132,38 +123,6 @@ function fileName(table: string, index: number, provided?: string): string {
 function readParquetViewSql(schema: string, table: string, files: string[]): string {
   const escaped = files.map(name => `'${sqlEscape(name)}'`).join(', ')
   return `CREATE OR REPLACE VIEW ${schema}.${table} AS SELECT * FROM read_parquet([${escaped}], union_by_name = true)`
-}
-
-/**
- * Build a `DuckDBBundles` map from a single base URL hosting the standard
- * DuckDB-WASM asset set (matches the names jsDelivr + `@duckdb/duckdb-wasm`
- * ship). Callers pointing at a Worker / R2 / self-hosted origin can pass
- * just the origin instead of duplicating the URL layout across apps.
- *
- * Omits `coi` (pthread) by default; most hosts don't serve the
- * cross-origin-isolation headers needed to use it and requesting a missing
- * asset fails bundle selection on Safari/Firefox.
- */
-export function createDuckDBBundlesFromBase(baseUrl: string, options: { includeCoi?: boolean } = {}): DuckDBBundles {
-  const base = baseUrl.replace(/\/+$/, '')
-  const bundles: DuckDBBundles = {
-    mvp: {
-      mainModule: `${base}/duckdb-mvp.wasm`,
-      mainWorker: `${base}/duckdb-browser-mvp.worker.js`,
-    },
-    eh: {
-      mainModule: `${base}/duckdb-eh.wasm`,
-      mainWorker: `${base}/duckdb-browser-eh.worker.js`,
-    },
-  }
-  if (options.includeCoi) {
-    bundles.coi = {
-      mainModule: `${base}/duckdb-coi.wasm`,
-      mainWorker: `${base}/duckdb-browser-coi.worker.js`,
-      pthreadWorker: `${base}/duckdb-browser-coi.pthread.worker.js`,
-    }
-  }
-  return bundles
 }
 
 export async function bootDuckDBWasm(
@@ -272,49 +231,6 @@ export async function attachParquetUrlTables(
   }
 }
 
-/**
- * Incremental attach — fetch + register a single table's URLs and create the
- * view, without touching any other table. Use this for lazy attach when a
- * page only needs one of several available tables.
- */
-export async function attachSingleTable(options: AttachSingleTableOptions): Promise<void> {
-  const {
-    db,
-    conn,
-    table,
-    urls,
-    fetch: fetchImpl = globalThis.fetch.bind(globalThis),
-    schema = 'main',
-    fetchInit,
-  } = options
-  if (urls.length === 0)
-    return
-  await Promise.all(urls.map(async (url, index) => {
-    const response = await fetchImpl(url, fetchInit)
-    if (!response.ok)
-      throw new Error(`fetch ${url} failed: ${response.status}`)
-    const bytes = new Uint8Array(await response.arrayBuffer())
-    await db.registerFileBuffer(fileName(table, index), bytes)
-  }))
-  const names = urls.map((_, i) => fileName(table, i))
-  await conn.query(readParquetViewSql(schema, table, names))
-}
-
-/**
- * List the views currently attached under `schema` via DuckDB's
- * `information_schema`. Lets callers decide whether to call
- * `attachSingleTable` before each query without guessing at state.
- */
-export async function listAttachedTables(
-  conn: AsyncDuckDBConnection,
-  schema: string = 'main',
-): Promise<string[]> {
-  const result = await conn.query(
-    `SELECT table_name FROM information_schema.tables WHERE table_schema = '${sqlEscape(schema)}'`,
-  )
-  return toRows(result).map(r => String(r.table_name))
-}
-
 export function createBrowserAnalysisRuntime(
   boot: DuckDBWasmBootResult,
   options: { schema?: string, version?: number | string, attachedTables?: readonly string[] } = {},
@@ -388,7 +304,7 @@ export function createBrowserAnalysisRuntime(
               return toRows(await runParameterized(sql, bindParams, innerSignal ?? signal))
             },
           },
-          { schema, signal, attachedTables },
+          { schema, signal, attachedTables, adapter: pgResolverAdapter },
         )
         const result: AnalysisResult = await runAnalyzerFromSource(source, params, registry)
         return {

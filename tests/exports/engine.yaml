@@ -23,13 +23,9 @@
   inferTable: function
   keywords: object
   MAX_DAY_BYTES: number
-  mondayOfWeek: function
-  monthPartition: function
   objectKey: function
   page_keywords: object
   pages: object
-  quarterOfMonth: function
-  quarterPartition: function
   resolveToSQL: function
   SCHEMAS: object
   substituteNamedFiles: function
@@ -37,13 +33,13 @@
   toPath: function
   toSumPosition: function
   transformGscRow: function
-  weekPartition: function
 ./analysis-types:
   num: function
 ./analyzer:
   AnalyzerCapabilityError: function
   createAnalyzerRegistry: function
   defineAnalyzer: function
+  requireAdapter: function
   runAnalyzerFromSource: function
 ./arrow:
   arrowToRows: function
@@ -76,8 +72,12 @@
   toSumPosition: function
   transformGscRow: function
 ./node:
+  attachParquetIndex: function
+  attachSnapshotIndex: function
   createNodeDuckDBHandle: function
+  createNodeHarness: function
   resetNodeDuckDB: function
+  snapshotAlias: function
 ./period:
   comparisonOf: function
   defaultEndDate: function
@@ -97,17 +97,19 @@
   createR2DataSource: function
 ./r2-manifest:
   createR2ManifestStore: function
+./report:
+  canonicalize: function
+  computeInputHash: function
+  createReportRegistry: function
+  defineReport: function
 ./resolver:
   assertDimensionsSupported: function
   assertSchemaInSync: function
   buildExtrasQueries: function
   buildTotalsSql: function
-  compilePg: function
-  compileSqlite: function
   createParquetResolverAdapter: function
   createResolverAdapter: function
   createSqlFragments: function
-  createSqlQuerySource: function
   DIMENSION_SURFACES: object
   dimensionColumn: function
   dimensionValue: function
@@ -115,7 +117,6 @@
   getFilterDimensions: function
   getInternalFilters: function
   inferLogicalDataset: function
-  isSqlQuerySource: function
   LOGICAL_DATASETS: object
   matchesDimensionFilter: function
   matchesMetricFilter: function
@@ -127,6 +128,18 @@
   resolveToSQL: function
   resolveToSQLOptimized: function
   supportsDimensionOnSurface: function
+./rollups:
+  dailyTotalsRollup: object
+  DEFAULT_ROLLUPS: object
+  indexingMetadataRollup: object
+  rebuildRollups: function
+  rollupKey: function
+  rollupParquetKey: function
+  topCountries28dRollup: object
+  topKeywords28dParquetRollup: object
+  topKeywords28dRollup: object
+  topPages28dRollup: object
+  weeklyTotalsRollup: object
 ./schema:
   allTables: function
   countries: object
@@ -151,6 +164,7 @@
   AttachedTableMissingError: function
   createAttachedTableSource: function
   createEngineQuerySource: function
+  createSqlQuerySource: function
   ENGINE_QUERY_CAPABILITIES: object
   queryComparisonRows: function
   queryRows: function

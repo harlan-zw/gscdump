@@ -6,41 +6,28 @@
  */
 
 import type { AnalysisParams, AnalysisResult } from '../analysis-types'
-import type { AnalysisQuerySource, FileSet, QueryRow } from '../resolver/source-types'
+import type { AnalysisQuerySource, FileSet, QueryRow } from '../source/source-types'
 import type { AnalyzerRegistry } from './registry'
-import type { Analyzer, Capability, RowQueriesPlan, SqlPlan } from './types'
+import type { Analyzer, RequiredCapability, RowQueriesPlan, SqlPlan } from './types'
 
 type AnalyzerRow = QueryRow
 
 export class AnalyzerCapabilityError extends Error {
   constructor(
     public readonly tool: string,
-    public readonly missing: readonly Capability[],
+    public readonly missing: readonly RequiredCapability[],
   ) {
     super(`analyzer "${tool}" requires capabilities [${missing.join(', ')}] not provided by source`)
     this.name = 'AnalyzerCapabilityError'
   }
 }
 
-function sourceCapabilities(source: AnalysisQuerySource): ReadonlySet<Capability> {
-  const caps = new Set<Capability>()
-  if (source.executeSql)
-    caps.add('executeSql')
-  if (source.capabilities.fileSets)
-    caps.add('partitionedParquet')
-  if (source.capabilities.regex)
-    caps.add('regex')
-  if (source.capabilities.windowTotals)
-    caps.add('windowTotals')
-  if (source.capabilities.comparisonJoin)
-    caps.add('comparisonJoin')
-  if (source.capabilities.attachedTables)
-    caps.add('attachedTables')
-  return caps
+function sourceHas(source: AnalysisQuerySource, cap: RequiredCapability): boolean {
+  return source.capabilities[cap] === true
 }
 
-function assertSatisfies(analyzer: Analyzer, caps: ReadonlySet<Capability>): void {
-  const missing = analyzer.requires.filter(c => !caps.has(c))
+function assertSatisfies(analyzer: Analyzer, source: AnalysisQuerySource): void {
+  const missing = analyzer.requires.filter(c => !sourceHas(source, c))
   if (missing.length > 0)
     throw new AnalyzerCapabilityError(analyzer.id, missing)
 }
@@ -54,16 +41,12 @@ export async function runAnalyzerFromSource(
   params: AnalysisParams,
   registry: AnalyzerRegistry,
 ): Promise<AnalysisResult> {
-  const caps = sourceCapabilities(source)
-  const analyzer = registry.resolveAnalyzer(
-    params.type,
-    caps.has('executeSql') || caps.has('attachedTables'),
-  )
+  const analyzer = registry.resolveAnalyzer(params.type, sourceHas(source, 'executeSql'))
   if (!analyzer)
     throw new AnalyzerCapabilityError(params.type, ['executeSql'])
-  assertSatisfies(analyzer, caps)
+  assertSatisfies(analyzer, source)
 
-  const plan = analyzer.build(params)
+  const plan = analyzer.build(params, { adapter: source.adapter, siteId: source.siteId })
   if (plan.kind === 'rows')
     return runRowsPlanAgainstSource(source, analyzer, plan, params)
   return runSqlPlanAgainstSource(source, analyzer, plan, params)
@@ -106,8 +89,6 @@ async function runSqlPlanAgainstSource(
 ): Promise<AnalysisResult> {
   if (!source.executeSql)
     throw new AnalyzerCapabilityError(analyzer.id, ['executeSql'])
-  if (plan.requiresAttachedTables && !source.capabilities.attachedTables)
-    throw new AnalyzerCapabilityError(analyzer.id, ['attachedTables'])
 
   const fileSets = source.capabilities.fileSets ? fileSetsFor(plan) : undefined
 
@@ -120,11 +101,7 @@ async function runSqlPlanAgainstSource(
     }
   }
   const { results, meta } = analyzer.reduce(rows, { params, extras })
-  const sourceMeta: { source?: string } = source.capabilities.localSource
-    ? { source: 'local' }
-    : source.capabilities.attachedTables
-      ? { source: 'browser' }
-      : {}
+  const sourceMeta: { source?: string } = source.kind ? { source: source.kind } : {}
   return {
     results: results as AnalysisResult['results'],
     meta: { tool: params.type, ...sourceMeta, ...meta },

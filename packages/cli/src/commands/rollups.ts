@@ -1,5 +1,5 @@
 import type { TableName } from '../local-store'
-import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/analysis/rollups'
+import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'

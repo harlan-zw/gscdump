@@ -9,7 +9,7 @@
 //
 // Progress flows to the shared analytics map so <GscBootProgress> lights up.
 
-import type { RollupEnvelope } from '@gscdump/analysis/rollups'
+import type { RollupEnvelope } from '@gscdump/engine/rollups'
 import type { SiteListItem } from './useGscAnalytics'
 import { useGscFetch } from '../utils/gsc-fetch'
 import { _useGscAnalyticsContext } from './useGscAnalytics'

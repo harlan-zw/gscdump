@@ -3,19 +3,24 @@
  * path. DuckDB (node + wasm) speaks Postgres-flavored SQL, so the same
  * adapter compiles queries for both runtimes. Single-tenant: `siteIdColRef`
  * is absent.
- *
- * Engine-wasm re-exports this as `browserResolverAdapter` for historical
- * reasons; new code should import `pgResolverAdapter` directly.
  */
 
+import type { SQL } from 'drizzle-orm'
 import type { TableName } from 'gscdump/contracts'
 import type { ResolverAdapter } from './types'
 import { sql } from 'drizzle-orm'
+import { PgDialect } from 'drizzle-orm/pg-core'
 import { drizzleSchema } from '../drizzle-schema'
 import { createResolverAdapter } from './adapter'
-import { compilePg } from './dialects'
 
 export type PgTableKey = TableName
+
+const pgDialect = new PgDialect()
+
+function compilePg(query: SQL): { sql: string, params: unknown[] } {
+  const compiled = pgDialect.sqlToQuery(query)
+  return { sql: compiled.sql, params: compiled.params as unknown[] }
+}
 
 const PG_BASE_CONFIG = {
   schema: drizzleSchema,

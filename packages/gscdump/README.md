@@ -124,15 +124,13 @@ import {
   analyzeCannibalization,
   analyzeDecay,
   analyzeMovers,
-  analyzeStrikingDistance,
-  fetchKeywordsWithComparison,
-} from 'gscdump'
+} from '@gscdump/analysis'
+import { fetchKeywordsWithComparison } from 'gscdump'
 
 // Fetch data first
 const { current, previous } = await fetchKeywordsWithComparison(auth, site, range)
 
 // Run pure analysis on the data
-const striking = analyzeStrikingDistance(current)
 const movers = analyzeMovers(current, previous)
 const decay = analyzeDecay(current, previous)
 const cannibalization = analyzeCannibalization(keywordPageData)
@@ -146,7 +144,7 @@ const cannibalization = analyzeCannibalization(keywordPageData)
 
 **Analytics:** `fetchAnalyticsWithComparison`, `fetchPagesWithComparison`, `fetchKeywordsWithComparison`, `fetchDevicesWithComparison`, `fetchCountriesWithComparison`, `fetchSearchAppearanceWithComparison`, `fetchDates`, `fetchDatesWithComparison`, `fetchPages`, `fetchPage`, `fetchKeyword`
 
-**Analysis (Pure):** `analyzeStrikingDistance`, `analyzeOpportunity`, `analyzeBrandSegmentation`, `analyzeConcentration`, `analyzeDecay`, `analyzeMovers`, `analyzeCannibalization`, `analyzeZeroClick`, `analyzeSeasonality`, `analyzeClustering`
+**Analysis (Pure)** — these live in `@gscdump/analysis`: `analyzeOpportunity`, `analyzeBrandSegmentation`, `analyzeConcentration`, `analyzeDecay`, `analyzeMovers`, `analyzeCannibalization`, `analyzeZeroClick`, `analyzeSeasonality`, `analyzeClustering`
 
 **Low-level:** `gscClient`, `queryRecursive`, `queryRecursiveStream`, `createQueryBody`, `withPropertyAggregation`, `withSearchAppearance`, `withDataType`, `withFreshData`, `withFinalData`
 

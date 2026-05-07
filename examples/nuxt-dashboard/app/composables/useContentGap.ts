@@ -6,7 +6,8 @@ import type {
 import type { QueryResult } from '@gscdump/engine-duckdb-wasm'
 
 import { analyzeContentGap } from '@gscdump/analysis/semantic'
-import { createEngine as createBrowserQuerySource } from '@gscdump/engine-duckdb-wasm'
+import { pgResolverAdapter } from '@gscdump/engine/resolver'
+import { createSqlQuerySource } from '@gscdump/engine/source'
 
 export type { ContentGapOptions, ContentGapProgress, ContentGapResult }
 
@@ -39,12 +40,12 @@ export function useContentGap(): ContentGapRunner {
     error.value = null
     results.value = []
 
-    const source = createBrowserQuerySource({
-      runner: {
-        async query(sql: string, params?: unknown[]) {
-          const result = await runner.query(sql, params)
-          return result.rows
-        },
+    const source = createSqlQuerySource({
+      name: 'browser',
+      adapter: pgResolverAdapter,
+      execute: async (sql, params) => {
+        const result = await runner.query(sql, params)
+        return result.rows
       },
     })
 

@@ -1,20 +1,15 @@
 .:
   attachParquetTables: function
   attachParquetUrlTables: function
-  attachSingleTable: function
   bootDuckDBWasm: function
-  browserResolverAdapter: object
   countries: object
   createBrowserAnalysisRuntime: function
   createClient: function
-  createDuckDBBundlesFromBase: function
-  createEngine: function
   createInsightRunner: function
   devices: object
   drizzle: function
   DuckDBWasmDatabase: function
   keywords: object
-  listAttachedTables: function
   mergeScope: function
   page_keywords: object
   pages: object

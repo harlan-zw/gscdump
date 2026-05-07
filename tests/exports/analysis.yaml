@@ -1,54 +1,44 @@
 .:
-  analyzeActionPriority: function
-  analyzeActionPriorityFromSource: function
   analyzeBrandSegmentation: function
-  analyzeBrandSegmentationFromSource: function
   analyzeCannibalization: function
   analyzeClustering: function
-  analyzeClusteringFromSource: function
   analyzeConcentration: function
   analyzeDecay: function
-  analyzeDecayFromSource: function
-  analyzeFromSource: function
   analyzeInBrowser: function
   analyzeKeywordConcentration: function
-  analyzeKeywordConcentrationFromSource: function
   analyzeMovers: function
-  analyzeMoversFromSource: function
-  analyzeOpportunityFromSource: function
   analyzePageConcentration: function
-  analyzePageConcentrationFromSource: function
   AnalyzerCapabilityError: function
   analyzeSeasonality: function
-  analyzeSeasonalityFromSource: function
-  analyzeStrikingDistance: function
-  analyzeStrikingDistanceFromSource: function
   comparisonOf: function
   createAnalyzerRegistry: function
   createCompositeSource: function
   createEngineQuerySource: function
   createInMemoryQuerySource: function
   createSorter: function
+  DEFAULT_PRIORITY_SOURCES: object
   defaultAnalyzerRegistry: object
+  defaultReportRegistry: object
   defineAnalyzer: function
+  dryRunReport: function
   ENGINE_QUERY_CAPABILITIES: object
+  formatReport: function
   IN_MEMORY_DEFAULT_CAPABILITIES: object
-  isSqlQuerySource: function
   mergePriorityActions: function
   normalizePriorityActions: function
   normalizeQuery: function
   num: function
   padTimeseries: function
   periodOf: function
-  queryAnalyticsFromSource: function
-  queryComparisonFromSource: function
   queryComparisonRows: function
   queryRows: function
+  REPORTS: object
   resolveWindow: function
   rewriteForTableSource: function
   ROW_ANALYZERS: object
   runAnalyzerFromSource: function
   runAnalyzerWithEngine: function
+  runReport: function
   scorePriorityActions: function
   SQL_ANALYZERS: object
   typedQuery: function
@@ -86,7 +76,6 @@
   positionVolatilityAnalyzer: object
   queryMigrationAnalyzer: object
   resolveSort: function
-  ROW_ANALYZERS: object
   seasonalityAnalyzer: object
   stlDecomposeAnalyzer: object
   strikingDistanceAnalyzer: object
@@ -97,30 +86,17 @@
   buildDataDetailPlan: function
   buildDataQueryPlan: function
   normalizeQuery: function
+  shapeDataDetailRows: function
+  shapeDataQueryRows: function
 ./registry:
   defaultAnalyzerRegistry: object
-./rollups:
-  dailyTotalsRollup: object
-  DEFAULT_ROLLUPS: object
-  indexingMetadataRollup: object
-  rebuildRollups: function
-  rollupKey: function
-  rollupParquetKey: function
-  topCountries28dRollup: object
-  topKeywords28dParquetRollup: object
-  topKeywords28dRollup: object
-  topPages28dRollup: object
-  weeklyTotalsRollup: object
-./routing:
-  forceD1: function
-  isAnalyticsTable: function
-  isValidReadFromForPhase: function
-  r2ReadsEnabled: function
-  resolvePhase: function
-  resolveReadFrom: function
-  shouldDualWrite: function
-  shouldReadFromR2: function
-  shouldWriteToD1: function
+./report:
+  defaultReportRegistry: object
+  dryRunReport: function
+  formatReport: function
+  REPORTS: object
+  resolveTarget: function
+  runReport: function
 ./semantic:
   analyzeContentGap: function
   ContentGapSourceUnsupportedError: function
@@ -129,19 +105,6 @@
   normalizeUrl: function
   rankContentGaps: function
 ./source:
-  analyzeBrandSegmentationFromSource: function
-  analyzeClusteringFromSource: function
-  analyzeDecayFromSource: function
-  analyzeFromSource: function
-  analyzeKeywordConcentrationFromSource: function
-  analyzeMoversFromSource: function
-  analyzeOpportunityFromSource: function
-  analyzePageConcentrationFromSource: function
-  AnalyzerCapabilityError: function
-  analyzeSeasonalityFromSource: function
-  analyzeStrikingDistanceFromSource: function
   createCompositeSource: function
   createInMemoryQuerySource: function
   IN_MEMORY_DEFAULT_CAPABILITIES: object
-  queryAnalyticsFromSource: function
-  queryComparisonFromSource: function

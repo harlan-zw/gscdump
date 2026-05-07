@@ -13,6 +13,7 @@
 import type { AnalyzerRunner } from '@gscdump/analysis'
 
 import { analyzeInBrowser } from '@gscdump/analysis'
+import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import {
   createNodeDuckDBHandle,
   resetNodeDuckDB,
@@ -92,7 +93,7 @@ describe('data-query', () => {
           { dimension: 'date', operator: 'lte', expression: '2026-04-11' },
         ] },
       },
-    })
+    }, defaultAnalyzerRegistry)
 
     const rows = out.results as Array<{ query: string, clicks: number, impressions: number }>
     // alpha (2 rows → 25 clicks, 250 impressions), beta (20/200), gamma (5/500)
@@ -132,7 +133,7 @@ describe('data-query', () => {
       },
       // 'new' filter: keywords in current window with no previous impressions.
       comparisonFilter: 'new',
-    })
+    }, defaultAnalyzerRegistry)
 
     // 'new' keeps rows where previous is NULL or 0. beta and gamma qualify
     // (no 2026-04-01 row); alpha has prior impressions so it's excluded.
@@ -155,7 +156,7 @@ describe('data-query', () => {
         orderBy: { column: 'impressions', dir: 'desc' },
         rowLimit: 2,
       },
-    })
+    }, defaultAnalyzerRegistry)
     const rows = out.results as Array<{ query: string }>
     // impressions desc: gamma 500, alpha 250, beta 200 → top 2 is gamma + alpha
     expect(rows.map(r => r.query)).toEqual(['gamma', 'alpha'])
@@ -185,7 +186,7 @@ describe('data-detail', () => {
           { dimension: 'date', operator: 'lte', expression: '2026-04-10' },
         ] },
       },
-    })
+    }, defaultAnalyzerRegistry)
 
     const daily = out.results as Array<{ date: string, clicks: number, impressions: number }>
     // 3 days, one gap filled. padTimeseries emits date as a Date object only
@@ -224,7 +225,7 @@ describe('data-detail', () => {
           { dimension: 'date', operator: 'lte', expression: '2026-04-01' },
         ] },
       },
-    })
+    }, defaultAnalyzerRegistry)
     const meta = out.meta as { previousTotals?: { clicks: number, impressions: number } }
     expect(meta.previousTotals).toBeDefined()
     expect(meta.previousTotals!.clicks).toBe(5)

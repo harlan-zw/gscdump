@@ -1,43 +1,51 @@
 // Composite analytics source: engine first, live GSC fallback for queries
-// whose date range falls outside the site's synced window AND can be answered
-// by GSC's native API (no metric filters, no engine-derived dimensions).
-//
-// SQL execution always routes to the engine (GSC API has no SQL surface).
+// outside the site's synced window that the API can answer. The route
+// decision lives behind a single predicate (`shouldRouteToLive`). SQL
+// execution always routes to the engine (GSC API has no SQL surface).
 
-import type { AnalysisQuerySource, SqlQuerySource } from '@gscdump/engine/resolver'
+import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { BuilderState } from 'gscdump/query'
 import { canProxyToGsc } from '@gscdump/engine-gsc-api'
 import { extractDateRange } from 'gscdump/query'
 
-export interface CompositeSourceOptions {
-  engine: SqlQuerySource
-  live: AnalysisQuerySource
-  site: { oldestDateSynced: string | null, newestDateSynced: string | null }
+export interface SyncedRange {
+  oldestDateSynced: string | null
+  newestDateSynced: string | null
 }
 
-export function createCompositeSource(opts: CompositeSourceOptions): SqlQuerySource {
+export interface CompositeSourceOptions {
+  engine: AnalysisQuerySource
+  live: AnalysisQuerySource
+  site: SyncedRange
+}
+
+/**
+ * Single predicate combining structural compatibility (`canProxyToGsc`) and
+ * date-window coverage. Returns `true` when the query should be answered by
+ * the live GSC API instead of the local engine: the API supports the query
+ * shape AND the requested range falls outside (or is partially outside) the
+ * synced window. Sites with no synced data route everything live.
+ */
+function shouldRouteToLive(state: BuilderState, site: SyncedRange): boolean {
+  if (!canProxyToGsc(state))
+    return false
+  const { startDate, endDate } = extractDateRange(state.filter)
+  if (!startDate || !endDate)
+    return false
+  if (!site.oldestDateSynced || !site.newestDateSynced)
+    return true
+  return startDate < site.oldestDateSynced || endDate > site.newestDateSynced
+}
+
+export function createCompositeSource(opts: CompositeSourceOptions): AnalysisQuerySource {
   const { engine, live, site } = opts
-
-  function rangeCovered(state: BuilderState): boolean {
-    const { startDate, endDate } = extractDateRange(state.filter)
-    return !!(
-      startDate
-      && endDate
-      && site.oldestDateSynced
-      && site.newestDateSynced
-      && startDate >= site.oldestDateSynced
-      && endDate <= site.newestDateSynced
-    )
-  }
-
   return {
+    ...engine,
     name: 'composite-engine-live',
-    capabilities: engine.capabilities,
     async queryRows(state: BuilderState) {
-      if (!rangeCovered(state) && canProxyToGsc(state))
-        return live.queryRows(state)
-      return engine.queryRows(state)
+      return shouldRouteToLive(state, site)
+        ? live.queryRows(state)
+        : engine.queryRows(state)
     },
-    executeSql: engine.executeSql,
   }
 }

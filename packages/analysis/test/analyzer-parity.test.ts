@@ -23,6 +23,7 @@ import {
   createDuckDBExecutor,
   createStorageEngine,
 } from '@gscdump/engine'
+import { runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import {
   createFilesystemDataSource,
   createFilesystemManifestStore,
@@ -34,7 +35,6 @@ import {
 import { runAnalyzerWithEngine } from '@gscdump/engine/source'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { defaultAnalyzerRegistry } from '../src/default-registry'
-import { analyzeFromSource } from '../src/source/analyze-from-source'
 import { createInMemoryQuerySource } from '../src/source/in-memory'
 
 afterAll(() => {
@@ -178,7 +178,7 @@ describe('analyzer parity (sql vs rows)', () => {
 
       const aggregated = aggregateForRows(c.seed)
       const source = createInMemoryQuerySource({ queryRows: state => rowsForState(state, aggregated) })
-      const rowsOut = await analyzeFromSource(source, c.params as never, defaultAnalyzerRegistry)
+      const rowsOut = await runAnalyzerFromSource(source, c.params as never, defaultAnalyzerRegistry)
 
       expect(Array.isArray(sqlOut.results), `${c.id} sql.results should be array`).toBe(true)
       expect(Array.isArray(rowsOut.results), `${c.id} rows.results should be array`).toBe(true)

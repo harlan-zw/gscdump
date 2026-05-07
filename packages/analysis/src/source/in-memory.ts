@@ -1,4 +1,4 @@
-import type { QueryRow, RowQuerySource } from '@gscdump/engine/resolver'
+import type { AnalysisQuerySource, QueryRow } from '@gscdump/engine/source'
 import type { BuilderState } from 'gscdump/query'
 
 import type { PlannerCapabilities } from 'gscdump/query/plan'
@@ -21,9 +21,10 @@ export interface InMemoryQuerySourceOptions {
 
 export function createInMemoryQuerySource(
   options: InMemoryQuerySourceOptions,
-): RowQuerySource {
+): AnalysisQuerySource {
   return {
     name: 'memory',
+    kind: 'in-memory',
     capabilities: options.capabilities ?? IN_MEMORY_DEFAULT_CAPABILITIES,
     async queryRows(state: BuilderState): Promise<QueryRow[]> {
       return await options.queryRows(state)

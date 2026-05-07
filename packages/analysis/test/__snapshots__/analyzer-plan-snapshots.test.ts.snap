@@ -380,7 +380,6 @@ exports[`analyzer plan snapshots > sql plan: bayesian-ctr 1`] = `
     10,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH entity AS (
       SELECT
@@ -551,7 +550,6 @@ exports[`analyzer plan snapshots > sql plan: bipartite-pagerank 1`] = `
     10,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH edges0 AS (
       SELECT
@@ -1404,7 +1402,6 @@ exports[`analyzer plan snapshots > sql plan: brand 1`] = `
     "(acme|acme-corp)",
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH agg AS (
       SELECT
@@ -1483,7 +1480,6 @@ exports[`analyzer plan snapshots > sql plan: cannibalization 1`] = `
     20,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
       WITH agg AS (
         SELECT
@@ -1635,7 +1631,6 @@ exports[`analyzer plan snapshots > sql plan: change-point 1`] = `
     10,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH daily AS (
       SELECT
@@ -1811,7 +1806,6 @@ exports[`analyzer plan snapshots > sql plan: clustering 1`] = `
     3,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
       WITH agg AS (
         SELECT
@@ -1910,7 +1904,6 @@ exports[`analyzer plan snapshots > sql plan: concentration 1`] = `
     10,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH items AS (
       SELECT
@@ -2095,7 +2088,6 @@ exports[`analyzer plan snapshots > sql plan: content-velocity 1`] = `
     "2024-02-29",
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH src AS (
       SELECT query, date
@@ -2183,7 +2175,6 @@ exports[`analyzer plan snapshots > sql plan: ctr-anomaly 1`] = `
     10,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH daily AS (
       SELECT
@@ -2348,7 +2339,6 @@ exports[`analyzer plan snapshots > sql plan: ctr-curve 1`] = `
     "2024-02-29",
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH src AS (
       SELECT
@@ -2570,7 +2560,6 @@ exports[`analyzer plan snapshots > sql plan: dark-traffic 1`] = `
     "2024-02-29",
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH page_totals AS (
       SELECT SUM(clicks) AS total_clicks, SUM(impressions) AS total_impressions
@@ -2662,7 +2651,6 @@ exports[`analyzer plan snapshots > sql plan: data-detail 1`] = `
     "2024-02-29",
   ],
   "previous": undefined,
-  "requiresAttachedTables": true,
   "sql": "SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", "pages"."date", CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END, "pages"."date" ORDER BY clicks DESC LIMIT 100",
 }
 `;
@@ -2702,7 +2690,6 @@ exports[`analyzer plan snapshots > sql plan: data-query 1`] = `
     "2024-01-31",
   ],
   "previous": undefined,
-  "requiresAttachedTables": true,
   "sql": "WITH current AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END), previous AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $3 AND "pages"."date" <= $4 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END) SELECT c.page as "page", CAST(c.clicks AS DOUBLE) as "clicks", CAST(c.impressions AS DOUBLE) as "impressions", c.ctr as "ctr", c.position as "position", COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition" FROM current c LEFT JOIN previous p ON c.page = p.page WHERE 1=1 AND c.clicks > COALESCE(p.clicks, 0) ORDER BY c.clicks DESC LIMIT 100",
 }
 `;
@@ -2808,7 +2795,6 @@ exports[`analyzer plan snapshots > sql plan: decay 1`] = `
     ],
     "table": "pages",
   },
-  "requiresAttachedTables": undefined,
   "sql": "
       WITH cur AS (
         SELECT
@@ -2927,7 +2913,6 @@ exports[`analyzer plan snapshots > sql plan: device-gap 1`] = `
     "2024-02-29",
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     SELECT
       date,
@@ -2996,7 +2981,6 @@ exports[`analyzer plan snapshots > sql plan: intent-atlas 1`] = `
     10,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH queries AS (
       SELECT
@@ -3121,7 +3105,6 @@ exports[`analyzer plan snapshots > sql plan: keyword-breadth 1`] = `
     "2024-02-29",
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH per_page AS (
       SELECT
@@ -3235,7 +3218,6 @@ exports[`analyzer plan snapshots > sql plan: long-tail 1`] = `
     10,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH page_queries AS (
       SELECT
@@ -3416,7 +3398,6 @@ exports[`analyzer plan snapshots > sql plan: movers 1`] = `
     ],
     "table": "page_keywords",
   },
-  "requiresAttachedTables": undefined,
   "sql": "
       WITH cur AS (
         SELECT
@@ -3552,7 +3533,6 @@ exports[`analyzer plan snapshots > sql plan: opportunity 1`] = `
     10,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH agg AS (
       SELECT
@@ -3670,7 +3650,6 @@ exports[`analyzer plan snapshots > sql plan: position-distribution 1`] = `
     "2024-02-29",
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH pos AS (
       SELECT
@@ -3746,7 +3725,6 @@ exports[`analyzer plan snapshots > sql plan: position-volatility 1`] = `
     6,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH query_day AS (
       SELECT
@@ -3919,7 +3897,6 @@ exports[`analyzer plan snapshots > sql plan: query-migration 1`] = `
     ],
     "table": "page_keywords",
   },
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH cur AS (
       SELECT query, url AS page,
@@ -4049,7 +4026,6 @@ exports[`analyzer plan snapshots > sql plan: seasonality 1`] = `
     "2024-02-29",
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
       WITH monthly AS (
         SELECT
@@ -4132,7 +4108,6 @@ exports[`analyzer plan snapshots > sql plan: stl-decompose 1`] = `
     10,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH daily AS (
       SELECT
@@ -4311,7 +4286,6 @@ exports[`analyzer plan snapshots > sql plan: striking-distance 1`] = `
     "2024-02-29",
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     SELECT
       query,
@@ -4379,7 +4353,6 @@ exports[`analyzer plan snapshots > sql plan: survival 1`] = `
     10,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH daily AS (
       SELECT
@@ -4564,7 +4537,6 @@ exports[`analyzer plan snapshots > sql plan: trends 1`] = `
     6,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
     WITH bucketed AS (
       SELECT
@@ -4701,7 +4673,6 @@ exports[`analyzer plan snapshots > sql plan: zero-click 1`] = `
     0.05,
   ],
   "previous": undefined,
-  "requiresAttachedTables": undefined,
   "sql": "
       WITH agg AS (
         SELECT

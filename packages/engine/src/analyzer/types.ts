@@ -15,20 +15,20 @@
 
 import type { BuilderState } from 'gscdump/query'
 import type { AnalysisParams } from '../analysis-types'
-import type { FileSet } from '../resolver/source-types'
+import type { ResolverAdapter } from '../resolver/types'
+import type { FileSet, SourceCapabilities } from '../source/source-types'
 import type { Row } from '../storage'
 
 /**
- * Capabilities a Plan may require of its host. A dispatcher matches these
- * against a source's declared capabilities and rejects mismatches.
+ * Capabilities a Plan may require of its host. Dispatch matches `requires`
+ * against the source's declared `capabilities` (and the presence of
+ * `executeSql`) and rejects mismatches.
+ *
+ * `'executeSql'` checks for the method on the source; the rest are flag keys
+ * on `SourceCapabilities`. Single source of truth — adding a new capability
+ * is one line in `SourceCapabilities`.
  */
-export type Capability
-  = | 'executeSql' // source supports raw SQL execution
-    | 'partitionedParquet' // source has manifest-resolved parquet partitions
-    | 'attachedTables' // source has named tables attached as views (browser)
-    | 'regex' // regex predicates supported
-    | 'windowTotals' // SQL window functions for totals
-    | 'comparisonJoin' // JOIN-based comparison queries
+export type RequiredCapability = 'executeSql' | keyof SourceCapabilities
 
 export interface SqlExtraQuery {
   name: string
@@ -48,8 +48,6 @@ export interface SqlPlan {
   previous?: FileSet
   extraFiles?: Record<string, FileSet>
   extraQueries?: SqlExtraQuery[]
-  /** Emits direct table refs (browser-only). Dispatcher rejects for manifest path. */
-  requiresAttachedTables?: boolean
 }
 
 export interface TypedRowQuery<T extends Row = Row> {
@@ -69,6 +67,34 @@ export interface RowQueriesPlan {
 }
 
 export type Plan = SqlPlan | RowQueriesPlan
+
+/**
+ * Plan-build context. Surfaced from the source at dispatch time so analyzers
+ * that compose SQL from a typed `BuilderState` can pick up the right dialect
+ * adapter without importing one directly. Most SQL analyzers emit static SQL
+ * and ignore this; only the BuilderState-driven `data-query` / `data-detail`
+ * analyzers consume it today.
+ *
+ * `adapter` is optional on the type; analyzers that need it should call
+ * `requireAdapter(ctx, id)` rather than non-null-asserting. Capability
+ * declaration (`'adapter'` in `requires`) is the runtime guarantee; the
+ * helper makes the failure mode loud if the contract is broken.
+ */
+export interface BuildContext {
+  adapter?: ResolverAdapter<any>
+  siteId?: string | number
+}
+
+/**
+ * Throw a uniform error if a SQL analyzer declared the `'adapter'` capability
+ * but the dispatcher handed it a context without one. Centralizes the assert
+ * so analyzers don't repeat `ctx.adapter!` with explanatory comments.
+ */
+export function requireAdapter(ctx: BuildContext, analyzerId: string): ResolverAdapter<any> {
+  if (!ctx.adapter)
+    throw new Error(`analyzer "${analyzerId}": BuildContext.adapter missing — declare 'adapter' in sqlRequires/rowsRequires`)
+  return ctx.adapter
+}
 
 export interface ReduceContext<TRow extends Row = Row> {
   params: AnalysisParams
@@ -90,9 +116,9 @@ export interface Analyzer<
   /** Stable tool id (e.g. `striking-distance`, `opportunity`). */
   id: string
   /** Capabilities a host source must provide. */
-  requires: readonly Capability[]
-  /** Pure: params → plan. Snapshot-testable. */
-  build: (params: P) => Plan
+  requires: readonly RequiredCapability[]
+  /** Pure: params → plan. Snapshot-testable. `ctx` carries the source's dialect adapter when one is available. */
+  build: (params: P, ctx?: BuildContext) => Plan
   /** Pure: rows + context → typed result + meta. */
   reduce: (rows: TRow[] | Record<string, TRow[]>, ctx: ReduceContext<TRow>) => {
     results: R

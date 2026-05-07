@@ -1,19 +1,22 @@
 /**
  * Generic factory: turns a `(sql, params) → rows` execute function plus a
- * dialect-specific `ResolverAdapter` into a `SqlQuerySource`.
+ * dialect-specific `ResolverAdapter` into an `AnalysisQuerySource` with
+ * `executeSql` + the matching capability flag set.
  *
  * Adapters (`engine-duckdb-wasm`, `engine-sqlite`, future Postgres / BigQuery)
  * reduce to driver glue + one call here. Keeps the typed-builder path,
  * the raw-SQL escape hatch, and capability reporting in a single place.
  */
 
-import type { QueryRow, SourceCapabilities, SqlQuerySource } from './source-types'
-import type { ResolverAdapter } from './types'
-import { resolveToSQL } from './compiler'
+import type { ResolverAdapter } from '../resolver/types'
+import type { AnalysisQuerySource, AnalysisSourceKind, QueryRow, SourceCapabilities } from './source-types'
+import { resolveToSQL } from '../resolver/compiler'
 
 export interface CreateSqlQuerySourceOptions<TKey extends string> {
   /** Debug-only identifier surfaced on the source for error messages. */
   name: string
+  /** Telemetry tag stamped onto analyzer result meta. */
+  kind?: AnalysisSourceKind
   /** Dialect-specific adapter; compiles `BuilderState` → `{ sql, params }`. */
   adapter: ResolverAdapter<TKey>
   /** Drives the underlying DB. Called for both typed queries and raw SQL. */
@@ -26,11 +29,14 @@ export interface CreateSqlQuerySourceOptions<TKey extends string> {
 
 export function createSqlQuerySource<TKey extends string>(
   options: CreateSqlQuerySourceOptions<TKey>,
-): SqlQuerySource {
-  const { name, adapter, execute, siteId, extraCapabilities } = options
+): AnalysisQuerySource {
+  const { name, kind, adapter, execute, siteId, extraCapabilities } = options
   return {
     name,
-    capabilities: { ...adapter.capabilities, ...extraCapabilities },
+    kind,
+    capabilities: { ...adapter.capabilities, ...extraCapabilities, executeSql: true, adapter: true },
+    adapter,
+    siteId,
     async queryRows(state) {
       const resolved = resolveToSQL(state, { adapter, siteId })
       return execute(resolved.sql, resolved.params)

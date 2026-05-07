@@ -15,17 +15,25 @@
 
 import type { ScopedRunnerOptions, TableScope } from '@gscdump/engine/scope'
 
+import type { SQL } from 'drizzle-orm'
 import type { AsyncRemoteCallback, SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy'
 import type { Schema } from './schema'
 
 import { createScopedHelpers } from '@gscdump/engine/scope'
 
+import { SQLiteAsyncDialect } from 'drizzle-orm/sqlite-core'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 
 import { schema } from './schema'
 
 export type { ScopedRunnerOptions, TableScope }
-export { compileSqlite } from '@gscdump/engine/resolver'
+
+const sqliteDialect = new SQLiteAsyncDialect()
+
+export function compileSqlite(query: SQL): { sql: string, params: unknown[] } {
+  const compiled = sqliteDialect.sqlToQuery(query)
+  return { sql: compiled.sql, params: compiled.params as unknown[] }
+}
 
 export type SqliteRowExecutor = (
   sql: string,

@@ -8,7 +8,7 @@
 //   - pro flows when a query's date range falls outside the synced window
 //     and is GSC-answerable (via `createCompositeSource`)
 
-import type { AnalysisQuerySource } from '@gscdump/engine/resolver'
+import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { GoogleSearchConsoleClient } from 'gscdump'
 import type { BuilderState } from 'gscdump/query'
 import { googleSearchConsole } from 'gscdump'
@@ -48,6 +48,7 @@ export function createLiveGscSource(opts: CreateLiveGscSourceOptions): AnalysisQ
 
   return {
     name: 'gsc-api',
+    kind: 'live',
     capabilities: { regex: true, multiDataset: false, comparisonJoin: false, windowTotals: false },
     async queryRows(state: BuilderState) {
       const client = await getClient()

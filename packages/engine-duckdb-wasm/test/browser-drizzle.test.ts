@@ -6,13 +6,12 @@
 
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm'
 
-import { resolveToSQL } from '@gscdump/engine/resolver'
+import { pgResolverAdapter, resolveToSQL } from '@gscdump/engine/resolver'
 import { desc, eq, sum } from 'drizzle-orm'
 import { and, between, contains, date, gsc, or, page, query, regex } from 'gscdump/query'
 
 import { describe, expect, it } from 'vitest'
 import {
-  browserResolverAdapter,
   createInsightRunner,
   keywords,
   page_keywords,
@@ -130,7 +129,7 @@ describe('@gscdump/engine-duckdb-wasm', () => {
       ))
       .getState()
 
-    const resolved = resolveToSQL(state, { adapter: browserResolverAdapter })
+    const resolved = resolveToSQL(state, { adapter: pgResolverAdapter })
     expect(resolved.sql).toMatch(/regexp_matches/i)
     expect(resolved.params).toContain('^https://example.com/blog/\\d+$')
   })
@@ -144,7 +143,7 @@ describe('@gscdump/engine-duckdb-wasm', () => {
       ))
       .getState()
 
-    const resolved = resolveToSQL(state, { adapter: browserResolverAdapter })
+    const resolved = resolveToSQL(state, { adapter: pgResolverAdapter })
     // All three OR branches present
     expect(resolved.params).toContain('%nuxt%')
     expect(resolved.params).toContain('%seo%')
@@ -168,7 +167,7 @@ describe('@gscdump/engine-duckdb-wasm', () => {
       ))
       .getState()
 
-    const resolved = resolveToSQL(state, { adapter: browserResolverAdapter })
+    const resolved = resolveToSQL(state, { adapter: pgResolverAdapter })
     expect(resolved.params).toContain('%nuxt%')
     expect(resolved.params).toContain('%/docs/%')
     // No OR introduced when the user only used AND

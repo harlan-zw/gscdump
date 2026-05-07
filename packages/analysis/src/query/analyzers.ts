@@ -25,11 +25,6 @@ export interface QueryAnalyzerPlan<TK extends string = string> {
   sql: string
   params: unknown[]
   extraQueries?: QueryAnalyzerExtraQuery[]
-  shape: (
-    rows: Row[],
-    params: AnalysisParams,
-    extras?: Record<string, Row[]>,
-  ) => { results: Row[], meta: Record<string, unknown> }
 }
 
 function requireBuilderState(
@@ -165,7 +160,6 @@ export function buildDataQueryPlan<TK extends string>(
       sql: comparison.sql,
       params: comparison.params,
       extraQueries,
-      shape: (rows, _params, resolvedExtras) => shapeDataQuery(rows, resolvedExtras, { hasPrev: true }),
     }
   }
 
@@ -175,8 +169,20 @@ export function buildDataQueryPlan<TK extends string>(
     sql: optimized.sql,
     params: optimized.params,
     extraQueries,
-    shape: (rows, _params, resolvedExtras) => shapeDataQuery(rows, resolvedExtras, { hasPrev: false }),
   }
+}
+
+/**
+ * Pure post-processing for `data-query` rows. Adapter-free so reducers can
+ * call it without re-running the SQL plan.
+ */
+export function shapeDataQueryRows(
+  rows: Row[],
+  params: AnalysisParams,
+  extras?: Record<string, Row[]>,
+): { results: Row[], meta: Record<string, unknown> } {
+  const hasPrev = params.qc != null
+  return shapeDataQuery(rows, extras, { hasPrev })
 }
 
 export function buildDataDetailPlan<TK extends string>(
@@ -200,37 +206,47 @@ export function buildDataDetailPlan<TK extends string>(
   }
 
   const tableKey = options.adapter.inferTable(state.dimensions)
-  const { startDate: rangeStart, endDate: rangeEnd } = extractDateRange(state.filter)
 
   return {
     tableKey,
     sql: main.sql,
     params: main.params,
     extraQueries,
-    shape: (rows, _params, extras) => {
-      const coerced = (rows as Array<Record<string, unknown>>).map(coerceNumericCols)
-      const daily = rangeStart && rangeEnd
-        ? padTimeseries(coerced, { startDate: rangeStart, endDate: rangeEnd })
-        : coerced
-      const totalsRow = (extras?.totals?.[0] ?? {}) as Record<string, unknown>
-      const meta: Record<string, unknown> = {
-        totals: {
-          clicks: Number(totalsRow.clicks ?? 0),
-          impressions: Number(totalsRow.impressions ?? 0),
-          ctr: Number(totalsRow.ctr ?? 0),
-          position: Number(totalsRow.position ?? 0),
-        },
-      }
-      if (extras?.prevTotals) {
-        const previousTotalsRow = (extras.prevTotals[0] ?? {}) as Record<string, unknown>
-        meta.previousTotals = {
-          clicks: Number(previousTotalsRow.clicks ?? 0),
-          impressions: Number(previousTotalsRow.impressions ?? 0),
-          ctr: Number(previousTotalsRow.ctr ?? 0),
-          position: Number(previousTotalsRow.position ?? 0),
-        }
-      }
-      return { results: daily as unknown as Row[], meta }
+  }
+}
+
+/**
+ * Pure post-processing for `data-detail` rows. Reads the date range off
+ * `params.q` so it stays adapter-free; reducers call it directly.
+ */
+export function shapeDataDetailRows(
+  rows: Row[],
+  params: AnalysisParams,
+  extras?: Record<string, Row[]>,
+): { results: Row[], meta: Record<string, unknown> } {
+  const state = requireBuilderState(params.q, 'data-detail')
+  const { startDate: rangeStart, endDate: rangeEnd } = extractDateRange(state.filter)
+  const coerced = (rows as Array<Record<string, unknown>>).map(coerceNumericCols)
+  const daily = rangeStart && rangeEnd
+    ? padTimeseries(coerced, { startDate: rangeStart, endDate: rangeEnd })
+    : coerced
+  const totalsRow = (extras?.totals?.[0] ?? {}) as Record<string, unknown>
+  const meta: Record<string, unknown> = {
+    totals: {
+      clicks: Number(totalsRow.clicks ?? 0),
+      impressions: Number(totalsRow.impressions ?? 0),
+      ctr: Number(totalsRow.ctr ?? 0),
+      position: Number(totalsRow.position ?? 0),
     },
   }
+  if (extras?.prevTotals) {
+    const previousTotalsRow = (extras.prevTotals[0] ?? {}) as Record<string, unknown>
+    meta.previousTotals = {
+      clicks: Number(previousTotalsRow.clicks ?? 0),
+      impressions: Number(previousTotalsRow.impressions ?? 0),
+      ctr: Number(previousTotalsRow.ctr ?? 0),
+      position: Number(previousTotalsRow.position ?? 0),
+    }
+  }
+  return { results: daily as unknown as Row[], meta }
 }

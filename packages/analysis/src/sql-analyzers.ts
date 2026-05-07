@@ -1,71 +1,16 @@
 /**
  * DuckDB SQL analyzer collection. Pure array export — no side effects.
- * Pass to `createAnalyzerRegistry({ sql: SQL_ANALYZERS })` when composing
- * a registry that serves SQL-capable sources.
+ *
+ * Derived from `ALL_ANALYZERS`: every `DefinedAnalyzer` with a `sql` variant
+ * is included automatically. Pass to
+ * `createAnalyzerRegistry({ sql: SQL_ANALYZERS })` for narrow composition,
+ * or prefer `createAnalyzerRegistry({ defined: ALL_ANALYZERS })` in-tree.
  */
 
 import type { Analyzer } from '@gscdump/engine/analyzer'
 
-import {
-  bayesianCtrAnalyzer,
-  bipartitePagerankAnalyzer,
-  brandAnalyzer,
-  cannibalizationAnalyzer,
-  changePointAnalyzer,
-  clusteringAnalyzer,
-  concentrationAnalyzer,
-  contentVelocityAnalyzer,
-  ctrAnomalyAnalyzer,
-  ctrCurveAnalyzer,
-  darkTrafficAnalyzer,
-  dataDetailAnalyzer,
-  dataQueryAnalyzer,
-  decayAnalyzer,
-  deviceGapAnalyzer,
-  intentAtlasAnalyzer,
-  keywordBreadthAnalyzer,
-  longTailAnalyzer,
-  moversAnalyzer,
-  opportunityAnalyzer,
-  positionDistributionAnalyzer,
-  positionVolatilityAnalyzer,
-  queryMigrationAnalyzer,
-  seasonalityAnalyzer,
-  stlDecomposeAnalyzer,
-  strikingDistanceAnalyzer,
-  survivalAnalyzer,
-  trendsAnalyzer,
-  zeroClickAnalyzer,
-} from './analyzer'
+import { ALL_ANALYZERS } from './analyzer/all'
 
-export const SQL_ANALYZERS: readonly Analyzer[] = [
-  bayesianCtrAnalyzer.sql!,
-  bipartitePagerankAnalyzer.sql!,
-  brandAnalyzer.sql!,
-  cannibalizationAnalyzer.sql!,
-  changePointAnalyzer.sql!,
-  clusteringAnalyzer.sql!,
-  concentrationAnalyzer.sql!,
-  contentVelocityAnalyzer.sql!,
-  ctrAnomalyAnalyzer.sql!,
-  ctrCurveAnalyzer.sql!,
-  darkTrafficAnalyzer.sql!,
-  dataDetailAnalyzer.sql!,
-  dataQueryAnalyzer.sql!,
-  decayAnalyzer.sql!,
-  deviceGapAnalyzer.sql!,
-  intentAtlasAnalyzer.sql!,
-  keywordBreadthAnalyzer.sql!,
-  longTailAnalyzer.sql!,
-  moversAnalyzer.sql!,
-  opportunityAnalyzer.sql!,
-  positionDistributionAnalyzer.sql!,
-  positionVolatilityAnalyzer.sql!,
-  queryMigrationAnalyzer.sql!,
-  seasonalityAnalyzer.sql!,
-  stlDecomposeAnalyzer.sql!,
-  strikingDistanceAnalyzer.sql!,
-  survivalAnalyzer.sql!,
-  trendsAnalyzer.sql!,
-  zeroClickAnalyzer.sql!,
-]
+export const SQL_ANALYZERS: readonly Analyzer[] = ALL_ANALYZERS.flatMap(
+  d => (d.sql ? [d.sql] : []),
+)

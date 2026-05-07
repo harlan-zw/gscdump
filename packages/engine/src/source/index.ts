@@ -1,6 +1,6 @@
 /**
  * `@gscdump/engine/source` — engine-backed query source + typed-query
- * ergonomics. Wraps a `StorageEngine` as a `SqlQuerySource` so analyzers
+ * ergonomics. Wraps a `StorageEngine` as an `AnalysisQuerySource` so analyzers
  * dispatch uniformly via `runAnalyzerFromSource`.
  */
 
@@ -8,19 +8,28 @@ import type { BuilderState } from 'gscdump/query'
 import type { PlannerCapabilities } from 'gscdump/query/plan'
 import type { AnalysisParams, AnalysisResult } from '../analysis-types'
 import type { AnalyzerRegistry } from '../analyzer/registry'
+import type { StorageEngine, TenantCtx } from '../storage'
 import type {
   AnalysisQuerySource,
   ExecuteSqlOptions,
   QueryRow,
   SourceCapabilities,
-  SqlQuerySource,
-} from '../resolver/source-types'
-import type { StorageEngine, TenantCtx } from '../storage'
+} from './source-types'
 import { runAnalyzerFromSource } from '../analyzer/dispatch'
-import { assertDimensionsSupported, getFilterDimensions } from '../resolver'
+import { assertDimensionsSupported, getFilterDimensions, pgResolverAdapter } from '../resolver'
 
 export type { AttachedTableRunner, AttachedTableSourceOptions } from './attached-table'
 export { AttachedTableMissingError, createAttachedTableSource, rewriteForTableSource } from './attached-table'
+export { createSqlQuerySource } from './create-sql-query-source'
+export type { CreateSqlQuerySourceOptions } from './create-sql-query-source'
+export type {
+  AnalysisQuerySource,
+  AnalysisSourceKind,
+  ExecuteSqlOptions,
+  FileSet,
+  QueryRow,
+  SourceCapabilities,
+} from './source-types'
 
 function isMetricDimension(dim: string): dim is 'clicks' | 'impressions' | 'ctr' | 'position' {
   return ['clicks', 'impressions', 'ctr', 'position'].includes(dim)
@@ -42,7 +51,8 @@ export const ENGINE_QUERY_CAPABILITIES: PlannerCapabilities = {
 const ENGINE_SOURCE_CAPABILITIES: SourceCapabilities = {
   ...ENGINE_QUERY_CAPABILITIES,
   fileSets: true,
-  localSource: true,
+  executeSql: true,
+  adapter: true,
 }
 
 export interface EngineQuerySourceOptions {
@@ -51,19 +61,21 @@ export interface EngineQuerySourceOptions {
 }
 
 /**
- * Wraps a storage engine as a `SqlQuerySource`. `queryRows` runs typed
- * builder-state queries; `executeSql` delegates to `engine.runSQL` and
- * requires `opts.fileSets` (with a `FILES` entry so the target table can be
- * resolved for partition lookup).
+ * Wraps a storage engine as an `AnalysisQuerySource` with SQL execution.
+ * `queryRows` runs typed builder-state queries; `executeSql` delegates to
+ * `engine.runSQL` and requires `opts.fileSets` (with a `FILES` entry so the
+ * target table can be resolved for partition lookup).
  */
 export function createEngineQuerySource(
   options: EngineQuerySourceOptions,
-): SqlQuerySource {
+): AnalysisQuerySource {
   const { engine, ctx } = options
 
   return {
     name: 'engine',
+    kind: 'local',
     capabilities: ENGINE_SOURCE_CAPABILITIES,
+    adapter: pgResolverAdapter,
     async queryRows(state: BuilderState): Promise<QueryRow[]> {
       const filterDims = getFilterDimensions(state.filter, isMetricDimension)
       assertDimensionsSupported([...state.dimensions, ...filterDims], 'stored', 'engine query source')

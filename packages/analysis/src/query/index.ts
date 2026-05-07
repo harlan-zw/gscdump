@@ -10,6 +10,8 @@
 export {
   buildDataDetailPlan,
   buildDataQueryPlan,
+  shapeDataDetailRows,
+  shapeDataQueryRows,
 } from './analyzers'
 export type { QueryAnalyzerExtraQuery, QueryAnalyzerPlan } from './analyzers'
 export { normalizeQuery } from './normalize'

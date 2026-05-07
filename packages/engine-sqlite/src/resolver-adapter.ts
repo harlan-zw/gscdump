@@ -5,8 +5,10 @@
 import type { ResolverAdapter } from '@gscdump/engine/resolver'
 import type { SqliteRowExecutor } from './runner'
 
-import { compileSqlite, createResolverAdapter } from '@gscdump/engine/resolver'
+import { createResolverAdapter } from '@gscdump/engine/resolver'
 import { sql } from 'drizzle-orm'
+
+import { compileSqlite } from './runner'
 
 import { schema } from './schema'
 

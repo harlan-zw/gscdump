@@ -28,12 +28,7 @@ export {
   DEFAULT_SEARCH_TYPE,
   inferLegacyTier,
   inferSearchType,
-  mondayOfWeek,
-  monthPartition,
   objectKey,
-  quarterOfMonth,
-  quarterPartition,
-  weekPartition,
 } from './storage'
 export type {
   CodecCtx,

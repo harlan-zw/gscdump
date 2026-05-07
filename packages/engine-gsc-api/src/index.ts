@@ -8,9 +8,7 @@
 
 export { canProxyToGsc, createLiveGscSource } from './live'
 export type { CreateLiveGscSourceOptions } from './live'
-export { applyBuilderStatePostProcessing } from './post-process'
 export {
-  collectRows as collectGscRows,
   fetchGscDaily,
   fetchGscTopN,
 } from './rollup-synth'
@@ -20,5 +18,5 @@ export type {
   GscRange,
   GscTopNRow,
 } from './rollup-synth'
-export { createGscApiQuerySource, GSC_API_CAPABILITIES } from './source'
+export { createGscApiQuerySource } from './source'
 export type { GscApiQuerySourceOptions } from './source'

@@ -66,10 +66,15 @@
       "import": "./dist/entities.mjs",
       "default": "./dist/entities.mjs"
     },
+    "./rollups": {
+      "types": "./dist/rollups.d.mts",
+      "import": "./dist/rollups.mjs",
+      "default": "./dist/rollups.mjs"
+    },
     "./node": {
-      "types": "./dist/adapters/duckdb-node.d.mts",
-      "import": "./dist/adapters/duckdb-node.mjs",
-      "default": "./dist/adapters/duckdb-node.mjs"
+      "types": "./dist/adapters/node.d.mts",
+      "import": "./dist/adapters/node.mjs",
+      "default": "./dist/adapters/node.mjs"
     },
     "./filesystem": {
       "types": "./dist/adapters/filesystem.d.mts",

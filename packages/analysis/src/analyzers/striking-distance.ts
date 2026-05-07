@@ -45,6 +45,55 @@ export interface StrikingDistanceResult {
   potentialClicks: number
 }
 
+export interface StrikingDistanceFilterOptions {
+  minPosition?: number
+  maxPosition?: number
+  minImpressions?: number
+  maxCtr?: number
+}
+
+/**
+ * Shared kernel: filter rows + derive `potentialClicks`. No sort, no
+ * pagination. Both the analyzer's `reduce` and the top-level
+ * `analyzeStrikingDistance` pure fn call this so the correctness contract
+ * lives in one place.
+ */
+export function filterStrikingDistance(
+  rows: readonly { query: unknown, page?: unknown, clicks: unknown, impressions: unknown, ctr: unknown, position: unknown }[],
+  options: StrikingDistanceFilterOptions = {},
+): StrikingDistanceResult[] {
+  const minPosition = options.minPosition ?? 4
+  const maxPosition = options.maxPosition ?? 20
+  const minImpressions = options.minImpressions ?? 100
+  const maxCtr = options.maxCtr ?? 0.05
+
+  const results: StrikingDistanceResult[] = []
+  for (const row of rows) {
+    const position = num(row.position)
+    const impressions = num(row.impressions)
+    const ctr = num(row.ctr)
+    const clicks = num(row.clicks)
+
+    if (position < minPosition || position > maxPosition)
+      continue
+    if (impressions < minImpressions)
+      continue
+    if (ctr > maxCtr)
+      continue
+
+    results.push({
+      keyword: String(row.query ?? ''),
+      page: row.page == null ? null : String(row.page),
+      clicks,
+      impressions,
+      ctr,
+      position,
+      potentialClicks: Math.round(impressions * 0.15),
+    })
+  }
+  return results
+}
+
 export const strikingDistanceAnalyzer = defineAnalyzer<
   AnalysisParams,
   StrikingDistanceInputRow,
@@ -54,39 +103,9 @@ export const strikingDistanceAnalyzer = defineAnalyzer<
 
   reduce(rows, params) {
     const arr = Array.isArray(rows) ? rows : []
-    const minPosition = params.minPosition ?? 4
-    const maxPosition = params.maxPosition ?? 20
-    const minImpressions = params.minImpressions ?? 100
-    const maxCtr = params.maxCtr ?? 0.05
-    const limit = params.limit ?? 1000
-
-    const results: StrikingDistanceResult[] = []
-    for (const row of arr) {
-      const position = num(row.position)
-      const impressions = num(row.impressions)
-      const ctr = num(row.ctr)
-      const clicks = num(row.clicks)
-
-      if (position < minPosition || position > maxPosition)
-        continue
-      if (impressions < minImpressions)
-        continue
-      if (ctr > maxCtr)
-        continue
-
-      results.push({
-        keyword: String(row.query ?? ''),
-        page: row.page == null ? null : String(row.page),
-        clicks,
-        impressions,
-        ctr,
-        position,
-        potentialClicks: Math.round(impressions * 0.15),
-      })
-    }
-
+    const results = filterStrikingDistance(arr, params)
     results.sort((a, b) => b.potentialClicks - a.potentialClicks)
-    const paged = paginateInMemory(results, { limit, offset: params.offset })
+    const paged = paginateInMemory(results, { limit: params.limit ?? 1000, offset: params.offset })
     return { results: paged, meta: { total: results.length, returned: paged.length } }
   },
 

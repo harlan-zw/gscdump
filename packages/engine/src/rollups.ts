@@ -12,12 +12,12 @@
 // tables that the dashboard wants to filter by date range) are a planned
 // follow-up — they need a flexible-schema variant of `encodeRowsToParquet`.
 
-import type { DataSource, Row } from '@gscdump/engine/contracts'
-import type { ColumnDef } from '@gscdump/engine/schema'
 import type { TenantCtx } from 'gscdump/contracts'
-import { createIndexingMetadataStore } from '@gscdump/engine/entities'
-import { encodeRowsToParquetFlex } from '@gscdump/engine/hyparquet'
+import type { DataSource, Row } from './contracts'
+import type { ColumnDef } from './schema'
 import { MS_PER_DAY } from 'gscdump'
+import { encodeRowsToParquetFlex } from './adapters/hyparquet'
+import { createIndexingMetadataStore } from './entities'
 
 export interface RollupCtx extends TenantCtx {
   /** When the rollup was built. Stamped into payload + filename. */

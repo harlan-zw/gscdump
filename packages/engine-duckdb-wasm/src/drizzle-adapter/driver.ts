@@ -6,7 +6,7 @@
  * Stripped to the minimum: no DSN parsing, no bundle loading. Callers pass
  * their own client (built via createClient from ./client), so the wiring
  * composes cleanly with gscdump's existing DuckDB-WASM setup in the demo
- * and in @gscdump/engine-duckdb-node.
+ * and in `@gscdump/engine/node`.
  */
 
 import type { DrizzleConfig, RelationalSchemaConfig, TablesRelationalConfig } from 'drizzle-orm'

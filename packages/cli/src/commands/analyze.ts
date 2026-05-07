@@ -3,6 +3,7 @@ import type { CommandDef } from 'citty'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { defineCommand } from 'citty'
 import { resolveAnalysisSource } from '../analysis-local'
+import { gscErrorHandler } from '../error-handler'
 import { logger, toCSV } from '../utils'
 
 const ANALYSIS_TOOLS = defaultAnalyzerRegistry.listAnalyzerIds()
@@ -97,7 +98,7 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       logger.info(`Running ${tool} analysis...`)
 
       const params = buildParams(tool, args)
-      const result = await runAnalysis(params)
+      const result = await runAnalysis(params).catch(gscErrorHandler)
 
       if (format === 'json') {
         console.log(JSON.stringify(result, null, 2))

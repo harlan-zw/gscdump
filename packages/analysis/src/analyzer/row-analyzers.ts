@@ -3,32 +3,16 @@
  * `AnalysisQuerySource` that yields rows (live GSC API, in-memory, SQL
  * engines via their row path).
  *
- * Export is a plain array so consumers can compose registries without
- * triggering side effects. Pass to `createAnalyzerRegistry({ rows: ROW_ANALYZERS })`.
+ * Derived from `ALL_ANALYZERS`: every `DefinedAnalyzer` with a `rows` variant
+ * is included automatically. Pass to
+ * `createAnalyzerRegistry({ rows: ROW_ANALYZERS })` for narrow composition,
+ * or prefer `createAnalyzerRegistry({ defined: ALL_ANALYZERS })` in-tree.
  */
 
 import type { Analyzer } from '@gscdump/engine/analyzer'
 
-import { brandAnalyzer } from '../analyzers/brand'
-import { cannibalizationAnalyzer } from '../analyzers/cannibalization'
-import { clusteringAnalyzer } from '../analyzers/clustering'
-import { concentrationAnalyzer } from '../analyzers/concentration'
-import { decayAnalyzer } from '../analyzers/decay'
-import { moversAnalyzer } from '../analyzers/movers'
-import { opportunityAnalyzer } from '../analyzers/opportunity'
-import { seasonalityAnalyzer } from '../analyzers/seasonality'
-import { strikingDistanceAnalyzer } from '../analyzers/striking-distance'
-import { zeroClickAnalyzer } from '../analyzers/zero-click'
+import { ALL_ANALYZERS } from './all'
 
-export const ROW_ANALYZERS: readonly Analyzer[] = [
-  strikingDistanceAnalyzer.rows!,
-  opportunityAnalyzer.rows!,
-  brandAnalyzer.rows!,
-  concentrationAnalyzer.rows!,
-  clusteringAnalyzer.rows!,
-  seasonalityAnalyzer.rows!,
-  moversAnalyzer.rows!,
-  decayAnalyzer.rows!,
-  cannibalizationAnalyzer.rows!,
-  zeroClickAnalyzer.rows!,
-]
+export const ROW_ANALYZERS: readonly Analyzer[] = ALL_ANALYZERS.flatMap(
+  d => (d.rows ? [d.rows] : []),
+)

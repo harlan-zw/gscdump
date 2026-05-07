@@ -1,15 +1,17 @@
+import type { AnalysisParams } from '@gscdump/analysis'
 import type { Row, WriteCtx } from '@gscdump/engine/contracts'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { createNodeHarness } from '@gscdump/engine-duckdb-node'
-import { resetNodeDuckDB } from '@gscdump/engine/node'
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  hasLocalData,
-  LocalStoreUnsupportedError,
-  runLocalAnalysis,
-} from '../src/analysis-local'
+  AnalyzerCapabilityError,
+  createEngineQuerySource,
+  runAnalyzerFromSource,
+} from '@gscdump/analysis'
+import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
+import { createNodeHarness, resetNodeDuckDB } from '@gscdump/engine/node'
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { hasLocalData } from '../src/analysis-local'
 
 const SITE = 'sc-domain:example.com'
 
@@ -38,6 +40,17 @@ async function seedPageKeywords(
   }
 }
 
+function dispatch(
+  harness: ReturnType<typeof createNodeHarness>,
+  params: AnalysisParams,
+) {
+  const source = createEngineQuerySource({
+    engine: harness.engine,
+    ctx: { userId: harness.userId, siteId: harness.siteIdFor(SITE) },
+  })
+  return runAnalyzerFromSource(source, params, defaultAnalyzerRegistry)
+}
+
 describe('analysis-local', () => {
   let tmpDir: string
 
@@ -62,15 +75,13 @@ describe('analysis-local', () => {
     expect(await hasLocalData(harness, SITE)).toBe(true)
   })
 
-  it('runLocalAnalysis dispatches striking-distance against the store', async () => {
+  it('dispatches striking-distance against the store', async () => {
     const harness = createNodeHarness({ dataDir: tmpDir })
-    // One striking-distance candidate (position ~6, high impressions, low CTR)
-    // and one row outside the window (position ~2).
     await seedPageKeywords(harness, [
       { url: '/guide', query: 'near miss', date: '2026-04-10', clicks: 2, impressions: 500, sum_position: 2500 },
       { url: '/home', query: 'strong', date: '2026-04-10', clicks: 100, impressions: 500, sum_position: 500 },
     ])
-    const out = await runLocalAnalysis(harness, SITE, {
+    const out = await dispatch(harness, {
       type: 'striking-distance',
       startDate: '2026-04-10',
       endDate: '2026-04-10',
@@ -80,22 +91,19 @@ describe('analysis-local', () => {
     expect((out.results[0] as { keyword: string }).keyword).toBe('near miss')
   })
 
-  it('runLocalAnalysis rejects unknown tool types with LocalStoreUnsupportedError', async () => {
+  it('rejects unknown tool types with AnalyzerCapabilityError', async () => {
     const harness = createNodeHarness({ dataDir: tmpDir })
-    // All current tools are wired; force the dispatcher's default branch with
-    // an unknown type to exercise the safety-net error path.
     await expect(
-      runLocalAnalysis(harness, SITE, { type: 'not-a-real-tool' as never }),
-    ).rejects.toThrow(LocalStoreUnsupportedError)
+      dispatch(harness, { type: 'not-a-real-tool' as never }),
+    ).rejects.toThrow(AnalyzerCapabilityError)
   })
 
-  it('runLocalAnalysis dispatches opportunity against the store', async () => {
+  it('dispatches opportunity against the store', async () => {
     const harness = createNodeHarness({ dataDir: tmpDir })
     await seedPageKeywords(harness, [
-      // High-impression keyword, position ~11, low CTR: strong opportunity candidate.
       { url: '/guide', query: 'opportunity candidate', date: '2026-04-10', clicks: 5, impressions: 10000, sum_position: 100000 },
     ])
-    const out = await runLocalAnalysis(harness, SITE, {
+    const out = await dispatch(harness, {
       type: 'opportunity',
       startDate: '2026-04-10',
       endDate: '2026-04-10',
@@ -105,13 +113,13 @@ describe('analysis-local', () => {
     expect((out.results[0] as { keyword: string }).keyword).toBe('opportunity candidate')
   })
 
-  it('runLocalAnalysis dispatches brand when brandTerms provided', async () => {
+  it('dispatches brand when brandTerms provided', async () => {
     const harness = createNodeHarness({ dataDir: tmpDir })
     await seedPageKeywords(harness, [
       { url: '/', query: 'acme shoes', date: '2026-04-10', clicks: 10, impressions: 200, sum_position: 200 },
       { url: '/', query: 'running shoes', date: '2026-04-10', clicks: 5, impressions: 200, sum_position: 600 },
     ])
-    const out = await runLocalAnalysis(harness, SITE, {
+    const out = await dispatch(harness, {
       type: 'brand',
       brandTerms: ['acme'],
       startDate: '2026-04-10',
@@ -123,20 +131,20 @@ describe('analysis-local', () => {
     expect(brandRow?.query).toBe('acme shoes')
   })
 
-  it('runLocalAnalysis brand throws when brandTerms missing', async () => {
+  it('brand throws when brandTerms missing', async () => {
     const harness = createNodeHarness({ dataDir: tmpDir })
     await expect(
-      runLocalAnalysis(harness, SITE, { type: 'brand' }),
+      dispatch(harness, { type: 'brand' }),
     ).rejects.toThrow('brandTerms')
   })
 
-  it('runLocalAnalysis dispatches movers for comparison periods', async () => {
+  it('dispatches movers for comparison periods', async () => {
     const harness = createNodeHarness({ dataDir: tmpDir })
     await seedPageKeywords(harness, [
       { url: '/', query: 'rising term', date: '2026-04-10', clicks: 100, impressions: 1000, sum_position: 3000 },
       { url: '/', query: 'rising term', date: '2026-04-03', clicks: 10, impressions: 100, sum_position: 500 },
     ])
-    const out = await runLocalAnalysis(harness, SITE, {
+    const out = await dispatch(harness, {
       type: 'movers',
       startDate: '2026-04-10',
       endDate: '2026-04-10',
@@ -149,10 +157,10 @@ describe('analysis-local', () => {
     expect(rising[0].keyword).toBe('rising term')
   })
 
-  it('runLocalAnalysis movers throws when comparison period missing', async () => {
+  it('movers throws when comparison period missing', async () => {
     const harness = createNodeHarness({ dataDir: tmpDir })
     await expect(
-      runLocalAnalysis(harness, SITE, { type: 'movers' }),
+      dispatch(harness, { type: 'movers' }),
     ).rejects.toThrow('prevStartDate')
   })
 })

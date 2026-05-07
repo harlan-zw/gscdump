@@ -1,10 +1,11 @@
 /**
  * `@gscdump/engine/resolver` — dialect-neutral SQL composition kit.
  *
- * Exports the `ResolverAdapter` contract, dialect compile fns
- * (`compilePg`, `compileSqlite`), SQL composers (`resolveToSQL`,
- * `resolveComparisonSQL`, etc), the `createSqlQuerySource` factory, and
- * the source-layer types analyzers consume.
+ * Exports the `ResolverAdapter` contract and SQL composers
+ * (`resolveToSQL`, `resolveComparisonSQL`, etc). Dialect compile fns are
+ * colocated with their adapters: `compilePg` is internal to `pg-adapter`;
+ * `compileSqlite` lives in `@gscdump/engine-sqlite`. Source-layer types
+ * and the `createSqlQuerySource` factory live in `@gscdump/engine/source`.
  *
  * Engine adapter packages (`@gscdump/engine-duckdb-wasm`, `@gscdump/engine-sqlite`)
  * and analyzer dispatch (`@gscdump/engine/analyzer`) import from here.
@@ -20,8 +21,6 @@ export {
   resolveToSQL,
   resolveToSQLOptimized,
 } from './compiler'
-export { createSqlQuerySource } from './create-sql-query-source'
-export type { CreateSqlQuerySourceOptions } from './create-sql-query-source'
 export {
   assertDimensionsSupported,
   DIMENSION_SURFACES,
@@ -36,7 +35,6 @@ export type {
   LogicalDataset,
   LogicalDatasetDefinition,
 } from './datasets'
-export { compilePg, compileSqlite } from './dialects'
 export {
   dimensionValue,
   getDimensionFilters,
@@ -53,18 +51,6 @@ export { createParquetResolverAdapter, pgResolverAdapter } from './pg-adapter'
 export type { PgTableKey } from './pg-adapter'
 export { assertSchemaInSync } from './schema-drift'
 export type { AssertSchemaInSyncOptions } from './schema-drift'
-export {
-  isSqlQuerySource,
-} from './source-types'
-export type {
-  AnalysisQuerySource,
-  ExecuteSqlOptions,
-  FileSet,
-  QueryRow,
-  RowQuerySource,
-  SourceCapabilities,
-  SqlQuerySource,
-} from './source-types'
 export type {
   ComparisonFilter,
   ExtraQuery,

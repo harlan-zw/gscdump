@@ -4,7 +4,7 @@
 // (browser) or @duckdb/node-api (Node) — the caller supplies a runner that
 // executes SQL and returns plain row objects.
 
-import type { SnapshotIndex } from '@gscdump/engine/snapshot'
+import type { SnapshotIndex } from '../snapshot'
 
 /**
  * Runs arbitrary SQL and returns rows as plain objects. Caller supplies

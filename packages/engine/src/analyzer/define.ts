@@ -1,7 +1,8 @@
 /**
  * `defineAnalyzer` — single colocation site for an analyzer that can be
- * executed via SQL (against a `SqlQuerySource`) or via a row query plan
- * (against a `RowQuerySource` — e.g. GSC live API, in-memory rows).
+ * executed via SQL (against a source whose `capabilities.executeSql` is set)
+ * or via a row query plan (against any source — e.g. GSC live API, in-memory
+ * rows).
  *
  * Authors provide either:
  *   - a shared `reduce` (parity-mode: SQL emits raw aggregation; reducer does
@@ -12,13 +13,14 @@
 
 import type { BuilderState } from 'gscdump/query'
 import type { AnalysisParams } from '../analysis-types'
-import type { FileSet } from '../resolver/source-types'
+import type { FileSet } from '../source/source-types'
 import type { Row } from '../storage'
 import type {
   Analyzer,
-  Capability,
+  BuildContext,
   Plan,
   ReduceContext,
+  RequiredCapability,
   RowQueriesPlan,
   SqlExtraQuery,
   SqlPlan,
@@ -31,7 +33,6 @@ export interface SqlPlanSpec {
   previous?: FileSet
   extraFiles?: Record<string, FileSet>
   extraQueries?: SqlExtraQuery[]
-  requiresAttachedTables?: boolean
 }
 
 export interface ReduceCtx<InputRow> {
@@ -62,13 +63,13 @@ export interface DefineAnalyzerOptions<
   /** Row-only reducer. Required when `buildRows` is set without `reduce`. */
   reduceRows?: Reducer<Params, InputRow, Result>
   /** SQL plan builder. Omit if the analyzer has no SQL path. */
-  buildSql?: (params: Params) => SqlPlanSpec
+  buildSql?: (params: Params, ctx: BuildContext) => SqlPlanSpec
   /** Row plan builder. Omit if the analyzer has no row path. */
-  buildRows?: (params: Params) => Record<string, BuilderState>
-  /** Capabilities required by the SQL plan. Defaults to `['executeSql', 'partitionedParquet']`. */
-  sqlRequires?: readonly Capability[]
+  buildRows?: (params: Params, ctx: BuildContext) => Record<string, BuilderState>
+  /** Capabilities required by the SQL plan. Defaults to `['executeSql', 'fileSets']`. */
+  sqlRequires?: readonly RequiredCapability[]
   /** Capabilities required by the row plan. Defaults to `[]`. */
-  rowsRequires?: readonly Capability[]
+  rowsRequires?: readonly RequiredCapability[]
 }
 
 export interface DefinedAnalyzer {
@@ -77,7 +78,7 @@ export interface DefinedAnalyzer {
   rows?: Analyzer
 }
 
-const DEFAULT_SQL_REQUIRES: readonly Capability[] = ['executeSql', 'partitionedParquet']
+const DEFAULT_SQL_REQUIRES: readonly RequiredCapability[] = ['executeSql', 'fileSets']
 
 export function defineAnalyzer<
   Params extends AnalysisParams,
@@ -116,8 +117,8 @@ export function defineAnalyzer<
     ? {
         id,
         requires: sqlRequires,
-        build(params: AnalysisParams): Plan {
-          const spec = buildSql(params as Params)
+        build(params: AnalysisParams, ctx: BuildContext = {}): Plan {
+          const spec = buildSql(params as Params, ctx)
           const plan: SqlPlan = {
             kind: 'sql',
             sql: spec.sql,
@@ -126,7 +127,6 @@ export function defineAnalyzer<
             previous: spec.previous,
             extraFiles: spec.extraFiles,
             extraQueries: spec.extraQueries,
-            requiresAttachedTables: spec.requiresAttachedTables,
           }
           return plan
         },
@@ -143,8 +143,8 @@ export function defineAnalyzer<
     ? {
         id,
         requires: rowsRequires,
-        build(params: AnalysisParams): Plan {
-          const queries = buildRows(params as Params)
+        build(params: AnalysisParams, ctx: BuildContext = {}): Plan {
+          const queries = buildRows(params as Params, ctx)
           const plan: RowQueriesPlan = {
             kind: 'rows',
             queries: Object.fromEntries(

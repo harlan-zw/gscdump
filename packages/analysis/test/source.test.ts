@@ -11,6 +11,7 @@ import {
   createStorageEngine,
 } from '@gscdump/engine'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
+import { runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import {
   createFilesystemDataSource,
   createFilesystemManifestStore,
@@ -34,11 +35,10 @@ import {
   topLevel,
 } from 'gscdump/query'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
-import {
-  analyzeMoversFromSource,
-  createInMemoryQuerySource,
-  queryAnalyticsFromSource,
-} from '../src/source'
+import { keywordsQueryState, pagesQueryState } from '../src/analyzer/adapt-rows'
+import { moversAnalyzer } from '../src/analyzers/movers'
+import { defaultAnalyzerRegistry } from '../src/default-registry'
+import { createInMemoryQuerySource } from '../src/source'
 
 afterAll(() => {
   resetNodeDuckDB()
@@ -76,7 +76,7 @@ describe('analysis sources', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  it('queryAnalyticsFromSource fans out through one shared source contract', async () => {
+  it('in-memory source fans rows out by builder dimensions', async () => {
     const source = createInMemoryQuerySource({
       queryRows(state) {
         if (state.dimensions.includes('query'))
@@ -87,14 +87,14 @@ describe('analysis sources', () => {
       },
     })
 
-    const out = await queryAnalyticsFromSource(source, {
-      startDate: '2026-04-10',
-      endDate: '2026-04-10',
-    })
+    const period = { startDate: '2026-04-10', endDate: '2026-04-10' }
+    const [keywords, pages] = await Promise.all([
+      queryRows(source, keywordsQueryState(period, 100)),
+      queryRows(source, pagesQueryState(period, 100)),
+    ])
 
-    expect(out.keywords[0].query).toBe('alpha')
-    expect(out.pages[0].page).toBe('/a')
-    expect(out.dates[0].date).toBe('2026-04-10')
+    expect(keywords[0].query).toBe('alpha')
+    expect(pages[0].page).toBe('/a')
   })
 
   it('gsc api source applies analytics-only filters client-side', async () => {
@@ -186,7 +186,7 @@ describe('analysis sources', () => {
     expect(keywordRows[0].query).toBe('alpha')
   })
 
-  it('portable analyzers work against non-api sources too', async () => {
+  it('movers analyzer dispatches against in-memory sources via runAnalyzerFromSource', async () => {
     const source = createInMemoryQuerySource({
       queryRows(state) {
         if (state.dimensions.includes('query')) {
@@ -203,12 +203,21 @@ describe('analysis sources', () => {
       },
     })
 
-    const out = await analyzeMoversFromSource(source, {
-      current: { startDate: '2026-04-10', endDate: '2026-04-10' },
-      previous: { startDate: '2026-04-01', endDate: '2026-04-01' },
-    })
+    const out = await runAnalyzerFromSource(
+      source,
+      {
+        type: 'movers',
+        startDate: '2026-04-10',
+        endDate: '2026-04-10',
+        prevStartDate: '2026-04-01',
+        prevEndDate: '2026-04-01',
+      } as never,
+      defaultAnalyzerRegistry,
+    )
 
-    expect(out.rising).toHaveLength(1)
-    expect(out.rising[0].keyword).toBe('alpha')
+    expect(out.results).toHaveLength(1)
+    expect((out.results as Array<{ keyword: string }>)[0].keyword).toBe('alpha')
+    expect((out.meta as { rising: number }).rising).toBe(1)
+    expect(moversAnalyzer.id).toBe('movers')
   })
 })

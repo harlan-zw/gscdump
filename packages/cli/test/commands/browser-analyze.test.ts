@@ -11,12 +11,16 @@ import {
   createDuckDBExecutor,
   createStorageEngine,
 } from '@gscdump/engine'
-import { attachParquetIndex, attachSnapshotIndex } from '@gscdump/engine-duckdb-node'
 import {
   createFilesystemDataSource,
   createFilesystemManifestStore,
 } from '@gscdump/engine/filesystem'
-import { createNodeDuckDBHandle, resetNodeDuckDB } from '@gscdump/engine/node'
+import {
+  attachParquetIndex,
+  attachSnapshotIndex,
+  createNodeDuckDBHandle,
+  resetNodeDuckDB,
+} from '@gscdump/engine/node'
 import { encodeSiteId } from 'gscdump/tenant'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { exportToDuckDB } from '../../src/commands/export'
@@ -108,6 +112,7 @@ describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
         runner,
         { schema: 'gsc' },
         { type: 'striking-distance', startDate: '2026-04-10', endDate: '2026-04-10', limit: 100 },
+        defaultAnalyzerRegistry,
       )
 
       // Same rows, same ordering, same counts.
@@ -182,7 +187,7 @@ describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
     }
 
     try {
-      const browser = await analyzeInBrowser(runner, { schema: 'gsc' }, params)
+      const browser = await analyzeInBrowser(runner, { schema: 'gsc' }, params, defaultAnalyzerRegistry)
       expect(browser.results).toEqual(server.results)
       expect(browser.meta?.rising).toBe(server.meta?.rising)
     }
@@ -240,7 +245,7 @@ describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
     }
 
     try {
-      const browser = await analyzeInBrowser(runner, { schema: 'gsc' }, params)
+      const browser = await analyzeInBrowser(runner, { schema: 'gsc' }, params, defaultAnalyzerRegistry)
       expect(browser.results).toEqual(server.results)
       expect(browser.meta?.tool).toBe('zero-click')
       expect(browser.meta?.minImpressions).toBe(1000)
@@ -292,7 +297,7 @@ describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
     }
 
     try {
-      const browser = await analyzeInBrowser(runner, { schema: 'gsc' }, params)
+      const browser = await analyzeInBrowser(runner, { schema: 'gsc' }, params, defaultAnalyzerRegistry)
       // opportunityScore ties between rows → DuckDB instances differ in tie-break
       // order (server-side blocking wasm vs browser-side native @duckdb/node-api).
       // Sort by a stable key before comparison; set equality is what matters here.
@@ -438,7 +443,7 @@ describe('attachSnapshotIndex', () => {
         },
       }
 
-      const browser = await analyzeInBrowser(analyzerRunner, { schema: 'main' }, params)
+      const browser = await analyzeInBrowser(analyzerRunner, { schema: 'main' }, params, defaultAnalyzerRegistry)
       expect(browser.results).toEqual(server.results)
     }
     finally {
@@ -629,7 +634,7 @@ describe('attachParquetIndex', () => {
           return reader.getRowObjects() as Row[]
         },
       }
-      const browser = await analyzeInBrowser(analyzerRunner, { schema: 'main' }, params)
+      const browser = await analyzeInBrowser(analyzerRunner, { schema: 'main' }, params, defaultAnalyzerRegistry)
       expect(browser.results).toEqual(server.results)
     }
     finally {

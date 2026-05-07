@@ -11,11 +11,13 @@ export type { DefineAnalyzerOptions, DefinedAnalyzer, ReduceCtx, Reducer, SqlPla
 export { AnalyzerCapabilityError, runAnalyzerFromSource } from './dispatch'
 export { createAnalyzerRegistry } from './registry'
 export type { AnalyzerRegistry, AnalyzerRegistryInit, AnalyzerVariants } from './registry'
+export { requireAdapter } from './types'
 export type {
   Analyzer,
-  Capability,
+  BuildContext,
   Plan,
   ReduceContext,
+  RequiredCapability,
   RowQueriesPlan,
   SqlExtraQuery,
   SqlPlan,

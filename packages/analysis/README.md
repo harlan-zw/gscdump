@@ -22,8 +22,6 @@ npm install @gscdump/analysis
 | `@gscdump/analysis/source` | Portable query sources (`createInMemoryQuerySource`, `createCompositeSource`) + source-backed analyzers. |
 | `@gscdump/analysis/semantic` | Browser-only semantic analyzers such as content-gap; optional `@huggingface/transformers` peer. |
 | `@gscdump/analysis/query` | `buildDataQueryPlan` / `buildDataDetailPlan` for the generic query analyzers. |
-| `@gscdump/analysis/routing` | Phase-aware D1 ↔ R2 routing helpers. |
-| `@gscdump/analysis/rollups` | Pre-baked rollup definitions + rebuild orchestration. |
 
 The contract layer (`Analyzer`, `Plan`, `Capability`, `AnalysisParams`, `AnalysisResult`, `AnalysisQuerySource`, `runAnalyzerFromSource`, `createAnalyzerRegistry`, `defineAnalyzer`, period helpers, `createEngineQuerySource`) lives in `@gscdump/engine` under the `/analyzer`, `/analysis-types`, `/period`, `/source`, and `/resolver` subpaths. Most are re-exported from `@gscdump/analysis` for convenience.
 
@@ -40,11 +38,9 @@ import {
   analyzeMovers,
   analyzeOpportunity,
   analyzeSeasonality,
-  analyzeStrikingDistance,
   padTimeseries,
 } from '@gscdump/analysis'
 
-const striking = analyzeStrikingDistance(keywordRows, { minImpressions: 100 })
 const movers = analyzeMovers(currentRows, previousRows)
 const decay = analyzeDecay(currentRows, previousRows)
 ```
@@ -72,7 +68,7 @@ const result = await runReport(report, {
 Source adapters compose a GSC client + analyzer in one call:
 
 ```ts
-import { analyzeMoversFromSource, analyzeStrikingDistanceFromSource } from '@gscdump/analysis'
+import { analyzeMoversFromSource } from '@gscdump/analysis'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 
 const source = createGscApiQuerySource({ client, siteUrl })
@@ -99,9 +95,17 @@ const result = await runAnalyzerFromSource(source, { type: 'striking-distance', 
 
 ```ts
 import { analyzeInBrowser } from '@gscdump/analysis'
+// Compose your own narrow registry instead of pulling the kitchen-sink default
+// (which statically imports every SQL analyzer). For demo only:
+import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { createEngine } from '@gscdump/engine-duckdb-wasm'
 
-const result = await analyzeInBrowser(runner, { schema: 'gsc' }, { type: 'striking-distance' })
+const result = await analyzeInBrowser(
+  runner,
+  { schema: 'gsc' },
+  { type: 'striking-distance' },
+  defaultAnalyzerRegistry,
+)
 ```
 
 `analyzeInBrowser` wraps any runner with `query(sql, params, signal?)` in an `AnalysisQuerySource` with the `attachedTables` capability and dispatches via `runAnalyzerFromSource`.
@@ -178,10 +182,10 @@ Presets: `last-7d`, `last-28d`, `last-30d`, `last-90d`, `last-180d`, `last-365d`
 
 | Surface | Stability |
 |---|---|
-| Row analyzers (`analyzeStrikingDistance`, `analyzeMovers`, ...) | Public |
+| Row analyzers (`analyzeMovers`, `analyzeDecay`, ...) | Public |
 | Source factories + `analyzeFromSource` | Public |
 | `Analyzer<P, R>` contract + `createAnalyzerRegistry` (re-exported from `@gscdump/engine/analyzer`) | Public |
-| `/source`, `/semantic`, `/query`, `/routing`, `/rollups` subpaths | Public |
+| `/source`, `/semantic`, `/query` subpaths | Public |
 | Per-analyzer modules under `analysis/src/analyzers/<name>` | Private |
 
 ## Related

@@ -53,14 +53,15 @@ export { analyzeMovers } from './analyzers/movers'
 export type { OpportunityResult } from './analyzers/opportunity'
 export type { MonthlyData, SeasonalityMetric, SeasonalityOptions, SeasonalityResult } from './analyzers/seasonality'
 export { analyzeSeasonality } from './analyzers/seasonality'
+export type { StrikingDistanceInputRow, StrikingDistanceResult } from './analyzers/striking-distance'
 export type { ZeroClickResult } from './analyzers/zero-click'
-// Browser dispatcher (legacy AnalyzerSpec path)
 export { analyzeInBrowser, rewriteForTableSource } from './browser'
+
 export type { AnalyzerRunner, BrowserAnalyzeOptions } from './browser'
 
 export { defaultAnalyzerRegistry } from './default-registry'
-
 export { normalizeQuery } from './query/normalize'
+
 // Reports — public surface. `defineReport` lives at `@gscdump/engine/report`
 // so the contract is readable without pulling the runtime in.
 export {
@@ -70,50 +71,24 @@ export {
   REPORTS,
   runReport,
 } from './report'
-
 export type {
   DryRunReportResult,
   FormatReportOptions,
   RunReportOptions,
 } from './report'
-// Source-based analyzer entrypoints
-export type {
-  ComparisonQueryResult,
-  QueryDimension,
-  QueryOptions,
-  QueryResult,
-} from './source'
 
+// Source factories. The dispatcher is `runAnalyzerFromSource` (re-exported
+// below from `@gscdump/engine/analyzer`).
 export {
-  analyzeBrandSegmentationFromSource,
-  analyzeClusteringFromSource,
-  analyzeDecayFromSource,
-  analyzeFromSource,
-  analyzeKeywordConcentrationFromSource,
-  analyzeMoversFromSource,
-  analyzeOpportunityFromSource,
-  analyzePageConcentrationFromSource,
-  analyzeSeasonalityFromSource,
-  analyzeStrikingDistanceFromSource,
   createCompositeSource,
   createInMemoryQuerySource,
   IN_MEMORY_DEFAULT_CAPABILITIES,
-  queryAnalyticsFromSource,
-  queryComparisonFromSource,
 } from './source'
-
 export type {
   CompositeSourceOptions,
   InMemoryQuerySourceOptions,
 } from './source'
 export { SQL_ANALYZERS } from './sql-analyzers'
-export type {
-  StrikingDistanceOptions,
-  StrikingDistanceResult,
-  StrikingDistanceSortMetric,
-} from './striking-distance'
-
-export { analyzeStrikingDistance } from './striking-distance'
 // Domain row shapes + utilities
 export type {
   BaseMetrics,
@@ -141,9 +116,9 @@ export type {
   AnalyzerRegistry,
   AnalyzerRegistryInit,
   AnalyzerVariants,
-  Capability,
   Plan,
   ReduceContext,
+  RequiredCapability,
   RowQueriesPlan,
   SqlExtraQuery,
   SqlPlan,
@@ -193,21 +168,15 @@ export type {
   ReportResult,
   ReportSection,
 } from '@gscdump/engine/report'
-// Source contracts (resolver-owned)
+// Source contracts + engine-backed source + typed-query helpers
 export type {
   AnalysisQuerySource,
+  AnalysisSourceKind,
+  EngineQuerySourceOptions,
   ExecuteSqlOptions,
   FileSet,
   QueryRow,
-  RowQuerySource,
   SourceCapabilities,
-  SqlQuerySource,
-} from '@gscdump/engine/resolver'
-
-export { isSqlQuerySource } from '@gscdump/engine/resolver'
-// Engine-backed source + typed-query helpers
-export type {
-  EngineQuerySourceOptions,
   TypedQuery,
 } from '@gscdump/engine/source'
 export {

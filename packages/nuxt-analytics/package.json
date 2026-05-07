@@ -58,6 +58,7 @@
   "dependencies": {
     "@duckdb/duckdb-wasm": "catalog:",
     "@gscdump/analysis": "workspace:*",
+    "@gscdump/engine": "workspace:*",
     "@gscdump/engine-duckdb-wasm": "workspace:*",
     "@nuxt/ui": "catalog:",
     "@unovis/ts": "catalog:",

@@ -2,7 +2,7 @@
  * Report runtime — `runReport`, `dryRunReport`.
  *
  * Composition pattern: each
- * `ReportPlanStep` is dispatched through `analyzeFromSource` in parallel,
+ * `ReportPlanStep` is dispatched through `runAnalyzerFromSource` in parallel,
  * results land in a keyed bag, the report's `reduce` shapes that into
  * sections. Required-step failure throws; optional-step failure flips
  * `coverage: 'partial'` and `meta.degraded: true`.
@@ -19,9 +19,9 @@ import type {
   ReportSection,
   ReportStepStateMeta,
 } from '@gscdump/engine/report'
-import type { AnalysisQuerySource } from '@gscdump/engine/resolver'
+import type { AnalysisQuerySource } from '@gscdump/engine/source'
+import { runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import { computeInputHash } from '@gscdump/engine/report'
-import { analyzeFromSource } from '../source/analyze-from-source'
 
 export interface RunReportOptions<P extends ReportParams = ReportParams> {
   source: AnalysisQuerySource
@@ -40,7 +40,7 @@ async function executeStep(
   step: ReportPlanStep,
 ): Promise<StepOutcome> {
   const params = { ...step.params, type: step.type } as AnalysisParams
-  return analyzeFromSource(source, params, analyzers)
+  return runAnalyzerFromSource(source, params, analyzers)
     .then((result): StepOutcome => ({
       state: { key: step.key, type: step.type, status: 'done' },
       result,
