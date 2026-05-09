@@ -1,15 +1,19 @@
 import type { DataSource, Row, TableName } from '@gscdump/engine/contracts'
 import type { RollupDef, RollupEngine } from '../src/rollups'
-import { createIndexingMetadataStore } from '@gscdump/engine/entities'
+import { createIndexingMetadataStore, createSitemapStore } from '@gscdump/engine/entities'
 import { decodeParquetToRows } from '@gscdump/engine/hyparquet'
 import { describe, expect, it } from 'vitest'
 import {
   dailyTotalsRollup,
   DEFAULT_ROLLUPS,
+  indexingHealthRollup,
   indexingMetadataRollup,
+  indexPercentRollup,
   rebuildRollups,
   rollupKey,
   rollupParquetKey,
+  sitemapChanges28dRollup,
+  sitemapHealthRollup,
   topCountries28dRollup,
   topKeywords28dParquetRollup,
   topPages28dRollup,
@@ -372,5 +376,217 @@ describe('parquet rollups', () => {
         now: () => 1_700_000_000_000,
       }),
     ).rejects.toThrow(/parquetColumns/)
+  })
+})
+
+describe('indexingHealthRollup', () => {
+  it('returns empty days when inspection parquet URI is unavailable', async () => {
+    const { ds } = makeFakeDataSource()
+    const engine = makeFakeEngine({} as Record<TableName, Row[]>)
+    const payload = (await indexingHealthRollup.build({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource: ds,
+      builtAt: 1_700_000_000_000,
+    })) as { days: unknown[] }
+    expect(payload.days).toEqual([])
+  })
+
+  it('runs DuckDB SQL and projects per-day counts when URI is present', async () => {
+    // DataSource with `uri` defined makes parquetUri() return a string.
+    const { ds: base } = makeFakeDataSource()
+    const ds: DataSource = { ...base, uri: (k: string) => `file://${k}` }
+    let capturedSql = ''
+    const engine: RollupEngine = {
+      async runSQL(opts) {
+        capturedSql = opts.sql
+        return {
+          rows: [
+            {
+              date: '2026-04-10',
+              total_urls: 10,
+              indexed_count: 7,
+              soft_404: 1,
+              redirect: 0,
+              not_found: 1,
+              mobile_passes: 6,
+              rich_results_passes: 5,
+              canonical_mismatches: 2,
+            },
+          ],
+        }
+      },
+    }
+    const payload = (await indexingHealthRollup.build({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource: ds,
+      builtAt: 1_700_000_000_000,
+    })) as { days: Array<{ date: string, indexed_count: number, canonical_mismatches: number }> }
+    expect(capturedSql).toContain('read_parquet(\'file://u_u1/s1/entities/inspections/index.parquet\')')
+    expect(payload.days).toHaveLength(1)
+    expect(payload.days[0].date).toBe('2026-04-10')
+    expect(payload.days[0].indexed_count).toBe(7)
+    expect(payload.days[0].canonical_mismatches).toBe(2)
+  })
+})
+
+describe('indexPercentRollup', () => {
+  it('returns zero totals when sitemap urls parquet URI is unavailable', async () => {
+    const { ds } = makeFakeDataSource()
+    const engine = makeFakeEngine({} as Record<TableName, Row[]>)
+    const payload = (await indexPercentRollup.build({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource: ds,
+      builtAt: 1_700_000_000_000,
+    })) as { totalSitemapUrls: number, days: unknown[] }
+    expect(payload.totalSitemapUrls).toBe(0)
+    expect(payload.days).toEqual([])
+  })
+
+  it('computes per-day ratio from JOIN against pages parquet', async () => {
+    const { ds: base } = makeFakeDataSource()
+    const ds: DataSource = { ...base, uri: (k: string) => `file://${k}` }
+    const engine: RollupEngine = {
+      async runSQL(opts) {
+        // First call: numerator (per-day clicked URLs); second call: denominator
+        if (opts.sql.includes('clicked_urls')) {
+          return {
+            rows: [
+              { date: '2026-04-10', clicked_urls: 25 },
+              { date: '2026-04-11', clicked_urls: 50 },
+            ],
+          }
+        }
+        return { rows: [{ total: 100 }] }
+      },
+    }
+    const payload = (await indexPercentRollup.build({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource: ds,
+      builtAt: 1_700_000_000_000,
+    })) as {
+      totalSitemapUrls: number
+      days: Array<{ date: string, clicked_urls: number, total_sitemap_urls: number, ratio: number }>
+    }
+    expect(payload.totalSitemapUrls).toBe(100)
+    expect(payload.days).toHaveLength(2)
+    expect(payload.days[0].ratio).toBeCloseTo(0.25)
+    expect(payload.days[1].ratio).toBeCloseTo(0.5)
+  })
+})
+
+describe('sitemapHealthRollup', () => {
+  it('returns empty payload when sitemap index is empty', async () => {
+    const { ds } = makeFakeDataSource()
+    const engine = makeFakeEngine({} as Record<TableName, Row[]>)
+    const payload = (await sitemapHealthRollup.build({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource: ds,
+      builtAt: 1_700_000_000_000,
+    })) as { days: unknown[], feeds: unknown[] }
+    expect(payload.days).toEqual([])
+    expect(payload.feeds).toEqual([])
+  })
+
+  it('aggregates per-day feed counts and url totals', async () => {
+    const { ds } = makeFakeDataSource()
+    const store = createSitemapStore({ dataSource: ds })
+    const ctx = { userId: 'u1', siteId: 's1' }
+    // builtAt 2026-04-22; cutoff = 2026-01-22 (90d back). Use recent dates.
+    const builtAt = new Date('2026-04-22T00:00:00Z').getTime()
+    await store.writeSnapshot(ctx, [
+      {
+        path: 'https://x/sitemap-1.xml',
+        capturedAt: '2026-04-20T00:00:00Z',
+        urlCount: 100,
+        errors: 1,
+        warnings: 2,
+        contentHash: 'abc',
+        lastDownloaded: '2026-04-20T00:00:00Z',
+      },
+      {
+        path: 'https://x/sitemap-2.xml',
+        capturedAt: '2026-04-20T00:00:00Z',
+        urlCount: 50,
+        errors: 0,
+        warnings: 1,
+        contentHash: 'def',
+      },
+    ])
+    const engine = makeFakeEngine({} as Record<TableName, Row[]>)
+    const payload = (await sitemapHealthRollup.build({
+      engine,
+      ctx,
+      dataSource: ds,
+      builtAt,
+    })) as {
+      days: Array<{ day: string, feeds: number, total_urls: number, errors: number, warnings: number }>
+      feeds: Array<{ path: string, urlCount: number }>
+    }
+    expect(payload.days).toHaveLength(1)
+    expect(payload.days[0].day).toBe('2026-04-20')
+    expect(payload.days[0].feeds).toBe(2)
+    expect(payload.days[0].total_urls).toBe(150)
+    expect(payload.days[0].errors).toBe(1)
+    expect(payload.days[0].warnings).toBe(3)
+    expect(payload.feeds).toHaveLength(2)
+  })
+})
+
+describe('sitemapChanges28dRollup', () => {
+  it('returns empty payload when no deltas exist', async () => {
+    const { ds } = makeFakeDataSource()
+    const engine = makeFakeEngine({} as Record<TableName, Row[]>)
+    const payload = (await sitemapChanges28dRollup.build({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource: ds,
+      builtAt: 1_700_000_000_000,
+    })) as { days: unknown[], topAdded: unknown[], topRemoved: unknown[] }
+    expect(payload.days).toEqual([])
+    expect(payload.topAdded).toEqual([])
+    expect(payload.topRemoved).toEqual([])
+  })
+
+  it('aggregates added/removed counts per day per feedpath and emits top lists', async () => {
+    const { ds } = makeFakeDataSource()
+    const builtAt = new Date('2026-04-22T00:00:00Z').getTime()
+    let nowMs = new Date('2026-04-20T00:00:00Z').getTime()
+    const store = createSitemapStore({ dataSource: ds, now: () => nowMs })
+    const ctx = { userId: 'u1', siteId: 's1' }
+    // Snapshot 1: feed A with two URLs (both added).
+    await store.snapshotUrls(ctx, 'https://x/a.xml', [
+      { loc: 'https://x/a/1' },
+      { loc: 'https://x/a/2' },
+    ])
+    // Snapshot 2 (next day): drop one URL, add another.
+    nowMs = new Date('2026-04-21T00:00:00Z').getTime()
+    await store.snapshotUrls(ctx, 'https://x/a.xml', [
+      { loc: 'https://x/a/1' },
+      { loc: 'https://x/a/3' },
+    ])
+    const engine = makeFakeEngine({} as Record<TableName, Row[]>)
+    const payload = (await sitemapChanges28dRollup.build({
+      engine,
+      ctx,
+      dataSource: ds,
+      builtAt,
+    })) as {
+      days: Array<{ day: string, feedpath: string, added: number, removed: number }>
+      topAdded: Array<{ loc: string }>
+      topRemoved: Array<{ loc: string }>
+    }
+    // Day 1: 2 added, 0 removed. Day 2: 1 added, 1 removed.
+    expect(payload.days).toHaveLength(2)
+    expect(payload.days[0]).toMatchObject({ day: '2026-04-20', added: 2, removed: 0 })
+    expect(payload.days[1]).toMatchObject({ day: '2026-04-21', added: 1, removed: 1 })
+    expect(payload.topAdded.length).toBeGreaterThan(0)
+    // Most-recent-first: top added should start with /3 (added day 2).
+    expect(payload.topAdded[0].loc).toBe('https://x/a/3')
+    expect(payload.topRemoved[0].loc).toBe('https://x/a/2')
   })
 })

@@ -7,6 +7,8 @@ export type { GscApiRow, IngestOptions, RowAccumulator, RowAccumulatorOptions } 
 export { createRowAccumulator, toPath, toSumPosition, transformGscRow } from './ingest'
 export { enumeratePartitions, FILES_PLACEHOLDER, resolveToSQL, substituteNamedFiles } from './planner'
 export type { ResolvedQuery } from './planner'
+export type { InspectionVerdict, SchedulePolicy, ScheduleState } from './schedule'
+export { fixedPolicy, inspectionPolicy, sitemapPolicy } from './schedule'
 export {
   allTables,
   countries,

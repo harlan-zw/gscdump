@@ -61,6 +61,11 @@
       "import": "./dist/sql-fragments.mjs",
       "default": "./dist/sql-fragments.mjs"
     },
+    "./schedule": {
+      "types": "./dist/schedule.d.mts",
+      "import": "./dist/schedule.mjs",
+      "default": "./dist/schedule.mjs"
+    },
     "./entities": {
       "types": "./dist/entities.d.mts",
       "import": "./dist/entities.mjs",

@@ -18,6 +18,7 @@ export default defineBuildConfig({
         './src/ingest.ts',
         './src/sql-bind.ts',
         './src/sql-fragments.ts',
+        './src/schedule.ts',
         './src/entities.ts',
         './src/rollups.ts',
         './src/resolver/index.ts',
