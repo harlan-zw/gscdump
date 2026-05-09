@@ -7,8 +7,10 @@
 // keyed by URL hash, holding the latest inspection per URL. Append-only
 // monthly history shards live alongside for state-over-time queries.
 
-import type { TenantCtx } from 'gscdump/contracts'
+import type { ColumnDef, TenantCtx } from 'gscdump/contracts'
+import type { ScheduleState } from './schedule'
 import type { DataSource } from './storage'
+import { encodeRowsToParquetFlex } from './adapters/hyparquet'
 
 /**
  * GSC URL inspection result fields we persist. Mirrors the
@@ -38,8 +40,17 @@ export interface InspectionRecord {
    * Free-form payload for fields we don't promote to first-class columns
    *  (e.g. `referringUrls`, `crawledAs`). Keeps the wire format forward-compat
    *  without bumping the schema for every API addition.
+   *
+   *  Recognised keys:
+   *  - `schedule`: optional `ScheduleState` from {@link inspectionPolicy}
+   *    governing when this URL is next due for re-inspection. Undefined on
+   *    pre-§0 records — readers must tolerate the missing field and fall
+   *    back to default policy on first observe.
    */
-  raw?: unknown
+  raw?: {
+    schedule?: ScheduleState
+    [key: string]: unknown
+  }
 }
 
 /** Wire shape persisted to disk/R2. */
@@ -67,6 +78,12 @@ export function emptyTypesKey(ctx: TenantCtx): string {
   return ctx.siteId
     ? `u_${ctx.userId}/${ctx.siteId}/entities/empty-types.json`
     : `u_${ctx.userId}/entities/empty-types.json`
+}
+
+export function inspectionParquetKey(ctx: TenantCtx): string {
+  return ctx.siteId
+    ? `u_${ctx.userId}/${ctx.siteId}/entities/inspections/index.parquet`
+    : `u_${ctx.userId}/entities/inspections/index.parquet`
 }
 
 export function inspectionHistoryKey(ctx: TenantCtx, yearMonth: string): string {
@@ -113,6 +130,30 @@ export interface InspectionStore {
   loadIndex: (ctx: TenantCtx) => Promise<InspectionIndex>
   /** Read the per-month history shard if it exists. */
   loadHistory: (ctx: TenantCtx, yearMonth: string) => Promise<InspectionHistoryShard | undefined>
+  /**
+   * Snapshot the current JSON index to a parquet sidecar at
+   * `entities/inspections/index.parquet`. One PUT. Sorted by `urlHash` so
+   * DuckDB row-group stats can prune URL-keyed JOINs efficiently.
+   *
+   * Internal seam: callers don't choose JSON-vs-parquet — the store materialises
+   * the parquet at end-of-batch (e.g. after `indexing/complete`) and readers
+   * pick the format that matches their access pattern (parquet for JOINs,
+   * JSON for full-index scans / point lookups).
+   *
+   * Returns the parquet object key (matches {@link parquetUri} after write).
+   */
+  materialize: (ctx: TenantCtx) => Promise<{ key: string, rowCount: number, bytes: number }>
+  /**
+   * DuckDB-resolvable URI for the materialised parquet sidecar, or
+   * `undefined` if the underlying `DataSource` has no native URI shape
+   * (in-memory tests). When defined, read paths can `read_parquet(<uri>)`
+   * directly without staging bytes through JS.
+   *
+   * Does not check existence — caller is responsible for ensuring
+   * `materialize` has run at least once. Returning a URI for a missing key
+   * is safe; DuckDB will surface a 404 / not-found at query time.
+   */
+  parquetUri: (ctx: TenantCtx) => string | undefined
 }
 
 export interface CreateInspectionStoreOptions {
@@ -190,8 +231,66 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
     async loadHistory(ctx, yearMonth) {
       return await readJson<InspectionHistoryShard>(inspectionHistoryKey(ctx, yearMonth))
     },
+
+    async materialize(ctx) {
+      const index = (await readJson<InspectionIndex>(inspectionIndexKey(ctx))) ?? emptyIndex()
+      const rows = Object.entries(index.records).map(([urlHash, r]) => ({
+        urlHash,
+        url: r.url,
+        inspectedAt: r.inspectedAt,
+        indexStatus: r.indexStatus ?? null,
+        lastCrawlTime: r.lastCrawlTime ?? null,
+        googleCanonical: r.googleCanonical ?? null,
+        userCanonical: r.userCanonical ?? null,
+        coverageState: r.coverageState ?? null,
+        robotsTxtState: r.robotsTxtState ?? null,
+        indexingState: r.indexingState ?? null,
+        pageFetchState: r.pageFetchState ?? null,
+        mobileUsabilityVerdict: r.mobileUsabilityVerdict ?? null,
+        richResultsVerdict: r.richResultsVerdict ?? null,
+        scheduleNextAt: r.raw?.schedule?.nextAt ?? null,
+        scheduleConsecutiveUnchanged: r.raw?.schedule?.consecutiveUnchanged ?? null,
+        schedulePolicyVersion: r.raw?.schedule?.policyVersion ?? null,
+      }))
+      const bytes = encodeRowsToParquetFlex(rows, {
+        columns: INSPECTION_PARQUET_COLUMNS,
+        sortKey: ['urlHash'],
+      })
+      const key = inspectionParquetKey(ctx)
+      await ds.write(key, bytes)
+      return { key, rowCount: rows.length, bytes: bytes.byteLength }
+    },
+
+    parquetUri(ctx) {
+      return ds.uri?.(inspectionParquetKey(ctx))
+    },
   }
 }
+
+/**
+ * Column schema for the inspections parquet sidecar. Stable shape — DuckDB
+ * `read_parquet({{INSPECTIONS}})` JOINs in §C consumers depend on these
+ * names. New fields go in `raw.*` first; promote here only when a JOIN
+ * needs them.
+ */
+const INSPECTION_PARQUET_COLUMNS: readonly ColumnDef[] = [
+  { name: 'urlHash', type: 'VARCHAR', nullable: false },
+  { name: 'url', type: 'VARCHAR', nullable: false },
+  { name: 'inspectedAt', type: 'VARCHAR', nullable: false },
+  { name: 'indexStatus', type: 'VARCHAR', nullable: true },
+  { name: 'lastCrawlTime', type: 'VARCHAR', nullable: true },
+  { name: 'googleCanonical', type: 'VARCHAR', nullable: true },
+  { name: 'userCanonical', type: 'VARCHAR', nullable: true },
+  { name: 'coverageState', type: 'VARCHAR', nullable: true },
+  { name: 'robotsTxtState', type: 'VARCHAR', nullable: true },
+  { name: 'indexingState', type: 'VARCHAR', nullable: true },
+  { name: 'pageFetchState', type: 'VARCHAR', nullable: true },
+  { name: 'mobileUsabilityVerdict', type: 'VARCHAR', nullable: true },
+  { name: 'richResultsVerdict', type: 'VARCHAR', nullable: true },
+  { name: 'scheduleNextAt', type: 'BIGINT', nullable: true },
+  { name: 'scheduleConsecutiveUnchanged', type: 'INTEGER', nullable: true },
+  { name: 'schedulePolicyVersion', type: 'INTEGER', nullable: true },
+]
 
 // ---------------------------------------------------------------------------
 // Sitemap snapshots

@@ -9,9 +9,11 @@ import {
   hashUrl,
   inspectionHistoryKey,
   inspectionIndexKey,
+  inspectionParquetKey,
   sitemapHistoryKey,
   sitemapIndexKey,
 } from '../src/entities'
+import { decodeParquetToRows } from '../src/adapters/hyparquet'
 
 function makeFakeDataSource(): {
   ds: DataSource
@@ -341,6 +343,82 @@ describe('createSitemapStore', () => {
       'https://never-snapshotted.example.com/sitemap.xml',
     )
     expect(rec).toBeUndefined()
+  })
+})
+
+describe('inspectionParquetKey', () => {
+  it('encodes tenant + site path', () => {
+    expect(inspectionParquetKey({ userId: 'u1', siteId: 's1' }))
+      .toBe('u_u1/s1/entities/inspections/index.parquet')
+    expect(inspectionParquetKey({ userId: 'u1' }))
+      .toBe('u_u1/entities/inspections/index.parquet')
+  })
+})
+
+describe('createInspectionStore: materialize', () => {
+  it('writes a parquet sidecar of the current index sorted by urlHash', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    const ctx = { userId: 'u1', siteId: 's1' }
+    await inspector.writeBatch(ctx, [
+      rec('https://example.com/a', { indexStatus: 'PASS' }),
+      rec('https://example.com/b', {
+        indexStatus: 'FAIL',
+        coverageState: 'Crawled - currently not indexed',
+        raw: { schedule: { nextAt: 1234567890, consecutiveUnchanged: 2, policyVersion: 1 } },
+      }),
+    ])
+    const result = await inspector.materialize(ctx)
+    expect(result.key).toBe('u_u1/s1/entities/inspections/index.parquet')
+    expect(result.rowCount).toBe(2)
+    expect(result.bytes).toBeGreaterThan(0)
+    const bytes = store.get(result.key)!
+    expect(bytes.byteLength).toBe(result.bytes)
+    const rows = await decodeParquetToRows(bytes)
+    expect(rows).toHaveLength(2)
+    // Sorted by urlHash ascending.
+    const hashes = rows.map(r => r.urlHash as string)
+    expect([...hashes].sort()).toEqual(hashes)
+    const byUrl = new Map(rows.map(r => [r.url, r]))
+    const a = byUrl.get('https://example.com/a')!
+    expect(a.indexStatus).toBe('PASS')
+    expect(a.scheduleNextAt).toBeNull()
+    const b = byUrl.get('https://example.com/b')!
+    expect(b.indexStatus).toBe('FAIL')
+    expect(b.coverageState).toBe('Crawled - currently not indexed')
+    expect(Number(b.scheduleNextAt)).toBe(1234567890)
+    expect(b.scheduleConsecutiveUnchanged).toBe(2)
+    expect(b.schedulePolicyVersion).toBe(1)
+  })
+
+  it('writes an empty parquet when the index has no records', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    const ctx = { userId: 'u1', siteId: 's1' }
+    const result = await inspector.materialize(ctx)
+    expect(result.rowCount).toBe(0)
+    expect(store.has(result.key)).toBe(true)
+    const rows = await decodeParquetToRows(store.get(result.key)!)
+    expect(rows).toEqual([])
+  })
+})
+
+describe('createInspectionStore: parquetUri', () => {
+  it('returns the underlying DataSource URI when supported', () => {
+    const { ds } = makeFakeDataSource()
+    const dsWithUri: DataSource = {
+      ...ds,
+      uri: (key: string) => `r2://bucket/${key}`,
+    }
+    const inspector = createInspectionStore({ dataSource: dsWithUri })
+    expect(inspector.parquetUri({ userId: 'u1', siteId: 's1' }))
+      .toBe('r2://bucket/u_u1/s1/entities/inspections/index.parquet')
+  })
+
+  it('returns undefined when the DataSource has no native URI shape', () => {
+    const { ds } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    expect(inspector.parquetUri({ userId: 'u1', siteId: 's1' })).toBeUndefined()
   })
 })
 
