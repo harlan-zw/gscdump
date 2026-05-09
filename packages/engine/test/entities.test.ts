@@ -344,6 +344,162 @@ describe('createSitemapStore', () => {
   })
 })
 
+describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls', () => {
+  const ctx = { userId: 'u1', siteId: 's1' }
+  const feed = 'https://example.com/sitemap.xml'
+
+  function urls(...locs: string[]): { loc: string }[] {
+    return locs.map(loc => ({ loc }))
+  }
+
+  it('first run: every URL is added; one delta parquet is written', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const sitemaps = createSitemapStore({ dataSource: ds, now: () => Date.parse('2026-05-09T00:00:00Z') })
+
+    const result = await sitemaps.snapshotUrls(ctx, feed, urls('https://e.com/a', 'https://e.com/b'))
+
+    expect(result.added).toBe(2)
+    expect(result.removed).toBe(0)
+    expect(result.kept).toBe(0)
+    expect(result.unchanged).toBe(false)
+    expect(result.contentHash).toMatch(/^[0-9a-f]{16}$/)
+
+    const deltaKeys = Array.from(store.keys()).filter(k => k.includes('/urls/deltas/'))
+    expect(deltaKeys).toHaveLength(1)
+    expect(deltaKeys[0]).toMatch(/u_u1\/s1\/entities\/sitemaps\/urls\/deltas\/2026-05-09__[0-9a-f]+\.parquet$/)
+  })
+
+  it('unchanged contentHash short-circuits: 0 PUTs on second snapshot', async () => {
+    const { ds, store } = makeFakeDataSource()
+    let now = Date.parse('2026-05-09T00:00:00Z')
+    const sitemaps = createSitemapStore({ dataSource: ds, now: () => now })
+
+    // Seed prior state via compaction so we have an index.parquet to short-circuit against.
+    await sitemaps.snapshotUrls(ctx, feed, urls('https://e.com/a', 'https://e.com/b'))
+    await sitemaps.compactUrls(ctx)
+    const sizeAfterSeed = store.size
+
+    now = Date.parse('2026-05-10T00:00:00Z')
+    const result = await sitemaps.snapshotUrls(ctx, feed, urls('https://e.com/a', 'https://e.com/b'))
+
+    expect(result.unchanged).toBe(true)
+    expect(result.added).toBe(0)
+    expect(result.removed).toBe(0)
+    expect(result.kept).toBe(2)
+    // No new keys.
+    expect(store.size).toBe(sizeAfterSeed)
+  })
+
+  it('changed URL set: writes a delta with added/removed ops', async () => {
+    const { ds, store } = makeFakeDataSource()
+    let now = Date.parse('2026-05-09T00:00:00Z')
+    const sitemaps = createSitemapStore({ dataSource: ds, now: () => now })
+
+    await sitemaps.snapshotUrls(ctx, feed, urls('https://e.com/a', 'https://e.com/b'))
+    await sitemaps.compactUrls(ctx)
+
+    now = Date.parse('2026-05-10T00:00:00Z')
+    const result = await sitemaps.snapshotUrls(
+      ctx,
+      feed,
+      urls('https://e.com/b', 'https://e.com/c'),
+    )
+
+    expect(result.added).toBe(1)
+    expect(result.removed).toBe(1)
+    expect(result.kept).toBe(1)
+    expect(result.unchanged).toBe(false)
+
+    const deltaKeys = Array.from(store.keys()).filter(k => k.includes('/urls/deltas/2026-05-10'))
+    expect(deltaKeys).toHaveLength(1)
+
+    const ops: Array<{ op: string, loc: string }> = []
+    for await (const d of sitemaps.loadDeltas(ctx))
+      ops.push({ op: d.op, loc: d.loc })
+    // Only the 2026-05-10 delta survives compaction (the 2026-05-09 delta was consumed).
+    expect(ops).toHaveLength(2)
+    expect(ops.find(o => o.loc === 'https://e.com/c')?.op).toBe('added')
+    expect(ops.find(o => o.loc === 'https://e.com/a')?.op).toBe('removed')
+  })
+
+  it('loadDeltas filters by date range', async () => {
+    const { ds } = makeFakeDataSource()
+    let now = Date.parse('2026-05-09T00:00:00Z')
+    const sitemaps = createSitemapStore({ dataSource: ds, now: () => now })
+
+    await sitemaps.snapshotUrls(ctx, feed, urls('https://e.com/a'))
+    now = Date.parse('2026-05-11T00:00:00Z')
+    await sitemaps.snapshotUrls(ctx, feed, urls('https://e.com/a', 'https://e.com/b'))
+
+    const inRange: string[] = []
+    for await (const d of sitemaps.loadDeltas(ctx, { from: '2026-05-10', to: '2026-05-12' }))
+      inRange.push(d.loc)
+    expect(inRange).toEqual(['https://e.com/b'])
+
+    const before: string[] = []
+    for await (const d of sitemaps.loadDeltas(ctx, { to: '2026-05-09' }))
+      before.push(d.loc)
+    expect(before).toEqual(['https://e.com/a'])
+  })
+
+  it('compactUrls folds deltas + prior index into a fresh index, deletes consumed deltas', async () => {
+    const { ds, store } = makeFakeDataSource()
+    let now = Date.parse('2026-05-09T00:00:00Z')
+    const sitemaps = createSitemapStore({ dataSource: ds, now: () => now })
+
+    await sitemaps.snapshotUrls(ctx, feed, urls('https://e.com/a', 'https://e.com/b'))
+    now = Date.parse('2026-05-10T00:00:00Z')
+    await sitemaps.snapshotUrls(ctx, feed, urls('https://e.com/b', 'https://e.com/c'))
+
+    expect(Array.from(store.keys()).filter(k => k.includes('/urls/deltas/'))).toHaveLength(2)
+
+    await sitemaps.compactUrls(ctx)
+
+    expect(Array.from(store.keys()).filter(k => k.includes('/urls/deltas/'))).toHaveLength(0)
+    expect(store.has('u_u1/s1/entities/sitemaps/urls/index.parquet')).toBe(true)
+
+    const live: string[] = []
+    for await (const r of sitemaps.loadUrls(ctx, feed)) live.push(r.loc)
+    expect(live.sort()).toEqual(['https://e.com/b', 'https://e.com/c'])
+
+    const all: SitemapRecordLoaded[] = []
+    for await (const r of sitemaps.loadUrls(ctx, feed, { includeRemoved: true }))
+      all.push({ loc: r.loc, removedAt: r.removedAt })
+    const removed = all.filter(r => r.removedAt != null).map(r => r.loc).sort()
+    expect(removed).toEqual(['https://e.com/a'])
+  })
+
+  it('loadUrls before compaction merges index + outstanding deltas', async () => {
+    const { ds } = makeFakeDataSource()
+    let now = Date.parse('2026-05-09T00:00:00Z')
+    const sitemaps = createSitemapStore({ dataSource: ds, now: () => now })
+
+    await sitemaps.snapshotUrls(ctx, feed, urls('https://e.com/a', 'https://e.com/b'))
+    await sitemaps.compactUrls(ctx)
+    now = Date.parse('2026-05-10T00:00:00Z')
+    await sitemaps.snapshotUrls(ctx, feed, urls('https://e.com/b', 'https://e.com/c'))
+
+    const live: string[] = []
+    for await (const r of sitemaps.loadUrls(ctx, feed)) live.push(r.loc)
+    expect(live.sort()).toEqual(['https://e.com/b', 'https://e.com/c'])
+  })
+
+  it('urlsParquetUri returns ds.uri output when provided', () => {
+    const { ds } = makeFakeDataSource()
+    const sitemaps = createSitemapStore({ dataSource: ds })
+    expect(sitemaps.urlsParquetUri(ctx)).toBeUndefined()
+
+    const dsWithUri: DataSource = { ...ds, uri: (k: string) => `r2://bucket/${k}` }
+    const sitemaps2 = createSitemapStore({ dataSource: dsWithUri })
+    expect(sitemaps2.urlsParquetUri(ctx)).toBe('r2://bucket/u_u1/s1/entities/sitemaps/urls/index.parquet')
+  })
+})
+
+interface SitemapRecordLoaded {
+  loc: string
+  removedAt: number | undefined
+}
+
 describe('createInspectionStore: hash override', () => {
   it('uses a caller-provided hash when supplied', async () => {
     const { ds, store } = makeFakeDataSource()
