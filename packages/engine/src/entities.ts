@@ -7,10 +7,10 @@
 // keyed by URL hash, holding the latest inspection per URL. Append-only
 // monthly history shards live alongside for state-over-time queries.
 
-import type { ColumnDef, TenantCtx } from 'gscdump/contracts'
+import type { ColumnDef, Row, TenantCtx } from 'gscdump/contracts'
 import type { ScheduleState } from './schedule'
 import type { DataSource } from './storage'
-import { encodeRowsToParquetFlex } from './adapters/hyparquet'
+import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
 
 /**
  * GSC URL inspection result fields we persist. Mirrors the
@@ -325,6 +325,12 @@ export interface SitemapRecord {
   }>
   /** Raw payload for fields we don't promote to first-class columns. */
   raw?: unknown
+  /** Number of URLs observed in this feedpath at last snapshot. */
+  urlCount?: number
+  /** Stable hash of the sorted normalized loc list at last snapshot. */
+  contentHash?: string
+  /** Adaptive cadence state owned by `sitemapPolicy`. */
+  schedule?: ScheduleState
 }
 
 export interface SitemapIndex {
@@ -352,6 +358,136 @@ export function sitemapHistoryKey(ctx: TenantCtx, feedpathHash: string, captured
     : `u_${ctx.userId}/entities/sitemaps/history/${feedpathHash}__${capturedAtMs}.json`
 }
 
+function sitemapUrlsPrefix(ctx: TenantCtx): string {
+  return ctx.siteId
+    ? `u_${ctx.userId}/${ctx.siteId}/entities/sitemaps/urls`
+    : `u_${ctx.userId}/entities/sitemaps/urls`
+}
+
+export function sitemapUrlsIndexKey(ctx: TenantCtx): string {
+  return `${sitemapUrlsPrefix(ctx)}/index.parquet`
+}
+
+export function sitemapUrlsDeltaKey(
+  ctx: TenantCtx,
+  feedpathHash: string,
+  date: string,
+): string {
+  return `${sitemapUrlsPrefix(ctx)}/deltas/${date}__${feedpathHash}.parquet`
+}
+
+const SITEMAP_URLS_DELTA_PREFIX_RE = /\/urls\/deltas\/(\d{4}-\d{2}-\d{2})__([0-9a-f]+)\.parquet$/
+
+/** Parsed URL entry from a sitemap XML. */
+export interface ParsedUrl {
+  loc: string
+  /** ISO-8601 lastmod from the sitemap, if present. */
+  lastmod?: string
+}
+
+/** A single URL row in the urls/index.parquet partition. */
+export interface SitemapUrlRecord {
+  feedpath: string
+  feedpathHash: string
+  urlHash: string
+  loc: string
+  lastmod?: string
+  firstSeenAt: number
+  lastSeenAt: number
+  /** Set when the URL has been removed. Null/undefined = currently live. */
+  removedAt?: number
+}
+
+export interface SnapshotUrlsResult {
+  added: number
+  removed: number
+  kept: number
+  contentHash: string
+  /** True when contentHash matched prior; the call performed zero writes. */
+  unchanged: boolean
+}
+
+export interface DeltaEntry {
+  feedpath: string
+  feedpathHash: string
+  urlHash: string
+  op: 'added' | 'removed'
+  loc: string
+  lastmod?: string
+  at: number
+}
+
+export interface DateRange {
+  /** YYYY-MM-DD inclusive. */
+  from?: string
+  /** YYYY-MM-DD inclusive. */
+  to?: string
+}
+
+export interface LoadUrlsOptions {
+  includeRemoved?: boolean
+}
+
+const URLS_INDEX_COLUMNS: readonly ColumnDef[] = [
+  { name: 'feedpath', type: 'VARCHAR', nullable: false },
+  { name: 'feedpath_hash', type: 'VARCHAR', nullable: false },
+  { name: 'url_hash', type: 'VARCHAR', nullable: false },
+  { name: 'loc', type: 'VARCHAR', nullable: false },
+  { name: 'lastmod', type: 'VARCHAR', nullable: true },
+  { name: 'first_seen_at', type: 'BIGINT', nullable: false },
+  { name: 'last_seen_at', type: 'BIGINT', nullable: false },
+  { name: 'removed_at', type: 'BIGINT', nullable: true },
+]
+
+const URLS_DELTA_COLUMNS: readonly ColumnDef[] = [
+  { name: 'feedpath', type: 'VARCHAR', nullable: false },
+  { name: 'feedpath_hash', type: 'VARCHAR', nullable: false },
+  { name: 'url_hash', type: 'VARCHAR', nullable: false },
+  { name: 'op', type: 'VARCHAR', nullable: false },
+  { name: 'loc', type: 'VARCHAR', nullable: false },
+  { name: 'lastmod', type: 'VARCHAR', nullable: true },
+  { name: 'at', type: 'BIGINT', nullable: false },
+]
+
+function rowToUrlRecord(row: Row): SitemapUrlRecord {
+  return {
+    feedpath: String(row.feedpath),
+    feedpathHash: String(row.feedpath_hash),
+    urlHash: String(row.url_hash),
+    loc: String(row.loc),
+    lastmod: row.lastmod == null ? undefined : String(row.lastmod),
+    firstSeenAt: Number(row.first_seen_at),
+    lastSeenAt: Number(row.last_seen_at),
+    removedAt: row.removed_at == null ? undefined : Number(row.removed_at),
+  }
+}
+
+function urlRecordToRow(r: SitemapUrlRecord): Row {
+  return {
+    feedpath: r.feedpath,
+    feedpath_hash: r.feedpathHash,
+    url_hash: r.urlHash,
+    loc: r.loc,
+    lastmod: r.lastmod ?? null,
+    first_seen_at: r.firstSeenAt,
+    last_seen_at: r.lastSeenAt,
+    removed_at: r.removedAt ?? null,
+  }
+}
+
+function isoDate(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
+/**
+ * Hash a URL list for change detection. Sorts then folds via FNV-1a so it's
+ * deterministic, locale-free, and cheap on Workers.
+ */
+export function hashUrlList(urls: readonly ParsedUrl[]): string {
+  const locs = urls.map(u => u.loc).sort()
+  return hashUrl(locs.join('\n'))
+}
+
 export interface SitemapStore {
   /**
    * Persist a snapshot run. Updates the index + writes one immutable
@@ -362,6 +498,32 @@ export interface SitemapStore {
   loadIndex: (ctx: TenantCtx) => Promise<SitemapIndex>
   /** Fetch the latest snapshot for a feedpath, or undefined. */
   getLatest: (ctx: TenantCtx, path: string) => Promise<SitemapRecord | undefined>
+  /**
+   * Diff incoming URLs against the prior `urls/index.parquet` partition for
+   * `feedpath`; on change, writes a single delta parquet under
+   * `urls/deltas/YYYY-MM-DD__{feedpathHash}.parquet`. Skipped (0 PUTs) when
+   * `contentHash` matches prior.
+   */
+  snapshotUrls: (
+    ctx: TenantCtx,
+    feedpath: string,
+    urls: readonly ParsedUrl[],
+  ) => Promise<SnapshotUrlsResult>
+  /** Stream live (and optionally removed) URL rows for a feedpath. */
+  loadUrls: (
+    ctx: TenantCtx,
+    feedpath: string,
+    opts?: LoadUrlsOptions,
+  ) => AsyncIterable<SitemapUrlRecord>
+  /** Stream all delta entries within `[from, to]` (YYYY-MM-DD inclusive). */
+  loadDeltas: (ctx: TenantCtx, dateRange?: DateRange) => AsyncIterable<DeltaEntry>
+  /**
+   * Fold every accumulated delta into the prior index; writes a fresh
+   * `urls/index.parquet` and deletes the consumed delta files.
+   */
+  compactUrls: (ctx: TenantCtx) => Promise<void>
+  /** DuckDB-resolvable URI for the URLs index; `undefined` if backend lacks one. */
+  urlsParquetUri: (ctx: TenantCtx) => string | undefined
 }
 
 export interface CreateSitemapStoreOptions {
@@ -416,6 +578,258 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
     async getLatest(ctx, path) {
       const index = await readJson<SitemapIndex>(sitemapIndexKey(ctx))
       return index?.records[hash(path)]
+    },
+
+    async snapshotUrls(ctx, feedpath, urls) {
+      const fpHash = hash(feedpath)
+      const contentHash = hashUrlList(urls)
+      const at = now()
+      // Load effective prior state for this feedpath: index.parquet + any
+      // outstanding deltas folded in chronologically. Diff is against what the
+      // reader sees today, not the (possibly stale) compacted index alone.
+      const priorByHash = new Map<string, SitemapUrlRecord>()
+      for await (const rec of this.loadUrls(ctx, feedpath, { includeRemoved: true }))
+        priorByHash.set(rec.urlHash, rec)
+      const livePrior = Array.from(priorByHash.values()).filter(r => r.removedAt == null)
+      // Short-circuit on unchanged hash: skip the PUT entirely.
+      // Compare only when the prior set was non-empty; first-run always writes.
+      if (livePrior.length > 0) {
+        const priorLocs = livePrior.map(r => String(r.loc)).sort()
+        const priorContentHash = hashUrl(priorLocs.join('\n'))
+        if (priorContentHash === contentHash) {
+          return {
+            added: 0,
+            removed: 0,
+            kept: livePrior.length,
+            contentHash,
+            unchanged: true,
+          }
+        }
+      }
+
+      // Diff in CPU.
+      const incomingByHash = new Map<string, ParsedUrl>()
+      for (const u of urls) incomingByHash.set(hash(u.loc), u)
+
+      const deltaRows: Row[] = []
+      let added = 0
+      let removed = 0
+      let kept = 0
+      const date = isoDate(at)
+
+      for (const [urlHash, u] of incomingByHash) {
+        const prev = priorByHash.get(urlHash)
+        if (!prev || prev.removedAt != null) {
+          added++
+          deltaRows.push({
+            feedpath,
+            feedpath_hash: fpHash,
+            url_hash: urlHash,
+            op: 'added',
+            loc: u.loc,
+            lastmod: u.lastmod ?? null,
+            at,
+          })
+        }
+        else {
+          kept++
+        }
+      }
+      for (const [urlHash, prev] of priorByHash) {
+        if (prev.removedAt != null)
+          continue
+        if (!incomingByHash.has(urlHash)) {
+          removed++
+          deltaRows.push({
+            feedpath,
+            feedpath_hash: fpHash,
+            url_hash: urlHash,
+            op: 'removed',
+            loc: prev.loc,
+            lastmod: prev.lastmod ?? null,
+            at,
+          })
+        }
+      }
+
+      if (deltaRows.length > 0) {
+        const bytes = encodeRowsToParquetFlex(deltaRows, {
+          columns: URLS_DELTA_COLUMNS,
+          sortKey: ['url_hash'],
+        })
+        await ds.write(sitemapUrlsDeltaKey(ctx, fpHash, date), bytes)
+      }
+
+      return { added, removed, kept, contentHash, unchanged: false }
+    },
+
+    async* loadUrls(ctx, feedpath, opts) {
+      const fpHash = hash(feedpath)
+      const includeRemoved = opts?.includeRemoved ?? false
+      const indexBytes = await ds.read(sitemapUrlsIndexKey(ctx)).catch(() => undefined)
+      const indexRows = indexBytes ? await decodeParquetToRows(indexBytes) : []
+      // Apply any deltas not yet folded into the index. Fold in chronological
+      // order (the delta filename embeds an ISO date prefix → lexical sort).
+      const deltaKeys = (await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`)).sort()
+      const live = new Map<string, SitemapUrlRecord>()
+      const removedMap = new Map<string, SitemapUrlRecord>()
+      for (const row of indexRows) {
+        if (row.feedpath_hash !== fpHash)
+          continue
+        const rec = rowToUrlRecord(row)
+        if (rec.removedAt != null)
+          removedMap.set(rec.urlHash, rec)
+        else
+          live.set(rec.urlHash, rec)
+      }
+      for (const key of deltaKeys) {
+        const m = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
+        if (!m || m[2] !== fpHash)
+          continue
+        const dBytes = await ds.read(key).catch(() => undefined)
+        if (!dBytes)
+          continue
+        const dRows = await decodeParquetToRows(dBytes)
+        for (const r of dRows) {
+          const op = String(r.op)
+          const urlHash = String(r.url_hash)
+          const at = Number(r.at)
+          if (op === 'added') {
+            const prev = live.get(urlHash) ?? removedMap.get(urlHash)
+            removedMap.delete(urlHash)
+            live.set(urlHash, {
+              feedpath,
+              feedpathHash: fpHash,
+              urlHash,
+              loc: String(r.loc),
+              lastmod: r.lastmod == null ? undefined : String(r.lastmod),
+              firstSeenAt: prev?.firstSeenAt ?? at,
+              lastSeenAt: at,
+            })
+          }
+          else if (op === 'removed') {
+            const prev = live.get(urlHash)
+            live.delete(urlHash)
+            if (prev) {
+              removedMap.set(urlHash, { ...prev, removedAt: at })
+            }
+          }
+        }
+      }
+      for (const rec of live.values()) yield rec
+      if (includeRemoved) {
+        for (const rec of removedMap.values()) yield rec
+      }
+    },
+
+    async* loadDeltas(ctx, dateRange) {
+      const from = dateRange?.from
+      const to = dateRange?.to
+      const keys = (await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`)).sort()
+      for (const key of keys) {
+        const m = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
+        if (!m)
+          continue
+        const date = m[1]
+        if (from && date < from)
+          continue
+        if (to && date > to)
+          continue
+        const bytes = await ds.read(key).catch(() => undefined)
+        if (!bytes)
+          continue
+        const rows = await decodeParquetToRows(bytes)
+        for (const r of rows) {
+          const op = String(r.op)
+          if (op !== 'added' && op !== 'removed')
+            continue
+          yield {
+            feedpath: String(r.feedpath),
+            feedpathHash: String(r.feedpath_hash),
+            urlHash: String(r.url_hash),
+            op,
+            loc: String(r.loc),
+            lastmod: r.lastmod == null ? undefined : String(r.lastmod),
+            at: Number(r.at),
+          }
+        }
+      }
+    },
+
+    async compactUrls(ctx) {
+      const indexKey = sitemapUrlsIndexKey(ctx)
+      const indexBytes = await ds.read(indexKey).catch(() => undefined)
+      const indexRows = indexBytes ? await decodeParquetToRows(indexBytes) : []
+      // Map keyed by (feedpath_hash, url_hash) so we can merge per-URL state.
+      const stateKey = (fp: string, u: string) => `${fp}::${u}`
+      const live = new Map<string, SitemapUrlRecord>()
+      const removed = new Map<string, SitemapUrlRecord>()
+      for (const row of indexRows) {
+        const rec = rowToUrlRecord(row)
+        const k = stateKey(rec.feedpathHash, rec.urlHash)
+        if (rec.removedAt != null)
+          removed.set(k, rec)
+        else
+          live.set(k, rec)
+      }
+      const deltaKeys = (await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`)).sort()
+      const consumed: string[] = []
+      for (const key of deltaKeys) {
+        const m = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
+        if (!m)
+          continue
+        const fpHash = m[2]
+        const bytes = await ds.read(key).catch(() => undefined)
+        if (!bytes)
+          continue
+        consumed.push(key)
+        const rows = await decodeParquetToRows(bytes)
+        for (const r of rows) {
+          const urlHash = String(r.url_hash)
+          const at = Number(r.at)
+          const k = stateKey(fpHash, urlHash)
+          const op = String(r.op)
+          if (op === 'added') {
+            const prev = live.get(k) ?? removed.get(k)
+            removed.delete(k)
+            live.set(k, {
+              feedpath: String(r.feedpath),
+              feedpathHash: fpHash,
+              urlHash,
+              loc: String(r.loc),
+              lastmod: r.lastmod == null ? undefined : String(r.lastmod),
+              firstSeenAt: prev?.firstSeenAt ?? at,
+              lastSeenAt: at,
+            })
+          }
+          else if (op === 'removed') {
+            const prev = live.get(k)
+            live.delete(k)
+            if (prev)
+              removed.set(k, { ...prev, removedAt: at })
+          }
+        }
+      }
+      const merged: SitemapUrlRecord[] = [...live.values(), ...removed.values()]
+      merged.sort((a, b) => {
+        if (a.feedpathHash !== b.feedpathHash)
+          return a.feedpathHash < b.feedpathHash ? -1 : 1
+        if (a.urlHash !== b.urlHash)
+          return a.urlHash < b.urlHash ? -1 : 1
+        return 0
+      })
+      const bytes = encodeRowsToParquetFlex(merged.map(urlRecordToRow), {
+        columns: URLS_INDEX_COLUMNS,
+        sortKey: ['feedpath_hash', 'url_hash'],
+      })
+      await ds.write(indexKey, bytes)
+      if (consumed.length > 0)
+        await ds.delete(consumed)
+    },
+
+    urlsParquetUri(ctx) {
+      const key = sitemapUrlsIndexKey(ctx)
+      return ds.uri ? ds.uri(key) : undefined
     },
   }
 }
