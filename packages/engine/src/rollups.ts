@@ -17,7 +17,7 @@ import type { DataSource, Row } from './contracts'
 import type { ColumnDef } from './schema'
 import { MS_PER_DAY } from 'gscdump'
 import { encodeRowsToParquetFlex } from './adapters/hyparquet'
-import { createIndexingMetadataStore, createInspectionStore, createSitemapStore } from './entities'
+import { createIndexingMetadataStore, createInspectionStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexKey } from './entities'
 
 export interface RollupCtx extends TenantCtx {
   /** When the rollup was built. Stamped into payload + filename. */
@@ -545,11 +545,20 @@ export const indexingHealthRollup: RollupDef = {
   id: 'indexing_health',
   windowDays: 90,
   async build({ engine, ctx, dataSource, builtAt }) {
-    const store = createInspectionStore({ dataSource })
-    const uri = store.parquetUri(ctx)
-    if (!uri)
+    // Skip when the parquet sidecar hasn't been materialized yet. We probe
+    // with `head` (cheap; no body) rather than `parquetUri` because we now
+    // route the read through `fileSets.keys` so DuckDB pre-fetches bytes —
+    // the URI itself is no longer the gate.
+    const key = inspectionParquetKey(ctx)
+    const exists = await dataSource.head?.(key)
+    if (!exists)
       return { days: [] }
     const cutoff = utcDateMinusDays(builtAt, 90)
+    // `read_parquet({{INSPECTIONS}}, union_by_name = true)` flows through the
+    // executor's prefetch path: bytes are read via the `DataSource` (R2
+    // binding) and registered as a virtual file before query. Crucial under
+    // the duckdb-worker, whose httpfs path bypasses `r2://` URIs (see
+    // docs/repros/ducklings-r2-httpfs.md).
     const sql = `
       SELECT
         substr(inspectedAt, 1, 10) AS date,
@@ -561,12 +570,17 @@ export const indexingHealthRollup: RollupDef = {
         SUM(CASE WHEN mobileUsabilityVerdict = 'PASS' THEN 1 ELSE 0 END)::BIGINT AS mobile_passes,
         SUM(CASE WHEN richResultsVerdict = 'PASS' THEN 1 ELSE 0 END)::BIGINT AS rich_results_passes,
         SUM(CASE WHEN userCanonical IS NOT NULL AND googleCanonical IS NOT NULL AND userCanonical <> googleCanonical THEN 1 ELSE 0 END)::BIGINT AS canonical_mismatches
-      FROM read_parquet(${sqlString(uri)})
+      FROM read_parquet({{INSPECTIONS}}, union_by_name = true)
       WHERE substr(inspectedAt, 1, 10) >= '${cutoff}'
       GROUP BY 1
       ORDER BY 1
     `
-    const result = await engine.runSQL({ ctx, table: 'pages', fileSets: {}, sql })
+    const result = await engine.runSQL({
+      ctx,
+      table: 'pages',
+      fileSets: { INSPECTIONS: { table: 'pages', keys: [key] } },
+      sql,
+    })
     return {
       days: result.rows.map(r => ({
         date: String(r.date),
@@ -594,22 +608,29 @@ export const indexPercentRollup: RollupDef = {
   id: 'index_percent',
   windowDays: 90,
   async build({ engine, ctx, dataSource, builtAt }) {
-    const store = createSitemapStore({ dataSource })
-    const urlsUri = store.urlsParquetUri(ctx)
-    if (!urlsUri)
+    // Probe directly for the urls/index.parquet — `urlsParquetUri` returns
+    // a URI even when the file's missing on backends with a synchronous
+    // `uri()`. We route reads via `fileSets.keys` so DuckDB pre-fetches
+    // bytes; that path is what works under the duckdb-worker bypass.
+    const urlsKey = sitemapUrlsIndexKey(ctx)
+    const urlsExist = await dataSource.head?.(urlsKey)
+    if (!urlsExist)
       return { totalSitemapUrls: 0, days: [] }
     const cutoff = utcDateMinusDays(builtAt, 90)
     // Numerator: per-day distinct sitemap URLs with clicks>0
     const numerator = await engine.runSQL({
       ctx,
       table: 'pages',
-      fileSets: { PAGES: { table: 'pages' } },
+      fileSets: {
+        PAGES: { table: 'pages' },
+        URLS: { table: 'pages', keys: [urlsKey] },
+      },
       sql: `
         SELECT
           p.date AS date,
           COUNT(DISTINCT p.url)::BIGINT AS clicked_urls
         FROM read_parquet({{PAGES}}, union_by_name = true) p
-        INNER JOIN read_parquet(${sqlString(urlsUri)}) s
+        INNER JOIN read_parquet({{URLS}}, union_by_name = true) s
           ON s.loc = p.url AND s.removed_at IS NULL
         WHERE p.clicks > 0 AND p.date >= '${cutoff}'
         GROUP BY p.date
@@ -620,10 +641,10 @@ export const indexPercentRollup: RollupDef = {
     const denom = await engine.runSQL({
       ctx,
       table: 'pages',
-      fileSets: {},
+      fileSets: { URLS: { table: 'pages', keys: [urlsKey] } },
       sql: `
         SELECT COUNT(*)::BIGINT AS total
-        FROM read_parquet(${sqlString(urlsUri)})
+        FROM read_parquet({{URLS}}, union_by_name = true)
         WHERE removed_at IS NULL
       `,
     })

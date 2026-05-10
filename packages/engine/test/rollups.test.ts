@@ -380,7 +380,7 @@ describe('parquet rollups', () => {
 })
 
 describe('indexingHealthRollup', () => {
-  it('returns empty days when inspection parquet URI is unavailable', async () => {
+  it('returns empty days when inspection parquet sidecar is missing', async () => {
     const { ds } = makeFakeDataSource()
     const engine = makeFakeEngine({} as Record<TableName, Row[]>)
     const payload = (await indexingHealthRollup.build({
@@ -392,14 +392,18 @@ describe('indexingHealthRollup', () => {
     expect(payload.days).toEqual([])
   })
 
-  it('runs DuckDB SQL and projects per-day counts when URI is present', async () => {
-    // DataSource with `uri` defined makes parquetUri() return a string.
+  it('runs DuckDB SQL via fileSets.keys when sidecar exists', async () => {
+    // `head` returning truthy = sidecar present. Rollup routes the read
+    // through `fileSets.keys` so the executor pre-fetches bytes — the SQL
+    // template carries `{{INSPECTIONS}}`, never an inline URI.
     const { ds: base } = makeFakeDataSource()
-    const ds: DataSource = { ...base, uri: (k: string) => `file://${k}` }
+    const ds: DataSource = { ...base, head: async () => ({ bytes: 1 }) }
     let capturedSql = ''
+    let capturedFileSets: Record<string, { keys?: string[] }> | undefined
     const engine: RollupEngine = {
       async runSQL(opts) {
         capturedSql = opts.sql
+        capturedFileSets = opts.fileSets as Record<string, { keys?: string[] }>
         return {
           rows: [
             {
@@ -423,7 +427,9 @@ describe('indexingHealthRollup', () => {
       dataSource: ds,
       builtAt: 1_700_000_000_000,
     })) as { days: Array<{ date: string, indexed_count: number, canonical_mismatches: number }> }
-    expect(capturedSql).toContain('read_parquet(\'file://u_u1/s1/entities/inspections/index.parquet\')')
+    expect(capturedSql).toContain('read_parquet({{INSPECTIONS}}')
+    expect(capturedSql).not.toContain('r2://')
+    expect(capturedFileSets?.INSPECTIONS?.keys).toEqual(['u_u1/s1/entities/inspections/index.parquet'])
     expect(payload.days).toHaveLength(1)
     expect(payload.days[0].date).toBe('2026-04-10')
     expect(payload.days[0].indexed_count).toBe(7)
@@ -432,7 +438,7 @@ describe('indexingHealthRollup', () => {
 })
 
 describe('indexPercentRollup', () => {
-  it('returns zero totals when sitemap urls parquet URI is unavailable', async () => {
+  it('returns zero totals when sitemap urls parquet is missing', async () => {
     const { ds } = makeFakeDataSource()
     const engine = makeFakeEngine({} as Record<TableName, Row[]>)
     const payload = (await indexPercentRollup.build({
@@ -447,7 +453,7 @@ describe('indexPercentRollup', () => {
 
   it('computes per-day ratio from JOIN against pages parquet', async () => {
     const { ds: base } = makeFakeDataSource()
-    const ds: DataSource = { ...base, uri: (k: string) => `file://${k}` }
+    const ds: DataSource = { ...base, head: async () => ({ bytes: 1 }) }
     const engine: RollupEngine = {
       async runSQL(opts) {
         // First call: numerator (per-day clicked URLs); second call: denominator

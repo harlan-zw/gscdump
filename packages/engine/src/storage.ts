@@ -422,6 +422,15 @@ export interface QueryExecutor {
 export interface FileSetRef {
   table: TableName
   partitions?: string[]
+  /**
+   * Pre-resolved object keys, bypassing the manifest lookup. When provided,
+   * runSQL skips `manifestStore.listLive` for this entry and uses these keys
+   * directly. Use for entity-store sidecars (`entities/inspections/index.parquet`,
+   * `entities/sitemaps/urls/index.parquet`) which aren't registered in the
+   * analytics manifest. `table` is still required as the schema sentinel for
+   * the empty-fallback rewrite, but isn't consulted when `keys` is non-empty.
+   */
+  keys?: string[]
 }
 
 export interface RunSQLOptions {

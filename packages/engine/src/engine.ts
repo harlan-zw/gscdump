@@ -131,6 +131,10 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     const entries = Object.entries(opts.fileSets)
     const perSet = await Promise.all(
       entries.map(async ([name, ref]) => {
+        // Direct-key path: skip manifest entirely. Used by entity-store
+        // sidecars (inspections.parquet, sitemap urls.parquet).
+        if (ref.keys !== undefined)
+          return [name, ref.keys] as const
         const list = await manifestStore.listLive({
           userId: opts.ctx.userId,
           siteId: opts.ctx.siteId,
