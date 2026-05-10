@@ -559,19 +559,25 @@ export const indexingHealthRollup: RollupDef = {
     // binding) and registered as a virtual file before query. Crucial under
     // the duckdb-worker, whose httpfs path bypasses `r2://` URIs (see
     // docs/repros/ducklings-r2-httpfs.md).
+    //
+    // Explicit `CAST(... AS VARCHAR)` per string column: DuckDB-WASM
+    // (ducklings) mis-types all-null UTF8 parquet columns as INT32, which
+    // makes `<col> = 'PASS'` fail with a string-to-INT32 conversion error on
+    // small sites where every row's verdict is null. The cast forces the
+    // string interpretation regardless of inference.
     const sql = `
       SELECT
-        substr(inspectedAt, 1, 10) AS date,
+        substr(CAST(inspectedAt AS VARCHAR), 1, 10) AS date,
         COUNT(*)::BIGINT AS total_urls,
-        SUM(CASE WHEN indexStatus = 'PASS' THEN 1 ELSE 0 END)::BIGINT AS indexed_count,
-        SUM(CASE WHEN pageFetchState = 'SOFT_404' THEN 1 ELSE 0 END)::BIGINT AS soft_404,
-        SUM(CASE WHEN pageFetchState = 'REDIRECT_ERROR' THEN 1 ELSE 0 END)::BIGINT AS redirect,
-        SUM(CASE WHEN pageFetchState = 'NOT_FOUND' THEN 1 ELSE 0 END)::BIGINT AS not_found,
-        SUM(CASE WHEN mobileUsabilityVerdict = 'PASS' THEN 1 ELSE 0 END)::BIGINT AS mobile_passes,
-        SUM(CASE WHEN richResultsVerdict = 'PASS' THEN 1 ELSE 0 END)::BIGINT AS rich_results_passes,
-        SUM(CASE WHEN userCanonical IS NOT NULL AND googleCanonical IS NOT NULL AND userCanonical <> googleCanonical THEN 1 ELSE 0 END)::BIGINT AS canonical_mismatches
+        SUM(CASE WHEN CAST(indexStatus AS VARCHAR) = 'PASS' THEN 1 ELSE 0 END)::BIGINT AS indexed_count,
+        SUM(CASE WHEN CAST(pageFetchState AS VARCHAR) = 'SOFT_404' THEN 1 ELSE 0 END)::BIGINT AS soft_404,
+        SUM(CASE WHEN CAST(pageFetchState AS VARCHAR) = 'REDIRECT_ERROR' THEN 1 ELSE 0 END)::BIGINT AS redirect,
+        SUM(CASE WHEN CAST(pageFetchState AS VARCHAR) = 'NOT_FOUND' THEN 1 ELSE 0 END)::BIGINT AS not_found,
+        SUM(CASE WHEN CAST(mobileUsabilityVerdict AS VARCHAR) = 'PASS' THEN 1 ELSE 0 END)::BIGINT AS mobile_passes,
+        SUM(CASE WHEN CAST(richResultsVerdict AS VARCHAR) = 'PASS' THEN 1 ELSE 0 END)::BIGINT AS rich_results_passes,
+        SUM(CASE WHEN userCanonical IS NOT NULL AND googleCanonical IS NOT NULL AND CAST(userCanonical AS VARCHAR) <> CAST(googleCanonical AS VARCHAR) THEN 1 ELSE 0 END)::BIGINT AS canonical_mismatches
       FROM read_parquet({{INSPECTIONS}}, union_by_name = true)
-      WHERE substr(inspectedAt, 1, 10) >= '${cutoff}'
+      WHERE substr(CAST(inspectedAt AS VARCHAR), 1, 10) >= '${cutoff}'
       GROUP BY 1
       ORDER BY 1
     `
