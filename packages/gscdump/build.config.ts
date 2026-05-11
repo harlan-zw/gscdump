@@ -54,5 +54,11 @@ export default defineBuildConfig({
       outDir: './dist',
       name: 'sitemap',
     },
+    {
+      type: 'bundle',
+      input: ['./src/onboarding.ts'],
+      outDir: './dist',
+      name: 'onboarding',
+    },
   ],
 })

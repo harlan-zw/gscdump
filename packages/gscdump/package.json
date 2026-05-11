@@ -76,6 +76,11 @@
       "types": "./dist/sitemap.d.mts",
       "import": "./dist/sitemap.mjs",
       "default": "./dist/sitemap.mjs"
+    },
+    "./onboarding": {
+      "types": "./dist/onboarding.d.mts",
+      "import": "./dist/onboarding.mjs",
+      "default": "./dist/onboarding.mjs"
     }
   },
   "main": "./dist/index.mjs",
