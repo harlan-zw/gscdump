@@ -9,7 +9,7 @@
  * - `mode: 'superset'` (sqlite/D1): dialect columns must include SCHEMAS.
  */
 
-import type { TableName } from 'gscdump/contracts'
+import type { TableName } from '@gscdump/contracts'
 import { SCHEMAS } from '../schema'
 
 export interface AssertSchemaInSyncOptions {

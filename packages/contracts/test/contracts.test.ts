@@ -1,0 +1,132 @@
+import {
+  partnerEndpointSchemas,
+  partnerRoutes,
+  analyticsRoutes,
+  legacyWebhookPayloadSchema,
+  partnerWebhookEnvelopeSchema,
+  VALID_WEBHOOK_EVENTS,
+  WEBHOOK_CONTRACT_VERSION,
+  WEBHOOK_TIMESTAMP_HEADER,
+  GSCDUMP_ONBOARDING_CONTRACT_VERSION,
+} from '../src'
+
+describe('@gscdump/contracts', () => {
+  it('exports hosted route metadata and endpoint schemas', () => {
+    expect(partnerRoutes.users.register).toBe('/users/register')
+    expect(partnerRoutes.partner.sites.register).toBe('/partner/sites/register')
+    expect(partnerRoutes.partner.sites.bulkRegister).toBe('/partner/sites/bulk-register')
+    expect(partnerRoutes.partner.users.byId('u_1')).toBe('/partner/users/u_1')
+    expect(partnerRoutes.sites.data('site_1')).toBe('/sites/site_1/data')
+    expect(partnerRoutes.sites.analysisSources('site_1')).toBe('/sites/site_1/analysis-sources')
+    expect(analyticsRoutes.sites).toBe('/api/__gsc/sites')
+    expect(analyticsRoutes.site.analysisSources('site_1')).toBe('/api/__gsc/sites/site_1/analysis-sources')
+    expect(analyticsRoutes.site.rollup('site_1', 'top-pages')).toBe('/api/__gsc/sites/site_1/rollup/top-pages')
+    expect(partnerEndpointSchemas.registerSite.body.parse({
+      userId: 'user_1',
+      siteUrl: 'sc-domain:example.com',
+      webhookEvents: ['site.completed', 'site.analytics.ready'],
+    })).toMatchObject({ userId: 'user_1' })
+    expect(partnerEndpointSchemas.bulkRegisterSites.body.parse({
+      userId: 'user_1',
+      siteUrls: ['sc-domain:example.com'],
+    })).toMatchObject({ userId: 'user_1' })
+    expect(partnerEndpointSchemas.analyticsRows.response.parse({
+      rows: [],
+      meta: { sourceName: 'r2', sourceKind: 'sql', queryMs: 12 },
+    })).toMatchObject({ rows: [] })
+  })
+
+  it('validates the current webhook envelope contract', () => {
+    expect(VALID_WEBHOOK_EVENTS).toContain('site.indexing.ready')
+    expect(WEBHOOK_TIMESTAMP_HEADER).toBe('X-GSCDump-Timestamp')
+    expect(partnerWebhookEnvelopeSchema.parse({
+      contractVersion: WEBHOOK_CONTRACT_VERSION,
+      deliveryId: 'whd_1',
+      event: 'site.analytics.ready',
+      partnerId: 'partner_1',
+      userId: 'user_1',
+      siteId: 'site_1',
+      externalUserId: null,
+      externalSiteId: null,
+      lifecycleRevision: 1,
+      occurredAt: '2026-05-11T00:00:00.000Z',
+      data: {
+        legacyEvent: 'site.completed',
+        legacyPayload: {
+          event: 'site.completed',
+          siteId: 'site_1',
+          siteUrl: 'sc-domain:example.com',
+          status: 'synced',
+          daysSynced: 28,
+          failedJobs: 0,
+          oldestDateSynced: '2026-04-01',
+          newestDateSynced: '2026-04-30',
+          timestamp: 1770000000,
+        },
+        siteId: 'site_1',
+        siteUrl: 'sc-domain:example.com',
+        status: 'synced',
+        daysSynced: 28,
+        failedJobs: 0,
+        oldestDateSynced: '2026-04-01',
+        newestDateSynced: '2026-04-30',
+        timestamp: 1770000000,
+      },
+    })).toMatchObject({ event: 'site.analytics.ready' })
+  })
+
+  it('validates legacy compatibility webhook payloads', () => {
+    expect(legacyWebhookPayloadSchema.parse({
+      event: 'auth.failed',
+      siteId: 'site_1',
+      siteUrl: 'sc-domain:example.com',
+      reason: 'site_not_in_gsc',
+      message: 'User no longer has access to this GSC property',
+    })).toMatchObject({ event: 'auth.failed' })
+  })
+
+  it('validates lifecycle onboarding responses', () => {
+    expect(partnerEndpointSchemas.getUserLifecycle.response.parse({
+      contractVersion: GSCDUMP_ONBOARDING_CONTRACT_VERSION,
+      userId: 'user_1',
+      partnerId: 'partner_1',
+      account: {
+        status: 'ready',
+        grantedScopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+        missingScopes: [],
+        nextAction: 'none',
+      },
+      sites: [{
+        siteId: 'site_1',
+        externalSiteId: null,
+        requestedUrl: 'sc-domain:example.com',
+        gscPropertyUrl: 'sc-domain:example.com',
+        permissionLevel: 'siteOwner',
+        property: { status: 'linked', nextAction: 'none' },
+        analytics: {
+          status: 'ready',
+          progress: { completed: 28, failed: 0, total: 28, percent: 100 },
+          queryable: true,
+          sourceMode: 'r2',
+          syncedRange: { oldest: '2026-04-01', newest: '2026-04-30' },
+          nextAction: 'none',
+        },
+        sitemaps: {
+          status: 'ready',
+          discoveredCount: 1,
+          nextAction: 'none',
+        },
+        indexing: {
+          status: 'ready',
+          eligible: true,
+          reason: null,
+          progress: { completed: 10, failed: 0, total: 10, percent: 100 },
+          nextAction: 'none',
+        },
+        latestError: null,
+        lifecycleRevision: 1,
+        updatedAt: '2026-05-11T00:00:00.000Z',
+      }],
+    })).toMatchObject({ userId: 'user_1' })
+  })
+})

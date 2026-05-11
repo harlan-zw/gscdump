@@ -32,6 +32,11 @@ export default defineNuxtConfig({
   future: { compatibilityVersion: 4 },
   extends: ['../../packages/nuxt-analytics'],
   runtimeConfig: {
+    partner: {
+      apiBase: process.env.GSCDUMP_PARTNER_API_BASE ?? (apiBase ? `${apiBase.replace(/\/+$/, '')}/api` : '/api'),
+      apiKey: process.env.GSCDUMP_PARTNER_API_KEY ?? '',
+      userId: process.env.GSCDUMP_PARTNER_USER_ID ?? '',
+    },
     public: {
       analytics: {
         mode,

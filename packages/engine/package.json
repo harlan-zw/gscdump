@@ -176,6 +176,7 @@
     }
   },
   "dependencies": {
+    "@gscdump/contracts": "workspace:*",
     "drizzle-orm": "catalog:",
     "gscdump": "workspace:*",
     "proper-lockfile": "catalog:deps"

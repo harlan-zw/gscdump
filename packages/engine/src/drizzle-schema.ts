@@ -16,7 +16,7 @@
  * manifests tag rows correctly.
  */
 
-import type { TableName } from 'gscdump/contracts'
+import type { TableName } from '@gscdump/contracts'
 
 import { date, doublePrecision, integer, pgTable, varchar } from 'drizzle-orm/pg-core'
 

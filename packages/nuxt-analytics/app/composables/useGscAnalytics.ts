@@ -5,8 +5,8 @@
 // writers.
 
 import type { InjectionKey } from 'vue'
-import type { SiteListItem } from '../../types'
-import { useGscFetch } from '../utils/gsc-fetch'
+import type { SiteListItem } from '@gscdump/contracts'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export type { SiteListItem }
 
@@ -161,7 +161,7 @@ function createContext(): GscAnalyticsContext {
   async function refreshSites(): Promise<void> {
     sitesLoading.value = true
     sitesError.value = null
-    sites.value = await useGscFetch()<SiteListItem[]>('/api/__gsc/sites').catch((err) => {
+    sites.value = await useGscAnalyticsClient().listSites().catch((err) => {
       sitesError.value = err instanceof Error ? err : new Error(String(err))
       return null
     })

@@ -9,10 +9,10 @@
 //
 // Progress flows to the shared analytics map so <GscBootProgress> lights up.
 
-import type { RollupEnvelope } from '@gscdump/engine/rollups'
+import type { RollupEnvelope } from '@gscdump/contracts'
 import type { SiteListItem } from './useGscAnalytics'
-import { useGscFetch } from '../utils/gsc-fetch'
 import { _useGscAnalyticsContext } from './useGscAnalytics'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 type RollupsInput = MaybeRefOrGetter<string | readonly string[]>
 type SiteLike = string | { id: string } | SiteListItem
@@ -229,9 +229,10 @@ async function fetchOne<T>(
     endedAt: undefined,
   })
   try {
-    const env = await useGscFetch()<RollupEnvelope<T>>(
-      `/api/__gsc/sites/${encodeURIComponent(siteId)}/rollup/${encodeURIComponent(rollupId)}`,
-      range ? { query: { start: range.start, end: range.end } } : undefined,
+    const env = await useGscAnalyticsClient().getRollup<T>(
+      siteId,
+      rollupId,
+      range ? { start: range.start, end: range.end } : undefined,
     )
     ctx?.patchProgress(siteId, { stage: 'ready', filesAttached: 1, endedAt: Date.now() })
     return env

@@ -2,13 +2,12 @@
 // site's history shards. Oldest → newest. 404 / empty history is a normal
 // state on the first dashboard visit before a second snapshot runs.
 
-import type { InspectionRecord } from '@gscdump/engine/entities'
-import type { InspectionHistoryResponse } from '../../types'
-import { useGscFetch } from '../utils/gsc-fetch'
+import type { InspectionHistoryRecord, InspectionHistoryResponse } from '@gscdump/contracts'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export interface UseGscInspectionHistoryReturn {
   response: Readonly<Ref<InspectionHistoryResponse | null>>
-  records: ComputedRef<InspectionRecord[]>
+  records: ComputedRef<InspectionHistoryRecord[]>
   url: ComputedRef<string | null>
   loading: Readonly<Ref<boolean>>
   refresh: () => Promise<void>
@@ -29,9 +28,7 @@ export function useGscInspectionHistory(
       return
     }
     loading.value = true
-    response.value = await useGscFetch()<InspectionHistoryResponse>(
-      `/api/__gsc/sites/${encodeURIComponent(id)}/inspections/${encodeURIComponent(hash)}`,
-    ).catch(() => null)
+    response.value = await useGscAnalyticsClient().getInspectionHistory(id, hash).catch(() => null)
     loading.value = false
   }
 

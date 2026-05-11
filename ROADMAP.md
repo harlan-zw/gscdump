@@ -25,7 +25,7 @@ Eleven packages:
   capability gates, design-system components (`GscHero`, `DataList`,
   `QueryLabel`, `CommandPalette`, `PerformanceChart`, `Ui*`), entity routes.
 - **`@gscdump/cli`** — CLI + MCP server.
-- **`@gscdump/mcp`**, **`@gscdump/cloud`** — frozen.
+- **`@gscdump/mcp`** — frozen.
 
 Example consumer: `examples/nuxt-dashboard` — exercises free (GSC API) and
 pro (engine/DuckDB) tiers, 11 site pages (overview, queries, pages, countries,

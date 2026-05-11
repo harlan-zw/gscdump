@@ -6,7 +6,7 @@
 // so the CLI, tests, and any downstream Node consumer don't rewrite the
 // 20-line wiring block.
 
-import type { Row, TableName } from 'gscdump/contracts'
+import type { Row, TableName } from '@gscdump/contracts'
 import type { DataSource, StorageEngine } from '../storage'
 import path from 'node:path'
 import { encodeSiteId } from 'gscdump/tenant'

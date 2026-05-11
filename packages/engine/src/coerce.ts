@@ -10,7 +10,7 @@
  * click/impression columns never reach that range.
  */
 
-import type { Row } from 'gscdump/contracts'
+import type { Row } from '@gscdump/contracts'
 
 export function coerceRow(row: Row): Row {
   let mutated: Row | null = null

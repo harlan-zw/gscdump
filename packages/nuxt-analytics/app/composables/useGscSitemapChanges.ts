@@ -1,10 +1,10 @@
 // Recently added / removed URLs across a site's sitemaps over a rolling
 // window. Backed by gscdump.com `/api/sites/[siteId]/sitemaps/changes`.
 
-import type { SitemapChangesResponse } from '../../types'
-import { useGscFetch } from '../utils/gsc-fetch'
+import type { SitemapChangesResponse } from '@gscdump/contracts'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
-export type { SitemapAddedRow, SitemapChangesResponse, SitemapRemovedRow } from '../../types'
+export type { SitemapAddedRow, SitemapChangesResponse, SitemapRemovedRow } from '@gscdump/contracts'
 
 export interface UseGscSitemapChangesReturn {
   data: Readonly<Ref<SitemapChangesResponse | null>>
@@ -26,10 +26,7 @@ export function useGscSitemapChanges(
       return
     }
     loading.value = true
-    data.value = await useGscFetch()<SitemapChangesResponse>(
-      `/api/__gsc/sites/${encodeURIComponent(id)}/sitemaps/changes`,
-      { query: { days: toValue(days) } },
-    ).catch(() => null)
+    data.value = await useGscAnalyticsClient().getSitemapChanges(id, { days: toValue(days) }).catch(() => null)
     loading.value = false
   }
 

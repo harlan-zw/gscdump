@@ -1,13 +1,12 @@
 // Fetches the snapshot timeline for a single sitemap (by feedpath hash)
 // from the site's history store. Oldest → newest.
 
-import type { SitemapRecord } from '@gscdump/engine/entities'
-import type { SitemapHistoryResponse } from '../../types'
-import { useGscFetch } from '../utils/gsc-fetch'
+import type { SitemapHistoryRecord, SitemapHistoryResponse } from '@gscdump/contracts'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export interface UseGscSitemapHistoryReturn {
   response: Readonly<Ref<SitemapHistoryResponse | null>>
-  snapshots: ComputedRef<SitemapRecord[]>
+  snapshots: ComputedRef<SitemapHistoryRecord[]>
   path: ComputedRef<string | null>
   loading: Readonly<Ref<boolean>>
   refresh: () => Promise<void>
@@ -28,9 +27,7 @@ export function useGscSitemapHistory(
       return
     }
     loading.value = true
-    response.value = await useGscFetch()<SitemapHistoryResponse>(
-      `/api/__gsc/sites/${encodeURIComponent(id)}/sitemaps/${encodeURIComponent(hash)}`,
-    ).catch(() => null)
+    response.value = await useGscAnalyticsClient().getSitemapHistory(id, hash).catch(() => null)
     loading.value = false
   }
 

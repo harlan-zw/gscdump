@@ -10,6 +10,7 @@ import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
 import type { ComputedRef, Ref, WatchSource } from 'vue'
 import { classifyGscError } from '../utils/gsc-error'
 import { useGscFetch } from '../utils/gsc-fetch'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 import { useGscAnalyzer } from './useGscAnalyzer'
 import { _useGscAuthInternal } from './useGscAuth'
 import { useGscBackfill } from './useGscBackfill'
@@ -141,11 +142,7 @@ function isEmpty(v: unknown): boolean {
 }
 
 async function defaultServerFallback<T>(siteId: string, params: AnalysisParams): Promise<T> {
-  const res = await useGscFetch()(`/api/__gsc/sites/${encodeURIComponent(siteId)}/analyze`, {
-    method: 'POST',
-    body: params,
-  })
-  return res as T
+  return await useGscAnalyticsClient().analyze<T>(siteId, params)
 }
 
 export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): UseGscQueryReturn<T> {

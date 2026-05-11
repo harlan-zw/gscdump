@@ -1,9 +1,9 @@
-import type { Row, TableName, TenantCtx } from 'gscdump/contracts'
+import type { Row, TableName, TenantCtx } from '@gscdump/contracts'
 import type { BuilderState, SearchType } from 'gscdump/query'
 import type { ComparisonFilter } from './resolver/types'
 import { MS_PER_DAY, toIsoDate } from 'gscdump'
 
-export type { Row, TableName, TenantCtx } from 'gscdump/contracts'
+export type { Row, TableName, TenantCtx } from '@gscdump/contracts'
 export type { SearchType } from 'gscdump/query'
 
 /**

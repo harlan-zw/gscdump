@@ -87,14 +87,6 @@ export default antfu({
     'examples/browser-http/_served/**',
   ],
 }, {
-  files: [
-    'packages/cloud/src/commands/**/*.ts',
-    'packages/cloud/src/cli.ts',
-  ],
-  rules: {
-    'no-console': 'off',
-  },
-}, {
   // Core overall — no reaching into sibling @gscdump/* packages (would create a cycle).
   files: ['packages/gscdump/src/**/*.ts'],
   rules: {
@@ -152,17 +144,6 @@ export default antfu({
       paths: preferGranularCoreSubpaths.paths,
       patterns: [
         ...forbidSiblings('cli', 'mcp', 'cloud').patterns,
-        ...preferGranularCoreSubpaths.patterns,
-      ],
-    }],
-  },
-}, {
-  files: ['packages/cloud/src/**/*.ts'],
-  rules: {
-    'no-restricted-imports': ['error', {
-      paths: preferGranularCoreSubpaths.paths,
-      patterns: [
-        ...forbidSiblings('cli', 'mcp', 'engine', 'engine-wasm', 'engine-sqlite', 'engine-duckdb-node').patterns,
         ...preferGranularCoreSubpaths.patterns,
       ],
     }],

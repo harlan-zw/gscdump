@@ -1,0 +1,54 @@
+{
+  "name": "@gscdump/sdk",
+  "type": "module",
+  "version": "0.11.4",
+  "description": "Consumer SDK for hosted gscdump.com integrations.",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "obuild",
+    "dev": "obuild --stub",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "prepack": "pnpm run build"
+  },
+  "dependencies": {
+    "@gscdump/contracts": "workspace:*",
+    "ofetch": "catalog:deps",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:dev-build",
+    "vitest": "catalog:dev-test"
+  }
+}

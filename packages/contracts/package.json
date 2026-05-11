@@ -1,19 +1,23 @@
 {
-  "name": "@gscdump/cloud",
+  "name": "@gscdump/contracts",
   "type": "module",
   "version": "0.11.4",
-  "private": true,
-  "description": "Cloud SDK + cloud CLI for Google Search Console (frozen — not under active development).",
+  "description": "Shared gscdump.com API, webhook, realtime, and lifecycle contracts.",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
     "url": "https://harlanzw.com/"
   },
   "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/contracts#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/harlan-zw/gscdump.git",
-    "directory": "packages/cloud"
+    "directory": "packages/contracts"
+  },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
   },
   "sideEffects": false,
   "exports": {
@@ -25,9 +29,6 @@
   },
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
-  "bin": {
-    "gscdump-cloud": "./dist/cli.mjs"
-  },
   "files": [
     "dist"
   ],
@@ -42,15 +43,10 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
-    "@clack/prompts": "catalog:deps",
-    "@gscdump/analysis": "workspace:*",
-    "citty": "catalog:deps",
-    "consola": "catalog:deps",
-    "gscdump": "workspace:*",
-    "ofetch": "catalog:deps"
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "catalog:",
+    "typescript": "catalog:dev-build",
     "vitest": "catalog:dev-test"
   }
 }

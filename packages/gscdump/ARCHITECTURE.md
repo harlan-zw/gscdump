@@ -5,7 +5,7 @@
 ## Scope
 
 - **In**: REST wrappers (`searchAnalytics`, `sites`, `sitemaps`, `urlInspection`, `indexing`), async-generator pagination, typed query builder + logical planner, cross-package contract types (`DriverSite`, `AnalysisParams`, …), tenant key + URL normalization primitives.
-- **Out**: Parquet/DuckDB storage (→ `@gscdump/engine`), analyzers + source dispatchers (→ `@gscdump/analysis`), engine adapters (→ `@gscdump/engine-*`), CLI (→ `@gscdump/cli`), cloud SDK (→ `@gscdump/cloud`, frozen), MCP server (→ `@gscdump/mcp`, frozen).
+- **Out**: Parquet/DuckDB storage (→ `@gscdump/engine`), analyzers + source dispatchers (→ `@gscdump/analysis`), engine adapters (→ `@gscdump/engine-*`), CLI (→ `@gscdump/cli`), hosted consumer SDK (→ `@gscdump/sdk`), hosted API schemas (→ `@gscdump/contracts`), MCP server (→ `@gscdump/mcp`, frozen).
 
 Edge-safety rule: no `node:*`, no `@duckdb/*`, no `hyparquet*`. Install on workers, edge runtimes, browsers. Optional peers `@googleapis/indexing` + `@googleapis/searchconsole` are only needed if callers use the REST helpers.
 
@@ -27,12 +27,12 @@ Edge-safety rule: no `node:*`, no `@duckdb/*`, no `hyparquet*`. Install on worke
 | `gscdump` | REST client + types (`googleSearchConsole`, error types). |
 | `gscdump/query` | Builder, columns, operators, resolver, date helpers, planner types. |
 | `gscdump/query/plan` | Logical planner internals (`buildLogicalPlan`, comparison-plan primitives). |
-| `gscdump/contracts` | Shared type primitives (type-only). |
+| `gscdump/contracts` | Compatibility type-only re-export of shared primitives from `@gscdump/contracts`. |
 | `gscdump/driver` | `DriverSite`, `DriverQueryResult`, `DriverSitemap`, `DriverInspectResult`, … (type-only). |
 | `gscdump/tenant` | `encodeSiteId`. |
 | `gscdump/normalize` | `normalizeUrl`. |
 
-Sibling packages should import the narrowest subpath that matches the primitive they need (e.g. `gscdump/contracts` or `gscdump/driver` instead of the root barrel) so consumers don't pay the REST-client bundle cost for a type import.
+Sibling packages should import shared wire/storage primitives from `@gscdump/contracts`; app-local `gscdump/*` subpaths remain for runtime helpers such as `gscdump/driver`, `gscdump/tenant`, and `gscdump/normalize`.
 
 ## Query builder → live vs. stored
 

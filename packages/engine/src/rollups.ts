@@ -12,7 +12,7 @@
 // tables that the dashboard wants to filter by date range) are a planned
 // follow-up — they need a flexible-schema variant of `encodeRowsToParquet`.
 
-import type { TenantCtx } from 'gscdump/contracts'
+import type { TenantCtx } from '@gscdump/contracts'
 import type { DataSource, FileSetRef, Row } from './contracts'
 import type { ColumnDef } from './schema'
 import { MS_PER_DAY } from 'gscdump'

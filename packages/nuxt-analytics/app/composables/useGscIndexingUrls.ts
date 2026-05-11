@@ -1,10 +1,10 @@
 // Paginated indexing-status rows for a site, with optional status/issue/search
 // filters. Backed by gscdump.com `/api/sites/[siteId]/indexing/urls`.
 
-import type { IndexingUrlsResponse, IndexingUrlStatus } from '../../types'
-import { useGscFetch } from '../utils/gsc-fetch'
+import type { IndexingUrlsResponse, IndexingUrlStatus } from '@gscdump/contracts'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
-export type { IndexingUrlRow, IndexingUrlsResponse, IndexingUrlStatus } from '../../types'
+export type { IndexingUrlRow, IndexingUrlsResponse, IndexingUrlStatus } from '@gscdump/contracts'
 
 export interface UseGscIndexingUrlsOptions {
   status?: MaybeRefOrGetter<IndexingUrlStatus | undefined>
@@ -50,10 +50,7 @@ export function useGscIndexingUrls(
       query.limit = limit
     if (offset)
       query.offset = offset
-    data.value = await useGscFetch()<IndexingUrlsResponse>(
-      `/api/__gsc/sites/${encodeURIComponent(id)}/indexing/urls`,
-      { query },
-    ).catch(() => null)
+    data.value = await useGscAnalyticsClient().getIndexingUrls(id, query).catch(() => null)
     loading.value = false
   }
 

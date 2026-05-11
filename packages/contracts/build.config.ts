@@ -6,11 +6,5 @@ export default defineBuildConfig({
       type: 'bundle',
       input: ['./src/index.ts'],
     },
-    {
-      type: 'bundle',
-      input: ['./src/cli.ts'],
-      outDir: './dist',
-      name: 'cli',
-    },
   ],
 })

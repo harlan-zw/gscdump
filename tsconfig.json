@@ -15,7 +15,8 @@
     { "path": "./packages/engine" },
     { "path": "./packages/cli" },
     { "path": "./packages/analysis" },
-    { "path": "./packages/cloud" },
+    { "path": "./packages/contracts" },
+    { "path": "./packages/sdk" },
     { "path": "./packages/mcp" }
   ],
   "include": [],

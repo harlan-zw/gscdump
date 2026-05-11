@@ -7,7 +7,7 @@
 // keyed by URL hash, holding the latest inspection per URL. Append-only
 // monthly history shards live alongside for state-over-time queries.
 
-import type { ColumnDef, Row, TenantCtx } from 'gscdump/contracts'
+import type { ColumnDef, Row, TenantCtx } from '@gscdump/contracts'
 import type { ScheduleState } from './schedule'
 import type { DataSource } from './storage'
 import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'

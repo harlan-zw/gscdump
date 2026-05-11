@@ -112,6 +112,7 @@
     }
   },
   "dependencies": {
+    "@gscdump/contracts": "workspace:*",
     "dayjs": "catalog:deps",
     "defu": "catalog:deps",
     "ofetch": "catalog:deps",

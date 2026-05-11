@@ -4,7 +4,13 @@
 [![npm downloads](https://img.shields.io/npm/dm/@gscdump/nuxt-analytics?color=yellow)](https://npm.chart.dev/@gscdump/nuxt-analytics)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-> Nuxt layer: GSC analytics UI + server handlers + DuckDB integration. Consumed by gscdump.com (origin mode) and nuxtseo.com (consumer mode).
+> Nuxt layer: GSC analytics UI, Nuxt auth/runtime wiring, and DuckDB-WASM integration. It uses `@gscdump/sdk` internally for hosted analytics HTTP reads.
+
+This package assumes a site is already linked. It does not own partner
+onboarding, registration, lifecycle decisions, token exchange, or webhook
+subscription management. Use `@gscdump/sdk` from the host app for those
+flows, then pass the linked `gscdumpSiteId` into the analytics composables
+here.
 
 Three consumption modes:
 
@@ -105,6 +111,12 @@ where a `useGscQuery` mounts before credentials resolve.
 `credentialsEndpoint` returns `{ apiKey: string, ... }` by default. Override
 the field name with `tokenField` and the header name with `headerName`.
 
+Onboarding and lifecycle state stay outside this layer. A consumer app should
+use `@gscdump/sdk` from its host backend to register users/sites, read
+`GET /api/partner/users/:userId/lifecycle`, handle webhook or realtime
+invalidation, and decide when a linked site is ready to render. Once it has a
+linked site id, this layer handles query reads and analytics UI only.
+
 ### CORS
 
 The origin app (`gscdump.com` or your own) must allow the consumer origin
@@ -115,7 +127,8 @@ calls. Allow-headers must include `x-api-key`, `Cache-Control`, and `Range`
 
 ## Related
 
-- [`gscdump`](../gscdump) — REST client + query builder.
+- [`@gscdump/sdk`](../sdk) — framework-agnostic hosted API client used by host onboarding code and by this Nuxt layer internally.
+- [`gscdump`](../gscdump) — local package and query builder.
 - [`@gscdump/engine`](../engine) — Storage engine consumed in origin mode.
 - [`@gscdump/engine-duckdb-wasm`](../engine-duckdb-wasm) — DuckDB-WASM browser runtime used by client-side widgets.
 - [`@gscdump/analysis`](../analysis) — Analyzers powering `/analyze` endpoints.

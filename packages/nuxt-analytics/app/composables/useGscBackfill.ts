@@ -3,6 +3,7 @@
 // the requested range is synced.
 
 import { useGscFetch } from '../utils/gsc-fetch'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 interface BackfillRange {
   startDate: string
@@ -62,12 +63,7 @@ export function useGscBackfill(): GscBackfillState & {
     error.value = null
     attemptedKeys.add(rangeKey(siteId, req))
 
-    // Route is provided by the host, not the layer — so the typed $fetch
-    // doesn't know about it. Cast the URL to skip route-typing narrowing.
-    await useGscFetch()(`/api/__gsc/sites/${siteId}/backfill` as string, {
-      method: 'POST',
-      body: req,
-    }).catch((err) => {
+    await useGscAnalyticsClient().requestBackfill(siteId, req).catch((err) => {
       error.value = (err as { data?: { message?: string }, message?: string })?.data?.message
         || (err as Error)?.message
         || 'Failed to queue backfill'

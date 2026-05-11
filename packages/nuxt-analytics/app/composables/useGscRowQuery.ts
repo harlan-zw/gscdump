@@ -8,10 +8,10 @@
 
 import type { QueryRow } from '@gscdump/analysis'
 import type { BuilderState } from 'gscdump/query'
-import type { GscRowQueryMeta, GscRowQueryResponse } from '../../types'
-import { useGscFetch } from '../utils/gsc-fetch'
+import type { GscRowQueryMeta, GscRowQueryResponse } from '@gscdump/contracts'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
-export type { GscRowQueryMeta, GscRowQueryResponse } from '../../types'
+export type { GscRowQueryMeta, GscRowQueryResponse } from '@gscdump/contracts'
 
 export interface UseGscRowQueryOptions {
   site: MaybeRefOrGetter<string | null | undefined>
@@ -56,10 +56,7 @@ export function useGscRowQuery<T = QueryRow>(
     loading.value = true
     error.value = null
     try {
-      const res = await useGscFetch()<GscRowQueryResponse<T>>(
-        `/api/__gsc/sites/${encodeURIComponent(site)}/rows`,
-        { method: 'POST', body: state, signal: ctrl.signal },
-      )
+      const res = await useGscAnalyticsClient().queryRows<T>(site, state)
       if (ctrl.signal.aborted)
         return
       rows.value = res.rows

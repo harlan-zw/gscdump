@@ -9,7 +9,7 @@
  * names the storage runtime for downstream meta annotation.
  */
 
-import type { TableName } from 'gscdump/contracts'
+import type { TableName } from '@gscdump/contracts'
 import type { BuilderState } from 'gscdump/query'
 import type { PlannerCapabilities } from 'gscdump/query/plan'
 import type { ResolverAdapter } from '../resolver/types'

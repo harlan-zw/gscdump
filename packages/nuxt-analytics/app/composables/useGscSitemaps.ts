@@ -2,12 +2,12 @@
 // `lastDownloaded` desc. Split from the previous `useEntity(kind)` discriminated
 // API so each entity stays its own typed hook.
 
-import type { SitemapIndex, SitemapRecord } from '@gscdump/engine/entities'
-import { useGscFetch } from '../utils/gsc-fetch'
+import type { SitemapHistoryRecord, SitemapIndex } from '@gscdump/contracts'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export interface UseGscSitemapsReturn {
   index: Readonly<Ref<SitemapIndex | null>>
-  records: ComputedRef<SitemapRecord[]>
+  records: ComputedRef<SitemapHistoryRecord[]>
   loading: Readonly<Ref<boolean>>
   refresh: () => Promise<void>
 }
@@ -23,18 +23,16 @@ export function useGscSitemaps(siteId: MaybeRefOrGetter<string | null | undefine
       return
     }
     loading.value = true
-    index.value = await useGscFetch()<SitemapIndex>(
-      `/api/__gsc/sites/${encodeURIComponent(id)}/sitemaps`,
-    ).catch(() => null)
+    index.value = await useGscAnalyticsClient().getSitemaps(id).catch(() => null)
     loading.value = false
   }
 
   watch(() => toValue(siteId), refresh, { immediate: true })
 
-  const records = computed<SitemapRecord[]>(() => {
+  const records = computed<SitemapHistoryRecord[]>(() => {
     if (!index.value)
       return []
-    const records = Object.values(index.value.records) as SitemapRecord[]
+    const records = Object.values(index.value.records) as SitemapHistoryRecord[]
     return records.sort((a, b) => {
       const ad = a.lastDownloaded ?? ''
       const bd = b.lastDownloaded ?? ''

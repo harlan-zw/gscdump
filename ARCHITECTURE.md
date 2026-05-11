@@ -14,7 +14,8 @@ gscdump/
 │   ├── engine-gsc-api/       # @gscdump/engine-gsc-api: GSC live-API engine adapter
 │   ├── analysis/             # @gscdump/analysis: analyzer instances (row + sql) + composite source + browser dispatcher
 │   ├── cli/                  # @gscdump/cli: CLI entry (gscdump bin)
-│   ├── cloud/                # @gscdump/cloud: cloud SDK + cloud CLI (frozen)
+│   ├── contracts/            # @gscdump/contracts: hosted API/webhook/realtime schemas and route metadata
+│   ├── sdk/                  # @gscdump/sdk: consumer SDK for hosted gscdump.com integrations
 │   └── mcp/                  # @gscdump/mcp: MCP server (frozen)
 └── pnpm-workspace.yaml
 ```
@@ -29,12 +30,13 @@ Dependency graph (acyclic; engine packages no longer depend on `@gscdump/analysi
 - `@gscdump/engine-sqlite` → `gscdump`, `@gscdump/engine`
 - `@gscdump/engine-gsc-api` → `gscdump`, `@gscdump/engine`
 - `@gscdump/engine` → `gscdump`
-- `@gscdump/cloud` → `gscdump`, `@gscdump/analysis` (type-only); frozen
+- `@gscdump/contracts` → `gscdump` (type/schema contracts)
+- `@gscdump/sdk` → `@gscdump/contracts`
 - `@gscdump/mcp` → `gscdump` (frozen)
 
 Canonical schema source of truth: `@gscdump/engine/schema` exports drizzle pg-core tables (`pages`, `keywords`, `countries`, `devices`, `page_keywords`). Every other representation — the abstract `SCHEMAS: Record<TableName, TableSchema>` for parquet writer / planner, the sqlite-core tables in `@gscdump/engine-sqlite` — is derived from or validated against this.
 
-`@gscdump/cloud` and `@gscdump/mcp` are `private: true` and frozen; builds + tests pass, no new features.
+`@gscdump/mcp` is `private: true` and frozen; builds + tests pass, no new features.
 
 ## Packages
 
@@ -138,11 +140,18 @@ CLI entry, `gscdump` bin. Owns config, auth, local engine wiring.
 
 **Read-path default:** `query`, `dump`, `analyze` read from DuckDB. If the request's date range isn't covered by the sync watermark, fail with an actionable `run gscdump sync first`. `--live` opts into the live GSC API. `sites`, `sitemaps`, `inspect` are always live; they don't store. `sync --types web,discover,news,googleNews,image,video` fans out across searchType partitions (non-`web` types get a `<table>/<searchType>/` path segment). `entities *` commands persist slow-changing state to the per-site entity store.
 
-### `@gscdump/cloud` (frozen)
+### `@gscdump/contracts`
 
-Cloud SDK + cloud CLI. Owns `CloudGscDriver` interface, all `Cloud*` types, `createCloudDriver`, `isCloudDriver`. Ships `gscdump-cloud` bin with `register` / `unregister` / `sync` / `sitemaps` / `indexing` subcommands. Loads session from `GSCDUMP_CLOUD_SESSION` env or `~/.config/gscdump/cloud-tokens.json`.
+Shared gscdump.com API, webhook, realtime, and lifecycle contracts. Owns route
+metadata, Zod schemas, event names, and contract versions. No HTTP client,
+queues, auth, DB access, or producer behavior.
 
-Revival trigger: when gscdump.com's web app needs to import runtime code from `@gscdump/cloud` (not just shared types).
+### `@gscdump/sdk`
+
+Consumer SDK for hosted gscdump.com integrations. Owns the pluggable HTTP
+client, websocket client, and webhook receiver helpers. Re-exports
+`@gscdump/contracts` for convenience, but does not own webhook production,
+delivery, retry policy, or gscdump.com storage behavior.
 
 ### `@gscdump/mcp` (frozen)
 

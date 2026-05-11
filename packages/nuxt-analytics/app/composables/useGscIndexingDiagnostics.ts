@@ -2,10 +2,10 @@
 // Backed by gscdump.com `/api/__gsc/sites/[siteId]/indexing/diagnostics`
 // (alias re-exporting the `/api/sites/[siteId]/indexing/diagnostics` handler).
 
-import type { IndexingDiagnostics } from '../../types'
-import { useGscFetch } from '../utils/gsc-fetch'
+import type { IndexingDiagnostics } from '@gscdump/contracts'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
-export type { IndexingDiagnostics, IndexingIssue, IndexingIssueSeverity } from '../../types'
+export type { IndexingDiagnostics, IndexingIssue, IndexingIssueSeverity } from '@gscdump/contracts'
 
 export interface UseGscIndexingDiagnosticsReturn {
   data: Readonly<Ref<IndexingDiagnostics | null>>
@@ -26,9 +26,7 @@ export function useGscIndexingDiagnostics(
       return
     }
     loading.value = true
-    data.value = await useGscFetch()<IndexingDiagnostics>(
-      `/api/__gsc/sites/${encodeURIComponent(id)}/indexing/diagnostics`,
-    ).catch(() => null)
+    data.value = await useGscAnalyticsClient().getIndexingDiagnostics(id).catch(() => null)
     loading.value = false
   }
 

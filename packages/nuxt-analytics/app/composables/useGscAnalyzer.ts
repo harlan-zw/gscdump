@@ -13,12 +13,13 @@
 
 import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
 import type { AttachedTablesHandle, BrowserAnalysisRuntime, DuckDBWasmBootResult, QueryResult } from '@gscdump/engine-duckdb-wasm'
-import type { AnalysisSourcesResponse, SourceInfoResponse } from '../../types'
+import type { AnalysisSourcesResponse, SourceInfoResponse } from '@gscdump/contracts'
 import type { SiteLoadProgress } from './useGscAnalytics'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis'
 import { attachParquetUrlTables, bootDuckDBWasm, createBrowserAnalysisRuntime } from '@gscdump/engine-duckdb-wasm'
-import { getGscFetchHeaders, useGscFetch } from '../utils/gsc-fetch'
+import { getGscFetchHeaders } from '../utils/gsc-fetch'
 import { _useGscAnalyticsContext } from './useGscAnalytics'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 import { readGscAuth } from './useGscAuth'
 
 export interface GscAnalyzerTimings {
@@ -252,10 +253,7 @@ function createInstance(
     patch({ stage: 'manifest', startedAt: Date.now(), filesAttached: 0, filesTotal: 0, error: undefined, endedAt: undefined })
     // Probe the server-resolved source first. Its kind + attachedTables bit
     // decides whether we boot DuckDB-WASM (expensive) or proxy to the server.
-    const info = await useGscFetch()<SourceInfoResponse>(
-      `/api/__gsc/sites/${encodeURIComponent(siteId)}/source-info`,
-      { headers: { 'cache-control': 'no-cache' } },
-    )
+    const info = await useGscAnalyticsClient().getSourceInfo(siteId) as SourceInfoResponse
     mode = info.browserAttachEligible ? 'browser-attached' : 'server'
 
     if (mode === 'server') {
@@ -282,10 +280,7 @@ function createInstance(
 
     patch({ stage: 'manifest' })
     const t1 = performance.now()
-    const sources = await useGscFetch()<AnalysisSourcesResponse>(
-      `/api/__gsc/sites/${encodeURIComponent(siteId)}/analysis-sources`,
-      { headers: { 'cache-control': 'no-cache' } },
-    )
+    const sources = await useGscAnalyticsClient().getAnalysisSources(siteId) as AnalysisSourcesResponse
     const manifestMs = performance.now() - t1
 
     const t2 = performance.now()
@@ -320,10 +315,7 @@ function createInstance(
   }
 
   async function runServerAnalyze(params: AnalysisParams, signal?: AbortSignal): Promise<AnalysisResult & { queryMs: number }> {
-    const out = await useGscFetch()<AnalysisResult & { queryMs?: number }>(
-      `/api/__gsc/sites/${encodeURIComponent(siteId)}/analyze`,
-      { method: 'POST', body: params, signal },
-    )
+    const out = await useGscAnalyticsClient().analyze<AnalysisResult & { queryMs?: number }>(siteId, params)
     return {
       results: coerceResults(out.results) as AnalysisResult['results'],
       meta: out.meta as AnalysisResult['meta'],
@@ -363,10 +355,7 @@ function createInstance(
     await boot
     if (mode !== 'browser-attached' || !runtime || !bootedDb)
       return false
-    const sources = await useGscFetch()<AnalysisSourcesResponse>(
-      `/api/__gsc/sites/${encodeURIComponent(siteId)}/analysis-sources`,
-      { headers: { 'cache-control': 'no-cache' } },
-    )
+    const sources = await useGscAnalyticsClient().getAnalysisSources(siteId) as AnalysisSourcesResponse
     if (!runtime.isStale(sources.manifestVersion))
       return false
     // Drop the stale views before swapping in the new partitions. The runtime

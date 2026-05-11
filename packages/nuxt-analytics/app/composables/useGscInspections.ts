@@ -2,12 +2,12 @@
 // counts derived from the records. Split from the previous `useEntity(kind)`
 // discriminated API so each entity stays its own typed hook.
 
-import type { InspectionIndex, InspectionRecord } from '@gscdump/engine/entities'
-import { useGscFetch } from '../utils/gsc-fetch'
+import type { InspectionHistoryRecord, InspectionIndex } from '@gscdump/contracts'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export interface UseGscInspectionsReturn {
   index: Readonly<Ref<InspectionIndex | null>>
-  records: ComputedRef<InspectionRecord[]>
+  records: ComputedRef<InspectionHistoryRecord[]>
   statusCounts: ComputedRef<{ PASS: number, NEUTRAL: number, FAIL: number, unknown: number }>
   loading: Readonly<Ref<boolean>>
   refresh: () => Promise<void>
@@ -24,15 +24,13 @@ export function useGscInspections(siteId: MaybeRefOrGetter<string | null | undef
       return
     }
     loading.value = true
-    index.value = await useGscFetch()<InspectionIndex>(
-      `/api/__gsc/sites/${encodeURIComponent(id)}/inspections`,
-    ).catch(() => null)
+    index.value = await useGscAnalyticsClient().getInspections(id).catch(() => null)
     loading.value = false
   }
 
   watch(() => toValue(siteId), refresh, { immediate: true })
 
-  const records = computed<InspectionRecord[]>(() => {
+  const records = computed<InspectionHistoryRecord[]>(() => {
     if (!index.value)
       return []
     return Object.values(index.value.records)

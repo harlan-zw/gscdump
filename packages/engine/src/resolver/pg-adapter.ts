@@ -6,7 +6,7 @@
  */
 
 import type { SQL } from 'drizzle-orm'
-import type { TableName } from 'gscdump/contracts'
+import type { TableName } from '@gscdump/contracts'
 import type { ResolverAdapter } from './types'
 import { sql } from 'drizzle-orm'
 import { PgDialect } from 'drizzle-orm/pg-core'

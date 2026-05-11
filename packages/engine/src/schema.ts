@@ -37,7 +37,7 @@
  * migrated in place.
  */
 
-import type { ColumnDef, ColumnType, TableName, TableSchema } from 'gscdump/contracts'
+import type { ColumnDef, ColumnType, TableName, TableSchema } from '@gscdump/contracts'
 
 import { getTableConfig } from 'drizzle-orm/pg-core'
 import { drizzleSchema, TABLE_METADATA } from './drizzle-schema'
@@ -130,4 +130,4 @@ export function dimensionToColumn(dim: string, _table: TableName): string {
   return dim
 }
 
-export type { ColumnDef, ColumnType, TableSchema } from 'gscdump/contracts'
+export type { ColumnDef, ColumnType, TableSchema } from '@gscdump/contracts'

@@ -31,6 +31,14 @@ function isSiteActive(id: string) {
             <UIcon name="i-lucide-layout-dashboard" class="size-4 shrink-0" />
             Overview
           </NuxtLink>
+          <NuxtLink
+            to="/partner"
+            class="flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors"
+            :class="route.path === '/partner' ? 'bg-elevated text-highlighted font-medium' : 'text-muted hover:text-default hover:bg-elevated/50'"
+          >
+            <UIcon name="i-lucide-plug" class="size-4 shrink-0" />
+            Partner API
+          </NuxtLink>
         </nav>
 
         <div>

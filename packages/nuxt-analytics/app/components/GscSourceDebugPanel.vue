@@ -11,8 +11,6 @@
 //  - Hidden by default; click the floating ⓘ pill to open.
 //  - Preference persists in localStorage per origin (key `gsc-debug-panel`).
 
-import { useGscFetch } from '../utils/gsc-fetch'
-
 const props = defineProps<{
   /** Explicit site id. Falls back to route.params.id. */
   site?: string
@@ -43,7 +41,8 @@ watchEffect(() => {
   if (!import.meta.client || resolvedSite.value || !open.value || whoami.value || whoamiLoading.value)
     return
   whoamiLoading.value = true
-  useGscFetch()<WhoamiResponse>('/api/__gsc/whoami')
+  const request = useGscAnalyticsClient().whoami() as Promise<WhoamiResponse>
+  request
     .then((res) => { whoami.value = res })
     .catch(() => { /* surface via empty state, not a toast */ })
     .finally(() => { whoamiLoading.value = false })

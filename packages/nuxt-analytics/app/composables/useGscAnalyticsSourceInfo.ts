@@ -6,8 +6,8 @@
 // analyze() call for each panel.
 
 import type { SourceCapabilities } from '@gscdump/analysis'
-import { useGscFetch } from '../utils/gsc-fetch'
 import { _useGscAnalyticsContext } from './useGscAnalytics'
+import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export interface GscAnalyticsSourceInfo {
   /** Source implementation name — e.g. "gsc-api", "engine", "browser". */
@@ -24,7 +24,7 @@ export interface GscAnalyticsSourceInfo {
    * `{ tier: 'free' | 'pro' }`). Layer treats as opaque — never use these
    * for gating on the client, the source provider is the gate.
    */
-  identityAttrs: Record<string, unknown> | null
+  identityAttrs?: Record<string, unknown> | null
 }
 
 interface GscAnalyticsSourceInfoState {
@@ -94,9 +94,7 @@ export function useGscAnalyticsSourceInfo(
   async function fetchInto(id: string, entry: CachedEntry): Promise<void> {
     entry.loading.value = true
     entry.error.value = null
-    entry.pending = useGscFetch()<GscAnalyticsSourceInfo>(
-      `/api/__gsc/sites/${encodeURIComponent(id)}/source-info`,
-    )
+    entry.pending = (useGscAnalyticsClient().getSourceInfo(id) as Promise<GscAnalyticsSourceInfo>)
       .then((data) => {
         entry.info.value = data
       })
