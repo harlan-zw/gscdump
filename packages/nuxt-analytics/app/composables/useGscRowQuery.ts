@@ -8,18 +8,10 @@
 
 import type { QueryRow } from '@gscdump/analysis'
 import type { BuilderState } from 'gscdump/query'
+import type { GscRowQueryMeta, GscRowQueryResponse } from '../../types'
 import { useGscFetch } from '../utils/gsc-fetch'
 
-export interface GscRowQueryMeta {
-  sourceName: string
-  sourceKind: 'row' | 'sql'
-  queryMs: number
-}
-
-export interface GscRowQueryResponse<T = QueryRow> {
-  rows: T[]
-  meta: GscRowQueryMeta
-}
+export type { GscRowQueryMeta, GscRowQueryResponse } from '../../types'
 
 export interface UseGscRowQueryOptions {
   site: MaybeRefOrGetter<string | null | undefined>

@@ -1,0 +1,8 @@
+{
+  "tables": {
+    "pages": ["/api/r2-data/user/1/site/example/pages/date=2026-05-10/part.parquet"],
+    "keywords": ["/api/r2-data/user/1/site/example/keywords/date=2026-05-10/part.parquet"]
+  },
+  "generatedAt": "2026-05-10T08:20:00.000Z",
+  "manifestVersion": "r2-manifest-2026-05-10T08:20:00.000Z"
+}

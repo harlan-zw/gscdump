@@ -1,4 +1,4 @@
-import type { SearchAnalyticsQuery } from '../core/types'
+import type { GscSearchAnalyticsRequest } from '../contracts'
 import type { BuilderState, Column, Dimension, Filter, Metric, MetricColumn } from './types'
 import { resolveToBody } from './resolver'
 
@@ -27,7 +27,7 @@ export interface GSCQueryBuilder<
   orderBy: (col: OrderableColumn, dir: 'asc' | 'desc') => GSCQueryBuilder<D, C>
   limit: (n: number) => GSCQueryBuilder<D, C>
   offset: (n: number) => GSCQueryBuilder<D, C>
-  toBody: () => SearchAnalyticsQuery
+  toBody: () => GscSearchAnalyticsRequest
   getState: () => BuilderState
 }
 

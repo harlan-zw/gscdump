@@ -17,10 +17,12 @@
   drizzleSchema: object
   enumeratePartitions: function
   FILES_PLACEHOLDER: string
+  fixedPolicy: function
   formatLiteral: function
   inferLegacyTier: function
   inferSearchType: function
   inferTable: function
+  inspectionPolicy: function
   keywords: object
   MAX_DAY_BYTES: number
   objectKey: function
@@ -28,6 +30,7 @@
   pages: object
   resolveToSQL: function
   SCHEMAS: object
+  sitemapPolicy: object
   substituteNamedFiles: function
   TABLE_METADATA: object
   toPath: function
@@ -51,11 +54,15 @@
   createSitemapStore: function
   emptyTypesKey: function
   hashUrl: function
+  hashUrlList: function
   indexingMetadataIndexKey: function
   inspectionHistoryKey: function
   inspectionIndexKey: function
+  inspectionParquetKey: function
   sitemapHistoryKey: function
   sitemapIndexKey: function
+  sitemapUrlsDeltaKey: function
+  sitemapUrlsIndexKey: function
 ./filesystem:
   createFilesystemDataSource: function
   createFilesystemManifestStore: function
@@ -131,15 +138,23 @@
 ./rollups:
   dailyTotalsRollup: object
   DEFAULT_ROLLUPS: object
+  indexingHealthRollup: object
   indexingMetadataRollup: object
+  indexPercentRollup: object
   rebuildRollups: function
   rollupKey: function
   rollupParquetKey: function
+  sitemapChanges28dRollup: object
+  sitemapHealthRollup: object
   topCountries28dRollup: object
   topKeywords28dParquetRollup: object
   topKeywords28dRollup: object
   topPages28dRollup: object
   weeklyTotalsRollup: object
+./schedule:
+  fixedPolicy: function
+  inspectionPolicy: function
+  sitemapPolicy: object
 ./schema:
   allTables: function
   countries: object

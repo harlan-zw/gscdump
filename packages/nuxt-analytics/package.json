@@ -71,6 +71,7 @@
     "tailwindcss": "catalog:"
   },
   "devDependencies": {
+    "@nuxt/kit": "catalog:",
     "nuxt": "catalog:",
     "typescript": "catalog:dev-build",
     "vue": "catalog:"

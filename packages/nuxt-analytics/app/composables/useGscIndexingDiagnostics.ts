@@ -2,26 +2,10 @@
 // Backed by gscdump.com `/api/__gsc/sites/[siteId]/indexing/diagnostics`
 // (alias re-exporting the `/api/sites/[siteId]/indexing/diagnostics` handler).
 
+import type { IndexingDiagnostics } from '../../types'
 import { useGscFetch } from '../utils/gsc-fetch'
 
-export type IndexingIssueSeverity = 'error' | 'warning' | 'info'
-
-export interface IndexingIssue {
-  type: string
-  label: string
-  severity: IndexingIssueSeverity
-  count: number
-}
-
-export interface IndexingDiagnostics {
-  summary: {
-    totalUrls: number
-    indexed: number
-    indexedPercent: number
-  }
-  issues: IndexingIssue[]
-  meta: { siteUrl: string }
-}
+export type { IndexingDiagnostics, IndexingIssue, IndexingIssueSeverity } from '../../types'
 
 export interface UseGscIndexingDiagnosticsReturn {
   data: Readonly<Ref<IndexingDiagnostics | null>>

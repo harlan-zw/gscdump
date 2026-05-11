@@ -1,25 +1,10 @@
 // Recently added / removed URLs across a site's sitemaps over a rolling
 // window. Backed by gscdump.com `/api/sites/[siteId]/sitemaps/changes`.
 
+import type { SitemapChangesResponse } from '../../types'
 import { useGscFetch } from '../utils/gsc-fetch'
 
-export interface SitemapAddedRow {
-  url: string
-  sitemap: string
-  firstSeenAt: number
-}
-
-export interface SitemapRemovedRow {
-  url: string
-  sitemap: string
-  removedAt: number
-}
-
-export interface SitemapChangesResponse {
-  added: SitemapAddedRow[]
-  removed: SitemapRemovedRow[]
-  summary: { totalAdded: number, totalRemoved: number, period: { days: number } }
-}
+export type { SitemapAddedRow, SitemapChangesResponse, SitemapRemovedRow } from '../../types'
 
 export interface UseGscSitemapChangesReturn {
   data: Readonly<Ref<SitemapChangesResponse | null>>

@@ -13,6 +13,7 @@
 
 import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
 import type { AttachedTablesHandle, BrowserAnalysisRuntime, DuckDBWasmBootResult, QueryResult } from '@gscdump/engine-duckdb-wasm'
+import type { AnalysisSourcesResponse, SourceInfoResponse } from '../../types'
 import type { SiteLoadProgress } from './useGscAnalytics'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis'
 import { attachParquetUrlTables, bootDuckDBWasm, createBrowserAnalysisRuntime } from '@gscdump/engine-duckdb-wasm'
@@ -48,20 +49,6 @@ export interface GscAnalyzerInstance {
 
 interface CachedAnalyzer extends GscAnalyzerInstance {
   refs: number
-}
-
-interface AnalysisSourcesResponse {
-  tables: Record<string, string[]>
-  generatedAt: string
-  manifestVersion: string
-}
-
-interface SourceInfoResponse {
-  name: string
-  kind: 'row' | 'sql'
-  capabilities: { attachedTables?: boolean, [k: string]: unknown }
-  supportedAnalyzerIds: string[]
-  browserAttachEligible: boolean
 }
 
 /**

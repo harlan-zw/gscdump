@@ -1,0 +1,7 @@
+{
+  "id": "sc-domain_example.com",
+  "label": "sc-domain:example.com",
+  "hostname": "example.com",
+  "propertyType": "domain",
+  "readBackend": "r2"
+}

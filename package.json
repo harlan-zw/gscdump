@@ -1,7 +1,7 @@
 {
   "type": "module",
   "private": true,
-  "packageManager": "pnpm@10.33.4",
+  "packageManager": "pnpm@11.0.9",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -14,6 +14,7 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm run -r typecheck",
     "test": "vitest --run",
+    "test:contracts": "pnpm --filter gscdump test -- --run test/core/contracts.test.ts test/query/builder.test.ts test/query/metrics.test.ts test/query/plan.test.ts && vitest --run packages/nuxt-analytics/test/contracts.test.ts && pnpm --filter @gscdump/nuxt-analytics typecheck",
     "test:e2e": "vitest --run --config tests/e2e/vitest.config.ts",
     "release": "pnpm build && bumpp --output=CHANGELOG.md packages/*/package.json"
   },

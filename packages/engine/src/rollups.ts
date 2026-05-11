@@ -13,11 +13,11 @@
 // follow-up — they need a flexible-schema variant of `encodeRowsToParquet`.
 
 import type { TenantCtx } from 'gscdump/contracts'
-import type { DataSource, Row } from './contracts'
+import type { DataSource, FileSetRef, Row } from './contracts'
 import type { ColumnDef } from './schema'
 import { MS_PER_DAY } from 'gscdump'
 import { encodeRowsToParquetFlex } from './adapters/hyparquet'
-import { createIndexingMetadataStore, createInspectionStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexKey } from './entities'
+import { createIndexingMetadataStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexKey } from './entities'
 
 export interface RollupCtx extends TenantCtx {
   /** When the rollup was built. Stamped into payload + filename. */
@@ -31,7 +31,7 @@ export interface RollupCtx extends TenantCtx {
 export interface RollupEngine {
   runSQL: (opts: {
     ctx: TenantCtx
-    fileSets: Record<string, { table: import('@gscdump/engine/contracts').TableName, partitions?: string[] }>
+    fileSets: Record<string, FileSetRef>
     table?: import('@gscdump/engine/contracts').TableName
     sql: string
     params?: unknown[]
@@ -526,11 +526,6 @@ export const indexingMetadataRollup: RollupDef = {
 // ---------------------------------------------------------------------------
 // §C: Indexing & sitemap rollups (replaces D1 timeseries tables)
 // ---------------------------------------------------------------------------
-
-// SQL string literal escape for inlining a parquet URI into DuckDB SQL.
-function sqlString(s: string): string {
-  return `'${s.replace(/'/g, '\'\'')}'`
-}
 
 /**
  * Indexing-API health by day: per `inspectedAt` date, counts of indexed,

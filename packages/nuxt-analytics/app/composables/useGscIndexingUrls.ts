@@ -1,38 +1,10 @@
 // Paginated indexing-status rows for a site, with optional status/issue/search
 // filters. Backed by gscdump.com `/api/sites/[siteId]/indexing/urls`.
 
+import type { IndexingUrlsResponse, IndexingUrlStatus } from '../../types'
 import { useGscFetch } from '../utils/gsc-fetch'
 
-export type IndexingUrlStatus = 'indexed' | 'not_indexed' | 'pending'
-
-export interface IndexingUrlRow {
-  url: string
-  verdict: string | null
-  coverageState: string | null
-  indexingState: string | null
-  robotsTxtState: string | null
-  pageFetchState: string | null
-  lastCrawlTime: string | null
-  crawlingUserAgent: string | null
-  userCanonical: string | null
-  googleCanonical: string | null
-  sitemaps: string[] | null
-  referringUrls: string[] | null
-  mobileVerdict: string | null
-  mobileIssues: unknown[] | null
-  richResultsVerdict: string | null
-  richResultsItems: unknown[] | null
-  inspectionResultLink: string | null
-  firstCheckedAt: string
-  lastCheckedAt: string
-  checkCount: number
-}
-
-export interface IndexingUrlsResponse {
-  urls: IndexingUrlRow[]
-  pagination: { total: number, limit: number, offset: number, hasMore: boolean }
-  meta: { siteUrl: string, status: string, issue: string | null }
-}
+export type { IndexingUrlRow, IndexingUrlsResponse, IndexingUrlStatus } from '../../types'
 
 export interface UseGscIndexingUrlsOptions {
   status?: MaybeRefOrGetter<IndexingUrlStatus | undefined>

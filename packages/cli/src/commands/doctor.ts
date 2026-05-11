@@ -174,7 +174,7 @@ async function checkTimeSkew(): Promise<Check[]> {
     method: 'GET',
     timeout: FETCH_TIMEOUT_MS,
   })
-    .then(r => r.headers.get('date'))
+    .then((r: Response) => r.headers.get('date'))
     .catch((e: any) => e?.response?.headers?.get('date') ?? null)
   if (!dateHeader)
     return [{ name: 'time', status: 'warn', detail: 'could not probe Google clock (no Date header)' }]

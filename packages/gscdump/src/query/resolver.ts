@@ -1,4 +1,4 @@
-import type { DimensionFilterGroup, SearchAnalyticsQuery } from '../core/types'
+import type { GscSearchAnalyticsDimension, GscSearchAnalyticsFilterGroup, GscSearchAnalyticsFilterOperator, GscSearchAnalyticsRequest, GscSearchType } from '../contracts'
 import type { BuilderState, Filter, FilterInput, InternalFilter, JsonFilter } from './types'
 import { addDays } from '../core/gsc-dates'
 import { isDateOperator, isMetricOperator, isQueryParam, isSpecialOperator } from './operator-meta'
@@ -218,7 +218,7 @@ export function extractSpecialOperatorFilters(input?: FilterInput): InternalFilt
   return [...special, ...nested]
 }
 
-export function resolveToBody(state: BuilderState): SearchAnalyticsQuery {
+export function resolveToBody(state: BuilderState): GscSearchAnalyticsRequest {
   // Extract date constraints and query params from filter
   const { startDate, endDate, searchType, dimensionFilter } = extractSpecialFilters(state.filter)
 
@@ -226,14 +226,14 @@ export function resolveToBody(state: BuilderState): SearchAnalyticsQuery {
     throw new Error('Date range required: use .where(between(date, start, end)) or .where(and(gte(date, start), lte(date, end)))')
   }
 
-  const body: SearchAnalyticsQuery = {
-    dimensions: state.dimensions,
+  const body: GscSearchAnalyticsRequest = {
+    dimensions: state.dimensions as GscSearchAnalyticsDimension[],
     startDate,
     endDate,
   }
 
   if (searchType) {
-    body.searchType = searchType
+    body.searchType = searchType as GscSearchType
   }
 
   if (state.rowLimit) {
@@ -256,11 +256,11 @@ function isApiFilter(f: InternalFilter): boolean {
   return !isMetricOperator(f.operator) && !isSpecialOperator(f.operator)
 }
 
-function resolveFilter(filter?: Filter<any>): DimensionFilterGroup[] {
+function resolveFilter(filter?: Filter<any>): GscSearchAnalyticsFilterGroup[] {
   if (!filter)
     return []
 
-  const groups: DimensionFilterGroup[] = []
+  const groups: GscSearchAnalyticsFilterGroup[] = []
   const groupType = filter._groupType ?? 'and'
   const apiFilters = filter._filters.filter(isApiFilter)
 
@@ -270,8 +270,8 @@ function resolveFilter(filter?: Filter<any>): DimensionFilterGroup[] {
       groups.push({
         groupType: 'or',
         filters: apiFilters.map(f => ({
-          dimension: f.dimension,
-          operator: f.operator,
+          dimension: f.dimension as GscSearchAnalyticsDimension,
+          operator: f.operator as GscSearchAnalyticsFilterOperator,
           expression: f.expression,
         })),
       })
@@ -282,8 +282,8 @@ function resolveFilter(filter?: Filter<any>): DimensionFilterGroup[] {
     if (apiFilters.length > 0) {
       groups.push({
         filters: apiFilters.map(f => ({
-          dimension: f.dimension,
-          operator: f.operator,
+          dimension: f.dimension as GscSearchAnalyticsDimension,
+          operator: f.operator as GscSearchAnalyticsFilterOperator,
           expression: f.expression,
         })),
       })

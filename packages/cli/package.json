@@ -52,6 +52,7 @@
     "consola": "catalog:deps",
     "google-auth-library": "catalog:deps",
     "gscdump": "workspace:*",
+    "ofetch": "catalog:deps",
     "open": "catalog:deps"
   },
   "devDependencies": {

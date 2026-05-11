@@ -1,0 +1,12 @@
+{
+  "rows": [
+    {
+      "keys": ["https://example.com/docs/"],
+      "clicks": 10,
+      "impressions": 100,
+      "ctr": 0.1,
+      "position": 3.2
+    }
+  ],
+  "responseAggregationType": "byPage"
+}

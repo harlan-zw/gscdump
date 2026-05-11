@@ -1,0 +1,10 @@
+{
+  "name": "r2-duckdb",
+  "kind": "sql",
+  "capabilities": {
+    "attachedTables": true,
+    "comparison": true
+  },
+  "supportedAnalyzerIds": ["striking-distance", "content-decay"],
+  "browserAttachEligible": true
+}

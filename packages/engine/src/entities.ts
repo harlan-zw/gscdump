@@ -166,6 +166,31 @@ export interface CreateInspectionStoreOptions {
   now?: () => number
 }
 
+/**
+ * Column schema for the inspections parquet sidecar. Stable shape — DuckDB
+ * `read_parquet({{INSPECTIONS}})` JOINs in §C consumers depend on these
+ * names. New fields go in `raw.*` first; promote here only when a JOIN
+ * needs them.
+ */
+const INSPECTION_PARQUET_COLUMNS: readonly ColumnDef[] = [
+  { name: 'urlHash', type: 'VARCHAR', nullable: false },
+  { name: 'url', type: 'VARCHAR', nullable: false },
+  { name: 'inspectedAt', type: 'VARCHAR', nullable: false },
+  { name: 'indexStatus', type: 'VARCHAR', nullable: true },
+  { name: 'lastCrawlTime', type: 'VARCHAR', nullable: true },
+  { name: 'googleCanonical', type: 'VARCHAR', nullable: true },
+  { name: 'userCanonical', type: 'VARCHAR', nullable: true },
+  { name: 'coverageState', type: 'VARCHAR', nullable: true },
+  { name: 'robotsTxtState', type: 'VARCHAR', nullable: true },
+  { name: 'indexingState', type: 'VARCHAR', nullable: true },
+  { name: 'pageFetchState', type: 'VARCHAR', nullable: true },
+  { name: 'mobileUsabilityVerdict', type: 'VARCHAR', nullable: true },
+  { name: 'richResultsVerdict', type: 'VARCHAR', nullable: true },
+  { name: 'scheduleNextAt', type: 'BIGINT', nullable: true },
+  { name: 'scheduleConsecutiveUnchanged', type: 'INTEGER', nullable: true },
+  { name: 'schedulePolicyVersion', type: 'INTEGER', nullable: true },
+]
+
 export function createInspectionStore(opts: CreateInspectionStoreOptions): InspectionStore {
   const hash = opts.hash ?? hashUrl
   const ds = opts.dataSource
@@ -266,31 +291,6 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
     },
   }
 }
-
-/**
- * Column schema for the inspections parquet sidecar. Stable shape — DuckDB
- * `read_parquet({{INSPECTIONS}})` JOINs in §C consumers depend on these
- * names. New fields go in `raw.*` first; promote here only when a JOIN
- * needs them.
- */
-const INSPECTION_PARQUET_COLUMNS: readonly ColumnDef[] = [
-  { name: 'urlHash', type: 'VARCHAR', nullable: false },
-  { name: 'url', type: 'VARCHAR', nullable: false },
-  { name: 'inspectedAt', type: 'VARCHAR', nullable: false },
-  { name: 'indexStatus', type: 'VARCHAR', nullable: true },
-  { name: 'lastCrawlTime', type: 'VARCHAR', nullable: true },
-  { name: 'googleCanonical', type: 'VARCHAR', nullable: true },
-  { name: 'userCanonical', type: 'VARCHAR', nullable: true },
-  { name: 'coverageState', type: 'VARCHAR', nullable: true },
-  { name: 'robotsTxtState', type: 'VARCHAR', nullable: true },
-  { name: 'indexingState', type: 'VARCHAR', nullable: true },
-  { name: 'pageFetchState', type: 'VARCHAR', nullable: true },
-  { name: 'mobileUsabilityVerdict', type: 'VARCHAR', nullable: true },
-  { name: 'richResultsVerdict', type: 'VARCHAR', nullable: true },
-  { name: 'scheduleNextAt', type: 'BIGINT', nullable: true },
-  { name: 'scheduleConsecutiveUnchanged', type: 'INTEGER', nullable: true },
-  { name: 'schedulePolicyVersion', type: 'INTEGER', nullable: true },
-]
 
 // ---------------------------------------------------------------------------
 // Sitemap snapshots
@@ -761,7 +761,7 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
       const indexBytes = await ds.read(indexKey).catch(() => undefined)
       const indexRows = indexBytes ? await decodeParquetToRows(indexBytes) : []
       // Map keyed by (feedpath_hash, url_hash) so we can merge per-URL state.
-      const stateKey = (fp: string, u: string) => `${fp}::${u}`
+      const stateKey = (fp: string, u: string): string => `${fp}::${u}`
       const live = new Map<string, SitemapUrlRecord>()
       const removed = new Map<string, SitemapUrlRecord>()
       for (const row of indexRows) {

@@ -1,0 +1,19 @@
+{
+  "startDate": "2026-04-01",
+  "endDate": "2026-04-30",
+  "dimensions": ["page"],
+  "dimensionFilterGroups": [
+    {
+      "filters": [
+        {
+          "dimension": "page",
+          "operator": "contains",
+          "expression": "/docs/"
+        }
+      ]
+    }
+  ],
+  "rowLimit": 100,
+  "startRow": 25,
+  "searchType": "web"
+}

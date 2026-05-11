@@ -17,14 +17,15 @@ overrides:
   '@nuxt/schema': 4.4.4
   '@types/node>undici-types': ^7.0.0
 catalog:
-  '@cloudflare/workers-types': ^4.20260507.1
+  '@cloudflare/workers-types': ^4.20260511.1
   '@duckdb/duckdb-wasm': ^1.32.0
   '@duckdb/node-api': 1.5.1-r.2
   '@huggingface/transformers': ^4.2.0
   '@modelcontextprotocol/sdk': ^1.29.0
+  '@nuxt/kit': ^4.4.5
   '@nuxt/ui': ^4.7.1
   '@types/js-yaml': ^4.0.9
-  '@types/node': ^25.6.0
+  '@types/node': ^25.6.2
   '@types/proper-lockfile': ^4.1.4
   '@unovis/ts': ^1.6.5
   '@unovis/vue': ^1.6.5
@@ -33,11 +34,11 @@ catalog:
   aws4fetch: ^1.0.20
   drizzle-orm: ^0.45.2
   h3: ^1.15.11
-  hyparquet: ^1.25.6
-  hyparquet-writer: ^0.14.0
+  hyparquet: ^1.25.8
+  hyparquet-writer: ^0.15.1
   js-yaml: ^4.1.1
-  nuxt: ^4.4.4
-  tailwindcss: ^4.2.4
+  nuxt: ^4.4.5
+  tailwindcss: ^4.3.0
   tsx: ^4.21.0
   vitest-package-exports: ^1.2.0
   vue: ^3.5.34
@@ -57,8 +58,8 @@ catalogs:
     proper-lockfile: ^4.1.2
     ufo: ^1.6.4
   dev-build:
-    bumpp: ^11.0.1
-    obuild: ^0.4.34
+    bumpp: ^11.1.0
+    obuild: ^0.4.35
     typescript: ^6.0.3
   dev-lint:
     '@antfu/eslint-config': ^8.2.0
@@ -72,3 +73,11 @@ onlyBuiltDependencies:
   - gtoken
   - unrs-resolver
   - vue-demi
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  maplibre-gl: true
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true
+  vue-demi: true

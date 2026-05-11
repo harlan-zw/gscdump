@@ -103,7 +103,7 @@ const inspectSubCommand = defineCommand({
           pageFetchState: indexStatus?.pageFetchState ?? undefined,
           mobileUsabilityVerdict: ix?.mobileUsabilityResult?.verdict ?? undefined,
           richResultsVerdict: ix?.richResultsResult?.verdict ?? undefined,
-          raw: ix,
+          raw: ix as Record<string, unknown> | undefined,
         })
       }
       completed++
