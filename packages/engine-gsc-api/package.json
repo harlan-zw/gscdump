@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/engine-gsc-api",
   "type": "module",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "description": "GSC live-API engine adapter — wraps the Search Analytics REST API as an AnalysisQuerySource for typed analyzer dispatch.",
   "author": {
     "name": "Harlan Wilton",
