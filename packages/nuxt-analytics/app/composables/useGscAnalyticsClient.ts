@@ -1,19 +1,9 @@
-import { createAnalyticsClient } from '@gscdump/sdk'
-import type { AnalyticsClient, AnalyticsFetch } from '@gscdump/sdk'
-import { getGscFetchHeaders, useGscFetch } from '../utils/gsc-fetch'
-import { readGscAuth } from './useGscAuth'
+// Reader for the layer's `AnalyticsClient`. Built once per NuxtApp by the
+// layer plugin and provided as `$gscAnalyticsClient`. Hosts override by
+// providing their own from a later plugin (e.g. to swap the SDK transport).
+
+import type { AnalyticsClient } from '@gscdump/sdk'
 
 export function useGscAnalyticsClient(): AnalyticsClient {
-  const cfg = useRuntimeConfig().public.analytics as { apiBase?: string } | undefined
-  return createAnalyticsClient({
-    apiBase: readGscAuth().apiBase || cfg?.apiBase || '',
-    fetch: useGscFetch() as unknown as AnalyticsFetch,
-    headers: () => {
-      const auth = readGscAuth()
-      const headers = new Headers(getGscFetchHeaders())
-      if (auth.apiKey)
-        headers.set('x-api-key', auth.apiKey)
-      return headers
-    },
-  })
+  return useNuxtApp().$gscAnalyticsClient as AnalyticsClient
 }

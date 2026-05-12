@@ -16,7 +16,7 @@ import type {
   Row,
 } from '@gscdump/engine'
 import type { AnalyticsEnv } from './env'
-import { bindLiterals, canonicalEmptyParquetSchema } from '@gscdump/engine'
+import { bindLiterals, canonicalEmptyParquetSchema, coerceRow } from '@gscdump/engine'
 import { createHyparquetCodec, decodeParquetToRows } from '@gscdump/engine/hyparquet'
 
 interface RunSQLTableSpec {
@@ -40,24 +40,6 @@ export function createDucklingsCodec(_env: AnalyticsEnv): ParquetCodec {
   // Default hyparquet `readRows` fetches bytes via `dataSource.read(key)` and
   // decodes in pure JS — no ducklings round-trip, no R2 httpfs.
   return createHyparquetCodec()
-}
-
-// DuckDB aggregate functions return BIGINT for SUM/COUNT over integer columns.
-// The RPC boundary delivers these as JS BigInt values; JSON.stringify then
-// throws (or yields null in Workers' toleranced path). Coerce numeric BigInts
-// to regular numbers before the response leaves the engine so every consumer
-// gets JSON-safe values. Precision loss above 2^53 is acceptable for analytics
-// aggregates — individual click/impression columns never reach that range.
-function coerceRow(row: Row): Row {
-  let mutated: Row | null = null
-  for (const [k, v] of Object.entries(row)) {
-    if (typeof v === 'bigint') {
-      if (!mutated)
-        mutated = { ...row }
-      mutated[k] = Number(v)
-    }
-  }
-  return mutated ?? row
 }
 
 // Matches the exact shape the engine compiler emits:

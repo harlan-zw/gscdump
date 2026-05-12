@@ -1,15 +1,17 @@
 import type {
-  AnalyticsClient,
   AnalysisSourcesResponse,
+  AnalyticsClient,
   BackfillRange,
   BackfillResponse,
+  CountriesResponse,
   GscRowQueryResponse,
   IndexingDiagnostics,
-  IndexingUrlStatus,
   IndexingUrlsResponse,
+  IndexingUrlStatus,
   InspectionHistoryResponse,
   InspectionIndex,
   RollupEnvelope,
+  SearchAppearanceResponse,
   SiteListItem,
   SitemapChangesResponse,
   SitemapHistoryResponse,
@@ -17,11 +19,11 @@ import type {
   SourceInfoResponse,
   WhoamiResponse,
 } from '@gscdump/contracts'
+import type { ZodTypeAny } from 'zod'
+import type { PartnerFetch, PartnerFetchOptions, PartnerHeaders } from './client'
 import { analyticsRoutes, partnerEndpointSchemas } from '@gscdump/contracts'
 import { ofetch } from 'ofetch'
-import type { ZodTypeAny } from 'zod'
 import { toPartnerError } from './errors'
-import type { PartnerFetch, PartnerFetchOptions, PartnerHeaders } from './client'
 
 export type AnalyticsFetch = PartnerFetch
 export type AnalyticsHeaders = PartnerHeaders
@@ -155,6 +157,12 @@ export function createAnalyticsClient(options: AnalyticsClientOptions = {}): Ana
     },
     getIndexingDiagnostics(siteId: string) {
       return request<IndexingDiagnostics>(analyticsRoutes.site.indexingDiagnostics(siteId), {}, partnerEndpointSchemas.analyticsIndexingDiagnostics.response)
+    },
+    getCountries(siteId: string, range: { start: string, end: string }) {
+      return request<CountriesResponse>(analyticsRoutes.site.countries(siteId), { query: range }, partnerEndpointSchemas.analyticsCountries.response)
+    },
+    getSearchAppearance(siteId: string, range: { start: string, end: string }) {
+      return request<SearchAppearanceResponse>(analyticsRoutes.site.searchAppearance(siteId), { query: range }, partnerEndpointSchemas.analyticsSearchAppearance.response)
     },
   }
 }

@@ -4,9 +4,12 @@
  * in `@gscdump/engine/analyzer` consumes these directly.
  *
  * Single Interface; capability flags declare what's available. SQL execution
- * is opt-in via `capabilities.executeSql + executeSql` method (the two move
- * together — factories MUST set both or neither). Telemetry-only `kind` tag
+ * is opt-in via the optional `executeSql` method; callers test for presence
+ * (`typeof source.executeSql === 'function'`). Telemetry-only `kind` tag
  * names the storage runtime for downstream meta annotation.
+ *
+ * Source invariant: rows returned from `queryRows` and `executeSql` MUST be
+ * BigInt-free. Source factories own this coercion (see `coerceRows`).
  */
 
 import type { TableName } from '@gscdump/contracts'
@@ -27,12 +30,10 @@ export interface ExecuteSqlOptions {
 
 /**
  * Flat capability bag: planner-side flags (`regex`, `comparisonJoin`, ...)
- * mixed with storage-side flags. `executeSql: true` means the source provides
- * the `executeSql` method; analyzer dispatch reads this single flag instead
- * of probing the function shape.
+ * mixed with storage-side flags. SQL execution is not a capability flag —
+ * callers probe `typeof source.executeSql === 'function'`.
  */
 export interface SourceCapabilities extends PlannerCapabilities {
-  executeSql?: boolean
   attachedTables?: boolean
   fileSets?: boolean
   /**
@@ -58,9 +59,10 @@ export interface AnalysisQuerySource {
   siteId?: string | number
   queryRows: (state: BuilderState) => Promise<QueryRow[]>
   /**
-   * Present iff `capabilities.executeSql === true`. Receives the compiled
-   * SQL plan with `{{FILES}}` placeholders; sources that advertise
-   * `capabilities.fileSets` consume `opts.fileSets`, others ignore them.
+   * Optional raw-SQL escape hatch. Receives the compiled SQL plan with
+   * `{{FILES}}` placeholders; sources that advertise `capabilities.fileSets`
+   * consume `opts.fileSets`, others ignore them. Implementations MUST coerce
+   * BigInts to numbers before returning (see Source invariant above).
    */
   executeSql?: (sql: string, params?: unknown[], opts?: ExecuteSqlOptions) => Promise<QueryRow[]>
 }

@@ -8,16 +8,10 @@ import { between, clicks as clicksCol, date as dateDim, eq, gsc, page as pageDim
 definePageMeta({ key: route => `query-detail:${route.params.id}:${route.params.keyword}` })
 
 const route = useRoute()
-const siteId = computed(() => String(route.params.id))
+const { siteId, site: currentSite } = useGscCurrentSite()
 const keyword = computed(() => decodeURIComponent(String(route.params.keyword)))
-const currentSite = useGscSite(siteId)
 
-type Period = typeof PERIOD_PRESETS[number]['value']
-type CompareMode = typeof COMPARE_OPTIONS[number]['value']
-const period = ref<Period>('28d')
-const compareMode = ref<CompareMode>('none')
-const stableData = ref(true)
-const range = computed(() => periodToDateRange(period.value, { stableData: stableData.value }))
+const { period, compareMode, stableData, range } = useGscPeriod()
 
 interface DailyRow { date: string, clicks: number, impressions: number, sum_position?: number, position?: number }
 interface PageRowShape { page: string, clicks: number, impressions: number, sum_position?: number, position?: number }
@@ -55,52 +49,13 @@ const { rows: pagesRaw, loading: pagesLoading, error: pagesError } = useGscRowQu
   state: topPagesState,
 })
 
-const daily = computed(() => dailyRaw.value
-  .slice()
-  .sort((a, b) => a.date.localeCompare(b.date))
-  .map(r => ({
-    date: r.date,
-    clicks: r.clicks,
-    impressions: r.impressions,
-    sum_position: r.sum_position ?? (r.position ?? 0) * r.impressions,
-  })))
-
-const pages = computed(() => pagesRaw.value.map(r => ({
-  url: r.page,
-  clicks: r.clicks,
-  impressions: r.impressions,
-  sum_position: r.sum_position ?? (r.position ?? 0) * r.impressions,
-})))
+const summary = computed(() => summarizeDailyRows(dailyRaw.value))
+const totals = computed(() => summary.value.totals)
+const chartData = computed(() => summary.value.chartData)
+const pages = computed(() => pagesRaw.value.map((r: PageRowShape) => ({ url: r.page, ...coerceRowMetrics(r) })))
 
 const loading = computed(() => dailyLoading.value || pagesLoading.value)
 const error = computed(() => dailyError.value?.message ?? pagesError.value?.message ?? null)
-
-const totals = computed(() => {
-  let clicks = 0
-  let impressions = 0
-  let weightedPosition = 0
-  for (const d of daily.value) {
-    clicks += d.clicks
-    impressions += d.impressions
-    weightedPosition += d.sum_position
-  }
-  return {
-    clicks,
-    impressions,
-    ctr: impressions > 0 ? clicks / impressions : 0,
-    position: impressions > 0 ? weightedPosition / impressions + 1 : 0,
-  }
-})
-
-function positionFor(r: { impressions: number, sum_position: number }): number {
-  return r.impressions > 0 ? r.sum_position / r.impressions + 1 : 0
-}
-
-const chartData = computed(() => daily.value.map(d => ({
-  date: d.date,
-  clicks: d.clicks,
-  impressions: d.impressions,
-})))
 
 const gscLink = computed(() =>
   currentSite.value
@@ -116,10 +71,8 @@ const gscLink = computed(() =>
 <template>
   <GscDashboardPage>
     <template #header>
-      <GscPageHeader
-        :crumbs="[
-          { label: 'Overview', to: '/' },
-          { label: currentSite?.hostname ?? siteId, to: `/sites/${encodeURIComponent(siteId)}` },
+      <GscSitePageHeader
+        :tail="[
           { label: 'Queries', to: `/sites/${encodeURIComponent(siteId)}/queries` },
           { label: keyword },
         ]"
@@ -144,7 +97,7 @@ const gscLink = computed(() =>
             v-model:stable-data="stableData"
           />
         </template>
-      </GscPageHeader>
+      </GscSitePageHeader>
     </template>
 
     <UAlert

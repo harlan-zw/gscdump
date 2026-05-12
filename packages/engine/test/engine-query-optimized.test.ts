@@ -1,13 +1,16 @@
-// Integration test for engine.queryOptimized — single-scan rows + totalCount +
+// Integration test for resolveToSQLOptimized — single-scan rows + totalCount +
 // totals via DuckDB window functions (COUNT(*) OVER (), SUM(metric) OVER ()).
-// Mirrors engine-comparison-extras.test.ts setup: filesystem dataSource +
-// manifest, real node DuckDB, parquet adapter.
+// Drives the resolver fragment directly through engine.runSQL; mirrors the
+// filesystem dataSource + manifest + real node DuckDB setup of the comparison
+// integration test.
 
 import type { BuilderState } from 'gscdump/query'
 import type { Row } from '../src/index'
+import type { StorageEngine, TableName } from '../src/storage'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { buildLogicalPlan } from 'gscdump/query/plan'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   createNodeDuckDBHandle,
@@ -17,18 +20,67 @@ import {
   createFilesystemDataSource,
   createFilesystemManifestStore,
 } from '../src/adapters/filesystem'
+import { enumeratePartitions } from '../src/compaction'
 import {
   createDuckDBCodec,
   createDuckDBExecutor,
   createStorageEngine,
 } from '../src/index'
+import { resolveToSQLOptimized } from '../src/resolver/compiler'
+import { createParquetResolverAdapter } from '../src/resolver/pg-adapter'
 
 afterAll(() => {
   resetNodeDuckDB()
 })
 
+interface OptimizedResult {
+  rows: Row[]
+  totalCount: number
+  totals: { clicks: number, impressions: number, ctr: number, position: number }
+}
+
+// Mirrors the deleted StorageEngine.queryOptimized orchestration so the
+// resolver fragment keeps its DuckDB integration coverage.
+async function runOptimized(
+  engine: StorageEngine,
+  ctx: { userId: string, siteId: string, table?: TableName },
+  state: BuilderState,
+): Promise<OptimizedResult> {
+  const adapter = createParquetResolverAdapter()
+  const plan = buildLogicalPlan(state, adapter.capabilities)
+  const table: TableName = ctx.table ?? plan.dataset
+  const partitions = enumeratePartitions(plan.dateRange.startDate, plan.dateRange.endDate)
+  const { sql, params } = resolveToSQLOptimized(state, { adapter, siteId: undefined })
+  const result = await engine.runSQL({
+    ctx: { userId: ctx.userId, siteId: ctx.siteId },
+    table,
+    fileSets: { FILES: { table, partitions } },
+    sql,
+    params,
+  })
+  const firstRow = result.rows[0] as Record<string, unknown> | undefined
+  const totalCount = Number(firstRow?.totalCount ?? 0)
+  const totals = {
+    clicks: Number(firstRow?.totalClicks ?? 0),
+    impressions: Number(firstRow?.totalImpressions ?? 0),
+    ctr: Number(firstRow?.totalCtr ?? 0),
+    position: Number(firstRow?.totalPosition ?? 0),
+  }
+  const rows = result.rows.map((r) => {
+    const {
+      totalCount: _tc,
+      totalClicks: _tcl,
+      totalImpressions: _ti,
+      totalCtr: _tr,
+      totalPosition: _tp,
+      ...rest
+    } = r as Record<string, unknown>
+    return rest as Row
+  })
+  return { rows, totalCount, totals }
+}
+
 function pageRow(url: string, date: string, clicks: number, impressions: number): Row {
-  // sum_position chosen to make average position = 5 + index-ish, deterministic
   return { url, date, clicks, impressions, sum_position: impressions * 5 }
 }
 
@@ -43,7 +95,7 @@ function dateFilter(start: string, end: string): BuilderState['filter'] {
   } as any
 }
 
-describe('engine.queryOptimized', () => {
+describe('resolveToSQLOptimized (integration)', () => {
   let dir: string
   beforeEach(async () => {
     resetNodeDuckDB()
@@ -64,8 +116,6 @@ describe('engine.queryOptimized', () => {
     return { engine }
   }
 
-  // Five unique pages, single day. Clicks/impressions chosen so each metric
-  // is independently distinguishable.
   const day = '2026-04-15'
   const fixture = [
     { url: '/a', clicks: 50, impressions: 500 },
@@ -75,7 +125,7 @@ describe('engine.queryOptimized', () => {
     { url: '/e', clicks: 10, impressions: 100 },
   ]
 
-  async function seedPages(engine: Awaited<ReturnType<typeof setup>>['engine']) {
+  async function seedPages(engine: StorageEngine) {
     await engine.writeDay(
       { userId: 'u1', siteId: 's1', table: 'pages', date: day },
       fixture.map(f => pageRow(f.url, day, f.clicks, f.impressions)),
@@ -106,7 +156,7 @@ describe('engine.queryOptimized', () => {
       orderBy: { column: 'impressions', dir: 'desc' },
     }
 
-    const result = await engine.queryOptimized({ userId: 'u1', siteId: 's1' }, state)
+    const result = await runOptimized(engine, { userId: 'u1', siteId: 's1' }, state)
     expect(result.rows).toHaveLength(2)
     expect(result.totalCount).toBe(5)
 
@@ -116,11 +166,9 @@ describe('engine.queryOptimized', () => {
     expect(result.totals.ctr).toBeCloseTo(exp.ctr, 5)
     expect(result.totals.position).toBeCloseTo(exp.position, 5)
 
-    // Rows are ordered by impressions desc and contain the top two URLs.
     expect((result.rows[0] as any).page).toBe('/a')
     expect((result.rows[1] as any).page).toBe('/b')
 
-    // Window-function totals MUST be stripped from rows.
     for (const r of result.rows) {
       const keys = Object.keys(r)
       expect(keys).not.toContain('totalCount')
@@ -143,7 +191,7 @@ describe('engine.queryOptimized', () => {
       orderBy: { column: 'impressions', dir: 'desc' },
     }
 
-    const result = await engine.queryOptimized({ userId: 'u1', siteId: 's1' }, state)
+    const result = await runOptimized(engine, { userId: 'u1', siteId: 's1' }, state)
     expect(result.rows).toHaveLength(5)
     expect(result.totalCount).toBe(5)
     const exp = expectedTotals()
@@ -158,12 +206,11 @@ describe('engine.queryOptimized', () => {
     const state: BuilderState = {
       dimensions: ['page'],
       metrics: ['clicks', 'impressions', 'ctr', 'position'],
-      // Date window outside the fixture day.
       filter: dateFilter('2025-01-01', '2025-01-31'),
       rowLimit: 100,
     }
 
-    const result = await engine.queryOptimized({ userId: 'u1', siteId: 's1' }, state)
+    const result = await runOptimized(engine, { userId: 'u1', siteId: 's1' }, state)
     expect(result.rows).toEqual([])
     expect(result.totalCount).toBe(0)
     expect(result.totals).toEqual({ clicks: 0, impressions: 0, ctr: 0, position: 0 })
@@ -179,19 +226,17 @@ describe('engine.queryOptimized', () => {
       filter: dateFilter('2026-04-01', '2026-04-30'),
       rowLimit: 100,
     }
-    const result = await engine.queryOptimized({ userId: 'u1', siteId: 's1' }, state)
+    const result = await runOptimized(engine, { userId: 'u1', siteId: 's1' }, state)
 
-    const expectedClicks = 50 + 40 + 30 + 20 + 10 // 150
-    const expectedImpressions = 500 + 400 + 300 + 200 + 100 // 1500
-    const expectedSumPos = expectedImpressions * 5 // each row sum_position = impressions * 5
+    const expectedClicks = 50 + 40 + 30 + 20 + 10
+    const expectedImpressions = 500 + 400 + 300 + 200 + 100
+    const expectedSumPos = expectedImpressions * 5
     expect(result.totals.clicks).toBe(expectedClicks)
     expect(result.totals.impressions).toBe(expectedImpressions)
     expect(result.totals.ctr).toBeCloseTo(expectedClicks / expectedImpressions, 5)
     expect(result.totals.position).toBeCloseTo(expectedSumPos / expectedImpressions + 1, 5)
   })
 
-  // Sanity: each table resolves to valid SQL the parquet adapter + DuckDB
-  // accepts. Catches column-mismatch failures (e.g. missing sum_position).
   describe('all metric tables resolve', () => {
     const cases: Array<{
       table: 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords'
@@ -218,7 +263,7 @@ describe('engine.queryOptimized', () => {
           filter: dateFilter('2026-04-01', '2026-04-30'),
           rowLimit: 10,
         }
-        const result = await engine.queryOptimized({ userId: 'u1', siteId: 's1' }, state)
+        const result = await runOptimized(engine, { userId: 'u1', siteId: 's1' }, state)
         expect(result.rows).toHaveLength(1)
         expect(result.totalCount).toBe(1)
         expect(result.totals.clicks).toBe(1)

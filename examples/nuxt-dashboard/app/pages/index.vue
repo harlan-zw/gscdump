@@ -4,8 +4,6 @@
 // selector drives which slice of the rollup's day-array we aggregate; growth
 // is computed against the preceding equal-length window (or YoY).
 
-type Period = typeof PERIOD_PRESETS[number]['value']
-type CompareMode = typeof COMPARE_OPTIONS[number]['value']
 
 interface DailyTotal {
   // Rollup writer stamps this as Unix ms (see rollups.ts) — not an ISO date.
@@ -34,9 +32,7 @@ interface SiteStats {
   builtAt: number | null
 }
 
-const period = ref<Period>('28d')
-const compareMode = ref<CompareMode>('previous')
-const stableData = ref(true)
+const { period, compareMode, stableData, range } = useGscPeriod()
 const { sites, loading: sitesLoading, error: sitesError } = useGscSites()
 
 // Free-tier fanout hits the live GSC API once per site — 20 sites = 20 calls
@@ -46,8 +42,6 @@ const EAGER_CAP = 12
 const sitesCap = ref(EAGER_CAP)
 const fanoutSites = computed(() => (sites.value ?? []).slice(0, sitesCap.value))
 const pendingLazyCount = computed(() => Math.max(0, (sites.value?.length ?? 0) - sitesCap.value))
-
-const range = computed(() => periodToDateRange(period.value, { stableData: stableData.value }))
 
 // Widen the server-side fetch to cover whichever comparison window is active
 // — previous-period needs prevStart, YoY needs yearStart. Free-tier rollups

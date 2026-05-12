@@ -1,8 +1,8 @@
 import type { GscdumpUserSite, PartnerFetch } from '@gscdump/sdk'
 import { createPartnerClient } from '@gscdump/sdk'
 
-export default defineEventHandler(async () => {
-  const config = useRuntimeConfig()
+export default defineEventHandler(async (event) => {
+  const config = useRuntimeConfig(event)
   const partner = config.partner as { apiBase?: string, apiKey?: string, userId?: string }
 
   if (!partner.apiKey || !partner.userId) {

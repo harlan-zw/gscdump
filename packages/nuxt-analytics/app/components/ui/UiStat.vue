@@ -192,8 +192,8 @@ const formattedTrend = computed(() => {
     <div
       class="group/card relative flex flex-col gap-1 overflow-hidden"
       :class="[
-        card ? 'rounded-xl border border-default bg-[var(--ui-bg-elevated)]/5 p-4 min-h-[5.5rem]' : '',
-        to && card ? 'transition-colors hover:border-accented' : '',
+        card ? 'ui-stat-card rounded-xl border border-default bg-[var(--ui-bg-elevated)]/5 p-4 min-h-[5.5rem]' : '',
+        to && card ? 'ui-stat-card--linked' : '',
         to && !card ? 'transition-opacity hover:opacity-80' : '',
       ]"
     >
@@ -239,7 +239,18 @@ const formattedTrend = computed(() => {
               </span>
               <span v-if="suffix" class="text-sm text-muted">{{ suffix }}</span>
               <slot v-if="card" name="trend">
-                <span v-if="trend != null && trend !== 0" class="text-xs font-medium font-mono tabular-nums" :class="trendColorClass">
+                <span
+                  v-if="trend != null && trend !== 0"
+                  class="inline-flex items-center gap-0.5 px-1.5 py-px rounded-md text-[10px] font-medium font-mono tabular-nums leading-tight"
+                  :class="[
+                    trendNeutral || isTrendPositive === null ? 'bg-muted text-muted' : isTrendPositive ? 'bg-success/10 text-success' : 'bg-error/10 text-error',
+                  ]"
+                >
+                  <UIcon
+                    v-if="!trendNeutral && isTrendPositive !== null"
+                    :name="isTrendPositive ? 'i-lucide-arrow-up-right' : 'i-lucide-arrow-down-right'"
+                    class="size-2.5"
+                  />
                   {{ formattedTrend }}
                 </span>
                 <span v-if="trendLabel" class="text-xs text-dimmed">{{ trendLabel }}</span>
@@ -264,3 +275,31 @@ const formattedTrend = computed(() => {
     </div>
   </component>
 </template>
+
+<style scoped>
+.ui-stat-card {
+  /* Subtle resting depth — inset edges only. No outer shadow at rest. */
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.03),
+    inset 0 -1px 0 0 rgb(0 0 0 / 0.02);
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+  transition: box-shadow 200ms ease-out, border-color 200ms ease-out, transform 200ms ease-out;
+}
+
+/* Linked cards lift slightly on hover — transient, monochrome. */
+.ui-stat-card--linked:hover {
+  border-color: var(--ui-border-accented);
+  box-shadow:
+    0 1px 2px 0 rgb(0 0 0 / 0.04),
+    0 6px 16px -6px rgb(0 0 0 / 0.06),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.04),
+    inset 0 -1px 0 0 rgb(0 0 0 / 0.02);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-stat-card {
+    transition: border-color 150ms ease-out;
+  }
+}
+</style>

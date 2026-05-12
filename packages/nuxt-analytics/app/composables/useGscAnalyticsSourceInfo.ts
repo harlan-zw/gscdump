@@ -6,7 +6,8 @@
 // analyze() call for each panel.
 
 import type { SourceCapabilities } from '@gscdump/analysis'
-import { _useGscAnalyticsContext } from './useGscAnalytics'
+import { useGscSharedSiteResource } from './_useGscSharedSiteResource'
+import { useGscAnalyticsContext } from './useGscAnalytics'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export interface GscAnalyticsSourceInfo {
@@ -36,109 +37,115 @@ interface GscAnalyticsSourceInfoState {
   supports: (analyzerId: MaybeRefOrGetter<string>) => ComputedRef<boolean>
 }
 
-interface CachedEntry {
+interface SourceInfoEntry {
   info: Ref<GscAnalyticsSourceInfo | null>
   loading: Ref<boolean>
   error: Ref<Error | null>
-  pending: Promise<void> | null
+  pending: Ref<Promise<void> | null>
+  siteId: string
 }
 
-const CACHE_KEY = Symbol('gsc-analytics-source-info')
+function createEntry(siteId: string): SourceInfoEntry {
+  return {
+    info: ref<GscAnalyticsSourceInfo | null>(null),
+    loading: ref(false),
+    error: ref<Error | null>(null),
+    pending: shallowRef<Promise<void> | null>(null),
+    siteId,
+  }
+}
 
-function getCache(ctx: ReturnType<typeof _useGscAnalyticsContext>): Map<string, CachedEntry> {
-  const bag = ctx as unknown as Record<PropertyKey, unknown>
-  let cache = bag[CACHE_KEY] as Map<string, CachedEntry> | undefined
+async function fetchInto(entry: SourceInfoEntry): Promise<void> {
+  entry.loading.value = true
+  entry.error.value = null
+  const p = (useGscAnalyticsClient().getSourceInfo(entry.siteId) as Promise<GscAnalyticsSourceInfo>)
+    .then((data) => {
+      entry.info.value = data
+    })
+    .catch((err: unknown) => {
+      entry.error.value = err instanceof Error ? err : new Error(String(err))
+    })
+    .finally(() => {
+      entry.loading.value = false
+      entry.pending.value = null
+    })
+  entry.pending.value = p
+  await p
+}
+
+const SOURCE_INFO_NAMESPACE = 'source-info'
+
+function acquireSourceInfoEntry(siteId: string): SourceInfoEntry {
+  const ctx = useGscAnalyticsContext()
+  const bag = ctx._sharedResources as Map<string, Map<string, { entry: SourceInfoEntry, refs: number }>>
+  let cache = bag.get(SOURCE_INFO_NAMESPACE)
   if (!cache) {
     cache = new Map()
-    bag[CACHE_KEY] = cache
+    bag.set(SOURCE_INFO_NAMESPACE, cache)
   }
-  return cache
+  let cached = cache.get(siteId)
+  if (!cached) {
+    cached = { entry: createEntry(siteId), refs: 0 }
+    cache.set(siteId, cached)
+  }
+  return cached.entry
+}
+
+/**
+ * Non-reactive source-info loader for callers outside a Vue scope (e.g. the
+ * analyzer's boot IIFE in `useGscAnalyzer.createInstance`). Shares the same
+ * per-site cache `useGscAnalyticsSourceInfo` consumes, so the gating UI and
+ * the analyzer mode probe collapse to one network read per site per session.
+ *
+ * If a fetch is already in flight (kicked off by `useGscAnalyticsSourceInfo`'s
+ * reactive watcher), this awaits it instead of issuing a duplicate request.
+ */
+export async function loadSourceInfoFor(siteId: string): Promise<GscAnalyticsSourceInfo> {
+  const entry = acquireSourceInfoEntry(siteId)
+  if (entry.info.value)
+    return entry.info.value
+  if (entry.pending.value) {
+    await entry.pending.value
+  }
+  else {
+    await fetchInto(entry)
+  }
+  if (entry.error.value)
+    throw entry.error.value
+  if (!entry.info.value)
+    throw new Error(`loadSourceInfoFor(${siteId}): no info after fetch`)
+  return entry.info.value
 }
 
 export function useGscAnalyticsSourceInfo(
   siteId: MaybeRefOrGetter<string | null | undefined>,
 ): GscAnalyticsSourceInfoState {
-  const ctx = _useGscAnalyticsContext()
-  const cache = getCache(ctx)
+  const { bound } = useGscSharedSiteResource<SourceInfoEntry>('source-info', siteId, {
+    factory: id => createEntry(id),
+    // No onDispose: source-info is cheap and persistent across the session.
+  })
 
-  const info = ref<GscAnalyticsSourceInfo | null>(null)
-  const loading = ref(false)
-  const error = ref<Error | null>(null)
-
-  let stop: (() => void) | null = null
-
-  function bind(id: string): void {
-    stop?.()
-    let entry = cache.get(id)
-    if (!entry) {
-      entry = {
-        info: ref(null),
-        loading: ref(false),
-        error: ref(null),
-        pending: null,
-      }
-      cache.set(id, entry)
-    }
-    const bound = entry
-    const stops = [
-      watch(bound.info, v => (info.value = v), { immediate: true }),
-      watch(bound.loading, v => (loading.value = v), { immediate: true }),
-      watch(bound.error, v => (error.value = v), { immediate: true }),
-    ]
-    stop = () => stops.forEach(fn => fn())
-
-    if (!bound.info.value && !bound.pending && import.meta.client)
-      void fetchInto(id, bound)
+  if (import.meta.client) {
+    watch(bound, (entry: SourceInfoEntry | null) => {
+      if (entry && entry.info.value == null && entry.pending.value == null && entry.error.value == null)
+        void fetchInto(entry)
+    }, { immediate: true })
   }
 
-  async function fetchInto(id: string, entry: CachedEntry): Promise<void> {
-    entry.loading.value = true
-    entry.error.value = null
-    entry.pending = (useGscAnalyticsClient().getSourceInfo(id) as Promise<GscAnalyticsSourceInfo>)
-      .then((data) => {
-        entry.info.value = data
-      })
-      .catch((err: unknown) => {
-        entry.error.value = err instanceof Error ? err : new Error(String(err))
-      })
-      .finally(() => {
-        entry.loading.value = false
-        entry.pending = null
-      })
-    await entry.pending
-  }
-
-  watch(
-    () => toValue(siteId),
-    (id) => {
-      if (!id) {
-        stop?.()
-        stop = null
-        info.value = null
-        loading.value = false
-        error.value = null
-        return
-      }
-      bind(id)
-    },
-    { immediate: true },
-  )
-
-  onScopeDispose(() => stop?.())
+  const info = computed(() => bound.value?.info.value ?? null) as unknown as Ref<GscAnalyticsSourceInfo | null>
+  const loading = computed(() => bound.value?.loading.value ?? false) as unknown as Ref<boolean>
+  const error = computed(() => bound.value?.error.value ?? null) as unknown as Ref<Error | null>
 
   async function refresh(): Promise<void> {
-    const id = toValue(siteId)
-    if (!id)
-      return
-    const entry = cache.get(id)
+    const entry = bound.value
     if (!entry)
       return
-    await fetchInto(id, entry)
+    await fetchInto(entry)
   }
 
   function supports(analyzerId: MaybeRefOrGetter<string>): ComputedRef<boolean> {
     return computed(() => {
-      const list = info.value?.supportedAnalyzerIds
+      const list = bound.value?.info.value?.supportedAnalyzerIds
       if (!list)
         return false
       return list.includes(toValue(analyzerId))

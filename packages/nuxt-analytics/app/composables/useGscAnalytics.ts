@@ -1,10 +1,9 @@
 // Analytics context: sites list + shared boot-progress map + per-site analyzer
-// cache. One `provideGscAnalytics()` at the app/layout root. Pages reach in via
-// narrower hooks (`useGscSites`, `useGscSite`, `useGscAnalyzer`,
-// `useGscBootProgress`) — no global mutable `currentSite`, no leaked progress
-// writers.
+// cache. Provided app-wide by the layer's plugin as `nuxtApp.$gscAnalytics`.
+// Pages reach in via narrower hooks (`useGscSites`, `useGscSite`,
+// `useGscAnalyzer`, `useGscBootProgress`) — no global mutable `currentSite`,
+// no leaked progress writers.
 
-import type { InjectionKey } from 'vue'
 import type { SiteListItem } from '@gscdump/contracts'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
@@ -51,42 +50,21 @@ export interface GscAnalyticsContext {
   patchProgress: (siteId: string, patch: Partial<SiteLoadProgress>) => void
   /** Escape hatch for demos/tests — clear progress map (all or one site). */
   clearProgress: (siteId?: string) => void
-  // @internal per-site analyzer instance cache; used by useGscAnalyzer.
-  _analyzers: Map<string, unknown>
+  // @internal per-namespace per-site resource bag; used by
+  // useGscSharedSiteResource. Replaces the old `_analyzers` Map — the analyzer
+  // cache is now one namespace among several (alongside source-info, etc.).
+  _sharedResources: Map<string, Map<string, { entry: unknown, refs: number }>>
 }
 
-export const GSC_ANALYTICS_KEY = Symbol('gsc-analytics') as InjectionKey<GscAnalyticsContext>
-
 // Factory exposed so the layer's Nuxt plugin can provide a single app-wide
-// context via `nuxtApp.vueApp.provide(GSC_ANALYTICS_KEY, createGscAnalyticsContext())`.
-// Prefer the plugin-driven path over calling provide() from a layout.
+// context via `provide: { gscAnalytics: createGscAnalyticsContext() }`.
 export function createGscAnalyticsContext(): GscAnalyticsContext {
   return createContext()
 }
 
-/**
- * Legacy scoped provide. Called inside a component setup, establishes the
- * context for that subtree. New apps should rely on the layer's plugin,
- * which provides at the Nuxt app root — this remains for consumers that
- * want to override per-layout.
- */
-export function provideGscAnalytics(): GscAnalyticsContext {
-  const existing = inject(GSC_ANALYTICS_KEY, null)
-  if (existing)
-    return existing
-  const ctx = createContext()
-  provide(GSC_ANALYTICS_KEY, ctx)
-  return ctx
-}
-
-// Internal: resolve the shared context. Throws if no provider is upstream —
-// should never happen once the layer's plugin runs, since that provides at
-// `nuxtApp.vueApp` which is upstream of every component.
-export function _useGscAnalyticsContext(): GscAnalyticsContext {
-  const ctx = inject(GSC_ANALYTICS_KEY, null)
-  if (!ctx)
-    throw new Error('[nuxt-analytics] provideGscAnalytics() must be called upstream (layout or app root).')
-  return ctx
+/** Resolve the shared context. The layer's plugin guarantees this is provided. */
+export function useGscAnalyticsContext(): GscAnalyticsContext {
+  return useNuxtApp().$gscAnalytics
 }
 
 /** Read-only sites list + refresh. */
@@ -96,13 +74,13 @@ export function useGscSites(): {
   error: Readonly<Ref<Error | null>>
   refresh: () => Promise<void>
 } {
-  const { sites, sitesLoading, sitesError, refreshSites } = _useGscAnalyticsContext()
+  const { sites, sitesLoading, sitesError, refreshSites } = useGscAnalyticsContext()
   return { sites, loading: sitesLoading, error: sitesError, refresh: refreshSites }
 }
 
 /** Derived site record for a given id. Non-mutating; returns `null` until the list resolves. */
 export function useGscSite(siteId: MaybeRefOrGetter<string | null | undefined>): Ref<SiteRecord | null> {
-  const { sites } = _useGscAnalyticsContext()
+  const { sites } = useGscAnalyticsContext()
   return computed(() => {
     const id = toValue(siteId)
     if (!id)
@@ -138,7 +116,7 @@ export function useGscBootProgress(): {
   allReady: ComputedRef<boolean>
   anyActive: ComputedRef<boolean>
 } {
-  const { progress } = _useGscAnalyticsContext()
+  const { progress } = useGscAnalyticsContext()
   const entries = computed<SiteLoadProgress[]>(() => {
     const all = Object.values(progress.value) as SiteLoadProgress[]
     return all.sort((a, b) => a.startedAt - b.startedAt)
@@ -195,10 +173,10 @@ function createContext(): GscAnalyticsContext {
   }
 
   // Lazy-load: defer refreshSites until something actually reads `sites`.
-  // Eager kick-off used to race host plugins that set auth headers
-  // (`setGscFetchHeaders`) — first call would 401 and the rest of the
-  // session would silently degrade. Triggering on first read defers the
-  // request to a microtask after plugin setup, so headers are in place.
+  // Eager kick-off used to race host plugins that set auth via `setGscAuth`;
+  // first call would 401 and the rest of the session would silently degrade.
+  // Triggering on first read defers the request to a microtask after plugin
+  // setup, so auth state is in place.
   let kickedOff = false
   function maybeKickOff(): void {
     if (kickedOff || !import.meta.client)
@@ -219,6 +197,6 @@ function createContext(): GscAnalyticsContext {
     progress: progress as Readonly<Ref<Record<string, SiteLoadProgress>>>,
     patchProgress,
     clearProgress,
-    _analyzers: new Map(),
+    _sharedResources: new Map(),
   }
 }

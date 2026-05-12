@@ -1,6 +1,5 @@
 import type { Row, TableName, TenantCtx } from '@gscdump/contracts'
 import type { BuilderState, SearchType } from 'gscdump/query'
-import type { ComparisonFilter } from './resolver/types'
 import { MS_PER_DAY, toIsoDate } from 'gscdump'
 
 export type { Row, TableName, TenantCtx } from '@gscdump/contracts'
@@ -342,28 +341,6 @@ export interface QueryResult {
   objectKeys: string[]
 }
 
-export interface ComparisonResult {
-  rows: Row[]
-  totalCount: number
-  totals: Record<string, unknown>
-}
-
-export interface ExtraResult {
-  key: string
-  rows: Row[]
-}
-
-export interface OptimizedQueryResult {
-  rows: Row[]
-  totalCount: number
-  totals: {
-    clicks: number
-    impressions: number
-    ctr: number
-    position: number
-  }
-}
-
 export interface QueryExecuteOptions {
   sql: string
   params: unknown[]
@@ -452,40 +429,6 @@ export interface RunSQLOptions {
 export interface StorageEngine {
   writeDay: (ctx: WriteCtx, rows: Row[]) => Promise<void>
   query: (ctx: QueryCtx, state: BuilderState) => Promise<QueryResult>
-  /**
-   * Two-window comparison query (resolver-compiled). Joins a `current` and
-   * `previous` window CTE on dimensions, applies an optional row filter
-   * (`new`/`lost`/`improving`/`declining`), and returns the merged rows plus
-   * total count and unfiltered totals.
-   *
-   * Tenant scoping comes from `ctx.userId`/`ctx.siteId` (manifest lookup) —
-   * the SQL itself is single-tenant against the parquet adapter, which has
-   * `includeSiteId: false`.
-   *
-   * Throws if `current` and `previous` resolve to different tables.
-   */
-  queryComparison: (
-    ctx: QueryCtx,
-    current: BuilderState,
-    previous: BuilderState,
-    filter?: ComparisonFilter,
-  ) => Promise<ComparisonResult>
-  /**
-   * Canonical-variant enrichment queries. Returns one result per extra
-   * surface; today only `queryCanonical` triggers an extra. Empty array
-   * when the state has no extras-eligible dimensions.
-   */
-  queryExtras: (ctx: QueryCtx, state: BuilderState) => Promise<ExtraResult[]>
-  /**
-   * Single-scan variant of {@link query} that piggy-backs `totalCount` and
-   * unfiltered metric totals onto the dimensioned result via window functions.
-   * Replaces the host-side rows + totals + count fan-out with one DuckDB
-   * execution. Window-function output columns (`totalCount`, `totalClicks`,
-   * `totalImpressions`, `totalCtr`, `totalPosition`) are stripped from `rows`
-   * before return; missing per-metric totals (when the metric was not
-   * requested in `state.metrics`) default to 0.
-   */
-  queryOptimized: (ctx: QueryCtx, state: BuilderState) => Promise<OptimizedQueryResult>
   /**
    * Run arbitrary SQL resolved against named partition sets. Composes
    * manifest lookup + object reads + placeholder substitution + execution

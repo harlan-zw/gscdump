@@ -4,11 +4,10 @@
 // multi-site fan-out so the component's visual states can be exercised
 // without real data wiring.
 
-// provideAnalytics is usually called by the layout; this page is standalone
-// (it doesn't use the default layout) so we provide here.
+// The layer's plugin provides the analytics context at app root, so even
+// layoutless pages can read it directly.
 definePageMeta({ layout: false })
-const ctx = provideGscAnalytics()
-const { progress, patchProgress, clearProgress } = ctx
+const { progress, patchProgress, clearProgress } = useGscAnalyticsContext()
 
 const SITES = [
   'sc-domain:harlanzw.com',

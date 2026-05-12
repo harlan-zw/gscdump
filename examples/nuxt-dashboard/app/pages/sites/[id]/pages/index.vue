@@ -6,48 +6,13 @@ definePageMeta({ key: route => `site-pages-index:${route.params.id}` })
 
 interface TopPageRow { url: string, clicks: number, impressions: number, sum_position: number }
 
-type Period = typeof PERIOD_PRESETS[number]['value']
-type CompareMode = typeof COMPARE_OPTIONS[number]['value']
+const { siteId } = useGscCurrentSite()
 
-const route = useRoute()
-const siteId = computed(() => String(route.params.id))
-const currentSite = useGscSite(siteId)
-
-const period = ref<Period>('28d')
-const compareMode = ref<CompareMode>('none')
-const stableData = ref(true)
-const windowRange = computed(() => {
-  const r = periodToDateRange(period.value, { stableData: stableData.value })
-  return { start: r.start, end: r.end }
-})
-
-const { data: payload, loading } = useGscRollup<TopPageRow[]>(
+const { period, compareMode, stableData, q: search, payload, loading, rows } = useGscRollupTable<TopPageRow>({
   siteId,
-  'top_pages_28d',
-  { range: windowRange },
-)
-// URL-synced table state (useGscTableState handles q deep-linking).
-const { q: search } = useGscTableState()
-const searchDebounced = ref('')
-let handle: ReturnType<typeof setTimeout> | null = null
-watch(search, (v) => {
-  if (handle)
-    clearTimeout(handle)
-  handle = setTimeout(() => {
-    searchDebounced.value = v
-  }, 150)
+  rollupKey: 'top_pages_28d',
+  filterField: 'url',
 })
-
-const rows = computed(() => {
-  const q = searchDebounced.value.trim().toLowerCase()
-  const list = (payload.value ?? []).slice()
-  const filtered = q ? list.filter(r => r.url.toLowerCase().includes(q)) : list
-  return filtered.slice(0, 100)
-})
-
-function positionFor(r: TopPageRow): number {
-  return r.impressions > 0 ? r.sum_position / r.impressions + 1 : 0
-}
 
 function hrefFor(url: string): string {
   return `/sites/${encodeURIComponent(siteId.value)}/pages/${encodeURIComponent(url)}`
@@ -57,12 +22,8 @@ function hrefFor(url: string): string {
 <template>
   <GscDashboardPage>
     <template #header>
-      <GscPageHeader
-        :crumbs="[
-          { label: 'Overview', to: '/' },
-          { label: currentSite?.hostname ?? siteId, to: `/sites/${encodeURIComponent(siteId)}` },
-          { label: 'Pages' },
-        ]"
+      <GscSitePageHeader
+        :tail="[{ label: 'Pages' }]"
         title="Pages"
         icon="i-lucide-file"
         description="Top 100 pages by clicks over the selected window."
@@ -74,7 +35,7 @@ function hrefFor(url: string): string {
             v-model:stable-data="stableData"
           />
         </template>
-      </GscPageHeader>
+      </GscSitePageHeader>
     </template>
 
     <SiteTabs :site-id="siteId" />

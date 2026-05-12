@@ -7,10 +7,7 @@ import { hashUrl } from '@gscdump/engine/entities'
 
 definePageMeta({ key: route => `site-sitemaps:${route.params.id}` })
 
-const route = useRoute()
-const siteId = computed(() => String(route.params.id))
-
-const currentSite = useGscSite(siteId)
+const { siteId, site: currentSite } = useGscCurrentSite()
 
 const { records, loading } = useGscSitemaps(siteId)
 
@@ -71,12 +68,8 @@ const gscLink = computed(() =>
 <template>
   <GscDashboardPage gap="lg">
     <template #header>
-      <GscPageHeader
-        :crumbs="[
-          { label: 'Overview', to: '/' },
-          { label: currentSite?.hostname ?? siteId, to: `/sites/${encodeURIComponent(siteId)}` },
-          { label: 'Sitemaps' },
-        ]"
+      <GscSitePageHeader
+        :tail="[{ label: 'Sitemaps' }]"
         title="Sitemaps"
         icon="i-lucide-map"
         description="Submitted sitemap feeds and their most recent download status."
@@ -94,7 +87,7 @@ const gscLink = computed(() =>
             Open in GSC
           </UButton>
         </template>
-      </GscPageHeader>
+      </GscSitePageHeader>
     </template>
 
     <SiteTabs :site-id="siteId" />

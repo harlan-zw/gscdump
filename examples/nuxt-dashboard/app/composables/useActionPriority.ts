@@ -83,27 +83,20 @@ export interface ActionPriorityRunner {
   run: (runner: AnalysisRunner) => Promise<void>
 }
 
-const SOURCES: ActionSource[] = [
-  'striking-distance',
-  'opportunity',
-  'cannibalization',
-  'ctr-anomaly',
-  'change-point',
-]
+function resolveSources(): ActionSource[] {
+  return useGscAnalyzerDefsWithCapability('actionPriority')
+    .map(d => d.capabilities.actionPriority)
+}
 
-function initialProgress(): ActionPriorityProgress {
+function initialProgress(sources: ActionSource[]): ActionPriorityProgress {
+  const seeded: Partial<Record<ActionSource, 'pending' | 'running' | 'done' | 'skipped' | 'error'>> = {}
+  for (const s of sources) seeded[s] = 'pending'
   return {
     phase: 'idle',
-    message: 'Ready. Runs 5 analyzers in parallel then synthesizes a prioritized action list.',
+    message: `Ready. Runs ${sources.length} analyzers in parallel then synthesizes a prioritized action list.`,
     completed: 0,
-    total: SOURCES.length,
-    sources: {
-      'striking-distance': 'pending',
-      'opportunity': 'pending',
-      'cannibalization': 'pending',
-      'ctr-anomaly': 'pending',
-      'change-point': 'pending',
-    },
+    total: sources.length,
+    sources: seeded as ActionPriorityProgress['sources'],
   }
 }
 
@@ -122,10 +115,13 @@ function applySourceState(
 }
 
 export function useActionPriority(): ActionPriorityRunner {
-  const progress = ref<ActionPriorityProgress>(initialProgress())
-  const actions = ref<PriorityAction[]>([])
-  const error = ref<Error | null>(null)
-  const running = ref(false)
+  const sources = resolveSources()
+  // `useState` so panel switches (mount/unmount under v-if) preserve the
+  // long-running action priority result + phase across the user's session.
+  const progress = useState<ActionPriorityProgress>('gscActionPriority:progress', () => initialProgress(sources))
+  const actions = useState<PriorityAction[]>('gscActionPriority:actions', () => [])
+  const error = useState<Error | null>('gscActionPriority:error', () => null)
+  const running = useState<boolean>('gscActionPriority:running', () => false)
 
   async function run(runner: AnalysisRunner): Promise<void> {
     if (running.value)
@@ -135,9 +131,9 @@ export function useActionPriority(): ActionPriorityRunner {
     error.value = null
     actions.value = []
     progress.value = {
-      ...initialProgress(),
+      ...initialProgress(sources),
       phase: 'running',
-      message: `Running ${SOURCES.length} analyzers in parallel...`,
+      message: `Running ${sources.length} analyzers in parallel...`,
     }
 
     const analyzer: ActionPriorityAnalyzer = {
@@ -146,7 +142,7 @@ export function useActionPriority(): ActionPriorityRunner {
 
     try {
       const result = await analyzeActionPriority(analyzer, {
-        sources: SOURCES,
+        sources,
         onSourceStatus: (state) => {
           progress.value = applySourceState(progress.value, state)
         },
@@ -155,7 +151,7 @@ export function useActionPriority(): ActionPriorityRunner {
       progress.value = {
         ...progress.value,
         phase: 'done',
-        message: `Ranked ${result.actions.length} actions from ${result.totalSignals} signals across ${SOURCES.length} analyzers.`,
+        message: `Ranked ${result.actions.length} actions from ${result.totalSignals} signals across ${sources.length} analyzers.`,
       }
     }
     catch (err) {

@@ -7,14 +7,13 @@
 // uses a different contract.
 
 import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
-import type { ComputedRef, Ref, WatchSource } from 'vue'
+import type { ComputedRef, Ref, WatchSource } from '@vue/runtime-core'
 import { classifyGscError } from '../utils/gsc-error'
-import { useGscFetch } from '../utils/gsc-fetch'
+import { useGscBackfill } from './_useGscBackfill'
+import { useGscQueryDispatcher } from './_useGscQueryDispatcher'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 import { useGscAnalyzer } from './useGscAnalyzer'
 import { _useGscAuthInternal } from './useGscAuth'
-import { useGscBackfill } from './useGscBackfill'
-import { resolveDefaultEngine } from './useGscEngine'
 
 export type GscQueryEngine = 'auto' | 'browser' | 'server'
 
@@ -27,6 +26,28 @@ export type GscQueryStatus
     | 'auth-missing'
     | 'rate-limited'
     | 'network'
+
+/**
+ * Why a given query ended up on `browser` or `server`. Surfaced for
+ * dev tooling so 0% R2 utilisation can be diagnosed without guessing
+ * (e.g. opt-in off vs. site not eligible vs. attach failure).
+ */
+export type GscQueryDecisionReason
+  = | 'idle'
+    | 'ssr'
+    | 'disabled'
+    | 'forced:server'
+    | 'forced:browser'
+    | 'optin:off'
+    | 'auto:browser'
+    | 'auto:fallback'
+
+export interface GscQueryDecision {
+  mode: 'browser' | 'server' | null
+  reason: GscQueryDecisionReason
+  /** Free-text detail for `auto:fallback` (the underlying error message). */
+  detail?: string
+}
 
 export interface GscQueryMeta {
   raw: Record<string, unknown> | null
@@ -74,50 +95,11 @@ export interface UseGscQueryReturn<T> {
   engine: Ref<'browser' | 'server' | null>
   elapsedMs: Ref<number | null>
   fallbackReason: Ref<string | null>
+  /** Why this query ran where it ran. Updated on every dispatch. */
+  lastDecision: Ref<GscQueryDecision>
   meta: Ref<GscQueryMeta>
   backfill: GscBackfillRunner | null
   refresh: () => Promise<void>
-}
-
-const fallbackBuffer: Array<{ reason: string, at: number, url: string }> = []
-let flushScheduled = false
-
-function scheduleFlush(): void {
-  if (flushScheduled || !import.meta.client)
-    return
-  flushScheduled = true
-  setTimeout(flushFallbacks, 5000)
-  if (typeof document !== 'undefined') {
-    const handler = (): void => {
-      if (document.visibilityState === 'hidden')
-        flushFallbacks()
-    }
-    document.addEventListener('visibilitychange', handler, { once: true })
-  }
-}
-
-function flushFallbacks(): void {
-  flushScheduled = false
-  if (fallbackBuffer.length === 0)
-    return
-  const payload = fallbackBuffer.splice(0)
-  const body = JSON.stringify({ events: payload })
-  if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-    navigator.sendBeacon('/api/telemetry/fallback', new Blob([body], { type: 'application/json' }))
-    return
-  }
-  useGscFetch()('/api/telemetry/fallback', { method: 'POST', body }).catch(() => {})
-}
-
-function reportFallback(reason: string): void {
-  if (!import.meta.client)
-    return
-  fallbackBuffer.push({
-    reason,
-    at: Date.now(),
-    url: typeof location !== 'undefined' ? location.pathname : '',
-  })
-  scheduleFlush()
 }
 
 function classifyError(e: unknown): { status: GscQueryStatus, retryAfter?: number } {
@@ -147,6 +129,7 @@ async function defaultServerFallback<T>(siteId: string, params: AnalysisParams):
 
 export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): UseGscQueryReturn<T> {
   const analyzer = useGscAnalyzer(opts.site)
+  const dispatcher = useGscQueryDispatcher()
 
   const data = shallowRef<T | null>(null)
   const status = ref<GscQueryStatus>('idle')
@@ -154,6 +137,7 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
   const engine = ref<'browser' | 'server' | null>(null)
   const elapsedMs = ref<number | null>(null)
   const fallbackReason = ref<string | null>(null)
+  const lastDecision = ref<GscQueryDecision>({ mode: null, reason: 'idle' })
   const meta = ref<GscQueryMeta>({ raw: null })
   const pending = computed(() => status.value === 'pending')
 
@@ -197,6 +181,7 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
   async function runQuery(): Promise<void> {
     if (!import.meta.client) {
       status.value = 'idle'
+      lastDecision.value = { mode: null, reason: 'ssr' }
       return
     }
     if (opts.enabled && !toValue(opts.enabled)) {
@@ -204,11 +189,13 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
       data.value = null
       engine.value = null
       elapsedMs.value = null
+      lastDecision.value = { mode: null, reason: 'disabled' }
       return
     }
     const siteId = toValue(opts.site)
     if (!siteId) {
       status.value = 'idle'
+      lastDecision.value = { mode: null, reason: 'idle' }
       return
     }
     activeController?.abort()
@@ -218,31 +205,29 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
     error.value = null
     fallbackReason.value = null
 
-    const requested = opts.engine ?? resolveDefaultEngine()
-    let mode: GscQueryEngine = requested
-    if (requested === 'auto') {
-      // When the host has wired `setGscAuth`, derive from the per-user
-      // `browserAnalyzerEnabled` flag — false skips the browser path. When
-      // unwired (no host plugin), preserve legacy 'auto' = probe behavior.
-      const auth = _useGscAuthInternal().value
-      if (auth._initialized && !auth.browserAnalyzerEnabled)
-        mode = 'server'
-    }
+    const decision = dispatcher.pickEngine(_useGscAuthInternal().value, { perCall: opts.engine })
+    lastDecision.value = decision
 
     try {
-      if (mode === 'server') {
+      if (decision.mode === 'server') {
         await runServer(siteId)
       }
-      else if (mode === 'browser') {
-        await runBrowser(controller.signal)
-      }
       else {
+        // Browser-mode: when the caller asked for `auto` we fall back to server
+        // on failure; explicit `browser` propagates the error.
         await runBrowser(controller.signal).catch(async (e) => {
           if (e?.name === 'AbortError')
             throw e
+          if (decision.requested !== 'auto')
+            throw e
           fallbackReason.value = e instanceof Error ? e.message : String(e)
           console.warn('[useGscQuery] browser failed, falling back to server:', fallbackReason.value)
-          reportFallback(fallbackReason.value)
+          dispatcher.reportFallback({
+            reason: fallbackReason.value,
+            at: Date.now(),
+            url: typeof location !== 'undefined' ? location.pathname : '',
+          })
+          lastDecision.value = { mode: 'server', reason: 'auto:fallback', detail: fallbackReason.value }
           await runServer(siteId)
         })
       }
@@ -294,5 +279,5 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
     }, { immediate: true })
   }
 
-  return { data, status, pending, error, engine, elapsedMs, fallbackReason, meta, backfill, refresh: runQuery }
+  return { data, status, pending, error, engine, elapsedMs, fallbackReason, lastDecision, meta, backfill, refresh: runQuery }
 }

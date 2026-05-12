@@ -3,13 +3,18 @@
 // state on the first dashboard visit before a second snapshot runs.
 
 import type { InspectionHistoryRecord, InspectionHistoryResponse } from '@gscdump/contracts'
+import type { ComputedRef, Ref } from '@vue/runtime-core'
+import type { GscResourceStatus } from './_useGscResource'
+import { useGscResource } from './_useGscResource'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export interface UseGscInspectionHistoryReturn {
   response: Readonly<Ref<InspectionHistoryResponse | null>>
   records: ComputedRef<InspectionHistoryRecord[]>
   url: ComputedRef<string | null>
-  loading: Readonly<Ref<boolean>>
+  loading: ComputedRef<boolean>
+  status: Ref<GscResourceStatus>
+  error: Ref<Error | null>
   refresh: () => Promise<void>
 }
 
@@ -17,31 +22,21 @@ export function useGscInspectionHistory(
   siteId: MaybeRefOrGetter<string | null | undefined>,
   urlHash: MaybeRefOrGetter<string | null | undefined>,
 ): UseGscInspectionHistoryReturn {
-  const response = ref<InspectionHistoryResponse | null>(null)
-  const loading = ref(false)
+  const { data, status, loading, error, refresh } = useGscResource({
+    keys: [siteId, urlHash] as const,
+    fetcher: (id: string, hash: string) => useGscAnalyticsClient().getInspectionHistory(id, hash),
+  })
 
-  async function refresh(): Promise<void> {
-    const id = toValue(siteId)
-    const hash = toValue(urlHash)
-    if (!id || !hash) {
-      response.value = null
-      return
-    }
-    loading.value = true
-    response.value = await useGscAnalyticsClient().getInspectionHistory(id, hash).catch(() => null)
-    loading.value = false
-  }
-
-  watch(() => [toValue(siteId), toValue(urlHash)], refresh, { immediate: true })
-
-  const records = computed(() => response.value?.records ?? [])
-  const url = computed(() => response.value?.url ?? null)
+  const records = computed(() => data.value?.records ?? [])
+  const url = computed(() => data.value?.url ?? null)
 
   return {
-    response: response as Readonly<typeof response>,
+    response: data as Readonly<Ref<InspectionHistoryResponse | null>>,
     records,
     url,
-    loading: loading as Readonly<Ref<boolean>>,
+    loading,
+    status,
+    error,
     refresh,
   }
 }

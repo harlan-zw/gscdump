@@ -4,8 +4,7 @@ export type {
   PartnerLifecycleSite,
 } from './onboarding'
 
-import type { PartnerLifecycleResponse, PartnerLifecycleSite } from './onboarding'
-import type { AccountNextAction, AccountStatus } from './onboarding'
+import type { AccountNextAction, AccountStatus, PartnerLifecycleResponse, PartnerLifecycleSite } from './onboarding'
 
 export type TableName = 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords' | 'search_appearance'
 export type Row = Record<string, unknown>
@@ -276,6 +275,8 @@ export interface AnalyticsClient {
   getInspectionHistory: (siteId: string, hash: string) => Promise<InspectionHistoryResponse>
   getIndexingUrls: (siteId: string, params?: { limit?: number, offset?: number, status?: IndexingUrlStatus, issue?: string, search?: string }) => Promise<IndexingUrlsResponse>
   getIndexingDiagnostics: (siteId: string) => Promise<IndexingDiagnostics>
+  getCountries: (siteId: string, range: { start: string, end: string }) => Promise<CountriesResponse>
+  getSearchAppearance: (siteId: string, range: { start: string, end: string }) => Promise<SearchAppearanceResponse>
 }
 
 export type GscSearchAnalyticsDimension = 'page' | 'query' | 'country' | 'device' | 'date' | 'searchAppearance'
@@ -668,15 +669,15 @@ export interface GscdumpIndexingDiagnosticsResponse {
   meta: { siteUrl: string }
 }
 
-export type GscdumpAnalysisPreset =
-  | 'striking-distance'
-  | 'opportunity'
-  | 'decay'
-  | 'zero-click'
-  | 'non-brand'
-  | 'brand-only'
-  | 'movers-rising'
-  | 'movers-declining'
+export type GscdumpAnalysisPreset
+  = | 'striking-distance'
+    | 'opportunity'
+    | 'decay'
+    | 'zero-click'
+    | 'non-brand'
+    | 'brand-only'
+    | 'movers-rising'
+    | 'movers-declining'
 
 export interface GscdumpAnalysisParams {
   preset: GscdumpAnalysisPreset

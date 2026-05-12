@@ -23,6 +23,8 @@ export class AnalyzerCapabilityError extends Error {
 }
 
 function sourceHas(source: AnalysisQuerySource, cap: RequiredCapability): boolean {
+  if (cap === 'executeSql')
+    return typeof source.executeSql === 'function'
   return source.capabilities[cap] === true
 }
 

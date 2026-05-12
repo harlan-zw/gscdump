@@ -77,20 +77,55 @@ function barHeight(i: number): string {
   />
 </template>
 
+<!--
+  Cross-fade reveal recipe (consumer responsibility):
+    <Transition name="ui-skel-fade">
+      <UiSkeleton v-if="loading" />
+      <RealContent v-else />
+    </Transition>
+  with `.ui-skel-fade-enter-active{transition:opacity 160ms ease-out}`. Prevents pop-in.
+-->
 <style scoped>
 .ui-skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--ui-bg-accented) 0%,
-    var(--ui-bg-elevated) 40%,
-    var(--ui-bg-accented) 80%
-  );
-  background-size: 200% 100%;
-  animation: ui-shimmer 1.8s ease-in-out infinite;
+  position: relative;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--ui-bg-elevated) 70%, transparent) 50%,
+      transparent 100%
+    ),
+    linear-gradient(
+      90deg,
+      var(--ui-bg-accented) 0%,
+      var(--ui-bg-elevated) 40%,
+      var(--ui-bg-accented) 80%
+    );
+  background-size: 200% 100%, 200% 100%;
+  background-repeat: no-repeat;
+  background-position: 200% 0, 200% 0;
+  animation: ui-shimmer-slow 2.8s ease-in-out infinite, ui-shimmer 1.6s ease-in-out infinite;
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.04), inset 0 -1px 0 0 rgb(0 0 0 / 0.03);
 }
 
 @keyframes ui-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% { background-position: 200% 0, 0 0; }
+  100% { background-position: -200% 0, 0 0; }
+}
+
+@keyframes ui-shimmer-slow {
+  0% { background-position: 200% 0, 0 0; }
+  100% { background-position: -200% 0, 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-skeleton {
+    animation: ui-skel-pulse 1.6s ease-in-out infinite;
+    background: var(--ui-bg-accented);
+  }
+  @keyframes ui-skel-pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
 }
 </style>

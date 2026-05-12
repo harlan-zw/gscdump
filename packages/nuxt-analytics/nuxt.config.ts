@@ -24,18 +24,7 @@ export default defineNuxtConfig({
     fileURLToPath(new URL('./app/assets/css/main.css', import.meta.url)),
   ],
 
-  // Sensible defaults for every consumer. Hosts override as needed.
-  runtimeConfig: {
-    public: {
-      analytics: {
-        duckdbBundleBase: '',
-        apiBase: '',
-        timezone: '',
-        toastErrors: false,
-        defaultEngine: 'auto' as 'auto' | 'browser' | 'server',
-      },
-    },
-  },
+  // runtimeConfig defaults live in module.ts (single source of truth).
 
   vite: {
     optimizeDeps: {

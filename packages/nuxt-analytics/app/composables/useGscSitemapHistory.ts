@@ -2,13 +2,18 @@
 // from the site's history store. Oldest → newest.
 
 import type { SitemapHistoryRecord, SitemapHistoryResponse } from '@gscdump/contracts'
+import type { ComputedRef, Ref } from '@vue/runtime-core'
+import type { GscResourceStatus } from './_useGscResource'
+import { useGscResource } from './_useGscResource'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export interface UseGscSitemapHistoryReturn {
   response: Readonly<Ref<SitemapHistoryResponse | null>>
   snapshots: ComputedRef<SitemapHistoryRecord[]>
   path: ComputedRef<string | null>
-  loading: Readonly<Ref<boolean>>
+  loading: ComputedRef<boolean>
+  status: Ref<GscResourceStatus>
+  error: Ref<Error | null>
   refresh: () => Promise<void>
 }
 
@@ -16,31 +21,21 @@ export function useGscSitemapHistory(
   siteId: MaybeRefOrGetter<string | null | undefined>,
   feedpathHash: MaybeRefOrGetter<string | null | undefined>,
 ): UseGscSitemapHistoryReturn {
-  const response = ref<SitemapHistoryResponse | null>(null)
-  const loading = ref(false)
+  const { data, status, loading, error, refresh } = useGscResource({
+    keys: [siteId, feedpathHash] as const,
+    fetcher: (id: string, hash: string) => useGscAnalyticsClient().getSitemapHistory(id, hash),
+  })
 
-  async function refresh(): Promise<void> {
-    const id = toValue(siteId)
-    const hash = toValue(feedpathHash)
-    if (!id || !hash) {
-      response.value = null
-      return
-    }
-    loading.value = true
-    response.value = await useGscAnalyticsClient().getSitemapHistory(id, hash).catch(() => null)
-    loading.value = false
-  }
-
-  watch(() => [toValue(siteId), toValue(feedpathHash)], refresh, { immediate: true })
-
-  const snapshots = computed(() => response.value?.snapshots ?? [])
-  const path = computed(() => response.value?.path ?? null)
+  const snapshots = computed(() => data.value?.snapshots ?? [])
+  const path = computed(() => data.value?.path ?? null)
 
   return {
-    response: response as Readonly<typeof response>,
+    response: data as Readonly<Ref<SitemapHistoryResponse | null>>,
     snapshots,
     path,
-    loading: loading as Readonly<Ref<boolean>>,
+    loading,
+    status,
+    error,
     refresh,
   }
 }

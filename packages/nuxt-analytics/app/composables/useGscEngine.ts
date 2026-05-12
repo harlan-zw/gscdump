@@ -1,8 +1,6 @@
-// App-wide engine override for `useGscQuery`. Replaces nuxtseo's
-// `useProBrowserAnalyzerFlag()` with a generic version backed by `useState`
-// so the value is SSR-safe and shared across the page tree.
+// App-wide engine override for `useGscQuery`. SSR-safe via `useState`.
 //
-// Resolution priority inside `useGscQuery`:
+// Resolution priority lives in `useGscQueryDispatcher.pickEngine`:
 //   per-call `opts.engine` → `useGscEngine().value` → `runtimeConfig.public.
 //   analytics.defaultEngine` → `'auto'`.
 //
@@ -15,13 +13,4 @@ const STATE_KEY = 'gscdump:engine'
 
 export function useGscEngine(): Ref<GscQueryEngine | null> {
   return useState<GscQueryEngine | null>(STATE_KEY, () => null)
-}
-
-/** Internal — called by `useGscQuery` to resolve the active default. */
-export function resolveDefaultEngine(): GscQueryEngine {
-  const override = useGscEngine().value
-  if (override)
-    return override
-  const cfg = useRuntimeConfig().public.analytics as { defaultEngine?: GscQueryEngine } | undefined
-  return cfg?.defaultEngine ?? 'auto'
 }

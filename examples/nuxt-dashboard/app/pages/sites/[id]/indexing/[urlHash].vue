@@ -9,10 +9,8 @@ import type { InspectionRecord } from '@gscdump/engine/entities'
 definePageMeta({ key: route => `site-indexing-url:${route.params.id}:${route.params.urlHash}` })
 
 const route = useRoute()
-const siteId = computed(() => String(route.params.id))
+const { siteId } = useGscCurrentSite()
 const urlHash = computed(() => String(route.params.urlHash))
-
-const currentSite = useGscSite(siteId)
 const { records, url, loading } = useGscInspectionHistory(siteId, urlHash)
 
 function fmtDateTime(iso: string | undefined): string {
@@ -57,10 +55,8 @@ function diff(a: InspectionRecord | undefined, b: InspectionRecord | undefined):
 <template>
   <GscDashboardPage>
     <template #header>
-      <GscPageHeader
-        :crumbs="[
-          { label: 'Overview', to: '/' },
-          { label: currentSite?.hostname ?? siteId, to: `/sites/${encodeURIComponent(siteId)}` },
+      <GscSitePageHeader
+        :tail="[
           { label: 'Indexing', to: `/sites/${encodeURIComponent(siteId)}/indexing` },
           { label: url ?? urlHash },
         ]"
@@ -81,7 +77,7 @@ function diff(a: InspectionRecord | undefined, b: InspectionRecord | undefined):
             Open URL
           </UButton>
         </template>
-      </GscPageHeader>
+      </GscSitePageHeader>
     </template>
 
     <SiteTabs :site-id="siteId" />

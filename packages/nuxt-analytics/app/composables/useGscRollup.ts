@@ -11,7 +11,8 @@
 
 import type { RollupEnvelope } from '@gscdump/contracts'
 import type { SiteListItem } from './useGscAnalytics'
-import { _useGscAnalyticsContext } from './useGscAnalytics'
+import { useGscResource } from './_useGscResource'
+import { useGscAnalyticsContext } from './useGscAnalytics'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 type RollupsInput = MaybeRefOrGetter<string | readonly string[]>
@@ -60,30 +61,20 @@ export function useGscRollup<T = unknown>(
   rollupId: MaybeRefOrGetter<string>,
   opts: UseGscRollupOptions = {},
 ): UseGscRollupReturn<T> {
-  const envelope = shallowRef<RollupEnvelope<T> | null>(null)
-  const loading = ref(false)
-  const ctx = tryUseContext()
+  const ctx = useGscAnalyticsContext()
+  const resource = useGscResource<[string, string], RollupEnvelope<T> | null>({
+    keys: [siteId, rollupId],
+    fetcher: (id, rid) => fetchOne<T>(id, rid, ctx, toValue(opts.range) ?? null),
+    watchSources: [() => toValue(opts.range)?.start, () => toValue(opts.range)?.end],
+    isEmpty: env => env == null,
+  })
 
-  async function refresh(): Promise<void> {
-    const id = toValue(siteId)
-    const rid = toValue(rollupId)
-    if (!id || !rid) {
-      envelope.value = null
-      return
-    }
-    loading.value = true
-    envelope.value = await fetchOne<T>(id, rid, ctx, toValue(opts.range) ?? null)
-    loading.value = false
+  return {
+    data: computed<T | null>(() => resource.data.value?.payload ?? null),
+    envelope: resource.data as unknown as Ref<RollupEnvelope<T> | null>,
+    loading: resource.loading as unknown as Readonly<Ref<boolean>>,
+    refresh: resource.refresh,
   }
-
-  watch(
-    () => [toValue(siteId), toValue(rollupId), toValue(opts.range)?.start, toValue(opts.range)?.end],
-    refresh,
-    { immediate: true },
-  )
-
-  const data = computed<T | null>(() => envelope.value?.payload ?? null)
-  return { data, envelope, loading: loading as Readonly<Ref<boolean>>, refresh }
 }
 
 /** Fetch N rollups for one site. */
@@ -92,7 +83,7 @@ export function useGscRollups<T = unknown>(
   rollupIds: RollupsInput,
   opts: UseGscRollupOptions = {},
 ): UseGscRollupsReturn<T> {
-  const ctx = tryUseContext()
+  const ctx = useGscAnalyticsContext()
 
   const envelopes = ref<Record<string, RollupEnvelope<T> | null>>({})
   const loading = ref(false)
@@ -142,7 +133,7 @@ export function useGscRollupFanout<T = unknown>(
   rollupId: MaybeRefOrGetter<string>,
   opts: UseGscRollupOptions = {},
 ): UseGscRollupFanoutReturn<T> {
-  const ctx = tryUseContext()
+  const ctx = useGscAnalyticsContext()
   const envelopes = ref<Record<string, RollupEnvelope<T> | null>>({})
   const loading = ref(false)
   const progress = ref<{ completed: number, total: number }>({ completed: 0, total: 0 })
@@ -216,10 +207,10 @@ function normaliseSites(input: unknown): string[] {
 async function fetchOne<T>(
   siteId: string,
   rollupId: string,
-  ctx: ReturnType<typeof tryUseContext>,
+  ctx: ReturnType<typeof useGscAnalyticsContext>,
   range: { start: string, end: string } | null = null,
 ): Promise<RollupEnvelope<T> | null> {
-  ctx?.patchProgress(siteId, {
+  ctx.patchProgress(siteId, {
     source: 'rollup',
     stage: 'manifest',
     filesTotal: 1,
@@ -234,18 +225,18 @@ async function fetchOne<T>(
       rollupId,
       range ? { start: range.start, end: range.end } : undefined,
     )
-    ctx?.patchProgress(siteId, { stage: 'ready', filesAttached: 1, endedAt: Date.now() })
+    ctx.patchProgress(siteId, { stage: 'ready', filesAttached: 1, endedAt: Date.now() })
     return env
   }
   catch (err: unknown) {
     const status = (err as { statusCode?: number, status?: number })?.statusCode
       ?? (err as { status?: number })?.status
     if (status === 404) {
-      ctx?.patchProgress(siteId, { stage: 'ready', filesAttached: 1, endedAt: Date.now() })
+      ctx.patchProgress(siteId, { stage: 'ready', filesAttached: 1, endedAt: Date.now() })
       return null
     }
     const msg = err instanceof Error ? err.message : String(err)
-    ctx?.patchProgress(siteId, { stage: 'error', error: msg, endedAt: Date.now() })
+    ctx.patchProgress(siteId, { stage: 'error', error: msg, endedAt: Date.now() })
     return null
   }
 }
@@ -258,13 +249,4 @@ function normaliseRollups(input: unknown): string[] {
   if (Array.isArray(input))
     return input.filter((v): v is string => typeof v === 'string' && v.length > 0)
   return []
-}
-
-function tryUseContext(): ReturnType<typeof _useGscAnalyticsContext> | null {
-  try {
-    return _useGscAnalyticsContext()
-  }
-  catch {
-    return null
-  }
 }

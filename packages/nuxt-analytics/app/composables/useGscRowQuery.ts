@@ -7,8 +7,10 @@
 // `useGscQuery` which dispatches via /analyze.
 
 import type { QueryRow } from '@gscdump/analysis'
-import type { BuilderState } from 'gscdump/query'
 import type { GscRowQueryMeta, GscRowQueryResponse } from '@gscdump/contracts'
+import type { ComputedRef, Ref } from '@vue/runtime-core'
+import type { BuilderState } from 'gscdump/query'
+import { useGscResource } from './_useGscResource'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export type { GscRowQueryMeta, GscRowQueryResponse } from '@gscdump/contracts'
@@ -21,8 +23,8 @@ export interface UseGscRowQueryOptions {
 }
 
 export interface UseGscRowQueryReturn<T> {
-  rows: Ref<T[]>
-  meta: Ref<GscRowQueryMeta | null>
+  rows: ComputedRef<T[]>
+  meta: ComputedRef<GscRowQueryMeta | null>
   loading: Ref<boolean>
   error: Ref<Error | null>
   refresh: () => Promise<void>
@@ -31,54 +33,24 @@ export interface UseGscRowQueryReturn<T> {
 export function useGscRowQuery<T = QueryRow>(
   opts: UseGscRowQueryOptions,
 ): UseGscRowQueryReturn<T> {
-  const rows = ref<T[]>([]) as Ref<T[]>
-  const meta = ref<GscRowQueryMeta | null>(null)
-  const loading = ref(false)
-  const error = ref<Error | null>(null)
+  const resource = useGscResource<[string, BuilderState], GscRowQueryResponse<T>>({
+    keys: [
+      () => (opts.enabled === undefined || toValue(opts.enabled) ? toValue(opts.site) : null),
+      // BuilderState is structural; stringify so keys[]-watch picks up shape changes.
+      () => {
+        const s = toValue(opts.state)
+        return s ? JSON.stringify(s) as unknown as BuilderState : null
+      },
+    ],
+    fetcher: site => useGscAnalyticsClient().queryRows<T>(site, toValue(opts.state) as BuilderState),
+    isEmpty: r => r.rows.length === 0,
+  })
 
-  let inFlight: AbortController | null = null
-
-  async function refresh(): Promise<void> {
-    const site = toValue(opts.site)
-    const state = toValue(opts.state)
-    const enabled = opts.enabled ? toValue(opts.enabled) : true
-    if (!site || !state || !enabled) {
-      inFlight?.abort()
-      inFlight = null
-      rows.value = []
-      meta.value = null
-      return
-    }
-
-    inFlight?.abort()
-    const ctrl = new AbortController()
-    inFlight = ctrl
-    loading.value = true
-    error.value = null
-    try {
-      const res = await useGscAnalyticsClient().queryRows<T>(site, state)
-      if (ctrl.signal.aborted)
-        return
-      rows.value = res.rows
-      meta.value = res.meta
-    }
-    catch (err: unknown) {
-      if ((err as { name?: string } | null)?.name === 'AbortError')
-        return
-      error.value = err instanceof Error ? err : new Error(String(err))
-    }
-    finally {
-      if (inFlight === ctrl)
-        inFlight = null
-      loading.value = false
-    }
+  return {
+    rows: computed(() => resource.data.value?.rows ?? []),
+    meta: computed(() => resource.data.value?.meta ?? null),
+    loading: resource.loading as unknown as Ref<boolean>,
+    error: resource.error,
+    refresh: resource.refresh,
   }
-
-  watch(
-    () => [toValue(opts.site), JSON.stringify(toValue(opts.state) ?? null), opts.enabled ? toValue(opts.enabled) : true],
-    refresh,
-    { immediate: true },
-  )
-
-  return { rows, meta, loading, error, refresh }
 }

@@ -160,9 +160,9 @@ export interface UseGscPeriodReturn {
 }
 
 export function useGscPeriod(opts: UseGscPeriodOptions = {}): UseGscPeriodReturn {
-  const period = ref<Period>(opts.defaultPeriod ?? '28d')
-  const compareMode = ref<CompareMode>(opts.defaultCompareMode ?? 'previous')
-  const stableData = ref<boolean>(opts.defaultStableData ?? true)
+  const period = useState<Period>('gsc:period', () => opts.defaultPeriod ?? '28d')
+  const compareMode = useState<CompareMode>('gsc:compareMode', () => opts.defaultCompareMode ?? 'previous')
+  const stableData = useState<boolean>('gsc:stableData', () => opts.defaultStableData ?? true)
 
   const cfg = useRuntimeConfig().public.analytics as { timezone?: string } | undefined
   const timezone = opts.timezone ?? cfg?.timezone ?? undefined

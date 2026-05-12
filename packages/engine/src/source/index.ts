@@ -16,6 +16,7 @@ import type {
   SourceCapabilities,
 } from './source-types'
 import { runAnalyzerFromSource } from '../analyzer/dispatch'
+import { coerceRows } from '../coerce'
 import { assertDimensionsSupported, getFilterDimensions, pgResolverAdapter } from '../resolver'
 
 export type { AttachedTableRunner, AttachedTableSourceOptions } from './attached-table'
@@ -51,7 +52,6 @@ export const ENGINE_QUERY_CAPABILITIES: PlannerCapabilities = {
 const ENGINE_SOURCE_CAPABILITIES: SourceCapabilities = {
   ...ENGINE_QUERY_CAPABILITIES,
   fileSets: true,
-  executeSql: true,
   adapter: true,
 }
 
@@ -83,7 +83,7 @@ export function createEngineQuerySource(
         throw new Error('engine query source does not support queryCanonical; use browser/sqlite query sources for derived dimensions')
       }
       const result = await engine.query(ctx, state)
-      return result.rows as QueryRow[]
+      return coerceRows(result.rows as QueryRow[])
     },
     async executeSql(sql: string, params?: unknown[], opts?: ExecuteSqlOptions): Promise<QueryRow[]> {
       const fileSets = opts?.fileSets
@@ -96,7 +96,7 @@ export function createEngineQuerySource(
         sql,
         params: params ?? [],
       })
-      return rows as QueryRow[]
+      return coerceRows(rows as QueryRow[])
     },
   }
 }

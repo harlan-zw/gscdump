@@ -8,10 +8,7 @@ import { hashUrl } from '@gscdump/engine/entities'
 
 definePageMeta({ key: route => `site-indexing:${route.params.id}` })
 
-const route = useRoute()
-const siteId = computed(() => String(route.params.id))
-
-const currentSite = useGscSite(siteId)
+const { siteId } = useGscCurrentSite()
 
 const { records, statusCounts, loading } = useGscInspections(siteId)
 const { envelope: metadata } = useGscRollup<{
@@ -25,15 +22,7 @@ const { envelope: metadata } = useGscRollup<{
 const { q: search, filter } = useGscTableState<{ status: 'all' | 'PASS' | 'NEUTRAL' | 'FAIL' }>({
   defaultFilter: { status: 'all' },
 })
-const searchDebounced = ref('')
-let handle: ReturnType<typeof setTimeout> | null = null
-watch(search, (v) => {
-  if (handle)
-    clearTimeout(handle)
-  handle = setTimeout(() => {
-    searchDebounced.value = v
-  }, 150)
-})
+const searchDebounced = refDebounced(search, 150)
 
 const filtered = computed<InspectionRecord[]>(() => {
   const q = searchDebounced.value.trim().toLowerCase()
@@ -95,12 +84,8 @@ const summary = computed(() => {
 <template>
   <GscDashboardPage gap="lg">
     <template #header>
-      <GscPageHeader
-        :crumbs="[
-          { label: 'Overview', to: '/' },
-          { label: currentSite?.hostname ?? siteId, to: `/sites/${encodeURIComponent(siteId)}` },
-          { label: 'Indexing' },
-        ]"
+      <GscSitePageHeader
+        :tail="[{ label: 'Indexing' }]"
         title="Indexing"
         icon="i-lucide-file-check"
         description="URL inspection state + Indexing API notifications for this site."

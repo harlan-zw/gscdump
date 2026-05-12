@@ -10,6 +10,7 @@
 
 import type { ResolverAdapter } from '../resolver/types'
 import type { AnalysisQuerySource, AnalysisSourceKind, QueryRow, SourceCapabilities } from './source-types'
+import { coerceRows } from '../coerce'
 import { resolveToSQL } from '../resolver/compiler'
 
 export interface CreateSqlQuerySourceOptions<TKey extends string> {
@@ -34,15 +35,17 @@ export function createSqlQuerySource<TKey extends string>(
   return {
     name,
     kind,
-    capabilities: { ...adapter.capabilities, ...extraCapabilities, executeSql: true, adapter: true },
+    capabilities: { ...adapter.capabilities, ...extraCapabilities, adapter: true },
     adapter,
     siteId,
     async queryRows(state) {
       const resolved = resolveToSQL(state, { adapter, siteId })
-      return execute(resolved.sql, resolved.params)
+      const rows = await execute(resolved.sql, resolved.params)
+      return coerceRows(rows)
     },
-    executeSql(sql, params) {
-      return execute(sql, params ?? [])
+    async executeSql(sql, params) {
+      const rows = await execute(sql, params ?? [])
+      return coerceRows(rows)
     },
   }
 }

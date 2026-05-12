@@ -5,65 +5,15 @@
 
 definePageMeta({ key: route => `site-countries:${route.params.id}` })
 
-const route = useRoute()
-const siteId = computed(() => String(route.params.id))
-const currentSite = useGscSite(siteId)
+const { siteId } = useGscCurrentSite()
 
-type Period = typeof PERIOD_PRESETS[number]['value']
-type CompareMode = typeof COMPARE_OPTIONS[number]['value']
-const period = ref<Period>('28d')
-const compareMode = ref<CompareMode>('none')
-const stableData = ref(true)
-const range = computed(() => periodToDateRange(period.value, { stableData: stableData.value }))
+const { period, compareMode, stableData, range } = useGscPeriod()
 
-interface CountryRow {
-  country: string
-  clicks: number
-  impressions: number
-  sum_position: number
-}
-interface CountriesResponse {
-  rows: CountryRow[]
-  range: { start: string, end: string }
-  generatedAt: string
-  source: 'gsc-api' | 'engine'
-}
-
-const rows = ref<CountryRow[]>([])
-const loading = ref(false)
-const error = ref<string | null>(null)
 const bootError = ref<Error | null>(null)
 
-let inFlight: AbortController | null = null
-
-async function load() {
-  inFlight?.abort()
-  const ctrl = new AbortController()
-  inFlight = ctrl
-  loading.value = true
-  error.value = null
-  try {
-    const res = await $fetch<CountriesResponse>(
-      `/api/__gsc/sites/${encodeURIComponent(siteId.value)}/countries`,
-      { query: { start: range.value.start, end: range.value.end }, signal: ctrl.signal },
-    )
-    if (ctrl.signal.aborted)
-      return
-    rows.value = res.rows
-  }
-  catch (err: unknown) {
-    if ((err as { name?: string } | null)?.name === 'AbortError')
-      return
-    error.value = err instanceof Error ? err.message : String(err)
-  }
-  finally {
-    if (inFlight === ctrl)
-      inFlight = null
-    loading.value = false
-  }
-}
-
-watch([siteId, () => range.value.start, () => range.value.end], load, { immediate: true })
+const windowRange = computed(() => ({ start: range.value.start, end: range.value.end }))
+const { rows, loading, error: queryError } = useGscCountries(siteId, windowRange)
+const error = computed(() => queryError.value?.message ?? null)
 
 const totals = computed(() => {
   let clicks = 0
@@ -75,11 +25,7 @@ const totals = computed(() => {
   return { clicks, impressions }
 })
 
-const maxClicks = computed(() => rows.value.reduce((m, r) => r.clicks > m ? r.clicks : m, 0) || 1)
-
-function positionFor(r: CountryRow): number {
-  return r.impressions > 0 ? r.sum_position / r.impressions + 1 : 0
-}
+const maxClicks = computed(() => rows.value.reduce((m: number, r: { clicks: number }) => r.clicks > m ? r.clicks : m, 0) || 1)
 
 function displayName(code: string): string {
   if (code.length === 3)
@@ -101,12 +47,8 @@ function flagEmoji(code: string): string {
 <template>
   <GscDashboardPage>
     <template #header>
-      <GscPageHeader
-        :crumbs="[
-          { label: 'Overview', to: '/' },
-          { label: currentSite?.hostname ?? siteId, to: `/sites/${encodeURIComponent(siteId)}` },
-          { label: 'Countries' },
-        ]"
+      <GscSitePageHeader
+        :tail="[{ label: 'Countries' }]"
         title="Countries"
         icon="i-lucide-globe"
         description="Search performance by searcher country."
@@ -118,7 +60,7 @@ function flagEmoji(code: string): string {
             v-model:stable-data="stableData"
           />
         </template>
-      </GscPageHeader>
+      </GscSitePageHeader>
     </template>
 
     <SiteTabs :site-id="siteId" />

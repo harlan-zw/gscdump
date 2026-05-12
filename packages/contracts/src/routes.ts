@@ -78,5 +78,7 @@ export const analyticsRoutes = {
     inspectionHistory: (siteId: string, hash: string) => `/api/__gsc/sites/${encodeURIComponent(siteId)}/inspections/${encodeURIComponent(hash)}`,
     indexingUrls: (siteId: string) => `/api/__gsc/sites/${encodeURIComponent(siteId)}/indexing/urls`,
     indexingDiagnostics: (siteId: string) => `/api/__gsc/sites/${encodeURIComponent(siteId)}/indexing/diagnostics`,
+    countries: (siteId: string) => `/api/__gsc/sites/${encodeURIComponent(siteId)}/countries`,
+    searchAppearance: (siteId: string) => `/api/__gsc/sites/${encodeURIComponent(siteId)}/search-appearance`,
   },
 } as const

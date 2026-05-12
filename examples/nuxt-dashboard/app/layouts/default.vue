@@ -1,11 +1,13 @@
 <script setup lang="ts">
 const route = useRoute()
 // Analytics context is provided by the layer's `plugins/analytics.ts` at
-// app root — no layout-side provide needed. Consumers can still call
-// `provideGscAnalytics()` here if they want a layout-scoped override.
+// app root, exposed via `useNuxtApp().$gscAnalytics`. Per-page overrides
+// can re-provide `$gscAnalytics` from a page-local plugin.
 const { sites, loading: sitesLoading } = useGscSites()
 
-const analyticsCfg = useRuntimeConfig().public.analytics as { mode?: string, apiBase?: string } | undefined
+// `mode` is host-specific (example dashboard's local|origin|consumer switch),
+// so we cast inline; layer-known keys go through useGscAnalyticsConfig().
+const analyticsCfg = useRuntimeConfig().public.analytics as unknown as { mode?: string }
 const mode = analyticsCfg?.mode ?? 'local'
 
 function isSiteActive(id: string) {

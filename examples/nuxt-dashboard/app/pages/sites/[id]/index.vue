@@ -16,17 +16,9 @@ interface DailyTotal {
 interface TopPageRow { url: string, clicks: number, impressions: number, sum_position: number }
 interface TopKeywordRow { query: string, clicks: number, impressions: number, sum_position: number }
 
-const route = useRoute()
-const siteId = computed(() => String(route.params.id))
+const { siteId, site: currentSite } = useGscCurrentSite()
 
-const currentSite = useGscSite(siteId)
-
-type Period = typeof PERIOD_PRESETS[number]['value']
-type CompareMode = typeof COMPARE_OPTIONS[number]['value']
-const period = ref<Period>('28d')
-const compareMode = ref<CompareMode>('previous')
-const stableData = ref(true)
-const range = computed(() => periodToDateRange(period.value, { stableData: stableData.value }))
+const { period, compareMode, stableData, range } = useGscPeriod()
 
 const windowRange = computed(() => ({ start: range.value.start, end: range.value.end }))
 const { payload, loading } = useGscRollups<unknown>(

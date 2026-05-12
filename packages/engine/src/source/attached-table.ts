@@ -12,12 +12,14 @@
 import type { Row } from '../contracts'
 import type { ResolverAdapter } from '../resolver/types'
 import type { AnalysisQuerySource, ExecuteSqlOptions, FileSet, QueryRow, SourceCapabilities } from './source-types'
+import { coerceRows } from '../coerce'
 
 export interface AttachedTableRunner {
   /**
    * Run a query with positional (`?`) bound parameters. Return objects keyed
-   * by column name. The runner MUST coerce BIGINT → number and DATE → ISO
-   * string (or let the analyzer reducer normalize via `num(v)`/`str(v)`).
+   * by column name. BIGINT → number coercion is applied by the source factory
+   * (see `coerceRows`); runners only need to handle DATE → ISO string (or
+   * let the analyzer reducer normalize via `num(v)`/`str(v)`).
    */
   query: (sql: string, params?: unknown[], signal?: AbortSignal) => Promise<Row[]>
 }
@@ -58,7 +60,6 @@ const ATTACHED_TABLE_CAPABILITIES: SourceCapabilities = {
   fileSets: true,
   attachedTables: true,
   regex: true,
-  executeSql: true,
 }
 
 const ATTACHED_TABLE_CAPABILITIES_WITH_ADAPTER: SourceCapabilities = {
@@ -114,7 +115,7 @@ export function createAttachedTableSource(
       }
       const rewritten = rewriteForTableSource(sql, schema, fileSets)
       const rows = await runner.query(rewritten, params ?? [], signal)
-      return rows as QueryRow[]
+      return coerceRows(rows as QueryRow[])
     },
   }
 }

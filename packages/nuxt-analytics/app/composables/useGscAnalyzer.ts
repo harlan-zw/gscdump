@@ -12,15 +12,17 @@
 // on boot regardless of mode.
 
 import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
-import type { AttachedTablesHandle, BrowserAnalysisRuntime, DuckDBWasmBootResult, QueryResult } from '@gscdump/engine-duckdb-wasm'
 import type { AnalysisSourcesResponse, SourceInfoResponse } from '@gscdump/contracts'
+import type { AttachedTablesHandle, BrowserAnalysisRuntime, DuckDBWasmBootResult, QueryResult } from '@gscdump/engine-duckdb-wasm'
 import type { SiteLoadProgress } from './useGscAnalytics'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis'
-import { attachParquetUrlTables, bootDuckDBWasm, createBrowserAnalysisRuntime } from '@gscdump/engine-duckdb-wasm'
-import { getGscFetchHeaders } from '../utils/gsc-fetch'
-import { _useGscAnalyticsContext } from './useGscAnalytics'
+import { coerceRow } from '@gscdump/engine'
+import { useGscSharedSiteResource } from './_useGscSharedSiteResource'
+import { useGscAnalyticsContext } from './useGscAnalytics'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
-import { readGscAuth } from './useGscAuth'
+import { useGscAnalyticsConfig } from './useGscAnalyticsConfig'
+import { loadSourceInfoFor } from './useGscAnalyticsSourceInfo'
+import { readGscAuth, resolveGscAuthHeaders } from './useGscAuth'
 
 export interface GscAnalyzerTimings {
   bootMs: number
@@ -48,110 +50,50 @@ export interface GscAnalyzerInstance {
   dispose: () => Promise<void>
 }
 
-interface CachedAnalyzer extends GscAnalyzerInstance {
-  refs: number
-}
+const EMPTY_TABLES: readonly string[] = Object.freeze([])
 
 /**
  * Get (or create) an analyzer for a site. Per-site cached across the app so
  * pages sharing a site reuse the boot. Refcounted — auto-disposes when the
- * last consumer unmounts. Returns a reactive proxy whose refs track the
- * currently-bound site's instance; switching `siteId` rebinds.
+ * last consumer unmounts. The returned refs are `computed` over the currently
+ * bound cached instance; switching `siteId` rebinds and the computeds track
+ * the new instance with no manual mirroring.
  */
 export function useGscAnalyzer(siteId: MaybeRefOrGetter<string | null | undefined>): GscAnalyzerInstance & { currentSiteId: Ref<string | null> } {
-  const ctx = _useGscAnalyticsContext()
-  const cache = ctx._analyzers as Map<string, CachedAnalyzer>
+  const ctx = useGscAnalyticsContext()
+  const { bound, currentSiteId } = useGscSharedSiteResource<GscAnalyzerInstance>('analyzer', siteId, {
+    factory: id => createInstance(id, ctx.patchProgress, () => loadSourceInfoFor(id) as Promise<SourceInfoResponse>),
+    onDispose: inst => inst.dispose(),
+  })
 
-  const currentSiteId = ref<string | null>(null)
-  const emptyRef = <T>(v: T): Ref<T> => ref(v) as Ref<T>
-
-  // Fallback empty refs when no site is bound. Replaced on bind with the
-  // cached instance's refs via `readonly` re-export.
-  const ready = emptyRef(false)
-  const initializing = emptyRef(false)
-  const error = emptyRef<Error | null>(null)
-  const attachedTables = emptyRef<string[]>([])
-  const timings = emptyRef<GscAnalyzerTimings | null>(null)
-  const manifestVersion = emptyRef<string | undefined>(undefined)
-
-  let bound: CachedAnalyzer | null = null
-  let stopSync: (() => void) | null = null
-
-  function bind(id: string): void {
-    unbind()
-    let inst = cache.get(id)
-    if (!inst) {
-      inst = createInstance(id, ctx.patchProgress)
-      cache.set(id, inst)
-    }
-    inst.refs++
-    bound = inst
-    currentSiteId.value = id
-
-    const stops = [
-      watch(inst.ready, (v: boolean) => (ready.value = v), { immediate: true }),
-      watch(inst.initializing, (v: boolean) => (initializing.value = v), { immediate: true }),
-      watch(inst.error, (v: Error | null) => (error.value = v), { immediate: true }),
-      watch(inst.attachedTables, (v: string[]) => (attachedTables.value = v), { immediate: true, deep: true }),
-      watch(inst.timings, (v: GscAnalyzerTimings | null) => (timings.value = v), { immediate: true }),
-      watch(inst.manifestVersion, (v: string | undefined) => (manifestVersion.value = v), { immediate: true }),
-    ]
-    stopSync = () => stops.forEach(fn => fn())
-  }
-
-  function unbind(): void {
-    stopSync?.()
-    stopSync = null
-    if (bound) {
-      bound.refs--
-      if (bound.refs <= 0) {
-        const id = currentSiteId.value
-        if (id)
-          cache.delete(id)
-        void bound.dispose()
-      }
-      bound = null
-    }
-    ready.value = false
-    initializing.value = false
-    error.value = null
-    attachedTables.value = []
-    timings.value = null
-    manifestVersion.value = undefined
-  }
-
-  watch(
-    () => toValue(siteId),
-    (id: string | null | undefined) => {
-      if (!id) {
-        unbind()
-        currentSiteId.value = null
-        return
-      }
-      if (import.meta.client)
-        bind(id)
-    },
-    { immediate: true },
-  )
-
-  onScopeDispose(unbind)
+  // Computed views over the bound instance. Reactive on both site switch
+  // (bound changes) and inner ref updates on the cached instance.
+  const ready = computed(() => bound.value?.ready.value ?? false) as unknown as Ref<boolean>
+  const initializing = computed(() => bound.value?.initializing.value ?? false) as unknown as Ref<boolean>
+  const error = computed(() => bound.value?.error.value ?? null) as unknown as Ref<Error | null>
+  const attachedTables = computed(() => bound.value?.attachedTables.value ?? (EMPTY_TABLES as string[])) as unknown as Ref<string[]>
+  const timings = computed(() => bound.value?.timings.value ?? null) as unknown as Ref<GscAnalyzerTimings | null>
+  const manifestVersion = computed(() => bound.value?.manifestVersion.value) as unknown as Ref<string | undefined>
 
   async function query(sql: string, params?: unknown[]): Promise<QueryResult> {
-    if (!bound)
+    const inst = bound.value
+    if (!inst)
       throw new Error('useGscAnalyzer: no site bound')
-    return bound.query(sql, params)
+    return inst.query(sql, params)
   }
 
   async function analyze(params: AnalysisParams, opts?: { signal?: AbortSignal }): Promise<AnalysisResult & { queryMs: number }> {
-    if (!bound)
+    const inst = bound.value
+    if (!inst)
       throw new Error('useGscAnalyzer: no site bound')
-    return bound.analyze(params, opts)
+    return inst.analyze(params, opts)
   }
 
   async function refresh(): Promise<boolean> {
-    if (!bound)
+    const inst = bound.value
+    if (!inst)
       return false
-    return bound.refresh()
+    return inst.refresh()
   }
 
   return {
@@ -165,16 +107,17 @@ export function useGscAnalyzer(siteId: MaybeRefOrGetter<string | null | undefine
     currentSiteId,
     query,
     analyze,
-    dispose: async (): Promise<void> => {
-      unbind()
-    },
+    // No-op: lifecycle is owned by the shared bag's onScopeDispose hook.
+    // Kept for API compat with consumers that opportunistically call dispose().
+    dispose: async (): Promise<void> => {},
   }
 }
 
 function createInstance(
   siteId: string,
   patchProgress: (id: string, p: Partial<SiteLoadProgress>) => void,
-): CachedAnalyzer {
+  sourceInfoLoader: () => Promise<SourceInfoResponse>,
+): GscAnalyzerInstance {
   const ready = ref(false)
   const initializing = ref(true)
   const error = ref<Error | null>(null)
@@ -197,8 +140,7 @@ function createInstance(
   // rather than the consumer's own host. Same-origin / absolute URLs pass
   // through unchanged.
   function rewriteParquetUrl(url: string): string {
-    const cfgBase = (useRuntimeConfig().public.analytics as { apiBase?: string } | undefined)?.apiBase ?? ''
-    const apiBase = readGscAuth().apiBase || cfgBase
+    const apiBase = useGscAnalyticsConfig().apiBase
     if (!apiBase || !url.startsWith('/'))
       return url
     return `${apiBase.replace(/\/+$/, '')}${url}`
@@ -220,12 +162,10 @@ function createInstance(
     // under the hood, so we pass the header through fetchInit. Cookies aren't
     // useful here — the parquet origin (gscdump.com) and the host page sit in
     // different session realms when the consumer mode is active.
-    const auth = readGscAuth()
-    const authHeaders: Record<string, string> = auth.apiKey ? { 'x-api-key': auth.apiKey } : {}
-    const legacyHeaders = getGscFetchHeaders()
-    const extraHeaders: Record<string, string> = { ...legacyHeaders, ...authHeaders }
+    const extraHeaders = resolveGscAuthHeaders()
     const hasExtra = Object.keys(extraHeaders).length > 0
     let attached = 0
+    const { attachParquetUrlTables } = await import('@gscdump/engine-duckdb-wasm')
     const handle = await attachParquetUrlTables({
       db: bootedDb.db,
       conn: bootedDb.conn,
@@ -253,7 +193,7 @@ function createInstance(
     patch({ stage: 'manifest', startedAt: Date.now(), filesAttached: 0, filesTotal: 0, error: undefined, endedAt: undefined })
     // Probe the server-resolved source first. Its kind + attachedTables bit
     // decides whether we boot DuckDB-WASM (expensive) or proxy to the server.
-    const info = await useGscAnalyticsClient().getSourceInfo(siteId) as SourceInfoResponse
+    const info = await sourceInfoLoader()
     mode = info.browserAttachEligible ? 'browser-attached' : 'server'
 
     if (mode === 'server') {
@@ -265,9 +205,13 @@ function createInstance(
       return null
     }
 
-    const cfg = useRuntimeConfig().public.duckdbBundleBase as string
+    const cfg = useGscAnalyticsConfig().duckdbBundleBase
     patch({ stage: 'wasm' })
     const t0 = performance.now()
+    // Dynamic import so server/consumer-mode hosts (no browser SQL) never pull
+    // the wasm engine into their client bundle. The static type-only import at
+    // top of the file keeps the type signatures available without an emit.
+    const { bootDuckDBWasm, createBrowserAnalysisRuntime } = await import('@gscdump/engine-duckdb-wasm')
     bootedDb = await bootDuckDBWasm(cfg
       ? {
           bundles: {
@@ -383,19 +327,7 @@ function createInstance(
     inFlight.clear()
   }
 
-  return { ready, initializing, error, attachedTables, timings, manifestVersion, query, analyze, refresh, dispose, refs: 0 }
-}
-
-function coerceRow(row: Record<string, unknown>): Record<string, unknown> {
-  let mutated: Record<string, unknown> | null = null
-  for (const [k, v] of Object.entries(row)) {
-    if (typeof v === 'bigint') {
-      if (!mutated)
-        mutated = { ...row }
-      mutated[k] = Number(v)
-    }
-  }
-  return mutated ?? row
+  return { ready, initializing, error, attachedTables, timings, manifestVersion, query, analyze, refresh, dispose }
 }
 
 function coerceResults(results: unknown): unknown {

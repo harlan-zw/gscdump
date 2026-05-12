@@ -11,10 +11,8 @@ import { VisAxis, VisCrosshair, VisLine, VisTooltip, VisXYContainer } from '@uno
 definePageMeta({ key: route => `site-sitemap-detail:${route.params.id}:${route.params.feedpathHash}` })
 
 const route = useRoute()
-const siteId = computed(() => String(route.params.id))
+const { siteId } = useGscCurrentSite()
 const feedpathHash = computed(() => String(route.params.feedpathHash))
-
-const currentSite = useGscSite(siteId)
 const { snapshots, path, loading } = useGscSitemapHistory(siteId, feedpathHash)
 
 function submittedTotal(record: SitemapRecord): number {
@@ -94,10 +92,8 @@ const delta = computed(() => {
 <template>
   <GscDashboardPage>
     <template #header>
-      <GscPageHeader
-        :crumbs="[
-          { label: 'Overview', to: '/' },
-          { label: currentSite?.hostname ?? siteId, to: `/sites/${encodeURIComponent(siteId)}` },
+      <GscSitePageHeader
+        :tail="[
           { label: 'Sitemaps', to: `/sites/${encodeURIComponent(siteId)}/sitemaps` },
           { label: path ?? feedpathHash },
         ]"
@@ -118,7 +114,7 @@ const delta = computed(() => {
             Open sitemap
           </UButton>
         </template>
-      </GscPageHeader>
+      </GscSitePageHeader>
     </template>
 
     <SiteTabs :site-id="siteId" />

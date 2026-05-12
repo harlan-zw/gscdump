@@ -1,6 +1,6 @@
 /**
  * `defineAnalyzer` — single colocation site for an analyzer that can be
- * executed via SQL (against a source whose `capabilities.executeSql` is set)
+ * executed via SQL (against a source whose `executeSql` method is defined)
  * or via a row query plan (against any source — e.g. GSC live API, in-memory
  * rows).
  *

@@ -4,38 +4,35 @@
 // to that origin (e.g. `https://gscdump.com`). Empty = same-origin, the
 // default for self-hosted deployments (gscdump.com itself).
 //
-// Cross-origin auth: hosts call `setGscFetchHeaders({ 'x-api-key': '…' })`
-// from a Nuxt plugin once they've resolved the viewer's origin credentials.
-// When headers are set, `credentials: 'include'` is dropped (cookies aren't
-// needed). When headers are empty, the layer falls back to cookies, which
-// matches the in-origin (same-site) deployment shape.
+// Auth: resolved via `useGscAuth` (host calls `setGscAuth` from a `'pre'`
+// plugin). `apiKey` populates `x-api-key`; `headers` carries any additional
+// auth headers. When no auth is wired, the layer falls back to cookies for
+// same-site / cookie-credentials deployments.
 //
-// Type: returns the looser ofetch `$Fetch` rather than Nuxt's
-// `NitroFetchRequest`-narrowed `$fetch`. The host's discovered routes don't
-// know about `/api/__gsc/*` (handlers live on the remote origin), so the
-// Nitro narrowing would mis-type every call site.
+// Built once per NuxtApp by the layer plugin and provided as `$gscFetch`.
+// `useGscFetch()` is a thin reader; hosts override by providing their own
+// `$gscFetch` from a later plugin.
 
 import type { $Fetch } from 'ofetch'
-import { readGscAuth } from '../composables/useGscAuth'
+import { readGscAuth, resolveGscAuthHeaders } from '../composables/useGscAuth'
 import { classifyGscError } from './gsc-error'
 
-let cached: $Fetch | null = null
-const _headers = ref<Record<string, string>>({})
-
 const TOAST_DEDUP_MS = 5000
-const _recentToasts = new Map<string, number>()
 
-function shouldEmitToast(key: string): boolean {
+interface ToastDedup {
+  recent: Map<string, number>
+}
+
+function shouldEmitToast(dedup: ToastDedup, key: string): boolean {
   const now = Date.now()
-  const last = _recentToasts.get(key) ?? 0
+  const last = dedup.recent.get(key) ?? 0
   if (now - last < TOAST_DEDUP_MS)
     return false
-  _recentToasts.set(key, now)
-  // Cap entries so the map never grows unbounded.
-  if (_recentToasts.size > 32) {
-    const oldest = [..._recentToasts.entries()].sort((a, b) => a[1] - b[1])[0]
+  dedup.recent.set(key, now)
+  if (dedup.recent.size > 32) {
+    const oldest = [...dedup.recent.entries()].sort((a, b) => a[1] - b[1])[0]
     if (oldest)
-      _recentToasts.delete(oldest[0])
+      dedup.recent.delete(oldest[0])
   }
   return true
 }
@@ -49,70 +46,29 @@ function defaultToastTitle(status: string): string {
   }
 }
 
-/**
- * Set request headers the layer should attach to every `/api/__gsc/*` call.
- * Hosts call this from a Nuxt plugin after fetching the viewer's origin
- * credentials. Pass `{}` to clear and revert to cookie-credentials.
- */
-export function setGscFetchHeaders(headers: Record<string, string>): void {
-  _headers.value = headers
-}
-
-/**
- * Read the headers set via `setGscFetchHeaders`. Used by `useGscAnalyzer`
- * to authenticate raw parquet fetches in `attachParquetUrlTables` (which
- * bypasses `useGscFetch` since DuckDB-WASM's runtime fetches are decoupled
- * from the layer's $fetch instance).
- */
-export function getGscFetchHeaders(): Record<string, string> {
-  return _headers.value
-}
-
-export function useGscFetch(): $Fetch {
-  if (cached)
-    return cached
-  const cfg = useRuntimeConfig().public.analytics as { apiBase?: string, toastErrors?: boolean } | undefined
-  const cfgApiBase = cfg?.apiBase ?? ''
-  const toastErrors = cfg?.toastErrors === true
-  cached = $fetch.create({
+export function createGscFetch(cfgApiBase: string, toastErrors: boolean): $Fetch {
+  const dedup: ToastDedup = { recent: new Map() }
+  return $fetch.create({
     onRequest: ({ options }) => {
-      // Resolve auth state per-request so reactive updates land without
-      // re-creating the $fetch instance. `useGscAuth` (when populated by
-      // the host) wins over the legacy `_headers` ref; `apiBase` from auth
-      // overrides the runtime-config default.
       const auth = readGscAuth()
-      const apiBase = (auth.apiBase || cfgApiBase) ?? ''
+      const apiBase = cfgApiBase ?? ''
+      const authHeaders = resolveGscAuthHeaders(auth)
 
       const merged = new Headers(options.headers as HeadersInit | undefined)
-      let hasAuth = false
-      if (auth.apiKey) {
-        merged.set('x-api-key', auth.apiKey)
-        hasAuth = true
-      }
-      const legacy = _headers.value
-      if (Object.keys(legacy).length > 0) {
-        for (const [k, v] of Object.entries(legacy)) {
-          if (!merged.has(k))
-            merged.set(k, v)
-        }
-        hasAuth = true
-      }
+      for (const [k, v] of Object.entries(authHeaders))
+        merged.set(k, v)
       options.headers = merged
 
-      // Resolve relative URLs against the resolved apiBase. We can't rely on
-      // baseURL here because it's locked at $fetch.create time.
       if (apiBase && typeof options.baseURL !== 'string')
         options.baseURL = apiBase
 
+      const hasAuth = Object.keys(authHeaders).length > 0
       if (hasAuth) {
-        // Explicit auth header — no cookies needed (cross-origin different
-        // session realm).
         if (!options.credentials)
           options.credentials = 'omit'
       }
       else if (apiBase && !options.credentials) {
-        // No explicit auth headers — fall back to cookies for cross-origin
-        // session-backed deployments.
+        // No explicit auth — fall back to cookies for cross-origin sessions.
         options.credentials = 'include'
       }
     },
@@ -121,7 +77,7 @@ export function useGscFetch(): $Fetch {
         return
       const c = classifyGscError(ctx.error ?? ctx.response)
       const key = `${c.status}:${c.code ?? '-'}:${c.message ?? ''}`
-      if (!shouldEmitToast(key))
+      if (!shouldEmitToast(dedup, key))
         return
       const toast = useToast()
       toast.add({
@@ -131,5 +87,8 @@ export function useGscFetch(): $Fetch {
       })
     },
   }) as unknown as $Fetch
-  return cached
+}
+
+export function useGscFetch(): $Fetch {
+  return useNuxtApp().$gscFetch as $Fetch
 }

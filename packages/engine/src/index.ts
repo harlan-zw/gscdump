@@ -35,10 +35,8 @@ export {
 export type {
   CodecCtx,
   CompactionTier,
-  ComparisonResult,
   DataSource,
   EngineOptions,
-  ExtraResult,
   FileSetRef,
   GcCtx,
   ListLiveFilter,
@@ -46,7 +44,6 @@ export type {
   ManifestEntry,
   ManifestPurgeResult,
   ManifestStore,
-  OptimizedQueryResult,
   ParquetCodec,
   PurgeFilter,
   PurgeResult,

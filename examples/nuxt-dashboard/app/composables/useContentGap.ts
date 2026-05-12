@@ -24,13 +24,15 @@ export interface ContentGapRunner {
 }
 
 export function useContentGap(): ContentGapRunner {
-  const progress = ref<ContentGapProgress>({
+  // `useState` so panel switches preserve the long-running embedding job
+  // state across tab unmounts.
+  const progress = useState<ContentGapProgress>('gscContentGap:progress', () => ({
     phase: 'idle',
     message: 'Ready. First run downloads ~110MB Xenova/bge-base-en-v1.5; cached thereafter. Re-runs skip embedding via IndexedDB cache.',
-  })
-  const results = ref<ContentGapResult[]>([])
-  const error = ref<Error | null>(null)
-  const running = ref(false)
+  }))
+  const results = useState<ContentGapResult[]>('gscContentGap:results', () => [])
+  const error = useState<Error | null>('gscContentGap:error', () => null)
+  const running = useState<boolean>('gscContentGap:running', () => false)
 
   async function run(runner: AnalysisRunner, opts: ContentGapOptions = {}): Promise<void> {
     if (running.value)

@@ -1,13 +1,9 @@
 import type { BuilderState } from 'gscdump/query'
 import type { CompactionThresholds } from './compaction'
-import type { ComparisonFilter } from './resolver/types'
 import type {
-  ComparisonResult,
   EngineOptions,
-  ExtraResult,
   GcCtx,
   ManifestEntry,
-  OptimizedQueryResult,
   PurgeResult,
   PurgeUrlsResult,
   QueryCtx,
@@ -21,11 +17,9 @@ import type {
 } from './storage'
 import { normalizeUrl } from 'gscdump/normalize'
 import { buildLogicalPlan } from 'gscdump/query/plan'
-import { compactTieredImpl, enumeratePartitions } from './compaction'
+import { compactTieredImpl } from './compaction'
 import { compileLogicalQueryPlan } from './compiler'
 import { gcOrphansImpl } from './gc'
-import { buildExtrasQueries, buildTotalsSql, resolveComparisonSQL, resolveToSQLOptimized } from './resolver/compiler'
-import { createParquetResolverAdapter } from './resolver/pg-adapter'
 import { currentSchemaVersion, SCHEMAS } from './schema'
 import { dayPartition, inferSearchType, objectKey, tenantPrefix } from './storage'
 
@@ -195,113 +189,6 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     })
   }
 
-  async function queryComparison(
-    ctx: QueryCtx,
-    current: BuilderState,
-    previous: BuilderState,
-    filter?: ComparisonFilter,
-  ): Promise<ComparisonResult> {
-    const adapter = createParquetResolverAdapter()
-
-    // Same logical plan path as `query` so partition resolution and dataset
-    // inference stay in lockstep with the simple-query path.
-    const currentPlan = buildLogicalPlan(current, adapter.capabilities)
-    const previousPlan = buildLogicalPlan(previous, adapter.capabilities)
-    if (currentPlan.dataset !== previousPlan.dataset) {
-      throw new Error(
-        `queryComparison: current (${currentPlan.dataset}) and previous (${previousPlan.dataset}) must resolve to the same table`,
-      )
-    }
-    const table: TableName = ctx.table ?? currentPlan.dataset
-
-    const comparison = resolveComparisonSQL(
-      current,
-      previous,
-      { adapter, siteId: undefined },
-      filter,
-    )
-    const totals = buildTotalsSql(current, { adapter, siteId: undefined })
-
-    // Partition union spans both windows so DuckDB sees every relevant file.
-    const startDate = currentPlan.dateRange.startDate < previousPlan.dateRange.startDate
-      ? currentPlan.dateRange.startDate
-      : previousPlan.dateRange.startDate
-    const endDate = currentPlan.dateRange.endDate > previousPlan.dateRange.endDate
-      ? currentPlan.dateRange.endDate
-      : previousPlan.dateRange.endDate
-    const partitions = enumeratePartitions(startDate, endDate)
-
-    const fileSets = { FILES: { table, partitions } }
-    const baseCtx = { userId: ctx.userId, siteId: ctx.siteId }
-    const [main, count, totalsRow] = await Promise.all([
-      runSQL({ ctx: baseCtx, table, fileSets, sql: comparison.sql, params: comparison.params, signal: ctx.signal }),
-      runSQL({ ctx: baseCtx, table, fileSets, sql: comparison.countSql, params: comparison.countParams, signal: ctx.signal }),
-      runSQL({ ctx: baseCtx, table, fileSets, sql: totals.sql, params: totals.params, signal: ctx.signal }),
-    ])
-    return {
-      rows: main.rows,
-      totalCount: Number(count.rows[0]?.total ?? 0),
-      totals: (totalsRow.rows[0] ?? {}) as Record<string, unknown>,
-    }
-  }
-
-  async function queryOptimized(ctx: QueryCtx, state: BuilderState): Promise<OptimizedQueryResult> {
-    const adapter = createParquetResolverAdapter()
-    const plan = buildLogicalPlan(state, adapter.capabilities)
-    const table: TableName = ctx.table ?? plan.dataset
-    const partitions = enumeratePartitions(plan.dateRange.startDate, plan.dateRange.endDate)
-    const { sql, params } = resolveToSQLOptimized(state, { adapter, siteId: undefined })
-
-    const result = await runSQL({
-      ctx: { userId: ctx.userId, siteId: ctx.siteId },
-      table,
-      fileSets: { FILES: { table, partitions } },
-      sql,
-      params,
-      signal: ctx.signal,
-    })
-
-    const firstRow = result.rows[0] as Record<string, unknown> | undefined
-    const totalCount = Number(firstRow?.totalCount ?? 0)
-    const totals = {
-      clicks: Number(firstRow?.totalClicks ?? 0),
-      impressions: Number(firstRow?.totalImpressions ?? 0),
-      ctr: Number(firstRow?.totalCtr ?? 0),
-      position: Number(firstRow?.totalPosition ?? 0),
-    }
-    const rows = result.rows.map((r) => {
-      const {
-        totalCount: _tc,
-        totalClicks: _tcl,
-        totalImpressions: _ti,
-        totalCtr: _tr,
-        totalPosition: _tp,
-        ...rest
-      } = r as Record<string, unknown>
-      return rest as Row
-    })
-
-    return { rows, totalCount, totals }
-  }
-
-  async function queryExtras(ctx: QueryCtx, state: BuilderState): Promise<ExtraResult[]> {
-    const adapter = createParquetResolverAdapter()
-    const extras = buildExtrasQueries(state, { adapter, siteId: undefined })
-    if (extras.length === 0)
-      return []
-
-    const plan = buildLogicalPlan(state, adapter.capabilities)
-    const table: TableName = ctx.table ?? plan.dataset
-    const partitions = enumeratePartitions(plan.dateRange.startDate, plan.dateRange.endDate)
-    const fileSets = { FILES: { table, partitions } }
-    const baseCtx = { userId: ctx.userId, siteId: ctx.siteId }
-
-    const results = await Promise.all(extras.map(e =>
-      runSQL({ ctx: baseCtx, table, fileSets, sql: e.sql, params: e.params, signal: ctx.signal }),
-    ))
-    return extras.map((e, i) => ({ key: e.key, rows: results[i]!.rows }))
-  }
-
   async function compactTiered(ctx: WriteCtx, thresholds?: CompactionThresholds): Promise<void> {
     return compactTieredImpl(
       { dataSource, manifestStore, codec },
@@ -422,9 +309,6 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
   return {
     writeDay,
     query,
-    queryComparison,
-    queryExtras,
-    queryOptimized,
     runSQL,
     compactTiered,
     gcOrphans,

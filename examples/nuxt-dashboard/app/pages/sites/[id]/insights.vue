@@ -6,15 +6,9 @@
 
 definePageMeta({ key: route => `site-insights:${route.params.id}` })
 
-const route = useRoute()
-const siteId = computed(() => String(route.params.id))
-const currentSite = useGscSite(siteId)
+const { siteId } = useGscCurrentSite()
 
-type Period = typeof PERIOD_PRESETS[number]['value']
-const period = ref<Period>('28d')
-const stableData = ref(true)
-const compareMode = ref<'previous' | 'year' | 'none'>('none')
-const range = computed(() => periodToDateRange(period.value, { stableData: stableData.value }))
+const { period, compareMode, stableData, range } = useGscPeriod()
 
 const { analyze, ready: isReady, error: bootError } = useGscAnalyzer(siteId)
 
@@ -29,173 +23,68 @@ interface InsightCard {
   headline: string
   tagline: string
   icon: string
-  accent: 'primary' | 'warning' | 'success' | 'error' | 'neutral'
+  accent: GscAnalyzerAccent
 }
 
-const cards = ref<Record<string, InsightCard>>({})
-const running = ref<Record<string, boolean>>({})
+// Pulled from the registry — analyzers that opted in via `capabilities.insightCard`.
+const DEFS = useGscAnalyzerDefsWithCapability('insightCard')
 
-function nfmt(n: number): string {
-  return new Intl.NumberFormat().format(Math.round(n))
-}
+// Pool of 2 lets the cheap analyzers (striking-distance, movers) render
+// promptly while the heavier ones (cannibalization, ctr-anomaly) catch up
+// behind them. DuckDB-WASM is single-threaded so higher parallelism just
+// serializes behind one connection.
+const { states, run } = useGscAnalyzerBatch<{ results: unknown[], meta: Record<string, unknown> }>(
+  { analyze: params => analyze(params as never) },
+  DEFS.map(d => d.id),
+  range,
+  { concurrency: 2, filter: id => supports(id).value },
+)
 
-interface Definition {
-  id: string
-  label: string
-  description: string
-  icon: string
-  accent: InsightCard['accent']
-  summarize: (res: { results: unknown[], meta: Record<string, unknown> }) => { headline: string, tagline: string }
-}
-
-const DEFS: Definition[] = [
-  {
-    id: 'striking-distance',
-    label: 'Striking distance',
-    description: 'Queries ranking positions 5–20 — one push away from the first page.',
-    icon: 'i-lucide-target',
-    accent: 'primary',
-    summarize: (res) => {
-      const n = res.results.length
-      return {
-        headline: `${nfmt(n)}`,
-        tagline: `queries ranked 5–20 with upside`,
+const cards = computed<Record<string, InsightCard>>(() => {
+  const out: Record<string, InsightCard> = {}
+  for (const def of DEFS) {
+    const entry = states.value[def.id]
+    if (!entry || entry.status === 'pending' || entry.status === 'running' || entry.status === 'skipped' || entry.status === 'idle')
+      continue
+    const card = def.capabilities.insightCard
+    if (entry.status === 'done' && entry.result) {
+      const { headline, tagline } = card.summarize(entry.result)
+      out[def.id] = {
+        id: def.id,
+        label: def.label,
+        description: card.description,
+        icon: card.icon,
+        accent: card.accent,
+        headline,
+        tagline,
       }
-    },
-  },
-  {
-    id: 'opportunity',
-    label: 'Opportunity',
-    description: 'High-impression / low-CTR pages where a title rewrite pays back fast.',
-    icon: 'i-lucide-zap',
-    accent: 'warning',
-    summarize: (res) => {
-      const n = res.results.length
-      return {
-        headline: `${nfmt(n)}`,
-        tagline: `underperforming pages flagged`,
+    }
+    else {
+      out[def.id] = {
+        id: def.id,
+        label: def.label,
+        description: card.description,
+        icon: card.icon,
+        accent: 'neutral',
+        headline: '—',
+        tagline: 'unavailable',
       }
-    },
-  },
-  {
-    id: 'cannibalization',
-    label: 'Cannibalization',
-    description: 'Queries where multiple URLs of yours compete for the same SERP.',
-    icon: 'i-lucide-git-fork',
-    accent: 'error',
-    summarize: (res) => {
-      const stolen = typeof res.meta.totalStolenClicks === 'number' ? res.meta.totalStolenClicks : 0
-      return {
-        headline: `${nfmt(stolen)}`,
-        tagline: `clicks lost to competing URLs`,
-      }
-    },
-  },
-  {
-    id: 'movers',
-    label: 'Movers',
-    description: 'Biggest WoW gainers + losers ranked by impression-weighted delta.',
-    icon: 'i-lucide-trending-up',
-    accent: 'success',
-    summarize: (res) => {
-      const n = res.results.length
-      return {
-        headline: `${nfmt(n)}`,
-        tagline: `queries with significant movement`,
-      }
-    },
-  },
-  {
-    id: 'ctr-anomaly',
-    label: 'CTR anomalies',
-    description: 'Pages whose CTR collapsed while position held — likely SERP feature theft.',
-    icon: 'i-lucide-alert-octagon',
-    accent: 'warning',
-    summarize: (res) => {
-      const lost = typeof res.meta.totalClicksLost === 'number' ? res.meta.totalClicksLost : 0
-      return {
-        headline: `${nfmt(lost)}`,
-        tagline: `clicks lost to CTR dips`,
-      }
-    },
-  },
-  {
-    id: 'long-tail',
-    label: 'Long-tail',
-    description: 'Pages with healthy tail distribution vs. head-heavy risk concentration.',
-    icon: 'i-lucide-bar-chart-3',
-    accent: 'neutral',
-    summarize: (res) => {
-      const fp = (res.meta.fingerprints as Record<string, number> | undefined) ?? {}
-      const flat = fp['flat-tail'] ?? 0
-      return {
-        headline: `${nfmt(flat)}`,
-        tagline: `pages with a flat, durable tail`,
-      }
-    },
-  },
-]
-
-async function runOne(def: Definition) {
-  running.value[def.id] = true
-  try {
-    const res = await analyze({
-      type: def.id,
-      dateStart: range.value.start,
-      dateEnd: range.value.end,
-    } as never)
-    const { headline, tagline } = def.summarize(res as { results: unknown[], meta: Record<string, unknown> })
-    cards.value[def.id] = {
-      id: def.id,
-      label: def.label,
-      description: def.description,
-      icon: def.icon,
-      accent: def.accent,
-      headline,
-      tagline,
     }
   }
-  catch {
-    cards.value[def.id] = {
-      id: def.id,
-      label: def.label,
-      description: def.description,
-      icon: def.icon,
-      accent: 'neutral',
-      headline: '—',
-      tagline: 'unavailable',
-    }
-  }
-  finally {
-    running.value[def.id] = false
-  }
-}
+  return out
+})
 
-// Limit concurrent analyzer runs. DuckDB-WASM is single-threaded — firing six
-// analyzers in parallel just serializes them behind the same connection and
-// delays first paint of the faster cards. A pool of 2 lets the cheap cards
-// (striking-distance, movers) render promptly while the heavier ones
-// (cannibalization, ctr-anomaly) catch up behind them.
-const CONCURRENCY = 2
+const running = computed<Record<string, boolean>>(() => {
+  const out: Record<string, boolean> = {}
+  for (const def of DEFS)
+    out[def.id] = states.value[def.id]?.status === 'running'
+  return out
+})
 
-async function runAll() {
-  if (!isReady.value)
-    return
-  // Skip analyzers the current source can't run — they'd 402 and spam the
-  // console. The template renders a locked card for the skipped ones.
-  const queue = DEFS.filter(d => supports(d.id).value)
-  const workers = Array.from({ length: CONCURRENCY }, async () => {
-    while (queue.length) {
-      const def = queue.shift()
-      if (!def)
-        break
-      await runOne(def)
-    }
-  })
-  await Promise.all(workers)
-}
-
-watch([isReady, period, stableData], runAll, { immediate: true })
+watch([isReady, period, stableData], () => {
+  if (isReady.value)
+    run()
+}, { immediate: true })
 
 function accentClasses(a: InsightCard['accent']): string {
   switch (a) {
@@ -211,12 +100,8 @@ function accentClasses(a: InsightCard['accent']): string {
 <template>
   <GscDashboardPage>
     <template #header>
-      <GscPageHeader
-        :crumbs="[
-          { label: 'Overview', to: '/' },
-          { label: currentSite?.hostname ?? siteId, to: `/sites/${encodeURIComponent(siteId)}` },
-          { label: 'Insights' },
-        ]"
+      <GscSitePageHeader
+        :tail="[{ label: 'Insights' }]"
         title="Insights"
         icon="i-lucide-sparkles"
         description="Curated analyzer digest — one headline per insight. Open Analyze for the full result."
@@ -228,7 +113,7 @@ function accentClasses(a: InsightCard['accent']): string {
             v-model:stable-data="stableData"
           />
         </template>
-      </GscPageHeader>
+      </GscSitePageHeader>
     </template>
 
     <SiteTabs :site-id="siteId" />
@@ -246,9 +131,9 @@ function accentClasses(a: InsightCard['accent']): string {
         v-for="def in DEFS"
         :key="def.id"
         :locked="!supports(def.id).value"
-        :icon="def.icon"
+        :icon="def.capabilities.insightCard.icon"
         :title="def.label"
-        :description="def.description"
+        :description="def.capabilities.insightCard.description"
         :cta-href="`/sites/${encodeURIComponent(siteId)}/analyze`"
         :headline-class="accentClasses(cards[def.id]?.accent ?? 'neutral')"
         locked-tagline="Requires the stored parquet dataset (Pro)."
@@ -262,7 +147,7 @@ function accentClasses(a: InsightCard['accent']): string {
           </template>
         </template>
         <template #tagline>
-          {{ cards[def.id]?.tagline ?? def.description.split('.')[0] }}
+          {{ cards[def.id]?.tagline ?? def.capabilities.insightCard.description.split('.')[0] }}
         </template>
       </GscLockedCard>
     </div>

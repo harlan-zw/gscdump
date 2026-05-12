@@ -6,57 +6,13 @@ definePageMeta({ key: route => `site-queries-index:${route.params.id}` })
 
 interface TopKeywordRow { query: string, clicks: number, impressions: number, sum_position: number }
 
-type Period = typeof PERIOD_PRESETS[number]['value']
-type CompareMode = typeof COMPARE_OPTIONS[number]['value']
+const { siteId } = useGscCurrentSite()
 
-const route = useRoute()
-const siteId = computed(() => String(route.params.id))
-const currentSite = useGscSite(siteId)
-
-const period = ref<Period>('28d')
-const compareMode = ref<CompareMode>('none')
-const stableData = ref(true)
-const windowRange = computed(() => {
-  const r = periodToDateRange(period.value, { stableData: stableData.value })
-  return { start: r.start, end: r.end }
-})
-
-const { data: payload, loading } = useGscRollup<TopKeywordRow[]>(
+const { period, compareMode, stableData, q, sort, toggleSort, payload, loading, rows } = useGscRollupTable<TopKeywordRow>({
   siteId,
-  'top_keywords_28d',
-  { range: windowRange },
-)
-
-// URL-synced table state (useGscTableState handles q/sort/page deep-linking).
-const { q, sort, toggleSort } = useGscTableState({ defaultSort: { column: 'clicks', direction: 'desc' } })
-const searchDebounced = ref('')
-let handle: ReturnType<typeof setTimeout> | null = null
-watch(q, (v) => {
-  if (handle)
-    clearTimeout(handle)
-  handle = setTimeout(() => {
-    searchDebounced.value = v
-  }, 150)
-})
-
-function positionFor(r: TopKeywordRow): number {
-  return r.impressions > 0 ? r.sum_position / r.impressions + 1 : 0
-}
-
-const rows = computed(() => {
-  const needle = searchDebounced.value.trim().toLowerCase()
-  const list = (payload.value ?? []).slice()
-  const filtered = needle ? list.filter(r => r.query.toLowerCase().includes(needle)) : list
-  const s = sort.value
-  if (s) {
-    const dir = s.direction === 'desc' ? -1 : 1
-    filtered.sort((a, b) => {
-      const av = s.column === 'position' ? positionFor(a) : (a as any)[s.column]
-      const bv = s.column === 'position' ? positionFor(b) : (b as any)[s.column]
-      return av < bv ? -1 * dir : av > bv ? 1 * dir : 0
-    })
-  }
-  return filtered.slice(0, 100)
+  rollupKey: 'top_keywords_28d',
+  filterField: 'query',
+  defaultSort: { column: 'clicks', direction: 'desc' },
 })
 
 function hrefFor(keyword: string): string {
@@ -67,12 +23,8 @@ function hrefFor(keyword: string): string {
 <template>
   <GscDashboardPage>
     <template #header>
-      <GscPageHeader
-        :crumbs="[
-          { label: 'Overview', to: '/' },
-          { label: currentSite?.hostname ?? siteId, to: `/sites/${encodeURIComponent(siteId)}` },
-          { label: 'Queries' },
-        ]"
+      <GscSitePageHeader
+        :tail="[{ label: 'Queries' }]"
         title="Queries"
         icon="i-lucide-search"
         description="Top 100 keywords by clicks over the selected window."
@@ -84,7 +36,7 @@ function hrefFor(keyword: string): string {
             v-model:stable-data="stableData"
           />
         </template>
-      </GscPageHeader>
+      </GscSitePageHeader>
     </template>
 
     <SiteTabs :site-id="siteId" />

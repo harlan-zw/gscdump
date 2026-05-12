@@ -1,11 +1,30 @@
-// Provide the analytics context at the Nuxt app root. Doing this in a plugin
-// (instead of `provideGscAnalytics()` inside each layout) means every page /
-// component — including routes that opt out of the default layout — can
-// inject without boilerplate. Consumers can still call `provideGscAnalytics()`
-// inside a layout to override with a scoped context.
+// Layer-wide DI: analytics context, query dispatcher, fetch instance, and
+// analytics client. Hosts override any provide via a later plugin (Nuxt
+// picks the last provider).
 
-import { createGscAnalyticsContext, GSC_ANALYTICS_KEY } from '../composables/useGscAnalytics'
+import type { AnalyticsFetch } from '@gscdump/sdk'
+import { createAnalyticsClient } from '@gscdump/sdk'
+import { createDefaultGscQueryDispatcher } from '../composables/_useGscQueryDispatcher'
+import { createGscAnalyticsContext } from '../composables/useGscAnalytics'
+import { useGscAnalyticsConfig } from '../composables/useGscAnalyticsConfig'
+import { resolveGscAuthHeaders } from '../composables/useGscAuth'
+import { createGscFetch } from '../utils/gsc-fetch'
 
-export default defineNuxtPlugin((nuxtApp) => {
-  nuxtApp.vueApp.provide(GSC_ANALYTICS_KEY, createGscAnalyticsContext())
+export default defineNuxtPlugin(() => {
+  const cfg = useGscAnalyticsConfig()
+  const gscFetch = createGscFetch(cfg.apiBase, cfg.toastErrors)
+  const gscAnalyticsClient = createAnalyticsClient({
+    apiBase: cfg.apiBase || '',
+    fetch: gscFetch as unknown as AnalyticsFetch,
+    headers: () => new Headers(resolveGscAuthHeaders()),
+  })
+
+  return {
+    provide: {
+      gscAnalytics: createGscAnalyticsContext(),
+      gscQueryDispatcher: createDefaultGscQueryDispatcher(),
+      gscFetch,
+      gscAnalyticsClient,
+    },
+  }
 })

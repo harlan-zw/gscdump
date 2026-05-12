@@ -37,7 +37,6 @@ const isEmpty = computed(() => status === 'success' && empty)
 
 <template>
   <div data-ui="UiWidgetState" :aria-busy="isLoading">
-    <!-- Loading -->
     <slot v-if="isLoading" name="loading">
       <UiSkeleton v-if="skeletonType === 'text'" :lines="skeletonLines" />
       <div v-else-if="skeletonType === 'bar'" class="flex items-end gap-1 h-40">
@@ -45,8 +44,6 @@ const isEmpty = computed(() => status === 'success' && empty)
       </div>
       <UiSkeleton v-else type="circle" :base="skeletonLines" />
     </slot>
-
-    <!-- Error -->
     <slot v-else-if="isError" name="error" :error="error" :retry="() => emit('retry')">
       <div class="flex flex-col items-center justify-center py-8 px-4 text-center">
         <div class="size-10 rounded-xl bg-error/10 flex items-center justify-center mb-3">
@@ -63,13 +60,9 @@ const isEmpty = computed(() => status === 'success' && empty)
         </UButton>
       </div>
     </slot>
-
-    <!-- Empty -->
     <slot v-else-if="isEmpty" name="empty">
       <UiNoData :icon="emptyIcon" :title="emptyTitle" :message="emptyMessage" />
     </slot>
-
-    <!-- Active -->
     <slot v-else />
   </div>
 </template>
