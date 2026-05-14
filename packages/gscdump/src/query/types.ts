@@ -104,6 +104,10 @@ export interface BuilderState {
   dimensions: Dimension[]
   metrics?: Metric[]
   filter?: Filter<any>
+  // Row-level WHERE filter on raw metric columns (clicks/impressions/sum_position).
+  // Distinct from `filter` HAVING semantics: applied pre-aggregation to cut scan cost.
+  // Caller-controlled — unsafe for queries that need zero-impression rows.
+  prefilter?: Filter<any>
   orderBy?: {
     column: Metric | 'date'
     dir: 'asc' | 'desc'

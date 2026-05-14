@@ -29,6 +29,7 @@ export interface ResolverAdapter<TableKey extends string = string> {
   metricSql: (metric: Metric, tableKey: TableKey) => SQL
   dimensionPredicates: (filters: InternalFilter[], tableKey: TableKey) => SQL[]
   havingPredicates: (filters: InternalFilter[], tableKey: TableKey) => SQL[]
+  prefilterPredicates: (filters: InternalFilter[], tableKey: TableKey) => SQL[]
   topLevelPredicate: (filters: InternalFilter[], tableKey: TableKey) => SQL | undefined
   compile: (query: SQL) => { sql: string, params: unknown[] }
 }

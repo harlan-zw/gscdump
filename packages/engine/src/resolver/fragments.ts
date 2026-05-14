@@ -43,6 +43,7 @@ export interface SqlFragments<TableKey extends string> {
   dimExprSql: (dim: Dimension, tableKey: TableKey) => SQL
   metricSql: (metric: Metric, tableKey: TableKey) => SQL
   havingPredicates: (filters: InternalFilter[], tableKey: TableKey) => SQL[]
+  prefilterPredicates: (filters: InternalFilter[], tableKey: TableKey) => SQL[]
   dimensionPredicates: (filters: InternalFilter[], tableKey: TableKey) => SQL[]
   topLevelPredicate: (filters: InternalFilter[], tableKey: TableKey) => SQL | undefined
 }
@@ -174,6 +175,46 @@ export function createSqlFragments<TableKey extends string>(
     return preds
   }
 
+  // Row-level WHERE predicates on raw metric columns (clicks/impressions/sum_position).
+  // ctr/position are derived aggregates and have no per-row equivalent — they're skipped.
+  function prefilterPredicates(filters: InternalFilter[], tableKey: TableKey): SQL[] {
+    const t = schema[tableKey] as unknown as Record<string, SQL>
+    const preds: SQL[] = []
+    for (const f of filters) {
+      const metric = f.dimension
+      let col: SQL | undefined
+      if (metric === 'clicks')
+        col = t.clicks
+      else if (metric === 'impressions')
+        col = t.impressions
+      else if (metric === 'position')
+        col = t.sum_position
+      if (!col)
+        continue
+      const v = Number(f.expression)
+      switch (f.operator) {
+        case 'metricGte':
+          preds.push(sql`${col} >= ${v}`)
+          break
+        case 'metricGt':
+          preds.push(sql`${col} > ${v}`)
+          break
+        case 'metricLte':
+          preds.push(sql`${col} <= ${v}`)
+          break
+        case 'metricLt':
+          preds.push(sql`${col} < ${v}`)
+          break
+        case 'metricBetween': {
+          const v2 = Number(f.expression2!)
+          preds.push(sql`${col} >= ${v} AND ${col} <= ${v2}`)
+          break
+        }
+      }
+    }
+    return preds
+  }
+
   function dimensionPredicates(filters: InternalFilter[], tableKey: TableKey): SQL[] {
     const preds: SQL[] = []
     for (const f of filters) {
@@ -234,6 +275,7 @@ export function createSqlFragments<TableKey extends string>(
     dimExprSql,
     metricSql,
     havingPredicates,
+    prefilterPredicates,
     dimensionPredicates,
     topLevelPredicate,
   }

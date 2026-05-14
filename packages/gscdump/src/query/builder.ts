@@ -24,6 +24,7 @@ export interface GSCQueryBuilder<
     <T extends SelectableColumn[]>(...cols: T): GSCQueryBuilder<ExtractDimensions<T> & Dimension[], C>
   }
   where: <F extends Filter<any>>(filter: F) => GSCQueryBuilder<D, C & F['_constraints']>
+  prefilter: <F extends Filter<any>>(filter: F) => GSCQueryBuilder<D, C>
   orderBy: (col: OrderableColumn, dir: 'asc' | 'desc') => GSCQueryBuilder<D, C>
   limit: (n: number) => GSCQueryBuilder<D, C>
   offset: (n: number) => GSCQueryBuilder<D, C>
@@ -72,6 +73,13 @@ function createBuilder<D extends Dimension[], C>(state: BuilderState): GSCQueryB
       return createBuilder<D, C & F['_constraints']>({
         ...state,
         filter,
+      })
+    },
+
+    prefilter<F extends Filter<any>>(filter: F) {
+      return createBuilder<D, C>({
+        ...state,
+        prefilter: filter,
       })
     },
 

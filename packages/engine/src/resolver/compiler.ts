@@ -159,6 +159,7 @@ function buildScope<TK extends string>(
 
   const dimFilters = toInternalDimensionFilters(plan.dimensionFilters)
   const metricFilters = toInternalMetricFilters(plan.metricFilters)
+  const prefilters = toInternalMetricFilters(plan.prefilters)
   const groupByDims = plan.groupByDimensions
   const hasDate = plan.hasDate
   const metrics = plan.metrics
@@ -168,6 +169,7 @@ function buildScope<TK extends string>(
     wherePredicates.push(sql`${adapter.siteIdColRef(tableKey)} = ${siteId}`)
   wherePredicates.push(sql`${adapter.dateColRef(tableKey)} >= ${plan.dateRange.startDate}`)
   wherePredicates.push(sql`${adapter.dateColRef(tableKey)} <= ${plan.dateRange.endDate}`)
+  wherePredicates.push(...adapter.prefilterPredicates(prefilters, tableKey))
   // Prefer the tree (preserves OR groups); fall back to flat AND of leaves
   // for plans built without tree support (older callers).
   const dimSql = plan.dimensionFilterTree

@@ -171,3 +171,45 @@ describe('resolveToSQLOptimized SUM casts', () => {
     expect(r.sql).not.toMatch(/(?<!CAST\()SUM\(impressions\) OVER\(\) as totalImpressions/)
   })
 })
+
+describe('prefilter (row-level WHERE on raw metrics)', () => {
+  it('omits the predicate when no prefilter is set', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolveToSQLOptimized(state({}), { adapter })
+    expect(r.sql).not.toMatch(/impressions"?\s*>=/)
+  })
+
+  it('compiles metricGte(impressions) into WHERE, not HAVING', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolveToSQLOptimized(state({
+      prefilter: {
+        _filters: [{ dimension: 'impressions', operator: 'metricGte', expression: '10' }],
+      } as any,
+    }), { adapter })
+    expect(r.sql).toMatch(/WHERE[\s\S]*"impressions"\s*>=\s*\$\d+/)
+    expect(r.sql).not.toMatch(/HAVING[\s\S]*impressions/)
+    expect(r.params).toContain(10)
+  })
+
+  it('supports metricBetween on raw clicks column', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolveToSQLOptimized(state({
+      prefilter: {
+        _filters: [{ dimension: 'clicks', operator: 'metricBetween', expression: '5', expression2: '50' }],
+      } as any,
+    }), { adapter })
+    expect(r.sql).toMatch(/"clicks"\s*>=\s*\$\d+\s*AND\s*"[^"]*"?\.?"?clicks"\s*<=\s*\$\d+/)
+    expect(r.params).toContain(5)
+    expect(r.params).toContain(50)
+  })
+
+  it('skips ctr (derived aggregate, no per-row equivalent)', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolveToSQLOptimized(state({
+      prefilter: {
+        _filters: [{ dimension: 'ctr', operator: 'metricGte', expression: '0.05' }],
+      } as any,
+    }), { adapter })
+    expect(r.params).not.toContain(0.05)
+  })
+})

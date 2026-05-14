@@ -40,6 +40,7 @@ export function createResolverAdapter<TableKey extends string>(
     metricSql: runtime.metricSql,
     dimensionPredicates: runtime.dimensionPredicates,
     havingPredicates: runtime.havingPredicates,
+    prefilterPredicates: runtime.prefilterPredicates,
     topLevelPredicate: runtime.topLevelPredicate,
     compile: config.compile,
   }

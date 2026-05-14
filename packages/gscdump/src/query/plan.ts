@@ -78,6 +78,9 @@ export interface LogicalQueryPlan {
   dimensionFilters: LogicalDimensionFilter[]
   dimensionFilterTree?: LogicalFilterNode
   metricFilters: LogicalMetricFilter[]
+  // Row-level WHERE filters on raw metric columns. Distinct from `metricFilters`
+  // (HAVING). Sourced from `state.prefilter`.
+  prefilters: LogicalMetricFilter[]
   specialFilters: {
     topLevel: boolean
   }
@@ -212,6 +215,8 @@ export function buildLogicalPlan(
   const allFilters = collectInternalFilters(normalizedFilter)
   const metricFilters = extractMetricFilters(normalizedFilter)
   const specialFilters = extractSpecialOperatorFilters(normalizedFilter)
+  const normalizedPrefilter = normalizeFilter(state.prefilter) as FilterInput | undefined
+  const prefilters = extractMetricFilters(normalizedPrefilter)
 
   const queryParams: Partial<Record<QueryParamName, string>> = {}
   const dimensionFilters: LogicalDimensionFilter[] = []
@@ -253,6 +258,12 @@ export function buildLogicalPlan(
     dimensionFilters,
     dimensionFilterTree,
     metricFilters: metricFilters.map(filter => ({
+      metric: filter.dimension as Metric,
+      operator: filter.operator as MetricOperator,
+      expression: Number(filter.expression),
+      expression2: filter.expression2 == null ? undefined : Number(filter.expression2),
+    })),
+    prefilters: prefilters.map(filter => ({
       metric: filter.dimension as Metric,
       operator: filter.operator as MetricOperator,
       expression: Number(filter.expression),
