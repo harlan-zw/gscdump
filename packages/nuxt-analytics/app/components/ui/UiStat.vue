@@ -177,6 +177,7 @@ const formattedTrend = computed(() => {
         <span v-if="trend != null && trend !== 0" class="text-xs font-medium font-mono tabular-nums" :class="trendColorClass">
           {{ formattedTrend }}
         </span>
+        <span v-else class="text-xs font-mono tabular-nums text-dimmed" aria-label="No comparison data">—</span>
         <span v-if="trendLabel" class="text-xs text-dimmed">{{ trendLabel }}</span>
       </slot>
       <span
@@ -253,6 +254,11 @@ const formattedTrend = computed(() => {
                   />
                   {{ formattedTrend }}
                 </span>
+                <span
+                  v-else
+                  class="inline-flex items-center px-1.5 py-px rounded-md text-[10px] font-medium font-mono tabular-nums leading-tight bg-muted/40 text-dimmed"
+                  aria-label="No comparison data"
+                >—</span>
                 <span v-if="trendLabel" class="text-xs text-dimmed">{{ trendLabel }}</span>
               </slot>
             </div>
