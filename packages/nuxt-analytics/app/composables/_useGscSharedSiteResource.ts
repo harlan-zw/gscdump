@@ -1,20 +1,65 @@
 // Per-site shared resource bag. Consolidates the bind/unbind/refcount pattern
 // that useGscAnalyzer and useGscAnalyticsSourceInfo each reinvented.
 //
-// Two modes via `onDispose`:
+// Two entry points share one underlying bag (a module-scope WeakMap keyed by
+// the NuxtApp instance, so each app gets isolated state and SSR is safe):
+//   - useGscSharedSiteResource → composable, refcounted, scope-disposed.
+//   - acquireSharedEntry       → non-composable acquire for boot-time / non-
+//                                setup callers (e.g. analyzer createInstance).
+//
+// Refcounting via `onDispose` is opt-in:
 //   - omitted     → entry persists forever (cheap, share-only; e.g. /source-info)
 //   - provided    → refcounted; runs onDispose + drops the entry at refs=0
 //
 // Returns a `bound` computed that tracks the entry for the current siteId. The
 // caller wraps it in `computed(() => bound.value?.field ?? default)` to expose
-// reactive fields — same shape as the two prior hand-rolled adapters.
+// reactive fields.
 
 import type { ComputedRef } from '@vue/runtime-core'
-import { useGscAnalyticsContext } from './useGscAnalytics'
+import type { NuxtApp } from 'nuxt/app'
 
 interface CacheEntry<T> {
   entry: T
   refs: number
+}
+
+type NamespaceBag = Map<string, Map<string, CacheEntry<unknown>>>
+
+const bags = new WeakMap<NuxtApp, NamespaceBag>()
+
+function namespaceMap(namespace: string): Map<string, CacheEntry<unknown>> {
+  const app = useNuxtApp()
+  let bag = bags.get(app)
+  if (!bag) {
+    bag = new Map()
+    bags.set(app, bag)
+  }
+  let m = bag.get(namespace)
+  if (!m) {
+    m = new Map()
+    bag.set(namespace, m)
+  }
+  return m
+}
+
+/**
+ * Non-composable acquire — returns (and lazily creates) the shared entry for
+ * `(namespace, siteId)`. No refcount, no scope dispose. Intended for callers
+ * outside a Vue setup scope (analyzer boot IIFE, one-shot loaders) that still
+ * need to share state with the reactive `useGscSharedSiteResource` consumers.
+ */
+export function acquireSharedEntry<T>(
+  namespace: string,
+  siteId: string,
+  factory: (siteId: string) => T,
+): T {
+  const cache = namespaceMap(namespace) as Map<string, CacheEntry<T>>
+  let inst = cache.get(siteId)
+  if (!inst) {
+    inst = { entry: factory(siteId), refs: 0 }
+    cache.set(siteId, inst)
+  }
+  return inst.entry
 }
 
 export interface UseSharedSiteResourceOptions<T> {
@@ -29,34 +74,12 @@ export interface UseSharedSiteResourceReturn<T> {
   currentSiteId: Ref<string | null>
 }
 
-interface SharedResources {
-  get: (namespace: string) => Map<string, CacheEntry<unknown>>
-}
-
-function getResourcesBag(ctx: ReturnType<typeof useGscAnalyticsContext>): SharedResources {
-  // `_sharedResources` is declared on GscAnalyticsContext; cast preserves the
-  // generic per-namespace value type at the call site.
-  const bag = ctx._sharedResources as Map<string, Map<string, CacheEntry<unknown>>>
-  return {
-    get(namespace) {
-      let m = bag.get(namespace)
-      if (!m) {
-        m = new Map()
-        bag.set(namespace, m)
-      }
-      return m
-    },
-  }
-}
-
 export function useGscSharedSiteResource<T>(
   namespace: string,
   siteId: MaybeRefOrGetter<string | null | undefined>,
   opts: UseSharedSiteResourceOptions<T>,
 ): UseSharedSiteResourceReturn<T> {
-  const ctx = useGscAnalyticsContext()
-  const resources = getResourcesBag(ctx)
-  const cache = resources.get(namespace) as Map<string, CacheEntry<T>>
+  const cache = namespaceMap(namespace) as Map<string, CacheEntry<T>>
 
   const boundRef = shallowRef<T | null>(null)
   const currentSiteId = ref<string | null>(null)

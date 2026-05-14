@@ -4,10 +4,13 @@
 //
 // Use this to render locked/ghost UI upfront without issuing a doomed
 // analyze() call for each panel.
+//
+// The reactive composable and the non-reactive `loadSourceInfoFor` (used by
+// `useGscAnalyzer.createInstance`) share one entry per site via the shared
+// site-resource seam, so they collapse to one network read per session.
 
 import type { SourceCapabilities } from '@gscdump/analysis'
-import { useGscSharedSiteResource } from './_useGscSharedSiteResource'
-import { useGscAnalyticsContext } from './useGscAnalytics'
+import { acquireSharedEntry, useGscSharedSiteResource } from './_useGscSharedSiteResource'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export interface GscAnalyticsSourceInfo {
@@ -42,23 +45,25 @@ interface SourceInfoEntry {
   loading: Ref<boolean>
   error: Ref<Error | null>
   pending: Ref<Promise<void> | null>
-  siteId: string
 }
 
-function createEntry(siteId: string): SourceInfoEntry {
+const SOURCE_INFO_NAMESPACE = 'source-info'
+
+function createEntry(): SourceInfoEntry {
   return {
     info: ref<GscAnalyticsSourceInfo | null>(null),
     loading: ref(false),
     error: ref<Error | null>(null),
     pending: shallowRef<Promise<void> | null>(null),
-    siteId,
   }
 }
 
-async function fetchInto(entry: SourceInfoEntry): Promise<void> {
+function fetchInto(entry: SourceInfoEntry, siteId: string): Promise<void> {
+  if (entry.pending.value)
+    return entry.pending.value
   entry.loading.value = true
   entry.error.value = null
-  const p = (useGscAnalyticsClient().getSourceInfo(entry.siteId) as Promise<GscAnalyticsSourceInfo>)
+  const p = (useGscAnalyticsClient().getSourceInfo(siteId) as Promise<GscAnalyticsSourceInfo>)
     .then((data) => {
       entry.info.value = data
     })
@@ -70,46 +75,21 @@ async function fetchInto(entry: SourceInfoEntry): Promise<void> {
       entry.pending.value = null
     })
   entry.pending.value = p
-  await p
-}
-
-const SOURCE_INFO_NAMESPACE = 'source-info'
-
-function acquireSourceInfoEntry(siteId: string): SourceInfoEntry {
-  const ctx = useGscAnalyticsContext()
-  const bag = ctx._sharedResources as Map<string, Map<string, { entry: SourceInfoEntry, refs: number }>>
-  let cache = bag.get(SOURCE_INFO_NAMESPACE)
-  if (!cache) {
-    cache = new Map()
-    bag.set(SOURCE_INFO_NAMESPACE, cache)
-  }
-  let cached = cache.get(siteId)
-  if (!cached) {
-    cached = { entry: createEntry(siteId), refs: 0 }
-    cache.set(siteId, cached)
-  }
-  return cached.entry
+  return p
 }
 
 /**
  * Non-reactive source-info loader for callers outside a Vue scope (e.g. the
  * analyzer's boot IIFE in `useGscAnalyzer.createInstance`). Shares the same
- * per-site cache `useGscAnalyticsSourceInfo` consumes, so the gating UI and
- * the analyzer mode probe collapse to one network read per site per session.
- *
- * If a fetch is already in flight (kicked off by `useGscAnalyticsSourceInfo`'s
- * reactive watcher), this awaits it instead of issuing a duplicate request.
+ * per-site cache `useGscAnalyticsSourceInfo` consumes via the shared
+ * site-resource seam, so gating UI and the analyzer mode probe collapse to
+ * one network read per site per session.
  */
 export async function loadSourceInfoFor(siteId: string): Promise<GscAnalyticsSourceInfo> {
-  const entry = acquireSourceInfoEntry(siteId)
+  const entry = acquireSharedEntry(SOURCE_INFO_NAMESPACE, siteId, createEntry)
   if (entry.info.value)
     return entry.info.value
-  if (entry.pending.value) {
-    await entry.pending.value
-  }
-  else {
-    await fetchInto(entry)
-  }
+  await fetchInto(entry, siteId)
   if (entry.error.value)
     throw entry.error.value
   if (!entry.info.value)
@@ -120,15 +100,20 @@ export async function loadSourceInfoFor(siteId: string): Promise<GscAnalyticsSou
 export function useGscAnalyticsSourceInfo(
   siteId: MaybeRefOrGetter<string | null | undefined>,
 ): GscAnalyticsSourceInfoState {
-  const { bound } = useGscSharedSiteResource<SourceInfoEntry>('source-info', siteId, {
-    factory: id => createEntry(id),
+  const { bound } = useGscSharedSiteResource<SourceInfoEntry>(SOURCE_INFO_NAMESPACE, siteId, {
+    factory: () => createEntry(),
     // No onDispose: source-info is cheap and persistent across the session.
   })
 
   if (import.meta.client) {
     watch(bound, (entry: SourceInfoEntry | null) => {
-      if (entry && entry.info.value == null && entry.pending.value == null && entry.error.value == null)
-        void fetchInto(entry)
+      if (!entry)
+        return
+      const id = toValue(siteId)
+      if (!id)
+        return
+      if (entry.info.value == null && entry.pending.value == null && entry.error.value == null)
+        void fetchInto(entry, id)
     }, { immediate: true })
   }
 
@@ -138,9 +123,11 @@ export function useGscAnalyticsSourceInfo(
 
   async function refresh(): Promise<void> {
     const entry = bound.value
-    if (!entry)
+    const id = toValue(siteId)
+    if (!entry || !id)
       return
-    await fetchInto(entry)
+    entry.info.value = null
+    await fetchInto(entry, id)
   }
 
   function supports(analyzerId: MaybeRefOrGetter<string>): ComputedRef<boolean> {

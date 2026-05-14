@@ -5,5 +5,6 @@ export default defineProject({
     name: '@gscdump/mcp',
     globals: true,
     setupFiles: ['../../vitest.setup.ts'],
+    passWithNoTests: true,
   },
 })

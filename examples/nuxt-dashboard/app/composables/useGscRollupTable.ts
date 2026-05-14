@@ -1,6 +1,7 @@
-// Top-N rollup table state for list pages.
+// Top-N rollup table state for the dashboard's list pages.
 //
-// Owns the canonical wiring previously duplicated across consumer apps:
+// Owns the canonical wiring that the two rollup-backed list pages
+// (queries/index, pages/index) previously duplicated:
 //   - shared `useGscPeriod` + windowed range
 //   - `useGscRollup` fetch
 //   - URL-synced search/sort via `useGscTableState`
@@ -8,10 +9,10 @@
 //   - position-aware sort (sort key 'position' invokes `positionFor`)
 //   - top-N slice (default 100)
 //
-// Row shape contract: `impressions` + `sum_position` so `positionFor` works
-// without a caller-supplied accessor.
+// Constraint on TRow: must include `impressions` and `sum_position` so
+// `positionFor` works without a caller-supplied accessor.
 
-import type { MaybeRefOrGetter, Ref } from '@vue/runtime-core'
+import type { ComputedRef, MaybeRefOrGetter, Ref } from 'vue'
 
 interface SortState { column: string, direction: 'asc' | 'desc' }
 
@@ -24,11 +25,23 @@ export interface UseGscRollupTableOptions<TRow> {
   debounceMs?: number
 }
 
-// eslint-disable-next-line ts/explicit-function-return-type -- complex generic inference; explicit type would diverge as composables evolve
+interface UseGscRollupTableReturn<TRow> {
+  period: ReturnType<typeof useGscPeriod>['period']
+  compareMode: ReturnType<typeof useGscPeriod>['compareMode']
+  stableData: ReturnType<typeof useGscPeriod>['stableData']
+  range: ReturnType<typeof useGscPeriod>['range']
+  q: ReturnType<typeof useGscTableState>['q']
+  sort: ReturnType<typeof useGscTableState>['sort']
+  toggleSort: ReturnType<typeof useGscTableState>['toggleSort']
+  payload: Ref<TRow[] | null>
+  loading: Readonly<Ref<boolean>>
+  rows: ComputedRef<TRow[]>
+}
+
 export function useGscRollupTable<
   TRow extends { impressions: number, sum_position: number },
->(opts: UseGscRollupTableOptions<TRow>) {
-  const { period, compareMode, stableData, range } = useGscPeriod()
+>(opts: UseGscRollupTableOptions<TRow>): UseGscRollupTableReturn<TRow> {
+  const { period, compareMode, stableData, range } = useGscPeriod({ shared: true })
   const windowRange = computed(() => ({ start: range.value.start, end: range.value.end }))
 
   const { data: payload, loading } = useGscRollup<TRow[]>(
@@ -39,14 +52,22 @@ export function useGscRollupTable<
 
   const { q, sort, toggleSort } = useGscTableState({ defaultSort: opts.defaultSort })
 
-  const searchDebounced = refDebounced<string>(q, opts.debounceMs ?? 150)
+  const searchDebounced = ref('')
+  let handle: ReturnType<typeof setTimeout> | null = null
+  watch(q, (v) => {
+    if (handle)
+      clearTimeout(handle)
+    handle = setTimeout(() => {
+      searchDebounced.value = v
+    }, opts.debounceMs ?? 150)
+  })
 
   const limit = opts.limit ?? 100
   const rows = computed<TRow[]>(() => {
     const needle = searchDebounced.value.trim().toLowerCase()
     const source = (payload.value ?? []).slice()
     const filtered = needle
-      ? source.filter((r: TRow) => {
+      ? source.filter((r) => {
           const v = (r as Record<string, unknown>)[opts.filterField]
           return typeof v === 'string' && v.toLowerCase().includes(needle)
         })
@@ -54,7 +75,7 @@ export function useGscRollupTable<
     const s = sort.value
     if (s) {
       const dir = s.direction === 'desc' ? -1 : 1
-      filtered.sort((a: TRow, b: TRow) => {
+      filtered.sort((a, b) => {
         const av = s.column === 'position' ? positionFor(a) : ((a as Record<string, unknown>)[s.column] as number)
         const bv = s.column === 'position' ? positionFor(b) : ((b as Record<string, unknown>)[s.column] as number)
         return av < bv ? -1 * dir : av > bv ? 1 * dir : 0

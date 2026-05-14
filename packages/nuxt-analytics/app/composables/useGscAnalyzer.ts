@@ -22,7 +22,7 @@ import { useGscAnalyticsContext } from './useGscAnalytics'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 import { useGscAnalyticsConfig } from './useGscAnalyticsConfig'
 import { loadSourceInfoFor } from './useGscAnalyticsSourceInfo'
-import { readGscAuth, resolveGscAuthHeaders } from './useGscAuth'
+import { resolveGscAuthHeaders } from './useGscAuth'
 
 export interface GscAnalyzerTimings {
   bootMs: number
@@ -258,7 +258,7 @@ function createInstance(
     return rt.query(sql, params)
   }
 
-  async function runServerAnalyze(params: AnalysisParams, signal?: AbortSignal): Promise<AnalysisResult & { queryMs: number }> {
+  async function runServerAnalyze(params: AnalysisParams, _signal?: AbortSignal): Promise<AnalysisResult & { queryMs: number }> {
     const out = await useGscAnalyticsClient().analyze<AnalysisResult & { queryMs?: number }>(siteId, params)
     return {
       results: coerceResults(out.results) as AnalysisResult['results'],

@@ -544,6 +544,9 @@ importers:
       '@gscdump/contracts':
         specifier: workspace:*
         version: link:../contracts
+      gscdump:
+        specifier: workspace:*
+        version: link:../gscdump
       ofetch:
         specifier: catalog:deps
         version: 1.5.1

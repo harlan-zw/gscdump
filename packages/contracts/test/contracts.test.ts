@@ -1,13 +1,12 @@
 import {
+  analyticsRoutes,
+  GSCDUMP_ONBOARDING_CONTRACT_VERSION,
   partnerEndpointSchemas,
   partnerRoutes,
-  analyticsRoutes,
-  legacyWebhookPayloadSchema,
   partnerWebhookEnvelopeSchema,
   VALID_WEBHOOK_EVENTS,
   WEBHOOK_CONTRACT_VERSION,
   WEBHOOK_TIMESTAMP_HEADER,
-  GSCDUMP_ONBOARDING_CONTRACT_VERSION,
 } from '../src'
 
 describe('@gscdump/contracts', () => {
@@ -24,7 +23,7 @@ describe('@gscdump/contracts', () => {
     expect(partnerEndpointSchemas.registerSite.body.parse({
       userId: 'user_1',
       siteUrl: 'sc-domain:example.com',
-      webhookEvents: ['site.completed', 'site.analytics.ready'],
+      webhookEvents: ['site.analytics.ready'],
     })).toMatchObject({ userId: 'user_1' })
     expect(partnerEndpointSchemas.bulkRegisterSites.body.parse({
       userId: 'user_1',
@@ -51,18 +50,6 @@ describe('@gscdump/contracts', () => {
       lifecycleRevision: 1,
       occurredAt: '2026-05-11T00:00:00.000Z',
       data: {
-        legacyEvent: 'site.completed',
-        legacyPayload: {
-          event: 'site.completed',
-          siteId: 'site_1',
-          siteUrl: 'sc-domain:example.com',
-          status: 'synced',
-          daysSynced: 28,
-          failedJobs: 0,
-          oldestDateSynced: '2026-04-01',
-          newestDateSynced: '2026-04-30',
-          timestamp: 1770000000,
-        },
         siteId: 'site_1',
         siteUrl: 'sc-domain:example.com',
         status: 'synced',
@@ -73,16 +60,6 @@ describe('@gscdump/contracts', () => {
         timestamp: 1770000000,
       },
     })).toMatchObject({ event: 'site.analytics.ready' })
-  })
-
-  it('validates legacy compatibility webhook payloads', () => {
-    expect(legacyWebhookPayloadSchema.parse({
-      event: 'auth.failed',
-      siteId: 'site_1',
-      siteUrl: 'sc-domain:example.com',
-      reason: 'site_not_in_gsc',
-      message: 'User no longer has access to this GSC property',
-    })).toMatchObject({ event: 'auth.failed' })
   })
 
   it('validates lifecycle onboarding responses', () => {

@@ -30,7 +30,7 @@ export interface GscAnalyticsRuntimeConfig {
   defaultEngine: 'auto' | 'browser' | 'server'
 }
 
-declare module 'nuxt/schema' {
+declare module '@nuxt/schema' {
   interface PublicRuntimeConfig {
     analytics: GscAnalyticsRuntimeConfig
   }

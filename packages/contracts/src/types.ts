@@ -1,10 +1,10 @@
+import type { AccountNextAction, AccountStatus, PartnerLifecycleResponse, PartnerLifecycleSite } from './onboarding'
+
 export type {
   PartnerLifecycleAccount,
   PartnerLifecycleResponse,
   PartnerLifecycleSite,
 } from './onboarding'
-
-import type { AccountNextAction, AccountStatus, PartnerLifecycleResponse, PartnerLifecycleSite } from './onboarding'
 
 export type TableName = 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords' | 'search_appearance'
 export type Row = Record<string, unknown>
@@ -28,17 +28,24 @@ export interface TenantCtx {
   siteId?: string
 }
 
-export type Dimension = 'page' | 'query' | 'country' | 'device' | 'date' | 'searchAppearance'
+export type Dimension = 'page' | 'query' | 'queryCanonical' | 'country' | 'device' | 'date' | 'searchAppearance'
 export type Metric = 'clicks' | 'impressions' | 'ctr' | 'position'
-export type Filter = Record<string, unknown>
+// Wire-format filter — server-side normalizer accepts both the JSON filter form
+// (`{ type, column, value, ... }`) and the branded builder form from
+// `gscdump/query` (`{ __filterBrand, _filters, _groupType, ... }`). Kept
+// `unknown` here so callers can pass either without type-system friction.
+export type Filter = unknown
 
+// Wire shape of an analytics query. Matches the gscdump.com server normalizer
+// (`normalizeBuilderState` in gscdump.com `server/utils/normalize-filter.ts`)
+// and the builder output of `gsc(...).getState()` from `gscdump/query`.
 export interface BuilderState {
   dimensions: Dimension[]
   metrics?: Metric[]
   filter?: Filter
-  orderBy?: { column: Metric | 'date', direction: 'asc' | 'desc' }
-  limit?: number
+  orderBy?: { column: Metric | 'date', dir: 'asc' | 'desc' }
   rowLimit?: number
+  startRow?: number
 }
 
 export interface GscApiRange {
@@ -1313,14 +1320,7 @@ export type CanonicalWebhookEventType
     | 'site.auth.failed'
     | 'job.failed'
 
-export type LegacyWebhookEventType
-  = | 'job.completed'
-    | 'job.failed'
-    | 'site.completed'
-    | 'indexing.completed'
-    | 'auth.failed'
-
-export type WebhookEventType = CanonicalWebhookEventType | LegacyWebhookEventType
+export type WebhookEventType = CanonicalWebhookEventType
 
 export interface WebhookEnvelope<TData extends Record<string, unknown> = Record<string, unknown>> {
   contractVersion: string
@@ -1336,92 +1336,10 @@ export interface WebhookEnvelope<TData extends Record<string, unknown> = Record<
   data: TData
 }
 
-export interface BaseWebhookData {
-  legacyEvent: WebhookEventType
-  legacyPayload?: Record<string, unknown> & { event?: LegacyWebhookEventType }
-}
-
-export interface JobCompletedWebhookData extends BaseWebhookData {
-  legacyEvent: 'job.completed'
-  legacyPayload: Record<string, unknown> & { event: 'job.completed' }
-  event?: 'job.completed'
-  siteId: string
-  siteUrl: string
-  table?: string
-  date: string
-  rowsFetched: number
-  rowsInserted: number
-  timestamp: number
-}
-
-export interface JobFailedWebhookData extends BaseWebhookData {
-  legacyEvent: 'job.failed'
-  legacyPayload: Record<string, unknown> & { event: 'job.failed' }
-  event?: 'job.failed'
-  siteId: string
-  siteUrl: string
-  table: string
-  date: string
-  error: string
-  timestamp: number
-}
-
-export interface SiteAnalyticsReadyWebhookData extends BaseWebhookData {
-  legacyEvent: 'site.completed'
-  legacyPayload: Record<string, unknown> & { event: 'site.completed' }
-  event?: 'site.completed'
-  siteId: string
-  siteUrl: string
-  status: string
-  daysSynced: number
-  failedJobs: number
-  oldestDateSynced?: string | null
-  newestDateSynced?: string | null
-  timestamp: number
-}
-
-export interface SiteIndexingReadyWebhookData extends BaseWebhookData {
-  legacyEvent: 'indexing.completed'
-  legacyPayload: Record<string, unknown> & { event: 'indexing.completed' }
-  event?: 'indexing.completed'
-  siteId: string
-  siteUrl: string
-  totalUrls: number
-  indexedCount: number
-  notIndexedCount: number
-  errorCount: number
-  urlsChecked: number
-  timestamp: number
-}
-
-export interface SiteAuthFailedWebhookData extends BaseWebhookData {
-  legacyEvent: 'auth.failed'
-  legacyPayload: Record<string, unknown> & { event: 'auth.failed' }
-  event?: 'auth.failed'
-  siteId: string
-  siteUrl: string
-  reason?: string
-  message?: string
-  reauthRequired?: boolean
-  authFailureCount?: number
-  error?: string
-  timestamp?: number
-}
-
-export interface LifecycleWebhookData extends BaseWebhookData {
-  legacyEvent: 'user.lifecycle.changed' | 'site.lifecycle.changed' | 'site.analytics.ready' | 'site.indexing.ready' | 'site.auth.failed'
-}
-
-export type PartnerWebhookData
-  = | JobCompletedWebhookData
-    | JobFailedWebhookData
-    | SiteAnalyticsReadyWebhookData
-    | SiteIndexingReadyWebhookData
-    | SiteAuthFailedWebhookData
-    | LifecycleWebhookData
+export type PartnerWebhookData = Record<string, unknown>
 
 export interface CreateWebhookEnvelopeOptions<TData extends Record<string, unknown> = Record<string, unknown>> {
-  event: WebhookEventType
+  event: CanonicalWebhookEventType
   partnerId: string
   userId: string | null
   siteId?: string

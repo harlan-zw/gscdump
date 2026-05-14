@@ -26,17 +26,23 @@ export interface UseGscAnalyzerBatchOptions {
   filter?: (id: string) => boolean
 }
 
+export interface UseGscAnalyzerBatchReturn<TResult> {
+  states: Ref<Record<string, GscAnalyzerBatchEntry<TResult>>>
+  running: Ref<boolean>
+  run: () => Promise<void>
+}
+
 export function useGscAnalyzerBatch<TResult = unknown>(
   runner: GscAnalyzerBatchRunner,
   ids: MaybeRefOrGetter<readonly string[]>,
   dateRange: MaybeRefOrGetter<{ start: string, end: string }>,
   opts: UseGscAnalyzerBatchOptions = {},
-) {
+): UseGscAnalyzerBatchReturn<TResult> {
   const states = ref<Record<string, GscAnalyzerBatchEntry<TResult>>>({}) as Ref<Record<string, GscAnalyzerBatchEntry<TResult>>>
   const running = ref(false)
   let token = 0
 
-  function reset(currentIds: readonly string[]) {
+  function reset(currentIds: readonly string[]): void {
     const next: Record<string, GscAnalyzerBatchEntry<TResult>> = {}
     for (const id of currentIds)
       next[id] = { status: 'pending', result: null, error: null }
@@ -61,7 +67,7 @@ export function useGscAnalyzerBatch<TResult = unknown>(
         queue.push(id)
     }
 
-    async function runOne(id: string) {
+    async function runOne(id: string): Promise<void> {
       if (token !== myToken)
         return
       states.value = { ...states.value, [id]: { status: 'running', result: null, error: null } }

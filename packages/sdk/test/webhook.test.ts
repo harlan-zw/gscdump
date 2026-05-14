@@ -5,7 +5,6 @@ import {
   readWebhookHeaders,
   shouldQueueWebhook,
   signWebhookPayload,
-  toCanonicalWebhookEvent,
   verifyWebhookSignature,
   WEBHOOK_CONTRACT_VERSION,
   WEBHOOK_DELIVERY_HEADER,
@@ -15,9 +14,9 @@ import {
 } from '../src/webhook'
 
 describe('partner webhooks', () => {
-  it('creates canonical envelopes and preserves legacy event context', () => {
+  it('creates canonical envelopes', () => {
     const envelope = createWebhookEnvelope({
-      event: 'site.completed',
+      event: 'site.analytics.ready',
       partnerId: 'partner_1',
       userId: 'usr_1',
       siteId: 'site_1',
@@ -32,14 +31,7 @@ describe('partner webhooks', () => {
       event: 'site.analytics.ready',
       externalUserId: null,
       externalSiteId: 'ext_site_1',
-      data: {
-        legacyEvent: 'site.completed',
-        legacyPayload: {
-          event: 'site.completed',
-          rowsInserted: 100,
-        },
-        rowsInserted: 100,
-      },
+      data: { rowsInserted: 100 },
     })
   })
 
@@ -63,10 +55,7 @@ describe('partner webhooks', () => {
       externalSiteId: null,
       lifecycleRevision: 789,
       occurredAt: '2026-05-11T00:00:00.000Z',
-      data: {
-        legacyEvent: 'user.lifecycle.changed',
-        account: { status: 'ready' },
-      },
+      data: { account: { status: 'ready' } },
     })
   })
 
@@ -109,9 +98,8 @@ describe('partner webhooks', () => {
     await expect(parseWebhookPayload(payload, { secret, signature: 'sha256=bad' })).rejects.toThrow('Invalid webhook signature')
   })
 
-  it('matches webhook subscriptions against canonical aliases', () => {
-    expect(toCanonicalWebhookEvent('auth.failed')).toBe('site.auth.failed')
-    expect(shouldQueueWebhook(JSON.stringify(['site.auth.failed']), 'auth.failed')).toBe(true)
-    expect(shouldQueueWebhook(['site.indexing.ready'], 'site.completed')).toBe(false)
+  it('matches webhook subscriptions', () => {
+    expect(shouldQueueWebhook(JSON.stringify(['site.auth.failed']), 'site.auth.failed')).toBe(true)
+    expect(shouldQueueWebhook(['site.indexing.ready'], 'site.analytics.ready')).toBe(false)
   })
 })

@@ -1,30 +1,17 @@
 import type {
-  CanonicalWebhookEventType,
   CreateWebhookEnvelopeOptions,
   PartnerWebhookHeaders,
   WebhookEnvelope,
-  WebhookEventType,
 } from '@gscdump/contracts'
+import { partnerWebhookEnvelopeSchema, WEBHOOK_CONTRACT_VERSION, WEBHOOK_CONTRACT_VERSION_HEADER, WEBHOOK_DELIVERY_HEADER, WEBHOOK_EVENT_HEADER, WEBHOOK_SIGNATURE_HEADER, WEBHOOK_TIMESTAMP_HEADER } from '@gscdump/contracts'
 import { PartnerApiError } from './errors'
-import { partnerWebhookEnvelopeSchema } from '@gscdump/contracts'
-import {
-  LEGACY_WEBHOOK_EVENTS,
-  WEBHOOK_CONTRACT_VERSION,
-  WEBHOOK_CONTRACT_VERSION_HEADER,
-  WEBHOOK_DELIVERY_HEADER,
-  WEBHOOK_EVENT_ALIASES,
-  WEBHOOK_EVENT_HEADER,
-  WEBHOOK_SIGNATURE_HEADER,
-  WEBHOOK_TIMESTAMP_HEADER,
-} from '@gscdump/contracts'
+
 export {
   CANONICAL_WEBHOOK_EVENTS,
-  LEGACY_WEBHOOK_EVENTS,
   VALID_WEBHOOK_EVENTS,
   WEBHOOK_CONTRACT_VERSION,
   WEBHOOK_CONTRACT_VERSION_HEADER,
   WEBHOOK_DELIVERY_HEADER,
-  WEBHOOK_EVENT_ALIASES,
   WEBHOOK_EVENT_HEADER,
   WEBHOOK_SIGNATURE_HEADER,
   WEBHOOK_TIMESTAMP_HEADER,
@@ -97,11 +84,7 @@ export function generateWebhookDeliveryId(): string {
   return `whd_${crypto.randomUUID()}`
 }
 
-export function toCanonicalWebhookEvent(event: WebhookEventType): CanonicalWebhookEventType {
-  return WEBHOOK_EVENT_ALIASES[event as typeof LEGACY_WEBHOOK_EVENTS[number]] ?? event as CanonicalWebhookEventType
-}
-
-export function shouldQueueWebhook(webhookEvents: string | string[] | null | undefined, eventType: WebhookEventType): boolean {
+export function shouldQueueWebhook(webhookEvents: string | string[] | null | undefined, eventType: string): boolean {
   if (!webhookEvents)
     return false
 
@@ -109,29 +92,20 @@ export function shouldQueueWebhook(webhookEvents: string | string[] | null | und
     ? webhookEvents
     : JSON.parse(webhookEvents) as string[]
 
-  return events.includes(eventType) || events.includes(toCanonicalWebhookEvent(eventType))
+  return events.includes(eventType)
 }
 
 export function createWebhookEnvelope<TData extends Record<string, unknown>>(
   options: CreateWebhookEnvelopeOptions<TData>,
-): WebhookEnvelope<TData & { legacyEvent?: WebhookEventType }> {
+): WebhookEnvelope<TData> {
   const occurredAt = options.occurredAt instanceof Date
     ? options.occurredAt.toISOString()
     : options.occurredAt ?? new Date().toISOString()
-  const canonicalEvent = toCanonicalWebhookEvent(options.event)
-  const legacyPayload = LEGACY_WEBHOOK_EVENTS.includes(options.event as typeof LEGACY_WEBHOOK_EVENTS[number])
-    ? { ...options.data, event: options.event }
-    : null
-  const data = {
-    legacyEvent: options.event,
-    ...(legacyPayload ? { legacyPayload } : {}),
-    ...options.data,
-  }
 
   return {
     contractVersion: options.contractVersion ?? WEBHOOK_CONTRACT_VERSION,
     deliveryId: options.deliveryId ?? generateWebhookDeliveryId(),
-    event: canonicalEvent,
+    event: options.event,
     partnerId: options.partnerId,
     userId: options.userId,
     siteId: options.siteId,
@@ -139,7 +113,7 @@ export function createWebhookEnvelope<TData extends Record<string, unknown>>(
     externalSiteId: options.externalSiteId ?? null,
     lifecycleRevision: options.lifecycleRevision,
     occurredAt,
-    data: data as TData & { legacyEvent?: WebhookEventType },
+    data: options.data,
   }
 }
 

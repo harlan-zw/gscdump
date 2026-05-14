@@ -25,6 +25,11 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
+    },
+    "./query": {
+      "types": "./dist/query.d.mts",
+      "import": "./dist/query.mjs",
+      "default": "./dist/query.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -41,6 +46,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "prepack": "pnpm run build"
+  },
+  "peerDependencies": {
+    "gscdump": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "gscdump": { "optional": true }
   },
   "dependencies": {
     "@gscdump/contracts": "workspace:*",

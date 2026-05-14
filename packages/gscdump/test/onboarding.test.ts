@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  accountStatuses,
+  analyticsStatuses,
   GSCDUMP_ONBOARDING_CONTRACT_VERSION,
   GSCDUMP_OPTIONAL_INDEXING_SCOPE,
   GSCDUMP_REQUIRED_ANALYTICS_SCOPE,
-  accountStatuses,
-  analyticsStatuses,
   hasOptionalIndexingScope,
   hasRequiredAnalyticsScope,
   indexingStatuses,
@@ -37,4 +37,3 @@ describe('partner onboarding contract', () => {
     expect(hasRequiredAnalyticsScope(GSCDUMP_OPTIONAL_INDEXING_SCOPE)).toBe(false)
   })
 })
-

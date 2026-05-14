@@ -1,16 +1,10 @@
 import { z } from 'zod'
 import {
-  CANONICAL_WEBHOOK_EVENTS,
-  LEGACY_WEBHOOK_EVENTS,
-  VALID_WEBHOOK_EVENTS,
-  WEBHOOK_CONTRACT_VERSION,
-} from './webhook-constants'
-import {
-  GSCDUMP_ONBOARDING_CONTRACT_VERSION,
   accountNextActions,
   accountStatuses,
   analyticsNextActions,
   analyticsStatuses,
+  GSCDUMP_ONBOARDING_CONTRACT_VERSION,
   indexingNextActions,
   indexingStatuses,
   lifecycleErrorCodes,
@@ -20,6 +14,10 @@ import {
   sitemapNextActions,
   sitemapStatuses,
 } from './onboarding'
+import {
+  CANONICAL_WEBHOOK_EVENTS,
+  WEBHOOK_CONTRACT_VERSION,
+} from './webhook-constants'
 
 const unknownRecord = z.record(z.string(), z.unknown())
 
@@ -414,7 +412,7 @@ export const registerPartnerSiteSchema = z.object({
   externalSiteId: z.string().optional(),
   externalSiteUrl: z.string().optional(),
   webhookUrl: z.url().optional(),
-  webhookEvents: z.array(z.enum(VALID_WEBHOOK_EVENTS)).optional(),
+  webhookEvents: z.array(z.enum(CANONICAL_WEBHOOK_EVENTS)).optional(),
   teamId: z.string().optional(),
 })
 
@@ -428,7 +426,7 @@ export const bulkRegisterPartnerSitesSchema = z.object({
     externalSiteId: z.string().optional(),
     externalSiteUrl: z.string().optional(),
     webhookUrl: z.url().optional(),
-    webhookEvents: z.array(z.enum(VALID_WEBHOOK_EVENTS)).optional(),
+    webhookEvents: z.array(z.enum(CANONICAL_WEBHOOK_EVENTS)).optional(),
   }).loose()).optional(),
 }).refine(value => (value.siteUrls?.length ?? 0) > 0 || (value.sites?.length ?? 0) > 0, {
   message: 'siteUrls or sites is required',
@@ -950,19 +948,7 @@ export const partnerRealtimeEventSchema = z.discriminatedUnion('event', [
 ])
 
 export const canonicalWebhookEventTypeSchema = z.enum(CANONICAL_WEBHOOK_EVENTS)
-export const legacyWebhookEventTypeSchema = z.enum(LEGACY_WEBHOOK_EVENTS)
-export const webhookEventTypeSchema = z.enum(VALID_WEBHOOK_EVENTS)
-
-export const jobCompletedWebhookPayloadSchema = z.object({
-  event: z.literal('job.completed'),
-  siteId: z.string(),
-  siteUrl: z.string(),
-  table: z.string().optional(),
-  date: z.string(),
-  rowsFetched: z.number(),
-  rowsInserted: z.number(),
-  timestamp: z.number(),
-}).loose()
+export const webhookEventTypeSchema = canonicalWebhookEventTypeSchema
 
 export const jobFailedWebhookPayloadSchema = z.object({
   event: z.literal('job.failed'),
@@ -974,129 +960,7 @@ export const jobFailedWebhookPayloadSchema = z.object({
   timestamp: z.number(),
 }).loose()
 
-export const siteCompletedWebhookPayloadSchema = z.object({
-  event: z.literal('site.completed'),
-  siteId: z.string(),
-  siteUrl: z.string(),
-  status: z.string(),
-  daysSynced: z.number(),
-  failedJobs: z.number(),
-  oldestDateSynced: z.string().nullable().optional(),
-  newestDateSynced: z.string().nullable().optional(),
-  timestamp: z.number(),
-}).loose()
-
-export const indexingCompletedWebhookPayloadSchema = z.object({
-  event: z.literal('indexing.completed'),
-  siteId: z.string(),
-  siteUrl: z.string(),
-  totalUrls: z.number(),
-  indexedCount: z.number(),
-  notIndexedCount: z.number(),
-  errorCount: z.number(),
-  urlsChecked: z.number(),
-  timestamp: z.number(),
-}).loose()
-
-export const authFailedWebhookPayloadSchema = z.object({
-  event: z.literal('auth.failed'),
-  siteId: z.string(),
-  siteUrl: z.string(),
-  reason: z.string().optional(),
-  message: z.string().optional(),
-  reauthRequired: z.boolean().optional(),
-  authFailureCount: z.number().optional(),
-  error: z.string().optional(),
-  timestamp: z.number().optional(),
-}).loose()
-
-export const legacyWebhookPayloadSchema = z.discriminatedUnion('event', [
-  jobCompletedWebhookPayloadSchema,
-  jobFailedWebhookPayloadSchema,
-  siteCompletedWebhookPayloadSchema,
-  indexingCompletedWebhookPayloadSchema,
-  authFailedWebhookPayloadSchema,
-])
-
-export const partnerWebhookDataSchema = z.discriminatedUnion('legacyEvent', [
-  z.object({
-    legacyEvent: z.literal('job.completed'),
-    legacyPayload: jobCompletedWebhookPayloadSchema,
-    event: z.literal('job.completed').optional(),
-    siteId: z.string(),
-    siteUrl: z.string(),
-    table: z.string().optional(),
-    date: z.string(),
-    rowsFetched: z.number(),
-    rowsInserted: z.number(),
-    timestamp: z.number(),
-  }).loose(),
-  z.object({
-    legacyEvent: z.literal('job.failed'),
-    legacyPayload: jobFailedWebhookPayloadSchema,
-    event: z.literal('job.failed').optional(),
-    siteId: z.string(),
-    siteUrl: z.string(),
-    table: z.string(),
-    date: z.string(),
-    error: z.string(),
-    timestamp: z.number(),
-  }).loose(),
-  z.object({
-    legacyEvent: z.literal('site.completed'),
-    legacyPayload: siteCompletedWebhookPayloadSchema,
-    event: z.literal('site.completed').optional(),
-    siteId: z.string(),
-    siteUrl: z.string(),
-    status: z.string(),
-    daysSynced: z.number(),
-    failedJobs: z.number(),
-    oldestDateSynced: z.string().nullable().optional(),
-    newestDateSynced: z.string().nullable().optional(),
-    timestamp: z.number(),
-  }).loose(),
-  z.object({
-    legacyEvent: z.literal('indexing.completed'),
-    legacyPayload: indexingCompletedWebhookPayloadSchema,
-    event: z.literal('indexing.completed').optional(),
-    siteId: z.string(),
-    siteUrl: z.string(),
-    totalUrls: z.number(),
-    indexedCount: z.number(),
-    notIndexedCount: z.number(),
-    errorCount: z.number(),
-    urlsChecked: z.number(),
-    timestamp: z.number(),
-  }).loose(),
-  z.object({
-    legacyEvent: z.literal('auth.failed'),
-    legacyPayload: authFailedWebhookPayloadSchema,
-    event: z.literal('auth.failed').optional(),
-    siteId: z.string(),
-    siteUrl: z.string(),
-    reason: z.string().optional(),
-    message: z.string().optional(),
-    reauthRequired: z.boolean().optional(),
-    authFailureCount: z.number().optional(),
-    error: z.string().optional(),
-    timestamp: z.number().optional(),
-  }).loose(),
-  z.object({
-    legacyEvent: z.literal('user.lifecycle.changed'),
-  }).loose(),
-  z.object({
-    legacyEvent: z.literal('site.lifecycle.changed'),
-  }).loose(),
-  z.object({
-    legacyEvent: z.literal('site.analytics.ready'),
-  }).loose(),
-  z.object({
-    legacyEvent: z.literal('site.indexing.ready'),
-  }).loose(),
-  z.object({
-    legacyEvent: z.literal('site.auth.failed'),
-  }).loose(),
-])
+export const partnerWebhookDataSchema = unknownRecord
 
 export const partnerWebhookEnvelopeSchema = z.object({
   contractVersion: z.literal(WEBHOOK_CONTRACT_VERSION),
@@ -1166,5 +1030,5 @@ export const partnerEndpointSchemas = {
   addTeamMember: { body: addPartnerTeamMemberSchema, response: unknownRecord },
   bindSiteToTeam: { body: bindPartnerSiteTeamSchema, response: z.object({ ok: z.literal(true), teamId: z.string().nullable() }).loose() },
   realtimeEvent: { message: partnerRealtimeEventSchema },
-  webhook: { message: partnerWebhookEnvelopeSchema, legacyMessage: legacyWebhookPayloadSchema },
+  webhook: { message: partnerWebhookEnvelopeSchema },
 } as const

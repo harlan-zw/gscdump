@@ -229,4 +229,3 @@ export function hasOptionalIndexingScope(scopes: string | string[] | null | unde
   const granted = Array.isArray(scopes) ? scopes : parseGrantedScopes(scopes)
   return granted.includes(GSCDUMP_OPTIONAL_INDEXING_SCOPE)
 }
-

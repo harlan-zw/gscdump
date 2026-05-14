@@ -50,10 +50,6 @@ export interface GscAnalyticsContext {
   patchProgress: (siteId: string, patch: Partial<SiteLoadProgress>) => void
   /** Escape hatch for demos/tests — clear progress map (all or one site). */
   clearProgress: (siteId?: string) => void
-  // @internal per-namespace per-site resource bag; used by
-  // useGscSharedSiteResource. Replaces the old `_analyzers` Map — the analyzer
-  // cache is now one namespace among several (alongside source-info, etc.).
-  _sharedResources: Map<string, Map<string, { entry: unknown, refs: number }>>
 }
 
 // Factory exposed so the layer's Nuxt plugin can provide a single app-wide
@@ -197,6 +193,5 @@ function createContext(): GscAnalyticsContext {
     progress: progress as Readonly<Ref<Record<string, SiteLoadProgress>>>,
     patchProgress,
     clearProgress,
-    _sharedResources: new Map(),
   }
 }
