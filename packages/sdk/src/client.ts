@@ -36,6 +36,9 @@ import type {
   GscdumpUserSite,
   GscdumpUserStatus,
   GscdumpUserTokenUpdate,
+  IndexingInspectRateLimited,
+  IndexingInspectRequest,
+  IndexingInspectResponse,
   IndexingUrlsParams,
   PartnerClient,
   PartnerLifecycleResponse,
@@ -380,6 +383,14 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
 
     getIndexingDiagnostics(siteId: string) {
       return request<GscdumpIndexingDiagnosticsResponse>(partnerRoutes.sites.indexingDiagnostics(siteId), {}, partnerEndpointSchemas.getIndexingDiagnostics.response)
+    },
+
+    requestIndexingInspect(siteId: string, body: IndexingInspectRequest) {
+      const parsed = shouldValidate(options, 'request') ? partnerEndpointSchemas.getIndexingInspect.body.parse(body) : body
+      return request<IndexingInspectResponse | IndexingInspectRateLimited>(partnerRoutes.sites.indexingInspect(siteId), {
+        method: 'POST',
+        body: parsed,
+      }, partnerEndpointSchemas.getIndexingInspect.response)
     },
 
     getUserSettings() {

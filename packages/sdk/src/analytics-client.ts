@@ -6,6 +6,9 @@ import type {
   CountriesResponse,
   GscRowQueryResponse,
   IndexingDiagnostics,
+  IndexingInspectRateLimited,
+  IndexingInspectRequest,
+  IndexingInspectResponse,
   IndexingUrlsResponse,
   IndexingUrlStatus,
   InspectionHistoryResponse,
@@ -157,6 +160,10 @@ export function createAnalyticsClient(options: AnalyticsClientOptions = {}): Ana
     },
     getIndexingDiagnostics(siteId: string) {
       return request<IndexingDiagnostics>(analyticsRoutes.site.indexingDiagnostics(siteId), {}, partnerEndpointSchemas.analyticsIndexingDiagnostics.response)
+    },
+    requestIndexingInspect(siteId: string, body: IndexingInspectRequest) {
+      const parsed = shouldValidate(options, 'request') ? partnerEndpointSchemas.analyticsIndexingInspect.body.parse(body) : body
+      return request<IndexingInspectResponse | IndexingInspectRateLimited>(analyticsRoutes.site.indexingInspect(siteId), { method: 'POST', body: parsed }, partnerEndpointSchemas.analyticsIndexingInspect.response)
     },
     getCountries(siteId: string, range: { start: string, end: string }) {
       return request<CountriesResponse>(analyticsRoutes.site.countries(siteId), { query: range }, partnerEndpointSchemas.analyticsCountries.response)

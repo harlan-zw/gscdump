@@ -220,6 +220,51 @@ export interface IndexingDiagnostics {
   meta: { siteUrl: string }
 }
 
+export interface IndexingInspectRequest {
+  urls: string[]
+}
+
+export interface IndexingInspectResult {
+  url: string
+  verdict: string | null
+  coverageState: string | null
+  indexingState: string | null
+  robotsTxtState: string | null
+  pageFetchState: string | null
+  lastCrawlTime: string | null
+  crawlingUserAgent: string | null
+  userCanonical: string | null
+  googleCanonical: string | null
+  sitemaps: string | null
+  referringUrls: string | null
+  mobileVerdict: string | null
+  mobileIssues: string | null
+  richResultsVerdict: string | null
+  richResultsItems: string | null
+  inspectionResultLink: string | null
+}
+
+export interface IndexingInspectRateLimit {
+  reserved: number
+  remaining: number
+  limit: number
+}
+
+export interface IndexingInspectResponse {
+  siteId: string
+  rateLimit: IndexingInspectRateLimit
+  results: IndexingInspectResult[]
+  errors: Array<{ url: string, error: string }>
+  skipped: Array<{ url: string, reason: string }>
+}
+
+export interface IndexingInspectRateLimited {
+  error: 'rate_limited'
+  message: string
+  rateLimit: { reserved: 0, remaining: 0, limit: number }
+  retryAfterSeconds: number
+}
+
 export interface SitemapAddedRow {
   url: string
   sitemap: string
@@ -282,6 +327,7 @@ export interface AnalyticsClient {
   getInspectionHistory: (siteId: string, hash: string) => Promise<InspectionHistoryResponse>
   getIndexingUrls: (siteId: string, params?: { limit?: number, offset?: number, status?: IndexingUrlStatus, issue?: string, search?: string }) => Promise<IndexingUrlsResponse>
   getIndexingDiagnostics: (siteId: string) => Promise<IndexingDiagnostics>
+  requestIndexingInspect: (siteId: string, body: IndexingInspectRequest) => Promise<IndexingInspectResponse | IndexingInspectRateLimited>
   getCountries: (siteId: string, range: { start: string, end: string }) => Promise<CountriesResponse>
   getSearchAppearance: (siteId: string, range: { start: string, end: string }) => Promise<SearchAppearanceResponse>
 }
@@ -675,6 +721,11 @@ export interface GscdumpIndexingDiagnosticsResponse {
   issues: { type: string, label: string, severity: string, count: number }[]
   meta: { siteUrl: string }
 }
+
+export type GscdumpIndexingInspectRequest = IndexingInspectRequest
+export type GscdumpIndexingInspectResult = IndexingInspectResult
+export type GscdumpIndexingInspectResponse = IndexingInspectResponse
+export type GscdumpIndexingInspectRateLimited = IndexingInspectRateLimited
 
 export type GscdumpAnalysisPreset
   = | 'striking-distance'
@@ -1125,6 +1176,7 @@ export interface PartnerClient {
   getIndexing: (siteId: string, days?: number) => Promise<GscdumpIndexingResponse>
   getIndexingUrls: (siteId: string, params?: IndexingUrlsParams) => Promise<GscdumpIndexingUrlsResponse>
   getIndexingDiagnostics: (siteId: string) => Promise<GscdumpIndexingDiagnosticsResponse>
+  requestIndexingInspect: (siteId: string, body: IndexingInspectRequest) => Promise<IndexingInspectResponse | IndexingInspectRateLimited>
   getUserSettings: () => Promise<GscdumpUserSettings>
   patchUserSettings: (body: Partial<GscdumpUserSettings>) => Promise<GscdumpUserSettings>
   recoverPermission: (siteId: string) => Promise<GscdumpPermissionRecovery>

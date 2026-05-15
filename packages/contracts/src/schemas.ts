@@ -172,6 +172,58 @@ export const indexingDiagnosticsSchema = z.object({
   meta: z.object({ siteUrl: z.string() }).loose(),
 }).loose()
 
+export const indexingInspectRequestSchema = z.object({
+  urls: z.array(z.string().url()).min(1).max(10),
+})
+
+export const indexingInspectResultSchema = z.object({
+  url: z.string(),
+  verdict: z.string().nullable(),
+  coverageState: z.string().nullable(),
+  indexingState: z.string().nullable(),
+  robotsTxtState: z.string().nullable(),
+  pageFetchState: z.string().nullable(),
+  lastCrawlTime: z.string().nullable(),
+  crawlingUserAgent: z.string().nullable(),
+  userCanonical: z.string().nullable(),
+  googleCanonical: z.string().nullable(),
+  sitemaps: z.string().nullable(),
+  referringUrls: z.string().nullable(),
+  mobileVerdict: z.string().nullable(),
+  mobileIssues: z.string().nullable(),
+  richResultsVerdict: z.string().nullable(),
+  richResultsItems: z.string().nullable(),
+  inspectionResultLink: z.string().nullable(),
+}).loose()
+
+export const indexingInspectResponseSchema = z.object({
+  siteId: z.string(),
+  rateLimit: z.object({
+    reserved: z.number(),
+    remaining: z.number(),
+    limit: z.number(),
+  }).loose(),
+  results: z.array(indexingInspectResultSchema),
+  errors: z.array(z.object({ url: z.string(), error: z.string() }).loose()),
+  skipped: z.array(z.object({ url: z.string(), reason: z.string() }).loose()),
+}).loose()
+
+export const indexingInspectRateLimitedSchema = z.object({
+  error: z.literal('rate_limited'),
+  message: z.string(),
+  rateLimit: z.object({
+    reserved: z.literal(0),
+    remaining: z.literal(0),
+    limit: z.number(),
+  }).loose(),
+  retryAfterSeconds: z.number(),
+}).loose()
+
+export const indexingInspectAnyResponseSchema = z.union([
+  indexingInspectResponseSchema,
+  indexingInspectRateLimitedSchema,
+])
+
 export const sitemapChangesResponseSchema = z.object({
   added: z.array(z.object({
     url: z.string(),
@@ -994,6 +1046,7 @@ export const partnerEndpointSchemas = {
   analyticsBackfill: { body: backfillRangeSchema, response: backfillResponseSchema },
   analyticsIndexingUrls: { response: indexingUrlsResponseSchema },
   analyticsIndexingDiagnostics: { response: indexingDiagnosticsSchema },
+  analyticsIndexingInspect: { body: indexingInspectRequestSchema, response: indexingInspectAnyResponseSchema },
   analyticsSitemapChanges: { response: sitemapChangesResponseSchema },
   analyticsAnalysisSources: { response: gscdumpAnalysisSourcesResponseSchema },
   analyticsSourceInfo: { response: sourceInfoResponseSchema },
@@ -1015,6 +1068,7 @@ export const partnerEndpointSchemas = {
   getIndexing: { response: gscdumpIndexingResponseSchema },
   getIndexingUrls: { query: indexingUrlsParamsSchema, response: gscdumpIndexingUrlsResponseSchema },
   getIndexingDiagnostics: { response: gscdumpIndexingDiagnosticsResponseSchema },
+  getIndexingInspect: { body: indexingInspectRequestSchema, response: indexingInspectAnyResponseSchema },
   getUserSettings: { response: gscdumpUserSettingsSchema },
   patchUserSettings: { body: gscdumpUserSettingsSchema.partial(), response: gscdumpUserSettingsSchema },
   recoverPermission: { response: gscdumpPermissionRecoverySchema },
