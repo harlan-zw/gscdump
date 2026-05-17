@@ -49,6 +49,13 @@ export { createSqlFragments } from './fragments'
 export type { SqlFragments, SqlFragmentsConfig } from './fragments'
 export { createParquetResolverAdapter, pgResolverAdapter } from './pg-adapter'
 export type { PgTableKey } from './pg-adapter'
+export type {
+  ComparisonQueryResult,
+  OptimizedQueryResult,
+  RunQueryCtx,
+  RunSQLFn,
+} from './run-query'
+export { runComparisonQuery, runOptimizedQuery } from './run-query'
 export { assertSchemaInSync } from './schema-drift'
 export type { AssertSchemaInSyncOptions } from './schema-drift'
 export type {

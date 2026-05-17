@@ -6,6 +6,8 @@
  * sqlite surface accessible via an async executor (`sql, params) => rows`).
  */
 
+export type { CachedManifestStore, CachedManifestStoreOptions } from './cached-manifest-store'
+export { createCachedManifestStore } from './cached-manifest-store'
 export { createEngine } from './engine'
 export type { EngineConfig, SqliteQueryExecutor } from './engine'
 export {

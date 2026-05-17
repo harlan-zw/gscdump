@@ -47,6 +47,20 @@ const DEFAULT_THRESHOLDS: Required<CompactionThresholds> = {
   d30: 90,
 }
 
+// Host policy: queue a per-(site, table) compaction job once the count of
+// live raw daily files for a table crosses this. Matches the default
+// `raw → d7` daily→weekly gate, so the host trigger fires the same day the
+// engine's threshold-driven path would have collapsed the bucket.
+export const RAW_DAILY_COMPACT_THRESHOLD = 7
+
+// Predicate hosts use against `ManifestStore.listLive` results to decide
+// whether a table's raw-daily count warrants kicking a compaction job.
+export function countRawDailies(
+  entries: ReadonlyArray<{ tier?: string | null, partition: string }>,
+): number {
+  return entries.filter(e => e.tier === 'raw' || (e.tier == null && e.partition.startsWith('daily/'))).length
+}
+
 /**
  * GSC `dataState='all'` finalizes ~3 days after a date. Until that grace
  * elapses, sync may still write fresh dailies into a bucket, so compacting

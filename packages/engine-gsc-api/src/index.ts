@@ -20,3 +20,10 @@ export type {
 } from './rollup-synth'
 export { createGscApiQuerySource } from './source'
 export type { GscApiQuerySourceOptions } from './source'
+export type {
+  GscApiRow,
+  RunGscSyncSliceOptions,
+  RunGscSyncSliceResult,
+  SyncSliceDomainFilter,
+} from './sync-slice'
+export { runGscSyncSlice } from './sync-slice'

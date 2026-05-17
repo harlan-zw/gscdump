@@ -474,6 +474,10 @@ export const registerPartnerSiteSchema = z.object({
   webhookUrl: z.url().optional(),
   webhookEvents: z.array(z.enum(CANONICAL_WEBHOOK_EVENTS)).optional(),
   teamId: z.string().optional(),
+  // GSC slices the partner wants to sync for this site. Server-side validation
+  // (validateEnabledSearchTypes) always implies 'web'; missing field defaults
+  // to ['web']. Invalid slices are rejected with 400.
+  enabledSearchTypes: z.array(searchTypeSchema).optional(),
 })
 
 export const bulkRegisterPartnerSitesSchema = z.object({
@@ -546,6 +550,8 @@ export const gscdumpAnalysisParamsSchema = z.object({
   minPosition: z.number().optional(),
   maxPosition: z.number().optional(),
   maxCtr: z.number().optional(),
+  /** GSC slice the analysis is scoped to. Undefined = cross-type (web-only default). */
+  searchType: searchTypeSchema.optional(),
 }).superRefine((value, ctx) => {
   if ((value.preset === 'brand-only' || value.preset === 'non-brand') && !value.brandTerms?.trim()) {
     ctx.addIssue({

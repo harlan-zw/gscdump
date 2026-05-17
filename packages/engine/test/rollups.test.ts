@@ -99,6 +99,26 @@ describe('rebuildRollups searchType namespacing', () => {
     // Crucially, the legacy/web path must NOT have been written.
     expect(store.has('u_u1/s1/rollups/json_def__v1700000000000.json')).toBe(false)
   })
+
+  it('throws when searchType is paired with a slice-orthogonal def', async () => {
+    const { ds } = makeFakeDataSource()
+    const orthogonalDef: RollupDef = {
+      id: 'entity_def',
+      windowDays: 90,
+      sliceOrthogonal: true,
+      async build() {
+        return { days: [] }
+      },
+    }
+    await expect(rebuildRollups({
+      engine: makeFakeEngine({} as Record<TableName, Row[]>),
+      dataSource: ds,
+      ctx: { userId: 'u1', siteId: 's1' },
+      defs: [orthogonalDef],
+      now: () => 1_700_000_000_000,
+      searchType: 'discover',
+    })).rejects.toThrow('rollup def \'entity_def\' is slice-orthogonal; do not pass searchType')
+  })
 })
 
 describe('rebuildRollups', () => {

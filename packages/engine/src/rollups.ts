@@ -75,6 +75,14 @@ export interface RollupDef {
   parquetColumns?: readonly ColumnDef[]
   /** Sort-key column names for parquet row-group stats. Optional. */
   parquetSortKey?: readonly string[]
+  /**
+   * When true, this rollup's payload is independent of GSC slice (e.g. entity
+   * rollups sourced from sitemap / indexing snapshots, not slice-partitioned
+   * fact tables). The runner rejects calls that pass `searchType` alongside
+   * a slice-orthogonal def so the output never lands under a per-slice prefix
+   * that the read path won't look at.
+   */
+  sliceOrthogonal?: boolean
   build: (deps: {
     engine: RollupEngine
     ctx: TenantCtx
@@ -140,6 +148,47 @@ export function rollupParquetKey(ctx: TenantCtx, id: string, builtAt: number, se
   return `${rollupPrefix(ctx, searchType)}/${id}__v${builtAt}.parquet`
 }
 
+const ROLLUP_FILE_RE = /^(?<id>[a-z0-9_]+)__v(?<ts>\d+)\.json$/
+
+// Minimal bucket shape — structurally satisfied by Cloudflare's `R2Bucket`,
+// any S3-compatible adapter, or an in-memory fake.
+export interface RollupBucket {
+  list: (opts: { prefix: string }) => Promise<{ objects: Array<{ key: string }> }>
+  get: (key: string) => Promise<{ text: () => Promise<string> } | null>
+}
+
+// Inverse of `rollupKey`: locate and parse the newest JSON envelope for an
+// `(ctx, id)` pair. Returns null when no envelope exists (first-sync site,
+// or rollup id never built) so callers can fall back to another source.
+// `searchType` scopes the prefix the same way `rollupKey` does — undefined
+// reads the legacy/web path.
+export async function readLatestRollup<T = unknown>(
+  bucket: RollupBucket,
+  ctx: TenantCtx,
+  id: string,
+  searchType?: SearchType,
+): Promise<RollupEnvelope<T> | null> {
+  const prefix = `${rollupPrefix(ctx, searchType)}/`
+  const listing = await bucket.list({ prefix }).catch(() => null)
+  if (!listing)
+    return null
+  let newest: { ts: number, key: string } | null = null
+  for (const obj of listing.objects) {
+    const m = ROLLUP_FILE_RE.exec(obj.key.slice(prefix.length))
+    if (!m?.groups || m.groups.id !== id)
+      continue
+    const ts = Number(m.groups.ts)
+    if (!newest || ts > newest.ts)
+      newest = { ts, key: obj.key }
+  }
+  if (!newest)
+    return null
+  const obj = await bucket.get(newest.key).catch(() => null)
+  if (!obj)
+    return null
+  return JSON.parse(await obj.text()) as RollupEnvelope<T>
+}
+
 export interface RebuildRollupsOptions {
   engine: RollupEngine
   dataSource: DataSource
@@ -177,6 +226,13 @@ export async function rebuildRollups(
   const now = opts.now ?? (() => Date.now())
   const results: RebuildRollupResult[] = []
   const searchType = opts.searchType
+  if (searchType !== undefined) {
+    for (const def of opts.defs) {
+      if (def.sliceOrthogonal === true) {
+        throw new Error(`rollup def '${def.id}' is slice-orthogonal; do not pass searchType`)
+      }
+    }
+  }
   for (const def of opts.defs) {
     const builtAt = now()
     const payload = await def.build({
@@ -579,6 +635,7 @@ export const indexingMetadataRollup: RollupDef = {
 export const indexingHealthRollup: RollupDef = {
   id: 'indexing_health',
   windowDays: 90,
+  sliceOrthogonal: true,
   async build({ engine, ctx, dataSource, builtAt }) {
     // Skip when the parquet sidecar hasn't been materialized yet. We probe
     // with `head` (cheap; no body) rather than `parquetUri` because we now
@@ -648,6 +705,7 @@ export const indexingHealthRollup: RollupDef = {
 export const indexPercentRollup: RollupDef = {
   id: 'index_percent',
   windowDays: 90,
+  sliceOrthogonal: true,
   async build({ engine, ctx, dataSource, builtAt, searchType }) {
     // Probe directly for the urls/index.parquet — `urlsParquetUri` returns
     // a URI even when the file's missing on backends with a synchronous
@@ -719,6 +777,7 @@ export const indexPercentRollup: RollupDef = {
 export const sitemapHealthRollup: RollupDef = {
   id: 'sitemap_health',
   windowDays: 90,
+  sliceOrthogonal: true,
   async build({ dataSource, ctx, builtAt }) {
     const store = createSitemapStore({ dataSource })
     const index = await store.loadIndex(ctx)
@@ -781,6 +840,7 @@ export const sitemapHealthRollup: RollupDef = {
 export const sitemapChanges28dRollup: RollupDef = {
   id: 'sitemap_changes_28d',
   windowDays: 28,
+  sliceOrthogonal: true,
   async build({ dataSource, ctx, builtAt }) {
     const store = createSitemapStore({ dataSource })
     const from = utcDateMinusDays(builtAt, 28)
