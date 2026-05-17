@@ -113,6 +113,23 @@ export function normalizeFilter(input?: FilterInput): Filter<any> | undefined {
   return input as Filter<any>
 }
 
+// Project an untyped partner-API request body into a typed BuilderState,
+// normalizing the embedded filter from wire format. Use at the receive edge
+// of partner endpoints that accept JSON bodies from SDK consumers.
+export function normalizeBuilderState(state: unknown): BuilderState {
+  if (!state || typeof state !== 'object')
+    throw new Error('Invalid state')
+  const s = state as Record<string, unknown>
+  return {
+    dimensions: s.dimensions as BuilderState['dimensions'],
+    metrics: s.metrics as BuilderState['metrics'],
+    filter: normalizeFilter(s.filter as FilterInput | undefined) as BuilderState['filter'],
+    orderBy: s.orderBy as BuilderState['orderBy'],
+    rowLimit: s.rowLimit as number | undefined,
+    startRow: s.startRow as number | undefined,
+  }
+}
+
 interface FilterExtraction {
   startDate?: string
   endDate?: string

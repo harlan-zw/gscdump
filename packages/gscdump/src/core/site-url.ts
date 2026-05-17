@@ -45,6 +45,22 @@ export function parseGscSiteUrl(siteUrl: string): ParsedGscSiteUrl {
 }
 
 /**
+ * Comparison-canonical form of a GSC property URL. Strips `sc-domain:`,
+ * protocol, leading `www.`, trailing slash, and lowercases. Use when matching
+ * the same logical site across `https://www.example.com/` vs
+ * `sc-domain:example.com` vs bare hostnames — properties Google sometimes
+ * returns in different shapes for the same site.
+ */
+export function normalizeGscSiteUrl(siteUrl: string): string {
+  return siteUrl
+    .replace(/^sc-domain:/, '')
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\/$/, '')
+    .toLowerCase()
+}
+
+/**
  * Normalize a user-input URL/hostname into a canonical registration target.
  * Returns lowercase hostname stripped of protocol, or null if unparseable.
  */
