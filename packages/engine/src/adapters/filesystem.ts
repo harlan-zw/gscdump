@@ -208,6 +208,8 @@ function matchesFilter(entry: ManifestEntry, filter: ListLiveFilter): boolean {
     return false
   if (filter.tier !== undefined && inferLegacyTier(entry) !== filter.tier)
     return false
+  if (filter.searchType !== undefined && inferSearchType(entry) !== filter.searchType)
+    return false
   return true
 }
 

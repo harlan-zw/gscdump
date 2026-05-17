@@ -99,6 +99,106 @@ describe('inferSearchType', () => {
   })
 })
 
+describe('listLiveFilter.searchType', () => {
+  it('returns only the web slice (including legacy/undefined entries) when filter is web', async () => {
+    const { engine, manifestStore } = makeEngine()
+    // Different days so the two web writes don't supersede each other.
+    await engine.writeDay(
+      { ...makeCtx(), date: '2026-04-09', now: () => 1000, searchType: 'web' },
+      [pageRow('/web-explicit', '2026-04-09', 1)],
+    )
+    await engine.writeDay(
+      { ...makeCtx(), date: '2026-04-10', now: () => 1500 },
+      [pageRow('/web-legacy', '2026-04-10', 2)],
+    )
+    await engine.writeDay(
+      { ...makeCtx(), date: '2026-04-10', now: () => 2000, searchType: 'discover' },
+      [pageRow('/discover', '2026-04-10', 3)],
+    )
+
+    const web = await manifestStore.listLive({
+      userId: 'u1',
+      siteId: 's1',
+      table: 'pages',
+      searchType: 'web',
+    })
+    expect(web).toHaveLength(2)
+    expect(web.every(e => inferSearchType(e) === 'web')).toBe(true)
+
+    const discover = await manifestStore.listLive({
+      userId: 'u1',
+      siteId: 's1',
+      table: 'pages',
+      searchType: 'discover',
+    })
+    expect(discover).toHaveLength(1)
+    expect(discover[0].objectKey).toContain('/discover/')
+
+    // Undefined filter preserves the cross-type union (admin/GC semantics).
+    const all = await manifestStore.listLive({
+      userId: 'u1',
+      siteId: 's1',
+      table: 'pages',
+    })
+    expect(all).toHaveLength(3)
+  })
+
+  it('compaction never merges mixed-searchType entries into the same parquet', async () => {
+    const { engine, dataSource, manifestStore } = makeEngine()
+    // Write a web + discover daily for each of three consecutive days; all
+    // older than the raw→d7 cutoff so the first stage will pick them up.
+    const baseDay = Date.parse('2026-04-01T00:00:00Z')
+    const days = ['2026-04-01', '2026-04-02', '2026-04-03']
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i]!
+      await engine.writeDay(
+        { ...makeCtx(), date: day, now: () => baseDay + i, searchType: 'web' },
+        [pageRow(`/web-${day}`, day)],
+      )
+      await engine.writeDay(
+        { ...makeCtx(), date: day, now: () => baseDay + i + 10, searchType: 'discover' },
+        [pageRow(`/discover-${day}`, day)],
+      )
+    }
+
+    // Far in the future relative to the writes — every daily is past the
+    // raw→d7 cutoff and the PENDING_WINDOW_DAYS floor.
+    const compactAt = baseDay + 60 * 86_400_000
+    await engine.compactTiered(
+      { ...makeCtx(), now: () => compactAt },
+    )
+
+    // Two weekly compaction outputs: one web, one discover. Each must contain
+    // only its own slice's input rows.
+    // Compaction cascades raw→d7→d30→d90 in a single pass when entries are
+    // far enough past the d30 cutoff. End state for these inputs is one
+    // monthly entry per searchType — the regression we're testing is that
+    // these two stay separate, not which tier they land at.
+    const live = manifestStore.snapshot()
+    expect(live).toHaveLength(2)
+    const byType = new Map(live.map(e => [inferSearchType(e), e]))
+    expect(byType.get('web')).toBeDefined()
+    expect(byType.get('discover')).toBeDefined()
+    expect(byType.get('web')!.objectKey).not.toContain('/discover/')
+    expect(byType.get('discover')!.objectKey).toContain('/discover/')
+
+    // Inspect bytes: each compacted parquet must reference only its own slice.
+    const dec = new TextDecoder()
+    for (const [type, entry] of byType) {
+      const bytes = dataSource.snapshot().get(entry.objectKey)!
+      const text = dec.decode(bytes)
+      if (type === 'web') {
+        expect(text).toContain('/web-2026-04-01')
+        expect(text).not.toContain('/discover-')
+      }
+      else {
+        expect(text).toContain('/discover-2026-04-01')
+        expect(text).not.toContain('/web-')
+      }
+    }
+  })
+})
+
 describe('writeDay: searchType partitioning', () => {
   it('different search types coexist in the same date partition without superseding each other', async () => {
     const { engine, manifestStore } = makeEngine()

@@ -23,6 +23,14 @@ const unknownRecord = z.record(z.string(), z.unknown())
 
 export const builderStateSchema = unknownRecord
 
+/**
+ * GSC search-type slice validator. Mirrors the {@link GscSearchType} union
+ * and the `SearchTypes` constants in `gscdump/query`. Used by consumers
+ * routing requests across slices (web | discover | news | googleNews | image |
+ * video) to validate untrusted input before threading it to the engine.
+ */
+export const searchTypeSchema = z.enum(['web', 'image', 'video', 'news', 'discover', 'googleNews'])
+
 export const gscComparisonFilterSchema = z.enum(['new', 'lost', 'improving', 'declining'])
 
 export const gscApiRangeSchema = z.object({

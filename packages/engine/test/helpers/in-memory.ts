@@ -16,6 +16,7 @@ import type {
   WatermarkFilter,
   WatermarkScope,
 } from '../../src/storage'
+import { inferSearchType } from '../../src/storage'
 
 export function createInMemoryDataSource(initial?: Map<string, Uint8Array>): DataSource & {
   snapshot: () => Map<string, Uint8Array>
@@ -67,6 +68,8 @@ function matchesFilter(entry: ManifestEntry, filter: ListLiveFilter): boolean {
   if (filter.table !== undefined && entry.table !== filter.table)
     return false
   if (filter.partitions && !filter.partitions.includes(entry.partition))
+    return false
+  if (filter.searchType !== undefined && inferSearchType(entry) !== filter.searchType)
     return false
   return true
 }

@@ -198,6 +198,45 @@ describe('createR2ManifestStore — happy path', () => {
     expect(d90).toHaveLength(0)
   })
 
+  it('listLive filters by searchType — web matches legacy/undefined, discover matches its slice', async () => {
+    const bucket = makeFakeBucket()
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+
+    // Legacy entry: no searchType field (pre-partitioning data).
+    await store.registerVersion(makeEntry({
+      objectKey: 'u_u1/s1/pages/daily/2026-04-01__v1.parquet',
+      partition: 'daily/2026-04-01',
+      searchType: undefined,
+    }))
+    // Explicit web entry.
+    await store.registerVersion(makeEntry({
+      objectKey: 'u_u1/s1/pages/daily/2026-04-02__v1.parquet',
+      partition: 'daily/2026-04-02',
+      searchType: 'web',
+    }))
+    // Discover entry on the same (site, table).
+    await store.registerVersion(makeEntry({
+      objectKey: 'u_u1/s1/pages/discover/daily/2026-04-02__v1.parquet',
+      partition: 'daily/2026-04-02',
+      searchType: 'discover',
+    }))
+
+    const web = await store.listLive({ userId: 'u1', searchType: 'web' })
+    expect(web.map(e => e.objectKey).sort()).toEqual([
+      'u_u1/s1/pages/daily/2026-04-01__v1.parquet',
+      'u_u1/s1/pages/daily/2026-04-02__v1.parquet',
+    ])
+
+    const discover = await store.listLive({ userId: 'u1', searchType: 'discover' })
+    expect(discover.map(e => e.objectKey)).toEqual([
+      'u_u1/s1/pages/discover/daily/2026-04-02__v1.parquet',
+    ])
+
+    // Undefined filter still unions every slice (admin/GC semantics).
+    const all = await store.listLive({ userId: 'u1' })
+    expect(all).toHaveLength(3)
+  })
+
   it('tracks watermarks per shard', async () => {
     const bucket = makeFakeBucket()
     const store = createR2ManifestStore({ bucket, userId: 'u1' })

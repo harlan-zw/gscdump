@@ -28,6 +28,13 @@ export interface WriteCtx extends TenantCtx {
 export interface QueryCtx extends TenantCtx {
   table?: TableName
   signal?: AbortSignal
+  /**
+   * Restrict the query to a single GSC search-type partition (`web`,
+   * `discover`, etc.). Undefined preserves the cross-type union for
+   * legacy/web-only deployments; explicit value scopes the read to
+   * manifest entries written for that type. Mirrors {@link WriteCtx.searchType}.
+   */
+  searchType?: SearchType
 }
 
 export interface GcCtx {
@@ -114,6 +121,18 @@ export interface ListLiveFilter {
    * an explicit `tier` field match on {@link inferLegacyTier}.
    */
   tier?: CompactionTier
+  /**
+   * Narrow to a single GSC searchType slice. Undefined means "no filter" — used
+   * by cross-type admin paths (GC / orphan sweep, tenant-stats site discovery).
+   * Explicit value filters to that slice; pass `'web'` to match the legacy /
+   * sentinel-`''` entries via {@link inferSearchType}.
+   *
+   * Read paths that scope to a single (user, site, table) cohort MUST set this
+   * once writes from multiple search types coexist for that cohort, otherwise
+   * the result unions web + non-web entries into a single query and double-
+   * counts metrics.
+   */
+  searchType?: SearchType
 }
 
 export interface DataSource {
@@ -424,6 +443,14 @@ export interface RunSQLOptions {
   sql: string
   params?: unknown[]
   signal?: AbortSignal
+  /**
+   * Restrict every manifest lookup the runner performs to a single
+   * search-type slice. Applies uniformly across all `fileSets`; per-
+   * fileSet overrides aren't supported (the only multi-fileSet caller,
+   * comparison joins, always wants the same slice for both windows).
+   * Undefined keeps the legacy cross-type union.
+   */
+  searchType?: SearchType
 }
 
 export interface StorageEngine {

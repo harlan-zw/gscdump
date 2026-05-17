@@ -143,6 +143,10 @@ async function runStage(
   const effectiveDays = Math.max(stage.cutoffDays, PENDING_WINDOW_DAYS)
   const cutoff = now - effectiveDays * MS_PER_DAY
 
+  // Intentionally unfiltered by searchType — compaction sweeps every slice
+  // (web, discover, ...) for the tenant+table+tier in one pass. Same-type
+  // bucketing happens below via the `(searchType, bucketKey)` composite key
+  // so different searchTypes never merge into a single output parquet.
   const candidates = await deps.manifestStore.listLive({
     userId: ctx.userId,
     siteId: ctx.siteId,

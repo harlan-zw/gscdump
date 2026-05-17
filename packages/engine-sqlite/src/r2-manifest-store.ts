@@ -122,6 +122,18 @@ export function createD1ManifestStore(db: AnalyticsManifestDb): ManifestStore {
       if (cond)
         baseConds.push(cond)
     }
+    if (filter.searchType !== undefined) {
+      // r2_manifest.searchType is nullable text (unlike r2_sync_states.searchType
+      // which uses '' as a NOT NULL sentinel). Entries written before the column
+      // landed, or via writeDay with `ctx.searchType` omitted, store NULL — those
+      // are the legacy/web cohort and must match a `searchType: 'web'` filter.
+      // Explicit 'web' writes store the literal 'web'; accept both.
+      baseConds.push(
+        filter.searchType === 'web'
+          ? or(eq(r2Manifest.searchType, 'web'), isNull(r2Manifest.searchType))!
+          : eq(r2Manifest.searchType, filter.searchType),
+      )
+    }
 
     // D1 has a 100-bound-param-per-query limit. Chunk partition IN-clauses
     // (each value is one bound param) to stay safely under that ceiling
