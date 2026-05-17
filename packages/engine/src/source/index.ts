@@ -8,7 +8,7 @@ import type { BuilderState } from 'gscdump/query'
 import type { PlannerCapabilities } from 'gscdump/query/plan'
 import type { AnalysisParams, AnalysisResult } from '../analysis-types'
 import type { AnalyzerRegistry } from '../analyzer/registry'
-import type { StorageEngine, TenantCtx } from '../storage'
+import type { SearchType, StorageEngine, TenantCtx } from '../storage'
 import type {
   AnalysisQuerySource,
   ExecuteSqlOptions,
@@ -58,6 +58,14 @@ const ENGINE_SOURCE_CAPABILITIES: SourceCapabilities = {
 export interface EngineQuerySourceOptions {
   engine: StorageEngine
   ctx: TenantCtx
+  /**
+   * Restrict every manifest lookup the source performs to a single search-type
+   * slice. Threads into `engine.query` and `engine.runSQL` so the wrapped
+   * source returns rows from one cohort instead of unioning web + non-web
+   * parquet. Undefined preserves legacy cross-type behaviour for web-only
+   * tenants and admin paths.
+   */
+  searchType?: SearchType
 }
 
 /**
@@ -69,7 +77,7 @@ export interface EngineQuerySourceOptions {
 export function createEngineQuerySource(
   options: EngineQuerySourceOptions,
 ): AnalysisQuerySource {
-  const { engine, ctx } = options
+  const { engine, ctx, searchType } = options
 
   return {
     name: 'engine',
@@ -82,7 +90,10 @@ export function createEngineQuerySource(
       if (state.dimensions.includes('queryCanonical') || filterDims.includes('queryCanonical')) {
         throw new Error('engine query source does not support queryCanonical; use browser/sqlite query sources for derived dimensions')
       }
-      const result = await engine.query(ctx, state)
+      const result = await engine.query(
+        { ...ctx, ...(searchType !== undefined ? { searchType } : {}) },
+        state,
+      )
       return coerceRows(result.rows as QueryRow[])
     },
     async executeSql(sql: string, params?: unknown[], opts?: ExecuteSqlOptions): Promise<QueryRow[]> {
@@ -95,6 +106,7 @@ export function createEngineQuerySource(
         fileSets,
         sql,
         params: params ?? [],
+        ...(searchType !== undefined ? { searchType } : {}),
       })
       return coerceRows(rows as QueryRow[])
     },

@@ -62,17 +62,15 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     return manifestStore.withLock(
       { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table, partition },
       async () => {
-        const liveForPartition = await manifestStore.listLive({
+        // Only fetch the slice we'll supersede — different search types
+        // coexist in the same date partition and must not retire each other.
+        const superseding = await manifestStore.listLive({
           userId: ctx.userId,
           siteId: ctx.siteId,
           table: ctx.table,
           partitions: [partition],
+          searchType: inferSearchType({ searchType }),
         })
-        // Only supersede entries that share the same searchType — different
-        // search types coexist in the same date partition.
-        const superseding = liveForPartition.filter(
-          e => inferSearchType(e) === inferSearchType({ searchType }),
-        )
 
         const normalizedRows = rows.map(r => normalizeRow(ctx.table, r))
         const key = objectKey(ctx, ctx.table, partition, now, searchType)
@@ -134,6 +132,11 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
           siteId: opts.ctx.siteId,
           table: ref.table,
           partitions: ref.partitions,
+          // Without this, a tenant with mixed-searchType writes would union
+          // web + Discover (etc.) parquet into the same query — clicks /
+          // impressions double, CTR smears. Undefined preserves the legacy
+          // cross-type behaviour for web-only tenants.
+          ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
         })
         return [name, list.map(e => e.objectKey)] as const
       }),
@@ -186,6 +189,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
       sql: resolved.sql,
       params: resolved.params,
       signal: ctx.signal,
+      ...(ctx.searchType !== undefined ? { searchType: ctx.searchType } : {}),
     })
   }
 
@@ -254,6 +258,9 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     }
 
     for (const table of URL_PURGE_TABLES) {
+      // Intentionally unfiltered by searchType — a GDPR URL takedown must
+      // scrub the URL from every slice (web, discover, ...). Each rewritten
+      // entry carries its source `entry.searchType` so types stay separated.
       const entries = await manifestStore.listLive({
         userId: ctx.userId,
         siteId: ctx.siteId,

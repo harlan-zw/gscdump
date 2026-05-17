@@ -4,6 +4,7 @@ import {
   partnerEndpointSchemas,
   partnerRoutes,
   partnerWebhookEnvelopeSchema,
+  searchTypeSchema,
   VALID_WEBHOOK_EVENTS,
   WEBHOOK_CONTRACT_VERSION,
   WEBHOOK_TIMESTAMP_HEADER,
@@ -60,6 +61,23 @@ describe('@gscdump/contracts', () => {
         timestamp: 1770000000,
       },
     })).toMatchObject({ event: 'site.analytics.ready' })
+  })
+
+  it('searchTypeSchema accepts the 6 GSC slices and rejects everything else', () => {
+    for (const slice of ['web', 'image', 'video', 'news', 'discover', 'googleNews'] as const)
+      expect(searchTypeSchema.parse(slice)).toBe(slice)
+
+    // Case-sensitive: 'Discover' is not the same as 'discover'.
+    expect(searchTypeSchema.safeParse('Discover').success).toBe(false)
+    // Empty string is never a valid slice (the '' sentinel is an internal
+    // store-level convention, not a public input).
+    expect(searchTypeSchema.safeParse('').success).toBe(false)
+    // Whitespace-padded values must round-trip exactly; no trimming.
+    expect(searchTypeSchema.safeParse('web ').success).toBe(false)
+    // Unknown strings rejected outright.
+    expect(searchTypeSchema.safeParse('blogs').success).toBe(false)
+    expect(searchTypeSchema.safeParse(undefined).success).toBe(false)
+    expect(searchTypeSchema.safeParse(null).success).toBe(false)
   })
 
   it('validates lifecycle onboarding responses', () => {

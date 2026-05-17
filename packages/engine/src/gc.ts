@@ -51,6 +51,8 @@ export async function gcOrphansImpl(
   let sweptOrphans = 0
   if (opts.userId) {
     const prefix = tenantPrefix({ userId: opts.userId, siteId: opts.siteId })
+    // Intentionally unfiltered by searchType — orphan sweep must consider
+    // every slice's known keys when distinguishing live bytes from orphans.
     const knownEntries = await deps.manifestStore.listAll({ userId: opts.userId, siteId: opts.siteId })
     const knownSet = new Set(knownEntries.map(e => e.objectKey))
     const orphans: string[] = []

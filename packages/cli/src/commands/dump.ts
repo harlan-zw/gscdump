@@ -1,3 +1,4 @@
+import type { SearchType } from 'gscdump/query'
 import type { LocalStore, ManifestEntry, TableName } from '../local-store'
 import { Buffer } from 'node:buffer'
 import fs from 'node:fs/promises'
@@ -8,7 +9,7 @@ import { sqlEscape } from '@gscdump/engine/sql'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
-import { applyOutputMode, displayPath, logger, OUTPUT_ARGS, toCSV } from '../utils'
+import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseSearchType, toCSV } from '../utils'
 
 const DEFAULT_OUT = './gscdump-export'
 const FORMATS = ['parquet', 'json', 'ndjson', 'csv'] as const
@@ -52,6 +53,10 @@ export const dumpCommand = defineCommand({
       default: false,
       description: 'Compact every closed month into a single file before exporting',
     },
+    'search-type': {
+      type: 'string',
+      description: `Restrict dump to a single GSC search-type slice (${ALL_SEARCH_TYPES.join(', ')}). Default: all slices.`,
+    },
     ...OUTPUT_ARGS,
   },
   async run({ args }) {
@@ -64,6 +69,7 @@ export const dumpCommand = defineCommand({
     const tablesFilter = args.tables
       ? new Set(String(args.tables).split(',').map(t => t.trim()).filter(Boolean))
       : null
+    const searchType = parseSearchType(args['search-type'])
     const ctx = await createCommandContext({ needsAuth: !args['all-sites'], needsStore: true })
     const store = ctx.store!
     const outDir = path.resolve(String(args.out))
@@ -83,7 +89,7 @@ export const dumpCommand = defineCommand({
 
     const summary: Array<{ site: string, files: number, rows: number, format: DumpFormat, outPath: string }> = []
     for (const siteUrl of targets) {
-      const entries = (await listLiveEntries(store, siteUrl))
+      const entries = (await listLiveEntries(store, siteUrl, searchType))
         .filter(e => !tablesFilter || tablesFilter.has(e.table))
       if (entries.length === 0) {
         if (!quiet)
@@ -123,13 +129,14 @@ async function listSitesWithData(store: LocalStore): Promise<string[]> {
   return Array.from(siteIds)
 }
 
-async function listLiveEntries(store: LocalStore, siteUrl: string): Promise<ManifestEntry[]> {
+async function listLiveEntries(store: LocalStore, siteUrl: string, searchType?: SearchType): Promise<ManifestEntry[]> {
   const siteId = store.siteIdFor(siteUrl)
   const perTable = await Promise.all(
     allTables().map(table => store.engine.listLive({
       userId: store.userId,
       siteId,
       table: table as TableName,
+      ...(searchType !== undefined ? { searchType } : {}),
     })),
   )
   return perTable.flat()

@@ -6,12 +6,12 @@ import process from 'node:process'
 import { cancel, isCancel, multiselect, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { daysAgo } from 'gscdump'
-import { and, between, contains, country, date as dateCol, device, eq, gsc, notRegex, page, query as queryCol, regex, searchAppearance, SearchTypes } from 'gscdump/query'
+import { and, between, contains, country, date as dateCol, device, eq, gsc, notRegex, page, query as queryCol, regex, searchAppearance } from 'gscdump/query'
 import { loadConfig } from '../config'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { allTables, inferTable } from '../local-store'
-import { exportToCSV, logger } from '../utils'
+import { ALL_SEARCH_TYPES, exportToCSV, logger, parseSearchType } from '../utils'
 
 const DIMENSIONS = ['page', 'query', 'date', 'country', 'device', 'searchAppearance'] as const
 type DimensionName = typeof DIMENSIONS[number]
@@ -34,7 +34,6 @@ const FILTER_COL: Record<FilterDim, Column<Dimension>> = {
   device,
   searchAppearance,
 }
-const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
 const DATA_STATES = ['all', 'final', 'hourly_all'] as const
 const AGGREGATION_TYPES = ['auto', 'byPage', 'byProperty'] as const
 
@@ -257,6 +256,7 @@ export const queryCommand = defineCommand({
         table: args.table ? String(args.table) : 'pages',
         output: args.output ? String(args.output) : undefined,
         quiet: Boolean(args.quiet),
+        searchType: parseSearchType(args.type, '--type'),
       })
       return
     }
@@ -272,7 +272,7 @@ export const queryCommand = defineCommand({
       : (ctxConfig.defaultLimit ?? 1000)
     const format = String(args.format) as 'json' | 'csv'
     const dimensionFilter = buildDimensionFilter(args)
-    const searchType = parseSearchType(args.type ?? ctxConfig.defaultSearchType)
+    const searchType = parseSearchType(args.type ?? ctxConfig.defaultSearchType, '--type')
     const dataState = args['data-state']
       ? String(args['data-state'])
       : ctxConfig.defaultDataState
@@ -340,10 +340,6 @@ export const queryCommand = defineCommand({
       return
     }
 
-    if (searchType && searchType !== 'web') {
-      logger.error(`--type=${searchType} requires --live (local store query path is web-only).`)
-      process.exit(1)
-    }
     if (dataState || aggregationType) {
       logger.warn('--data-state / --aggregation-type are ignored without --live')
     }
@@ -360,7 +356,12 @@ export const queryCommand = defineCommand({
     }
     await assertRangeCovered(store, siteUrl, table, startDate, endDate)
     const result = await store.engine.query(
-      { userId: store.userId, siteId: store.siteIdFor(siteUrl), table },
+      {
+        userId: store.userId,
+        siteId: store.siteIdFor(siteUrl),
+        table,
+        ...(searchType !== undefined ? { searchType } : {}),
+      },
       state,
     ).catch((e: Error) => {
       logger.error(`Query failed: ${e.message}`)
@@ -517,17 +518,6 @@ function buildDimensionFilter(args: Record<string, unknown>): Filter<any> | unde
   return and(...leaves)
 }
 
-function parseSearchType(value: unknown): SearchType | undefined {
-  if (!value)
-    return undefined
-  const v = String(value)
-  if (!ALL_SEARCH_TYPES.includes(v as SearchType)) {
-    logger.error(`Invalid --type: ${v}. Allowed: ${ALL_SEARCH_TYPES.join(', ')}`)
-    process.exit(1)
-  }
-  return v as SearchType
-}
-
 async function assertRangeCovered(
   store: LocalStore,
   siteUrl: string,
@@ -561,6 +551,7 @@ async function runRawSqlMode(opts: {
   table: string
   output: string | undefined
   quiet: boolean
+  searchType?: SearchType
 }): Promise<void> {
   if (!isKnownTable(opts.table)) {
     logger.error(`Unknown table "${opts.table}". Known: ${allTables().join(', ')}`)
@@ -578,6 +569,7 @@ async function runRawSqlMode(opts: {
     sql: opts.sql,
     siteUrl,
     table: opts.table,
+    ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
   }).catch((e: Error) => {
     logger.error(`SQL failed: ${e.message}`)
     process.exit(1)
