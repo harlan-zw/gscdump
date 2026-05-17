@@ -1158,6 +1158,7 @@ export interface PartnerClient {
   getUserStatus: (userId: string) => Promise<GscdumpUserStatus>
   getUserLifecycle: (userId: string) => Promise<PartnerLifecycleResponse>
   waitForUserReady: (userId: string, options?: { attempts?: number, intervalMs?: number }) => Promise<GscdumpUserStatus>
+  waitForUserLifecycleReady: (userId: string, options?: { attempts?: number, intervalMs?: number }) => Promise<PartnerLifecycleResponse>
   getUserSites: (userId: string) => Promise<{ sites: GscdumpUserSite[] }>
   getAvailableSites: (userId: string) => Promise<{ sites: GscdumpAvailableSite[] }>
   registerSite: (params: RegisterPartnerSiteParams) => Promise<GscdumpSiteRegistration>
@@ -1165,7 +1166,7 @@ export interface PartnerClient {
   deleteUser: (userId: string) => Promise<DeletePartnerUserResponse>
   deleteSite: (siteId: string) => Promise<{ success: boolean }>
   getAnalysisSources: (siteId: string, tables?: string[] | string) => Promise<GscdumpAnalysisSourcesResponse>
-  getSiteSyncStatus: (siteId: string) => Promise<GscdumpSyncStatusResponse>
+  getSiteSyncStatus: (siteId: string, userId?: string) => Promise<GscdumpSyncStatusResponse>
   getData: (siteId: string, state: BuilderState, options?: DataQueryOptions) => Promise<GscdumpDataResponse>
   getDataDetail: (siteId: string, state: BuilderState, options?: DataDetailOptions) => Promise<GscdumpDataDetailResponse>
   getAnalysis: (siteId: string, params: GscdumpAnalysisParams) => Promise<GscdumpAnalysisResponse>

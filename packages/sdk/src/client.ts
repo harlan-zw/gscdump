@@ -49,7 +49,8 @@ import type {
 import type { ZodTypeAny } from 'zod'
 import { partnerEndpointSchemas, partnerRoutes } from '@gscdump/contracts'
 import { ofetch } from 'ofetch'
-import { toPartnerError } from './errors'
+import { PartnerApiError, toPartnerError } from './errors'
+import { findLifecycleSite, lifecycleSiteToSyncStatus } from './lifecycle'
 
 export type PartnerFetch = <T = unknown>(request: string, options?: PartnerFetchOptions) => Promise<T>
 export type PartnerHeaders = HeadersInit | (() => HeadersInit | Promise<HeadersInit>)
@@ -270,6 +271,52 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       throw err
     },
 
+    // Lifecycle-aware variant of `waitForUserReady`. Polls
+    // `getUserLifecycle(userId)` and discriminates between states:
+    //   - `ready`                                              → resolve
+    //   - `refresh_missing|scope_missing|reauth_required`      → throw `auth` (401)
+    //   - `disconnected|oauth_received`                        → throw `provisioning` (409)
+    //   - polling exhausted (still provisioning, db_provisioning, etc.) → throw `provisioning` (409)
+    // Consumers map `PartnerApiError.kind` to their HTTP framework's error shape.
+    async waitForUserLifecycleReady(
+      userId: string,
+      waitOptions: { attempts?: number, intervalMs?: number } = {},
+    ): Promise<PartnerLifecycleResponse> {
+      const attempts = waitOptions.attempts ?? 12
+      const intervalMs = waitOptions.intervalMs ?? 1000
+      let latest: PartnerLifecycleResponse | null = null
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        latest = await request<PartnerLifecycleResponse>(partnerRoutes.users.lifecycle(userId))
+        const status = latest.account.status
+        if (status === 'ready')
+          return latest
+        if (status === 'refresh_missing' || status === 'scope_missing' || status === 'reauth_required') {
+          throw new PartnerApiError({
+            kind: 'auth',
+            statusCode: 401,
+            message: 'Google Search Console authorization must be refreshed',
+            data: latest.account,
+          })
+        }
+        if (status === 'disconnected' || status === 'oauth_received') {
+          throw new PartnerApiError({
+            kind: 'provisioning',
+            statusCode: 409,
+            message: 'gscdump user is not fully connected',
+            data: latest.account,
+          })
+        }
+        if (attempt < attempts - 1)
+          await sleep(intervalMs)
+      }
+      throw new PartnerApiError({
+        kind: 'provisioning',
+        statusCode: 409,
+        message: 'gscdump user database is still provisioning',
+        data: latest,
+      })
+    },
+
     getUserSites(userId: string) {
       return request<{ sites: GscdumpUserSite[] }>(partnerRoutes.users.sites(userId), {}, partnerEndpointSchemas.getUserSites.response)
     },
@@ -312,8 +359,24 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       }, partnerEndpointSchemas.getAnalysisSources.response)
     },
 
-    getSiteSyncStatus(siteId: string) {
-      return request<GscdumpSyncStatusResponse>(partnerRoutes.sites.syncStatus(siteId))
+    // When `userId` is passed, derive sync status from a single lifecycle
+    // round-trip (saves a request when the caller already wanted both). Falls
+    // back to the dedicated sync-status endpoint otherwise. Throws `not-found`
+    // when the lifecycle response doesn't include the requested site.
+    async getSiteSyncStatus(siteId: string, userId?: string): Promise<GscdumpSyncStatusResponse> {
+      if (!userId)
+        return request<GscdumpSyncStatusResponse>(partnerRoutes.sites.syncStatus(siteId))
+      const lifecycle = await request<PartnerLifecycleResponse>(partnerRoutes.users.lifecycle(userId))
+      const site = findLifecycleSite(lifecycle, siteId)
+      if (!site) {
+        throw new PartnerApiError({
+          kind: 'not-found',
+          statusCode: 404,
+          message: 'gscdump lifecycle site not found',
+          data: { siteId, userId },
+        })
+      }
+      return lifecycleSiteToSyncStatus(site)
     },
 
     getData(siteId: string, state: BuilderState, queryOptions?: DataQueryOptions) {
