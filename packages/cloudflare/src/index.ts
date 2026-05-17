@@ -17,6 +17,8 @@ export { getAnalyticsEngine } from './engine'
 export type { AnalyticsEnv } from './env'
 
 export { useAnalyticsEnv } from './env'
+export type { HostedR2QueryKeyInput, InflightDedupe } from './inflight-dedupe'
+export { createInflightDedupe, getHostedR2QueryKey } from './inflight-dedupe'
 export type { PresignOptions } from './r2-presign'
 
 export { createR2Presigner } from './r2-presign'

@@ -77,6 +77,14 @@ export type {
   RunReportOptions,
 } from './report'
 
+export type {
+  SitemapDelta,
+  SitemapHealthDiff,
+  SitemapHealthInput,
+  SitemapHealthRow,
+  SitemapHealthTotals,
+} from './sitemap-health'
+export { diffSitemapHealth } from './sitemap-health'
 // Source factories. The dispatcher is `runAnalyzerFromSource` (re-exported
 // below from `@gscdump/engine/analyzer`).
 export {
