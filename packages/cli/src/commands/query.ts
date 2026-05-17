@@ -340,10 +340,6 @@ export const queryCommand = defineCommand({
       return
     }
 
-    if (searchType && searchType !== 'web') {
-      logger.error(`--type=${searchType} requires --live (local store query path is web-only).`)
-      process.exit(1)
-    }
     if (dataState || aggregationType) {
       logger.warn('--data-state / --aggregation-type are ignored without --live')
     }
@@ -360,7 +356,12 @@ export const queryCommand = defineCommand({
     }
     await assertRangeCovered(store, siteUrl, table, startDate, endDate)
     const result = await store.engine.query(
-      { userId: store.userId, siteId: store.siteIdFor(siteUrl), table },
+      {
+        userId: store.userId,
+        siteId: store.siteIdFor(siteUrl),
+        table,
+        ...(searchType ? { searchType } : {}),
+      },
       state,
     ).catch((e: Error) => {
       logger.error(`Query failed: ${e.message}`)
