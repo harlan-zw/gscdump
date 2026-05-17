@@ -8,9 +8,10 @@
 //   - pro flows when a query's date range falls outside the synced window
 //     and is GSC-answerable (via `createCompositeSource`)
 
+import type { SearchType as EngineSearchType } from '@gscdump/engine'
 import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { GoogleSearchConsoleClient } from 'gscdump'
-import type { BuilderState } from 'gscdump/query'
+import type { BuilderState, Filter } from 'gscdump/query'
 import { googleSearchConsole } from 'gscdump'
 import { extractMetricFilters, extractSpecialOperatorFilters } from 'gscdump/query'
 import { createGscApiQuerySource } from './source'
@@ -36,6 +37,31 @@ export interface CreateLiveGscSourceOptions {
    * cost is paid only when the source actually runs. Host owns refresh logic.
    */
   getAccessToken: () => Promise<string>
+  /**
+   * GSC `searchType` slice this source is scoped to (`web`, `discover`,
+   * `news`, `googleNews`, `image`, `video`). When set, the slice is injected
+   * into every outgoing query's filter so the live API returns rows for that
+   * slice only. Undefined preserves pre-0.17.1 behaviour (web by default,
+   * unless the BuilderState's filter already names a `searchType`).
+   */
+  searchType?: EngineSearchType
+}
+
+// Inject `searchType` as a top-level dimension filter on the state. The
+// gscdump query layer's `extractSpecialFilters` pulls it out and lifts it
+// onto the request body. If the state already names a different slice, the
+// caller's filter wins — same precedence rule as date filters today.
+function withSearchType(state: BuilderState, searchType: EngineSearchType): BuilderState {
+  const existing = state.filter as Filter<any> | undefined
+  const existingFilters = existing?._filters ?? []
+  const namesSearchType = existingFilters.some(f => f.dimension === 'searchType')
+  if (namesSearchType)
+    return state
+  const newEntry = { dimension: 'searchType', operator: 'eq' as const, expression: searchType }
+  const merged: Filter<any> = existing
+    ? { ...existing, _filters: [...existingFilters, newEntry as unknown as typeof existingFilters[number]] }
+    : { _filters: [newEntry as unknown as Parameters<typeof Object>[0]], _groupType: 'and' } as unknown as Filter<any>
+  return { ...state, filter: merged }
 }
 
 export function createLiveGscSource(opts: CreateLiveGscSourceOptions): AnalysisQuerySource {
@@ -52,7 +78,8 @@ export function createLiveGscSource(opts: CreateLiveGscSourceOptions): AnalysisQ
     capabilities: { regex: true, multiDataset: false, comparisonJoin: false, windowTotals: false },
     async queryRows(state: BuilderState) {
       const client = await getClient()
-      return createGscApiQuerySource({ client, siteUrl: opts.siteUrl }).queryRows(state)
+      const scopedState = opts.searchType !== undefined ? withSearchType(state, opts.searchType) : state
+      return createGscApiQuerySource({ client, siteUrl: opts.siteUrl }).queryRows(scopedState)
     },
   }
 }

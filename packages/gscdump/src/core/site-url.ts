@@ -43,3 +43,20 @@ export function parseGscSiteUrl(siteUrl: string): ParsedGscSiteUrl {
     isDomain,
   }
 }
+
+/**
+ * Normalize a user-input URL/hostname into a canonical registration target.
+ * Returns lowercase hostname stripped of protocol, or null if unparseable.
+ */
+export function normalizeRegistrationTarget(inputUrl: string): string | null {
+  const trimmed = inputUrl.trim()
+  if (!trimmed)
+    return null
+
+  const inputParsed = parseGscSiteUrl(trimmed)
+  if (inputParsed.isDomain)
+    return inputParsed.hostname.toLowerCase()
+
+  const urlMatch = trimmed.match(/^(?:https?:\/\/)?([^/]+)/)
+  return urlMatch?.[1]?.toLowerCase() ?? null
+}

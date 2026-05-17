@@ -132,6 +132,97 @@ export function storageError(message: string, cause?: unknown): GscError {
   return { kind: 'storage', message, cause }
 }
 
+// --- Structured Google API error (parsed JSON shape) -----------------------
+// Complements `classifyError` (which routes any unknown into the `GscError`
+// union). `parseGoogleError` is the parsing layer: it pulls the canonical
+// `{code, message, reason, status}` info out of Google's error JSON shape
+// (both the nested `errors.googleapis.com`-style envelope and the bare OAuth
+// `{error, error_description}` shape). `GscApiError` carries that info.
+
+interface GoogleApiErrorNested {
+  error: {
+    code: number
+    message: string
+    status?: string
+    details?: Array<{
+      '@type': string
+      'reason'?: string
+      'domain'?: string
+      'metadata'?: Record<string, string>
+    }>
+  }
+}
+
+interface GoogleOAuthError {
+  error: string
+  error_description?: string
+  error_uri?: string
+}
+
+export interface GscApiErrorInfo {
+  code: number
+  message: string
+  reason?: string
+  status?: string
+}
+
+export function parseGoogleError(text: string, httpStatus?: number): GscApiErrorInfo {
+  let parsed: GoogleApiErrorNested | GoogleOAuthError | null = null
+  try {
+    parsed = JSON.parse(text)
+  }
+  catch { /* ignore */ }
+
+  if (!parsed || !('error' in parsed))
+    return { code: httpStatus ?? 500, message: text || 'Unknown Google API error' }
+
+  if (typeof parsed.error === 'string') {
+    const oauth = parsed as GoogleOAuthError
+    return {
+      code: httpStatus ?? 400,
+      message: oauth.error_description || oauth.error,
+      reason: oauth.error,
+    }
+  }
+
+  const err = (parsed as GoogleApiErrorNested).error
+  const errorInfo = err.details?.find(d => d['@type']?.includes('ErrorInfo'))
+  return {
+    code: err.code ?? httpStatus ?? 500,
+    message: err.message || err.status || text || `HTTP ${httpStatus ?? '?'}`,
+    reason: errorInfo?.reason,
+    status: err.status,
+  }
+}
+
+export class GscApiError extends Error {
+  constructor(message: string, public info: GscApiErrorInfo) {
+    super(message)
+    this.name = 'GscApiError'
+  }
+}
+
+/**
+ * Returns a handler that re-throws `unknown` as a `GscApiError` prefixed with
+ * `prefix`. Recognises `ofetch` `FetchError` (parses `err.data` as Google JSON
+ * via `parseGoogleError`); passes through existing `GscApiError`; re-throws
+ * anything else as-is.
+ */
+export function rethrowAsGscApiError(prefix: string): (err: unknown) => never {
+  return (err: unknown) => {
+    if (err instanceof GscApiError)
+      throw err
+    // ofetch FetchError has shape { statusCode, data, message }
+    const maybe = err as { name?: string, statusCode?: number, data?: unknown }
+    if (maybe && maybe.name === 'FetchError') {
+      const text = typeof maybe.data === 'string' ? maybe.data : JSON.stringify(maybe.data ?? {})
+      const info = parseGoogleError(text, maybe.statusCode)
+      throw new GscApiError(`${prefix}: ${info.message}`, info)
+    }
+    throw err
+  }
+}
+
 const PERMISSION_SIGNALS = [
   '403 forbidden',
   'permission_denied',

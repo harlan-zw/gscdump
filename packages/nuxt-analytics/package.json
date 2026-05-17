@@ -30,11 +30,6 @@
       "types": "./module.ts",
       "import": "./module.ts",
       "default": "./module.ts"
-    },
-    "./site-url": {
-      "types": "./site-url.ts",
-      "import": "./site-url.ts",
-      "default": "./site-url.ts"
     }
   },
   "main": "./nuxt.config.ts",
@@ -44,7 +39,6 @@
     "app",
     "module.ts",
     "nuxt.config.ts",
-    "site-url.ts",
     "types.ts"
   ],
   "scripts": {

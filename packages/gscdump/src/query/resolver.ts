@@ -1,7 +1,11 @@
 import type { GscSearchAnalyticsDimension, GscSearchAnalyticsFilterGroup, GscSearchAnalyticsFilterOperator, GscSearchAnalyticsRequest, GscSearchType } from '../contracts'
+import type { SearchType } from './constants'
 import type { BuilderState, Filter, FilterInput, InternalFilter, JsonFilter } from './types'
 import { addDays } from '../core/gsc-dates'
+import { SearchTypes } from './constants'
 import { isDateOperator, isMetricOperator, isQueryParam, isSpecialOperator } from './operator-meta'
+
+const KNOWN_SEARCH_TYPES = new Set<string>(Object.values(SearchTypes))
 
 // Check if value is a JSON filter (serialized) vs a real Filter object
 export function isJsonFilter(value: unknown): value is JsonFilter {
@@ -216,6 +220,24 @@ export function extractSpecialOperatorFilters(input?: FilterInput): InternalFilt
   const special = filter._filters.filter(f => isSpecialOperator(f.operator))
   const nested = filter._nestedGroups?.flatMap(g => extractSpecialOperatorFilters(g)) ?? []
   return [...special, ...nested]
+}
+
+/**
+ * Pull `searchType` out of a BuilderState filter. Returns undefined for
+ * missing/invalid shapes — callers treat that as "no scope" (cross-type read).
+ * Validated against the canonical `SearchTypes` set so unknown strings
+ * don't reach the engine.
+ */
+export function extractSearchType(state: BuilderState | undefined | null): SearchType | undefined {
+  if (!state)
+    return undefined
+  const filter = (state as { filter?: unknown }).filter
+  if (!filter || typeof filter !== 'object')
+    return undefined
+  const raw = (filter as { searchType?: unknown }).searchType
+  if (typeof raw !== 'string' || raw.length === 0)
+    return undefined
+  return KNOWN_SEARCH_TYPES.has(raw) ? raw as SearchType : undefined
 }
 
 export function resolveToBody(state: BuilderState): GscSearchAnalyticsRequest {
