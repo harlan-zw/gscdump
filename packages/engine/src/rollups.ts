@@ -13,6 +13,7 @@
 // follow-up — they need a flexible-schema variant of `encodeRowsToParquet`.
 
 import type { TenantCtx } from '@gscdump/contracts'
+import type { SearchType } from 'gscdump/query'
 import type { DataSource, FileSetRef, Row } from './contracts'
 import type { ColumnDef } from './schema'
 import { MS_PER_DAY } from 'gscdump'
@@ -35,6 +36,13 @@ export interface RollupEngine {
     table?: import('@gscdump/engine/contracts').TableName
     sql: string
     params?: unknown[]
+    /**
+     * Restrict every manifest lookup to a single GSC search-type slice. The
+     * rollup runner forwards `RebuildRollupsOptions.searchType` so the
+     * aggregated facts never mix web + non-web rows. Undefined preserves
+     * the legacy cross-type union (web-only tenants).
+     */
+    searchType?: SearchType
   }) => Promise<{ rows: import('@gscdump/engine/contracts').Row[] }>
 }
 
@@ -84,6 +92,13 @@ export interface RollupDef {
      * lives in ICU).
      */
     builtAt: number
+    /**
+     * GSC search-type slice the runner was invoked for. Builders forward
+     * this to every `engine.runSQL` call so the aggregated facts come
+     * from one cohort. Undefined preserves the legacy cross-type union
+     * (used by web-only tenants and admin paths).
+     */
+    searchType?: SearchType
   }) => Promise<unknown>
 }
 
@@ -105,18 +120,24 @@ export interface ParquetRollupPointer {
   rowCount: number
 }
 
-function rollupPrefix(ctx: TenantCtx): string {
-  return ctx.siteId
+function rollupPrefix(ctx: TenantCtx, searchType?: SearchType): string {
+  const base = ctx.siteId
     ? `u_${ctx.userId}/${ctx.siteId}/rollups`
     : `u_${ctx.userId}/rollups`
+  // Web is the implicit default and stays at the legacy path so existing
+  // readers + rollup pointer URLs keep working. Non-web slices land under
+  // a per-type segment so cross-type rollup outputs never collide.
+  return searchType !== undefined && searchType !== 'web'
+    ? `${base}/${searchType}`
+    : base
 }
 
-export function rollupKey(ctx: TenantCtx, id: string, builtAt: number): string {
-  return `${rollupPrefix(ctx)}/${id}__v${builtAt}.json`
+export function rollupKey(ctx: TenantCtx, id: string, builtAt: number, searchType?: SearchType): string {
+  return `${rollupPrefix(ctx, searchType)}/${id}__v${builtAt}.json`
 }
 
-export function rollupParquetKey(ctx: TenantCtx, id: string, builtAt: number): string {
-  return `${rollupPrefix(ctx)}/${id}__v${builtAt}.parquet`
+export function rollupParquetKey(ctx: TenantCtx, id: string, builtAt: number, searchType?: SearchType): string {
+  return `${rollupPrefix(ctx, searchType)}/${id}__v${builtAt}.parquet`
 }
 
 export interface RebuildRollupsOptions {
@@ -125,6 +146,16 @@ export interface RebuildRollupsOptions {
   ctx: TenantCtx
   defs: readonly RollupDef[]
   now?: () => number
+  /**
+   * Build rollups for a single GSC search-type slice. Threads into every
+   * builder's `engine.runSQL` call so the aggregated facts come from one
+   * cohort, and namespaces the output object keys under a `<searchType>/`
+   * segment so per-slice rollups coexist without overwriting each other.
+   * Undefined preserves the legacy cross-type behaviour (one rollup over
+   * the union of all slices, written to the legacy path) — fine for web-
+   * only tenants and explicit cross-type admin views.
+   */
+  searchType?: SearchType
 }
 
 export interface RebuildRollupResult {
@@ -145,6 +176,7 @@ export async function rebuildRollups(
 ): Promise<RebuildRollupResult[]> {
   const now = opts.now ?? (() => Date.now())
   const results: RebuildRollupResult[] = []
+  const searchType = opts.searchType
   for (const def of opts.defs) {
     const builtAt = now()
     const payload = await def.build({
@@ -152,6 +184,7 @@ export async function rebuildRollups(
       ctx: opts.ctx,
       dataSource: opts.dataSource,
       builtAt,
+      ...(searchType !== undefined ? { searchType } : {}),
     })
     if (def.format === 'parquet') {
       if (!def.parquetColumns || def.parquetColumns.length === 0)
@@ -161,7 +194,7 @@ export async function rebuildRollups(
         columns: def.parquetColumns,
         sortKey: def.parquetSortKey,
       })
-      const parquetKey = rollupParquetKey(opts.ctx, def.id, builtAt)
+      const parquetKey = rollupParquetKey(opts.ctx, def.id, builtAt, searchType)
       await opts.dataSource.write(parquetKey, parquetBytes)
       const pointer: ParquetRollupPointer = { parquetKey, rowCount: rows.length }
       const envelope: RollupEnvelope<ParquetRollupPointer> = {
@@ -172,7 +205,7 @@ export async function rebuildRollups(
         payload: pointer,
       }
       const envelopeBytes = new TextEncoder().encode(JSON.stringify(envelope))
-      const key = rollupKey(opts.ctx, def.id, builtAt)
+      const key = rollupKey(opts.ctx, def.id, builtAt, searchType)
       await opts.dataSource.write(key, envelopeBytes)
       results.push({
         id: def.id,
@@ -228,7 +261,7 @@ function utcDateMinusDays(at: number, days: number): string {
 export const dailyTotalsRollup: RollupDef = {
   id: 'daily_totals',
   windowDays: null,
-  async build({ engine, ctx }) {
+  async build({ engine, ctx, searchType }) {
     const pages = await engine.runSQL({
       ctx,
       table: 'pages',
@@ -243,6 +276,7 @@ export const dailyTotalsRollup: RollupDef = {
         GROUP BY date
         ORDER BY date
       `,
+      ...(searchType !== undefined ? { searchType } : {}),
     })
     const keywords = await engine.runSQL({
       ctx,
@@ -255,6 +289,7 @@ export const dailyTotalsRollup: RollupDef = {
         FROM read_parquet({{FILES}}, union_by_name = true)
         GROUP BY date
       `,
+      ...(searchType !== undefined ? { searchType } : {}),
     })
     const keywordImpressionsByDate = new Map<string, bigint>()
     for (const r of keywords.rows)
@@ -280,11 +315,12 @@ export const dailyTotalsRollup: RollupDef = {
 export const weeklyTotalsRollup: RollupDef = {
   id: 'weekly_totals',
   windowDays: null,
-  async build({ engine, ctx }) {
+  async build({ engine, ctx, searchType }) {
     const result = await engine.runSQL({
       ctx,
       table: 'pages',
       fileSets: { FILES: { table: 'pages' } },
+      ...(searchType !== undefined ? { searchType } : {}),
       sql: `
         SELECT
           strftime(date_trunc('week', date::DATE), '%Y-%m-%d') AS week,
@@ -313,12 +349,13 @@ export const weeklyTotalsRollup: RollupDef = {
 export const topPages28dRollup: RollupDef = {
   id: 'top_pages_28d',
   windowDays: 28,
-  async build({ engine, ctx, builtAt }) {
+  async build({ engine, ctx, builtAt, searchType }) {
     const cutoff = utcDateMinusDays(builtAt, 28)
     const result = await engine.runSQL({
       ctx,
       table: 'pages',
       fileSets: { FILES: { table: 'pages' } },
+      ...(searchType !== undefined ? { searchType } : {}),
       sql: `
         SELECT
           url,
@@ -350,12 +387,13 @@ export const topPages28dRollup: RollupDef = {
 export const topCountries28dRollup: RollupDef = {
   id: 'top_countries_28d',
   windowDays: 28,
-  async build({ engine, ctx, builtAt }) {
+  async build({ engine, ctx, builtAt, searchType }) {
     const cutoff = utcDateMinusDays(builtAt, 28)
     const result = await engine.runSQL({
       ctx,
       table: 'countries',
       fileSets: { FILES: { table: 'countries' } },
+      ...(searchType !== undefined ? { searchType } : {}),
       sql: `
         SELECT
           country,
@@ -382,12 +420,13 @@ export const topCountries28dRollup: RollupDef = {
 export const topKeywords28dRollup: RollupDef = {
   id: 'top_keywords_28d',
   windowDays: 28,
-  async build({ engine, ctx, builtAt }) {
+  async build({ engine, ctx, builtAt, searchType }) {
     const cutoff = utcDateMinusDays(builtAt, 28)
     const result = await engine.runSQL({
       ctx,
       table: 'keywords',
       fileSets: { FILES: { table: 'keywords' } },
+      ...(searchType !== undefined ? { searchType } : {}),
       sql: `
         SELECT
           query,
@@ -431,12 +470,13 @@ export const topKeywords28dParquetRollup: RollupDef = {
     { name: 'sum_position', type: 'DOUBLE', nullable: false },
   ],
   parquetSortKey: ['clicks'],
-  async build({ engine, ctx, builtAt }) {
+  async build({ engine, ctx, builtAt, searchType }) {
     const cutoff = utcDateMinusDays(builtAt, 28)
     const result = await engine.runSQL({
       ctx,
       table: 'keywords',
       fileSets: { FILES: { table: 'keywords' } },
+      ...(searchType !== undefined ? { searchType } : {}),
       sql: `
         SELECT
           query,
@@ -608,7 +648,7 @@ export const indexingHealthRollup: RollupDef = {
 export const indexPercentRollup: RollupDef = {
   id: 'index_percent',
   windowDays: 90,
-  async build({ engine, ctx, dataSource, builtAt }) {
+  async build({ engine, ctx, dataSource, builtAt, searchType }) {
     // Probe directly for the urls/index.parquet — `urlsParquetUri` returns
     // a URI even when the file's missing on backends with a synchronous
     // `uri()`. We route reads via `fileSets.keys` so DuckDB pre-fetches
@@ -618,7 +658,10 @@ export const indexPercentRollup: RollupDef = {
     if (!urlsExist)
       return { totalSitemapUrls: 0, days: [] }
     const cutoff = utcDateMinusDays(builtAt, 90)
-    // Numerator: per-day distinct sitemap URLs with clicks>0
+    // Numerator: per-day distinct sitemap URLs with clicks>0. PAGES goes
+    // through the manifest so forward searchType; URLS is a direct-keys
+    // sidecar (entity store, not slice-partitioned) so searchType doesn't
+    // apply to it.
     const numerator = await engine.runSQL({
       ctx,
       table: 'pages',
@@ -626,6 +669,7 @@ export const indexPercentRollup: RollupDef = {
         PAGES: { table: 'pages' },
         URLS: { table: 'pages', keys: [urlsKey] },
       },
+      ...(searchType !== undefined ? { searchType } : {}),
       sql: `
         SELECT
           p.date AS date,
