@@ -200,6 +200,41 @@ describe('storageEngine.purgeUrls', () => {
     expect(live[0].rowCount).toBe(1)
   })
 
+  it('scrubs the URL from every searchType slice (web + discover)', async () => {
+    let clock = 1000
+    const { engine, manifestStore } = makeEngine({ now: () => clock })
+
+    // Web slice — legacy/implicit (no searchType field).
+    await engine.writeDay(
+      makeCtx({ date: '2026-04-10' }),
+      [pageRow('/gone', '2026-04-10'), pageRow('/keep', '2026-04-10')],
+    )
+    clock = 1100
+    // Discover slice — same site, same date partition, different slice.
+    await engine.writeDay(
+      makeCtx({ date: '2026-04-10', searchType: 'discover' }),
+      [pageRow('/gone', '2026-04-10'), pageRow('/keep-discover', '2026-04-10')],
+    )
+
+    clock = 5000
+    const result = await engine.purgeUrls({ userId: 'u1', siteId: 's1' }, ['/gone'])
+
+    // Both entries rewritten, both retired then replaced (one per slice).
+    expect(result.entriesRewritten).toBe(2)
+    expect(result.rowsRemoved).toBe(2)
+
+    const live = manifestStore.snapshot()
+    expect(live).toHaveLength(2)
+    const bySlice = new Map(live.map(e => [e.searchType ?? 'web', e]))
+    // Web entry keeps the legacy partition path and rebuilt without /gone.
+    expect(bySlice.get('web')!.objectKey).not.toContain('/discover/')
+    expect(bySlice.get('web')!.rowCount).toBe(1)
+    // Discover entry preserves its slice path and rebuilt without /gone.
+    expect(bySlice.get('discover')!.objectKey).toContain('/discover/')
+    expect(bySlice.get('discover')!.searchType).toBe('discover')
+    expect(bySlice.get('discover')!.rowCount).toBe(1)
+  })
+
   it('empty urls array is a no-op', async () => {
     const { engine, manifestStore } = makeEngine({ now: () => 1000 })
     await engine.writeDay(makeCtx(), [pageRow('/keep', '2026-04-10')])

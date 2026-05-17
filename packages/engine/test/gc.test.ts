@@ -70,6 +70,34 @@ describe('gcOrphans', () => {
     expect(keys).toHaveLength(0)
   })
 
+  it('orphan sweep considers every searchType slice as known (does not delete live discover entries)', async () => {
+    let clock = 1_000_000
+    const { engine, dataSource, manifestStore } = makeEngine(() => clock)
+
+    // Two live entries on the same date — one web, one discover. The sweep
+    // must treat BOTH as known (filter=undefined cross-type union) so the
+    // discover bytes don't get classified as orphan-with-no-manifest-record
+    // just because the web slice is the legacy-default.
+    const ctx = { userId: 'u1', siteId: 's1', table: 'pages' as const, date: '2026-04-10' }
+    await engine.writeDay({ ...ctx, searchType: 'web' }, [
+      { url: '/', date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 50 },
+    ])
+    clock += 1_000
+    await engine.writeDay({ ...ctx, searchType: 'discover' }, [
+      { url: '/d', date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 50 },
+    ])
+
+    const live = manifestStore.snapshot()
+    expect(live).toHaveLength(2)
+    const discoverKey = live.find(e => e.searchType === 'discover')!.objectKey
+
+    clock += 120_000
+    const result = await engine.gcOrphans({ userId: 'u1', siteId: 's1' }, 60_000)
+    expect(result.deleted).toBe(0)
+    // Both blobs still readable.
+    expect(await dataSource.read(discoverKey)).toBeInstanceOf(Uint8Array)
+  })
+
   it('does not delete objects registered by a concurrent writeDay (re-check under lock)', async () => {
     let clock = 1_000_000
     const { engine, dataSource, manifestStore } = makeEngine(() => clock)

@@ -246,6 +246,37 @@ describe('writeDay: searchType partitioning', () => {
     expect(retired[0].objectKey).toContain('__v1000')
   })
 
+  it('writing discover after web for the same day leaves the web entry live (no cross-type supersede)', async () => {
+    const { engine, manifestStore } = makeEngine()
+    // Web first, then discover for the SAME date partition.
+    await engine.writeDay(
+      { ...makeCtx(), date: '2026-04-10', now: () => 1000, searchType: 'web' },
+      [pageRow('/web', '2026-04-10', 7)],
+    )
+    await engine.writeDay(
+      { ...makeCtx(), date: '2026-04-10', now: () => 2000, searchType: 'discover' },
+      [pageRow('/discover', '2026-04-10', 3)],
+    )
+
+    // Both entries are live; no retiredAt stamped on either.
+    const all = manifestStore.all()
+    expect(all).toHaveLength(2)
+    expect(all.every(e => e.retiredAt === undefined)).toBe(true)
+
+    const live = manifestStore.snapshot()
+    expect(live).toHaveLength(2)
+    const types = live.map(e => inferSearchType(e)).sort()
+    expect(types).toEqual(['discover', 'web'])
+    // Object keys live at distinct partitions so the cross-type write cannot
+    // overwrite the web bytes either.
+    const webEntry = live.find(e => inferSearchType(e) === 'web')!
+    const discoverEntry = live.find(e => inferSearchType(e) === 'discover')!
+    expect(webEntry.objectKey).not.toBe(discoverEntry.objectKey)
+    expect(webEntry.objectKey).toContain('/pages/daily/')
+    expect(webEntry.objectKey).not.toContain('/discover/')
+    expect(discoverEntry.objectKey).toContain('/pages/discover/daily/')
+  })
+
   it('omitting searchType writes to the legacy (web) path', async () => {
     const { engine, manifestStore } = makeEngine()
     await engine.writeDay(makeCtx(), [pageRow('/a', '2026-04-10')])
