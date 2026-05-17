@@ -257,6 +257,7 @@ export const queryCommand = defineCommand({
         table: args.table ? String(args.table) : 'pages',
         output: args.output ? String(args.output) : undefined,
         quiet: Boolean(args.quiet),
+        searchType: parseSearchType(args.type),
       })
       return
     }
@@ -562,6 +563,7 @@ async function runRawSqlMode(opts: {
   table: string
   output: string | undefined
   quiet: boolean
+  searchType?: SearchType
 }): Promise<void> {
   if (!isKnownTable(opts.table)) {
     logger.error(`Unknown table "${opts.table}". Known: ${allTables().join(', ')}`)
@@ -579,6 +581,7 @@ async function runRawSqlMode(opts: {
     sql: opts.sql,
     siteUrl,
     table: opts.table,
+    ...(opts.searchType ? { searchType: opts.searchType } : {}),
   }).catch((e: Error) => {
     logger.error(`SQL failed: ${e.message}`)
     process.exit(1)

@@ -7,6 +7,7 @@
 // 20-line wiring block.
 
 import type { Row, TableName } from '@gscdump/contracts'
+import type { SearchType } from 'gscdump/query'
 import type { DataSource, StorageEngine } from '../storage'
 import path from 'node:path'
 import { encodeSiteId } from 'gscdump/tenant'
@@ -38,6 +39,11 @@ export interface NodeHarness {
     siteUrl: string
     table: TableName
     params?: unknown[]
+    /**
+     * Restrict the underlying manifest lookup to a single GSC search-type
+     * slice. Undefined keeps the legacy cross-type union.
+     */
+    searchType?: SearchType
   }) => Promise<{ rows: Row[], sql: string, keys: string[] }>
 }
 
@@ -62,6 +68,7 @@ export function createNodeHarness(opts: NodeHarnessOptions): NodeHarness {
     siteUrl: string
     table: TableName
     params?: unknown[]
+    searchType?: SearchType
   }): Promise<{ rows: Row[], sql: string, keys: string[] }> {
     const result = await engine.runSQL({
       ctx: { userId, siteId: encodeSiteId(runOpts.siteUrl) },
@@ -69,6 +76,7 @@ export function createNodeHarness(opts: NodeHarnessOptions): NodeHarness {
       fileSets: { FILES: { table: runOpts.table } },
       sql: runOpts.sql,
       params: runOpts.params ?? [],
+      ...(runOpts.searchType !== undefined ? { searchType: runOpts.searchType } : {}),
     })
     return { rows: result.rows, sql: result.sql, keys: result.objectKeys }
   }

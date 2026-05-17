@@ -41,6 +41,7 @@ export interface LocalStore {
     siteUrl: string
     table: import('@gscdump/engine/contracts').TableName
     params?: unknown[]
+    searchType?: import('gscdump/query').SearchType
   }) => Promise<{
     rows: import('@gscdump/engine/contracts').Row[]
     sql: string

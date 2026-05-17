@@ -226,7 +226,7 @@ export async function rebuildRollups(
     }
     const json = JSON.stringify(envelope)
     const bytes = new TextEncoder().encode(json)
-    const key = rollupKey(opts.ctx, def.id, builtAt)
+    const key = rollupKey(opts.ctx, def.id, builtAt, searchType)
     await opts.dataSource.write(key, bytes)
     results.push({ id: def.id, objectKey: key, bytes: bytes.byteLength, builtAt })
   }

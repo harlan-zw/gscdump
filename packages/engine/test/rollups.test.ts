@@ -66,6 +66,39 @@ describe('rollupKey', () => {
     expect(rollupKey({ userId: 'u1' }, 'top_pages_28d', 1700000000000))
       .toBe('u_u1/rollups/top_pages_28d__v1700000000000.json')
   })
+
+  it('namespaces non-web slices under a searchType segment; web stays at the legacy path', () => {
+    expect(rollupKey({ userId: 'u1', siteId: 's1' }, 'daily_totals', 1700000000000, 'discover'))
+      .toBe('u_u1/s1/rollups/discover/daily_totals__v1700000000000.json')
+    expect(rollupKey({ userId: 'u1', siteId: 's1' }, 'daily_totals', 1700000000000, 'web'))
+      .toBe('u_u1/s1/rollups/daily_totals__v1700000000000.json')
+  })
+})
+
+describe('rebuildRollups searchType namespacing', () => {
+  it('jSON-format envelope key honours opts.searchType (regression: was overwriting web)', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const def: RollupDef = {
+      id: 'json_def',
+      windowDays: 7,
+      async build() {
+        return [{ a: 1 }]
+      },
+    }
+    const results = await rebuildRollups({
+      engine: makeFakeEngine({} as Record<TableName, Row[]>),
+      dataSource: ds,
+      builtAt: 1_700_000_000_000,
+      ctx: { userId: 'u1', siteId: 's1' },
+      defs: [def],
+      now: () => 1_700_000_000_000,
+      searchType: 'discover',
+    })
+    expect(results[0].objectKey).toBe('u_u1/s1/rollups/discover/json_def__v1700000000000.json')
+    expect(store.has(results[0].objectKey)).toBe(true)
+    // Crucially, the legacy/web path must NOT have been written.
+    expect(store.has('u_u1/s1/rollups/json_def__v1700000000000.json')).toBe(false)
+  })
 })
 
 describe('rebuildRollups', () => {
