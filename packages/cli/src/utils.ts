@@ -1,9 +1,13 @@
+import type { SearchType } from 'gscdump/query'
 import { Buffer } from 'node:buffer'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import process from 'node:process'
 import { createConsola } from 'consola'
+import { SearchTypes } from 'gscdump/query'
 import pkg from '../package.json' with { type: 'json' }
+
+export const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
 
 export const VERSION: string = pkg.version
 
@@ -42,6 +46,22 @@ export function applyOutputMode(args: { json?: unknown, quiet?: unknown }): { js
   const quiet = json || Boolean(args.quiet)
   setQuiet(quiet)
   return { json, quiet }
+}
+
+/**
+ * Validate a CLI-provided search-type slice against the gscdump source-of-truth
+ * (`SearchTypes`). Exits on invalid input; returns `undefined` for falsy/missing
+ * input so callers decide whether to fall back to cross-type union or a default.
+ */
+export function parseSearchType(value: unknown, flag: string = '--search-type'): SearchType | undefined {
+  if (!value)
+    return undefined
+  const v = String(value)
+  if (!ALL_SEARCH_TYPES.includes(v as SearchType)) {
+    logger.error(`Invalid ${flag}: ${v}. Allowed: ${ALL_SEARCH_TYPES.join(', ')}`)
+    process.exit(1)
+  }
+  return v as SearchType
 }
 
 // ANSI helpers honour NO_COLOR (https://no-color.org), `--no-color` argv,

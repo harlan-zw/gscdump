@@ -7,12 +7,9 @@ import process from 'node:process'
 import { DuckDBInstance } from '@duckdb/node-api'
 import { sqlEscape } from '@gscdump/engine/sql'
 import { defineCommand } from 'citty'
-import { SearchTypes } from 'gscdump/query'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
-import { applyOutputMode, displayPath, logger, OUTPUT_ARGS, toCSV } from '../utils'
-
-const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
+import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseSearchType, toCSV } from '../utils'
 
 const DEFAULT_OUT = './gscdump-export'
 const FORMATS = ['parquet', 'json', 'ndjson', 'csv'] as const
@@ -58,7 +55,7 @@ export const dumpCommand = defineCommand({
     },
     'search-type': {
       type: 'string',
-      description: 'Restrict dump to a single GSC search-type slice (web, image, video, news, discover, googleNews). Default: all slices.',
+      description: `Restrict dump to a single GSC search-type slice (${ALL_SEARCH_TYPES.join(', ')}). Default: all slices.`,
     },
     ...OUTPUT_ARGS,
   },
@@ -72,15 +69,7 @@ export const dumpCommand = defineCommand({
     const tablesFilter = args.tables
       ? new Set(String(args.tables).split(',').map(t => t.trim()).filter(Boolean))
       : null
-    let searchType: SearchType | undefined
-    if (args['search-type']) {
-      const v = String(args['search-type'])
-      if (!ALL_SEARCH_TYPES.includes(v as SearchType)) {
-        logger.error(`Invalid --search-type: ${v}. Allowed: ${ALL_SEARCH_TYPES.join(', ')}`)
-        process.exit(1)
-      }
-      searchType = v as SearchType
-    }
+    const searchType = parseSearchType(args['search-type'])
     const ctx = await createCommandContext({ needsAuth: !args['all-sites'], needsStore: true })
     const store = ctx.store!
     const outDir = path.resolve(String(args.out))

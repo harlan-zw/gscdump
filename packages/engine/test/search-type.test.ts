@@ -1,5 +1,8 @@
+import type { searchTypeSchema } from '@gscdump/contracts'
+import type { SearchType } from 'gscdump/query'
+import type { z } from 'zod'
 import type { Row, WriteCtx } from '../src/index'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import {
   createStorageEngine,
   inferSearchType,
@@ -40,6 +43,16 @@ function makeCtx(partial: Partial<WriteCtx> = {}): WriteCtx {
 function pageRow(url: string, date: string, clicks = 1, impressions = 10): Row {
   return { url, date, clicks, impressions, sum_position: impressions * 5 }
 }
+
+describe('searchType drift guard', () => {
+  // The schema in `@gscdump/contracts` is hand-authored (contracts can't depend
+  // on `gscdump`), so a new GSC slice added to `SearchTypes` would silently
+  // diverge from the validator. Bidirectional type check fails the build the
+  // moment that drift appears.
+  it('searchTypeSchema infers the same union as gscdump/query SearchType', () => {
+    expectTypeOf<z.infer<typeof searchTypeSchema>>().toEqualTypeOf<SearchType>()
+  })
+})
 
 describe('objectKey: searchType in path', () => {
   it('omits the type segment for web (default), preserving legacy paths', () => {
