@@ -51,7 +51,9 @@
     "gscdump": "workspace:*"
   },
   "peerDependenciesMeta": {
-    "gscdump": { "optional": true }
+    "gscdump": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@gscdump/contracts": "workspace:*",
