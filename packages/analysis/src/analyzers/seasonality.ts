@@ -139,10 +139,15 @@ export const seasonalityAnalyzer = defineAnalyzer<AnalysisParams, Row, MonthlyDa
     const { startDate, endDate } = periodOf(params)
     const metric = params.metric === 'impressions' ? 'impressions' : 'clicks'
 
+    // CAST(date AS DATE) defends against union_by_name=true coercing the
+    // `date` column to VARCHAR when one of the attached parquets stores it as
+    // a string. strftime only accepts DATE/TIMESTAMP; without the cast a
+    // browser-engine run binder-errors and forces a server fallback. Same
+    // pattern as content-velocity.
     const sql = `
       WITH monthly AS (
         SELECT
-          strftime(date, '%Y-%m') AS month,
+          strftime(CAST(date AS DATE), '%Y-%m') AS month,
           CAST(SUM(${metric}) AS DOUBLE) AS value
         FROM read_parquet({{FILES}}, union_by_name = true)
         WHERE date >= ? AND date <= ?

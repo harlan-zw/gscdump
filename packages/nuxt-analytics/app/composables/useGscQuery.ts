@@ -72,8 +72,13 @@ export interface UseGscQueryOptions<T> {
    * `/api/__gsc/sites/[siteId]/analyze` and returning the response body.
    */
   serverFallback?: (siteId: string, params: AnalysisParams) => Promise<T>
-  /** Force a specific engine. Default `'auto'`. */
-  engine?: GscQueryEngine
+  /**
+   * Force a specific engine. Default `'auto'`. Accepts a getter so callers
+   * can swing engine reactively (e.g. flip to `'server'` when the requested
+   * range overlaps a known coverage gap). Re-read on every `runQuery` and
+   * also included in the watcher graph so changes trigger a refetch.
+   */
+  engine?: MaybeRefOrGetter<GscQueryEngine>
   /** Extra reactive sources that should trigger refetch. */
   watchSources?: WatchSource[]
   /** Extract meta from the consumer payload. Defaults to `(out as any).meta`. */
@@ -205,7 +210,7 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
     error.value = null
     fallbackReason.value = null
 
-    const decision = dispatcher.pickEngine(_useGscAuthInternal().value, { perCall: opts.engine })
+    const decision = dispatcher.pickEngine(_useGscAuthInternal().value, { perCall: toValue(opts.engine) })
     lastDecision.value = decision
 
     try {
@@ -263,6 +268,8 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
   ]
   if (opts.enabled)
     sources.push(() => toValue(opts.enabled))
+  if (opts.engine !== undefined)
+    sources.push(() => toValue(opts.engine))
   watch(sources, runQuery, { deep: true, immediate: true })
 
   let backfill: GscBackfillRunner | null = null

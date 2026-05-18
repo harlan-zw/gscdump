@@ -1636,7 +1636,10 @@ exports[`analyzer plan snapshots > sql plan: change-point 1`] = `
       SELECT
         query,
         url AS page,
-        date,
+        -- Normalize at the source CTE: union_by_name=true can coerce date to
+        -- VARCHAR across parquets with mixed schemas, which makes downstream
+        -- strftime(date, ...) binder-error.
+        CAST(date AS DATE) AS date,
         CAST(SUM(clicks) AS DOUBLE) AS clicks,
         CAST(SUM(impressions) AS DOUBLE) AS impressions,
         CAST(SUM(clicks) AS DOUBLE) AS value
@@ -2180,7 +2183,10 @@ exports[`analyzer plan snapshots > sql plan: ctr-anomaly 1`] = `
       SELECT
         query,
         url AS page,
-        date,
+        -- Normalize at the source CTE: union_by_name=true can coerce date to
+        -- VARCHAR across parquets with mixed schemas, which makes downstream
+        -- strftime(date, ...) binder-error.
+        CAST(date AS DATE) AS date,
         CAST(SUM(clicks) AS DOUBLE) AS day_clicks,
         CAST(SUM(impressions) AS DOUBLE) AS day_impressions,
         CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS day_ctr,
@@ -3730,7 +3736,10 @@ exports[`analyzer plan snapshots > sql plan: position-volatility 1`] = `
       SELECT
         url AS page,
         query,
-        date,
+        -- Normalize at the source CTE: union_by_name=true can coerce date to
+        -- VARCHAR across parquets with mixed schemas, which makes downstream
+        -- strftime(date, ...) binder-error.
+        CAST(date AS DATE) AS date,
         CAST(SUM(impressions) AS DOUBLE) AS q_impressions,
         SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS q_position
       FROM read_parquet({{FILES}}, union_by_name = true)
@@ -4029,7 +4038,7 @@ exports[`analyzer plan snapshots > sql plan: seasonality 1`] = `
   "sql": "
       WITH monthly AS (
         SELECT
-          strftime(date, '%Y-%m') AS month,
+          strftime(CAST(date AS DATE), '%Y-%m') AS month,
           CAST(SUM(clicks) AS DOUBLE) AS value
         FROM read_parquet({{FILES}}, union_by_name = true)
         WHERE date >= ? AND date <= ?
@@ -4113,7 +4122,10 @@ exports[`analyzer plan snapshots > sql plan: stl-decompose 1`] = `
       SELECT
         query,
         url AS page,
-        date,
+        -- Normalize at the source CTE: union_by_name=true can coerce date to
+        -- VARCHAR across parquets with mixed schemas, which makes downstream
+        -- strftime(date, ...) binder-error.
+        CAST(date AS DATE) AS date,
         CAST(SUM(clicks) AS DOUBLE) AS clicks,
         CAST(SUM(impressions) AS DOUBLE) AS impressions,
         CAST(SUM(clicks) AS DOUBLE) AS observed

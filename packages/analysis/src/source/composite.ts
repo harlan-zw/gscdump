@@ -19,6 +19,16 @@ import { extractDateRange } from 'gscdump/query'
 export interface SyncedRange {
   oldestDateSynced: string | null
   newestDateSynced: string | null
+  /**
+   * Optional sorted list of `[start, end]` daily-key spans (`YYYY-MM-DD`,
+   * both inclusive) that the engine actually has partitions for. When set,
+   * `shouldRouteToLive` returns true for any requested range that overlaps
+   * a day NOT inside one of these spans — even when the request sits inside
+   * `oldestDateSynced..newestDateSynced`. Lets the composite catch *internal*
+   * manifest gaps (e.g. a missing monthly tier) that the outer envelope
+   * doesn't reveal. Spans must be sorted by `start` and non-overlapping.
+   */
+  coveredSpans?: ReadonlyArray<{ start: string, end: string }>
 }
 
 export interface CompositeSourceOptions {
@@ -28,11 +38,42 @@ export interface CompositeSourceOptions {
 }
 
 /**
+ * Returns true when `[start, end]` (inclusive, ISO daily keys) is NOT fully
+ * covered by `coveredSpans` (sorted, non-overlapping `[start, end]` spans).
+ * O(spans.length). Exported for diagnostics.
+ */
+export function hasGapInCoveredSpans(
+  start: string,
+  end: string,
+  coveredSpans: ReadonlyArray<{ start: string, end: string }>,
+): boolean {
+  let cursor = start
+  for (const span of coveredSpans) {
+    if (span.end < cursor)
+      continue
+    if (span.start > cursor)
+      return true
+    if (span.end >= end)
+      return false
+    cursor = nextDay(span.end)
+    if (cursor > end)
+      return false
+  }
+  return cursor <= end
+}
+
+function nextDay(day: string): string {
+  const t = Date.parse(`${day}T00:00:00Z`) + 86_400_000
+  return new Date(t).toISOString().slice(0, 10)
+}
+
+/**
  * Single predicate combining structural compatibility (`canProxyToGsc`) and
  * date-window coverage. Returns `true` when the query should be answered by
  * the live GSC API instead of the local engine: the API supports the query
- * shape AND the requested range falls outside (or is partially outside) the
- * synced window. Sites with no synced data route everything live.
+ * shape AND (the requested range falls outside the synced envelope OR
+ * overlaps an internal manifest gap when `coveredSpans` is provided). Sites
+ * with no synced data route everything live.
  *
  * Exported so callers (telemetry, debug UIs) can introspect the routing
  * decision without re-implementing it.
@@ -45,7 +86,11 @@ export function shouldRouteToLive(state: BuilderState, site: SyncedRange): boole
     return false
   if (!site.oldestDateSynced || !site.newestDateSynced)
     return true
-  return startDate < site.oldestDateSynced || endDate > site.newestDateSynced
+  if (startDate < site.oldestDateSynced || endDate > site.newestDateSynced)
+    return true
+  if (site.coveredSpans && site.coveredSpans.length > 0)
+    return hasGapInCoveredSpans(startDate, endDate, site.coveredSpans)
+  return false
 }
 
 export function createCompositeSource(opts: CompositeSourceOptions): AnalysisQuerySource {

@@ -88,7 +88,10 @@ export const ctrAnomalyAnalyzer = defineAnalyzer<AnalysisParams, Row, CtrAnomaly
       SELECT
         query,
         url AS page,
-        date,
+        -- Normalize at the source CTE: union_by_name=true can coerce date to
+        -- VARCHAR across parquets with mixed schemas, which makes downstream
+        -- strftime(date, ...) binder-error.
+        CAST(date AS DATE) AS date,
         ${METRIC_EXPR.clicks} AS day_clicks,
         ${METRIC_EXPR.impressions} AS day_impressions,
         ${METRIC_EXPR.ctr} AS day_ctr,

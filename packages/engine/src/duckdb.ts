@@ -261,7 +261,11 @@ function dateReplaceClause(table: TableName | undefined): string {
   const dateCols = SCHEMAS[table].columns.filter(c => c.type === 'DATE').map(c => c.name)
   if (dateCols.length === 0)
     return ''
-  const replacements = dateCols.map(n => `strftime(${n}, '%Y-%m-%d') AS ${n}`)
+  // CAST(.. AS DATE) defends against legacy parquets whose `date` column was
+  // written as VARCHAR (before the schema enforced DATE). strftime rejects
+  // VARCHAR; the cast is a no-op for DATE-typed columns and parses ISO date
+  // strings for VARCHAR ones, so output stays canonical either way.
+  const replacements = dateCols.map(n => `strftime(CAST(${n} AS DATE), '%Y-%m-%d') AS ${n}`)
   return `REPLACE (${replacements.join(', ')})`
 }
 

@@ -10,7 +10,7 @@ import type { AnalysisQuerySource, SourceCapabilities } from '@gscdump/engine/so
 import { between, date, gsc, page } from 'gscdump/query'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createCompositeSource, shouldRouteToLive } from '../src/source/composite'
+import { createCompositeSource, hasGapInCoveredSpans, shouldRouteToLive } from '../src/source/composite'
 
 function makeSource(over: Partial<AnalysisQuerySource> = {}): AnalysisQuerySource {
   const caps: SourceCapabilities = { regex: true, ...(over.capabilities ?? {}) }
@@ -94,5 +94,68 @@ describe('createCompositeSource', () => {
     const s = stateInRange('2023-01-01', '2023-01-31')
     expect(shouldRouteToLive(s, { oldestDateSynced: '2024-01-01', newestDateSynced: '2024-12-31' })).toBe(true)
     expect(shouldRouteToLive(s, { oldestDateSynced: '2022-01-01', newestDateSynced: '2024-12-31' })).toBe(false)
+  })
+
+  describe('coveredSpans gap detection', () => {
+    it('routes to live when request overlaps an internal manifest gap', async () => {
+      const engine = makeSource()
+      const live = makeSource()
+      const c = createCompositeSource({
+        engine,
+        live,
+        site: {
+          oldestDateSynced: '2024-01-01',
+          newestDateSynced: '2024-12-31',
+          // Gap: 2024-04 through 2024-06 missing
+          coveredSpans: [
+            { start: '2024-01-01', end: '2024-03-31' },
+            { start: '2024-07-01', end: '2024-12-31' },
+          ],
+        },
+      })
+      await c.queryRows(stateInRange('2024-02-01', '2024-08-31'))
+      expect(live.queryRows).toHaveBeenCalledTimes(1)
+      expect(engine.queryRows).not.toHaveBeenCalled()
+    })
+
+    it('stays on engine when request sits inside a single span', async () => {
+      const engine = makeSource()
+      const live = makeSource()
+      const c = createCompositeSource({
+        engine,
+        live,
+        site: {
+          oldestDateSynced: '2024-01-01',
+          newestDateSynced: '2024-12-31',
+          coveredSpans: [
+            { start: '2024-01-01', end: '2024-03-31' },
+            { start: '2024-07-01', end: '2024-12-31' },
+          ],
+        },
+      })
+      await c.queryRows(stateInRange('2024-02-01', '2024-03-15'))
+      expect(engine.queryRows).toHaveBeenCalledTimes(1)
+      expect(live.queryRows).not.toHaveBeenCalled()
+    })
+
+    it('hasGapInCoveredSpans handles edge cases', () => {
+      const spans = [
+        { start: '2024-01-01', end: '2024-03-31' },
+        { start: '2024-07-01', end: '2024-12-31' },
+      ]
+      // Fully inside first span
+      expect(hasGapInCoveredSpans('2024-01-10', '2024-03-15', spans)).toBe(false)
+      // Spans two coverage ranges with gap in middle
+      expect(hasGapInCoveredSpans('2024-03-01', '2024-07-15', spans)).toBe(true)
+      // Adjacent days (no gap)
+      expect(hasGapInCoveredSpans('2024-03-31', '2024-04-01', [
+        { start: '2024-01-01', end: '2024-03-31' },
+        { start: '2024-04-01', end: '2024-04-30' },
+      ])).toBe(false)
+      // Single day in gap
+      expect(hasGapInCoveredSpans('2024-04-15', '2024-04-15', spans)).toBe(true)
+      // Empty spans — everything is a gap
+      expect(hasGapInCoveredSpans('2024-04-15', '2024-04-15', [])).toBe(true)
+    })
   })
 })

@@ -54,7 +54,10 @@ export const positionVolatilityAnalyzer = defineAnalyzer<AnalysisParams, Row, Po
       SELECT
         url AS page,
         query,
-        date,
+        -- Normalize at the source CTE: union_by_name=true can coerce date to
+        -- VARCHAR across parquets with mixed schemas, which makes downstream
+        -- strftime(date, ...) binder-error.
+        CAST(date AS DATE) AS date,
         ${METRIC_EXPR.impressions} AS q_impressions,
         ${METRIC_EXPR.position} AS q_position
       FROM read_parquet({{FILES}}, union_by_name = true)
