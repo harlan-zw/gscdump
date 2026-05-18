@@ -113,6 +113,68 @@ describe('googleSearchConsole', () => {
     expect(customFetch).toHaveBeenCalledWith('https://searchconsole.googleapis.com/webmasters/v3/sites', { signal: undefined })
   })
 
+  it('preserves `sc-domain:` literal prefix when encoding siteUrl', async () => {
+    const customFetch = vi.fn().mockResolvedValue({ permissionLevel: 'siteOwner', siteUrl: 'sc-domain:example.com' })
+    const client = googleSearchConsole('dummy', { fetch: customFetch as any })
+    await client.sites.get('sc-domain:example.com')
+    expect(customFetch).toHaveBeenCalledWith(
+      'https://searchconsole.googleapis.com/webmasters/v3/sites/sc-domain:example.com',
+      { signal: undefined },
+    )
+  })
+
+  it('percent-encodes URL-prefix siteUrls', async () => {
+    const customFetch = vi.fn().mockResolvedValue({})
+    const client = googleSearchConsole('dummy', { fetch: customFetch as any })
+    await client.sites.delete('https://example.com/')
+    expect(customFetch).toHaveBeenCalledWith(
+      'https://searchconsole.googleapis.com/webmasters/v3/sites/https%3A%2F%2Fexample.com%2F',
+      { method: 'DELETE', signal: undefined },
+    )
+  })
+
+  it('sitemaps.list passes sitemapIndex query param when provided', async () => {
+    const customFetch = vi.fn().mockResolvedValue({ sitemap: [] })
+    const client = googleSearchConsole('dummy', { fetch: customFetch as any })
+    await client.sitemaps.list('sc-domain:example.com', { sitemapIndex: 'https://example.com/sitemap_index.xml' })
+    expect(customFetch).toHaveBeenCalledWith(
+      'https://searchconsole.googleapis.com/webmasters/v3/sites/sc-domain:example.com/sitemaps',
+      { signal: undefined, query: { sitemapIndex: 'https://example.com/sitemap_index.xml' } },
+    )
+  })
+
+  it('sitemaps.list omits query entirely when sitemapIndex not provided', async () => {
+    const customFetch = vi.fn().mockResolvedValue({ sitemap: [] })
+    const client = googleSearchConsole('dummy', { fetch: customFetch as any })
+    await client.sitemaps.list('sc-domain:example.com')
+    expect(customFetch).toHaveBeenCalledWith(
+      'https://searchconsole.googleapis.com/webmasters/v3/sites/sc-domain:example.com/sitemaps',
+      { signal: undefined, query: undefined },
+    )
+  })
+
+  it('inspect includes languageCode in body when provided', async () => {
+    const customFetch = vi.fn().mockResolvedValue({ inspectionResult: {} })
+    const client = googleSearchConsole('dummy', { fetch: customFetch as any })
+    await client.inspect('sc-domain:example.com', 'https://example.com/p', { languageCode: 'de-CH' })
+    expect(customFetch).toHaveBeenCalledWith(
+      'https://searchconsole.googleapis.com/v1/urlInspection/index:inspect',
+      {
+        method: 'POST',
+        body: { inspectionUrl: 'https://example.com/p', siteUrl: 'sc-domain:example.com', languageCode: 'de-CH' },
+        signal: undefined,
+      },
+    )
+  })
+
+  it('inspect omits languageCode from body when not provided', async () => {
+    const customFetch = vi.fn().mockResolvedValue({ inspectionResult: {} })
+    const client = googleSearchConsole('dummy', { fetch: customFetch as any })
+    await client.inspect('sc-domain:example.com', 'https://example.com/p')
+    const body = customFetch.mock.calls[0][1].body
+    expect(body).not.toHaveProperty('languageCode')
+  })
+
   it('should call onRateLimited on 429', async () => {
     const onRateLimited = vi.fn()
     const _client = googleSearchConsole('test-token', { onRateLimited })

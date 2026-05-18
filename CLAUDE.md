@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CONSUMERS
+
+- ~/sites/gscdump.com 
+- ~/sites/nuxtseo.com 
+
 ## GSCDump
 
 Google Search Console CLI and library. Real-time API queries, no local storage.

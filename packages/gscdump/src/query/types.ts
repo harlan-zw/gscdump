@@ -1,3 +1,4 @@
+import type { GscAggregationType, GscDataState } from '../contracts'
 import type { Country, Device, SearchType } from './constants'
 
 // Dimension value mapping (groupable dimensions)
@@ -9,6 +10,8 @@ export interface DimensionValueMap {
   device: Device
   searchAppearance: string
   date: string
+  /** Hour bucket — ISO-8601 with PT offset, e.g. `2025-07-14T13:00:00-07:00`. Use with `dataState: 'hourly_all'`. */
+  hour: string
 }
 
 export type Dimension = keyof DimensionValueMap
@@ -114,6 +117,12 @@ export interface BuilderState {
   }
   rowLimit?: number
   startRow?: number
+  /** GSC `dataState`. `'hourly_all'` is required when grouping by `hour`. */
+  dataState?: GscDataState
+  /** GSC `aggregationType`. `'byNewsShowcasePanel'` requires `type=discover|googleNews` with NEWS_SHOWCASE searchAppearance. */
+  aggregationType?: GscAggregationType
+  /** GSC search corpus. Wins over any `searchType` filter when both are set. */
+  searchType?: SearchType
 }
 
 // JSON-serialized filter (survives JSON.stringify/parse roundtrip)

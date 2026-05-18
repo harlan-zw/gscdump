@@ -20,6 +20,7 @@ export const device = createColumn('device')
 export const country = createColumn('country')
 export const searchAppearance = createColumn('searchAppearance')
 export const date = createColumn('date')
+export const hour = createColumn('hour')
 
 // Metric columns (aggregated, not groupable)
 export const clicks = createMetricColumn('clicks')

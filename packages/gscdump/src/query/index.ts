@@ -14,7 +14,7 @@ export { gsc } from './builder'
 export type { GSCQueryBuilder } from './builder'
 
 // Column references (groupable dimensions)
-export { country, date, device, page, query, queryCanonical, searchAppearance } from './columns'
+export { country, date, device, hour, page, query, queryCanonical, searchAppearance } from './columns'
 
 // Metric columns (aggregated values)
 export { clicks, ctr, impressions, position } from './columns'

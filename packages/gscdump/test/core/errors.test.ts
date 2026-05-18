@@ -41,13 +41,59 @@ describe('classifyError', () => {
     expect(e.kind).toBe('auth-expired')
   })
 
-  it('classifies 404 as not-found', () => {
-    expect(classifyError(ofetchLike(404, 'gone')).kind).toBe('not-found')
+  it('classifies 403 with quota `reason` in ErrorInfo as rate-limited', () => {
+    // FetchError-shaped: data envelope with details[].reason
+    const e = classifyError(ofetchLike(403, 'permission denied', {
+      data: {
+        error: {
+          code: 403,
+          message: 'permission denied',
+          details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'rateLimitExceeded' }],
+        },
+      },
+    }))
+    expect(e.kind).toBe('rate-limited')
   })
 
-  it('classifies 400 and 422 as validation', () => {
+  it('classifies 403 with legacy `errors[0].reason` as rate-limited', () => {
+    const e = classifyError(ofetchLike(403, 'forbidden', {
+      data: { error: { code: 403, message: 'forbidden', errors: [{ reason: 'dailyLimitExceeded' }] } },
+    }))
+    expect(e.kind).toBe('rate-limited')
+  })
+
+  it('treats unknown 403 reason as auth-expired', () => {
+    const e = classifyError(ofetchLike(403, 'forbidden', {
+      data: { error: { code: 403, message: 'forbidden', errors: [{ reason: 'forbidden' }] } },
+    }))
+    expect(e.kind).toBe('auth-expired')
+  })
+
+  it('classifies 404 and 410 as not-found', () => {
+    expect(classifyError(ofetchLike(404, 'gone')).kind).toBe('not-found')
+    expect(classifyError(ofetchLike(410, 'gone forever')).kind).toBe('not-found')
+  })
+
+  it('classifies 400/402/409/413/422 as validation', () => {
     expect(classifyError(ofetchLike(400, 'bad')).kind).toBe('validation')
+    expect(classifyError(ofetchLike(402, 'payment required')).kind).toBe('validation')
+    expect(classifyError(ofetchLike(409, 'conflict')).kind).toBe('validation')
+    expect(classifyError(ofetchLike(413, 'batch too large')).kind).toBe('validation')
     expect(classifyError(ofetchLike(422, 'unprocessable')).kind).toBe('validation')
+  })
+
+  it.each([
+    'dailyLimitExceededUnreg',
+    'rateLimitExceededUnreg',
+    'userRateLimitExceededUnreg',
+    'responseTooLarge',
+    'limitExceeded',
+    'variableTermExpiredDailyExceeded',
+  ])('classifies 403 with reason %s as rate-limited', (reason) => {
+    const e = classifyError(ofetchLike(403, 'forbidden', {
+      data: { error: { code: 403, message: 'forbidden', errors: [{ reason }] } },
+    }))
+    expect(e.kind).toBe('rate-limited')
   })
 
   it('classifies 500/unknown as transport and preserves status', () => {

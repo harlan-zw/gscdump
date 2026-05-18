@@ -96,6 +96,62 @@ function extractRetryAfter(error: unknown): number | undefined {
 
 const QUOTA_MESSAGE_RE = /quota|rate\s*limit/i
 
+/** GSC/Google API `reason` codes that indicate quota/rate exhaustion (not a real permission failure). */
+const QUOTA_REASONS = new Set([
+  'dailyLimitExceeded',
+  'dailyLimitExceededUnreg',
+  'rateLimitExceeded',
+  'rateLimitExceededUnreg',
+  'userRateLimitExceeded',
+  'userRateLimitExceededUnreg',
+  'quotaExceeded',
+  'concurrentLimitExceeded',
+  'variableTermLimitExceeded',
+  'variableTermExpiredDailyExceeded',
+  'servingLimitExceeded',
+  'responseTooLarge',
+  'limitExceeded',
+  'batchSizeTooLarge',
+  'RATE_LIMIT_EXCEEDED',
+  'RESOURCE_EXHAUSTED',
+])
+
+function extractReason(cause: unknown): string | undefined {
+  // ofetch FetchError wraps Google's JSON body in `data`; check there first, then the parsed details path.
+  const data = pickField(cause, [['data']], (v): v is unknown => true)
+  if (data) {
+    const errorInfo = pickField(
+      data,
+      [['error', 'details']],
+      (v): v is Array<Record<string, unknown>> => Array.isArray(v),
+    )
+    if (errorInfo) {
+      const info = errorInfo.find(d => typeof d['@type'] === 'string' && d['@type'].includes('ErrorInfo'))
+      const reason = info?.reason
+      if (typeof reason === 'string')
+        return reason
+    }
+    const directErrors = pickField(
+      data,
+      [['error', 'errors']],
+      (v): v is Array<Record<string, unknown>> => Array.isArray(v),
+    )
+    if (directErrors) {
+      const reason = directErrors[0]?.reason
+      if (typeof reason === 'string')
+        return reason
+    }
+  }
+  return undefined
+}
+
+function isQuotaCondition(cause: unknown, message: string): boolean {
+  const reason = extractReason(cause)
+  if (reason && QUOTA_REASONS.has(reason))
+    return true
+  return QUOTA_MESSAGE_RE.test(message)
+}
+
 /**
  * Classify an unknown error into a `GscError` discriminated union.
  * Transport is the catch-all — anything without a recognizable status ends up there.
@@ -111,17 +167,20 @@ export function classifyError(cause: unknown): GscError {
     return { kind: 'rate-limited', message, retryAfter: extractRetryAfter(cause), cause }
 
   if (status === 403) {
-    // GSC folds daily-quota exhaustion into 403. If the message mentions quota or rate limit,
-    // it's a retry-later condition; otherwise it's a real permission failure.
-    if (QUOTA_MESSAGE_RE.test(message))
+    // GSC folds daily-quota exhaustion into 403. Prefer the structured `reason` from the
+    // Google error envelope; fall back to message substring for older/unknown shapes.
+    if (isQuotaCondition(cause, message))
       return { kind: 'rate-limited', message, retryAfter: extractRetryAfter(cause), cause }
     return { kind: 'auth-expired', message, cause }
   }
 
-  if (status === 404)
+  if (status === 404 || status === 410)
     return { kind: 'not-found', message, cause }
 
-  if (status === 400 || status === 422)
+  // 400 invalid argument, 402 billing required, 409 conflict (e.g. sites.add
+  // duplicate), 413 batch too large, 422 unprocessable — all classify as
+  // caller-fixable validation problems.
+  if (status === 400 || status === 402 || status === 409 || status === 413 || status === 422)
     return { kind: 'validation', message, cause }
 
   return { kind: 'transport', message, status, cause }

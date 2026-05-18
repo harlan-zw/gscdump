@@ -71,6 +71,14 @@ export interface ParsedIndexingResult {
   mobileIssues: string | null
   richResultsVerdict: string | null
   richResultsItems: string | null
+  ampVerdict: string | null
+  ampUrl: string | null
+  ampIndexingState: string | null
+  ampIndexStatusVerdict: string | null
+  ampRobotsTxtState: string | null
+  ampPageFetchState: string | null
+  ampLastCrawlTime: string | null
+  ampIssues: string | null
   inspectionResultLink: string | null
 }
 
@@ -84,6 +92,7 @@ export async function inspectUrlFlat(
   const index = inspection?.indexStatusResult
   const mobile = inspection?.mobileUsabilityResult
   const rich = inspection?.richResultsResult
+  const amp = inspection?.ampResult
   return {
     url: inspectionUrl,
     verdict: index?.verdict ?? null,
@@ -101,6 +110,14 @@ export async function inspectUrlFlat(
     mobileIssues: mobile?.issues?.length ? JSON.stringify(mobile.issues) : null,
     richResultsVerdict: rich?.verdict ?? null,
     richResultsItems: rich?.detectedItems?.length ? JSON.stringify(rich.detectedItems) : null,
+    ampVerdict: amp?.verdict ?? null,
+    ampUrl: amp?.ampUrl ?? null,
+    ampIndexingState: amp?.indexingState ?? null,
+    ampIndexStatusVerdict: amp?.ampIndexStatusVerdict ?? null,
+    ampRobotsTxtState: amp?.robotsTxtState ?? null,
+    ampPageFetchState: amp?.pageFetchState ?? null,
+    ampLastCrawlTime: amp?.lastCrawlTime ?? null,
+    ampIssues: amp?.issues?.length ? JSON.stringify(amp.issues) : null,
     inspectionResultLink: inspection?.inspectionResultLink ?? null,
   }
 }
@@ -137,7 +154,8 @@ export function getNextCheckAfter(priority: InspectionPriority): number {
 // Two gates: the OAuth grant must include the indexing scope, AND the user's
 // GSC permission on the property must be one of the inspection-allowed levels.
 
-const INSPECTION_ALLOWED_PERMISSIONS = new Set(['siteOwner', 'siteFullUser'])
+// Any verified user can call URL inspection; only siteUnverifiedUser is blocked.
+const INSPECTION_ALLOWED_PERMISSIONS = new Set(['siteOwner', 'siteFullUser', 'siteRestrictedUser'])
 
 export function canUseUrlInspection(permissionLevel: string | null | undefined): boolean {
   return !!permissionLevel && INSPECTION_ALLOWED_PERMISSIONS.has(permissionLevel)

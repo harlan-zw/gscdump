@@ -1,4 +1,4 @@
-import type { ApiSite, ApiSitemap, RequiredNonNullable, Site } from 'gscdump'
+import type { ApiSite, ApiSitemap, Site } from 'gscdump'
 import type { z } from 'zod'
 import type { HandlerContext, listSitemapsInput, listSitesInput, sitemapInput } from '../types'
 import { fetchSitemaps, fetchSites, fetchSitesWithSitemaps, deleteSitemap as gscDeleteSitemap, fetchSitemap as gscFetchSitemap, submitSitemap as gscSubmitSitemap } from 'gscdump'
@@ -13,7 +13,7 @@ export async function listSites(
 export async function listSitesWithSitemaps(
   _input: z.infer<typeof listSitesInput>,
   ctx: HandlerContext,
-): Promise<(Site & { sitemaps: RequiredNonNullable<ApiSitemap>[] })[]> {
+): Promise<(Site & { sitemaps: ApiSitemap[] })[]> {
   return fetchSitesWithSitemaps(ctx.client)
 }
 

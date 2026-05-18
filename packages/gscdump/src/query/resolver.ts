@@ -127,6 +127,8 @@ export function normalizeBuilderState(state: unknown): BuilderState {
     orderBy: s.orderBy as BuilderState['orderBy'],
     rowLimit: s.rowLimit as number | undefined,
     startRow: s.startRow as number | undefined,
+    dataState: s.dataState as BuilderState['dataState'],
+    aggregationType: s.aggregationType as BuilderState['aggregationType'],
   }
 }
 
@@ -186,18 +188,19 @@ function extractSpecialFilters(filter?: Filter<any>): FilterExtraction {
     }
   }
 
-  // Process nested groups recursively
+  // Process nested groups recursively.
+  // Outer-scope date/searchType wins: nested-group values are only adopted
+  // when the outer scope didn't set them. Otherwise an inner OR group could
+  // silently override the user's top-level date range.
   if (filter._nestedGroups) {
     for (const nested of filter._nestedGroups) {
       const extracted = extractSpecialFilters(nested)
-      // Merge date/searchType from nested
-      if (extracted.startDate)
+      if (!startDate && extracted.startDate)
         startDate = extracted.startDate
-      if (extracted.endDate)
+      if (!endDate && extracted.endDate)
         endDate = extracted.endDate
-      if (extracted.searchType)
+      if (!searchType && extracted.searchType)
         searchType = extracted.searchType
-      // Keep cleaned nested filter if it has dimension filters
       if (extracted.dimensionFilter) {
         cleanedNestedGroups.push(extracted.dimensionFilter)
       }
@@ -248,6 +251,9 @@ export function extractSpecialOperatorFilters(input?: FilterInput): InternalFilt
 export function extractSearchType(state: BuilderState | undefined | null): SearchType | undefined {
   if (!state)
     return undefined
+  // Top-level builder .type() wins over filter-embedded searchType.
+  if (state.searchType && KNOWN_SEARCH_TYPES.has(state.searchType))
+    return state.searchType
   const filter = (state as { filter?: unknown }).filter
   if (!filter || typeof filter !== 'object')
     return undefined
@@ -271,16 +277,46 @@ export function resolveToBody(state: BuilderState): GscSearchAnalyticsRequest {
     endDate,
   }
 
-  if (searchType) {
-    body.searchType = searchType as GscSearchType
+  // Builder-level .type() overrides any searchType filter.
+  const resolvedType = state.searchType ?? searchType
+  if (resolvedType) {
+    body.type = resolvedType as GscSearchType
   }
 
-  if (state.rowLimit) {
+  if (state.rowLimit !== undefined) {
+    if (!Number.isInteger(state.rowLimit) || state.rowLimit < 1)
+      throw new Error(`rowLimit must be a positive integer, got ${state.rowLimit}`)
+    // Builder `.limit(n)` is a *total* row cap; the pagination layer in
+    // `client.query` paginates in ≤25k chunks. Pass through unclamped so
+    // `.toBody()` callers retain the original intent.
     body.rowLimit = state.rowLimit
   }
 
-  if (state.startRow) {
-    body.startRow = state.startRow
+  if (state.startRow !== undefined) {
+    if (!Number.isInteger(state.startRow) || state.startRow < 0)
+      throw new Error(`startRow must be a non-negative integer, got ${state.startRow}`)
+    if (state.startRow > 0)
+      body.startRow = state.startRow
+  }
+
+  const hasHour = state.dimensions?.includes('hour' as GscSearchAnalyticsDimension)
+  if (hasHour && state.dataState !== 'hourly_all')
+    throw new Error('hour dimension requires dataState: "hourly_all"')
+  if (state.dataState === 'hourly_all' && !hasHour)
+    throw new Error('dataState: "hourly_all" requires grouping by hour dimension')
+
+  if (state.dataState) {
+    body.dataState = state.dataState
+  }
+
+  if (state.aggregationType) {
+    if (state.aggregationType === 'byNewsShowcasePanel') {
+      if (body.type !== 'discover' && body.type !== 'googleNews')
+        throw new Error('aggregationType: "byNewsShowcasePanel" requires type "discover" or "googleNews"')
+    }
+    if (state.aggregationType === 'byProperty' && (body.type === 'discover' || body.type === 'googleNews'))
+      throw new Error('aggregationType: "byProperty" is not supported for type "discover" or "googleNews"')
+    body.aggregationType = state.aggregationType
   }
 
   const filterGroups = resolveFilter(dimensionFilter)
@@ -303,8 +339,10 @@ function resolveFilter(filter?: Filter<any>): GscSearchAnalyticsFilterGroup[] {
   const groupType = filter._groupType ?? 'and'
   const apiFilters = filter._filters.filter(isApiFilter)
 
+  // NOTE: Google docs flag `groupType: 'or'` as "not yet supported", but the API
+  // currently accepts it on the searchAnalytics.query endpoint. We pass it through
+  // and let Google decide; revisit if 400s start appearing in the wild.
   if (groupType === 'or') {
-    // OR group - all filters in one group with OR logic
     if (apiFilters.length > 0) {
       groups.push({
         groupType: 'or',
@@ -316,17 +354,14 @@ function resolveFilter(filter?: Filter<any>): GscSearchAnalyticsFilterGroup[] {
       })
     }
   }
-  else {
-    // AND - flat filters become one AND group
-    if (apiFilters.length > 0) {
-      groups.push({
-        filters: apiFilters.map(f => ({
-          dimension: f.dimension as GscSearchAnalyticsDimension,
-          operator: f.operator as GscSearchAnalyticsFilterOperator,
-          expression: f.expression,
-        })),
-      })
-    }
+  else if (apiFilters.length > 0) {
+    groups.push({
+      filters: apiFilters.map(f => ({
+        dimension: f.dimension as GscSearchAnalyticsDimension,
+        operator: f.operator as GscSearchAnalyticsFilterOperator,
+        expression: f.expression,
+      })),
+    })
   }
 
   // Process nested groups (preserved OR groups from and())
