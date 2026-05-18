@@ -35,7 +35,7 @@ export interface TenantCtx {
   siteId?: string
 }
 
-export type Dimension = 'page' | 'query' | 'queryCanonical' | 'country' | 'device' | 'date' | 'searchAppearance'
+export type Dimension = 'page' | 'query' | 'queryCanonical' | 'country' | 'device' | 'date' | 'searchAppearance' | 'hour'
 export type Metric = 'clicks' | 'impressions' | 'ctr' | 'position'
 // Wire-format filter — server-side normalizer accepts both the JSON filter form
 // (`{ type, column, value, ... }`) and the branded builder form from
