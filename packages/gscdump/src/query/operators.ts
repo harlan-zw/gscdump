@@ -170,6 +170,19 @@ export function or<F extends Filter<any>[]>(
   } as Filter<object>
 }
 
+const INVERSIONS: Record<FilterOperator, FilterOperator> = {
+  equals: 'notEquals',
+  notEquals: 'equals',
+  contains: 'notContains',
+  notContains: 'contains',
+  includingRegex: 'excludingRegex',
+  excludingRegex: 'includingRegex',
+}
+
+function invertOperator(op: FilterOperator): FilterOperator {
+  return INVERSIONS[op]
+}
+
 // not - inverts filter, no narrowing. Only dimension operators are
 // invertible; date and metric operators have no GSC equivalent inversion
 // and are rejected to avoid silently dropping clauses.
@@ -186,19 +199,6 @@ export function not<F extends Filter<any>>(filter: F): Filter<object> {
     _constraints: {},
     _filters: inverted,
   } as Filter<object>
-}
-
-const INVERSIONS: Record<FilterOperator, FilterOperator> = {
-  equals: 'notEquals',
-  notEquals: 'equals',
-  contains: 'notContains',
-  notContains: 'contains',
-  includingRegex: 'excludingRegex',
-  excludingRegex: 'includingRegex',
-}
-
-function invertOperator(op: FilterOperator): FilterOperator {
-  return INVERSIONS[op]
 }
 
 // gte - greater than or equal (date dimension or metric column only —

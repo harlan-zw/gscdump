@@ -118,7 +118,7 @@ const QUOTA_REASONS = new Set([
 
 function extractReason(cause: unknown): string | undefined {
   // ofetch FetchError wraps Google's JSON body in `data`; check there first, then the parsed details path.
-  const data = pickField(cause, [['data']], (v): v is unknown => true)
+  const data = pickField(cause, [['data']], (_v): _v is unknown => true)
   if (data) {
     const errorInfo = pickField(
       data,

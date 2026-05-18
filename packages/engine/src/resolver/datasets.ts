@@ -21,6 +21,7 @@ export const DIMENSION_SURFACES: Record<Dimension, readonly DimensionSurface[]> 
   device: ['api', 'stored'],
   searchAppearance: ['api', 'stored'],
   date: ['api', 'stored'],
+  hour: ['api', 'stored'],
 }
 
 export const LOGICAL_DATASETS: Record<LogicalDataset, LogicalDatasetDefinition> = {

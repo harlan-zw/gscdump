@@ -52,8 +52,12 @@ export function matchGscSite(siteUrl: string | null | undefined, gscSiteUrl: str
   const getHostname = (url: string): string => {
     if (url.startsWith('sc-domain:'))
       return url.replace('sc-domain:', '')
-    try { return new URL(url).hostname }
-    catch { return url }
+    try {
+      return new URL(url).hostname
+    }
+    catch {
+      return url
+    }
   }
   return gscPropertyMatchesTarget(getHostname(siteUrl), gscSiteUrl)
 }
@@ -88,7 +92,7 @@ export function pickBestGscProperty<T extends GscPropertyCandidate>(
  * URL candidates separately, so callers can show "we matched on X domain
  * property and Y URL-prefix property" diagnostics.
  */
-export function findBestGscProperty<T extends GscPropertyCandidate>(targetDomain: string, properties: readonly T[]) {
+export function findBestGscProperty<T extends GscPropertyCandidate>(targetDomain: string, properties: readonly T[]): { matchedSite: T | null, domainProperty: T | null, urlProperty: T | null } {
   const cleanTarget = stripWww(targetDomain)
 
   const domainProperty = properties.find((property) => {

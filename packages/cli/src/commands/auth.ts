@@ -1,14 +1,14 @@
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
-
-const AUTH_SUBCOMMANDS = ['status', 'login', 'logout', 'refresh', 'scopes'] as const
 import { ofetch } from 'ofetch'
 import { authenticate, clearTokens, formatAuthProvenance, getAuth, getAuthCredentials, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { loadConfig, saveConfig } from '../config'
 import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
 import { runSmokeTest } from './init'
 import { adoptCurrentConfigAsProfile, profileNameFromEmail, resolveActiveProfile } from './profile'
+
+const AUTH_SUBCOMMANDS = ['status', 'login', 'logout', 'refresh', 'scopes'] as const
 
 interface TokenInfo {
   scope?: string

@@ -88,7 +88,7 @@ export interface CreateIngestAccumulatorOptions extends RowAccumulatorOptions {
   hooks: IngestAccumulatorHooks
 }
 
-function scopeOf(ctx: IngestAccumulatorCtx, table: TableName, date: string) {
+function scopeOf(ctx: IngestAccumulatorCtx, table: TableName, date: string): TenantCtx & { table: TableName, date: string, searchType?: SearchType } {
   return {
     userId: String(ctx.userId),
     siteId: ctx.siteId,

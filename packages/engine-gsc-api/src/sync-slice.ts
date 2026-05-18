@@ -6,10 +6,12 @@
 import type { SearchType } from '@gscdump/engine'
 import type {
   GoogleSearchConsoleClient,
-  GscDataState,
-  GscSearchAnalyticsMetadata,
   SearchAnalyticsQuery,
 } from 'gscdump'
+import type {
+  GscDataState,
+  GscSearchAnalyticsMetadata,
+} from 'gscdump/contracts'
 
 export interface GscApiRow {
   keys: string[]
@@ -97,7 +99,7 @@ function isTimeoutLike(err: unknown): boolean {
   return err.name === 'AbortError' || err.message?.includes('timeout') || err.message?.includes('aborted')
 }
 
-function buildDomainFilterGroups(filter: SyncSliceDomainFilter | null | undefined) {
+function buildDomainFilterGroups(filter: SyncSliceDomainFilter | null | undefined): { filters: { dimension: 'page', operator: 'includingRegex', expression: string }[] }[] | undefined {
   if (!filter?.domain)
     return undefined
   const rootDomain = filter.domain.replace(/^www\./, '')

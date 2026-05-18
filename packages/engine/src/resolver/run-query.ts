@@ -50,7 +50,7 @@ export interface ComparisonQueryResult {
   totals: Record<string, unknown>
 }
 
-function runArgs(ctx: RunQueryCtx, partitions: string[]) {
+function runArgs(ctx: RunQueryCtx, partitions: string[]): { ctx: { userId: string, siteId: string }, table: RunQueryCtx['table'], fileSets: { FILES: { table: RunQueryCtx['table'], partitions: string[] } }, searchType?: RunQueryCtx['searchType'] } {
   return {
     ctx: { userId: ctx.userId, siteId: ctx.siteId },
     table: ctx.table,
