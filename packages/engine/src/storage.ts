@@ -1,8 +1,8 @@
-import type { Row, TableName, TenantCtx } from '@gscdump/contracts'
+import type { Grain, Row, TableName, TenantCtx } from '@gscdump/contracts'
 import type { BuilderState, SearchType } from 'gscdump/query'
 import { MS_PER_DAY, toIsoDate } from 'gscdump'
 
-export type { Row, TableName, TenantCtx } from '@gscdump/contracts'
+export type { Grain, Row, TableName, TenantCtx } from '@gscdump/contracts'
 export type { SearchType } from 'gscdump/query'
 
 /**
@@ -23,6 +23,12 @@ export interface WriteCtx extends TenantCtx {
    * for different search types coexist without colliding.
    */
   searchType?: SearchType
+  /**
+   * Temporal granularity for this write. `'day'` (default) routes to
+   * `writeDay` semantics. `'hour'` routes to `writeHour` — the host (ingest
+   * accumulator) interprets this; the engine surfaces both methods directly.
+   */
+  grain?: Grain
 }
 
 export interface QueryCtx extends TenantCtx {
@@ -35,12 +41,25 @@ export interface QueryCtx extends TenantCtx {
    * manifest entries written for that type. Mirrors {@link WriteCtx.searchType}.
    */
   searchType?: SearchType
+  /**
+   * Temporal granularity for this query. `'day'` (default) reads daily
+   * partitions only and skips any `hourly/` partitions. `'hour'` reads only
+   * hourly partitions. The two never mix — daily-from-hourly aggregation
+   * happens through the `discover-daily-from-hourly` rollup, not at read.
+   */
+  grain?: Grain
 }
 
 export interface GcCtx {
   now?: () => number
   userId?: string
   siteId?: string
+  /**
+   * Override retention for hourly partitions in milliseconds. Defaults to
+   * 90 days inside `gcOrphansImpl`. Hourly is GC-only — never compacted —
+   * so this is the only lifecycle knob for `hourly/{date}` entries.
+   */
+  hourlyRetentionMs?: number
 }
 
 /**
@@ -455,6 +474,15 @@ export interface RunSQLOptions {
 
 export interface StorageEngine {
   writeDay: (ctx: WriteCtx, rows: Row[]) => Promise<void>
+  /**
+   * Read-merge-write a single-day hourly partition. Idempotent on
+   * `(url, hour)` (last-write-wins): callers can re-fire the same slice
+   * after a retry and the partition converges. `ctx.date` is the PT
+   * calendar day; rows must carry `hour` + `date` fields. Partition shape
+   *  `hourly/{date}`; coexists with daily partitions in the same `table`
+   *  prefix (`hourly_pages`).
+   */
+  writeHour: (ctx: WriteCtx, rows: Row[]) => Promise<void>
   query: (ctx: QueryCtx, state: BuilderState) => Promise<QueryResult>
   /**
    * Run arbitrary SQL resolved against named partition sets. Composes
@@ -514,6 +542,16 @@ export interface EngineOptions {
 
 export function dayPartition(date: string): string {
   return `daily/${date}`
+}
+
+/**
+ * Hourly partition keyed by the PT calendar day (`YYYY-MM-DD`). One parquet
+ * per day holds 24 hourly buckets — read-merge-write keeps `(url, hour)`
+ * idempotency across retries. Names sort lexically alongside daily ones but
+ * never collide because of the `hourly/` prefix.
+ */
+export function hourPartition(date: string): string {
+  return `hourly/${date}`
 }
 
 export function monthPartition(month: string): string {

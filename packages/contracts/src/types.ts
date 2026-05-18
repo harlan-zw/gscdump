@@ -6,7 +6,14 @@ export type {
   PartnerLifecycleSite,
 } from './onboarding'
 
-export type TableName = 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords' | 'search_appearance'
+export type TableName = 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords' | 'search_appearance' | 'hourly_pages'
+/**
+ * Temporal granularity axis. Daily callers (`'day'`, default) read/write rows
+ *  keyed by `date`; hourly callers (`'hour'`) read/write rows that additionally
+ *  carry a `hour` field. Composes with `searchType` — hourly is only meaningful
+ *  for Discover at the moment but the engine is generic.
+ */
+export type Grain = 'day' | 'hour'
 export type Row = Record<string, unknown>
 export type ColumnType = 'DATE' | 'VARCHAR' | 'INTEGER' | 'BIGINT' | 'DOUBLE'
 

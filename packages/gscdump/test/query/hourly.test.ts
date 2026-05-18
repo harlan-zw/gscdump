@@ -52,14 +52,16 @@ describe('hourly Discover support', () => {
 
   describe('client.query metadata', () => {
     it('returns first_incomplete_hour as the generator final value', async () => {
-      const mockFetch = vi.fn().mockResolvedValue({
-        rows: [
-          { keys: ['2026-05-18T11:00:00-07:00'], clicks: 5, impressions: 100, ctr: 0.05, position: 3.1 },
-        ],
-        metadata: {
-          first_incomplete_hour: '2026-05-18T11:00:00-07:00',
-        },
-      })
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({
+          rows: [
+            { keys: ['2026-05-18T11:00:00-07:00'], clicks: 5, impressions: 100, ctr: 0.05, position: 3.1 },
+          ],
+          metadata: {
+            first_incomplete_hour: '2026-05-18T11:00:00-07:00',
+          },
+        })
+        .mockResolvedValue({ rows: [] })
 
       const client = googleSearchConsole('test-token', { fetch: mockFetch as any })
       const builder = gsc
@@ -77,13 +79,15 @@ describe('hourly Discover support', () => {
 
       expect(batches).toHaveLength(1)
       expect(batches[0][0]).toMatchObject({ hour: '2026-05-18T11:00:00-07:00', clicks: 5 })
-      expect(result.value).toEqual({ first_incomplete_hour: '2026-05-18T11:00:00-07:00' })
+      expect(result.value).toEqual({ metadata: { first_incomplete_hour: '2026-05-18T11:00:00-07:00' }, responseAggregationType: undefined })
     })
 
     it('returns undefined metadata when response omits it', async () => {
-      const mockFetch = vi.fn().mockResolvedValue({
-        rows: [{ keys: ['/foo'], clicks: 1, impressions: 1, ctr: 1, position: 1 }],
-      })
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({
+          rows: [{ keys: ['/foo'], clicks: 1, impressions: 1, ctr: 1, position: 1 }],
+        })
+        .mockResolvedValue({ rows: [] })
 
       const client = googleSearchConsole('test-token', { fetch: mockFetch as any })
       const builder = gsc.select(page).where(between(date, '2026-05-17', '2026-05-18'))
@@ -93,7 +97,7 @@ describe('hourly Discover support', () => {
       while (!result.done)
         result = await it.next()
 
-      expect(result.value).toBeUndefined()
+      expect(result.value).toEqual({ metadata: undefined, responseAggregationType: undefined })
     })
 
     it('sends dataState in the request body', async () => {

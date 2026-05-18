@@ -58,6 +58,10 @@ const FIXTURES: Record<TableName, Row[]> = {
   search_appearance: [
     { searchAppearance: 'AMP_TOP_STORIES', date: '2025-01-01', clicks: 4, impressions: 40, sum_position: 16 },
   ],
+  hourly_pages: [
+    { url: '/a', hour: '2025-01-01T08:00:00-07:00', date: '2025-01-01', clicks: 2, impressions: 12, sum_position: 18 },
+    { url: '/a', hour: '2025-01-01T09:00:00-07:00', date: '2025-01-01', clicks: 1, impressions: 6, sum_position: 9 },
+  ],
 }
 
 describe('hyparquet codec', () => {

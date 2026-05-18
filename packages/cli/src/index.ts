@@ -3,7 +3,7 @@
 import process from 'node:process'
 import { defineCommand, runMain } from 'citty'
 import { analyzeCommand } from './commands/analyze'
-import { authCommand } from './commands/auth'
+import { authCommand, loginCommand, logoutCommand, statusCommand } from './commands/auth'
 import { configCommand } from './commands/config'
 import { doctorCommand } from './commands/doctor'
 import { dumpCommand } from './commands/dump'
@@ -103,6 +103,10 @@ const main = defineCommand({
     analyze: analyzeCommand,
     report: reportCommand,
     auth: authCommand,
+    // Aliases: `gscdump login` etc. routed to the same subcommands.
+    login: loginCommand,
+    logout: logoutCommand,
+    status: statusCommand,
     config: configCommand,
     profile: profileCommand,
     doctor: doctorCommand,

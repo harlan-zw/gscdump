@@ -3,13 +3,19 @@
 // surfaces host concerns (recovery queue, error log, manifest bust, post-flush
 // hook) as callbacks. Hosts compose this with their D1/queue/drizzle wiring.
 
-import type { Row, TableName } from '@gscdump/contracts'
+import type { Grain, Row, TableName } from '@gscdump/contracts'
 import type { GscApiRow, RowAccumulator, RowAccumulatorOptions } from './ingest'
 import type { SearchType, TenantCtx } from './storage'
 import { createRowAccumulator } from './ingest'
 
 export interface IngestAccumulatorEngine {
   writeDay: (scope: TenantCtx & { table: TableName, date: string, searchType?: SearchType }, rows: Row[]) => Promise<void>
+  /**
+   * Routed when the accumulator's `ctx.grain === 'hour'`. Same scope shape as
+   * `writeDay`; `date` is the PT calendar day, rows carry `hour` + `date`.
+   * Optional so hosts that never opt into hourly need not implement it.
+   */
+  writeHour?: (scope: TenantCtx & { table: TableName, date: string, searchType?: SearchType }, rows: Row[]) => Promise<void>
   setSyncState: (
     scope: TenantCtx & { table: TableName, date: string, searchType?: SearchType },
     state: 'done' | 'failed',
@@ -21,6 +27,12 @@ export interface IngestAccumulatorCtx {
   userId: string | number
   siteId: string
   searchType?: SearchType
+  /**
+   * Temporal granularity for this accumulator. `'day'` (default) routes
+   * flushed buckets to `engine.writeDay`. `'hour'` routes to
+   * `engine.writeHour` and requires the engine implementation to be set.
+   */
+  grain?: Grain
 }
 
 export interface IngestAccumulatorHooks {
@@ -103,7 +115,10 @@ export function createIngestAccumulator(opts: CreateIngestAccumulatorOptions): I
 
   async function writeOne(table: TableName, date: string, rows: Row[]): Promise<{ ok: true, rows: number } | { ok: false }> {
     const scope = scopeOf(ctx, table, date)
-    return engine.writeDay(scope, rows)
+    const write = ctx.grain === 'hour'
+      ? (engine.writeHour ?? (() => Promise.reject(new Error('ingest accumulator: grain=hour requires engine.writeHour'))))
+      : engine.writeDay
+    return write(scope, rows)
       .then(() => engine.setSyncState(scope, 'done'))
       .then(async () => {
         await hooks.onWritten?.({ table, date, rowCount: rows.length })

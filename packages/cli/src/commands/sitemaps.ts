@@ -3,7 +3,7 @@ import { defineCommand } from 'citty'
 import { discoverSitemap, fetchSitemap, fetchSitemapUrls } from 'gscdump'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
-import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
+import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
 
 const listCommand = defineCommand({
   meta: {
@@ -215,5 +215,11 @@ export const sitemapsCommand = defineCommand({
     delete: deleteCommand,
     discover: discoverCommand,
     urls: urlsCommand,
+  },
+  // No subcommand: list sitemaps (requires --site).
+  async run({ args }) {
+    if (!noSubcommandSelected('sitemaps', ['list', 'get', 'submit', 'delete', 'discover', 'urls']))
+      return
+    await listCommand.run?.({ args, cmd: listCommand, rawArgs: [] } as any)
   },
 })

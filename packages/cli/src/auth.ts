@@ -196,15 +196,19 @@ export async function getAuthCredentials(interactive: boolean): Promise<OAuth2Cr
   const envClientSecret = process.env.GOOGLE_CLIENT_SECRET
 
   if (envClientId && envClientSecret) {
-    logger.info('Using OAuth client from env')
-    console.log(`  \x1B[90m${envClientId}\x1B[0m`)
+    if (interactive) {
+      logger.info('Using OAuth client from env')
+      console.log(`  \x1B[90m${envClientId}\x1B[0m`)
+    }
     return { clientId: envClientId, clientSecret: envClientSecret }
   }
 
   const config = await loadConfig()
   if (config.clientId && config.clientSecret) {
-    logger.info(`Using OAuth client from ${displayPath(`${getConfigDir()}/config.json`)}`)
-    console.log(`  \x1B[90m${config.clientId}\x1B[0m`)
+    if (interactive) {
+      logger.info(`Using OAuth client from ${displayPath(`${getConfigDir()}/config.json`)}`)
+      console.log(`  \x1B[90m${config.clientId}\x1B[0m`)
+    }
     return { clientId: config.clientId, clientSecret: config.clientSecret }
   }
 
@@ -303,6 +307,11 @@ async function getAuthCodeViaLoopback(authUrl: string): Promise<LoopbackAuthResu
       console.log(`  \x1B[90mIf browser doesn't open, visit:\x1B[0m`)
       console.log(`  \x1B[36m${fullAuthUrl}\x1B[0m`)
       console.log()
+      console.log(`  \x1B[90mIf Google says "redirect_uri_mismatch", your OAuth client is`)
+      console.log(`  not a "Desktop application" type. Create a Desktop client at`)
+      console.log(`  https://console.cloud.google.com/apis/credentials, then run`)
+      console.log(`  \`gscdump init --force\` with the new ID/secret.\x1B[0m`)
+      console.log()
 
       import('open').then(({ default: open }) => open(fullAuthUrl)).catch(() => {
         logger.warn('Could not open browser automatically')
@@ -312,7 +321,7 @@ async function getAuthCodeViaLoopback(authUrl: string): Promise<LoopbackAuthResu
     server.on('error', err => settle(() => reject(err)))
 
     timeoutId = setTimeout(() => {
-      settle(() => reject(new Error('Authorization timed out')))
+      settle(() => reject(new Error('Authorization timed out. If Google showed "redirect_uri_mismatch", your OAuth client must be type "Desktop application" (create one at https://console.cloud.google.com/apis/credentials and run `gscdump init --force`).')))
     }, 5 * 60 * 1000)
   })
 }
@@ -347,28 +356,42 @@ export async function authenticate(
   }
 
   const existingTokens = !opts.force ? await loadTokens() : null
+  let refreshFailed = false
+  let refreshError: Error | null = null
   if (existingTokens) {
     oauth2Client.setCredentials(existingTokens)
 
     if (existingTokens.expiry_date && existingTokens.expiry_date < Date.now()) {
-      const { credentials: newTokens } = await oauth2Client.refreshAccessToken()
-        .catch(() => ({ credentials: null }))
+      const result = await oauth2Client.refreshAccessToken()
+        .then(r => ({ credentials: r.credentials, error: null as Error | null }))
+        .catch((e: Error) => ({ credentials: null, error: e }))
 
-      if (newTokens) {
-        await saveTokens(newTokens)
-        oauth2Client.setCredentials(newTokens)
-        logger.success('Token refreshed')
+      if (result.credentials) {
+        await saveTokens(result.credentials)
+        oauth2Client.setCredentials(result.credentials)
+        if (interactive)
+          logger.success('Token refreshed')
         return oauth2Client
       }
+      refreshFailed = true
+      refreshError = result.error
     }
     else {
-      logger.success('Using saved credentials')
+      if (interactive)
+        logger.success('Using saved credentials')
       return oauth2Client
     }
   }
 
   if (!interactive) {
-    logger.error('No saved tokens. Run interactively first to authenticate.')
+    if (refreshFailed) {
+      logger.error(`Token refresh failed${refreshError ? `: ${refreshError.message}` : ''}`)
+      logger.info('Refresh token may be revoked or expired. Run `gscdump auth login` to re-authenticate.')
+    }
+    else {
+      logger.error('Not authenticated')
+      logger.info('Run `gscdump auth login` (or `gscdump init` for full setup).')
+    }
     process.exit(1)
   }
 

@@ -3,6 +3,7 @@
 // `runSQL` callable. Hosts wire their own `engine.runSQL` (or a fake) and
 // keep auth/tenant routing outside.
 
+import type { Grain } from '@gscdump/contracts'
 import type { BuilderState } from 'gscdump/query'
 import type { SearchType, TableName } from '../storage'
 import type { ComparisonFilter } from './types'
@@ -15,6 +16,14 @@ export interface RunQueryCtx {
   siteId: string
   table: TableName
   searchType?: SearchType
+  /**
+   * Temporal granularity. `'day'` (default) drives `enumeratePartitions` to
+   * emit `daily/{date}` only; hourly partitions are skipped by construction.
+   * `'hour'` is reserved for hourly read paths and must use the dedicated
+   * hourly query surface (callers pass `partitions: [hourly/{date}]`
+   * directly through `runSQL`).
+   */
+  grain?: Grain
 }
 
 export interface RunSQLFn {

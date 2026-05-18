@@ -9,7 +9,15 @@ export interface GcDeps {
 export interface GcOptions {
   userId?: string
   siteId?: string
+  /**
+   * Retention for hourly partitions (`hourly/{date}`) in milliseconds.
+   * Defaults to 90 days; entries with `createdAt < now - hourlyRetentionMs`
+   * are retired and their bytes deleted alongside ordinary orphan sweeping.
+   */
+  hourlyRetentionMs?: number
 }
+
+const DEFAULT_HOURLY_RETENTION_MS = 90 * 24 * 60 * 60 * 1000
 
 const VERSION_RE = /__v(\d+)\.parquet$/
 
@@ -46,6 +54,21 @@ export async function gcOrphansImpl(
   if (retired.length > 0) {
     await deps.dataSource.delete(retired.map(e => e.objectKey))
     await deps.manifestStore.delete(retired)
+  }
+
+  // Hourly retention sweep. Hourly partitions are GC-only (never compacted)
+  // so a separate age cutoff scrubs anything older than the configured window.
+  let hourlyDeleted = 0
+  if (opts.userId) {
+    const hourlyRetentionMs = opts.hourlyRetentionMs ?? DEFAULT_HOURLY_RETENTION_MS
+    const hourlyCutoff = now - hourlyRetentionMs
+    const allEntries = await deps.manifestStore.listAll({ userId: opts.userId, siteId: opts.siteId })
+    const expiredHourly = allEntries.filter(e => e.partition.startsWith('hourly/') && e.createdAt < hourlyCutoff)
+    if (expiredHourly.length > 0) {
+      await deps.dataSource.delete(expiredHourly.map(e => e.objectKey))
+      await deps.manifestStore.delete(expiredHourly)
+      hourlyDeleted = expiredHourly.length
+    }
   }
 
   let sweptOrphans = 0
@@ -106,5 +129,5 @@ export async function gcOrphansImpl(
     }
   }
 
-  return { deleted: retired.length + sweptOrphans }
+  return { deleted: retired.length + sweptOrphans + hourlyDeleted }
 }

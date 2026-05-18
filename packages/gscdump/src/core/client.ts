@@ -1,5 +1,5 @@
-import type { $Fetch, FetchOptions } from 'ofetch'
-import type { GscSearchAnalyticsMetadata } from '../contracts'
+import type { $Fetch, FetchContext, FetchOptions } from 'ofetch'
+import type { GscResponseAggregationType, GscSearchAnalyticsMetadata } from '../contracts'
 import type { GSCQueryBuilder } from '../query/builder'
 import type { Dimension, GSCRow } from '../query/types'
 import type {
@@ -141,8 +141,24 @@ export function createFetch(auth: Auth, options?: FetchOptions): $Fetch {
   return ofetch.create({
     ...options,
     retry: 3,
-    retryDelay: 1000,
-    retryStatusCodes: [408, 409, 425, 429, 500, 502, 503, 504],
+    // Honour `Retry-After` on 429/503 (RFC 7231): seconds or HTTP-date.
+    // Fall back to 1s for other retryable codes.
+    retryDelay: (ctx: FetchContext) => {
+      const status = ctx.response?.status
+      if (status === 429 || status === 503) {
+        const header = ctx.response?.headers.get('retry-after')
+        if (header) {
+          const secs = Number.parseInt(header, 10)
+          if (Number.isFinite(secs))
+            return secs * 1000
+          const when = Date.parse(header)
+          if (Number.isFinite(when))
+            return Math.max(0, when - Date.now())
+        }
+      }
+      return 1000
+    },
+    retryStatusCodes: [408, 425, 429, 500, 502, 503, 504],
     headers: {
       ...options?.headers,
       'Accept-Encoding': 'gzip',
@@ -179,9 +195,16 @@ export interface CallOptions {
   signal?: AbortSignal
 }
 
+/** Generator return value for `client.query` — exposes API response metadata plus the resolved aggregation type Google actually used (may differ from the requested `aggregationType: 'auto'`). */
+export interface QueryReturn {
+  metadata?: GscSearchAnalyticsMetadata
+  /** Aggregation type Google actually used. Useful when requesting `auto` to know if rows were aggregated `byPage` vs `byProperty`. */
+  responseAggregationType?: GscResponseAggregationType
+}
+
 export interface GoogleSearchConsoleClient {
   /** Query search analytics with builder, returns async generator yielding typed row batches */
-  query: <D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions) => AsyncGenerator<GSCRow<D, C>[], GscSearchAnalyticsMetadata | undefined>
+  query: <D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions) => AsyncGenerator<GSCRow<D, C>[], QueryReturn>
 
   /**
    * List all sites. Also exposes write ops as `client.sites.add(siteUrl)` and
@@ -279,7 +302,7 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
     })
 
   return {
-    async* query<D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions): AsyncGenerator<GSCRow<D, C>[], GscSearchAnalyticsMetadata | undefined> {
+    async* query<D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions): AsyncGenerator<GSCRow<D, C>[], QueryReturn> {
       const state = builder.getState()
       const body = resolveToBody(state)
       // When the caller specifies rowLimit it's a *total* cap; per-page we
@@ -289,6 +312,7 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
       let startRow = body.startRow || 0
       let yielded = 0
       let metadata: GscSearchAnalyticsMetadata | undefined
+      let responseAggregationType: GscResponseAggregationType | undefined
 
       while (true) {
         opts?.signal?.throwIfAborted()
@@ -299,6 +323,8 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
         const response = await rawQuery(siteUrl, { ...body, startRow, rowLimit }, opts)
         if (response.metadata)
           metadata = response.metadata as GscSearchAnalyticsMetadata
+        if (response.responseAggregationType)
+          responseAggregationType = response.responseAggregationType as GscResponseAggregationType
         const rows = (response.rows || []).map((row) => {
           const result: any = rowWithMetricDefaults(row)
           state.dimensions.forEach((dim, i) => {
@@ -306,13 +332,16 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
           })
           return result as GSCRow<D, C>
         })
+        // Per Google docs (how-tos/all-your-data): paginate until rows.length === 0.
+        // Short pages are not a reliable end-of-data signal. Don't yield empty
+        // batches — they're a pagination implementation detail.
+        if (rows.length === 0)
+          break
         yield rows
         yielded += rows.length
-        if (rows.length < rowLimit)
-          break
         startRow += rows.length
       }
-      return metadata
+      return { metadata, responseAggregationType }
     },
 
     sites: (() => {

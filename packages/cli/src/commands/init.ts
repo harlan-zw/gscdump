@@ -70,7 +70,20 @@ export const initCommand = defineCommand({
 
     if (config.clientId && config.clientSecret && !args.force) {
       logger.info('Already configured')
-      logger.info('Run with --force to reconfigure')
+      const tokens = await loadTokens()
+      if (!tokens) {
+        logger.info('No saved tokens. Run `gscdump auth login` to authenticate.')
+      }
+      else {
+        const isExpired = tokens.expiry_date && tokens.expiry_date < Date.now()
+        if (isExpired && tokens.refresh_token)
+          logger.info('Tokens expired but refresh available. Any live command will auto-refresh, or run `gscdump auth refresh`.')
+        else if (isExpired)
+          logger.warn('Tokens expired without a refresh token. Run `gscdump auth login` to re-authenticate.')
+        else
+          logger.info('Next: `gscdump sites` to list properties, or `gscdump query --help`.')
+      }
+      logger.info('Run `gscdump init --force` to reconfigure.')
       return
     }
 
@@ -151,11 +164,38 @@ export const initCommand = defineCommand({
 })
 
 async function smokeTest(oauth: OAuth2Client): Promise<void> {
+  await runSmokeTest(oauth)
+}
+
+/**
+ * Hit `sites.list` as a post-auth health check. Surfaces project-level
+ * misconfig (Search Console API not enabled, missing scopes) with an
+ * actionable next step, since those errors won't appear until the first real
+ * API call otherwise.
+ */
+export async function runSmokeTest(oauth: OAuth2Client): Promise<void> {
   const client = googleSearchConsole(oauth)
   const sites = await client.sites().catch((e: Error) => e)
   if (sites instanceof Error) {
-    logger.warn(`Smoke test failed: ${sites.message}`)
-    logger.info('Auth saved, but verify scopes via `gscdump auth status` / `gscdump doctor`.')
+    const msg = sites.message
+    const apiDisabledMatch = msg.match(/projects?\/(\d+)/) ?? msg.match(/project (\d+)/)
+    if (/has not been used in project|API has not been used|SERVICE_DISABLED/i.test(msg)) {
+      logger.error('Search Console API is not enabled for this Google Cloud project.')
+      const project = apiDisabledMatch?.[1]
+      const url = project
+        ? `https://console.developers.google.com/apis/api/searchconsole.googleapis.com/overview?project=${project}`
+        : 'https://console.developers.google.com/apis/api/searchconsole.googleapis.com/overview'
+      logger.info(`Enable it here, then retry: ${url}`)
+      logger.info('Note: it can take a few minutes to propagate after enabling.')
+      return
+    }
+    if (/insufficient|scope|forbidden|403/i.test(msg)) {
+      logger.warn(`Smoke test failed (likely missing scopes): ${msg}`)
+      logger.info('Run `gscdump auth login --force` to re-consent with the required scopes.')
+      return
+    }
+    logger.warn(`Smoke test failed: ${msg}`)
+    logger.info('Auth saved, but verify via `gscdump auth status` / `gscdump doctor`.')
     return
   }
   logger.success(`Verified: ${sites.length} GSC site(s) accessible`)

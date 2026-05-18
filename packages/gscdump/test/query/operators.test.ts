@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { country, device, page, query } from '../../src/query/columns'
+import { country, date, device, page, query } from '../../src/query/columns'
 import { Countries, Devices } from '../../src/query/constants'
-import { and, contains, eq, inArray, like, ne, not, notRegex, or, regex } from '../../src/query/operators'
+import { and, between, contains, eq, inArray, like, ne, not, notRegex, or, regex } from '../../src/query/operators'
 
 describe('operators', () => {
   describe('eq', () => {
@@ -66,6 +66,10 @@ describe('operators', () => {
       expect(f._filters).toHaveLength(2)
       expect(f._groupType).toBe('or')
     })
+
+    it('throws on empty array (would silently match everything)', () => {
+      expect(() => inArray(country, [])).toThrow(/at least one value/)
+    })
   })
 
   describe('contains', () => {
@@ -80,18 +84,36 @@ describe('operators', () => {
   })
 
   describe('like', () => {
-    it('converts SQL LIKE to contains', () => {
+    it('converts SQL LIKE wildcards to regex', () => {
       const f = like(page, '%/blog/%')
       expect(f._filters[0]).toEqual({
         dimension: 'page',
-        operator: 'contains',
-        expression: '/blog/',
+        operator: 'includingRegex',
+        expression: '.*/blog/.*',
       })
     })
 
-    it('handles patterns without %', () => {
+    it('translates _ to single-char regex', () => {
+      const f = like(page, '/post/_/end')
+      expect(f._filters[0]).toEqual({
+        dimension: 'page',
+        operator: 'includingRegex',
+        expression: '/post/./end',
+      })
+    })
+
+    it('falls back to contains when no wildcards present', () => {
       const f = like(query, 'test')
-      expect(f._filters[0].expression).toBe('test')
+      expect(f._filters[0]).toEqual({
+        dimension: 'query',
+        operator: 'contains',
+        expression: 'test',
+      })
+    })
+
+    it('escapes regex metacharacters in literal portions', () => {
+      const f = like(page, 'foo.bar%')
+      expect(f._filters[0].expression).toBe('foo\\.bar.*')
     })
   })
 
@@ -154,6 +176,13 @@ describe('operators', () => {
       )
       expect(f._filters).toHaveLength(2)
       expect(f._groupType).toBe('or')
+    })
+
+    it('rejects date filters (would silently collapse to AND)', () => {
+      expect(() => or(
+        between(date, '2024-01-01', '2024-01-31'),
+        eq(query, 'foo'),
+      )).toThrow(/date/)
     })
   })
 

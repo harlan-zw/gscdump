@@ -17,15 +17,11 @@ describe('extractSpecialFilters nested-group precedence', () => {
     expect(body.endDate).toBe('2026-05-07')
   })
 
-  it('falls back to nested date when no outer date set (single nested group)', () => {
-    // Wrapping a single between in and() puts it as a leaf, not nested — use
-    // explicit or() to push it into a nested group with no outer date.
-    const body = gsc
-      .select(page)
-      .where(and(or(between(date, '2026-04-01', '2026-04-30'))))
-      .toBody()
-
-    expect(body.startDate).toBe('2026-04-01')
-    expect(body.endDate).toBe('2026-04-30')
+  it('rejects date filter inside or() (would silently collapse to AND)', () => {
+    // The nested-date fallback path used to be reachable by wrapping a
+    // single between(date, ...) in or(). The or() guard now forbids that
+    // construction; the fallback in extractSpecialFilters remains as a
+    // defensive no-op.
+    expect(() => or(between(date, '2026-04-01', '2026-04-30'))).toThrow(/date/)
   })
 })

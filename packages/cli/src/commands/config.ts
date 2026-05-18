@@ -1,7 +1,7 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
 import { getConfigPath, loadConfig, saveConfig } from '../config'
-import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
+import { applyOutputMode, displayPath, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
 
 const showCommand = defineCommand({
   meta: {
@@ -221,5 +221,11 @@ export const configCommand = defineCommand({
     unset: unsetCommand,
     path: pathCommand,
     validate: validateCommand,
+  },
+  // No subcommand: show the current config.
+  async run({ args }) {
+    if (!noSubcommandSelected('config', ['show', 'set', 'unset', 'path', 'validate']))
+      return
+    await showCommand.run?.({ args, cmd: showCommand, rawArgs: [] } as any)
   },
 })

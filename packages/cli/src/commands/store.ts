@@ -1,4 +1,5 @@
 import { defineCommand } from 'citty'
+import { noSubcommandSelected } from '../utils'
 import { compactCommand } from './compact'
 import { exportCommand } from './export'
 import { gcCommand } from './gc'
@@ -19,5 +20,11 @@ export const storeCommand = defineCommand({
     'rollups': rollupsCommand,
     'rm-site': rmSiteCommand,
     'reset': resetCommand,
+  },
+  // No subcommand: show stats (read-only default).
+  async run({ args }) {
+    if (!noSubcommandSelected('store', ['stats', 'compact', 'gc', 'export', 'rollups', 'rm-site', 'reset']))
+      return
+    await statsCommand.run?.({ args, cmd: statsCommand, rawArgs: [] } as any)
   },
 })

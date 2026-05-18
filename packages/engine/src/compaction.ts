@@ -173,6 +173,11 @@ async function runStage(
   // its own compacted file.
   const buckets = new Map<string, ManifestEntry[]>()
   for (const entry of candidates) {
+    // Hourly partitions are GC-only — never merged into daily/weekly/monthly
+    // cohorts. Belt-and-braces against future stage definitions that might
+    // otherwise scoop them up.
+    if (entry.partition.startsWith('hourly/'))
+      continue
     const key = stage.bucketKey(entry)
     if (!key)
       continue

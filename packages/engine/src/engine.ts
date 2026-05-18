@@ -21,7 +21,7 @@ import { compactTieredImpl } from './compaction'
 import { compileLogicalQueryPlan } from './compiler'
 import { gcOrphansImpl } from './gc'
 import { currentSchemaVersion, SCHEMAS } from './schema'
-import { dayPartition, inferSearchType, objectKey, tenantPrefix } from './storage'
+import { dayPartition, hourPartition, inferSearchType, objectKey, tenantPrefix } from './storage'
 
 const URL_PURGE_TABLES: readonly TableName[] = ['pages', 'page_keywords']
 
@@ -109,6 +109,87 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
           ...(searchType !== undefined ? { searchType } : {}),
         }
         await manifestStore.registerVersion(entry, superseding)
+        await manifestStore.bumpWatermark(
+          { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table },
+          date,
+          now,
+        )
+      },
+    )
+  }
+
+  async function writeHour(ctx: WriteCtx, rows: Row[]): Promise<void> {
+    if (!ctx.date)
+      throw new Error('writeHour requires ctx.date (the PT calendar day)')
+    const date = ctx.date
+    const now = (ctx.now ?? defaultNow)()
+    const partition = hourPartition(date)
+    const searchType = ctx.searchType
+
+    return manifestStore.withLock(
+      { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table, partition },
+      async () => {
+        const live = await manifestStore.listLive({
+          userId: ctx.userId,
+          siteId: ctx.siteId,
+          table: ctx.table,
+          partitions: [partition],
+          searchType: inferSearchType({ searchType }),
+        })
+
+        // Read-merge-write: each tick reads existing rows for the day,
+        // overwrites buckets on (url, hour), and rewrites the parquet.
+        const existing: Row[] = []
+        for (const entry of live) {
+          const rs = await codec.readRows({ table: ctx.table }, entry.objectKey, dataSource)
+          existing.push(...rs)
+        }
+        const dedup = new Map<string, Row>()
+        for (const r of existing) {
+          const k = `${String(r.url ?? '')}\0${String(r.hour ?? '')}`
+          dedup.set(k, r)
+        }
+        for (const r of rows) {
+          const normalized = normalizeRow(ctx.table, r)
+          const k = `${String(normalized.url ?? '')}\0${String(normalized.hour ?? '')}`
+          dedup.set(k, normalized)
+        }
+        const merged = [...dedup.values()]
+
+        const key = objectKey(ctx, ctx.table, partition, now, searchType)
+        const { bytes: writtenBytes, rowCount } = await codec.writeRows(
+          { table: ctx.table },
+          merged,
+          key,
+          dataSource,
+        )
+        let bytes = writtenBytes
+        if (bytes === 0 && rowCount > 0 && dataSource.head) {
+          const probed = await dataSource.head(key)
+          if (probed)
+            bytes = probed.bytes
+        }
+        if (bytes > MAX_DAY_BYTES) {
+          await dataSource.delete([key]).catch(() => {})
+          throw new Error(
+            `writeHour payload ${bytes} bytes exceeds ${MAX_DAY_BYTES} hard ceiling (table=${ctx.table}, key=${key})`,
+          )
+        }
+
+        const entry: ManifestEntry = {
+          userId: ctx.userId,
+          siteId: ctx.siteId,
+          table: ctx.table,
+          partition,
+          objectKey: key,
+          rowCount,
+          bytes,
+          createdAt: now,
+          schemaVersion: currentSchemaVersion(ctx.table),
+          tier: 'raw',
+          ...(searchType !== undefined ? { searchType } : {}),
+        }
+        await manifestStore.registerVersion(entry, live)
         await manifestStore.bumpWatermark(
           { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table },
           date,
@@ -207,7 +288,11 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
       { dataSource, manifestStore },
       (ctx.now ?? defaultNow)(),
       graceMs,
-      { userId: ctx.userId, siteId: ctx.siteId },
+      {
+        userId: ctx.userId,
+        siteId: ctx.siteId,
+        ...(ctx.hourlyRetentionMs !== undefined ? { hourlyRetentionMs: ctx.hourlyRetentionMs } : {}),
+      },
     )
   }
 
@@ -315,6 +400,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
 
   return {
     writeDay,
+    writeHour,
     query,
     runSQL,
     compactTiered,

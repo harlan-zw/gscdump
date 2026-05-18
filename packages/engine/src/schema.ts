@@ -46,6 +46,7 @@ export {
   countries,
   devices,
   drizzleSchema,
+  hourly_pages,
   keywords,
   page_keywords,
   pages,
@@ -85,7 +86,7 @@ function tableSchemaFrom(tableName: TableName): TableSchema {
   }
 }
 
-const METRIC_TABLES: readonly TableName[] = ['pages', 'keywords', 'countries', 'devices', 'page_keywords', 'search_appearance']
+const METRIC_TABLES: readonly TableName[] = ['pages', 'keywords', 'countries', 'devices', 'page_keywords', 'search_appearance', 'hourly_pages']
 
 export const SCHEMAS: Record<TableName, TableSchema> = Object.fromEntries(
   METRIC_TABLES.map(t => [t, tableSchemaFrom(t)] as const),

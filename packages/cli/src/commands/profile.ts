@@ -6,7 +6,7 @@ import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { getConfigDir, setConfigDir } from '../config'
-import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
+import { applyOutputMode, displayPath, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
 
 const ROOT_DIR = path.join(os.homedir(), '.config', 'gscdump')
 const PROFILES_DIR = path.join(ROOT_DIR, 'profiles')
@@ -282,5 +282,11 @@ export const profileCommand = defineCommand({
     create: createCmd,
     clear: clearCmd,
     delete: deleteCmd,
+  },
+  // No subcommand: list profiles.
+  async run({ args }) {
+    if (!noSubcommandSelected('profile', ['list', 'path', 'current', 'use', 'create', 'clear', 'delete']))
+      return
+    await listCmd.run?.({ args, cmd: listCmd, rawArgs: [] } as any)
   },
 })

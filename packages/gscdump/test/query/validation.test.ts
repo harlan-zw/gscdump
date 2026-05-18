@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { gsc } from '../../src/query/builder'
-import { date, hour, page } from '../../src/query/columns'
-import { between } from '../../src/query/operators'
+import { date, hour, page, query, searchAppearance } from '../../src/query/columns'
+import { and, between, eq } from '../../src/query/operators'
 
 describe('resolveToBody validation', () => {
   const dateRange = between(date, '2026-05-01', '2026-05-07')
@@ -44,20 +44,55 @@ describe('resolveToBody validation', () => {
   describe('aggregationType', () => {
     it('rejects byNewsShowcasePanel without discover/googleNews type', () => {
       expect(() =>
-        gsc.select(page).where(dateRange).aggregationType('byNewsShowcasePanel').toBody(),
+        gsc.select(query).where(dateRange).aggregationType('byNewsShowcasePanel').toBody(),
       ).toThrow(/byNewsShowcasePanel/)
     })
 
-    it('accepts byNewsShowcasePanel with type discover', () => {
-      const body = gsc.select(page).where(dateRange).type('discover').aggregationType('byNewsShowcasePanel').toBody()
+    it('accepts byNewsShowcasePanel with type discover + NEWS_SHOWCASE filter and no page', () => {
+      const body = gsc.select(query)
+        .where(and(dateRange, eq(searchAppearance, 'NEWS_SHOWCASE')))
+        .type('discover')
+        .aggregationType('byNewsShowcasePanel')
+        .toBody()
       expect(body.aggregationType).toBe('byNewsShowcasePanel')
       expect(body.type).toBe('discover')
     })
 
+    it('rejects byNewsShowcasePanel when grouping by page', () => {
+      expect(() =>
+        gsc.select(page)
+          .where(and(dateRange, eq(searchAppearance, 'NEWS_SHOWCASE')))
+          .type('discover')
+          .aggregationType('byNewsShowcasePanel')
+          .toBody(),
+      ).toThrow(/page/)
+    })
+
+    it('rejects byNewsShowcasePanel without NEWS_SHOWCASE searchAppearance filter', () => {
+      expect(() =>
+        gsc.select(query).where(dateRange).type('discover').aggregationType('byNewsShowcasePanel').toBody(),
+      ).toThrow(/NEWS_SHOWCASE/)
+    })
+
     it('rejects byProperty for discover/googleNews', () => {
       expect(() =>
-        gsc.select(page).where(dateRange).type('googleNews').aggregationType('byProperty').toBody(),
+        gsc.select(query).where(dateRange).type('googleNews').aggregationType('byProperty').toBody(),
       ).toThrow(/byProperty/)
+    })
+
+    it('rejects byProperty when grouping by page', () => {
+      expect(() =>
+        gsc.select(page).where(dateRange).aggregationType('byProperty').toBody(),
+      ).toThrow(/page/)
+    })
+
+    it('rejects byProperty when filtering by page', () => {
+      expect(() =>
+        gsc.select(query)
+          .where(and(dateRange, eq(page, 'https://example.com/')))
+          .aggregationType('byProperty')
+          .toBody(),
+      ).toThrow(/page/)
     })
   })
 })

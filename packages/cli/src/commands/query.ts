@@ -6,20 +6,21 @@ import process from 'node:process'
 import { cancel, isCancel, multiselect, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { daysAgo } from 'gscdump'
-import { and, between, contains, country, date as dateCol, device, eq, gsc, notRegex, page, query as queryCol, regex, searchAppearance } from 'gscdump/query'
+import { and, between, contains, country, date as dateCol, device, eq, gsc, hour, notRegex, page, query as queryCol, regex, searchAppearance } from 'gscdump/query'
 import { loadConfig } from '../config'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { allTables, inferTable } from '../local-store'
 import { ALL_SEARCH_TYPES, exportToCSV, logger, parseSearchType } from '../utils'
 
-const DIMENSIONS = ['page', 'query', 'date', 'country', 'device', 'searchAppearance'] as const
+const DIMENSIONS = ['page', 'query', 'date', 'hour', 'country', 'device', 'searchAppearance'] as const
 type DimensionName = typeof DIMENSIONS[number]
 
 const DIM_COLUMNS: Record<DimensionName, Column<Dimension>> = {
   page,
   query: queryCol,
   date: dateCol,
+  hour,
   country,
   device,
   searchAppearance,

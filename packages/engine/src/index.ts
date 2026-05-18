@@ -4,6 +4,7 @@ export { countRawDailies, RAW_DAILY_COMPACT_THRESHOLD } from './compaction'
 export { canonicalEmptyParquetSchema, createDuckDBCodec, createDuckDBExecutor } from './duckdb'
 export type { DuckDBFactory, DuckDBHandle } from './duckdb'
 export { createStorageEngine, MAX_DAY_BYTES } from './engine'
+export { gcOrphansImpl } from './gc'
 export type { GscApiRow, IngestOptions, RowAccumulator, RowAccumulatorOptions } from './ingest'
 export { createRowAccumulator, toPath, toSumPosition, transformGscRow } from './ingest'
 export type {
@@ -18,6 +19,7 @@ export type {
 export { createIngestAccumulator, createNoopIngestAccumulator } from './ingest-accumulator'
 export { enumeratePartitions, FILES_PLACEHOLDER, resolveToSQL, substituteNamedFiles } from './planner'
 export type { ResolvedQuery } from './planner'
+export { rebuildDailyFromHourly } from './rollups'
 export type { InspectionVerdict, SchedulePolicy, ScheduleState } from './schedule'
 export { fixedPolicy, inspectionPolicy, sitemapPolicy } from './schedule'
 export {
@@ -27,6 +29,7 @@ export {
   devices,
   dimensionToColumn,
   drizzleSchema,
+  hourly_pages,
   inferTable,
   keywords,
   page_keywords,
@@ -39,10 +42,12 @@ export { bindLiterals, formatLiteral } from './sql-bind'
 export {
   dayPartition,
   DEFAULT_SEARCH_TYPE,
+  hourPartition,
   inferLegacyTier,
   inferSearchType,
   objectKey,
 } from './storage'
+export type { Grain } from './storage'
 export type {
   CodecCtx,
   CompactionTier,

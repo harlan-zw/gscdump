@@ -73,7 +73,18 @@ export const search_appearance = pgTable('search_appearance', {
   ...metricCols(),
 })
 
-export const drizzleSchema = { pages, keywords, countries, devices, page_keywords, search_appearance }
+// Per-(url, hour) Discover slice. `hour` is the GSC `hourly_all` timestamp
+// (ISO 8601 with PT offset, e.g. `2026-05-17T15:00:00-07:00`). `date` is the
+// derived PT calendar day used for partitioning; one parquet file per day
+// holds 24 hourly buckets per url. Read-merge-write keyed on (url, hour).
+export const hourly_pages = pgTable('hourly_pages', {
+  url: varchar('url').notNull(),
+  hour: varchar('hour').notNull(),
+  date: dateCol(),
+  ...metricCols(),
+})
+
+export const drizzleSchema = { pages, keywords, countries, devices, page_keywords, search_appearance, hourly_pages }
 export type DrizzleSchema = typeof drizzleSchema
 
 export const TABLE_METADATA: Record<TableName, { sortKey: string[], version: number }> = {
@@ -83,4 +94,5 @@ export const TABLE_METADATA: Record<TableName, { sortKey: string[], version: num
   devices: { sortKey: ['date', 'device'], version: 1 },
   page_keywords: { sortKey: ['date', 'url', 'query'], version: 2 },
   search_appearance: { sortKey: ['date', 'searchAppearance'], version: 1 },
+  hourly_pages: { sortKey: ['date', 'hour', 'url'], version: 1 },
 }

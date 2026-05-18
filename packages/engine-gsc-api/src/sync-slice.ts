@@ -4,7 +4,12 @@
 // no D1, no queue, no manifest.
 
 import type { SearchType } from '@gscdump/engine'
-import type { GoogleSearchConsoleClient, SearchAnalyticsQuery } from 'gscdump'
+import type {
+  GoogleSearchConsoleClient,
+  GscDataState,
+  GscSearchAnalyticsMetadata,
+  SearchAnalyticsQuery,
+} from 'gscdump'
 
 export interface GscApiRow {
   keys: string[]
@@ -26,10 +31,21 @@ export interface RunGscSyncSliceOptions {
   client: GoogleSearchConsoleClient
   siteUrl: string
   /** One of the engine sync-fan tables. Drives the dimension list. */
-  table: 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords'
+  table: 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords' | 'hourly_pages'
   startDate: string
   endDate: string
   domainFilter?: SyncSliceDomainFilter | null
+  /**
+   * Override the dimension list for this slice. Defaults to
+   *  `DIMENSIONS_BY_TABLE[table]`. Hosts that need bespoke groupings (e.g.
+   *  hourly Discover variants) supply this directly.
+   */
+  dimensions?: string[]
+  /**
+   * GSC `dataState` for the query. Defaults to `'all'`. Use `'hourly_all'`
+   *  for hourly Discover slices.
+   */
+  dataState?: GscDataState
   /**
    * Invoked per GSC API page with the rows fetched. Return a promise; the
    *  loop awaits it before paging further. Throw inside to abort; AbortError /
@@ -58,6 +74,12 @@ export interface RunGscSyncSliceResult {
   totalRows: number
   hasMore: boolean
   nextStartRow: number
+  /**
+   * Metadata from the LAST GSC API page seen during this slice run. When
+   *  `dataState='hourly_all'` and grouped by `hour`, this surfaces
+   *  `first_incomplete_hour` so hosts can watermark hourly progress.
+   */
+  metadata?: GscSearchAnalyticsMetadata
 }
 
 const DIMENSIONS_BY_TABLE = {
@@ -66,6 +88,7 @@ const DIMENSIONS_BY_TABLE = {
   countries: ['country', 'date'],
   devices: ['device', 'date'],
   page_keywords: ['page', 'query', 'date'],
+  hourly_pages: ['hour', 'page'],
 } as const
 
 function isTimeoutLike(err: unknown): boolean {
@@ -96,19 +119,23 @@ export async function runGscSyncSlice(
   const cpuBudgetMs = opts.cpuBudgetMs ?? 20_000
   const maxPages = opts.maxPages ?? Infinity
   const searchType: SearchType = opts.searchType ?? 'web'
-  const dimensions = [...DIMENSIONS_BY_TABLE[opts.table]]
+  const dimensions = opts.dimensions
+    ? [...opts.dimensions]
+    : [...DIMENSIONS_BY_TABLE[opts.table]]
+  const dataState: GscDataState = opts.dataState ?? 'all'
   const dimensionFilterGroups = buildDomainFilterGroups(opts.domainFilter)
 
   const loopStart = Date.now()
   let startRow = opts.initialStartRow ?? 0
   let totalRows = 0
   let pageCount = 0
+  let metadata: GscSearchAnalyticsMetadata | undefined
 
   while (true) {
     if (pageCount >= maxPages)
-      return { totalRows, hasMore: true, nextStartRow: startRow }
+      return { totalRows, hasMore: true, nextStartRow: startRow, metadata }
     if (Date.now() - loopStart >= cpuBudgetMs)
-      return { totalRows, hasMore: true, nextStartRow: startRow }
+      return { totalRows, hasMore: true, nextStartRow: startRow, metadata }
 
     const query: SearchAnalyticsQuery = {
       startDate: opts.startDate,
@@ -116,7 +143,7 @@ export async function runGscSyncSlice(
       dimensions,
       rowLimit,
       startRow,
-      dataState: 'all',
+      dataState,
       type: searchType,
       ...(dimensionFilterGroups ? { dimensionFilterGroups } : {}),
     }
@@ -127,11 +154,13 @@ export async function runGscSyncSlice(
       throw err
     })
     if (!response)
-      return { totalRows, hasMore: true, nextStartRow: startRow }
+      return { totalRows, hasMore: true, nextStartRow: startRow, metadata }
 
     const rows = (response.rows ?? []) as GscApiRow[]
     totalRows += rows.length
     pageCount++
+    if ((response as { metadata?: GscSearchAnalyticsMetadata }).metadata)
+      metadata = (response as { metadata?: GscSearchAnalyticsMetadata }).metadata
     opts.onPage?.({ searchType, rowsThisPage: rows.length })
 
     if (rows.length > 0) {
@@ -147,5 +176,5 @@ export async function runGscSyncSlice(
     startRow += rows.length
   }
 
-  return { totalRows, hasMore: false, nextStartRow: startRow }
+  return { totalRows, hasMore: false, nextStartRow: startRow, metadata }
 }

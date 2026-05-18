@@ -13,6 +13,7 @@ packages:
   - packages/*
   - examples/nuxt-dashboard
 overrides:
+  '@eslint/plugin-kit': ^0.7.1
   '@nuxt/kit': 4.4.4
   '@nuxt/schema': 4.4.4
   '@types/node>undici-types': ^7.0.0

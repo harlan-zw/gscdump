@@ -29,6 +29,9 @@ export const TABLE_DIMS: Record<TableName, string[]> = {
   devices: ['device', 'date'],
   page_keywords: ['page', 'query', 'date'],
   search_appearance: ['searchAppearance', 'date'],
+  // GSC `hourly_all` dataState — keys arrive as `[hour, page]`; the calendar
+  // date is derived from the leading hour timestamp at ingest.
+  hourly_pages: ['hour', 'page'],
 }
 
 export interface GscApiRow {
@@ -121,6 +124,17 @@ export function transformGscRow(
     return {
       date,
       row: { device: String(keys[0] ?? ''), date, clicks, impressions, sum_position },
+    }
+  }
+
+  if (table === 'hourly_pages') {
+    // GSC `hourly_all` emits hour as ISO with PT offset
+    // (e.g. `2026-05-17T15:00:00-07:00`). Calendar date = leading 10 chars.
+    const hour = String(keys[0] ?? '')
+    const date = hour.slice(0, 10)
+    return {
+      date,
+      row: { url: toPath(String(keys[1] ?? '')), hour, date, clicks, impressions, sum_position },
     }
   }
 

@@ -29,6 +29,12 @@ export interface ScopedRunnerOptions {
   startDate?: string
   /** Inclusive upper bound for `date`. Ignored if `window` is supplied. */
   endDate?: string
+  /**
+   * Temporal granularity. `'day'` (default) filters on `table.date`. `'hour'`
+   *  filters on `table.hour` when the table exposes that column (e.g.
+   *  `hourly_pages`); falls back to date filtering otherwise.
+   */
+  grain?: 'day' | 'hour'
 }
 
 export interface TableScope {
@@ -46,13 +52,16 @@ export function buildTableScope(
   if (opts.siteId && 'site_id' in table)
     predicates.push(eq(table.site_id, opts.siteId))
 
-  if ('date' in table) {
+  const grain = opts.grain ?? 'day'
+  const useHour = grain === 'hour' && 'hour' in table
+  const filterCol = useHour ? table.hour : table.date
+  if ('date' in table || useHour) {
     const start = opts.window?.start ?? opts.startDate
     const end = opts.window?.end ?? opts.endDate
     if (start)
-      predicates.push(gte(table.date, start))
+      predicates.push(gte(filterCol, start))
     if (end)
-      predicates.push(lte(table.date, end))
+      predicates.push(lte(filterCol, end))
   }
 
   return { wherePredicates: predicates, window: opts.window, siteId: opts.siteId }

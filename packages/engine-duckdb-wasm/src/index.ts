@@ -48,7 +48,7 @@ export type {
   DuckDBWasmBootResult,
   QueryResult,
 } from './runtime'
-export { countries, devices, keywords, page_keywords, pages, schema } from './schema'
+export { countries, devices, hourly_pages, keywords, page_keywords, pages, schema } from './schema'
 export type { Schema } from './schema'
 
 export { resolveWindow } from '@gscdump/engine/period'

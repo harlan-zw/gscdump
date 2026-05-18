@@ -35,12 +35,17 @@ describe('client.query pagination', () => {
     expect(mockFetch.mock.calls[0][1].body.rowLimit).toBe(150)
   })
 
-  it('uses 25k per-page when no limit set and stops on short page', async () => {
+  it('uses 25k per-page when no limit set and stops on empty page', async () => {
     let call = 0
     const mockFetch = vi.fn().mockImplementation(() => {
       call++
-      // Page 1: full 25k, Page 2: 10 rows (short ⇒ done).
-      return Promise.resolve({ rows: call === 1 ? fixtureRows(25_000) : fixtureRows(10, 25_000) })
+      // Per Google docs: paginate until rows.length === 0. A short page
+      // is NOT a reliable end-of-data marker.
+      if (call === 1)
+        return Promise.resolve({ rows: fixtureRows(25_000) })
+      if (call === 2)
+        return Promise.resolve({ rows: fixtureRows(10, 25_000) })
+      return Promise.resolve({ rows: [] })
     })
 
     const client = googleSearchConsole('t', { fetch: mockFetch as any })
@@ -49,7 +54,7 @@ describe('client.query pagination', () => {
       total += batch.length
 
     expect(total).toBe(25_010)
-    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
     expect(mockFetch.mock.calls[0][1].body.rowLimit).toBe(25_000)
   })
 

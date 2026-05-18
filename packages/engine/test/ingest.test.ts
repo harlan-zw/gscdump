@@ -55,6 +55,26 @@ describe('transformGscRow', () => {
     expect(out?.row).toEqual({ device: 'mobile', date: '2026-04-10', clicks: 0, impressions: 3, sum_position: 0 })
   })
 
+  it('maps hourly_pages (keys=[hour, page]) and derives date from the hour prefix', () => {
+    const out = transformGscRow('hourly_pages', {
+      keys: ['2026-05-17T15:00:00-07:00', 'https://example.com/foo'],
+      clicks: 4,
+      impressions: 20,
+      position: 5,
+    })
+    expect(out).toEqual({
+      date: '2026-05-17',
+      row: {
+        url: '/foo',
+        hour: '2026-05-17T15:00:00-07:00',
+        date: '2026-05-17',
+        clicks: 4,
+        impressions: 20,
+        sum_position: 80,
+      },
+    })
+  })
+
   it('maps page_keywords (keys=[page, query, date])', () => {
     const out = transformGscRow(
       'page_keywords',

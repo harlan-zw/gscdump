@@ -7,6 +7,7 @@
 export {
   countries,
   devices,
+  hourly_pages,
   keywords,
   page_keywords,
   pages,

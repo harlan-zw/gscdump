@@ -135,7 +135,7 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
           break
         startRow += rows.length
       }
-      return metadata
+      return { metadata }
     },
 
     sites: (() => {

@@ -309,19 +309,34 @@ export function resolveToBody(state: BuilderState): GscSearchAnalyticsRequest {
     body.dataState = state.dataState
   }
 
-  if (state.aggregationType) {
-    if (state.aggregationType === 'byNewsShowcasePanel') {
-      if (body.type !== 'discover' && body.type !== 'googleNews')
-        throw new Error('aggregationType: "byNewsShowcasePanel" requires type "discover" or "googleNews"')
-    }
-    if (state.aggregationType === 'byProperty' && (body.type === 'discover' || body.type === 'googleNews'))
-      throw new Error('aggregationType: "byProperty" is not supported for type "discover" or "googleNews"')
-    body.aggregationType = state.aggregationType
-  }
-
   const filterGroups = resolveFilter(dimensionFilter)
   if (filterGroups.length > 0) {
     body.dimensionFilterGroups = filterGroups
+  }
+
+  if (state.aggregationType) {
+    const groupsByPage = (body.dimensions ?? []).includes('page' as GscSearchAnalyticsDimension)
+    const apiLeafFilters = filterGroups.flatMap(g => g.filters ?? [])
+    const filtersByPage = apiLeafFilters.some(f => f.dimension === 'page')
+
+    if (state.aggregationType === 'byProperty') {
+      if (body.type === 'discover' || body.type === 'googleNews')
+        throw new Error('aggregationType: "byProperty" is not supported for type "discover" or "googleNews"')
+      if (groupsByPage || filtersByPage)
+        throw new Error('aggregationType: "byProperty" is not allowed when grouping or filtering by page')
+    }
+    if (state.aggregationType === 'byNewsShowcasePanel') {
+      if (body.type !== 'discover' && body.type !== 'googleNews')
+        throw new Error('aggregationType: "byNewsShowcasePanel" requires type "discover" or "googleNews"')
+      if (groupsByPage || filtersByPage)
+        throw new Error('aggregationType: "byNewsShowcasePanel" is not allowed when grouping or filtering by page')
+      const saFilters = apiLeafFilters.filter(f => f.dimension === 'searchAppearance')
+      const hasNewsShowcase = saFilters.some(f => f.operator === 'equals' && f.expression === 'NEWS_SHOWCASE')
+      const hasOther = saFilters.some(f => !(f.operator === 'equals' && f.expression === 'NEWS_SHOWCASE'))
+      if (!hasNewsShowcase || hasOther)
+        throw new Error('aggregationType: "byNewsShowcasePanel" requires a searchAppearance equals "NEWS_SHOWCASE" filter and no other searchAppearance filter')
+    }
+    body.aggregationType = state.aggregationType
   }
 
   return body

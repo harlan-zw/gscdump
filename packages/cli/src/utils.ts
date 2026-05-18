@@ -11,6 +11,23 @@ export const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchTyp
 
 export const VERSION: string = pkg.version
 
+/**
+ * Citty calls a parent command's `run` even when a subcommand matches, so a
+ * naive "default to subcommand X" runs X *in addition to* the chosen
+ * subcommand. Use this to gate the default-subcommand body: returns true iff
+ * the next argv after `parent` is not in `subNames`, meaning we should run the
+ * default.
+ */
+export function noSubcommandSelected(parent: string, subNames: readonly string[]): boolean {
+  const idx = process.argv.indexOf(parent)
+  if (idx < 0)
+    return true
+  const next = process.argv[idx + 1]
+  if (!next)
+    return true
+  return !subNames.includes(next)
+}
+
 // All progress/diagnostic logs go to stderr so stdout is reserved for
 // machine-readable output (JSON, CSV, raw query results). Consola's default
 // instance writes info/success/warn to stdout, which collides with `--json`
