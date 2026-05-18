@@ -1,4 +1,5 @@
 import type { $Fetch, FetchOptions } from 'ofetch'
+import type { GscSearchAnalyticsMetadata } from '../contracts'
 import type { GSCQueryBuilder } from '../query/builder'
 import type { Dimension, GSCRow } from '../query/types'
 import type {
@@ -17,6 +18,30 @@ import { rowWithMetricDefaults } from './cli-format'
 const GSC_API = 'https://searchconsole.googleapis.com'
 const INDEXING_API = 'https://indexing.googleapis.com'
 const SITE_VERIFICATION_API = 'https://www.googleapis.com/siteVerification/v1'
+
+/**
+ * Encode a GSC `siteUrl` for use in a path segment. Preserves the literal
+ * `sc-domain:` prefix used by Domain properties so the colon doesn't get
+ * percent-encoded (Google accepts either, but the docs use the literal form).
+ */
+function encodeSiteUrl(siteUrl: string): string {
+  if (siteUrl.startsWith('sc-domain:'))
+    return `sc-domain:${encodeURIComponent(siteUrl.slice('sc-domain:'.length))}`
+  return encodeURIComponent(siteUrl)
+}
+
+/**
+ * GSC accepts a URL-prefix property (`http://…` or `https://…`, with trailing
+ * slash) or a Domain property (`sc-domain:example.com`). Anything else is
+ * rejected with a 400, so guard at the SDK boundary.
+ */
+function assertValidSiteUrl(siteUrl: string): void {
+  if (siteUrl.startsWith('sc-domain:') && siteUrl.length > 'sc-domain:'.length)
+    return
+  if (/^https?:\/\/.+/.test(siteUrl))
+    return
+  throw new Error(`Invalid siteUrl: expected "https?://…" or "sc-domain:…", got "${siteUrl}"`)
+}
 
 export type VerificationMethod = 'META' | 'FILE' | 'DNS_TXT' | 'DNS_CNAME' | 'ANALYTICS' | 'TAG_MANAGER'
 export type VerificationSiteType = 'SITE' | 'INET_DOMAIN' | 'ANDROID_APP'
@@ -156,7 +181,7 @@ export interface CallOptions {
 
 export interface GoogleSearchConsoleClient {
   /** Query search analytics with builder, returns async generator yielding typed row batches */
-  query: <D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions) => AsyncGenerator<GSCRow<D, C>[]>
+  query: <D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions) => AsyncGenerator<GSCRow<D, C>[], GscSearchAnalyticsMetadata | undefined>
 
   /**
    * List all sites. Also exposes write ops as `client.sites.add(siteUrl)` and
@@ -165,6 +190,8 @@ export interface GoogleSearchConsoleClient {
    */
   sites: ((opts?: CallOptions) => Promise<ApiSite[]>) & {
     list: (opts?: CallOptions) => Promise<ApiSite[]>
+    /** Retrieve a single property (with permission level). 404 if not in the user's account. */
+    get: (siteUrl: string, opts?: CallOptions) => Promise<ApiSite>
     /** Add a property in unverified state. Caller must verify ownership separately. */
     add: (siteUrl: string, opts?: CallOptions) => Promise<void>
     /** Remove a property from the user's account. */
@@ -182,12 +209,13 @@ export interface GoogleSearchConsoleClient {
     delete: (id: string, opts?: CallOptions) => Promise<void>
   }
 
-  /** Inspect a URL */
-  inspect: (siteUrl: string, url: string, opts?: CallOptions) => Promise<InspectUrlIndexResponse>
+  /** Inspect a URL. `languageCode` is a BCP-47 tag for translating result strings; omit to let Google pick. */
+  inspect: (siteUrl: string, url: string, opts?: CallOptions & { languageCode?: string }) => Promise<InspectUrlIndexResponse>
 
   /** Sitemap operations */
   sitemaps: {
-    list: (siteUrl: string, opts?: CallOptions) => Promise<ApiSitemap[]>
+    /** List sitemaps. Pass `sitemapIndex` to list children of a sitemap-index file. */
+    list: (siteUrl: string, opts?: CallOptions & { sitemapIndex?: string }) => Promise<ApiSitemap[]>
     get: (siteUrl: string, feedpath: string, opts?: CallOptions) => Promise<ApiSitemap>
     submit: (siteUrl: string, feedpath: string, opts?: CallOptions) => Promise<void>
     delete: (siteUrl: string, feedpath: string, opts?: CallOptions) => Promise<void>
@@ -244,22 +272,33 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
   }
 
   const rawQuery = (siteUrl: string, body: SearchAnalyticsQuery, opts?: CallOptions): Promise<SearchAnalyticsResponse> =>
-    fetch<SearchAnalyticsResponse>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, {
+    fetch<SearchAnalyticsResponse>(`${GSC_API}/webmasters/v3/sites/${encodeSiteUrl(siteUrl)}/searchAnalytics/query`, {
       method: 'POST',
       body,
       signal: opts?.signal,
     })
 
   return {
-    async* query<D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions): AsyncGenerator<GSCRow<D, C>[]> {
+    async* query<D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions): AsyncGenerator<GSCRow<D, C>[], GscSearchAnalyticsMetadata | undefined> {
       const state = builder.getState()
       const body = resolveToBody(state)
-      const rowLimit = body.rowLimit || 25_000
+      // When the caller specifies rowLimit it's a *total* cap; per-page we
+      // still use the API max (25k) to minimise round-trips.
+      const totalCap = body.rowLimit
+      const pageSize = Math.min(totalCap ?? 25_000, 25_000)
       let startRow = body.startRow || 0
+      let yielded = 0
+      let metadata: GscSearchAnalyticsMetadata | undefined
 
       while (true) {
         opts?.signal?.throwIfAborted()
+        const remaining = totalCap ? totalCap - yielded : pageSize
+        if (remaining <= 0)
+          break
+        const rowLimit = Math.min(pageSize, remaining)
         const response = await rawQuery(siteUrl, { ...body, startRow, rowLimit }, opts)
+        if (response.metadata)
+          metadata = response.metadata as GscSearchAnalyticsMetadata
         const rows = (response.rows || []).map((row) => {
           const result: any = rowWithMetricDefaults(row)
           state.dimensions.forEach((dim, i) => {
@@ -268,10 +307,12 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
           return result as GSCRow<D, C>
         })
         yield rows
+        yielded += rows.length
         if (rows.length < rowLimit)
           break
         startRow += rows.length
       }
+      return metadata
     },
 
     sites: (() => {
@@ -281,13 +322,17 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
       }
       return Object.assign(list, {
         list,
-        add: (siteUrl: string, opts?: CallOptions) =>
-          fetch<void>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}`, {
+        get: (siteUrl: string, opts?: CallOptions) =>
+          fetch<ApiSite>(`${GSC_API}/webmasters/v3/sites/${encodeSiteUrl(siteUrl)}`, { signal: opts?.signal }),
+        add: (siteUrl: string, opts?: CallOptions) => {
+          assertValidSiteUrl(siteUrl)
+          return fetch<void>(`${GSC_API}/webmasters/v3/sites/${encodeSiteUrl(siteUrl)}`, {
             method: 'PUT',
             signal: opts?.signal,
-          }),
+          })
+        },
         delete: (siteUrl: string, opts?: CallOptions) =>
-          fetch<void>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}`, {
+          fetch<void>(`${GSC_API}/webmasters/v3/sites/${encodeSiteUrl(siteUrl)}`, {
             method: 'DELETE',
             signal: opts?.signal,
           }),
@@ -324,27 +369,32 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
     inspect: (siteUrl, url, opts) =>
       fetch<InspectUrlIndexResponse>(`${GSC_API}/v1/urlInspection/index:inspect`, {
         method: 'POST',
-        body: { inspectionUrl: url, siteUrl },
+        body: opts?.languageCode
+          ? { inspectionUrl: url, siteUrl, languageCode: opts.languageCode }
+          : { inspectionUrl: url, siteUrl },
         signal: opts?.signal,
       }),
 
     sitemaps: {
       list: async (siteUrl, opts) => {
-        const res = await fetch<{ sitemap?: ApiSitemap[] }>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps`, { signal: opts?.signal })
+        const res = await fetch<{ sitemap?: ApiSitemap[] }>(`${GSC_API}/webmasters/v3/sites/${encodeSiteUrl(siteUrl)}/sitemaps`, {
+          signal: opts?.signal,
+          query: opts?.sitemapIndex ? { sitemapIndex: opts.sitemapIndex } : undefined,
+        })
         return res.sitemap || []
       },
 
       get: (siteUrl, feedpath, opts) =>
-        fetch<ApiSitemap>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps/${encodeURIComponent(feedpath)}`, { signal: opts?.signal }),
+        fetch<ApiSitemap>(`${GSC_API}/webmasters/v3/sites/${encodeSiteUrl(siteUrl)}/sitemaps/${encodeURIComponent(feedpath)}`, { signal: opts?.signal }),
 
       submit: (siteUrl, feedpath, opts) =>
-        fetch<void>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps/${encodeURIComponent(feedpath)}`, {
+        fetch<void>(`${GSC_API}/webmasters/v3/sites/${encodeSiteUrl(siteUrl)}/sitemaps/${encodeURIComponent(feedpath)}`, {
           method: 'PUT',
           signal: opts?.signal,
         }),
 
       delete: (siteUrl, feedpath, opts) =>
-        fetch<void>(`${GSC_API}/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/sitemaps/${encodeURIComponent(feedpath)}`, {
+        fetch<void>(`${GSC_API}/webmasters/v3/sites/${encodeSiteUrl(siteUrl)}/sitemaps/${encodeURIComponent(feedpath)}`, {
           method: 'DELETE',
           signal: opts?.signal,
         }),

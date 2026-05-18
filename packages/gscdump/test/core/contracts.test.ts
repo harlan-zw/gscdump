@@ -24,7 +24,7 @@ describe('public contracts', () => {
       .toBody()
 
     expect(body).toEqual(fixture)
-    expect('type' in body).toBe(false)
+    expect('searchType' in body).toBe(false)
   })
 
   it('documents the normalized row response fixture used by host apps', () => {

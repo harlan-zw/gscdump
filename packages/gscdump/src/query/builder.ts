@@ -1,4 +1,4 @@
-import type { GscSearchAnalyticsRequest } from '../contracts'
+import type { GscAggregationType, GscDataState, GscSearchAnalyticsRequest, GscSearchType } from '../contracts'
 import type { BuilderState, Column, Dimension, Filter, Metric, MetricColumn } from './types'
 import { resolveToBody } from './resolver'
 
@@ -28,6 +28,10 @@ export interface GSCQueryBuilder<
   orderBy: (col: OrderableColumn, dir: 'asc' | 'desc') => GSCQueryBuilder<D, C>
   limit: (n: number) => GSCQueryBuilder<D, C>
   offset: (n: number) => GSCQueryBuilder<D, C>
+  dataState: (state: GscDataState) => GSCQueryBuilder<D, C>
+  aggregationType: (type: GscAggregationType) => GSCQueryBuilder<D, C>
+  /** GSC search corpus (`type` on the wire). Equivalent to filtering by `searchType`. */
+  type: (t: GscSearchType) => GSCQueryBuilder<D, C>
   toBody: () => GscSearchAnalyticsRequest
   getState: () => BuilderState
 }
@@ -97,6 +101,18 @@ function createBuilder<D extends Dimension[], C>(state: BuilderState): GSCQueryB
 
     offset(n: number) {
       return createBuilder<D, C>({ ...state, startRow: n })
+    },
+
+    dataState(s: GscDataState) {
+      return createBuilder<D, C>({ ...state, dataState: s })
+    },
+
+    aggregationType(t: GscAggregationType) {
+      return createBuilder<D, C>({ ...state, aggregationType: t })
+    },
+
+    type(t: GscSearchType) {
+      return createBuilder<D, C>({ ...state, searchType: t as BuilderState['searchType'] })
     },
 
     toBody() {

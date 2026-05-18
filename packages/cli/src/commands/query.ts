@@ -95,7 +95,7 @@ async function runLiveQuery(
     rowLimit: opts.rowLimit,
   }
   if (opts.searchType)
-    baseBody.searchType = opts.searchType
+    baseBody.type = opts.searchType
   if (opts.dataState)
     baseBody.dataState = opts.dataState
   if (opts.aggregationType)
@@ -303,7 +303,7 @@ export const queryCommand = defineCommand({
           rowLimit,
         }
         if (searchType)
-          body.searchType = searchType
+          body.type = searchType
         if (dataState)
           body.dataState = dataState
         if (aggregationType)

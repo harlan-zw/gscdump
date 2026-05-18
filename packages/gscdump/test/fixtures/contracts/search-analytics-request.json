@@ -15,5 +15,5 @@
   ],
   "rowLimit": 100,
   "startRow": 25,
-  "searchType": "web"
+  "type": "web"
 }

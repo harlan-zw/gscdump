@@ -117,7 +117,7 @@ export async function runGscSyncSlice(
       rowLimit,
       startRow,
       dataState: 'all',
-      searchType,
+      type: searchType,
       ...(dimensionFilterGroups ? { dimensionFilterGroups } : {}),
     }
 

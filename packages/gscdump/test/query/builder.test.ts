@@ -219,6 +219,39 @@ describe('gSCQueryBuilder', () => {
     it('throws when no date range set', () => {
       expect(() => gsc.select('page').toBody()).toThrow('Date range required')
     })
+
+    it('emits wire field `type` (not deprecated `searchType`) when search type is filtered', async () => {
+      const { searchType } = await import('../../src/query/columns')
+      const body = gsc
+        .select('page')
+        .where(and(
+          between(date, '2024-01-01', '2024-01-31'),
+          eq(searchType, 'discover'),
+        ))
+        .toBody() as Record<string, unknown>
+
+      expect(body.type).toBe('discover')
+      expect(body.searchType).toBeUndefined()
+    })
+
+    it('emits aggregationType when set', () => {
+      const body = gsc
+        .select('page')
+        .where(between(date, '2024-01-01', '2024-01-31'))
+        .aggregationType('byPage')
+        .toBody()
+
+      expect(body.aggregationType).toBe('byPage')
+    })
+
+    it('omits aggregationType when not set', () => {
+      const body = gsc
+        .select('page')
+        .where(between(date, '2024-01-01', '2024-01-31'))
+        .toBody()
+
+      expect(body.aggregationType).toBeUndefined()
+    })
   })
 
   describe('chaining', () => {

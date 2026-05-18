@@ -28,6 +28,10 @@ interface ApiQueryResponse {
     rowCount: number
     hasMore: boolean
   }
+  metadata?: {
+    first_incomplete_date?: string
+    first_incomplete_hour?: string
+  }
 }
 
 interface ApiSitesResponse {
@@ -62,7 +66,7 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
     baseURL: baseUrl,
     retry: 3,
     retryDelay: 1000,
-    retryStatusCodes: [408, 429, 500, 502, 503, 504],
+    retryStatusCodes: [408, 409, 425, 429, 500, 502, 503, 504],
     headers: {
       'x-api-key': options.apiKey,
       'Content-Type': 'application/json',
@@ -92,19 +96,29 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
   }
 
   return {
-    async* query<D extends Dimension[], C>(siteId: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions): AsyncGenerator<GSCRow<D, C>[]> {
+    async* query<D extends Dimension[], C>(siteId: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions) {
       const state = builder.getState()
       const body = resolveToBody(state)
-      const rowLimit = body.rowLimit || 25_000
+      const totalCap = body.rowLimit
+      const pageSize = Math.min(totalCap ?? 25_000, 25_000)
       let startRow = body.startRow || 0
+      let yielded = 0
+      let metadata: ApiQueryResponse['metadata']
 
       while (true) {
         opts?.signal?.throwIfAborted()
+        const remaining = totalCap ? totalCap - yielded : pageSize
+        if (remaining <= 0)
+          break
+        const rowLimit = Math.min(pageSize, remaining)
         const response = await fetch<ApiQueryResponse>(`/api/sites/${encodeURIComponent(siteId)}/query`, {
           method: 'POST',
           body: { ...body, startRow, rowLimit },
           signal: opts?.signal,
         })
+
+        if (response.metadata)
+          metadata = response.metadata
 
         const rows = response.rows.map((row) => {
           const result: any = rowWithMetricDefaults(row)
@@ -115,11 +129,13 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
         })
 
         yield rows
+        yielded += rows.length
 
         if (!response.meta.hasMore || rows.length < rowLimit)
           break
         startRow += rows.length
       }
+      return metadata
     },
 
     sites: (() => {
@@ -135,6 +151,7 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
       }
       return Object.assign(list, {
         list,
+        get: unsupported('get'),
         add: unsupported('add'),
         delete: unsupported('delete'),
       })

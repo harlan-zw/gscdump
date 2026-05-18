@@ -20,7 +20,16 @@ export interface TenantCtx {
   siteId?: string
 }
 
-export type GscSearchAnalyticsDimension = 'page' | 'query' | 'country' | 'device' | 'date' | 'searchAppearance'
+export type GscSearchAnalyticsDimension = 'page' | 'query' | 'country' | 'device' | 'date' | 'hour' | 'searchAppearance'
+
+export type GscDataState = 'final' | 'all' | 'hourly_all'
+
+export interface GscSearchAnalyticsMetadata {
+  /** First date (YYYY-MM-DD, PT) still being collected. Populated when dataState=`all` and grouped by `date`. */
+  first_incomplete_date?: string
+  /** First hour (YYYY-MM-DDThh:mm:ss±hh:mm, PT) still being collected. Populated when dataState=`hourly_all` and grouped by `hour`. */
+  first_incomplete_hour?: string
+}
 
 export type GscSearchAnalyticsFilterOperator
   = | 'equals'
@@ -43,6 +52,10 @@ export interface GscSearchAnalyticsFilterGroup {
 
 export type GscSearchType = 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews'
 
+export type GscAggregationType = 'auto' | 'byPage' | 'byProperty' | 'byNewsShowcasePanel'
+
+export type GscResponseAggregationType = 'auto' | 'byPage' | 'byProperty' | 'byNewsShowcasePanel'
+
 export interface GscSearchAnalyticsRequest {
   startDate: string
   endDate: string
@@ -50,7 +63,10 @@ export interface GscSearchAnalyticsRequest {
   dimensionFilterGroups?: GscSearchAnalyticsFilterGroup[]
   rowLimit?: number
   startRow?: number
-  searchType?: GscSearchType
+  /** GSC search corpus. Maps to wire field `type` (the API still accepts the deprecated `searchType` alias). */
+  type?: GscSearchType
+  dataState?: GscDataState
+  aggregationType?: GscAggregationType
 }
 
 export interface GscSearchAnalyticsRow {
@@ -63,5 +79,6 @@ export interface GscSearchAnalyticsRow {
 
 export interface GscSearchAnalyticsResponse {
   rows?: GscSearchAnalyticsRow[]
-  responseAggregationType?: string
+  responseAggregationType?: GscResponseAggregationType
+  metadata?: GscSearchAnalyticsMetadata
 }
