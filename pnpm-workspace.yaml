@@ -23,7 +23,7 @@ catalog:
   '@duckdb/node-api': 1.5.1-r.2
   '@huggingface/transformers': ^4.2.0
   '@modelcontextprotocol/sdk': ^1.29.0
-  '@nuxt/kit': ^4.4.5
+  '@nuxt/kit': ^4.4.6
   '@nuxt/ui': ^4.7.1
   '@types/js-yaml': ^4.0.9
   '@types/node': ^25.8.0
@@ -38,7 +38,7 @@ catalog:
   hyparquet: ^1.25.8
   hyparquet-writer: ^0.15.1
   js-yaml: ^4.1.1
-  nuxt: ^4.4.5
+  nuxt: ^4.4.6
   tailwindcss: ^4.3.0
   tsx: ^4.22.1
   vitest-package-exports: ^1.2.0

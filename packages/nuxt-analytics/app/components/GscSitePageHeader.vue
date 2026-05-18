@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // Site-scoped page header. Auto-prefixes the `[Overview, hostname-link]`
 // crumb trail every `/sites/[id]/*` page repeats, on top of the layer's
-// `GscPageHeader`. Hosts pass `:tail` for the remaining crumbs and use
-// `<GscPageHeader>` directly for pages that don't fit the standard shape
+// `PageHeader`. Hosts pass `:tail` for the remaining crumbs and use
+// `<PageHeader>` directly for pages that don't fit the standard shape
 // (e.g. the site index, where the title IS the hostname).
 
 interface Crumb { label: string, to?: string }
@@ -24,7 +24,7 @@ const crumbs = computed<Crumb[]>(() => [
 </script>
 
 <template>
-  <GscPageHeader
+  <PageHeader
     :crumbs="crumbs"
     :title="title"
     :icon="icon"
@@ -36,5 +36,5 @@ const crumbs = computed<Crumb[]>(() => [
     <template #actions>
       <slot name="actions" />
     </template>
-  </GscPageHeader>
+  </PageHeader>
 </template>
