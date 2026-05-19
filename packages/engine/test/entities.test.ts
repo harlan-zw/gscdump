@@ -1,4 +1,4 @@
-import type { InspectionRecord } from '../src/entities'
+import type { InspectionParquetRow, InspectionRecord } from '../src/entities'
 import type { DataSource } from '../src/storage'
 import { describe, expect, it } from 'vitest'
 import { decodeParquetToRows } from '../src/adapters/hyparquet'
@@ -8,7 +8,9 @@ import {
   createSitemapStore,
   emptyTypesKey,
   hashUrl,
-  inspectionHistoryKey,
+  INSPECTION_HISTORY_MAX_BYTES,
+  inspectionHistoryPrefix,
+  inspectionHistoryShardKey,
   inspectionIndexKey,
   inspectionParquetKey,
   sitemapHistoryKey,
@@ -61,12 +63,14 @@ describe('hashUrl', () => {
   })
 })
 
-describe('inspectionIndexKey / inspectionHistoryKey', () => {
+describe('inspectionIndexKey / inspectionHistoryPrefix / inspectionHistoryShardKey', () => {
   it('encodes tenant + site path', () => {
     expect(inspectionIndexKey({ userId: 'u1', siteId: 's1' }))
       .toBe('u_u1/s1/entities/inspections/index.json')
-    expect(inspectionHistoryKey({ userId: 'u1', siteId: 's1' }, '2026-04'))
-      .toBe('u_u1/s1/entities/inspections/history/2026-04.json')
+    expect(inspectionHistoryPrefix({ userId: 'u1', siteId: 's1' }, '2026-04'))
+      .toBe('u_u1/s1/entities/inspections/history/2026-04')
+    expect(inspectionHistoryShardKey({ userId: 'u1', siteId: 's1' }, '2026-04', 'abc-123'))
+      .toBe('u_u1/s1/entities/inspections/history/2026-04/abc-123.json')
   })
 
   it('omits the site segment when no siteId', () => {
@@ -75,105 +79,101 @@ describe('inspectionIndexKey / inspectionHistoryKey', () => {
   })
 })
 
-describe('createInspectionStore: writeBatch + getLatest', () => {
-  it('persists inspection results into the index keyed by URL hash', async () => {
+describe('createInspectionStore: appendHistory + loadHistory', () => {
+  it('writes a UUID-keyed shard per month, never reads the existing index', async () => {
     const { ds, store } = makeFakeDataSource()
-    const inspector = createInspectionStore({ dataSource: ds })
+    const reads: string[] = []
+    const ds2: DataSource = {
+      ...ds,
+      async read(k) {
+        reads.push(k)
+        return ds.read(k)
+      },
+    }
+    const inspector = createInspectionStore({ dataSource: ds2 })
 
-    await inspector.writeBatch({ userId: 'u1', siteId: 's1' }, [
+    await inspector.appendHistory({ userId: 'u1', siteId: 's1' }, [
       rec('https://example.com/a', { indexStatus: 'PASS' }),
       rec('https://example.com/b', { indexStatus: 'NEUTRAL' }),
-    ])
+    ], { batchId: 'batch-1' })
 
-    expect(store.has('u_u1/s1/entities/inspections/index.json')).toBe(true)
-    expect(store.has('u_u1/s1/entities/inspections/history/2026-04.json')).toBe(true)
-
-    const a = await inspector.getLatest({ userId: 'u1', siteId: 's1' }, 'https://example.com/a')
-    expect(a?.indexStatus).toBe('PASS')
-
-    const b = await inspector.getLatest({ userId: 'u1', siteId: 's1' }, 'https://example.com/b')
-    expect(b?.indexStatus).toBe('NEUTRAL')
+    expect(store.has('u_u1/s1/entities/inspections/history/2026-04/batch-1.json')).toBe(true)
+    expect(reads).toHaveLength(0) // no read-before-write
   })
 
-  it('writeBatch on the same URL updates the index latest record', async () => {
-    const { ds } = makeFakeDataSource()
+  it('groups by month — multiple shards per call when months differ', async () => {
+    const { ds, store } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })
     const ctx = { userId: 'u1', siteId: 's1' }
 
-    await inspector.writeBatch(ctx, [rec('https://x.com/a', { indexStatus: 'PASS', inspectedAt: '2026-04-01T00:00:00Z' })])
-    await inspector.writeBatch(ctx, [rec('https://x.com/a', { indexStatus: 'FAIL', inspectedAt: '2026-04-22T00:00:00Z' })])
-
-    const latest = await inspector.getLatest(ctx, 'https://x.com/a')
-    expect(latest?.indexStatus).toBe('FAIL')
-    expect(latest?.inspectedAt).toBe('2026-04-22T00:00:00Z')
-
-    const index = await inspector.loadIndex(ctx)
-    expect(Object.keys(index.records)).toHaveLength(1)
-  })
-
-  it('history shards bucket records by inspectedAt YYYY-MM', async () => {
-    const { ds } = makeFakeDataSource()
-    const inspector = createInspectionStore({ dataSource: ds })
-    const ctx = { userId: 'u1', siteId: 's1' }
-
-    await inspector.writeBatch(ctx, [
+    await inspector.appendHistory(ctx, [
       rec('https://x.com/a', { inspectedAt: '2026-04-22T00:00:00Z' }),
       rec('https://x.com/b', { inspectedAt: '2026-05-01T00:00:00Z' }),
       rec('https://x.com/c', { inspectedAt: '2026-04-15T00:00:00Z' }),
-    ])
+    ], { batchId: 'b1' })
 
-    const apr = await inspector.loadHistory(ctx, '2026-04')
-    expect(apr?.records).toHaveLength(2)
-
-    const may = await inspector.loadHistory(ctx, '2026-05')
-    expect(may?.records).toHaveLength(1)
+    expect(store.has('u_u1/s1/entities/inspections/history/2026-04/b1.json')).toBe(true)
+    expect(store.has('u_u1/s1/entities/inspections/history/2026-05/b1.json')).toBe(true)
   })
 
-  it('history shards are append-only across writeBatch calls', async () => {
+  it('retries write distinct shards under different batchIds — idempotency seam', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    const ctx = { userId: 'u1', siteId: 's1' }
+
+    await inspector.appendHistory(ctx, [rec('https://x.com/a')], { batchId: 'b1' })
+    await inspector.appendHistory(ctx, [rec('https://x.com/a')], { batchId: 'b2' })
+
+    const aprKeys = Array.from(store.keys()).filter(k => k.includes('/history/2026-04/'))
+    expect(aprKeys).toHaveLength(2)
+  })
+
+  it('loadHistory concatenates every shard in a month directory', async () => {
     const { ds } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })
     const ctx = { userId: 'u1', siteId: 's1' }
 
-    await inspector.writeBatch(ctx, [rec('https://x.com/a', { inspectedAt: '2026-04-01T00:00:00Z' })])
-    await inspector.writeBatch(ctx, [rec('https://x.com/a', { inspectedAt: '2026-04-15T00:00:00Z' })])
-    await inspector.writeBatch(ctx, [rec('https://x.com/a', { inspectedAt: '2026-04-22T00:00:00Z' })])
+    await inspector.appendHistory(ctx, [rec('https://x.com/a', { inspectedAt: '2026-04-01T00:00:00Z' })], { batchId: 'b1' })
+    await inspector.appendHistory(ctx, [rec('https://x.com/b', { inspectedAt: '2026-04-15T00:00:00Z' })], { batchId: 'b2' })
+    await inspector.appendHistory(ctx, [rec('https://x.com/c', { inspectedAt: '2026-04-22T00:00:00Z' })], { batchId: 'b3' })
 
     const apr = await inspector.loadHistory(ctx, '2026-04')
     expect(apr?.records).toHaveLength(3)
   })
 
-  it('writeBatch with empty array is a no-op (no I/O)', async () => {
-    const { ds, store } = makeFakeDataSource()
-    const inspector = createInspectionStore({ dataSource: ds })
-    await inspector.writeBatch({ userId: 'u1', siteId: 's1' }, [])
-    expect(store.size).toBe(0)
-  })
-
-  it('getLatest returns undefined for unknown URL', async () => {
+  it('loadHistory returns undefined when the month has no shards', async () => {
     const { ds } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })
-    const result = await inspector.getLatest(
-      { userId: 'u1', siteId: 's1' },
-      'https://never-inspected.example.com/',
-    )
+    const result = await inspector.loadHistory({ userId: 'u1', siteId: 's1' }, '2099-01')
     expect(result).toBeUndefined()
   })
 
-  it('loadIndex returns an empty index when nothing has been written', async () => {
-    const { ds } = makeFakeDataSource()
+  it('appendHistory with empty array is a no-op (no I/O)', async () => {
+    const { ds, store } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })
-    const index = await inspector.loadIndex({ userId: 'u1', siteId: 's1' })
-    expect(index.version).toBe(1)
-    expect(index.records).toEqual({})
+    await inspector.appendHistory({ userId: 'u1', siteId: 's1' }, [])
+    expect(store.size).toBe(0)
   })
 
   it('records with malformed inspectedAt land in the `unknown` shard', async () => {
     const { ds } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })
     const ctx = { userId: 'u1', siteId: 's1' }
-    await inspector.writeBatch(ctx, [{ url: 'https://x.com/a', inspectedAt: 'not-a-date' }])
+    await inspector.appendHistory(ctx, [{ url: 'https://x.com/a', inspectedAt: 'not-a-date' }], { batchId: 'b1' })
     const shard = await inspector.loadHistory(ctx, 'unknown')
     expect(shard?.records).toHaveLength(1)
+  })
+
+  it('rejects payloads exceeding INSPECTION_HISTORY_MAX_BYTES', async () => {
+    const { ds } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    // 6 MB of duplicated URL records — well past the 5 MB cap.
+    const huge = 'x'.repeat(60_000)
+    const bigBatch = Array.from({ length: 100 }, (_, i) => rec(`https://example.com/${huge}-${i}`))
+    await expect(
+      inspector.appendHistory({ userId: 'u1', siteId: 's1' }, bigBatch, { batchId: 'b1' }),
+    ).rejects.toThrow(/exceeds/i)
+    expect(INSPECTION_HISTORY_MAX_BYTES).toBe(5 * 1024 * 1024)
   })
 })
 
@@ -356,19 +356,42 @@ describe('inspectionParquetKey', () => {
 })
 
 describe('createInspectionStore: materialize', () => {
-  it('writes a parquet sidecar of the current index sorted by urlHash', async () => {
+  function row(partial: Partial<InspectionParquetRow> & Pick<InspectionParquetRow, 'url' | 'inspectedAt'>): InspectionParquetRow {
+    return {
+      urlHash: hashUrl(partial.url),
+      indexStatus: null,
+      lastCrawlTime: null,
+      googleCanonical: null,
+      userCanonical: null,
+      coverageState: null,
+      robotsTxtState: null,
+      indexingState: null,
+      pageFetchState: null,
+      mobileUsabilityVerdict: null,
+      richResultsVerdict: null,
+      scheduleNextAt: null,
+      scheduleConsecutiveUnchanged: null,
+      schedulePolicyVersion: null,
+      ...partial,
+    }
+  }
+
+  it('writes a parquet sidecar of caller-provided rows sorted by urlHash', async () => {
     const { ds, store } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })
     const ctx = { userId: 'u1', siteId: 's1' }
-    await inspector.writeBatch(ctx, [
-      rec('https://example.com/a', { indexStatus: 'PASS' }),
-      rec('https://example.com/b', {
+    const result = await inspector.materialize(ctx, [
+      row({ url: 'https://example.com/a', inspectedAt: '2026-04-22T10:00:00Z', indexStatus: 'PASS' }),
+      row({
+        url: 'https://example.com/b',
+        inspectedAt: '2026-04-22T10:00:00Z',
         indexStatus: 'FAIL',
         coverageState: 'Crawled - currently not indexed',
-        raw: { schedule: { nextAt: 1234567890, consecutiveUnchanged: 2, policyVersion: 1 } },
+        scheduleNextAt: 1234567890,
+        scheduleConsecutiveUnchanged: 2,
+        schedulePolicyVersion: 1,
       }),
     ])
-    const result = await inspector.materialize(ctx)
     expect(result.key).toBe('u_u1/s1/entities/inspections/index.parquet')
     expect(result.rowCount).toBe(2)
     expect(result.bytes).toBeGreaterThan(0)
@@ -376,7 +399,6 @@ describe('createInspectionStore: materialize', () => {
     expect(bytes.byteLength).toBe(result.bytes)
     const rows = await decodeParquetToRows(bytes)
     expect(rows).toHaveLength(2)
-    // Sorted by urlHash ascending.
     const hashes = rows.map(r => r.urlHash as string)
     expect([...hashes].sort()).toEqual(hashes)
     const byUrl = new Map(rows.map(r => [r.url, r]))
@@ -391,11 +413,11 @@ describe('createInspectionStore: materialize', () => {
     expect(b.schedulePolicyVersion).toBe(1)
   })
 
-  it('writes an empty parquet when the index has no records', async () => {
+  it('writes an empty parquet when the caller passes no rows', async () => {
     const { ds, store } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })
     const ctx = { userId: 'u1', siteId: 's1' }
-    const result = await inspector.materialize(ctx)
+    const result = await inspector.materialize(ctx, [])
     expect(result.rowCount).toBe(0)
     expect(store.has(result.key)).toBe(true)
     const rows = await decodeParquetToRows(store.get(result.key)!)
@@ -576,22 +598,3 @@ interface SitemapRecordLoaded {
   loc: string
   removedAt: number | undefined
 }
-
-describe('createInspectionStore: hash override', () => {
-  it('uses a caller-provided hash when supplied', async () => {
-    const { ds, store } = makeFakeDataSource()
-    const inspector = createInspectionStore({
-      dataSource: ds,
-      hash: () => 'fixed-hash',
-    })
-    await inspector.writeBatch({ userId: 'u1', siteId: 's1' }, [
-      rec('https://x.com/a'),
-      rec('https://x.com/b'),
-    ])
-    const indexBytes = store.get('u_u1/s1/entities/inspections/index.json')!
-    const index = JSON.parse(new TextDecoder().decode(indexBytes))
-    // Both URLs collide onto the fixed hash; second write wins.
-    expect(Object.keys(index.records)).toEqual(['fixed-hash'])
-    expect(index.records['fixed-hash'].url).toBe('https://x.com/b')
-  })
-})

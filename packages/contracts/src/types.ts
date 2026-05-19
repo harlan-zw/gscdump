@@ -124,6 +124,38 @@ export interface SitemapHistoryResponse {
   snapshots: SitemapHistoryRecord[]
 }
 
+/**
+ * Wire-format extension carried under `InspectionHistoryRecord.raw`.
+ *
+ * Source of truth: D1 `url_indexing_status` (per the 2026-05-19 redesign).
+ * Most fields are JSON-encoded TEXT in D1 and surface here unchanged as
+ * `string | null`; consumers parse on read.
+ *
+ * Additional keys are tolerated (`[key: string]: unknown`) for
+ * forward-compatibility — new fields can ship without a contract bump.
+ */
+export interface InspectionRecordRaw {
+  /** Adaptive recheck schedule owned by `inspectionPolicy.observe`. */
+  schedule?: ScheduleState
+  /** Unix seconds. Mirrors the `next_check_after` column. */
+  nextCheckAfter?: number
+  /** Mirrors the `next_check_priority` column. */
+  priority?: 'high' | 'medium' | 'low'
+  /** JSON-encoded `string[]` of sitemap URLs containing this URL. */
+  sitemaps?: string | null
+  /** JSON-encoded `string[]` of referring URLs Google reported. */
+  referringUrls?: string | null
+  /** Crawler that fetched the URL (`Googlebot smartphone` etc.). */
+  crawlingUserAgent?: string | null
+  /** JSON-encoded mobile-usability issues. */
+  mobileIssues?: string | null
+  /** JSON-encoded rich-results items array. */
+  richResultsItems?: string | null
+  /** Deep link into the GSC URL Inspection tool. */
+  inspectionResultLink?: string | null
+  [key: string]: unknown
+}
+
 export interface InspectionHistoryRecord {
   url: string
   inspectedAt: string
@@ -137,10 +169,7 @@ export interface InspectionHistoryRecord {
   pageFetchState?: string
   mobileUsabilityVerdict?: string
   richResultsVerdict?: string
-  raw?: {
-    schedule?: ScheduleState
-    [key: string]: unknown
-  }
+  raw?: InspectionRecordRaw
 }
 
 export interface InspectionHistoryResponse {

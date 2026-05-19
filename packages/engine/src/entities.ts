@@ -60,9 +60,14 @@ export interface InspectionIndex {
   records: Record<string, InspectionRecord>
 }
 
-interface InspectionHistoryShard {
+/**
+ * Append-only history shard, one blob per `appendHistory` call.
+ * Keyed by UUID under the month directory — retries write a new blob,
+ * never RMW an existing one. Idempotent under job retries.
+ */
+export interface InspectionHistoryShard {
   version: 1
-  /** Append-only list of inspection records for the YYYY-MM bucket. */
+  /** Records persisted in this batch. */
   records: InspectionRecord[]
 }
 
@@ -86,10 +91,19 @@ export function inspectionParquetKey(ctx: TenantCtx): string {
     : `u_${ctx.userId}/entities/inspections/index.parquet`
 }
 
-export function inspectionHistoryKey(ctx: TenantCtx, yearMonth: string): string {
+/**
+ * Directory prefix for a month's history shards. Each shard is a UUID-keyed
+ * blob under this prefix; `appendHistory` writes one per call, `loadHistory`
+ * lists + concatenates.
+ */
+export function inspectionHistoryPrefix(ctx: TenantCtx, yearMonth: string): string {
   return ctx.siteId
-    ? `u_${ctx.userId}/${ctx.siteId}/entities/inspections/history/${yearMonth}.json`
-    : `u_${ctx.userId}/entities/inspections/history/${yearMonth}.json`
+    ? `u_${ctx.userId}/${ctx.siteId}/entities/inspections/history/${yearMonth}`
+    : `u_${ctx.userId}/entities/inspections/history/${yearMonth}`
+}
+
+export function inspectionHistoryShardKey(ctx: TenantCtx, yearMonth: string, batchId: string): string {
+  return `${inspectionHistoryPrefix(ctx, yearMonth)}/${batchId}.json`
 }
 
 /**
@@ -115,34 +129,69 @@ export function hashUrl(url: string): string {
   return ((hi >>> 0).toString(16).padStart(8, '0') + (lo >>> 0).toString(16).padStart(8, '0'))
 }
 
+/**
+ * Row shape for the inspections parquet sidecar. Caller-side schema for
+ * `materialize` — D1 is the source of truth in the 2026-05-19 redesign, so
+ * consumers stream rows from `url_indexing_status` and pass them in. The
+ * parquet sidecar exists for DuckDB JOIN seams; readers go through
+ * `parquetUri`.
+ */
+export interface InspectionParquetRow {
+  urlHash: string
+  url: string
+  inspectedAt: string
+  indexStatus: string | null
+  lastCrawlTime: string | null
+  googleCanonical: string | null
+  userCanonical: string | null
+  coverageState: string | null
+  robotsTxtState: string | null
+  indexingState: string | null
+  pageFetchState: string | null
+  mobileUsabilityVerdict: string | null
+  richResultsVerdict: string | null
+  scheduleNextAt: number | null
+  scheduleConsecutiveUnchanged: number | null
+  schedulePolicyVersion: number | null
+}
+
+/**
+ * Hard cap on a single `appendHistory` shard payload. Encoded bytes >
+ * this threshold throws — the caller logs and moves on (D1 is
+ * authoritative, R2 history is a sidecar). At `URLS_PER_JOB=3` a real
+ * batch encodes to ~10 KB so the cap is purely defensive against future
+ * batch-size bumps.
+ */
+export const INSPECTION_HISTORY_MAX_BYTES = 5 * 1024 * 1024
+
 export interface InspectionStore {
   /**
-   * Persist a batch of fresh inspection results. Updates the index +
-   *  appends to the per-month history shard.
+   * Append a batch of fresh inspection results as an immutable per-batch
+   * shard under `history/<YYYY-MM>/<batchId>.json`. Idempotent under job
+   * retry (caller-supplied UUID per logical batch), no read-before-write,
+   * one PUT per month-group within the batch.
+   *
+   * Throws if the encoded payload exceeds {@link INSPECTION_HISTORY_MAX_BYTES}.
    */
-  writeBatch: (ctx: TenantCtx, records: readonly InspectionRecord[]) => Promise<void>
-  /** Fetch the latest inspection record for a URL, or undefined. */
-  getLatest: (ctx: TenantCtx, url: string) => Promise<InspectionRecord | undefined>
+  appendHistory: (ctx: TenantCtx, records: readonly InspectionRecord[], opts?: { batchId?: string }) => Promise<void>
   /**
-   * Read the full index for a site (latest record per URL). Cheap on
-   *  Workers; on big tenants the dashboard reads this once per page load.
+   * Read every shard in a month directory and concatenate. Best-effort:
+   * shards that fail to decode are skipped (logged via console). Returns
+   * `undefined` if the month has no shards.
    */
-  loadIndex: (ctx: TenantCtx) => Promise<InspectionIndex>
-  /** Read the per-month history shard if it exists. */
   loadHistory: (ctx: TenantCtx, yearMonth: string) => Promise<InspectionHistoryShard | undefined>
   /**
-   * Snapshot the current JSON index to a parquet sidecar at
-   * `entities/inspections/index.parquet`. One PUT. Sorted by `urlHash` so
-   * DuckDB row-group stats can prune URL-keyed JOINs efficiently.
+   * Encode caller-provided rows into the inspections parquet sidecar at
+   * `entities/inspections/index.parquet`. Sorted by `urlHash` so DuckDB
+   * row-group stats can prune URL-keyed JOINs efficiently. One PUT.
    *
-   * Internal seam: callers don't choose JSON-vs-parquet — the store materialises
-   * the parquet at end-of-batch (e.g. after `indexing/complete`) and readers
-   * pick the format that matches their access pattern (parquet for JOINs,
-   * JSON for full-index scans / point lookups).
+   * D1 is the source of truth in the 2026-05-19 redesign; this rebuilds
+   * the parquet from D1 rows the caller streams in (engine has no D1
+   * access). Triggered by `indexing/complete` post-hook.
    *
    * Returns the parquet object key (matches {@link parquetUri} after write).
    */
-  materialize: (ctx: TenantCtx) => Promise<{ key: string, rowCount: number, bytes: number }>
+  materialize: (ctx: TenantCtx, rows: Iterable<InspectionParquetRow>) => Promise<{ key: string, rowCount: number, bytes: number }>
   /**
    * DuckDB-resolvable URI for the materialised parquet sidecar, or
    * `undefined` if the underlying `DataSource` has no native URI shape
@@ -158,12 +207,6 @@ export interface InspectionStore {
 
 export interface CreateInspectionStoreOptions {
   dataSource: DataSource
-  /**
-   * Override the FNV hash with a callable (test seam, or to swap in
-   *  SHA-256 if hash collisions become a concern at extreme scale).
-   */
-  hash?: (url: string) => string
-  now?: () => number
 }
 
 /**
@@ -192,27 +235,7 @@ const INSPECTION_PARQUET_COLUMNS: readonly ColumnDef[] = [
 ]
 
 export function createInspectionStore(opts: CreateInspectionStoreOptions): InspectionStore {
-  const hash = opts.hash ?? hashUrl
   const ds = opts.dataSource
-
-  async function readJson<T>(key: string): Promise<T | undefined> {
-    return await ds.read(key).then(
-      bytes => JSON.parse(new TextDecoder().decode(bytes)) as T,
-      () => undefined,
-    )
-  }
-
-  async function writeJson(key: string, value: unknown): Promise<void> {
-    await ds.write(key, new TextEncoder().encode(JSON.stringify(value)))
-  }
-
-  function emptyIndex(): InspectionIndex {
-    return { version: 1, records: {} }
-  }
-
-  function emptyShard(): InspectionHistoryShard {
-    return { version: 1, records: [] }
-  }
 
   function shardFor(record: InspectionRecord): string {
     // YYYY-MM derived from inspectedAt. Falls back to "unknown" if the
@@ -221,62 +244,61 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
     return m ? `${m[1]}-${m[2]}` : 'unknown'
   }
 
+  function randomBatchId(): string {
+    return (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  }
+
   return {
-    async writeBatch(ctx, records) {
+    async appendHistory(ctx, records, options) {
       if (records.length === 0)
         return
-      const indexKey = inspectionIndexKey(ctx)
-      const index = (await readJson<InspectionIndex>(indexKey)) ?? emptyIndex()
-      const byShard = new Map<string, InspectionRecord[]>()
+      const batchId = options?.batchId ?? randomBatchId()
+      const byMonth = new Map<string, InspectionRecord[]>()
       for (const r of records) {
-        index.records[hash(r.url)] = r
-        const shardKey = shardFor(r)
-        if (!byShard.has(shardKey))
-          byShard.set(shardKey, [])
-        byShard.get(shardKey)!.push(r)
+        const month = shardFor(r)
+        if (!byMonth.has(month))
+          byMonth.set(month, [])
+        byMonth.get(month)!.push(r)
       }
-      await writeJson(indexKey, index)
-      for (const [yearMonth, batch] of byShard) {
-        const histKey = inspectionHistoryKey(ctx, yearMonth)
-        const existing = (await readJson<InspectionHistoryShard>(histKey)) ?? emptyShard()
-        existing.records.push(...batch)
-        await writeJson(histKey, existing)
+      for (const [yearMonth, batch] of byMonth) {
+        const shard: InspectionHistoryShard = { version: 1, records: batch }
+        const bytes = new TextEncoder().encode(JSON.stringify(shard))
+        if (bytes.byteLength > INSPECTION_HISTORY_MAX_BYTES) {
+          throw new Error(
+            `inspection history shard exceeds ${INSPECTION_HISTORY_MAX_BYTES} bytes (got ${bytes.byteLength}); split the batch`,
+          )
+        }
+        await ds.write(inspectionHistoryShardKey(ctx, yearMonth, batchId), bytes)
       }
-    },
-
-    async getLatest(ctx, url) {
-      const index = await readJson<InspectionIndex>(inspectionIndexKey(ctx))
-      return index?.records[hash(url)]
-    },
-
-    async loadIndex(ctx) {
-      return (await readJson<InspectionIndex>(inspectionIndexKey(ctx))) ?? emptyIndex()
     },
 
     async loadHistory(ctx, yearMonth) {
-      return await readJson<InspectionHistoryShard>(inspectionHistoryKey(ctx, yearMonth))
+      const keys = await ds.list(inspectionHistoryPrefix(ctx, yearMonth))
+      if (keys.length === 0)
+        return undefined
+      const out: InspectionRecord[] = []
+      for (const key of keys) {
+        const bytes = await ds.read(key).catch(() => undefined)
+        if (!bytes)
+          continue
+        const shard = await Promise.resolve()
+          .then(() => JSON.parse(new TextDecoder().decode(bytes)) as InspectionHistoryShard)
+          .catch((err: Error) => {
+            console.warn('[inspection.loadHistory] failed to decode shard', { key, error: err.message })
+            return undefined
+          })
+        if (shard?.records)
+          out.push(...shard.records)
+      }
+      return { version: 1, records: out }
     },
 
-    async materialize(ctx) {
-      const index = (await readJson<InspectionIndex>(inspectionIndexKey(ctx))) ?? emptyIndex()
-      const rows = Object.entries(index.records).map(([urlHash, r]) => ({
-        urlHash,
-        url: r.url,
-        inspectedAt: r.inspectedAt,
-        indexStatus: r.indexStatus ?? null,
-        lastCrawlTime: r.lastCrawlTime ?? null,
-        googleCanonical: r.googleCanonical ?? null,
-        userCanonical: r.userCanonical ?? null,
-        coverageState: r.coverageState ?? null,
-        robotsTxtState: r.robotsTxtState ?? null,
-        indexingState: r.indexingState ?? null,
-        pageFetchState: r.pageFetchState ?? null,
-        mobileUsabilityVerdict: r.mobileUsabilityVerdict ?? null,
-        richResultsVerdict: r.richResultsVerdict ?? null,
-        scheduleNextAt: r.raw?.schedule?.nextAt ?? null,
-        scheduleConsecutiveUnchanged: r.raw?.schedule?.consecutiveUnchanged ?? null,
-        schedulePolicyVersion: r.raw?.schedule?.policyVersion ?? null,
-      }))
+    async materialize(ctx, rowIter) {
+      const rows = Array.from(rowIter)
+      // Sorted parquet — DuckDB row-group stats can prune URL-keyed JOINs.
+      rows.sort((a, b) => (a.urlHash < b.urlHash ? -1 : a.urlHash > b.urlHash ? 1 : 0))
       const bytes = encodeRowsToParquetFlex(rows, {
         columns: INSPECTION_PARQUET_COLUMNS,
         sortKey: ['urlHash'],

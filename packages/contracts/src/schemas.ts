@@ -84,9 +84,44 @@ export const sitemapHistoryResponseSchema = z.object({
   snapshots: z.array(sitemapHistoryRecordSchema),
 }).loose()
 
+/** Adaptive recheck schedule shape — must match `ScheduleState` in types.ts. */
+export const scheduleStateSchema = z.object({
+  nextAt: z.number(),
+  consecutiveUnchanged: z.number(),
+  policyVersion: z.number(),
+}).loose()
+
+/**
+ * `raw` extension on inspection records. JSON-encoded `string | null`
+ * fields surface unchanged from D1; consumers parse on read. `.loose()`
+ * preserves forward-compatibility for fields added without a contract bump.
+ */
+export const inspectionRecordRawSchema = z.object({
+  schedule: scheduleStateSchema.optional(),
+  nextCheckAfter: z.number().optional(),
+  priority: z.enum(['high', 'medium', 'low']).optional(),
+  sitemaps: z.string().nullable().optional(),
+  referringUrls: z.string().nullable().optional(),
+  crawlingUserAgent: z.string().nullable().optional(),
+  mobileIssues: z.string().nullable().optional(),
+  richResultsItems: z.string().nullable().optional(),
+  inspectionResultLink: z.string().nullable().optional(),
+}).loose()
+
 export const inspectionHistoryRecordSchema = z.object({
   url: z.string(),
   inspectedAt: z.string(),
+  indexStatus: z.string().optional(),
+  lastCrawlTime: z.string().optional(),
+  googleCanonical: z.string().optional(),
+  userCanonical: z.string().optional(),
+  coverageState: z.string().optional(),
+  robotsTxtState: z.string().optional(),
+  indexingState: z.string().optional(),
+  pageFetchState: z.string().optional(),
+  mobileUsabilityVerdict: z.string().optional(),
+  richResultsVerdict: z.string().optional(),
+  raw: inspectionRecordRawSchema.optional(),
 }).loose()
 
 export const inspectionHistoryResponseSchema = z.object({
