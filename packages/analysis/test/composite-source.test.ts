@@ -7,7 +7,7 @@
  */
 
 import type { AnalysisQuerySource, SourceCapabilities } from '@gscdump/engine/source'
-import { between, date, gsc, page } from 'gscdump/query'
+import { and, between, date, device, eq, gsc, page, query } from 'gscdump/query'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createCompositeSource, hasGapInCoveredSpans, shouldRouteToLive } from '../src/source/composite'
@@ -94,6 +94,33 @@ describe('createCompositeSource', () => {
     const s = stateInRange('2023-01-01', '2023-01-31')
     expect(shouldRouteToLive(s, { oldestDateSynced: '2024-01-01', newestDateSynced: '2024-12-31' })).toBe(true)
     expect(shouldRouteToLive(s, { oldestDateSynced: '2022-01-01', newestDateSynced: '2024-12-31' })).toBe(false)
+  })
+
+  it('routes a cross-dimension query to live even when the range is fully synced', async () => {
+    // group by `query`, filter by `device` — no stored table carries both.
+    const crossDim = gsc
+      .select(query)
+      .where(and(between(date, '2024-06-01', '2024-06-30'), eq(device, 'MOBILE')))
+      .limit(100)
+      .getState()
+    const syncedSite = { oldestDateSynced: '2024-01-01', newestDateSynced: '2024-12-31' }
+    expect(shouldRouteToLive(crossDim, syncedSite)).toBe(true)
+
+    const engine = makeSource()
+    const live = makeSource()
+    const c = createCompositeSource({ engine, live, site: syncedSite })
+    await c.queryRows(crossDim)
+    expect(live.queryRows).toHaveBeenCalledTimes(1)
+    expect(engine.queryRows).not.toHaveBeenCalled()
+  })
+
+  it('keeps a single-dimension query (its own filter) on the engine', () => {
+    const sameDim = gsc
+      .select(query)
+      .where(and(between(date, '2024-06-01', '2024-06-30'), eq(query, 'seo')))
+      .limit(100)
+      .getState()
+    expect(shouldRouteToLive(sameDim, { oldestDateSynced: '2024-01-01', newestDateSynced: '2024-12-31' })).toBe(false)
   })
 
   describe('coveredSpans gap detection', () => {

@@ -1,7 +1,7 @@
 import type { BuilderState } from '../../src/query/types'
 
 import { describe, expect, it } from 'vitest'
-import { buildLogicalComparisonPlan, buildLogicalPlan, inferDataset, isDatasetResolvable, UnresolvableDatasetError } from '../../src/query/plan'
+import { buildLogicalComparisonPlan, buildLogicalPlan, inferDataset, isDatasetResolvable, isStateResolvable, UnresolvableDatasetError } from '../../src/query/plan'
 
 function state(partial: Partial<BuilderState>): BuilderState {
   return {
@@ -89,6 +89,26 @@ describe('isDatasetResolvable', () => {
     // inferDataset still routes (legacy precedence); the predicate is what
     // tells callers the routed table cannot actually answer it.
     expect(isDatasetResolvable(['device'], ['query'])).toBe(false)
+  })
+})
+
+describe('isStateResolvable', () => {
+  it('extracts a state\'s filter dimensions and rejects cross-dimension queries', () => {
+    const crossDim = state({
+      dimensions: ['query'],
+      filter: {
+        _filters: [
+          { dimension: 'date', operator: 'between', expression: '2026-03-01', expression2: '2026-03-31' },
+          { dimension: 'device', operator: 'equals', expression: 'MOBILE' },
+        ],
+      } as any,
+    })
+    expect(isStateResolvable(crossDim)).toBe(false)
+  })
+
+  it('accepts a single-family query (date filter only)', () => {
+    expect(isStateResolvable(state({ dimensions: ['query'] }))).toBe(true)
+    expect(isStateResolvable(state({ dimensions: ['page', 'query'] }))).toBe(true)
   })
 })
 

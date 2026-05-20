@@ -187,6 +187,22 @@ export class UnresolvableDatasetError extends Error {
   }
 }
 
+/**
+ * `BuilderState`-level convenience for {@link isDatasetResolvable}: extracts
+ * the state's dimension filters (the same way `buildLogicalPlan` does) and
+ * checks them against the grouped dimensions. Lets routing code (e.g. the
+ * composite source) detect a cross-dimension query without rebuilding a plan.
+ */
+export function isStateResolvable(state: BuilderState): boolean {
+  const filterDims = collectInternalFilters(normalizeFilter(state.filter) as FilterInput | undefined)
+    .filter(f => !isMetric(f.dimension))
+    .filter(f => !(f.dimension === 'date' && isDateOperator(f.operator)))
+    .filter(f => !(f.operator === 'topLevel' || f.operator.startsWith('metric')))
+    .filter(f => !isQueryParam(f.dimension))
+    .map(f => f.dimension as Dimension)
+  return isDatasetResolvable(state.dimensions, filterDims)
+}
+
 function requireCapability(
   capabilities: PlannerCapabilities | undefined,
   capability: keyof PlannerCapabilities,

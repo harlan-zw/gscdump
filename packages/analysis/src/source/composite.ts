@@ -15,6 +15,7 @@ import type { AnalysisQuerySource, ExecuteSqlOptions, QueryRow } from '@gscdump/
 import type { BuilderState } from 'gscdump/query'
 import { canProxyToGsc } from '@gscdump/engine-gsc-api'
 import { extractDateRange } from 'gscdump/query'
+import { isStateResolvable } from 'gscdump/query/plan'
 
 export interface SyncedRange {
   oldestDateSynced: string | null
@@ -68,12 +69,13 @@ function nextDay(day: string): string {
 }
 
 /**
- * Single predicate combining structural compatibility (`canProxyToGsc`) and
- * date-window coverage. Returns `true` when the query should be answered by
- * the live GSC API instead of the local engine: the API supports the query
- * shape AND (the requested range falls outside the synced envelope OR
- * overlaps an internal manifest gap when `coveredSpans` is provided). Sites
- * with no synced data route everything live.
+ * Single predicate combining structural compatibility (`canProxyToGsc`),
+ * cross-dimension resolvability, and date-window coverage. Returns `true`
+ * when the query should be answered by the live GSC API instead of the local
+ * engine: the API supports the query shape AND (the query is cross-dimension
+ * so no stored table can answer it OR the requested range falls outside the
+ * synced envelope OR overlaps an internal manifest gap when `coveredSpans` is
+ * provided). Sites with no synced data route everything live.
  *
  * Exported so callers (telemetry, debug UIs) can introspect the routing
  * decision without re-implementing it.
@@ -81,6 +83,12 @@ function nextDay(day: string): string {
 export function shouldRouteToLive(state: BuilderState, site: SyncedRange): boolean {
   if (!canProxyToGsc(state))
     return false
+  // Cross-dimension queries (grouped + filtered dimensions spanning two
+  // stored datasets, e.g. a `query` breakdown filtered by `device`) have no
+  // stored per-dimension table that carries every referenced column. Only the
+  // live GSC API computes them — route there regardless of sync coverage.
+  if (!isStateResolvable(state))
+    return true
   const { startDate, endDate } = extractDateRange(state.filter)
   if (!startDate || !endDate)
     return false
