@@ -13,7 +13,7 @@
 // DuckDB-written files. `date` lands as VARCHAR (BYTE_ARRAY/UTF8) because
 // rows carry ISO strings; INTEGER → INT32; BIGINT → INT64; DOUBLE → DOUBLE.
 
-import type { AsyncBuffer } from 'hyparquet'
+import type { AsyncBuffer, ParquetQueryFilter } from 'hyparquet'
 import type { BasicType, ColumnSource } from 'hyparquet-writer'
 import type { ColumnDef, ColumnType } from '../schema'
 import type {
@@ -175,10 +175,28 @@ function asyncBufferFromBytes(bytes: Uint8Array): AsyncBuffer {
   }
 }
 
-export async function decodeParquetToRows(bytes: Uint8Array): Promise<Row[]> {
+export interface DecodeParquetOptions {
+  /**
+   * Row filter pushed down into the parquet reader. hyparquet evaluates this
+   * per row group — pruning groups whose column statistics can't match and
+   * materialising only matching rows — so a filtered decode of a large file
+   * holds at most one row group plus the matches in memory, never the whole
+   * file. Use this whenever the caller needs a sub-slice of a big parquet
+   * (e.g. one feedpath out of a site-wide sitemap-urls index).
+   */
+  filter?: ParquetQueryFilter
+}
+
+export async function decodeParquetToRows(
+  bytes: Uint8Array,
+  opts: DecodeParquetOptions = {},
+): Promise<Row[]> {
   if (bytes.byteLength === 0)
     return []
-  const rows = await parquetReadObjects({ file: asyncBufferFromBytes(bytes) })
+  const rows = await parquetReadObjects({
+    file: asyncBufferFromBytes(bytes),
+    ...(opts.filter ? { filter: opts.filter } : {}),
+  })
   return rows as Row[]
 }
 

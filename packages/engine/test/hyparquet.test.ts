@@ -214,3 +214,35 @@ describe('hyparquet codec', () => {
     expect(Number(rows2[1]!.clicks)).toBe(42)
   })
 })
+
+describe('decodeParquetToRows — pushed-down filter', () => {
+  // Mirrors the sitemap-urls index: many feedpaths share one parquet, and a
+  // reader only wants one feedpath's rows without materialising the whole file.
+  const columns = [
+    { name: 'feedpath_hash', type: 'VARCHAR', nullable: false },
+    { name: 'loc', type: 'VARCHAR', nullable: false },
+  ] as const
+  const rows: Row[] = [
+    { feedpath_hash: 'aaa', loc: 'https://x/1' },
+    { feedpath_hash: 'bbb', loc: 'https://x/2' },
+    { feedpath_hash: 'aaa', loc: 'https://x/3' },
+    { feedpath_hash: 'ccc', loc: 'https://x/4' },
+    { feedpath_hash: 'bbb', loc: 'https://x/5' },
+  ]
+
+  it('returns only rows matching the filter', async () => {
+    const bytes = encodeRowsToParquetFlex(rows, { columns: [...columns], sortKey: ['feedpath_hash'] })
+    const got = await decodeParquetToRows(bytes, { filter: { feedpath_hash: 'aaa' } })
+    expect(got.map(r => r.loc).sort()).toEqual(['https://x/1', 'https://x/3'])
+  })
+
+  it('returns an empty array when nothing matches', async () => {
+    const bytes = encodeRowsToParquetFlex(rows, { columns: [...columns], sortKey: ['feedpath_hash'] })
+    expect(await decodeParquetToRows(bytes, { filter: { feedpath_hash: 'zzz' } })).toEqual([])
+  })
+
+  it('returns every row when no filter is given (back-compat)', async () => {
+    const bytes = encodeRowsToParquetFlex(rows, { columns: [...columns], sortKey: ['feedpath_hash'] })
+    expect(await decodeParquetToRows(bytes)).toHaveLength(5)
+  })
+})

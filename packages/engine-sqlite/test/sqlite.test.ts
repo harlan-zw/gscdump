@@ -168,8 +168,10 @@ describe('@gscdump/engine-sqlite adapter primitives', () => {
     expect(sqliteResolverAdapter.inferTable(['page'])).toBe('gsc_pages')
     expect(sqliteResolverAdapter.inferTable(['country'])).toBe('gsc_countries')
     expect(sqliteResolverAdapter.inferTable(['device'])).toBe('gsc_devices')
-    // date-only → devices: SUM over devices is GSC's true site total.
-    expect(sqliteResolverAdapter.inferTable(['date'])).toBe('gsc_devices')
+    // date-only → pages: under the registered-host page filter (ADR-0033) GSC
+    // drops anonymised impressions from dimension-grouped queries, so only
+    // `gsc_pages` sums to the page-filtered host total.
+    expect(sqliteResolverAdapter.inferTable(['date'])).toBe('gsc_pages')
   })
 
   it('dimColumn maps dimension aliases to real columns', async () => {

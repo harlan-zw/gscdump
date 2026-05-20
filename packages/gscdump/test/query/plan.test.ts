@@ -64,6 +64,26 @@ describe('buildLogicalPlan', () => {
   })
 })
 
+describe('inferDataset', () => {
+  it('routes each single dimension to its own dataset', () => {
+    expect(inferDataset(['page'])).toBe('pages')
+    expect(inferDataset(['query'])).toBe('keywords')
+    expect(inferDataset(['country'])).toBe('countries')
+    expect(inferDataset(['device'])).toBe('devices')
+    expect(inferDataset(['page', 'query'])).toBe('page_keywords')
+    expect(inferDataset(['searchAppearance'])).toBe('search_appearance')
+  })
+
+  it('routes date-only / dimensionless queries to pages', () => {
+    // Under the registered-host `page`-regex filter (ADR-0033) GSC drops
+    // anonymised impressions from any dimension-grouped query, so `devices`
+    // and `keywords` undercount the host total. Only `pages` sums to the
+    // page-filtered total the live GSC `["date"]` proxy returns.
+    expect(inferDataset([])).toBe('pages')
+    expect(inferDataset(['date'])).toBe('pages')
+  })
+})
+
 describe('isDatasetResolvable', () => {
   it('accepts a single-dimension breakdown and its own filter', () => {
     expect(isDatasetResolvable(['device'])).toBe(true)

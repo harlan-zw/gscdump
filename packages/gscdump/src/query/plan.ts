@@ -131,9 +131,12 @@ export function inferDataset(
     return 'countries'
   if (has('device'))
     return 'devices'
-  // Date-only / no-dimension queries: `devices` sums to GSC's true site total;
-  // `keywords` undercounts (anonymised long-tail queries dropped).
-  return 'devices'
+  // Date-only / no-dimension queries: route to `pages`. Under the registered-
+  // host `page`-regex filter (ADR-0033) GSC drops anonymised impressions from
+  // any dimension-grouped query, so `devices`/`keywords` undercount the host
+  // total; only `pages` sums to the page-filtered total the live GSC `["date"]`
+  // proxy returns.
+  return 'pages'
 }
 
 // Each stored dataset carries exactly one dimension family (`page_keywords` is

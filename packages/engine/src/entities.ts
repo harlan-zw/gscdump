@@ -692,7 +692,14 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
       const fpHash = hash(feedpath)
       const includeRemoved = opts?.includeRemoved ?? false
       const indexBytes = await ds.read(sitemapUrlsIndexKey(ctx)).catch(() => undefined)
-      const indexRows = indexBytes ? await decodeParquetToRows(indexBytes) : []
+      // The index spans every feedpath for the tenant — 1M+ rows for large
+      // multi-sitemap sites. loadUrls only needs this one feedpath, so push the
+      // `feedpath_hash` filter into the decoder: hyparquet prunes row groups by
+      // statistics and materialises only matching rows, keeping peak memory
+      // bounded. An unfiltered decode here OOMs the Worker on big sites.
+      const indexRows = indexBytes
+        ? await decodeParquetToRows(indexBytes, { filter: { feedpath_hash: { $eq: fpHash } } })
+        : []
       // Apply any deltas not yet folded into the index. Fold in chronological
       // order (the delta filename embeds an ISO date prefix → lexical sort).
       const deltaKeys = (await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`)).sort()
