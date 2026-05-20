@@ -122,7 +122,14 @@ function fileName(table: string, index: number, provided?: string): string {
 
 function readParquetViewSql(schema: string, table: string, files: string[]): string {
   const escaped = files.map(name => `'${sqlEscape(name)}'`).join(', ')
-  return `CREATE OR REPLACE VIEW ${schema}.${table} AS SELECT * FROM read_parquet([${escaped}], union_by_name = true)`
+  // `date` lands as VARCHAR in legacy parquets (BYTE_ARRAY/UTF8, before the
+  // schema enforced DATE). DuckDB infers from the parquet file, so the view
+  // surface would otherwise expose VARCHAR despite SCHEMAS declaring DATE.
+  // REPLACE-cast at the scan rewrites it canonically once per scan so every
+  // downstream consumer — the analyzers' compiled SQL, ad-hoc SQL the chat
+  // composes via the database tool — sees DATE uniformly. The cast is a no-op
+  // for already-DATE-typed columns and vectorized parsing for VARCHAR ones.
+  return `CREATE OR REPLACE VIEW ${schema}.${table} AS SELECT * REPLACE (CAST(date AS DATE) AS date) FROM read_parquet([${escaped}], union_by_name = true)`
 }
 
 export async function bootDuckDBWasm(
