@@ -99,6 +99,24 @@ function isTimeoutLike(err: unknown): boolean {
   return err.name === 'AbortError' || err.message?.includes('timeout') || err.message?.includes('aborted')
 }
 
+// Builds the GSC `dimensionFilterGroups` that scopes a slice to the registered
+// host. A site is scoped to the EXACT host the user registered, never the whole
+// GSC property — when a site maps to a broader `sc-domain:` property this `page`
+// regex (`^https?://(www\.)?<domain>/`) intentionally excludes all subdomain
+// traffic. This host-scoping is a DECISION (ADR-0033), not a bug — do not widen
+// it to "match the GSC UI".
+//
+// Behaviour of attaching this filter, measured 2026-05 (see gscdump.com
+// docs/postmortems/2026-05-gsc-page-filter-sampling.md):
+//  - With `page` / `date` dimensions (the `pages` slice) it is side-effect free:
+//    GSC switches to by-page aggregation and returns a total >= the by-property
+//    total. No sampling.
+//  - With `device` / `country` / `query` dimensions GSC anonymizes at the
+//    (page x dim) grain and the long-tail collapses the total to the anonymized
+//    floor (observed ‑37% to ‑79%). The `devices` / `countries` slices are
+//    therefore undercounted on `sc-domain:` properties — a known limitation,
+//    NOT a reason to drop the filter (the `pages`/`keywords` slices need it).
+// Only `groupType: 'and'` is valid; GSC rejects `'or'` with HTTP 400.
 function buildDomainFilterGroups(filter: SyncSliceDomainFilter | null | undefined): { filters: { dimension: 'page', operator: 'includingRegex', expression: string }[] }[] | undefined {
   if (!filter?.domain)
     return undefined
