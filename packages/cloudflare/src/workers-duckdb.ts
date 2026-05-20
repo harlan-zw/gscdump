@@ -36,6 +36,46 @@ function resolveSvc(env: AnalyticsEnv): DuckDBServiceRPC {
   return svc
 }
 
+/**
+ * Deadline for a single `DUCKDB_SVC.runSQL` RPC. A service-binding call to a
+ * sibling Worker has no implicit client timeout: if the sibling stalls (OOM
+ * mid-query, deadlock), the caller awaits up to Cloudflare's ~15-min wall
+ * ceiling and dies as `exceededCpu` with ~2ms CPU. 22s sits under the 25s
+ * job/request CPU budget so a stalled query rejects cleanly and identifiably.
+ */
+const DUCKDB_RPC_TIMEOUT_MS = 22_000
+
+export class DuckDBServiceTimeoutError extends Error {
+  override name = 'DuckDBServiceTimeoutError'
+  constructor(timeoutMs: number) {
+    super(`DUCKDB_SVC.runSQL exceeded ${timeoutMs}ms deadline`)
+  }
+}
+
+/**
+ * Race a `DUCKDB_SVC` RPC against a wall-clock deadline. The RPC itself isn't
+ * abortable (service-binding RPCs have no AbortSignal channel), so the loser
+ * promise simply stops being awaited; this bounds *our* latency, not the
+ * sibling's work. An optional caller `signal` rejects the race early.
+ */
+export function withDuckDBDeadline<T>(
+  op: Promise<T>,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (signal?.aborted)
+    return Promise.reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new DuckDBServiceTimeoutError(timeoutMs)), timeoutMs)
+    const onAbort = (): void => reject(signal!.reason ?? new DOMException('Aborted', 'AbortError'))
+    signal?.addEventListener('abort', onAbort, { once: true })
+    op.then(resolve, reject).finally(() => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+    })
+  })
+}
+
 export function createDucklingsCodec(_env: AnalyticsEnv): ParquetCodec {
   // Default hyparquet `readRows` fetches bytes via `dataSource.read(key)` and
   // decodes in pure JS — no ducklings round-trip, no R2 httpfs.
@@ -152,7 +192,11 @@ export function createDucklingsExecutor(env: AnalyticsEnv): QueryExecutor {
       })
       const finalSql = bindLiterals(rewritten, params)
 
-      const result = await svc.runSQL({ sql: finalSql, tables })
+      const result = await withDuckDBDeadline(
+        svc.runSQL({ sql: finalSql, tables }),
+        DUCKDB_RPC_TIMEOUT_MS,
+        signal,
+      )
       return { rows: result.rows.map(coerceRow), sql: result.sql }
     },
   }

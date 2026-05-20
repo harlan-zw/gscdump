@@ -9,7 +9,7 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
 import { defineAnalyzer, requireAdapter } from '@gscdump/engine/analyzer'
-import { buildDataDetailPlan, shapeDataDetailRows } from '../query'
+import { buildDataDetailPlan, buildDataDetailRows, shapeDataDetailRowResults, shapeDataDetailRows } from '../query'
 
 export type DataDetailResult = Row
 
@@ -30,6 +30,17 @@ export const dataDetailAnalyzer = defineAnalyzer<AnalysisParams, Row, DataDetail
   reduceSql(rows, params, ctx) {
     const arr = Array.isArray(rows) ? rows : []
     const { results, meta } = shapeDataDetailRows(arr, params, ctx.extras)
+    return { results: results as DataDetailResult[], meta }
+  },
+
+  // Row path — the cross-dimension fallback (see data-query.ts).
+  buildRows(params) {
+    return buildDataDetailRows(params)
+  },
+
+  reduceRows(rows, params) {
+    const rowMap = (Array.isArray(rows) ? {} : rows) as Record<string, Row[]>
+    const { results, meta } = shapeDataDetailRowResults(rowMap, params)
     return { results: results as DataDetailResult[], meta }
   },
 })

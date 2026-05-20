@@ -8,7 +8,7 @@
 import type { AnalysisParams, AnalysisResult } from '../analysis-types'
 import type { AnalysisQuerySource, FileSet, QueryRow } from '../source/source-types'
 import type { AnalyzerRegistry } from './registry'
-import type { Analyzer, RequiredCapability, RowQueriesPlan, SqlPlan } from './types'
+import type { Analyzer, Plan, RequiredCapability, RowQueriesPlan, SqlPlan } from './types'
 
 type AnalyzerRow = QueryRow
 
@@ -43,12 +43,33 @@ export async function runAnalyzerFromSource(
   params: AnalysisParams,
   registry: AnalyzerRegistry,
 ): Promise<AnalysisResult> {
-  const analyzer = registry.resolveAnalyzer(params.type, sourceHas(source, 'executeSql'))
+  let analyzer = registry.resolveAnalyzer(params.type, sourceHas(source, 'executeSql'))
   if (!analyzer)
     throw new AnalyzerCapabilityError(params.type, ['executeSql'])
   assertSatisfies(analyzer, source)
 
-  const plan = analyzer.build(params, { adapter: source.adapter, siteId: source.siteId })
+  const buildCtx = { adapter: source.adapter, siteId: source.siteId }
+  let plan: Plan
+  try {
+    plan = analyzer.build(params, buildCtx)
+  }
+  catch (err) {
+    // A cross-dimension query the SQL resolver can't satisfy from stored
+    // tables (`UnresolvableDatasetError`, matched by name across engine
+    // versions). If the analyzer has a row-query variant, dispatch that
+    // instead — its `BuilderState`s run through `queryRows`, which the
+    // composite source routes to the live GSC API. Other build errors and
+    // a missing rows variant both propagate unchanged.
+    const rowsVariant = (err as { name?: string } | null)?.name === 'UnresolvableDatasetError'
+      ? registry.getAnalyzerVariants(params.type)?.rows
+      : undefined
+    if (!rowsVariant)
+      throw err
+    assertSatisfies(rowsVariant, source)
+    analyzer = rowsVariant
+    plan = rowsVariant.build(params, buildCtx)
+  }
+
   if (plan.kind === 'rows')
     return runRowsPlanAgainstSource(source, analyzer, plan, params)
   return runSqlPlanAgainstSource(source, analyzer, plan, params)

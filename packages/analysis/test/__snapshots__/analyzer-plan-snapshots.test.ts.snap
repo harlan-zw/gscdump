@@ -115,6 +115,159 @@ exports[`analyzer plan snapshots > rows plan: concentration 1`] = `
 }
 `;
 
+exports[`analyzer plan snapshots > rows plan: data-detail 1`] = `
+{
+  "kind": "rows",
+  "queries": {
+    "main": {
+      "state": {
+        "dimensions": [
+          "page",
+          "date",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+    "prevTotals": {
+      "state": {
+        "dimensions": [],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-01-01",
+              "expression2": "2024-01-31",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "orderBy": undefined,
+        "rowLimit": 1,
+      },
+    },
+    "totals": {
+      "state": {
+        "dimensions": [],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "orderBy": undefined,
+        "rowLimit": 1,
+      },
+    },
+  },
+}
+`;
+
+exports[`analyzer plan snapshots > rows plan: data-query 1`] = `
+{
+  "kind": "rows",
+  "queries": {
+    "main": {
+      "state": {
+        "dimensions": [
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+    "prevMain": {
+      "state": {
+        "dimensions": [
+          "page",
+        ],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-01-01",
+              "expression2": "2024-01-31",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "rowLimit": 100,
+      },
+    },
+    "prevTotals": {
+      "state": {
+        "dimensions": [],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-01-01",
+              "expression2": "2024-01-31",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "orderBy": undefined,
+        "rowLimit": 1,
+      },
+    },
+    "totals": {
+      "state": {
+        "dimensions": [],
+        "filter": {
+          "_constraints": {},
+          "_filters": [
+            {
+              "dimension": "date",
+              "expression": "2024-02-01",
+              "expression2": "2024-02-29",
+              "operator": "between",
+            },
+          ],
+        },
+        "metrics": undefined,
+        "orderBy": undefined,
+        "rowLimit": 1,
+      },
+    },
+  },
+}
+`;
+
 exports[`analyzer plan snapshots > rows plan: decay 1`] = `
 {
   "kind": "rows",

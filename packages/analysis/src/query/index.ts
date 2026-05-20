@@ -9,8 +9,12 @@
 
 export {
   buildDataDetailPlan,
+  buildDataDetailRows,
   buildDataQueryPlan,
+  buildDataQueryRows,
+  shapeDataDetailRowResults,
   shapeDataDetailRows,
+  shapeDataQueryRowResults,
   shapeDataQueryRows,
 } from './analyzers'
 export type { QueryAnalyzerExtraQuery, QueryAnalyzerPlan } from './analyzers'

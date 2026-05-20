@@ -9,7 +9,7 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
 import { defineAnalyzer, requireAdapter } from '@gscdump/engine/analyzer'
-import { buildDataQueryPlan, shapeDataQueryRows } from '../query'
+import { buildDataQueryPlan, buildDataQueryRows, shapeDataQueryRowResults, shapeDataQueryRows } from '../query'
 
 export type DataQueryResult = Row
 
@@ -30,6 +30,19 @@ export const dataQueryAnalyzer = defineAnalyzer<AnalysisParams, Row, DataQueryRe
   reduceSql(rows, params, ctx) {
     const arr = Array.isArray(rows) ? rows : []
     const { results, meta } = shapeDataQueryRows(arr, params, ctx.extras)
+    return { results: results as DataQueryResult[], meta }
+  },
+
+  // Row path — the cross-dimension fallback. No `adapter` needed: each plan
+  // entry is a plain BuilderState run through the source's `queryRows`, which
+  // the composite source routes to live GSC.
+  buildRows(params) {
+    return buildDataQueryRows(params)
+  },
+
+  reduceRows(rows, params) {
+    const rowMap = (Array.isArray(rows) ? {} : rows) as Record<string, Row[]>
+    const { results, meta } = shapeDataQueryRowResults(rowMap, params)
     return { results: results as DataQueryResult[], meta }
   },
 })
