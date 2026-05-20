@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/nuxt",
   "type": "module",
-  "version": "0.18.7",
+  "version": "0.19.0",
   "description": "Nuxt layer: GSC analytics UI + DuckDB-WASM integration. Frontend-only; server primitives live in @gscdump/analysis, @gscdump/engine-sqlite, @gscdump/cloudflare, and host apps.",
   "author": {
     "name": "Harlan Wilton",
