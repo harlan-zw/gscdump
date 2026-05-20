@@ -44,6 +44,18 @@ export interface RollupEngine {
      */
     searchType?: SearchType
   }) => Promise<{ rows: import('@gscdump/engine/contracts').Row[] }>
+  /**
+   * Read the live manifest for a (tenant, table[, searchType]) cohort —
+   * cheap, no parquet decode. Builders use this to chunk a full-history scan
+   * into byte-bounded windows so a single `runSQL` call never has to ship
+   * more than ~14MB of decoded rows across the Workers service-binding RPC
+   * (32MiB hard cap).
+   */
+  listPartitions: (opts: {
+    ctx: TenantCtx
+    table: import('@gscdump/engine/contracts').TableName
+    searchType?: SearchType
+  }) => Promise<Array<{ partition: string, bytes: number }>>
 }
 
 /**
@@ -218,6 +230,12 @@ export interface RebuildRollupResult {
   /** Parquet payload byte size when `format === 'parquet'`. */
   parquetBytes?: number
   builtAt: number
+  /**
+   * Set when this def's build/encode/write failed. The runner records the
+   * failure and continues with the remaining defs so one bad rollup never
+   * aborts the rest. Successful defs have no `error`.
+   */
+  error?: string
 }
 
 export async function rebuildRollups(
@@ -225,66 +243,76 @@ export async function rebuildRollups(
 ): Promise<RebuildRollupResult[]> {
   const now = opts.now ?? (() => Date.now())
   const results: RebuildRollupResult[] = []
-  const searchType = opts.searchType
-  if (searchType !== undefined) {
-    for (const def of opts.defs) {
-      if (def.sliceOrthogonal === true) {
-        throw new Error(`rollup def '${def.id}' is slice-orthogonal; do not pass searchType`)
-      }
-    }
-  }
   for (const def of opts.defs) {
     const builtAt = now()
-    const payload = await def.build({
-      engine: opts.engine,
-      ctx: opts.ctx,
-      dataSource: opts.dataSource,
-      builtAt,
-      ...(searchType !== undefined ? { searchType } : {}),
-    })
-    if (def.format === 'parquet') {
-      if (!def.parquetColumns || def.parquetColumns.length === 0)
-        throw new Error(`rollup '${def.id}' declared format='parquet' without parquetColumns`)
-      const rows = (payload ?? []) as readonly Row[]
-      const parquetBytes = encodeRowsToParquetFlex(rows, {
-        columns: def.parquetColumns,
-        sortKey: def.parquetSortKey,
+    // Slice-orthogonal defs (entity-store sourced) are independent of the GSC
+    // slice — they always build once at the legacy/web path so their output
+    // never lands under a per-slice prefix the read path won't look at. Slice-
+    // aware defs honour the requested searchType.
+    const defSearchType = def.sliceOrthogonal === true ? undefined : opts.searchType
+    try {
+      const payload = await def.build({
+        engine: opts.engine,
+        ctx: opts.ctx,
+        dataSource: opts.dataSource,
+        builtAt,
+        ...(defSearchType !== undefined ? { searchType: defSearchType } : {}),
       })
-      const parquetKey = rollupParquetKey(opts.ctx, def.id, builtAt, searchType)
-      await opts.dataSource.write(parquetKey, parquetBytes)
-      const pointer: ParquetRollupPointer = { parquetKey, rowCount: rows.length }
-      const envelope: RollupEnvelope<ParquetRollupPointer> = {
+      if (def.format === 'parquet') {
+        if (!def.parquetColumns || def.parquetColumns.length === 0)
+          throw new Error(`rollup '${def.id}' declared format='parquet' without parquetColumns`)
+        const rows = (payload ?? []) as readonly Row[]
+        const parquetBytes = encodeRowsToParquetFlex(rows, {
+          columns: def.parquetColumns,
+          sortKey: def.parquetSortKey,
+        })
+        const parquetKey = rollupParquetKey(opts.ctx, def.id, builtAt, defSearchType)
+        await opts.dataSource.write(parquetKey, parquetBytes)
+        const pointer: ParquetRollupPointer = { parquetKey, rowCount: rows.length }
+        const envelope: RollupEnvelope<ParquetRollupPointer> = {
+          version: 1,
+          id: def.id,
+          builtAt,
+          windowDays: def.windowDays,
+          payload: pointer,
+        }
+        const envelopeBytes = new TextEncoder().encode(JSON.stringify(envelope))
+        const key = rollupKey(opts.ctx, def.id, builtAt, defSearchType)
+        await opts.dataSource.write(key, envelopeBytes)
+        results.push({
+          id: def.id,
+          objectKey: key,
+          parquetKey,
+          bytes: envelopeBytes.byteLength,
+          parquetBytes: parquetBytes.byteLength,
+          builtAt,
+        })
+        continue
+      }
+      const envelope: RollupEnvelope = {
         version: 1,
         id: def.id,
         builtAt,
         windowDays: def.windowDays,
-        payload: pointer,
+        payload,
       }
-      const envelopeBytes = new TextEncoder().encode(JSON.stringify(envelope))
-      const key = rollupKey(opts.ctx, def.id, builtAt, searchType)
-      await opts.dataSource.write(key, envelopeBytes)
+      const json = JSON.stringify(envelope)
+      const bytes = new TextEncoder().encode(json)
+      const key = rollupKey(opts.ctx, def.id, builtAt, defSearchType)
+      await opts.dataSource.write(key, bytes)
+      results.push({ id: def.id, objectKey: key, bytes: bytes.byteLength, builtAt })
+    }
+    catch (err) {
+      // One failing def must never abort the rest. Record the error and move
+      // on — callers split results into built (no `error`) vs failed.
       results.push({
         id: def.id,
-        objectKey: key,
-        parquetKey,
-        bytes: envelopeBytes.byteLength,
-        parquetBytes: parquetBytes.byteLength,
+        objectKey: '',
+        bytes: 0,
         builtAt,
+        error: err instanceof Error ? (err.stack || err.message) : String(err),
       })
-      continue
     }
-    const envelope: RollupEnvelope = {
-      version: 1,
-      id: def.id,
-      builtAt,
-      windowDays: def.windowDays,
-      payload,
-    }
-    const json = JSON.stringify(envelope)
-    const bytes = new TextEncoder().encode(json)
-    const key = rollupKey(opts.ctx, def.id, builtAt, searchType)
-    await opts.dataSource.write(key, bytes)
-    results.push({ id: def.id, objectKey: key, bytes: bytes.byteLength, builtAt })
   }
   return results
 }
@@ -299,6 +327,172 @@ function utcDateMinusDays(at: number, days: number): string {
   const m = String(d.getUTCMonth() + 1).padStart(2, '0')
   const day = String(d.getUTCDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+// ---------------------------------------------------------------------------
+// Windowed rollup builds — chunk full-history scans so a single runSQL never
+// ships more than ~14MB of decoded rows across the Workers RPC (32MiB cap).
+// ---------------------------------------------------------------------------
+
+/**
+ * Target decoded-bytes budget per window. Sits well under the 28MiB executor
+ *  guard so headroom remains for SQL + result rows.
+ */
+export const WINDOW_BYTE_BUDGET = 14 * 1024 * 1024
+
+const DAY_RE = /^daily\/(\d{4})-(\d{2})-(\d{2})$/
+const WEEK_RE = /^weekly\/(\d{4})-(\d{2})-(\d{2})$/
+const MONTH_RE = /^monthly\/(\d{4})-(\d{2})$/
+const QUARTER_RE = /^quarterly\/(\d{4})-Q([1-4])$/
+
+function isoDate(ms: number): string {
+  const d = new Date(ms)
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/**
+ * UTC day-aligned [startMs, endMs] span a partition covers. Returns null for
+ * `hourly/` partitions and anything unrecognised — those are excluded from
+ * windowed planning.
+ */
+export function partitionDaySpan(partition: string): { startMs: number, endMs: number } | null {
+  const day = DAY_RE.exec(partition)
+  if (day) {
+    const ms = Date.UTC(Number(day[1]), Number(day[2]) - 1, Number(day[3]))
+    return { startMs: ms, endMs: ms }
+  }
+  const week = WEEK_RE.exec(partition)
+  if (week) {
+    const ms = Date.UTC(Number(week[1]), Number(week[2]) - 1, Number(week[3]))
+    return { startMs: ms, endMs: ms + 6 * MS_PER_DAY }
+  }
+  const month = MONTH_RE.exec(partition)
+  if (month) {
+    const y = Number(month[1])
+    const m = Number(month[2]) - 1
+    const startMs = Date.UTC(y, m, 1)
+    const endMs = Date.UTC(y, m + 1, 1) - MS_PER_DAY
+    return { startMs, endMs }
+  }
+  const quarter = QUARTER_RE.exec(partition)
+  if (quarter) {
+    const y = Number(quarter[1])
+    const q = Number(quarter[2])
+    const startMonth = (q - 1) * 3
+    const startMs = Date.UTC(y, startMonth, 1)
+    const endMs = Date.UTC(y, startMonth + 3, 1) - MS_PER_DAY
+    return { startMs, endMs }
+  }
+  return null
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n))
+}
+
+/**
+ * Plan byte-bounded windows over a partition set. Each window names the
+ * partitions whose span intersects it; a coarse tier file can land in two
+ * windows, so every windowed SQL MUST also date-filter to the window bounds.
+ */
+export function planRollupWindows(
+  parts: Array<{ partition: string, bytes: number }>,
+  clampRange?: { start: string, end: string },
+): Array<{ start: string, end: string, partitions: string[] }> {
+  const clampStartMs = clampRange ? Date.parse(`${clampRange.start}T00:00:00Z`) : undefined
+  const clampEndMs = clampRange ? Date.parse(`${clampRange.end}T00:00:00Z`) : undefined
+  const spans: Array<{ partition: string, bytes: number, startMs: number, endMs: number }> = []
+  for (const p of parts) {
+    const span = partitionDaySpan(p.partition)
+    if (!span)
+      continue
+    if (clampStartMs !== undefined && clampEndMs !== undefined) {
+      if (span.endMs < clampStartMs || span.startMs > clampEndMs)
+        continue
+    }
+    spans.push({ partition: p.partition, bytes: p.bytes, startMs: span.startMs, endMs: span.endMs })
+  }
+  if (spans.length === 0)
+    return []
+
+  let rangeStartMs = Math.min(...spans.map(s => s.startMs))
+  let rangeEndMs = Math.max(...spans.map(s => s.endMs))
+  if (clampStartMs !== undefined)
+    rangeStartMs = Math.max(rangeStartMs, clampStartMs)
+  if (clampEndMs !== undefined)
+    rangeEndMs = Math.min(rangeEndMs, clampEndMs)
+
+  const totalBytes = spans.reduce((a, s) => a + s.bytes, 0)
+  const spanDays = Math.floor((rangeEndMs - rangeStartMs) / MS_PER_DAY) + 1
+  const bytesPerDay = Math.max(1, totalBytes / spanDays)
+  const windowDays = clamp(Math.floor(WINDOW_BYTE_BUDGET / bytesPerDay), 7, 400)
+
+  const windows: Array<{ start: string, end: string, partitions: string[] }> = []
+  let cursorMs = rangeStartMs
+  while (cursorMs <= rangeEndMs) {
+    const windowEndMs = Math.min(cursorMs + (windowDays - 1) * MS_PER_DAY, rangeEndMs)
+    const partitions = spans
+      .filter(s => s.endMs >= cursorMs && s.startMs <= windowEndMs)
+      .map(s => s.partition)
+    if (partitions.length > 0)
+      windows.push({ start: isoDate(cursorMs), end: isoDate(windowEndMs), partitions })
+    cursorMs = windowEndMs + MS_PER_DAY
+  }
+  return windows
+}
+
+/** Partition strings whose span intersects the inclusive [start, end] date range. */
+export function partitionsInRange(
+  parts: Array<{ partition: string, bytes: number }>,
+  start: string,
+  end: string,
+): string[] {
+  const startMs = Date.parse(`${start}T00:00:00Z`)
+  const endMs = Date.parse(`${end}T00:00:00Z`)
+  const out: string[] = []
+  for (const p of parts) {
+    const span = partitionDaySpan(p.partition)
+    if (!span)
+      continue
+    if (span.endMs >= startMs && span.startMs <= endMs)
+      out.push(p.partition)
+  }
+  return out
+}
+
+/**
+ * Run a full-history aggregation in byte-bounded windows and concat the rows.
+ * Each window's SQL MUST date-filter to `[w.start, w.end]` (see `sqlFor`) so a
+ * tier file spanning a window boundary doesn't double-count calendar dates.
+ */
+export async function runWindowed(opts: {
+  engine: RollupEngine
+  ctx: TenantCtx
+  table: import('@gscdump/engine/contracts').TableName
+  searchType?: SearchType
+  sqlFor: (w: { start: string, end: string }) => string
+}): Promise<Row[]> {
+  const parts = await opts.engine.listPartitions({
+    ctx: opts.ctx,
+    table: opts.table,
+    ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
+  })
+  const windows = planRollupWindows(parts)
+  const rows: Row[] = []
+  for (const w of windows) {
+    const result = await opts.engine.runSQL({
+      ctx: opts.ctx,
+      table: opts.table,
+      fileSets: { FILES: { table: opts.table, partitions: w.partitions } },
+      sql: opts.sqlFor(w),
+      ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
+    })
+    rows.push(...result.rows)
+  }
+  return rows
 }
 
 // ---------------------------------------------------------------------------
@@ -318,39 +512,57 @@ export const dailyTotalsRollup: RollupDef = {
   id: 'daily_totals',
   windowDays: null,
   async build({ engine, ctx, searchType }) {
-    const pages = await engine.runSQL({
+    const pageRows = await runWindowed({
+      engine,
       ctx,
       table: 'pages',
-      fileSets: { FILES: { table: 'pages' } },
-      sql: `
+      ...(searchType !== undefined ? { searchType } : {}),
+      sqlFor: w => `
         SELECT
           date,
           SUM(clicks)::BIGINT AS clicks,
           SUM(impressions)::BIGINT AS impressions,
           SUM(sum_position)::DOUBLE AS sum_position
         FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= '${w.start}' AND date <= '${w.end}'
         GROUP BY date
         ORDER BY date
       `,
-      ...(searchType !== undefined ? { searchType } : {}),
     })
-    const keywords = await engine.runSQL({
+    const keywordRows = await runWindowed({
+      engine,
       ctx,
       table: 'keywords',
-      fileSets: { FILES: { table: 'keywords' } },
-      sql: `
+      ...(searchType !== undefined ? { searchType } : {}),
+      sqlFor: w => `
         SELECT
           date,
           SUM(impressions)::BIGINT AS impressions
         FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= '${w.start}' AND date <= '${w.end}'
         GROUP BY date
       `,
-      ...(searchType !== undefined ? { searchType } : {}),
     })
+    // Windows are date-disjoint, but merge defensively by date in case a tier
+    // file straddling a boundary slipped a date through twice.
+    const pagesByDate = new Map<string, { date: string, clicks: bigint, impressions: bigint, sum_position: number }>()
+    for (const r of pageRows) {
+      const date = String(r.date)
+      const cur = pagesByDate.get(date) ?? { date, clicks: BigInt(0), impressions: BigInt(0), sum_position: 0 }
+      cur.clicks += BigInt(r.clicks as bigint | number)
+      cur.impressions += BigInt(r.impressions as bigint | number)
+      cur.sum_position += Number(r.sum_position)
+      pagesByDate.set(date, cur)
+    }
     const keywordImpressionsByDate = new Map<string, bigint>()
-    for (const r of keywords.rows)
-      keywordImpressionsByDate.set(String(r.date), BigInt(r.impressions as bigint | number))
-    return pages.rows.map((r) => {
+    for (const r of keywordRows) {
+      const date = String(r.date)
+      keywordImpressionsByDate.set(
+        date,
+        (keywordImpressionsByDate.get(date) ?? BigInt(0)) + BigInt(r.impressions as bigint | number),
+      )
+    }
+    return Array.from(pagesByDate.values()).sort((a, b) => (a.date < b.date ? -1 : 1)).map((r) => {
       const totalImpressions = BigInt(r.impressions as bigint | number)
       const queryImpressions = keywordImpressionsByDate.get(String(r.date)) ?? BigInt(0)
       const anonymized = totalImpressions === BigInt(0)
@@ -372,28 +584,35 @@ export const weeklyTotalsRollup: RollupDef = {
   id: 'weekly_totals',
   windowDays: null,
   async build({ engine, ctx, searchType }) {
-    const result = await engine.runSQL({
+    const rows = await runWindowed({
+      engine,
       ctx,
       table: 'pages',
-      fileSets: { FILES: { table: 'pages' } },
       ...(searchType !== undefined ? { searchType } : {}),
-      sql: `
+      sqlFor: w => `
         SELECT
           strftime(date_trunc('week', date::DATE), '%Y-%m-%d') AS week,
           SUM(clicks)::BIGINT AS clicks,
           SUM(impressions)::BIGINT AS impressions,
           SUM(sum_position)::DOUBLE AS sum_position
         FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= '${w.start}' AND date <= '${w.end}'
         GROUP BY 1
         ORDER BY 1
       `,
     })
-    return result.rows.map(r => ({
-      week: r.week,
-      clicks: Number(r.clicks),
-      impressions: Number(r.impressions),
-      sum_position: Number(r.sum_position),
-    }))
+    // A calendar week can straddle a window boundary, so the same `week`
+    // appears in two adjacent windows. Merge by week, summing every metric.
+    const byWeek = new Map<string, { week: string, clicks: number, impressions: number, sum_position: number }>()
+    for (const r of rows) {
+      const week = String(r.week)
+      const cur = byWeek.get(week) ?? { week, clicks: 0, impressions: 0, sum_position: 0 }
+      cur.clicks += Number(r.clicks)
+      cur.impressions += Number(r.impressions)
+      cur.sum_position += Number(r.sum_position)
+      byWeek.set(week, cur)
+    }
+    return Array.from(byWeek.values()).sort((a, b) => (a.week < b.week ? -1 : 1))
   },
 }
 
@@ -407,10 +626,18 @@ export const topPages28dRollup: RollupDef = {
   windowDays: 28,
   async build({ engine, ctx, builtAt, searchType }) {
     const cutoff = utcDateMinusDays(builtAt, 28)
+    const parts = await engine.listPartitions({
+      ctx,
+      table: 'pages',
+      ...(searchType !== undefined ? { searchType } : {}),
+    })
+    const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(builtAt, 0))
+    if (partitions.length === 0)
+      return []
     const result = await engine.runSQL({
       ctx,
       table: 'pages',
-      fileSets: { FILES: { table: 'pages' } },
+      fileSets: { FILES: { table: 'pages', partitions } },
       ...(searchType !== undefined ? { searchType } : {}),
       sql: `
         SELECT
@@ -445,10 +672,18 @@ export const topCountries28dRollup: RollupDef = {
   windowDays: 28,
   async build({ engine, ctx, builtAt, searchType }) {
     const cutoff = utcDateMinusDays(builtAt, 28)
+    const parts = await engine.listPartitions({
+      ctx,
+      table: 'countries',
+      ...(searchType !== undefined ? { searchType } : {}),
+    })
+    const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(builtAt, 0))
+    if (partitions.length === 0)
+      return []
     const result = await engine.runSQL({
       ctx,
       table: 'countries',
-      fileSets: { FILES: { table: 'countries' } },
+      fileSets: { FILES: { table: 'countries', partitions } },
       ...(searchType !== undefined ? { searchType } : {}),
       sql: `
         SELECT
@@ -478,10 +713,18 @@ export const topKeywords28dRollup: RollupDef = {
   windowDays: 28,
   async build({ engine, ctx, builtAt, searchType }) {
     const cutoff = utcDateMinusDays(builtAt, 28)
+    const parts = await engine.listPartitions({
+      ctx,
+      table: 'keywords',
+      ...(searchType !== undefined ? { searchType } : {}),
+    })
+    const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(builtAt, 0))
+    if (partitions.length === 0)
+      return []
     const result = await engine.runSQL({
       ctx,
       table: 'keywords',
-      fileSets: { FILES: { table: 'keywords' } },
+      fileSets: { FILES: { table: 'keywords', partitions } },
       ...(searchType !== undefined ? { searchType } : {}),
       sql: `
         SELECT
@@ -528,10 +771,18 @@ export const topKeywords28dParquetRollup: RollupDef = {
   parquetSortKey: ['clicks'],
   async build({ engine, ctx, builtAt, searchType }) {
     const cutoff = utcDateMinusDays(builtAt, 28)
+    const parts = await engine.listPartitions({
+      ctx,
+      table: 'keywords',
+      ...(searchType !== undefined ? { searchType } : {}),
+    })
+    const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(builtAt, 0))
+    if (partitions.length === 0)
+      return []
     const result = await engine.runSQL({
       ctx,
       table: 'keywords',
-      fileSets: { FILES: { table: 'keywords' } },
+      fileSets: { FILES: { table: 'keywords', partitions } },
       ...(searchType !== undefined ? { searchType } : {}),
       sql: `
         SELECT
@@ -720,11 +971,17 @@ export const indexPercentRollup: RollupDef = {
     // through the manifest so forward searchType; URLS is a direct-keys
     // sidecar (entity store, not slice-partitioned) so searchType doesn't
     // apply to it.
+    const pagesParts = await engine.listPartitions({
+      ctx,
+      table: 'pages',
+      ...(searchType !== undefined ? { searchType } : {}),
+    })
+    const pagesPartitions = partitionsInRange(pagesParts, cutoff, utcDateMinusDays(builtAt, 0))
     const numerator = await engine.runSQL({
       ctx,
       table: 'pages',
       fileSets: {
-        PAGES: { table: 'pages' },
+        PAGES: { table: 'pages', partitions: pagesPartitions },
         URLS: { table: 'pages', keys: [urlsKey] },
       },
       ...(searchType !== undefined ? { searchType } : {}),

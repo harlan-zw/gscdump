@@ -502,7 +502,18 @@ export const syncCommand = defineCommand({
         logger.info(`Rebuilding rollups for [${siteId}] (${DEFAULT_ROLLUPS.length} rollups)…`)
       const rollupStart = Date.now()
       const results = await rebuildRollups({
-        engine: store.engine,
+        engine: {
+          runSQL: opts => store.engine.runSQL(opts),
+          listPartitions: async ({ ctx, table, searchType }) => {
+            const entries = await store.engine.listLive({
+              userId: ctx.userId,
+              ...(ctx.siteId !== undefined ? { siteId: ctx.siteId } : {}),
+              table,
+              ...(searchType !== undefined ? { searchType } : {}),
+            })
+            return entries.map(e => ({ partition: e.partition, bytes: e.bytes }))
+          },
+        },
         dataSource: store.dataSource,
         ctx: { userId: store.userId, siteId },
         defs: DEFAULT_ROLLUPS,

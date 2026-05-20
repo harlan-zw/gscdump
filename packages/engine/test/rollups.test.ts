@@ -53,6 +53,12 @@ function makeFakeEngine(
       const rows = responses[table as TableName] ?? []
       return { rows }
     },
+    // Single recent partition near the tests' builtAt (1_700_000_000_000 ≈
+    // 2023-11-14): windowed builders produce exactly ONE window and runSQL
+    // (which ignores partitions in this fake) is called once — no dup rows.
+    async listPartitions() {
+      return [{ partition: 'daily/2023-11-10', bytes: 1000 }]
+    },
   }
 }
 
@@ -100,8 +106,8 @@ describe('rebuildRollups searchType namespacing', () => {
     expect(store.has('u_u1/s1/rollups/json_def__v1700000000000.json')).toBe(false)
   })
 
-  it('throws when searchType is paired with a slice-orthogonal def', async () => {
-    const { ds } = makeFakeDataSource()
+  it('builds a slice-orthogonal def at the legacy path even when searchType is passed', async () => {
+    const { ds, store } = makeFakeDataSource()
     const orthogonalDef: RollupDef = {
       id: 'entity_def',
       windowDays: 90,
@@ -110,14 +116,59 @@ describe('rebuildRollups searchType namespacing', () => {
         return { days: [] }
       },
     }
-    await expect(rebuildRollups({
+    const sliceAwareDef: RollupDef = {
+      id: 'slice_def',
+      windowDays: 7,
+      async build() {
+        return [{ a: 1 }]
+      },
+    }
+    const results = await rebuildRollups({
       engine: makeFakeEngine({} as Record<TableName, Row[]>),
       dataSource: ds,
       ctx: { userId: 'u1', siteId: 's1' },
-      defs: [orthogonalDef],
+      defs: [orthogonalDef, sliceAwareDef],
       now: () => 1_700_000_000_000,
       searchType: 'discover',
-    })).rejects.toThrow('rollup def \'entity_def\' is slice-orthogonal; do not pass searchType')
+    })
+    expect(results.every(r => !r.error)).toBe(true)
+    // Slice-orthogonal def lands at the legacy (non-namespaced) key.
+    expect(store.has('u_u1/s1/rollups/entity_def__v1700000000000.json')).toBe(true)
+    expect(store.has('u_u1/s1/rollups/discover/entity_def__v1700000000000.json')).toBe(false)
+    // Slice-aware def in the same call lands under the discover/ segment.
+    expect(store.has('u_u1/s1/rollups/discover/slice_def__v1700000000000.json')).toBe(true)
+  })
+
+  it('continues building other defs when one def throws; failing result carries error', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const failingDef: RollupDef = {
+      id: 'boom',
+      windowDays: 7,
+      async build() {
+        throw new Error('build exploded')
+      },
+    }
+    const okDef: RollupDef = {
+      id: 'ok',
+      windowDays: 7,
+      async build() {
+        return [{ a: 1 }]
+      },
+    }
+    const results = await rebuildRollups({
+      engine: makeFakeEngine({} as Record<TableName, Row[]>),
+      dataSource: ds,
+      ctx: { userId: 'u1', siteId: 's1' },
+      defs: [failingDef, okDef],
+      now: () => 1_700_000_000_000,
+    })
+    expect(results).toHaveLength(2)
+    const failed = results.find(r => r.id === 'boom')!
+    const ok = results.find(r => r.id === 'ok')!
+    expect(failed.error).toContain('build exploded')
+    expect(ok.error).toBeUndefined()
+    // The good def's envelope was still written despite the earlier failure.
+    expect(store.has('u_u1/s1/rollups/ok__v1700000000000.json')).toBe(true)
   })
 })
 
@@ -420,15 +471,15 @@ describe('parquet rollups', () => {
         return []
       },
     }
-    await expect(
-      rebuildRollups({
-        engine: makeFakeEngine({}),
-        dataSource: ds,
-        ctx: { userId: 'u1' },
-        defs: [broken],
-        now: () => 1_700_000_000_000,
-      }),
-    ).rejects.toThrow(/parquetColumns/)
+    const results = await rebuildRollups({
+      engine: makeFakeEngine({}),
+      dataSource: ds,
+      ctx: { userId: 'u1' },
+      defs: [broken],
+      now: () => 1_700_000_000_000,
+    })
+    expect(results).toHaveLength(1)
+    expect(results[0].error).toMatch(/parquetColumns/)
   })
 })
 
@@ -472,6 +523,9 @@ describe('indexingHealthRollup', () => {
             },
           ],
         }
+      },
+      async listPartitions() {
+        return [{ partition: 'daily/2023-11-10', bytes: 1000 }]
       },
     }
     const payload = (await indexingHealthRollup.build({
@@ -519,6 +573,9 @@ describe('indexPercentRollup', () => {
           }
         }
         return { rows: [{ total: 100 }] }
+      },
+      async listPartitions() {
+        return [{ partition: 'daily/2023-11-10', bytes: 1000 }]
       },
     }
     const payload = (await indexPercentRollup.build({

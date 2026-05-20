@@ -168,6 +168,20 @@ export function createDucklingsExecutor(env: AnalyticsEnv): QueryExecutor {
           )
           const merged: Row[] = []
           for (const rows of perFile) merged.push(...rows)
+          // Service-binding RPC args are capped at 32MiB by Cloudflare. A
+          // full-history `pages`/`keywords` placeholder decodes to ~60MB of
+          // JS rows — shipping that to the duckdb sibling fails with a cryptic
+          // "Serialized RPC arguments ... limited to 32MiB". Fail early with a
+          // message that names the placeholder + size so the rollup builder is
+          // identifiable as the thing that must window its query.
+          const mergedBytes = estimateRowsBytes(merged)
+          if (mergedBytes > 28 * 1024 * 1024) {
+            throw new Error(
+              `createDucklingsExecutor: placeholder {{${placeholder}}} decoded to ~${mergedBytes} bytes `
+              + `(${merged.length} rows), exceeding the 28MiB service-binding RPC budget. `
+              + `The rollup builder must window this query (chunk partitions) instead of scanning all files at once.`,
+            )
+          }
           const tmp = tmpTableName(placeholder)
           tempNames[placeholder] = tmp
           // DDL used by the sibling only when `merged` is empty; we pass
