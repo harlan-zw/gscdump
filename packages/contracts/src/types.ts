@@ -368,51 +368,10 @@ export interface AnalyticsClient {
   getSearchAppearance: (siteId: string, range: { start: string, end: string }) => Promise<SearchAppearanceResponse>
 }
 
-export type GscSearchAnalyticsDimension = 'page' | 'query' | 'country' | 'device' | 'date' | 'searchAppearance'
-
-export type GscSearchAnalyticsFilterOperator
-  = | 'equals'
-    | 'notEquals'
-    | 'contains'
-    | 'notContains'
-    | 'includingRegex'
-    | 'excludingRegex'
-
-export interface GscSearchAnalyticsFilter {
-  dimension: GscSearchAnalyticsDimension
-  expression: string
-  operator?: GscSearchAnalyticsFilterOperator
-}
-
-export interface GscSearchAnalyticsFilterGroup {
-  groupType?: 'and' | 'or'
-  filters: GscSearchAnalyticsFilter[]
-}
-
-export type GscSearchType = 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews'
-
-export interface GscSearchAnalyticsRequest {
-  startDate: string
-  endDate: string
-  dimensions?: GscSearchAnalyticsDimension[]
-  dimensionFilterGroups?: GscSearchAnalyticsFilterGroup[]
-  rowLimit?: number
-  startRow?: number
-  searchType?: GscSearchType
-}
-
-export interface GscSearchAnalyticsRow {
-  keys: string[]
-  clicks: number
-  impressions: number
-  ctr: number
-  position: number
-}
-
-export interface GscSearchAnalyticsResponse {
-  rows?: GscSearchAnalyticsRow[]
-  responseAggregationType?: string
-}
+// GSC Search Analytics wire types (request/response shapes for the live
+// google.com/webmasters API) are owned by the `gscdump` package — see
+// `gscdump/contracts`. They are deliberately not duplicated here; nothing
+// in `@gscdump/contracts` consumes them.
 
 export type GscComparisonFilter = 'new' | 'lost' | 'improving' | 'declining'
 

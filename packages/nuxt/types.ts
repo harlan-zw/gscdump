@@ -1,4 +1,4 @@
-// Public API surface of @gscdump/nuxt-analytics.
+// Public API surface of @gscdump/nuxt.
 // Anything not exported here is considered internal and may change without a major bump.
 //
 // This package is a frontend-only Nuxt layer. Server-side primitives (auth

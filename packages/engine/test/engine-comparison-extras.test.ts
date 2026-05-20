@@ -27,7 +27,7 @@ import {
   createDuckDBExecutor,
   createStorageEngine,
 } from '../src/index'
-import { buildExtrasQueries, buildTotalsSql, resolveComparisonSQL } from '../src/resolver/compiler'
+import { buildExtrasQueries, buildTotalsSql, resolveComparisonSQL } from '../src/resolver/compile'
 import { createParquetResolverAdapter } from '../src/resolver/pg-adapter'
 
 afterAll(() => {

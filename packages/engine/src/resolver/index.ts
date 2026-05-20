@@ -20,7 +20,7 @@ export {
   resolveComparisonSQL,
   resolveToSQL,
   resolveToSQLOptimized,
-} from './compiler'
+} from './compile'
 export {
   assertDimensionsSupported,
   DIMENSION_SURFACES,

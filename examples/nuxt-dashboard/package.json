@@ -17,7 +17,7 @@
     "@gscdump/engine": "workspace:*",
     "@gscdump/engine-duckdb-wasm": "workspace:*",
     "@gscdump/engine-sqlite": "workspace:*",
-    "@gscdump/nuxt-analytics": "workspace:*",
+    "@gscdump/nuxt": "workspace:*",
     "@gscdump/sdk": "workspace:*",
     "@nuxt/ui": "catalog:",
     "aws4fetch": "catalog:",

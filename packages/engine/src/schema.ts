@@ -120,7 +120,9 @@ export function inferTable(dimensions: readonly string[]): TableName {
     return 'devices'
   if (dims.has('searchAppearance'))
     return 'search_appearance'
-  return 'keywords'
+  // Date-only / no-dimension queries: `devices` sums to GSC's true site total;
+  // `keywords` undercounts (anonymised long-tail queries dropped).
+  return 'devices'
 }
 
 export function dimensionToColumn(dim: string, _table: TableName): string {

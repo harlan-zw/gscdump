@@ -11,7 +11,7 @@
 import type { ResolverAdapter } from '../resolver/types'
 import type { AnalysisQuerySource, AnalysisSourceKind, QueryRow, SourceCapabilities } from './source-types'
 import { coerceRows } from '../coerce'
-import { resolveToSQL } from '../resolver/compiler'
+import { resolveToSQL } from '../resolver/compile'
 
 export interface CreateSqlQuerySourceOptions<TKey extends string> {
   /** Debug-only identifier surfaced on the source for error messages. */

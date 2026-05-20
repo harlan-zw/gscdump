@@ -1,7 +1,7 @@
 import type { BuilderState } from 'gscdump/query'
 import { describe, expect, it } from 'vitest'
-import { FILES_PLACEHOLDER, resolveToSQL, substituteNamedFiles } from '../src/index'
-import { resolveToSQL as resolverResolveToSQL, resolveToSQLOptimized } from '../src/resolver/compiler'
+import { FILES_PLACEHOLDER, resolveParquetSQL, substituteNamedFiles } from '../src/index'
+import { resolveToSQL as resolverResolveToSQL, resolveToSQLOptimized } from '../src/resolver/compile'
 import { createParquetResolverAdapter, pgResolverAdapter } from '../src/resolver/pg-adapter'
 
 function state(partial: Partial<BuilderState>): BuilderState {
@@ -19,9 +19,9 @@ function state(partial: Partial<BuilderState>): BuilderState {
   }
 }
 
-describe('resolveToSQL', () => {
+describe('resolveParquetSQL', () => {
   it('builds GROUP BY + ORDER BY + LIMIT with FILES placeholder', () => {
-    const r = resolveToSQL(state({}), 'pages')
+    const r = resolveParquetSQL(state({}), 'pages')
     expect(r.sql).toContain(FILES_PLACEHOLDER)
     expect(r.sql).toMatch(/GROUP BY url/)
     expect(r.sql).toMatch(/ORDER BY clicks DESC/)
@@ -30,14 +30,14 @@ describe('resolveToSQL', () => {
   })
 
   it('enumerates candidate partitions for the date range (daily + monthly)', () => {
-    const r = resolveToSQL(state({}), 'pages')
+    const r = resolveParquetSQL(state({}), 'pages')
     expect(r.partitions).toContain('daily/2026-03-01')
     expect(r.partitions).toContain('daily/2026-03-31')
     expect(r.partitions).toContain('monthly/2026-03')
   })
 
   it('translates a metric HAVING filter to a metricExpr comparison', () => {
-    const r = resolveToSQL(state({
+    const r = resolveParquetSQL(state({
       filter: {
         _filters: [
           { dimension: 'date', operator: 'between', expression: '2026-03-01', expression2: '2026-03-31' },
@@ -51,7 +51,7 @@ describe('resolveToSQL', () => {
   })
 
   it('translates contains/regex to DuckDB-safe predicates', () => {
-    const r = resolveToSQL(state({
+    const r = resolveParquetSQL(state({
       filter: {
         _filters: [
           { dimension: 'date', operator: 'between', expression: '2026-03-01', expression2: '2026-03-31' },
@@ -64,7 +64,7 @@ describe('resolveToSQL', () => {
   })
 
   it('throws when date range is missing', () => {
-    expect(() => resolveToSQL(state({ filter: undefined }), 'pages')).toThrow(/date range/)
+    expect(() => resolveParquetSQL(state({ filter: undefined }), 'pages')).toThrow(/date range/)
   })
 })
 

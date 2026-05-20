@@ -2,7 +2,7 @@ import antfu from '@antfu/eslint-config'
 
 // Layer lint — encodes the package DAG declared in ARCHITECTURE.md.
 // Edges allowed between sibling packages:
-//   gscdump             → (no @gscdump/* siblings; edge-compatible surface must stay node-free)
+//   gscdump             → contracts (dependency-free leaf only; edge-compatible surface must stay node-free)
 //   engine              → gscdump
 //   analysis            → gscdump, engine, engine-wasm, engine-sqlite, engine-duckdb-node
 //   engine-duckdb-node  → gscdump, engine, analysis (analyzer/query/source subpaths)
@@ -17,6 +17,22 @@ function forbidSiblings(...siblings) {
     })),
   }
 }
+
+// Every @gscdump/* sibling except the dependency-free `contracts` leaf, which
+// core (gscdump) is allowed to depend on (it sits below core in the DAG).
+const coreForbiddenSiblings = [
+  'analysis',
+  'cli',
+  'cloud',
+  'cloudflare',
+  'engine',
+  'engine-duckdb-wasm',
+  'engine-gsc-api',
+  'engine-sqlite',
+  'mcp',
+  'nuxt',
+  'sdk',
+]
 
 const preferGranularCoreSubpaths = {
   paths: [
@@ -88,12 +104,13 @@ export default antfu({
     'examples/browser-http/_served/**',
   ],
 }, {
-  // Core overall — no reaching into sibling @gscdump/* packages (would create a cycle).
+  // Core overall — no reaching into sibling @gscdump/* packages (would create a
+  // cycle); only the @gscdump/contracts leaf is an allowed edge.
   files: ['packages/gscdump/src/**/*.ts'],
   rules: {
     'no-restricted-imports': ['error', {
       patterns: [
-        { group: ['@gscdump/*'], message: 'Core (gscdump) must not depend on sibling @gscdump/* packages (would create a cycle).' },
+        ...forbidSiblings(...coreForbiddenSiblings).patterns,
       ],
     }],
   },
@@ -112,7 +129,7 @@ export default antfu({
     'no-restricted-imports': ['error', {
       patterns: [
         { group: ['node:*'], message: 'Core\'s edge-compatible surface must not import node:* builtins. Move Node-only code into @gscdump/engine adapters.' },
-        { group: ['@gscdump/*'], message: 'Core (gscdump) must not depend on sibling @gscdump/* packages (would create a cycle).' },
+        ...forbidSiblings(...coreForbiddenSiblings).patterns,
       ],
     }],
   },

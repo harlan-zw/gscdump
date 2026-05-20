@@ -26,7 +26,7 @@ import {
   createDuckDBExecutor,
   createStorageEngine,
 } from '../src/index'
-import { resolveToSQLOptimized } from '../src/resolver/compiler'
+import { resolveToSQLOptimized } from '../src/resolver/compile'
 import { createParquetResolverAdapter } from '../src/resolver/pg-adapter'
 
 afterAll(() => {

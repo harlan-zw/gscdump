@@ -17,7 +17,7 @@ function readFixture<T>(name: string): T {
   return JSON.parse(readFileSync(fileURLToPath(url), 'utf8')) as T
 }
 
-describe('@gscdump/nuxt-analytics public response contracts', () => {
+describe('@gscdump/nuxt public response contracts', () => {
   it('locks SiteListItem', () => {
     const item = readFixture<SiteListItem>('site-list-item')
     expect(item).toMatchObject({

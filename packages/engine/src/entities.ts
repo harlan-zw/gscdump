@@ -137,6 +137,9 @@ export function hashUrl(url: string): string {
  * `parquetUri`.
  */
 export interface InspectionParquetRow {
+  // Explicit index signature keeps the shape assignable to `Row`
+  // (`Record<string, unknown>`) for `encodeRowsToParquetFlex`.
+  [column: string]: string | number | null
   urlHash: string
   url: string
   inspectedAt: string

@@ -66,7 +66,7 @@ const source = createEngine({
 - [`@gscdump/analysis`](../analysis) — Analyzer registry + `analyzeContentGap` (browser semantic).
 - [`@gscdump/engine-duckdb-node`](../engine-duckdb-node) — Node DuckDB counterpart.
 - [`@gscdump/engine-sqlite`](../engine-sqlite) — SQLite / D1 counterpart.
-- [`@gscdump/nuxt-analytics`](../nuxt-analytics) — Nuxt layer that ships this runtime client-side.
+- [`@gscdump/nuxt`](../nuxt) — Nuxt layer that ships this runtime client-side.
 
 ## License
 

@@ -85,7 +85,11 @@ export function inferLogicalDataset(
     return 'countries'
   if (has('device'))
     return 'devices'
-  return 'keywords'
+  // Date-only / no-dimension queries (e.g. overview timeseries totals): route
+  // to `devices`, not `keywords`. Every impression has exactly one device, so
+  // SUM over `devices` equals GSC's true site total. `keywords` drops GSC's
+  // anonymised long-tail queries and systematically undercounts totals.
+  return 'devices'
 }
 
 export function dimensionColumn(dim: Dimension, dataset: LogicalDataset): string {

@@ -1,7 +1,7 @@
-# @gscdump/nuxt-analytics
+# @gscdump/nuxt
 
-[![npm version](https://img.shields.io/npm/v/@gscdump/nuxt-analytics?color=yellow)](https://npmjs.com/package/@gscdump/nuxt-analytics)
-[![npm downloads](https://img.shields.io/npm/dm/@gscdump/nuxt-analytics?color=yellow)](https://npm.chart.dev/@gscdump/nuxt-analytics)
+[![npm version](https://img.shields.io/npm/v/@gscdump/nuxt?color=yellow)](https://npmjs.com/package/@gscdump/nuxt)
+[![npm downloads](https://img.shields.io/npm/dm/@gscdump/nuxt?color=yellow)](https://npm.chart.dev/@gscdump/nuxt)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
 > Nuxt layer: GSC analytics UI, Nuxt auth/runtime wiring, and DuckDB-WASM integration. It uses `@gscdump/sdk` internally for hosted analytics HTTP reads.
@@ -23,13 +23,13 @@ Three consumption modes:
 ## Install
 
 ```bash
-pnpm add @gscdump/nuxt-analytics
+pnpm add @gscdump/nuxt
 ```
 
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  extends: ['@gscdump/nuxt-analytics'],
+  extends: ['@gscdump/nuxt'],
   runtimeConfig: {
     analytics: {
       mode: 'origin', // or 'consumer' / 'local'

@@ -131,7 +131,9 @@ function inferDataset(
     return 'countries'
   if (has('device'))
     return 'devices'
-  return 'keywords'
+  // Date-only / no-dimension queries: `devices` sums to GSC's true site total;
+  // `keywords` undercounts (anonymised long-tail queries dropped).
+  return 'devices'
 }
 
 function requireCapability(

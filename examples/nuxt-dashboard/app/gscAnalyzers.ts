@@ -10,7 +10,7 @@
 // component (lazy-imported via `defineAsyncComponent` to preserve route-level
 // codesplitting) plus optional `summarize`/`caption`.
 
-import { defineGscAnalyzer } from '@gscdump/nuxt-analytics/types'
+import { defineGscAnalyzer } from '@gscdump/nuxt/types'
 import { defineAsyncComponent } from 'vue'
 
 function nfmt(n: number): string {

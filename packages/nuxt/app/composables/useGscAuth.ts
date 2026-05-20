@@ -1,4 +1,4 @@
-// Reactive auth primitive for the @gscdump/nuxt-analytics layer.
+// Reactive auth primitive for the @gscdump/nuxt layer.
 //
 // `useState`-backed so the value is SSR-safe and shared across the page tree.
 // Hosts call `setGscAuth(getter)` from a `'pre'`-enforced plugin so downstream

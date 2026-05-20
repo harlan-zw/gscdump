@@ -1,4 +1,5 @@
-import type { IndexingMetadataRecord, InspectionRecord, SitemapRecord } from '@gscdump/engine/entities'
+import type { TenantCtx } from '@gscdump/engine/contracts'
+import type { IndexingMetadataRecord, InspectionRecord, InspectionStore, SitemapRecord } from '@gscdump/engine/entities'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 import process from 'node:process'
@@ -14,6 +15,36 @@ import { applyOutputMode, logger, OUTPUT_ARGS, runWithConcurrency } from '../uti
 
 const INSPECTION_QPD_PER_PROPERTY = 2000
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
+
+// The redesigned InspectionStore is append-only history shards bucketed by the
+// `inspectedAt` month (no JSON index / point-lookup API). `entities show`
+// reconstructs a point lookup by scanning recent month shards newest-first; the
+// first month holding the URL has its latest inspection, since a record's
+// bucket is its own inspection month.
+const INSPECTION_HISTORY_LOOKBACK_MONTHS = 24
+
+async function findLatestInspection(
+  inspector: InspectionStore,
+  ctx: TenantCtx,
+  url: string,
+): Promise<InspectionRecord | undefined> {
+  const now = new Date()
+  const buckets: string[] = []
+  for (let i = 0; i < INSPECTION_HISTORY_LOOKBACK_MONTHS; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))
+    buckets.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`)
+  }
+  // Records with a malformed `inspectedAt` land in the `unknown` bucket; check
+  // it last so a real dated record always wins.
+  buckets.push('unknown')
+  for (const yearMonth of buckets) {
+    const shard = await inspector.loadHistory(ctx, yearMonth)
+    const matches = shard?.records.filter(r => r.url === url) ?? []
+    if (matches.length > 0)
+      return matches.reduce((a, b) => (a.inspectedAt >= b.inspectedAt ? a : b))
+  }
+  return undefined
+}
 
 async function readUrlList(opts: { file?: string }): Promise<string[]> {
   if (opts.file) {
@@ -114,7 +145,7 @@ const inspectSubCommand = defineCommand({
     if (!quiet)
       process.stdout.write('\n')
 
-    await inspector.writeBatch(
+    await inspector.appendHistory(
       { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
       records,
     )
@@ -160,7 +191,8 @@ const showSubCommand = defineCommand({
     const store = ctx.store!
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const inspector = createInspectionStore({ dataSource: store.dataSource })
-    const record = await inspector.getLatest(
+    const record = await findLatestInspection(
+      inspector,
       { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
       String(args.url),
     )

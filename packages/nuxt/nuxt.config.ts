@@ -1,6 +1,6 @@
-// Layer-mode Nuxt config for @gscdump/nuxt-analytics.
+// Layer-mode Nuxt config for @gscdump/nuxt.
 //
-// Consuming apps pull this in via `extends: ['@gscdump/nuxt-analytics']` in
+// Consuming apps pull this in via `extends: ['@gscdump/nuxt']` in
 // their own nuxt.config.ts. Anything declared here is a shared default; hosts
 // can override in the normal Nuxt fashion (defu-merged, app config wins).
 //

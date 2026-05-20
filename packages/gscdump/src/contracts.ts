@@ -1,24 +1,8 @@
-export type TableName = 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords' | 'search_appearance'
-export type Row = Record<string, unknown>
-export type ColumnType = 'DATE' | 'VARCHAR' | 'INTEGER' | 'BIGINT' | 'DOUBLE'
-
-export interface ColumnDef {
-  name: string
-  type: ColumnType
-  nullable: boolean
-}
-
-export interface TableSchema {
-  name: TableName
-  columns: ColumnDef[]
-  sortKey: string[]
-  version: number
-}
-
-export interface TenantCtx {
-  userId: string
-  siteId?: string
-}
+// Schema/storage vocabulary is owned by the dependency-free `@gscdump/contracts`
+// leaf package; re-exported here so `gscdump/contracts` stays the single import
+// surface for GSC consumers. The GSC Search Analytics wire types below remain
+// owned by this package (the live-API client is their only consumer).
+export type { ColumnDef, ColumnType, Row, TableName, TableSchema, TenantCtx } from '@gscdump/contracts'
 
 export type GscSearchAnalyticsDimension = 'page' | 'query' | 'country' | 'device' | 'date' | 'hour' | 'searchAppearance'
 

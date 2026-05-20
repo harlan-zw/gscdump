@@ -168,7 +168,8 @@ describe('@gscdump/engine-sqlite adapter primitives', () => {
     expect(sqliteResolverAdapter.inferTable(['page'])).toBe('gsc_pages')
     expect(sqliteResolverAdapter.inferTable(['country'])).toBe('gsc_countries')
     expect(sqliteResolverAdapter.inferTable(['device'])).toBe('gsc_devices')
-    expect(sqliteResolverAdapter.inferTable(['date'])).toBe('gsc_keywords')
+    // date-only → devices: SUM over devices is GSC's true site total.
+    expect(sqliteResolverAdapter.inferTable(['date'])).toBe('gsc_devices')
   })
 
   it('dimColumn maps dimension aliases to real columns', async () => {

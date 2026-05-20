@@ -207,9 +207,9 @@ importers:
       '@gscdump/engine-sqlite':
         specifier: workspace:*
         version: link:../../packages/engine-sqlite
-      '@gscdump/nuxt-analytics':
+      '@gscdump/nuxt':
         specifier: workspace:*
-        version: link:../../packages/nuxt-analytics
+        version: link:../../packages/nuxt
       '@gscdump/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -479,7 +479,7 @@ importers:
         specifier: catalog:dev-test
         version: 4.1.6(@types/node@25.9.0)(vite@7.3.3(@types/node@25.9.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.47.1)(tsx@4.22.2)(yaml@2.9.0))
 
-  packages/nuxt-analytics:
+  packages/nuxt:
     dependencies:
       '@duckdb/duckdb-wasm':
         specifier: 'catalog:'

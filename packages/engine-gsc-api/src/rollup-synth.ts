@@ -1,4 +1,4 @@
-// Pure GSC-API → rollup-shape synthesisers. Used by nuxt-analytics free-tier
+// Pure GSC-API → rollup-shape synthesisers. Used by @gscdump/nuxt free-tier
 // endpoints to produce daily_totals / top_pages / top_keywords envelopes
 // without any pre-built parquet. Lives in @gscdump/engine-gsc-api so the
 // HTTP layer stays thin and other consumers (CLI live mode, MCP, future

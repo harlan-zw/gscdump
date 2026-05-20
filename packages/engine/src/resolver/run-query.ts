@@ -8,7 +8,7 @@ import type { BuilderState } from 'gscdump/query'
 import type { SearchType, TableName } from '../storage'
 import type { ComparisonFilter } from './types'
 import { enumeratePartitions } from '../planner'
-import { buildExtrasQueries, buildTotalsSql, resolveComparisonSQL, resolveToSQLOptimized } from './compiler'
+import { buildExtrasQueries, buildTotalsSql, resolveComparisonSQL, resolveToSQLOptimized } from './compile'
 import { createParquetResolverAdapter } from './pg-adapter'
 
 export interface RunQueryCtx {

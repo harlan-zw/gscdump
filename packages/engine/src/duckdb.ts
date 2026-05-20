@@ -16,7 +16,7 @@ import type {
   TableName,
   WriteResult,
 } from './storage'
-import { substituteNamedFiles } from './compiler'
+import { substituteNamedFiles } from './parquet-plan'
 import { SCHEMAS } from './schema'
 import { sqlEscape } from './sql-bind'
 

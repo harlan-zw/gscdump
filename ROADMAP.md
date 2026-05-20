@@ -21,7 +21,7 @@ Eleven packages:
 - **`@gscdump/analysis`** — analyzer instances (row + sql), composite source,
   attached-table dispatcher, semantic analyzers. Re-exports the contract layer
   from `@gscdump/engine` for ergonomics.
-- **`@gscdump/nuxt-analytics`** — Nuxt layer (`extends`). Source provider seam,
+- **`@gscdump/nuxt`** — Nuxt layer (`extends`). Source provider seam,
   capability gates, design-system components (`GscHero`, `DataList`,
   `QueryLabel`, `CommandPalette`, `PerformanceChart`, `Ui*`), entity routes.
 - **`@gscdump/cli`** — CLI + MCP server.
@@ -55,7 +55,7 @@ each layer mode.
 
 ### P1 — consumer adoption
 
-1. **Phase 3: migrate `gscdump.com` to consume `@gscdump/nuxt-analytics`** —
+1. **Phase 3: migrate `gscdump.com` to consume `@gscdump/nuxt`** —
    DONE. `gscdump.com` catalog pins all `@gscdump/*` to `^0.7.5` with no
    `link:` overrides; session auth provider + origin-mode config wired.
 2. **Phase 5: onboard `nuxtseo.com` as consumer-mode adopter** — catalog
@@ -226,10 +226,10 @@ user-facing features. Widen the layer first; assumes all consumers use
 - `tests/example-modes.test.ts` exercises the example config under every
   layer mode (local, origin, consumer + override + invalid + default).
 - `tests/layer-file-count.test.ts` enforces a 90-file budget on
-  `@gscdump/nuxt-analytics`; currently at 74 — flags inadvertent layer
+  `@gscdump/nuxt`; currently at 74 — flags inadvertent layer
   growth.
 - Released `@gscdump/*@0.5.0` (analysis, engine + adapters,
-  nuxt-analytics, gscdump, cli, mcp). gscdump.com now has a real npm
+  nuxt, gscdump, cli, mcp). gscdump.com now has a real npm
   source to pull from instead of `link:`.
 
 ## Last session (2026-04-27 afternoon)
@@ -297,7 +297,7 @@ user-facing features. Widen the layer first; assumes all consumers use
   no `link:` overrides — P1.1 Phase 3 adoption DONE.
 - Bumped `nuxtseo.com` catalog to `@gscdump/*@^0.7.5` and dropped the
   three `link:` overrides on `analysis`, `engine-duckdb-wasm`,
-  `nuxt-analytics`. Needs `pnpm install` in the `nuxtseo.com` repo to
+  `@gscdump/nuxt`. Needs `pnpm install` in the `nuxtseo.com` repo to
   resolve. Layer auth provider + `useProGscdump*` deletion still open
   under P1.2.
 - Dropped P2 1.0 cut from the plan — `0.7.x` is the working line for now.
@@ -310,7 +310,7 @@ user-facing features. Widen the layer first; assumes all consumers use
     `createInspectionStoreSqlite`, `inspectionSqliteKey`,
     `InspectionSqlDriver`, `CreateInspectionStoreSqliteOptions` from
     `entities.ts` (~233 LOC). JSON-backed `createInspectionStore` is
-    what cli + nuxt-analytics actually use; the SQLite track had no
+    what cli + @gscdump/nuxt actually use; the SQLite track had no
     consumers.
   - Dropped `engine` peer deps `better-sqlite3` + `wa-sqlite` and the
     matching catalog entries / `onlyBuiltDependencies` slot.

@@ -29,8 +29,8 @@ const { sites } = await gscdump.getUserSites(userId)
 - Shared request/response types re-exported from `@gscdump/contracts`
 
 Analyzer Source dispatch, browser DuckDB-WASM boot, R2 parquet attach, and
-Nuxt composables remain in `@gscdump/nuxt-analytics`. Nuxt apps should install
-`@gscdump/nuxt-analytics` for dashboard reads; that layer uses
+Nuxt composables remain in `@gscdump/nuxt`. Nuxt apps should install
+`@gscdump/nuxt` for dashboard reads; that layer uses
 `createAnalyticsClient()` internally.
 
 ## Boundary

@@ -1,6 +1,6 @@
 export { coerceRow, coerceRows } from './coerce'
 export type { CompactionThresholds } from './compaction'
-export { countRawDailies, RAW_DAILY_COMPACT_THRESHOLD } from './compaction'
+export { countRawDailies, dedupeOverlappingTiers, RAW_DAILY_COMPACT_THRESHOLD, splitOverlappingTiers } from './compaction'
 export { canonicalEmptyParquetSchema, createDuckDBCodec, createDuckDBExecutor } from './duckdb'
 export type { DuckDBFactory, DuckDBHandle } from './duckdb'
 export { createStorageEngine, MAX_DAY_BYTES } from './engine'
@@ -17,7 +17,7 @@ export type {
   IngestAccumulatorHooks,
 } from './ingest-accumulator'
 export { createIngestAccumulator, createNoopIngestAccumulator } from './ingest-accumulator'
-export { enumeratePartitions, FILES_PLACEHOLDER, resolveToSQL, substituteNamedFiles } from './planner'
+export { enumeratePartitions, FILES_PLACEHOLDER, resolveParquetSQL, substituteNamedFiles } from './planner'
 export type { ResolvedQuery } from './planner'
 export { rebuildDailyFromHourly } from './rollups'
 export type { InspectionVerdict, SchedulePolicy, ScheduleState } from './schedule'

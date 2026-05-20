@@ -1,4 +1,4 @@
-// Nuxt module for @gscdump/nuxt-analytics.
+// Nuxt module for @gscdump/nuxt.
 //
 // Responsibilities:
 //  - Merge the layer's public runtime-config defaults (apiBase, duckdbBundleBase)
@@ -35,7 +35,7 @@ declare module 'nuxt/schema' {
 
 export default defineNuxtModule<ModuleOptions>({
   meta: {
-    name: '@gscdump/nuxt-analytics',
+    name: '@gscdump/nuxt',
     configKey: 'gscdumpAnalytics',
     compatibility: { nuxt: '>=4.0.0' },
   },

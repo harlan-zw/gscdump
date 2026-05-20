@@ -17,9 +17,9 @@ import type {
 } from './storage'
 import { normalizeUrl } from 'gscdump/normalize'
 import { buildLogicalPlan } from 'gscdump/query/plan'
-import { compactTieredImpl } from './compaction'
-import { compileLogicalQueryPlan } from './compiler'
+import { compactTieredImpl, dedupeOverlappingTiers } from './compaction'
 import { gcOrphansImpl } from './gc'
+import { compileLogicalQueryPlan } from './parquet-plan'
 import { currentSchemaVersion, SCHEMAS } from './schema'
 import { dayPartition, hourPartition, inferSearchType, objectKey, tenantPrefix } from './storage'
 
@@ -219,7 +219,11 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
           // cross-type behaviour for web-only tenants.
           ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
         })
-        return [name, list.map(e => e.objectKey)] as const
+        // A coarse tier (monthly/quarterly) can outlive the finer files it was
+        // meant to supersede — backfill writes coarse partitions directly and
+        // re-sync writes fresh daily/weekly for the same dates. union_by_name
+        // would then sum the overlap. Drop fully-subsumed coarse files first.
+        return [name, dedupeOverlappingTiers(list).map(e => e.objectKey)] as const
       }),
     )
 

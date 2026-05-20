@@ -166,7 +166,7 @@ export function compileLogicalQueryPlan(
   }
 }
 
-export function resolveToSQL(state: BuilderState, table?: TableName): ResolvedQuery {
+export function resolveParquetSQL(state: BuilderState, table?: TableName): ResolvedQuery {
   const plan = buildLogicalPlan(state, { regex: true })
   return compileLogicalQueryPlan(plan, table ?? plan.dataset)
 }

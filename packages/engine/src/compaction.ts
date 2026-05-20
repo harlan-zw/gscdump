@@ -22,6 +22,7 @@ import {
 const DAILY_PARTITION_RE = /^daily\/(\d{4}-\d{2}-\d{2})$/
 const WEEKLY_PARTITION_RE = /^weekly\/(\d{4}-\d{2}-\d{2})$/
 const MONTHLY_PARTITION_RE = /^monthly\/(\d{4}-\d{2})$/
+const QUARTERLY_PARTITION_RE = /^quarterly\/(\d{4})-Q([1-4])$/
 
 export interface CompactionDeps {
   dataSource: DataSource
@@ -264,6 +265,106 @@ export function enumeratePartitions(startDate: string, endDate: string): string[
     }
   }
   return out
+}
+
+/**
+ * Day-span [startMs, endMs] (UTC, day-aligned) covered by a partition name,
+ * or `undefined` for shapes that don't carry a date range (`hourly/`, sidecar
+ * keys, anything unrecognised). Tier rank: lower = finer.
+ */
+function partitionSpan(partition: string): { rank: number, startMs: number, endMs: number } | undefined {
+  let m = partition.match(DAILY_PARTITION_RE)
+  if (m) {
+    const ms = Date.parse(`${m[1]!}T00:00:00Z`)
+    return { rank: 0, startMs: ms, endMs: ms }
+  }
+  m = partition.match(WEEKLY_PARTITION_RE)
+  if (m) {
+    const ms = Date.parse(`${m[1]!}T00:00:00Z`)
+    return { rank: 1, startMs: ms, endMs: ms + 6 * MS_PER_DAY }
+  }
+  m = partition.match(MONTHLY_PARTITION_RE)
+  if (m) {
+    const [y, mo] = m[1]!.split('-').map(Number) as [number, number]
+    return { rank: 2, startMs: Date.UTC(y, mo - 1, 1), endMs: Date.UTC(y, mo, 0) }
+  }
+  m = partition.match(QUARTERLY_PARTITION_RE)
+  if (m) {
+    const y = Number(m[1])
+    const q = Number(m[2])
+    return { rank: 3, startMs: Date.UTC(y, (q - 1) * 3, 1), endMs: Date.UTC(y, q * 3, 0) }
+  }
+  return undefined
+}
+
+/**
+ * Split manifest entries into the set worth reading (`kept`) and the set whose
+ * every covered day is already served by a finer-or-newer live entry
+ * (`subsumed`).
+ *
+ * Tiered compaction (daily→weekly→monthly→quarterly) is meant to retire its
+ * inputs, but coarse files can outlive their finer counterparts: a D1→R2
+ * backfill writes daily files that compact to monthly while a later re-sync
+ * writes fresh daily/weekly for the same dates, and same-partition re-writes
+ * leave a stale prior version live. All stay live, the resolver unions every
+ * live tier whose partition intersects the range, and `union_by_name` sums the
+ * overlap — impressions/clicks double-count.
+ *
+ * Entries are walked finest-tier-first, newest-first within a tier, so a
+ * coarse or stale file is dropped only when every day it covers is already
+ * claimed. Subsumption is evaluated per searchType — a `web` monthly never
+ * cancels a `discover` weekly, they cover disjoint data. Partial
+ * month-boundary overlap (a weekly straddling two months alongside a kept
+ * monthly) still double-counts those boundary days — eliminating that needs
+ * per-file date predicates in the SQL, tracked separately. Unrecognised
+ * partition shapes (`hourly/`, sidecar keys) are always kept.
+ */
+export function splitOverlappingTiers(
+  entries: ManifestEntry[],
+): { kept: ManifestEntry[], subsumed: ManifestEntry[] } {
+  const spanned: { entry: ManifestEntry, rank: number, days: number[] }[] = []
+  const kept: ManifestEntry[] = []
+  for (const entry of entries) {
+    const span = partitionSpan(entry.partition)
+    if (!span) {
+      // Unrecognised shape (hourly/, sidecar) — never deduped.
+      kept.push(entry)
+      continue
+    }
+    const days: number[] = []
+    for (let t = span.startMs; t <= span.endMs; t += MS_PER_DAY)
+      days.push(t)
+    spanned.push({ entry, rank: span.rank, days })
+  }
+
+  // Finest tier first, then newest-first — so a coarse tier is tested against
+  // already-covered days, and the newest version of a partition claims its
+  // days before any stale same-partition prior version is reached.
+  spanned.sort((a, b) => a.rank - b.rank || b.entry.createdAt - a.entry.createdAt)
+  // Coverage tracked per searchType — different slices never cancel each other.
+  const coveredBySearchType = new Map<string, Set<number>>()
+  const subsumed: ManifestEntry[] = []
+  for (const { entry, days } of spanned) {
+    const slice = inferSearchType(entry)
+    let covered = coveredBySearchType.get(slice)
+    if (!covered) {
+      covered = new Set<number>()
+      coveredBySearchType.set(slice, covered)
+    }
+    if (days.every(d => covered!.has(d))) {
+      subsumed.push(entry)
+      continue
+    }
+    kept.push(entry)
+    for (const d of days)
+      covered.add(d)
+  }
+  return { kept, subsumed }
+}
+
+/** Entries worth reading — see {@link splitOverlappingTiers}. */
+export function dedupeOverlappingTiers(entries: ManifestEntry[]): ManifestEntry[] {
+  return splitOverlappingTiers(entries).kept
 }
 
 function monthEndMs(month: string): number {
