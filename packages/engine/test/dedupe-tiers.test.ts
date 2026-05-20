@@ -54,6 +54,36 @@ describe('dedupeOverlappingTiers', () => {
     expect(partitions(kept)).toContain('monthly/2026-03')
   })
 
+  it('regression: range-scoped subsumption drops a monthly whose out-of-window days lack a finer file', () => {
+    // The server path enumerates partitions for the query window only. A query
+    // ending 2026-04-23 never enumerates weekly/2026-04-27, so monthly/2026-04's
+    // Apr 27-30 looks uncovered — but those days are outside the query and SQL-
+    // filtered to nothing. With the query range it must still be dropped.
+    const list = [
+      'monthly/2026-04',
+      'weekly/2026-03-30',
+      'weekly/2026-04-06',
+      'weekly/2026-04-13',
+      'weekly/2026-04-20',
+    ].map(p => entry(p))
+
+    // Range-less (full-manifest contract): monthly kept — Apr 24-30 uncovered.
+    expect(partitions(dedupeOverlappingTiers(list))).toContain('monthly/2026-04')
+
+    // Query-scoped to Apr 23: monthly's in-window days (Apr 1-23) are fully
+    // covered by the four weeklies → dropped.
+    const kept = dedupeOverlappingTiers(list, { start: '2026-02-21', end: '2026-04-23' })
+    expect(partitions(kept)).not.toContain('monthly/2026-04')
+  })
+
+  it('drops entries entirely outside the query window', () => {
+    const kept = dedupeOverlappingTiers(
+      [entry('monthly/2026-01'), entry('daily/2026-05-10')],
+      { start: '2026-05-01', end: '2026-05-31' },
+    )
+    expect(partitions(kept)).toEqual(['daily/2026-05-10'])
+  })
+
   it('drops a monthly fully subsumed by weekly files', () => {
     // weekly/2026-03-30 (Mar 30 - Apr 5) through weekly/2026-04-27 (Apr 27 - May 3)
     // fully tile April.

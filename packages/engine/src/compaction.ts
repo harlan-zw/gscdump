@@ -318,12 +318,24 @@ function partitionSpan(partition: string): { rank: number, startMs: number, endM
  * monthly) still double-counts those boundary days — eliminating that needs
  * per-file date predicates in the SQL, tracked separately. Unrecognised
  * partition shapes (`hourly/`, sidecar keys) are always kept.
+ *
+ * `queryRange` clamps every entry's day-span to the window the caller will
+ * actually read. This is required when `entries` came from a partition-
+ * filtered `listLive` (`runSQL` enumerates only the partitions intersecting
+ * the query): a `monthly/2026-04` whose Apr 27-30 falls past the query end
+ * must not be judged "unsubsumed" just because `weekly/2026-04-27` wasn't
+ * enumerated — those out-of-window days are SQL-filtered to nothing anyway.
+ * Omit `queryRange` when `entries` is the full manifest (e.g. analysis-sources).
  */
 export function splitOverlappingTiers(
   entries: ManifestEntry[],
+  queryRange?: { start: string, end: string },
 ): { kept: ManifestEntry[], subsumed: ManifestEntry[] } {
+  const rangeStartMs = queryRange ? Date.parse(`${queryRange.start}T00:00:00Z`) : undefined
+  const rangeEndMs = queryRange ? Date.parse(`${queryRange.end}T00:00:00Z`) : undefined
   const spanned: { entry: ManifestEntry, rank: number, days: number[] }[] = []
   const kept: ManifestEntry[] = []
+  const subsumed: ManifestEntry[] = []
   for (const entry of entries) {
     const span = partitionSpan(entry.partition)
     if (!span) {
@@ -332,8 +344,16 @@ export function splitOverlappingTiers(
       continue
     }
     const days: number[] = []
-    for (let t = span.startMs; t <= span.endMs; t += MS_PER_DAY)
+    for (let t = span.startMs; t <= span.endMs; t += MS_PER_DAY) {
+      if (rangeStartMs !== undefined && (t < rangeStartMs || t > rangeEndMs!))
+        continue
       days.push(t)
+    }
+    // Entirely outside the query window — contributes no rows, drop it.
+    if (queryRange && days.length === 0) {
+      subsumed.push(entry)
+      continue
+    }
     spanned.push({ entry, rank: span.rank, days })
   }
 
@@ -343,7 +363,6 @@ export function splitOverlappingTiers(
   spanned.sort((a, b) => a.rank - b.rank || b.entry.createdAt - a.entry.createdAt)
   // Coverage tracked per searchType — different slices never cancel each other.
   const coveredBySearchType = new Map<string, Set<number>>()
-  const subsumed: ManifestEntry[] = []
   for (const { entry, days } of spanned) {
     const slice = inferSearchType(entry)
     let covered = coveredBySearchType.get(slice)
@@ -363,8 +382,11 @@ export function splitOverlappingTiers(
 }
 
 /** Entries worth reading — see {@link splitOverlappingTiers}. */
-export function dedupeOverlappingTiers(entries: ManifestEntry[]): ManifestEntry[] {
-  return splitOverlappingTiers(entries).kept
+export function dedupeOverlappingTiers(
+  entries: ManifestEntry[],
+  queryRange?: { start: string, end: string },
+): ManifestEntry[] {
+  return splitOverlappingTiers(entries, queryRange).kept
 }
 
 function monthEndMs(month: string): number {

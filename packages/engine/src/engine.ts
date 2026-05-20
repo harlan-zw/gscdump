@@ -47,6 +47,31 @@ function normalizeRow(table: TableName, row: Row): Row {
   return { ...row, url: normalized }
 }
 
+const DAILY_PARTITION_RE = /^daily\/(\d{4}-\d{2}-\d{2})$/
+
+/**
+ * Derive the query date window from an enumerated partition list. The planner
+ * emits a `daily/` partition for every day in range, so the min/max daily
+ * bounds the window — used to scope tier-subsumption to what the query reads.
+ */
+function queryRangeOf(partitions?: string[]): { start: string, end: string } | undefined {
+  if (!partitions)
+    return undefined
+  let min: string | undefined
+  let max: string | undefined
+  for (const p of partitions) {
+    const m = DAILY_PARTITION_RE.exec(p)
+    if (!m)
+      continue
+    const d = m[1]!
+    if (min === undefined || d < min)
+      min = d
+    if (max === undefined || d > max)
+      max = d
+  }
+  return min !== undefined ? { start: min, end: max! } : undefined
+}
+
 export function createStorageEngine(opts: EngineOptions): StorageEngine {
   const { dataSource, manifestStore, codec, executor } = opts
   const defaultNow = opts.now ?? (() => Date.now())
@@ -222,8 +247,11 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
         // A coarse tier (monthly/quarterly) can outlive the finer files it was
         // meant to supersede — backfill writes coarse partitions directly and
         // re-sync writes fresh daily/weekly for the same dates. union_by_name
-        // would then sum the overlap. Drop fully-subsumed coarse files first.
-        return [name, dedupeOverlappingTiers(list).map(e => e.objectKey)] as const
+        // would then sum the overlap. Drop fully-subsumed coarse files first,
+        // scoped to the query window: `ref.partitions` is enumerated for the
+        // query range, so a coarse file's days past that window must not count
+        // against subsumption (the finer file covering them isn't enumerated).
+        return [name, dedupeOverlappingTiers(list, queryRangeOf(ref.partitions)).map(e => e.objectKey)] as const
       }),
     )
 
