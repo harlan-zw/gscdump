@@ -559,8 +559,9 @@ describe('indexPercentRollup', () => {
   })
 
   it('computes per-day ratio from JOIN against pages parquet', async () => {
-    const { ds: base } = makeFakeDataSource()
-    const ds: DataSource = { ...base, head: async () => ({ bytes: 1 }) }
+    const { ds } = makeFakeDataSource()
+    // At least one per-feedpath index file present → the rollup proceeds.
+    await ds.write('u_u1/s1/entities/sitemaps/urls/by-feed/abc123/index.parquet', new Uint8Array([1]))
     const engine: RollupEngine = {
       async runSQL(opts) {
         // First call: numerator (per-day clicked URLs); second call: denominator

@@ -18,7 +18,7 @@ import type { DataSource, FileSetRef, Row } from './contracts'
 import type { ColumnDef } from './schema'
 import { MS_PER_DAY } from 'gscdump'
 import { encodeRowsToParquetFlex } from './adapters/hyparquet'
-import { createIndexingMetadataStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexKey } from './entities'
+import { createIndexingMetadataStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexPrefix } from './entities'
 
 export interface RollupCtx extends TenantCtx {
   /** When the rollup was built. Stamped into payload + filename. */
@@ -958,13 +958,12 @@ export const indexPercentRollup: RollupDef = {
   windowDays: 90,
   sliceOrthogonal: true,
   async build({ engine, ctx, dataSource, builtAt, searchType }) {
-    // Probe directly for the urls/index.parquet — `urlsParquetUri` returns
-    // a URI even when the file's missing on backends with a synchronous
-    // `uri()`. We route reads via `fileSets.keys` so DuckDB pre-fetches
-    // bytes; that path is what works under the duckdb-worker bypass.
-    const urlsKey = sitemapUrlsIndexKey(ctx)
-    const urlsExist = await dataSource.head?.(urlsKey)
-    if (!urlsExist)
+    // The URLs index is partitioned one parquet per feedpath; list every
+    // per-feedpath file and read them as a set. `read_parquet` over the key
+    // list unions them, and routing via `fileSets.keys` lets DuckDB pre-fetch
+    // bytes — the path that works under the duckdb-worker bypass.
+    const urlsKeys = await dataSource.list(sitemapUrlsIndexPrefix(ctx))
+    if (urlsKeys.length === 0)
       return { totalSitemapUrls: 0, days: [] }
     const cutoff = utcDateMinusDays(builtAt, 90)
     // Numerator: per-day distinct sitemap URLs with clicks>0. PAGES goes
@@ -982,7 +981,7 @@ export const indexPercentRollup: RollupDef = {
       table: 'pages',
       fileSets: {
         PAGES: { table: 'pages', partitions: pagesPartitions },
-        URLS: { table: 'pages', keys: [urlsKey] },
+        URLS: { table: 'pages', keys: urlsKeys },
       },
       ...(searchType !== undefined ? { searchType } : {}),
       sql: `
@@ -1001,7 +1000,7 @@ export const indexPercentRollup: RollupDef = {
     const denom = await engine.runSQL({
       ctx,
       table: 'pages',
-      fileSets: { URLS: { table: 'pages', keys: [urlsKey] } },
+      fileSets: { URLS: { table: 'pages', keys: urlsKeys } },
       sql: `
         SELECT COUNT(*)::BIGINT AS total
         FROM read_parquet({{URLS}}, union_by_name = true)

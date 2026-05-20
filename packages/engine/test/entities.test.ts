@@ -555,7 +555,8 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
     await sitemaps.compactUrls(ctx)
 
     expect(Array.from(store.keys()).filter(k => k.includes('/urls/deltas/'))).toHaveLength(0)
-    expect(store.has('u_u1/s1/entities/sitemaps/urls/index.parquet')).toBe(true)
+    // Compacted state is partitioned one parquet per feedpath under by-feed/.
+    expect(Array.from(store.keys()).some(k => /\/urls\/by-feed\/[0-9a-f]+\/index\.parquet$/.test(k))).toBe(true)
 
     const live: string[] = []
     for await (const r of sitemaps.loadUrls(ctx, feed)) live.push(r.loc)
@@ -583,14 +584,24 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
     expect(live.sort()).toEqual(['https://e.com/b', 'https://e.com/c'])
   })
 
-  it('urlsParquetUri returns ds.uri output when provided', () => {
-    const { ds } = makeFakeDataSource()
-    const sitemaps = createSitemapStore({ dataSource: ds })
-    expect(sitemaps.urlsParquetUri(ctx)).toBeUndefined()
+  it('compactUrls partitions the index by feedpath — one file per sitemap', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const sitemaps = createSitemapStore({ dataSource: ds, now: () => Date.parse('2026-05-09T00:00:00Z') })
 
-    const dsWithUri: DataSource = { ...ds, uri: (k: string) => `r2://bucket/${k}` }
-    const sitemaps2 = createSitemapStore({ dataSource: dsWithUri })
-    expect(sitemaps2.urlsParquetUri(ctx)).toBe('r2://bucket/u_u1/s1/entities/sitemaps/urls/index.parquet')
+    await sitemaps.snapshotUrls(ctx, 'https://e.com/sitemap-a.xml', urls('https://e.com/a1', 'https://e.com/a2'))
+    await sitemaps.snapshotUrls(ctx, 'https://e.com/sitemap-b.xml', urls('https://e.com/b1'))
+    await sitemaps.compactUrls(ctx)
+
+    // Two distinct feedpaths → two separate index files, no shared blob.
+    const indexKeys = Array.from(store.keys()).filter(k => /\/urls\/by-feed\/[0-9a-f]+\/index\.parquet$/.test(k))
+    expect(indexKeys).toHaveLength(2)
+
+    const a: string[] = []
+    for await (const r of sitemaps.loadUrls(ctx, 'https://e.com/sitemap-a.xml')) a.push(r.loc)
+    expect(a.sort()).toEqual(['https://e.com/a1', 'https://e.com/a2'])
+    const b: string[] = []
+    for await (const r of sitemaps.loadUrls(ctx, 'https://e.com/sitemap-b.xml')) b.push(r.loc)
+    expect(b).toEqual(['https://e.com/b1'])
   })
 })
 

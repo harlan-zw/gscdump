@@ -232,13 +232,13 @@ describe('decodeParquetToRows — pushed-down filter', () => {
 
   it('returns only rows matching the filter', async () => {
     const bytes = encodeRowsToParquetFlex(rows, { columns: [...columns], sortKey: ['feedpath_hash'] })
-    const got = await decodeParquetToRows(bytes, { filter: { feedpath_hash: 'aaa' } })
+    const got = await decodeParquetToRows(bytes, { filter: { feedpath_hash: { $eq: 'aaa' } } })
     expect(got.map(r => r.loc).sort()).toEqual(['https://x/1', 'https://x/3'])
   })
 
   it('returns an empty array when nothing matches', async () => {
     const bytes = encodeRowsToParquetFlex(rows, { columns: [...columns], sortKey: ['feedpath_hash'] })
-    expect(await decodeParquetToRows(bytes, { filter: { feedpath_hash: 'zzz' } })).toEqual([])
+    expect(await decodeParquetToRows(bytes, { filter: { feedpath_hash: { $eq: 'zzz' } } })).toEqual([])
   })
 
   it('returns every row when no filter is given (back-compat)', async () => {
