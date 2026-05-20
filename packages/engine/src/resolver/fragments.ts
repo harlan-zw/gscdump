@@ -7,7 +7,9 @@ import { escapeLike } from '../sql-fragments'
 
 import {
   inferLogicalDataset,
+  isDatasetResolvable,
   LOGICAL_DATASETS,
+  UnresolvableDatasetError,
 } from './datasets'
 
 export interface SqlFragmentsConfig<TableKey extends string> {
@@ -95,6 +97,12 @@ export function createSqlFragments<TableKey extends string>(
   }
 
   function inferTable(dimensions: Dimension[], filterDims: Dimension[] = []): TableKey {
+    // A cross-dimension query (grouped + filtered dimensions spanning two
+    // stored datasets) has no table that carries every referenced column.
+    // Fail with a typed error here rather than letting `colRef` throw a raw
+    // "unknown column" Error deep in SQL compilation.
+    if (!isDatasetResolvable(dimensions, filterDims))
+      throw new UnresolvableDatasetError(dimensions, filterDims)
     const dataset = inferLogicalDataset(dimensions, filterDims)
     return tableKeyForDataset(dataset)
   }

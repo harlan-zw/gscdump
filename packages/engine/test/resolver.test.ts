@@ -172,6 +172,31 @@ describe('resolveToSQLOptimized SUM casts', () => {
   })
 })
 
+describe('cross-dimension queries (unresolvable datasets)', () => {
+  // A `device` breakdown filtered by `query` has no stored table carrying both
+  // columns. The resolver must fail with a typed UnresolvableDatasetError, not
+  // a raw "unknown column" Error deep in SQL compilation.
+  it('throws UnresolvableDatasetError instead of an opaque column error', () => {
+    const adapter = createParquetResolverAdapter()
+    const crossDim = state({
+      dimensions: ['device'],
+      filter: {
+        _filters: [
+          { dimension: 'date', operator: 'between', expression: '2026-03-01', expression2: '2026-03-31' },
+          { dimension: 'query', operator: 'equals', expression: 'sitemap validator' },
+        ],
+      } as any,
+    })
+    expect(() => resolveToSQLOptimized(crossDim, { adapter })).toThrowError(/UnresolvableDatasetError|cross-dimension|separate per-dimension/i)
+  })
+
+  it('still resolves a single-family query (device breakdown, no cross filter)', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolveToSQLOptimized(state({ dimensions: ['device'] }), { adapter })
+    expect(r.sql).toMatch(/GROUP BY "devices"\."device"/)
+  })
+})
+
 describe('prefilter (row-level WHERE on raw metrics)', () => {
   it('omits the predicate when no prefilter is set', () => {
     const adapter = createParquetResolverAdapter()

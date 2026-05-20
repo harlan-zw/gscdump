@@ -26,7 +26,7 @@ import type {
 } from '../storage'
 import { parquetReadObjects } from 'hyparquet'
 import { parquetWriteBuffer } from 'hyparquet-writer'
-import { SCHEMAS, TABLE_METADATA } from '../schema'
+import { dedupeByNaturalKey, SCHEMAS, TABLE_METADATA } from '../schema'
 
 // 25k rows/group keeps a typical day file in 2-10 row groups so DuckDB's
 // stats-based row-group pruning has something to skip. The hyparquet-writer
@@ -223,9 +223,13 @@ export function createHyparquetCodec(options: HyparquetCodecOptions = {}): Parqu
         const rows = await decodeParquetToRows(input)
         allRows.push(...rows)
       }
-      const bytes = encodeRowsToParquet(ctx.table, allRows)
+      // Recurrence guard: correct compaction inputs own disjoint natural keys,
+      // but a duplicated-row regression must not survive a merge — collapse
+      // any natural-key collision before encoding. See dedupeByNaturalKey.
+      const rows = dedupeByNaturalKey(ctx.table, allRows)
+      const bytes = encodeRowsToParquet(ctx.table, rows)
       await dataSource.write(outputKey, bytes)
-      return { bytes: bytes.byteLength, rowCount: allRows.length }
+      return { bytes: bytes.byteLength, rowCount: rows.length }
     },
   }
 }

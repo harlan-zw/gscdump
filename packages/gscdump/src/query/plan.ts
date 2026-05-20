@@ -112,7 +112,7 @@ function collectInternalFilters(filter: FilterInput | undefined): InternalFilter
   return [...flat, ...nested]
 }
 
-function inferDataset(
+export function inferDataset(
   dimensions: readonly Dimension[],
   filterDims: readonly Dimension[] = [],
 ): LogicalDataset {
@@ -134,6 +134,57 @@ function inferDataset(
   // Date-only / no-dimension queries: `devices` sums to GSC's true site total;
   // `keywords` undercounts (anonymised long-tail queries dropped).
   return 'devices'
+}
+
+// Each stored dataset carries exactly one dimension family (`page_keywords` is
+// the sole composite). A query is resolvable from stored data only when every
+// grouped + filtered dimension fits inside ONE family — GSC stores no other
+// cross-dimension aggregate, so e.g. a `device` breakdown filtered by `query`
+// has no stored home. `date`/`hour` are time axes present on every table and
+// never constrain dataset choice.
+const RESOLVABLE_DIMENSION_FAMILIES: ReadonlyArray<ReadonlySet<Dimension>> = [
+  new Set<Dimension>(['page', 'query', 'queryCanonical']),
+  new Set<Dimension>(['country']),
+  new Set<Dimension>(['device']),
+  new Set<Dimension>(['searchAppearance']),
+]
+const TIME_AXIS_DIMENSIONS = new Set<Dimension>(['date', 'hour'])
+
+/**
+ * True when every grouped + filtered dimension fits inside one stored dataset,
+ * i.e. the query is answerable from stored Parquet/D1 tables without a live
+ * GSC call. `inferDataset` always returns *some* dataset; this predicate is
+ * how callers tell a genuine match from one that will fail at column-resolve
+ * time.
+ */
+export function isDatasetResolvable(
+  dimensions: readonly Dimension[],
+  filterDims: readonly Dimension[] = [],
+): boolean {
+  const needed = new Set<Dimension>(
+    [...dimensions, ...filterDims].filter(d => !TIME_AXIS_DIMENSIONS.has(d)),
+  )
+  if (needed.size === 0)
+    return true
+  return RESOLVABLE_DIMENSION_FAMILIES.some(family => [...needed].every(d => family.has(d)))
+}
+
+/**
+ * Thrown when a query's grouped + filtered dimensions span more than one
+ * stored dataset. Replaces the resolver's raw "unknown column" error so hosts
+ * can map it to a 4xx instead of leaking an opaque 500.
+ */
+export class UnresolvableDatasetError extends Error {
+  constructor(dimensions: readonly Dimension[], filterDims: readonly Dimension[] = []) {
+    const grouped = dimensions.filter(d => !TIME_AXIS_DIMENSIONS.has(d))
+    const filtered = filterDims.filter(d => !TIME_AXIS_DIMENSIONS.has(d))
+    super(
+      `Cannot resolve a [${grouped.join(', ')}] breakdown filtered by [${filtered.join(', ')}] `
+      + `from stored data: these dimensions live in separate per-dimension tables. `
+      + `Only the live GSC API computes cross-dimension aggregates.`,
+    )
+    this.name = 'UnresolvableDatasetError'
+  }
 }
 
 function requireCapability(
@@ -248,6 +299,12 @@ export function buildLogicalPlan(
   const dimensionFilterTree = buildDimensionFilterTree(normalizedFilter, capabilities)
 
   const filterDims = dimensionFilters.map(filter => filter.dimension)
+  // A cross-dimension query (grouped + filtered dimensions spanning two stored
+  // datasets) has no table carrying every referenced column. Fail here with a
+  // typed error rather than letting the SQL resolver throw a raw "unknown
+  // column" Error during compilation.
+  if (!isDatasetResolvable(state.dimensions, filterDims))
+    throw new UnresolvableDatasetError(state.dimensions, filterDims)
   const dataset = inferDataset(state.dimensions, filterDims)
 
   return {

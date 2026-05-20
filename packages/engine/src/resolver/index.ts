@@ -26,8 +26,10 @@ export {
   DIMENSION_SURFACES,
   dimensionColumn,
   inferLogicalDataset,
+  isDatasetResolvable,
   LOGICAL_DATASETS,
   supportsDimensionOnSurface,
+  UnresolvableDatasetError,
 } from './datasets'
 export type {
   DimensionBinding,

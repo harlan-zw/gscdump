@@ -164,6 +164,34 @@ describe('duckDB (Node blocking) smoke', () => {
     expect(urls).toEqual(['/a', '/b', '/c'])
   })
 
+  // Regression: the 2026-04 monthly-compaction corruption merged a complete
+  // month back onto its own daily inputs, doubling every row. compactRows
+  // must collapse natural-key collisions, not sum them.
+  it('compactRows collapses duplicate natural keys instead of doubling them', async () => {
+    const handle = createNodeDuckDBHandle()
+    const codec = createDuckDBCodec({ getDuckDB: async () => handle })
+    const dataSource = createInMemoryDataSource()
+
+    const rows = [
+      { url: '/a', date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 50 },
+      { url: '/b', date: '2026-04-11', clicks: 2, impressions: 20, sum_position: 100 },
+    ]
+    await codec.writeRows({ table: 'pages' }, rows, 'a.parquet', dataSource)
+    await codec.writeRows({ table: 'pages' }, rows, 'b.parquet', dataSource)
+
+    const merged = await codec.compactRows(
+      { table: 'pages' },
+      ['a.parquet', 'b.parquet'],
+      'merged.parquet',
+      dataSource,
+    )
+    expect(merged.rowCount).toBe(2)
+
+    const decoded = await codec.readRows({ table: 'pages' }, 'merged.parquet', dataSource)
+    expect(decoded.map(r => r.url).sort()).toEqual(['/a', '/b'])
+    expect(decoded.reduce((n, r) => n + Number(r.impressions), 0)).toBe(30)
+  })
+
   it('compactRows uses the pure-DuckDB URI path when all keys are URI-resolvable (no dataSource.read calls)', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'gscdump-duckdb-uri-'))
     try {

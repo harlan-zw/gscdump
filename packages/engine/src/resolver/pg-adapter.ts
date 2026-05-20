@@ -31,6 +31,7 @@ const PG_BASE_CONFIG = {
     countries: 'countries',
     devices: 'devices',
     search_appearance: 'search_appearance',
+    hourly_pages: 'hourly_pages',
   },
   metricCast: 'DOUBLE',
   regexPredicate: (expr, pattern, negate) => negate

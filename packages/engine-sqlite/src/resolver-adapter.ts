@@ -30,6 +30,7 @@ export function createSqliteResolverAdapter(
       countries: 'gsc_countries',
       devices: 'gsc_devices',
       search_appearance: 'gsc_search_appearance',
+      hourly_pages: 'gsc_hourly_pages',
     },
     metricCast: 'REAL',
     regexPredicate: (expr, pattern, negate) => negate

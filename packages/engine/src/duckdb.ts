@@ -120,7 +120,7 @@ export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
           .join(', ')
         try {
           await db.query(
-            `COPY (SELECT * FROM read_parquet([${fileList}], union_by_name=true)) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`,
+            `COPY (${dedupedMergeSql(ctx.table, fileList)}) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`,
           )
           const bytes = await db.copyFileToBuffer(outName)
           const countRows = await db.query(
@@ -152,7 +152,7 @@ export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
         // memory. Matches the read path. `union_by_name` lets us merge files
         // with column-additive schema drift without a binder error.
         await db.query(
-          `COPY (SELECT * FROM read_parquet([${fileList}], union_by_name = true)) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`,
+          `COPY (${dedupedMergeSql(ctx.table, fileList)}) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`,
         )
         registered.push(outName)
         const bytes = await db.copyFileToBuffer(outName)
@@ -168,6 +168,25 @@ export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
       }
     },
   }
+}
+
+/**
+ * SELECT body that merges parquet inputs and collapses any natural-key
+ * collision to a single row.
+ *
+ * Correct tiered-compaction inputs own disjoint natural keys (each daily/
+ * weekly/monthly bucket covers distinct dates), so the `QUALIFY` is a no-op
+ * on healthy data. It exists as a recurrence guard: the 2026-04 monthly
+ * compaction corruption merged a complete month back onto its own daily
+ * inputs, doubling every row. `union_by_name` tolerates additive schema drift.
+ */
+function dedupedMergeSql(table: TableName, fileListSql: string): string {
+  const base = `SELECT * FROM read_parquet([${fileListSql}], union_by_name = true)`
+  const key = SCHEMAS[table].sortKey
+  if (key.length === 0)
+    return base
+  const partition = key.map(c => `"${c.replace(/"/g, '""')}"`).join(', ')
+  return `${base} QUALIFY row_number() OVER (PARTITION BY ${partition}) = 1`
 }
 
 /**

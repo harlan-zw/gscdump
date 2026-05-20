@@ -20,7 +20,7 @@ import { buildLogicalPlan } from 'gscdump/query/plan'
 import { compactTieredImpl, dedupeOverlappingTiers } from './compaction'
 import { gcOrphansImpl } from './gc'
 import { compileLogicalQueryPlan } from './parquet-plan'
-import { currentSchemaVersion, SCHEMAS } from './schema'
+import { currentSchemaVersion, dedupeByNaturalKey, SCHEMAS } from './schema'
 import { dayPartition, hourPartition, inferSearchType, objectKey, tenantPrefix } from './storage'
 
 const URL_PURGE_TABLES: readonly TableName[] = ['pages', 'page_keywords']
@@ -97,7 +97,14 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
           searchType: inferSearchType({ searchType }),
         })
 
-        const normalizedRows = rows.map(r => normalizeRow(ctx.table, r))
+        // Dedupe by natural key before writing: a day file holds one row per
+        // (date, dimension) tuple. Source rows should already be unique, but
+        // collapsing here keeps a duplicated-source regression from being
+        // persisted and then doubled again by downstream compaction.
+        const normalizedRows = dedupeByNaturalKey(
+          ctx.table,
+          rows.map(r => normalizeRow(ctx.table, r)),
+        )
         const key = objectKey(ctx, ctx.table, partition, now, searchType)
         const { bytes: writtenBytes, rowCount } = await codec.writeRows(
           { table: ctx.table },

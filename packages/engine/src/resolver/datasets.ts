@@ -64,33 +64,25 @@ export const LOGICAL_DATASETS: Record<LogicalDataset, LogicalDatasetDefinition> 
       date: { column: 'date', surfaces: ['api', 'stored'] },
     },
   },
+  hourly_pages: {
+    dimensions: {
+      page: { column: 'url', surfaces: ['api', 'stored'] },
+      date: { column: 'date', surfaces: ['api', 'stored'] },
+      hour: { column: 'hour', surfaces: ['api', 'stored'] },
+    },
+  },
 }
 
-export function inferLogicalDataset(
-  dimensions: readonly Dimension[],
-  filterDims: readonly Dimension[] = [],
-): LogicalDataset {
-  const allDims = new Set<Dimension>([...dimensions, ...filterDims])
-  const has = (d: Dimension): boolean => allDims.has(d)
-
-  if (has('searchAppearance'))
-    return 'search_appearance'
-  if (has('page') && (has('query') || has('queryCanonical')))
-    return 'page_keywords'
-  if (has('query') || has('queryCanonical'))
-    return 'keywords'
-  if (has('page'))
-    return 'pages'
-  if (has('country'))
-    return 'countries'
-  if (has('device'))
-    return 'devices'
-  // Date-only / no-dimension queries (e.g. overview timeseries totals): route
-  // to `devices`, not `keywords`. Every impression has exactly one device, so
-  // SUM over `devices` equals GSC's true site total. `keywords` drops GSC's
-  // anonymised long-tail queries and systematically undercounts totals.
-  return 'devices'
-}
+// Single source of truth lives in the planner (`gscdump/query/plan`). The
+// engine resolver previously kept a duplicate of this routing logic; the
+// re-export keeps one definition so the two can never drift.
+// `inferLogicalDataset` is the engine-facing name for the planner's
+// `inferDataset`.
+export {
+  inferDataset as inferLogicalDataset,
+  isDatasetResolvable,
+  UnresolvableDatasetError,
+} from 'gscdump/query/plan'
 
 export function dimensionColumn(dim: Dimension, dataset: LogicalDataset): string {
   return LOGICAL_DATASETS[dataset].dimensions[dim]?.column ?? dim

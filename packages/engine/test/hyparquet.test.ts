@@ -112,6 +112,29 @@ describe('hyparquet codec', () => {
     expect(merged.map(r => r.url).sort()).toEqual(['/x', '/y'])
   })
 
+  // Regression: the 2026-04 monthly-compaction corruption merged a complete
+  // month back onto its own daily inputs, so every (date, dimension) row
+  // landed twice. compactRows must collapse natural-key collisions instead of
+  // summing them — otherwise impressions double on every overlap.
+  it('compactRows collapses duplicate natural keys instead of doubling them', async () => {
+    const codec = createHyparquetCodec()
+    const ds = memDataSource()
+    const rows = [
+      { url: '/x', date: '2025-01-01', clicks: 1, impressions: 10, sum_position: 5 },
+      { url: '/y', date: '2025-01-02', clicks: 2, impressions: 20, sum_position: 10 },
+    ]
+    // Two input files carrying byte-identical rows — the corruption shape.
+    await codec.writeRows({ table: 'pages' }, rows, 'a.parquet', ds)
+    await codec.writeRows({ table: 'pages' }, rows, 'b.parquet', ds)
+
+    const res = await codec.compactRows({ table: 'pages' }, ['a.parquet', 'b.parquet'], 'out.parquet', ds)
+    expect(res.rowCount).toBe(2)
+    const merged = await codec.readRows({ table: 'pages' }, 'out.parquet', ds)
+    expect(merged).toHaveLength(2)
+    expect(merged.map(r => r.url).sort()).toEqual(['/x', '/y'])
+    expect(merged.reduce((n, r) => n + Number(r.impressions), 0)).toBe(30)
+  })
+
   it('compact with zero inputs still produces a schema-bearing output', async () => {
     const codec = createHyparquetCodec()
     const ds = memDataSource()

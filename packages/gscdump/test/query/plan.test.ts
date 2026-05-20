@@ -1,7 +1,7 @@
 import type { BuilderState } from '../../src/query/types'
 
 import { describe, expect, it } from 'vitest'
-import { buildLogicalComparisonPlan, buildLogicalPlan } from '../../src/query/plan'
+import { buildLogicalComparisonPlan, buildLogicalPlan, inferDataset, isDatasetResolvable, UnresolvableDatasetError } from '../../src/query/plan'
 
 function state(partial: Partial<BuilderState>): BuilderState {
   return {
@@ -61,6 +61,44 @@ describe('buildLogicalPlan', () => {
     }), { regex: true })
 
     expect(plan.dimensionFilters[0]?.operator).toBe('includingRegex')
+  })
+})
+
+describe('isDatasetResolvable', () => {
+  it('accepts a single-dimension breakdown and its own filter', () => {
+    expect(isDatasetResolvable(['device'])).toBe(true)
+    expect(isDatasetResolvable(['query'], ['query'])).toBe(true)
+    expect(isDatasetResolvable(['page', 'query'])).toBe(true)
+  })
+
+  it('ignores the date and hour time axes', () => {
+    expect(isDatasetResolvable(['date', 'device'])).toBe(true)
+    expect(isDatasetResolvable(['device'], ['date'])).toBe(true)
+    expect(isDatasetResolvable([], ['date'])).toBe(true)
+  })
+
+  it('rejects dimensions that span two stored datasets', () => {
+    expect(isDatasetResolvable(['device'], ['query'])).toBe(false)
+    expect(isDatasetResolvable(['country'], ['device'])).toBe(false)
+    expect(isDatasetResolvable(['page'], ['country'])).toBe(false)
+    expect(isDatasetResolvable(['searchAppearance'], ['device'])).toBe(false)
+  })
+
+  it('agrees with inferDataset: routed dataset always covers a resolvable query', () => {
+    expect(inferDataset(['device'], ['query'])).toBe('keywords')
+    // inferDataset still routes (legacy precedence); the predicate is what
+    // tells callers the routed table cannot actually answer it.
+    expect(isDatasetResolvable(['device'], ['query'])).toBe(false)
+  })
+})
+
+describe('unresolvableDatasetError', () => {
+  it('names the offending grouped and filtered dimensions', () => {
+    const err = new UnresolvableDatasetError(['date', 'device'], ['date', 'query'])
+    expect(err).toBeInstanceOf(Error)
+    expect(err.name).toBe('UnresolvableDatasetError')
+    expect(err.message).toContain('[device]')
+    expect(err.message).toContain('[query]')
   })
 })
 
