@@ -13,6 +13,8 @@ describe('exports-snapshot', async () => {
       .filter(entry => entry.isDirectory())
       .map(async (entry) => {
         const path = join(process.cwd(), 'packages', entry.name)
+        if (!existsSync(join(path, 'package.json')))
+          return null
         const pkg = JSON.parse(await readFile(join(path, 'package.json'), 'utf8'))
         return {
           name: pkg.name as string,
@@ -22,7 +24,7 @@ describe('exports-snapshot', async () => {
       }),
   )
 
-  for (const pkg of packages) {
+  for (const pkg of packages.filter(pkg => pkg !== null)) {
     // skip private packages and CLI (bin-only, calls process.exit on import)
     if (pkg.private || pkg.name === '@gscdump/cli')
       continue
