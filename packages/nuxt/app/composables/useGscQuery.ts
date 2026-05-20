@@ -132,8 +132,21 @@ async function defaultServerFallback<T>(siteId: string, params: AnalysisParams):
   return await useGscAnalyticsClient().analyze<T>(siteId, params)
 }
 
+const DEFAULT_SEARCH_TYPE: NonNullable<AnalysisParams['searchType']> = 'web'
+
+function withDefaultSearchType(params: AnalysisParams): AnalysisParams {
+  return { ...params, searchType: params.searchType ?? DEFAULT_SEARCH_TYPE }
+}
+
 export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): UseGscQueryReturn<T> {
-  const analyzer = useGscAnalyzer(opts.site)
+  const querySearchType = computed(() => toValue(opts.params).searchType ?? DEFAULT_SEARCH_TYPE)
+  const queryRange = computed(() => {
+    const params = toValue(opts.params)
+    return typeof params.startDate === 'string' && typeof params.endDate === 'string'
+      ? { start: params.startDate, end: params.endDate }
+      : null
+  })
+  const analyzer = useGscAnalyzer(opts.site, querySearchType, queryRange)
   const dispatcher = useGscQueryDispatcher()
 
   const data = shallowRef<T | null>(null)
@@ -164,7 +177,7 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
   async function runServer(siteId: string): Promise<void> {
     const t0 = performance.now()
     const fn = opts.serverFallback ?? defaultServerFallback
-    const out = await fn(siteId, toValue(opts.params)) as T
+    const out = await fn(siteId, withDefaultSearchType(toValue(opts.params))) as T
     data.value = out
     engine.value = 'server'
     elapsedMs.value = performance.now() - t0
@@ -172,7 +185,7 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
   }
 
   async function runBrowser(signal: AbortSignal): Promise<void> {
-    const out = await analyzer.analyze(toValue(opts.params), { signal })
+    const out = await analyzer.analyze(withDefaultSearchType(toValue(opts.params)), { signal })
     signal.throwIfAborted()
     const shaped = opts.reshape ? opts.reshape(out) : (out as unknown as T)
     data.value = shaped

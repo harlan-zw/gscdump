@@ -1,4 +1,4 @@
-import type { AsyncDuckDB, AsyncDuckDBConnection, DuckDBBundles } from '@duckdb/duckdb-wasm'
+import type { AsyncDuckDB, AsyncDuckDBConnection, DuckDBBundles, DuckDBConfig } from '@duckdb/duckdb-wasm'
 import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { AnalyzerRegistry } from '@gscdump/engine/analyzer'
 
@@ -32,6 +32,12 @@ export interface BootDuckDBWasmOptions {
    * worker assets themselves (e.g. Cloudflare Workers' 25 MB per-asset cap).
    */
   bundles?: DuckDBBundles
+  /**
+   * Extra DuckDB open config. The browser runtime always forces HTTP files
+   * into range-only mode (reliable HEAD probes, no full HTTP fallback) so a
+   * server that cannot answer bounded reads fails closed.
+   */
+  config?: DuckDBConfig
 }
 
 export interface BrowserParquetFile {
@@ -62,7 +68,24 @@ export interface AttachParquetUrlTablesOptions {
   tables: BrowserParquetUrlTable[]
   fetch?: typeof fetch
   schema?: string
+  /**
+   * Request init used only for runtime-owned HEAD / one-byte Range preflights.
+   * DuckDB-WASM's internal HTTP reader cannot receive custom fetch headers;
+   * URL reads must therefore be authorized by the URL itself.
+   */
   fetchInit?: RequestInit
+  /**
+   * Caps simultaneous URL preflights. Browser source endpoints should already
+   * return small, coverage-planned URL sets; this is the runtime's local
+   * guard against accidental unbounded attachment.
+   */
+  fetchConcurrency?: number
+  /** Reject before preflight when the URL set exceeds this many parquet files. */
+  maxFiles?: number
+  /** Reject before registration when hinted or authoritative bytes exceed budget. */
+  maxBytes?: number
+  /** Abort signal passed through to URL preflights and registration. */
+  signal?: AbortSignal
   /**
    * Manifest version the caller associates with this set of URLs. Returned
    * on the resulting handle so callers can compare against a fresh manifest
@@ -72,9 +95,11 @@ export interface AttachParquetUrlTablesOptions {
   version?: number | string
   /**
    * Called once per parquet file after it's been fetched and registered with
-   * DuckDB. Fires in non-deterministic order (Promise.all under the hood).
-   * Used by UI progress indicators to tick a per-site counter; a no-op
-   * default keeps the hot path free.
+   * DuckDB. For URL-backed HTTP files this means "preflighted and registered"
+   * rather than fully downloaded; DuckDB then performs range reads during the
+   * query. Fires in bounded-concurrency completion order, which is still not
+   * guaranteed to match manifest URL order. Used by UI progress indicators to
+   * tick a per-site counter; a no-op default keeps the hot path free.
    */
   onFileAttached?: (info: { table: string, index: number, total: number }) => void
 }
@@ -116,8 +141,21 @@ export interface BrowserAnalysisRuntime {
   close: () => Promise<void>
 }
 
+const DEFAULT_ATTACH_FETCH_CONCURRENCY = 2
+const DEFAULT_ATTACH_MAX_FILES = 32
+const DEFAULT_ATTACH_MAX_BYTES = 16 * 1024 * 1024
+let nextAttachId = 0
+
+export class BrowserAttachBudgetExceededError extends Error {
+  override name = 'BrowserAttachBudgetExceededError'
+}
+
 function fileName(table: string, index: number, provided?: string): string {
   return provided ?? `${table}_${index}.parquet`
+}
+
+function attachFileName(attachId: number, table: string, index: number): string {
+  return `__gscdump_attach_${attachId}_${fileName(table, index)}`
 }
 
 function readParquetViewSql(schema: string, table: string, files: string[]): string {
@@ -132,6 +170,183 @@ function readParquetViewSql(schema: string, table: string, files: string[]): str
   return `CREATE OR REPLACE VIEW ${schema}.${table} AS SELECT * REPLACE (CAST(date AS DATE) AS date) FROM read_parquet([${escaped}], union_by_name = true)`
 }
 
+function positiveInteger(value: number | undefined, fallback: number, label: string): number {
+  const raw = value ?? fallback
+  if (!Number.isFinite(raw) || raw < 1)
+    throw new Error(`${label} must be a positive integer`)
+  return Math.floor(raw)
+}
+
+async function runWithConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  let next = 0
+  let failed = false
+  async function worker(): Promise<void> {
+    while (!failed && next < items.length) {
+      const index = next++
+      try {
+        await fn(items[index]!, index)
+      }
+      catch (err) {
+        failed = true
+        throw err
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker))
+}
+
+function sizeHintFromUrl(url: string): number | null {
+  try {
+    const base = typeof globalThis.location?.href === 'string'
+      ? globalThis.location.href
+      : 'http://localhost'
+    const raw = new URL(url, base).searchParams.get('s')?.split('.')[0]
+    if (!raw)
+      return null
+    const size = Number(raw)
+    return Number.isFinite(size) && size >= 0 ? size : null
+  }
+  catch {
+    return null
+  }
+}
+
+function mergeAbortSignals(primary: AbortSignal | undefined, secondary: AbortSignal | undefined): AbortSignal | undefined {
+  if (!primary)
+    return secondary
+  if (!secondary)
+    return primary
+  if (primary.aborted)
+    return primary
+  if (secondary.aborted)
+    return secondary
+  const controller = new AbortController()
+  const abort = (signal: AbortSignal): void => {
+    controller.abort(signal.reason)
+  }
+  primary.addEventListener('abort', () => abort(primary), { once: true })
+  secondary.addEventListener('abort', () => abort(secondary), { once: true })
+  return controller.signal
+}
+
+function fetchInitFor(
+  fetchInit: RequestInit | undefined,
+  method: 'HEAD' | 'GET',
+  signal: AbortSignal | undefined,
+  extraHeaders?: Record<string, string>,
+): RequestInit {
+  const {
+    body: _body,
+    method: _method,
+    signal: initSignal,
+    headers: initHeaders,
+    ...rest
+  } = fetchInit ?? {}
+  const headers = new Headers(initHeaders)
+  for (const [key, value] of Object.entries(extraHeaders ?? {}))
+    headers.set(key, value)
+  return {
+    ...rest,
+    method,
+    headers,
+    signal: mergeAbortSignals(signal, initSignal ?? undefined),
+  }
+}
+
+function isAbortError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { name?: string }).name === 'AbortError'
+}
+
+function parseContentLength(headers: Headers): number | null {
+  const raw = headers.get('content-length')
+  if (!raw)
+    return null
+  const size = Number(raw)
+  return Number.isFinite(size) && size >= 0 ? size : null
+}
+
+function parseContentRangeSize(headers: Headers): number | null {
+  const raw = headers.get('content-range')
+  if (!raw)
+    return null
+  const match = /^bytes\s+\d+-\d+\/(\d+)$/i.exec(raw)
+  if (!match)
+    return null
+  const size = Number(match[1])
+  return Number.isFinite(size) && size >= 0 ? size : null
+}
+
+function supportsRangeReads(headers: Headers): boolean {
+  return headers.get('accept-ranges')?.toLowerCase().split(',').map(v => v.trim()).includes('bytes') === true
+}
+
+async function cancelBody(response: Response): Promise<void> {
+  await response.body?.cancel().catch(() => undefined)
+}
+
+async function preflightHttpUrl(
+  url: string,
+  fetchImpl: typeof fetch,
+  fetchInit: RequestInit | undefined,
+  signal: AbortSignal | undefined,
+): Promise<number> {
+  const head = await fetchImpl(url, fetchInitFor(fetchInit, 'HEAD', signal))
+  if (head.ok) {
+    const size = parseContentLength(head.headers)
+    if (size === null)
+      throw new Error(`HEAD ${url} missing Content-Length`)
+    if (!supportsRangeReads(head.headers))
+      throw new Error(`HEAD ${url} missing Accept-Ranges: bytes`)
+    return size
+  }
+
+  await cancelBody(head)
+  if (![403, 405, 501].includes(head.status))
+    throw new Error(`HEAD ${url} failed: ${head.status}`)
+
+  const probe = await fetchImpl(url, fetchInitFor(fetchInit, 'GET', signal, { Range: 'bytes=0-0' }))
+  try {
+    if (probe.status !== 206)
+      throw new Error(`range probe ${url} failed: ${probe.status}`)
+    const size = parseContentRangeSize(probe.headers)
+    if (size === null)
+      throw new Error(`range probe ${url} missing Content-Range size`)
+    return size
+  }
+  finally {
+    await cancelBody(probe)
+  }
+}
+
+function rangeOnlyConfig(config: DuckDBConfig | undefined): DuckDBConfig {
+  return {
+    ...(config ?? {}),
+    filesystem: {
+      ...(config?.filesystem ?? {}),
+      reliableHeadRequests: true,
+      allowFullHTTPReads: false,
+      forceFullHTTPReads: false,
+    },
+  }
+}
+
+async function dropAttachedResources(
+  db: AsyncDuckDB,
+  conn: AsyncDuckDBConnection,
+  schema: string,
+  tables: readonly string[],
+  files: readonly string[],
+): Promise<void> {
+  for (const table of tables)
+    await conn.query(`DROP VIEW IF EXISTS ${schema}.${table}`)
+  if (files.length > 0)
+    await db.dropFiles([...files])
+}
+
 export async function bootDuckDBWasm(
   options: BootDuckDBWasmOptions = {},
 ): Promise<DuckDBWasmBootResult> {
@@ -144,6 +359,7 @@ export async function bootDuckDBWasm(
   const worker = new Worker(workerUrl)
   const db = new AsyncDuckDB((options.logger as any) ?? new ConsoleLogger(), worker)
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
+  await db.open(rangeOnlyConfig(options.config))
   URL.revokeObjectURL(workerUrl)
   const conn = await db.connect()
   return { db, conn }
@@ -175,9 +391,18 @@ export async function attachParquetUrlTables(
     fetch: fetchImpl = globalThis.fetch.bind(globalThis),
     schema = 'main',
     fetchInit,
+    fetchConcurrency,
+    maxFiles,
+    maxBytes,
+    signal,
     version,
     onFileAttached,
   } = options
+
+  const concurrency = positiveInteger(fetchConcurrency, DEFAULT_ATTACH_FETCH_CONCURRENCY, 'fetchConcurrency')
+  const fileBudget = positiveInteger(maxFiles, DEFAULT_ATTACH_MAX_FILES, 'maxFiles')
+  const byteBudget = positiveInteger(maxBytes, DEFAULT_ATTACH_MAX_BYTES, 'maxBytes')
+  const attachId = nextAttachId++
 
   const flat: Array<{ table: string, url: string, index: number }> = []
   const counts: Record<string, number> = {}
@@ -188,36 +413,90 @@ export async function attachParquetUrlTables(
     for (let i = 0; i < urls.length; i++)
       flat.push({ table, url: urls[i]!, index: i })
   }
+  if (flat.length > fileBudget) {
+    throw new BrowserAttachBudgetExceededError(
+      `browser parquet attach requires ${flat.length} files, above maxFiles=${fileBudget}`,
+    )
+  }
+  const hintedBytes = flat.reduce((acc, item) => {
+    const hint = sizeHintFromUrl(item.url)
+    return hint === null ? acc : acc + hint
+  }, 0)
+  if (hintedBytes > byteBudget) {
+    throw new BrowserAttachBudgetExceededError(
+      `browser parquet attach requires ${hintedBytes} hinted bytes, above maxBytes=${byteBudget}`,
+    )
+  }
 
+  // Browser attach is range-first: we never pull a whole parquet into JS.
+  // Each URL is bounded with HEAD (or a 1-byte Range probe for GET-only URLs)
+  // before registration. DuckDB then reads registered HTTP files via ranges;
+  // bootDuckDBWasm() disables DuckDB's full-HTTP fallback for the same reason.
+  //
   // Per-table fetch resilience: a single 404/500 in one table's URL list
   // must not take down every other table's view. Track failures by table
   // and drop only the offenders — the surviving tables still get a view.
   const tableFailures = new Map<string, Error>()
+  const budgetController = new AbortController()
+  const effectiveSignal = mergeAbortSignals(signal, budgetController.signal)
+  let plannedBytes = 0
   const total = flat.length
-  await Promise.all(flat.map(async ({ table, url, index }) => {
+  const preflighted: Array<{ table: string, url: string, index: number, name: string }> = []
+  await runWithConcurrency(flat, concurrency, async ({ table, url, index }) => {
     if (tableFailures.has(table))
       return
-    await fetchImpl(url, fetchInit).then(async (response) => {
-      if (!response.ok)
-        throw new Error(`fetch ${url} failed: ${response.status}`)
-      const bytes = new Uint8Array(await response.arrayBuffer())
-      await db.registerFileBuffer(fileName(table, index), bytes)
-      onFileAttached?.({ table, index, total })
+    effectiveSignal?.throwIfAborted()
+    await preflightHttpUrl(url, fetchImpl, fetchInit, effectiveSignal).then((bytes) => {
+      plannedBytes += bytes
+      if (plannedBytes > byteBudget) {
+        const err = new BrowserAttachBudgetExceededError(
+          `browser parquet attach planned ${plannedBytes} bytes, above maxBytes=${byteBudget}`,
+        )
+        budgetController.abort(err)
+        throw err
+      }
+      effectiveSignal?.throwIfAborted()
+      preflighted.push({ table, url, index, name: attachFileName(attachId, table, index) })
     }).catch((err) => {
+      if (effectiveSignal?.aborted || err instanceof BrowserAttachBudgetExceededError || isAbortError(err))
+        throw err
       tableFailures.set(table, err instanceof Error ? err : new Error(String(err)))
     })
-  }))
+  })
 
+  const { DuckDBDataProtocol } = await import('@duckdb/duckdb-wasm')
   const attached: string[] = []
-  for (const table of Object.keys(counts)) {
-    if (tableFailures.has(table))
-      continue
-    const names: string[] = []
-    for (let i = 0; i < counts[table]!; i++)
-      names.push(fileName(table, i))
-    await conn.query(readParquetViewSql(schema, table, names))
-    attached.push(table)
+  const registeredFiles: string[] = []
+  try {
+    for (const file of preflighted) {
+      if (tableFailures.has(file.table))
+        continue
+      effectiveSignal?.throwIfAborted()
+      await db.registerFileURL(file.name, file.url, DuckDBDataProtocol.HTTP, false)
+      registeredFiles.push(file.name)
+      onFileAttached?.({ table: file.table, index: file.index, total })
+    }
+
+    for (const table of Object.keys(counts)) {
+      if (tableFailures.has(table))
+        continue
+      const files = preflighted
+        .filter(file => file.table === table)
+        .sort((a, b) => a.index - b.index)
+      if (files.length !== counts[table])
+        continue
+      effectiveSignal?.throwIfAborted()
+      await conn.query(readParquetViewSql(schema, table, files.map(file => file.name)))
+      attached.push(table)
+    }
   }
+  catch (err) {
+    await dropAttachedResources(db, conn, schema, attached, registeredFiles).catch((cleanupErr) => {
+      console.warn('[gscdump/engine-duckdb-wasm] cleanup after failed attach failed', cleanupErr)
+    })
+    throw err
+  }
+
   if (tableFailures.size > 0) {
     // Surface the failures so consumers can log / warn rather than silently
     // miss a view. The runtime throws later with a clear "does not exist"
@@ -227,13 +506,16 @@ export async function attachParquetUrlTables(
       console.warn(`[gscdump/engine-duckdb-wasm] dropped table "${table}" — ${err.message}`)
   }
 
+  let detached = false
   return {
     version,
     tables: attached,
     schema,
     async detach() {
-      for (const table of attached)
-        await conn.query(`DROP VIEW IF EXISTS ${schema}.${table}`)
+      if (detached)
+        return
+      detached = true
+      await dropAttachedResources(db, conn, schema, attached, registeredFiles)
     },
   }
 }
@@ -248,18 +530,50 @@ export function createBrowserAnalysisRuntime(
   let attachedTables: readonly string[] | undefined = options.attachedTables
 
   // Serialize every `analyze()` call against the shared connection. DuckDB's
-  // AsyncDuckDBConnection is not concurrency-safe (async ≠ parallel); two
+  // AsyncDuckDBConnection is not concurrency-safe (async != parallel); two
   // simultaneous callers corrupt prepared-statement state. Chain on a
-  // rolling promise so later callers queue behind earlier ones.
+  // rolling promise so later callers queue behind earlier ones. `query()` and
+  // `analyze()` share this queue because they use the same connection.
   let chain: Promise<unknown> = Promise.resolve()
+
+  function abortError(signal: AbortSignal): unknown {
+    return signal.reason ?? new DOMException('aborted', 'AbortError')
+  }
+
+  function raceSignal<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+    if (!signal)
+      return promise
+    if (signal.aborted)
+      return Promise.reject(abortError(signal))
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = (): void => reject(abortError(signal))
+      signal.addEventListener('abort', onAbort, { once: true })
+      promise.then(
+        (value) => {
+          signal.removeEventListener('abort', onAbort)
+          resolve(value)
+        },
+        (err) => {
+          signal.removeEventListener('abort', onAbort)
+          reject(err)
+        },
+      )
+    })
+  }
+
+  function runExclusive<T>(signal: AbortSignal | undefined, work: () => Promise<T>): Promise<T> {
+    const next = chain.then(work, work)
+    // Keep the chain alive even on rejection so later callers do not inherit
+    // the failure, but do not surface unhandled rejections.
+    chain = next.catch(() => {})
+    return raceSignal(next, signal)
+  }
 
   async function cancelOnAbort(signal: AbortSignal | undefined, work: Promise<unknown>): Promise<unknown> {
     if (!signal)
       return work
     if (signal.aborted) {
-      // Fire-and-forget: best-effort cancel, then surface the abort reason.
-      conn.cancelSent().catch(() => {})
-      throw signal.reason ?? new DOMException('aborted', 'AbortError')
+      throw abortError(signal)
     }
     const onAbort = (): void => {
       conn.cancelSent().catch(() => {})
@@ -273,7 +587,7 @@ export function createBrowserAnalysisRuntime(
     }
   }
 
-  async function runParameterized(sql: string, params: readonly unknown[] | undefined, signal?: AbortSignal): Promise<unknown> {
+  async function runParameterizedDirect(sql: string, params: readonly unknown[] | undefined, signal?: AbortSignal): Promise<unknown> {
     signal?.throwIfAborted()
     const work = (async () => {
       if (!params || params.length === 0)
@@ -294,7 +608,7 @@ export function createBrowserAnalysisRuntime(
     conn,
     async query(sql: string, params?: unknown[], signal?: AbortSignal): Promise<QueryResult> {
       const t0 = performance.now()
-      const result = await runParameterized(sql, params, signal)
+      const result = await runExclusive(signal, () => runParameterizedDirect(sql, params, signal))
       return {
         rows: toRows(result),
         queryMs: performance.now() - t0,
@@ -308,7 +622,7 @@ export function createBrowserAnalysisRuntime(
         const source = createAttachedTableSource(
           {
             query: async (sql, bindParams, innerSignal) => {
-              return toRows(await runParameterized(sql, bindParams, innerSignal ?? signal))
+              return toRows(await runParameterizedDirect(sql, bindParams, innerSignal ?? signal))
             },
           },
           { schema, signal, attachedTables, adapter: pgResolverAdapter },
@@ -320,11 +634,7 @@ export function createBrowserAnalysisRuntime(
           queryMs: performance.now() - t0,
         }
       }
-      const next = chain.then(run, run)
-      // Keep the chain alive even on rejection so later callers don't
-      // inherit the failure, but don't surface unhandled rejections.
-      chain = next.catch(() => {})
-      return next
+      return runExclusive(signal, run)
     },
     isStale(expected) {
       return expected !== version

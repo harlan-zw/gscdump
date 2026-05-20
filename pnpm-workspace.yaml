@@ -37,6 +37,7 @@ catalog:
   '@types/proper-lockfile': ^4.1.4
   '@unovis/ts': ^1.6.5
   '@unovis/vue': ^1.6.5
+  '@uwdata/flechette': ^2.5.0
   '@vueuse/core': ^14.3.0
   '@vueuse/nuxt': ^14.3.0
   aws4fetch: ^1.0.20

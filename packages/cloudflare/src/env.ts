@@ -26,9 +26,14 @@ export interface AnalyticsEnv {
    * Optional: DuckDB service binding (Workers RPC) for server-side execution.
    * Structural shape — any binding with `runSQL` + `ping` satisfies it, so
    * hosts can declare their own binding interface without coupling to this one.
+   * Request tables use Arrow IPC chunks. Small queries pass tables inline to
+   * `runSQL`; larger queries stage chunks via `stageArrowTable`, then call
+   * `runSQL` with only SQL, and finally `dropTables`.
    */
   DUCKDB_SVC?: {
-    runSQL: (args: { sql: string, tables?: Record<string, { rows: unknown[], ddl?: string }> }) => Promise<{ rows: unknown[], sql: string }>
+    runSQL: (args: { sql: string, tables?: Record<string, { ipc: Uint8Array }> }) => Promise<{ rows: unknown[], sql: string }>
+    stageArrowTable?: (args: { table: string, ipc: Uint8Array }) => Promise<void>
+    dropTables?: (args: { tables: string[] }) => Promise<void>
     ping: () => Promise<string>
   }
   /** Route override: force D1 as the manifest source even if R2 is bound. */

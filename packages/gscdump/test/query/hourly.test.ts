@@ -42,11 +42,23 @@ describe('hourly Discover support', () => {
         .select(hour)
         .where(between(date, '2026-05-17', '2026-05-18'))
         .dataState('hourly_all')
+        .type('discover')
         .getState()
 
       const normalized = normalizeBuilderState(JSON.parse(JSON.stringify(state)))
       expect(normalized.dataState).toBe('hourly_all')
+      expect(normalized.searchType).toBe('discover')
       expect(resolveToBody(normalized).dataState).toBe('hourly_all')
+      expect(resolveToBody(normalized).type).toBe('discover')
+    })
+
+    it('drops invalid searchType during normalizeBuilderState', () => {
+      const normalized = normalizeBuilderState({
+        dimensions: ['page'],
+        searchType: 'blogs',
+      })
+
+      expect(normalized.searchType).toBeUndefined()
     })
   })
 

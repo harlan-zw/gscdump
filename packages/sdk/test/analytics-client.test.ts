@@ -8,6 +8,8 @@ describe('createAnalyticsClient', () => {
       calls.push({ url, options })
       if (url.endsWith('/sites'))
         return Promise.resolve([])
+      if (url.endsWith('/source-info'))
+        return Promise.resolve({ name: 'r2', kind: 'sql', capabilities: { attachedTables: true }, supportedAnalyzerIds: [], browserAttachEligible: true })
       if (url.endsWith('/analysis-sources'))
         return Promise.resolve({ tables: {}, generatedAt: '2026-05-11T00:00:00.000Z', manifestVersion: 'v1' })
       return Promise.resolve({ rows: [], meta: { sourceName: 'r2', sourceKind: 'sql', queryMs: 1 } })
@@ -20,18 +22,33 @@ describe('createAnalyticsClient', () => {
     })
 
     await client.listSites()
-    await client.getAnalysisSources('s_1', ['pages', 'keywords'])
+    await client.getSourceInfo('s_1', { searchType: 'discover', start: '2026-05-01', end: '2026-05-07' })
+    await client.getAnalysisSources('s_1', ['pages', 'keywords'], { start: '2026-05-01', end: '2026-05-07' })
     await client.queryRows('s_1', { dimensions: ['page'], rowLimit: 10 })
+    await client.getAnalysisSources('s_1', { tables: 'pages', searchType: 'discover' })
+    await client.analyze('s_1', { type: 'data-query', searchType: 'image' })
 
     expect(calls[0]!.url).toBe('https://origin.example/api/__gsc/sites')
     expect(new Headers(calls[0]!.options.headers).get('x-api-key')).toBe('key_1')
     expect(calls[1]).toMatchObject({
-      url: 'https://origin.example/api/__gsc/sites/s_1/analysis-sources',
-      options: { query: { tables: 'pages,keywords' } },
+      url: 'https://origin.example/api/__gsc/sites/s_1/source-info',
+      options: { query: { searchType: 'discover', start: '2026-05-01', end: '2026-05-07' } },
     })
     expect(calls[2]).toMatchObject({
+      url: 'https://origin.example/api/__gsc/sites/s_1/analysis-sources',
+      options: { query: { tables: 'pages,keywords', searchType: 'web', start: '2026-05-01', end: '2026-05-07' } },
+    })
+    expect(calls[3]).toMatchObject({
       url: 'https://origin.example/api/__gsc/sites/s_1/rows',
-      options: { method: 'POST', body: { dimensions: ['page'], rowLimit: 10 } },
+      options: { method: 'POST', body: { dimensions: ['page'], rowLimit: 10, searchType: 'web' } },
+    })
+    expect(calls[4]).toMatchObject({
+      url: 'https://origin.example/api/__gsc/sites/s_1/analysis-sources',
+      options: { query: { tables: 'pages', searchType: 'discover' } },
+    })
+    expect(calls[5]).toMatchObject({
+      url: 'https://origin.example/api/__gsc/sites/s_1/analyze',
+      options: { method: 'POST', body: { type: 'data-query', searchType: 'image' } },
     })
   })
 

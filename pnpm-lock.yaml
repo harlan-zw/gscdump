@@ -39,6 +39,9 @@ catalogs:
     '@unovis/vue':
       specifier: ^1.6.5
       version: 1.6.5
+    '@uwdata/flechette':
+      specifier: ^2.5.0
+      version: 2.5.0
     '@vueuse/core':
       specifier: ^14.3.0
       version: 14.3.0
@@ -308,6 +311,9 @@ importers:
       '@gscdump/engine-sqlite':
         specifier: workspace:*
         version: link:../engine-sqlite
+      '@uwdata/flechette':
+        specifier: 'catalog:'
+        version: 2.5.0
       aws4fetch:
         specifier: 'catalog:'
         version: 1.0.20
@@ -3320,6 +3326,9 @@ packages:
     peerDependencies:
       '@unovis/ts': 1.6.5
       vue: ^3
+
+  '@uwdata/flechette@2.5.0':
+    resolution: {integrity: sha512-NSB9xIPVsxpEcnEvtLfbvH/tEqZWiD4bfdz/yBUAUBEe0Z0C3zmA/Y4GOCsLZe4ChxiHaedFBZzVdUxQ+NVcMA==}
 
   '@vercel/nft@1.5.0':
     resolution: {integrity: sha512-IWTDeIoWhQ7ZtRO/JRKH+jhmeQvZYhtGPmzw/QGDY+wDCQqfm25P9yIdoAFagu4fWsK4IwZXDFIjrmp5rRm/sA==}
@@ -10423,6 +10432,8 @@ snapshots:
     dependencies:
       '@unovis/ts': 1.6.5
       vue: 3.5.34(typescript@6.0.3)
+
+  '@uwdata/flechette@2.5.0': {}
 
   '@vercel/nft@1.5.0(rollup@4.60.4)':
     dependencies:

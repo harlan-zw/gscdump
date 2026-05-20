@@ -30,7 +30,7 @@ export interface RunSQLFn {
   (opts: {
     ctx: { userId: string, siteId: string }
     table: TableName
-    fileSets: Record<string, { table: TableName, partitions: string[] }>
+    fileSets: Record<string, { table: TableName, partitions?: string[], keys?: string[] }>
     sql: string
     params: unknown[]
     searchType?: SearchType

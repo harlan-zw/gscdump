@@ -19,6 +19,7 @@ import type { ColumnDef } from './schema'
 import { MS_PER_DAY } from 'gscdump'
 import { encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { createIndexingMetadataStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexPrefix } from './entities'
+import { DEFAULT_SEARCH_TYPE } from './storage'
 
 export interface RollupCtx extends TenantCtx {
   /** When the rollup was built. Stamped into payload + filename. */
@@ -47,9 +48,9 @@ export interface RollupEngine {
   /**
    * Read the live manifest for a (tenant, table[, searchType]) cohort —
    * cheap, no parquet decode. Builders use this to chunk a full-history scan
-   * into byte-bounded windows so a single `runSQL` call never has to ship
-   * more than ~14MB of decoded rows across the Workers service-binding RPC
-   * (32MiB hard cap).
+   * into byte-bounded windows (see `WINDOW_BYTE_BUDGET`) so a single `runSQL`
+   * call never ships an oversized Arrow IPC payload across the Workers
+   * service-binding RPC (32MiB hard cap).
    */
   listPartitions: (opts: {
     ctx: TenantCtx
@@ -331,14 +332,21 @@ function utcDateMinusDays(at: number, days: number): string {
 
 // ---------------------------------------------------------------------------
 // Windowed rollup builds — chunk full-history scans so a single runSQL never
-// ships more than ~14MB of decoded rows across the Workers RPC (32MiB cap).
+// ships an oversized Arrow IPC payload across the Workers RPC (32MiB cap).
 // ---------------------------------------------------------------------------
 
 /**
- * Target decoded-bytes budget per window. Sits well under the 28MiB executor
- *  guard so headroom remains for SQL + result rows.
+ * Per-window budget, measured in *parquet* bytes (manifest `bytes`), used by
+ * `planRollupWindows` to chunk a full-history scan.
+ *
+ * The executor decodes a window's parquet and ships it as an Arrow IPC stream
+ * over the service binding; that IPC is hard-guarded at 28MiB
+ * (`IPC_PLACEHOLDER_BUDGET` in @gscdump/cloudflare). Parquet is compressed and
+ * the IPC stream is not, so a window inflates on the wire — keep this
+ * conservatively below the guard. Re-measure the parquet→IPC ratio against
+ * production and raise if headroom allows.
  */
-export const WINDOW_BYTE_BUDGET = 14 * 1024 * 1024
+export const WINDOW_BYTE_BUDGET = 10 * 1024 * 1024
 
 const DAY_RE = /^daily\/(\d{4})-(\d{2})-(\d{2})$/
 const WEEK_RE = /^weekly\/(\d{4})-(\d{2})-(\d{2})$/
@@ -966,14 +974,16 @@ export const indexPercentRollup: RollupDef = {
     if (urlsKeys.length === 0)
       return { totalSitemapUrls: 0, days: [] }
     const cutoff = utcDateMinusDays(builtAt, 90)
-    // Numerator: per-day distinct sitemap URLs with clicks>0. PAGES goes
-    // through the manifest so forward searchType; URLS is a direct-keys
+    // Numerator: per-day distinct sitemap URLs with clicks>0. This rollup is
+    // written at the legacy path, so omitted searchType means the web slice,
+    // not a cross-type union. URLS is a direct-keys
     // sidecar (entity store, not slice-partitioned) so searchType doesn't
     // apply to it.
+    const factSearchType = searchType ?? DEFAULT_SEARCH_TYPE
     const pagesParts = await engine.listPartitions({
       ctx,
       table: 'pages',
-      ...(searchType !== undefined ? { searchType } : {}),
+      searchType: factSearchType,
     })
     const pagesPartitions = partitionsInRange(pagesParts, cutoff, utcDateMinusDays(builtAt, 0))
     const numerator = await engine.runSQL({
@@ -983,7 +993,7 @@ export const indexPercentRollup: RollupDef = {
         PAGES: { table: 'pages', partitions: pagesPartitions },
         URLS: { table: 'pages', keys: urlsKeys },
       },
-      ...(searchType !== undefined ? { searchType } : {}),
+      searchType: factSearchType,
       sql: `
         SELECT
           p.date AS date,

@@ -19,6 +19,7 @@ import type {
   SitemapChangesResponse,
   SitemapHistoryResponse,
   SitemapIndex,
+  SourceInfoOptions,
   SourceInfoResponse,
   WhoamiResponse,
 } from '@gscdump/contracts'
@@ -41,6 +42,16 @@ export interface AnalyticsClientOptions {
 
 const TRAILING_SLASH_RE = /\/+$/
 const LEADING_SLASH_RE = /^\/+/
+type GscSearchType = 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews'
+interface AnalysisSourcesOptions {
+  tables?: string[] | string
+  searchType?: GscSearchType
+  start?: string
+  end?: string
+  startDate?: string
+  endDate?: string
+}
+const DEFAULT_SEARCH_TYPE: GscSearchType = 'web'
 
 function trimApiBase(apiBase: string | undefined): string {
   return (apiBase ?? '').replace(TRAILING_SLASH_RE, '')
@@ -75,10 +86,54 @@ function parseWith<T>(schema: ZodTypeAny | undefined, value: T): T {
   return schema ? schema.parse(value) as T : value
 }
 
-function tablesQuery(tables: string[] | string | undefined): Record<string, string> | undefined {
-  if (!tables)
-    return undefined
-  return { tables: Array.isArray(tables) ? tables.join(',') : tables }
+function isAnalysisSourcesOptions(value: unknown): value is AnalysisSourcesOptions {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function searchTypeQuery(searchType?: GscSearchType): Record<string, string> {
+  return { searchType: searchType ?? DEFAULT_SEARCH_TYPE }
+}
+
+function dateRangeOptionsQuery(options: { start?: string, end?: string, startDate?: string, endDate?: string } | undefined): Record<string, string> {
+  const query: Record<string, string> = {}
+  const start = options?.start ?? options?.startDate
+  const end = options?.end ?? options?.endDate
+  if (start)
+    query.start = start
+  if (end)
+    query.end = end
+  return query
+}
+
+function sourceInfoQuery(options: SourceInfoOptions | undefined): Record<string, string> {
+  return {
+    ...searchTypeQuery(options?.searchType),
+    ...dateRangeOptionsQuery(options),
+  }
+}
+
+function tablesQuery(
+  tablesOrOptions: string[] | string | AnalysisSourcesOptions | undefined,
+  options?: { searchType?: GscSearchType, start?: string, end?: string, startDate?: string, endDate?: string },
+): Record<string, string> {
+  const tables = isAnalysisSourcesOptions(tablesOrOptions) ? tablesOrOptions.tables : tablesOrOptions
+  const source = isAnalysisSourcesOptions(tablesOrOptions) ? tablesOrOptions : options
+  const query = {
+    ...searchTypeQuery(source?.searchType),
+    ...dateRangeOptionsQuery(source),
+  }
+  if (tables)
+    query.tables = Array.isArray(tables) ? tables.join(',') : tables
+  return query
+}
+
+function withDefaultSearchType<T>(value: T): T {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return value
+  return {
+    ...(value as Record<string, unknown>),
+    searchType: (value as { searchType?: GscSearchType }).searchType ?? DEFAULT_SEARCH_TYPE,
+  } as T
 }
 
 function indexingUrlsQuery(params: { limit?: number, offset?: number, status?: IndexingUrlStatus, issue?: string, search?: string } = {}): Record<string, string | number> {
@@ -121,17 +176,17 @@ export function createAnalyticsClient(options: AnalyticsClientOptions = {}): Ana
     listSites() {
       return request<SiteListItem[]>(analyticsRoutes.sites, {}, partnerEndpointSchemas.analyticsSites.response)
     },
-    getSourceInfo(siteId: string) {
-      return request<SourceInfoResponse>(analyticsRoutes.site.sourceInfo(siteId), {}, partnerEndpointSchemas.analyticsSourceInfo.response)
+    getSourceInfo(siteId: string, options?: SourceInfoOptions) {
+      return request<SourceInfoResponse>(analyticsRoutes.site.sourceInfo(siteId), { query: sourceInfoQuery(options) }, partnerEndpointSchemas.analyticsSourceInfo.response)
     },
-    getAnalysisSources(siteId: string, tables?: string[] | string) {
-      return request<AnalysisSourcesResponse>(analyticsRoutes.site.analysisSources(siteId), { query: tablesQuery(tables) }, partnerEndpointSchemas.analyticsAnalysisSources.response)
+    getAnalysisSources(siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: { searchType?: GscSearchType, start?: string, end?: string, startDate?: string, endDate?: string }) {
+      return request<AnalysisSourcesResponse>(analyticsRoutes.site.analysisSources(siteId), { query: tablesQuery(tables, options) }, partnerEndpointSchemas.analyticsAnalysisSources.response)
     },
     analyze<T = unknown>(siteId: string, params: unknown) {
-      return request<T>(analyticsRoutes.site.analyze(siteId), { method: 'POST', body: params })
+      return request<T>(analyticsRoutes.site.analyze(siteId), { method: 'POST', body: withDefaultSearchType(params) })
     },
     queryRows<T = Record<string, unknown>>(siteId: string, state: unknown) {
-      return request<GscRowQueryResponse<T>>(analyticsRoutes.site.rows(siteId), { method: 'POST', body: state }, partnerEndpointSchemas.analyticsRows.response)
+      return request<GscRowQueryResponse<T>>(analyticsRoutes.site.rows(siteId), { method: 'POST', body: withDefaultSearchType(state) }, partnerEndpointSchemas.analyticsRows.response)
     },
     getRollup<T = unknown>(siteId: string, rollupId: string, params?: { start?: string, end?: string }) {
       return request<RollupEnvelope<T>>(analyticsRoutes.site.rollup(siteId, rollupId), { query: params }, partnerEndpointSchemas.analyticsRollup.response)

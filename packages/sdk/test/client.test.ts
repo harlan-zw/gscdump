@@ -37,12 +37,41 @@ describe('createPartnerClient', () => {
       { dimensions: ['page'], rowLimit: 10 },
       { comparison: { dimensions: ['page'] }, filter: 'new' },
     )
+    await client.getDataDetail(
+      's_1',
+      { dimensions: ['query'], searchType: 'discover' },
+      { comparison: { dimensions: ['query'] } },
+    )
+    await client.getAnalysis('s_1', {
+      preset: 'opportunity',
+      startDate: '2026-05-01',
+      endDate: '2026-05-10',
+      searchType: 'image',
+    })
 
     expect(calls[0]!.url).toBe('/api/sites/s_1/data')
     expect(calls[0]!.options.query).toEqual({
-      q: JSON.stringify({ dimensions: ['page'], rowLimit: 10 }),
-      qc: JSON.stringify({ dimensions: ['page'] }),
+      q: JSON.stringify({ dimensions: ['page'], rowLimit: 10, searchType: 'web' }),
+      qc: JSON.stringify({ dimensions: ['page'], searchType: 'web' }),
       filter: 'new',
+      searchType: 'web',
+    })
+    expect(calls[1]!.url).toBe('/api/sites/s_1/data/detail')
+    expect(calls[1]!.options.query).toEqual({
+      q: JSON.stringify({ dimensions: ['query'], searchType: 'discover' }),
+      qc: JSON.stringify({ dimensions: ['query'], searchType: 'discover' }),
+      searchType: 'discover',
+    })
+    expect(calls[2]).toMatchObject({
+      url: '/api/sites/s_1/analysis',
+      options: {
+        query: {
+          preset: 'opportunity',
+          startDate: '2026-05-01',
+          endDate: '2026-05-10',
+          searchType: 'image',
+        },
+      },
     })
   })
 
@@ -140,12 +169,12 @@ describe('createPartnerClient', () => {
     }) as PartnerFetch
     const client = createPartnerClient({ fetch, validate: true })
 
-    await client.getAnalysisSources('s_1', ['pages', 'keywords'])
+    await client.getAnalysisSources('s_1', ['pages', 'keywords'], { start: '2026-05-01', end: '2026-05-07' })
     await client.getKeywordSparklines('s_1', { keywords: ['test'], startDate: '2026-05-01', endDate: '2026-05-10' })
     await client.getQueryTrend('s_1', { startDate: '2026-05-01', endDate: '2026-05-10', prevStartDate: '2026-04-20' })
     await client.getCtrCurve('s_1', { startDate: '2026-05-01', endDate: '2026-05-10' })
 
-    expect(calls[0]).toMatchObject({ url: '/api/sites/s_1/analysis-sources', options: { query: { tables: 'pages,keywords' } } })
+    expect(calls[0]).toMatchObject({ url: '/api/sites/s_1/analysis-sources', options: { query: { tables: 'pages,keywords', searchType: 'web', start: '2026-05-01', end: '2026-05-07' } } })
     expect(calls[1]).toMatchObject({ url: '/api/sites/s_1/data/keyword-sparklines', options: { method: 'POST' } })
     expect(calls[2]).toMatchObject({ url: '/api/sites/s_1/data/query-trend' })
     expect(calls[3]).toMatchObject({ url: '/api/sites/s_1/ctr-curve' })

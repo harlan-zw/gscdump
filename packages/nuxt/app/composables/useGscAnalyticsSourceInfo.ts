@@ -5,11 +5,12 @@
 // Use this to render locked/ghost UI upfront without issuing a doomed
 // analyze() call for each panel.
 //
-// The reactive composable and the non-reactive `loadSourceInfoFor` (used by
-// `useGscAnalyzer.createInstance`) share one entry per site via the shared
-// site-resource seam, so they collapse to one network read per session.
+// The reactive composable and the non-reactive `loadSourceInfoFor` share one
+// entry per site/searchType/range via the shared site-resource seam, so they
+// collapse to one network read per session slice.
 
 import type { SourceCapabilities } from '@gscdump/analysis'
+import type { SourceInfoOptions } from '@gscdump/contracts'
 import { acquireSharedEntry, useGscSharedSiteResource } from './_useGscSharedSiteResource'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
@@ -48,6 +49,7 @@ interface SourceInfoEntry {
 }
 
 const SOURCE_INFO_NAMESPACE = 'source-info'
+const DEFAULT_SEARCH_TYPE = 'web'
 
 function createEntry(): SourceInfoEntry {
   return {
@@ -58,12 +60,21 @@ function createEntry(): SourceInfoEntry {
   }
 }
 
-function fetchInto(entry: SourceInfoEntry, siteId: string): Promise<void> {
+function sourceInfoKey(siteId: string, options?: SourceInfoOptions): string {
+  return JSON.stringify([
+    siteId,
+    options?.searchType ?? DEFAULT_SEARCH_TYPE,
+    options?.start ?? options?.startDate ?? null,
+    options?.end ?? options?.endDate ?? null,
+  ])
+}
+
+function fetchInto(entry: SourceInfoEntry, siteId: string, options?: SourceInfoOptions): Promise<void> {
   if (entry.pending.value)
     return entry.pending.value
   entry.loading.value = true
   entry.error.value = null
-  const p = (useGscAnalyticsClient().getSourceInfo(siteId) as Promise<GscAnalyticsSourceInfo>)
+  const p = (useGscAnalyticsClient().getSourceInfo(siteId, options) as Promise<GscAnalyticsSourceInfo>)
     .then((data) => {
       entry.info.value = data
     })
@@ -85,11 +96,11 @@ function fetchInto(entry: SourceInfoEntry, siteId: string): Promise<void> {
  * site-resource seam, so gating UI and the analyzer mode probe collapse to
  * one network read per site per session.
  */
-export async function loadSourceInfoFor(siteId: string): Promise<GscAnalyticsSourceInfo> {
-  const entry = acquireSharedEntry(SOURCE_INFO_NAMESPACE, siteId, createEntry)
+export async function loadSourceInfoFor(siteId: string, options?: SourceInfoOptions): Promise<GscAnalyticsSourceInfo> {
+  const entry = acquireSharedEntry(SOURCE_INFO_NAMESPACE, sourceInfoKey(siteId, options), createEntry)
   if (entry.info.value)
     return entry.info.value
-  await fetchInto(entry, siteId)
+  await fetchInto(entry, siteId, options)
   if (entry.error.value)
     throw entry.error.value
   if (!entry.info.value)
@@ -99,8 +110,13 @@ export async function loadSourceInfoFor(siteId: string): Promise<GscAnalyticsSou
 
 export function useGscAnalyticsSourceInfo(
   siteId: MaybeRefOrGetter<string | null | undefined>,
+  options: MaybeRefOrGetter<SourceInfoOptions | null | undefined> = null,
 ): GscAnalyticsSourceInfoState {
-  const { bound } = useGscSharedSiteResource<SourceInfoEntry>(SOURCE_INFO_NAMESPACE, siteId, {
+  const cacheKey = computed(() => {
+    const id = toValue(siteId)
+    return id ? sourceInfoKey(id, toValue(options) ?? undefined) : null
+  })
+  const { bound } = useGscSharedSiteResource<SourceInfoEntry>(SOURCE_INFO_NAMESPACE, cacheKey, {
     factory: () => createEntry(),
     // No onDispose: source-info is cheap and persistent across the session.
   })
@@ -113,7 +129,7 @@ export function useGscAnalyticsSourceInfo(
       if (!id)
         return
       if (entry.info.value == null && entry.pending.value == null && entry.error.value == null)
-        void fetchInto(entry, id)
+        void fetchInto(entry, id, toValue(options) ?? undefined)
     }, { immediate: true })
   }
 
@@ -127,7 +143,7 @@ export function useGscAnalyticsSourceInfo(
     if (!entry || !id)
       return
     entry.info.value = null
-    await fetchInto(entry, id)
+    await fetchInto(entry, id, toValue(options) ?? undefined)
   }
 
   function supports(analyzerId: MaybeRefOrGetter<string>): ComputedRef<boolean> {

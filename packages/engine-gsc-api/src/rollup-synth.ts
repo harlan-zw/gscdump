@@ -13,7 +13,7 @@
 //    can; everything else trims after row collection.
 
 import type { GoogleSearchConsoleClient } from 'gscdump'
-import type { Column, Dimension, GSCQueryBuilder } from 'gscdump/query'
+import type { Column, Dimension, GSCQueryBuilder, SearchType } from 'gscdump/query'
 import { between, clicks as clicksCol, date as dateDim, gsc } from 'gscdump/query'
 
 export async function collectRows<T>(gen: AsyncGenerator<T[]>): Promise<T[]> {
@@ -48,13 +48,17 @@ export interface FetchTopNOptions<D extends Dimension> {
   limit?: number
   /** Trim after the fact (e.g. country has no server-side limit). */
   sliceTop?: number
+  /** GSC search corpus; callers default API-boundary omissions to web. */
+  searchType?: SearchType
 }
 
 export async function fetchGscTopN<D extends Dimension>(
   opts: FetchTopNOptions<D>,
 ): Promise<GscTopNRow[]> {
-  const { client, siteUrl, dimension, range, orderByClicksDesc, limit, sliceTop } = opts
+  const { client, siteUrl, dimension, range, orderByClicksDesc, limit, sliceTop, searchType } = opts
   let builder = gsc.select(dimension).where(between(dateDim, range.start, range.end))
+  if (searchType)
+    builder = builder.type(searchType)
   if (orderByClicksDesc)
     builder = builder.orderBy(clicksCol, 'desc')
   if (typeof limit === 'number')
@@ -98,12 +102,17 @@ export async function fetchGscDaily(opts: {
   client: GoogleSearchConsoleClient
   siteUrl: string
   range: GscRange
+  /** GSC search corpus; callers default API-boundary omissions to web. */
+  searchType?: SearchType
 }): Promise<GscDailyRow[]> {
-  const { client, siteUrl, range } = opts
-  const builder = gsc
+  const { client, siteUrl, range, searchType } = opts
+  let builder = gsc
     .select(dateDim)
-    .where(between(dateDim, range.start, range.end)) as unknown as GSCQueryBuilder<never, never>
-  const rows = await collectRows(client.query(siteUrl, builder))
+    .where(between(dateDim, range.start, range.end))
+  if (searchType)
+    builder = builder.type(searchType)
+  const query = builder as unknown as GSCQueryBuilder<never, never>
+  const rows = await collectRows(client.query(siteUrl, query))
   return rows
     .map((r) => {
       const row = r as { date?: string, clicks?: number, impressions?: number, position?: number }

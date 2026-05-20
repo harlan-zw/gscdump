@@ -1,5 +1,6 @@
 import {
   analyticsRoutes,
+  builderStateSchema,
   GSCDUMP_ONBOARDING_CONTRACT_VERSION,
   partnerEndpointSchemas,
   partnerRoutes,
@@ -78,6 +79,14 @@ describe('@gscdump/contracts', () => {
     expect(searchTypeSchema.safeParse('blogs').success).toBe(false)
     expect(searchTypeSchema.safeParse(undefined).success).toBe(false)
     expect(searchTypeSchema.safeParse(null).success).toBe(false)
+  })
+
+  it('builderState contract preserves valid optional searchType', () => {
+    expect(builderStateSchema.parse({ dimensions: ['page'], searchType: 'discover' })).toMatchObject({
+      searchType: 'discover',
+    })
+    expect(builderStateSchema.parse({ dimensions: ['page'] }).searchType).toBeUndefined()
+    expect(builderStateSchema.safeParse({ dimensions: ['page'], searchType: 'blogs' }).success).toBe(false)
   })
 
   it('validates lifecycle onboarding responses', () => {

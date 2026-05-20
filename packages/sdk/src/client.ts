@@ -82,6 +82,28 @@ type FetchOptions = PartnerFetchOptions
 
 const TRAILING_SLASH_RE = /\/+$/
 const LEADING_SLASH_RE = /^\/+/
+type GscSearchType = 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews'
+interface SearchTypeOptions {
+  searchType?: GscSearchType
+}
+interface SourceRangeOptions {
+  start?: string
+  end?: string
+  startDate?: string
+  endDate?: string
+}
+interface AnalysisSourcesOptions extends SearchTypeOptions {
+  tables?: string[] | string
+  start?: string
+  end?: string
+  startDate?: string
+  endDate?: string
+}
+type BuilderStateWithSearchType = BuilderState & SearchTypeOptions
+type DataQueryOptionsWithSearchType = DataQueryOptions & SearchTypeOptions
+type DataDetailOptionsWithSearchType = DataDetailOptions & SearchTypeOptions
+type AnalysisParamsWithSearchType = GscdumpAnalysisParams & SearchTypeOptions
+const DEFAULT_SEARCH_TYPE: GscSearchType = 'web'
 
 function trimApiBase(apiBase: string | undefined): string {
   return (apiBase ?? '/api').replace(TRAILING_SLASH_RE, '')
@@ -112,19 +134,37 @@ async function resolveHeaders(options: PartnerClientOptions): Promise<HeadersIni
   return mergeHeaders(resolved, { 'x-api-key': options.apiKey })
 }
 
+function withDefaultSearchType<T extends BuilderState>(state: T, searchType?: GscSearchType): T & SearchTypeOptions {
+  const scoped = state as BuilderStateWithSearchType
+  return {
+    ...state,
+    searchType: searchType ?? scoped.searchType ?? DEFAULT_SEARCH_TYPE,
+  }
+}
+
 function dataQuery(state: BuilderState, options?: DataQueryOptions): Record<string, string> {
-  const query: Record<string, string> = { q: JSON.stringify(state) }
-  if (options?.comparison)
-    query.qc = JSON.stringify(options.comparison)
-  if (options?.filter)
-    query.filter = options.filter
+  const opts = options as DataQueryOptionsWithSearchType | undefined
+  const scoped = withDefaultSearchType(state, opts?.searchType)
+  const query: Record<string, string> = {
+    q: JSON.stringify(scoped),
+    searchType: scoped.searchType ?? DEFAULT_SEARCH_TYPE,
+  }
+  if (opts?.comparison)
+    query.qc = JSON.stringify(withDefaultSearchType(opts.comparison, scoped.searchType))
+  if (opts?.filter)
+    query.filter = opts.filter
   return query
 }
 
 function dataDetailQuery(state: BuilderState, options?: DataDetailOptions): Record<string, string> {
-  const query: Record<string, string> = { q: JSON.stringify(state) }
-  if (options?.comparison)
-    query.qc = JSON.stringify(options.comparison)
+  const opts = options as DataDetailOptionsWithSearchType | undefined
+  const scoped = withDefaultSearchType(state, opts?.searchType)
+  const query: Record<string, string> = {
+    q: JSON.stringify(scoped),
+    searchType: scoped.searchType ?? DEFAULT_SEARCH_TYPE,
+  }
+  if (opts?.comparison)
+    query.qc = JSON.stringify(withDefaultSearchType(opts.comparison, scoped.searchType))
   return query
 }
 
@@ -160,6 +200,7 @@ function analysisQuery(params: GscdumpAnalysisParams): Record<string, string | n
     query.maxPosition = params.maxPosition
   if (params.maxCtr != null)
     query.maxCtr = params.maxCtr
+  query.searchType = (params as AnalysisParamsWithSearchType).searchType ?? DEFAULT_SEARCH_TYPE
   return query
 }
 
@@ -178,10 +219,26 @@ function indexingUrlsQuery(params: IndexingUrlsParams = {}): Record<string, stri
   return query
 }
 
-function tablesQuery(tables: string[] | string | undefined): Record<string, string> | undefined {
-  if (!tables)
-    return undefined
-  return { tables: Array.isArray(tables) ? tables.join(',') : tables }
+function isAnalysisSourcesOptions(value: unknown): value is AnalysisSourcesOptions {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function tablesQuery(
+  tablesOrOptions: string[] | string | AnalysisSourcesOptions | undefined,
+  options?: SearchTypeOptions & SourceRangeOptions,
+): Record<string, string> {
+  const tables = isAnalysisSourcesOptions(tablesOrOptions) ? tablesOrOptions.tables : tablesOrOptions
+  const source = isAnalysisSourcesOptions(tablesOrOptions) ? tablesOrOptions : options
+  const query: Record<string, string> = { searchType: source?.searchType ?? DEFAULT_SEARCH_TYPE }
+  const start = source?.start ?? source?.startDate
+  const end = source?.end ?? source?.endDate
+  if (start)
+    query.start = start
+  if (end)
+    query.end = end
+  if (tables)
+    query.tables = Array.isArray(tables) ? tables.join(',') : tables
+  return query
 }
 
 function dateRangeQuery(params: GscdumpDateRangeParams): Record<string, string> {
@@ -353,9 +410,9 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       })
     },
 
-    getAnalysisSources(siteId: string, tables?: string[] | string) {
+    getAnalysisSources(siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: SearchTypeOptions & SourceRangeOptions) {
       return request<GscdumpAnalysisSourcesResponse>(partnerRoutes.sites.analysisSources(siteId), {
-        query: tablesQuery(tables),
+        query: tablesQuery(tables, options),
       }, partnerEndpointSchemas.getAnalysisSources.response)
     },
 

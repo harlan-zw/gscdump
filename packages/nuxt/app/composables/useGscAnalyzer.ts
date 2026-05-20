@@ -21,7 +21,6 @@ import { useGscSharedSiteResource } from './_useGscSharedSiteResource'
 import { useGscAnalyticsContext } from './useGscAnalytics'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 import { useGscAnalyticsConfig } from './useGscAnalyticsConfig'
-import { loadSourceInfoFor } from './useGscAnalyticsSourceInfo'
 import { resolveGscAuthHeaders } from './useGscAuth'
 
 export interface GscAnalyzerTimings {
@@ -51,6 +50,58 @@ export interface GscAnalyzerInstance {
 }
 
 const EMPTY_TABLES: readonly string[] = Object.freeze([])
+const DEFAULT_SEARCH_TYPE: NonNullable<AnalysisParams['searchType']> = 'web'
+const DEFAULT_ATTACH_FETCH_CONCURRENCY = 2
+const DEFAULT_ATTACH_MAX_FILES = 32
+const DEFAULT_ATTACH_MAX_BYTES = 16 * 1024 * 1024
+
+interface AnalyzerRange {
+  start: string
+  end: string
+}
+
+interface AnalysisSourcesClient {
+  getAnalysisSources: (
+    siteId: string,
+    tables?: string[] | string | { tables?: string[] | string, searchType?: NonNullable<AnalysisParams['searchType']>, start?: string, end?: string },
+    options?: { searchType?: NonNullable<AnalysisParams['searchType']>, start?: string, end?: string },
+  ) => Promise<AnalysisSourcesResponse>
+  getSourceInfo: (
+    siteId: string,
+    options?: { searchType?: NonNullable<AnalysisParams['searchType']>, start?: string, end?: string },
+  ) => Promise<SourceInfoResponse>
+}
+
+function normalizeSearchType(searchType: AnalysisParams['searchType']): NonNullable<AnalysisParams['searchType']> {
+  return searchType ?? DEFAULT_SEARCH_TYPE
+}
+
+function analyzerCacheKey(siteId: string, searchType: NonNullable<AnalysisParams['searchType']>, range: AnalyzerRange | null): string {
+  return JSON.stringify([siteId, searchType, range?.start ?? null, range?.end ?? null])
+}
+
+function parseAnalyzerCacheKey(key: string): { siteId: string, searchType: NonNullable<AnalysisParams['searchType']>, range: AnalyzerRange | null } {
+  const [siteId, searchType, start, end] = JSON.parse(key) as [string, NonNullable<AnalysisParams['searchType']>, string | null, string | null]
+  return { siteId, searchType, range: start && end ? { start, end } : null }
+}
+
+function normalizeRange(range: AnalyzerRange | null | undefined): AnalyzerRange | null {
+  return range?.start && range?.end ? range : null
+}
+
+function loadSourceInfo(siteId: string, searchType: NonNullable<AnalysisParams['searchType']>, range: AnalyzerRange | null): Promise<SourceInfoResponse> {
+  return (useGscAnalyticsClient() as unknown as AnalysisSourcesClient).getSourceInfo(siteId, {
+    searchType,
+    ...(range ? { start: range.start, end: range.end } : {}),
+  })
+}
+
+function loadAnalysisSources(siteId: string, searchType: NonNullable<AnalysisParams['searchType']>, range: AnalyzerRange | null): Promise<AnalysisSourcesResponse> {
+  return (useGscAnalyticsClient() as unknown as AnalysisSourcesClient).getAnalysisSources(siteId, undefined, {
+    searchType,
+    ...(range ? { start: range.start, end: range.end } : {}),
+  })
+}
 
 /**
  * Get (or create) an analyzer for a site. Per-site cached across the app so
@@ -59,10 +110,21 @@ const EMPTY_TABLES: readonly string[] = Object.freeze([])
  * bound cached instance; switching `siteId` rebinds and the computeds track
  * the new instance with no manual mirroring.
  */
-export function useGscAnalyzer(siteId: MaybeRefOrGetter<string | null | undefined>): GscAnalyzerInstance & { currentSiteId: Ref<string | null> } {
+export function useGscAnalyzer(
+  siteId: MaybeRefOrGetter<string | null | undefined>,
+  searchType: MaybeRefOrGetter<AnalysisParams['searchType']> = DEFAULT_SEARCH_TYPE,
+  range: MaybeRefOrGetter<AnalyzerRange | null | undefined> = null,
+): GscAnalyzerInstance & { currentSiteId: Ref<string | null> } {
   const ctx = useGscAnalyticsContext()
-  const { bound, currentSiteId } = useGscSharedSiteResource<GscAnalyzerInstance>('analyzer', siteId, {
-    factory: id => createInstance(id, ctx.patchProgress, () => loadSourceInfoFor(id) as Promise<SourceInfoResponse>),
+  const cacheKey = computed(() => {
+    const id = toValue(siteId)
+    return id ? analyzerCacheKey(id, normalizeSearchType(toValue(searchType)), normalizeRange(toValue(range))) : null
+  })
+  const { bound, currentSiteId: currentCacheKey } = useGscSharedSiteResource<GscAnalyzerInstance>('analyzer', cacheKey, {
+    factory: (key) => {
+      const parsed = parseAnalyzerCacheKey(key)
+      return createInstance(parsed.siteId, parsed.searchType, parsed.range, ctx.patchProgress)
+    },
     onDispose: inst => inst.dispose(),
   })
 
@@ -74,6 +136,10 @@ export function useGscAnalyzer(siteId: MaybeRefOrGetter<string | null | undefine
   const attachedTables = computed(() => bound.value?.attachedTables.value ?? (EMPTY_TABLES as string[])) as unknown as Ref<string[]>
   const timings = computed(() => bound.value?.timings.value ?? null) as unknown as Ref<GscAnalyzerTimings | null>
   const manifestVersion = computed(() => bound.value?.manifestVersion.value) as unknown as Ref<string | undefined>
+  const currentSiteId = computed(() => {
+    const key = currentCacheKey.value
+    return key ? parseAnalyzerCacheKey(key).siteId : null
+  }) as unknown as Ref<string | null>
 
   async function query(sql: string, params?: unknown[]): Promise<QueryResult> {
     const inst = bound.value
@@ -115,8 +181,9 @@ export function useGscAnalyzer(siteId: MaybeRefOrGetter<string | null | undefine
 
 function createInstance(
   siteId: string,
+  searchType: NonNullable<AnalysisParams['searchType']>,
+  range: AnalyzerRange | null,
   patchProgress: (id: string, p: Partial<SiteLoadProgress>) => void,
-  sourceInfoLoader: () => Promise<SourceInfoResponse>,
 ): GscAnalyzerInstance {
   const ready = ref(false)
   const initializing = ref(true)
@@ -133,6 +200,7 @@ function createInstance(
   let bootedDb: DuckDBWasmBootResult | null = null
   let attachedHandle: AttachedTablesHandle | null = null
   let mode: 'browser-attached' | 'server' = 'server'
+  const lifetimeController = new AbortController()
   const inFlight = new Map<string, Promise<AnalysisResult & { queryMs: number }>>()
 
   // Cross-origin: if the host returns relative parquet URLs (`/api/r2-data/…`)
@@ -146,9 +214,11 @@ function createInstance(
     return `${apiBase.replace(/\/+$/, '')}${url}`
   }
 
-  async function attachFromSources(sources: AnalysisSourcesResponse): Promise<{ attached: number, total: number }> {
+  async function attachFromSources(sources: AnalysisSourcesResponse, signal?: AbortSignal): Promise<{ attached: number, total: number }> {
     if (!bootedDb)
       throw new Error('useGscAnalyzer: attachFromSources called before DuckDB boot')
+    if (sources.canUseBrowser === false)
+      throw new Error(`useGscAnalyzer: browser attach unavailable: ${sources.reason ?? sources.fallback ?? 'coverage plan rejected'}`)
 
     const tables = Object.entries(sources.tables)
       .filter(([, urls]) => Array.isArray(urls) && urls.length > 0)
@@ -157,11 +227,10 @@ function createInstance(
     const total = tables.reduce((n, t) => n + t.urls.length, 0)
     patch({ stage: 'attach', filesTotal: total, filesAttached: 0 })
 
-    // Cross-origin parquet GETs need the host-supplied auth header (same one
-    // useGscFetch attaches to /api/__gsc/* calls). DuckDB-WASM runs raw fetch
-    // under the hood, so we pass the header through fetchInit. Cookies aren't
-    // useful here — the parquet origin (gscdump.com) and the host page sit in
-    // different session realms when the consumer mode is active.
+    // URL preflights can use the same host-supplied auth header as /api/__gsc/*.
+    // The actual DuckDB range reads are authorized by the exact-key token
+    // embedded in each analysis-sources URL, because registerFileURL cannot
+    // carry custom fetch headers into DuckDB-WASM's internal HTTP reader.
     const extraHeaders = resolveGscAuthHeaders()
     const hasExtra = Object.keys(extraHeaders).length > 0
     let attached = 0
@@ -174,6 +243,10 @@ function createInstance(
       fetchInit: hasExtra
         ? { credentials: 'omit', headers: extraHeaders }
         : { credentials: 'same-origin' },
+      fetchConcurrency: DEFAULT_ATTACH_FETCH_CONCURRENCY,
+      maxFiles: DEFAULT_ATTACH_MAX_FILES,
+      maxBytes: DEFAULT_ATTACH_MAX_BYTES,
+      signal,
       onFileAttached: () => {
         attached++
         patch({ filesAttached: attached })
@@ -193,7 +266,7 @@ function createInstance(
     patch({ stage: 'manifest', startedAt: Date.now(), filesAttached: 0, filesTotal: 0, error: undefined, endedAt: undefined })
     // Probe the server-resolved source first. Its kind + attachedTables bit
     // decides whether we boot DuckDB-WASM (expensive) or proxy to the server.
-    const info = await sourceInfoLoader()
+    const info = await loadSourceInfo(siteId, searchType, range)
     mode = info.browserAttachEligible ? 'browser-attached' : 'server'
 
     if (mode === 'server') {
@@ -224,11 +297,11 @@ function createInstance(
 
     patch({ stage: 'manifest' })
     const t1 = performance.now()
-    const sources = await useGscAnalyticsClient().getAnalysisSources(siteId) as AnalysisSourcesResponse
+    const sources = await loadAnalysisSources(siteId, searchType, range)
     const manifestMs = performance.now() - t1
 
     const t2 = performance.now()
-    const { total } = await attachFromSources(sources)
+    const { total } = await attachFromSources(sources, lifetimeController.signal)
     const attachMs = performance.now() - t2
 
     runtime = createBrowserAnalysisRuntime(bootedDb, { schema: 'main', attachedTables: attachedTables.value })
@@ -259,7 +332,7 @@ function createInstance(
   }
 
   async function runServerAnalyze(params: AnalysisParams, _signal?: AbortSignal): Promise<AnalysisResult & { queryMs: number }> {
-    const out = await useGscAnalyticsClient().analyze<AnalysisResult & { queryMs?: number }>(siteId, params)
+    const out = await useGscAnalyticsClient().analyze<AnalysisResult & { queryMs?: number }>(siteId, { ...params, searchType: params.searchType ?? searchType })
     return {
       results: coerceResults(out.results) as AnalysisResult['results'],
       meta: out.meta as AnalysisResult['meta'],
@@ -268,18 +341,19 @@ function createInstance(
   }
 
   async function analyze(params: AnalysisParams, opts?: { signal?: AbortSignal }): Promise<AnalysisResult & { queryMs: number }> {
-    const rt = await boot
+    const rt = opts?.signal ? await raceSignal(boot, opts.signal) : await boot
     opts?.signal?.throwIfAborted?.()
 
-    const key = JSON.stringify(params)
+    const scopedParams = { ...params, searchType: params.searchType ?? searchType }
+    const key = JSON.stringify({ manifestVersion: manifestVersion.value, params: scopedParams, searchType, siteId })
     const existing = inFlight.get(key)
     if (existing)
       return opts?.signal ? raceSignal(existing, opts.signal) : existing
 
     const p = (async () => {
       if (!rt)
-        return runServerAnalyze(params, opts?.signal)
-      const out = await rt.analyze(params as never, defaultAnalyzerRegistry)
+        return runServerAnalyze(scopedParams, opts?.signal)
+      const out = await rt.analyze(scopedParams as never, defaultAnalyzerRegistry, { signal: opts?.signal })
       opts?.signal?.throwIfAborted?.()
       return {
         results: coerceResults(out.results) as AnalysisResult['results'],
@@ -287,19 +361,22 @@ function createInstance(
         queryMs: out.queryMs,
       }
     })()
+    if (opts?.signal) {
+      return raceSignal(p, opts.signal)
+    }
     inFlight.set(key, p)
     p.finally(() => {
       if (inFlight.get(key) === p)
         inFlight.delete(key)
     })
-    return opts?.signal ? raceSignal(p, opts.signal) : p
+    return p
   }
 
   async function refresh(): Promise<boolean> {
     await boot
     if (mode !== 'browser-attached' || !runtime || !bootedDb)
       return false
-    const sources = await useGscAnalyticsClient().getAnalysisSources(siteId) as AnalysisSourcesResponse
+    const sources = await loadAnalysisSources(siteId, searchType, range)
     if (!runtime.isStale(sources.manifestVersion))
       return false
     // Drop the stale views before swapping in the new partitions. The runtime
@@ -315,6 +392,7 @@ function createInstance(
   }
 
   async function dispose(): Promise<void> {
+    lifetimeController.abort()
     await runtime?.close().catch((e) => {
       console.error('[analyzer] runtime.close failed', e)
     })

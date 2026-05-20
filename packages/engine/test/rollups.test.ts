@@ -593,6 +593,39 @@ describe('indexPercentRollup', () => {
     expect(payload.days[0].ratio).toBeCloseTo(0.25)
     expect(payload.days[1].ratio).toBeCloseTo(0.5)
   })
+
+  it('defaults omitted page-fact searchType to web instead of cross-type unioning', async () => {
+    const { ds } = makeFakeDataSource()
+    await ds.write('u_u1/s1/entities/sitemaps/urls/by-feed/abc123/index.parquet', new Uint8Array([1]))
+    const listCalls: Parameters<RollupEngine['listPartitions']>[0][] = []
+    const runCalls: Parameters<RollupEngine['runSQL']>[0][] = []
+    const engine: RollupEngine = {
+      async listPartitions(opts) {
+        listCalls.push(opts)
+        return [{ partition: 'daily/2023-11-10', bytes: 1000 }]
+      },
+      async runSQL(opts) {
+        runCalls.push(opts)
+        return opts.sql.includes('clicked_urls')
+          ? { rows: [] }
+          : { rows: [{ total: 100 }] }
+      },
+    }
+
+    await indexPercentRollup.build({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource: ds,
+      builtAt: 1_700_000_000_000,
+    })
+
+    expect(listCalls[0]).toEqual(expect.objectContaining({ table: 'pages', searchType: 'web' }))
+    const numerator = runCalls.find(call => call.fileSets.PAGES)
+    const denominator = runCalls.find(call => !call.fileSets.PAGES)
+    expect(numerator).toEqual(expect.objectContaining({ table: 'pages', searchType: 'web' }))
+    expect(denominator).toEqual(expect.objectContaining({ table: 'pages' }))
+    expect(denominator).not.toHaveProperty('searchType')
+  })
 })
 
 describe('sitemapHealthRollup', () => {

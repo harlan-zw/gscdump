@@ -18,6 +18,7 @@ import type {
 import { runAnalyzerFromSource } from '../analyzer/dispatch'
 import { coerceRows } from '../coerce'
 import { assertDimensionsSupported, getFilterDimensions, pgResolverAdapter } from '../resolver'
+import { DEFAULT_SEARCH_TYPE } from '../storage'
 
 export type { AttachedTableRunner, AttachedTableSourceOptions } from './attached-table'
 export { AttachedTableMissingError, createAttachedTableSource, rewriteForTableSource } from './attached-table'
@@ -115,8 +116,8 @@ export function createEngineQuerySource(
 
 /**
  * Convenience: wrap a storage engine + tenant ctx in a source and dispatch.
- * Equivalent to
- * `runAnalyzerFromSource(createEngineQuerySource({ engine, ctx }), params, registry)`.
+ * Equivalent to wrapping `createEngineQuerySource`, with omitted searchType
+ * defaulted to web at this public helper boundary.
  */
 export async function runAnalyzerWithEngine(
   deps: { engine: StorageEngine },
@@ -125,7 +126,7 @@ export async function runAnalyzerWithEngine(
   registry: AnalyzerRegistry,
 ): Promise<AnalysisResult> {
   return runAnalyzerFromSource(
-    createEngineQuerySource({ engine: deps.engine, ctx }),
+    createEngineQuerySource({ engine: deps.engine, ctx, searchType: params.searchType ?? DEFAULT_SEARCH_TYPE }),
     params,
     registry,
   )

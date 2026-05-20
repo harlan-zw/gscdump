@@ -33,6 +33,7 @@ export {
   attachParquetTables,
   attachParquetUrlTables,
   bootDuckDBWasm,
+  BrowserAttachBudgetExceededError,
   createBrowserAnalysisRuntime,
 } from './runtime'
 export type {

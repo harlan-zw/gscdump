@@ -81,9 +81,10 @@ the data — e.g. nuxtseo.com pro consuming gscdump.com. Two pieces:
 2. **Hand the layer a per-viewer api key**: register a client plugin that
    trades the viewer's host session for an api key, then call
    `setGscFetchHeaders({ 'x-api-key': key })`. The layer's `useGscFetch`
-   attaches the header to every `/api/__gsc/*` call automatically. The same
-   header rides parquet GETs in `attachParquetUrlTables` (DuckDB-WASM
-   browser path), so R2 reads work cross-origin.
+   attaches the header to every `/api/__gsc/*` call automatically. Browser
+   parquet reads use exact-object URLs minted by the source endpoint; runtime
+   preflights can include this header, while DuckDB-WASM range reads are
+   authorized by the token embedded in each URL.
 
 The `setupGscFetchAuth` helper collapses the boilerplate:
 

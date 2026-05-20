@@ -5,27 +5,34 @@
 //         write/compaction grows linear memory monotonically and cannot shrink,
 //         OOMing after a handful of month-sized compactions.
 // Reads: fetched from R2 via binding in this Worker, decoded with hyparquet,
-//         then handed to the duckdb Worker as a pre-materialized temp table
-//         via `runSQL({sql, tables})`. Bypasses ducklings' R2 httpfs path
-//         entirely because it has a stateful cache bug on small parquets
-//         (see docs/repros/ducklings-r2-httpfs.md).
+//         encoded into Arrow IPC stream buffers (see `./arrow`), then handed to
+//         the duckdb Worker as pre-materialized temp tables either inline via
+//         `runSQL({sql, tables})` or through staged chunk uploads. Bypasses
+//         ducklings' R2 httpfs path entirely because it has a stateful cache bug
+//         on small parquets (see docs/repros/ducklings-r2-httpfs.md). Arrow IPC
+//         — not JS row objects — crosses the service binding: columnar, compact,
+//         and ingested by the sibling without a row→column rebuild.
 
 import type {
+  ColumnDef,
   ParquetCodec,
   QueryExecutor,
   Row,
 } from '@gscdump/engine'
 import type { AnalyticsEnv } from './env'
-import { bindLiterals, canonicalEmptyParquetSchema, coerceRow } from '@gscdump/engine'
+import { bindLiterals, coerceRow, SCHEMAS } from '@gscdump/engine'
 import { createHyparquetCodec, decodeParquetToRows } from '@gscdump/engine/hyparquet'
+import { rowsToArrowIPC } from './arrow'
 
 interface RunSQLTableSpec {
-  rows: Row[]
-  ddl?: string
+  /** Arrow IPC stream buffer the sibling materialises as a temp table. */
+  ipc: Uint8Array
 }
 
 interface DuckDBServiceRPC {
   runSQL: (args: { sql: string, tables?: Record<string, RunSQLTableSpec> }) => Promise<{ rows: Row[], sql: string }>
+  stageArrowTable?: (args: { table: string, ipc: Uint8Array }) => Promise<void>
+  dropTables?: (args: { tables: string[] }) => Promise<void>
   ping: () => Promise<string>
 }
 
@@ -44,6 +51,17 @@ function resolveSvc(env: AnalyticsEnv): DuckDBServiceRPC {
  * job/request CPU budget so a stalled query rejects cleanly and identifiably.
  */
 const DUCKDB_RPC_TIMEOUT_MS = 22_000
+const WORKER_R2_MAX_FILES = 96
+const WORKER_R2_MAX_BYTES = 64 * 1024 * 1024
+const WORKER_R2_DECODE_CONCURRENCY = 2
+const WORKER_R2_HEAD_CONCURRENCY = 4
+
+// Arrow IPC budgets for the service-binding RPC. Cloudflare caps serialized
+// RPC arguments at 32MiB; keep each chunk and any direct `{sql, tables}` call
+// below that, while still bounding the total staged upload for one query.
+const IPC_CHUNK_BUDGET = 8 * 1024 * 1024
+const IPC_DIRECT_CALL_BUDGET = 30 * 1024 * 1024
+const IPC_STAGED_TOTAL_BUDGET = 64 * 1024 * 1024
 
 export class DuckDBServiceTimeoutError extends Error {
   override name = 'DuckDBServiceTimeoutError'
@@ -93,6 +111,61 @@ function tmpTableName(placeholder: string): string {
   return `tmp_${placeholder.toLowerCase()}_${uuid}`
 }
 
+export async function mapLimit<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const limit = Math.max(1, Math.floor(concurrency))
+  const out = Array.from<R>({ length: items.length })
+  let next = 0
+  async function worker(): Promise<void> {
+    while (next < items.length) {
+      const index = next++
+      out[index] = await fn(items[index]!, index)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return out
+}
+
+export interface WorkerReadBudgetInput {
+  fileKeys: Record<string, string[]>
+  sizes?: Record<string, number | undefined>
+  maxFiles?: number
+  maxBytes?: number
+}
+
+export function assertWorkerReadBudget(opts: WorkerReadBudgetInput): void {
+  const maxFiles = opts.maxFiles ?? WORKER_R2_MAX_FILES
+  const maxBytes = opts.maxBytes ?? WORKER_R2_MAX_BYTES
+  const entries = Object.entries(opts.fileKeys)
+  const totalFiles = entries.reduce((acc, [, keys]) => acc + keys.length, 0)
+  if (totalFiles > maxFiles) {
+    throw new Error(
+      `createDucklingsExecutor: planned read spans ${totalFiles} files, exceeding the ${maxFiles} file Worker budget. `
+      + `Narrow the date range or route through a background/windowed query.`,
+    )
+  }
+
+  if (!opts.sizes)
+    return
+  let totalBytes = 0
+  for (const [, keys] of entries) {
+    for (const key of keys) {
+      const bytes = opts.sizes[key]
+      if (bytes !== undefined)
+        totalBytes += Math.max(0, bytes)
+    }
+  }
+  if (totalBytes > maxBytes) {
+    throw new Error(
+      `createDucklingsExecutor: planned read spans ${totalBytes} bytes, exceeding the ${maxBytes} byte Worker budget. `
+      + `Narrow the date range or route through a background/windowed query.`,
+    )
+  }
+}
+
 // Decoded-row cache. R2 object keys are content-addressed (`__v<ts>` suffix),
 // so the bytes — and the decoded `Row[]` — are immutable for a given key.
 // That makes a per-isolate cache safe across requests: any object key the
@@ -113,6 +186,126 @@ function estimateRowsBytes(rows: Row[]): number {
   // every cached entry, which would dominate decode cost on hits.
   const cols = Object.keys(rows[0]!).length
   return rows.length * cols * 64
+}
+
+export interface ArrowIPCChunk {
+  ipc: Uint8Array
+  rows: number
+}
+
+export interface ArrowIPCChunkOptions {
+  maxChunkBytes?: number
+  placeholder?: string
+}
+
+function inferExtraColumnType(values: unknown[]): ColumnDef['type'] {
+  let hasValue = false
+  let hasString = false
+  let hasFloat = false
+  let hasBigInt = false
+  for (const value of values) {
+    if (value === null || value === undefined)
+      continue
+    hasValue = true
+    if (typeof value === 'string') {
+      hasString = true
+      break
+    }
+    if (typeof value === 'bigint') {
+      hasBigInt = true
+      continue
+    }
+    if (typeof value === 'number') {
+      if (!Number.isInteger(value))
+        hasFloat = true
+      if (value > 2_147_483_647 || value < -2_147_483_648)
+        hasBigInt = true
+    }
+  }
+  if (!hasValue || hasString)
+    return 'VARCHAR'
+  if (hasFloat)
+    return 'DOUBLE'
+  return hasBigInt ? 'BIGINT' : 'INTEGER'
+}
+
+function chunkSchemaColumns(rows: Row[], schemaColumns?: readonly ColumnDef[]): ColumnDef[] | undefined {
+  const columns = schemaColumns ? [...schemaColumns] : []
+  const seen = new Set(columns.map(c => c.name))
+  const extraValues = new Map<string, unknown[]>()
+
+  for (const row of rows) {
+    for (const key in row) {
+      if (seen.has(key))
+        continue
+      let values = extraValues.get(key)
+      if (!values) {
+        values = []
+        extraValues.set(key, values)
+      }
+      values.push(row[key])
+    }
+  }
+
+  if (extraValues.size === 0)
+    return schemaColumns ? columns : undefined
+
+  for (const [name, values] of extraValues) {
+    columns.push({
+      name,
+      type: inferExtraColumnType(values),
+      nullable: true,
+    })
+  }
+  return columns
+}
+
+export function rowsToArrowIPCChunks(
+  rows: Row[],
+  schemaColumns?: readonly ColumnDef[],
+  opts: ArrowIPCChunkOptions = {},
+): ArrowIPCChunk[] {
+  const maxChunkBytes = Math.max(1, Math.floor(opts.maxChunkBytes ?? IPC_CHUNK_BUDGET))
+  const placeholder = opts.placeholder ? `{{${opts.placeholder}}}` : 'placeholder'
+  const chunkColumns = chunkSchemaColumns(rows, schemaColumns)
+  if (rows.length === 0) {
+    const ipc = rowsToArrowIPC([], chunkColumns)
+    if (ipc.byteLength > maxChunkBytes) {
+      throw new Error(
+        `createDucklingsExecutor: empty ${placeholder} Arrow IPC schema encoded to ${ipc.byteLength} bytes, `
+        + `exceeding the ${maxChunkBytes}-byte service-binding chunk budget.`,
+      )
+    }
+    return [{ ipc, rows: 0 }]
+  }
+
+  const estimatedPerRow = Math.max(1, Math.ceil(estimateRowsBytes(rows) / rows.length))
+  let targetRows = Math.max(1, Math.min(rows.length, Math.floor((maxChunkBytes * 0.75) / estimatedPerRow)))
+  const chunks: ArrowIPCChunk[] = []
+  let index = 0
+  while (index < rows.length) {
+    let take = Math.min(targetRows, rows.length - index)
+    while (true) {
+      const slice = rows.slice(index, index + take)
+      const ipc = rowsToArrowIPC(slice, chunkColumns)
+      if (ipc.byteLength <= maxChunkBytes) {
+        chunks.push({ ipc, rows: slice.length })
+        index += take
+        if (ipc.byteLength < maxChunkBytes * 0.4 && take === targetRows)
+          targetRows = Math.min(rows.length - index || targetRows, targetRows * 2)
+        break
+      }
+      if (take === 1) {
+        throw new Error(
+          `createDucklingsExecutor: one ${placeholder} row encoded to ${ipc.byteLength} bytes of Arrow IPC, `
+          + `exceeding the ${maxChunkBytes}-byte service-binding chunk budget. `
+          + `Narrow the query or route through a background/windowed query.`,
+        )
+      }
+      take = Math.max(1, Math.floor(take / 2))
+    }
+  }
+  return chunks
 }
 
 function rowCacheGet(key: string): Row[] | undefined {
@@ -141,57 +334,79 @@ function rowCachePut(key: string, rows: Row[]): void {
   rowCacheBytes += bytes
 }
 
-export function createDucklingsExecutor(env: AnalyticsEnv): QueryExecutor {
+export interface DucklingsExecutorOptions {
+  ipcChunkBytes?: number
+  ipcDirectCallBytes?: number
+  ipcTotalBytes?: number
+}
+
+export function createDucklingsExecutor(env: AnalyticsEnv, opts: DucklingsExecutorOptions = {}): QueryExecutor {
   return {
-    async execute({ sql, params, fileKeys, dataSource, signal, table }) {
+    async execute({ sql, params, fileKeys, placeholderTables, dataSource, signal, table }) {
       signal?.throwIfAborted()
       const svc = resolveSvc(env)
+      assertWorkerReadBudget({ fileKeys })
+      if (dataSource.head) {
+        const uniqueKeys = [...new Set(Object.values(fileKeys).flat())]
+        const sizes: Record<string, number | undefined> = {}
+        await mapLimit(uniqueKeys, WORKER_R2_HEAD_CONCURRENCY, async (key) => {
+          signal?.throwIfAborted()
+          sizes[key] = (await dataSource.head!(key))?.bytes
+        })
+        assertWorkerReadBudget({ fileKeys, sizes })
+      }
 
-      // Fetch every parquet for every placeholder in parallel, decode in the
-      // main Worker, merge into one row array per placeholder. Each becomes a
-      // DuckDB temp table that the sibling materializes before running SQL.
+      // Fetch/decode parquet with a tiny concurrency cap in the main Worker,
+      // merge into one row array per placeholder, then encode each as an Arrow
+      // IPC stream the sibling materializes as a temp table before running SQL.
       const tempNames: Record<string, string> = {}
-      const tables: Record<string, RunSQLTableSpec> = {}
+      const tableChunks: Record<string, ArrowIPCChunk[]> = {}
+      let totalIpcBytes = 0
+      const maxChunkBytes = opts.ipcChunkBytes ?? IPC_CHUNK_BUDGET
+      const maxDirectCallBytes = opts.ipcDirectCallBytes ?? IPC_DIRECT_CALL_BUDGET
+      const maxTotalBytes = opts.ipcTotalBytes ?? IPC_STAGED_TOTAL_BUDGET
 
-      await Promise.all(
-        Object.entries(fileKeys).map(async ([placeholder, keys]) => {
-          const perFile = await Promise.all(
-            keys.map(async (key) => {
-              const cached = rowCacheGet(key)
-              if (cached)
-                return cached
-              const bytes = await dataSource.read(key)
-              const rows = await decodeParquetToRows(bytes)
-              rowCachePut(key, rows)
-              return rows
-            }),
+      for (const [placeholder, keys] of Object.entries(fileKeys)) {
+        signal?.throwIfAborted()
+        const perFile = await mapLimit(keys, WORKER_R2_DECODE_CONCURRENCY, async (key) => {
+          const cached = rowCacheGet(key)
+          if (cached)
+            return cached
+          signal?.throwIfAborted()
+          const bytes = await dataSource.read(key, undefined, signal)
+          signal?.throwIfAborted()
+          const rows = await decodeParquetToRows(bytes)
+          rowCachePut(key, rows)
+          return rows
+        })
+        const merged: Row[] = []
+        for (const rows of perFile) merged.push(...rows)
+
+        // Encode the merged rows as Arrow IPC. `placeholderTables` carries the
+        // canonical table per placeholder (it can differ across placeholders
+        // in a multi-fileSet query); its schema authoritatively types every
+        // fact column. An entity-sidecar placeholder, whose `table` is a
+        // placeholder lie, falls back to value inference in `rowsToArrowIPC`.
+        const placeholderTable = placeholderTables?.[placeholder] ?? table
+        const chunks = rowsToArrowIPCChunks(merged, SCHEMAS[placeholderTable]?.columns, {
+          maxChunkBytes,
+          placeholder,
+        })
+        signal?.throwIfAborted()
+
+        totalIpcBytes += chunks.reduce((acc, chunk) => acc + chunk.ipc.byteLength, 0)
+        if (totalIpcBytes > maxTotalBytes) {
+          throw new Error(
+            `createDucklingsExecutor: query encoded to ${totalIpcBytes} bytes of Arrow IPC across `
+            + `${Object.keys(tableChunks).length + 1} placeholders, exceeding the ${maxTotalBytes}-byte `
+            + `service-binding transport budget. Window the query (chunk partitions / narrow the range).`,
           )
-          const merged: Row[] = []
-          for (const rows of perFile) merged.push(...rows)
-          // Service-binding RPC args are capped at 32MiB by Cloudflare. A
-          // full-history `pages`/`keywords` placeholder decodes to ~60MB of
-          // JS rows — shipping that to the duckdb sibling fails with a cryptic
-          // "Serialized RPC arguments ... limited to 32MiB". Fail early with a
-          // message that names the placeholder + size so the rollup builder is
-          // identifiable as the thing that must window its query.
-          const mergedBytes = estimateRowsBytes(merged)
-          if (mergedBytes > 28 * 1024 * 1024) {
-            throw new Error(
-              `createDucklingsExecutor: placeholder {{${placeholder}}} decoded to ~${mergedBytes} bytes `
-              + `(${merged.length} rows), exceeding the 28MiB service-binding RPC budget. `
-              + `The rollup builder must window this query (chunk partitions) instead of scanning all files at once.`,
-            )
-          }
-          const tmp = tmpTableName(placeholder)
-          tempNames[placeholder] = tmp
-          // DDL used by the sibling only when `merged` is empty; we pass
-          // unconditionally because it's a few bytes and keeps the contract
-          // simple. (Building DDL inside the worker would tree-shake-fail and
-          // bundle the whole engine package — see workers/duckdb/src/index.ts.)
-          const ddl = `AS SELECT * FROM ${canonicalEmptyParquetSchema(table)} WHERE FALSE`
-          tables[tmp] = { rows: merged, ddl }
-        }),
-      )
+        }
+
+        const tmp = tmpTableName(placeholder)
+        tempNames[placeholder] = tmp
+        tableChunks[tmp] = chunks
+      }
 
       signal?.throwIfAborted()
 
@@ -206,11 +421,71 @@ export function createDucklingsExecutor(env: AnalyticsEnv): QueryExecutor {
       })
       const finalSql = bindLiterals(rewritten, params)
 
-      const result = await withDuckDBDeadline(
-        svc.runSQL({ sql: finalSql, tables }),
-        DUCKDB_RPC_TIMEOUT_MS,
-        signal,
-      )
+      const canInlineTables = totalIpcBytes <= maxDirectCallBytes
+        && Object.values(tableChunks).every(chunks => chunks.length === 1)
+
+      let result: { rows: Row[], sql: string }
+      if (canInlineTables) {
+        const tables: Record<string, RunSQLTableSpec> = {}
+        for (const [name, chunks] of Object.entries(tableChunks))
+          tables[name] = { ipc: chunks[0]!.ipc }
+        result = await withDuckDBDeadline(
+          svc.runSQL({ sql: finalSql, tables }),
+          DUCKDB_RPC_TIMEOUT_MS,
+          signal,
+        )
+      }
+      else {
+        if (!svc.stageArrowTable || !svc.dropTables) {
+          throw new Error(
+            'createDucklingsExecutor: DUCKDB_SVC does not support chunked Arrow IPC staging. '
+            + 'Deploy the gscdump-duckdb worker with stageArrowTable/dropTables support.',
+          )
+        }
+
+        const staged = new Set<string>()
+        let primaryError: unknown
+        let cleanupError: unknown
+        try {
+          for (const [name, chunks] of Object.entries(tableChunks)) {
+            for (const chunk of chunks) {
+              signal?.throwIfAborted()
+              staged.add(name)
+              await withDuckDBDeadline(
+                svc.stageArrowTable({ table: name, ipc: chunk.ipc }),
+                DUCKDB_RPC_TIMEOUT_MS,
+                signal,
+              )
+            }
+          }
+          result = await withDuckDBDeadline(
+            svc.runSQL({ sql: finalSql }),
+            DUCKDB_RPC_TIMEOUT_MS,
+            signal,
+          )
+        }
+        catch (error) {
+          primaryError = error
+        }
+        finally {
+          if (staged.size > 0) {
+            try {
+              await withDuckDBDeadline(
+                svc.dropTables({ tables: [...staged] }),
+                DUCKDB_RPC_TIMEOUT_MS,
+              )
+            }
+            catch (error) {
+              cleanupError = error
+            }
+          }
+        }
+        if (primaryError)
+          throw primaryError
+        if (cleanupError)
+          throw cleanupError
+        result = result!
+      }
       return { rows: result.rows.map(coerceRow), sql: result.sql }
     },
   }

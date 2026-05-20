@@ -37,6 +37,7 @@ export interface TenantCtx {
 
 export type Dimension = 'page' | 'query' | 'queryCanonical' | 'country' | 'device' | 'date' | 'searchAppearance' | 'hour'
 export type Metric = 'clicks' | 'impressions' | 'ctr' | 'position'
+export type GscSearchType = 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews'
 // Wire-format filter — server-side normalizer accepts both the JSON filter form
 // (`{ type, column, value, ... }`) and the branded builder form from
 // `gscdump/query` (`{ __filterBrand, _filters, _groupType, ... }`). Kept
@@ -53,6 +54,7 @@ export interface BuilderState {
   orderBy?: { column: Metric | 'date', dir: 'asc' | 'desc' }
   rowLimit?: number
   startRow?: number
+  searchType?: GscSearchType
 }
 
 export interface GscApiRange {
@@ -350,8 +352,8 @@ export interface BackfillResponse {
 export interface AnalyticsClient {
   whoami: () => Promise<WhoamiResponse>
   listSites: () => Promise<SiteListItem[]>
-  getSourceInfo: (siteId: string) => Promise<SourceInfoResponse>
-  getAnalysisSources: (siteId: string, tables?: string[] | string) => Promise<AnalysisSourcesResponse>
+  getSourceInfo: (siteId: string, options?: SourceInfoOptions) => Promise<SourceInfoResponse>
+  getAnalysisSources: (siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: SearchTypeOptions | SourceInfoOptions) => Promise<AnalysisSourcesResponse>
   analyze: <T = unknown>(siteId: string, params: unknown) => Promise<T>
   queryRows: <T = Record<string, unknown>>(siteId: string, state: unknown) => Promise<GscRowQueryResponse<T>>
   getRollup: <T = unknown>(siteId: string, rollupId: string, params?: { start?: string, end?: string }) => Promise<RollupEnvelope<T>>
@@ -746,6 +748,7 @@ export interface GscdumpAnalysisParams {
   minPosition?: number
   maxPosition?: number
   maxCtr?: number
+  searchType?: GscSearchType
 }
 
 export interface GscdumpAnalysisResponse {
@@ -830,15 +833,43 @@ export interface GscdumpAnalysisSourcesResponse {
   tables: Record<string, string[]>
   generatedAt: string
   manifestVersion: string
+  searchType?: GscSearchType
+  canUseBrowser?: boolean
+  fallback?: string
+  reason?: string
+  estimatedBytes?: number
+  estimatedFiles?: number
+  coveragePlan?: unknown
+}
+
+export interface SearchTypeOptions {
+  searchType?: GscSearchType
+}
+
+export interface SourceInfoOptions extends SearchTypeOptions {
+  start?: string
+  end?: string
+  startDate?: string
+  endDate?: string
+}
+
+export interface AnalysisSourcesOptions extends SearchTypeOptions {
+  tables?: string[] | string
+  start?: string
+  end?: string
+  startDate?: string
+  endDate?: string
 }
 
 export interface DataQueryOptions {
   comparison?: BuilderState
   filter?: GscComparisonFilter
+  searchType?: GscSearchType
 }
 
 export interface DataDetailOptions {
   comparison?: BuilderState
+  searchType?: GscSearchType
 }
 
 export interface IndexingUrlsParams {
@@ -1160,7 +1191,7 @@ export interface PartnerClient {
   bulkRegisterSites: (params: BulkRegisterPartnerSitesParams) => Promise<BulkRegisterPartnerSitesResponse>
   deleteUser: (userId: string) => Promise<DeletePartnerUserResponse>
   deleteSite: (siteId: string) => Promise<{ success: boolean }>
-  getAnalysisSources: (siteId: string, tables?: string[] | string) => Promise<GscdumpAnalysisSourcesResponse>
+  getAnalysisSources: (siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: SearchTypeOptions | SourceInfoOptions) => Promise<GscdumpAnalysisSourcesResponse>
   getSiteSyncStatus: (siteId: string, userId?: string) => Promise<GscdumpSyncStatusResponse>
   getData: (siteId: string, state: BuilderState, options?: DataQueryOptions) => Promise<GscdumpDataResponse>
   getDataDetail: (siteId: string, state: BuilderState, options?: DataDetailOptions) => Promise<GscdumpDataDetailResponse>

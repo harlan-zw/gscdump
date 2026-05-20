@@ -38,6 +38,26 @@ const scope = scopeFor('keywords', { siteId, window })
 const rows = await strikingMomentum(runner, { ...scope, limit: 50 })
 ```
 
+## Browser Parquet Attachment Strategy
+
+`attachParquetUrlTables()` uses URL registration with DuckDB-WASM's HTTP file
+reader rather than downloading parquet objects into JS memory. Each exact-object
+URL is preflighted with `HEAD`; if the endpoint does not support `HEAD`, the
+runtime performs a one-byte `Range: bytes=0-0` probe. Attachment fails closed
+unless the response proves `Content-Length` / `Content-Range` and byte-range
+support.
+
+The runtime keeps local guards independent of the server response:
+`maxFiles`, `maxBytes`, `fetchConcurrency`, and `AbortSignal` are enforced
+before registering files. `bootDuckDBWasm()` opens DuckDB with full HTTP reads
+disabled, so a server that cannot satisfy range reads routes to server-side
+fallback instead of causing broad browser object downloads.
+
+OPFS is intentionally not used as a write-through parquet cache yet. If it is
+added later, the cache key must include manifest version and object key, and
+the same file/byte budgets must gate admission before any object is materialized
+locally.
+
 ### Engine source for analyzer dispatch
 
 ```ts

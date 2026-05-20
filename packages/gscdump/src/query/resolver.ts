@@ -120,7 +120,7 @@ export function normalizeBuilderState(state: unknown): BuilderState {
   if (!state || typeof state !== 'object')
     throw new Error('Invalid state')
   const s = state as Record<string, unknown>
-  return {
+  const normalized: BuilderState = {
     dimensions: s.dimensions as BuilderState['dimensions'],
     metrics: s.metrics as BuilderState['metrics'],
     filter: normalizeFilter(s.filter as FilterInput | undefined) as BuilderState['filter'],
@@ -130,6 +130,9 @@ export function normalizeBuilderState(state: unknown): BuilderState {
     dataState: s.dataState as BuilderState['dataState'],
     aggregationType: s.aggregationType as BuilderState['aggregationType'],
   }
+  if (typeof s.searchType === 'string' && KNOWN_SEARCH_TYPES.has(s.searchType))
+    normalized.searchType = s.searchType as SearchType
+  return normalized
 }
 
 interface FilterExtraction {
