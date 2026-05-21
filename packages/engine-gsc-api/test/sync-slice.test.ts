@@ -119,4 +119,144 @@ describe('runGscSyncSlice', () => {
 
     expect(result.metadata?.first_incomplete_hour).toBe('NEW')
   })
+
+  const fullPage2 = [
+    { keys: ['a'], clicks: 1, impressions: 1, ctr: 1, position: 1 },
+    { keys: ['b'], clicks: 1, impressions: 1, ctr: 1, position: 1 },
+  ]
+
+  it('does NOT advance the cursor when a durable onBatch write times out', async () => {
+    // Regression: a timed-out onBatch write is ambiguous — the rows may never
+    // have been persisted. The slice must stop and let the continuation
+    // re-process THIS page from the same cursor, not skip past it.
+    const captured: SearchAnalyticsQuery[] = []
+    const client = makeClient([{ rows: fullPage2 }, { rows: fullPage2 }], captured)
+    let calls = 0
+    const onBatch = async () => {
+      calls++
+      throw new Error('R2 write timeout')
+    }
+
+    const result = await runGscSyncSlice({
+      client,
+      siteUrl: 'sc-domain:example.com',
+      table: 'pages',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      rowLimit: 2,
+      onBatch,
+    })
+
+    expect(calls).toBe(1)
+    expect(captured).toHaveLength(1) // loop stopped — did not fetch page 2
+    expect(result.hasMore).toBe(true)
+    expect(result.nextStartRow).toBe(0) // cursor NOT advanced past the unwritten page
+  })
+
+  it('rethrows a non-timeout (durable) onBatch failure instead of swallowing it', async () => {
+    const captured: SearchAnalyticsQuery[] = []
+    const client = makeClient([{ rows: fullPage2 }], captured)
+    const onBatch = async () => {
+      throw new Error('disk full')
+    }
+
+    await expect(runGscSyncSlice({
+      client,
+      siteUrl: 'sc-domain:example.com',
+      table: 'pages',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      rowLimit: 2,
+      onBatch,
+    })).rejects.toThrow('disk full')
+  })
+
+  it('returns retry state without advancing the cursor when a GSC fetch times out', async () => {
+    const captured: SearchAnalyticsQuery[] = []
+    const client = {
+      _rawQuery: async (_siteUrl: string, body: SearchAnalyticsQuery) => {
+        captured.push(body)
+        throw Object.assign(new Error('socket aborted'), { name: 'AbortError' })
+      },
+    } as unknown as GoogleSearchConsoleClient
+
+    const result = await runGscSyncSlice({
+      client,
+      siteUrl: 'sc-domain:example.com',
+      table: 'pages',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      initialStartRow: 40,
+      onBatch: async () => {},
+    })
+
+    expect(result.hasMore).toBe(true)
+    expect(result.nextStartRow).toBe(40)
+    expect(result.totalRows).toBe(0)
+  })
+
+  it('scopes the slice to the registered host via a page-regex filter (ADR-0033)', async () => {
+    const captured: SearchAnalyticsQuery[] = []
+    const client = makeClient([{ rows: [] }], captured)
+
+    await runGscSyncSlice({
+      client,
+      siteUrl: 'sc-domain:example.com',
+      table: 'pages',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      domainFilter: { domain: 'www.example.com' },
+      onBatch: async () => {},
+    })
+
+    const groups = captured[0]!.dimensionFilterGroups
+    expect(groups).toEqual([{
+      filters: [{
+        dimension: 'page',
+        operator: 'includingRegex',
+        expression: '^https?://(www\\.)?example\\.com/',
+      }],
+    }])
+  })
+
+  it('omits dimensionFilterGroups when no domainFilter is given', async () => {
+    const captured: SearchAnalyticsQuery[] = []
+    const client = makeClient([{ rows: [] }], captured)
+
+    await runGscSyncSlice({
+      client,
+      siteUrl: 'sc-domain:example.com',
+      table: 'pages',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      onBatch: async () => {},
+    })
+
+    expect(captured[0]!.dimensionFilterGroups).toBeUndefined()
+  })
+
+  it('defaults searchType to web and forwards an explicit searchType to the query', async () => {
+    const webCap: SearchAnalyticsQuery[] = []
+    await runGscSyncSlice({
+      client: makeClient([{ rows: [] }], webCap),
+      siteUrl: 'sc-domain:example.com',
+      table: 'pages',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      onBatch: async () => {},
+    })
+    expect(webCap[0]!.type).toBe('web')
+
+    const discoverCap: SearchAnalyticsQuery[] = []
+    await runGscSyncSlice({
+      client: makeClient([{ rows: [] }], discoverCap),
+      siteUrl: 'sc-domain:example.com',
+      table: 'pages',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      searchType: 'discover',
+      onBatch: async () => {},
+    })
+    expect(discoverCap[0]!.type).toBe('discover')
+  })
 })

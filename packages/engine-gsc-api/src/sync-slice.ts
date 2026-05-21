@@ -50,8 +50,9 @@ export interface RunGscSyncSliceOptions {
   dataState?: GscDataState
   /**
    * Invoked per GSC API page with the rows fetched. Return a promise; the
-   *  loop awaits it before paging further. Throw inside to abort; AbortError /
-   *  timeout messages are swallowed so the continuation can re-process.
+   *  loop awaits it before paging further. Throw a durable error to abort the
+   *  slice. A thrown AbortError / timeout stops the loop and returns retry
+   *  state at the current cursor so the continuation re-processes this page.
    */
   onBatch: (rows: GscApiRow[]) => Promise<void>
   initialStartRow?: number
@@ -184,11 +185,17 @@ export async function runGscSyncSlice(
     opts.onPage?.({ searchType, rowsThisPage: rows.length })
 
     if (rows.length > 0) {
-      await opts.onBatch(rows).catch((err: unknown) => {
+      const batchTimedOut = await opts.onBatch(rows).then(() => false).catch((err: unknown) => {
         if (isTimeoutLike(err))
-          return
+          return true
         throw err
       })
+      // A timed-out durable write is ambiguous — the rows may never have been
+      // persisted. Stop and return retry state at the CURRENT cursor so the
+      // continuation re-processes this page, rather than advancing past it
+      // (which would leave a silent gap). Mirrors the `_rawQuery` timeout path.
+      if (batchTimedOut)
+        return { totalRows: totalRows - rows.length, hasMore: true, nextStartRow: startRow, metadata }
     }
 
     if (rows.length < rowLimit)
