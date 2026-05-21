@@ -1,6 +1,7 @@
 import type {
   ArbitrarySqlQuery,
   EntityDailySparklineQuery,
+  MultiSeriesStackedDailyQuery,
   PresetAnalyzerQuery,
   SiteDailyTimeseriesQuery,
   TopNBreakdownQuery,
@@ -60,6 +61,25 @@ describe('buildArchetypeSql', () => {
     expect(buildArchetypeSql(q).sql).toContain('LIMIT 20 OFFSET 40')
   })
 
+  it('top-n-breakdown over device reads the dates pivot columns', () => {
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'device',
+      metrics: ['clicks', 'impressions', 'ctr', 'position'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 3,
+    }
+    const plan = buildArchetypeSql(q)
+    expect(plan.table).toBe('dates')
+    expect(plan.sql).toContain('UNION ALL')
+    expect(plan.sql).toContain('SUM(clicks_desktop) AS clicks')
+    expect(plan.sql).toContain('SUM(impressions_mobile) AS impressions')
+    expect(plan.sql).toContain('SUM(sum_position_tablet) / NULLIF(SUM(impressions_tablet), 0) AS position')
+    expect(plan.sql).toContain('ORDER BY clicks DESC LIMIT 3')
+    expect(plan.params).toHaveLength(12)
+  })
+
   it('entity-daily-sparkline inlines the pre-resolved entity IN list (escaped)', () => {
     const q: EntityDailySparklineQuery = {
       ...base,
@@ -114,6 +134,22 @@ describe('buildArchetypeSql', () => {
     expect(plan.sql).toContain('HAVING')
     expect(plan.sql).not.toMatch(/OVER\s*\(/)
     expect(plan.sql).not.toContain('QUALIFY')
+  })
+
+  it('multi-series-stacked-daily over device reads the dates pivot columns', () => {
+    const q: MultiSeriesStackedDailyQuery = {
+      ...base,
+      archetype: 'multi-series-stacked-daily',
+      seriesDimension: 'device',
+      metric: 'clicks',
+    }
+    const plan = buildArchetypeSql(q)
+    expect(plan.table).toBe('dates')
+    expect(plan.sql).toContain('UNION ALL')
+    expect(plan.sql).toContain('SUM(clicks_desktop) AS clicks')
+    expect(plan.sql).toContain('GROUP BY date')
+    expect(plan.sql).toContain('ORDER BY date ASC, device ASC')
+    expect(plan.params).toHaveLength(12)
   })
 
   it('preset-analyzer rejects a non-R2-SQL-safe preset', () => {

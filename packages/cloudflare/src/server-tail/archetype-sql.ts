@@ -92,6 +92,37 @@ function orderMetricExpr(metric: Metric): string {
   }
 }
 
+const DEVICE_SUFFIXES = ['desktop', 'mobile', 'tablet'] as const
+
+function metricExprForSource(metric: Metric, source: {
+  clicks: string
+  impressions: string
+  sumPosition: string
+}): string {
+  switch (metric) {
+    case 'clicks':
+      return `SUM(${source.clicks}) AS clicks`
+    case 'impressions':
+      return `SUM(${source.impressions}) AS impressions`
+    case 'ctr':
+      return `SUM(${source.clicks}) / NULLIF(SUM(${source.impressions}), 0) AS ctr`
+    case 'position':
+      return `SUM(${source.sumPosition}) / NULLIF(SUM(${source.impressions}), 0) AS position`
+  }
+}
+
+function deviceSource(suffix: typeof DEVICE_SUFFIXES[number]): {
+  clicks: string
+  impressions: string
+  sumPosition: string
+} {
+  return {
+    clicks: `clicks_${suffix}`,
+    impressions: `impressions_${suffix}`,
+    sumPosition: `sum_position_${suffix}`,
+  }
+}
+
 /**
  * Escape a string for an inline SQL literal. Used only for the pre-resolved
  * entity `IN` lists of the `r2-sql-resolved` archetypes — R2 SQL cannot bind
@@ -159,6 +190,25 @@ function buildEntityDailySparkline(q: EntityDailySparklineQuery): ArchetypeSqlPl
 function buildTopNBreakdown(q: TopNBreakdownQuery): ArchetypeSqlPlan {
   const table = inferTable([q.dimension]) as IcebergTableName
   const w = partitionWhere(q)
+  if (q.dimension === 'device') {
+    const metricList = q.metrics.includes(q.orderBy.metric)
+      ? q.metrics
+      : [...q.metrics, q.orderBy.metric]
+    const order = `${q.orderBy.metric} ${q.orderBy.dir.toUpperCase()}`
+    const selects = DEVICE_SUFFIXES.map((suffix) => {
+      const source = deviceSource(suffix)
+      const metrics = metricList.map(m => metricExprForSource(m, source)).join(', ')
+      return `SELECT '${suffix.toUpperCase()}' AS device, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}`
+    })
+    let sql = `${selects.join(' UNION ALL ')} ORDER BY ${order} LIMIT ${Math.max(0, Math.floor(q.limit))}`
+    if (q.offset && q.offset > 0)
+      sql += ` OFFSET ${Math.floor(q.offset)}`
+    return {
+      table,
+      params: DEVICE_SUFFIXES.flatMap(() => w.params),
+      sql,
+    }
+  }
   const col = dimColumn(q.dimension)
   const metrics = q.metrics.map(metricExpr).join(', ')
   const order = `${orderMetricExpr(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}`
@@ -194,6 +244,18 @@ function buildSingleRowLookup(q: SingleRowLookupQuery): ArchetypeSqlPlan {
 function buildMultiSeriesStackedDaily(q: MultiSeriesStackedDailyQuery): ArchetypeSqlPlan {
   const table = inferTable([q.seriesDimension]) as IcebergTableName
   const w = partitionWhere(q)
+  if (q.seriesDimension === 'device') {
+    const selects = DEVICE_SUFFIXES.map((suffix) => {
+      const source = deviceSource(suffix)
+      return `SELECT date, '${suffix.toUpperCase()}' AS device, ${metricExprForSource(q.metric, source)} `
+        + `FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause} GROUP BY date`
+    })
+    return {
+      table,
+      params: DEVICE_SUFFIXES.flatMap(() => w.params),
+      sql: `${selects.join(' UNION ALL ')} ORDER BY date ASC, device ASC`,
+    }
+  }
   const col = dimColumn(q.seriesDimension)
   return {
     table,

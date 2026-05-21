@@ -4,7 +4,8 @@
  * Every consumer query (the `pro-gsc` layer, the analyzer composable, the
  * server tail) is one of these 10 shapes. Each archetype is tagged with its
  * EXECUTION CLASS — whether the server tail can answer it in R2 SQL, or needs
- * DuckDB-over-Iceberg-files (window functions).
+ * DuckDB-over-Iceberg-files (window functions). The Iceberg fact tables are
+ * the final five: `pages`, `queries`, `countries`, `page_queries`, `dates`.
  *
  * POC findings 2026-05-22 (Spike 4): R2 SQL has GROUP BY + aggregates but NO
  * window functions, NO JOINs, NO `FROM` subqueries, `COUNT(*)` only,
@@ -83,7 +84,11 @@ export interface ArchetypeQueryBase {
 }
 
 // ── 1. Site-level daily timeseries ──────────────────────────────────────────
-/** Whole-site metrics grouped by date. R2 SQL: `GROUP BY date`. */
+/**
+ * Whole-site metrics grouped by date. Reads `dates`, the authoritative daily
+ * total table (site totals + anonymized impressions + device pivot).
+ * R2 SQL: `GROUP BY date`.
+ */
 export interface SiteDailyTimeseriesQuery extends ArchetypeQueryBase {
   archetype: 'site-daily-timeseries'
   metrics: readonly Metric[]
@@ -117,6 +122,8 @@ export interface EntityDailySparklineQuery extends ArchetypeQueryBase {
 // ── 4. Top-N breakdown table ─────────────────────────────────────────────────
 /**
  * Ranked breakdown over one dimension. `GROUP BY` + `ORDER BY` + `LIMIT`.
+ * Device breakdowns read the wide `dates` table and unpivot its device columns
+ * (`clicks_desktop`, `impressions_mobile`, etc.) at query time.
  * `offset` pagination is UNVERIFIED in R2 SQL (POC) — when set, the router
  * may escalate to `duckdb`.
  */
@@ -141,7 +148,10 @@ export interface SingleRowLookupQuery extends ArchetypeQueryBase {
 }
 
 // ── 6. Multi-series stacked daily ────────────────────────────────────────────
-/** Daily metrics split by a secondary dimension. `GROUP BY date, <dim>`. */
+/**
+ * Daily metrics split by a secondary dimension. `GROUP BY date, <dim>`.
+ * Device split charts read `dates` and unpivot the wide device columns.
+ */
 export interface MultiSeriesStackedDailyQuery extends ArchetypeQueryBase {
   archetype: 'multi-series-stacked-daily'
   /** The series dimension, e.g. `device` or `country`. */
@@ -165,8 +175,10 @@ export interface PresetAnalyzerQuery extends ArchetypeQueryBase {
 
 // ── 8. Two-dimension (page × query) detail ───────────────────────────────────
 /**
- * The whale archetype — `page_queries` grouped by `(url, query)`. The reason
- * the server tail exists. R2-SQL-expressible (`GROUP BY url, query`).
+ * The whale archetype — `page_queries` grouped by `(url, query)`. The query ×
+ * page cross no longer reads the retired `page_keywords` table name. This is
+ * the reason the server tail exists. R2-SQL-expressible
+ * (`GROUP BY url, query`).
  */
 export interface TwoDimensionDetailQuery extends ArchetypeQueryBase {
   archetype: 'two-dimension-detail'

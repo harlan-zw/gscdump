@@ -116,6 +116,26 @@ describe('compileArchetypeSql', () => {
     expect(c.sql).toContain('ORDER BY date, device')
   })
 
+  it('4b — top-n-breakdown: device includes the order metric when it is not selected', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'top-n-breakdown',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      dimension: 'device',
+      metrics: ['clicks'],
+      orderBy: { metric: 'impressions', dir: 'desc' },
+      limit: 3,
+    }
+    const c = compileArchetypeSql(q)
+    expect(c.table).toBe('dates')
+    expect(c.sql).toContain('UNION ALL')
+    expect(c.sql).toContain('SUM(clicks_desktop) AS clicks')
+    expect(c.sql).toContain('SUM(impressions_desktop) AS impressions')
+    expect(c.sql).toContain('SELECT device, clicks, impressions FROM')
+    expect(c.sql).toContain('ORDER BY impressions DESC LIMIT ?')
+  })
+
   it('6b — multi-series-stacked-daily: non-device series still groups by date + dim', () => {
     const q: ArchetypeQuery = {
       archetype: 'multi-series-stacked-daily',

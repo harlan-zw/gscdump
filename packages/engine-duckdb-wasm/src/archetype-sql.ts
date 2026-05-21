@@ -181,8 +181,11 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
       const dir = query.orderBy.dir === 'asc' ? 'ASC' : 'DESC'
       if (query.dimension === 'device') {
         // `dates` stores the device breakdown pivoted; unpivot then rank.
-        let sql = `SELECT device, ${query.metrics.join(', ')} FROM (`
-          + `${deviceUnpivotSql(query.metrics, where.sql, false)}) `
+        const metricList = query.metrics.includes(query.orderBy.metric)
+          ? query.metrics
+          : [...query.metrics, query.orderBy.metric]
+        let sql = `SELECT device, ${metricList.join(', ')} FROM (`
+          + `${deviceUnpivotSql(metricList, where.sql, false)}) `
           + `ORDER BY ${query.orderBy.metric} ${dir} LIMIT ?`
         const params = [...where.params, ...where.params, ...where.params, query.limit]
         if (query.offset && query.offset > 0) {
