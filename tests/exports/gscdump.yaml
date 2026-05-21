@@ -1,8 +1,13 @@
 .:
+  accountNextActions: object
+  accountStatuses: object
   addDays: function
   addSite: function
+  analyticsNextActions: object
+  analyticsStatuses: object
   batchInspectUrls: function
   batchRequestIndexing: function
+  canUseUrlInspection: function
   classifyError: function
   countDays: function
   createAuth: function
@@ -12,18 +17,25 @@
   deleteSite: function
   deleteSitemap: function
   discoverSitemap: function
+  exchangeAuthCode: function
   fetchSitemap: function
   fetchSitemaps: function
   fetchSitemapUrls: function
   fetchSites: function
   fetchSitesWithSitemaps: function
+  findBestGscProperty: function
+  findExactGscProperty: function
   formatErrorForCli: function
+  formatGscPropertyCandidates: function
   generateGscDateRange: function
   getBackfillProgress: function
   getDateRange: function
   getFreshestGscDate: function
+  getIndexingEligibility: function
   getIndexingMetadata: function
   getLatestGscDate: function
+  getNextCheckAfter: function
+  getNextCheckPriority: function
   getNextDate: function
   getOldestGscDate: function
   getPendingDates: function
@@ -32,40 +44,89 @@
   getVerificationToken: function
   getVerifiedSite: function
   googleSearchConsole: function
+  grantedScopeList: function
   groupIntoRanges: function
   GSC_FINALIZED_LAG_DAYS: number
   GSC_FRESHEST_LAG_DAYS: number
   GSC_QUOTAS: object
   GSC_RETENTION_MONTHS: number
+  GscApiError: function
+  GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
+  GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
+  GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
   gscdumpApi: function
+  gscPropertyMatchesTarget: function
   hasGscReadScope: function
   hasGscWriteScope: function
   hasIndexingScope: function
-  INDEXING_DAILY_LIMIT: number
-  INDEXING_EFFECTIVE_LIMIT: number
+  hasOptionalIndexingScope: function
+  hasRequiredAnalyticsScope: function
   INDEXING_ISSUE_FILTERS: object
   INDEXING_ISSUE_LABELS: object
   INDEXING_ISSUE_SEVERITY: object
+  indexingNextActions: object
+  indexingStatuses: object
   inspectUrl: function
+  inspectUrlFlat: function
   isPermissionDeniedError: function
   isValidGscDate: function
+  isVerifiedGscPermission: function
+  isVerifiedGscProperty: function
+  lifecycleErrorCodes: object
+  lifecycleWebhookEvents: object
   listVerifiedSites: function
+  matchGscSite: function
   MS_PER_DAY: number
+  normalizeGscSiteUrl: function
+  normalizeRegistrationTarget: function
+  parseGoogleError: function
+  parseGrantedScopes: function
+  parseGscSiteUrl: function
+  pickBestGscProperty: function
   progressBar: function
+  propertyNextActions: object
+  propertyStatuses: object
+  querySourceModes: object
+  refreshAccessToken: function
   requestIndexing: function
+  rethrowAsGscApiError: function
   rowWithMetricDefaults: function
   runSequentialBatch: function
+  sitemapNextActions: object
+  sitemapStatuses: object
   siteUrlToVerificationSite: function
   storageError: function
   submitSitemap: function
   toIsoDate: function
   unverifySite: function
+  URL_INSPECTION_DAILY_LIMIT: number
+  URL_INSPECTION_EFFECTIVE_LIMIT: number
   verificationMethodsFor: function
   verifySite: function
 ./contracts: {}
 ./driver: {}
 ./normalize:
   normalizeUrl: function
+./onboarding:
+  accountNextActions: object
+  accountStatuses: object
+  analyticsNextActions: object
+  analyticsStatuses: object
+  GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
+  GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
+  GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
+  hasOptionalIndexingScope: function
+  hasRequiredAnalyticsScope: function
+  indexingNextActions: object
+  indexingStatuses: object
+  lifecycleErrorCodes: object
+  lifecycleWebhookEvents: object
+  parseGrantedScopes: function
+  propertyNextActions: object
+  propertyStatuses: object
+  querySourceModes: object
+  sitemapNextActions: object
+  sitemapStatuses: object
 ./query:
   and: function
   between: function
@@ -86,10 +147,12 @@
   eq: function
   extractDateRange: function
   extractMetricFilters: function
+  extractSearchType: function
   extractSpecialOperatorFilters: function
   gsc: object
   gt: function
   gte: function
+  hour: object
   impressions: object
   inArray: function
   isJsonFilter: function
@@ -97,6 +160,7 @@
   lt: function
   lte: function
   ne: function
+  normalizeBuilderState: function
   normalizeFilter: function
   not: function
   notRegex: function
@@ -116,6 +180,10 @@
 ./query/plan:
   buildLogicalComparisonPlan: function
   buildLogicalPlan: function
+  inferDataset: function
+  isDatasetResolvable: function
+  isStateResolvable: function
+  UnresolvableDatasetError: function
   UnsupportedLogicalCapabilityError: function
 ./sitemap:
   discoverSitemap: function

@@ -26,6 +26,7 @@
     "aws4fetch": "catalog:",
     "bumpp": "catalog:dev-build",
     "eslint": "catalog:dev-lint",
+    "gscdump": "workspace:*",
     "js-yaml": "catalog:",
     "obuild": "catalog:dev-build",
     "typescript": "catalog:dev-build",

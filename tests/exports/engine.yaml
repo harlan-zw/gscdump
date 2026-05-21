@@ -4,13 +4,17 @@
   canonicalEmptyParquetSchema: function
   coerceRow: function
   coerceRows: function
+  countRawDailies: function
   countries: object
   createDuckDBCodec: function
   createDuckDBExecutor: function
+  createIngestAccumulator: function
+  createNoopIngestAccumulator: function
   createRowAccumulator: function
   createStorageEngine: function
   currentSchemaVersion: function
   dayPartition: function
+  dedupeOverlappingTiers: function
   DEFAULT_SEARCH_TYPE: string
   devices: object
   dimensionToColumn: function
@@ -19,23 +23,44 @@
   FILES_PLACEHOLDER: string
   fixedPolicy: function
   formatLiteral: function
+  gcOrphansImpl: function
+  getDateWeight: function
+  getTablesForTier: function
+  getTableTier: function
+  hourly_pages: object
+  hourPartition: function
   inferLegacyTier: function
   inferSearchType: function
   inferTable: function
   inspectionPolicy: function
   keywords: object
   MAX_DAY_BYTES: number
+  MAX_GSC_PAGES_R2: number
+  MAX_SITEMAP_URLS_PER_SITE: number
+  MAX_TRACKED_URLS_PER_SITE: number
+  MIN_COUNTRY_IMPRESSIONS: number
+  MIN_SYNC_IMPRESSIONS: number
   objectKey: function
   page_keywords: object
   pages: object
-  resolveToSQL: function
+  parseEnabledSearchTypes: function
+  RAW_DAILY_COMPACT_THRESHOLD: number
+  rebuildDailyFromHourly: function
+  resolveParquetSQL: function
+  ROW_LIMIT_R2: number
   SCHEMAS: object
   sitemapPolicy: object
+  splitOverlappingTiers: function
   substituteNamedFiles: function
   TABLE_METADATA: object
+  TABLE_TIERS: object
+  TABLES_BY_SEARCH_TYPE: object
+  TIER_PRIORITY: object
   toPath: function
   toSumPosition: function
   transformGscRow: function
+  validateEnabledSearchTypes: function
+  WEIGHT_PRIORITY: object
 ./analysis-types:
   num: function
 ./analyzer:
@@ -56,13 +81,16 @@
   hashUrl: function
   hashUrlList: function
   indexingMetadataIndexKey: function
-  inspectionHistoryKey: function
+  INSPECTION_HISTORY_MAX_BYTES: number
+  inspectionHistoryPrefix: function
+  inspectionHistoryShardKey: function
   inspectionIndexKey: function
   inspectionParquetKey: function
   sitemapHistoryKey: function
   sitemapIndexKey: function
   sitemapUrlsDeltaKey: function
   sitemapUrlsIndexKey: function
+  sitemapUrlsIndexPrefix: function
 ./filesystem:
   createFilesystemDataSource: function
   createFilesystemManifestStore: function
@@ -98,7 +126,7 @@
   compileLogicalQueryPlan: function
   enumeratePartitions: function
   FILES_PLACEHOLDER: string
-  resolveToSQL: function
+  resolveParquetSQL: function
   substituteNamedFiles: function
 ./r2:
   createR2DataSource: function
@@ -124,6 +152,7 @@
   getFilterDimensions: function
   getInternalFilters: function
   inferLogicalDataset: function
+  isDatasetResolvable: function
   LOGICAL_DATASETS: object
   matchesDimensionFilter: function
   matchesMetricFilter: function
@@ -134,16 +163,25 @@
   resolveComparisonSQL: function
   resolveToSQL: function
   resolveToSQLOptimized: function
+  runComparisonQuery: function
+  runOptimizedQuery: function
   supportsDimensionOnSurface: function
+  UnresolvableDatasetError: function
 ./rollups:
   dailyTotalsRollup: object
   DEFAULT_ROLLUPS: object
   indexingHealthRollup: object
   indexingMetadataRollup: object
   indexPercentRollup: object
+  partitionDaySpan: function
+  partitionsInRange: function
+  planRollupWindows: function
+  readLatestRollup: function
+  rebuildDailyFromHourly: function
   rebuildRollups: function
   rollupKey: function
   rollupParquetKey: function
+  runWindowed: function
   sitemapChanges28dRollup: object
   sitemapHealthRollup: object
   topCountries28dRollup: object
@@ -151,6 +189,7 @@
   topKeywords28dRollup: object
   topPages28dRollup: object
   weeklyTotalsRollup: object
+  WINDOW_BYTE_BUDGET: number
 ./schedule:
   fixedPolicy: function
   inspectionPolicy: function
@@ -159,11 +198,14 @@
   allTables: function
   countries: object
   currentSchemaVersion: function
+  dedupeByNaturalKey: function
   devices: object
   dimensionToColumn: function
   drizzleSchema: object
+  hourly_pages: object
   inferTable: function
   keywords: object
+  naturalKeyColumns: function
   page_keywords: object
   pages: object
   schemaFor: function

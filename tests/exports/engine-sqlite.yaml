@@ -5,6 +5,7 @@
   aggPosition: function
   and: function
   compileSqlite: function
+  createCachedManifestStore: function
   createD1ManifestStore: function
   createEngine: function
   createSqliteInsightRunner: function

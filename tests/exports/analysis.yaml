@@ -20,6 +20,7 @@
   defaultAnalyzerRegistry: object
   defaultReportRegistry: object
   defineAnalyzer: function
+  diffSitemapHealth: function
   dryRunReport: function
   ENGINE_QUERY_CAPABILITIES: object
   formatReport: function
@@ -84,9 +85,13 @@
   zeroClickAnalyzer: object
 ./query:
   buildDataDetailPlan: function
+  buildDataDetailRows: function
   buildDataQueryPlan: function
+  buildDataQueryRows: function
   normalizeQuery: function
+  shapeDataDetailRowResults: function
   shapeDataDetailRows: function
+  shapeDataQueryRowResults: function
   shapeDataQueryRows: function
 ./registry:
   defaultAnalyzerRegistry: object

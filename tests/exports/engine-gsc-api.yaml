@@ -4,3 +4,4 @@
   createLiveGscSource: function
   fetchGscDaily: function
   fetchGscTopN: function
+  runGscSyncSlice: function

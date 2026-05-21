@@ -2,6 +2,7 @@
   attachParquetTables: function
   attachParquetUrlTables: function
   bootDuckDBWasm: function
+  BrowserAttachBudgetExceededError: function
   countries: object
   createBrowserAnalysisRuntime: function
   createClient: function
@@ -9,6 +10,7 @@
   devices: object
   drizzle: function
   DuckDBWasmDatabase: function
+  hourly_pages: object
   keywords: object
   mergeScope: function
   page_keywords: object

@@ -5,7 +5,7 @@
   analyticsNextActions: object
   analyticsRoutes: object
   analyticsStatuses: object
-  authFailedWebhookPayloadSchema: object
+  analyticsStatusToSyncStatus: function
   backfillRangeSchema: object
   backfillResponseSchema: object
   bindPartnerSiteTeamSchema: object
@@ -24,6 +24,7 @@
   createPartnerTeamSchema: object
   dataDetailOptionsSchema: object
   dataQueryOptionsSchema: object
+  findLifecycleSite: function
   gscApiRangeSchema: object
   gscComparisonFilterSchema: object
   GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
@@ -73,8 +74,12 @@
   gscRowQueryResponseSchema: object
   hasOptionalIndexingScope: function
   hasRequiredAnalyticsScope: function
-  indexingCompletedWebhookPayloadSchema: object
   indexingDiagnosticsSchema: object
+  indexingInspectAnyResponseSchema: object
+  indexingInspectRateLimitedSchema: object
+  indexingInspectRequestSchema: object
+  indexingInspectResponseSchema: object
+  indexingInspectResultSchema: object
   indexingIssueSchema: object
   indexingNextActions: object
   indexingStatuses: object
@@ -85,14 +90,13 @@
   inspectionHistoryRecordSchema: object
   inspectionHistoryResponseSchema: object
   inspectionIndexSchema: object
-  jobCompletedWebhookPayloadSchema: object
+  inspectionRecordRawSchema: object
   jobFailedWebhookPayloadSchema: object
-  LEGACY_WEBHOOK_EVENTS: object
-  legacyWebhookEventTypeSchema: object
-  legacyWebhookPayloadSchema: object
   lifecycleErrorCodes: object
   lifecycleErrorSchema: object
   lifecycleProgressSchema: object
+  lifecycleSiteToSyncStatus: function
+  lifecycleSiteToUserSite: function
   lifecycleWebhookEvents: object
   parseGrantedScopes: function
   parseWebhookPayload: function
@@ -112,10 +116,11 @@
   registerPartnerSiteSchema: object
   registerPartnerUserSchema: object
   rollupEnvelopeSchema: object
+  scheduleStateSchema: object
   searchAppearanceResponseSchema: object
   searchAppearanceRowSchema: object
+  searchTypeSchema: object
   serializeWebhookPayload: function
-  siteCompletedWebhookPayloadSchema: object
   siteListItemSchema: object
   sitemapChangesResponseSchema: object
   sitemapHistoryRecordSchema: object
@@ -124,7 +129,6 @@
   sitemapNextActions: object
   sitemapStatuses: object
   sourceInfoResponseSchema: object
-  toCanonicalWebhookEvent: function
   toPartnerError: function
   updatePartnerUserTokensSchema: object
   VALID_WEBHOOK_EVENTS: object
@@ -132,9 +136,58 @@
   WEBHOOK_CONTRACT_VERSION: string
   WEBHOOK_CONTRACT_VERSION_HEADER: string
   WEBHOOK_DELIVERY_HEADER: string
-  WEBHOOK_EVENT_ALIASES: object
   WEBHOOK_EVENT_HEADER: string
   WEBHOOK_SIGNATURE_HEADER: string
   WEBHOOK_TIMESTAMP_HEADER: string
   webhookEventTypeSchema: object
   whoamiResponseSchema: object
+./query:
+  and: function
+  between: function
+  buildLogicalComparisonPlan: function
+  buildLogicalPlan: function
+  clicks: object
+  contains: function
+  Countries: object
+  country: object
+  ctr: object
+  currentPstDate: function
+  date: object
+  dayjs: function
+  dayjsPst: function
+  daysAgo: function
+  device: object
+  Devices: object
+  eq: function
+  extractDateRange: function
+  extractMetricFilters: function
+  extractSearchType: function
+  extractSpecialOperatorFilters: function
+  gsc: object
+  gt: function
+  gte: function
+  hour: object
+  impressions: object
+  inArray: function
+  isJsonFilter: function
+  like: function
+  lt: function
+  lte: function
+  ne: function
+  normalizeBuilderState: function
+  normalizeFilter: function
+  not: function
+  notRegex: function
+  or: function
+  page: object
+  parseJsonFilter: function
+  position: object
+  query: object
+  queryCanonical: object
+  regex: function
+  searchAppearance: object
+  searchType: object
+  SearchTypes: object
+  today: function
+  topLevel: function
+  UnsupportedLogicalCapabilityError: function
