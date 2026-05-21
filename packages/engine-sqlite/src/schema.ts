@@ -101,10 +101,37 @@ export const schema = {
 
 export type Schema = typeof schema
 
-const GSC_PREFIX_RE = /^gsc_/
+/**
+ * Physical per-user D1 table → logical engine `TableName`.
+ *
+ * DECISION (Iceberg re-architecture): the physical D1 table names stay
+ * `gsc_keywords` / `gsc_page_keywords` / `gsc_devices` — renaming them needs a
+ * forbidden destructive D1 migration, and the user-DB tables are being
+ * replaced wholesale by Iceberg. Only the *logical* name they map to is
+ * renamed (`queries`, `page_queries`).
+ *
+ * `gsc_devices` has NO logical counterpart: the standalone `devices` table was
+ * retired and folded into the pivoted `dates` table, which the row-grained
+ * D1 `gsc_devices` table cannot satisfy. It is therefore excluded from the
+ * schema-drift assertion and the resolver dataset map — device-grained reads
+ * route to the live GSC API on the legacy D1 path.
+ */
+const GSC_TABLE_TO_LOGICAL: Record<keyof typeof schema, TableName | null> = {
+  gsc_pages: 'pages',
+  gsc_keywords: 'queries',
+  gsc_countries: 'countries',
+  gsc_devices: null,
+  gsc_page_keywords: 'page_queries',
+  gsc_search_appearance: 'search_appearance',
+  gsc_hourly_pages: 'hourly_pages',
+}
+
+const driftSchema = Object.fromEntries(
+  Object.entries(schema).filter(([k]) => GSC_TABLE_TO_LOGICAL[k as keyof typeof schema] !== null),
+)
 assertSchemaInSync({
   label: 'sqlite',
-  schema,
-  tableKeyToName: key => key.replace(GSC_PREFIX_RE, '') as TableName,
+  schema: driftSchema,
+  tableKeyToName: key => GSC_TABLE_TO_LOGICAL[key as keyof typeof schema] as TableName,
   mode: 'superset',
 })

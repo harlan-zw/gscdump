@@ -6,11 +6,11 @@
 
 export {
   countries,
-  devices,
+  dates,
   hourly_pages,
-  keywords,
-  page_keywords,
+  page_queries,
   pages,
+  queries,
   drizzleSchema as schema,
 } from '@gscdump/engine/schema'
 export type { DrizzleSchema as Schema } from '@gscdump/engine/schema'

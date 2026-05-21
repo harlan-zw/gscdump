@@ -142,7 +142,7 @@ export const ctrCurveAnalyzer = defineAnalyzer<AnalysisParams, Row, CtrCurveBuck
     return {
       sql,
       params: [startDate, endDate],
-      current: { table: 'keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 

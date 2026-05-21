@@ -15,7 +15,7 @@ import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
-import { keywordsQueryState } from '../analyzer/adapt-rows'
+import { queriesQueryState } from '../analyzer/adapt-rows'
 import { createSorter } from '../types'
 
 export type CannibalizationSortMetric = 'clicks' | 'impressions' | 'positionSpread' | 'pageCount'
@@ -270,7 +270,7 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
     return {
       sql,
       params: [startDate, endDate, minImpressions, minCompetitors, minQueryImpressions],
-      current: { table: 'page_keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'page_queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 
@@ -351,7 +351,7 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
 
   buildRows(params) {
     return {
-      rows: keywordsQueryState(periodOf(params), params.limit),
+      rows: queriesQueryState(periodOf(params), params.limit),
     }
   },
 

@@ -290,10 +290,10 @@ const MAGIC = 'JSONROWS\n'
 // mimic the parquet `union_by_name` behavior even with zero rows.
 const SCHEMAS: Record<string, string[]> = {
   pages: ['url', 'date', 'clicks', 'impressions', 'sum_position'],
-  keywords: ['query', 'date', 'clicks', 'impressions', 'sum_position'],
+  queries: ['query', 'date', 'clicks', 'impressions', 'sum_position'],
   countries: ['country', 'date', 'clicks', 'impressions', 'sum_position'],
-  devices: ['device', 'date', 'clicks', 'impressions', 'sum_position'],
-  page_keywords: ['url', 'query', 'date', 'clicks', 'impressions', 'sum_position'],
+  dates: ['device', 'date', 'clicks', 'impressions', 'sum_position'],
+  page_queries: ['url', 'query', 'date', 'clicks', 'impressions', 'sum_position'],
 }
 
 interface JsonCodecFile {

@@ -239,15 +239,15 @@ describe('resolveToSQLOptimized (integration)', () => {
 
   describe('all metric tables resolve', () => {
     const cases: Array<{
-      table: 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords'
+      table: 'pages' | 'queries' | 'countries' | 'dates' | 'page_queries'
       dimensions: BuilderState['dimensions']
       row: Row
     }> = [
       { table: 'pages', dimensions: ['page'], row: { url: '/x', date: day, clicks: 1, impressions: 10, sum_position: 50 } },
-      { table: 'keywords', dimensions: ['query'], row: { query: 'foo', date: day, clicks: 1, impressions: 10, sum_position: 50 } },
+      { table: 'queries', dimensions: ['query'], row: { query: 'foo', date: day, clicks: 1, impressions: 10, sum_position: 50 } },
       { table: 'countries', dimensions: ['country'], row: { country: 'usa', date: day, clicks: 1, impressions: 10, sum_position: 50 } },
-      { table: 'devices', dimensions: ['device'], row: { device: 'DESKTOP', date: day, clicks: 1, impressions: 10, sum_position: 50 } },
-      { table: 'page_keywords', dimensions: ['page', 'query'], row: { url: '/x', query: 'foo', date: day, clicks: 1, impressions: 10, sum_position: 50 } },
+      { table: 'dates', dimensions: ['date'], row: { date: day, clicks: 1, impressions: 10, sum_position: 50, anonymized_impressions_pct: 0, clicks_desktop: 1, clicks_mobile: 0, clicks_tablet: 0, impressions_desktop: 10, impressions_mobile: 0, impressions_tablet: 0, sum_position_desktop: 50, sum_position_mobile: 0, sum_position_tablet: 0 } },
+      { table: 'page_queries', dimensions: ['page', 'query'], row: { url: '/x', query: 'foo', date: day, clicks: 1, impressions: 10, sum_position: 50 } },
     ]
 
     for (const c of cases) {

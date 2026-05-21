@@ -4,7 +4,7 @@ exports[`analyzer plan snapshots > rows plan: brand 1`] = `
 {
   "kind": "rows",
   "queries": {
-    "keywords": {
+    "queries": {
       "state": {
         "dimensions": [
           "query",
@@ -62,7 +62,7 @@ exports[`analyzer plan snapshots > rows plan: clustering 1`] = `
 {
   "kind": "rows",
   "queries": {
-    "keywords": {
+    "queries": {
       "state": {
         "dimensions": [
           "query",
@@ -370,7 +370,7 @@ exports[`analyzer plan snapshots > rows plan: opportunity 1`] = `
 {
   "kind": "rows",
   "queries": {
-    "keywords": {
+    "queries": {
       "state": {
         "dimensions": [
           "query",
@@ -427,7 +427,7 @@ exports[`analyzer plan snapshots > rows plan: striking-distance 1`] = `
 {
   "kind": "rows",
   "queries": {
-    "keywords": {
+    "queries": {
       "state": {
         "dimensions": [
           "query",
@@ -522,7 +522,7 @@ exports[`analyzer plan snapshots > sql plan: bayesian-ctr 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -692,7 +692,7 @@ exports[`analyzer plan snapshots > sql plan: bipartite-pagerank 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -1543,7 +1543,7 @@ exports[`analyzer plan snapshots > sql plan: brand 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -1620,7 +1620,7 @@ exports[`analyzer plan snapshots > sql plan: cannibalization 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -1773,7 +1773,7 @@ exports[`analyzer plan snapshots > sql plan: change-point 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -1950,7 +1950,7 @@ exports[`analyzer plan snapshots > sql plan: clustering 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "keywords",
+    "table": "queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -2234,7 +2234,7 @@ exports[`analyzer plan snapshots > sql plan: content-velocity 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "keywords",
+    "table": "queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -2320,7 +2320,7 @@ exports[`analyzer plan snapshots > sql plan: ctr-anomaly 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -2488,7 +2488,7 @@ exports[`analyzer plan snapshots > sql plan: ctr-curve 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "keywords",
+    "table": "queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -2662,7 +2662,7 @@ exports[`analyzer plan snapshots > sql plan: dark-traffic 1`] = `
         "daily/2024-02-28",
         "daily/2024-02-29",
       ],
-      "table": "keywords",
+      "table": "queries",
     },
     "PAGE_KEYWORDS": {
       "partitions": [
@@ -2703,7 +2703,7 @@ exports[`analyzer plan snapshots > sql plan: dark-traffic 1`] = `
         "daily/2024-02-28",
         "daily/2024-02-29",
       ],
-      "table": "page_keywords",
+      "table": "page_queries",
     },
   },
   "extraQueries": undefined,
@@ -3062,7 +3062,7 @@ exports[`analyzer plan snapshots > sql plan: device-gap 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "devices",
+    "table": "dates",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -3129,7 +3129,7 @@ exports[`analyzer plan snapshots > sql plan: intent-atlas 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "keywords",
+    "table": "queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -3254,7 +3254,7 @@ exports[`analyzer plan snapshots > sql plan: keyword-breadth 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -3366,7 +3366,7 @@ exports[`analyzer plan snapshots > sql plan: long-tail 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -3496,7 +3496,7 @@ exports[`analyzer plan snapshots > sql plan: movers 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -3555,7 +3555,7 @@ exports[`analyzer plan snapshots > sql plan: movers 1`] = `
       "daily/2024-01-30",
       "daily/2024-01-31",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "sql": "
       WITH cur AS (
@@ -3681,7 +3681,7 @@ exports[`analyzer plan snapshots > sql plan: opportunity 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -3799,7 +3799,7 @@ exports[`analyzer plan snapshots > sql plan: position-distribution 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "keywords",
+    "table": "queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -3872,7 +3872,7 @@ exports[`analyzer plan snapshots > sql plan: position-volatility 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -4003,7 +4003,7 @@ exports[`analyzer plan snapshots > sql plan: query-migration 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -4057,7 +4057,7 @@ exports[`analyzer plan snapshots > sql plan: query-migration 1`] = `
       "daily/2024-01-30",
       "daily/2024-01-31",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "sql": "
     WITH cur AS (
@@ -4259,7 +4259,7 @@ exports[`analyzer plan snapshots > sql plan: stl-decompose 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -4441,7 +4441,7 @@ exports[`analyzer plan snapshots > sql plan: striking-distance 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -4507,7 +4507,7 @@ exports[`analyzer plan snapshots > sql plan: survival 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,
@@ -4825,7 +4825,7 @@ exports[`analyzer plan snapshots > sql plan: zero-click 1`] = `
       "daily/2024-02-28",
       "daily/2024-02-29",
     ],
-    "table": "page_keywords",
+    "table": "page_queries",
   },
   "extraFiles": undefined,
   "extraQueries": undefined,

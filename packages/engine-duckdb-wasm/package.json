@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@gscdump/engine": "workspace:*",
+    "@gscdump/sdk": "workspace:*",
     "drizzle-orm": "catalog:",
     "gscdump": "workspace:*"
   },

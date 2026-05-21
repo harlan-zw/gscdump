@@ -8,10 +8,12 @@
 // emits when you select the corresponding dimensions:
 //
 //   pages          → keys = [page, date]
-//   keywords       → keys = [query, date]
+//   queries        → keys = [query, date]
 //   countries      → keys = [country, date]
-//   devices        → keys = [device, date]
-//   page_keywords  → keys = [page, query, date]
+//   page_queries   → keys = [page, query, date]
+//   dates          → bespoke: two GSC queries (`['date']` + `['date','device']`)
+//                    assembled by `assembleDatesRow` (see below), NOT
+//                    `transformGscRow`.
 
 import type { Row, TableName } from './storage'
 
@@ -24,10 +26,13 @@ import type { Row, TableName } from './storage'
  */
 export const TABLE_DIMS: Record<TableName, string[]> = {
   pages: ['page', 'date'],
-  keywords: ['query', 'date'],
+  queries: ['query', 'date'],
   countries: ['country', 'date'],
-  devices: ['device', 'date'],
-  page_keywords: ['page', 'query', 'date'],
+  // `dates` is assembled from a GSC `['date']` query (true site totals) plus a
+  // `['date','device']` query (device pivot); see `assembleDatesRow`. The
+  // `['date']` form is listed here as the primary fetch dimension set.
+  dates: ['date'],
+  page_queries: ['page', 'query', 'date'],
   search_appearance: ['searchAppearance', 'date'],
   // GSC `hourly_all` dataState — keys arrive as `[hour, page]`; the calendar
   // date is derived from the leading hour timestamp at ingest.
@@ -47,8 +52,8 @@ export interface IngestOptions {
   /**
    * Canonical form of a query string, stored alongside `query` as
    * `query_canonical`. Site-specific (e.g. synonym groups, stemming); if
-   * omitted, `query_canonical` is null. Applied to `keywords` +
-   * `page_keywords` tables only.
+   * omitted, `query_canonical` is null. Applied to `queries` +
+   * `page_queries` tables only.
    */
   normalizeQuery?: (query: string) => string | null | undefined
 }
@@ -101,7 +106,7 @@ export function transformGscRow(
     }
   }
 
-  if (table === 'keywords') {
+  if (table === 'queries') {
     const query = String(keys[0] ?? '')
     const date = String(keys[1] ?? '')
     const query_canonical = options.normalizeQuery?.(query) ?? null
@@ -116,14 +121,6 @@ export function transformGscRow(
     return {
       date,
       row: { country: String(keys[0] ?? ''), date, clicks, impressions, sum_position },
-    }
-  }
-
-  if (table === 'devices') {
-    const date = String(keys[1] ?? '')
-    return {
-      date,
-      row: { device: String(keys[0] ?? ''), date, clicks, impressions, sum_position },
     }
   }
 
@@ -146,7 +143,14 @@ export function transformGscRow(
     }
   }
 
-  // page_keywords
+  if (table === 'dates') {
+    // `dates` is never produced by transformGscRow — it is assembled from two
+    // separate GSC queries by `assembleDatesRow`. Reject to fail loudly if a
+    // caller mis-routes a single-query slice to this table.
+    throw new Error('`dates` rows must be built via assembleDatesRow, not transformGscRow')
+  }
+
+  // page_queries
   const query = String(keys[1] ?? '')
   const date = String(keys[2] ?? '')
   const query_canonical = options.normalizeQuery?.(query) ?? null
@@ -162,6 +166,72 @@ export function transformGscRow(
       sum_position,
     },
   }
+}
+
+/** Canonical GSC device key → `dates` pivot-column suffix. */
+const DEVICE_SUFFIX: Record<string, 'desktop' | 'mobile' | 'tablet'> = {
+  DESKTOP: 'desktop',
+  MOBILE: 'mobile',
+  TABLET: 'tablet',
+}
+
+/**
+ * Assemble one `dates` row for a single `date` from the two GSC queries that
+ * back the table:
+ *
+ * - `totalsRow` — the GSC `['date']` query result: the TRUE site totals
+ *   (clicks/impressions/position), including anonymized impressions.
+ * - `deviceRows` — the GSC `['date','device']` query results for that date:
+ *   one row per device, pivoted into the 9 `*_{device}` columns.
+ * - `queryGrainedImpressions` — total impressions summed from the
+ *   `['query','date']` (or `['page','query','date']`) query for the same date,
+ *   used to derive `anonymized_impressions_pct`.
+ *
+ * `anonymized_impressions_pct = 1 - query_grained_impressions /
+ * page_grained_impressions`, where the page/date totals come from `totalsRow`.
+ * Mirrors the legacy `dailyTotalsRollup` formula. Clamped to `[0, 1]`.
+ */
+export function assembleDatesRow(
+  date: string,
+  totalsRow: GscApiRow,
+  deviceRows: readonly GscApiRow[],
+  queryGrainedImpressions: number,
+): { date: string, row: Row } {
+  const clicks = totalsRow.clicks || 0
+  const impressions = totalsRow.impressions || 0
+  const sum_position = toSumPosition(totalsRow.position || 0, impressions)
+
+  const row: Record<string, unknown> = {
+    date,
+    clicks,
+    impressions,
+    sum_position,
+    anonymized_impressions_pct: impressions > 0
+      ? Math.min(1, Math.max(0, 1 - queryGrainedImpressions / impressions))
+      : 0,
+    clicks_desktop: 0,
+    clicks_mobile: 0,
+    clicks_tablet: 0,
+    impressions_desktop: 0,
+    impressions_mobile: 0,
+    impressions_tablet: 0,
+    sum_position_desktop: 0,
+    sum_position_mobile: 0,
+    sum_position_tablet: 0,
+  }
+
+  for (const dr of deviceRows) {
+    const deviceKey = String(dr.keys?.[1] ?? dr.keys?.[0] ?? '').toUpperCase()
+    const suffix = DEVICE_SUFFIX[deviceKey]
+    if (!suffix)
+      continue
+    const dImpr = dr.impressions || 0
+    row[`clicks_${suffix}`] = dr.clicks || 0
+    row[`impressions_${suffix}`] = dImpr
+    row[`sum_position_${suffix}`] = toSumPosition(dr.position || 0, dImpr)
+  }
+
+  return { date, row }
 }
 
 export interface RowAccumulator {

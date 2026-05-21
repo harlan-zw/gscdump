@@ -51,6 +51,11 @@
       "import": "./dist/ingest.mjs",
       "default": "./dist/ingest.mjs"
     },
+    "./sink-node": {
+      "types": "./dist/sink-node.d.mts",
+      "import": "./dist/sink-node.mjs",
+      "default": "./dist/sink-node.mjs"
+    },
     "./sql": {
       "types": "./dist/sql-bind.d.mts",
       "import": "./dist/sql-bind.mjs",
@@ -140,6 +145,11 @@
       "types": "./dist/arrow-utils.d.mts",
       "import": "./dist/arrow-utils.mjs",
       "default": "./dist/arrow-utils.mjs"
+    },
+    "./vendor/hysnappy": {
+      "types": "./dist/vendor/hysnappy-purejs.d.mts",
+      "import": "./dist/vendor/hysnappy-purejs.mjs",
+      "default": "./dist/vendor/hysnappy-purejs.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -179,6 +189,7 @@
     "@gscdump/contracts": "workspace:*",
     "drizzle-orm": "catalog:",
     "gscdump": "workspace:*",
+    "icebird": "catalog:",
     "proper-lockfile": "catalog:deps"
   },
   "devDependencies": {

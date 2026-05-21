@@ -125,7 +125,7 @@ describe('contract: engine-duckdb-node vs engine-duckdb-wasm', () => {
         ],
       )
       await engine.writeDay(
-        { ...CTX, table: 'keywords', date: day },
+        { ...CTX, table: 'queries', date: day },
         [
           keywordRow('nuxt seo', day, 8, 80),
           keywordRow('vue ssr', day, 4, 40),

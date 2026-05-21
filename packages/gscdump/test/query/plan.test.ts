@@ -30,7 +30,7 @@ describe('buildLogicalPlan', () => {
       } as any,
     }))
 
-    expect(plan.dataset).toBe('keywords')
+    expect(plan.dataset).toBe('queries')
     expect(plan.dimensionFilters).toEqual([
       {
         dimension: 'queryCanonical',
@@ -67,45 +67,51 @@ describe('buildLogicalPlan', () => {
 describe('inferDataset', () => {
   it('routes each single dimension to its own dataset', () => {
     expect(inferDataset(['page'])).toBe('pages')
-    expect(inferDataset(['query'])).toBe('keywords')
+    expect(inferDataset(['query'])).toBe('queries')
     expect(inferDataset(['country'])).toBe('countries')
-    expect(inferDataset(['device'])).toBe('devices')
-    expect(inferDataset(['page', 'query'])).toBe('page_keywords')
+    // `device` folds into the pivoted `dates` table (the standalone `devices`
+    // table was retired); it has no groupable stored home.
+    expect(inferDataset(['device'])).toBe('dates')
+    expect(inferDataset(['page', 'query'])).toBe('page_queries')
     expect(inferDataset(['searchAppearance'])).toBe('search_appearance')
   })
 
-  it('routes date-only / dimensionless queries to pages', () => {
-    // Under the registered-host `page`-regex filter (ADR-0033) GSC drops
-    // anonymised impressions from any dimension-grouped query, so `devices`
-    // and `keywords` undercount the host total. Only `pages` sums to the
-    // page-filtered total the live GSC `["date"]` proxy returns.
-    expect(inferDataset([])).toBe('pages')
-    expect(inferDataset(['date'])).toBe('pages')
+  it('routes date-only / dimensionless queries to dates', () => {
+    // `dates` carries the TRUE site totals (incl. anonymized impressions);
+    // dimension-grouped tables undercount the host total under the
+    // registered-host `page`-regex filter (ADR-0033).
+    expect(inferDataset([])).toBe('dates')
+    expect(inferDataset(['date'])).toBe('dates')
   })
 })
 
 describe('isDatasetResolvable', () => {
   it('accepts a single-dimension breakdown and its own filter', () => {
-    expect(isDatasetResolvable(['device'])).toBe(true)
     expect(isDatasetResolvable(['query'], ['query'])).toBe(true)
     expect(isDatasetResolvable(['page', 'query'])).toBe(true)
+    expect(isDatasetResolvable(['country'])).toBe(true)
+  })
+
+  it('treats a device breakdown as unresolvable (folded into pivoted `dates`)', () => {
+    // The standalone `devices` table was retired; a `GROUP BY device` has no
+    // stored home — device reads go through the device-pivot archetypes.
+    expect(isDatasetResolvable(['device'])).toBe(false)
   })
 
   it('ignores the date and hour time axes', () => {
-    expect(isDatasetResolvable(['date', 'device'])).toBe(true)
-    expect(isDatasetResolvable(['device'], ['date'])).toBe(true)
+    expect(isDatasetResolvable(['date', 'country'])).toBe(true)
+    expect(isDatasetResolvable(['country'], ['date'])).toBe(true)
     expect(isDatasetResolvable([], ['date'])).toBe(true)
   })
 
   it('rejects dimensions that span two stored datasets', () => {
-    expect(isDatasetResolvable(['device'], ['query'])).toBe(false)
-    expect(isDatasetResolvable(['country'], ['device'])).toBe(false)
+    expect(isDatasetResolvable(['country'], ['query'])).toBe(false)
     expect(isDatasetResolvable(['page'], ['country'])).toBe(false)
-    expect(isDatasetResolvable(['searchAppearance'], ['device'])).toBe(false)
+    expect(isDatasetResolvable(['searchAppearance'], ['query'])).toBe(false)
   })
 
   it('agrees with inferDataset: routed dataset always covers a resolvable query', () => {
-    expect(inferDataset(['device'], ['query'])).toBe('keywords')
+    expect(inferDataset(['device'], ['query'])).toBe('queries')
     // inferDataset still routes (legacy precedence); the predicate is what
     // tells callers the routed table cannot actually answer it.
     expect(isDatasetResolvable(['device'], ['query'])).toBe(false)
@@ -155,7 +161,7 @@ describe('buildLogicalComparisonPlan', () => {
       { comparisonJoin: true },
       'new',
     )
-    expect(plan.current.dataset).toBe('keywords')
+    expect(plan.current.dataset).toBe('queries')
     expect(plan.comparisonFilter).toBe('new')
   })
 })

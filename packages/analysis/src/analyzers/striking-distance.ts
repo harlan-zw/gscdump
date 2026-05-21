@@ -16,7 +16,7 @@ import { num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
-import { keywordsQueryState } from '../analyzer/adapt-rows'
+import { queriesQueryState } from '../analyzer/adapt-rows'
 import { paginateInMemory } from '../analyzer/paginate'
 
 const DEFAULT_ROW_LIMIT = 25_000
@@ -125,13 +125,13 @@ export const strikingDistanceAnalyzer = defineAnalyzer<
     GROUP BY query, url
   `,
       params: [startDate, endDate],
-      current: { table: 'page_keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'page_queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 
   buildRows(params) {
     return {
-      keywords: keywordsQueryState(periodOf(params), params.limit ?? DEFAULT_ROW_LIMIT),
+      queries: queriesQueryState(periodOf(params), params.limit ?? DEFAULT_ROW_LIMIT),
     }
   },
 })

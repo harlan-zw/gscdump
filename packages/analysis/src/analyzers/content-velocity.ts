@@ -77,7 +77,7 @@ export const contentVelocityAnalyzer = defineAnalyzer<AnalysisParams, Row, Conte
     return {
       sql,
       params: [startDate, endDate],
-      current: { table: 'keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 

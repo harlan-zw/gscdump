@@ -23,12 +23,19 @@ export function createSqliteResolverAdapter(
 ): ResolverAdapter<TableKey> {
   return createResolverAdapter<TableKey>({
     schema,
+    // Logical engine `TableName` → physical per-user D1 table. Physical names
+    // keep their legacy `gsc_keywords` / `gsc_page_keywords` spelling (renaming
+    // them needs a destructive D1 migration; the user DB is being replaced by
+    // Iceberg). `dates` has no row-grained D1 home — the standalone `devices`
+    // table was folded into the pivoted `dates` table — so it maps to the
+    // closest legacy physical table (`gsc_devices`); device/date-only reads on
+    // the legacy D1 path route to the live GSC API instead.
     datasetToTableKey: {
       pages: 'gsc_pages',
-      keywords: 'gsc_keywords',
-      page_keywords: 'gsc_page_keywords',
+      queries: 'gsc_keywords',
+      page_queries: 'gsc_page_keywords',
       countries: 'gsc_countries',
-      devices: 'gsc_devices',
+      dates: 'gsc_devices',
       search_appearance: 'gsc_search_appearance',
       hourly_pages: 'gsc_hourly_pages',
     },

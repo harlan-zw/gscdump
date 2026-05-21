@@ -105,7 +105,7 @@ export { zeroClickAnalyzer } from '../analyzers/zero-click'
 export type { ZeroClickResult } from '../analyzers/zero-click'
 export {
   datesQueryState,
-  keywordsQueryState,
+  queriesQueryState,
   pagesQueryState,
 } from './adapt-rows'
 export {

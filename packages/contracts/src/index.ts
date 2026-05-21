@@ -1,3 +1,4 @@
+export type * from './file-resolution'
 export * from './onboarding'
 export * from './routes'
 export * from './schemas'

@@ -23,5 +23,35 @@ export type { PresignOptions } from './r2-presign'
 
 export { createR2Presigner } from './r2-presign'
 
+export type {
+  ArchetypeSqlPlan,
+  DuckDbIcebergExecutor,
+  DuckDbIcebergExecutorConfig,
+  DuckDbIcebergResult,
+  DuckDbIcebergRow,
+  DuckDbSvc,
+  R2SqlClient,
+  R2SqlClientConfig,
+  R2SqlResult,
+  R2SqlRow,
+  ServerTailDispatcher,
+  ServerTailDispatcherConfig,
+  ServerTailEngine,
+} from './server-tail'
+export {
+  buildArchetypeSql,
+  createDuckDbIcebergExecutor,
+  createR2SqlClient,
+  createServerTailDispatcher,
+  DuckDbIcebergError,
+  DuckDbIcebergTimeoutError,
+  escapeSqlValue,
+  inlineParams,
+  R2SqlError,
+  R2SqlTimeoutError,
+  resolveServerTailEngine,
+  ServerTailRoutingError,
+  TABLE_PLACEHOLDER,
+} from './server-tail'
 export { signSizeHint, verifySizeHint } from './size-hint-sig'
 export { createDucklingsCodec, createDucklingsExecutor } from './workers-duckdb'

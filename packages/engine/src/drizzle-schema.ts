@@ -11,9 +11,19 @@
  * planner / hyparquet codec consume the derived shape. Adding a column =
  * edit one drizzle table; everything downstream updates.
  *
- * `TABLE_METADATA` carries sortKey + schema version that drizzle can't
- * express; bump `version` when a table's physical layout changes so stored
- * manifests tag rows correctly.
+ * `TABLE_METADATA` carries sortKey + clusterKey + schema version that drizzle
+ * can't express; bump `version` when a table's physical layout changes so
+ * stored manifests tag rows correctly.
+ *
+ * `sortKey` is the natural-key identity (used by `dedupeByNaturalKey` and the
+ * manifest dedup `PARTITION BY`) — order is irrelevant, only membership.
+ * `clusterKey` is the physical row order written into parquet: dimension-first
+ * (`query`/`url` before `date`) so the high-cardinality dimension column is
+ * contiguous within each row group. That keeps dictionary indices run-length
+ * friendly (smaller files) and tightens per-dimension page statistics (so a
+ * per-entity query — the keyword/page sparkline + detail charts — prunes pages
+ * sharply). Raw daily files carry a single `date`, so this only changes the
+ * physical layout of multi-day compacted tiers (d7/d30/d90).
  */
 
 import type { TableName } from '@gscdump/contracts'
@@ -40,7 +50,7 @@ export const pages = pgTable('pages', {
   ...metricCols(),
 })
 
-export const keywords = pgTable('keywords', {
+export const queries = pgTable('queries', {
   query: varchar('query').notNull(),
   query_canonical: varchar('query_canonical'),
   date: dateCol(),
@@ -53,18 +63,45 @@ export const countries = pgTable('countries', {
   ...metricCols(),
 })
 
-export const devices = pgTable('devices', {
-  device: varchar('device').notNull(),
-  date: dateCol(),
-  ...metricCols(),
-})
-
-export const page_keywords = pgTable('page_keywords', {
+export const page_queries = pgTable('page_queries', {
   url: varchar('url').notNull(),
   query: varchar('query').notNull(),
   query_canonical: varchar('query_canonical'),
   date: dateCol(),
   ...metricCols(),
+})
+
+/**
+ * Per-`(site, search_type, date)` daily totals + device breakdown.
+ *
+ * Replaces the standalone `devices` long table and the legacy `daily_totals`
+ * rollup. Does NOT fit the generic `metricCols()` shape — it has bespoke
+ * site-total columns, an anonymized-impressions ratio, and a 9-column device
+ * pivot (clicks/impressions/sum_position × desktop/mobile/tablet).
+ *
+ * - `clicks`/`impressions`/`sum_position`: TRUE site totals from a GSC
+ *   `['date']` query — authoritative, includes anonymized impressions.
+ * - `anonymized_impressions_pct`: `1 - query_grained_impressions /
+ *   page_grained_impressions` — fraction of impressions GSC withholds at
+ *   query grain. Mirrors the legacy `dailyTotalsRollup` formula.
+ * - `clicks_{device}` / `impressions_{device}` / `sum_position_{device}`:
+ *   device breakdown pivoted from a GSC `['date','device']` query.
+ */
+export const dates = pgTable('dates', {
+  date: dateCol(),
+  clicks: integer('clicks').notNull(),
+  impressions: integer('impressions').notNull(),
+  sum_position: doublePrecision('sum_position').notNull(),
+  anonymized_impressions_pct: doublePrecision('anonymized_impressions_pct').notNull(),
+  clicks_desktop: integer('clicks_desktop').notNull(),
+  clicks_mobile: integer('clicks_mobile').notNull(),
+  clicks_tablet: integer('clicks_tablet').notNull(),
+  impressions_desktop: integer('impressions_desktop').notNull(),
+  impressions_mobile: integer('impressions_mobile').notNull(),
+  impressions_tablet: integer('impressions_tablet').notNull(),
+  sum_position_desktop: doublePrecision('sum_position_desktop').notNull(),
+  sum_position_mobile: doublePrecision('sum_position_mobile').notNull(),
+  sum_position_tablet: doublePrecision('sum_position_tablet').notNull(),
 })
 
 export const search_appearance = pgTable('search_appearance', {
@@ -84,15 +121,15 @@ export const hourly_pages = pgTable('hourly_pages', {
   ...metricCols(),
 })
 
-export const drizzleSchema = { pages, keywords, countries, devices, page_keywords, search_appearance, hourly_pages }
+export const drizzleSchema = { pages, queries, countries, page_queries, dates, search_appearance, hourly_pages }
 export type DrizzleSchema = typeof drizzleSchema
 
-export const TABLE_METADATA: Record<TableName, { sortKey: string[], version: number }> = {
-  pages: { sortKey: ['date', 'url'], version: 1 },
-  keywords: { sortKey: ['date', 'query'], version: 2 },
-  countries: { sortKey: ['date', 'country'], version: 1 },
-  devices: { sortKey: ['date', 'device'], version: 1 },
-  page_keywords: { sortKey: ['date', 'url', 'query'], version: 2 },
-  search_appearance: { sortKey: ['date', 'searchAppearance'], version: 1 },
-  hourly_pages: { sortKey: ['date', 'hour', 'url'], version: 1 },
+export const TABLE_METADATA: Record<TableName, { sortKey: string[], clusterKey: string[], version: number }> = {
+  pages: { sortKey: ['date', 'url'], clusterKey: ['url', 'date'], version: 1 },
+  queries: { sortKey: ['date', 'query'], clusterKey: ['query', 'date'], version: 2 },
+  countries: { sortKey: ['date', 'country'], clusterKey: ['country', 'date'], version: 1 },
+  page_queries: { sortKey: ['date', 'url', 'query'], clusterKey: ['url', 'query', 'date'], version: 2 },
+  dates: { sortKey: ['date'], clusterKey: ['date'], version: 1 },
+  search_appearance: { sortKey: ['date', 'searchAppearance'], clusterKey: ['searchAppearance', 'date'], version: 1 },
+  hourly_pages: { sortKey: ['date', 'hour', 'url'], clusterKey: ['url', 'date', 'hour'], version: 1 },
 }

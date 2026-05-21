@@ -13,8 +13,8 @@ import { and, between, contains, date, gsc, or, page, query, regex } from 'gscdu
 import { describe, expect, it } from 'vitest'
 import {
   createInsightRunner,
-  keywords,
-  page_keywords,
+  page_queries,
+  queries,
   resolveWindow,
   scopeFor,
   strikingMomentum,
@@ -55,7 +55,7 @@ describe('@gscdump/engine-duckdb-wasm', () => {
     // Bare import triggers assertInSync(). No throw = pass.
     const mod = await import('../src/schema')
     expect(mod.schema).toHaveProperty('pages')
-    expect(mod.schema).toHaveProperty('page_keywords')
+    expect(mod.schema).toHaveProperty('page_queries')
   })
 
   it('resolveWindow: last-30d with prev-period comparison', () => {
@@ -90,7 +90,7 @@ describe('@gscdump/engine-duckdb-wasm', () => {
 
   it('scopeFor(page_keywords, window) emits date predicates', () => {
     const w = resolveWindow({ preset: 'last-7d', anchor: '2026-04-14' })
-    const scope = scopeFor('page_keywords', { window: w })
+    const scope = scopeFor('page_queries', { window: w })
     expect(scope.wherePredicates).toHaveLength(2)
     expect(scope.window?.days).toBe(7)
   })
@@ -104,17 +104,17 @@ describe('@gscdump/engine-duckdb-wasm', () => {
 
     const q = runner.db
       .select({
-        query: keywords.query,
-        total: sum(keywords.impressions),
+        query: queries.query,
+        total: sum(queries.impressions),
       })
-      .from(keywords)
-      .where(eq(keywords.query, 'site seo'))
-      .groupBy(keywords.query)
-      .orderBy(desc(sum(keywords.impressions)))
+      .from(queries)
+      .where(eq(queries.query, 'site seo'))
+      .groupBy(queries.query)
+      .orderBy(desc(sum(queries.impressions)))
       .limit(5)
 
     const { sql, params } = q.toSQL()
-    expect(sql).toMatch(/select .* from "keywords"/i)
+    expect(sql).toMatch(/select .* from "queries"/i)
     expect(sql).toContain('group by')
     expect(sql).toContain('order by')
     expect(params).toContain('site seo')
@@ -205,7 +205,7 @@ describe('@gscdump/engine-duckdb-wasm', () => {
     // Impression-weighted position with +1 offset (GSC 0-indexed convention)
     expect(sql).toMatch(/sum\(sum_position\)\s*\/\s*nullif/i)
     // Tables referenced
-    expect(sql).toMatch(/from\s+"page_keywords"/i)
+    expect(sql).toMatch(/from\s+"page_queries"/i)
   })
 
   it('sql template with typed Row works as the escape hatch', async () => {
@@ -219,12 +219,12 @@ describe('@gscdump/engine-duckdb-wasm', () => {
     interface Row { query: string, total: number }
     const rows = await runner.db.execute<Row>(sql`
       SELECT query, SUM(impressions) AS total
-      FROM ${page_keywords}
+      FROM ${page_queries}
       WHERE date >= DATE '2026-04-01'
       GROUP BY query
       LIMIT 1
     `)
     expect(Array.isArray(rows)).toBe(true)
-    expect(captured[0]?.sql).toMatch(/from\s+"page_keywords"/i)
+    expect(captured[0]?.sql).toMatch(/from\s+"page_queries"/i)
   })
 })

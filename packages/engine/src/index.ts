@@ -5,8 +5,47 @@ export { canonicalEmptyParquetSchema, createDuckDBCodec, createDuckDBExecutor } 
 export type { DuckDBFactory, DuckDBHandle } from './duckdb'
 export { createStorageEngine, MAX_DAY_BYTES } from './engine'
 export { gcOrphansImpl } from './gc'
+export {
+  connectIcebergCatalog,
+  createIcebergTables,
+  dropIcebergTables,
+  ensureIcebergNamespace,
+  icebergAppendRetrying,
+  icebergPartitionSpecFor,
+  icebergSchemaFor,
+  isCommitRateLimited,
+  listIcebergTables,
+} from './iceberg-catalog'
+export type {
+  CommitRetryOptions,
+  IcebergCatalogConfig,
+  IcebergConnection,
+  IcebergPartitionSpec,
+  IcebergPartitionSpecField,
+  IcebergPrimitiveType,
+  IcebergS3Config,
+  IcebergSchema,
+  IcebergSchemaField,
+  IcebergTableOpResult,
+} from './iceberg-catalog'
+export {
+  ICEBERG_FIELD_ID_BASE,
+  ICEBERG_PARTITION_COLUMNS,
+  ICEBERG_PARTITION_SPEC,
+  ICEBERG_SCHEMAS,
+  ICEBERG_TABLES,
+  icebergTableSpec,
+} from './iceberg-schema'
+export type {
+  IcebergColumn,
+  IcebergColumnType,
+  IcebergPartitionField,
+  IcebergPartitionTransform,
+  IcebergTableName,
+  IcebergTableSpec,
+} from './iceberg-schema'
 export type { GscApiRow, IngestOptions, RowAccumulator, RowAccumulatorOptions } from './ingest'
-export { createRowAccumulator, toPath, toSumPosition, transformGscRow } from './ingest'
+export { assembleDatesRow, createRowAccumulator, toPath, toSumPosition, transformGscRow } from './ingest'
 export type {
   CreateIngestAccumulatorOptions,
   FinalizeOptions,
@@ -26,18 +65,37 @@ export {
   allTables,
   countries,
   currentSchemaVersion,
-  devices,
+  dates,
   dimensionToColumn,
   drizzleSchema,
   hourly_pages,
   inferTable,
-  keywords,
-  page_keywords,
+  page_queries,
   pages,
+  queries,
   SCHEMAS,
   TABLE_METADATA,
 } from './schema'
 export type { ColumnDef, ColumnType, DrizzleSchema, TableSchema } from './schema'
+export type {
+  IcebergAppendSinkOptions,
+  LocalIcebergSinkOptions,
+  Sink,
+  SinkCapabilities,
+  SinkCloseResult,
+  SinkOptions,
+  SinkSlice,
+  SinkWriteResult,
+} from './sink'
+export {
+  createIcebergAppendSink,
+  createInMemorySink,
+} from './sinks'
+export type {
+  IcebergAppendSink,
+  InMemorySink,
+  StoredRow,
+} from './sinks'
 export { bindLiterals, formatLiteral } from './sql-bind'
 export {
   dayPartition,

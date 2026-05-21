@@ -9,13 +9,13 @@
 
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
-import type { KeywordRow } from '../types'
+import type { QueriesRow } from '../types'
 import { num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
-import { keywordsQueryState } from '../analyzer/adapt-rows'
+import { queriesQueryState } from '../analyzer/adapt-rows'
 
 export type ClusterType = 'prefix' | 'intent' | 'both'
 
@@ -31,7 +31,7 @@ export interface ClusteringOptions {
 export interface KeywordCluster {
   clusterName: string
   clusterType: 'prefix' | 'intent'
-  keywords: KeywordRow[]
+  keywords: QueriesRow[]
   totalClicks: number
   totalImpressions: number
   avgPosition: number
@@ -40,7 +40,7 @@ export interface KeywordCluster {
 
 export interface ClusteringResult {
   clusters: KeywordCluster[]
-  unclustered: KeywordRow[]
+  unclustered: QueriesRow[]
 }
 
 const INTENT_PREFIXES_REGEX
@@ -103,7 +103,7 @@ function extractWordPrefix(keyword: string, wordCount = 2): string | null {
  * Re-exported from `@gscdump/analysis` for portable callers.
  */
 export function analyzeClustering(
-  keywords: KeywordRow[],
+  keywords: QueriesRow[],
   options: ClusteringOptions = {},
 ): ClusteringResult {
   const {
@@ -114,7 +114,7 @@ export function analyzeClustering(
 
   const filtered = keywords.filter(k => num(k.impressions) >= minImpressions)
 
-  const clusterMap = new Map<string, { type: 'prefix' | 'intent', keywords: KeywordRow[] }>()
+  const clusterMap = new Map<string, { type: 'prefix' | 'intent', keywords: QueriesRow[] }>()
   const clusteredKeywords = new Set<string>()
 
   if (clusterBy === 'intent' || clusterBy === 'both') {
@@ -135,7 +135,7 @@ export function analyzeClustering(
 
   if (clusterBy === 'prefix' || clusterBy === 'both') {
     const unclustered = filtered.filter(kw => !clusteredKeywords.has(kw.query))
-    const prefixMap = new Map<string, KeywordRow[]>()
+    const prefixMap = new Map<string, QueriesRow[]>()
 
     for (const kw of unclustered) {
       const prefix = extractWordPrefix(kw.query)
@@ -251,7 +251,7 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
     return {
       sql,
       params: [startDate, endDate, minImpressions, minClusterSize],
-      current: { table: 'keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 
@@ -270,7 +270,7 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
         impressions: num(k.impressions),
         ctr: num(k.ctr),
         position: num(k.position),
-      })) as unknown as KeywordRow[],
+      })) as unknown as QueriesRow[],
     }))
     return {
       results: clusters,
@@ -280,12 +280,12 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
 
   buildRows(params) {
     return {
-      keywords: keywordsQueryState(periodOf(params), params.limit),
+      queries: queriesQueryState(periodOf(params), params.limit),
     }
   },
 
   reduceRows(rows, params) {
-    const keywords = (Array.isArray(rows) ? rows : []) as unknown as KeywordRow[]
+    const keywords = (Array.isArray(rows) ? rows : []) as unknown as QueriesRow[]
     const result = analyzeClustering(keywords, {
       clusterBy: params.clusterBy,
       minClusterSize: params.minClusterSize,

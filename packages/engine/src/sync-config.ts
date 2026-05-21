@@ -9,16 +9,16 @@ import type { SearchType } from './storage'
 // intentionally absent — it's searchType-orthogonal and lives in its own
 // pipeline. Non-Discover types mirror Discover's shape until verified
 // against the GSC Search Analytics docs.
-export type SyncTableName = Extract<TableName, 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords'>
+export type SyncTableName = Extract<TableName, 'pages' | 'queries' | 'countries' | 'page_queries' | 'dates'>
 
 export const TABLES_BY_SEARCH_TYPE: Record<SearchType, readonly SyncTableName[]> = {
-  web: ['pages', 'keywords', 'countries', 'devices', 'page_keywords'],
-  // Discover has no `query` dimension — drop keyword-bearing tables.
-  discover: ['pages', 'countries', 'devices'],
-  news: ['pages', 'countries', 'devices'],
-  googleNews: ['pages', 'countries', 'devices'],
-  image: ['pages', 'countries', 'devices'],
-  video: ['pages', 'countries', 'devices'],
+  web: ['pages', 'queries', 'countries', 'page_queries', 'dates'],
+  // Discover has no `query` dimension — drop query-bearing tables.
+  discover: ['pages', 'countries', 'dates'],
+  news: ['pages', 'countries', 'dates'],
+  googleNews: ['pages', 'countries', 'dates'],
+  image: ['pages', 'countries', 'dates'],
+  video: ['pages', 'countries', 'dates'],
 }
 
 // Parse the persisted JSON column. Returns ['web'] for null/invalid/empty
@@ -61,10 +61,10 @@ export function validateEnabledSearchTypes(value: unknown): SearchType[] {
 // Tiered sync table priority. Hosts use this to plan sync ordering.
 export const TABLE_TIERS = {
   pages: 'critical',
-  keywords: 'critical',
+  queries: 'critical',
   countries: 'standard',
-  devices: 'standard',
-  page_keywords: 'extended',
+  dates: 'standard',
+  page_queries: 'extended',
 } as const
 
 export type TieredTableName = keyof typeof TABLE_TIERS

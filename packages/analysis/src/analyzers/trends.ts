@@ -58,7 +58,7 @@ export const trendsAnalyzer = defineAnalyzer<AnalysisParams, Row, TrendsResult[]
     const minWeeksWithData = params.minWeeksWithData ?? Math.max(2, Math.floor(weeks / 4))
     const limit = params.limit ?? 500
     const dim = params.dimension === 'keywords' ? 'keywords' : 'pages'
-    const table: TableName = dim === 'keywords' ? 'keywords' : 'pages'
+    const table: TableName = dim === 'keywords' ? 'queries' : 'pages'
     const keyCol = dim === 'keywords' ? 'query' : 'url'
 
     // DuckDB's `date_trunc('week', d)` buckets to Monday. Series rows store

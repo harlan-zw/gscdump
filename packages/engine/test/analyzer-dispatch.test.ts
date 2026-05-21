@@ -34,7 +34,7 @@ function defineDualAnalyzer(buildSqlThrows: Error | null) {
     buildSql() {
       if (buildSqlThrows)
         throw buildSqlThrows
-      return { sql: 'SELECT 1', params: [], current: { table: 'devices', partitions: [] } }
+      return { sql: 'SELECT 1', params: [], current: { table: 'dates', partitions: [] } }
     },
     reduceSql(rows) {
       return { results: rows as any[], meta: { via: 'sql' } }

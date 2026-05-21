@@ -52,7 +52,7 @@ export const deviceGapAnalyzer = defineAnalyzer<AnalysisParams, Row, DeviceGapRe
     return {
       sql,
       params: [startDate, endDate],
-      current: { table: 'devices', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'dates', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 

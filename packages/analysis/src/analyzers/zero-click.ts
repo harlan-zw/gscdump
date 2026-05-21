@@ -76,7 +76,7 @@ export const zeroClickAnalyzer = defineAnalyzer<AnalysisParams, Row, ZeroClickRe
     return {
       sql,
       params: [startDate, endDate, minImpressions, maxPosition, maxCtr],
-      current: { table: 'page_keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'page_queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 

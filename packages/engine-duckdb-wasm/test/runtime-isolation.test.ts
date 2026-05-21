@@ -45,7 +45,7 @@ function stubDb(): AsyncDuckDB {
  * a fileSet, which `createAttachedTableSource` checks against the runtime's
  * attached set — the seam under test for incomplete-coverage refusal.
  */
-function sqlAnalyzerForTable(table: 'keywords' | 'page_keywords'): Analyzer {
+function sqlAnalyzerForTable(table: 'queries' | 'page_queries'): Analyzer {
   return {
     id: 'data-query',
     requires: ['executeSql', 'fileSets'],
@@ -123,13 +123,13 @@ describe('browser runtime incomplete-coverage refusal', () => {
     // Site has only `keywords` parquet attached; analyzer wants `page_keywords`.
     const runtime = createBrowserAnalysisRuntime(
       { db: stubDb(), conn },
-      { attachedTables: ['keywords'] },
+      { attachedTables: ['queries'] },
     )
-    const registry = createAnalyzerRegistry({ sql: [sqlAnalyzerForTable('page_keywords')] })
+    const registry = createAnalyzerRegistry({ sql: [sqlAnalyzerForTable('page_queries')] })
 
     await expect(runtime.analyze(queryParams, registry)).rejects.toMatchObject({
       name: 'AttachedTableMissingError',
-      missing: ['page_keywords'],
+      missing: ['page_queries'],
     })
     // Refusal happens before any SQL hits the connection.
     expect(query).not.toHaveBeenCalled()
@@ -140,15 +140,15 @@ describe('browser runtime incomplete-coverage refusal', () => {
     const conn = { query } as unknown as AsyncDuckDBConnection
     const runtime = createBrowserAnalysisRuntime(
       { db: stubDb(), conn },
-      { attachedTables: ['keywords', 'page_keywords'] },
+      { attachedTables: ['queries', 'page_queries'] },
     )
-    const registry = createAnalyzerRegistry({ sql: [sqlAnalyzerForTable('page_keywords')] })
+    const registry = createAnalyzerRegistry({ sql: [sqlAnalyzerForTable('page_queries')] })
 
     const result = await runtime.analyze(queryParams, registry)
     expect(result.results).toEqual([{ n: 1 }])
     expect(query).toHaveBeenCalledTimes(1)
     // Placeholder rewritten to the attached view reference.
-    expect(query.mock.calls[0]![0]).toContain('main.page_keywords')
+    expect(query.mock.calls[0]![0]).toContain('main.page_queries')
   })
 
   it('analyze: setAttachedTables narrows coverage and a now-missing table fast-fails', async () => {
@@ -156,17 +156,17 @@ describe('browser runtime incomplete-coverage refusal', () => {
     const conn = { query } as unknown as AsyncDuckDBConnection
     const runtime = createBrowserAnalysisRuntime(
       { db: stubDb(), conn },
-      { attachedTables: ['keywords', 'page_keywords'] },
+      { attachedTables: ['queries', 'page_queries'] },
     )
-    const registry = createAnalyzerRegistry({ sql: [sqlAnalyzerForTable('page_keywords')] })
+    const registry = createAnalyzerRegistry({ sql: [sqlAnalyzerForTable('page_queries')] })
 
     await expect(runtime.analyze(queryParams, registry)).resolves.toBeTruthy()
 
     // Re-attach against a manifest that dropped page_keywords coverage.
-    runtime.setAttachedTables(['keywords'])
+    runtime.setAttachedTables(['queries'])
     await expect(runtime.analyze(queryParams, registry)).rejects.toMatchObject({
       name: 'AttachedTableMissingError',
-      missing: ['page_keywords'],
+      missing: ['page_queries'],
     })
     // Only the first (successful) analyze reached the connection.
     expect(query).toHaveBeenCalledTimes(1)

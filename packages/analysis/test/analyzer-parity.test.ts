@@ -129,7 +129,7 @@ interface ParityCase {
 
 const SHARED_SEED: Seed[] = [
   {
-    table: 'page_keywords',
+    table: 'page_queries',
     date: '2026-04-10',
     rows: [
       { url: '/a', query: 'big opportunity', date: '2026-04-10', clicks: 5, impressions: 10_000, sum_position: 100_000 },

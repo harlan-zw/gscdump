@@ -155,8 +155,8 @@ export const queryMigrationAnalyzer = defineAnalyzer<AnalysisParams, Row, QueryM
         prevEnd,
         minImpressions,
       ],
-      current: { table: 'page_keywords', partitions: enumeratePartitions(cur.startDate, cur.endDate) },
-      previous: { table: 'page_keywords', partitions: enumeratePartitions(prevStart, prevEnd) },
+      current: { table: 'page_queries', partitions: enumeratePartitions(cur.startDate, cur.endDate) },
+      previous: { table: 'page_queries', partitions: enumeratePartitions(prevStart, prevEnd) },
     }
   },
 

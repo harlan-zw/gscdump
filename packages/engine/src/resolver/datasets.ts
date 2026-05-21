@@ -31,14 +31,14 @@ export const LOGICAL_DATASETS: Record<LogicalDataset, LogicalDatasetDefinition> 
       date: { column: 'date', surfaces: ['api', 'stored'] },
     },
   },
-  keywords: {
+  queries: {
     dimensions: {
       query: { column: 'query', surfaces: ['api', 'stored'] },
       queryCanonical: { column: 'query_canonical', surfaces: ['stored', 'derived'] },
       date: { column: 'date', surfaces: ['api', 'stored'] },
     },
   },
-  page_keywords: {
+  page_queries: {
     dimensions: {
       page: { column: 'url', surfaces: ['api', 'stored'] },
       query: { column: 'query', surfaces: ['api', 'stored'] },
@@ -52,9 +52,12 @@ export const LOGICAL_DATASETS: Record<LogicalDataset, LogicalDatasetDefinition> 
       date: { column: 'date', surfaces: ['api', 'stored'] },
     },
   },
-  devices: {
+  // `dates` has the device breakdown pivoted into wide columns
+  // (`clicks_desktop` etc.), so `device` is NOT a groupable dimension here.
+  // Only `date` is a real grouping axis. Device-grained reads go through the
+  // `device-gap` / site-timeseries archetypes, which pivot the wide columns.
+  dates: {
     dimensions: {
-      device: { column: 'device', surfaces: ['api', 'stored'] },
       date: { column: 'date', surfaces: ['api', 'stored'] },
     },
   },

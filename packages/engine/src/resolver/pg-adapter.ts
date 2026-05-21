@@ -26,10 +26,10 @@ const PG_BASE_CONFIG = {
   schema: drizzleSchema,
   datasetToTableKey: {
     pages: 'pages',
-    keywords: 'keywords',
-    page_keywords: 'page_keywords',
+    queries: 'queries',
+    page_queries: 'page_queries',
     countries: 'countries',
-    devices: 'devices',
+    dates: 'dates',
     search_appearance: 'search_appearance',
     hourly_pages: 'hourly_pages',
   },

@@ -21,12 +21,28 @@
  * no external bus-factor risk on a load-bearing primitive.
  */
 
+export { compileArchetypeSql, tableForArchetype } from './archetype-sql'
+export type { CompiledArchetypeSql } from './archetype-sql'
 export { createClient } from './drizzle-adapter'
 export type { DuckDBWasmClient } from './drizzle-adapter'
 export { drizzle, DuckDBWasmDatabase } from './drizzle-adapter'
 export type { DuckDBWasmDrizzleDatabase } from './drizzle-adapter'
 export { strikingMomentum } from './insights/striking-momentum'
 export type { StrikingMomentumOptions, StrikingMomentumRow } from './insights/striking-momentum'
+export {
+  attachOpfsParquetTables,
+  clearOpfsSnapshotCache,
+  estimateOpfsStorage,
+  OpfsQuotaExceededError,
+  requestPersistentStorage,
+} from './opfs'
+export type {
+  AttachOpfsTablesOptions,
+  OpfsAttachedHandle,
+  OpfsFileProgress,
+  OpfsParquetFile,
+  OpfsParquetTable,
+} from './opfs'
 export { createInsightRunner, mergeScope, scopeFor } from './runner'
 export type { InsightRunner, InsightRunnerOptions, ScopedRunnerOptions, TableScope } from './runner'
 export {
@@ -49,7 +65,7 @@ export type {
   DuckDBWasmBootResult,
   QueryResult,
 } from './runtime'
-export { countries, devices, hourly_pages, keywords, page_keywords, pages, schema } from './schema'
+export { countries, dates, hourly_pages, page_queries, pages, queries, schema } from './schema'
 export type { Schema } from './schema'
 
 export { resolveWindow } from '@gscdump/engine/period'

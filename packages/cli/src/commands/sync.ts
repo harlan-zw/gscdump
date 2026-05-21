@@ -12,7 +12,7 @@ import { createCommandContext } from '../context'
 import { allTables, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, runWithConcurrency } from '../utils'
 
-const DEFAULT_TABLES: TableName[] = ['pages', 'keywords', 'countries', 'devices']
+const DEFAULT_TABLES: TableName[] = ['pages', 'queries', 'countries', 'dates']
 const DEFAULT_TYPES: readonly SearchType[] = ['web']
 const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
 const DEFAULT_PENDING_DAYS = 3

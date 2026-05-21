@@ -8,13 +8,13 @@
 
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
-import type { KeywordRow } from '../types'
+import type { QueriesRow } from '../types'
 import { num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
-import { keywordsQueryState } from '../analyzer/adapt-rows'
+import { queriesQueryState } from '../analyzer/adapt-rows'
 import { paginateClause, paginateInMemory } from '../analyzer/paginate'
 import { createMetricSorter } from '../types'
 
@@ -167,7 +167,7 @@ export const opportunityAnalyzer = defineAnalyzer<AnalysisParams, Row, Opportuni
     return {
       sql,
       params: [startDate, endDate, minImpressions],
-      current: { table: 'page_keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'page_queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 
@@ -195,12 +195,12 @@ export const opportunityAnalyzer = defineAnalyzer<AnalysisParams, Row, Opportuni
 
   buildRows(params) {
     return {
-      keywords: keywordsQueryState(periodOf(params), params.limit),
+      queries: queriesQueryState(periodOf(params), params.limit),
     }
   },
 
   reduceRows(rows, params) {
-    const keywords = (Array.isArray(rows) ? (rows as unknown as KeywordRow[]) : []) ?? []
+    const keywords = (Array.isArray(rows) ? (rows as unknown as QueriesRow[]) : []) ?? []
 
     const minImpressions = params.minImpressions ?? 100
     const positionWeight = 1

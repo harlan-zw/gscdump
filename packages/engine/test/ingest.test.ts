@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  assembleDatesRow,
   createRowAccumulator,
   toPath,
   toSumPosition,
@@ -28,7 +29,7 @@ describe('transformGscRow', () => {
 
   it('maps keywords + applies normalizeQuery hook', () => {
     const out = transformGscRow(
-      'keywords',
+      'queries',
       { keys: ['Foo Bar', '2026-04-10'], clicks: 1, impressions: 2, position: 10 },
       { normalizeQuery: q => q.toLowerCase() },
     )
@@ -36,7 +37,7 @@ describe('transformGscRow', () => {
   })
 
   it('keywords without normalizeQuery sets query_canonical=null', () => {
-    const out = transformGscRow('keywords', { keys: ['foo', '2026-04-10'], clicks: 0, impressions: 0, position: 0 })
+    const out = transformGscRow('queries', { keys: ['foo', '2026-04-10'], clicks: 0, impressions: 0, position: 0 })
     expect(out?.row.query_canonical).toBeNull()
   })
 
@@ -50,9 +51,47 @@ describe('transformGscRow', () => {
     expect(out?.row).toEqual({ searchAppearance: 'AMP_TOP_STORIES', date: '2026-04-10', clicks: 2, impressions: 20, sum_position: 80 })
   })
 
-  it('maps devices', () => {
-    const out = transformGscRow('devices', { keys: ['mobile', '2026-04-10'], clicks: 0, impressions: 3, position: 1 })
-    expect(out?.row).toEqual({ device: 'mobile', date: '2026-04-10', clicks: 0, impressions: 3, sum_position: 0 })
+  it('rejects the bespoke `dates` table — must use assembleDatesRow', () => {
+    expect(() => transformGscRow('dates', { keys: ['x', '2026-04-10'], clicks: 0, impressions: 0, position: 0 }))
+      .toThrow(/assembleDatesRow/)
+  })
+})
+
+describe('assembleDatesRow', () => {
+  it('pivots the device breakdown and derives anonymized_impressions_pct', () => {
+    const { date, row } = assembleDatesRow(
+      '2026-04-10',
+      { keys: ['2026-04-10'], clicks: 30, impressions: 300, position: 3 },
+      [
+        { keys: ['2026-04-10', 'DESKTOP'], clicks: 20, impressions: 200, position: 2 },
+        { keys: ['2026-04-10', 'MOBILE'], clicks: 10, impressions: 100, position: 5 },
+      ],
+      240, // query-grained impressions → 1 - 240/300 = 0.2 anonymized
+    )
+    expect(date).toBe('2026-04-10')
+    expect(row.anonymized_impressions_pct as number).toBeCloseTo(0.2, 6)
+    expect(row).toMatchObject({
+      date: '2026-04-10',
+      clicks: 30,
+      impressions: 300,
+      sum_position: (3 - 1) * 300,
+      clicks_desktop: 20,
+      clicks_mobile: 10,
+      clicks_tablet: 0,
+      impressions_desktop: 200,
+      impressions_mobile: 100,
+      impressions_tablet: 0,
+      sum_position_desktop: (2 - 1) * 200,
+      sum_position_mobile: (5 - 1) * 100,
+      sum_position_tablet: 0,
+    })
+  })
+
+  it('clamps anonymized_impressions_pct into [0, 1]', () => {
+    const over = assembleDatesRow('2026-04-10', { keys: ['2026-04-10'], clicks: 0, impressions: 100, position: 0 }, [], 150)
+    expect(over.row.anonymized_impressions_pct).toBe(0)
+    const zeroImpr = assembleDatesRow('2026-04-10', { keys: ['2026-04-10'], clicks: 0, impressions: 0, position: 0 }, [], 0)
+    expect(zeroImpr.row.anonymized_impressions_pct).toBe(0)
   })
 
   it('maps hourly_pages (keys=[hour, page]) and derives date from the hour prefix', () => {
@@ -77,7 +116,7 @@ describe('transformGscRow', () => {
 
   it('maps page_keywords (keys=[page, query, date])', () => {
     const out = transformGscRow(
-      'page_keywords',
+      'page_queries',
       { keys: ['https://example.com/foo', 'bar', '2026-04-10'], clicks: 2, impressions: 20, position: 4 },
       { normalizeQuery: q => q },
     )
@@ -117,7 +156,7 @@ describe('createRowAccumulator', () => {
       { keys: ['/b', '2026-04-10'], clicks: 2, impressions: 20, position: 2 },
       { keys: ['/c', '2026-04-11'], clicks: 3, impressions: 30, position: 3 },
     ])
-    acc.push('keywords', [
+    acc.push('queries', [
       { keys: ['foo', '2026-04-10'], clicks: 5, impressions: 50, position: 4 },
     ])
     expect(acc.totalRows).toBe(4)
@@ -125,12 +164,12 @@ describe('createRowAccumulator', () => {
     const drained = acc.drain()
     expect(drained.get('pages')?.get('2026-04-10')).toHaveLength(2)
     expect(drained.get('pages')?.get('2026-04-11')).toHaveLength(1)
-    expect(drained.get('keywords')?.get('2026-04-10')).toHaveLength(1)
+    expect(drained.get('queries')?.get('2026-04-10')).toHaveLength(1)
   })
 
   it('drain resets state', () => {
     const acc = createRowAccumulator()
-    acc.push('devices', [{ keys: ['mobile', '2026-04-10'], clicks: 0, impressions: 0, position: 0 }])
+    acc.push('countries', [{ keys: ['usa', '2026-04-10'], clicks: 0, impressions: 0, position: 0 }])
     acc.drain()
     expect(acc.totalRows).toBe(0)
     expect(acc.drain().size).toBe(0)
@@ -202,23 +241,23 @@ describe('createRowAccumulator', () => {
 
   it('drainCompleted advances the boundary across multiple pushes', () => {
     const acc = createRowAccumulator({ trackDateBoundary: true })
-    acc.push('keywords', [
+    acc.push('queries', [
       { keys: ['foo', '2026-04-10'], clicks: 0, impressions: 0, position: 0 },
     ])
     expect(acc.drainCompleted().size).toBe(0)
 
-    acc.push('keywords', [
+    acc.push('queries', [
       { keys: ['bar', '2026-04-11'], clicks: 0, impressions: 0, position: 0 },
     ])
     const first = acc.drainCompleted()
-    expect(first.get('keywords')?.get('2026-04-10')).toHaveLength(1)
+    expect(first.get('queries')?.get('2026-04-10')).toHaveLength(1)
     expect(acc.totalRows).toBe(1)
 
-    acc.push('keywords', [
+    acc.push('queries', [
       { keys: ['baz', '2026-04-12'], clicks: 0, impressions: 0, position: 0 },
     ])
     const second = acc.drainCompleted()
-    expect(second.get('keywords')?.get('2026-04-11')).toHaveLength(1)
+    expect(second.get('queries')?.get('2026-04-11')).toHaveLength(1)
     expect(acc.totalRows).toBe(1)
   })
 
@@ -228,12 +267,12 @@ describe('createRowAccumulator', () => {
       { keys: ['/a', '2026-04-10'], clicks: 0, impressions: 0, position: 0 },
       { keys: ['/b', '2026-04-12'], clicks: 0, impressions: 0, position: 0 },
     ])
-    acc.push('keywords', [
+    acc.push('queries', [
       { keys: ['foo', '2026-04-09'], clicks: 0, impressions: 0, position: 0 },
     ])
     const completed = acc.drainCompleted()
     expect(completed.get('pages')?.get('2026-04-10')).toHaveLength(1)
-    expect(completed.has('keywords')).toBe(false)
+    expect(completed.has('queries')).toBe(false)
     expect(acc.totalRows).toBe(2)
   })
 

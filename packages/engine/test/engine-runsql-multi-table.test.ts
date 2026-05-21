@@ -23,7 +23,7 @@ describe('runSQL multi-table ambiguity', () => {
         ctx: { userId: 'u1', siteId: 's1' },
         fileSets: {
           FILES: { table: 'pages' },
-          FILES_PREV: { table: 'keywords' },
+          FILES_PREV: { table: 'queries' },
         },
         sql: 'SELECT 1',
       }),
@@ -36,7 +36,7 @@ describe('runSQL multi-table ambiguity', () => {
       ctx: { userId: 'u1', siteId: 's1' },
       fileSets: {
         FILES: { table: 'pages' },
-        FILES_PREV: { table: 'keywords' },
+        FILES_PREV: { table: 'queries' },
       },
       table: 'pages',
       sql: 'SELECT 1',

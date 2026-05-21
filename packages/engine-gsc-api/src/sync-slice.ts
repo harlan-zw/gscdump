@@ -33,7 +33,7 @@ export interface RunGscSyncSliceOptions {
   client: GoogleSearchConsoleClient
   siteUrl: string
   /** One of the engine sync-fan tables. Drives the dimension list. */
-  table: 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords' | 'hourly_pages'
+  table: 'pages' | 'queries' | 'countries' | 'dates' | 'page_queries' | 'hourly_pages'
   startDate: string
   endDate: string
   domainFilter?: SyncSliceDomainFilter | null
@@ -85,12 +85,16 @@ export interface RunGscSyncSliceResult {
   metadata?: GscSearchAnalyticsMetadata
 }
 
+// Keyed by engine `SyncTableName` (post Iceberg rename). `dates` fetches the
+// `['device', 'date']` grain: the legacy D1 path stores it row-grained in
+// `gsc_devices`, and the Iceberg `dates` ingest pivots the device rows (plus a
+// separate `['date']` site-total query) into the wide `dates` table.
 const DIMENSIONS_BY_TABLE = {
   pages: ['page', 'date'],
-  keywords: ['query', 'date'],
+  queries: ['query', 'date'],
   countries: ['country', 'date'],
-  devices: ['device', 'date'],
-  page_keywords: ['page', 'query', 'date'],
+  dates: ['device', 'date'],
+  page_queries: ['page', 'query', 'date'],
   hourly_pages: ['hour', 'page'],
 } as const
 

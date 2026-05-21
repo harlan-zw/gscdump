@@ -151,7 +151,7 @@ export const longTailAnalyzer = defineAnalyzer<AnalysisParams, Row, LongTailResu
     return {
       sql,
       params: [startDate, endDate, minQueryImpressions],
-      current: { table: 'page_keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'page_queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 

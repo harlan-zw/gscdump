@@ -212,10 +212,10 @@ describe('rebuildRollups', () => {
     const { ds, store } = makeFakeDataSource()
     const engine = makeFakeEngine({
       pages: [{ date: '2026-04-10', clicks: 100, impressions: 1000, sum_position: 5000, week: '2026-04-06', url: '/x' }],
-      keywords: [{ date: '2026-04-10', impressions: 530, query: 'foo', clicks: 10, sum_position: 30 }],
+      queries: [{ date: '2026-04-10', impressions: 530, query: 'foo', clicks: 10, sum_position: 30 }],
       countries: [],
-      devices: [],
-      page_keywords: [],
+      dates: [],
+      page_queries: [],
     })
 
     await rebuildRollups({
@@ -242,13 +242,13 @@ describe('dailyTotalsRollup', () => {
         { date: '2026-04-10', clicks: 50, impressions: 1000, sum_position: 5000 },
         { date: '2026-04-11', clicks: 60, impressions: 800, sum_position: 4000 },
       ],
-      keywords: [
+      queries: [
         { date: '2026-04-10', impressions: 530 }, // 47% anonymized
         { date: '2026-04-11', impressions: 800 }, // 0% anonymized
       ],
       countries: [],
-      devices: [],
-      page_keywords: [],
+      dates: [],
+      page_queries: [],
     })
     const { ds: buildDs } = makeFakeDataSource()
     const result = (await dailyTotalsRollup.build({
@@ -267,10 +267,10 @@ describe('dailyTotalsRollup', () => {
   it('clamps anonymizedImpressionsPct into [0, 1] (e.g. when keyword aggregation overshoots)', async () => {
     const engine = makeFakeEngine({
       pages: [{ date: '2026-04-10', clicks: 50, impressions: 1000, sum_position: 5000 }],
-      keywords: [{ date: '2026-04-10', impressions: 1500 }],
+      queries: [{ date: '2026-04-10', impressions: 1500 }],
       countries: [],
-      devices: [],
-      page_keywords: [],
+      dates: [],
+      page_queries: [],
     })
     const { ds: buildDs } = makeFakeDataSource()
     const result = (await dailyTotalsRollup.build({
@@ -285,10 +285,10 @@ describe('dailyTotalsRollup', () => {
   it('returns 0 anonymization when total impressions is 0', async () => {
     const engine = makeFakeEngine({
       pages: [{ date: '2026-04-10', clicks: 0, impressions: 0, sum_position: 0 }],
-      keywords: [],
+      queries: [],
       countries: [],
-      devices: [],
-      page_keywords: [],
+      dates: [],
+      page_queries: [],
     })
     const { ds: buildDs } = makeFakeDataSource()
     const result = (await dailyTotalsRollup.build({
@@ -305,10 +305,10 @@ describe('weeklyTotalsRollup', () => {
   it('forwards rows to payload coercing numeric types', async () => {
     const engine = makeFakeEngine({
       pages: [{ week: '2026-04-06', clicks: 100n, impressions: 500n, sum_position: 750 }],
-      keywords: [],
+      queries: [],
       countries: [],
-      devices: [],
-      page_keywords: [],
+      dates: [],
+      page_queries: [],
     })
     const { ds: buildDs } = makeFakeDataSource()
     const result = (await weeklyTotalsRollup.build({
@@ -484,7 +484,7 @@ describe('parquet rollups', () => {
   it('writes parquet bytes + JSON sidecar pointer', async () => {
     const { ds, store } = makeFakeDataSource()
     const engine = makeFakeEngine({
-      keywords: [
+      queries: [
         { query: 'foo', clicks: 500, impressions: 5000, sum_position: 10000 },
         { query: 'bar', clicks: 100, impressions: 1000, sum_position: 5000 },
       ],

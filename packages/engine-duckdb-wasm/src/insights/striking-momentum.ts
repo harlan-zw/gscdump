@@ -2,7 +2,7 @@
  * Striking Distance Momentum — validates the drizzle surface against the
  * exact insight the benchmark sub-agent hand-wrote in raw SQL.
  *
- * For every (query, url) pair in page_keywords, split the trailing 180 days
+ * For every (query, url) pair in page_queries, split the trailing 180 days
  * around `anchor` into two 90-day windows. Compute impression-weighted avg
  * position per window, keep queries with prior-period baseline
  * (`prior_impr >= 10`) and recent signal (`recent_impr >= 50`), then rank
@@ -21,7 +21,7 @@ import type { InsightRunner } from '../runner'
 import { sql } from 'drizzle-orm'
 import { toIsoDate } from 'gscdump'
 
-import { page_keywords } from '../schema'
+import { page_queries } from '../schema'
 
 export interface StrikingMomentumOptions {
   /** Anchor date (YYYY-MM-DD). Defaults to today. */
@@ -61,16 +61,16 @@ export async function strikingMomentum(
       SELECT
         query,
         url,
-        ${page_keywords.date} AS date,
-        ${page_keywords.impressions} AS impressions,
-        ${page_keywords.sum_position} AS sum_position,
+        ${page_queries.date} AS date,
+        ${page_queries.impressions} AS impressions,
+        ${page_queries.sum_position} AS sum_position,
         CASE
-          WHEN ${page_keywords.date} >= (DATE ${sql.raw(`'${anchor}'`)} - INTERVAL ${sql.raw(`${windowDays}`)} DAY)
+          WHEN ${page_queries.date} >= (DATE ${sql.raw(`'${anchor}'`)} - INTERVAL ${sql.raw(`${windowDays}`)} DAY)
           THEN 'recent' ELSE 'prior'
         END AS period
-      FROM ${page_keywords}
-      WHERE ${page_keywords.date} >= (DATE ${sql.raw(`'${anchor}'`)} - INTERVAL ${sql.raw(`${windowDays * 2}`)} DAY)
-        AND ${page_keywords.date} <  (DATE ${sql.raw(`'${anchor}'`)} + INTERVAL 1 DAY)
+      FROM ${page_queries}
+      WHERE ${page_queries.date} >= (DATE ${sql.raw(`'${anchor}'`)} - INTERVAL ${sql.raw(`${windowDays * 2}`)} DAY)
+        AND ${page_queries.date} <  (DATE ${sql.raw(`'${anchor}'`)} + INTERVAL 1 DAY)
     ),
     agg AS (
       SELECT

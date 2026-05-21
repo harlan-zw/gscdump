@@ -6,7 +6,7 @@ export type {
   PartnerLifecycleSite,
 } from './onboarding'
 
-export type TableName = 'pages' | 'keywords' | 'countries' | 'devices' | 'page_keywords' | 'search_appearance' | 'hourly_pages'
+export type TableName = 'pages' | 'queries' | 'countries' | 'page_queries' | 'dates' | 'search_appearance' | 'hourly_pages'
 /**
  * Temporal granularity axis. Daily callers (`'day'`, default) read/write rows
  *  keyed by `date`; hourly callers (`'hour'`) read/write rows that additionally

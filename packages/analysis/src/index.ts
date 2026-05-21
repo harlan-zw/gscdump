@@ -101,8 +101,8 @@ export { SQL_ANALYZERS } from './sql-analyzers'
 export type {
   BaseMetrics,
   DateRow,
-  KeywordRow,
   PageRow,
+  QueriesRow,
   QueryPageRow,
   SortOrder,
 } from './types'

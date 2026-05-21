@@ -102,8 +102,8 @@ export const darkTrafficAnalyzer = defineAnalyzer<AnalysisParams, Row, DarkTraff
       params: [startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate],
       current: { table: 'pages', partitions: enumeratePartitions(startDate, endDate) },
       extraFiles: {
-        KEYWORDS: { table: 'keywords', partitions: enumeratePartitions(startDate, endDate) },
-        PAGE_KEYWORDS: { table: 'page_keywords', partitions: enumeratePartitions(startDate, endDate) },
+        KEYWORDS: { table: 'queries', partitions: enumeratePartitions(startDate, endDate) },
+        PAGE_KEYWORDS: { table: 'page_queries', partitions: enumeratePartitions(startDate, endDate) },
       },
     }
   },

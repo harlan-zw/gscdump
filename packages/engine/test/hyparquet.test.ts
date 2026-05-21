@@ -14,6 +14,23 @@ import {
   encodeRowsToParquetFlex,
 } from '../src/adapters/hyparquet'
 import { allTables } from '../src/index'
+import { naturalKeyColumns } from '../src/schema'
+
+// The codec writes rows in `clusterKey` (dimension-first) order, not input
+// order — so round-trip comparisons must be order-agnostic. Sort both sides
+// by natural key before a positional compare.
+function byNaturalKey(table: TableName, rows: readonly Row[]): Row[] {
+  const key = naturalKeyColumns(table)
+  return rows.slice().sort((a, b) => {
+    for (const col of key) {
+      const av = `${a[col] ?? ''}`
+      const bv = `${b[col] ?? ''}`
+      if (av !== bv)
+        return av < bv ? -1 : 1
+    }
+    return 0
+  })
+}
 
 function memDataSource(): DataSource & { store: Map<string, Uint8Array> } {
   const store = new Map<string, Uint8Array>()
@@ -42,17 +59,32 @@ const FIXTURES: Record<TableName, Row[]> = {
     { url: '/a', date: '2025-01-01', clicks: 10, impressions: 100, sum_position: 523.4 },
     { url: '/b', date: '2025-01-01', clicks: 0, impressions: 3, sum_position: 18 },
   ],
-  keywords: [
+  queries: [
     { query: 'foo', query_canonical: 'foo', date: '2025-01-01', clicks: 5, impressions: 50, sum_position: 21.5 },
     { query: 'bar', query_canonical: null, date: '2025-01-02', clicks: 1, impressions: 2, sum_position: 4 },
   ],
   countries: [
     { country: 'usa', date: '2025-01-01', clicks: 7, impressions: 70, sum_position: 14 },
   ],
-  devices: [
-    { device: 'mobile', date: '2025-01-01', clicks: 3, impressions: 30, sum_position: 9 },
+  dates: [
+    {
+      date: '2025-01-01',
+      clicks: 30,
+      impressions: 300,
+      sum_position: 600,
+      anonymized_impressions_pct: 0.2,
+      clicks_desktop: 20,
+      clicks_mobile: 10,
+      clicks_tablet: 0,
+      impressions_desktop: 200,
+      impressions_mobile: 100,
+      impressions_tablet: 0,
+      sum_position_desktop: 400,
+      sum_position_mobile: 200,
+      sum_position_tablet: 0,
+    },
   ],
-  page_keywords: [
+  page_queries: [
     { url: '/a', query: 'foo', query_canonical: 'foo', date: '2025-01-01', clicks: 2, impressions: 20, sum_position: 40 },
   ],
   search_appearance: [
@@ -79,9 +111,11 @@ describe('hyparquet codec', () => {
 
       const readBack = await codec.readRows({ table }, key, ds)
       expect(readBack).toHaveLength(rows.length)
-      for (let i = 0; i < rows.length; i++) {
-        for (const col of Object.keys(rows[i]!))
-          expect(readBack[i]![col]).toEqual(rows[i]![col])
+      const expected = byNaturalKey(table, rows)
+      const actual = byNaturalKey(table, readBack)
+      for (let i = 0; i < expected.length; i++) {
+        for (const col of Object.keys(expected[i]!))
+          expect(actual[i]![col]).toEqual(expected[i]![col])
       }
     })
   }
@@ -138,7 +172,7 @@ describe('hyparquet codec', () => {
   it('compact with zero inputs still produces a schema-bearing output', async () => {
     const codec = createHyparquetCodec()
     const ds = memDataSource()
-    const res = await codec.compactRows({ table: 'keywords' }, [], 'empty.parquet', ds)
+    const res = await codec.compactRows({ table: 'queries' }, [], 'empty.parquet', ds)
     expect(res.rowCount).toBe(0)
     expect(res.bytes).toBeGreaterThan(0)
   })
@@ -159,11 +193,11 @@ describe('hyparquet codec', () => {
   })
 
   it('exports raw encode/decode helpers for ad-hoc use', async () => {
-    const bytes = encodeRowsToParquet('devices', [
-      { device: 'desktop', date: '2025-01-01', clicks: 1, impressions: 2, sum_position: 3 },
+    const bytes = encodeRowsToParquet('countries', [
+      { country: 'usa', date: '2025-01-01', clicks: 1, impressions: 2, sum_position: 3 },
     ])
     const rows = await decodeParquetToRows(bytes)
-    expect(rows[0]!.device).toBe('desktop')
+    expect(rows[0]!.country).toBe('usa')
   })
 
   it('encodeRowsToParquetFlex round-trips an arbitrary column set', async () => {

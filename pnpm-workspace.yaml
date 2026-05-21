@@ -6,6 +6,7 @@ minimumReleaseAgeExclude:
   - '@types/node@25.9.0'
   - nuxt@4.4.6
   - tsx@4.22.2
+  - icebird@0.8.5
 shellEmulator: true
 
 trustPolicy: no-downgrade
@@ -45,6 +46,7 @@ catalog:
   h3: ^1.15.11
   hyparquet: ^1.25.8
   hyparquet-writer: ^0.15.1
+  icebird: ^0.8.5
   js-yaml: ^4.1.1
   nuxt: ^4.4.6
   tailwindcss: ^4.3.0
@@ -90,3 +92,5 @@ allowBuilds:
   protobufjs: true
   sharp: true
   vue-demi: true
+patchedDependencies:
+  icebird@0.8.5: patches/icebird@0.8.5.patch

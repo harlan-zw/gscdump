@@ -13,7 +13,7 @@ import { between, date as dateCol, gsc, page as pageCol, query as queryCol } fro
 
 const DEFAULT_LIMIT = 25_000
 
-export function keywordsQueryState(period: AnalysisPeriod, limit: number = DEFAULT_LIMIT): BuilderState {
+export function queriesQueryState(period: AnalysisPeriod, limit: number = DEFAULT_LIMIT): BuilderState {
   return gsc.select(queryCol, pageCol).where(between(dateCol, period.startDate, period.endDate)).limit(limit).getState()
 }
 

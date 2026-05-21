@@ -1,24 +1,31 @@
 .:
   allTables: function
+  assembleDatesRow: function
   bindLiterals: function
   canonicalEmptyParquetSchema: function
   coerceRow: function
   coerceRows: function
+  connectIcebergCatalog: function
   countRawDailies: function
   countries: object
   createDuckDBCodec: function
   createDuckDBExecutor: function
+  createIcebergAppendSink: function
+  createIcebergTables: function
   createIngestAccumulator: function
+  createInMemorySink: function
   createNoopIngestAccumulator: function
   createRowAccumulator: function
   createStorageEngine: function
   currentSchemaVersion: function
+  dates: object
   dayPartition: function
   dedupeOverlappingTiers: function
   DEFAULT_SEARCH_TYPE: string
-  devices: object
   dimensionToColumn: function
   drizzleSchema: object
+  dropIcebergTables: function
+  ensureIcebergNamespace: function
   enumeratePartitions: function
   FILES_PLACEHOLDER: string
   fixedPolicy: function
@@ -29,11 +36,21 @@
   getTableTier: function
   hourly_pages: object
   hourPartition: function
+  ICEBERG_FIELD_ID_BASE: number
+  ICEBERG_PARTITION_COLUMNS: object
+  ICEBERG_PARTITION_SPEC: object
+  ICEBERG_SCHEMAS: object
+  ICEBERG_TABLES: object
+  icebergAppendRetrying: function
+  icebergPartitionSpecFor: function
+  icebergSchemaFor: function
+  icebergTableSpec: function
   inferLegacyTier: function
   inferSearchType: function
   inferTable: function
   inspectionPolicy: function
-  keywords: object
+  isCommitRateLimited: function
+  listIcebergTables: function
   MAX_DAY_BYTES: number
   MAX_GSC_PAGES_R2: number
   MAX_SITEMAP_URLS_PER_SITE: number
@@ -41,9 +58,10 @@
   MIN_COUNTRY_IMPRESSIONS: number
   MIN_SYNC_IMPRESSIONS: number
   objectKey: function
-  page_keywords: object
+  page_queries: object
   pages: object
   parseEnabledSearchTypes: function
+  queries: object
   RAW_DAILY_COMPACT_THRESHOLD: number
   rebuildDailyFromHourly: function
   resolveParquetSQL: function
@@ -101,6 +119,7 @@
   encodeRowsToParquet: function
   encodeRowsToParquetFlex: function
 ./ingest:
+  assembleDatesRow: function
   createRowAccumulator: function
   TABLE_DIMS: object
   toPath: function
@@ -198,16 +217,16 @@
   allTables: function
   countries: object
   currentSchemaVersion: function
+  dates: object
   dedupeByNaturalKey: function
-  devices: object
   dimensionToColumn: function
   drizzleSchema: object
   hourly_pages: object
   inferTable: function
-  keywords: object
   naturalKeyColumns: function
-  page_keywords: object
+  page_queries: object
   pages: object
+  queries: object
   schemaFor: function
   SCHEMAS: object
   search_appearance: object
@@ -216,6 +235,8 @@
   buildTableScope: function
   createScopedHelpers: function
   mergeScope: function
+./sink-node:
+  createLocalIcebergSink: function
 ./snapshot: {}
 ./source:
   AttachedTableMissingError: function
@@ -236,3 +257,6 @@
   escapeLike: function
   METRIC_EXPR: object
   topLevelPagePredicateSql: function
+./vendor/hysnappy:
+  snappyUncompress: function
+  snappyUncompressor: function

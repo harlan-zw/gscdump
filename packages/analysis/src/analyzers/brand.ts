@@ -8,13 +8,13 @@
 
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
-import type { KeywordRow } from '../types'
+import type { QueriesRow } from '../types'
 import { num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
-import { keywordsQueryState } from '../analyzer/adapt-rows'
+import { queriesQueryState } from '../analyzer/adapt-rows'
 
 export interface BrandSegmentationOptions {
   /** Brand terms to match against keywords (case-insensitive) */
@@ -32,8 +32,8 @@ export interface BrandSummary {
 }
 
 export interface BrandSegmentationResult {
-  brand: KeywordRow[]
-  nonBrand: KeywordRow[]
+  brand: QueriesRow[]
+  nonBrand: QueriesRow[]
   summary: BrandSummary
 }
 
@@ -60,15 +60,15 @@ function str(v: unknown): string {
  * brand terms. Re-exported from `@gscdump/analysis` for portable callers.
  */
 export function analyzeBrandSegmentation(
-  keywords: KeywordRow[],
+  keywords: QueriesRow[],
   options: BrandSegmentationOptions,
 ): BrandSegmentationResult {
   const { brandTerms, minImpressions = 10 } = options
 
   const lowerBrandTerms = brandTerms.map(t => t.toLowerCase())
 
-  const brand: KeywordRow[] = []
-  const nonBrand: KeywordRow[] = []
+  const brand: QueriesRow[] = []
+  const nonBrand: QueriesRow[] = []
 
   for (const row of keywords) {
     if (num(row.impressions) < minImpressions)
@@ -138,7 +138,7 @@ export const brandAnalyzer = defineAnalyzer<AnalysisParams, Row, BrandResultRow[
     return {
       sql,
       params: [startDate, endDate, minImpressions, regex],
-      current: { table: 'page_keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'page_queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 
@@ -185,14 +185,14 @@ export const brandAnalyzer = defineAnalyzer<AnalysisParams, Row, BrandResultRow[
 
   buildRows(params) {
     return {
-      keywords: keywordsQueryState(periodOf(params), params.limit),
+      queries: queriesQueryState(periodOf(params), params.limit),
     }
   },
 
   reduceRows(rows, params) {
     if (!params.brandTerms?.length)
       throw new Error('Brand analysis requires brandTerms')
-    const keywords = (Array.isArray(rows) ? rows : []) as unknown as KeywordRow[]
+    const keywords = (Array.isArray(rows) ? rows : []) as unknown as QueriesRow[]
     const result = analyzeBrandSegmentation(keywords, {
       brandTerms: params.brandTerms,
       minImpressions: params.minImpressions,

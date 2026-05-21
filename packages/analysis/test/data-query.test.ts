@@ -34,11 +34,11 @@ const runner: AnalyzerRunner = {
 }
 
 async function reset(): Promise<void> {
-  await handle.query(`DROP TABLE IF EXISTS keywords`)
+  await handle.query(`DROP TABLE IF EXISTS queries`)
   await handle.query(`DROP TABLE IF EXISTS pages`)
-  await handle.query(`DROP TABLE IF EXISTS page_keywords`)
+  await handle.query(`DROP TABLE IF EXISTS page_queries`)
   await handle.query(`DROP TABLE IF EXISTS countries`)
-  await handle.query(`DROP TABLE IF EXISTS devices`)
+  await handle.query(`DROP TABLE IF EXISTS dates`)
 }
 
 interface KwRow {
@@ -52,7 +52,7 @@ interface KwRow {
 
 async function createKeywords(rows: KwRow[]): Promise<void> {
   await handle.query(
-    `CREATE TABLE keywords (
+    `CREATE TABLE queries (
       query VARCHAR NOT NULL,
       query_canonical VARCHAR,
       date DATE NOT NULL,
@@ -63,7 +63,7 @@ async function createKeywords(rows: KwRow[]): Promise<void> {
   )
   for (const r of rows) {
     await handle.query(
-      `INSERT INTO keywords VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO queries VALUES (?, ?, ?, ?, ?, ?)`,
       [r.query, r.query_canonical ?? null, r.date, r.clicks, r.impressions, r.sum_position],
     )
   }

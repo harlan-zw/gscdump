@@ -50,7 +50,7 @@ export const positionDistributionAnalyzer = defineAnalyzer<AnalysisParams, Row, 
     return {
       sql,
       params: [startDate, endDate],
-      current: { table: 'keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 

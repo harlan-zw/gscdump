@@ -133,8 +133,8 @@ export interface BrowserAnalysisRuntime {
   /**
    * Update the list of attached table names. Lets callers fast-fail in
    * `analyze()` when a SQL plan references a table that wasn't in the manifest
-   * for this site (e.g. site has only `keywords` parquet, analyzer wants
-   * `page_keywords`) — surface a clean `AttachedTableMissingError` so the
+   * for this site (e.g. site has only `queries` parquet, analyzer wants
+   * `page_queries`) — surface a clean `AttachedTableMissingError` so the
    * caller can route to cloud fallback without paying the SQL execution cost.
    */
   setAttachedTables: (tables: readonly string[]) => void

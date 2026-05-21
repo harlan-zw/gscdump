@@ -9,13 +9,13 @@
 
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
-import type { KeywordRow } from '../types'
+import type { QueriesRow } from '../types'
 import { num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { comparisonOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
-import { keywordsQueryState } from '../analyzer/adapt-rows'
+import { queriesQueryState } from '../analyzer/adapt-rows'
 import { percentDifference } from '../scoring'
 import { buildPeriodMap } from '../types'
 
@@ -31,8 +31,8 @@ export interface MoversOptions {
 }
 
 export interface MoversInput {
-  current: KeywordRow[]
-  previous: KeywordRow[]
+  current: QueriesRow[]
+  previous: QueriesRow[]
   /** If periods have different lengths, provide normalization factor (previous/current) */
   normalizationFactor?: number
 }
@@ -292,8 +292,8 @@ export const moversAnalyzer = defineAnalyzer<AnalysisParams, Row, MoversResultRo
         changeThreshold,
         changeThreshold,
       ],
-      current: { table: 'page_keywords', partitions: enumeratePartitions(cur.startDate, cur.endDate) },
-      previous: { table: 'page_keywords', partitions: enumeratePartitions(prev.startDate, prev.endDate) },
+      current: { table: 'page_queries', partitions: enumeratePartitions(cur.startDate, cur.endDate) },
+      previous: { table: 'page_queries', partitions: enumeratePartitions(prev.startDate, prev.endDate) },
     }
   },
 
@@ -337,15 +337,15 @@ export const moversAnalyzer = defineAnalyzer<AnalysisParams, Row, MoversResultRo
   buildRows(params) {
     const { current, previous } = comparisonOf(params)
     return {
-      current: keywordsQueryState(current, params.limit),
-      previous: keywordsQueryState(previous, params.limit),
+      current: queriesQueryState(current, params.limit),
+      previous: queriesQueryState(previous, params.limit),
     }
   },
 
   reduceRows(rows, params) {
     const map = (rows && !Array.isArray(rows)) ? rows as Record<string, Row[]> : { current: [], previous: [] }
-    const current = (map.current ?? []) as unknown as KeywordRow[]
-    const previous = (map.previous ?? []) as unknown as KeywordRow[]
+    const current = (map.current ?? []) as unknown as QueriesRow[]
+    const previous = (map.previous ?? []) as unknown as QueriesRow[]
     const result = analyzeMovers({ current, previous }, {
       changeThreshold: params.changeThreshold,
       minImpressions: params.minImpressions,

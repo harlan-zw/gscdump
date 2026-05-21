@@ -33,7 +33,7 @@ async function seedPageKeywords(
     const ctx: WriteCtx = {
       userId: harness.userId,
       siteId: harness.siteIdFor(SITE),
-      table: 'page_keywords',
+      table: 'page_queries',
       date,
     }
     await harness.engine.writeDay(ctx, dayRows)

@@ -90,7 +90,7 @@ describe('sync state machine', () => {
     const { engine } = makeEngine()
     await engine.setSyncState({ userId: 'u1', siteId: 's1', table: 'pages', date: '2026-04-10' }, 'done')
     await engine.setSyncState({ userId: 'u2', siteId: 's1', table: 'pages', date: '2026-04-10' }, 'pending')
-    await engine.setSyncState({ userId: 'u1', siteId: 's1', table: 'keywords', date: '2026-04-10' }, 'failed')
+    await engine.setSyncState({ userId: 'u1', siteId: 's1', table: 'queries', date: '2026-04-10' }, 'failed')
 
     const u1Pages = await engine.getSyncStates({ userId: 'u1', siteId: 's1', table: 'pages' })
     expect(u1Pages).toHaveLength(1)

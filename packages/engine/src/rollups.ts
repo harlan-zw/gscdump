@@ -576,10 +576,10 @@ export const dailyTotalsRollup: RollupDef = {
         ORDER BY date
       `,
     })
-    const keywordRows = await runWindowed({
+    const queryRows = await runWindowed({
       engine,
       ctx,
-      table: 'keywords',
+      table: 'queries',
       ...(searchType !== undefined ? { searchType } : {}),
       sqlFor: w => `
         SELECT
@@ -601,17 +601,17 @@ export const dailyTotalsRollup: RollupDef = {
       cur.sum_position += Number(r.sum_position)
       pagesByDate.set(date, cur)
     }
-    const keywordImpressionsByDate = new Map<string, bigint>()
-    for (const r of keywordRows) {
+    const queryImpressionsByDate = new Map<string, bigint>()
+    for (const r of queryRows) {
       const date = String(r.date)
-      keywordImpressionsByDate.set(
+      queryImpressionsByDate.set(
         date,
-        (keywordImpressionsByDate.get(date) ?? BigInt(0)) + BigInt(r.impressions as bigint | number),
+        (queryImpressionsByDate.get(date) ?? BigInt(0)) + BigInt(r.impressions as bigint | number),
       )
     }
     return Array.from(pagesByDate.values()).sort((a, b) => (a.date < b.date ? -1 : 1)).map((r) => {
       const totalImpressions = BigInt(r.impressions as bigint | number)
-      const queryImpressions = keywordImpressionsByDate.get(String(r.date)) ?? BigInt(0)
+      const queryImpressions = queryImpressionsByDate.get(String(r.date)) ?? BigInt(0)
       const anonymized = totalImpressions === BigInt(0)
         ? 0
         : 1 - Number(queryImpressions) / Number(totalImpressions)
@@ -762,7 +762,7 @@ export const topKeywords28dRollup: RollupDef = {
     const cutoff = utcDateMinusDays(windowAnchorMs, 28)
     const parts = await engine.listPartitions({
       ctx,
-      table: 'keywords',
+      table: 'queries',
       ...(searchType !== undefined ? { searchType } : {}),
     })
     const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(windowAnchorMs, 0))
@@ -770,8 +770,8 @@ export const topKeywords28dRollup: RollupDef = {
       return []
     const result = await engine.runSQL({
       ctx,
-      table: 'keywords',
-      fileSets: { FILES: { table: 'keywords', partitions } },
+      table: 'queries',
+      fileSets: { FILES: { table: 'queries', partitions } },
       ...(searchType !== undefined ? { searchType } : {}),
       sql: `
         SELECT
@@ -820,7 +820,7 @@ export const topKeywords28dParquetRollup: RollupDef = {
     const cutoff = utcDateMinusDays(windowAnchorMs, 28)
     const parts = await engine.listPartitions({
       ctx,
-      table: 'keywords',
+      table: 'queries',
       ...(searchType !== undefined ? { searchType } : {}),
     })
     const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(windowAnchorMs, 0))
@@ -828,8 +828,8 @@ export const topKeywords28dParquetRollup: RollupDef = {
       return []
     const result = await engine.runSQL({
       ctx,
-      table: 'keywords',
-      fileSets: { FILES: { table: 'keywords', partitions } },
+      table: 'queries',
+      fileSets: { FILES: { table: 'queries', partitions } },
       ...(searchType !== undefined ? { searchType } : {}),
       sql: `
         SELECT

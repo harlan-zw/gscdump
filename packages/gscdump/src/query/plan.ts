@@ -122,21 +122,20 @@ export function inferDataset(
   if (has('searchAppearance'))
     return 'search_appearance'
   if (has('page') && (has('query') || has('queryCanonical')))
-    return 'page_keywords'
+    return 'page_queries'
   if (has('query') || has('queryCanonical'))
-    return 'keywords'
+    return 'queries'
   if (has('page'))
     return 'pages'
   if (has('country'))
     return 'countries'
   if (has('device'))
-    return 'devices'
-  // Date-only / no-dimension queries: route to `pages`. Under the registered-
-  // host `page`-regex filter (ADR-0033) GSC drops anonymised impressions from
-  // any dimension-grouped query, so `devices`/`keywords` undercount the host
-  // total; only `pages` sums to the page-filtered total the live GSC `["date"]`
-  // proxy returns.
-  return 'pages'
+    return 'dates'
+  // Date-only / no-dimension queries: route to `dates` — the per-`(site,
+  // search_type, date)` table holds the TRUE site totals (incl. anonymized
+  // impressions). Dimension-grouped tables undercount the host total under the
+  // registered-host `page`-regex filter (ADR-0033).
+  return 'dates'
 }
 
 // Each stored dataset carries exactly one dimension family (`page_keywords` is
@@ -145,10 +144,15 @@ export function inferDataset(
 // cross-dimension aggregate, so e.g. a `device` breakdown filtered by `query`
 // has no stored home. `date`/`hour` are time axes present on every table and
 // never constrain dataset choice.
+// `device` is intentionally absent: the standalone `devices` table was retired
+// and folded into the `dates` table as pivoted wide columns
+// (`clicks_desktop` etc.). A `GROUP BY device` breakdown has no stored home —
+// device-grained reads go through the `device-gap` / site-timeseries
+// archetypes which read `dates` and pivot. A raw builder `device` breakdown is
+// therefore unresolvable and routes to the live GSC API.
 const RESOLVABLE_DIMENSION_FAMILIES: ReadonlyArray<ReadonlySet<Dimension>> = [
   new Set<Dimension>(['page', 'query', 'queryCanonical']),
   new Set<Dimension>(['country']),
-  new Set<Dimension>(['device']),
   new Set<Dimension>(['searchAppearance']),
 ]
 const TIME_AXIS_DIMENSIONS = new Set<Dimension>(['date', 'hour'])

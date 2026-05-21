@@ -1,0 +1,119 @@
+/**
+ * CONTRACT — file-resolution endpoint (Wave-2, frozen).
+ *
+ * The repurposed `analysis-sources` endpoint. It answers: "site X, range Y,
+ * archetype Z → either the compacted Iceberg parquet files the browser should
+ * download into OPFS, OR a server-tail directive."
+ *
+ * Replaces the old `AnalysisSourcesResponse` (`{ tables, manifestVersion,
+ * coveragePlan }`) — the `coveragePlan` gap machinery is deleted under the
+ * Iceberg model (a complete local snapshot has no gaps).
+ *
+ * The decision is per `(site, table)`: browser-eligible iff the compacted
+ * Iceberg data for that pair is under the ceiling (~150 MB / ~10M rows,
+ * POC 2026-05-22). Above it → server tail.
+ *
+ * TYPES ONLY.
+ */
+
+import type { GscSearchType } from './types'
+
+/** The 5 Iceberg fact tables — string-typed here to avoid an engine dep. */
+export type FileResolutionTable
+  = 'pages' | 'queries' | 'countries' | 'page_queries' | 'dates'
+
+/** Request query params for `GET /api/sites/[siteId]/analysis-sources`. */
+export interface FileResolutionRequest {
+  /** `YYYY-MM-DD` inclusive. Required — no date range = no resolution. */
+  start: string
+  /** `YYYY-MM-DD` inclusive. */
+  end: string
+  searchType?: GscSearchType
+  /**
+   * Restrict resolution to these tables. Omitted = all 5. The archetype the
+   * caller intends determines which tables it needs.
+   */
+  tables?: FileResolutionTable[]
+  /**
+   * The archetype the caller will run. Lets the endpoint route the 2
+   * window-function archetypes straight to the server tail even when the
+   * data would be browser-eligible by size.
+   */
+  archetype?: string
+}
+
+/**
+ * One compacted Iceberg parquet data file the browser should fetch into OPFS.
+ */
+export interface ResolvedParquetFile {
+  /**
+   * Same-origin URL (`/api/r2-data/<key>?...`) carrying a signed size hint
+   * and a short-lived exact-key access token. Stable for the file's lifetime
+   * (content-addressed).
+   */
+  url: string
+  /** Byte size — drives the browser-eligibility sum and OPFS quota planning. */
+  bytes: number
+  /**
+   * Content hash of the file (Iceberg data-file digest). The browser
+   * verifies the OPFS-cached copy against this before attaching.
+   */
+  contentHash: string
+  /** Row count, for eligibility accounting + diagnostics. */
+  rowCount: number
+}
+
+/** Per-table resolution result. */
+export interface ResolvedTable {
+  table: FileResolutionTable
+  /**
+   * `'browser'` — `files` is populated; the browser downloads + attaches.
+   * `'server'`  — this `(site, table)` exceeds the eligibility ceiling;
+   *               `files` is empty and queries route to the server tail.
+   */
+  mode: 'browser' | 'server'
+  /** Compacted Iceberg data files. Empty when `mode === 'server'`. */
+  files: ResolvedParquetFile[]
+  /** Total bytes across `files` — compared against the ceiling. */
+  totalBytes: number
+  /** Total rows across `files`. */
+  totalRows: number
+}
+
+/** Server-tail directive — how an ineligible `(site, table)` is queried. */
+export interface ServerTailDirective {
+  /**
+   * `'r2-sql'`  — server runs the query via R2 SQL over the Iceberg table.
+   * `'duckdb'`  — server runs DuckDB-over-Iceberg-files (window functions).
+   * The hybrid split (POC Spike 4): 8/10 archetypes `r2-sql`, 2 `duckdb`.
+   */
+  engine: 'r2-sql' | 'duckdb'
+  /** Endpoint the consumer POSTs the archetype query to. */
+  endpoint: string
+}
+
+/** Response body of the file-resolution endpoint. */
+export interface FileResolutionResponse {
+  siteId: string
+  searchType: GscSearchType
+  range: { start: string, end: string }
+  /**
+   * Stable hash over the resolved file set. The browser re-attaches only when
+   * this changes (new compaction landed). Replaces the old `manifestVersion`.
+   */
+  snapshotVersion: string
+  generatedAt: string
+  /** Per-table resolution. */
+  tables: ResolvedTable[]
+  /**
+   * Present iff at least one table resolved to `mode: 'server'`. Tells the
+   * consumer how to route the server-tail queries for those tables.
+   */
+  serverTail?: ServerTailDirective
+  /**
+   * The per-(site,table) browser-eligibility ceiling in effect, echoed so the
+   * consumer can show "X is too large for local analysis" UX without
+   * hard-coding the threshold.
+   */
+  eligibilityCeiling: { maxBytes: number, maxRows: number }
+}

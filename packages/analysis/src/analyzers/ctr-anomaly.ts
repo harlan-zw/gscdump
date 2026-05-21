@@ -200,7 +200,7 @@ export const ctrAnomalyAnalyzer = defineAnalyzer<AnalysisParams, Row, CtrAnomaly
     return {
       sql,
       params: [startDate, endDate, minDailyImpressions],
-      current: { table: 'page_keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'page_queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 

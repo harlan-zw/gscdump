@@ -104,7 +104,7 @@ export interface ReduceContext<TRow extends Row = Row> {
 
 /**
  * Unified analyzer contract. `TRow` lets authors narrow from the default
- * `Row = Record<string, unknown>` to a typed row shape (e.g. `KeywordRow`)
+ * `Row = Record<string, unknown>` to a typed row shape (e.g. `QueriesRow`)
  * when their reducer assumes specific columns exist — catches drift between
  * `build` (SELECT list) and `reduce` (column access) at compile time.
  */

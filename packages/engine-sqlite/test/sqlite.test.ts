@@ -167,11 +167,12 @@ describe('@gscdump/engine-sqlite adapter primitives', () => {
     expect(sqliteResolverAdapter.inferTable(['query'])).toBe('gsc_keywords')
     expect(sqliteResolverAdapter.inferTable(['page'])).toBe('gsc_pages')
     expect(sqliteResolverAdapter.inferTable(['country'])).toBe('gsc_countries')
-    expect(sqliteResolverAdapter.inferTable(['device'])).toBe('gsc_devices')
-    // date-only → pages: under the registered-host page filter (ADR-0033) GSC
-    // drops anonymised impressions from dimension-grouped queries, so only
-    // `gsc_pages` sums to the page-filtered host total.
-    expect(sqliteResolverAdapter.inferTable(['date'])).toBe('gsc_pages')
+    // `device` is no longer resolvable from stored data — the standalone
+    // `devices` table was folded into the pivoted `dates` table.
+    expect(() => sqliteResolverAdapter.inferTable(['device'])).toThrow()
+    // date-only → `dates` → physical `gsc_devices` (the legacy device-grained
+    // D1 table; `dates` has no row-grained D1 home).
+    expect(sqliteResolverAdapter.inferTable(['date'])).toBe('gsc_devices')
   })
 
   it('dimColumn maps dimension aliases to real columns', async () => {

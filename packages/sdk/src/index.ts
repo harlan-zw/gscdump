@@ -1,5 +1,27 @@
 export { createAnalyticsClient } from './analytics-client'
 export type { AnalyticsClientOptions, AnalyticsFetch, AnalyticsFetchOptions, AnalyticsHeaders } from './analytics-client'
+export { ARCHETYPE_EXECUTION_CLASS } from './archetypes'
+export type {
+  ArbitrarySqlQuery,
+  ArchetypeExecutionClass,
+  ArchetypeQuery,
+  ArchetypeQueryBase,
+  ArchetypeResult,
+  ArchetypeResultRow,
+  ArchetypeResultSource,
+  AuxCloudOnlyQuery,
+  DateRange,
+  EntityDailySparklineQuery,
+  EntityDailyTimeseriesQuery,
+  MultiSeriesStackedDailyQuery,
+  PresetAnalyzerQuery,
+  QueryArchetype,
+  ResolvedArchetypeQuery,
+  SingleRowLookupQuery,
+  SiteDailyTimeseriesQuery,
+  TopNBreakdownQuery,
+  TwoDimensionDetailQuery,
+} from './archetypes'
 export { createGscdumpClient, createPartnerClient } from './client'
 export type { PartnerClientOptions, PartnerFetch, PartnerFetchOptions, PartnerHeaders } from './client'
 export { PartnerApiError, toPartnerError } from './errors'

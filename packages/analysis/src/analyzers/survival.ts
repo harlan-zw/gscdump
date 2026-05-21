@@ -192,7 +192,7 @@ export const survivalAnalyzer = defineAnalyzer<AnalysisParams, Row, SurvivalResu
     return {
       sql,
       params: [startDate, endDate, minImpressions],
-      current: { table: 'page_keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'page_queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 

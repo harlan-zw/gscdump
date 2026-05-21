@@ -86,7 +86,7 @@ describe('storageEngine.purgeUrls', () => {
       ],
     )
     await engine.writeDay(
-      makeCtx({ table: 'page_keywords', date: '2026-04-10' }),
+      makeCtx({ table: 'page_queries', date: '2026-04-10' }),
       [
         pageKeywordRow('/keep', 'foo', '2026-04-10'),
         pageKeywordRow('/deleted-page', 'foo', '2026-04-10'),
@@ -118,7 +118,7 @@ describe('storageEngine.purgeUrls', () => {
     expect(pagesUrls).toEqual(['/also-keep', '/keep'])
 
     const pkQuery = await engine.query(
-      { userId: 'u1', siteId: 's1', table: 'page_keywords' },
+      { userId: 'u1', siteId: 's1', table: 'page_queries' },
       stateForRange('2026-04-01', '2026-04-30', ['page', 'query']),
     )
     expect(pkQuery.rows).toHaveLength(1)
@@ -169,7 +169,7 @@ describe('storageEngine.purgeUrls', () => {
   it('does not touch tables without a url column', async () => {
     const { engine, manifestStore } = makeEngine({ now: () => 1000 })
     await engine.writeDay(
-      makeCtx({ table: 'keywords' }),
+      makeCtx({ table: 'queries' }),
       [{ query: 'foo', query_canonical: 'foo', date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 5 }],
     )
     const before = manifestStore.snapshot()

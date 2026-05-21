@@ -129,7 +129,7 @@ describe('filesystemManifestStore', () => {
     await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'pages' }, '2026-03-12', 500)
 
     // Different table keeps its own watermark
-    await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'keywords' }, '2026-04-01', 4000)
+    await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'queries' }, '2026-04-01', 4000)
 
     const ws = await store.getWatermarks({ userId: 'u1' })
     expect(ws).toHaveLength(2)
@@ -138,7 +138,7 @@ describe('filesystemManifestStore', () => {
     expect(pages.newestDateSynced).toBe('2026-03-20')
     expect(pages.lastSyncAt).toBe(3000)
 
-    const scoped = await store.getWatermarks({ userId: 'u1', table: 'keywords' })
+    const scoped = await store.getWatermarks({ userId: 'u1', table: 'queries' })
     expect(scoped).toHaveLength(1)
     expect(scoped[0].newestDateSynced).toBe('2026-04-01')
   })
@@ -257,7 +257,7 @@ describe('filesystemManifestStore', () => {
     const store = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
     await store.setSyncState({ userId: 'u1', siteId: 's1', table: 'pages', date: '2026-04-10' }, 'done', { at: 1 })
     await store.setSyncState({ userId: 'u1', siteId: 's1', table: 'pages', date: '2026-04-11' }, 'failed', { at: 2, error: 'x' })
-    await store.setSyncState({ userId: 'u1', siteId: 's1', table: 'keywords', date: '2026-04-10' }, 'done', { at: 3 })
+    await store.setSyncState({ userId: 'u1', siteId: 's1', table: 'queries', date: '2026-04-10' }, 'done', { at: 3 })
 
     const done = await store.getSyncStates({ userId: 'u1', state: 'done' })
     expect(done).toHaveLength(2)

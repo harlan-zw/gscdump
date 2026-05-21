@@ -15,7 +15,7 @@ export interface BaseMetrics {
 }
 
 /** Keyword row from query */
-export interface KeywordRow extends BaseMetrics {
+export interface QueriesRow extends BaseMetrics {
   query: string
   page?: string
 }

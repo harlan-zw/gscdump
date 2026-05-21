@@ -190,10 +190,16 @@ describe('cross-dimension queries (unresolvable datasets)', () => {
     expect(() => resolveToSQLOptimized(crossDim, { adapter })).toThrowError(/UnresolvableDatasetError|cross-dimension|separate per-dimension/i)
   })
 
-  it('still resolves a single-family query (device breakdown, no cross filter)', () => {
+  it('still resolves a single-family query (country breakdown, no cross filter)', () => {
     const adapter = createParquetResolverAdapter()
-    const r = resolveToSQLOptimized(state({ dimensions: ['device'] }), { adapter })
-    expect(r.sql).toMatch(/GROUP BY "devices"\."device"/)
+    const r = resolveToSQLOptimized(state({ dimensions: ['country'] }), { adapter })
+    expect(r.sql).toMatch(/GROUP BY "countries"\."country"/)
+  })
+
+  it('treats a device breakdown as unresolvable — the standalone devices table was folded into pivoted `dates`', () => {
+    const adapter = createParquetResolverAdapter()
+    expect(() => resolveToSQLOptimized(state({ dimensions: ['device'] }), { adapter }))
+      .toThrowError(/UnresolvableDatasetError|cross-dimension|separate per-dimension/i)
   })
 })
 

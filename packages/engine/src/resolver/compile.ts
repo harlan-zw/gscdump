@@ -481,16 +481,16 @@ export function buildExtrasQueries<TK extends string>(
   if (!hasQueryCanonical)
     return extras
 
-  const keywordsKey = adapter.tableKeyForDataset('keywords') as TK
+  const queriesKey = adapter.tableKeyForDataset('queries') as TK
   const schema = adapter.schema as Record<string, Record<string, SQL>>
-  const t = schema[keywordsKey]!
-  const table = adapter.tableRef(keywordsKey)
+  const t = schema[queriesKey]!
+  const table = adapter.tableRef(queriesKey)
 
   const whereParts: SQL[] = []
   if (adapter.siteIdColRef && siteId != null)
-    whereParts.push(sql`${adapter.siteIdColRef(keywordsKey)} = ${siteId}`)
-  whereParts.push(sql`${adapter.dateColRef(keywordsKey)} >= ${plan.dateRange.startDate}`)
-  whereParts.push(sql`${adapter.dateColRef(keywordsKey)} <= ${plan.dateRange.endDate}`)
+    whereParts.push(sql`${adapter.siteIdColRef(queriesKey)} = ${siteId}`)
+  whereParts.push(sql`${adapter.dateColRef(queriesKey)} >= ${plan.dateRange.startDate}`)
+  whereParts.push(sql`${adapter.dateColRef(queriesKey)} <= ${plan.dateRange.endDate}`)
 
   const whereExpr = whereParts.length > 0 ? sql`WHERE ${joinAnd(whereParts)}` : sql``
   const outerQueryCol = sql.raw('query')

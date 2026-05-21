@@ -392,8 +392,8 @@ export interface QueryExecuteOptions {
   /**
    * Per-placeholder table identity. Used by the executor to emit a
    * schema-correct empty fallback when a named file set is empty: an
-   * `extraFiles` placeholder against `page_keywords` should fall back to
-   * the page_keywords schema, not the analyzer's primary `table`.
+   * `extraFiles` placeholder against `page_queries` should fall back to
+   * the page_queries schema, not the analyzer's primary `table`.
    */
   placeholderTables?: Record<string, TableName>
   dataSource: DataSource
@@ -509,8 +509,8 @@ export interface StorageEngine {
   /**
    * GDPR URL-matcher purge. Deletes rows whose `url` column matches one of
    * `urls` across every live parquet entry for the tenant in tables that
-   * carry a `url` column (`pages`, `page_keywords`). Tables without a `url`
-   * column (`keywords`, `countries`, `devices`, `search_appearance`) are
+   * carry a `url` column (`pages`, `page_queries`). Tables without a `url`
+   * column (`queries`, `countries`, `search_appearance`) are
    * untouched — they never store per-URL data.
    *
    * For each affected entry the engine reads the file, filters the matching

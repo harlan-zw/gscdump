@@ -1,4 +1,13 @@
+import { fileURLToPath } from 'node:url'
 import { defineBuildConfig } from 'obuild/config'
+
+// Pure-JS `hysnappy` shim. `icebird`'s metadata path pulls in
+// `hyparquet-compressors`, which instantiates a WASM snappy module at import
+// time — banned by `workerd`. Aliasing `hysnappy` to this shim swaps the WASM
+// codec for `hyparquet`'s pure-JS snappy. Inert while `icebird` is externalized
+// (the default), but keeps the engine bundle Worker-safe if it is ever inlined.
+// The gscdump.com Worker bundle applies the same alias via `nuxt.config.ts`.
+const hysnappyShim = fileURLToPath(new URL('./src/vendor/hysnappy-purejs.ts', import.meta.url))
 
 // Single bundle entry with all inputs. Previously each subpath ran its own
 // rolldown invocation + dts generation, and the type graph (drizzle-orm,
@@ -16,6 +25,7 @@ export default defineBuildConfig({
         './src/planner.ts',
         './src/schema.ts',
         './src/ingest.ts',
+        './src/sink-node.ts',
         './src/sql-bind.ts',
         './src/sql-fragments.ts',
         './src/schedule.ts',
@@ -29,6 +39,7 @@ export default defineBuildConfig({
         './src/source/index.ts',
         './src/scope.ts',
         './src/arrow-utils.ts',
+        './src/vendor/hysnappy-purejs.ts',
         './src/adapters/duckdb-node.ts',
         './src/adapters/node.ts',
         './src/adapters/filesystem.ts',
@@ -36,6 +47,11 @@ export default defineBuildConfig({
         './src/adapters/r2.ts',
         './src/adapters/r2-manifest.ts',
       ],
+      rolldown: {
+        resolve: {
+          alias: { hysnappy: hysnappyShim },
+        },
+      },
     },
   ],
 })

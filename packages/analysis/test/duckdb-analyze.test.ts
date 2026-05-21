@@ -70,7 +70,7 @@ describe('runAnalyzerWithEngine', () => {
     const env = await setup(dir)
     await seed(env.engine, USER, SITE, [
       {
-        table: 'page_keywords',
+        table: 'page_queries',
         date: '2026-04-10',
         rows: [
           // Candidate: position ~6, impressions 500, low ctr
@@ -98,7 +98,7 @@ describe('runAnalyzerWithEngine', () => {
     const env = await setup(dir)
     await seed(env.engine, USER, SITE, [
       {
-        table: 'page_keywords',
+        table: 'page_queries',
         date: '2026-04-10',
         rows: [
           // Position ~11, high impressions, low ctr: strong opportunity
@@ -125,7 +125,7 @@ describe('runAnalyzerWithEngine', () => {
     const env = await setup(dir)
     await seed(env.engine, USER, SITE, [
       {
-        table: 'page_keywords',
+        table: 'page_queries',
         date: '2026-04-10',
         rows: [
           { url: '/', query: 'acme shoes', date: '2026-04-10', clicks: 10, impressions: 200, sum_position: 200 },
@@ -153,7 +153,7 @@ describe('runAnalyzerWithEngine', () => {
     const env = await setup(dir)
     await seed(env.engine, USER, SITE, [
       {
-        table: 'keywords',
+        table: 'queries',
         date: '2026-04-10',
         rows: [
           { query: 'how to bake bread', date: '2026-04-10', clicks: 10, impressions: 200, sum_position: 600 },
@@ -264,7 +264,7 @@ describe('runAnalyzerWithEngine', () => {
     const env = await setup(dir)
     await seed(env.engine, USER, SITE, [
       {
-        table: 'page_keywords',
+        table: 'page_queries',
         date: '2026-04-10',
         rows: [
           { url: '/', query: 'rising term', date: '2026-04-10', clicks: 100, impressions: 1000, sum_position: 3000 },
@@ -272,7 +272,7 @@ describe('runAnalyzerWithEngine', () => {
         ],
       },
       {
-        table: 'page_keywords',
+        table: 'page_queries',
         date: '2026-04-03',
         rows: [
           { url: '/', query: 'rising term', date: '2026-04-03', clicks: 10, impressions: 100, sum_position: 500 },
@@ -410,7 +410,7 @@ describe('runAnalyzerWithEngine', () => {
     const env = await setup(dir)
     const weekStarts = ['2026-03-02', '2026-03-09', '2026-03-16', '2026-03-23']
     const seeds: Seed[] = weekStarts.map((date, i) => ({
-      table: 'keywords' as const,
+      table: 'queries' as const,
       date,
       rows: [{ query: 'ascending term', date, clicks: 10 * (i + 1), impressions: 100 * (i + 1), sum_position: 100 * (i + 1) }],
     }))
@@ -443,7 +443,7 @@ describe('runAnalyzerWithEngine', () => {
       const impressions = 1000
       const clicks = healthy ? 80 : 10
       seeds.push({
-        table: 'page_keywords',
+        table: 'page_queries',
         date: dateStr,
         rows: [
           // target entity
@@ -519,7 +519,7 @@ describe('runAnalyzerWithEngine', () => {
           sum_position: basePos * 100,
         })
       }
-      seeds.push({ table: 'page_keywords', date: dateStr, rows })
+      seeds.push({ table: 'page_queries', date: dateStr, rows })
     }
     await seed(env.engine, USER, SITE, seeds)
 
@@ -565,7 +565,7 @@ describe('runAnalyzerWithEngine', () => {
         sum_position: 5 * Math.max(5, Math.round(10000 / (q * q * q))),
       })
     }
-    await seed(env.engine, USER, SITE, [{ table: 'page_keywords', date: '2026-04-10', rows: rowsAll }])
+    await seed(env.engine, USER, SITE, [{ table: 'page_queries', date: '2026-04-10', rows: rowsAll }])
 
     const out = await runAnalyzerWithEngine(
       { engine: env.engine },
@@ -608,7 +608,7 @@ describe('runAnalyzerWithEngine', () => {
     }
     for (const d of dates) {
       await env.engine.writeDay(
-        { userId: USER, siteId: SITE, table: 'keywords', date: d },
+        { userId: USER, siteId: SITE, table: 'queries', date: d },
         rows.filter(r => r.date === d),
       )
     }
@@ -636,7 +636,7 @@ describe('runAnalyzerWithEngine', () => {
     // Expected: one migration edge /old → /new with 2 absorbed queries.
     await seed(env.engine, USER, SITE, [
       {
-        table: 'page_keywords',
+        table: 'page_queries',
         date: '2026-03-15',
         rows: [
           { url: '/old', query: 'react server components', date: '2026-03-15', clicks: 10, impressions: 500, sum_position: 4 * 500 },
@@ -644,7 +644,7 @@ describe('runAnalyzerWithEngine', () => {
         ],
       },
       {
-        table: 'page_keywords',
+        table: 'page_queries',
         date: '2026-04-15',
         rows: [
           { url: '/new', query: 'react server component', date: '2026-04-15', clicks: 12, impressions: 480, sum_position: 3 * 480 },
@@ -686,7 +686,7 @@ describe('runAnalyzerWithEngine', () => {
     const env = await setup(dir)
     await seed(env.engine, USER, SITE, [
       {
-        table: 'page_keywords',
+        table: 'page_queries',
         date: '2026-04-10',
         rows: [
           // "best widget" cannibalized across 3 URLs — /widgets dominates impressions
@@ -770,7 +770,7 @@ describe('runAnalyzerWithEngine', () => {
     })
 
     await seed(env.engine, USER, SITE, [
-      { table: 'page_keywords', date: '2026-04-10', rows },
+      { table: 'page_queries', date: '2026-04-10', rows },
     ])
 
     const out = await runAnalyzerWithEngine(
@@ -840,7 +840,7 @@ describe('runAnalyzerWithEngine', () => {
       const isLastWeek = d.getTime() >= lastWeekStart.getTime()
       const impressions = Math.round(100 + 20 * Math.sin((2 * Math.PI * dow) / 7) + (isLastWeek ? 30 : 0))
       seeds.push({
-        table: 'page_keywords',
+        table: 'page_queries',
         date: dateStr,
         rows: [
           { url: '/cycle', query: 'seasonal tide', date: dateStr, clicks: 10, impressions, sum_position: 5 * impressions },
@@ -894,7 +894,7 @@ describe('runAnalyzerWithEngine', () => {
       // sum_position uses GSC's 0-indexed convention (position = sum/impr + 1).
       const sumPosition = (pos - 1) * impressions
       seeds.push({
-        table: 'page_keywords',
+        table: 'page_queries',
         date: dateStr,
         rows: [
           { url: '/pivot', query: 'regime shift', date: dateStr, clicks: 5, impressions, sum_position: sumPosition },
@@ -955,7 +955,7 @@ describe('runAnalyzerWithEngine', () => {
       const flashPos = dayIdx <= 3 ? 9 : 40
 
       seeds.push({
-        table: 'page_keywords',
+        table: 'page_queries',
         date: dateStr,
         rows: [
           {
@@ -1053,7 +1053,7 @@ describe('runAnalyzerWithEngine', () => {
     ]
 
     await seed(env.engine, USER, SITE, [
-      { table: 'page_keywords', date: '2026-04-10', rows },
+      { table: 'page_queries', date: '2026-04-10', rows },
     ])
 
     const out = await runAnalyzerWithEngine(

@@ -1,21 +1,28 @@
 .:
+  attachOpfsParquetTables: function
   attachParquetTables: function
   attachParquetUrlTables: function
   bootDuckDBWasm: function
   BrowserAttachBudgetExceededError: function
+  clearOpfsSnapshotCache: function
+  compileArchetypeSql: function
   countries: object
   createBrowserAnalysisRuntime: function
   createClient: function
   createInsightRunner: function
-  devices: object
+  dates: object
   drizzle: function
   DuckDBWasmDatabase: function
+  estimateOpfsStorage: function
   hourly_pages: object
-  keywords: object
   mergeScope: function
-  page_keywords: object
+  OpfsQuotaExceededError: function
+  page_queries: object
   pages: object
+  queries: object
+  requestPersistentStorage: function
   resolveWindow: function
   schema: object
   scopeFor: function
   strikingMomentum: function
+  tableForArchetype: function

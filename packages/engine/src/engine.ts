@@ -23,7 +23,7 @@ import { compileLogicalQueryPlan } from './parquet-plan'
 import { currentSchemaVersion, dedupeByNaturalKey, SCHEMAS } from './schema'
 import { dayPartition, hourPartition, inferSearchType, objectKey, tenantPrefix } from './storage'
 
-const URL_PURGE_TABLES: readonly TableName[] = ['pages', 'page_keywords']
+const URL_PURGE_TABLES: readonly TableName[] = ['pages', 'page_queries']
 
 export const MAX_DAY_BYTES = 100 * 1024 * 1024
 

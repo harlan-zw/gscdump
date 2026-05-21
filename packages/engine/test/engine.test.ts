@@ -501,7 +501,7 @@ describe('manifest listLive filtering', () => {
     const { engine, manifestStore } = makeEngine()
     await engine.writeDay(makeCtx({ userId: 'u1', date: '2026-04-01' }), [pageRow('/', '2026-04-01')])
     await engine.writeDay(makeCtx({ userId: 'u2', date: '2026-04-01' }), [pageRow('/', '2026-04-01')])
-    await engine.writeDay(makeCtx({ userId: 'u1', table: 'keywords', date: '2026-04-01' }), [{ query: 'foo', date: '2026-04-01', clicks: 1, impressions: 10, sum_position: 50 }])
+    await engine.writeDay(makeCtx({ userId: 'u1', table: 'queries', date: '2026-04-01' }), [{ query: 'foo', date: '2026-04-01', clicks: 1, impressions: 10, sum_position: 50 }])
 
     const u1pages = await manifestStore.listLive({ userId: 'u1', table: 'pages', partitions: [dayPartition('2026-04-01')] })
     expect(u1pages).toHaveLength(1)

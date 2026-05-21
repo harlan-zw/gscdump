@@ -146,7 +146,7 @@ describe('createR2ManifestStore — happy path', () => {
     await store.registerVersion(makeEntry({ siteId: 's1', table: 'pages' }))
     await store.registerVersion(makeEntry({
       siteId: 's2',
-      table: 'keywords',
+      table: 'queries',
       objectKey: 'u_u1/s2/keywords/daily/2026-04-10__v1.parquet',
     }))
 
@@ -157,9 +157,9 @@ describe('createR2ManifestStore — happy path', () => {
     expect(justS1).toHaveLength(1)
     expect(justS1[0].siteId).toBe('s1')
 
-    const justKeywords = await store.listLive({ userId: 'u1', table: 'keywords' })
+    const justKeywords = await store.listLive({ userId: 'u1', table: 'queries' })
     expect(justKeywords).toHaveLength(1)
-    expect(justKeywords[0].table).toBe('keywords')
+    expect(justKeywords[0].table).toBe('queries')
   })
 
   it('filters by tier, treating legacy entries via inferLegacyTier', async () => {
@@ -403,7 +403,7 @@ describe('createR2ManifestStore — purgeTenant', () => {
 
     await store.registerVersions([
       makeEntry({ siteId: 's1', table: 'pages', objectKey: 'k1' }),
-      makeEntry({ siteId: 's1', table: 'keywords', objectKey: 'k2' }),
+      makeEntry({ siteId: 's1', table: 'queries', objectKey: 'k2' }),
       makeEntry({ siteId: 's2', table: 'pages', objectKey: 'k3' }),
     ])
     await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'pages' }, '2026-04-10')

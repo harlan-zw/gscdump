@@ -6,6 +6,7 @@
   analyticsRoutes: object
   analyticsStatuses: object
   analyticsStatusToSyncStatus: function
+  ARCHETYPE_EXECUTION_CLASS: object
   backfillRangeSchema: object
   backfillResponseSchema: object
   bindPartnerSiteTeamSchema: object

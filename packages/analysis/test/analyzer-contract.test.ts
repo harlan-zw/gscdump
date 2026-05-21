@@ -64,7 +64,7 @@ describe('sQL-native pilot (striking-distance)', () => {
     if (plan.kind === 'sql') {
       expect(plan.sql).toMatch(/read_parquet/)
       expect(plan.sql).toMatch(/\{\{FILES\}\}/)
-      expect(plan.current.table).toBe('page_keywords')
+      expect(plan.current.table).toBe('page_queries')
       // Filtering + derivation moved to the shared reducer; only date bounds
       // are pushed into SQL now.
       expect(plan.params).toEqual(['2026-01-01', '2026-01-31'])
@@ -89,7 +89,7 @@ describe('sQL-native pilot (striking-distance)', () => {
 })
 
 describe('row-based pilot (opportunity)', () => {
-  it('build emits a RowQueriesPlan with a keywords query', () => {
+  it('build emits a RowQueriesPlan with a queries query', () => {
     const a = resolveAnalyzer('opportunity', false)!
     const plan = a.build({
       type: 'opportunity',
@@ -99,8 +99,8 @@ describe('row-based pilot (opportunity)', () => {
     } as any)
     expect(plan.kind).toBe('rows')
     if (plan.kind === 'rows') {
-      expect(Object.keys(plan.queries)).toEqual(['keywords'])
-      expect(plan.queries.keywords.state).toBeDefined()
+      expect(Object.keys(plan.queries)).toEqual(['queries'])
+      expect(plan.queries.queries.state).toBeDefined()
     }
   })
 
@@ -110,7 +110,7 @@ describe('row-based pilot (opportunity)', () => {
       { query: 'high-value', page: '/a', clicks: 5, impressions: 500, ctr: 0.01, position: 12 },
       { query: 'low-imp', page: '/b', clicks: 1, impressions: 5, ctr: 0.2, position: 3 }, // skipped (< 100 imp)
     ]
-    const { results } = a.reduce({ keywords: keywords as any }, {
+    const { results } = a.reduce({ queries: keywords as any }, {
       params: { type: 'opportunity' } as any,
     })
     const out = results as any[]

@@ -67,7 +67,7 @@ describe('gscdump store export', () => {
       ],
     )
     await engine.writeDay(
-      { userId: USER, siteId, table: 'keywords', date: '2026-04-10' },
+      { userId: USER, siteId, table: 'queries', date: '2026-04-10' },
       [
         { query: 'foo', date: '2026-04-10', clicks: 3, impressions: 50, sum_position: 200 },
       ],
@@ -82,9 +82,9 @@ describe('gscdump store export', () => {
       force: true,
     })
 
-    expect(result.tables.map(t => t.table).sort()).toEqual(['keywords', 'pages'])
+    expect(result.tables.map(t => t.table).sort()).toEqual(['pages', 'queries'])
     expect(result.tables.find(t => t.table === 'pages')).toMatchObject({ files: 2, rows: 3 })
-    expect(result.tables.find(t => t.table === 'keywords')).toMatchObject({ files: 1, rows: 1 })
+    expect(result.tables.find(t => t.table === 'queries')).toMatchObject({ files: 1, rows: 1 })
     expect(result.totalRows).toBe(4)
 
     // Round-trip: attach read-only with a fresh DuckDB instance and verify contents
@@ -99,7 +99,7 @@ describe('gscdump store export', () => {
         { url: '/a', clicks: 12 },
         { url: '/b', clicks: 5 },
       ])
-      const kw = await conn.runAndReadAll('SELECT query, clicks::INT AS clicks FROM v.keywords')
+      const kw = await conn.runAndReadAll('SELECT query, clicks::INT AS clicks FROM v.queries')
       expect(kw.getRowObjects()).toEqual([{ query: 'foo', clicks: 3 }])
     }
     finally {

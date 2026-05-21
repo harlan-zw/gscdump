@@ -9,13 +9,13 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row, TableName } from '@gscdump/engine/contracts'
 import type { BuilderState } from 'gscdump/query'
-import type { KeywordRow, PageRow } from '../types'
+import type { PageRow, QueriesRow } from '../types'
 import { num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
-import { keywordsQueryState, pagesQueryState } from '../analyzer/adapt-rows'
+import { pagesQueryState, queriesQueryState } from '../analyzer/adapt-rows'
 
 export type ConcentrationRiskLevel = 'low' | 'medium' | 'high'
 
@@ -156,7 +156,7 @@ export function analyzePageConcentration(
  * Keyword concentration analysis.
  */
 export function analyzeKeywordConcentration(
-  keywords: KeywordRow[],
+  keywords: QueriesRow[],
   options?: ConcentrationOptions,
 ): ConcentrationResult {
   return analyzeConcentration(
@@ -172,7 +172,7 @@ export const concentrationAnalyzer = defineAnalyzer<AnalysisParams, Row, Concent
     const { startDate, endDate } = periodOf(params)
     const dim = params.dimension || 'pages'
     const topN = params.topN ?? 10
-    const table: TableName = dim === 'keywords' ? 'keywords' : 'pages'
+    const table: TableName = dim === 'keywords' ? 'queries' : 'pages'
     const keyCol = dim === 'keywords' ? 'query' : 'url'
 
     const sql = `
@@ -269,7 +269,7 @@ export const concentrationAnalyzer = defineAnalyzer<AnalysisParams, Row, Concent
     if (dim === 'pages')
       out.pages = pagesQueryState(period, params.limit)
     else
-      out.keywords = keywordsQueryState(period, params.limit)
+      out.queries = queriesQueryState(period, params.limit)
     return out
   },
 
@@ -279,10 +279,10 @@ export const concentrationAnalyzer = defineAnalyzer<AnalysisParams, Row, Concent
     // `pickSingle`, so for both 'pages' and 'keywords' we receive a flat array.
     const arr = (Array.isArray(rows)
       ? rows
-      : (rows as Record<string, Row[]>)[dim] ?? []) as Row[]
+      : (rows as Record<string, Row[]>)[dim === 'pages' ? 'pages' : 'queries'] ?? []) as Row[]
     const result = dim === 'pages'
       ? analyzePageConcentration(arr as unknown as PageRow[], { topN: params.topN })
-      : analyzeKeywordConcentration(arr as unknown as KeywordRow[], { topN: params.topN })
+      : analyzeKeywordConcentration(arr as unknown as QueriesRow[], { topN: params.topN })
     return { results: [result], meta: { dimension: dim } }
   },
 })

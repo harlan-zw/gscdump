@@ -220,7 +220,7 @@ describe('runtime parquet URL attachment', () => {
   it('drops registered files and created views when attach aborts during view creation', async () => {
     const { db, registerFileURL, dropFiles } = stubDb()
     const query = vi.fn(async (sql: string) => {
-      if (sql.includes('keywords'))
+      if (sql.includes('queries'))
         throw new DOMException('aborted', 'AbortError')
       return { toArray: () => [] }
     })
@@ -232,7 +232,7 @@ describe('runtime parquet URL attachment', () => {
       conn,
       tables: [
         { table: 'pages', urls: ['https://x.test/1'] },
-        { table: 'keywords', urls: ['https://x.test/2'] },
+        { table: 'queries', urls: ['https://x.test/2'] },
       ],
       fetch: fetchImpl,
     })).rejects.toMatchObject({ name: 'AbortError' })
@@ -242,7 +242,7 @@ describe('runtime parquet URL attachment', () => {
     expect(dropFiles.mock.calls[0]![0]).toHaveLength(2)
     expect(query.mock.calls.map(call => call[0])).toEqual([
       expect.stringContaining('main.pages'),
-      expect.stringContaining('main.keywords'),
+      expect.stringContaining('main.queries'),
       'DROP VIEW IF EXISTS main.pages',
     ])
   })

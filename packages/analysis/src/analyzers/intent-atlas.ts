@@ -176,7 +176,7 @@ export const intentAtlasAnalyzer = defineAnalyzer<AnalysisParams, Row, IntentAtl
     return {
       sql,
       params: [startDate, endDate, minQueryImpressions],
-      current: { table: 'keywords', partitions: enumeratePartitions(startDate, endDate) },
+      current: { table: 'queries', partitions: enumeratePartitions(startDate, endDate) },
     }
   },
 

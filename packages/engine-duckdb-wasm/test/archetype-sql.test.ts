@@ -1,0 +1,203 @@
+import type { ArchetypeQuery } from '@gscdump/sdk'
+import { describe, expect, it } from 'vitest'
+import { compileArchetypeSql, tableForArchetype } from '../src/archetype-sql'
+
+const range = { start: '2026-01-01', end: '2026-03-31' }
+
+describe('compileArchetypeSql', () => {
+  it('1 — site-daily-timeseries: groups by date over dates', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'site-daily-timeseries',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      metrics: ['clicks', 'impressions'],
+    }
+    const c = compileArchetypeSql(q)
+    expect(c.table).toBe('dates')
+    expect(c.sql).toContain('GROUP BY date')
+    expect(c.sql).toContain('SUM(clicks) AS clicks')
+    expect(c.params).toEqual(['2026-01-01', '2026-03-31', 'web'])
+  })
+
+  it('2 — entity-daily-timeseries: filters one resolved entity', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'entity-daily-timeseries',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      entity: { dimension: 'page', value: 'https://x.com/a' },
+      metrics: ['clicks'],
+    }
+    const c = compileArchetypeSql(q)
+    expect(c.table).toBe('pages')
+    expect(c.sql).toContain('url = ?')
+    expect(c.params).toContain('https://x.com/a')
+  })
+
+  it('3 — entity-daily-sparkline: builds an IN list from resolved entities', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'entity-daily-sparkline',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      dimension: 'query',
+      entities: ['kw1', 'kw2', 'kw3'],
+      metric: 'clicks',
+    }
+    const c = compileArchetypeSql(q)
+    expect(c.table).toBe('queries')
+    expect(c.sql).toContain('query IN (?, ?, ?)')
+    expect(c.params.slice(-3)).toEqual(['kw1', 'kw2', 'kw3'])
+  })
+
+  it('3 — entity-daily-sparkline: throws with no resolved entities', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'entity-daily-sparkline',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      dimension: 'query',
+      entities: [],
+      metric: 'clicks',
+    }
+    expect(() => compileArchetypeSql(q)).toThrow(/resolved entities/)
+  })
+
+  it('4 — top-n-breakdown: applies LIMIT and optional OFFSET', () => {
+    const base: ArchetypeQuery = {
+      archetype: 'top-n-breakdown',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      dimension: 'query',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 100,
+    }
+    const noOffset = compileArchetypeSql(base)
+    expect(noOffset.sql).toContain('ORDER BY clicks DESC LIMIT ?')
+    expect(noOffset.sql).not.toContain('OFFSET')
+
+    const withOffset = compileArchetypeSql({ ...base, offset: 50 })
+    expect(withOffset.sql).toContain('OFFSET ?')
+    expect(withOffset.params.slice(-2)).toEqual([100, 50])
+  })
+
+  it('5 — single-row-lookup: ANDs every match dimension', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'single-row-lookup',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      match: { page: 'https://x.com/a', query: 'kw' },
+      metrics: ['clicks'],
+    }
+    const c = compileArchetypeSql(q)
+    expect(c.table).toBe('page_queries')
+    expect(c.sql).toContain('url = ?')
+    expect(c.sql).toContain('query = ?')
+  })
+
+  it('6 — multi-series-stacked-daily: device unpivots the dates pivot columns', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'multi-series-stacked-daily',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      seriesDimension: 'device',
+      metric: 'clicks',
+    }
+    const c = compileArchetypeSql(q)
+    expect(c.table).toBe('dates')
+    // device breakdown is pivoted on `dates`; the compiler UNION-ALL-unpivots it.
+    expect(c.sql).toContain('UNION ALL')
+    expect(c.sql).toContain('SUM(clicks_desktop)')
+    expect(c.sql).toContain('ORDER BY date, device')
+  })
+
+  it('6b — multi-series-stacked-daily: non-device series still groups by date + dim', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'multi-series-stacked-daily',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      seriesDimension: 'country',
+      metric: 'clicks',
+    }
+    const c = compileArchetypeSql(q)
+    expect(c.table).toBe('countries')
+    expect(c.sql).toContain('GROUP BY date, country')
+  })
+
+  it('7 — preset-analyzer: striking-distance HAVING shape', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'preset-analyzer',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      presetId: 'striking-distance',
+      params: { minPosition: 5, maxPosition: 15, minImpressions: 20, limit: 500 },
+    }
+    const c = compileArchetypeSql(q)
+    expect(c.sql).toContain('HAVING position BETWEEN ? AND ?')
+    expect(c.params.slice(-4)).toEqual([5, 15, 20, 500])
+  })
+
+  it('8 — two-dimension-detail: groups by url, query with optional filter', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'two-dimension-detail',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      metrics: ['clicks', 'impressions'],
+      filter: { page: 'https://x.com/a' },
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 1000,
+    }
+    const c = compileArchetypeSql(q)
+    expect(c.table).toBe('page_queries')
+    expect(c.sql).toContain('GROUP BY url, query')
+    expect(c.sql).toContain('url = ?')
+    expect(c.params).toContain('https://x.com/a')
+  })
+
+  it('9 — arbitrary-sql: passes the SQL through verbatim', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'arbitrary-sql',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      sql: 'SELECT date, AVG(clicks) OVER (ORDER BY date) FROM pages',
+      params: [1],
+    }
+    const c = compileArchetypeSql(q)
+    expect(c.sql).toContain('OVER (ORDER BY date)')
+    expect(c.params).toEqual([1])
+  })
+
+  it('10 — aux-cloud-only: throws (not an Iceberg query)', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'aux-cloud-only',
+      siteId: 's1',
+      dataset: 'sitemaps',
+    }
+    expect(() => compileArchetypeSql(q)).toThrow(/aux-cloud-only/)
+  })
+})
+
+describe('tableForArchetype', () => {
+  it('returns null for aux-cloud-only', () => {
+    expect(tableForArchetype({ archetype: 'aux-cloud-only', siteId: 's1', dataset: 'indexing' })).toBeNull()
+  })
+
+  it('returns page_queries for a two-dimension query', () => {
+    expect(tableForArchetype({
+      archetype: 'two-dimension-detail',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      metrics: ['clicks'],
+    })).toBe('page_queries')
+  })
+})

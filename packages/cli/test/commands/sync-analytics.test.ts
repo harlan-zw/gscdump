@@ -113,7 +113,7 @@ describe('sync command (local analytics)', () => {
         site: SITE,
         start,
         end,
-        tables: 'pages,keywords',
+        tables: 'pages,queries',
         quiet: true,
       },
       rawArgs: [],
@@ -144,7 +144,7 @@ describe('sync command (local analytics)', () => {
     const keywords = await harness.engine.listLive({
       userId: harness.userId,
       siteId,
-      table: 'keywords',
+      table: 'queries',
     })
     expect(keywords).toHaveLength(3)
 

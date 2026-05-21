@@ -35,7 +35,7 @@ import {
   topLevel,
 } from 'gscdump/query'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { keywordsQueryState, pagesQueryState } from '../src/analyzer/adapt-rows'
+import { queriesQueryState, pagesQueryState } from '../src/analyzer/adapt-rows'
 import { moversAnalyzer } from '../src/analyzers/movers'
 import { defaultAnalyzerRegistry } from '../src/default-registry'
 import { createInMemoryQuerySource } from '../src/source'
@@ -89,7 +89,7 @@ describe('analysis sources', () => {
 
     const period = { startDate: '2026-04-10', endDate: '2026-04-10' }
     const [keywords, pages] = await Promise.all([
-      queryRows(source, keywordsQueryState(period, 100)),
+      queryRows(source, queriesQueryState(period, 100)),
       queryRows(source, pagesQueryState(period, 100)),
     ])
 
@@ -166,7 +166,7 @@ describe('analysis sources', () => {
         ],
       },
       {
-        table: 'keywords',
+        table: 'queries',
         date: '2026-04-10',
         rows: [
           { query: 'alpha', query_canonical: 'alpha', date: '2026-04-10', clicks: 15, impressions: 150, sum_position: 300 },

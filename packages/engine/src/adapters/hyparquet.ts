@@ -31,7 +31,7 @@ import { dedupeByNaturalKey, SCHEMAS, TABLE_METADATA } from '../schema'
 // 25k rows/group keeps a typical day file in 2-10 row groups so DuckDB's
 // stats-based row-group pruning has something to skip. The hyparquet-writer
 // default of 100k yields one giant group for most days, which makes the
-// declared `sortKey` worthless at query time.
+// declared `clusterKey` worthless at query time.
 const ROW_GROUP_SIZE = 25000
 
 function basicTypeFor(colType: ColumnType): BasicType {
@@ -86,13 +86,16 @@ function compareValues(a: unknown, b: unknown): number {
   return String(a) < String(b) ? -1 : 1
 }
 
-function sortRowsBySortKey(table: TableName, rows: readonly Row[]): readonly Row[] {
-  const sortKey = TABLE_METADATA[table].sortKey
-  if (sortKey.length === 0 || rows.length <= 1)
+// Physical row order written into parquet. Uses `clusterKey` (dimension-first)
+// rather than `sortKey` (natural-key identity, date-first) so the
+// high-cardinality dimension column is contiguous — see TABLE_METADATA.
+function sortRowsByClusterKey(table: TableName, rows: readonly Row[]): readonly Row[] {
+  const clusterKey = TABLE_METADATA[table].clusterKey
+  if (clusterKey.length === 0 || rows.length <= 1)
     return rows
   const copy = rows.slice()
   copy.sort((a, b) => {
-    for (const col of sortKey) {
+    for (const col of clusterKey) {
       const cmp = compareValues(a[col], b[col])
       if (cmp !== 0)
         return cmp
@@ -104,7 +107,7 @@ function sortRowsBySortKey(table: TableName, rows: readonly Row[]): readonly Row
 
 export function encodeRowsToParquet(table: TableName, rows: readonly Row[]): Uint8Array {
   const schema = SCHEMAS[table]
-  const sorted = sortRowsBySortKey(table, rows)
+  const sorted = sortRowsByClusterKey(table, rows)
   const columnData: ColumnSource[] = schema.columns.map((col) => {
     const type = basicTypeFor(col.type)
     const data = sorted.map(r => coerceValue(r[col.name], type))

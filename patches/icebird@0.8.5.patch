@@ -1,0 +1,36 @@
+diff --git a/src/write/snapshot.js b/src/write/snapshot.js
+index bb0ee43057aa18a1764fd7ec0293d8e6c92afa2e..16606d9a6477a9da0640e57def0e8955126e06e5 100644
+--- a/src/write/snapshot.js
++++ b/src/write/snapshot.js
+@@ -87,8 +87,20 @@ export async function buildSnapshotUpdate({
+     snapshot['first-row-id'] = toMetadataLong(firstRowId)
+     snapshot['added-rows'] = toMetadataLong(addedRows)
+   }
+-  const parentId = metadata['current-snapshot-id']
+-  if (parentId !== undefined) snapshot['parent-snapshot-id'] = parentId
++  // gscdump patch: the Iceberg spec uses `current-snapshot-id: -1` as the
++  // sentinel for "table has no current snapshot" (a freshly created empty
++  // table). icebird's `?? null` only normalised `undefined`/`null`, so a
++  // first append sent `assert-ref-snapshot-id(main, -1)` and
++  // `parent-snapshot-id: -1` — which strict REST catalogs (e.g.
++  // apache/iceberg-rest-fixture) reject with a 409 that icebird then
++  // misclassifies as a concurrent-commit conflict and retries 50×. Treat -1
++  // as "no current snapshot" everywhere.
++  const rawCurrentSnapshotId = metadata['current-snapshot-id']
++  const currentSnapshotId
++    = (rawCurrentSnapshotId === undefined || rawCurrentSnapshotId === null || rawCurrentSnapshotId === -1)
++      ? null
++      : rawCurrentSnapshotId
++  if (currentSnapshotId !== null) snapshot['parent-snapshot-id'] = currentSnapshotId
+ 
+   /** @type {TableRequirement[]} */
+   const requirements = [
+@@ -96,7 +108,7 @@ export async function buildSnapshotUpdate({
+     {
+       type: 'assert-ref-snapshot-id',
+       ref: 'main',
+-      'snapshot-id': metadata['current-snapshot-id'] ?? null,
++      'snapshot-id': currentSnapshotId,
+     },
+   ]
+   if (rowLineage) {

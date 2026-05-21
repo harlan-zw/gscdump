@@ -36,7 +36,7 @@ export interface ContentGapOptions {
 
 /**
  * Content-gap requires a source with a raw-SQL escape hatch. The analyzer's
- * query shape (CTEs + window functions against `main.page_keywords`) isn't
+ * query shape (CTEs + window functions against `main.page_queries`) isn't
  * expressible as a {@link BuilderState}, so it bypasses `queryRows` and
  * goes directly through `source.executeSql`.
  */
@@ -301,7 +301,7 @@ async function fetchContentGapInputs(
         SUM(impressions)::BIGINT AS total_impressions,
         SUM(clicks)::BIGINT AS total_clicks,
         SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS avg_position
-      FROM main.page_keywords
+      FROM main.page_queries
       WHERE query IS NOT NULL AND query <> ''
       GROUP BY query
       HAVING SUM(impressions) >= ?
@@ -313,7 +313,7 @@ async function fetchContentGapInputs(
         SUM(pk.impressions)::BIGINT AS url_impressions,
         SUM(pk.sum_position) / NULLIF(SUM(pk.impressions), 0) + 1 AS url_position,
         ROW_NUMBER() OVER (PARTITION BY pk.query ORDER BY SUM(pk.impressions) DESC) AS rnk
-      FROM main.page_keywords pk
+      FROM main.page_queries pk
       JOIN query_totals qt USING (query)
       WHERE pk.url IS NOT NULL AND pk.url <> ''
       GROUP BY pk.query, pk.url
@@ -327,7 +327,7 @@ async function fetchContentGapInputs(
 
   const urlRows = await executeSql(`
     SELECT url, SUM(impressions)::BIGINT AS impressions
-    FROM main.page_keywords
+    FROM main.page_queries
     WHERE url IS NOT NULL AND url <> ''
     GROUP BY url
     ORDER BY impressions DESC

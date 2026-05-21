@@ -73,7 +73,7 @@ describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
     // Seed enough page_keywords data to trigger a striking-distance candidate:
     // position ≈ 6 (between 4 and 20), impressions ≥ 100, ctr ≤ 0.05.
     await engine.writeDay(
-      { userId: USER, siteId, table: 'page_keywords', date: '2026-04-10' },
+      { userId: USER, siteId, table: 'page_queries', date: '2026-04-10' },
       [
         { url: 'https://example.com/a', query: 'striking one', date: '2026-04-10', clicks: 2, impressions: 500, sum_position: 2500 },
         { url: 'https://example.com/b', query: 'striking two', date: '2026-04-10', clicks: 1, impressions: 200, sum_position: 1000 },
@@ -133,28 +133,28 @@ describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
 
     // Current period: 2026-04-10..11. Previous: 2026-03-10..11.
     await engine.writeDay(
-      { userId: USER, siteId, table: 'page_keywords', date: '2026-04-10' },
+      { userId: USER, siteId, table: 'page_queries', date: '2026-04-10' },
       [
         { url: 'https://example.com/a', query: 'stable', date: '2026-04-10', clicks: 10, impressions: 1000, sum_position: 10000 },
         { url: 'https://example.com/b', query: 'rising', date: '2026-04-10', clicks: 40, impressions: 1000, sum_position: 10000 },
       ],
     )
     await engine.writeDay(
-      { userId: USER, siteId, table: 'page_keywords', date: '2026-04-11' },
+      { userId: USER, siteId, table: 'page_queries', date: '2026-04-11' },
       [
         { url: 'https://example.com/a', query: 'stable', date: '2026-04-11', clicks: 10, impressions: 1000, sum_position: 10000 },
         { url: 'https://example.com/b', query: 'rising', date: '2026-04-11', clicks: 40, impressions: 1000, sum_position: 10000 },
       ],
     )
     await engine.writeDay(
-      { userId: USER, siteId, table: 'page_keywords', date: '2026-03-10' },
+      { userId: USER, siteId, table: 'page_queries', date: '2026-03-10' },
       [
         { url: 'https://example.com/a', query: 'stable', date: '2026-03-10', clicks: 10, impressions: 1000, sum_position: 10000 },
         { url: 'https://example.com/b', query: 'rising', date: '2026-03-10', clicks: 5, impressions: 1000, sum_position: 10000 },
       ],
     )
     await engine.writeDay(
-      { userId: USER, siteId, table: 'page_keywords', date: '2026-03-11' },
+      { userId: USER, siteId, table: 'page_queries', date: '2026-03-11' },
       [
         { url: 'https://example.com/a', query: 'stable', date: '2026-03-11', clicks: 10, impressions: 1000, sum_position: 10000 },
         { url: 'https://example.com/b', query: 'rising', date: '2026-03-11', clicks: 5, impressions: 1000, sum_position: 10000 },
@@ -204,7 +204,7 @@ describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
     //   impressions >= 1000 (default), position <= 10, ctr < 0.03.
     // sum_position values below give position = sum_position/impressions + 1.
     await engine.writeDay(
-      { userId: USER, siteId, table: 'page_keywords', date: '2026-04-10' },
+      { userId: USER, siteId, table: 'page_queries', date: '2026-04-10' },
       [
         // qualifier: pos ≈ 5, imps 2000, ctr = 20/2000 = 0.01
         { url: 'https://example.com/a', query: 'zero click one', date: '2026-04-10', clicks: 20, impressions: 2000, sum_position: 8000 },
@@ -262,14 +262,14 @@ describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
     const engine = makeEngine()
 
     await engine.writeDay(
-      { userId: USER, siteId, table: 'page_keywords', date: '2026-04-10' },
+      { userId: USER, siteId, table: 'page_queries', date: '2026-04-10' },
       [
         { url: 'https://example.com/p', query: 'mid', date: '2026-04-10', clicks: 20, impressions: 1000, sum_position: 11000 },
         { url: 'https://example.com/q', query: 'high', date: '2026-04-10', clicks: 50, impressions: 500, sum_position: 2500 },
       ],
     )
     await engine.writeDay(
-      { userId: USER, siteId, table: 'page_keywords', date: '2026-04-11' },
+      { userId: USER, siteId, table: 'page_queries', date: '2026-04-11' },
       [
         { url: 'https://example.com/p', query: 'mid', date: '2026-04-11', clicks: 22, impressions: 1100, sum_position: 12100 },
       ],
@@ -345,14 +345,14 @@ describe('attachSnapshotIndex', () => {
 
     // Seed two months of page_keywords: March (cold) and April (hot).
     await engine.writeDay(
-      { userId: USER, siteId, table: 'page_keywords', date: '2026-03-15' },
+      { userId: USER, siteId, table: 'page_queries', date: '2026-03-15' },
       [
         { url: 'https://example.com/a', query: 'striking cold', date: '2026-03-15', clicks: 2, impressions: 500, sum_position: 2500 },
         { url: 'https://example.com/b', query: 'striking cold two', date: '2026-03-15', clicks: 1, impressions: 300, sum_position: 1500 },
       ],
     )
     await engine.writeDay(
-      { userId: USER, siteId, table: 'page_keywords', date: '2026-04-10' },
+      { userId: USER, siteId, table: 'page_queries', date: '2026-04-10' },
       [
         { url: 'https://example.com/c', query: 'striking hot', date: '2026-04-10', clicks: 3, impressions: 600, sum_position: 3000 },
         { url: 'https://example.com/d', query: 'striking hot two', date: '2026-04-10', clicks: 1, impressions: 200, sum_position: 1000 },
@@ -370,7 +370,7 @@ describe('attachSnapshotIndex', () => {
     expect(server.results.length).toBeGreaterThan(0)
 
     // Split live parquet URIs by month.
-    const live = await engine.listLive({ userId: USER, siteId, table: 'page_keywords' })
+    const live = await engine.listLive({ userId: USER, siteId, table: 'page_queries' })
     const march = live.filter(e => e.partition.includes('2026-03')).map(e => path.join(dataDir, e.objectKey))
     const april = live.filter(e => e.partition.includes('2026-04')).map(e => path.join(dataDir, e.objectKey))
     expect(march.length).toBeGreaterThan(0)
@@ -385,7 +385,7 @@ describe('attachSnapshotIndex', () => {
       const conn = await inst.connect()
       try {
         const list = march.map(p => `'${p.replace(/'/g, '\'\'')}'`).join(', ')
-        await conn.run(`CREATE TABLE page_keywords AS SELECT * FROM read_parquet([${list}], union_by_name=true)`)
+        await conn.run(`CREATE TABLE page_queries AS SELECT * FROM read_parquet([${list}], union_by_name=true)`)
       }
       finally {
         conn.closeSync()
@@ -399,7 +399,7 @@ describe('attachSnapshotIndex', () => {
       const conn = await inst.connect()
       try {
         const list = april.map(p => `'${p.replace(/'/g, '\'\'')}'`).join(', ')
-        await conn.run(`CREATE TABLE page_keywords AS SELECT * FROM read_parquet([${list}], union_by_name=true)`)
+        await conn.run(`CREATE TABLE page_queries AS SELECT * FROM read_parquet([${list}], union_by_name=true)`)
       }
       finally {
         conn.closeSync()
@@ -430,7 +430,7 @@ describe('attachSnapshotIndex', () => {
 
       const result = await attachSnapshotIndex(runner, { index, attachUrls, schema: 'main' })
       expect(result.aliases).toEqual(['cold_2026_03', 'hot'])
-      expect(result.tables).toEqual(['page_keywords'])
+      expect(result.tables).toEqual(['page_queries'])
       expect(result.schema).toBe('main')
 
       // Analyzer runner adaptor: analyzeInBrowser wants params support.
@@ -585,13 +585,13 @@ describe('attachParquetIndex', () => {
 
     // Seed two days of page_keywords so the test has real parquets to read.
     await engine.writeDay(
-      { userId: USER, siteId, table: 'page_keywords', date: '2026-03-15' },
+      { userId: USER, siteId, table: 'page_queries', date: '2026-03-15' },
       [
         { url: 'https://example.com/a', query: 'striking one', date: '2026-03-15', clicks: 2, impressions: 500, sum_position: 2500 },
       ],
     )
     await engine.writeDay(
-      { userId: USER, siteId, table: 'page_keywords', date: '2026-04-10' },
+      { userId: USER, siteId, table: 'page_queries', date: '2026-04-10' },
       [
         { url: 'https://example.com/b', query: 'striking two', date: '2026-04-10', clicks: 3, impressions: 600, sum_position: 3000 },
       ],
@@ -607,7 +607,7 @@ describe('attachParquetIndex', () => {
     const server = await runAnalyzerWithEngine({ engine }, { userId: USER, siteId }, params)
     expect(server.results.length).toBeGreaterThan(0)
 
-    const live = await engine.listLive({ userId: USER, siteId, table: 'page_keywords' })
+    const live = await engine.listLive({ userId: USER, siteId, table: 'page_queries' })
     const parquetUrls = live.map(e => path.join(dataDir, e.objectKey))
     expect(parquetUrls.length).toBeGreaterThan(0)
 
@@ -620,11 +620,11 @@ describe('attachParquetIndex', () => {
       }
 
       const result = await attachParquetIndex(runner, {
-        tables: { page_keywords: parquetUrls },
+        tables: { page_queries: parquetUrls },
         schema: 'main',
       })
       expect(result.schema).toBe('main')
-      expect(result.tables).toEqual(['page_keywords'])
+      expect(result.tables).toEqual(['page_queries'])
 
       const analyzerRunner = {
         async query(sql: string, p?: unknown[]): Promise<Row[]> {
