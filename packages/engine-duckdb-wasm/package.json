@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/engine-duckdb-wasm",
   "type": "module",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "description": "DuckDB-WASM engine adapter for @gscdump/analysis — typed browser analytics against parquet via R2.",
   "author": {
     "name": "Harlan Wilton",
