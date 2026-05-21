@@ -149,6 +149,7 @@ def _ensure_table(cat, job):
             ident,
             schema=_schema(spec),
             partition_spec=_partition_spec(spec),
+            properties={"write.parquet.compression-codec": "snappy"},
         )
     return cat.load_table(ident)
 

@@ -29,11 +29,11 @@ import {
 } from '@gscdump/engine-duckdb-wasm'
 
 const { db, conn } = await bootDuckDBWasm()
-await attachParquetUrlTables(conn, { tables: [{ name: 'gsc_keywords', url: '/r2/keywords.parquet' }] })
+await attachParquetUrlTables(conn, { tables: [{ name: 'queries', url: '/r2/queries.parquet' }] })
 
 const runner = createInsightRunner({ db, conn })
 const window = resolveWindow({ preset: 'last-30d', comparison: 'prev-period' })
-const scope = scopeFor('keywords', { siteId, window })
+const scope = scopeFor('queries', { siteId, window })
 
 const rows = await strikingMomentum(runner, { ...scope, limit: 50 })
 ```
@@ -75,7 +75,7 @@ const source = createEngine({
 - `bootDuckDBWasm()` / `attachParquetTables()` / `attachParquetUrlTables()` / `attachSingleTable()` / `createBrowserAnalysisRuntime()` / `createDuckDBBundlesFromBase()` / `listAttachedTables()` — browser runtime primitives.
 - `strikingMomentum(runner, options)` — first-class browser insight.
 - `scopeFor(table, { siteId, window })` / `mergeScope()` — tenant scope predicates.
-- `pages` / `keywords` / `page_keywords` / `countries` / `devices` / `schema` — drizzle schema mirroring `gscdump/analytics` `SCHEMAS`. Drift fails loudly at module load.
+- `pages` / `queries` / `page_queries` / `countries` / `dates` / `schema` — drizzle schema mirroring `gscdump/analytics` `SCHEMAS`. Drift fails loudly at module load.
 - `browserResolverAdapter` — dialect adapter for the resolver kit.
 - `createClient` / `drizzle` / `DuckDBWasmDatabase` — vendored drizzle-orm DuckDB-WASM adapter.
 - `resolveWindow` (re-exported from `@gscdump/engine/period`).

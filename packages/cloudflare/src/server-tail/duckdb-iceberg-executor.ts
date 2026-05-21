@@ -119,7 +119,7 @@ export interface DuckDbIcebergExecutor {
  * SQL with `iceberg_scan` references. The `arbitrary-sql` contract says the
  * SQL references "the attached table views by their `IcebergTableName`" — in
  * the browser those are attached DuckDB views; on the server tail the same
- * `{{pages}}` / `{{page_keywords}}` style placeholders resolve to Iceberg
+ * `{{pages}}` / `{{page_queries}}` style placeholders resolve to Iceberg
  * scans here.
  */
 function resolveTablePlaceholders(sql: string, config: DuckDbIcebergExecutorConfig): string {
