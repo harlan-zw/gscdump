@@ -290,6 +290,40 @@ describe('writeDay: searchType partitioning', () => {
     expect(discoverEntry.objectKey).toContain('/pages/discover/daily/')
   })
 
+  it('runSQL with searchType=discover resolves zero web objects (and inverse for web)', async () => {
+    const { engine } = makeEngine()
+    // A manifest holding BOTH web and discover objects for the same partition.
+    await engine.writeDay(
+      { ...makeCtx(), date: '2026-04-10', now: () => 1000, searchType: 'web' },
+      [pageRow('/web', '2026-04-10', 7)],
+    )
+    await engine.writeDay(
+      { ...makeCtx(), date: '2026-04-10', now: () => 2000, searchType: 'discover' },
+      [pageRow('/discover', '2026-04-10', 3)],
+    )
+
+    const fileSets = { FILES: { table: 'pages' as const, partitions: ['daily/2026-04-10'] } }
+
+    const discover = await engine.runSQL({
+      ctx: { userId: 'u1', siteId: 's1' },
+      sql: 'SELECT * FROM FILES',
+      fileSets,
+      searchType: 'discover',
+    })
+    expect(discover.objectKeys).toHaveLength(1)
+    expect(discover.objectKeys.every(k => k.includes('/discover/'))).toBe(true)
+    expect(discover.objectKeys.some(k => !k.includes('/discover/'))).toBe(false)
+
+    const web = await engine.runSQL({
+      ctx: { userId: 'u1', siteId: 's1' },
+      sql: 'SELECT * FROM FILES',
+      fileSets,
+      searchType: 'web',
+    })
+    expect(web.objectKeys).toHaveLength(1)
+    expect(web.objectKeys.every(k => !k.includes('/discover/'))).toBe(true)
+  })
+
   it('omitting searchType writes to the legacy (web) path', async () => {
     const { engine, manifestStore } = makeEngine()
     await engine.writeDay(makeCtx(), [pageRow('/a', '2026-04-10')])

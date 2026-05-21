@@ -20,6 +20,8 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev-lint",
+    "@gscdump/engine": "workspace:*",
+    "@gscdump/engine-gsc-api": "workspace:*",
     "@nuxt/test-utils": "catalog:dev-test",
     "@types/js-yaml": "catalog:",
     "@types/node": "catalog:",

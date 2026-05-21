@@ -165,8 +165,16 @@ const ROLLUP_FILE_RE = /^(?<id>[a-z0-9_]+)__v(?<ts>\d+)\.json$/
 
 // Minimal bucket shape — structurally satisfied by Cloudflare's `R2Bucket`,
 // any S3-compatible adapter, or an in-memory fake.
+//
+// `list` mirrors the Cloudflare `R2Bucket.list` cursor protocol: a single call
+// may return a `truncated` page with a `cursor` to resume from. Callers must
+// loop until `truncated` is false (see `readLatestRollup`).
 export interface RollupBucket {
-  list: (opts: { prefix: string }) => Promise<{ objects: Array<{ key: string }> }>
+  list: (opts: { prefix: string, cursor?: string }) => Promise<{
+    objects: Array<{ key: string }>
+    truncated?: boolean
+    cursor?: string
+  }>
   get: (key: string) => Promise<{ text: () => Promise<string> } | null>
 }
 
@@ -182,18 +190,25 @@ export async function readLatestRollup<T = unknown>(
   searchType?: SearchType,
 ): Promise<RollupEnvelope<T> | null> {
   const prefix = `${rollupPrefix(ctx, searchType)}/`
-  const listing = await bucket.list({ prefix }).catch(() => null)
-  if (!listing)
-    return null
   let newest: { ts: number, key: string } | null = null
-  for (const obj of listing.objects) {
-    const m = ROLLUP_FILE_RE.exec(obj.key.slice(prefix.length))
-    if (!m?.groups || m.groups.id !== id)
-      continue
-    const ts = Number(m.groups.ts)
-    if (!newest || ts > newest.ts)
-      newest = { ts, key: obj.key }
-  }
+  // Prefix LIST is paginated: R2 returns a bounded page plus a `cursor` when
+  // `truncated`. Loop the whole keyspace so the newest envelope is found even
+  // when it lands on a later page than the first.
+  let cursor: string | undefined
+  do {
+    const listing = await bucket.list({ prefix, cursor }).catch(() => null)
+    if (!listing)
+      return null
+    for (const obj of listing.objects) {
+      const m = ROLLUP_FILE_RE.exec(obj.key.slice(prefix.length))
+      if (!m?.groups || m.groups.id !== id)
+        continue
+      const ts = Number(m.groups.ts)
+      if (!newest || ts > newest.ts)
+        newest = { ts, key: obj.key }
+    }
+    cursor = listing.truncated ? listing.cursor : undefined
+  } while (cursor !== undefined)
   if (!newest)
     return null
   const obj = await bucket.get(newest.key).catch(() => null)

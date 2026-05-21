@@ -1,5 +1,5 @@
 import type { DataSource, Row, TableName } from '@gscdump/engine/contracts'
-import type { RollupDef, RollupEngine } from '../src/rollups'
+import type { RollupBucket, RollupDef, RollupEngine } from '../src/rollups'
 import { createIndexingMetadataStore, createSitemapStore } from '@gscdump/engine/entities'
 import { decodeParquetToRows } from '@gscdump/engine/hyparquet'
 import { describe, expect, it } from 'vitest'
@@ -9,6 +9,7 @@ import {
   indexingHealthRollup,
   indexingMetadataRollup,
   indexPercentRollup,
+  readLatestRollup,
   rebuildRollups,
   rollupKey,
   rollupParquetKey,
@@ -738,5 +739,134 @@ describe('sitemapChanges28dRollup', () => {
     // Most-recent-first: top added should start with /3 (added day 2).
     expect(payload.topAdded[0].loc).toBe('https://x/a/3')
     expect(payload.topRemoved[0].loc).toBe('https://x/a/2')
+  })
+})
+
+// A RollupBucket fake that mirrors the Cloudflare R2 cursor protocol: keys are
+// served `pageSize` at a time, each truncated page carrying an opaque cursor.
+function makePaginatedBucket(keys: string[], pageSize: number): RollupBucket & {
+  listCalls: number
+} {
+  const store = new Map<string, string>()
+  for (const k of keys) store.set(k, JSON.stringify({ version: 1, id: 'x', builtAt: 0, windowDays: null, payload: { key: k } }))
+  const all = Array.from(store.keys())
+  const bucket = {
+    listCalls: 0,
+    list(opts: { prefix: string, cursor?: string }) {
+      bucket.listCalls++
+      const matching = all.filter(k => k.startsWith(opts.prefix))
+      const offset = opts.cursor ? Number(opts.cursor) : 0
+      const page = matching.slice(offset, offset + pageSize)
+      const nextOffset = offset + pageSize
+      const truncated = nextOffset < matching.length
+      return Promise.resolve({
+        objects: page.map(key => ({ key })),
+        truncated,
+        cursor: truncated ? String(nextOffset) : undefined,
+      })
+    },
+    get(key: string) {
+      const text = store.get(key)
+      return Promise.resolve(text ? { text: () => Promise.resolve(text) } : null)
+    },
+  }
+  return bucket
+}
+
+describe('readLatestRollup', () => {
+  it('returns null when no envelope exists for the (ctx, id) pair', async () => {
+    const bucket = makePaginatedBucket([], 10)
+    const got = await readLatestRollup(bucket, { userId: 'u1', siteId: 's1' }, 'daily_totals')
+    expect(got).toBeNull()
+  })
+
+  it('happy path: resolves the newest envelope from a single list page', async () => {
+    const ctx = { userId: 'u1', siteId: 's1' }
+    const bucket = makePaginatedBucket([
+      rollupKey(ctx, 'daily_totals', 1700000000000),
+      rollupKey(ctx, 'daily_totals', 1700000005000),
+      rollupKey(ctx, 'daily_totals', 1700000002000),
+    ], 50)
+    const got = await readLatestRollup<{ key: string }>(bucket, ctx, 'daily_totals')
+    expect(got).not.toBeNull()
+    expect(got!.payload.key).toBe(rollupKey(ctx, 'daily_totals', 1700000005000))
+  })
+
+  it('ignores envelopes for a different rollup id', async () => {
+    const ctx = { userId: 'u1', siteId: 's1' }
+    const bucket = makePaginatedBucket([
+      rollupKey(ctx, 'daily_totals', 1700000000000),
+      rollupKey(ctx, 'top_pages_28d', 1700000009000),
+    ], 50)
+    const got = await readLatestRollup<{ key: string }>(bucket, ctx, 'daily_totals')
+    expect(got!.payload.key).toBe(rollupKey(ctx, 'daily_totals', 1700000000000))
+  })
+
+  it('finds the newest envelope when it appears only on the 2nd list page', async () => {
+    const ctx = { userId: 'u1', siteId: 's1' }
+    // Page size 2: the newest (highest ts) key sorts last, so a single
+    // un-paginated list call would never see it.
+    const keys = [
+      rollupKey(ctx, 'daily_totals', 1700000000001),
+      rollupKey(ctx, 'daily_totals', 1700000000002),
+      rollupKey(ctx, 'daily_totals', 1700000000003),
+      rollupKey(ctx, 'daily_totals', 1700000000099),
+    ]
+    const bucket = makePaginatedBucket(keys, 2)
+    const got = await readLatestRollup<{ key: string }>(bucket, ctx, 'daily_totals')
+    expect(bucket.listCalls).toBeGreaterThan(1)
+    expect(got!.payload.key).toBe(rollupKey(ctx, 'daily_totals', 1700000000099))
+  })
+
+  it('scopes the prefix to the searchType segment for non-web slices', async () => {
+    const ctx = { userId: 'u1', siteId: 's1' }
+    const bucket = makePaginatedBucket([
+      rollupKey(ctx, 'daily_totals', 1700000000000),
+      rollupKey(ctx, 'daily_totals', 1700000000050, 'discover'),
+    ], 50)
+    const web = await readLatestRollup<{ key: string }>(bucket, ctx, 'daily_totals', 'web')
+    const discover = await readLatestRollup<{ key: string }>(bucket, ctx, 'daily_totals', 'discover')
+    expect(web!.payload.key).toBe(rollupKey(ctx, 'daily_totals', 1700000000000))
+    expect(discover!.payload.key).toBe(rollupKey(ctx, 'daily_totals', 1700000000050, 'discover'))
+  })
+})
+
+describe('rebuildRollups idempotency', () => {
+  it('re-running with identical inputs overwrites cleanly and produces identical output', async () => {
+    const ctx = { userId: 'u1', siteId: 's1' }
+    const def: RollupDef = {
+      id: 'idem',
+      windowDays: 7,
+      async build() {
+        return [{ a: 1, b: 'x' }]
+      },
+    }
+    const opts = {
+      engine: makeFakeEngine({} as Record<TableName, Row[]>),
+      ctx,
+      defs: [def],
+      now: () => 1_700_000_000_000,
+    }
+
+    const first = makeFakeDataSource()
+    const r1 = await rebuildRollups({ ...opts, dataSource: first.ds, builtAt: 1_700_000_000_000 })
+
+    const second = makeFakeDataSource()
+    const r2 = await rebuildRollups({ ...opts, dataSource: second.ds, builtAt: 1_700_000_000_000 })
+
+    expect(r1).toEqual(r2)
+    // Same key written, store has exactly one object, identical bytes.
+    expect(r1[0].objectKey).toBe(r2[0].objectKey)
+    expect(first.store.size).toBe(1)
+    expect(second.store.size).toBe(1)
+    expect(first.store.get(r1[0].objectKey)).toEqual(second.store.get(r2[0].objectKey))
+
+    // Re-run a second time against the SAME store: overwrites in place, no
+    // duplicate object, byte-identical envelope.
+    const before = new TextDecoder().decode(first.store.get(r1[0].objectKey)!)
+    const r3 = await rebuildRollups({ ...opts, dataSource: first.ds, builtAt: 1_700_000_000_000 })
+    expect(r3).toEqual(r1)
+    expect(first.store.size).toBe(1)
+    expect(new TextDecoder().decode(first.store.get(r3[0].objectKey)!)).toBe(before)
   })
 })
