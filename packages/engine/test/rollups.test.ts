@@ -95,7 +95,7 @@ describe('rebuildRollups searchType namespacing', () => {
     const results = await rebuildRollups({
       engine: makeFakeEngine({} as Record<TableName, Row[]>),
       dataSource: ds,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
       ctx: { userId: 'u1', siteId: 's1' },
       defs: [def],
       now: () => 1_700_000_000_000,
@@ -188,7 +188,7 @@ describe('rebuildRollups', () => {
     const results = await rebuildRollups({
       engine: makeFakeEngine({} as Record<TableName, Row[]>),
       dataSource: ds,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
       ctx: { userId: 'u1', siteId: 's1' },
       defs: [def],
       now: () => now++,
@@ -221,7 +221,7 @@ describe('rebuildRollups', () => {
     await rebuildRollups({
       engine,
       dataSource: ds,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
       ctx: { userId: 'u1', siteId: 's1' },
       defs: DEFAULT_ROLLUPS,
       now: () => 1_700_000_000_000,
@@ -255,7 +255,7 @@ describe('dailyTotalsRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: buildDs,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as Array<{ date: string, anonymizedImpressionsPct: number, impressions: number }>
 
     expect(result).toHaveLength(2)
@@ -277,7 +277,7 @@ describe('dailyTotalsRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: buildDs,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as Array<{ anonymizedImpressionsPct: number }>
     expect(result[0].anonymizedImpressionsPct).toBe(0)
   })
@@ -295,7 +295,7 @@ describe('dailyTotalsRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: buildDs,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as Array<{ anonymizedImpressionsPct: number }>
     expect(result[0].anonymizedImpressionsPct).toBe(0)
   })
@@ -315,7 +315,7 @@ describe('weeklyTotalsRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: buildDs,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as Array<{ week: string, clicks: number, impressions: number }>
     expect(result[0].week).toBe('2026-04-06')
     expect(result[0].clicks).toBe(100)
@@ -331,7 +331,7 @@ describe('indexingMetadataRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: ds,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as { totals: { urls: number, updates: number, removes: number }, days: unknown[] }
     expect(payload.totals.urls).toBe(0)
     expect(payload.totals.updates).toBe(0)
@@ -368,7 +368,7 @@ describe('indexingMetadataRollup', () => {
       engine,
       ctx,
       dataSource: ds,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as {
       totals: { urls: number, updates: number, removes: number, latestUpdateAt: string | null, latestRemoveAt: string | null }
       days: Array<{ day: string, updates: number, removes: number }>
@@ -387,6 +387,57 @@ describe('indexingMetadataRollup', () => {
   })
 })
 
+describe('rebuildRollups dataEndDate anchoring', () => {
+  function capturingDef(sink: { windowAnchorMs?: number }): RollupDef {
+    return {
+      id: 'capture',
+      windowDays: 28,
+      async build({ windowAnchorMs }) {
+        sink.windowAnchorMs = windowAnchorMs
+        return []
+      },
+    }
+  }
+
+  it('anchors windowAnchorMs to dataEndDate, not wall-clock build time', async () => {
+    const { ds } = makeFakeDataSource()
+    const sink: { windowAnchorMs?: number } = {}
+    await rebuildRollups({
+      engine: makeFakeEngine({} as Record<TableName, Row[]>),
+      dataSource: ds,
+      ctx: { userId: 'u1', siteId: 's1' },
+      defs: [capturingDef(sink)],
+      dataEndDate: '2026-01-15',
+      now: () => 1_900_000_000_000, // far-future wall clock — must be ignored
+    })
+    expect(sink.windowAnchorMs).toBe(Date.UTC(2026, 0, 15))
+  })
+
+  it('falls back to wall-clock build time when dataEndDate is omitted', async () => {
+    const { ds } = makeFakeDataSource()
+    const sink: { windowAnchorMs?: number } = {}
+    await rebuildRollups({
+      engine: makeFakeEngine({} as Record<TableName, Row[]>),
+      dataSource: ds,
+      ctx: { userId: 'u1', siteId: 's1' },
+      defs: [capturingDef(sink)],
+      now: () => 1_700_000_000_000,
+    })
+    expect(sink.windowAnchorMs).toBe(1_700_000_000_000)
+  })
+
+  it('rejects a malformed dataEndDate', async () => {
+    const { ds } = makeFakeDataSource()
+    await expect(rebuildRollups({
+      engine: makeFakeEngine({} as Record<TableName, Row[]>),
+      dataSource: ds,
+      ctx: { userId: 'u1', siteId: 's1' },
+      defs: [capturingDef({})],
+      dataEndDate: '2026/01/15',
+    })).rejects.toThrow('dataEndDate must be ISO')
+  })
+})
+
 describe('topPages28dRollup', () => {
   it('forwards top-N rows from the engine result', async () => {
     const engine = makeFakeEngine({
@@ -400,7 +451,7 @@ describe('topPages28dRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: buildDs,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as Array<{ url: string, clicks: number }>
     expect(result).toHaveLength(2)
     expect(result[0].url).toBe('/a')
@@ -421,7 +472,7 @@ describe('topCountries28dRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: buildDs,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as Array<{ country: string, clicks: number }>
     expect(result).toHaveLength(2)
     expect(result[0].country).toBe('usa')
@@ -492,7 +543,7 @@ describe('indexingHealthRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: ds,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as { days: unknown[] }
     expect(payload.days).toEqual([])
   })
@@ -533,7 +584,7 @@ describe('indexingHealthRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: ds,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as { days: Array<{ date: string, indexed_count: number, canonical_mismatches: number }> }
     expect(capturedSql).toContain('read_parquet({{INSPECTIONS}}')
     expect(capturedSql).not.toContain('r2://')
@@ -553,7 +604,7 @@ describe('indexPercentRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: ds,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as { totalSitemapUrls: number, days: unknown[] }
     expect(payload.totalSitemapUrls).toBe(0)
     expect(payload.days).toEqual([])
@@ -584,7 +635,7 @@ describe('indexPercentRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: ds,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as {
       totalSitemapUrls: number
       days: Array<{ date: string, clicked_urls: number, total_sitemap_urls: number, ratio: number }>
@@ -617,7 +668,7 @@ describe('indexPercentRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: ds,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })
 
     expect(listCalls[0]).toEqual(expect.objectContaining({ table: 'pages', searchType: 'web' }))
@@ -637,7 +688,7 @@ describe('sitemapHealthRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: ds,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as { days: unknown[], feeds: unknown[] }
     expect(payload.days).toEqual([])
     expect(payload.feeds).toEqual([])
@@ -673,7 +724,7 @@ describe('sitemapHealthRollup', () => {
       engine,
       ctx,
       dataSource: ds,
-      builtAt,
+      windowAnchorMs: builtAt,
     })) as {
       days: Array<{ day: string, feeds: number, total_urls: number, errors: number, warnings: number }>
       feeds: Array<{ path: string, urlCount: number }>
@@ -696,7 +747,7 @@ describe('sitemapChanges28dRollup', () => {
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: ds,
-      builtAt: 1_700_000_000_000,
+      windowAnchorMs: 1_700_000_000_000,
     })) as { days: unknown[], topAdded: unknown[], topRemoved: unknown[] }
     expect(payload.days).toEqual([])
     expect(payload.topAdded).toEqual([])
@@ -725,7 +776,7 @@ describe('sitemapChanges28dRollup', () => {
       engine,
       ctx,
       dataSource: ds,
-      builtAt,
+      windowAnchorMs: builtAt,
     })) as {
       days: Array<{ day: string, feedpath: string, added: number, removed: number }>
       topAdded: Array<{ loc: string }>
@@ -849,10 +900,10 @@ describe('rebuildRollups idempotency', () => {
     }
 
     const first = makeFakeDataSource()
-    const r1 = await rebuildRollups({ ...opts, dataSource: first.ds, builtAt: 1_700_000_000_000 })
+    const r1 = await rebuildRollups({ ...opts, dataSource: first.ds, windowAnchorMs: 1_700_000_000_000 })
 
     const second = makeFakeDataSource()
-    const r2 = await rebuildRollups({ ...opts, dataSource: second.ds, builtAt: 1_700_000_000_000 })
+    const r2 = await rebuildRollups({ ...opts, dataSource: second.ds, windowAnchorMs: 1_700_000_000_000 })
 
     expect(r1).toEqual(r2)
     // Same key written, store has exactly one object, identical bytes.
@@ -864,7 +915,7 @@ describe('rebuildRollups idempotency', () => {
     // Re-run a second time against the SAME store: overwrites in place, no
     // duplicate object, byte-identical envelope.
     const before = new TextDecoder().decode(first.store.get(r1[0].objectKey)!)
-    const r3 = await rebuildRollups({ ...opts, dataSource: first.ds, builtAt: 1_700_000_000_000 })
+    const r3 = await rebuildRollups({ ...opts, dataSource: first.ds, windowAnchorMs: 1_700_000_000_000 })
     expect(r3).toEqual(r1)
     expect(first.store.size).toBe(1)
     expect(new TextDecoder().decode(first.store.get(r3[0].objectKey)!)).toBe(before)

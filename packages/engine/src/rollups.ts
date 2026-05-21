@@ -106,13 +106,14 @@ export interface RollupDef {
      */
     dataSource: DataSource
     /**
-     * Wall-clock millis when the runner started this rollup. Use for
-     * derived window cutoffs (e.g. trailing-28d boundary) so the SQL can
-     * inline a date literal and stay portable across DuckDB builds that
-     * don't bundle the ICU extension (Workers DuckDB, for one — CURRENT_DATE
-     * lives in ICU).
+     * UTC millis the trailing window anchors to — its inclusive END. Equals
+     * the newest synced/finalized data date when the runner is given
+     * `dataEndDate`, otherwise wall-clock build time. Builders derive window
+     * cutoffs from this (e.g. the trailing-28d boundary) and inline a date
+     * literal so the SQL stays portable across DuckDB builds without the ICU
+     * extension (Workers DuckDB — `CURRENT_DATE` lives in ICU).
      */
-    builtAt: number
+    windowAnchorMs: number
     /**
      * GSC search-type slice the runner was invoked for. Builders forward
      * this to every `engine.runSQL` call so the aggregated facts come
@@ -233,6 +234,15 @@ export interface RebuildRollupsOptions {
    * only tenants and explicit cross-type admin views.
    */
   searchType?: SearchType
+  /**
+   * ISO date (`YYYY-MM-DD`) of the newest synced/finalized day. Trailing-
+   * window rollups (28d/90d) anchor their window END here instead of
+   * wall-clock build time, so a "last 28 days" rollup covers the 28 days of
+   * data that actually exist — not 28 days back from whenever the job ran,
+   * which would include GSC's 2-3 day empty tail. Omit for the legacy
+   * wall-clock behaviour.
+   */
+  dataEndDate?: string
 }
 
 export interface RebuildRollupResult {
@@ -258,9 +268,14 @@ export async function rebuildRollups(
   opts: RebuildRollupsOptions,
 ): Promise<RebuildRollupResult[]> {
   const now = opts.now ?? (() => Date.now())
+  const dataEndMs = opts.dataEndDate !== undefined ? isoDateToUtcMs(opts.dataEndDate) : null
   const results: RebuildRollupResult[] = []
   for (const def of opts.defs) {
     const builtAt = now()
+    // `builtAt` versions the object key; `windowAnchorMs` is what trailing
+    // windows anchor to. They differ only when the runner supplies a
+    // `dataEndDate` — otherwise the window ends at wall-clock build time.
+    const windowAnchorMs = dataEndMs ?? builtAt
     // Slice-orthogonal defs (entity-store sourced) are independent of the GSC
     // slice — they always build once at the legacy/web path so their output
     // never lands under a per-slice prefix the read path won't look at. Slice-
@@ -271,7 +286,7 @@ export async function rebuildRollups(
         engine: opts.engine,
         ctx: opts.ctx,
         dataSource: opts.dataSource,
-        builtAt,
+        windowAnchorMs,
         ...(defSearchType !== undefined ? { searchType: defSearchType } : {}),
       })
       if (def.format === 'parquet') {
@@ -337,6 +352,15 @@ export async function rebuildRollups(
 // builders to inline a trailing-window cutoff into SQL instead of relying on
 // `CURRENT_DATE`, which lives in the ICU extension and isn't available in
 // every DuckDB build (notably Workers DuckDB).
+// Parse an ISO `YYYY-MM-DD` date to UTC-midnight millis. Anchors trailing
+// rollup windows to a data date rather than wall-clock time.
+function isoDateToUtcMs(iso: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m)
+    throw new Error(`dataEndDate must be ISO YYYY-MM-DD, got: ${iso}`)
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+}
+
 function utcDateMinusDays(at: number, days: number): string {
   const d = new Date(at - days * MS_PER_DAY)
   const y = d.getUTCFullYear()
@@ -647,14 +671,14 @@ export const weeklyTotalsRollup: RollupDef = {
 export const topPages28dRollup: RollupDef = {
   id: 'top_pages_28d',
   windowDays: 28,
-  async build({ engine, ctx, builtAt, searchType }) {
-    const cutoff = utcDateMinusDays(builtAt, 28)
+  async build({ engine, ctx, windowAnchorMs, searchType }) {
+    const cutoff = utcDateMinusDays(windowAnchorMs, 28)
     const parts = await engine.listPartitions({
       ctx,
       table: 'pages',
       ...(searchType !== undefined ? { searchType } : {}),
     })
-    const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(builtAt, 0))
+    const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(windowAnchorMs, 0))
     if (partitions.length === 0)
       return []
     const result = await engine.runSQL({
@@ -693,14 +717,14 @@ export const topPages28dRollup: RollupDef = {
 export const topCountries28dRollup: RollupDef = {
   id: 'top_countries_28d',
   windowDays: 28,
-  async build({ engine, ctx, builtAt, searchType }) {
-    const cutoff = utcDateMinusDays(builtAt, 28)
+  async build({ engine, ctx, windowAnchorMs, searchType }) {
+    const cutoff = utcDateMinusDays(windowAnchorMs, 28)
     const parts = await engine.listPartitions({
       ctx,
       table: 'countries',
       ...(searchType !== undefined ? { searchType } : {}),
     })
-    const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(builtAt, 0))
+    const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(windowAnchorMs, 0))
     if (partitions.length === 0)
       return []
     const result = await engine.runSQL({
@@ -734,14 +758,14 @@ export const topCountries28dRollup: RollupDef = {
 export const topKeywords28dRollup: RollupDef = {
   id: 'top_keywords_28d',
   windowDays: 28,
-  async build({ engine, ctx, builtAt, searchType }) {
-    const cutoff = utcDateMinusDays(builtAt, 28)
+  async build({ engine, ctx, windowAnchorMs, searchType }) {
+    const cutoff = utcDateMinusDays(windowAnchorMs, 28)
     const parts = await engine.listPartitions({
       ctx,
       table: 'keywords',
       ...(searchType !== undefined ? { searchType } : {}),
     })
-    const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(builtAt, 0))
+    const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(windowAnchorMs, 0))
     if (partitions.length === 0)
       return []
     const result = await engine.runSQL({
@@ -792,14 +816,14 @@ export const topKeywords28dParquetRollup: RollupDef = {
     { name: 'sum_position', type: 'DOUBLE', nullable: false },
   ],
   parquetSortKey: ['clicks'],
-  async build({ engine, ctx, builtAt, searchType }) {
-    const cutoff = utcDateMinusDays(builtAt, 28)
+  async build({ engine, ctx, windowAnchorMs, searchType }) {
+    const cutoff = utcDateMinusDays(windowAnchorMs, 28)
     const parts = await engine.listPartitions({
       ctx,
       table: 'keywords',
       ...(searchType !== undefined ? { searchType } : {}),
     })
-    const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(builtAt, 0))
+    const partitions = partitionsInRange(parts, cutoff, utcDateMinusDays(windowAnchorMs, 0))
     if (partitions.length === 0)
       return []
     const result = await engine.runSQL({
@@ -910,7 +934,7 @@ export const indexingHealthRollup: RollupDef = {
   id: 'indexing_health',
   windowDays: 90,
   sliceOrthogonal: true,
-  async build({ engine, ctx, dataSource, builtAt }) {
+  async build({ engine, ctx, dataSource, windowAnchorMs }) {
     // Skip when the parquet sidecar hasn't been materialized yet. We probe
     // with `head` (cheap; no body) rather than `parquetUri` because we now
     // route the read through `fileSets.keys` so DuckDB pre-fetches bytes —
@@ -919,7 +943,7 @@ export const indexingHealthRollup: RollupDef = {
     const exists = await dataSource.head?.(key)
     if (!exists)
       return { days: [] }
-    const cutoff = utcDateMinusDays(builtAt, 90)
+    const cutoff = utcDateMinusDays(windowAnchorMs, 90)
     // `read_parquet({{INSPECTIONS}}, union_by_name = true)` flows through the
     // executor's prefetch path: bytes are read via the `DataSource` (R2
     // binding) and registered as a virtual file before query. Crucial under
@@ -980,7 +1004,7 @@ export const indexPercentRollup: RollupDef = {
   id: 'index_percent',
   windowDays: 90,
   sliceOrthogonal: true,
-  async build({ engine, ctx, dataSource, builtAt, searchType }) {
+  async build({ engine, ctx, dataSource, windowAnchorMs, searchType }) {
     // The URLs index is partitioned one parquet per feedpath; list every
     // per-feedpath file and read them as a set. `read_parquet` over the key
     // list unions them, and routing via `fileSets.keys` lets DuckDB pre-fetch
@@ -988,7 +1012,7 @@ export const indexPercentRollup: RollupDef = {
     const urlsKeys = await dataSource.list(sitemapUrlsIndexPrefix(ctx))
     if (urlsKeys.length === 0)
       return { totalSitemapUrls: 0, days: [] }
-    const cutoff = utcDateMinusDays(builtAt, 90)
+    const cutoff = utcDateMinusDays(windowAnchorMs, 90)
     // Numerator: per-day distinct sitemap URLs with clicks>0. This rollup is
     // written at the legacy path, so omitted searchType means the web slice,
     // not a cross-type union. URLS is a direct-keys
@@ -1000,7 +1024,7 @@ export const indexPercentRollup: RollupDef = {
       table: 'pages',
       searchType: factSearchType,
     })
-    const pagesPartitions = partitionsInRange(pagesParts, cutoff, utcDateMinusDays(builtAt, 0))
+    const pagesPartitions = partitionsInRange(pagesParts, cutoff, utcDateMinusDays(windowAnchorMs, 0))
     const numerator = await engine.runSQL({
       ctx,
       table: 'pages',
@@ -1059,11 +1083,11 @@ export const sitemapHealthRollup: RollupDef = {
   id: 'sitemap_health',
   windowDays: 90,
   sliceOrthogonal: true,
-  async build({ dataSource, ctx, builtAt }) {
+  async build({ dataSource, ctx, windowAnchorMs }) {
     const store = createSitemapStore({ dataSource })
     const index = await store.loadIndex(ctx)
     const records = Object.values(index.records)
-    const cutoff = utcDateMinusDays(builtAt, 90)
+    const cutoff = utcDateMinusDays(windowAnchorMs, 90)
 
     interface DayBucket {
       day: string
@@ -1122,10 +1146,10 @@ export const sitemapChanges28dRollup: RollupDef = {
   id: 'sitemap_changes_28d',
   windowDays: 28,
   sliceOrthogonal: true,
-  async build({ dataSource, ctx, builtAt }) {
+  async build({ dataSource, ctx, windowAnchorMs }) {
     const store = createSitemapStore({ dataSource })
-    const from = utcDateMinusDays(builtAt, 28)
-    const to = utcDateMinusDays(builtAt, 0)
+    const from = utcDateMinusDays(windowAnchorMs, 28)
+    const to = utcDateMinusDays(windowAnchorMs, 0)
 
     interface DayKey {
       day: string
