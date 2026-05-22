@@ -244,8 +244,13 @@ function createSnapshotAnalyzerInstance(
       qs.set('start', range.start)
       qs.set('end', range.end)
     }
-    return $fetch<FileResolutionResponse>(`/api/sites/${siteId}/analysis-sources?${qs}`, {
+    // Hit the `__gsc` layer surface (session-backed, credentialed) on the
+    // gscdump data origin — not a bare relative path, which would resolve
+    // against the embedding app's own origin and 404.
+    const apiBase = (useGscAnalyticsConfig().apiBase ?? '').replace(/\/+$/, '')
+    return $fetch<FileResolutionResponse>(`${apiBase}/api/__gsc/sites/${siteId}/analysis-sources?${qs}`, {
       headers: { 'cache-control': 'no-cache' },
+      credentials: 'include',
       signal,
     })
   }
