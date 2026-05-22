@@ -106,7 +106,11 @@ export const WEIGHT_PRIORITY: Record<DateWeight, number> = {
 // Sync ingest caps the engine cares about. Page sizes apply to the GSC API
 // page size; row caps apply to the R2 write accumulator's per-job ceilings.
 export const MAX_GSC_PAGES_R2 = 40
-export const ROW_LIMIT_R2 = 10_000
+// GSC Search Analytics caps a single page at 25k rows. Larger pages mean
+// fewer Iceberg appends (fewer catalog commits → less 429 contention),
+// bigger parquet files (smaller small-file penalty), and 2.5× fewer GSC
+// subrequests per job. ~7-8 MB held per page, well under the Worker budget.
+export const ROW_LIMIT_R2 = 25_000
 
 // Drop-thresholds for sync row filtering. Zero-impression rows are noise;
 // long-tail country rows balloon write volume.
