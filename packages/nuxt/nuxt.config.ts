@@ -14,10 +14,16 @@ import { fileURLToPath } from 'node:url'
 export default defineNuxtConfig({
   // Register the layer's module so hooks + runtime config land on host apps
   // without them having to wire each module individually.
+  //
+  // `nuxt-query` provides `useNuxtQuery` / `useQueryCache` — TanStack-Query-
+  // shaped wrapper over `useFetch`. Composables in this layer fetch through
+  // it for SWR + dedup. Consumers must install `nuxt-query` (until published,
+  // link the workspace path).
   modules: [
     fileURLToPath(new URL('./module.ts', import.meta.url)),
     '@nuxt/ui',
     '@vueuse/nuxt',
+    'nuxt-query',
   ],
 
   css: [

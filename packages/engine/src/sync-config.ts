@@ -9,10 +9,10 @@ import type { SearchType } from './storage'
 // intentionally absent — it's searchType-orthogonal and lives in its own
 // pipeline. Non-Discover types mirror Discover's shape until verified
 // against the GSC Search Analytics docs.
-export type SyncTableName = Extract<TableName, 'pages' | 'queries' | 'countries' | 'page_queries' | 'dates'>
+export type SyncTableName = Extract<TableName, 'pages' | 'queries' | 'countries' | 'page_queries' | 'dates' | 'search_appearance'>
 
 export const TABLES_BY_SEARCH_TYPE: Record<SearchType, readonly SyncTableName[]> = {
-  web: ['pages', 'queries', 'countries', 'page_queries', 'dates'],
+  web: ['pages', 'queries', 'countries', 'page_queries', 'dates', 'search_appearance'],
   // Discover has no `query` dimension — drop query-bearing tables.
   discover: ['pages', 'countries', 'dates'],
   news: ['pages', 'countries', 'dates'],

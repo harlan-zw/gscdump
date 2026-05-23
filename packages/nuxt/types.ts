@@ -46,6 +46,7 @@ declare module '#app' {
   }
 }
 
+export type { GscAnalyzerInstance, GscAnalyzerTimings } from './app/composables/useGscAnalyzer'
 export type {
   GscAnalyzerBatchEntry,
   GscAnalyzerBatchRunner,
@@ -65,15 +66,14 @@ export type {
   GscAnalyzerPanelSpec,
   GscAnalyzerStatTile,
 } from './app/composables/useGscAnalyzerDefs'
-
 export { gscPanelRunnerKey, useGscPanelRunner } from './app/composables/useGscPanelContext'
 
 export type { GscPanelRunnerContext } from './app/composables/useGscPanelContext'
+
 export type {
   UseGscParquetTableOptions,
   UseGscParquetTableReturn,
 } from './app/composables/useGscParquetTable'
-
 export type {
   GscBackfillRunner,
   GscQueryDecision,
@@ -86,6 +86,13 @@ export type {
 } from './app/composables/useGscQuery'
 
 export type { UseGscRollupTableOptions } from './app/composables/useGscRollupTable'
+
+export type {
+  GscFactTable,
+  GscTableStage,
+  GscTableStatus,
+  UseGscSiteAnalyzerReturn,
+} from './app/composables/useGscSiteAnalyzer'
 
 export type {
   AnalysisSourcesResponse,

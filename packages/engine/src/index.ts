@@ -14,12 +14,14 @@ export {
   icebergPartitionSpecFor,
   icebergSchemaFor,
   isCommitRateLimited,
+  listIcebergDataFiles,
   listIcebergTables,
 } from './iceberg-catalog'
 export type {
   CommitRetryOptions,
   IcebergCatalogConfig,
   IcebergConnection,
+  IcebergListedDataFile,
   IcebergPartitionSpec,
   IcebergPartitionSpecField,
   IcebergPrimitiveType,
@@ -27,6 +29,7 @@ export type {
   IcebergSchema,
   IcebergSchemaField,
   IcebergTableOpResult,
+  ListIcebergDataFilesOptions,
 } from './iceberg-catalog'
 export {
   ICEBERG_FIELD_ID_BASE,

@@ -23,9 +23,11 @@ import {
   icebergAppend,
   icebergCreateTable,
   icebergDropTable,
+  icebergManifests,
   restCatalogConnect,
   restCatalogCreateNamespace,
   restCatalogListTables,
+  restCatalogLoadTable,
   s3SignedResolver,
 } from 'icebird'
 import {
@@ -307,6 +309,135 @@ export async function createIcebergTables(
 export async function listIcebergTables(conn: IcebergConnection): Promise<string[]> {
   return restCatalogListTables(conn.catalog, { namespace: conn.namespace })
     .then(list => list.map(t => t.name).sort(), () => [])
+}
+
+// ---------------------------------------------------------------------------
+// Read path — list data files for a partition slice.
+// ---------------------------------------------------------------------------
+//
+// `analysis-sources.get.ts` consumes this to build presigned URLs the browser
+// downloads into OPFS. Wave 3 of the Iceberg re-architecture: reads must come
+// from the catalog so the browser sees what the ingest sink writes, not the
+// legacy `r2_manifest`.
+
+/** A data file in the current snapshot's manifest, scoped to one partition. */
+export interface IcebergListedDataFile {
+  /** Raw Iceberg `data_file.file_path` (e.g. `s3://gscdump-analytics/.../x.parquet`). */
+  filePath: string
+  /** Object key relative to the warehouse bucket (the part after `s3://<bucket>/`). */
+  objectKey: string
+  bytes: number
+  rowCount: number
+}
+
+export interface ListIcebergDataFilesOptions {
+  table: IcebergTableName
+  /** Partition identity column. */
+  siteId: string
+  /** Partition identity column. */
+  searchType: string
+  /**
+   * Inclusive date range. Every month touched by `[start, end]` is scanned;
+   * `month(date)` is the third partition transform.
+   */
+  range: { start: string, end: string }
+}
+
+/**
+ * Months covering `[start, end]` inclusive, as `YYYY-MM`. Walks calendar
+ * boundaries so the result is correct regardless of day-of-month.
+ */
+function monthsInRange(range: { start: string, end: string }): string[] {
+  const [sy, sm] = range.start.split('-').map(Number) as [number, number]
+  const [ey, em] = range.end.split('-').map(Number) as [number, number]
+  const out: string[] = []
+  let y = sy
+  let m = sm
+  while (y < ey || (y === ey && m <= em)) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`)
+    m++
+    if (m > 12) {
+      m = 1
+      y++
+    }
+  }
+  return out
+}
+
+/**
+ * Iceberg's `month(date)` transform value: months since 1970-01-01.
+ * `2026-05` → `(2026 - 1970) * 12 + (5 - 1)` = 676.
+ */
+function monthsSinceEpoch(ym: string): number {
+  const [y, m] = ym.split('-').map(Number) as [number, number]
+  return (y - 1970) * 12 + (m - 1)
+}
+
+/**
+ * Extract the warehouse-relative object key from an Iceberg `s3://bucket/key`
+ * file path. Returns the input unchanged when it isn't an `s3://` URL.
+ */
+function stripBucket(filePath: string): string {
+  if (!filePath.startsWith('s3://'))
+    return filePath
+  const rest = filePath.slice(5)
+  const slash = rest.indexOf('/')
+  return slash >= 0 ? rest.slice(slash + 1) : rest
+}
+
+/**
+ * List the parquet data files in the current snapshot of `table`, filtered
+ * to a single partition slice `(siteId, searchType, month(date) ∈ range)`.
+ *
+ * Cost: 1 REST `loadTable` + N manifest fetches (typically 1–10 small Avro
+ * files). Iceberg returns the manifest list embedded in `metadata`, so a
+ * cached `metadata` would let callers skip the REST call entirely.
+ *
+ * Skips deleted entries (status=2) and non-data file types (delete files).
+ * Returns object keys + bytes + rowCount so the caller can build presigned
+ * URLs without re-walking the catalog.
+ */
+export async function listIcebergDataFiles(
+  conn: IcebergConnection,
+  opts: ListIcebergDataFilesOptions,
+): Promise<IcebergListedDataFile[]> {
+  const { metadata } = await restCatalogLoadTable(conn.catalog, {
+    namespace: conn.namespace,
+    table: opts.table,
+  })
+
+  // No current snapshot — table exists but is empty. Empty list is correct.
+  if (metadata['current-snapshot-id'] == null)
+    return []
+
+  const wantedMonths = new Set(monthsInRange(opts.range).map(monthsSinceEpoch))
+  const manifests = await icebergManifests({ metadata, resolver: conn.resolver })
+
+  const out: IcebergListedDataFile[] = []
+  for (const m of manifests) {
+    for (const entry of m.entries) {
+      if (entry.status === 2)
+        continue
+      const df = entry.data_file
+      if (df.content !== 0)
+        continue
+      const part = df.partition as Record<string, unknown>
+      if (part.site_id !== opts.siteId)
+        continue
+      if (part.search_type !== opts.searchType)
+        continue
+      const month = part.date_month
+      if (typeof month !== 'number' || !wantedMonths.has(month))
+        continue
+      out.push({
+        filePath: df.file_path,
+        objectKey: stripBucket(df.file_path),
+        bytes: Number(df.file_size_in_bytes),
+        rowCount: Number(df.record_count),
+      })
+    }
+  }
+  return out
 }
 
 /**

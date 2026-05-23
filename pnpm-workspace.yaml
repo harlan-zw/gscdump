@@ -26,13 +26,13 @@ overrides:
   '@nuxt/schema': 4.4.4
   '@types/node>undici-types': ^7.0.0
 catalog:
-  '@cloudflare/workers-types': ^4.20260520.1
+  '@cloudflare/workers-types': ^4.20260522.1
   '@duckdb/duckdb-wasm': ^1.32.0
   '@duckdb/node-api': 1.5.1-r.2
   '@huggingface/transformers': ^4.2.0
   '@modelcontextprotocol/sdk': ^1.29.0
   '@nuxt/kit': ^4.4.6
-  '@nuxt/ui': ^4.7.1
+  '@nuxt/ui': ^4.8.0
   '@types/js-yaml': ^4.0.9
   '@types/node': ^25.9.1
   '@types/proper-lockfile': ^4.1.4
@@ -77,7 +77,7 @@ catalogs:
     eslint: ^10.4.0
   dev-test:
     '@nuxt/test-utils': ^4.0.3
-    vitest: ^4.1.6
+    vitest: ^4.1.7
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - esbuild

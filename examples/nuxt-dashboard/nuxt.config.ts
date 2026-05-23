@@ -39,6 +39,10 @@ export default defineNuxtConfig({
       apiBase: process.env.GSCDUMP_PARTNER_API_BASE ?? (apiBase ? `${apiBase.replace(/\/+$/, '')}/api` : '/api'),
       apiKey: process.env.GSCDUMP_PARTNER_API_KEY ?? '',
       userId: process.env.GSCDUMP_PARTNER_USER_ID ?? '',
+      // `gsd_user_*` key for the multi-site dashboard. Preferred over partner
+      // key because `/api/__gsc/sites` (the site fanout) only accepts
+      // user/team/CLI/session auth.
+      userApiKey: process.env.GSCDUMP_USER_API_KEY ?? '',
     },
     public: {
       analytics: {

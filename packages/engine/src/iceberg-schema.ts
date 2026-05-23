@@ -27,19 +27,20 @@ import type { ColumnType, TableName } from '@gscdump/contracts'
 import type { SearchType } from './storage'
 import { SCHEMAS } from './schema'
 
-/** The 5 fact tables that exist as global Iceberg tables. */
+/** The 6 fact tables that exist as global Iceberg tables. */
 export type IcebergTableName = Extract<
   TableName,
-  'pages' | 'queries' | 'countries' | 'page_queries' | 'dates'
+  'pages' | 'queries' | 'countries' | 'page_queries' | 'dates' | 'search_appearance'
 >
 
-/** The 5 Iceberg table names, in canonical order. */
+/** The 6 Iceberg table names, in canonical order. */
 export const ICEBERG_TABLES: readonly IcebergTableName[] = [
   'pages',
   'queries',
   'countries',
   'page_queries',
   'dates',
+  'search_appearance',
 ] as const
 
 /**

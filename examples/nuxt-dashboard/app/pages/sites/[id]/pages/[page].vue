@@ -1,10 +1,8 @@
 <script setup lang="ts">
 // Page detail: daily series for one URL + list of queries ranking for it.
-// Data comes from POST /api/__gsc/sites/[siteId]/rows which dispatches against the
-// viewer's source (GSC API in free tier, engine in pro). No client-side
-// DuckDB boot required.
-
-import { between, clicks as clicksCol, date as dateDim, eq, gsc, page as pageDim, query as queryDim } from 'gscdump/query'
+// Data comes from the shared per-site DuckDB-WASM analyzer:
+//   - daily series from the `pages` Iceberg table filtered to `url`
+//   - top queries from the `page_queries` Iceberg table filtered to `url`
 
 definePageMeta({ key: route => `page-detail:${route.params.id}:${route.params.page}` })
 
@@ -14,51 +12,97 @@ const pagePath = computed(() => decodeURIComponent(String(route.params.page)))
 
 const { period, compareMode, stableData, range } = useGscPeriod()
 
-interface DailyRow { date: string, clicks: number, impressions: number, sum_position?: number, position?: number }
-interface QueryRowShape { query: string, clicks: number, impressions: number, sum_position?: number, position?: number }
+interface DailyRowRaw { date: string, clicks: number | bigint, impressions: number | bigint, sum_position: number | bigint }
+interface QueryRowRaw { query: string, clicks: number | bigint, impressions: number | bigint, sum_position: number | bigint }
+interface DailyRow { date: string, clicks: number, impressions: number, sum_position: number }
+interface QueryRowShape { query: string, clicks: number, impressions: number, sum_position: number }
 
-const bootError = ref<Error | null>(null)
+const attachRange = computed(() => ({ start: range.value.start, end: range.value.end }))
 
-// Daily series filtered to this single URL.
-const dailyState = computed(() => {
-  if (!pagePath.value)
-    return null
-  return gsc
-    .select(dateDim)
-    .where(eq(pageDim, pagePath.value))
-    .where(between(dateDim, range.value.start, range.value.end))
-    .getState()
-})
+const { tables, query, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
 
-// Top queries ranking for this URL.
-const topQueriesState = computed(() => {
-  if (!pagePath.value)
-    return null
-  return gsc
-    .select(queryDim)
-    .where(eq(pageDim, pagePath.value))
-    .where(between(dateDim, range.value.start, range.value.end))
-    .orderBy(clicksCol, 'desc')
-    .limit(100)
-    .getState()
-})
+const dailyRaw = ref<DailyRow[]>([])
+const queriesRaw = ref<QueryRowShape[]>([])
+const dailyLoaded = ref(false)
+const queriesLoaded = ref(false)
 
-const { rows: dailyRaw, loading: dailyLoading, error: dailyError } = useGscRowQuery<DailyRow>({
-  site: siteId,
-  state: dailyState,
-})
-const { rows: queriesRaw, loading: queriesLoading, error: queriesError } = useGscRowQuery<QueryRowShape>({
-  site: siteId,
-  state: topQueriesState,
-})
+function escapeSql(s: string): string {
+  return s.replace(/'/g, '\'\'')
+}
+
+async function refresh() {
+  if (!siteId.value || !pagePath.value)
+    return
+  const url = escapeSql(pagePath.value)
+  const r = range.value
+
+  dailyLoaded.value = false
+  query<DailyRowRaw>({
+    needs: ['pages'],
+    sql: `
+      SELECT
+        CAST(date AS VARCHAR) AS date,
+        SUM(clicks)::DOUBLE AS clicks,
+        SUM(impressions)::DOUBLE AS impressions,
+        SUM(sum_position)::DOUBLE AS sum_position
+      FROM pages
+      WHERE url = '${url}'
+        AND date >= DATE '${r.start}' AND date <= DATE '${r.end}'
+      GROUP BY date
+      ORDER BY date
+    `,
+  })
+    .then((rows) => {
+      dailyRaw.value = rows.map(row => ({
+        date: String(row.date),
+        clicks: Number(row.clicks),
+        impressions: Number(row.impressions),
+        sum_position: Number(row.sum_position),
+      }))
+    })
+    .catch(() => { dailyRaw.value = [] })
+    .finally(() => { dailyLoaded.value = true })
+
+  queriesLoaded.value = false
+  query<QueryRowRaw>({
+    needs: ['page_queries'],
+    sql: `
+      SELECT
+        query,
+        SUM(clicks)::DOUBLE AS clicks,
+        SUM(impressions)::DOUBLE AS impressions,
+        SUM(sum_position)::DOUBLE AS sum_position
+      FROM page_queries
+      WHERE url = '${url}'
+        AND date >= DATE '${r.start}' AND date <= DATE '${r.end}'
+      GROUP BY query
+      ORDER BY clicks DESC
+      LIMIT 50
+    `,
+  })
+    .then((rows) => {
+      queriesRaw.value = rows.map(row => ({
+        query: String(row.query),
+        clicks: Number(row.clicks),
+        impressions: Number(row.impressions),
+        sum_position: Number(row.sum_position),
+      }))
+    })
+    .catch(() => { queriesRaw.value = [] })
+    .finally(() => { queriesLoaded.value = true })
+}
+
+watch([siteId, pagePath, () => range.value.start, () => range.value.end], refresh, { immediate: true })
 
 const summary = computed(() => summarizeDailyRows(dailyRaw.value))
 const totals = computed(() => summary.value.totals)
 const chartData = computed(() => summary.value.chartData)
 const queries = computed(() => queriesRaw.value.map(coerceRowMetrics))
 
-const loading = computed(() => dailyLoading.value || queriesLoading.value)
-const error = computed(() => dailyError.value?.message ?? queriesError.value?.message ?? null)
+const pagesStage = computed(() => tables.value.pages.stage)
+const pageQueriesStage = computed(() => tables.value.page_queries.stage)
+const dailyReady = computed(() => pagesStage.value === 'ready' && dailyLoaded.value)
+const queriesReady = computed(() => pageQueriesStage.value === 'ready' && queriesLoaded.value)
 
 const gscLink = computed(() =>
   currentSite.value
@@ -135,18 +179,10 @@ const inspectLink = computed(() =>
     </template>
 
     <UAlert
-      v-if="bootError"
+      v-if="analyzerError"
       color="error"
       icon="i-lucide-alert-circle"
-      title="Failed to boot DuckDB-WASM"
-      :description="bootError.message"
-    />
-    <UAlert
-      v-if="error"
-      color="error"
-      variant="soft"
-      icon="i-lucide-alert-circle"
-      :title="error"
+      :title="`Analyzer error: ${analyzerError.message}`"
     />
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -165,7 +201,10 @@ const inspectLink = computed(() =>
           {{ stat.label }}
         </div>
         <div class="text-2xl font-semibold text-default tabular-nums tracking-tight mt-1.5">
-          {{ stat.value }}
+          <template v-if="dailyReady">
+            {{ stat.value }}
+          </template>
+          <span v-else class="inline-block w-20 h-7 rounded bg-muted/30 animate-pulse" />
         </div>
       </div>
     </div>
@@ -173,16 +212,21 @@ const inspectLink = computed(() =>
     <div v-if="chartData.length" class="rounded-lg border border-default bg-default p-4">
       <GscPerformanceChart :value="chartData" :height="220" />
     </div>
+    <div v-else-if="!dailyReady" class="rounded-lg border border-default bg-default p-4">
+      <div class="h-[220px] rounded bg-muted/20 animate-pulse" />
+    </div>
 
     <div>
       <h3 class="text-sm font-semibold tracking-tight text-default mb-2">
         Ranking queries
       </h3>
       <div
-        v-if="loading && !queries.length"
-        class="rounded-lg border border-default bg-default p-6 text-sm text-muted"
+        v-if="!queriesReady && !queries.length"
+        class="rounded-lg border border-default bg-default overflow-hidden"
       >
-        Loading…
+        <div class="p-3 space-y-2">
+          <div v-for="i in 6" :key="i" class="h-5 rounded bg-muted/30 animate-pulse" />
+        </div>
       </div>
       <div
         v-else-if="!queries.length"

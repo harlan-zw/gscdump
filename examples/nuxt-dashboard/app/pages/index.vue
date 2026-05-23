@@ -4,7 +4,6 @@
 // selector drives which slice of the rollup's day-array we aggregate; growth
 // is computed against the preceding equal-length window (or YoY).
 
-
 interface DailyTotal {
   // Rollup writer stamps this as Unix ms (see rollups.ts) — not an ISO date.
   date: number
@@ -54,15 +53,37 @@ const fetchRange = computed(() => {
   return { start, end: r.end }
 })
 
-// Fan-out fetch of daily_totals rollups. Progress for each site lands on
-// the shared progress map, which <GscBootProgress> renders. The composable
-// also exposes a coarse `{ completed, total }` for a count-based hint —
-// useful in free tier where each site is a live GSC API call.
-const { envelopes, progress: fanoutProgress } = useGscRollupFanout<DailyTotal[]>(
+// Fan-out via Iceberg `dates` table + browser DuckDB-WASM. Replaces the
+// legacy `useGscRollupFanout(sites, 'daily_totals')` which read a stale
+// pre-built envelope from R2; the Iceberg path queries authoritative daily
+// rows so Δ% renders dense for every site. Falls back to nulls for sites not
+// in the `ICEBERG_READS_SITES` canary, which the table renders as `–`.
+const { envelopes, progress: fanoutProgress } = useDailyTotalsFromIceberg(
   fanoutSites,
-  'daily_totals',
   { range: fetchRange },
 )
+
+// Per-site live load state — fed by `useDailyTotalsFromIceberg` via the shared
+// progress map. We read it on the page so each table row can show its own
+// stage (downloading / attaching / ready / errored) inline, not just in the
+// boot-progress bar at the top.
+const { progress: siteProgress } = useGscBootProgress()
+function siteState(siteId: string): 'idle' | 'loading' | 'ready' | 'error' | 'empty' {
+  const p = siteProgress.value[siteId]
+  if (!p || p.stage === 'idle')
+    return 'idle'
+  if (p.stage === 'error')
+    return 'error'
+  if (p.stage === 'ready')
+    return envelopes.value[siteId] ? 'ready' : 'empty'
+  return 'loading'
+}
+function siteFileProgress(siteId: string): { attached: number, total: number } | null {
+  const p = siteProgress.value[siteId]
+  if (!p || p.filesTotal === 0)
+    return null
+  return { attached: p.filesAttached, total: p.filesTotal }
+}
 
 // Snap the requested window's `end` to the site's actual most-recent data
 // point. Without this, a syncing site whose last day is earlier than
@@ -311,25 +332,59 @@ function growthFor(curr: number, prev: number | null | undefined): number | null
               <tbody class="divide-y divide-default">
                 <tr v-for="site in fanoutSites" :key="site.id" class="hover:bg-elevated/30 transition-colors">
                   <td class="px-4 py-3">
-                    <NuxtLink
-                      :to="`/sites/${encodeURIComponent(site.id)}`"
-                      class="inline-flex items-center gap-2 font-medium text-default hover:text-primary"
-                    >
-                      <GscFavicon :domain="site.hostname" :size="16" :alt="site.hostname" />
-                      <span>{{ site.hostname }}</span>
-                    </NuxtLink>
-                    <UBadge
-                      v-if="site.propertyType === 'url-prefix'"
-                      color="neutral"
-                      variant="soft"
-                      size="xs"
-                      class="ml-2 font-normal"
-                    >
-                      url-prefix
-                    </UBadge>
+                    <div class="flex items-center gap-2">
+                      <!-- Per-row state dot. Loading sites pulse; errored sites
+                           flag red; empty (no Iceberg data) shows a hollow ring;
+                           ready sites get a tiny solid green tick. -->
+                      <span
+                        v-if="siteState(site.id) === 'loading'"
+                        class="size-1.5 rounded-full bg-primary-500 animate-pulse"
+                        :title="siteFileProgress(site.id) ? `Loading ${siteFileProgress(site.id)!.attached}/${siteFileProgress(site.id)!.total} files` : 'Loading…'"
+                      />
+                      <span
+                        v-else-if="siteState(site.id) === 'error'"
+                        class="size-1.5 rounded-full bg-error-500"
+                        title="Failed to load"
+                      />
+                      <span
+                        v-else-if="siteState(site.id) === 'empty'"
+                        class="size-1.5 rounded-full border border-muted bg-transparent"
+                        title="No data in range"
+                      />
+                      <span
+                        v-else-if="siteState(site.id) === 'ready'"
+                        class="size-1.5 rounded-full bg-success-500"
+                      />
+                      <span v-else class="size-1.5 rounded-full bg-muted/40" />
+                      <NuxtLink
+                        :to="`/sites/${encodeURIComponent(site.id)}`"
+                        class="inline-flex items-center gap-2 font-medium text-default hover:text-primary"
+                      >
+                        <GscFavicon :domain="site.hostname" :size="16" :alt="site.hostname" />
+                        <span>{{ site.hostname }}</span>
+                      </NuxtLink>
+                      <UBadge
+                        v-if="site.propertyType === 'url-prefix'"
+                        color="neutral"
+                        variant="soft"
+                        size="xs"
+                        class="font-normal"
+                      >
+                        url-prefix
+                      </UBadge>
+                    </div>
                   </td>
+                  <!-- Loading sites render a thin pulsing skeleton in place of
+                       the value. As each site's query resolves, the skeleton
+                       collapses to a real number — independently per row. -->
                   <td class="px-4 py-3 text-right tabular-nums">
-                    {{ stats[site.id] ? fmtInt(stats[site.id]!.current.clicks) : '–' }}
+                    <template v-if="stats[site.id]">
+                      {{ fmtInt(stats[site.id]!.current.clicks) }}
+                    </template>
+                    <span v-else-if="siteState(site.id) === 'loading'" class="inline-block w-12 h-3 rounded bg-muted/40 animate-pulse" />
+                    <template v-else>
+                      –
+                    </template>
                   </td>
                   <td class="px-4 py-3 text-right">
                     <UBadge
@@ -343,7 +398,13 @@ function growthFor(curr: number, prev: number | null | undefined): number | null
                     </UBadge>
                   </td>
                   <td class="px-4 py-3 text-right tabular-nums">
-                    {{ stats[site.id] ? fmtInt(stats[site.id]!.current.impressions) : '–' }}
+                    <template v-if="stats[site.id]">
+                      {{ fmtInt(stats[site.id]!.current.impressions) }}
+                    </template>
+                    <span v-else-if="siteState(site.id) === 'loading'" class="inline-block w-16 h-3 rounded bg-muted/40 animate-pulse" />
+                    <template v-else>
+                      –
+                    </template>
                   </td>
                   <td class="px-4 py-3 text-right">
                     <UBadge
@@ -357,10 +418,22 @@ function growthFor(curr: number, prev: number | null | undefined): number | null
                     </UBadge>
                   </td>
                   <td class="px-4 py-3 text-right tabular-nums">
-                    {{ stats[site.id] ? fmtPct(stats[site.id]!.current.ctr) : '–' }}
+                    <template v-if="stats[site.id]">
+                      {{ fmtPct(stats[site.id]!.current.ctr) }}
+                    </template>
+                    <span v-else-if="siteState(site.id) === 'loading'" class="inline-block w-10 h-3 rounded bg-muted/40 animate-pulse" />
+                    <template v-else>
+                      –
+                    </template>
                   </td>
                   <td class="px-4 py-3 text-right tabular-nums">
-                    {{ stats[site.id] ? fmtPos(stats[site.id]!.current.position) : '–' }}
+                    <template v-if="stats[site.id]">
+                      {{ fmtPos(stats[site.id]!.current.position) }}
+                    </template>
+                    <span v-else-if="siteState(site.id) === 'loading'" class="inline-block w-8 h-3 rounded bg-muted/40 animate-pulse" />
+                    <template v-else>
+                      –
+                    </template>
                   </td>
                   <td class="px-4 py-3 text-right">
                     <ClientOnly v-if="stats[site.id]?.current.sparkline.length">
@@ -368,11 +441,12 @@ function growthFor(curr: number, prev: number | null | undefined): number | null
                         :data="stats[site.id]!.current.sparkline"
                         :width="100"
                         :height="20"
-                        color="blue"
+                        color="currentColor"
                         :stroke-width="1.2"
-                        class="inline-block align-middle"
+                        class="inline-block align-middle text-primary-500"
                       />
                     </ClientOnly>
+                    <span v-else-if="siteState(site.id) === 'loading'" class="inline-block w-[100px] h-3 rounded bg-muted/40 animate-pulse" />
                   </td>
                 </tr>
               </tbody>

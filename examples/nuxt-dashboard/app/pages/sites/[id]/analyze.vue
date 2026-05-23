@@ -39,7 +39,9 @@ const { siteId } = useGscCurrentSite()
 
 definePageMeta({ key: route => `site:${route.params.id}` })
 
-const runner = useGscAnalyzer(siteId)
+const { period, compareMode, stableData, range: dateRange } = useGscPeriod()
+
+const runner = useGscSiteAnalyzerLegacy(siteId, dateRange)
 const { query, analyze, ready: isReady, error: bootError, timings: bootTimings } = runner
 
 // Provide the runner to pipeline panels (actions, content-gap). Pipeline
@@ -48,8 +50,6 @@ const { query, analyze, ready: isReady, error: bootError, timings: bootTimings }
 provide(gscPanelRunnerKey, { runner, ready: isReady })
 const { data: dailyPayload } = useGscRollup<{ impressions: number, anonymizedImpressionsPct: number }[]>(siteId, 'daily_totals')
 const anonymizationPct = computed(() => weightedAnonPct(dailyPayload.value))
-
-const { period, compareMode, stableData, range: dateRange } = useGscPeriod()
 
 const QUERY_GRAINED_TABS = computed(() => new Set<string>([
   'queries',

@@ -87,6 +87,26 @@ export interface AttachParquetUrlTablesOptions {
   /** Abort signal passed through to URL preflights and registration. */
   signal?: AbortSignal
   /**
+   * How DuckDB reads the parquet bytes:
+   *  - `'http'` (default): register the URL as an HTTP file; DuckDB issues
+   *    its own range reads during query execution. Right for large parquet
+   *    where only some column chunks are touched per query.
+   *  - `'buffer'`: fetch the full file once into an `ArrayBuffer` and register
+   *    it via `registerFileBuffer`. DuckDB makes zero HTTP calls after
+   *    registration — every query reads from the in-memory copy. Right for
+   *    tiny files (e.g. `dates` daily-totals parquet, <50 KB per file) where
+   *    the per-file round-trip overhead dominates the actual bytes moved.
+   */
+  attachMode?: 'http' | 'buffer'
+  /**
+   * When `true` (default), skip per-file HEAD/Range preflight if the URL
+   * carries a signed `?s=<bytes>.<sig>` size hint — the size is already
+   * known and DuckDB will learn `Accept-Ranges` from its first read.
+   * Eliminates one round-trip per file on hosts that mint size hints. Set
+   * `false` to force preflight against URLs whose size you don't trust.
+   */
+  trustSizeHint?: boolean
+  /**
    * Manifest version the caller associates with this set of URLs. Returned
    * on the resulting handle so callers can compare against a fresh manifest
    * probe without re-attaching. Purely advisory — the runtime never derives
@@ -326,9 +346,14 @@ function rangeOnlyConfig(config: DuckDBConfig | undefined): DuckDBConfig {
   return {
     ...(config ?? {}),
     filesystem: {
-      ...(config?.filesystem ?? {}),
+      // Defaults: HEAD is reliable, range-only (no full-HTTP fallback). Hosts
+      // whose proxy can't serve a HEAD with `Content-Length` (e.g. Cloudflare
+      // Workers strips it from null-body responses) opt out via
+      // `reliableHeadRequests: false` + `allowFullHTTPReads: true` in their
+      // bootDuckDBWasm options.
       reliableHeadRequests: true,
       allowFullHTTPReads: false,
+      ...(config?.filesystem ?? {}),
       forceFullHTTPReads: false,
     },
   }
@@ -397,6 +422,8 @@ export async function attachParquetUrlTables(
     signal,
     version,
     onFileAttached,
+    attachMode = 'http',
+    trustSizeHint = true,
   } = options
 
   const concurrency = positiveInteger(fetchConcurrency, DEFAULT_ATTACH_FETCH_CONCURRENCY, 'fetchConcurrency')
@@ -428,10 +455,15 @@ export async function attachParquetUrlTables(
     )
   }
 
-  // Browser attach is range-first: we never pull a whole parquet into JS.
-  // Each URL is bounded with HEAD (or a 1-byte Range probe for GET-only URLs)
-  // before registration. DuckDB then reads registered HTTP files via ranges;
-  // bootDuckDBWasm() disables DuckDB's full-HTTP fallback for the same reason.
+  // Two registration paths, picked per call via `attachMode`:
+  //   - 'http' (default): DuckDB reads each file via HTTP range; we preflight
+  //     to learn size + Accept-Ranges. When the URL carries a signed size hint
+  //     (`?s=<bytes>.<sig>`) and `trustSizeHint` is on, we skip the preflight
+  //     entirely — the size is already known and the server contract
+  //     guarantees ranges.
+  //   - 'buffer': fetch the full file once and `registerFileBuffer`. DuckDB
+  //     has zero HTTP traffic after registration; right shape for tiny files
+  //     where per-file round-trip overhead dominates the byte movement.
   //
   // Per-table fetch resilience: a single 404/500 in one table's URL list
   // must not take down every other table's view. Track failures by table
@@ -441,12 +473,46 @@ export async function attachParquetUrlTables(
   const effectiveSignal = mergeAbortSignals(signal, budgetController.signal)
   let plannedBytes = 0
   const total = flat.length
-  const preflighted: Array<{ table: string, url: string, index: number, name: string }> = []
+  interface PreparedFile {
+    table: string
+    url: string
+    index: number
+    name: string
+    bytes: number
+    /** Materialised body for `'buffer'` mode; null for `'http'`. */
+    body: Uint8Array | null
+  }
+  const prepared: PreparedFile[] = []
+
   await runWithConcurrency(flat, concurrency, async ({ table, url, index }) => {
     if (tableFailures.has(table))
       return
     effectiveSignal?.throwIfAborted()
-    await preflightHttpUrl(url, fetchImpl, fetchInit, effectiveSignal).then((bytes) => {
+    try {
+      let bytes: number | null = null
+      let body: Uint8Array | null = null
+
+      if (attachMode === 'buffer') {
+        // Buffer mode: download the file, learn size from the body. No HEAD
+        // round-trip — the GET itself yields both size and bytes.
+        const res = await fetchImpl(url, fetchInitFor(fetchInit, 'GET', effectiveSignal))
+        if (!res.ok)
+          throw new Error(`GET ${url} failed: ${res.status}`)
+        const buf = new Uint8Array(await res.arrayBuffer())
+        body = buf
+        bytes = buf.byteLength
+      }
+      else if (trustSizeHint && sizeHintFromUrl(url) !== null) {
+        // HTTP mode + signed size hint: take the hint, skip the preflight.
+        // Saves one round-trip per file; DuckDB learns Accept-Ranges from
+        // its first range read.
+        bytes = sizeHintFromUrl(url)!
+      }
+      else {
+        // HTTP mode without a hint: preflight as before.
+        bytes = await preflightHttpUrl(url, fetchImpl, fetchInit, effectiveSignal)
+      }
+
       plannedBytes += bytes
       if (plannedBytes > byteBudget) {
         const err = new BrowserAttachBudgetExceededError(
@@ -456,23 +522,27 @@ export async function attachParquetUrlTables(
         throw err
       }
       effectiveSignal?.throwIfAborted()
-      preflighted.push({ table, url, index, name: attachFileName(attachId, table, index) })
-    }).catch((err) => {
+      prepared.push({ table, url, index, name: attachFileName(attachId, table, index), bytes, body })
+    }
+    catch (err) {
       if (effectiveSignal?.aborted || err instanceof BrowserAttachBudgetExceededError || isAbortError(err))
         throw err
       tableFailures.set(table, err instanceof Error ? err : new Error(String(err)))
-    })
+    }
   })
 
   const { DuckDBDataProtocol } = await import('@duckdb/duckdb-wasm')
   const attached: string[] = []
   const registeredFiles: string[] = []
   try {
-    for (const file of preflighted) {
+    for (const file of prepared) {
       if (tableFailures.has(file.table))
         continue
       effectiveSignal?.throwIfAborted()
-      await db.registerFileURL(file.name, file.url, DuckDBDataProtocol.HTTP, false)
+      if (file.body !== null)
+        await db.registerFileBuffer(file.name, file.body)
+      else
+        await db.registerFileURL(file.name, file.url, DuckDBDataProtocol.HTTP, false)
       registeredFiles.push(file.name)
       onFileAttached?.({ table: file.table, index: file.index, total })
     }
@@ -480,7 +550,7 @@ export async function attachParquetUrlTables(
     for (const table of Object.keys(counts)) {
       if (tableFailures.has(table))
         continue
-      const files = preflighted
+      const files = prepared
         .filter(file => file.table === table)
         .sort((a, b) => a.index - b.index)
       if (files.length !== counts[table])

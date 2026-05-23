@@ -1,19 +1,117 @@
 <script setup lang="ts">
-// Countries tab: per-country breakdown. Hits a server endpoint that branches
-// on tier — free tier queries GSC API live, pro tier aggregates parquet via
-// DuckDB. The page doesn't care which backend served the row; same shape.
+// Countries tab: per-country breakdown sourced from the shared per-site
+// DuckDB-WASM analyzer. The `countries` Iceberg fact table is attached
+// lazily; sibling tabs that already touched it (or had it preloaded by the
+// overview) make this render basically instant.
 
 definePageMeta({ key: route => `site-countries:${route.params.id}` })
 
-const { siteId } = useGscCurrentSite()
+interface CountryRow {
+  country: string
+  clicks: number
+  impressions: number
+  sum_position: number
+}
 
+const { siteId } = useGscCurrentSite()
 const { period, compareMode, stableData, range } = useGscPeriod()
 
-const bootError = ref<Error | null>(null)
+const attachRange = computed(() => ({
+  start: compareMode.value === 'year'
+    ? range.value.yearStart
+    : compareMode.value === 'previous'
+      ? range.value.prevStart
+      : range.value.start,
+  end: range.value.end,
+}))
 
-const windowRange = computed(() => ({ start: range.value.start, end: range.value.end }))
-const { rows, loading, error: queryError } = useGscCountries(siteId, windowRange)
-const error = computed(() => queryError.value?.message ?? null)
+const { tables, query, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
+
+const ranges = computed(() => ({
+  current: { start: range.value.start, end: range.value.end },
+  previous: compareMode.value === 'none'
+    ? null
+    : compareMode.value === 'year'
+      ? { start: range.value.yearStart, end: range.value.yearEnd }
+      : { start: range.value.prevStart, end: range.value.prevEnd },
+}))
+
+const rows = ref<CountryRow[]>([])
+const previousRows = ref<CountryRow[]>([])
+
+async function refresh() {
+  if (!siteId.value)
+    return
+  const r = ranges.value
+
+  query<CountryRow>({
+    needs: ['countries'],
+    sql: `
+      SELECT
+        country,
+        SUM(clicks)::DOUBLE AS clicks,
+        SUM(impressions)::DOUBLE AS impressions,
+        SUM(sum_position)::DOUBLE AS sum_position
+      FROM countries
+      WHERE date >= DATE '${r.current.start}' AND date <= DATE '${r.current.end}'
+      GROUP BY country
+      ORDER BY clicks DESC
+    `,
+  })
+    .then((res) => {
+      rows.value = res.map(row => ({
+        country: String(row.country),
+        clicks: Number(row.clicks) || 0,
+        impressions: Number(row.impressions) || 0,
+        sum_position: Number(row.sum_position) || 0,
+      }))
+    })
+    .catch(() => { rows.value = [] })
+
+  if (r.previous) {
+    query<CountryRow>({
+      needs: ['countries'],
+      sql: `
+        SELECT
+          country,
+          SUM(clicks)::DOUBLE AS clicks,
+          SUM(impressions)::DOUBLE AS impressions,
+          SUM(sum_position)::DOUBLE AS sum_position
+        FROM countries
+        WHERE date >= DATE '${r.previous.start}' AND date <= DATE '${r.previous.end}'
+        GROUP BY country
+      `,
+    })
+      .then((res) => {
+        previousRows.value = res.map(row => ({
+          country: String(row.country),
+          clicks: Number(row.clicks) || 0,
+          impressions: Number(row.impressions) || 0,
+          sum_position: Number(row.sum_position) || 0,
+        }))
+      })
+      .catch(() => { previousRows.value = [] })
+  }
+  else {
+    previousRows.value = []
+  }
+}
+
+watch(
+  [siteId, () => ranges.value.current.start, () => ranges.value.current.end, () => ranges.value.previous?.start, () => ranges.value.previous?.end],
+  refresh,
+  { immediate: true },
+)
+
+const countriesStage = computed(() => tables.value.countries.stage)
+const isLoading = computed(() => countriesStage.value !== 'ready' && countriesStage.value !== 'unavailable')
+
+const previousByCountry = computed(() => {
+  const map = new Map<string, CountryRow>()
+  for (const r of previousRows.value)
+    map.set(r.country, r)
+  return map
+})
 
 const totals = computed(() => {
   let clicks = 0
@@ -25,7 +123,7 @@ const totals = computed(() => {
   return { clicks, impressions }
 })
 
-const maxClicks = computed(() => rows.value.reduce((m: number, r: { clicks: number }) => r.clicks > m ? r.clicks : m, 0) || 1)
+const maxClicks = computed(() => rows.value.reduce((m, r) => r.clicks > m ? r.clicks : m, 0) || 1)
 
 function displayName(code: string): string {
   if (code.length === 3)
@@ -34,14 +132,33 @@ function displayName(code: string): string {
 }
 
 function flagEmoji(code: string): string {
-  // Many GSC exports use 3-letter codes; naive 2-letter mapping is good enough
-  // for the top countries. Fall back to a globe when we can't derive.
   if (code.length !== 2)
     return '🌐'
   const upper = code.toUpperCase()
   const codePoints = [...upper].map(c => 127397 + c.charCodeAt(0))
   return String.fromCodePoint(...codePoints)
 }
+
+function growthFor(curr: number, prev: number | null | undefined): number | null {
+  return computeGrowth(curr, prev)
+}
+
+function fmtGrowth(g: number | null, invert = false): string {
+  if (g == null)
+    return ''
+  const v = invert ? -g : g
+  const sign = v > 0 ? '+' : ''
+  return `${sign}${(v * 100).toFixed(1)}%`
+}
+
+function growthColor(g: number | null, invert = false): 'success' | 'error' | 'neutral' {
+  if (g == null || Math.abs(g) < 0.005)
+    return 'neutral'
+  const v = invert ? -g : g
+  return v > 0 ? 'success' : 'error'
+}
+
+const hasCompare = computed(() => ranges.value.previous != null)
 </script>
 
 <template>
@@ -66,26 +183,14 @@ function flagEmoji(code: string): string {
     <SiteTabs :site-id="siteId" />
 
     <UAlert
-      v-if="bootError"
+      v-if="analyzerError"
       color="error"
       icon="i-lucide-alert-circle"
-      title="Failed to boot DuckDB-WASM"
-      :description="bootError.message"
+      :title="`Analyzer error: ${analyzerError.message}`"
     />
-    <UAlert
-      v-if="error"
-      color="error"
-      variant="soft"
-      icon="i-lucide-alert-circle"
-      :title="error"
-    />
-
-    <div v-if="loading && !rows.length" class="text-sm text-muted">
-      Loading…
-    </div>
 
     <div
-      v-else-if="!rows.length"
+      v-if="!isLoading && !rows.length"
       class="rounded-lg border border-dashed border-default p-8 text-center text-sm text-muted"
     >
       No country data in the selected period.
@@ -104,8 +209,14 @@ function flagEmoji(code: string): string {
             <th class="px-4 py-2.5 text-right w-[110px]">
               Clicks
             </th>
+            <th v-if="hasCompare" class="px-4 py-2.5 text-right w-[80px]">
+              Δ Clicks
+            </th>
             <th class="px-4 py-2.5 text-right w-[130px]">
               Impressions
+            </th>
+            <th v-if="hasCompare" class="px-4 py-2.5 text-right w-[80px]">
+              Δ Impr
             </th>
             <th class="px-4 py-2.5 text-right w-[90px]">
               CTR
@@ -116,8 +227,37 @@ function flagEmoji(code: string): string {
           </tr>
         </thead>
         <tbody class="divide-y divide-default">
+          <template v-if="isLoading && !rows.length">
+            <tr v-for="i in 8" :key="`skel-${i}`">
+              <td class="px-4 py-2.5">
+                <div class="h-4 rounded bg-muted/30 animate-pulse w-48" />
+              </td>
+              <td class="px-4 py-2.5">
+                <div class="h-1.5 rounded-full bg-muted/30 animate-pulse" />
+              </td>
+              <td class="px-4 py-2.5">
+                <div class="h-4 rounded bg-muted/30 animate-pulse ml-auto w-16" />
+              </td>
+              <td v-if="hasCompare" class="px-4 py-2.5">
+                <div class="h-4 rounded bg-muted/30 animate-pulse ml-auto w-12" />
+              </td>
+              <td class="px-4 py-2.5">
+                <div class="h-4 rounded bg-muted/30 animate-pulse ml-auto w-20" />
+              </td>
+              <td v-if="hasCompare" class="px-4 py-2.5">
+                <div class="h-4 rounded bg-muted/30 animate-pulse ml-auto w-12" />
+              </td>
+              <td class="px-4 py-2.5">
+                <div class="h-4 rounded bg-muted/30 animate-pulse ml-auto w-10" />
+              </td>
+              <td class="px-4 py-2.5">
+                <div class="h-4 rounded bg-muted/30 animate-pulse ml-auto w-10" />
+              </td>
+            </tr>
+          </template>
           <tr
             v-for="(r, i) in rows"
+            v-else
             :key="r.country"
             class="hover:bg-elevated/30 transition-colors"
           >
@@ -147,8 +287,32 @@ function flagEmoji(code: string): string {
             <td class="px-4 py-2.5 text-right tabular-nums">
               {{ r.clicks.toLocaleString() }}
             </td>
+            <td v-if="hasCompare" class="px-4 py-2.5 text-right">
+              <UBadge
+                v-if="growthFor(r.clicks, previousByCountry.get(r.country)?.clicks) != null"
+                :color="growthColor(growthFor(r.clicks, previousByCountry.get(r.country)?.clicks))"
+                variant="soft"
+                size="xs"
+                class="tabular-nums"
+              >
+                {{ fmtGrowth(growthFor(r.clicks, previousByCountry.get(r.country)?.clicks)) }}
+              </UBadge>
+              <span v-else class="text-[11px] text-dimmed">–</span>
+            </td>
             <td class="px-4 py-2.5 text-right tabular-nums text-muted">
               {{ r.impressions.toLocaleString() }}
+            </td>
+            <td v-if="hasCompare" class="px-4 py-2.5 text-right">
+              <UBadge
+                v-if="growthFor(r.impressions, previousByCountry.get(r.country)?.impressions) != null"
+                :color="growthColor(growthFor(r.impressions, previousByCountry.get(r.country)?.impressions))"
+                variant="soft"
+                size="xs"
+                class="tabular-nums"
+              >
+                {{ fmtGrowth(growthFor(r.impressions, previousByCountry.get(r.country)?.impressions)) }}
+              </UBadge>
+              <span v-else class="text-[11px] text-dimmed">–</span>
             </td>
             <td class="px-4 py-2.5 text-right tabular-nums text-muted">
               {{ r.impressions > 0 ? ((r.clicks / r.impressions) * 100).toFixed(1) : '0' }}%

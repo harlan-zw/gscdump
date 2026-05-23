@@ -16,7 +16,7 @@ export interface GscAnalyzerBatchEntry<TResult> {
 }
 
 export interface GscAnalyzerBatchRunner {
-  analyze: (params: { type: string, dateStart?: string, dateEnd?: string }) => Promise<unknown>
+  analyze: (params: { type: string, startDate?: string, endDate?: string }) => Promise<unknown>
 }
 
 export interface UseGscAnalyzerBatchOptions {
@@ -72,7 +72,7 @@ export function useGscAnalyzerBatch<TResult = unknown>(
         return
       states.value = { ...states.value, [id]: { status: 'running', result: null, error: null } }
       try {
-        const result = await runner.analyze({ type: id, dateStart: range.start, dateEnd: range.end })
+        const result = await runner.analyze({ type: id, startDate: range.start, endDate: range.end })
         if (token !== myToken)
           return
         states.value = { ...states.value, [id]: { status: 'done', result: result as TResult, error: null } }

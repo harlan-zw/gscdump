@@ -33,7 +33,7 @@ export interface RunGscSyncSliceOptions {
   client: GoogleSearchConsoleClient
   siteUrl: string
   /** One of the engine sync-fan tables. Drives the dimension list. */
-  table: 'pages' | 'queries' | 'countries' | 'dates' | 'page_queries' | 'hourly_pages'
+  table: 'pages' | 'queries' | 'countries' | 'dates' | 'page_queries' | 'search_appearance' | 'hourly_pages'
   startDate: string
   endDate: string
   domainFilter?: SyncSliceDomainFilter | null
@@ -95,6 +95,7 @@ const DIMENSIONS_BY_TABLE = {
   countries: ['country', 'date'],
   dates: ['device', 'date'],
   page_queries: ['page', 'query', 'date'],
+  search_appearance: ['searchAppearance', 'date'],
   hourly_pages: ['hour', 'page'],
 } as const
 
