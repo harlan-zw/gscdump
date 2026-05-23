@@ -41,13 +41,12 @@ definePageMeta({ key: route => `site:${route.params.id}` })
 
 const { period, compareMode, stableData, range: dateRange } = useGscPeriod()
 
-const runner = useGscSiteAnalyzerLegacy(siteId, dateRange)
-const { query, analyze, ready: isReady, error: bootError, timings: bootTimings } = runner
+const { runQuery, analyze, ready: isReady, error: bootError } = useGscSiteAnalyzer(siteId, dateRange)
 
 // Provide the runner to pipeline panels (actions, content-gap). Pipeline
 // composables (`useActionPriority`, `useContentGap`) hold their own state
 // via `useState`, so panels can call them directly inside their setup().
-provide(gscPanelRunnerKey, { runner, ready: isReady })
+provide(gscPanelRunnerKey, { runner: { query: runQuery, analyze }, ready: isReady })
 const { data: dailyPayload } = useGscRollup<{ impressions: number, anonymizedImpressionsPct: number }[]>(siteId, 'daily_totals')
 const anonymizationPct = computed(() => weightedAnonPct(dailyPayload.value))
 
@@ -76,7 +75,7 @@ const rawReady = computed(() => isReady.value && activeTab.value.kind === 'raw')
 const raw = useGscParquetTable({
   table: rawTableName,
   dim: rawDim,
-  query,
+  query: runQuery,
   dateRange,
   q: search,
   sort,
@@ -199,13 +198,7 @@ function fmtCell(v: unknown): string {
             </UBadge>
             <TimingPanel
               v-else
-              :timings="{
-                bootMs: bootTimings?.bootMs,
-                manifestMs: bootTimings?.manifestMs,
-                attachMs: bootTimings?.attachMs,
-                rollupMs: undefined,
-                queryMs: queryMs ?? undefined,
-              }"
+              :timings="{ queryMs: queryMs ?? undefined }"
               source="browser"
             />
           </div>

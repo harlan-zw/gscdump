@@ -6,11 +6,18 @@
 // `/analyze` provides these once; panels inject. Type-only — runtime values
 // are the InjectionKey Symbols themselves.
 
+import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
 import type { InjectionKey } from '@vue/runtime-core'
-import type { GscAnalyzerInstance } from './useGscAnalyzer'
+
+export interface GscPanelRunner {
+  /** Positional-form SQL runner — `{ rows, queryMs }`. */
+  query: (sql: string, params?: readonly unknown[]) => Promise<{ rows: Record<string, unknown>[], queryMs: number }>
+  /** Registry-driven analyzer dispatch over the same per-site DuckDB-WASM runtime. */
+  analyze: (params: AnalysisParams, opts?: { signal?: AbortSignal }) => Promise<AnalysisResult & { queryMs: number }>
+}
 
 export interface GscPanelRunnerContext {
-  runner: GscAnalyzerInstance
+  runner: GscPanelRunner
   ready: Ref<boolean>
 }
 

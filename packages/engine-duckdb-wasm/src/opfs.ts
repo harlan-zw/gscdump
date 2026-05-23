@@ -12,8 +12,11 @@
  * - ATTACH-ONCE — files are downloaded + registered once per `(site, table)`.
  *   Filter / date-range changes within the attached span re-query, never
  *   re-attach.
- * - CONTENT-HASH VERIFIED — a cached OPFS file is only trusted when its
- *   SHA-256 matches the Iceberg data-file digest; a mismatch re-downloads.
+ * - CONTENT-ADDRESSED — the `contentHash` from the contract is encoded into
+ *   the OPFS filename. Same hash → same filename → existence is the cache
+ *   hit. Different hash → new filename → fresh download. No re-hashing on
+ *   the cache-hit path. Stale entries (same `(table,index)` but a different
+ *   hash) are swept at attach time.
  * - QUOTA-SAFE — `QuotaExceededError` degrades (the caller routes that table
  *   server-side); it never crashes the page.
  * - `navigator.storage.persist()` is requested up front so the browser is less
@@ -32,9 +35,11 @@ export interface OpfsParquetFile {
   /** Expected byte size — drives progress + a cheap pre-verify shortcut. */
   bytes: number
   /**
-   * Lowercase hex SHA-256 of the file's bytes (the Iceberg data-file digest).
-   * The OPFS-cached copy is verified against this before it is trusted.
-   * When omitted, only the byte size is checked (degraded trust).
+   * Opaque content-stable identifier for this file (e.g. the Iceberg data-
+   * file object key). Encoded into the OPFS filename so the same hash is the
+   * same cache entry. NOT required to be a SHA-256. When omitted, the cache
+   * key falls back to `(table, index)` and only the byte size is verified
+   * (degraded — stale entries can survive a content change).
    */
   contentHash?: string
   /** Row count — diagnostics only. */
@@ -117,6 +122,28 @@ const DEFAULT_CONCURRENCY = 2
 /** OPFS file-name prefix so our cache entries are namespaced + reapable. */
 const OPFS_PREFIX = 'gscdump-snapshot__'
 
+/**
+ * Per-DB set of OPFS file names already registered via `registerFileHandle`.
+ * BROWSER_FSACCESS opens a sync access handle the first time DuckDB reads
+ * the file — OPFS forbids a second sync handle on the same backing entry,
+ * so re-registering the same name from a different consumer (e.g. the home
+ * fanout AND the per-site analyzer sharing one DB instance) breaks reads.
+ * Dedup at the registration boundary so each `(db, opfsName)` only registers
+ * once for the lifetime of the DB.
+ */
+const dbFileRegistrations = new WeakMap<AsyncDuckDB, Set<string>>()
+function isAlreadyRegistered(db: AsyncDuckDB, name: string): boolean {
+  return dbFileRegistrations.get(db)?.has(name) === true
+}
+function markRegistered(db: AsyncDuckDB, name: string): void {
+  let set = dbFileRegistrations.get(db)
+  if (!set) {
+    set = new Set()
+    dbFileRegistrations.set(db, set)
+  }
+  set.add(name)
+}
+
 function isQuotaError(err: unknown): boolean {
   if (typeof err !== 'object' || err === null)
     return false
@@ -132,9 +159,25 @@ function isAbortError(err: unknown): boolean {
     && (err as { name?: string }).name === 'AbortError'
 }
 
-/** Stable, collision-free OPFS file name for a `(table, index)` pair. */
-function opfsFileName(table: string, index: number): string {
-  return `${OPFS_PREFIX}${table}_${index}.parquet`
+/**
+ * OPFS file name for a `(table, index, contentHash?)` triple. When a content
+ * hash is supplied, it's encoded as an 8-byte slug suffix so the filename
+ * itself is the cache address: same hash → same filename → trivial cache
+ * hit. The `(table, index)` prefix lets us sweep stale entries cheaply.
+ */
+function opfsFileName(table: string, index: number, hashSlug?: string): string {
+  const base = `${OPFS_PREFIX}${table}_${index}`
+  return hashSlug ? `${base}_${hashSlug}.parquet` : `${base}.parquet`
+}
+
+/**
+ * Sweep prefix matching every cache entry for a `(table, index)` slot —
+ * both legacy `<base>.parquet` and hash-suffixed `<base>_<slug>.parquet`
+ * forms. The trailing-character check at the call site enforces the
+ * delimiter (`.` or `_`) so `pages_0` never sweeps `pages_01`.
+ */
+function opfsFileNamePrefix(table: string, index: number): string {
+  return `${OPFS_PREFIX}${table}_${index}`
 }
 
 /**
@@ -161,11 +204,21 @@ export async function estimateOpfsStorage(): Promise<{ usageBytes?: number, quot
   return est ? { usageBytes: est.usage, quotaBytes: est.quota } : {}
 }
 
-async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(digest))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
+/**
+ * Stable, filesystem-safe slug derived from a `contentHash`. We keep it short
+ * (16 hex chars of SHA-256) so OPFS filenames stay readable, but with enough
+ * entropy that collisions across distinct payloads are vanishingly unlikely.
+ */
+async function contentHashSlug(contentHash: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(contentHash),
+  )
+  const bytes = new Uint8Array(digest)
+  let hex = ''
+  for (let i = 0; i < 8; i++)
+    hex += bytes[i]!.toString(16).padStart(2, '0')
+  return hex
 }
 
 async function getOpfsRoot(): Promise<FileSystemDirectoryHandle> {
@@ -176,13 +229,16 @@ async function getOpfsRoot(): Promise<FileSystemDirectoryHandle> {
 }
 
 /**
- * Return a verified OPFS file handle for `file`, downloading it if absent or
- * corrupt. Verification: byte size must match, and when `contentHash` is set
- * the SHA-256 of the cached bytes must match it. A failed check re-downloads.
+ * Return an OPFS file handle for `file`, downloading it if absent. The
+ * filename encodes the `contentHash` (when supplied), so existence + size
+ * match is sufficient verification — no SHA recomputation on the hot path.
+ * Stale entries for the same `(table, index)` but a different content hash
+ * are swept before download.
  */
 async function materialiseFile(
   root: FileSystemDirectoryHandle,
   name: string,
+  staleSweepPrefix: string,
   file: OpfsParquetFile,
   fetchImpl: typeof fetch,
   fetchInit: RequestInit | undefined,
@@ -195,19 +251,27 @@ async function materialiseFile(
   try {
     handle = await root.getFileHandle(name)
     const cached = await handle.getFile()
-    if (cached.size === file.bytes) {
-      if (!file.contentHash) {
-        // No digest to verify against — trust the size match (degraded).
-        return { handle, outcome: 'cache-hit' }
-      }
-      const cachedHash = await sha256Hex(await cached.arrayBuffer())
-      if (cachedHash === file.contentHash.toLowerCase())
-        return { handle, outcome: 'cache-hit' }
-      // Hash mismatch — corrupt / stale. Fall through to re-download.
-    }
+    if (cached.size === file.bytes)
+      return { handle, outcome: 'cache-hit' }
+    // Size mismatch — partial / corrupt write. Re-download.
   }
   catch {
     // Not cached yet — fall through to download.
+  }
+
+  // ---- sweep stale entries -----------------------------------------------
+  // Same `(table, index)` with a different content hash → orphaned cache
+  // entry. Remove it before writing the new one so OPFS doesn't accumulate.
+  const dir = root as FileSystemDirectoryHandle & { keys?: () => AsyncIterableIterator<string> }
+  if (dir.keys) {
+    for await (const existing of dir.keys()) {
+      if (existing === name || !existing.startsWith(staleSweepPrefix) || !existing.endsWith('.parquet'))
+        continue
+      // Enforce a slot boundary so `pages_0` never sweeps `pages_01_*.parquet`.
+      const next = existing.charAt(staleSweepPrefix.length)
+      if (next === '.' || next === '_')
+        await root.removeEntry(existing).catch(() => {})
+    }
   }
 
   // ---- download -----------------------------------------------------------
@@ -216,15 +280,6 @@ async function materialiseFile(
   if (!resp.ok)
     throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} failed: ${resp.status}`)
   const buf = await resp.arrayBuffer()
-  if (file.contentHash) {
-    const hash = await sha256Hex(buf)
-    if (hash !== file.contentHash.toLowerCase()) {
-      throw new Error(
-        `[engine-duckdb-wasm/opfs] content-hash mismatch for ${file.url}: `
-        + `expected ${file.contentHash}, got ${hash}`,
-      )
-    }
-  }
 
   // ---- write to OPFS ------------------------------------------------------
   // A `QuotaExceededError` can surface from createWritable / write / close.
@@ -327,10 +382,12 @@ export async function attachOpfsParquetTables(
     if (degraded.has(item.table))
       return
     signal?.throwIfAborted()
-    const name = opfsFileName(item.table, item.fileIndex)
+    const hashSlug = item.file.contentHash ? await contentHashSlug(item.file.contentHash) : undefined
+    const name = opfsFileName(item.table, item.fileIndex, hashSlug)
+    const sweepPrefix = opfsFileNamePrefix(item.table, item.fileIndex)
     let result: { handle: FileSystemFileHandle, outcome: 'cache-hit' | 'downloaded' }
     try {
-      result = await materialiseFile(root, name, item.file, fetchImpl, fetchInit, signal)
+      result = await materialiseFile(root, name, sweepPrefix, item.file, fetchImpl, fetchInit, signal)
     }
     catch (err) {
       if (isAbortError(err))
@@ -343,8 +400,13 @@ export async function attachOpfsParquetTables(
       throw err
     }
     // Register the OPFS handle with DuckDB. `BROWSER_FSACCESS` reads the file
-    // directly from OPFS — no copy into WASM linear memory.
-    await db.registerFileHandle(name, result.handle, DuckDBDataProtocol.BROWSER_FSACCESS, true)
+    // directly from OPFS — no copy into WASM linear memory. Skip if another
+    // consumer already registered this name on the same DB (sharing the boot
+    // means home fanout + analyzer can land on the same OPFS file).
+    if (!isAlreadyRegistered(db, name)) {
+      await db.registerFileHandle(name, result.handle, DuckDBDataProtocol.BROWSER_FSACCESS, true)
+      markRegistered(db, name)
+    }
     const list = tableFiles.get(item.table) ?? []
     list.push({ name, handle: result.handle })
     tableFiles.set(item.table, list)
@@ -406,12 +468,13 @@ async function detachOpfs(
   conn: AsyncDuckDBConnection,
   schema: string,
   tables: readonly string[],
-  files: readonly string[],
+  _files: readonly string[],
 ): Promise<void> {
   for (const table of tables)
     await conn.query(`DROP VIEW IF EXISTS ${schema}.${table}`).catch(() => {})
-  if (files.length > 0)
-    await db.dropFiles([...files]).catch(() => {})
+  // Intentionally NOT dropping the OPFS file handles here: when consumers
+  // share a DB instance (via `sharedGscDuckDBWasm`), another consumer may
+  // still hold a view over the same file. Files live for the DB's lifetime.
 }
 
 /**

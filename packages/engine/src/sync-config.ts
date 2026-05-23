@@ -9,10 +9,14 @@ import type { SearchType } from './storage'
 // intentionally absent — it's searchType-orthogonal and lives in its own
 // pipeline. Non-Discover types mirror Discover's shape until verified
 // against the GSC Search Analytics docs.
-export type SyncTableName = Extract<TableName, 'pages' | 'queries' | 'countries' | 'page_queries' | 'dates' | 'search_appearance'>
+// `search_appearance` is an Iceberg table but is NOT included in the daily
+// `sync/table` fan-out: GSC rejects `dimensions: ['searchAppearance', 'date']`
+// (the dimension can only be grouped alone, no second dim). It needs a
+// dedicated per-day ingest job; until that lands the table stays empty.
+export type SyncTableName = Extract<TableName, 'pages' | 'queries' | 'countries' | 'page_queries' | 'dates'>
 
 export const TABLES_BY_SEARCH_TYPE: Record<SearchType, readonly SyncTableName[]> = {
-  web: ['pages', 'queries', 'countries', 'page_queries', 'dates', 'search_appearance'],
+  web: ['pages', 'queries', 'countries', 'page_queries', 'dates'],
   // Discover has no `query` dimension — drop query-bearing tables.
   discover: ['pages', 'countries', 'dates'],
   news: ['pages', 'countries', 'dates'],

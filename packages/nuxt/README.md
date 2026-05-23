@@ -86,31 +86,28 @@ the data — e.g. nuxtseo.com pro consuming gscdump.com. Two pieces:
    preflights can include this header, while DuckDB-WASM range reads are
    authorized by the token embedded in each URL.
 
-The `setupGscFetchAuth` helper collapses the boilerplate:
+Wire it from a `'pre'`-enforced client plugin so downstream layer plugins see
+the auth on first read. The layer's `setGscAuth` accepts a value, a `Ref`,
+or a getter — use a getter when credentials may refresh during the session:
 
 ```ts
 // plugins/00.gscdump-auth.client.ts
-export default setupGscFetchAuth({
-  credentialsEndpoint: '/api/me/gscdump-credentials',
-  // Optional: preload host-specific state. Runs inside runWithContext so
-  // composables work. Useful for useState-backed flags read by the layer's
-  // composables at construction time.
-  async onReady() {
-    const flag = useState<boolean | null>('app:browser-analyzer-enabled', () => null)
-    if (flag.value !== null)
-      return
-    const settings = await useGscFetch()<{ browserAnalyzerEnabled: boolean }>('/api/user/settings').catch(() => null)
-    flag.value = !!settings?.browserAnalyzerEnabled
+export default defineNuxtPlugin({
+  name: 'gscdump-auth',
+  enforce: 'pre',
+  async setup() {
+    const creds = ref<{ apiKey: string, browserAnalyzerEnabled?: boolean } | null>(null)
+    creds.value = await $fetch('/api/me/gscdump-credentials').catch(() => null)
+    setGscAuth(() => ({
+      apiKey: creds.value?.apiKey ?? null,
+      browserAnalyzerEnabled: !!creds.value?.browserAnalyzerEnabled,
+    }))
   },
 })
 ```
 
-The helper is `enforce: 'pre'` and dedupes via an inflight promise; Nuxt
-blocks subsequent plugins until headers land, removing the auth-header race
-where a `useGscQuery` mounts before credentials resolve.
-
-`credentialsEndpoint` returns `{ apiKey: string, ... }` by default. Override
-the field name with `tokenField` and the header name with `headerName`.
+`useGscQuery` mounts that race the credential fetch resolve once the
+`'pre'` plugin's `await` settles — Nuxt blocks subsequent plugins on it.
 
 Onboarding and lifecycle state stay outside this layer. A consumer app should
 use `@gscdump/sdk` from its host backend to register users/sites, read

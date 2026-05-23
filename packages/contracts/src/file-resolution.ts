@@ -55,8 +55,14 @@ export interface ResolvedParquetFile {
   /** Byte size — drives the browser-eligibility sum and OPFS quota planning. */
   bytes: number
   /**
-   * Content hash of the file (Iceberg data-file digest). The browser
-   * verifies the OPFS-cached copy against this before attaching.
+   * Opaque content-stable identifier for this parquet file. Two requests for
+   * the same bytes MUST return the same `contentHash`; any change in bytes
+   * MUST yield a different one. The OPFS cache uses this as the file's
+   * address (encoded into the cache filename) — it is NOT required to be a
+   * SHA-256.
+   *
+   * In practice the server returns the Iceberg `data_file.file_path` object
+   * key, which is UUID-derived and content-addressed by convention.
    */
   contentHash: string
   /** Row count, for eligibility accounting + diagnostics. */

@@ -10,7 +10,7 @@ const { siteId } = useGscCurrentSite()
 
 const { period, compareMode, stableData, range } = useGscPeriod()
 
-const { analyze, ready: isReady, error: bootError } = useGscSiteAnalyzerLegacy(siteId, range)
+const { analyze, ready: isReady, error: bootError } = useGscSiteAnalyzer(siteId, range)
 
 // Which analyzer ids the server-resolved source can actually run. Cards
 // outside this set render as locked instead of firing 402 for every load.

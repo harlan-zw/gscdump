@@ -19,11 +19,16 @@
 //   page_queries    — url, query, query_canonical, date, …metrics
 
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm'
+import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
 import type { FileResolutionResponse } from '@gscdump/contracts'
 import type { OpfsAttachedHandle } from '@gscdump/engine-duckdb-wasm'
+import { defaultAnalyzerRegistry } from '@gscdump/analysis'
+import { runAnalyzerFromSource } from '@gscdump/engine/analyzer'
+import { createAttachedTableSource } from '@gscdump/engine/source'
 import { useGscFetch } from '#imports'
+import { attachParquetWithFallback } from '../utils/duckdb-wasm'
 
-export type GscFactTable = 'pages' | 'queries' | 'countries' | 'dates' | 'page_queries'
+export type GscFactTable = 'pages' | 'queries' | 'countries' | 'dates' | 'page_queries' | 'search_appearance'
 
 export type GscTableStage = 'idle' | 'resolving' | 'downloading' | 'attaching' | 'ready' | 'error' | 'unavailable'
 
@@ -48,6 +53,19 @@ export interface UseGscSiteAnalyzerReturn {
    * triggering on-demand attach if they haven't been started yet.
    */
   query: <T = Record<string, unknown>>(opts: { sql: string, needs: readonly GscFactTable[], params?: readonly unknown[] }) => Promise<T[]>
+  /**
+   * Positional-form `query` returning `{ rows, queryMs }`. Convenience for
+   * callers that want raw SQL access without naming `needs` themselves; the
+   * required tables are inferred from `FROM`/`JOIN` references.
+   */
+  runQuery: <T = Record<string, unknown>>(sql: string, params?: readonly unknown[]) => Promise<{ rows: T[], queryMs: number }>
+  /**
+   * Dispatch an analyzer from `defaultAnalyzerRegistry` against the attached
+   * tables. Builds an `attached-table` SQL source that proxies back through
+   * `query()`, so the per-site DuckDB-WASM boot and the on-demand attach
+   * lifecycle are reused.
+   */
+  analyze: (params: AnalysisParams, opts?: { signal?: AbortSignal }) => Promise<AnalysisResult & { queryMs: number }>
 }
 
 interface BootedAnalyzer {
@@ -67,7 +85,17 @@ interface BootedAnalyzer {
   dispose: () => Promise<void>
 }
 
-const ALL_TABLES: readonly GscFactTable[] = ['pages', 'queries', 'countries', 'dates', 'page_queries'] as const
+const ALL_TABLES: readonly GscFactTable[] = ['pages', 'queries', 'countries', 'dates', 'page_queries', 'search_appearance'] as const
+
+const FACT_TABLE_NAMES = ALL_TABLES.join('|')
+const TABLE_RE = new RegExp(`\\b(?:FROM|JOIN)\\s+(?:main\\.)?(${FACT_TABLE_NAMES})\\b`, 'gi')
+
+function tablesFromSql(sql: string): readonly GscFactTable[] {
+  const out = new Set<GscFactTable>()
+  for (const m of sql.matchAll(TABLE_RE))
+    out.add(m[1]!.toLowerCase() as GscFactTable)
+  return out.size > 0 ? Array.from(out) : ALL_TABLES
+}
 
 function sqlIdent(s: string): string {
   return s.replace(/\W/g, '_')
@@ -198,11 +226,41 @@ export function useGscSiteAnalyzer(
     })
   }
 
+  async function runQuery<T = Record<string, unknown>>(sql: string, params?: readonly unknown[]): Promise<{ rows: T[], queryMs: number }> {
+    const t0 = performance.now()
+    const rows = await query<T>({ sql, needs: tablesFromSql(sql), params })
+    return { rows, queryMs: performance.now() - t0 }
+  }
+
+  async function analyze(params: AnalysisParams, opts?: { signal?: AbortSignal }): Promise<AnalysisResult & { queryMs: number }> {
+    const t0 = performance.now()
+    const source = createAttachedTableSource(
+      {
+        query: async (sql, bindParams) => {
+          return query<Record<string, unknown>>({ sql, needs: tablesFromSql(sql), params: bindParams })
+        },
+      },
+      {
+        schema: 'main',
+        signal: opts?.signal,
+        attachedTables: ALL_TABLES as readonly string[],
+      },
+    )
+    const result = await runAnalyzerFromSource(source, params, defaultAnalyzerRegistry)
+    return {
+      results: result.results as AnalysisResult['results'],
+      meta: result.meta as AnalysisResult['meta'],
+      queryMs: performance.now() - t0,
+    }
+  }
+
   return {
     tables: tables as Readonly<Ref<Record<GscFactTable, GscTableStatus>>>,
     ready: ready as Readonly<Ref<boolean>>,
     error: error as Readonly<Ref<Error | null>>,
     query,
+    runQuery,
+    analyze,
   }
 }
 
@@ -212,6 +270,7 @@ interface AnalyzerArgs {
   siteId: string
   searchType: string
   range: { start: string, end: string }
+  useOpfsCache: boolean
 }
 
 function createAnalyzer(args: AnalyzerArgs): BootedAnalyzer {
@@ -219,6 +278,7 @@ function createAnalyzer(args: AnalyzerArgs): BootedAnalyzer {
   const ready = ref(false)
   const error = ref<Error | null>(null)
   const tablePromises = new Map<GscFactTable, Promise<void>>()
+  const opfsHandles = new Map<GscFactTable, OpfsAttachedHandle>()
 
   // Pin the configured fetcher + analytics config at construction — these
   // need a NuxtApp context, which is available here (the composable's
@@ -250,20 +310,10 @@ function createAnalyzer(args: AnalyzerArgs): BootedAnalyzer {
   // Boot DuckDB-WASM up front — the resolve and the WASM bundle download in
   // parallel, so by the time a query asks for a table, the DB is ready.
   const bootPromise: Promise<{ db: AsyncDuckDB, conn: AsyncDuckDBConnection }> = (async () => {
-    const { bootDuckDBWasm } = await import('@gscdump/engine-duckdb-wasm')
+    // Shared boot: navigating home → site detail (or between sites) reuses
+    // the same DuckDB-WASM instance instead of paying ~800ms cold-boot again.
     const bundleBase = (analyticsConfig as { duckdbBundleBase?: string }).duckdbBundleBase
-    const boot = await bootDuckDBWasm({
-      ...(bundleBase
-        ? {
-            bundles: {
-              mvp: { mainModule: `${bundleBase}/duckdb-mvp.wasm`, mainWorker: `${bundleBase}/duckdb-browser-mvp.worker.js` },
-              eh: { mainModule: `${bundleBase}/duckdb-eh.wasm`, mainWorker: `${bundleBase}/duckdb-browser-eh.worker.js` },
-            },
-          }
-        : {}),
-      // Same Workers-strips-Content-Length workaround as the home-page composable.
-      config: { filesystem: { reliableHeadRequests: false, allowFullHTTPReads: true } },
-    })
+    const boot = await sharedGscDuckDBWasm(bundleBase)
     ready.value = true
     return boot
   })()
@@ -318,48 +368,55 @@ function createAnalyzer(args: AnalyzerArgs): BootedAnalyzer {
       return
     }
     const tableEntry = full.tables.find(t => t.table === table)
-    const urls = tableEntry?.mode === 'browser' ? tableEntry.files.map(f => f.url) : []
-    if (urls.length === 0) {
+    const browserFiles = tableEntry?.mode === 'browser' ? tableEntry.files : []
+    if (browserFiles.length === 0) {
       patchSelf(table, { stage: 'unavailable', endedAt: Date.now() })
       patchLayer(table, 'unavailable', { endedAt: Date.now() })
       return
     }
 
-    patchSelf(table, { stage: 'downloading', filesTotal: urls.length })
-    patchLayer(table, 'downloading', { filesTotal: urls.length })
-
-    // Parallel fetches; tick on each completion so progress bars climb.
-    let filesAttached = 0
-    const buffers = await Promise.all(urls.map(async (url) => {
-      const r = await fetch(url, { credentials: 'omit' })
-      if (!r.ok)
-        throw new Error(`GET ${url} failed: ${r.status}`)
-      const buf = new Uint8Array(await r.arrayBuffer())
-      filesAttached++
-      patchSelf(table, { filesAttached })
-      patchLayer(table, 'downloading', { filesAttached })
-      return buf
-    })).catch((err) => {
-      patchSelf(table, { stage: 'error', error: err instanceof Error ? err.message : String(err), endedAt: Date.now() })
-      patchLayer(table, 'error', { error: err instanceof Error ? err.message : String(err), endedAt: Date.now() })
-      throw err
-    })
-
-    patchSelf(table, { stage: 'attaching' })
-    patchLayer(table, 'attaching')
+    patchSelf(table, { stage: 'downloading', filesTotal: browserFiles.length })
+    patchLayer(table, 'downloading', { filesTotal: browserFiles.length })
 
     const sid = sqlIdent(args.siteId)
     const tableIdent = sqlIdent(table)
-    const fileNames = buffers.map((_, i) => `${tableIdent}_${sid}_${i}.parquet`)
-    await withDb(async (conn) => {
-      const { db } = await bootPromise
-      for (let i = 0; i < buffers.length; i++)
-        await db.registerFileBuffer(fileNames[i]!, buffers[i]!)
-      const fileList = fileNames.map(n => `'${n.replace(/'/g, '\'\'')}'`).join(',')
-      // Cast `date` to DATE at scan-time to canonicalise the legacy-VARCHAR /
-      // new-DATE encodings (same as engine-duckdb-wasm's read_parquet view).
-      await conn.query(`CREATE OR REPLACE VIEW ${tableIdent} AS SELECT * REPLACE (CAST(date AS DATE) AS date) FROM read_parquet([${fileList}], union_by_name = true)`)
+    // Per-(site,table) view name keeps OPFS file names unique across sites
+    // sharing this DuckDB instance.
+    const viewName = `${tableIdent}_${sid}`
+
+    let filesAttached = 0
+    const { db, conn } = await bootPromise
+    const opfsHandle = await attachParquetWithFallback({
+      db,
+      conn,
+      viewName,
+      files: browserFiles,
+      version: full.snapshotVersion,
+      useOpfsCache: args.useOpfsCache,
+      withDb: fn => withDb(() => fn()),
+      onFileProgress: () => {
+        filesAttached++
+        patchSelf(table, { filesAttached })
+        patchLayer(table, 'downloading', { filesAttached })
+      },
+    }).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      patchSelf(table, { stage: 'error', error: msg, endedAt: Date.now() })
+      patchLayer(table, 'error', { error: msg, endedAt: Date.now() })
+      throw err
     })
+
+    // Query SQL references the canonical table name (`pages`, etc.); the
+    // underlying view is per-(site,table) so OPFS file names don't collide
+    // across sites that may share a DuckDB instance in future.
+    if (viewName !== tableIdent) {
+      await withDb(async (conn) => {
+        await conn.query(`CREATE OR REPLACE VIEW ${tableIdent} AS SELECT * FROM ${viewName}`)
+      })
+    }
+
+    if (opfsHandle)
+      opfsHandles.set(table, opfsHandle)
 
     patchSelf(table, { stage: 'ready', endedAt: Date.now() })
     patchLayer(table, 'ready', { endedAt: Date.now() })
@@ -373,11 +430,6 @@ function createAnalyzer(args: AnalyzerArgs): BootedAnalyzer {
     tablePromises.set(table, p)
     return p
   }
-
-  // Expose `ensureTable` to the outer composable via a captured closure.
-  // (Plain function refs would also work; this just keeps the public API in
-  // one place by storing on the analyzer record.)
-  ;(globalThis as { __gscEnsureTable?: typeof ensureTableInner }).__gscEnsureTable = ensureTableInner
 
   const instance: BootedAnalyzer = {
     bootPromise,
@@ -400,8 +452,14 @@ function createAnalyzer(args: AnalyzerArgs): BootedAnalyzer {
         }
       }
       try {
-        const { db } = await bootPromise
-        await db.terminate()
+        for (const h of opfsHandles.values())
+          await h.detach().catch(() => {})
+        opfsHandles.clear()
+        // Drop the per-site views we created so a re-attach is clean. Do NOT
+        // terminate the DB — it's shared via `sharedGscDuckDBWasm`.
+        const { conn } = await bootPromise
+        for (const t of ALL_TABLES)
+          await conn.query(`DROP VIEW IF EXISTS ${sqlIdent(t)}`).catch(() => {})
       }
       catch {
         // Boot failed — nothing to tear down.

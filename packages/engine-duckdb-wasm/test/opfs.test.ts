@@ -1,11 +1,12 @@
 /**
  * Unit tests for the OPFS attach module.
  *
- * These exercise the cache-probe / content-hash / quota-degrade / view-creation
- * logic against an in-memory OPFS fake. The REAL OPFS round-trip
- * (`navigator.storage.getDirectory` + DuckDB-WASM `BROWSER_FSACCESS`) needs a
- * browser and is covered by `poc/iceberg/browser/index.html` — see the
- * "real-browser test" note in the task report.
+ * Verifies the content-addressed cache (filename embeds `contentHash` so a
+ * cache hit is filename-existence + size match — no SHA recomputation), stale-
+ * entry sweep on re-attach, quota degradation, and view tear-down. The REAL
+ * OPFS round-trip (`navigator.storage.getDirectory` + DuckDB-WASM
+ * `BROWSER_FSACCESS`) needs a browser and is covered by
+ * `poc/iceberg/browser/index.html`.
  */
 
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm'
@@ -117,13 +118,18 @@ function stubDuckDb(): {
   }
 }
 
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
 function okFetch(payload: Uint8Array): typeof fetch {
   return vi.fn(async () => new Response(payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength), { status: 200 })) as unknown as typeof fetch
+}
+
+/** Replicates the 16-hex-char slug the module derives from `contentHash`. */
+async function expectedSlug(contentHash: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(contentHash))
+  const bytes = new Uint8Array(digest)
+  let hex = ''
+  for (let i = 0; i < 8; i++)
+    hex += bytes[i]!.toString(16).padStart(2, '0')
+  return hex
 }
 
 afterEach(() => {
@@ -131,12 +137,11 @@ afterEach(() => {
 })
 
 describe('attachOpfsParquetTables', () => {
-  it('downloads a file, verifies its content hash, registers + creates a view', async () => {
+  it('downloads, writes to OPFS, registers + creates a view', async () => {
     const opfs = makeFakeOpfs()
     installNavigatorStorage(opfs.root)
     const { db, conn, registerFileHandle, viewSql } = stubDuckDb()
     const payload = new Uint8Array([1, 2, 3, 4, 5])
-    const hash = await sha256Hex(payload)
 
     const handle = await attachOpfsParquetTables({
       db,
@@ -144,7 +149,7 @@ describe('attachOpfsParquetTables', () => {
       fetch: okFetch(payload),
       tables: [{
         table: 'pages',
-        files: [{ url: '/api/r2-data/pages-0.parquet', bytes: 5, contentHash: hash }],
+        files: [{ url: '/api/r2-data/pages-0.parquet', bytes: 5, contentHash: 'iceberg/abc.parquet' }],
       }],
     })
 
@@ -154,16 +159,17 @@ describe('attachOpfsParquetTables', () => {
     expect(registerFileHandle).toHaveBeenCalledOnce()
     expect(viewSql[0]).toContain('CREATE OR REPLACE VIEW main.pages')
     expect(opfs.files.size).toBe(1)
+    const slug = await expectedSlug('iceberg/abc.parquet')
+    expect([...opfs.files.keys()][0]).toBe(`gscdump-snapshot__pages_0_${slug}.parquet`)
   })
 
-  it('serves a verified cache hit without re-downloading', async () => {
+  it('serves a cache hit (filename + size) without re-downloading', async () => {
     const opfs = makeFakeOpfs()
     const payload = new Uint8Array([9, 9, 9])
-    // pre-seed OPFS with the exact bytes under the expected file name.
-    opfs.files.set('gscdump-snapshot__queries_0.parquet', payload)
+    const slug = await expectedSlug('iceberg/queries-0.parquet')
+    opfs.files.set(`gscdump-snapshot__queries_0_${slug}.parquet`, payload)
     installNavigatorStorage(opfs.root)
     const { db, conn } = stubDuckDb()
-    const hash = await sha256Hex(payload)
     const fetchSpy = okFetch(payload)
 
     const progress: string[] = []
@@ -171,7 +177,7 @@ describe('attachOpfsParquetTables', () => {
       db,
       conn,
       fetch: fetchSpy,
-      tables: [{ table: 'queries', files: [{ url: '/x', bytes: 3, contentHash: hash }] }],
+      tables: [{ table: 'queries', files: [{ url: '/x', bytes: 3, contentHash: 'iceberg/queries-0.parquet' }] }],
       onFileProgress: info => progress.push(info.outcome),
     })
 
@@ -179,37 +185,48 @@ describe('attachOpfsParquetTables', () => {
     expect(progress).toEqual(['cache-hit'])
   })
 
-  it('re-downloads when a cached file fails its content-hash check', async () => {
+  it('re-downloads when the content hash changes (new filename)', async () => {
     const opfs = makeFakeOpfs()
-    // cached bytes match the SIZE but not the hash — corrupt copy.
-    opfs.files.set('gscdump-snapshot__pages_0.parquet', new Uint8Array([0, 0, 0]))
+    // Old snapshot's cached file under the OLD content hash.
+    const oldSlug = await expectedSlug('iceberg/old.parquet')
+    opfs.files.set(`gscdump-snapshot__pages_0_${oldSlug}.parquet`, new Uint8Array([0, 0, 0]))
     installNavigatorStorage(opfs.root)
     const { db, conn } = stubDuckDb()
     const fresh = new Uint8Array([7, 7, 7])
-    const hash = await sha256Hex(fresh)
     const fetchSpy = okFetch(fresh)
 
     await attachOpfsParquetTables({
       db,
       conn,
       fetch: fetchSpy,
-      tables: [{ table: 'pages', files: [{ url: '/x', bytes: 3, contentHash: hash }] }],
+      tables: [{ table: 'pages', files: [{ url: '/x', bytes: 3, contentHash: 'iceberg/new.parquet' }] }],
     })
 
     expect(fetchSpy).toHaveBeenCalledOnce()
+    // Stale entry swept; only the new file remains.
+    expect(opfs.files.size).toBe(1)
+    const newSlug = await expectedSlug('iceberg/new.parquet')
+    expect([...opfs.files.keys()][0]).toBe(`gscdump-snapshot__pages_0_${newSlug}.parquet`)
   })
 
-  it('rejects a downloaded file whose content hash does not match', async () => {
+  it('re-downloads when a cached file has the wrong byte size (partial write)', async () => {
     const opfs = makeFakeOpfs()
+    const slug = await expectedSlug('iceberg/pages-0.parquet')
+    // Wrong size — looks like a torn write.
+    opfs.files.set(`gscdump-snapshot__pages_0_${slug}.parquet`, new Uint8Array([0]))
     installNavigatorStorage(opfs.root)
     const { db, conn } = stubDuckDb()
+    const fresh = new Uint8Array([1, 2, 3])
+    const fetchSpy = okFetch(fresh)
 
-    await expect(attachOpfsParquetTables({
+    await attachOpfsParquetTables({
       db,
       conn,
-      fetch: okFetch(new Uint8Array([1, 2, 3])),
-      tables: [{ table: 'pages', files: [{ url: '/x', bytes: 3, contentHash: 'deadbeef' }] }],
-    })).rejects.toThrow(/content-hash mismatch/)
+      fetch: fetchSpy,
+      tables: [{ table: 'pages', files: [{ url: '/x', bytes: 3, contentHash: 'iceberg/pages-0.parquet' }] }],
+    })
+
+    expect(fetchSpy).toHaveBeenCalledOnce()
   })
 
   it('degrades a table on QuotaExceededError instead of crashing', async () => {
@@ -218,7 +235,6 @@ describe('attachOpfsParquetTables', () => {
     installNavigatorStorage(opfs.root)
     const { db, conn } = stubDuckDb()
     const payload = new Uint8Array([1, 2, 3, 4, 5])
-    const hash = await sha256Hex(payload)
 
     const handle = await attachOpfsParquetTables({
       db,
@@ -226,8 +242,8 @@ describe('attachOpfsParquetTables', () => {
       fetch: okFetch(payload),
       fetchConcurrency: 1,
       tables: [
-        { table: 'pages', files: [{ url: '/a', bytes: 5, contentHash: hash }] },
-        { table: 'queries', files: [{ url: '/b', bytes: 5, contentHash: hash }] },
+        { table: 'pages', files: [{ url: '/a', bytes: 5, contentHash: 'iceberg/a.parquet' }] },
+        { table: 'queries', files: [{ url: '/b', bytes: 5, contentHash: 'iceberg/b.parquet' }] },
       ],
     })
 
@@ -240,13 +256,12 @@ describe('attachOpfsParquetTables', () => {
     installNavigatorStorage(opfs.root)
     const { db, conn, viewSql } = stubDuckDb()
     const payload = new Uint8Array([4, 2])
-    const hash = await sha256Hex(payload)
 
     const handle = await attachOpfsParquetTables({
       db,
       conn,
       fetch: okFetch(payload),
-      tables: [{ table: 'pages', files: [{ url: '/x', bytes: 2, contentHash: hash }] }],
+      tables: [{ table: 'pages', files: [{ url: '/x', bytes: 2, contentHash: 'iceberg/p.parquet' }] }],
     })
     await handle.detach()
     expect(viewSql.some(s => s.includes('DROP VIEW IF EXISTS main.pages'))).toBe(true)

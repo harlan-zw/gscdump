@@ -114,22 +114,12 @@ export function useDailyTotalsFromIceberg(
 
     // Shared DuckDB-WASM boot — kicked off in parallel with the first
     // analysis-sources fetches. Every site awaits this promise before its own
-    // `attach` step. Lazy import keeps DuckDB out of the SSR bundle.
-    const bootPromise = (async () => {
-      const { bootDuckDBWasm } = await import('@gscdump/engine-duckdb-wasm')
-      const bundleBase = (analyticsConfig as { duckdbBundleBase?: string }).duckdbBundleBase
-      return bootDuckDBWasm({
-        ...(bundleBase
-          ? {
-              bundles: {
-                mvp: { mainModule: `${bundleBase}/duckdb-mvp.wasm`, mainWorker: `${bundleBase}/duckdb-browser-mvp.worker.js` },
-                eh: { mainModule: `${bundleBase}/duckdb-eh.wasm`, mainWorker: `${bundleBase}/duckdb-browser-eh.worker.js` },
-              },
-            }
-          : {}),
-        config: { filesystem: { reliableHeadRequests: false, allowFullHTTPReads: true } },
-      })
-    })()
+    // `attach` step.
+    // Shared boot — process-wide. ~800ms boot cost amortised across every
+    // refresh on the home page (date-range changes, etc.) instead of paid
+    // on each one.
+    const bundleBase = (analyticsConfig as { duckdbBundleBase?: string }).duckdbBundleBase
+    const bootPromise = sharedGscDuckDBWasm(bundleBase)
 
     const useOpfsCache = opts.useOpfsCache ?? true
 
@@ -138,6 +128,8 @@ export function useDailyTotalsFromIceberg(
 
     async function loadSite(publicId: string): Promise<void> {
       const siteStart = Date.now()
+      const mark = (phase: string) => performance.mark(`gsc:${publicId}:${phase}`)
+      mark('start')
       let perSiteConn: Awaited<ReturnType<Awaited<typeof bootPromise>['db']['connect']>> | null = null
       let opfsHandle: OpfsAttachedHandle | null = null
       try {
@@ -145,6 +137,7 @@ export function useDailyTotalsFromIceberg(
         const res = await $gscFetch<FileResolutionResponse | { canUseBrowser?: false }>(
           `${apiBase}/api/__gsc/sites/${publicId}/analysis-sources?${qs}`,
         ).catch(() => null)
+        mark('manifest')
         if (token !== runToken)
           return
 
@@ -175,6 +168,7 @@ export function useDailyTotalsFromIceberg(
           if (token !== runToken)
             return
         }
+        mark('wasm')
         const db = boot.db
 
         // Per-site connection so DDL+query run in parallel with other sites.
@@ -188,53 +182,22 @@ export function useDailyTotalsFromIceberg(
         const viewName = `dates_${sanitised}`
         let filesAttached = 0
 
-        if (useOpfsCache) {
-          // ── attach via OPFS (cache-hit skips download) ────────────────
-          const { attachOpfsParquetTables } = await import('@gscdump/engine-duckdb-wasm')
-          opfsHandle = await attachOpfsParquetTables({
-            db,
-            conn: perSiteConn,
-            tables: [{
-              table: viewName,
-              // `contentHash` from the contract is the parquet path, not a
-              // SHA-256 — skip it. The Iceberg file ID in the URL is itself
-              // content-addressed, so size-match is sufficient.
-              files: browserFiles.map(f => ({ url: f.url, bytes: f.bytes })),
-            }],
-            version: full.snapshotVersion,
-            fetchConcurrency: browserFiles.length,
-            onFileProgress: () => {
-              filesAttached++
-              analyticsCtx.patchProgress(publicId, { filesAttached })
-            },
-          })
-          if (token !== runToken)
-            return
-          // OPFS quota hit — fall through to in-memory fetch path below.
-          if (opfsHandle.degradedTables.includes(viewName))
-            opfsHandle = null
-        }
-
-        if (!opfsHandle) {
-          // ── attach via in-memory buffers (fallback / opt-out path) ────
-          const urls = browserFiles.map(f => f.url)
-          const fileBuffers = await Promise.all(urls.map(async (url) => {
-            const r = await fetch(url, { credentials: 'omit' })
-            if (!r.ok)
-              throw new Error(`GET ${url} failed: ${r.status}`)
-            const buf = new Uint8Array(await r.arrayBuffer())
+        opfsHandle = await attachParquetWithFallback({
+          db,
+          conn: perSiteConn,
+          viewName,
+          files: browserFiles,
+          version: full.snapshotVersion,
+          useOpfsCache,
+          fetchConcurrency: browserFiles.length,
+          onFileProgress: () => {
             filesAttached++
             analyticsCtx.patchProgress(publicId, { filesAttached })
-            return buf
-          }))
-          if (token !== runToken)
-            return
-          const fileNames = fileBuffers.map((_, i) => `${viewName}_${i}.parquet`)
-          for (let i = 0; i < fileBuffers.length; i++)
-            await db.registerFileBuffer(fileNames[i]!, fileBuffers[i]!)
-          const fileList = fileNames.map(n => `'${n.replace(/'/g, '\'\'')}'`).join(',')
-          await perSiteConn.query(`CREATE OR REPLACE VIEW ${viewName} AS SELECT * REPLACE (CAST(date AS DATE) AS date) FROM read_parquet([${fileList}], union_by_name = true)`)
-        }
+          },
+        })
+        if (token !== runToken)
+          return
+        mark('attached')
 
         const result = await perSiteConn.query(`
           SELECT
@@ -272,6 +235,7 @@ export function useDailyTotalsFromIceberg(
         }
         analyticsCtx.patchProgress(publicId, { stage: 'ready', filesAttached: browserFiles.length, endedAt: Date.now() })
         progress.value = { completed: ++sitesReady, total: siteIds.length }
+        mark('ready')
       }
       catch (err) {
         if (token !== runToken)
@@ -294,19 +258,17 @@ export function useDailyTotalsFromIceberg(
       }
     }
 
+    performance.mark('gsc:fanout:start')
     try {
       await Promise.all(siteIds.map(id => loadSite(id)))
     }
     finally {
-      // Tear DuckDB down only after every site is done — sites share the
-      // boot, so an early `db.terminate()` would kill the connection used by
-      // late-arriving sites. Skipped when the run was superseded so the new
-      // run can still use any in-flight boot.
-      if (token === runToken) {
+      performance.mark('gsc:fanout:end')
+      // DO NOT terminate — boot is shared via `sharedGscDuckDBWasm` and the
+      // next refresh (or another consumer) reuses it. Per-site connections
+      // and OPFS handles are closed in `loadSite`'s finally.
+      if (token === runToken)
         loading.value = false
-        if (boot)
-          await boot.db.terminate().catch(() => {})
-      }
     }
   }
 
