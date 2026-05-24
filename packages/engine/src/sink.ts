@@ -55,13 +55,20 @@ export interface SinkWriteResult {
 }
 
 /**
- * Static description of a sink. All sinks are append-only under the v5
- * stability-cutoff model; `appendOnly` is therefore always `true` and kept
- * only as an explicit, self-documenting marker.
+ * Static description of a sink. Production ingestion is append-only under the
+ * v5 stability-cutoff model. Test and revision-path adapters may expose an
+ * overwrite capability explicitly.
  */
 export interface SinkCapabilities {
-  /** Always `true` — re-emitting a slice accumulates duplicate rows. */
-  appendOnly: true
+  /** When true, re-emitting a slice accumulates duplicate rows. */
+  appendOnly: boolean
+  /** Whether the sink exposes partition overwrite semantics. */
+  canOverwrite?: boolean
+}
+
+/** Partition-overwrite writer for revision paths. */
+export interface SliceOverwriteWriter {
+  overwriteSlice: (slice: SinkSlice, rows: readonly Row[]) => Promise<SinkWriteResult>
 }
 
 /**
@@ -113,6 +120,12 @@ export interface Sink {
 /** Construction options shared by all sink implementations. */
 export interface SinkOptions {
   now?: () => number
+}
+
+/** `PipelineSink` options — Cloudflare Pipeline stream plus overwrite delegate. */
+export interface PipelineSinkOptions extends SinkOptions {
+  stream: unknown
+  overwriteWriter: SliceOverwriteWriter
 }
 
 /**

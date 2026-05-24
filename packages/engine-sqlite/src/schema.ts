@@ -82,6 +82,30 @@ export const gsc_search_appearance = sqliteTable('gsc_search_appearance', {
   ...metricCols(),
 })
 
+export const gsc_search_appearance_pages = sqliteTable('gsc_search_appearance_pages', {
+  ...baseCols(),
+  searchAppearance: text('searchAppearance').notNull(),
+  url: text('url').notNull(),
+  ...metricCols(),
+})
+
+export const gsc_search_appearance_queries = sqliteTable('gsc_search_appearance_queries', {
+  ...baseCols(),
+  searchAppearance: text('searchAppearance').notNull(),
+  query: text('query').notNull(),
+  query_canonical: text('query_canonical'),
+  ...metricCols(),
+})
+
+export const gsc_search_appearance_page_queries = sqliteTable('gsc_search_appearance_page_queries', {
+  ...baseCols(),
+  searchAppearance: text('searchAppearance').notNull(),
+  url: text('url').notNull(),
+  query: text('query').notNull(),
+  query_canonical: text('query_canonical'),
+  ...metricCols(),
+})
+
 export const gsc_hourly_pages = sqliteTable('gsc_hourly_pages', {
   ...baseCols(),
   url: text('url').notNull(),
@@ -96,6 +120,9 @@ export const schema = {
   gsc_devices,
   gsc_page_keywords,
   gsc_search_appearance,
+  gsc_search_appearance_pages,
+  gsc_search_appearance_queries,
+  gsc_search_appearance_page_queries,
   gsc_hourly_pages,
 }
 
@@ -123,6 +150,9 @@ const GSC_TABLE_TO_LOGICAL: Record<keyof typeof schema, TableName | null> = {
   gsc_devices: null,
   gsc_page_keywords: 'page_queries',
   gsc_search_appearance: 'search_appearance',
+  gsc_search_appearance_pages: 'search_appearance_pages',
+  gsc_search_appearance_queries: 'search_appearance_queries',
+  gsc_search_appearance_page_queries: 'search_appearance_page_queries',
   gsc_hourly_pages: 'hourly_pages',
 }
 

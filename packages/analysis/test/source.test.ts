@@ -35,7 +35,7 @@ import {
   topLevel,
 } from 'gscdump/query'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { queriesQueryState, pagesQueryState } from '../src/analyzer/adapt-rows'
+import { pagesQueryState, queriesQueryState } from '../src/analyzer/adapt-rows'
 import { moversAnalyzer } from '../src/analyzers/movers'
 import { defaultAnalyzerRegistry } from '../src/default-registry'
 import { createInMemoryQuerySource } from '../src/source'

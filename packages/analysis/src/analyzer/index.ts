@@ -105,8 +105,8 @@ export { zeroClickAnalyzer } from '../analyzers/zero-click'
 export type { ZeroClickResult } from '../analyzers/zero-click'
 export {
   datesQueryState,
-  queriesQueryState,
   pagesQueryState,
+  queriesQueryState,
 } from './adapt-rows'
 export {
   clampLimit,

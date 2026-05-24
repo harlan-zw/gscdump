@@ -74,6 +74,9 @@ describe('inferDataset', () => {
     expect(inferDataset(['device'])).toBe('dates')
     expect(inferDataset(['page', 'query'])).toBe('page_queries')
     expect(inferDataset(['searchAppearance'])).toBe('search_appearance')
+    expect(inferDataset(['searchAppearance', 'page'])).toBe('search_appearance_pages')
+    expect(inferDataset(['searchAppearance', 'query'])).toBe('search_appearance_queries')
+    expect(inferDataset(['searchAppearance', 'page', 'query'])).toBe('search_appearance_page_queries')
   })
 
   it('routes date-only / dimensionless queries to dates', () => {
@@ -107,7 +110,12 @@ describe('isDatasetResolvable', () => {
   it('rejects dimensions that span two stored datasets', () => {
     expect(isDatasetResolvable(['country'], ['query'])).toBe(false)
     expect(isDatasetResolvable(['page'], ['country'])).toBe(false)
-    expect(isDatasetResolvable(['searchAppearance'], ['query'])).toBe(false)
+    expect(isDatasetResolvable(['searchAppearance'], ['country'])).toBe(false)
+  })
+
+  it('accepts contextual search appearance page/query breakdowns', () => {
+    expect(isDatasetResolvable(['searchAppearance'], ['query'])).toBe(true)
+    expect(isDatasetResolvable(['searchAppearance', 'page', 'query'])).toBe(true)
   })
 
   it('agrees with inferDataset: routed dataset always covers a resolvable query', () => {

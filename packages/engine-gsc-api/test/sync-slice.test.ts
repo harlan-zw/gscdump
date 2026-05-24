@@ -1,6 +1,7 @@
 import type { GoogleSearchConsoleClient, SearchAnalyticsQuery, SearchAnalyticsResponse } from 'gscdump'
+import type { GscApiRow } from '../src/sync-slice'
 import { describe, expect, it } from 'vitest'
-import { runGscSyncSlice } from '../src/sync-slice'
+import { runGscSearchAppearanceContextSlice, runGscSyncSlice } from '../src/sync-slice'
 
 function makeClient(
   responses: SearchAnalyticsResponse[],
@@ -70,6 +71,22 @@ describe('runGscSyncSlice', () => {
     })
 
     expect(captured[0]!.dimensions).toEqual(['hour', 'page'])
+  })
+
+  it('defaults search_appearance dimensions to searchAppearance only', async () => {
+    const captured: SearchAnalyticsQuery[] = []
+    const client = makeClient([{ rows: [] }], captured)
+
+    await runGscSyncSlice({
+      client,
+      siteUrl: 'sc-domain:example.com',
+      table: 'search_appearance',
+      startDate: '2026-05-10',
+      endDate: '2026-05-10',
+      onBatch: async () => {},
+    })
+
+    expect(captured[0]!.dimensions).toEqual(['searchAppearance'])
   })
 
   it('returns metadata captured from the final page', async () => {
@@ -233,6 +250,33 @@ describe('runGscSyncSlice', () => {
     })
 
     expect(captured[0]!.dimensionFilterGroups).toBeUndefined()
+  })
+
+  it('runs the two-step search appearance context flow', async () => {
+    const captured: SearchAnalyticsQuery[] = []
+    const client = makeClient([
+      { rows: [{ keys: ['AMP_BLUE_LINK'], clicks: 3, impressions: 30, ctr: 0.1, position: 2 }] },
+      { rows: [{ keys: ['https://example.com/a', 'blue widgets', '2026-05-10'], clicks: 1, impressions: 10, ctr: 0.1, position: 2 }] },
+    ], captured)
+    const contextRows: Array<{ searchAppearance: string, table: string, rows: GscApiRow[] }> = []
+
+    const result = await runGscSearchAppearanceContextSlice({
+      client,
+      siteUrl: 'sc-domain:example.com',
+      startDate: '2026-05-10',
+      endDate: '2026-05-10',
+      onContextBatch: async batch => contextRows.push(batch),
+    })
+
+    expect(result.appearances).toEqual(['AMP_BLUE_LINK'])
+    expect(captured[0]!.dimensions).toEqual(['searchAppearance'])
+    expect(captured[1]!.dimensions).toEqual(['page', 'query', 'date'])
+    expect(contextRows[0]!.table).toBe('search_appearance_page_queries')
+    expect(captured[1]!.dimensionFilterGroups).toEqual([{
+      filters: [{ dimension: 'searchAppearance', operator: 'equals', expression: 'AMP_BLUE_LINK' }],
+    }])
+    expect(contextRows[0]!.searchAppearance).toBe('AMP_BLUE_LINK')
+    expect(contextRows[0]!.rows).toHaveLength(1)
   })
 
   it('defaults searchType to web and forwards an explicit searchType to the query', async () => {

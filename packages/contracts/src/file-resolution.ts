@@ -20,7 +20,7 @@ import type { GscSearchType } from './types'
 
 /** The 6 Iceberg fact tables — string-typed here to avoid an engine dep. */
 export type FileResolutionTable
-  = 'pages' | 'queries' | 'countries' | 'page_queries' | 'dates' | 'search_appearance'
+  = 'pages' | 'queries' | 'countries' | 'page_queries' | 'dates' | 'search_appearance' | 'search_appearance_pages' | 'search_appearance_queries' | 'search_appearance_page_queries'
 
 /** Request query params for `GET /api/sites/[siteId]/analysis-sources`. */
 export interface FileResolutionRequest {

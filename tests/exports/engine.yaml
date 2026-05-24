@@ -50,6 +50,7 @@
   inferTable: function
   inspectionPolicy: function
   isCommitRateLimited: function
+  listIcebergDataFiles: function
   listIcebergTables: function
   MAX_DAY_BYTES: number
   MAX_GSC_PAGES_R2: number
@@ -230,6 +231,9 @@
   schemaFor: function
   SCHEMAS: object
   search_appearance: object
+  search_appearance_page_queries: object
+  search_appearance_pages: object
+  search_appearance_queries: object
   TABLE_METADATA: object
 ./scope:
   buildTableScope: function

@@ -128,7 +128,7 @@ export function useDailyTotalsFromIceberg(
 
     async function loadSite(publicId: string): Promise<void> {
       const siteStart = Date.now()
-      const mark = (phase: string) => performance.mark(`gsc:${publicId}:${phase}`)
+      const mark = (phase: string): PerformanceMark => performance.mark(`gsc:${publicId}:${phase}`)
       mark('start')
       let perSiteConn: Awaited<ReturnType<Awaited<typeof bootPromise>['db']['connect']>> | null = null
       let opfsHandle: OpfsAttachedHandle | null = null

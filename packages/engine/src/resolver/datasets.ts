@@ -67,6 +67,30 @@ export const LOGICAL_DATASETS: Record<LogicalDataset, LogicalDatasetDefinition> 
       date: { column: 'date', surfaces: ['api', 'stored'] },
     },
   },
+  search_appearance_pages: {
+    dimensions: {
+      searchAppearance: { column: 'searchAppearance', surfaces: ['stored'] },
+      page: { column: 'url', surfaces: ['stored'] },
+      date: { column: 'date', surfaces: ['stored'] },
+    },
+  },
+  search_appearance_queries: {
+    dimensions: {
+      searchAppearance: { column: 'searchAppearance', surfaces: ['stored'] },
+      query: { column: 'query', surfaces: ['stored'] },
+      queryCanonical: { column: 'query_canonical', surfaces: ['stored', 'derived'] },
+      date: { column: 'date', surfaces: ['stored'] },
+    },
+  },
+  search_appearance_page_queries: {
+    dimensions: {
+      searchAppearance: { column: 'searchAppearance', surfaces: ['stored'] },
+      page: { column: 'url', surfaces: ['stored'] },
+      query: { column: 'query', surfaces: ['stored'] },
+      queryCanonical: { column: 'query_canonical', surfaces: ['stored', 'derived'] },
+      date: { column: 'date', surfaces: ['stored'] },
+    },
+  },
   hourly_pages: {
     dimensions: {
       page: { column: 'url', surfaces: ['api', 'stored'] },

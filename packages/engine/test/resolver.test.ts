@@ -196,6 +196,23 @@ describe('cross-dimension queries (unresolvable datasets)', () => {
     expect(r.sql).toMatch(/GROUP BY "countries"\."country"/)
   })
 
+  it('routes search appearance + page/query context to its contextual table', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolveToSQLOptimized(state({
+      dimensions: ['searchAppearance', 'page', 'query'],
+    }), { adapter })
+    expect(r.sql).toContain('read_parquet({{FILES}}, union_by_name = true) AS "search_appearance_page_queries"')
+    expect(r.sql).toMatch(/GROUP BY "search_appearance_page_queries"\."searchAppearance", CASE WHEN url LIKE/)
+  })
+
+  it('keeps search appearance totals on the total table', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolveToSQLOptimized(state({
+      dimensions: ['searchAppearance'],
+    }), { adapter })
+    expect(r.sql).toContain('read_parquet({{FILES}}, union_by_name = true) AS "search_appearance"')
+  })
+
   it('treats a device breakdown as unresolvable — the standalone devices table was folded into pivoted `dates`', () => {
     const adapter = createParquetResolverAdapter()
     expect(() => resolveToSQLOptimized(state({ dimensions: ['device'] }), { adapter }))

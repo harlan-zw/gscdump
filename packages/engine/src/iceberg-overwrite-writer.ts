@@ -30,7 +30,7 @@
  * Implements the frozen `SliceOverwriteWriter` contract from `./sink`.
  */
 
-import type { Sink, SinkSlice, SinkWriteResult, SliceOverwriteWriter } from './sink'
+import type { Sink, SinkCloseResult, SinkSlice, SinkWriteResult, SliceOverwriteWriter } from './sink'
 import type { Row } from './storage'
 import process from 'node:process'
 import { ICEBERG_SCHEMAS } from './iceberg-schema'
@@ -105,7 +105,7 @@ export interface IcebergOverwriteWriterOptions {
  */
 export interface IcebergOverwriteWriter extends SliceOverwriteWriter {
   /** Release any backend resources. Idempotent. */
-  close: () => Promise<void>
+  close: () => Promise<SinkCloseResult>
 }
 
 /**
@@ -143,7 +143,9 @@ export function createIcebergOverwriteWriter(
 
   return {
     overwriteSlice,
-    async close() {},
+    async close() {
+      return { flushed: [], failed: [] }
+    },
   }
 }
 
@@ -247,7 +249,7 @@ export function httpBackend(opts: HttpBackendOptions): OverwriteBackend {
  * both append and revision paths against the local stack. Prod keeps `emit`
  * on the Pipeline; only `overwriteSlice` delegates here.
  */
-export function overwriteWriterAsSink(writer: IcebergOverwriteWriter): Sink {
+export function overwriteWriterAsSink(writer: IcebergOverwriteWriter): Sink & SliceOverwriteWriter {
   return {
     capabilities: { canOverwrite: true, appendOnly: false },
     emit: (slice, rows) => writer.overwriteSlice(slice, rows),

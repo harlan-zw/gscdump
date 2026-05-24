@@ -119,8 +119,15 @@ export function inferDataset(
   const allDims = new Set<Dimension>([...dimensions, ...filterDims])
   const has = (dimension: Dimension): boolean => allDims.has(dimension)
 
-  if (has('searchAppearance'))
+  if (has('searchAppearance')) {
+    if (has('page') && (has('query') || has('queryCanonical')))
+      return 'search_appearance_page_queries'
+    if (has('page'))
+      return 'search_appearance_pages'
+    if (has('query') || has('queryCanonical'))
+      return 'search_appearance_queries'
     return 'search_appearance'
+  }
   if (has('page') && (has('query') || has('queryCanonical')))
     return 'page_queries'
   if (has('query') || has('queryCanonical'))
@@ -153,7 +160,7 @@ export function inferDataset(
 const RESOLVABLE_DIMENSION_FAMILIES: ReadonlyArray<ReadonlySet<Dimension>> = [
   new Set<Dimension>(['page', 'query', 'queryCanonical']),
   new Set<Dimension>(['country']),
-  new Set<Dimension>(['searchAppearance']),
+  new Set<Dimension>(['searchAppearance', 'page', 'query', 'queryCanonical']),
 ]
 const TIME_AXIS_DIMENSIONS = new Set<Dimension>(['date', 'hour'])
 

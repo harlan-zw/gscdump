@@ -17,7 +17,7 @@ export default defineNuxtPlugin({
   async setup() {
     const integration = ref<Integration | null>(null)
 
-    async function refresh() {
+    async function refresh(): Promise<void> {
       integration.value = await $fetch<Integration>('/api/integration').catch(() => null)
     }
 

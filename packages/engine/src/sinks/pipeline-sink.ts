@@ -17,6 +17,7 @@
 import type {
   PipelineSinkOptions,
   Sink,
+  SinkCloseResult,
   SinkSlice,
   SinkWriteResult,
   SliceOverwriteWriter,
@@ -61,7 +62,7 @@ function toRecords(slice: SinkSlice, rows: readonly Row[]): PipelineRecord[] {
   }))
 }
 
-export interface PipelineSink extends Sink {
+export interface PipelineSink extends Sink, SliceOverwriteWriter {
   /** The `SliceOverwriteWriter` `overwriteSlice` is delegated to. */
   readonly overwriteWriter: SliceOverwriteWriter
 }
@@ -106,8 +107,8 @@ export function createPipelineSink(options: PipelineSinkOptions): PipelineSink {
      * Pipelines auto-flushes its own batches; there is no client-side buffer
      * to drain. No-op, idempotent.
      */
-    async close(): Promise<void> {
-      // nothing to release
+    async close(): Promise<SinkCloseResult> {
+      return { flushed: [], failed: [] }
     },
   }
 }

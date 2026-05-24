@@ -47,8 +47,35 @@ describe('transformGscRow', () => {
   })
 
   it('maps search_appearance', () => {
-    const out = transformGscRow('search_appearance', { keys: ['AMP_TOP_STORIES', '2026-04-10'], clicks: 2, impressions: 20, position: 5 })
-    expect(out?.row).toEqual({ searchAppearance: 'AMP_TOP_STORIES', date: '2026-04-10', clicks: 2, impressions: 20, sum_position: 80 })
+    const out = transformGscRow('search_appearance', { keys: ['AMP_TOP_STORIES'], clicks: 2, impressions: 20, position: 5 }, { date: '2026-04-10' })
+    expect(out?.row).toEqual({
+      searchAppearance: 'AMP_TOP_STORIES',
+      date: '2026-04-10',
+      clicks: 2,
+      impressions: 20,
+      sum_position: 80,
+    })
+  })
+
+  it('maps contextual search_appearance page/query rows', () => {
+    const out = transformGscRow(
+      'search_appearance_page_queries',
+      { keys: ['https://example.com/foo', 'Blue Widgets', '2026-04-10'], clicks: 2, impressions: 20, position: 5 },
+      {
+        searchAppearance: 'AMP_TOP_STORIES',
+        normalizeQuery: q => q.toLowerCase(),
+      },
+    )
+    expect(out?.row).toEqual({
+      searchAppearance: 'AMP_TOP_STORIES',
+      url: '/foo',
+      query: 'Blue Widgets',
+      query_canonical: 'blue widgets',
+      date: '2026-04-10',
+      clicks: 2,
+      impressions: 20,
+      sum_position: 80,
+    })
   })
 
   it('rejects the bespoke `dates` table — must use assembleDatesRow', () => {

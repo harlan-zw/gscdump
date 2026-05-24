@@ -29,14 +29,22 @@ export interface SyncSliceDomainFilter {
   domain?: string
 }
 
+export interface SyncSliceDimensionFilter {
+  dimension: 'page' | 'query' | 'country' | 'device' | 'searchAppearance'
+  operator?: 'equals' | 'notEquals' | 'contains' | 'notContains' | 'includingRegex' | 'excludingRegex'
+  expression: string
+}
+
 export interface RunGscSyncSliceOptions {
   client: GoogleSearchConsoleClient
   siteUrl: string
   /** One of the engine sync-fan tables. Drives the dimension list. */
-  table: 'pages' | 'queries' | 'countries' | 'dates' | 'page_queries' | 'search_appearance' | 'hourly_pages'
+  table: 'pages' | 'queries' | 'countries' | 'dates' | 'page_queries' | 'search_appearance' | 'search_appearance_pages' | 'search_appearance_queries' | 'search_appearance_page_queries' | 'hourly_pages'
   startDate: string
   endDate: string
   domainFilter?: SyncSliceDomainFilter | null
+  /** Additional AND filters, e.g. `searchAppearance = AMP_BLUE_LINK`. */
+  dimensionFilters?: SyncSliceDimensionFilter[]
   /**
    * Override the dimension list for this slice. Defaults to
    *  `DIMENSIONS_BY_TABLE[table]`. Hosts that need bespoke groupings (e.g.
@@ -85,6 +93,37 @@ export interface RunGscSyncSliceResult {
   metadata?: GscSearchAnalyticsMetadata
 }
 
+export type SearchAppearanceContextGrain = 'page' | 'query' | 'page_query'
+export type SearchAppearanceContextTable = 'search_appearance_pages' | 'search_appearance_queries' | 'search_appearance_page_queries'
+
+export interface RunGscSearchAppearanceContextSliceOptions {
+  client: GoogleSearchConsoleClient
+  siteUrl: string
+  startDate: string
+  endDate: string
+  domainFilter?: SyncSliceDomainFilter | null
+  /** Use a known appearance list to skip discovery. */
+  appearances?: string[]
+  /** Context grain to fetch for every discovered appearance. Defaults to page_query. */
+  grain?: SearchAppearanceContextGrain
+  /** Context table to fetch. Overrides `grain` when provided. */
+  table?: SearchAppearanceContextTable
+  dataState?: GscDataState
+  rowLimit?: number
+  maxPages?: number
+  cpuBudgetMs?: number
+  searchType?: SearchType
+  onTotalBatch?: (rows: GscApiRow[]) => Promise<void>
+  onContextBatch: (batch: { searchAppearance: string, table: SearchAppearanceContextTable, rows: GscApiRow[] }) => Promise<void>
+  onPage?: (info: { searchType: SearchType, rowsThisPage: number }) => void
+}
+
+export interface RunGscSearchAppearanceContextSliceResult {
+  appearances: string[]
+  totalRows: number
+  hasMore: boolean
+}
+
 // Keyed by engine `SyncTableName` (post Iceberg rename). `dates` fetches the
 // `['device', 'date']` grain: the legacy D1 path stores it row-grained in
 // `gsc_devices`, and the Iceberg `dates` ingest pivots the device rows (plus a
@@ -95,7 +134,12 @@ const DIMENSIONS_BY_TABLE = {
   countries: ['country', 'date'],
   dates: ['device', 'date'],
   page_queries: ['page', 'query', 'date'],
-  search_appearance: ['searchAppearance', 'date'],
+  // GSC only allows `searchAppearance` as a sole grouped dimension. Date/page/
+  // query context must be fetched by a second query filtered to one appearance.
+  search_appearance: ['searchAppearance'],
+  search_appearance_pages: ['page', 'date'],
+  search_appearance_queries: ['query', 'date'],
+  search_appearance_page_queries: ['page', 'query', 'date'],
   hourly_pages: ['hour', 'page'],
 } as const
 
@@ -123,19 +167,32 @@ function isTimeoutLike(err: unknown): boolean {
 //    therefore undercounted on `sc-domain:` properties — a known limitation,
 //    NOT a reason to drop the filter (the `pages`/`keywords` slices need it).
 // Only `groupType: 'and'` is valid; GSC rejects `'or'` with HTTP 400.
-function buildDomainFilterGroups(filter: SyncSliceDomainFilter | null | undefined): { filters: { dimension: 'page', operator: 'includingRegex', expression: string }[] }[] | undefined {
-  if (!filter?.domain)
-    return undefined
-  const rootDomain = filter.domain.replace(/^www\./, '')
-  const escapedDomain = rootDomain.replace(/\./g, '\\.')
-  const pattern = `^https?://(www\\.)?${escapedDomain}/`
-  return [{
-    filters: [{
-      dimension: 'page' as const,
-      operator: 'includingRegex' as const,
+type SyncSliceApiFilter = {
+  dimension: SyncSliceDimensionFilter['dimension']
+  operator: NonNullable<SyncSliceDimensionFilter['operator']>
+  expression: string
+}
+
+function buildDimensionFilterGroups(
+  domainFilter: SyncSliceDomainFilter | null | undefined,
+  filters: readonly SyncSliceDimensionFilter[] = [],
+): { filters: SyncSliceApiFilter[] }[] | undefined {
+  const out: SyncSliceApiFilter[] = filters.map(f => ({
+    dimension: f.dimension,
+    operator: f.operator ?? 'equals',
+    expression: f.expression,
+  }))
+  if (domainFilter?.domain) {
+    const rootDomain = domainFilter.domain.replace(/^www\./, '')
+    const escapedDomain = rootDomain.replace(/\./g, '\\.')
+    const pattern = `^https?://(www\\.)?${escapedDomain}/`
+    out.push({
+      dimension: 'page',
+      operator: 'includingRegex',
       expression: pattern,
-    }],
-  }]
+    })
+  }
+  return out.length > 0 ? [{ filters: out }] : undefined
 }
 
 export async function runGscSyncSlice(
@@ -149,7 +206,7 @@ export async function runGscSyncSlice(
     ? [...opts.dimensions]
     : [...DIMENSIONS_BY_TABLE[opts.table]]
   const dataState: GscDataState = opts.dataState ?? 'all'
-  const dimensionFilterGroups = buildDomainFilterGroups(opts.domainFilter)
+  const dimensionFilterGroups = buildDimensionFilterGroups(opts.domainFilter, opts.dimensionFilters)
 
   const loopStart = Date.now()
   let startRow = opts.initialStartRow ?? 0
@@ -209,4 +266,81 @@ export async function runGscSyncSlice(
   }
 
   return { totalRows, hasMore: false, nextStartRow: startRow, metadata }
+}
+
+function contextTableForGrain(grain: SearchAppearanceContextGrain): SearchAppearanceContextTable {
+  switch (grain) {
+    case 'page':
+      return 'search_appearance_pages'
+    case 'query':
+      return 'search_appearance_queries'
+    case 'page_query':
+      return 'search_appearance_page_queries'
+  }
+}
+
+/**
+ * Implements GSC's required two-step search-appearance flow:
+ * 1. group by `searchAppearance` alone to discover available appearances;
+ * 2. for each appearance, filter by it and fetch page/query/date context.
+ */
+export async function runGscSearchAppearanceContextSlice(
+  opts: RunGscSearchAppearanceContextSliceOptions,
+): Promise<RunGscSearchAppearanceContextSliceResult> {
+  const table = opts.table ?? contextTableForGrain(opts.grain ?? 'page_query')
+  const appearances = opts.appearances?.slice() ?? []
+  let totalRows = 0
+  let hasMore = false
+
+  if (!opts.appearances) {
+    const discovered = new Set<string>()
+    const discovery = await runGscSyncSlice({
+      client: opts.client,
+      siteUrl: opts.siteUrl,
+      table: 'search_appearance',
+      startDate: opts.startDate,
+      endDate: opts.endDate,
+      domainFilter: opts.domainFilter,
+      dataState: opts.dataState,
+      rowLimit: opts.rowLimit,
+      maxPages: opts.maxPages,
+      cpuBudgetMs: opts.cpuBudgetMs,
+      searchType: opts.searchType,
+      onPage: opts.onPage,
+      onBatch: async (rows) => {
+        for (const row of rows) {
+          const value = String(row.keys?.[0] ?? '')
+          if (value)
+            discovered.add(value)
+        }
+        await opts.onTotalBatch?.(rows)
+      },
+    })
+    totalRows += discovery.totalRows
+    hasMore ||= discovery.hasMore
+    appearances.push(...discovered)
+  }
+
+  for (const searchAppearance of appearances) {
+    const context = await runGscSyncSlice({
+      client: opts.client,
+      siteUrl: opts.siteUrl,
+      table,
+      startDate: opts.startDate,
+      endDate: opts.endDate,
+      domainFilter: opts.domainFilter,
+      dimensionFilters: [{ dimension: 'searchAppearance', expression: searchAppearance }],
+      dataState: opts.dataState,
+      rowLimit: opts.rowLimit,
+      maxPages: opts.maxPages,
+      cpuBudgetMs: opts.cpuBudgetMs,
+      searchType: opts.searchType,
+      onPage: opts.onPage,
+      onBatch: rows => opts.onContextBatch({ searchAppearance, table, rows }),
+    })
+    totalRows += context.totalRows
+    hasMore ||= context.hasMore
+  }
+
+  return { appearances, totalRows, hasMore }
 }

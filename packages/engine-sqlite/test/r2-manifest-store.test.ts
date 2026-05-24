@@ -10,7 +10,7 @@
  * live row per logical `(user, site, table, searchType, tier, partition)`.
  */
 
-import type { ManifestEntry } from '@gscdump/engine'
+import type { ManifestEntry } from '@gscdump/engine/contracts'
 import type { AnalyticsManifestDb } from '../src/r2-manifest-store'
 import { DatabaseSync } from 'node:sqlite'
 import { drizzle } from 'drizzle-orm/d1'
@@ -118,10 +118,8 @@ function setup(withUniqueIndex = false) {
 describe('@gscdump/engine-sqlite createD1ManifestStore', () => {
   describe('single-live-per-partition guarantee (SPEC section 2)', () => {
     let store: ReturnType<typeof setup>['store']
-    let sqlite: DatabaseSync
-
     beforeEach(() => {
-      ;({ store, sqlite } = setup())
+      ;({ store } = setup())
     })
 
     it('registerVersion of a fresh partition leaves exactly one live row', async () => {

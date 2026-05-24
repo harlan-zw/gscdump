@@ -11,12 +11,14 @@
 // keeps cold-tab latency low and avoids attaching parquet for tables a
 // session never touches (`countries` if the user only looks at Queries).
 //
-// All 5 Iceberg fact tables follow the same shape:
-//   pages           — url, date, clicks, impressions, sum_position
-//   queries         — query, query_canonical, date, …metrics
-//   countries       — country, date, …metrics
-//   dates           — date, …metrics + anonymized_impressions_pct + 9-col device pivot
-//   page_queries    — url, query, query_canonical, date, …metrics
+// Iceberg fact tables follow the same shape:
+//   pages                          — url, date, clicks, impressions, sum_position
+//   queries                        — query, query_canonical, date, …metrics
+//   countries                      — country, date, …metrics
+//   dates                          — date, …metrics + anonymized_impressions_pct + 9-col device pivot
+//   page_queries                   — url, query, query_canonical, date, …metrics
+//   search_appearance              — searchAppearance, date, …metrics
+//   search_appearance_*            — searchAppearance plus page/query context
 
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm'
 import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
@@ -28,7 +30,7 @@ import { createAttachedTableSource } from '@gscdump/engine/source'
 import { useGscFetch } from '#imports'
 import { attachParquetWithFallback } from '../utils/duckdb-wasm'
 
-export type GscFactTable = 'pages' | 'queries' | 'countries' | 'dates' | 'page_queries' | 'search_appearance'
+export type GscFactTable = 'pages' | 'queries' | 'countries' | 'dates' | 'page_queries' | 'search_appearance' | 'search_appearance_pages' | 'search_appearance_queries' | 'search_appearance_page_queries'
 
 export type GscTableStage = 'idle' | 'resolving' | 'downloading' | 'attaching' | 'ready' | 'error' | 'unavailable'
 
@@ -85,7 +87,17 @@ interface BootedAnalyzer {
   dispose: () => Promise<void>
 }
 
-const ALL_TABLES: readonly GscFactTable[] = ['pages', 'queries', 'countries', 'dates', 'page_queries', 'search_appearance'] as const
+const ALL_TABLES: readonly GscFactTable[] = [
+  'pages',
+  'queries',
+  'countries',
+  'dates',
+  'page_queries',
+  'search_appearance',
+  'search_appearance_pages',
+  'search_appearance_queries',
+  'search_appearance_page_queries',
+] as const
 
 const FACT_TABLE_NAMES = ALL_TABLES.join('|')
 const TABLE_RE = new RegExp(`\\b(?:FROM|JOIN)\\s+(?:main\\.)?(${FACT_TABLE_NAMES})\\b`, 'gi')
@@ -144,7 +156,7 @@ export function useGscSiteAnalyzer(
   const error = ref<Error | null>(null)
   let active: BootedAnalyzer | null = null
 
-  function bind(instance: BootedAnalyzer | null) {
+  function bind(instance: BootedAnalyzer | null): void {
     // Release the previous instance's refcount; pick up the new one. Skipping
     // shutdown on rebind means tab navigation never tears DuckDB down — the
     // instance lives until every consumer unmounts and the cache drops it.
@@ -156,9 +168,15 @@ export function useGscSiteAnalyzer(
       ready.value = instance.ready.value
       error.value = instance.error.value
       // Re-link reactive refs to the live instance.
-      watchEffect(() => { tables.value = instance.tables.value })
-      watchEffect(() => { ready.value = instance.ready.value })
-      watchEffect(() => { error.value = instance.error.value })
+      watchEffect(() => {
+        tables.value = instance.tables.value
+      })
+      watchEffect(() => {
+        ready.value = instance.ready.value
+      })
+      watchEffect(() => {
+        error.value = instance.error.value
+      })
     }
     else {
       tables.value = emptyTables()
@@ -212,8 +230,12 @@ export function useGscSiteAnalyzer(
       const result = opts.params && opts.params.length > 0
         ? await (async () => {
             const stmt = await conn.prepare(opts.sql)
-            try { return await stmt.query(...(opts.params as unknown[])) }
-            finally { await stmt.close() }
+            try {
+              return await stmt.query(...(opts.params as unknown[]))
+            }
+            finally {
+              await stmt.close()
+            }
           })()
         : await conn.query(opts.sql)
       // Apache Arrow returns `Proxy(StructRow)` rows — Vue's reactivity
@@ -337,10 +359,10 @@ function createAnalyzer(args: AnalyzerArgs): BootedAnalyzer {
   // the same in-flight work; the layer-wide `patchProgress` map is updated
   // as each phase advances so `<GscBootProgress />` shows the site's table
   // load alongside other sites.
-  function patchSelf(table: GscFactTable, patch: Partial<GscTableStatus>) {
+  function patchSelf(table: GscFactTable, patch: Partial<GscTableStatus>): void {
     tables.value = { ...tables.value, [table]: { ...tables.value[table], ...patch } }
   }
-  function patchLayer(table: GscFactTable, stage: GscTableStage, extras: Partial<GscTableStatus> = {}) {
+  function patchLayer(table: GscFactTable, stage: GscTableStage, extras: Partial<GscTableStatus> = {}): void {
     // Reuse the layer's SiteLoadProgress shape, namespacing by table so
     // multiple tables for the same site don't collide on the boot bar.
     const siteSlot = `${args.siteId}#${table}`

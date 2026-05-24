@@ -4,4 +4,5 @@
   createLiveGscSource: function
   fetchGscDaily: function
   fetchGscTopN: function
+  runGscSearchAppearanceContextSlice: function
   runGscSyncSlice: function

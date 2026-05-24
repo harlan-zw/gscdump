@@ -110,6 +110,30 @@ export const search_appearance = pgTable('search_appearance', {
   ...metricCols(),
 })
 
+export const search_appearance_pages = pgTable('search_appearance_pages', {
+  searchAppearance: varchar('searchAppearance').notNull(),
+  url: varchar('url').notNull(),
+  date: dateCol(),
+  ...metricCols(),
+})
+
+export const search_appearance_queries = pgTable('search_appearance_queries', {
+  searchAppearance: varchar('searchAppearance').notNull(),
+  query: varchar('query').notNull(),
+  query_canonical: varchar('query_canonical'),
+  date: dateCol(),
+  ...metricCols(),
+})
+
+export const search_appearance_page_queries = pgTable('search_appearance_page_queries', {
+  searchAppearance: varchar('searchAppearance').notNull(),
+  url: varchar('url').notNull(),
+  query: varchar('query').notNull(),
+  query_canonical: varchar('query_canonical'),
+  date: dateCol(),
+  ...metricCols(),
+})
+
 // Per-(url, hour) Discover slice. `hour` is the GSC `hourly_all` timestamp
 // (ISO 8601 with PT offset, e.g. `2026-05-17T15:00:00-07:00`). `date` is the
 // derived PT calendar day used for partitioning; one parquet file per day
@@ -121,7 +145,7 @@ export const hourly_pages = pgTable('hourly_pages', {
   ...metricCols(),
 })
 
-export const drizzleSchema = { pages, queries, countries, page_queries, dates, search_appearance, hourly_pages }
+export const drizzleSchema = { pages, queries, countries, page_queries, dates, search_appearance, search_appearance_pages, search_appearance_queries, search_appearance_page_queries, hourly_pages }
 export type DrizzleSchema = typeof drizzleSchema
 
 export const TABLE_METADATA: Record<TableName, { sortKey: string[], clusterKey: string[], version: number }> = {
@@ -131,5 +155,8 @@ export const TABLE_METADATA: Record<TableName, { sortKey: string[], clusterKey: 
   page_queries: { sortKey: ['date', 'url', 'query'], clusterKey: ['url', 'query', 'date'], version: 2 },
   dates: { sortKey: ['date'], clusterKey: ['date'], version: 1 },
   search_appearance: { sortKey: ['date', 'searchAppearance'], clusterKey: ['searchAppearance', 'date'], version: 1 },
+  search_appearance_pages: { sortKey: ['date', 'searchAppearance', 'url'], clusterKey: ['searchAppearance', 'url', 'date'], version: 1 },
+  search_appearance_queries: { sortKey: ['date', 'searchAppearance', 'query'], clusterKey: ['searchAppearance', 'query', 'date'], version: 1 },
+  search_appearance_page_queries: { sortKey: ['date', 'searchAppearance', 'url', 'query'], clusterKey: ['searchAppearance', 'url', 'query', 'date'], version: 1 },
   hourly_pages: { sortKey: ['date', 'hour', 'url'], clusterKey: ['url', 'date', 'hour'], version: 1 },
 }

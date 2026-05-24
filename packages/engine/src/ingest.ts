@@ -11,6 +11,10 @@
 //   queries        → keys = [query, date]
 //   countries      → keys = [country, date]
 //   page_queries   → keys = [page, query, date]
+//   search_appearance → keys = [searchAppearance] + options.date
+//   search_appearance_pages → keys = [page, date] + options.searchAppearance
+//   search_appearance_queries → keys = [query, date] + options.searchAppearance
+//   search_appearance_page_queries → keys = [page, query, date] + options.searchAppearance
 //   dates          → bespoke: two GSC queries (`['date']` + `['date','device']`)
 //                    assembled by `assembleDatesRow` (see below), NOT
 //                    `transformGscRow`.
@@ -34,6 +38,9 @@ export const TABLE_DIMS: Record<TableName, string[]> = {
   dates: ['date'],
   page_queries: ['page', 'query', 'date'],
   search_appearance: ['searchAppearance', 'date'],
+  search_appearance_pages: ['page', 'date'],
+  search_appearance_queries: ['query', 'date'],
+  search_appearance_page_queries: ['page', 'query', 'date'],
   // GSC `hourly_all` dataState — keys arrive as `[hour, page]`; the calendar
   // date is derived from the leading hour timestamp at ingest.
   hourly_pages: ['hour', 'page'],
@@ -56,6 +63,10 @@ export interface IngestOptions {
    * `page_queries` tables only.
    */
   normalizeQuery?: (query: string) => string | null | undefined
+  /** Date for one-day `searchAppearance` total queries, whose keys omit date. */
+  date?: string
+  /** Search appearance filter used for contextual second-step rows. */
+  searchAppearance?: string
 }
 
 /**
@@ -136,10 +147,38 @@ export function transformGscRow(
   }
 
   if (table === 'search_appearance') {
-    const date = String(keys[1] ?? '')
+    const date = String(keys[1] ?? options.date ?? '')
     return {
       date,
       row: { searchAppearance: String(keys[0] ?? ''), date, clicks, impressions, sum_position },
+    }
+  }
+
+  if (table === 'search_appearance_pages') {
+    const date = String(keys[1] ?? '')
+    return {
+      date,
+      row: { searchAppearance: String(options.searchAppearance ?? ''), url: toPath(String(keys[0] ?? '')), date, clicks, impressions, sum_position },
+    }
+  }
+
+  if (table === 'search_appearance_queries') {
+    const query = String(keys[0] ?? '')
+    const date = String(keys[1] ?? '')
+    const query_canonical = options.normalizeQuery?.(query) ?? null
+    return {
+      date,
+      row: { searchAppearance: String(options.searchAppearance ?? ''), query, query_canonical, date, clicks, impressions, sum_position },
+    }
+  }
+
+  if (table === 'search_appearance_page_queries') {
+    const query = String(keys[1] ?? '')
+    const date = String(keys[2] ?? '')
+    const query_canonical = options.normalizeQuery?.(query) ?? null
+    return {
+      date,
+      row: { searchAppearance: String(options.searchAppearance ?? ''), url: toPath(String(keys[0] ?? '')), query, query_canonical, date, clicks, impressions, sum_position },
     }
   }
 

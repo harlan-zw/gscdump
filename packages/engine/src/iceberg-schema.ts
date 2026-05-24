@@ -30,7 +30,7 @@ import { SCHEMAS } from './schema'
 /** The 6 fact tables that exist as global Iceberg tables. */
 export type IcebergTableName = Extract<
   TableName,
-  'pages' | 'queries' | 'countries' | 'page_queries' | 'dates' | 'search_appearance'
+  'pages' | 'queries' | 'countries' | 'page_queries' | 'dates' | 'search_appearance' | 'search_appearance_pages' | 'search_appearance_queries' | 'search_appearance_page_queries'
 >
 
 /** The 6 Iceberg table names, in canonical order. */
@@ -41,6 +41,9 @@ export const ICEBERG_TABLES: readonly IcebergTableName[] = [
   'page_queries',
   'dates',
   'search_appearance',
+  'search_appearance_pages',
+  'search_appearance_queries',
+  'search_appearance_page_queries',
 ] as const
 
 /**
