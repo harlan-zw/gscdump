@@ -31,7 +31,7 @@ const attachRange = computed(() => ({
   end: range.value.end,
 }))
 
-const { tables, query, ready, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
+const { tables, query, runQuery, ready, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
 
 const ranges = computed(() => ({
   current: { start: range.value.start, end: range.value.end },
@@ -167,6 +167,7 @@ const rows = computed<TopKeywordRow[]>(() => {
 
 const queriesStage = computed(() => tables.value.queries.stage)
 const isLoading = computed(() => queriesStage.value !== 'ready' && queriesStage.value !== 'unavailable')
+const semanticSeed = computed(() => q.value.trim() || rows.value[0]?.query || '')
 
 function hrefFor(keyword: string): string {
   return `/sites/${encodeURIComponent(siteId.value)}/queries/${encodeURIComponent(keyword)}`
@@ -225,6 +226,15 @@ function growthColor(g: number | null): 'success' | 'error' | 'neutral' {
         {{ rows.length }} of {{ (materialised.length).toLocaleString() }}
       </span>
     </div>
+
+    <PanelsSemanticKeywordRepoPanel
+      :runner="{ query: runQuery }"
+      :ready="ready"
+      :range="ranges.current"
+      :seed="semanticSeed"
+      title="Semantically related queries"
+      :limit="8"
+    />
 
     <div v-if="isLoading && !materialised.length" class="rounded-lg border border-default bg-default overflow-hidden">
       <div class="space-y-2 p-3">

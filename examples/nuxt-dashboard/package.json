@@ -23,7 +23,8 @@
     "aws4fetch": "catalog:",
     "gscdump": "workspace:*",
     "nuxt": "catalog:",
-    "nuxt-query": "file:../../../../sites/nuxtseo.com/modules/nuxt-query",
+    "nuxt-use-query": "catalog:",
+    "retriv": "catalog:",
     "tailwindcss": "catalog:",
     "vue": "catalog:"
   }

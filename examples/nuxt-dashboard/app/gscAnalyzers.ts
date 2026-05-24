@@ -36,6 +36,7 @@ const SurvivalAnalyzerPanel = defineAsyncComponent(() => import('./components/pa
 const GenericTableAnalyzerPanel = defineAsyncComponent(() => import('./components/panels/GenericTableAnalyzerPanel.vue'))
 const ActionsPipelinePanel = defineAsyncComponent(() => import('./components/panels/ActionsPipelinePanel.vue'))
 const ContentGapPipelinePanel = defineAsyncComponent(() => import('./components/panels/ContentGapPipelinePanel.vue'))
+const SemanticKeywordRepoPanel = defineAsyncComponent(() => import('./components/panels/SemanticKeywordRepoPanel.vue'))
 
 // Shared spec for analyzers with no bespoke viz — auto-formatted table.
 const genericTablePanel = { component: GenericTableAnalyzerPanel } as const
@@ -362,6 +363,19 @@ export const ANALYZERS = [
   defineGscAnalyzer({ id: 'position-distribution', label: 'Position dist.', kind: 'analyzer', capabilities: { panel: genericTablePanel } }),
   defineGscAnalyzer({ id: 'trends', label: 'Trends', kind: 'analyzer', isQueryGrained: true, capabilities: { panel: genericTablePanel } }),
   defineGscAnalyzer({ id: 'zero-click', label: 'Zero-click', kind: 'analyzer', isQueryGrained: true, capabilities: { panel: genericTablePanel } }),
+  defineGscAnalyzer({
+    id: 'semantic-keywords',
+    label: 'Semantic keywords',
+    kind: 'semantic',
+    isQueryGrained: true,
+    capabilities: {
+      panel: {
+        component: SemanticKeywordRepoPanel,
+        ownsLifecycle: true,
+        caption: 'POC: a retriv-shaped keyword vector repo. It indexes query text once, returns keyword IDs by similarity, then rejoins those IDs to site metrics from DuckDB.',
+      },
+    },
+  }),
   defineGscAnalyzer({
     id: 'content-gap',
     label: 'Content gaps ✨',

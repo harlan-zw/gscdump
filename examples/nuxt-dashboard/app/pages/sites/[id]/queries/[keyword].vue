@@ -17,7 +17,7 @@ interface PageAggRow { url: string, clicks: number, impressions: number, sum_pos
 
 const attachRange = computed(() => ({ start: range.value.start, end: range.value.end }))
 
-const { tables, query, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
+const { tables, query, runQuery, ready, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
 
 const dailyRows = ref<DailyAggRow[] | null>(null)
 const pageRows = ref<PageAggRow[] | null>(null)
@@ -181,6 +181,15 @@ const gscLink = computed(() =>
     <div v-else-if="dailyLoading" class="rounded-lg border border-default bg-default p-4">
       <div class="h-[220px] rounded bg-muted/20 animate-pulse" />
     </div>
+
+    <PanelsSemanticKeywordRepoPanel
+      :runner="{ query: runQuery }"
+      :ready="ready"
+      :range="range"
+      :seed="keyword"
+      title="Related queries"
+      :limit="10"
+    />
 
     <div>
       <h3 class="text-sm font-semibold tracking-tight text-default mb-2">

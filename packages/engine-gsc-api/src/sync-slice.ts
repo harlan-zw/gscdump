@@ -167,7 +167,7 @@ function isTimeoutLike(err: unknown): boolean {
 //    therefore undercounted on `sc-domain:` properties — a known limitation,
 //    NOT a reason to drop the filter (the `pages`/`keywords` slices need it).
 // Only `groupType: 'and'` is valid; GSC rejects `'or'` with HTTP 400.
-type SyncSliceApiFilter = {
+interface SyncSliceApiFilter {
   dimension: SyncSliceDimensionFilter['dimension']
   operator: NonNullable<SyncSliceDimensionFilter['operator']>
   expression: string

@@ -63,6 +63,7 @@
     "@vueuse/nuxt": "catalog:",
     "defu": "catalog:deps",
     "gscdump": "workspace:*",
+    "nuxt-use-query": "catalog:",
     "ofetch": "catalog:deps",
     "tailwindcss": "catalog:"
   },

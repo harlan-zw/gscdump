@@ -22,13 +22,13 @@ export { createGscApiQuerySource } from './source'
 export type { GscApiQuerySourceOptions } from './source'
 export type {
   GscApiRow,
-  RunGscSyncSliceOptions,
   RunGscSearchAppearanceContextSliceOptions,
   RunGscSearchAppearanceContextSliceResult,
+  RunGscSyncSliceOptions,
   RunGscSyncSliceResult,
   SearchAppearanceContextGrain,
   SearchAppearanceContextTable,
-  SyncSliceDomainFilter,
   SyncSliceDimensionFilter,
+  SyncSliceDomainFilter,
 } from './sync-slice'
 export { runGscSearchAppearanceContextSlice, runGscSyncSlice } from './sync-slice'

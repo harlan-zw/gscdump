@@ -171,14 +171,22 @@ function createContext(): GscAnalyticsContext {
   // Lazy-load: defer refreshSites until something actually reads `sites`.
   // Eager kick-off used to race host plugins that set auth via `setGscAuth`;
   // first call would 401 and the rest of the session would silently degrade.
-  // Triggering on first read defers the request to a microtask after plugin
-  // setup, so auth state is in place.
+  // Triggering on first read still needs to wait until hydration is done:
+  // `refreshSites()` flips `sitesLoading` synchronously, and doing that during
+  // the client's first render makes the sidebar disagree with SSR markup.
   let kickedOff = false
   function maybeKickOff(): void {
     if (kickedOff || !import.meta.client)
       return
     kickedOff = true
-    refreshSites()
+    const start = (): void => {
+      void refreshSites()
+    }
+    const nuxtApp = useNuxtApp()
+    if (nuxtApp.isHydrating)
+      onNuxtReady(start)
+    else
+      queueMicrotask(start)
   }
   const lazySites = computed<SiteListItem[] | null>(() => {
     maybeKickOff()
