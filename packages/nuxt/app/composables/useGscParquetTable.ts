@@ -1,10 +1,9 @@
 // Parquet-attached DuckDB table view: fuzzy-search + sortable metrics +
 // pagination over a single attached parquet (`main.<table>`), date-filtered.
 //
-// Sibling of `useGscRollupTable` — the rollup variant fetches a precomputed
-// JSON payload; this variant fires SQL against a parquet view in the
-// browser-attached DuckDB-WASM runtime. Two callers today (analyze.vue's
-// `pages` and `keywords` raw tabs); third+ callers are mechanical.
+// Fires SQL against a parquet view in the browser-attached DuckDB-WASM
+// runtime. Two callers today (analyze.vue's `pages` and `keywords` raw
+// tabs); third+ callers are mechanical.
 //
 // Caller passes the `query` fn from `useGscAnalyzer(siteId)`; the composable
 // owns the SQL builder, the debounce, the watcher, and the count+page

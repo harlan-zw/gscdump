@@ -85,8 +85,6 @@ export type {
   UseGscQueryReturn,
 } from './app/composables/useGscQuery'
 
-export type { UseGscRollupTableOptions } from './app/composables/useGscRollupTable'
-
 export type {
   GscFactTable,
   GscTableStage,

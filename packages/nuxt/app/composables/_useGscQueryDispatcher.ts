@@ -7,7 +7,8 @@
 
 import type { _useGscAuthInternal } from './useGscAuth'
 import type { GscQueryDecisionReason, GscQueryEngine } from './useGscQuery'
-import { useGscEngine } from './useGscEngine'
+
+const ENGINE_STATE_KEY = 'gscdump:engine'
 
 type InternalAuthState = ReturnType<typeof _useGscAuthInternal>['value']
 
@@ -26,14 +27,14 @@ export interface GscFallbackEvent {
 }
 
 export interface PickEngineOpts {
-  /** Per-call override. Wins over `useGscEngine()` + `runtimeConfig.public.analytics.defaultEngine`. */
+  /** Per-call override. Wins over the `gscdump:engine` useState + `runtimeConfig.public.analytics.defaultEngine`. */
   perCall?: GscQueryEngine
 }
 
 export interface GscQueryDispatcher {
   /**
    * Resolve the active engine into a concrete mode + reason. Consults the
-   * resolution chain: `opts.perCall` → `useGscEngine()` → runtimeConfig →
+   * resolution chain: `opts.perCall` → `gscdump:engine` useState → runtimeConfig →
    * `'auto'`. Then maps `auto` against `auth.browserAnalyzerEnabled`.
    */
   pickEngine: (auth: InternalAuthState, opts?: PickEngineOpts) => GscEngineDecision
@@ -110,7 +111,7 @@ export function createDefaultGscQueryDispatcher(
 }
 
 function resolveDefaultEngine(): GscQueryEngine {
-  const override = useGscEngine().value
+  const override = useState<GscQueryEngine | null>(ENGINE_STATE_KEY, () => null).value
   if (override)
     return override
   const cfg = useRuntimeConfig().public.analytics as { defaultEngine?: GscQueryEngine } | undefined
