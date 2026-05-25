@@ -37,11 +37,12 @@ interface WhoamiResponse {
 }
 const whoami = ref<WhoamiResponse | null>(null)
 const whoamiLoading = ref(false)
+const analyticsClient = useGscAnalyticsClient()
 watchEffect(() => {
   if (!import.meta.client || resolvedSite.value || !open.value || whoami.value || whoamiLoading.value)
     return
   whoamiLoading.value = true
-  const request = useGscAnalyticsClient().whoami() as Promise<WhoamiResponse>
+  const request = analyticsClient.whoami() as Promise<WhoamiResponse>
   request
     .then((res) => { whoami.value = res })
     .catch(() => { /* surface via empty state, not a toast */ })
