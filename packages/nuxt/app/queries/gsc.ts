@@ -150,7 +150,7 @@ export const gscQueries = defineNuxtQueryGroup('gsc', {
   }),
   syncProgress: () => defineNuxtRpcQuery({
     key: ['gsc', 'sync-progress'],
-    path: '/api/sync-progress',
+    path: analyticsRoutes.syncProgress,
     response: partnerEndpointSchemas.appSyncProgress.response,
   }),
 })
