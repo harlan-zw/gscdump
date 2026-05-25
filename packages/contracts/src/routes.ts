@@ -82,5 +82,7 @@ export const analyticsRoutes = {
     indexingInspect: (siteId: string) => `/api/__gsc/sites/${encodeURIComponent(siteId)}/indexing/inspect`,
     countries: (siteId: string) => `/api/__gsc/sites/${encodeURIComponent(siteId)}/countries`,
     searchAppearance: (siteId: string) => `/api/__gsc/sites/${encodeURIComponent(siteId)}/search-appearance`,
+    topAssociation: (siteId: string) => `/api/__gsc/sites/${encodeURIComponent(siteId)}/data/top-association`,
   },
+  syncProgress: '/api/sync-progress',
 } as const

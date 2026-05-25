@@ -2,9 +2,9 @@
 // on-demand backfill request, polls sync-progress, and invokes a refetch once
 // the requested range is synced.
 
+import { invalidateNuxtQueries } from 'nuxt-use-query/query-cache'
 import { gscQueries } from '../queries/gsc'
 import { useGscRpc } from '../utils/gsc-rpc'
-import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 interface BackfillRange {
   startDate: string
@@ -36,7 +36,7 @@ export function useGscBackfill(): GscBackfillState & {
   maybeTrigger: (meta: unknown, siteId: string, refetch: () => Promise<unknown> | unknown) => boolean
   reset: () => void
 } {
-  const client = useGscAnalyticsClient()
+  const rpc = useGscRpc()
   const pending = ref(false)
   const range = ref<BackfillRange | null>(null)
   const percent = ref(0)
@@ -50,7 +50,7 @@ export function useGscBackfill(): GscBackfillState & {
   }
 
   async function isRangeCovered(siteId: string, req: BackfillRange): Promise<boolean> {
-    const progress = await useGscRpc().query(gscQueries.syncProgress()).catch(() => null) as SyncProgressResponse | null
+    const progress = await rpc.query(gscQueries.syncProgress(), { silent: true }).catch(() => null) as SyncProgressResponse | null
     const site = progress?.sites?.find(s => s.id === siteId)
     if (!site?.oldestDateSynced || !site?.newestDateSynced)
       return false
@@ -65,7 +65,7 @@ export function useGscBackfill(): GscBackfillState & {
     error.value = null
     attemptedKeys.add(rangeKey(siteId, req))
 
-    await client.requestBackfill(siteId, { ...req }).catch((err: unknown) => {
+    await rpc.execute(gscQueries.backfill(siteId), { ...req }, { silent: true }).catch((err: unknown) => {
       error.value = (err as { data?: { message?: string }, message?: string })?.data?.message
         || (err as Error)?.message
         || 'Failed to queue backfill'
@@ -88,8 +88,14 @@ export function useGscBackfill(): GscBackfillState & {
     if (!covered)
       error.value = 'Backfill did not complete within the expected window. Try again later.'
 
-    if (covered)
+    if (covered) {
+      // Invalidate everything that depends on the newly synced range so
+      // consumers refetch instead of relying on the caller-passed refetch.
+      invalidateNuxtQueries(key => key.startsWith(`gsc:source-info:${siteId}`)
+        || key.startsWith(`gsc:analysis-sources:${siteId}`)
+        || key === 'gsc:sync-progress')
       await refetch()
+    }
     pending.value = false
     range.value = null
   }

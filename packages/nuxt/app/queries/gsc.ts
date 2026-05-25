@@ -1,8 +1,7 @@
 import type { AnalysisSourcesOptions, BackfillRange, GscApiRange, GscdumpTopAssociationParams, IndexingInspectRequest, SourceInfoOptions } from '@gscdump/contracts'
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
-import { analyticsRoutes, partnerEndpointSchemas } from '@gscdump/contracts'
+import { analyticsRoutes, gscdumpAnalysisParamsSchema, gscdumpAnalysisResponseSchema, partnerEndpointSchemas } from '@gscdump/contracts'
 import { defineNuxtQueryGroup, defineNuxtRpcMutation, defineNuxtRpcQuery } from 'nuxt-use-query/rpc'
-import { z } from 'zod'
 
 const DEFAULT_SEARCH_TYPE = 'web'
 
@@ -76,17 +75,22 @@ export const gscQueries = defineNuxtQueryGroup('gsc', {
     siteId: string,
     tables?: string[] | string | AnalysisSourcesOptions,
     options?: { searchType?: SearchType, start?: string, end?: string, startDate?: string, endDate?: string },
-  ) => defineNuxtRpcQuery({
-    key: ['gsc', 'analysis-sources', siteId, JSON.stringify(tables ?? null), JSON.stringify(options ?? null)],
-    path: analyticsRoutes.site.analysisSources(siteId),
-    query: tablesQuery(tables, options),
-    response: partnerEndpointSchemas.analyticsAnalysisSources.response,
-  }),
+  ) => {
+    const source = tables && typeof tables === 'object' && !Array.isArray(tables) ? tables : options
+    const tableList = tables && typeof tables === 'object' && !Array.isArray(tables) ? tables.tables : tables
+    const tablesCsv = Array.isArray(tableList) ? tableList.join(',') : (tableList ?? '')
+    return defineNuxtRpcQuery({
+      key: ['gsc', 'analysis-sources', siteId, source?.searchType ?? DEFAULT_SEARCH_TYPE, source?.start ?? source?.startDate ?? '', source?.end ?? source?.endDate ?? '', tablesCsv],
+      path: analyticsRoutes.site.analysisSources(siteId),
+      query: tablesQuery(tables, options),
+      response: partnerEndpointSchemas.analyticsAnalysisSources.response,
+    })
+  },
   analyze: (siteId: string) => defineNuxtRpcMutation({
-    body: z.custom<AnalysisParams>(value => !!value && typeof value === 'object' && !Array.isArray(value)),
+    body: gscdumpAnalysisParamsSchema,
     method: 'POST',
     path: analyticsRoutes.site.analyze(siteId),
-    response: z.unknown(),
+    response: gscdumpAnalysisResponseSchema,
   }),
   backfill: (siteId: string) => defineNuxtRpcMutation({
     body: partnerEndpointSchemas.analyticsBackfill.body,
@@ -140,7 +144,7 @@ export const gscQueries = defineNuxtQueryGroup('gsc', {
   }),
   topAssociation: (siteId: string, query: GscdumpTopAssociationParams) => defineNuxtRpcQuery({
     key: ['gsc', 'top-association', siteId, query.type, query.identifier, query.startDate, query.endDate],
-    path: `/api/__gsc/sites/${encodeURIComponent(siteId)}/data/top-association`,
+    path: analyticsRoutes.site.topAssociation(siteId),
     query,
     response: partnerEndpointSchemas.getTopAssociation.response,
   }),

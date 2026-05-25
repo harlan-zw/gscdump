@@ -21,7 +21,8 @@
 
 import type { FileResolutionResponse, RollupEnvelope } from '@gscdump/contracts'
 import type { OpfsAttachedHandle } from '@gscdump/engine-duckdb-wasm'
-import { useGscFetch } from '#imports'
+import { gscQueries } from '@gscdump/nuxt/queries/gsc'
+import { useGscRpc } from '#imports'
 
 export interface DailyTotalRow {
   date: number // unix ms
@@ -78,7 +79,7 @@ export function useDailyTotalsFromIceberg(
   const error = ref<Error | null>(null)
   let runToken = 0
 
-  const $gscFetch = useGscFetch()
+  const rpc = useGscRpc()
   const analyticsConfig = useGscAnalyticsConfig()
   // Shared per-site progress map — `<GscBootProgress />` already in the layout
   // reads this. Each site is its own row with live stage + file-count chips.
@@ -109,9 +110,6 @@ export function useDailyTotalsFromIceberg(
     for (const id of siteIds)
       analyticsCtx.patchProgress(id, { stage: 'manifest', source: 'duckdb', filesAttached: 0, filesTotal: 0, startedAt, endedAt: undefined, error: undefined })
 
-    const qs = `searchType=web&tables=dates&start=${range.start}&end=${range.end}`
-    const apiBase = (analyticsConfig.apiBase ?? '').replace(/\/+$/, '')
-
     // Shared DuckDB-WASM boot — kicked off in parallel with the first
     // analysis-sources fetches. Every site awaits this promise before its own
     // `attach` step.
@@ -134,9 +132,14 @@ export function useDailyTotalsFromIceberg(
       let opfsHandle: OpfsAttachedHandle | null = null
       try {
         // ── manifest ────────────────────────────────────────────────────
-        const res = await $gscFetch<FileResolutionResponse | { canUseBrowser?: false }>(
-          `${apiBase}/api/__gsc/sites/${publicId}/analysis-sources?${qs}`,
-        ).catch(() => null)
+        const res = await rpc.query(
+          gscQueries.analysisSources(publicId, ['dates'], {
+            searchType: 'web',
+            start: range.start,
+            end: range.end,
+          }),
+          { silent: true },
+        ).catch(() => null) as FileResolutionResponse | { canUseBrowser?: false } | null
         mark('manifest')
         if (token !== runToken)
           return
