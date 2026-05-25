@@ -30,6 +30,131 @@
       "types": "./module.ts",
       "import": "./module.ts",
       "default": "./module.ts"
+    },
+    "./composables/useGscAnalytics": {
+      "types": "./app/composables/useGscAnalytics.ts",
+      "import": "./app/composables/useGscAnalytics.ts",
+      "default": "./app/composables/useGscAnalytics.ts"
+    },
+    "./composables/useGscAnalyticsClient": {
+      "types": "./app/composables/useGscAnalyticsClient.ts",
+      "import": "./app/composables/useGscAnalyticsClient.ts",
+      "default": "./app/composables/useGscAnalyticsClient.ts"
+    },
+    "./composables/useGscAnalyticsConfig": {
+      "types": "./app/composables/useGscAnalyticsConfig.ts",
+      "import": "./app/composables/useGscAnalyticsConfig.ts",
+      "default": "./app/composables/useGscAnalyticsConfig.ts"
+    },
+    "./composables/useGscAnalyticsSourceInfo": {
+      "types": "./app/composables/useGscAnalyticsSourceInfo.ts",
+      "import": "./app/composables/useGscAnalyticsSourceInfo.ts",
+      "default": "./app/composables/useGscAnalyticsSourceInfo.ts"
+    },
+    "./composables/useGscAnalyzer": {
+      "types": "./app/composables/useGscAnalyzer.ts",
+      "import": "./app/composables/useGscAnalyzer.ts",
+      "default": "./app/composables/useGscAnalyzer.ts"
+    },
+    "./composables/useGscAnalyzerBatch": {
+      "types": "./app/composables/useGscAnalyzerBatch.ts",
+      "import": "./app/composables/useGscAnalyzerBatch.ts",
+      "default": "./app/composables/useGscAnalyzerBatch.ts"
+    },
+    "./composables/useGscAnalyzerDefs": {
+      "types": "./app/composables/useGscAnalyzerDefs.ts",
+      "import": "./app/composables/useGscAnalyzerDefs.ts",
+      "default": "./app/composables/useGscAnalyzerDefs.ts"
+    },
+    "./composables/useGscAuth": {
+      "types": "./app/composables/useGscAuth.ts",
+      "import": "./app/composables/useGscAuth.ts",
+      "default": "./app/composables/useGscAuth.ts"
+    },
+    "./composables/useGscConsoleUrl": {
+      "types": "./app/composables/useGscConsoleUrl.ts",
+      "import": "./app/composables/useGscConsoleUrl.ts",
+      "default": "./app/composables/useGscConsoleUrl.ts"
+    },
+    "./composables/useGscCountries": {
+      "types": "./app/composables/useGscCountries.ts",
+      "import": "./app/composables/useGscCountries.ts",
+      "default": "./app/composables/useGscCountries.ts"
+    },
+    "./composables/useGscCurrentSite": {
+      "types": "./app/composables/useGscCurrentSite.ts",
+      "import": "./app/composables/useGscCurrentSite.ts",
+      "default": "./app/composables/useGscCurrentSite.ts"
+    },
+    "./composables/useGscInspectionHistory": {
+      "types": "./app/composables/useGscInspectionHistory.ts",
+      "import": "./app/composables/useGscInspectionHistory.ts",
+      "default": "./app/composables/useGscInspectionHistory.ts"
+    },
+    "./composables/useGscInspections": {
+      "types": "./app/composables/useGscInspections.ts",
+      "import": "./app/composables/useGscInspections.ts",
+      "default": "./app/composables/useGscInspections.ts"
+    },
+    "./composables/useGscPanelContext": {
+      "types": "./app/composables/useGscPanelContext.ts",
+      "import": "./app/composables/useGscPanelContext.ts",
+      "default": "./app/composables/useGscPanelContext.ts"
+    },
+    "./composables/useGscPeriod": {
+      "types": "./app/composables/useGscPeriod.ts",
+      "import": "./app/composables/useGscPeriod.ts",
+      "default": "./app/composables/useGscPeriod.ts"
+    },
+    "./composables/useGscQuery": {
+      "types": "./app/composables/useGscQuery.ts",
+      "import": "./app/composables/useGscQuery.ts",
+      "default": "./app/composables/useGscQuery.ts"
+    },
+    "./composables/useGscQueryDispatcher": {
+      "types": "./app/composables/useGscQueryDispatcher.ts",
+      "import": "./app/composables/useGscQueryDispatcher.ts",
+      "default": "./app/composables/useGscQueryDispatcher.ts"
+    },
+    "./composables/useGscRequestIndexingInspect": {
+      "types": "./app/composables/useGscRequestIndexingInspect.ts",
+      "import": "./app/composables/useGscRequestIndexingInspect.ts",
+      "default": "./app/composables/useGscRequestIndexingInspect.ts"
+    },
+    "./composables/useGscResource": {
+      "types": "./app/composables/useGscResource.ts",
+      "import": "./app/composables/useGscResource.ts",
+      "default": "./app/composables/useGscResource.ts"
+    },
+    "./composables/useGscRollup": {
+      "types": "./app/composables/useGscRollup.ts",
+      "import": "./app/composables/useGscRollup.ts",
+      "default": "./app/composables/useGscRollup.ts"
+    },
+    "./composables/useGscSearchAppearance": {
+      "types": "./app/composables/useGscSearchAppearance.ts",
+      "import": "./app/composables/useGscSearchAppearance.ts",
+      "default": "./app/composables/useGscSearchAppearance.ts"
+    },
+    "./composables/useGscSiteAnalyzer": {
+      "types": "./app/composables/useGscSiteAnalyzer.ts",
+      "import": "./app/composables/useGscSiteAnalyzer.ts",
+      "default": "./app/composables/useGscSiteAnalyzer.ts"
+    },
+    "./composables/useGscSitemapHistory": {
+      "types": "./app/composables/useGscSitemapHistory.ts",
+      "import": "./app/composables/useGscSitemapHistory.ts",
+      "default": "./app/composables/useGscSitemapHistory.ts"
+    },
+    "./composables/useGscSitemaps": {
+      "types": "./app/composables/useGscSitemaps.ts",
+      "import": "./app/composables/useGscSitemaps.ts",
+      "default": "./app/composables/useGscSitemaps.ts"
+    },
+    "./composables/useGscTableState": {
+      "types": "./app/composables/useGscTableState.ts",
+      "import": "./app/composables/useGscTableState.ts",
+      "default": "./app/composables/useGscTableState.ts"
     }
   },
   "main": "./nuxt.config.ts",
@@ -65,7 +190,8 @@
     "gscdump": "workspace:*",
     "nuxt-use-query": "catalog:",
     "ofetch": "catalog:deps",
-    "tailwindcss": "catalog:"
+    "tailwindcss": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@nuxt/kit": "catalog:",

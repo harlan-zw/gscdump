@@ -67,7 +67,7 @@ export default defineNuxtModule<ModuleOptions>({
       })
     }
 
-    // Strip underscore-prefixed composables from the consumer auto-import surface.
+    // Strip internal composables from the consumer auto-import surface.
     // `app/composables/_useFoo.ts` stays usable inside the layer via explicit
     // relative imports, but never appears as a global auto-import in host apps.
     nuxt.hook('imports:extend', (imports) => {

@@ -9,8 +9,8 @@
 // entry per site/searchType/range via the shared site-resource seam, so they
 // collapse to one network read per session slice.
 
-import type { SourceCapabilities } from '@gscdump/analysis'
 import type { SourceInfoOptions } from '@gscdump/contracts'
+import type { SourceCapabilities } from '@gscdump/engine/source'
 import { acquireSharedEntry, useGscSharedSiteResource } from './_useGscSharedSiteResource'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
@@ -69,12 +69,17 @@ function sourceInfoKey(siteId: string, options?: SourceInfoOptions): string {
   ])
 }
 
-function fetchInto(entry: SourceInfoEntry, siteId: string, options?: SourceInfoOptions): Promise<void> {
+function fetchInto(
+  entry: SourceInfoEntry,
+  siteId: string,
+  options?: SourceInfoOptions,
+  client = useGscAnalyticsClient(),
+): Promise<void> {
   if (entry.pending.value)
     return entry.pending.value
   entry.loading.value = true
   entry.error.value = null
-  const p = (useGscAnalyticsClient().getSourceInfo(siteId, options) as Promise<GscAnalyticsSourceInfo>)
+  const p = (client.getSourceInfo(siteId, options) as Promise<GscAnalyticsSourceInfo>)
     .then((data) => {
       entry.info.value = data
     })
@@ -112,6 +117,7 @@ export function useGscAnalyticsSourceInfo(
   siteId: MaybeRefOrGetter<string | null | undefined>,
   options: MaybeRefOrGetter<SourceInfoOptions | null | undefined> = null,
 ): GscAnalyticsSourceInfoState {
+  const client = useGscAnalyticsClient()
   const cacheKey = computed(() => {
     const id = toValue(siteId)
     return id ? sourceInfoKey(id, toValue(options) ?? undefined) : null
@@ -129,7 +135,7 @@ export function useGscAnalyticsSourceInfo(
       if (!id)
         return
       if (entry.info.value == null && entry.pending.value == null && entry.error.value == null)
-        void fetchInto(entry, id, toValue(options) ?? undefined)
+        void fetchInto(entry, id, toValue(options) ?? undefined, client)
     }, { immediate: true })
   }
 
@@ -143,7 +149,7 @@ export function useGscAnalyticsSourceInfo(
     if (!entry || !id)
       return
     entry.info.value = null
-    await fetchInto(entry, id, toValue(options) ?? undefined)
+    await fetchInto(entry, id, toValue(options) ?? undefined, client)
   }
 
   function supports(analyzerId: MaybeRefOrGetter<string>): ComputedRef<boolean> {

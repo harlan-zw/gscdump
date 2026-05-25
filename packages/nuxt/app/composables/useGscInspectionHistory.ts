@@ -13,8 +13,8 @@ export interface UseGscInspectionHistoryReturn {
   records: ComputedRef<InspectionHistoryRecord[]>
   url: ComputedRef<string | null>
   loading: ComputedRef<boolean>
-  status: Ref<GscResourceStatus>
-  error: Ref<Error | null>
+  status: Readonly<Ref<GscResourceStatus>>
+  error: Readonly<Ref<Error | null>>
   refresh: () => Promise<void>
 }
 
@@ -22,9 +22,11 @@ export function useGscInspectionHistory(
   siteId: MaybeRefOrGetter<string | null | undefined>,
   urlHash: MaybeRefOrGetter<string | null | undefined>,
 ): UseGscInspectionHistoryReturn {
-  const { data, status, loading, error, refresh } = useGscResource({
+  const client = useGscAnalyticsClient()
+  const { data, status, loading, error, refresh } = useGscResource<[string, string], InspectionHistoryResponse>({
+    namespace: 'gsc-inspection-history',
     keys: [siteId, urlHash] as const,
-    fetcher: (id: string, hash: string) => useGscAnalyticsClient().getInspectionHistory(id, hash),
+    fetcher: (id: string, hash: string) => client.getInspectionHistory(id, hash),
   })
 
   const records = computed(() => data.value?.records ?? [])

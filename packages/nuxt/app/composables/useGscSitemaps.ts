@@ -12,15 +12,17 @@ export interface UseGscSitemapsReturn {
   index: Readonly<Ref<SitemapIndex | null>>
   records: ComputedRef<SitemapHistoryRecord[]>
   loading: ComputedRef<boolean>
-  status: Ref<GscResourceStatus>
-  error: Ref<Error | null>
+  status: Readonly<Ref<GscResourceStatus>>
+  error: Readonly<Ref<Error | null>>
   refresh: () => Promise<void>
 }
 
 export function useGscSitemaps(siteId: MaybeRefOrGetter<string | null | undefined>): UseGscSitemapsReturn {
-  const { data, status, loading, error, refresh } = useGscResource({
+  const client = useGscAnalyticsClient()
+  const { data, status, loading, error, refresh } = useGscResource<[string], SitemapIndex>({
+    namespace: 'gsc-sitemaps',
     keys: [siteId] as const,
-    fetcher: (id: string) => useGscAnalyticsClient().getSitemaps(id),
+    fetcher: (id: string) => client.getSitemaps(id),
   })
 
   const records = computed<SitemapHistoryRecord[]>(() => {

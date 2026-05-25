@@ -13,15 +13,17 @@ export interface UseGscInspectionsReturn {
   records: ComputedRef<InspectionHistoryRecord[]>
   statusCounts: ComputedRef<{ PASS: number, NEUTRAL: number, FAIL: number, unknown: number }>
   loading: ComputedRef<boolean>
-  status: Ref<GscResourceStatus>
-  error: Ref<Error | null>
+  status: Readonly<Ref<GscResourceStatus>>
+  error: Readonly<Ref<Error | null>>
   refresh: () => Promise<void>
 }
 
 export function useGscInspections(siteId: MaybeRefOrGetter<string | null | undefined>): UseGscInspectionsReturn {
-  const { data, status, loading, error, refresh } = useGscResource({
+  const client = useGscAnalyticsClient()
+  const { data, status, loading, error, refresh } = useGscResource<[string], InspectionIndex>({
+    namespace: 'gsc-inspections',
     keys: [siteId] as const,
-    fetcher: (id: string) => useGscAnalyticsClient().getInspections(id),
+    fetcher: (id: string) => client.getInspections(id),
   })
 
   const records = computed<InspectionHistoryRecord[]>(() =>

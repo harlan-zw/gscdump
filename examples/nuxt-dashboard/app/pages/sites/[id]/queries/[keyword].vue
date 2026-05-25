@@ -17,7 +17,7 @@ interface PageAggRow { url: string, clicks: number, impressions: number, sum_pos
 
 const attachRange = computed(() => ({ start: range.value.start, end: range.value.end }))
 
-const { tables, query, runQuery, ready, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
+const { tables, query, runQuery, ready, error: analyzerError } = useGscAnalyzerQuery(siteId, attachRange)
 
 const dailyRows = ref<DailyAggRow[] | null>(null)
 const pageRows = ref<PageAggRow[] | null>(null)

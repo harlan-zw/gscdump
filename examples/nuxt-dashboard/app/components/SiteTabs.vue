@@ -8,18 +8,12 @@ const { siteId } = defineProps<{ siteId: string }>()
 const route = useRoute()
 const encoded = computed(() => encodeURIComponent(siteId))
 const base = computed(() => `/sites/${encoded.value}`)
-const { info } = useGscAnalyticsSourceInfo(() => siteId)
-// Lock the Indexing tab when the source is row-only (free tier). The data
-// behind it comes from the entity store which only exists on SQL-capable
-// deployments — free-tier users can still click through to see the ghost UI.
-const locked = computed(() => info.value ? info.value.kind !== 'sql' : false)
 
 interface Tab {
   id: string
   label: string
   to?: string
   soon?: boolean
-  lockedWhenRow?: boolean
 }
 
 const tabs = computed<Tab[]>(() => [
@@ -28,10 +22,10 @@ const tabs = computed<Tab[]>(() => [
   { id: 'pages', label: 'Pages', to: `${base.value}/pages` },
   { id: 'countries', label: 'Countries', to: `${base.value}/countries` },
   { id: 'search-appearance', label: 'Search appearance', to: `${base.value}/search-appearance` },
-  { id: 'indexing', label: 'Indexing', to: `${base.value}/indexing`, lockedWhenRow: true },
+  { id: 'indexing', label: 'Indexing', to: `${base.value}/indexing` },
   { id: 'sitemaps', label: 'Sitemaps', to: `${base.value}/sitemaps` },
   { id: 'insights', label: 'Insights', to: `${base.value}/insights` },
-  { id: 'analyze', label: 'Analyze', to: `${base.value}/analyze`, lockedWhenRow: true },
+  { id: 'analyze', label: 'Analyze', to: `${base.value}/analyze` },
 ])
 
 function isActive(tab: Tab): boolean {
@@ -44,7 +38,7 @@ function isActive(tab: Tab): boolean {
 </script>
 
 <template>
-  <nav class="flex items-center gap-0.5 border-b border-default -mb-px overflow-x-auto">
+  <nav class="lg:hidden flex items-center gap-0.5 border-b border-default -mb-px overflow-x-auto">
     <template v-for="tab in tabs" :key="tab.id">
       <NuxtLink
         v-if="tab.to"
@@ -55,7 +49,6 @@ function isActive(tab: Tab): boolean {
           : 'border-transparent text-muted hover:text-default'"
       >
         {{ tab.label }}
-        <UIcon v-if="tab.lockedWhenRow && locked" name="i-lucide-lock" class="size-3 text-dimmed" />
       </NuxtLink>
       <span
         v-else

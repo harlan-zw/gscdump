@@ -127,6 +127,7 @@ export function useGscBootProgress(): {
 }
 
 function createContext(): GscAnalyticsContext {
+  const client = useGscAnalyticsClient()
   const sites = ref<SiteListItem[] | null>(null)
   const sitesLoading = ref(false)
   const sitesError = ref<Error | null>(null)
@@ -135,7 +136,7 @@ function createContext(): GscAnalyticsContext {
   async function refreshSites(): Promise<void> {
     sitesLoading.value = true
     sitesError.value = null
-    sites.value = await useGscAnalyticsClient().listSites().catch((err) => {
+    sites.value = await client.listSites().catch((err: unknown) => {
       sitesError.value = err instanceof Error ? err : new Error(String(err))
       return null
     })

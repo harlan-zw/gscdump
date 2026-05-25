@@ -9,6 +9,11 @@ const { sites, loading: sitesLoading } = useGscSites()
 // so we cast inline; layer-known keys go through useGscAnalyticsConfig().
 const analyticsCfg = useRuntimeConfig().public.analytics as unknown as { mode?: string }
 const mode = analyticsCfg?.mode ?? 'local'
+const siteId = computed(() => route.path.startsWith('/sites/') ? String(route.params.id ?? '') : '')
+provideGscCurrentSite(siteId)
+const activeSite = computed(() => sites.value?.find(site => site.id === siteId.value) ?? null)
+const inSite = computed(() => Boolean(siteId.value))
+const siteListTitle = computed(() => inSite.value ? 'Switch site' : 'Sites')
 
 function isSiteActive(id: string) {
   return route.path === `/sites/${id}` || route.path.startsWith(`/sites/${id}/`)
@@ -43,9 +48,32 @@ function isSiteActive(id: string) {
           </NuxtLink>
         </nav>
 
+        <div v-if="inSite" class="space-y-3">
+          <div class="px-2">
+            <NuxtLink
+              :to="`/sites/${encodeURIComponent(siteId)}`"
+              class="flex items-center gap-2 rounded px-0 py-1 text-sm text-highlighted hover:text-default"
+            >
+              <GscFavicon
+                v-if="activeSite?.hostname"
+                :domain="activeSite.hostname"
+                :size="18"
+                :alt="activeSite.hostname"
+              />
+              <UIcon v-else name="i-lucide-globe" class="size-4 text-dimmed shrink-0" />
+              <span class="min-w-0">
+                <span class="block truncate font-medium">{{ activeSite?.hostname ?? siteId }}</span>
+                <span class="block truncate text-[11px] text-dimmed">{{ activeSite?.propertyType ?? 'site' }}</span>
+              </span>
+            </NuxtLink>
+          </div>
+
+          <SiteSidebarNav :site-id="siteId" />
+        </div>
+
         <div>
           <div class="text-[11px] font-semibold text-dimmed uppercase tracking-widest px-2 mb-2">
-            Sites
+            {{ siteListTitle }}
           </div>
           <nav class="space-y-0.5">
             <div v-if="sitesLoading" class="px-2 py-1 text-xs text-dimmed">

@@ -94,14 +94,7 @@ const summary = computed(() => {
 
     <SiteTabs :site-id="siteId" />
 
-    <GscGhostPanel
-      :site-id="siteId"
-      requires="sql"
-      title="Indexing reports are a Pro feature"
-      description="URL inspection state and indexing history require the stored parquet backend. Free accounts only see live Search Console metrics."
-      cta-label="See plans"
-      cta-href="/pricing"
-    >
+    <div>
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div class="rounded-lg border border-default bg-default p-4">
           <div class="flex items-center gap-1.5 text-[11px] font-semibold text-dimmed uppercase tracking-widest">
@@ -236,6 +229,6 @@ const summary = computed(() => {
           </div>
         </div>
       </template>
-    </GscGhostPanel>
+    </div>
   </GscDashboardPage>
 </template>

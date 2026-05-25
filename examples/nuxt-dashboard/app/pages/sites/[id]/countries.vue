@@ -1,31 +1,11 @@
 <script setup lang="ts">
-// Countries tab: per-country breakdown sourced from the shared per-site
-// DuckDB-WASM analyzer. The `countries` Iceberg fact table is attached
-// lazily; sibling tabs that already touched it (or had it preloaded by the
-// overview) make this render basically instant.
+// Countries tab: per-country breakdown through the package composable so the
+// fixture can serve either API-backed rows or engine rows.
 
 definePageMeta({ key: route => `site-countries:${route.params.id}` })
 
-interface CountryRow {
-  country: string
-  clicks: number
-  impressions: number
-  sum_position: number
-}
-
 const { siteId } = useGscCurrentSite()
 const { period, compareMode, stableData, range } = useGscPeriod()
-
-const attachRange = computed(() => ({
-  start: compareMode.value === 'year'
-    ? range.value.yearStart
-    : compareMode.value === 'previous'
-      ? range.value.prevStart
-      : range.value.start,
-  end: range.value.end,
-}))
-
-const { tables, query, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
 
 const ranges = computed(() => ({
   current: { start: range.value.start, end: range.value.end },
@@ -36,75 +16,13 @@ const ranges = computed(() => ({
       : { start: range.value.prevStart, end: range.value.prevEnd },
 }))
 
-const rows = ref<CountryRow[]>([])
-const previousRows = ref<CountryRow[]>([])
+const current = useGscCountries(siteId, computed(() => ranges.value.current))
+const previous = useGscCountries(siteId, computed(() => ranges.value.previous))
 
-async function refresh() {
-  if (!siteId.value)
-    return
-  const r = ranges.value
-
-  query<CountryRow>({
-    needs: ['countries'],
-    sql: `
-      SELECT
-        country,
-        SUM(clicks)::DOUBLE AS clicks,
-        SUM(impressions)::DOUBLE AS impressions,
-        SUM(sum_position)::DOUBLE AS sum_position
-      FROM countries
-      WHERE date >= DATE '${r.current.start}' AND date <= DATE '${r.current.end}'
-      GROUP BY country
-      ORDER BY clicks DESC
-    `,
-  })
-    .then((res) => {
-      rows.value = res.map(row => ({
-        country: String(row.country),
-        clicks: Number(row.clicks) || 0,
-        impressions: Number(row.impressions) || 0,
-        sum_position: Number(row.sum_position) || 0,
-      }))
-    })
-    .catch(() => { rows.value = [] })
-
-  if (r.previous) {
-    query<CountryRow>({
-      needs: ['countries'],
-      sql: `
-        SELECT
-          country,
-          SUM(clicks)::DOUBLE AS clicks,
-          SUM(impressions)::DOUBLE AS impressions,
-          SUM(sum_position)::DOUBLE AS sum_position
-        FROM countries
-        WHERE date >= DATE '${r.previous.start}' AND date <= DATE '${r.previous.end}'
-        GROUP BY country
-      `,
-    })
-      .then((res) => {
-        previousRows.value = res.map(row => ({
-          country: String(row.country),
-          clicks: Number(row.clicks) || 0,
-          impressions: Number(row.impressions) || 0,
-          sum_position: Number(row.sum_position) || 0,
-        }))
-      })
-      .catch(() => { previousRows.value = [] })
-  }
-  else {
-    previousRows.value = []
-  }
-}
-
-watch(
-  [siteId, () => ranges.value.current.start, () => ranges.value.current.end, () => ranges.value.previous?.start, () => ranges.value.previous?.end],
-  refresh,
-  { immediate: true },
-)
-
-const countriesStage = computed(() => tables.value.countries.stage)
-const isLoading = computed(() => countriesStage.value !== 'ready' && countriesStage.value !== 'unavailable')
+const rows = computed(() => current.rows.value)
+const previousRows = computed(() => previous.rows.value)
+const analyzerError = computed(() => current.error.value ?? previous.error.value)
+const isLoading = computed(() => current.loading.value || previous.loading.value)
 
 const previousByCountry = computed(() => {
   const map = new Map<string, CountryRow>()

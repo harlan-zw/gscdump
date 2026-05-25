@@ -6,8 +6,9 @@
 // AnalysisParams to `/api/__gsc/sites/[siteId]/analyze`. Override if your server
 // uses a different contract.
 
-import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
+import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ComputedRef, Ref, WatchSource } from '@vue/runtime-core'
+import { withDefaultGscSearchType } from '../queries/gsc'
 import { classifyGscError } from '../utils/gsc-error'
 import { useGscBackfill } from './_useGscBackfill'
 import { useGscQueryDispatcher } from './_useGscQueryDispatcher'
@@ -128,17 +129,14 @@ function isEmpty(v: unknown): boolean {
   return false
 }
 
-async function defaultServerFallback<T>(siteId: string, params: AnalysisParams): Promise<T> {
-  return await useGscAnalyticsClient().analyze<T>(siteId, params)
-}
-
 const DEFAULT_SEARCH_TYPE: NonNullable<AnalysisParams['searchType']> = 'web'
 
 function withDefaultSearchType(params: AnalysisParams): AnalysisParams {
-  return { ...params, searchType: params.searchType ?? DEFAULT_SEARCH_TYPE }
+  return withDefaultGscSearchType(params)
 }
 
 export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): UseGscQueryReturn<T> {
+  const client = useGscAnalyticsClient()
   const querySearchType = computed(() => toValue(opts.params).searchType ?? DEFAULT_SEARCH_TYPE)
   const queryRange = computed(() => {
     const params = toValue(opts.params)
@@ -176,7 +174,7 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
 
   async function runServer(siteId: string): Promise<void> {
     const t0 = performance.now()
-    const fn = opts.serverFallback ?? defaultServerFallback
+    const fn = opts.serverFallback ?? ((siteId: string, params: AnalysisParams) => client.analyze<T>(siteId, params))
     const out = await fn(siteId, withDefaultSearchType(toValue(opts.params))) as T
     data.value = out
     engine.value = 'server'

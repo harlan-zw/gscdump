@@ -14,8 +14,8 @@ export interface UseGscCountriesReturn {
   range: ComputedRef<GscApiRange | null>
   source: ComputedRef<CountriesResponse['source'] | null>
   loading: ComputedRef<boolean>
-  status: Ref<GscResourceStatus>
-  error: Ref<Error | null>
+  status: Readonly<Ref<GscResourceStatus>>
+  error: Readonly<Ref<Error | null>>
   refresh: () => Promise<void>
 }
 
@@ -23,14 +23,16 @@ export function useGscCountries(
   siteId: MaybeRefOrGetter<string | null | undefined>,
   range: MaybeRefOrGetter<{ start: string, end: string } | null | undefined>,
 ): UseGscCountriesReturn {
-  const { data, status, loading, error, refresh } = useGscResource({
+  const client = useGscAnalyticsClient()
+  const { data, status, loading, error, refresh } = useGscResource<[string, string, string], CountriesResponse>({
+    namespace: 'gsc-countries',
     keys: [
       siteId,
       () => toValue(range)?.start,
       () => toValue(range)?.end,
     ] as const,
     fetcher: (id: string, start: string, end: string) =>
-      useGscAnalyticsClient().getCountries(id, { start, end }),
+      client.getCountries(id, { start, end }),
     isEmpty: r => r.rows.length === 0,
   })
 

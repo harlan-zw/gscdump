@@ -19,7 +19,7 @@ interface QueryRowShape { query: string, clicks: number, impressions: number, su
 
 const attachRange = computed(() => ({ start: range.value.start, end: range.value.end }))
 
-const { tables, query, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
+const { tables, query, error: analyzerError } = useGscAnalyzerQuery(siteId, attachRange)
 
 const dailyRaw = ref<DailyRow[]>([])
 const queriesRaw = ref<QueryRowShape[]>([])

@@ -12,7 +12,8 @@
 // `ActionSource` union from `@gscdump/analysis`, so misspelt or unknown
 // sources fail at typecheck instead of at runtime in the priority runner.
 
-import type { ActionSource, AnalysisTool } from '@gscdump/analysis'
+import type { ActionSource } from '@gscdump/analysis'
+import type { AnalysisTool } from '@gscdump/engine/analysis-types'
 import type { Component } from '@vue/runtime-core'
 
 export type GscAnalyzerKind = 'analyzer' | 'semantic' | 'action'

@@ -204,10 +204,9 @@ const chartPrevData = computed(() => stats.value?.previous?.series ?? [])
       v-if="stats && chartData.length"
       class="rounded-lg border border-default bg-default p-4"
     >
-      <PerformanceChart
-        :data="chartData"
-        :previous-data="chartPrevData"
-        :show-comparison="compareMode !== 'none' && chartPrevData.length > 0"
+      <GscPerformanceChart
+        :value="chartData"
+        :prev-value="compareMode !== 'none' ? chartPrevData : null"
         :height="220"
       />
     </div>

@@ -297,11 +297,11 @@ const position = (d: DataRow) => d.position ?? 0
     <div v-if="loading" class="loading-skeleton">
       <div class="flex-1 flex items-end gap-1">
         <div v-for="i in 30" :key="i" class="flex-1 h-full flex">
-          <UiSkeleton type="bar" :index="i" />
+          <USkeleton class="w-full self-end" :style="{ height: `${28 + ((i * 17) % 56)}%` }" />
         </div>
       </div>
       <div class="flex justify-between mt-3">
-        <UiSkeleton v-for="i in 5" :key="i" class="h-3 w-12" />
+        <USkeleton v-for="i in 5" :key="i" class="h-3 w-12" />
       </div>
     </div>
 
@@ -444,11 +444,11 @@ const position = (d: DataRow) => d.position ?? 0
         <div class="loading-skeleton">
           <div class="flex-1 flex items-end gap-1">
             <div v-for="i in 30" :key="i" class="flex-1">
-              <UiSkeleton type="bar" :index="i" />
+              <USkeleton class="w-full self-end" :style="{ height: `${28 + ((i * 17) % 56)}%` }" />
             </div>
           </div>
           <div class="flex justify-between mt-3">
-            <UiSkeleton v-for="i in 5" :key="i" class="h-3 w-12" />
+            <USkeleton v-for="i in 5" :key="i" class="h-3 w-12" />
           </div>
         </div>
       </template>

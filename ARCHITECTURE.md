@@ -16,6 +16,8 @@ gscdump/
 │   ├── cli/                  # @gscdump/cli: CLI entry (gscdump bin)
 │   ├── contracts/            # @gscdump/contracts: hosted API/webhook/realtime schemas and route metadata
 │   ├── sdk/                  # @gscdump/sdk: consumer SDK for hosted gscdump.com integrations
+│   ├── cloudflare/           # @gscdump/cloudflare: Cloudflare Workers / R2 helper primitives
+│   ├── nuxt/                 # @gscdump/nuxt: Nuxt layer, composables, and Gsc* UI
 │   └── mcp/                  # @gscdump/mcp: MCP server (frozen)
 └── pnpm-workspace.yaml
 ```
@@ -32,6 +34,8 @@ Dependency graph (acyclic; engine packages no longer depend on `@gscdump/analysi
 - `@gscdump/engine` → `gscdump`
 - `@gscdump/contracts` → `gscdump` (type/schema contracts)
 - `@gscdump/sdk` → `@gscdump/contracts`
+- `@gscdump/cloudflare` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-gsc-api`
+- `@gscdump/nuxt` → `gscdump`, `@gscdump/contracts`, `@gscdump/sdk`, `@gscdump/engine`, `@gscdump/engine-duckdb-wasm`, `@gscdump/analysis`
 - `@gscdump/mcp` → `gscdump` (frozen)
 
 Canonical schema source of truth: `@gscdump/engine/schema` exports drizzle pg-core tables (`pages`, `keywords`, `countries`, `devices`, `page_keywords`). Every other representation — the abstract `SCHEMAS: Record<TableName, TableSchema>` for parquet writer / planner, the sqlite-core tables in `@gscdump/engine-sqlite` — is derived from or validated against this.
@@ -149,15 +153,32 @@ queues, auth, DB access, or producer behavior.
 ### `@gscdump/sdk`
 
 Consumer SDK for hosted gscdump.com integrations. Owns the pluggable HTTP
-client, websocket client, and webhook receiver helpers. Re-exports
-`@gscdump/contracts` for convenience, but does not own webhook production,
-delivery, retry policy, or gscdump.com storage behavior.
+client, analytics client, websocket client, lifecycle helpers, query re-exports,
+and webhook receiver helpers. Re-exports `@gscdump/contracts` for convenience,
+but does not own webhook production, delivery, retry policy, or gscdump.com
+storage behavior.
+
+### `@gscdump/cloudflare`
+
+Cloudflare Workers and R2 helper primitives: `AnalyticsEnv`, R2 SigV4
+presigning, size-hint signing, inflight dedupe, R2 SQL/Worker shims, and engine
+factory helpers. Host apps own queues, auth, billing, and production routing.
+
+### `@gscdump/nuxt`
+
+Nuxt layer and module. Owns `Gsc*` components, composables, capability gates,
+browser/server source selection, and the SDK-backed analytics client used by
+`/api/__gsc/*` dashboard reads. It does not own partner API transport, billing,
+or host-specific lifecycle decisions.
 
 ### `@gscdump/mcp` (frozen)
 
 MCP server. Ships `gscdump-mcp` bin (env-var auth only); `@gscdump/cli`'s `mcp` command wraps the same server with interactive auth/config loading.
 
-MCP tools: `list-sites`, `list-sites-with-sitemaps`, `list-sitemaps`, `get-sitemap`, `submit-sitemap`, `delete-sitemap`, `fetch-pages`, `fetch-keywords`, `fetch-countries`, `fetch-devices`, `query`, `inspect-url`, `request-indexing`, `get-indexing-status`, `batch-request-indexing`, `batch-inspect-urls`.
+MCP tools: `list-reports`, `run-report`, `list-sites`,
+`list-sites-with-sitemaps`, `list-sitemaps`, `get-sitemap`, `submit-sitemap`,
+`delete-sitemap`, `query`, `inspect-url`, `request-indexing`,
+`get-indexing-status`, `batch-request-indexing`, `batch-inspect-urls`.
 
 ## Data flow
 

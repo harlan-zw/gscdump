@@ -1,36 +1,41 @@
-// Site-keyed async resource composable. Owns key-watch, stale-token discard,
-// status classification, refresh, and dispose for every read-only `/api/__gsc/*`
-// fetcher in the layer. Resource composables (useGscSitemaps,
-// useGscIndexingDiagnostics, …) are thin adapters that wire reactive keys to
-// `useGscAnalyticsClient().getX(...)` plus optional derived computeds.
-//
-// Stale-token (not AbortController) because `@gscdump/sdk`'s AnalyticsClient
-// doesn't accept a signal. Late-arriving promises from a superseded run are
-// dropped on `data`/`status` writes; the in-flight fetch still runs to
-// completion, which is acceptable for read-only GETs.
+// Site-keyed async resource composable. Owns key-watch, status classification,
+// refresh, and cache policy for every read-only `/api/__gsc/*` operation in
+// the layer. Resource composables stay thin adapters that wire reactive keys to
+// `gscQueries.*(...)` operations plus optional derived computeds.
 
 import type { ComputedRef, Ref, WatchSource } from '@vue/runtime-core'
+import type { NuxtRpcQueryOperation } from 'nuxt-use-query/rpc'
 import type { GscErrorStatus } from '../utils/gsc-error'
+import { serializeNuxtRpcKey } from 'nuxt-use-query/rpc'
 import { classifyGscError } from '../utils/gsc-error'
+import { useGscFetch } from '../utils/gsc-fetch'
 
 export type GscResourceStatus = 'idle' | 'pending' | 'success' | 'empty' | GscErrorStatus
 
 export interface UseGscResourceOptions<TArgs extends readonly unknown[], TData> {
   /** Reactive args passed to the fetcher. Resource stays idle while any required key is null/undefined. */
   keys: { [I in keyof TArgs]: MaybeRefOrGetter<TArgs[I] | null | undefined> }
-  /** Async fetcher invoked with the resolved keys. */
-  fetcher: (...args: TArgs) => Promise<TData | null>
+  /** RPC query operation invoked with the resolved keys. */
+  operation?: (...args: TArgs) => NuxtRpcQueryOperation<any, any>
+  /** Composite async fetcher invoked with the resolved keys. Underlying API calls should still use query operations. */
+  fetcher?: (...args: TArgs) => Promise<TData | null>
   /** Predicate for the `empty` status — defaults to checking `null`/`[]`/typical container fields. */
   isEmpty?: (data: TData) => boolean
   /** Extra reactive sources that should retrigger a fetch. */
   watchSources?: WatchSource[]
+  /** Optional namespace for the Nuxt query key. Defaults to `gsc-resource`. */
+  namespace?: string
+  /** Milliseconds before cached data is considered stale. Defaults to `nuxt-use-query`'s 60s. */
+  staleTime?: number
+  /** Evict cached payload after the last consumer unmounts. Defaults to `nuxt-use-query`'s 5 min. */
+  gcTime?: number
 }
 
 export interface UseGscResourceReturn<TData> {
-  data: Ref<TData | null>
-  status: Ref<GscResourceStatus>
+  data: Readonly<Ref<TData | null>>
+  status: Readonly<Ref<GscResourceStatus>>
   loading: ComputedRef<boolean>
-  error: Ref<Error | null>
+  error: Readonly<Ref<Error | null>>
   refresh: () => Promise<void>
 }
 
@@ -53,14 +58,8 @@ function defaultIsEmpty(v: unknown): boolean {
 export function useGscResource<TArgs extends readonly unknown[], TData>(
   opts: UseGscResourceOptions<TArgs, TData>,
 ): UseGscResourceReturn<TData> {
-  const data = shallowRef<TData | null>(null)
-  const status = ref<GscResourceStatus>('idle')
-  const error = ref<Error | null>(null)
-  const loading = computed(() => status.value === 'pending')
-
-  let runToken = 0
-
-  function resolveKeys(): TArgs | null {
+  const namespace = opts.namespace ?? 'gsc-resource'
+  const resolvedArgs = computed<TArgs | null>(() => {
     const out: unknown[] = []
     for (const k of opts.keys) {
       const v = toValue(k)
@@ -69,46 +68,77 @@ export function useGscResource<TArgs extends readonly unknown[], TData>(
       out.push(v)
     }
     return out as unknown as TArgs
-  }
+  })
+
+  const queryKey = computed(() => {
+    const args = resolvedArgs.value
+    return args ? `${namespace}:${JSON.stringify(args)}` : `${namespace}:idle`
+  })
+
+  const enabled = computed(() => resolvedArgs.value != null)
+  const operation = computed<NuxtRpcQueryOperation<any, any> | null>(() => {
+    const args = resolvedArgs.value
+    return args && opts.operation ? opts.operation(...args) : null
+  })
+
+  const gscFetch = useGscFetch()
+  const fetchResource = (async (request: unknown, options?: unknown) => {
+    if (operation.value)
+      return await gscFetch(request as Parameters<typeof gscFetch>[0], options as Parameters<typeof gscFetch>[1])
+    const args = resolvedArgs.value
+    if (!args)
+      return null
+    if (opts.fetcher)
+      return await opts.fetcher(...args)
+    throw new Error('useGscResource: no operation or fetcher configured')
+  }) as unknown as typeof $fetch
+
+  const query = useNuxtQuery<TData | null, Error>(() => operation.value?.path ?? queryKey.value, {
+    key: () => operation.value ? serializeNuxtRpcKey(operation.value.key) : queryKey.value,
+    enabled,
+    query: computed(() => operation.value?.query),
+    transform: (payload: unknown) => operation.value ? operation.value.response.parse(payload) : payload as TData | null,
+    watch: opts.watchSources,
+    staleTime: opts.staleTime,
+    gcTime: opts.gcTime,
+    $fetch: fetchResource,
+  })
+
+  const data = computed<TData | null>(() => {
+    if (!enabled.value)
+      return null
+    return (query.displayData.value ?? null) as TData | null
+  })
+
+  const error = computed<Error | null>(() => {
+    if (!enabled.value)
+      return null
+    const e = query.error.value
+    return e == null ? null : e instanceof Error ? e : new Error(String(e))
+  })
+
+  const status = computed<GscResourceStatus>(() => {
+    if (!enabled.value)
+      return 'idle'
+    if (query.status.value === 'pending')
+      return 'pending'
+    if (query.status.value === 'error') {
+      const classified = classifyGscError(error.value)
+      return classified.status
+    }
+    const out = data.value
+    if (query.status.value === 'success')
+      return out == null || (opts.isEmpty ?? defaultIsEmpty)(out) ? 'empty' : 'success'
+    return 'idle'
+  })
+
+  const loading = computed(() => status.value === 'pending')
 
   async function refresh(): Promise<void> {
-    const args = resolveKeys()
-    const token = ++runToken
-    if (!args) {
-      data.value = null
-      status.value = 'idle'
-      error.value = null
+    if (!enabled.value)
       return
-    }
-    status.value = 'pending'
-    error.value = null
-    try {
-      const out = await opts.fetcher(...args)
-      if (token !== runToken)
-        return
-      data.value = out
-      const empty = out == null || (opts.isEmpty ?? defaultIsEmpty)(out)
-      status.value = empty ? 'empty' : 'success'
-    }
-    catch (e) {
-      if (token !== runToken)
-        return
-      const classified = classifyGscError(e)
-      error.value = e instanceof Error ? e : new Error(String(e))
-      status.value = classified.status
-      data.value = null
-    }
+    await query.refresh()
   }
-
-  watch(
-    [...opts.keys.map(k => () => toValue(k)), ...(opts.watchSources ?? [])],
-    refresh,
-    { immediate: true },
-  )
-
-  onScopeDispose(() => {
-    runToken++
-  })
 
   return { data, status, loading, error, refresh }
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useIntersectionObserver } from '@vueuse/core'
-import { useGscFetch } from '../utils/gsc-fetch'
+import { gscQueries } from '../queries/gsc'
+import { useGscRpc } from '../utils/gsc-rpc'
 
 const props = defineProps<{
   siteUrl: string
@@ -21,14 +22,15 @@ const { stop } = useIntersectionObserver(
       return
     loaded.value = true
     stop()
-    useGscFetch()<{ value: string | null }>(`/api/__gsc/sites/${encodeURIComponent(props.siteUrl)}/data/top-association`, {
-      query: {
+    const request = useGscRpc().query(
+      gscQueries.topAssociation(props.siteUrl, {
         type: props.type,
         identifier: props.identifier,
         startDate: props.startDate,
         endDate: props.endDate,
-      },
-    })
+      }),
+    ) as unknown as Promise<{ value: string | null }>
+    request
       .then(r => value.value = r.value)
       .catch(() => {})
   },

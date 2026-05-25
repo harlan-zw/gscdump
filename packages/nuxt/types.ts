@@ -8,9 +8,9 @@
 
 import type { AnalyticsClient } from '@gscdump/sdk'
 import type { $Fetch } from 'ofetch'
-import type { GscQueryDispatcher } from './app/composables/_useGscQueryDispatcher'
 import type { GscAnalyticsContext } from './app/composables/useGscAnalytics'
 import type { GscAnalyzerDefinition } from './app/composables/useGscAnalyzerDefs'
+import type { GscQueryDispatcher } from './app/composables/useGscQueryDispatcher'
 
 export interface GscAnalyticsRuntimeConfig {
   /**
@@ -70,10 +70,6 @@ export { gscPanelRunnerKey, useGscPanelRunner } from './app/composables/useGscPa
 
 export type { GscPanelRunnerContext } from './app/composables/useGscPanelContext'
 
-export type {
-  UseGscParquetTableOptions,
-  UseGscParquetTableReturn,
-} from './app/composables/useGscParquetTable'
 export type {
   GscBackfillRunner,
   GscQueryDecision,

@@ -22,7 +22,7 @@ const attachRange = computed(() => ({
   end: range.value.end,
 }))
 
-const { tables, query, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
+const { tables, query, error: analyzerError } = useGscAnalyzerQuery(siteId, attachRange)
 
 const ranges = computed(() => ({
   current: { start: range.value.start, end: range.value.end },
@@ -207,7 +207,7 @@ function fmtGrowth(g: number | null): string {
     </div>
 
     <div
-      v-if="pagesReady && currentRows && !currentRows.length"
+      v-if="(pagesStage === 'unavailable' || pagesReady) && currentRows && !currentRows.length"
       class="rounded-lg border border-dashed border-default p-8 text-center text-sm text-muted"
     >
       No pages in the selected window.

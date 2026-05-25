@@ -14,10 +14,10 @@ const gapClass = computed(() => (
 </script>
 
 <template>
-  <div class="flex flex-col min-h-screen">
+  <div class="flex flex-col min-h-screen overflow-x-clip">
     <slot name="header" />
     <div
-      class="max-w-[1128px] px-4 sm:px-6 lg:px-9 pt-4 pb-10 flex flex-col flex-1 w-full"
+      class="max-w-[1128px] min-w-0 px-4 sm:px-6 lg:px-9 pt-4 pb-10 flex flex-col flex-1 w-full"
       :class="gapClass"
     >
       <slot />

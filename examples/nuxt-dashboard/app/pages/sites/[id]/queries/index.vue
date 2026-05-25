@@ -31,7 +31,7 @@ const attachRange = computed(() => ({
   end: range.value.end,
 }))
 
-const { tables, query, runQuery, ready, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
+const { tables, query, runQuery, ready, error: analyzerError } = useGscAnalyzerQuery(siteId, attachRange)
 
 const ranges = computed(() => ({
   current: { start: range.value.start, end: range.value.end },

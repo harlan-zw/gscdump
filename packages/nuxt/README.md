@@ -31,12 +31,24 @@ pnpm add @gscdump/nuxt
 export default defineNuxtConfig({
   extends: ['@gscdump/nuxt'],
   runtimeConfig: {
-    analytics: {
-      mode: 'origin', // or 'consumer' / 'local'
+    public: {
+      analytics: {
+        apiBase: '', // same-origin by default; set to your analytics origin in consumer mode
+      },
     },
   },
 })
 ```
+
+Nuxt auto-imports the layer composables. If you prefer explicit imports, use
+per-composable entrypoints:
+
+```ts
+import { setGscAuth } from '@gscdump/nuxt/composables/useGscAuth'
+import { useGscRollup } from '@gscdump/nuxt/composables/useGscRollup'
+```
+
+The primary query interface is `useGscQuery` / `useGscAnalyzer`.
 
 ## Register an auth provider
 
@@ -60,11 +72,11 @@ export default defineNitroPlugin((nitro) => {
 
 | Need | Endpoint | Client composable |
 | --- | --- | --- |
-| Pre-aggregated widgets (top pages, daily totals) | `GET /api/sites/:siteId/rollup/:id` | `useGscRollup` / `useGscRollups` / `useGscRollupFanout` |
-| Raw rows filtered by dimension/range (`where(eq(page, ...))`) | `POST /api/sites/:siteId/rows` | `useGscRowQuery({ site, state })` |
-| Analyzer result (striking-distance, CTR anomaly, …) | `POST /api/sites/:siteId/analyze` | `useGscAnalyzer(siteId).analyze(...)` |
+| Pre-aggregated widgets (top pages, daily totals) | `GET /api/__gsc/sites/:siteId/rollup/:id` | `useGscRollup` / `useGscRollups` / `useGscRollupFanout` |
+| Raw rows filtered by dimension/range (`where(eq(page, ...))`) | `POST /api/__gsc/sites/:siteId/rows` | `useGscQuery({ siteId, params })` |
+| Analyzer result (striking-distance, CTR anomaly, …) | `POST /api/__gsc/sites/:siteId/analyze` | `useGscAnalyzer(siteId).analyze(...)` |
 
-Rule of thumb: reach for `/rows` + `useGscRowQuery` for detail pages that
+Rule of thumb: reach for `/rows` + `useGscQuery` for detail pages that
 need a freeform slice of the data. Only fall back to `/analyze` when the
 server runs an actual analyzer (anything in the registry); hitting it for
 plain row lookups routes through analyzer-gating logic you don't need.
@@ -78,9 +90,9 @@ the data — e.g. nuxtseo.com pro consuming gscdump.com. Two pieces:
    in `nuxt.config.ts` (or via `NUXT_PUBLIC_ANALYTICS_API_BASE`). Empty =
    same-origin (the default origin-mode shape).
 
-2. **Hand the layer a per-viewer api key**: register a client plugin that
-   trades the viewer's host session for an api key, then call
-   `setGscFetchHeaders({ 'x-api-key': key })`. The layer's `useGscFetch`
+2. **Hand the layer per-viewer auth**: register a client plugin that trades
+   the viewer's host session for an api key, then call
+   `setGscAuth({ apiKey: key })`. The layer's `useGscFetch`
    attaches the header to every `/api/__gsc/*` call automatically. Browser
    parquet reads use exact-object URLs minted by the source endpoint; runtime
    preflights can include this header, while DuckDB-WASM range reads are

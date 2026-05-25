@@ -6,7 +6,7 @@
 // `/analyze` provides these once; panels inject. Type-only — runtime values
 // are the InjectionKey Symbols themselves.
 
-import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
+import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { InjectionKey } from '@vue/runtime-core'
 
 export interface GscPanelRunner {

@@ -11,11 +11,11 @@
 // re-boot. Writes progress to the shared map so <GscBootProgress> lights up
 // on boot regardless of mode.
 
-import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
 import type { AnalysisSourcesResponse, SourceInfoResponse } from '@gscdump/contracts'
 import type { AttachedTablesHandle, BrowserAnalysisRuntime, DuckDBWasmBootResult, QueryResult } from '@gscdump/engine-duckdb-wasm'
+import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
+import type { AnalyzerRegistry } from '@gscdump/engine/analyzer'
 import type { SiteLoadProgress } from './useGscAnalytics'
-import { defaultAnalyzerRegistry } from '@gscdump/analysis'
 import { coerceRow } from '@gscdump/engine'
 import { useGscSharedSiteResource } from './_useGscSharedSiteResource'
 import { useGscAnalyticsContext } from './useGscAnalytics'
@@ -55,21 +55,11 @@ const DEFAULT_ATTACH_FETCH_CONCURRENCY = 2
 const DEFAULT_ATTACH_MAX_FILES = 32
 const DEFAULT_ATTACH_MAX_BYTES = 16 * 1024 * 1024
 
+let defaultAnalyzerRegistryPromise: Promise<AnalyzerRegistry> | null = null
+
 interface AnalyzerRange {
   start: string
   end: string
-}
-
-interface AnalysisSourcesClient {
-  getAnalysisSources: (
-    siteId: string,
-    tables?: string[] | string | { tables?: string[] | string, searchType?: NonNullable<AnalysisParams['searchType']>, start?: string, end?: string },
-    options?: { searchType?: NonNullable<AnalysisParams['searchType']>, start?: string, end?: string },
-  ) => Promise<AnalysisSourcesResponse>
-  getSourceInfo: (
-    siteId: string,
-    options?: { searchType?: NonNullable<AnalysisParams['searchType']>, start?: string, end?: string },
-  ) => Promise<SourceInfoResponse>
 }
 
 function normalizeSearchType(searchType: AnalysisParams['searchType']): NonNullable<AnalysisParams['searchType']> {
@@ -89,18 +79,26 @@ function normalizeRange(range: AnalyzerRange | null | undefined): AnalyzerRange 
   return range?.start && range?.end ? range : null
 }
 
-function loadSourceInfo(siteId: string, searchType: NonNullable<AnalysisParams['searchType']>, range: AnalyzerRange | null): Promise<SourceInfoResponse> {
-  return (useGscAnalyticsClient() as unknown as AnalysisSourcesClient).getSourceInfo(siteId, {
+type AnalyticsClient = ReturnType<typeof useGscAnalyticsClient>
+
+function loadSourceInfo(client: AnalyticsClient, siteId: string, searchType: NonNullable<AnalysisParams['searchType']>, range: AnalyzerRange | null): Promise<SourceInfoResponse> {
+  return client.getSourceInfo(siteId, {
     searchType,
     ...(range ? { start: range.start, end: range.end } : {}),
-  })
+  }) as Promise<SourceInfoResponse>
 }
 
-function loadAnalysisSources(siteId: string, searchType: NonNullable<AnalysisParams['searchType']>, range: AnalyzerRange | null): Promise<AnalysisSourcesResponse> {
-  return (useGscAnalyticsClient() as unknown as AnalysisSourcesClient).getAnalysisSources(siteId, undefined, {
+function loadAnalysisSources(client: AnalyticsClient, siteId: string, searchType: NonNullable<AnalysisParams['searchType']>, range: AnalyzerRange | null): Promise<AnalysisSourcesResponse> {
+  return client.getAnalysisSources(siteId, undefined, {
     searchType,
     ...(range ? { start: range.start, end: range.end } : {}),
-  })
+  }) as Promise<AnalysisSourcesResponse>
+}
+
+function loadDefaultAnalyzerRegistry(): Promise<AnalyzerRegistry> {
+  defaultAnalyzerRegistryPromise ??= import('@gscdump/analysis/registry')
+    .then(m => m.defaultAnalyzerRegistry)
+  return defaultAnalyzerRegistryPromise
 }
 
 /**
@@ -191,6 +189,7 @@ function createInstance(
   const attachedTables = ref<string[]>([])
   const timings = ref<GscAnalyzerTimings | null>(null)
   const manifestVersion = ref<string | undefined>(undefined)
+  const client = useGscAnalyticsClient()
 
   function patch(p: Partial<SiteLoadProgress>): void {
     patchProgress(siteId, { source: 'duckdb', ...p })
@@ -266,7 +265,7 @@ function createInstance(
     patch({ stage: 'manifest', startedAt: Date.now(), filesAttached: 0, filesTotal: 0, error: undefined, endedAt: undefined })
     // Probe the server-resolved source first. Its kind + attachedTables bit
     // decides whether we boot DuckDB-WASM (expensive) or proxy to the server.
-    const info = await loadSourceInfo(siteId, searchType, range)
+    const info = await loadSourceInfo(client, siteId, searchType, range)
     mode = info.browserAttachEligible ? 'browser-attached' : 'server'
 
     if (mode === 'server') {
@@ -297,7 +296,7 @@ function createInstance(
 
     patch({ stage: 'manifest' })
     const t1 = performance.now()
-    const sources = await loadAnalysisSources(siteId, searchType, range)
+    const sources = await loadAnalysisSources(client, siteId, searchType, range)
     const manifestMs = performance.now() - t1
 
     const t2 = performance.now()
@@ -332,7 +331,10 @@ function createInstance(
   }
 
   async function runServerAnalyze(params: AnalysisParams, _signal?: AbortSignal): Promise<AnalysisResult & { queryMs: number }> {
-    const out = await useGscAnalyticsClient().analyze<AnalysisResult & { queryMs?: number }>(siteId, { ...params, searchType: params.searchType ?? searchType })
+    const out = await client.analyze<AnalysisResult & { queryMs?: number }>(
+      siteId,
+      { ...params, searchType: params.searchType ?? searchType },
+    )
     return {
       results: coerceResults(out.results) as AnalysisResult['results'],
       meta: out.meta as AnalysisResult['meta'],
@@ -353,7 +355,9 @@ function createInstance(
     const p = (async () => {
       if (!rt)
         return runServerAnalyze(scopedParams, opts?.signal)
-      const out = await rt.analyze(scopedParams as never, defaultAnalyzerRegistry, { signal: opts?.signal })
+      const registry = await loadDefaultAnalyzerRegistry()
+      opts?.signal?.throwIfAborted?.()
+      const out = await rt.analyze(scopedParams as never, registry, { signal: opts?.signal })
       opts?.signal?.throwIfAborted?.()
       return {
         results: coerceResults(out.results) as AnalysisResult['results'],
@@ -376,7 +380,7 @@ function createInstance(
     await boot
     if (mode !== 'browser-attached' || !runtime || !bootedDb)
       return false
-    const sources = await loadAnalysisSources(siteId, searchType, range)
+    const sources = await loadAnalysisSources(client, siteId, searchType, range)
     if (!runtime.isStale(sources.manifestVersion))
       return false
     // Drop the stale views before swapping in the new partitions. The runtime

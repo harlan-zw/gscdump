@@ -51,6 +51,17 @@ function isoDaysAgo(days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+function errorStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object')
+    return undefined
+  const err = error as {
+    response?: { status?: number }
+    status?: number
+    statusCode?: number
+  }
+  return err.response?.status ?? err.status ?? err.statusCode
+}
+
 const auth = resolveAuth()
 const skip = !auth
 
@@ -68,23 +79,36 @@ describe.skipIf(skip)('analytics pipeline — real API → parquet → query', (
     const sites = await client.sites()
     expect(sites.length).toBeGreaterThan(0)
 
-    // Walk the verified sites until one returns rows for the window — a single
-    // property can legitimately be empty over any given 3-day span.
+    // Walk the verified sites until one returns rows for the window. A single
+    // property can legitimately be empty, and some verified properties can
+    // deny Search Analytics for this token even though they appear in sites().
     let siteUrl: string | undefined
     let fetched: GscApiRow[] = []
     let totalRows = 0
-    for (const site of sites.slice(0, 6)) {
+    let denied = 0
+    for (const site of sites.slice(0, 12)) {
       const rows: GscApiRow[] = []
-      const result = await runGscSyncSlice({
-        client,
-        siteUrl: site.siteUrl,
-        table: 'pages',
-        startDate,
-        endDate,
-        rowLimit: 1000,
-        maxPages: 2,
-        onBatch: async (batch) => { rows.push(...batch) },
-      })
+      let result: Awaited<ReturnType<typeof runGscSyncSlice>>
+      try {
+        result = await runGscSyncSlice({
+          client,
+          siteUrl: site.siteUrl,
+          table: 'pages',
+          startDate,
+          endDate,
+          rowLimit: 1000,
+          maxPages: 2,
+          onBatch: async (batch) => { rows.push(...batch) },
+        })
+      }
+      catch (error) {
+        if (errorStatus(error) === 403) {
+          denied++
+          console.warn(`[pipeline-real] skipping ${site.siteUrl}: Search Analytics returned 403`)
+          continue
+        }
+        throw error
+      }
       // The slice must always terminate cleanly against the real API.
       expect(typeof result.hasMore).toBe('boolean')
       expect(result.totalRows).toBe(rows.length)
@@ -97,7 +121,7 @@ describe.skipIf(skip)('analytics pipeline — real API → parquet → query', (
     }
 
     if (!siteUrl) {
-      console.warn(`[pipeline-real] no GSC page data in ${startDate}..${endDate} across sampled sites — pipeline ran, round-trip skipped`)
+      console.warn(`[pipeline-real] no GSC page data in ${startDate}..${endDate} across sampled sites (${denied} denied) — pipeline ran, round-trip skipped`)
       return
     }
 

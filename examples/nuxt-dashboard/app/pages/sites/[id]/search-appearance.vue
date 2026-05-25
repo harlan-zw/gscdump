@@ -1,35 +1,12 @@
 <script setup lang="ts">
 // Search appearance tab: per-facet breakdown (AMP, rich results, videos, etc.).
-// Sourced from the shared per-site DuckDB-WASM analyzer over the
-// `search_appearance` Iceberg fact table.
+// Sourced through the package composable so fixture sites can use either API
+// rows or engine rows.
 
 definePageMeta({ key: route => `site-search-appearance:${route.params.id}` })
 
-interface SearchAppearanceRow {
-  searchAppearance: string
-  clicks: number
-  impressions: number
-  sum_position: number
-}
-
-interface SearchAppearanceContextRow extends SearchAppearanceRow {
-  page: string
-  query: string
-}
-
 const { siteId } = useGscCurrentSite()
 const { period, compareMode, stableData, range } = useGscPeriod()
-
-const attachRange = computed(() => ({
-  start: compareMode.value === 'year'
-    ? range.value.yearStart
-    : compareMode.value === 'previous'
-      ? range.value.prevStart
-      : range.value.start,
-  end: range.value.end,
-}))
-
-const { tables, query, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
 
 const ranges = computed(() => ({
   current: { start: range.value.start, end: range.value.end },
@@ -40,106 +17,13 @@ const ranges = computed(() => ({
       : { start: range.value.prevStart, end: range.value.prevEnd },
 }))
 
-const rows = ref<SearchAppearanceRow[]>([])
-const previousRows = ref<SearchAppearanceRow[]>([])
-const contextRows = ref<SearchAppearanceContextRow[]>([])
+const current = useGscSearchAppearance(siteId, computed(() => ranges.value.current))
+const previous = useGscSearchAppearance(siteId, computed(() => ranges.value.previous))
 
-async function refresh() {
-  if (!siteId.value)
-    return
-  const r = ranges.value
-
-  query<SearchAppearanceRow>({
-    needs: ['search_appearance'],
-    sql: `
-      SELECT
-        searchAppearance,
-        SUM(clicks)::DOUBLE AS clicks,
-        SUM(impressions)::DOUBLE AS impressions,
-        SUM(sum_position)::DOUBLE AS sum_position
-      FROM search_appearance
-      WHERE date >= DATE '${r.current.start}' AND date <= DATE '${r.current.end}'
-      GROUP BY searchAppearance
-      ORDER BY clicks DESC
-    `,
-  })
-    .then((res) => {
-      rows.value = res.map(row => ({
-        searchAppearance: String(row.searchAppearance ?? ''),
-        clicks: Number(row.clicks) || 0,
-        impressions: Number(row.impressions) || 0,
-        sum_position: Number(row.sum_position) || 0,
-      }))
-    })
-    .catch(() => { rows.value = [] })
-
-  query<SearchAppearanceContextRow>({
-    needs: ['search_appearance_page_queries'],
-    sql: `
-      SELECT
-        searchAppearance,
-        url AS page,
-        query,
-        SUM(clicks)::DOUBLE AS clicks,
-        SUM(impressions)::DOUBLE AS impressions,
-        SUM(sum_position)::DOUBLE AS sum_position
-      FROM search_appearance_page_queries
-      WHERE date >= DATE '${r.current.start}' AND date <= DATE '${r.current.end}'
-      GROUP BY searchAppearance, url, query
-      ORDER BY clicks DESC
-      LIMIT 50
-    `,
-  })
-    .then((res) => {
-      contextRows.value = res.map(row => ({
-        searchAppearance: String(row.searchAppearance ?? ''),
-        page: String(row.page ?? ''),
-        query: String(row.query ?? ''),
-        clicks: Number(row.clicks) || 0,
-        impressions: Number(row.impressions) || 0,
-        sum_position: Number(row.sum_position) || 0,
-      }))
-    })
-    .catch(() => { contextRows.value = [] })
-
-  if (r.previous) {
-    query<SearchAppearanceRow>({
-      needs: ['search_appearance'],
-      sql: `
-        SELECT
-          searchAppearance,
-          SUM(clicks)::DOUBLE AS clicks,
-          SUM(impressions)::DOUBLE AS impressions,
-          SUM(sum_position)::DOUBLE AS sum_position
-        FROM search_appearance
-        WHERE date >= DATE '${r.previous.start}' AND date <= DATE '${r.previous.end}'
-        GROUP BY searchAppearance
-      `,
-    })
-      .then((res) => {
-        previousRows.value = res.map(row => ({
-          searchAppearance: String(row.searchAppearance ?? ''),
-          clicks: Number(row.clicks) || 0,
-          impressions: Number(row.impressions) || 0,
-          sum_position: Number(row.sum_position) || 0,
-        }))
-      })
-      .catch(() => { previousRows.value = [] })
-  }
-  else {
-    previousRows.value = []
-  }
-}
-
-watch(
-  [siteId, () => ranges.value.current.start, () => ranges.value.current.end, () => ranges.value.previous?.start, () => ranges.value.previous?.end],
-  refresh,
-  { immediate: true },
-)
-
-const saStage = computed(() => tables.value.search_appearance.stage)
-const contextStage = computed(() => tables.value.search_appearance_page_queries.stage)
-const isLoading = computed(() => saStage.value !== 'ready' && saStage.value !== 'unavailable')
+const rows = computed(() => current.rows.value)
+const previousRows = computed(() => previous.rows.value)
+const analyzerError = computed(() => current.error.value ?? previous.error.value)
+const isLoading = computed(() => current.loading.value || previous.loading.value)
 
 const previousByKey = computed(() => {
   const map = new Map<string, SearchAppearanceRow>()
@@ -222,7 +106,6 @@ function growthColor(g: number | null, invert = false): 'success' | 'error' | 'n
 }
 
 const hasCompare = computed(() => ranges.value.previous != null)
-const hasContext = computed(() => contextStage.value === 'ready' && contextRows.value.length > 0)
 </script>
 
 <template>
@@ -395,66 +278,5 @@ const hasContext = computed(() => contextStage.value === 'ready' && contextRows.
       </table>
     </div>
 
-    <div v-if="hasContext" class="rounded-lg border border-default bg-default overflow-hidden">
-      <table class="w-full text-sm">
-        <thead class="bg-elevated/50 text-[11px] font-semibold text-dimmed uppercase tracking-widest">
-          <tr>
-            <th class="px-4 py-2.5 text-left">
-              Appearance
-            </th>
-            <th class="px-4 py-2.5 text-left">
-              Page
-            </th>
-            <th class="px-4 py-2.5 text-left">
-              Query
-            </th>
-            <th class="px-4 py-2.5 text-right w-[110px]">
-              Clicks
-            </th>
-            <th class="px-4 py-2.5 text-right w-[130px]">
-              Impressions
-            </th>
-            <th class="px-4 py-2.5 text-right w-[90px]">
-              CTR
-            </th>
-            <th class="px-4 py-2.5 text-right w-[100px]">
-              Avg. pos
-            </th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-default">
-          <tr
-            v-for="r in contextRows"
-            :key="`${r.searchAppearance}:${r.page}:${r.query}`"
-            class="hover:bg-elevated/30 transition-colors"
-          >
-            <td class="px-4 py-2.5 max-w-[220px]">
-              <div class="flex items-center gap-2">
-                <UIcon :name="iconFor(r.searchAppearance)" class="size-4 text-dimmed shrink-0" />
-                <span class="truncate text-default" :title="r.searchAppearance">{{ displayName(r.searchAppearance) }}</span>
-              </div>
-            </td>
-            <td class="px-4 py-2.5 max-w-[320px]">
-              <span class="truncate block text-muted font-mono text-xs" :title="r.page">{{ r.page }}</span>
-            </td>
-            <td class="px-4 py-2.5 max-w-[320px]">
-              <span class="truncate block text-default" :title="r.query">{{ r.query }}</span>
-            </td>
-            <td class="px-4 py-2.5 text-right tabular-nums">
-              {{ r.clicks.toLocaleString() }}
-            </td>
-            <td class="px-4 py-2.5 text-right tabular-nums text-muted">
-              {{ r.impressions.toLocaleString() }}
-            </td>
-            <td class="px-4 py-2.5 text-right tabular-nums text-muted">
-              {{ r.impressions > 0 ? ((r.clicks / r.impressions) * 100).toFixed(1) : '0' }}%
-            </td>
-            <td class="px-4 py-2.5 text-right tabular-nums text-muted">
-              {{ positionFor(r).toFixed(1) }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
   </GscDashboardPage>
 </template>

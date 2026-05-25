@@ -2,7 +2,8 @@
 // on-demand backfill request, polls sync-progress, and invokes a refetch once
 // the requested range is synced.
 
-import { useGscFetch } from '../utils/gsc-fetch'
+import { gscQueries } from '../queries/gsc'
+import { useGscRpc } from '../utils/gsc-rpc'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 interface BackfillRange {
@@ -35,6 +36,7 @@ export function useGscBackfill(): GscBackfillState & {
   maybeTrigger: (meta: unknown, siteId: string, refetch: () => Promise<unknown> | unknown) => boolean
   reset: () => void
 } {
+  const client = useGscAnalyticsClient()
   const pending = ref(false)
   const range = ref<BackfillRange | null>(null)
   const percent = ref(0)
@@ -48,7 +50,7 @@ export function useGscBackfill(): GscBackfillState & {
   }
 
   async function isRangeCovered(siteId: string, req: BackfillRange): Promise<boolean> {
-    const progress = await useGscFetch()<SyncProgressResponse>('/api/sync-progress').catch(() => null)
+    const progress = await useGscRpc().query(gscQueries.syncProgress()).catch(() => null) as SyncProgressResponse | null
     const site = progress?.sites?.find(s => s.id === siteId)
     if (!site?.oldestDateSynced || !site?.newestDateSynced)
       return false
@@ -63,7 +65,7 @@ export function useGscBackfill(): GscBackfillState & {
     error.value = null
     attemptedKeys.add(rangeKey(siteId, req))
 
-    await useGscAnalyticsClient().requestBackfill(siteId, req).catch((err) => {
+    await client.requestBackfill(siteId, { ...req }).catch((err: unknown) => {
       error.value = (err as { data?: { message?: string }, message?: string })?.data?.message
         || (err as Error)?.message
         || 'Failed to queue backfill'

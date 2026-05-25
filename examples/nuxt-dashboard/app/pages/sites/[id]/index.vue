@@ -34,7 +34,11 @@ const attachRange = computed(() => ({
   end: range.value.end,
 }))
 
-const { tables, query, ready, error: analyzerError } = useGscSiteAnalyzer(siteId, attachRange)
+const { tables, query, ready, error: analyzerError } = useGscAnalyzerQuery(siteId, attachRange)
+const { envelopes: dailyEnvelopes } = useDailyTotalsFromIceberg(
+  computed(() => siteId.value ? [{ id: siteId.value }] : []),
+  { range: attachRange, useOpfsCache: false },
+)
 
 const ranges = computed(() => ({
   current: { start: range.value.start, end: range.value.end },
@@ -59,6 +63,42 @@ const topKeywordsLoading = ref(false)
 interface Totals { clicks: number, impressions: number, sum_position: number, days: number }
 const currentTotals = ref<Totals | null>(null)
 const previousTotals = ref<Totals | null>(null)
+
+function toIso(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
+function summarizeDailyTotals(payload: DailyTotal[], start: string, end: string): Totals | null {
+  let clicks = 0
+  let impressions = 0
+  let sumPosition = 0
+  let days = 0
+  for (const row of payload) {
+    const iso = toIso(row.date)
+    if (iso < start || iso > end)
+      continue
+    clicks += row.clicks
+    impressions += row.impressions
+    sumPosition += row.sum_position
+    days++
+  }
+  return days > 0 ? { clicks, impressions, sum_position: sumPosition, days } : null
+}
+
+watch(
+  [() => dailyEnvelopes.value[siteId.value]?.payload, ranges],
+  () => {
+    const payload = dailyEnvelopes.value[siteId.value]?.payload ?? null
+    if (!payload)
+      return
+    dailyPayload.value = payload
+    currentTotals.value = summarizeDailyTotals(payload, ranges.value.current.start, ranges.value.current.end)
+    previousTotals.value = ranges.value.previous
+      ? summarizeDailyTotals(payload, ranges.value.previous.start, ranges.value.previous.end)
+      : null
+  },
+  { immediate: true },
+)
 
 async function refresh() {
   if (!siteId.value)
@@ -278,6 +318,7 @@ const topKeywordRows = computed(() => (topKeywords.value ?? []).map(r => ({
 const datesStage = computed(() => tables.value.dates.stage)
 const queriesStage = computed(() => tables.value.queries.stage)
 const pagesStage = computed(() => tables.value.pages.stage)
+const currentHostname = computed(() => currentSite.value?.hostname && currentSite.value.hostname.includes('.') ? currentSite.value.hostname : null)
 </script>
 
 <template>
@@ -288,12 +329,12 @@ const pagesStage = computed(() => tables.value.pages.stage)
           { label: 'Overview', to: '/' },
           { label: 'Sites' },
         ]"
-        :title="currentSite?.hostname ?? siteId"
+        :title="currentHostname ?? siteId"
         icon="i-lucide-globe"
         description="Search performance across the selected period."
       >
         <template #icon>
-          <GscFavicon v-if="currentSite" :domain="currentSite.hostname" :size="18" :alt="currentSite.hostname" />
+          <GscFavicon v-if="currentHostname" :domain="currentHostname" :size="18" :alt="currentHostname" />
           <UIcon v-else name="i-lucide-globe" class="size-4 text-dimmed shrink-0" />
         </template>
         <template #actions>

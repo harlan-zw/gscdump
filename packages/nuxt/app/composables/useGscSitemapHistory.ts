@@ -12,8 +12,8 @@ export interface UseGscSitemapHistoryReturn {
   snapshots: ComputedRef<SitemapHistoryRecord[]>
   path: ComputedRef<string | null>
   loading: ComputedRef<boolean>
-  status: Ref<GscResourceStatus>
-  error: Ref<Error | null>
+  status: Readonly<Ref<GscResourceStatus>>
+  error: Readonly<Ref<Error | null>>
   refresh: () => Promise<void>
 }
 
@@ -21,9 +21,11 @@ export function useGscSitemapHistory(
   siteId: MaybeRefOrGetter<string | null | undefined>,
   feedpathHash: MaybeRefOrGetter<string | null | undefined>,
 ): UseGscSitemapHistoryReturn {
-  const { data, status, loading, error, refresh } = useGscResource({
+  const client = useGscAnalyticsClient()
+  const { data, status, loading, error, refresh } = useGscResource<[string, string], SitemapHistoryResponse>({
+    namespace: 'gsc-sitemap-history',
     keys: [siteId, feedpathHash] as const,
-    fetcher: (id: string, hash: string) => useGscAnalyticsClient().getSitemapHistory(id, hash),
+    fetcher: (id: string, hash: string) => client.getSitemapHistory(id, hash),
   })
 
   const snapshots = computed(() => data.value?.snapshots ?? [])

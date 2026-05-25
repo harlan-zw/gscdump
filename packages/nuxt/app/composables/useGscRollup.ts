@@ -62,9 +62,11 @@ export function useGscRollup<T = unknown>(
   opts: UseGscRollupOptions = {},
 ): UseGscRollupReturn<T> {
   const ctx = useGscAnalyticsContext()
+  const client = useGscAnalyticsClient()
   const resource = useGscResource<[string, string], RollupEnvelope<T> | null>({
+    namespace: 'gsc-rollup',
     keys: [siteId, rollupId],
-    fetcher: (id, rid) => fetchOne<T>(id, rid, ctx, toValue(opts.range) ?? null),
+    fetcher: (id, rid) => fetchOne<T>(client, id, rid, ctx, toValue(opts.range) ?? null),
     watchSources: [() => toValue(opts.range)?.start, () => toValue(opts.range)?.end],
     isEmpty: env => env == null,
   })
@@ -84,43 +86,31 @@ export function useGscRollups<T = unknown>(
   opts: UseGscRollupOptions = {},
 ): UseGscRollupsReturn<T> {
   const ctx = useGscAnalyticsContext()
-
-  const envelopes = ref<Record<string, RollupEnvelope<T> | null>>({})
-  const loading = ref(false)
-
-  async function refresh(): Promise<void> {
-    const sid = toValue(siteId)
-    const rids = normaliseRollups(toValue(rollupIds))
-    if (!sid || rids.length === 0) {
-      envelopes.value = {}
-      return
-    }
-    loading.value = true
-    const range = toValue(opts.range) ?? null
-    const next: Record<string, RollupEnvelope<T> | null> = {}
-    try {
+  const client = useGscAnalyticsClient()
+  const rollupKey = computed(() => encodeStringList(normaliseRollups(toValue(rollupIds))))
+  const resource = useGscResource<[string, string], Record<string, RollupEnvelope<T> | null>>({
+    namespace: 'gsc-rollups',
+    keys: [siteId, rollupKey],
+    fetcher: async (sid, encoded) => {
+      const rids = decodeStringList(encoded)
+      const next: Record<string, RollupEnvelope<T> | null> = {}
+      const range = toValue(opts.range) ?? null
       await Promise.all(rids.map(async (rid) => {
-        next[rid] = await fetchOne<T>(sid, rid, ctx, range)
+        next[rid] = await fetchOne<T>(client, sid, rid, ctx, range)
       }))
-      envelopes.value = next
-    }
-    finally {
-      loading.value = false
-    }
-  }
-
-  watch(
-    () => [toValue(siteId), normaliseRollups(toValue(rollupIds)).join(','), toValue(opts.range)?.start, toValue(opts.range)?.end],
-    refresh,
-    { immediate: true },
-  )
+      return next
+    },
+    watchSources: [() => toValue(opts.range)?.start, () => toValue(opts.range)?.end],
+    isEmpty: value => Object.keys(value).length === 0,
+  })
+  const envelopes = computed<Record<string, RollupEnvelope<T> | null>>(() => resource.data.value ?? {})
 
   return {
     get: (rollupId: string) => envelopes.value[rollupId] ?? null,
     payload: (rollupId: string) => envelopes.value[rollupId]?.payload ?? null,
-    envelopes,
-    loading: loading as Readonly<Ref<boolean>>,
-    refresh,
+    envelopes: envelopes as unknown as Ref<Record<string, RollupEnvelope<T> | null>>,
+    loading: resource.loading as unknown as Readonly<Ref<boolean>>,
+    refresh: resource.refresh,
   }
 }
 
@@ -134,56 +124,39 @@ export function useGscRollupFanout<T = unknown>(
   opts: UseGscRollupOptions = {},
 ): UseGscRollupFanoutReturn<T> {
   const ctx = useGscAnalyticsContext()
-  const envelopes = ref<Record<string, RollupEnvelope<T> | null>>({})
-  const loading = ref(false)
+  const client = useGscAnalyticsClient()
   const progress = ref<{ completed: number, total: number }>({ completed: 0, total: 0 })
-  // Ensures late-arriving promises from a superseded run don't mutate state
-  // for the current run (e.g. when the range changes rapidly).
-  let runToken = 0
-
-  async function refresh(): Promise<void> {
-    const token = ++runToken
-    const siteIds = normaliseSites(toValue(sites))
-    const rid = toValue(rollupId)
-    if (siteIds.length === 0 || !rid) {
-      envelopes.value = {}
-      progress.value = { completed: 0, total: 0 }
-      return
-    }
-    loading.value = true
-    // Seed envelopes with nulls so the UI can render skeleton rows before any
-    // fetch resolves. Writes land incrementally as each site returns.
-    const seeded: Record<string, RollupEnvelope<T> | null> = {}
-    for (const sid of siteIds) seeded[sid] = null
-    envelopes.value = seeded
-    progress.value = { completed: 0, total: siteIds.length }
-    const range = toValue(opts.range) ?? null
-    try {
+  const siteKey = computed(() => encodeStringList(normaliseSites(toValue(sites))))
+  const resource = useGscResource<[string, string], Record<string, RollupEnvelope<T> | null>>({
+    namespace: 'gsc-rollup-fanout',
+    keys: [siteKey, rollupId],
+    fetcher: async (encoded, rid) => {
+      const siteIds = decodeStringList(encoded)
+      progress.value = { completed: 0, total: siteIds.length }
+      const range = toValue(opts.range) ?? null
+      const next: Record<string, RollupEnvelope<T> | null> = {}
       await Promise.all(siteIds.map(async (sid) => {
-        const env = await fetchOne<T>(sid, rid, ctx, range)
-        if (token !== runToken)
-          return
-        envelopes.value = { ...envelopes.value, [sid]: env }
+        next[sid] = await fetchOne<T>(client, sid, rid, ctx, range)
         progress.value = { completed: progress.value.completed + 1, total: siteIds.length }
       }))
-    }
-    finally {
-      if (token === runToken)
-        loading.value = false
-    }
-  }
-
-  watch(
-    () => [normaliseSites(toValue(sites)).join(','), toValue(rollupId), toValue(opts.range)?.start, toValue(opts.range)?.end],
-    refresh,
-    { immediate: true },
-  )
+      return next
+    },
+    watchSources: [() => toValue(opts.range)?.start, () => toValue(opts.range)?.end],
+    isEmpty: value => Object.keys(value).length === 0,
+  })
+  const envelopes = computed<Record<string, RollupEnvelope<T> | null>>(() => resource.data.value ?? {})
+  watch(resource.loading, (loading) => {
+    if (loading)
+      return
+    if (!resource.data.value)
+      progress.value = { completed: 0, total: 0 }
+  }, { immediate: true })
 
   return {
-    envelopes,
-    loading: loading as Readonly<Ref<boolean>>,
+    envelopes: envelopes as unknown as Ref<Record<string, RollupEnvelope<T> | null>>,
+    loading: resource.loading as unknown as Readonly<Ref<boolean>>,
     progress: progress as Readonly<Ref<{ completed: number, total: number }>>,
-    refresh,
+    refresh: resource.refresh,
   }
 }
 
@@ -204,7 +177,19 @@ function normaliseSites(input: unknown): string[] {
   return out
 }
 
+function encodeStringList(values: string[]): string {
+  return values.length > 0 ? JSON.stringify(values) : ''
+}
+
+function decodeStringList(encoded: string): string[] {
+  const parsed = JSON.parse(encoded) as unknown
+  return Array.isArray(parsed)
+    ? parsed.filter((v): v is string => typeof v === 'string' && v.length > 0)
+    : []
+}
+
 async function fetchOne<T>(
+  client: ReturnType<typeof useGscAnalyticsClient>,
   siteId: string,
   rollupId: string,
   ctx: ReturnType<typeof useGscAnalyticsContext>,
@@ -220,7 +205,7 @@ async function fetchOne<T>(
     endedAt: undefined,
   })
   try {
-    const env = await useGscAnalyticsClient().getRollup<T>(
+    const env = await client.getRollup<T>(
       siteId,
       rollupId,
       range ? { start: range.start, end: range.end } : undefined,

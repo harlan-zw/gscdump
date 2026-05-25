@@ -1,15 +1,36 @@
-// Dashboard route convention `/sites/[id]/*` ↔ analytics layer's
-// `useGscSite(siteId)`. Pages collapse to:
-//   const { siteId, site } = useGscCurrentSite()
-// The analytics layer is otherwise route-agnostic — this composable is the
-// one place the `id` param name is hard-coded. Hosts using a different param
-// name should provide their own equivalent.
+import type { ComputedRef, InjectionKey } from 'vue'
 
-export function useGscCurrentSite(): {
+export interface GscCurrentSiteContext {
   siteId: ComputedRef<string>
   site: ReturnType<typeof useGscSite>
-} {
+}
+
+export const gscCurrentSiteKey: InjectionKey<GscCurrentSiteContext> = Symbol('gsc-current-site')
+
+function createGscCurrentSiteContext(siteId: MaybeRefOrGetter<string | null | undefined>): GscCurrentSiteContext {
+  const resolvedSiteId = computed(() => String(toValue(siteId) ?? ''))
+  return { siteId: resolvedSiteId, site: useGscSite(resolvedSiteId) }
+}
+
+/**
+ * Provide the current-site context for a dashboard subtree. Hosts with a route
+ * shape other than `/sites/[id]/*` should call this from their layout/page.
+ */
+export function provideGscCurrentSite(siteId: MaybeRefOrGetter<string | null | undefined>): GscCurrentSiteContext {
+  const ctx = createGscCurrentSiteContext(siteId)
+  provide(gscCurrentSiteKey, ctx)
+  return ctx
+}
+
+/**
+ * Read the current-site context. Falls back to the historical `/sites/[id]/*`
+ * route convention for existing hosts that have not added a provider yet.
+ */
+export function useGscCurrentSite(): GscCurrentSiteContext {
+  const provided = inject(gscCurrentSiteKey, null)
+  if (provided)
+    return provided
+
   const route = useRoute()
-  const siteId = computed(() => String(route.params.id))
-  return { siteId, site: useGscSite(siteId) }
+  return createGscCurrentSiteContext(() => route.params.id as string | undefined)
 }

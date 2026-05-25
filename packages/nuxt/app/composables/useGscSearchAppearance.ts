@@ -14,8 +14,8 @@ export interface UseGscSearchAppearanceReturn {
   range: ComputedRef<GscApiRange | null>
   source: ComputedRef<SearchAppearanceResponse['source'] | null>
   loading: ComputedRef<boolean>
-  status: Ref<GscResourceStatus>
-  error: Ref<Error | null>
+  status: Readonly<Ref<GscResourceStatus>>
+  error: Readonly<Ref<Error | null>>
   refresh: () => Promise<void>
 }
 
@@ -23,14 +23,16 @@ export function useGscSearchAppearance(
   siteId: MaybeRefOrGetter<string | null | undefined>,
   range: MaybeRefOrGetter<{ start: string, end: string } | null | undefined>,
 ): UseGscSearchAppearanceReturn {
-  const { data, status, loading, error, refresh } = useGscResource({
+  const client = useGscAnalyticsClient()
+  const { data, status, loading, error, refresh } = useGscResource<[string, string, string], SearchAppearanceResponse>({
+    namespace: 'gsc-search-appearance',
     keys: [
       siteId,
       () => toValue(range)?.start,
       () => toValue(range)?.end,
     ] as const,
     fetcher: (id: string, start: string, end: string) =>
-      useGscAnalyticsClient().getSearchAppearance(id, { start, end }),
+      client.getSearchAppearance(id, { start, end }),
     isEmpty: r => r.rows.length === 0,
   })
 
