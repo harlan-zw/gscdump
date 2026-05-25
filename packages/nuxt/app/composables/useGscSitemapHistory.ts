@@ -4,8 +4,8 @@
 import type { SitemapHistoryRecord, SitemapHistoryResponse } from '@gscdump/contracts'
 import type { ComputedRef, Ref } from '@vue/runtime-core'
 import type { GscResourceStatus } from './_useGscResource'
+import { gscQueries } from '../queries/gsc'
 import { useGscResource } from './_useGscResource'
-import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export interface UseGscSitemapHistoryReturn {
   response: Readonly<Ref<SitemapHistoryResponse | null>>
@@ -21,11 +21,9 @@ export function useGscSitemapHistory(
   siteId: MaybeRefOrGetter<string | null | undefined>,
   feedpathHash: MaybeRefOrGetter<string | null | undefined>,
 ): UseGscSitemapHistoryReturn {
-  const client = useGscAnalyticsClient()
   const { data, status, loading, error, refresh } = useGscResource<[string, string], SitemapHistoryResponse>({
-    namespace: 'gsc-sitemap-history',
     keys: [siteId, feedpathHash] as const,
-    fetcher: (id: string, hash: string) => client.getSitemapHistory(id, hash),
+    operation: (id, hash) => gscQueries.sitemapHistory(id, hash),
   })
 
   const snapshots = computed(() => data.value?.snapshots ?? [])

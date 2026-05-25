@@ -17,6 +17,8 @@ import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-ty
 import type { AnalyzerRegistry } from '@gscdump/engine/analyzer'
 import type { SiteLoadProgress } from './useGscAnalytics'
 import { coerceRow } from '@gscdump/engine'
+import { gscQueries } from '../queries/gsc'
+import { useGscRpc } from '../utils/gsc-rpc'
 import { useGscSharedSiteResource } from './_useGscSharedSiteResource'
 import { useGscAnalyticsContext } from './useGscAnalytics'
 import { useGscAnalyticsClient } from './useGscAnalyticsClient'
@@ -190,6 +192,7 @@ function createInstance(
   const timings = ref<GscAnalyzerTimings | null>(null)
   const manifestVersion = ref<string | undefined>(undefined)
   const client = useGscAnalyticsClient()
+  const rpc = useGscRpc()
 
   function patch(p: Partial<SiteLoadProgress>): void {
     patchProgress(siteId, { source: 'duckdb', ...p })
@@ -331,10 +334,11 @@ function createInstance(
   }
 
   async function runServerAnalyze(params: AnalysisParams, _signal?: AbortSignal): Promise<AnalysisResult & { queryMs: number }> {
-    const out = await client.analyze<AnalysisResult & { queryMs?: number }>(
-      siteId,
-      { ...params, searchType: params.searchType ?? searchType },
-    )
+    const out = await rpc.execute(
+      gscQueries.analyze(siteId),
+      { ...params, searchType: params.searchType ?? searchType } as never,
+      { silent: true },
+    ) as AnalysisResult & { queryMs?: number }
     return {
       results: coerceResults(out.results) as AnalysisResult['results'],
       meta: out.meta as AnalysisResult['meta'],

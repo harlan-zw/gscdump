@@ -25,6 +25,26 @@ export default defineNuxtConfig({
     'nuxt-use-query',
   ],
 
+  // Enforce shared/contracts + app/queries pattern at build time so host apps
+  // can't drift back to hardcoded `/api/*` literals in components / composables.
+  // Hosts can opt out per-site by overriding `nuxtUseQuery.contracts.enabled`.
+  nuxtUseQuery: {
+    contracts: {
+      enabled: true,
+      // `@gscdump/contracts` is the shared package alias for hosted-API wire
+      // shapes — query files must import from there (or a host
+      // `shared/contracts/*`).
+      apiPrefixes: ['/api/__gsc', '/api/sync-progress'],
+      queryDirs: ['app/queries', 'layers/*/app/queries'],
+      contractDirs: ['shared/contracts', 'layers/*/shared/contracts', '@gscdump/contracts'],
+      serverApiDirs: ['server/api', 'layers/*/server/api'],
+      requireServerContracts: false,
+      // The config file declares these prefixes so the scanner must skip it.
+      // (overrides the default ignore set — keep the defaults alongside it.)
+      ignore: ['.git', '.nuxt', '.output', 'coverage', 'dist', 'node_modules', 'nuxt.config.ts'],
+    },
+  },
+
   css: [
     fileURLToPath(new URL('./app/assets/css/main.css', import.meta.url)),
   ],

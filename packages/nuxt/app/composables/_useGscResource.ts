@@ -1,12 +1,13 @@
 // Site-keyed async resource composable. Owns key-watch, status classification,
 // refresh, and cache policy for every read-only `/api/__gsc/*` operation in
-// the layer. Resource composables stay thin adapters that wire reactive keys to
-// `gscQueries.*(...)` operations plus optional derived computeds.
+// the layer. Resource composables stay thin adapters that wire reactive keys
+// to `gscQueries.*(...)` operations (preferred) — or to a `fetcher` for the
+// rollup composables that mix multiple operations + progress side-effects.
 
 import type { ComputedRef, Ref, WatchSource } from '@vue/runtime-core'
 import type { NuxtRpcQueryOperation } from 'nuxt-use-query/rpc'
 import type { GscErrorStatus } from '../utils/gsc-error'
-import { serializeNuxtRpcKey } from 'nuxt-use-query/rpc'
+import { useNuxtRpcQuery } from 'nuxt-use-query/rpc'
 import { classifyGscError } from '../utils/gsc-error'
 import { useGscFetch } from '../utils/gsc-fetch'
 
@@ -15,17 +16,17 @@ export type GscResourceStatus = 'idle' | 'pending' | 'success' | 'empty' | GscEr
 export interface UseGscResourceOptions<TArgs extends readonly unknown[], TData> {
   /** Reactive args passed to the fetcher. Resource stays idle while any required key is null/undefined. */
   keys: { [I in keyof TArgs]: MaybeRefOrGetter<TArgs[I] | null | undefined> }
-  /** RPC query operation invoked with the resolved keys. */
+  /** RPC query operation invoked with the resolved keys. Preferred over `fetcher` — gets Zod validation + shared cache keying. */
   operation?: (...args: TArgs) => NuxtRpcQueryOperation<any, any>
-  /** Composite async fetcher invoked with the resolved keys. Underlying API calls should still use query operations. */
+  /** Composite async fetcher invoked with the resolved keys. Use only when an operation can't model the request (multi-call, progress side-effects). */
   fetcher?: (...args: TArgs) => Promise<TData | null>
   /** Predicate for the `empty` status — defaults to checking `null`/`[]`/typical container fields. */
   isEmpty?: (data: TData) => boolean
   /** Extra reactive sources that should retrigger a fetch. */
   watchSources?: WatchSource[]
-  /** Optional namespace for the Nuxt query key. Defaults to `gsc-resource`. */
+  /** Optional namespace for the fetcher-mode cache key. Defaults to `gsc-resource`. Ignored when `operation` is provided (the operation owns its key). */
   namespace?: string
-  /** Milliseconds before cached data is considered stale. Defaults to `nuxt-use-query`'s 60s. */
+  /** Milliseconds before cached data is considered stale. Defaults to `nuxt-use-query`'s 0. */
   staleTime?: number
   /** Evict cached payload after the last consumer unmounts. Defaults to `nuxt-use-query`'s 5 min. */
   gcTime?: number
@@ -70,21 +71,80 @@ export function useGscResource<TArgs extends readonly unknown[], TData>(
     return out as unknown as TArgs
   })
 
+  const enabled = computed(() => resolvedArgs.value != null)
+  const gscFetch = useGscFetch()
+
+  // Operation branch: route through useNuxtRpcQuery so we inherit Zod
+  // response validation, RPC key serialization, and shared cache invalidation.
+  if (opts.operation) {
+    const operation = computed<NuxtRpcQueryOperation<any, any> | null>(() => {
+      const args = resolvedArgs.value
+      return args ? opts.operation!(...args) : null
+    })
+
+    // Idle placeholder when args aren't ready — useNuxtRpcQuery is always
+    // mounted, but the `enabled` gate prevents the request firing.
+    const fallbackOp = { key: `${namespace}:idle`, path: `${namespace}:idle`, response: { parse: (v: unknown) => v } as any }
+
+    const query = useNuxtRpcQuery<any>(
+      () => operation.value ?? fallbackOp,
+      {
+        enabled,
+        watch: opts.watchSources,
+        staleTime: opts.staleTime,
+        gcTime: opts.gcTime,
+        $fetch: gscFetch as any,
+      } as any,
+    )
+
+    const data = computed<TData | null>(() => {
+      if (!enabled.value)
+        return null
+      return (query.displayData.value ?? null) as TData | null
+    })
+
+    const error = computed<Error | null>(() => {
+      if (!enabled.value)
+        return null
+      const e = query.error.value
+      return e == null ? null : e instanceof Error ? e : new Error(String(e))
+    })
+
+    const status = computed<GscResourceStatus>(() => {
+      if (!enabled.value)
+        return 'idle'
+      if (query.status.value === 'pending')
+        return 'pending'
+      if (query.status.value === 'error') {
+        const classified = classifyGscError(error.value)
+        return classified.status
+      }
+      const out = data.value
+      if (query.status.value === 'success')
+        return out == null || (opts.isEmpty ?? defaultIsEmpty)(out) ? 'empty' : 'success'
+      return 'idle'
+    })
+
+    const loading = computed(() => status.value === 'pending')
+
+    async function refresh(): Promise<void> {
+      if (!enabled.value)
+        return
+      await query.refresh()
+    }
+
+    return { data, status, loading, error, refresh }
+  }
+
+  // Fetcher branch: composables that can't be modelled as a single RPC
+  // operation (rollup fan-out, progress tracking) drop down to a raw
+  // useNuxtQuery + bound $fetch.
   const queryKey = computed(() => {
     const args = resolvedArgs.value
     return args ? `${namespace}:${JSON.stringify(args)}` : `${namespace}:idle`
   })
 
-  const enabled = computed(() => resolvedArgs.value != null)
-  const operation = computed<NuxtRpcQueryOperation<any, any> | null>(() => {
-    const args = resolvedArgs.value
-    return args && opts.operation ? opts.operation(...args) : null
-  })
-
-  const gscFetch = useGscFetch()
-  const fetchResource = (async (request: unknown, options?: unknown) => {
-    if (operation.value)
-      return await gscFetch(request as Parameters<typeof gscFetch>[0], options as Parameters<typeof gscFetch>[1])
+  const fetchResource = (async () => {
     const args = resolvedArgs.value
     if (!args)
       return null
@@ -93,11 +153,9 @@ export function useGscResource<TArgs extends readonly unknown[], TData>(
     throw new Error('useGscResource: no operation or fetcher configured')
   }) as unknown as typeof $fetch
 
-  const query = useNuxtQuery<TData | null, Error>(() => operation.value?.path ?? queryKey.value, {
-    key: () => operation.value ? serializeNuxtRpcKey(operation.value.key) : queryKey.value,
+  const query = useNuxtQuery<TData | null, Error>(() => queryKey.value, {
+    key: () => queryKey.value,
     enabled,
-    query: computed(() => operation.value?.query),
-    transform: (payload: unknown) => operation.value ? operation.value.response.parse(payload) : payload as TData | null,
     watch: opts.watchSources,
     staleTime: opts.staleTime,
     gcTime: opts.gcTime,

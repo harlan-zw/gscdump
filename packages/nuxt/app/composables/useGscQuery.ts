@@ -8,11 +8,11 @@
 
 import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ComputedRef, Ref, WatchSource } from '@vue/runtime-core'
-import { withDefaultGscSearchType } from '../queries/gsc'
+import { gscQueries, withDefaultGscSearchType } from '../queries/gsc'
 import { classifyGscError } from '../utils/gsc-error'
+import { useGscRpc } from '../utils/gsc-rpc'
 import { useGscBackfill } from './_useGscBackfill'
 import { useGscQueryDispatcher } from './_useGscQueryDispatcher'
-import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 import { useGscAnalyzer } from './useGscAnalyzer'
 import { _useGscAuthInternal } from './useGscAuth'
 
@@ -136,7 +136,7 @@ function withDefaultSearchType(params: AnalysisParams): AnalysisParams {
 }
 
 export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): UseGscQueryReturn<T> {
-  const client = useGscAnalyticsClient()
+  const rpc = useGscRpc()
   const querySearchType = computed(() => toValue(opts.params).searchType ?? DEFAULT_SEARCH_TYPE)
   const queryRange = computed(() => {
     const params = toValue(opts.params)
@@ -174,7 +174,7 @@ export function useGscQuery<T = AnalysisResult>(opts: UseGscQueryOptions<T>): Us
 
   async function runServer(siteId: string): Promise<void> {
     const t0 = performance.now()
-    const fn = opts.serverFallback ?? ((siteId: string, params: AnalysisParams) => client.analyze<T>(siteId, params))
+    const fn = opts.serverFallback ?? (async (siteId: string, params: AnalysisParams) => rpc.execute(gscQueries.analyze(siteId), params as never, { silent: true }) as Promise<T>)
     const out = await fn(siteId, withDefaultSearchType(toValue(opts.params))) as T
     data.value = out
     engine.value = 'server'

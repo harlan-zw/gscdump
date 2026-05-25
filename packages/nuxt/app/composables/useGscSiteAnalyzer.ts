@@ -12,7 +12,9 @@ import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-ty
 import { defaultAnalyzerRegistry } from '@gscdump/analysis'
 import { runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import { createAttachedTableSource } from '@gscdump/engine/source'
+import { gscQueries } from '../queries/gsc'
 import { attachParquetWithFallback, sharedGscDuckDBWasm } from '../utils/duckdb-wasm'
+import { useGscRpc } from '../utils/gsc-rpc'
 
 export type GscFactTable
   = | 'pages'
@@ -268,23 +270,26 @@ function createAnalyzer(args: AnalyzerArgs): BootedAnalyzer {
   const tablePromises = new Map<GscFactTable, Promise<void>>()
   const opfsHandles = new Map<GscFactTable, OpfsAttachedHandle>()
 
-  const $gscFetch = useGscFetch()
+  const rpc = useGscRpc()
   const analyticsConfig = useGscAnalyticsConfig()
   const analyticsCtx = useGscAnalyticsContext()
-  const apiBase = (analyticsConfig.apiBase ?? '').replace(/\/+$/, '')
 
   let resolvePromise: Promise<FileResolutionResponse | null> | null = null
   function getResolution(): Promise<FileResolutionResponse | null> {
     if (resolvePromise)
       return resolvePromise
-    const qs = `searchType=${args.searchType}&start=${args.range.start}&end=${args.range.end}`
-    resolvePromise = $gscFetch<FileResolutionResponse | { canUseBrowser?: false }>(
-      `${apiBase}/api/__gsc/sites/${args.siteId}/analysis-sources?${qs}`,
+    resolvePromise = rpc.query(
+      gscQueries.analysisSources(args.siteId, undefined, {
+        searchType: args.searchType as 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews',
+        start: args.range.start,
+        end: args.range.end,
+      }),
+      { silent: true },
     )
       .then((res) => {
         if (!res || (res as { canUseBrowser?: boolean }).canUseBrowser === false)
           return null
-        return res as FileResolutionResponse
+        return res as unknown as FileResolutionResponse
       })
       .catch(() => null)
     return resolvePromise

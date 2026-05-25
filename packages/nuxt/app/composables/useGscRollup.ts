@@ -11,9 +11,10 @@
 
 import type { RollupEnvelope } from '@gscdump/contracts'
 import type { SiteListItem } from './useGscAnalytics'
+import { gscQueries } from '../queries/gsc'
+import { useGscRpc } from '../utils/gsc-rpc'
 import { useGscResource } from './_useGscResource'
 import { useGscAnalyticsContext } from './useGscAnalytics'
-import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 type RollupsInput = MaybeRefOrGetter<string | readonly string[]>
 type SiteLike = string | { id: string } | SiteListItem
@@ -62,11 +63,11 @@ export function useGscRollup<T = unknown>(
   opts: UseGscRollupOptions = {},
 ): UseGscRollupReturn<T> {
   const ctx = useGscAnalyticsContext()
-  const client = useGscAnalyticsClient()
+  const rpc = useGscRpc()
   const resource = useGscResource<[string, string], RollupEnvelope<T> | null>({
     namespace: 'gsc-rollup',
     keys: [siteId, rollupId],
-    fetcher: (id, rid) => fetchOne<T>(client, id, rid, ctx, toValue(opts.range) ?? null),
+    fetcher: (id, rid) => fetchOne<T>(rpc, id, rid, ctx, toValue(opts.range) ?? null),
     watchSources: [() => toValue(opts.range)?.start, () => toValue(opts.range)?.end],
     isEmpty: env => env == null,
   })
@@ -86,7 +87,7 @@ export function useGscRollups<T = unknown>(
   opts: UseGscRollupOptions = {},
 ): UseGscRollupsReturn<T> {
   const ctx = useGscAnalyticsContext()
-  const client = useGscAnalyticsClient()
+  const rpc = useGscRpc()
   const rollupKey = computed(() => encodeStringList(normaliseRollups(toValue(rollupIds))))
   const resource = useGscResource<[string, string], Record<string, RollupEnvelope<T> | null>>({
     namespace: 'gsc-rollups',
@@ -96,7 +97,7 @@ export function useGscRollups<T = unknown>(
       const next: Record<string, RollupEnvelope<T> | null> = {}
       const range = toValue(opts.range) ?? null
       await Promise.all(rids.map(async (rid) => {
-        next[rid] = await fetchOne<T>(client, sid, rid, ctx, range)
+        next[rid] = await fetchOne<T>(rpc, sid, rid, ctx, range)
       }))
       return next
     },
@@ -124,7 +125,7 @@ export function useGscRollupFanout<T = unknown>(
   opts: UseGscRollupOptions = {},
 ): UseGscRollupFanoutReturn<T> {
   const ctx = useGscAnalyticsContext()
-  const client = useGscAnalyticsClient()
+  const rpc = useGscRpc()
   const progress = ref<{ completed: number, total: number }>({ completed: 0, total: 0 })
   const siteKey = computed(() => encodeStringList(normaliseSites(toValue(sites))))
   const resource = useGscResource<[string, string], Record<string, RollupEnvelope<T> | null>>({
@@ -136,7 +137,7 @@ export function useGscRollupFanout<T = unknown>(
       const range = toValue(opts.range) ?? null
       const next: Record<string, RollupEnvelope<T> | null> = {}
       await Promise.all(siteIds.map(async (sid) => {
-        next[sid] = await fetchOne<T>(client, sid, rid, ctx, range)
+        next[sid] = await fetchOne<T>(rpc, sid, rid, ctx, range)
         progress.value = { completed: progress.value.completed + 1, total: siteIds.length }
       }))
       return next
@@ -189,7 +190,7 @@ function decodeStringList(encoded: string): string[] {
 }
 
 async function fetchOne<T>(
-  client: ReturnType<typeof useGscAnalyticsClient>,
+  rpc: ReturnType<typeof useGscRpc>,
   siteId: string,
   rollupId: string,
   ctx: ReturnType<typeof useGscAnalyticsContext>,
@@ -205,11 +206,10 @@ async function fetchOne<T>(
     endedAt: undefined,
   })
   try {
-    const env = await client.getRollup<T>(
-      siteId,
-      rollupId,
-      range ? { start: range.start, end: range.end } : undefined,
-    )
+    const env = await rpc.query(
+      gscQueries.rollup(siteId, rollupId, range ?? undefined),
+      { silent: true },
+    ) as RollupEnvelope<T>
     ctx.patchProgress(siteId, { stage: 'ready', filesAttached: 1, endedAt: Date.now() })
     return env
   }

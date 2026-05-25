@@ -5,8 +5,8 @@
 import type { InspectionHistoryRecord, InspectionHistoryResponse } from '@gscdump/contracts'
 import type { ComputedRef, Ref } from '@vue/runtime-core'
 import type { GscResourceStatus } from './_useGscResource'
+import { gscQueries } from '../queries/gsc'
 import { useGscResource } from './_useGscResource'
-import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export interface UseGscInspectionHistoryReturn {
   response: Readonly<Ref<InspectionHistoryResponse | null>>
@@ -22,11 +22,9 @@ export function useGscInspectionHistory(
   siteId: MaybeRefOrGetter<string | null | undefined>,
   urlHash: MaybeRefOrGetter<string | null | undefined>,
 ): UseGscInspectionHistoryReturn {
-  const client = useGscAnalyticsClient()
   const { data, status, loading, error, refresh } = useGscResource<[string, string], InspectionHistoryResponse>({
-    namespace: 'gsc-inspection-history',
     keys: [siteId, urlHash] as const,
-    fetcher: (id: string, hash: string) => client.getInspectionHistory(id, hash),
+    operation: (id, hash) => gscQueries.inspectionHistory(id, hash),
   })
 
   const records = computed(() => data.value?.records ?? [])

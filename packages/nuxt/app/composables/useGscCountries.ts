@@ -5,8 +5,8 @@
 import type { CountriesResponse, CountryRow, GscApiRange } from '@gscdump/contracts'
 import type { ComputedRef, Ref } from '@vue/runtime-core'
 import type { GscResourceStatus } from './_useGscResource'
+import { gscQueries } from '../queries/gsc'
 import { useGscResource } from './_useGscResource'
-import { useGscAnalyticsClient } from './useGscAnalyticsClient'
 
 export interface UseGscCountriesReturn {
   response: Readonly<Ref<CountriesResponse | null>>
@@ -23,16 +23,13 @@ export function useGscCountries(
   siteId: MaybeRefOrGetter<string | null | undefined>,
   range: MaybeRefOrGetter<{ start: string, end: string } | null | undefined>,
 ): UseGscCountriesReturn {
-  const client = useGscAnalyticsClient()
   const { data, status, loading, error, refresh } = useGscResource<[string, string, string], CountriesResponse>({
-    namespace: 'gsc-countries',
     keys: [
       siteId,
       () => toValue(range)?.start,
       () => toValue(range)?.end,
     ] as const,
-    fetcher: (id: string, start: string, end: string) =>
-      client.getCountries(id, { start, end }),
+    operation: (id, start, end) => gscQueries.countries(id, { start, end }),
     isEmpty: r => r.rows.length === 0,
   })
 
