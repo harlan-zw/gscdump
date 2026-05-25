@@ -1,15 +1,20 @@
 import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
-import type { GscFactTable, GscTableStatus } from '@gscdump/nuxt/composables/useGscSiteAnalyzer'
+import type { GscFactTable, GscTableStatus, UseGscSiteAnalyzerReturn } from '@gscdump/nuxt/composables/useGscSiteAnalyzer'
 import type { MaybeRefOrGetter } from 'vue'
 
 export type DashboardFactTable = GscFactTable
 export type DashboardTableStatus = GscTableStatus
+export interface UseGscAnalyzerQueryReturn extends Pick<UseGscSiteAnalyzerReturn, 'tables' | 'ready' | 'error'> {
+  query: <T = Record<string, unknown>>(opts: { sql: string, needs?: readonly DashboardFactTable[], params?: readonly unknown[] }) => Promise<T[]>
+  runQuery: <T = Record<string, unknown>>(sql: string, params?: readonly unknown[]) => Promise<{ rows: T[], queryMs: number }>
+  analyze: (params: AnalysisParams, opts?: { signal?: AbortSignal }) => Promise<AnalysisResult & { queryMs: number }>
+}
 
 export function useGscAnalyzerQuery(
   siteId: MaybeRefOrGetter<string | null | undefined>,
   range: MaybeRefOrGetter<{ start: string, end: string } | null | undefined>,
   options: { searchType?: 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews' } = {},
-) {
+): UseGscAnalyzerQueryReturn {
   const analyzer = useGscSiteAnalyzer(siteId, range, {
     searchType: options.searchType ?? 'web',
   })

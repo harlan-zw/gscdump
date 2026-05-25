@@ -1,4 +1,4 @@
-import type { BackfillRange, GscdumpTopAssociationParams, IndexingInspectRequest, SourceInfoOptions } from '@gscdump/contracts'
+import type { AnalysisSourcesOptions, BackfillRange, GscApiRange, GscdumpTopAssociationParams, IndexingInspectRequest, SourceInfoOptions } from '@gscdump/contracts'
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import { analyticsRoutes, partnerEndpointSchemas } from '@gscdump/contracts'
 import { defineNuxtQueryGroup, defineNuxtRpcMutation, defineNuxtRpcQuery } from 'nuxt-use-query/rpc'
@@ -7,15 +7,6 @@ import { z } from 'zod'
 const DEFAULT_SEARCH_TYPE = 'web'
 
 type SearchType = NonNullable<SourceInfoOptions['searchType']>
-interface DateRange { start: string, end: string }
-interface AnalysisSourcesOptions {
-  tables?: string[] | string
-  searchType?: SearchType
-  start?: string
-  end?: string
-  startDate?: string
-  endDate?: string
-}
 
 function searchTypeQuery(searchType?: SearchType): Record<string, string> {
   return { searchType: searchType ?? DEFAULT_SEARCH_TYPE }
@@ -129,19 +120,19 @@ export const gscQueries = defineNuxtQueryGroup('gsc', {
     path: analyticsRoutes.site.indexingInspect(siteId),
     response: partnerEndpointSchemas.analyticsIndexingInspect.response,
   }),
-  countries: (siteId: string, range: DateRange) => defineNuxtRpcQuery({
+  countries: (siteId: string, range: GscApiRange) => defineNuxtRpcQuery({
     key: ['gsc', 'countries', siteId, range.start, range.end],
     path: analyticsRoutes.site.countries(siteId),
     query: range,
     response: partnerEndpointSchemas.analyticsCountries.response,
   }),
-  searchAppearance: (siteId: string, range: DateRange) => defineNuxtRpcQuery({
+  searchAppearance: (siteId: string, range: GscApiRange) => defineNuxtRpcQuery({
     key: ['gsc', 'search-appearance', siteId, range.start, range.end],
     path: analyticsRoutes.site.searchAppearance(siteId),
     query: range,
     response: partnerEndpointSchemas.analyticsSearchAppearance.response,
   }),
-  rollup: (siteId: string, rollupId: string, range?: Partial<DateRange>) => defineNuxtRpcQuery({
+  rollup: (siteId: string, rollupId: string, range?: Partial<GscApiRange>) => defineNuxtRpcQuery({
     key: ['gsc', 'rollup', siteId, rollupId, range?.start ?? '', range?.end ?? ''],
     path: analyticsRoutes.site.rollup(siteId, rollupId),
     query: range,
