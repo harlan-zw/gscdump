@@ -30,6 +30,8 @@ jobs:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
       - run: pnpm i
+        env:
+          PNPM_MINIMUM_RELEASE_AGE: 0
 
       # `@gscdump/engine` bundles ~20 entries via obuild; on the GitHub-hosted
       # ubuntu runner the default Node heap (~2 GB) OOM'd during v0.5.0, even

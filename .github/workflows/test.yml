@@ -23,6 +23,8 @@ jobs:
           cache: pnpm
 
       - run: pnpm i
+        env:
+          PNPM_MINIMUM_RELEASE_AGE: 0
 
       - name: Lint
         run: pnpm lint
