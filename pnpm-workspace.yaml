@@ -9,6 +9,7 @@ minimumReleaseAgeExclude:
   - icebird@0.8.5
   - retriv@0.14.7
   - nuxt-use-query@0.2.4
+  - nuxt-use-query@0.2.7
 shellEmulator: true
 
 trustPolicy: no-downgrade
@@ -54,7 +55,7 @@ catalog:
   icebird: ^0.8.5
   js-yaml: ^4.1.1
   nuxt: ^4.4.6
-  nuxt-use-query: ^0.2.4
+  nuxt-use-query: ^0.2.7
   retriv: ^0.14.7
   tailwindcss: ^4.3.0
   tsx: ^4.22.3
