@@ -8,8 +8,8 @@ minimumReleaseAgeExclude:
   - tsx@4.22.2
   - icebird@0.8.5
   - retriv@0.14.7
-  - nuxt-use-query@0.2.4
   - nuxt-use-query@0.2.7
+  - nuxt-use-query@0.3.0
 shellEmulator: true
 
 trustPolicy: no-downgrade
@@ -32,7 +32,7 @@ overrides:
 patchedDependencies:
   icebird@0.8.5: patches/icebird@0.8.5.patch
 catalog:
-  '@cloudflare/workers-types': ^4.20260524.1
+  '@cloudflare/workers-types': ^4.20260525.1
   '@duckdb/duckdb-wasm': ^1.32.0
   '@duckdb/node-api': 1.5.1-r.2
   '@huggingface/transformers': ^4.2.0
@@ -51,11 +51,11 @@ catalog:
   drizzle-orm: ^0.45.2
   h3: ^1.15.11
   hyparquet: ^1.26.0
-  hyparquet-writer: ^0.15.2
+  hyparquet-writer: ^0.15.3
   icebird: ^0.8.5
   js-yaml: ^4.1.1
   nuxt: ^4.4.6
-  nuxt-use-query: ^0.2.7
+  nuxt-use-query: ^0.3.0
   retriv: ^0.14.7
   tailwindcss: ^4.3.0
   tsx: ^4.22.3
