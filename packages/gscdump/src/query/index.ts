@@ -1,4 +1,4 @@
-import { currentPstDate, dayjsPst } from './utils/dayjs'
+import { currentPstDate, daysAgoPst } from './utils/dayjs'
 
 // Date helpers
 export function today(): string {
@@ -6,7 +6,7 @@ export function today(): string {
 }
 
 export function daysAgo(n: number): string {
-  return dayjsPst().subtract(n, 'day').format('YYYY-MM-DD')
+  return daysAgoPst(n)
 }
 
 // Query builder
@@ -51,4 +51,4 @@ export { extractDateRange, extractMetricFilters, extractSearchType, extractSpeci
 // Types
 export type { BuilderState, Column, Dimension, DimensionValueMap, Filter, FilterInput, GSCResult, GSCRow, InternalFilter, JsonFilter, JsonInternalFilter, Metric, MetricColumn, QueryParam, QueryParamName, QueryParamValueMap } from './types'
 
-export { currentPstDate, dayjs, dayjsPst } from './utils/dayjs'
+export { currentPstDate } from './utils/dayjs'

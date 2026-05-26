@@ -69,7 +69,7 @@ catalogs:
     '@googleapis/searchconsole': ^6.0.1
     citty: ^0.2.2
     consola: ^3.4.2
-    dayjs: ^1.11.20
+    date-fns: ^4.3.0
     defu: ^6.1.7
     google-auth-library: ^10.6.2
     ofetch: ^1.5.1

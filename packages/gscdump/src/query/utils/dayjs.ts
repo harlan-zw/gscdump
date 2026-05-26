@@ -1,19 +1,24 @@
-import type { Dayjs } from 'dayjs'
-import _dayjs from 'dayjs'
-import timezone from 'dayjs/plugin/timezone.js'
-import utc from 'dayjs/plugin/utc.js'
+import { format, subDays } from 'date-fns'
 
-_dayjs.extend(utc)
-_dayjs.extend(timezone)
+const PST_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Los_Angeles',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
 
-export function dayjs(date?: _dayjs.ConfigType): Dayjs {
-  return _dayjs(date)
+function pstDateParts(d: Date = new Date()): { year: number, month: number, day: number } {
+  const parts = PST_FORMATTER.formatToParts(d)
+  const get = (t: string) => Number(parts.find(p => p.type === t)!.value)
+  return { year: get('year'), month: get('month'), day: get('day') }
 }
 
 export function currentPstDate(): string {
-  return dayjs().tz('America/Los_Angeles').hour(12).minute(0).second(0).format('YYYY-MM-DD')
+  const { year, month, day } = pstDateParts()
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-export function dayjsPst(): Dayjs {
-  return dayjs().tz('America/Los_Angeles').hour(12).minute(0).second(0)
+export function daysAgoPst(n: number): string {
+  const { year, month, day } = pstDateParts()
+  return format(subDays(new Date(year, month - 1, day, 12), n), 'yyyy-MM-dd')
 }

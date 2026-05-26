@@ -113,7 +113,7 @@
   },
   "dependencies": {
     "@gscdump/contracts": "workspace:*",
-    "dayjs": "catalog:deps",
+    "date-fns": "catalog:deps",
     "defu": "catalog:deps",
     "ofetch": "catalog:deps",
     "ufo": "catalog:deps"
