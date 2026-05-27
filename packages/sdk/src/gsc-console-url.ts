@@ -1,6 +1,6 @@
 // Builds `search.google.com/search-console?...` deep-links for a site +
-// optional page / query. Portable across consumers — no layer state, pure
-// URL string concat.
+// optional page / query. Portable across consumers — no framework state,
+// pure URL string concat.
 
 export interface GscConsoleUrlOpts {
   /** The GSC property — either `sc-domain:example.com` or a URL-prefix. */

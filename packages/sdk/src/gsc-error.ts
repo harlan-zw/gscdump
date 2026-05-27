@@ -1,5 +1,7 @@
-// Error classification shared by the layer's fetch wrappers and query hooks.
-// Returns a structured status the caller maps to UI (toast, banner, retry, …).
+// Error classification for the user-facing GSC fetch wrapper.
+// Distinct from PartnerApiError (SDK partner-API errors) — this maps any
+// thrown error into a structured GSC-specific status the caller renders as
+// toast / banner / retry UI.
 
 export type GscErrorStatus
   = | 'auth-missing'

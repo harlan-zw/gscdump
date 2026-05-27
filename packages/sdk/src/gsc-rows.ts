@@ -3,10 +3,8 @@
 // Free-tier rows (GSC API) ship `position`; engine rows ship `sum_position`.
 // Both formats coerce to the same denominator: `sum_position = position * impressions`,
 // so downstream `weightedPosition / impressions` math works without branching.
-//
-// Lifted from the per-page detail pages where the coalesce + totals reducer
-// was duplicated. The `+1` in `position` is GSC's 1-indexed convention
-// (position 1 == top result), applied once after weighting.
+// The `+1` in `position` is GSC's 1-indexed convention (position 1 == top
+// result), applied once after weighting.
 
 export interface RawDailyRow {
   date: string
@@ -69,4 +67,14 @@ export function summarizeDailyRows(raw: readonly RawDailyRow[]): GscDailySummary
   }
   const chartData = daily.map(d => ({ date: d.date, clicks: d.clicks, impressions: d.impressions }))
   return { daily, totals, chartData }
+}
+
+/**
+ * Rollup-row position helper. `sum_position` is GSC's average-position sum
+ * across impressions; dividing back out (+1 because GSC is 1-indexed) gives
+ * the impression-weighted average position. Returns 0 when there were no
+ * impressions so the column renders blank rather than NaN.
+ */
+export function positionFor(r: { impressions: number, sum_position: number }): number {
+  return r.impressions > 0 ? r.sum_position / r.impressions + 1 : 0
 }

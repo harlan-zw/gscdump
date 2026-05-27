@@ -597,9 +597,18 @@ importers:
 
   packages/sdk:
     dependencies:
+      '@gscdump/analysis':
+        specifier: workspace:*
+        version: link:../analysis
       '@gscdump/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@gscdump/engine':
+        specifier: workspace:*
+        version: link:../engine
+      date-fns:
+        specifier: catalog:deps
+        version: 4.3.0
       gscdump:
         specifier: workspace:*
         version: link:../gscdump

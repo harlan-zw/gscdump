@@ -13,7 +13,7 @@ import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { GoogleSearchConsoleClient } from 'gscdump'
 import type { BuilderState, Filter } from 'gscdump/query'
 import { googleSearchConsole } from 'gscdump'
-import { extractMetricFilters, extractSpecialOperatorFilters } from 'gscdump/query'
+import { extractMetricFilters, extractSpecialOperatorFilters, normalizeFilter } from 'gscdump/query'
 import { createGscApiQuerySource } from './source'
 
 // Dimensions the GSC API can't produce (engine-derived).
@@ -51,17 +51,24 @@ export interface CreateLiveGscSourceOptions {
 // gscdump query layer's `extractSpecialFilters` pulls it out and lifts it
 // onto the request body. If the state already names a different slice, the
 // caller's filter wins — same precedence rule as date filters today.
+//
+// Normalize first so wire-format filters (`{ type, column, from, to }`) become
+// `_filters` shape before we splice in the searchType entry. Without this, the
+// spread `{ ...existing, _filters: [...] }` produces a hybrid that has BOTH a
+// `type` field AND `_filters` — isWireFilter rejects (sees `_filters`),
+// normalizeFilter passes it through unchanged, and the date bound (still on
+// the wire `type/from/to`) is silently lost downstream.
 function withSearchType(state: BuilderState, searchType: EngineSearchType): BuilderState {
-  const existing = state.filter as Filter<any> | undefined
-  const existingFilters = existing?._filters ?? []
+  const normalized = normalizeFilter(state.filter as Parameters<typeof normalizeFilter>[0]) as Filter<any> | undefined
+  const existingFilters = normalized?._filters ?? []
   const namesSearchType = existingFilters.some(f => f.dimension === 'searchType')
   if (namesSearchType)
-    return state
+    return normalized === state.filter ? state : { ...state, filter: normalized as BuilderState['filter'] }
   const newEntry = { dimension: 'searchType', operator: 'eq' as const, expression: searchType }
-  const merged: Filter<any> = existing
-    ? { ...existing, _filters: [...existingFilters, newEntry as unknown as typeof existingFilters[number]] }
+  const merged: Filter<any> = normalized
+    ? { ...normalized, _filters: [...existingFilters, newEntry as unknown as typeof existingFilters[number]] }
     : { _filters: [newEntry as unknown as Parameters<typeof Object>[0]], _groupType: 'and' } as unknown as Filter<any>
-  return { ...state, filter: merged }
+  return { ...state, filter: merged as BuilderState['filter'] }
 }
 
 export function createLiveGscSource(opts: CreateLiveGscSourceOptions): AnalysisQuerySource {

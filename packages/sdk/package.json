@@ -56,7 +56,10 @@
     }
   },
   "dependencies": {
+    "@gscdump/analysis": "workspace:*",
     "@gscdump/contracts": "workspace:*",
+    "@gscdump/engine": "workspace:*",
+    "date-fns": "catalog:deps",
     "ofetch": "catalog:deps",
     "zod": "catalog:"
   },
