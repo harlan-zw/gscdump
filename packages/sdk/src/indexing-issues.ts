@@ -123,7 +123,7 @@ export const coverageLabels: Record<string, { short: string, color: string }> = 
   'Blocked by robots.txt': { short: 'Robots blocked', color: 'text-warning' },
 }
 
-export function coverageLabel(state: string) {
+export function coverageLabel(state: string): { short: string, color: string } {
   return coverageLabels[state] || { short: state, color: 'text-muted' }
 }
 

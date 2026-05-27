@@ -37,7 +37,6 @@ catalog:
   '@duckdb/node-api': 1.5.1-r.2
   '@huggingface/transformers': ^4.2.0
   '@modelcontextprotocol/sdk': ^1.29.0
-  '@nuxt/kit': ^4.4.6
   '@nuxt/ui': ^4.8.0
   '@types/js-yaml': ^4.0.9
   '@types/node': ^25.9.1
@@ -45,8 +44,6 @@ catalog:
   '@unovis/ts': ^1.6.5
   '@unovis/vue': ^1.6.5
   '@uwdata/flechette': ^2.5.0
-  '@vueuse/core': ^14.3.0
-  '@vueuse/nuxt': ^14.3.0
   aws4fetch: ^1.0.20
   drizzle-orm: ^0.45.2
   h3: ^1.15.11

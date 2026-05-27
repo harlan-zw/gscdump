@@ -9,7 +9,7 @@ const PST_FORMATTER = new Intl.DateTimeFormat('en-CA', {
 
 function pstDateParts(d: Date = new Date()): { year: number, month: number, day: number } {
   const parts = PST_FORMATTER.formatToParts(d)
-  const get = (t: string) => Number(parts.find(p => p.type === t)!.value)
+  const get = (t: string): number => Number(parts.find(p => p.type === t)!.value)
   return { year: get('year'), month: get('month'), day: get('day') }
 }
 

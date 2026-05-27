@@ -10,8 +10,8 @@
 // component (lazy-imported via `defineAsyncComponent` to preserve route-level
 // codesplitting) plus optional `summarize`/`caption`.
 
-import { defineGscAnalyzer } from '../layers/gsc/types'
 import { defineAsyncComponent } from 'vue'
+import { defineGscAnalyzer } from '../layers/gsc/types'
 
 function nfmt(n: number): string {
   return new Intl.NumberFormat().format(Math.round(n))

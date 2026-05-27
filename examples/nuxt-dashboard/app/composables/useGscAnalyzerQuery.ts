@@ -1,6 +1,6 @@
 import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
-import type { GscFactTable, GscTableStatus, UseGscSiteAnalyzerReturn } from '../../layers/gsc/app/composables/useGscSiteAnalyzer'
 import type { MaybeRefOrGetter } from 'vue'
+import type { GscFactTable, GscTableStatus, UseGscSiteAnalyzerReturn } from '../../layers/gsc/app/composables/useGscSiteAnalyzer'
 
 export type DashboardFactTable = GscFactTable
 export type DashboardTableStatus = GscTableStatus
