@@ -1,6 +1,6 @@
 catalogMode: prefer
 minimumReleaseAgeExclude:
-  - '@cloudflare/workers-types@4.20260519.1'
+  - '@cloudflare/workers-types@4.20260527.1'
   - '@nuxt/nitro-server@4.4.6'
   - '@nuxt/vite-builder@4.4.6'
   - '@types/node@25.9.0'
