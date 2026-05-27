@@ -24,6 +24,8 @@ export interface CreateSqlQuerySourceOptions<TKey extends string> {
   execute: (sql: string, params: unknown[]) => Promise<QueryRow[]>
   /** Tenant id for multi-tenant dialects; forwarded to `resolveToSQL`. */
   siteId?: string | number
+  /** Search-type scope for multi-tenant dialects; forwarded to `resolveToSQL`. */
+  searchType?: string
   /** Additional capability flags merged on top of `adapter.capabilities`. */
   extraCapabilities?: Partial<SourceCapabilities>
 }
@@ -31,7 +33,7 @@ export interface CreateSqlQuerySourceOptions<TKey extends string> {
 export function createSqlQuerySource<TKey extends string>(
   options: CreateSqlQuerySourceOptions<TKey>,
 ): AnalysisQuerySource {
-  const { name, kind, adapter, execute, siteId, extraCapabilities } = options
+  const { name, kind, adapter, execute, siteId, searchType, extraCapabilities } = options
   return {
     name,
     kind,
@@ -39,7 +41,7 @@ export function createSqlQuerySource<TKey extends string>(
     adapter,
     siteId,
     async queryRows(state) {
-      const resolved = resolveToSQL(state, { adapter, siteId })
+      const resolved = resolveToSQL(state, { adapter, siteId, searchType })
       const rows = await execute(resolved.sql, resolved.params)
       return coerceRows(rows)
     },

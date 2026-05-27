@@ -36,6 +36,7 @@ export function createResolverAdapter<TableKey extends string>(
     dateColRef: runtime.dateColRef,
     urlToPathExpr: runtime.urlToPathExpr,
     siteIdColRef: runtime.siteIdColRef,
+    searchTypeColRef: runtime.searchTypeColRef,
     dimExprSql: runtime.dimExprSql,
     metricSql: runtime.metricSql,
     dimensionPredicates: runtime.dimensionPredicates,

@@ -153,7 +153,7 @@ function buildScope<TK extends string>(
   state: BuilderState,
   options: ResolverOptions<TK>,
 ): BuiltScope<TK> {
-  const { adapter, siteId } = options
+  const { adapter, siteId, searchType } = options
   const plan = buildLogicalPlan(state, adapter.capabilities)
   const tableKey = adapter.tableKeyForDataset(plan.dataset)
 
@@ -167,6 +167,8 @@ function buildScope<TK extends string>(
   const wherePredicates: SQL[] = []
   if (adapter.siteIdColRef && siteId != null)
     wherePredicates.push(sql`${adapter.siteIdColRef(tableKey)} = ${siteId}`)
+  if (adapter.searchTypeColRef && searchType != null)
+    wherePredicates.push(sql`${adapter.searchTypeColRef(tableKey)} = ${searchType}`)
   wherePredicates.push(sql`${adapter.dateColRef(tableKey)} >= ${plan.dateRange.startDate}`)
   wherePredicates.push(sql`${adapter.dateColRef(tableKey)} <= ${plan.dateRange.endDate}`)
   wherePredicates.push(...adapter.prefilterPredicates(prefilters, tableKey))
@@ -368,7 +370,7 @@ export function resolveComparisonSQL<TK extends string>(
   options: ResolverOptions<TK>,
   comparisonFilter?: ComparisonFilter,
 ): ResolvedComparisonSQL {
-  const { adapter, siteId } = options
+  const { adapter, siteId, searchType } = options
   const comparisonPlan = buildComparisonPlan(current, previous, adapter.capabilities)
   const currentScope = buildScope(current, options)
   const previousScope = buildScope(previous, options)
@@ -400,6 +402,8 @@ export function resolveComparisonSQL<TK extends string>(
   const prevWhere: SQL[] = []
   if (adapter.siteIdColRef && siteId != null)
     prevWhere.push(sql`${adapter.siteIdColRef(tableKey)} = ${siteId}`)
+  if (adapter.searchTypeColRef && searchType != null)
+    prevWhere.push(sql`${adapter.searchTypeColRef(tableKey)} = ${searchType}`)
   if (previousScope.startDate)
     prevWhere.push(sql`${adapter.dateColRef(tableKey)} >= ${previousScope.startDate}`)
   if (previousScope.endDate)
@@ -472,7 +476,7 @@ export function buildExtrasQueries<TK extends string>(
   state: BuilderState,
   options: ResolverOptions<TK>,
 ): ExtraQuery[] {
-  const { adapter, siteId } = options
+  const { adapter, siteId, searchType } = options
   const plan = buildLogicalPlan(state, adapter.capabilities)
   const dims = plan.groupByDimensions
   const extras: ExtraQuery[] = []
@@ -489,6 +493,8 @@ export function buildExtrasQueries<TK extends string>(
   const whereParts: SQL[] = []
   if (adapter.siteIdColRef && siteId != null)
     whereParts.push(sql`${adapter.siteIdColRef(queriesKey)} = ${siteId}`)
+  if (adapter.searchTypeColRef && searchType != null)
+    whereParts.push(sql`${adapter.searchTypeColRef(queriesKey)} = ${searchType}`)
   whereParts.push(sql`${adapter.dateColRef(queriesKey)} >= ${plan.dateRange.startDate}`)
   whereParts.push(sql`${adapter.dateColRef(queriesKey)} <= ${plan.dateRange.endDate}`)
 

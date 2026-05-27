@@ -2,7 +2,7 @@ import type { BuilderState } from 'gscdump/query'
 import { describe, expect, it } from 'vitest'
 import { FILES_PLACEHOLDER, resolveParquetSQL, substituteNamedFiles } from '../src/index'
 import { resolveToSQL as resolverResolveToSQL, resolveToSQLOptimized } from '../src/resolver/compile'
-import { createParquetResolverAdapter, pgResolverAdapter } from '../src/resolver/pg-adapter'
+import { createIcebergResolverAdapter, createParquetResolverAdapter, pgResolverAdapter } from '../src/resolver/pg-adapter'
 
 function state(partial: Partial<BuilderState>): BuilderState {
   return {
@@ -259,5 +259,49 @@ describe('prefilter (row-level WHERE on raw metrics)', () => {
       } as any,
     }), { adapter })
     expect(r.params).not.toContain(0.05)
+  })
+})
+
+describe('createIcebergResolverAdapter', () => {
+  it('injects site_id and search_type predicates when both scopes are provided', () => {
+    const adapter = createIcebergResolverAdapter()
+    const r = resolverResolveToSQL(state({}), { adapter, siteId: 42, searchType: 'web' })
+    expect(r.sql).toContain('"pages"."site_id"')
+    expect(r.sql).toContain('"pages"."search_type"')
+    expect(r.params).toContain(42)
+    expect(r.params).toContain('web')
+  })
+
+  it('omits search_type predicate when searchType option is not set', () => {
+    const adapter = createIcebergResolverAdapter()
+    const r = resolverResolveToSQL(state({}), { adapter, siteId: 42 })
+    expect(r.sql).toContain('"pages"."site_id"')
+    expect(r.sql).not.toContain('"pages"."search_type"')
+    expect(r.params).toContain(42)
+  })
+
+  it('omits site_id predicate when siteId option is not set', () => {
+    const adapter = createIcebergResolverAdapter()
+    const r = resolverResolveToSQL(state({}), { adapter, searchType: 'image' })
+    expect(r.sql).not.toContain('"pages"."site_id"')
+    expect(r.sql).toContain('"pages"."search_type"')
+    expect(r.params).toContain('image')
+  })
+})
+
+describe('pgResolverAdapter ignores multi-tenant scopes', () => {
+  // Regression guard: legacy single-tenant pgResolverAdapter must NOT inject
+  // site_id / search_type predicates even if callers pass these options. The
+  // parquet read path treats site identity as implicit (per-site object keys).
+  it('emits no site_id / search_type predicates regardless of options', () => {
+    const r = resolverResolveToSQL(state({}), {
+      adapter: pgResolverAdapter,
+      siteId: 42,
+      searchType: 'web',
+    })
+    expect(r.sql).not.toContain('site_id')
+    expect(r.sql).not.toContain('search_type')
+    expect(r.params).not.toContain(42)
+    expect(r.params).not.toContain('web')
   })
 })

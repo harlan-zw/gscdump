@@ -9,13 +9,52 @@ import type { TableName } from '@gscdump/contracts'
 import type { SQL } from 'drizzle-orm'
 import type { ResolverAdapter } from './types'
 import { sql } from 'drizzle-orm'
-import { PgDialect } from 'drizzle-orm/pg-core'
+import { PgDialect, pgTable, varchar } from 'drizzle-orm/pg-core'
 import { drizzleSchema } from '../drizzle-schema'
 import { createResolverAdapter } from './adapter'
 
 export type PgTableKey = TableName
 
 const pgDialect = new PgDialect()
+
+/**
+ * Iceberg variant of {@link drizzleSchema}. Each table is redeclared with the
+ * two multi-tenant identity columns (`site_id`, `search_type`) prepended so
+ * `colRef` can resolve them — the canonical parquet schema omits both columns
+ * since per-site object keys imply site identity. Table NAMES are identical
+ * to the base schema, so SQL output is unchanged except for the injected
+ * WHERE predicates.
+ */
+function withTenantCols<T>(
+  tableName: string,
+  baseTable: T,
+): T & { site_id: ReturnType<ReturnType<typeof varchar>['notNull']>, search_type: ReturnType<ReturnType<typeof varchar>['notNull']> } {
+  // Re-build a drizzle pgTable with the tenant cols plus a passthrough of base
+  // column NAMES. We cannot deep-clone drizzle column objects, so we shadow
+  // every base column with a freshly-declared varchar/etc. Cheaper: extract
+  // each base column's drizzle metadata and re-emit. Simpler: declare the
+  // tenant cols separately and merge them with the existing column objects;
+  // colRef only needs `schema[tableKey][colName]` to be SOMETHING the drizzle
+  // sql template can render, which the existing column objects already are.
+  const t = pgTable(tableName, {
+    site_id: varchar('site_id').notNull(),
+    search_type: varchar('search_type').notNull(),
+  })
+  return { ...baseTable, site_id: t.site_id, search_type: t.search_type } as any
+}
+
+const icebergSchema = {
+  pages: withTenantCols('pages', drizzleSchema.pages),
+  queries: withTenantCols('queries', drizzleSchema.queries),
+  countries: withTenantCols('countries', drizzleSchema.countries),
+  page_queries: withTenantCols('page_queries', drizzleSchema.page_queries),
+  dates: withTenantCols('dates', drizzleSchema.dates),
+  search_appearance: withTenantCols('search_appearance', drizzleSchema.search_appearance),
+  search_appearance_pages: withTenantCols('search_appearance_pages', drizzleSchema.search_appearance_pages),
+  search_appearance_queries: withTenantCols('search_appearance_queries', drizzleSchema.search_appearance_queries),
+  search_appearance_page_queries: withTenantCols('search_appearance_page_queries', drizzleSchema.search_appearance_page_queries),
+  hourly_pages: withTenantCols('hourly_pages', drizzleSchema.hourly_pages),
+}
 
 function compilePg(query: SQL): { sql: string, params: unknown[] } {
   const compiled = pgDialect.sqlToQuery(query)
@@ -71,5 +110,31 @@ export function createParquetResolverAdapter(): ResolverAdapter<PgTableKey> {
     ...PG_BASE_CONFIG,
     tableLabel: 'parquet-resolver-adapter',
     tableRef: tk => sql.raw(`read_parquet({{FILES}}, union_by_name = true) AS "${tk}"`),
+  })
+}
+
+/**
+ * Multi-tenant pg-flavored adapter for the Iceberg / R2 SQL read path.
+ * Identical SQL output to `pgResolverAdapter` except WHERE clauses inject
+ * `site_id = ?` AND `search_type = ?` automatically when those scopes are
+ * passed to `resolveToSQL`. Required for the Iceberg fact tables which are
+ * shared across tenants — querying without these predicates would leak
+ * cross-tenant data. Single-use: the adapter has no `tableRef` override,
+ * so callers must rewrite bare table names to their qualified form (e.g.
+ * `${namespace}.pages`) before sending to R2 SQL.
+ */
+export function createIcebergResolverAdapter(): ResolverAdapter<PgTableKey> {
+  return createResolverAdapter<PgTableKey>({
+    ...PG_BASE_CONFIG,
+    schema: icebergSchema,
+    includeSiteId: true,
+    includeSearchType: true,
+    tableLabel: 'iceberg-resolver-adapter',
+    // `icebergSchema` table entries are plain object spreads of drizzle tables,
+    // so they preserve column symbols (for `colRef`) but lose the table-level
+    // symbols drizzle needs to render `${schema[tk]}` as a name (it falls back
+    // to `[object Object]`). Emit the bare quoted name; gscdump.com's qualifier
+    // rewrites `"pages"` → `gsc.pages` before sending to R2 SQL.
+    tableRef: tk => sql.raw(`"${tk}"`),
   })
 }

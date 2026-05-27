@@ -61,6 +61,7 @@ export type {
 export { createIngestAccumulator, createNoopIngestAccumulator } from './ingest-accumulator'
 export { enumeratePartitions, FILES_PLACEHOLDER, resolveParquetSQL, substituteNamedFiles } from './planner'
 export type { ResolvedQuery } from './planner'
+export { createIcebergResolverAdapter, createParquetResolverAdapter, pgResolverAdapter } from './resolver/pg-adapter'
 export { rebuildDailyFromHourly } from './rollups'
 export type { InspectionVerdict, SchedulePolicy, ScheduleState } from './schedule'
 export { fixedPolicy, inspectionPolicy, sitemapPolicy } from './schedule'
@@ -99,6 +100,7 @@ export type {
   InMemorySink,
   StoredRow,
 } from './sinks'
+export { createSqlQuerySource, ENGINE_QUERY_CAPABILITIES } from './source'
 export { bindLiterals, formatLiteral } from './sql-bind'
 export {
   dayPartition,

@@ -25,6 +25,7 @@ export interface ResolverAdapter<TableKey extends string = string> {
   dateColRef: (tableKey: TableKey) => SQL
   urlToPathExpr: (col: string) => string
   siteIdColRef?: (tableKey: TableKey) => SQL
+  searchTypeColRef?: (tableKey: TableKey) => SQL
   dimExprSql: (dim: Dimension, tableKey: TableKey) => SQL
   metricSql: (metric: Metric, tableKey: TableKey) => SQL
   dimensionPredicates: (filters: InternalFilter[], tableKey: TableKey) => SQL[]
@@ -40,6 +41,8 @@ export interface ResolverOptions<TableKey extends string = string> {
   adapter: ResolverAdapter<TableKey>
   /** Optional site scope. Required for multi-tenant D1; omitted for parquet. */
   siteId?: string | number
+  /** Optional searchType scope. Required for multi-tenant Iceberg; omitted for parquet. */
+  searchType?: string
 }
 
 export interface ResolvedSQL {

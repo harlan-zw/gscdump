@@ -49,7 +49,7 @@ export {
 } from './filter-utils'
 export { createSqlFragments } from './fragments'
 export type { SqlFragments, SqlFragmentsConfig } from './fragments'
-export { createParquetResolverAdapter, pgResolverAdapter } from './pg-adapter'
+export { createIcebergResolverAdapter, createParquetResolverAdapter, pgResolverAdapter } from './pg-adapter'
 export type { PgTableKey } from './pg-adapter'
 export type {
   ComparisonQueryResult,

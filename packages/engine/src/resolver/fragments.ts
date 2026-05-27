@@ -19,6 +19,7 @@ export interface SqlFragmentsConfig<TableKey extends string> {
   regexPredicate: (expr: SQL, pattern: string, negate: boolean) => SQL
   tableLabel: string
   includeSiteId: boolean
+  includeSearchType?: boolean
   urlToPathExpr?: (col: string) => string
   /**
    * Override the FROM-clause table reference. Default emits the bound drizzle
@@ -42,6 +43,7 @@ export interface SqlFragments<TableKey extends string> {
   tableRef: (tableKey: TableKey) => SQL
   dateColRef: (tableKey: TableKey) => SQL
   siteIdColRef?: (tableKey: TableKey) => SQL
+  searchTypeColRef?: (tableKey: TableKey) => SQL
   dimExprSql: (dim: Dimension, tableKey: TableKey) => SQL
   metricSql: (metric: Metric, tableKey: TableKey) => SQL
   havingPredicates: (filters: InternalFilter[], tableKey: TableKey) => SQL[]
@@ -79,6 +81,7 @@ export function createSqlFragments<TableKey extends string>(
     regexPredicate,
     tableLabel,
     includeSiteId,
+    includeSearchType,
     urlToPathExpr: urlToPathExprOverride,
     tableRef: tableRefOverride,
   } = config
@@ -129,6 +132,10 @@ export function createSqlFragments<TableKey extends string>(
 
   function siteIdColRef(tableKey: TableKey): SQL {
     return colRef(tableKey, 'site_id')
+  }
+
+  function searchTypeColRef(tableKey: TableKey): SQL {
+    return colRef(tableKey, 'search_type')
   }
 
   function dimExprSql(dim: Dimension, tableKey: TableKey): SQL {
@@ -280,6 +287,7 @@ export function createSqlFragments<TableKey extends string>(
     tableRef,
     dateColRef,
     siteIdColRef: includeSiteId ? siteIdColRef : undefined,
+    searchTypeColRef: includeSearchType ? searchTypeColRef : undefined,
     dimExprSql,
     metricSql,
     havingPredicates,
