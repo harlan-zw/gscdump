@@ -19,6 +19,8 @@
     "@gscdump/engine-sqlite": "workspace:*",
     "@gscdump/sdk": "workspace:*",
     "@nuxt/ui": "catalog:",
+    "@unovis/ts": "catalog:",
+    "@unovis/vue": "catalog:",
     "aws4fetch": "catalog:",
     "gscdump": "workspace:*",
     "nuxt": "catalog:",

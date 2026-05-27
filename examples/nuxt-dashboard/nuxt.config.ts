@@ -30,7 +30,7 @@ const apiBase = mode === 'consumer'
 
 export default defineNuxtConfig({
   future: { compatibilityVersion: 4 },
-  extends: ['../../packages/nuxt'],
+  extends: ['./layers/gsc'],
   gscdumpAnalytics: {
     analyzers: '~/gscAnalyzers',
   },

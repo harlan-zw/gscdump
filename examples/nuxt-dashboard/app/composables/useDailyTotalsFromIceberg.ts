@@ -21,7 +21,7 @@
 
 import type { FileResolutionResponse, RollupEnvelope } from '@gscdump/contracts'
 import type { OpfsAttachedHandle } from '@gscdump/engine-duckdb-wasm'
-import { gscQueries } from '@gscdump/nuxt/queries/gsc'
+import { gscQueries } from '../../layers/gsc/app/queries/gsc'
 import { useGscRpc } from '#imports'
 
 export interface DailyTotalRow {
