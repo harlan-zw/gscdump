@@ -37,11 +37,33 @@ export interface TriageEvidence {
   value: string
 }
 
+/**
+ * Distance-to-next-stage for one axis, so the UI never re-derives thresholds.
+ *
+ * `direction`:
+ *  - `advance` — up-path rung (waiting → emerging → growing). `pct` = value/target.
+ *  - `escape`  — off-ramp recovery (declining/faded/decayed) or a held health gate
+ *    (crawl_faults/quality_rejection). `pct` = inverse distance: closer to passing ⇒ higher.
+ *  - `sustain` — already good (growing/healthy). `nextStage` null, `pct` 1, framed as momentum.
+ *
+ * `gapLabel` is always a concrete count (pages/clicks/points), never a bare %.
+ */
+export interface StageProgression {
+  nextStage: ReachStage | HealthStage | null
+  metric: string
+  value: number
+  target: number
+  pct: number
+  gapLabel: string
+  direction: 'advance' | 'escape' | 'sustain'
+}
+
 export interface ReachVerdict {
   stage: ReachStage
   summary: string
   primaryAction: string
   evidence: TriageEvidence[]
+  progression: StageProgression
 }
 
 export interface HealthVerdict {
@@ -49,6 +71,7 @@ export interface HealthVerdict {
   summary: string
   primaryAction: string
   evidence: TriageEvidence[]
+  progression: StageProgression
 }
 
 export interface SiteTriage {
@@ -141,6 +164,67 @@ function fmt(n: number): string {
   return new Intl.NumberFormat('en').format(Math.max(0, Math.round(n)))
 }
 
+function clamp01(n: number): number {
+  if (!Number.isFinite(n))
+    return 0
+  return Math.min(1, Math.max(0, n))
+}
+
+/** Signed percentage, e.g. -85 → "-85%", 42 → "+42%". */
+function pctStr(n: number): string {
+  return `${n >= 0 ? '+' : ''}${Math.round(n)}%`
+}
+
+/**
+ * `advance` progression: climbing toward `target`. `pct` = value/target clamped.
+ * Used for up-path rungs where a larger value is better (impressions, growth %).
+ */
+function advance(
+  nextStage: ReachStage | HealthStage,
+  metric: string,
+  value: number,
+  target: number,
+  gapLabel: string,
+): StageProgression {
+  return { nextStage, metric, value, target, pct: clamp01(value / target), gapLabel, direction: 'advance' }
+}
+
+/**
+ * `escape` progression for an off-ramp where a larger value is better but the
+ * site is below an exit threshold (declining clicks %, faded liveness, decayed CTR).
+ * `pct` = value/target clamped — closer to the exit ⇒ higher. Negative values floor at 0.
+ */
+function escapeToward(
+  nextStage: ReachStage | HealthStage,
+  metric: string,
+  value: number,
+  target: number,
+  gapLabel: string,
+): StageProgression {
+  return { nextStage, metric, value, target, pct: clamp01(value / target), gapLabel, direction: 'escape' }
+}
+
+/**
+ * `escape` progression for a "reduce" gate where a SMALLER value passes
+ * (faults, rejection share). `pct` = inverse distance: at/under target ⇒ 1,
+ * at 2× target ⇒ 0, linear between.
+ */
+function escapeReduce(
+  nextStage: ReachStage | HealthStage,
+  metric: string,
+  value: number,
+  target: number,
+  gapLabel: string,
+): StageProgression {
+  const pct = target <= 0 ? (value <= 0 ? 1 : 0) : clamp01(2 - value / target)
+  return { nextStage, metric, value, target, pct, gapLabel, direction: 'escape' }
+}
+
+/** `sustain` progression: already good (growing/healthy). Full bar, framed as momentum. */
+function sustain(metric: string, value: number, gapLabel: string): StageProgression {
+  return { nextStage: null, metric, value, target: value, pct: 1, gapLabel, direction: 'sustain' }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HEALTH
 // ─────────────────────────────────────────────────────────────────────────────
@@ -184,11 +268,20 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
   // Real faults: 5xx / access / broken — NOT not_found or soft_404 (a 404 is a
   // missing page, a 5xx is a broken one; only the latter is a hard fault).
   const hardBlocks = serverError + (input.crawlAuditBlockerCount ?? 0)
-  if (hardBlocks > Math.max(HARD_BLOCK_FLOOR, indexableUrls * HARD_BLOCK_SHARE)) {
+  const faultTarget = Math.max(HARD_BLOCK_FLOOR, indexableUrls * HARD_BLOCK_SHARE)
+  if (hardBlocks > faultTarget) {
+    const toFix = Math.ceil(hardBlocks - faultTarget)
     return {
       stage: 'crawl_faults',
       ...HEALTH_COPY.crawl_faults,
       evidence: [{ label: 'Access faults (5xx / broken)', value: fmt(hardBlocks) }],
+      progression: escapeReduce(
+        'healthy',
+        'access faults',
+        hardBlocks,
+        faultTarget,
+        `${fmt(hardBlocks)} faults — fix ~${fmt(toFix)} to clear the gate`,
+      ),
     }
   }
 
@@ -196,17 +289,32 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
   // (thin/empty) counts here, not as a hard fault. Applies even to pSEO.
   const rejectPool = crawledNotIndexed + softFound
   if (totalUrls > 0 && rejectPool > REJECT_MIN && rejectPool / totalUrls >= REJECT_SHARE) {
+    const share = rejectPool / totalUrls
+    // Pages to clear so the remaining rejected share drops just under REJECT_SHARE.
+    const toClear = Math.max(0, Math.ceil(rejectPool - REJECT_SHARE * totalUrls))
     return {
       stage: 'quality_rejection',
       ...HEALTH_COPY.quality_rejection,
       evidence: [
         { label: 'Crawled, then refused', value: fmt(rejectPool) },
-        { label: 'Share of known URLs', value: `${((rejectPool / totalUrls) * 100).toFixed(0)}%` },
+        { label: 'Share of known URLs', value: `${(share * 100).toFixed(0)}%` },
       ],
+      progression: escapeReduce(
+        'healthy',
+        'crawled-rejected share',
+        share,
+        REJECT_SHARE,
+        `${(share * 100).toFixed(0)}% rejected — improve/consolidate ~${fmt(toClear)} pages to clear`,
+      ),
     }
   }
 
-  return { stage: 'healthy', ...HEALTH_COPY.healthy, evidence: [] }
+  return {
+    stage: 'healthy',
+    ...HEALTH_COPY.healthy,
+    evidence: [],
+    progression: sustain('indexing health', 1, 'Indexable pages are getting indexed — no gate blocking reach.'),
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -244,8 +352,8 @@ const REACH_COPY: Record<ReachStage, Pick<ReachVerdict, 'summary' | 'primaryActi
   },
 }
 
-function reach(stage: ReachStage, evidence: TriageEvidence[]): ReachVerdict {
-  return { stage, ...REACH_COPY[stage], evidence }
+function reach(stage: ReachStage, evidence: TriageEvidence[], progression: StageProgression): ReachVerdict {
+  return { stage, ...REACH_COPY[stage], evidence, progression }
 }
 
 export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
@@ -261,7 +369,17 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
 
   // Maturity branch: genuinely new (no lifetime history) → nothing to diagnose.
   if (imp12m != null && imp12m < LIFETIME_FLOOR) {
-    return reach('waiting_for_data', [{ label: 'Impressions (12m)', value: fmt(imp12m) }])
+    return reach(
+      'waiting_for_data',
+      [{ label: 'Impressions (12m)', value: fmt(imp12m) }],
+      advance(
+        'emerging',
+        'lifetime impressions',
+        imp12m,
+        LIFETIME_FLOOR,
+        `${fmt(imp12m)} of ${fmt(LIFETIME_FLOOR)} lifetime impressions — collecting data, keep indexing`,
+      ),
+    )
   }
 
   const hadRealReach = (imp12m ?? imp28d) > LIFETIME_FLOOR
@@ -271,7 +389,18 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
   // Faded: a real-reach site whose latest week collapsed vs its own peak. This
   // is the spike→died case the 90d-vs-prior delta cannot see.
   if (hadRealReach && liveness != null && liveness < FADED_LIVENESS && !isGrowing) {
-    return reach('faded', [{ label: 'Recent week vs peak', value: `${(liveness * 100).toFixed(0)}%` }])
+    const FADED_RECOVERY = 0.5
+    return reach(
+      'faded',
+      [{ label: 'Recent week vs peak', value: `${(liveness * 100).toFixed(0)}%` }],
+      escapeToward(
+        'growing',
+        'recent week vs peak (liveness)',
+        liveness,
+        FADED_RECOVERY,
+        `recent week is ${(liveness * 100).toFixed(0)}% of peak — revive toward ~50%`,
+      ),
+    )
   }
 
   // Genuine decline: both windows down with a meaningful baseline to fall from.
@@ -279,35 +408,82 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
     && clicks28dPct != null && clicks28dPct < DECLINE_CLICKS_PCT
     && priorClicks != null && priorClicks >= MIN_DECLINE_PRIOR_CLICKS
   if (isDeclining) {
-    return reach('declining', [
-      { label: 'Clicks 90d', value: `${clicks90dPct!.toFixed(0)}%` },
-      { label: 'Clicks 28d', value: `${clicks28dPct!.toFixed(0)}%` },
-    ])
+    // Off-ramp recovery: the exit is 90d clicks climbing back above the decline
+    // floor (−10%). value/target keep the signed metric the UI displays; pct is
+    // inverse distance on the drop magnitude — at −10% ⇒ 1, at −20% ⇒ 0, so a
+    // −12% site reads nearly-out and a −85% site reads far.
+    return reach(
+      'declining',
+      [
+        { label: 'Clicks 90d', value: pctStr(clicks90dPct!) },
+        { label: 'Clicks 28d', value: pctStr(clicks28dPct!) },
+      ],
+      {
+        nextStage: 'plateaued',
+        metric: '90d clicks change',
+        value: clicks90dPct!,
+        target: DECLINE_CLICKS_PCT,
+        pct: clamp01(2 - Math.abs(clicks90dPct!) / Math.abs(DECLINE_CLICKS_PCT)),
+        gapLabel: `down ${pctStr(clicks90dPct!)} (90d) — recover clicks above ${pctStr(DECLINE_CLICKS_PCT)} to exit`,
+        direction: 'escape',
+      },
+    )
   }
 
   if (isGrowing) {
-    return reach('growing', [
-      ...(clicks90dPct != null ? [{ label: 'Clicks 90d', value: `+${clicks90dPct.toFixed(0)}%` }] : []),
-      ...(imp90dPct != null ? [{ label: 'Impressions 90d', value: `+${imp90dPct.toFixed(0)}%` }] : []),
-    ])
+    const growthPct = clicks90dPct ?? imp90dPct ?? 0
+    const growthLabel = clicks90dPct != null
+      ? `${pctStr(clicks90dPct)} 90d clicks — comfortably growing; defend & expand`
+      : `${pctStr(growthPct)} 90d impressions — comfortably growing; defend & expand`
+    return reach(
+      'growing',
+      [
+        ...(clicks90dPct != null ? [{ label: 'Clicks 90d', value: `+${clicks90dPct.toFixed(0)}%` }] : []),
+        ...(imp90dPct != null ? [{ label: 'Impressions 90d', value: `+${imp90dPct.toFixed(0)}%` }] : []),
+      ],
+      sustain('90d clicks growth', growthPct, growthLabel),
+    )
   }
 
   // Decayed: established lifetime base, not growing, impressions linger but
   // clicks have evaporated (aged-out content ranking for stale/low-intent terms).
   const ctr = clicks28d != null && imp28d > 0 ? clicks28d / imp28d : null
   if (hadRealReach && imp28d >= NASCENT_IMPRESSIONS_28D && ctr != null && ctr < DECAY_CTR) {
-    return reach('decayed', [
-      { label: 'Impressions (28d)', value: fmt(imp28d) },
-      { label: 'Clicks (28d)', value: fmt(clicks28d ?? 0) },
-    ])
+    return reach(
+      'decayed',
+      [
+        { label: 'Impressions (28d)', value: fmt(imp28d) },
+        { label: 'Clicks (28d)', value: fmt(clicks28d ?? 0) },
+      ],
+      escapeToward(
+        'growing',
+        'CTR (clicks/impressions)',
+        ctr,
+        DECAY_CTR,
+        `${(ctr * 100).toFixed(2)}% CTR on ${fmt(imp28d)} impressions — refresh content toward ~${(DECAY_CTR * 100).toFixed(1)}%`,
+      ),
+    )
   }
+
+  // Both emerging and plateaued advance to growing via 90d clicks growth > +10%.
+  const growthVal = clicks90dPct ?? 0
+  const growthGap = Math.max(0, GROWTH_CLICKS_PCT - growthVal)
+  const growthProgression = (stage: 'emerging' | 'plateaued'): StageProgression => advance(
+    'growing',
+    '90d clicks growth',
+    growthVal,
+    GROWTH_CLICKS_PCT,
+    clicks90dPct != null
+      ? `${pctStr(growthVal)} 90d clicks — need ${pctStr(growthGap)} more to clear the +${GROWTH_CLICKS_PCT}% growth bar`
+      : `${stage === 'plateaued' ? 'flat' : 'rising'} — reach +${GROWTH_CLICKS_PCT}% 90d clicks growth to break into growing`,
+  )
 
   // Established + neither up nor down → plateaued; small-but-real → emerging.
   if (imp28d >= ESTABLISHED_IMPRESSIONS_28D)
-    return reach('plateaued', [{ label: 'Impressions (28d)', value: fmt(imp28d) }])
+    return reach('plateaued', [{ label: 'Impressions (28d)', value: fmt(imp28d) }], growthProgression('plateaued'))
   if (imp28d < NASCENT_IMPRESSIONS_28D)
-    return reach('emerging', [{ label: 'Impressions (28d)', value: fmt(imp28d) }])
-  return reach('plateaued', [{ label: 'Impressions (28d)', value: fmt(imp28d) }])
+    return reach('emerging', [{ label: 'Impressions (28d)', value: fmt(imp28d) }], growthProgression('emerging'))
+  return reach('plateaued', [{ label: 'Impressions (28d)', value: fmt(imp28d) }], growthProgression('plateaued'))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
