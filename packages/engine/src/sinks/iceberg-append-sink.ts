@@ -76,15 +76,32 @@ function toIcebergDate(value: unknown): unknown {
   return value
 }
 
+/**
+ * Coerce a column value to a JSON-serializable form. BigInt values flow in
+ * from D1 backfills (D1 returns INTEGER columns as bigint when the value
+ * exceeds Number.MAX_SAFE_INTEGER, and sometimes even when it doesn't) and
+ * fail JSON.stringify inside icebird's commit path with "Do not know how to
+ * serialize a BigInt". Iceberg LONG columns fit Number's 2^53 precision for
+ * any plausible GSC metric, so the lossy coercion is safe; values past 2^53
+ * would already have been clamped at the GSC API boundary.
+ */
+function coerceJsonSafe(value: unknown): unknown {
+  if (typeof value === 'bigint')
+    return Number(value)
+  return value
+}
+
 /** Build the icebird append records for a slice — inject identity columns, encode `date`. */
 function toRecords(slice: SinkSlice, rows: readonly Row[]): IcebergRecord[] {
   const siteId = slice.ctx.siteId ?? ''
-  return rows.map(row => ({
-    ...row,
-    date: toIcebergDate((row as Record<string, unknown>).date),
-    site_id: siteId,
-    search_type: slice.searchType,
-  }))
+  return rows.map((row) => {
+    const out: Record<string, unknown> = {}
+    for (const k in row) out[k] = coerceJsonSafe((row as Record<string, unknown>)[k])
+    out.date = toIcebergDate(out.date)
+    out.site_id = siteId
+    out.search_type = slice.searchType
+    return out as IcebergRecord
+  })
 }
 
 /**

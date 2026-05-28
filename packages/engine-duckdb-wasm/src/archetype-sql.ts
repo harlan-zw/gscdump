@@ -38,10 +38,16 @@ const METRIC_SQL: Record<string, string> = {
 /**
  * GSC dimension → parquet column. `device` has no long column on `dates` — it
  * is served by the device-pivot archetypes, not generic dimension SQL.
+ *
+ * `queryCanonical` is the normalised form stored alongside `query` on
+ * `queries` / `page_queries` — case-folded + variants collapsed so e.g.
+ * `nuxt seo` and `Nuxt SEO` group together. Distinct from the cloud SDK's
+ * dimColumn (`'query_canonical'`).
  */
 const DIM_COLUMN: Record<string, string> = {
   page: 'url',
   query: 'query',
+  queryCanonical: 'query_canonical',
   country: 'country',
   date: 'date',
   searchAppearance: 'search_appearance',
@@ -56,9 +62,9 @@ const DIM_COLUMN: Record<string, string> = {
  */
 function tableForDimensions(dims: readonly string[]): string {
   const set = new Set(dims.filter(d => d !== 'date'))
-  if (set.has('page') && set.has('query'))
+  if (set.has('page') && (set.has('query') || set.has('queryCanonical')))
     return 'page_queries'
-  if (set.has('query'))
+  if (set.has('query') || set.has('queryCanonical'))
     return 'queries'
   if (set.has('country'))
     return 'countries'
