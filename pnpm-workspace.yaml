@@ -83,17 +83,17 @@ catalogs:
   dev-test:
     '@nuxt/test-utils': ^4.0.3
     vitest: ^4.1.7
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  maplibre-gl: true
+  onnxruntime-node: false
+  protobufjs: true
+  sharp: true
+  vue-demi: true
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - esbuild
   - gtoken
   - unrs-resolver
   - vue-demi
-allowBuilds:
-  '@parcel/watcher': true
-  esbuild: true
-  maplibre-gl: true
-  onnxruntime-node: true
-  protobufjs: true
-  sharp: true
-  vue-demi: true
