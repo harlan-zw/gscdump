@@ -25,7 +25,6 @@ export type {
   IcebergPartitionSpec,
   IcebergPartitionSpecField,
   IcebergPrimitiveType,
-  IcebergS3Config,
   IcebergSchema,
   IcebergSchemaField,
   IcebergTableOpResult,
@@ -44,6 +43,7 @@ export type {
   IcebergColumnType,
   IcebergPartitionField,
   IcebergPartitionTransform,
+  IcebergS3Config,
   IcebergTableName,
   IcebergTableSpec,
 } from './iceberg-schema'

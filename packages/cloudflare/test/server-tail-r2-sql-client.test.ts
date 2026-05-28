@@ -1,10 +1,11 @@
 import type { SiteDailyTimeseriesQuery } from '@gscdump/sdk'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createR2SqlClient,
   escapeSqlValue,
   inlineParams,
   R2SqlError,
+  R2SqlTimeoutError,
 } from '../src/server-tail/r2-sql-client'
 
 const range = { start: '2026-01-01', end: '2026-03-31' }
@@ -108,5 +109,69 @@ describe('createR2SqlClient', () => {
     const fetchImpl = fakeFetch({}, { ok: false, status: 403 })
     const client = createR2SqlClient({ ...config, fetchImpl })
     await expect(client.query('SELECT 1')).rejects.toThrow(/HTTP 403/)
+  })
+})
+
+describe('createR2SqlClient timeout', () => {
+  const config = {
+    accountId: 'acct',
+    warehouse: 'wh',
+    namespace: 'gsc',
+    token: 'tok',
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /** A fetch that never resolves until its AbortSignal fires, then rejects. */
+  function hangingFetch() {
+    return vi.fn((_url: string, opts?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        const signal = opts?.signal
+        if (signal) {
+          signal.addEventListener('abort', () => {
+            // mirror the platform: aborting fetch rejects with the abort reason
+            // (an Error whose name is 'AbortError') or the supplied reason.
+            const reason = (signal as AbortSignal & { reason?: unknown }).reason
+            reject(reason ?? Object.assign(new Error('aborted'), { name: 'AbortError' }))
+          })
+        }
+      })
+    })
+  }
+
+  it('aborts the request and throws R2SqlTimeoutError after the deadline', async () => {
+    const fetchImpl = hangingFetch()
+    const client = createR2SqlClient({ ...config, fetchImpl, timeoutMs: 25_000 })
+    const p = client.query('SELECT 1')
+    const assertion = expect(p).rejects.toBeInstanceOf(R2SqlTimeoutError)
+    await vi.advanceTimersByTimeAsync(25_000)
+    await assertion
+    // the AbortController signal was passed through to fetch
+    const [, opts] = fetchImpl.mock.calls[0]!
+    expect((opts!.signal as AbortSignal).aborted).toBe(true)
+  })
+
+  it('maps a platform AbortError to R2SqlTimeoutError', async () => {
+    // a fetch that rejects immediately with a generic AbortError (e.g. the
+    // platform aborted for reasons other than our timer reason object).
+    const fetchImpl = vi.fn(async () => {
+      throw Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })
+    })
+    const client = createR2SqlClient({ ...config, fetchImpl, timeoutMs: 25_000 })
+    await expect(client.query('SELECT 1')).rejects.toBeInstanceOf(R2SqlTimeoutError)
+  })
+
+  it('wraps other fetch failures as R2SqlError', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error('ECONNREFUSED')
+    })
+    const client = createR2SqlClient({ ...config, fetchImpl })
+    await expect(client.query('SELECT 1')).rejects.toThrow(/ECONNREFUSED/)
+    await expect(client.query('SELECT 1')).rejects.toBeInstanceOf(R2SqlError)
   })
 })

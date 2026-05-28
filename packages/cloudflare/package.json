@@ -25,6 +25,11 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
+    },
+    "./server-tail": {
+      "types": "./dist/server-tail/index.d.mts",
+      "import": "./dist/server-tail/index.mjs",
+      "default": "./dist/server-tail/index.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -39,6 +44,7 @@
     "build": "obuild",
     "dev": "obuild --stub",
     "typecheck": "tsc --noEmit",
+    "test:workers": "GSCDUMP_E2E=1 vitest --run --config vitest.workers.config.ts",
     "prepack": "pnpm run build"
   },
   "peerDependencies": {
@@ -54,8 +60,10 @@
     "gscdump": "workspace:*"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "h3": "catalog:",
-    "typescript": "catalog:dev-build"
+    "typescript": "catalog:dev-build",
+    "wrangler": "catalog:"
   }
 }

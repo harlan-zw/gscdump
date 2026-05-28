@@ -7,7 +7,10 @@
 
 import type { AnalyticsEnv } from './env'
 
-const SIG_HEX_LEN = 16
+// Full SHA-256 HMAC digest: 32 bytes → 64 hex chars. A truncated tag (the
+// previous 8-byte/64-bit form) is forgeable far sooner than the full digest,
+// and this signs a value DuckDB-WASM trusts for range planning.
+const SIG_HEX_LEN = 64
 const keyCache = new WeakMap<object, Promise<CryptoKey>>()
 const stringKeyCache = new Map<string, Promise<CryptoKey>>()
 

@@ -18,7 +18,7 @@
  * `ICEBERG_SCHEMAS` contract — never hand-listed here.
  */
 
-import type { IcebergColumnType, IcebergTableName } from './iceberg-schema'
+import type { IcebergColumnType, IcebergS3Config, IcebergTableName } from './iceberg-schema'
 import {
   icebergAppend,
   icebergCreateTable,
@@ -66,16 +66,6 @@ export interface IcebergPartitionSpecField {
 export interface IcebergPartitionSpec {
   'spec-id': number
   'fields': IcebergPartitionSpecField[]
-}
-
-/** S3-compatible credentials for the R2 warehouse. */
-export interface IcebergS3Config {
-  /** R2 S3 endpoint, e.g. `https://<account>.r2.cloudflarestorage.com`. */
-  endpoint: string
-  accessKeyId: string
-  secretAccessKey: string
-  /** Defaults to `'auto'` (R2's region). */
-  region?: string
 }
 
 /** Everything needed to talk to the R2 Data Catalog. */

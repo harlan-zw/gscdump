@@ -383,11 +383,21 @@ export async function bootDuckDBWasm(
   )
   const worker = new Worker(workerUrl)
   const db = new AsyncDuckDB((options.logger as any) ?? new ConsoleLogger(), worker)
-  await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
-  await db.open(rangeOnlyConfig(options.config))
-  URL.revokeObjectURL(workerUrl)
-  const conn = await db.connect()
-  return { db, conn }
+  try {
+    await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
+    await db.open(rangeOnlyConfig(options.config))
+    const conn = await db.connect()
+    return { db, conn }
+  }
+  catch (err) {
+    // Instantiate/open/connect failed — tear down the worker so a failed boot
+    // doesn't leak a Worker thread (and its object URL) for the page's lifetime.
+    worker.terminate()
+    throw err
+  }
+  finally {
+    URL.revokeObjectURL(workerUrl)
+  }
 }
 
 export async function attachParquetTables(

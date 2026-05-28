@@ -28,6 +28,7 @@ interface DuckDBNodeBindings {
   copyFileToBuffer: (name: string) => Uint8Array
   dropFile: (name: string) => void
   dropFiles: (names?: string[]) => void
+  reset: () => void
 }
 
 interface DuckDBConnection {
@@ -119,5 +120,17 @@ export function createNodeDuckDBHandle(opts: NodeDuckDBOptions = {}): DuckDBHand
 }
 
 export function resetNodeDuckDB(): void {
+  const pending = singleton
+  // Null the singleton first so the next `createNodeDuckDBHandle` re-inits a
+  // fresh instance rather than racing the teardown below.
   singleton = null
+  // Best-effort: close the connection and reset the bindings so the native
+  // DuckDB instance is released instead of leaking across CLI/test runs.
+  // Fire-and-forget keeps the synchronous signature the many call sites rely on.
+  void pending
+    ?.then(({ db, conn }) => {
+      conn.close()
+      db.reset()
+    })
+    .catch(() => {})
 }

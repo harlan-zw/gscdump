@@ -30,19 +30,11 @@
  * Implements the frozen `SliceOverwriteWriter` contract from `./sink`.
  */
 
+import type { IcebergS3Config } from './iceberg-schema'
 import type { Sink, SinkCloseResult, SinkSlice, SinkWriteResult, SliceOverwriteWriter } from './sink'
 import type { Row } from './storage'
 import process from 'node:process'
-import { ICEBERG_SCHEMAS } from './iceberg-schema'
-
-/** S3-compatible credentials for the Iceberg warehouse (R2 / MinIO). */
-export interface IcebergS3Config {
-  /** S3 endpoint host (POC MinIO: `localhost:9100`; prod: the R2 S3 endpoint). */
-  endpoint: string
-  accessKeyId: string
-  secretAccessKey: string
-  region?: string
-}
+import { assertIcebergTable, ICEBERG_SCHEMAS } from './iceberg-schema'
 
 /** Connection details for the Iceberg REST catalog the writer targets. */
 export interface IcebergCatalogConfig {
@@ -122,14 +114,19 @@ export function createIcebergOverwriteWriter(
     if (!siteId)
       throw new Error('overwriteSlice: slice.ctx.siteId is required for the Iceberg partition key')
 
+    // Guard the `ICEBERG_SCHEMAS[slice.table]` lookup: `slice.table` is typed
+    // `IcebergTableName`, but a runtime caller can pass a non-canonical name
+    // (the lookup would then yield `undefined`, writing a corrupt spec).
+    const table = assertIcebergTable(slice.table)
+
     const job: OverwriteJob = {
       op: 'overwrite',
       catalogUri: catalog.catalogUri,
       namespace: catalog.namespace,
       warehouse: catalog.warehouse,
       s3: catalog.s3,
-      table: slice.table,
-      spec: ICEBERG_SCHEMAS[slice.table],
+      table,
+      spec: ICEBERG_SCHEMAS[table],
       siteId,
       searchType: slice.searchType,
       date: slice.date,

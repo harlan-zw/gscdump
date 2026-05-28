@@ -6,6 +6,11 @@
  * HMAC scheme, the DuckDB Workers shims, and the analytics engine factory.
  * Host apps wire their Nitro server handlers using these primitives plus the
  * D1 manifest store from `@gscdump/engine-sqlite`.
+ *
+ * The hybrid R2-SQL / DuckDB-over-Iceberg query cluster lives behind the
+ * `@gscdump/cloudflare/server-tail` subpath so consumers that only presign or
+ * read the env binding don't pull `@gscdump/sdk` and `@gscdump/contracts` into
+ * their Worker bundle.
  */
 
 export type { Row } from './duckdb-wasm-handle'
@@ -23,35 +28,5 @@ export type { PresignOptions } from './r2-presign'
 
 export { createR2Presigner } from './r2-presign'
 
-export type {
-  ArchetypeSqlPlan,
-  DuckDbIcebergExecutor,
-  DuckDbIcebergExecutorConfig,
-  DuckDbIcebergResult,
-  DuckDbIcebergRow,
-  DuckDbSvc,
-  R2SqlClient,
-  R2SqlClientConfig,
-  R2SqlResult,
-  R2SqlRow,
-  ServerTailDispatcher,
-  ServerTailDispatcherConfig,
-  ServerTailEngine,
-} from './server-tail'
-export {
-  buildArchetypeSql,
-  createDuckDbIcebergExecutor,
-  createR2SqlClient,
-  createServerTailDispatcher,
-  DuckDbIcebergError,
-  DuckDbIcebergTimeoutError,
-  escapeSqlValue,
-  inlineParams,
-  R2SqlError,
-  R2SqlTimeoutError,
-  resolveServerTailEngine,
-  ServerTailRoutingError,
-  TABLE_PLACEHOLDER,
-} from './server-tail'
 export { signSizeHint, verifySizeHint } from './size-hint-sig'
 export { createDucklingsCodec, createDucklingsExecutor } from './workers-duckdb'

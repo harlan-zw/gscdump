@@ -249,6 +249,7 @@ function queryTrendQuery(params: GscdumpQueryTrendParams): Record<string, string
   const query: Record<string, string> = {
     startDate: params.startDate,
     endDate: params.endDate,
+    searchType: params.searchType ?? DEFAULT_SEARCH_TYPE,
   }
   if (params.prevStartDate)
     query.prevStartDate = params.prevStartDate
@@ -539,7 +540,8 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     getKeywordSparklines(siteId: string, params: GscdumpKeywordSparklinesParams) {
-      const body = shouldValidate(options, 'request') ? partnerEndpointSchemas.getKeywordSparklines.body.parse(params) : params
+      const withSearchType = { ...params, searchType: params.searchType ?? DEFAULT_SEARCH_TYPE }
+      const body = shouldValidate(options, 'request') ? partnerEndpointSchemas.getKeywordSparklines.body.parse(withSearchType) : withSearchType
       return request<GscdumpKeywordSparklinesResponse>(partnerRoutes.sites.keywordSparklines(siteId), {
         method: 'POST',
         body,

@@ -9,6 +9,8 @@ export default defineProject({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
+      // Browser-only OPFS suite — runs via `pnpm test:browser` (chromium).
+      '**/*.browser.test.ts',
     ],
     typecheck: {
       enabled: true,

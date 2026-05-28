@@ -26,7 +26,9 @@
  * composable so server / consumer-mode hosts never pull it into their bundle.
  */
 
-import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm'
+import type { AsyncDuckDB, AsyncDuckDBConnection, DuckDBDataProtocol } from '@duckdb/duckdb-wasm'
+import type { OpfsHandleRegistry } from './opfs-registry'
+import { createOpfsHandleRegistry } from './opfs-registry'
 
 /** A parquet data file to materialise into OPFS. */
 export interface OpfsParquetFile {
@@ -123,25 +125,25 @@ const DEFAULT_CONCURRENCY = 2
 const OPFS_PREFIX = 'gscdump-snapshot__'
 
 /**
- * Per-DB set of OPFS file names already registered via `registerFileHandle`.
- * BROWSER_FSACCESS opens a sync access handle the first time DuckDB reads
- * the file — OPFS forbids a second sync handle on the same backing entry,
- * so re-registering the same name from a different consumer (e.g. the home
- * fanout AND the per-site analyzer sharing one DB instance) breaks reads.
- * Dedup at the registration boundary so each `(db, opfsName)` only registers
- * once for the lifetime of the DB.
+ * Per-DB reference-counted registry of OPFS file handles. BROWSER_FSACCESS
+ * opens a sync access handle the first time DuckDB reads the file — OPFS forbids
+ * a second sync handle on the same backing entry, so re-registering the same
+ * name from a different consumer (e.g. the home fanout AND the per-site analyzer
+ * sharing one DB instance) breaks reads. The registry registers each name once
+ * and counts references so a shared file is only dropped (releasing its sync
+ * access handle) when the last consumer detaches. One registry per DB instance.
  */
-const dbFileRegistrations = new WeakMap<AsyncDuckDB, Set<string>>()
-function isAlreadyRegistered(db: AsyncDuckDB, name: string): boolean {
-  return dbFileRegistrations.get(db)?.has(name) === true
-}
-function markRegistered(db: AsyncDuckDB, name: string): void {
-  let set = dbFileRegistrations.get(db)
-  if (!set) {
-    set = new Set()
-    dbFileRegistrations.set(db, set)
+const dbRegistries = new WeakMap<AsyncDuckDB, OpfsHandleRegistry>()
+function getOpfsRegistry(db: AsyncDuckDB, protocol: DuckDBDataProtocol): OpfsHandleRegistry {
+  let registry = dbRegistries.get(db)
+  if (!registry) {
+    registry = createOpfsHandleRegistry({
+      register: (name, handle) => db.registerFileHandle(name, handle as FileSystemFileHandle, protocol, true),
+      drop: async (name) => { await db.dropFile(name) },
+    })
+    dbRegistries.set(db, registry)
   }
-  set.add(name)
+  return registry
 }
 
 function isQuotaError(err: unknown): boolean {
@@ -157,6 +159,19 @@ function isQuotaError(err: unknown): boolean {
 function isAbortError(err: unknown): boolean {
   return typeof err === 'object' && err !== null
     && (err as { name?: string }).name === 'AbortError'
+}
+
+/**
+ * True for the OPFS sync-access-handle exclusivity error. Access handles are
+ * exclusive per backing file, so when a prior attach of the same parquet (e.g.
+ * a previous page/analyzer sharing the DB) hasn't released its handle yet,
+ * DuckDB's `BROWSER_FSACCESS` read throws "Access Handles cannot be created…".
+ * Treated as a degradation (not fatal) so the caller falls back to the
+ * in-memory buffer path instead of failing the whole table.
+ */
+function isOpfsAccessHandleConflict(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /createSyncAccessHandle|Access Handle/i.test(msg)
 }
 
 /**
@@ -371,14 +386,24 @@ export async function attachOpfsParquetTables(
   const total = flat.length
 
   const { DuckDBDataProtocol } = await import('@duckdb/duckdb-wasm')
+  const registry = getOpfsRegistry(db, DuckDBDataProtocol.BROWSER_FSACCESS)
 
   // Per-table OPFS file names + the registered handles, so a table that hits
   // a quota error can be dropped wholesale.
   const tableFiles = new Map<string, Array<{ name: string, handle: FileSystemFileHandle }>>()
   const degraded = new Set<string>()
+  const acquiredNames = new Set<string>()
   let bytesAttached = 0
+  // Release every OPFS handle acquired for a table (decrements the registry
+  // refcount, dropping the sync access handle when no other consumer holds it).
+  const releaseTable = async (table: string): Promise<void> => {
+    const names = (tableFiles.get(table) ?? []).map(f => f.name)
+    for (const n of names)
+      acquiredNames.delete(n)
+    await registry.release(names)
+  }
 
-  await runWithConcurrency(flat, Math.max(1, fetchConcurrency), async (item, index) => {
+  const runDownloads = (): Promise<void> => runWithConcurrency(flat, Math.max(1, fetchConcurrency), async (item, index) => {
     if (degraded.has(item.table))
       return
     signal?.throwIfAborted()
@@ -400,12 +425,24 @@ export async function attachOpfsParquetTables(
       throw err
     }
     // Register the OPFS handle with DuckDB. `BROWSER_FSACCESS` reads the file
-    // directly from OPFS — no copy into WASM linear memory. Skip if another
-    // consumer already registered this name on the same DB (sharing the boot
-    // means home fanout + analyzer can land on the same OPFS file).
-    if (!isAlreadyRegistered(db, name)) {
-      await db.registerFileHandle(name, result.handle, DuckDBDataProtocol.BROWSER_FSACCESS, true)
-      markRegistered(db, name)
+    // directly from OPFS — no copy into WASM linear memory. The registry
+    // registers each name once and reference-counts it, so a name another
+    // consumer already holds on the same DB is reused rather than re-opened
+    // (a second sync access handle on one backing file is the OPFS conflict).
+    try {
+      await registry.acquire(name, () => result.handle)
+      acquiredNames.add(name)
+    }
+    catch (err) {
+      if (isAbortError(err))
+        throw err
+      // Sync-access-handle exclusivity conflict — degrade this table so the
+      // caller can fall back to the buffer path instead of failing.
+      if (isOpfsAccessHandleConflict(err)) {
+        degraded.add(item.table)
+        return
+      }
+      throw err
     }
     const list = tableFiles.get(item.table) ?? []
     list.push({ name, handle: result.handle })
@@ -421,30 +458,73 @@ export async function attachOpfsParquetTables(
     })
   })
 
+  // If the download loop throws (abort, or a non-degradable error), release
+  // every handle it managed to acquire before the throw escapes — there is no
+  // view loop to clean up after a download-phase failure.
+  try {
+    await runDownloads()
+  }
+  catch (err) {
+    await registry.release([...acquiredNames]).catch(() => {})
+    throw err
+  }
+
   // ---- create the views ---------------------------------------------------
   const attached: string[] = []
   const registeredNames: string[] = []
-  try {
-    for (const t of tables) {
-      if (degraded.has(t.table))
-        continue
-      const files = tableFiles.get(t.table) ?? []
-      // A table only attaches when every one of its files materialised.
-      if (files.length !== t.files.length) {
-        degraded.add(t.table)
-        continue
-      }
+  for (const t of tables) {
+    if (degraded.has(t.table)) {
+      // Degraded during the download loop (quota / access-handle conflict on a
+      // later file of the table). Any EARLIER file of this table that already
+      // acquired a handle must be released here — the download loop only marked
+      // the table degraded, it did not release the handles it had taken.
+      await releaseTable(t.table)
+      continue
+    }
+    const files = tableFiles.get(t.table) ?? []
+    // A table only attaches when every one of its files materialised. Release
+    // any handles it did acquire so they don't leak as orphan registrations.
+    if (files.length !== t.files.length) {
+      degraded.add(t.table)
+      await releaseTable(t.table)
+      continue
+    }
+    try {
+      // The abort check is INSIDE the try so an abort between view-loop
+      // iterations shares the teardown path below — otherwise a bare throw here
+      // escapes uncaught and leaks every handle acquired during the download loop.
       signal?.throwIfAborted()
       await conn.query(readParquetViewSql(schema, t.table, files.map(f => f.name)))
-      attached.push(t.table)
-      for (const f of files)
-        registeredNames.push(f.name)
     }
-  }
-  catch (err) {
-    // View creation failed — tear down everything we registered this call.
-    await detachOpfs(db, conn, schema, attached, registeredNames).catch(() => {})
-    throw err
+    catch (err) {
+      if (isAbortError(err)) {
+        await detachOpfs(registry, conn, schema, attached, [...acquiredNames]).catch(() => {})
+        throw err
+      }
+      // Sync-access-handle exclusivity conflict — the BROWSER_FSACCESS read
+      // can't open this file while a prior handle is held. Degrade just this
+      // table (dropping any half-created view + releasing its handles) so the
+      // caller falls back to the buffer path; other tables keep their OPFS
+      // attachment.
+      if (isOpfsAccessHandleConflict(err)) {
+        // Only drop the half-created view if NO other consumer on this shared DB
+        // holds it — otherwise we'd yank a view another attach still queries.
+        if (registry.viewRefs(`${schema}.${t.table}`) === 0)
+          await conn.query(`DROP VIEW IF EXISTS ${schema}.${t.table}`).catch(() => {})
+        degraded.add(t.table)
+        await releaseTable(t.table)
+        continue
+      }
+      // Any other view-creation failure tears down everything registered.
+      await detachOpfs(registry, conn, schema, attached, [...acquiredNames]).catch(() => {})
+      throw err
+    }
+    attached.push(t.table)
+    // This consumer now holds the view; refcount it so a sibling consumer's
+    // detach can't drop the view while this one still queries through it.
+    registry.acquireView(`${schema}.${t.table}`)
+    for (const f of files)
+      registeredNames.push(f.name)
   }
 
   let detached = false
@@ -458,23 +538,31 @@ export async function attachOpfsParquetTables(
       if (detached)
         return
       detached = true
-      await detachOpfs(db, conn, schema, attached, registeredNames)
+      await detachOpfs(registry, conn, schema, attached, registeredNames)
     },
   }
 }
 
 async function detachOpfs(
-  db: AsyncDuckDB,
+  registry: OpfsHandleRegistry,
   conn: AsyncDuckDBConnection,
   schema: string,
   tables: readonly string[],
-  _files: readonly string[],
+  files: readonly string[],
 ): Promise<void> {
-  for (const table of tables)
-    await conn.query(`DROP VIEW IF EXISTS ${schema}.${table}`).catch(() => {})
-  // Intentionally NOT dropping the OPFS file handles here: when consumers
-  // share a DB instance (via `sharedGscDuckDBWasm`), another consumer may
-  // still hold a view over the same file. Files live for the DB's lifetime.
+  // Refcount-release the views: a view shared by two consumers on one DB is
+  // only dropped once the LAST consumer detaches, so the first detach can't
+  // break the other consumer's queries.
+  for (const table of tables) {
+    await registry.releaseView(
+      `${schema}.${table}`,
+      () => conn.query(`DROP VIEW IF EXISTS ${schema}.${table}`).then(() => {}),
+    )
+  }
+  // Release the OPFS handles via the registry. Reference counting means a file
+  // another consumer still holds (shared DB via `sharedGscDuckDBWasm`) is kept
+  // open; only the last detach drops it, releasing the sync access handle.
+  await registry.release(files)
 }
 
 /**

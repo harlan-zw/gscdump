@@ -17,6 +17,9 @@ export interface PresignOptions {
   expiresIn?: number
 }
 
+// S3 SigV4 query signing caps presigned-URL lifetime at 7 days (604800s).
+const MAX_EXPIRES_IN = 604800
+
 export function createR2Presigner(env: AnalyticsEnv) {
   if (!env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY)
     throw createError({ statusCode: 500, message: 'R2 S3 credentials missing (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY)' })
@@ -33,6 +36,10 @@ export function createR2Presigner(env: AnalyticsEnv) {
   const endpoint = `https://${env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`
 
   return async function presignGet({ key, bucket, expiresIn = 3600 }: PresignOptions): Promise<string> {
+    if (!Number.isInteger(expiresIn) || expiresIn <= 0)
+      throw createError({ statusCode: 400, message: `expiresIn must be a positive integer (got ${expiresIn})` })
+    if (expiresIn > MAX_EXPIRES_IN)
+      throw createError({ statusCode: 400, message: `expiresIn exceeds the ${MAX_EXPIRES_IN}s (7 day) S3 SigV4 maximum (got ${expiresIn})` })
     const url = new URL(`${endpoint}/${bucket}/${encodeKey(key)}`)
     url.searchParams.set('X-Amz-Expires', String(expiresIn))
     const signed = await aws.sign(url.toString(), {

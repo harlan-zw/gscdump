@@ -69,10 +69,21 @@ const DAY_MILLIS = 86_400_000
  * anything else passes through untouched.
  */
 function toIcebergDate(value: unknown): unknown {
-  if (typeof value === 'string')
-    return Math.floor(Date.parse(`${value}T00:00:00Z`) / DAY_MILLIS)
-  if (value instanceof Date)
-    return Math.floor(value.getTime() / DAY_MILLIS)
+  if (typeof value === 'string') {
+    const ms = Date.parse(`${value}T00:00:00Z`)
+    // `Date.parse` yields NaN for an empty or malformed date. Writing NaN into
+    // the Iceberg `date` column corrupts the parquet/partition silently, so
+    // fail loudly instead.
+    if (Number.isNaN(ms))
+      throw new TypeError(`toIcebergDate: invalid date string '${value}'`)
+    return Math.floor(ms / DAY_MILLIS)
+  }
+  if (value instanceof Date) {
+    const ms = value.getTime()
+    if (Number.isNaN(ms))
+      throw new TypeError('toIcebergDate: invalid Date (NaN)')
+    return Math.floor(ms / DAY_MILLIS)
+  }
   return value
 }
 

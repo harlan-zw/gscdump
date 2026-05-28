@@ -906,6 +906,7 @@ export interface GscdumpKeywordSparklinesParams {
   keywords: string[]
   startDate: string
   endDate: string
+  searchType?: GscSearchType
 }
 
 export interface GscdumpKeywordSparklinesResponse {
@@ -917,6 +918,7 @@ export interface GscdumpQueryTrendParams {
   endDate: string
   prevStartDate?: string
   prevEndDate?: string
+  searchType?: GscSearchType
 }
 
 export interface GscdumpQueryTrendResponse {

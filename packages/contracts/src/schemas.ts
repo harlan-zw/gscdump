@@ -898,6 +898,7 @@ export const gscdumpKeywordSparklinesParamsSchema = z.object({
   keywords: z.array(z.string()).min(1).max(20),
   startDate: z.string(),
   endDate: z.string(),
+  searchType: searchTypeSchema.optional(),
 })
 
 export const gscdumpKeywordSparklinesResponseSchema = z.object({
@@ -909,6 +910,7 @@ export const gscdumpQueryTrendParamsSchema = z.object({
   endDate: z.string(),
   prevStartDate: z.string().optional(),
   prevEndDate: z.string().optional(),
+  searchType: searchTypeSchema.optional(),
 })
 
 export const gscdumpQueryTrendResponseSchema = z.object({

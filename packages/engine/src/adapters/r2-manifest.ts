@@ -114,6 +114,18 @@ export interface CreateR2ManifestStoreOptions {
 
 const SHARD_RE = /^u_[^/]+\/manifest\/(?<siteId>[^/]+)\/(?<table>[^/]+)\/HEAD$/
 
+// Full-jitter exponential backoff between CAS attempts. Without it, concurrent
+// writers to the same shard retry in lockstep — a thundering herd where only
+// one wins each synchronised round, so N-way contention starves writers and
+// blows the retry budget. Jittered backoff desynchronises them so they
+// converge. Edge-safe: `setTimeout` exists in Workers, browsers, and node.
+const CAS_BACKOFF_BASE_MS = 5
+const CAS_BACKOFF_CAP_MS = 250
+async function casBackoff(attempt: number): Promise<void> {
+  const ceil = Math.min(CAS_BACKOFF_CAP_MS, CAS_BACKOFF_BASE_MS * 2 ** attempt)
+  await new Promise(resolve => setTimeout(resolve, Math.random() * ceil))
+}
+
 function defaultSnapshotId(): string {
   const ts = Date.now()
   const rnd = Math.random().toString(36).slice(2, 10)
@@ -184,7 +196,9 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
   const { bucket, userId } = opts
   const newSnapshotId = opts.newSnapshotId ?? defaultSnapshotId
   const now = opts.now ?? (() => Date.now())
-  const maxRetries = opts.maxRetries ?? 8
+  // Headroom for N-way contention on a hot shard: a writer may need ~N attempts
+  // to win when N writers race. Paired with jittered backoff (see `casBackoff`).
+  const maxRetries = opts.maxRetries ?? 16
   const onEvent = opts.onEvent
 
   async function readShard(siteId: string, table: TableName): Promise<{
@@ -242,6 +256,8 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
       }
       onEvent?.({ kind: 'cas-rejected', siteId, table, attempt })
       attempt++
+      if (attempt < maxRetries)
+        await casBackoff(attempt)
     }
     throw new Error(`R2 manifest CAS exceeded ${maxRetries} retries for ${siteId}/${table}`)
   }

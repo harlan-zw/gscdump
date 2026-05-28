@@ -1,3 +1,5 @@
+import { siteTypeBaseline } from './site-baseline'
+
 // 13-stage diagnostic classifier for a site's Search Console health.
 // Each stage carries a severity, a one-line summary, and an evidence array
 // the UI renders inline. The chooser walks issues → sitemaps → indexing
@@ -52,6 +54,28 @@ export interface SearchConsoleStageSummary {
   change28d?: number | null
 }
 
+/**
+ * Trajectory + maturity signals (v2). These are first-class axes: a site that
+ * is growing over the robust 90-day window is told to keep expanding, never to
+ * "fix indexing", regardless of coverage%. Percent fields are whole numbers
+ * (e.g. 42.6 for +42.6%); `positionDelta90d` is current − prior (negative =
+ * rank improved). Window contract: callers MUST drop the trailing ~3 GSC lag
+ * days before computing these, and the 7-day window is intentionally absent —
+ * it is too lag-contaminated to classify on.
+ */
+export interface SearchConsoleStageTrajectory {
+  clicksPct90d?: number | null
+  impressionsPct90d?: number | null
+  positionDelta90d?: number | null
+  clicksPct28d?: number | null
+  /**
+   * Absolute clicks in the PRIOR 28-day window — the baseline a decline would
+   * be measured against. Gates decline detection so a percentage crash on
+   * trivial traffic (8 → 2 clicks) is not mistaken for a real loss.
+   */
+  clicksPrior28d?: number | null
+}
+
 export interface SearchConsoleStageSitemap {
   errors?: number | null
   warnings?: number | null
@@ -75,6 +99,26 @@ export interface ClassifySearchConsoleStageInput {
   pageInventory?: SearchConsoleStagePage[] | null
   ctrOutlierCount?: number | null
   pageMoverDropCount?: number | null
+  /** v2 trajectory axis — when present, drives the growth override + decline detection. */
+  trajectory?: SearchConsoleStageTrajectory | null
+  /** v2 maturity axis — impressions over the trailing 28 days. Gates whether coverage% is even meaningful. */
+  impressions28d?: number | null
+  /**
+   * v2 on-page technical faults from the crawl audit (broken links/images,
+   * server errors, access failures) — counted as hard blockers alongside GSC
+   * crawl reasons. Excludes intentional noindex.
+   */
+  crawlAuditBlockerCount?: number | null
+  /** v2 authority signal — open recoverable broken backlinks (expansion lever, not a defect). */
+  recoverableBacklinkCount?: number | null
+  /** v2 authority signal — cross-competitor content-gap topics (expansion readiness). */
+  competitorGapCount?: number | null
+  /**
+   * v2 site purpose (AI profile `type`). Benchmarks the verdict against intent:
+   * informational types (docs/blog/portfolio) earn structurally low CTR, so the
+   * visible-not-clicked bar is raised for them. Unknown/null → `other`.
+   */
+  siteType?: string | null
 }
 
 function formatCount(value: number): string {
@@ -208,6 +252,29 @@ function stage(
   return { key, evidence, ...stages[key] }
 }
 
+// v2 thresholds, derived from a 12-site live audit (docs/search-console-stage-v2-audit.md).
+// MATURITY: the 5 sites >20k impressions/28d were all growing with coverage 52–100%,
+// so coverage% stops predicting health above this line; the next site down sits at ~5k.
+const ESTABLISHED_IMPRESSIONS_28D = 20000
+// Below this, traffic is too thin to diagnose coverage at all (gscdump 17, mdream 170, skilld 146).
+const NASCENT_IMPRESSIONS_28D = 1000
+// GROWTH: every healthy exemplar cleared +10% clicks/90d (+25/+43/+100/+191/+28).
+const GROWTH_CLICKS_PCT_90D = 10
+const GROWTH_IMPRESSIONS_PCT_90D = 20
+// DECLINE: require BOTH windows down to filter lag/noise (largemirage −44/90d, requestindexing −48/90d).
+const DECLINE_CLICKS_PCT = -10
+// ...and require a meaningful baseline to decline FROM. Prior-28d clicks cleanly
+// split real losses (requestindexing 117, largemirage 156) from tiny-traffic
+// noise (harlanzw 8, zhead 22) where a % crash is statistically meaningless.
+const MIN_DECLINE_PRIOR_CLICKS = 50
+
+/**
+ * v2 classifier. Trajectory and maturity are first-class axes that run BEFORE
+ * the coverage/discovery rungs, so a growing site is told to keep expanding —
+ * never to "fix indexing". Reuses the existing stage-key enum (growth →
+ * `healthy_growth_ready`, nascent → `waiting_for_data`, mass crawled-not-indexed
+ * → `index_rejection`, on-page/crawl faults → `crawl_blocked`).
+ */
 export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInput): SearchConsoleStage {
   const issues = input.issues ?? []
   const summary = input.summary ?? null
@@ -230,33 +297,92 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   }
 
   const sitemapErrors = totalSitemapErrors(sitemaps)
-  const sitemapUrlCount = sitemaps.reduce((sum, sitemap) => sum + (sitemap.urlCount ?? 0), 0)
   const unknown = issueCount(issues, 'unknown_to_google')
   const discovered = issueCount(issues, 'discovered_not_indexed')
   const crawled = issueCount(issues, 'crawled_not_indexed')
-  const crawlBlocks = issueCount(issues, 'blocked_robots', 'server_error', 'not_found', 'soft_404', 'access_denied', 'forbidden')
-  const indexBlocks = issueCount(issues, 'noindex', 'canonical_mismatch')
+  // not_found / soft_404 are NOT hard faults — a 404 is a missing page (often
+  // an intentionally retired one), a 5xx is a broken one. Only the latter blocks.
+  const gscCrawlBlocks = issueCount(issues, 'blocked_robots', 'server_error', 'access_denied', 'forbidden')
+  // On-page faults from the crawl audit join GSC crawl reasons. `noindex` is
+  // EXCLUDED — it is usually intentional (the v1 model mis-flagged it).
+  const hardBlocks = gscCrawlBlocks + (input.crawlAuditBlockerCount ?? 0)
   const canonicalMismatches = input.canonicalMismatchCount ?? issueCount(issues, 'canonical_mismatch')
-  const zeroImpressionPages = (input.pageInventory ?? []).filter(page => page.impressions === 0).length
   const visibleNoClickPages = (input.pageInventory ?? []).filter(page => page.impressions >= 50 && page.clicks === 0).length
   const poorPositionPages = (input.pageInventory ?? []).filter(page => page.impressions >= 50 && (page.position ?? 0) > 20).length
-  const pageMoverDropCount = input.pageMoverDropCount ?? 0
   const ctrOutlierCount = input.ctrOutlierCount ?? 0
 
-  if (summary.change7d != null && summary.change7d <= -5) {
-    return stage('declining_visibility', [
-      { label: 'Index rate change', value: `${summary.change7d.toFixed(1)}% in 7 days`, source: 'indexing' },
+  // ── v2 axes ────────────────────────────────────────────────────────────────
+  const traj = input.trajectory ?? null
+  const impressions28d = input.impressions28d ?? null
+  const clicks90d = traj?.clicksPct90d ?? null
+  const imp90d = traj?.impressionsPct90d ?? null
+  const posDelta90d = traj?.positionDelta90d ?? null
+  const clicks28d = traj?.clicksPct28d ?? null
+  const clicksPrior28d = traj?.clicksPrior28d ?? null
+
+  const isGrowing = (clicks90d != null && clicks90d > GROWTH_CLICKS_PCT_90D)
+    || (imp90d != null && imp90d > GROWTH_IMPRESSIONS_PCT_90D && posDelta90d != null && posDelta90d < 0)
+  // Both windows down AND enough prior traffic for the drop to be meaningful.
+  const isDeclining = clicks90d != null && clicks90d < DECLINE_CLICKS_PCT
+    && clicks28d != null && clicks28d < DECLINE_CLICKS_PCT
+    && clicksPrior28d != null && clicksPrior28d >= MIN_DECLINE_PRIOR_CLICKS
+  const isNascent = impressions28d != null && impressions28d < NASCENT_IMPRESSIONS_28D
+  const isEstablished = impressions28d != null && impressions28d >= ESTABLISHED_IMPRESSIONS_28D
+  const hasHardBlocker = hardBlocks > Math.max(10, totalUrls * 0.05)
+
+  // Hard technical faults (server errors / broken links / access) win over
+  // everything except connection — even on a growing site they need a flag.
+  if (hasHardBlocker) {
+    return stage('crawl_blocked', [
+      { label: 'Crawl / on-page faults', value: formatCount(hardBlocks), source: 'indexing' },
       { label: 'Indexed pages', value: `${formatCount(indexed)} of ${formatCount(totalUrls)}`, source: 'indexing' },
     ])
   }
 
-  if (pageMoverDropCount > 0) {
+  // Decline, on the robust windows only (never the lag-poisoned 7-day signal).
+  if (isDeclining) {
     return stage('declining_visibility', [
-      { label: 'Falling pages', value: formatCount(pageMoverDropCount), source: 'performance' },
+      { label: 'Clicks 90d', value: `${clicks90d!.toFixed(1)}%`, source: 'performance' },
+      { label: 'Clicks 28d', value: `${clicks28d!.toFixed(1)}%`, source: 'performance' },
     ])
   }
 
-  if (sitemaps.length === 0 || sitemapUrlCount === 0 || sitemapErrors > 0 || unknown > Math.max(5, totalUrls * 0.1)) {
+  // GROWTH OVERRIDE — discoverable, indexed-enough, trending up. Coverage% and
+  // intentional noindex are irrelevant here; the next work is expansion. This
+  // sits above mass-rejection and the maturity floor: a growing site is left
+  // to keep expanding regardless of its non-indexed pool.
+  if (isGrowing) {
+    return stage('healthy_growth_ready', [
+      ...(clicks90d != null ? [{ label: 'Clicks 90d', value: `+${clicks90d.toFixed(1)}%`, source: 'performance' as const }] : []),
+      ...(imp90d != null ? [{ label: 'Impressions 90d', value: `+${imp90d.toFixed(1)}%`, source: 'performance' as const }] : []),
+      ...((input.recoverableBacklinkCount ?? 0) > 0 ? [{ label: 'Recoverable backlinks', value: formatCount(input.recoverableBacklinkCount!), source: 'performance' as const }] : []),
+      ...((input.competitorGapCount ?? 0) > 0 ? [{ label: 'Competitor content gaps', value: formatCount(input.competitorGapCount!), source: 'performance' as const }] : []),
+    ])
+  }
+
+  // Mass crawled-but-rejected on a large site = content quality. Diagnosable
+  // regardless of traffic maturity (Google actively crawled and refused these),
+  // so it sits ABOVE the nascent floor.
+  if (crawled > Math.max(10, totalUrls * 0.30) && totalUrls > 500) {
+    return stage('index_rejection', [
+      { label: 'Crawled, not indexed', value: formatCount(crawled), source: 'indexing' },
+      { label: 'Not indexed', value: formatCount(notIndexed), source: 'indexing' },
+    ])
+  }
+
+  // Maturity floor: too little traffic to diagnose coverage. Catches brand-new
+  // sites the v1 model wrongly flagged as a discovery defect.
+  if (isNascent) {
+    return stage('waiting_for_data', [
+      { label: 'Impressions (28d)', value: formatCount(impressions28d ?? 0), source: 'performance' },
+      { label: 'Indexed pages', value: `${formatCount(indexed)} of ${formatCount(totalUrls)}`, source: 'indexing' },
+    ])
+  }
+
+  // Discovery gap — only for non-established sites (a growing/established site
+  // never lands here). Sitemap urlCount is intentionally NOT a trigger: GSC
+  // often reports it null, which the v1 model mistook for "no coverage".
+  if (!isEstablished && (sitemaps.length === 0 || sitemapErrors > 0 || unknown > Math.max(5, totalUrls * 0.1))) {
     return stage('weak_discovery', [
       { label: 'Sitemaps', value: sitemaps.length === 0 ? 'None registered' : `${formatCount(sitemapErrors)} errors`, source: 'sitemap' },
       ...(unknown > 0 ? [{ label: 'Unknown URLs', value: formatCount(unknown), source: 'indexing' as const }] : []),
@@ -270,41 +396,20 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
     ])
   }
 
-  if (crawlBlocks > Math.max(5, totalUrls * 0.05)) {
-    return stage('crawl_blocked', [
-      { label: 'Crawl blockers', value: formatCount(crawlBlocks), source: 'indexing' },
-      { label: 'Indexed pages', value: `${formatCount(indexed)} of ${formatCount(totalUrls)}`, source: 'indexing' },
-    ])
-  }
-
-  if (indexBlocks > Math.max(5, totalUrls * 0.05) || canonicalMismatches > Math.max(5, totalUrls * 0.05)) {
+  if (canonicalMismatches > Math.max(5, totalUrls * 0.05)) {
     return stage('indexability_blocked', [
-      ...(indexBlocks > 0 ? [{ label: 'Index signal blockers', value: formatCount(indexBlocks), source: 'indexing' as const }] : []),
-      ...(canonicalMismatches > 0 ? [{ label: 'Canonical mismatches', value: formatCount(canonicalMismatches), source: 'canonical' as const }] : []),
+      { label: 'Canonical mismatches', value: formatCount(canonicalMismatches), source: 'canonical' },
     ])
   }
 
-  if (crawled > Math.max(10, totalUrls * 0.15)) {
-    return stage('index_rejection', [
-      { label: 'Crawled, not indexed', value: formatCount(crawled), source: 'indexing' },
-      { label: 'Not indexed', value: formatCount(notIndexed), source: 'indexing' },
-    ])
-  }
-
-  if (indexedPercent < 80) {
-    return stage('partially_indexed', [
-      { label: 'Indexed', value: `${indexedPercent.toFixed(1)}%`, source: 'indexing' },
-      { label: 'Not indexed', value: formatCount(notIndexed), source: 'indexing' },
-    ])
-  }
-
-  if (zeroImpressionPages >= Math.max(1, (input.pageInventory?.length ?? 0) * 0.25)) {
-    return stage('indexed_invisible', [
-      { label: 'No-impression pages', value: formatCount(zeroImpressionPages), source: 'performance' },
-    ])
-  }
-
-  if (ctrOutlierCount > 0 || visibleNoClickPages >= Math.max(1, (input.pageInventory?.length ?? 0) * 0.25)) {
+  // Benchmark CTR against site purpose. Informational types (docs/blog/portfolio)
+  // earn structurally low CTR — the answer is often in the SERP — so raise the
+  // bar: require a majority of pages to be impression-rich-but-clickless, and
+  // don't fire on the global-curve CTR-outlier count alone.
+  const lowCtrType = siteTypeBaseline(input.siteType).ctrExpectation === 'low'
+  const noClickShare = lowCtrType ? 0.5 : 0.25
+  const noClickTrigger = visibleNoClickPages >= Math.max(1, (input.pageInventory?.length ?? 0) * noClickShare)
+  if ((ctrOutlierCount > 0 && !lowCtrType) || noClickTrigger) {
     return stage('visible_not_clicked', [
       ...(ctrOutlierCount > 0 ? [{ label: 'CTR outliers', value: formatCount(ctrOutlierCount), source: 'performance' as const }] : []),
       ...(visibleNoClickPages > 0 ? [{ label: 'Visible, no clicks', value: formatCount(visibleNoClickPages), source: 'performance' as const }] : []),

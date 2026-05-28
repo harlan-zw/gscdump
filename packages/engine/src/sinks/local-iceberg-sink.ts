@@ -21,7 +21,7 @@
  * the canonical schema is the only source of truth, never hand-listed.
  */
 
-import type { IcebergTableName } from '../iceberg-schema'
+import type { IcebergS3Config, IcebergTableName } from '../iceberg-schema'
 import type { LocalIcebergSinkOptions, Sink, SinkCloseResult, SinkSlice, SinkWriteResult } from '../sink'
 import type { Row } from '../storage'
 import { execFile } from 'node:child_process'
@@ -30,19 +30,10 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { ICEBERG_SCHEMAS } from '../iceberg-schema'
 
-/** S3-compatible credentials for the warehouse (POC: MinIO). */
-export interface LocalIcebergS3Config {
-  /** S3 endpoint host (POC MinIO: `localhost:9100`). */
-  endpoint: string
-  accessKeyId: string
-  secretAccessKey: string
-  region?: string
-}
-
 /** Full `LocalIcebergSink` options — extends the frozen contract options. */
 export interface LocalIcebergSinkFullOptions extends LocalIcebergSinkOptions {
   /** S3 credentials for the warehouse. Defaults to the POC MinIO creds. */
-  s3?: LocalIcebergS3Config
+  s3?: IcebergS3Config
   /** Python interpreter. Defaults to `$GSCDUMP_ICEBERG_PYTHON` then `python3`. */
   python?: string
   /** Override the writer-script path. Defaults to `scripts/iceberg-writer.py`. */
@@ -50,7 +41,7 @@ export interface LocalIcebergSinkFullOptions extends LocalIcebergSinkOptions {
 }
 
 /** POC MinIO defaults (`docker-compose.iceberg.yml`). */
-const POC_S3: LocalIcebergS3Config = {
+const POC_S3: IcebergS3Config = {
   endpoint: 'localhost:9100',
   accessKeyId: 'poc',
   secretAccessKey: 'pocpocpoc',
@@ -62,7 +53,7 @@ interface WriterJob {
   catalogUri: string
   namespace: string
   warehouse: string
-  s3: LocalIcebergS3Config
+  s3: IcebergS3Config
   table: string
   spec: unknown
   siteId: string

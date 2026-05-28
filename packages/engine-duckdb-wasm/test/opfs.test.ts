@@ -101,19 +101,33 @@ function stubDuckDb(): {
   db: AsyncDuckDB
   conn: AsyncDuckDBConnection
   registerFileHandle: ReturnType<typeof vi.fn>
+  dropFile: ReturnType<typeof vi.fn>
   viewSql: string[]
 } {
-  const registerFileHandle = vi.fn(async () => {})
-  const dropFiles = vi.fn(async () => {})
+  // Model OPFS exclusivity: a name allows only one live sync access handle, so
+  // a second registerFileHandle on a live name throws the conflict DuckDB would.
+  const live = new Set<string>()
+  const registerFileHandle = vi.fn(async (name: string) => {
+    if (live.has(name)) {
+      const err = new Error(`Access Handles cannot be created (${name})`)
+      err.name = 'InvalidStateError'
+      throw err
+    }
+    live.add(name)
+  })
+  const dropFile = vi.fn(async (name: string) => {
+    live.delete(name)
+  })
   const viewSql: string[] = []
   const query = vi.fn(async (sql: string) => {
     viewSql.push(sql)
     return { toArray: () => [] }
   })
   return {
-    db: { registerFileHandle, dropFiles } as unknown as AsyncDuckDB,
+    db: { registerFileHandle, dropFile } as unknown as AsyncDuckDB,
     conn: { query } as unknown as AsyncDuckDBConnection,
     registerFileHandle,
+    dropFile,
     viewSql,
   }
 }
@@ -251,10 +265,10 @@ describe('attachOpfsParquetTables', () => {
     expect(handle.degradedTables).toEqual(['queries'])
   })
 
-  it('detach drops the views + registered files', async () => {
+  it('detach drops the views AND releases the OPFS sync access handle', async () => {
     const opfs = makeFakeOpfs()
     installNavigatorStorage(opfs.root)
-    const { db, conn, viewSql } = stubDuckDb()
+    const { db, conn, dropFile, viewSql } = stubDuckDb()
     const payload = new Uint8Array([4, 2])
 
     const handle = await attachOpfsParquetTables({
@@ -265,8 +279,76 @@ describe('attachOpfsParquetTables', () => {
     })
     await handle.detach()
     expect(viewSql.some(s => s.includes('DROP VIEW IF EXISTS main.pages'))).toBe(true)
+    // Regression: detach must release the sync access handle, not leak it for
+    // the DB's lifetime. Exactly one file was registered, so exactly one drop.
+    expect(dropFile).toHaveBeenCalledOnce()
     // idempotent
     await expect(handle.detach()).resolves.toBeUndefined()
+    expect(dropFile).toHaveBeenCalledOnce()
+  })
+
+  it('two consumers sharing one DB attach the same file without an OPFS conflict', async () => {
+    // The crux of the flagged root issue: the home fanout and the per-site
+    // analyzer share one DB via `sharedGscDuckDBWasm` and attach the same OPFS
+    // parquet. The registry dedups the registration (one sync access handle)
+    // and only releases it once BOTH consumers detach.
+    const opfs = makeFakeOpfs()
+    installNavigatorStorage(opfs.root)
+    const { db, conn, registerFileHandle, dropFile } = stubDuckDb()
+    const payload = new Uint8Array([1, 2, 3])
+    const file = { url: '/shared', bytes: 3, contentHash: 'iceberg/shared.parquet' }
+
+    const first = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(payload),
+      tables: [{ table: 'dates', files: [file] }],
+    })
+    const second = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(payload),
+      tables: [{ table: 'dates', files: [file] }],
+    })
+
+    expect(first.tables).toEqual(['dates'])
+    expect(second.tables).toEqual(['dates'])
+    expect(second.degradedTables).toEqual([])
+    // One backing file → exactly one sync access handle registered.
+    expect(registerFileHandle).toHaveBeenCalledOnce()
+
+    // First consumer detaches: the second still reads through it, keep it open.
+    await first.detach()
+    expect(dropFile).not.toHaveBeenCalled()
+    // Last consumer detaches: now release.
+    await second.detach()
+    expect(dropFile).toHaveBeenCalledOnce()
+  })
+
+  it('two CONCURRENT attaches of the same file on one DB dedup to a single handle', async () => {
+    // Home fanout + per-site analyzer can fire attachOpfsParquetTables
+    // concurrently on the shared DB, racing two acquire(sameName) calls. The
+    // per-name registration serialisation must collapse that to ONE
+    // registerFileHandle — a second would hit the OPFS exclusivity error
+    // modelled by stubDuckDb and degrade the table.
+    const opfs = makeFakeOpfs()
+    installNavigatorStorage(opfs.root)
+    const { db, conn, registerFileHandle, dropFile } = stubDuckDb()
+    const file = { url: '/shared', bytes: 3, contentHash: 'iceberg/shared.parquet' }
+    const mk = () => attachOpfsParquetTables({ db, conn, fetch: okFetch(new Uint8Array([1, 2, 3])), tables: [{ table: 'dates', files: [file] }] })
+
+    const [first, second] = await Promise.all([mk(), mk()])
+
+    expect(first.tables).toEqual(['dates'])
+    expect(second.tables).toEqual(['dates'])
+    expect(first.degradedTables).toEqual([])
+    expect(second.degradedTables).toEqual([])
+    expect(registerFileHandle).toHaveBeenCalledOnce()
+
+    await first.detach()
+    expect(dropFile).not.toHaveBeenCalled()
+    await second.detach()
+    expect(dropFile).toHaveBeenCalledOnce()
   })
 })
 

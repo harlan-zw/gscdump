@@ -10,7 +10,6 @@
 
 export { createLocalIcebergSink } from './sinks/local-iceberg-sink'
 export type {
-  LocalIcebergS3Config,
   LocalIcebergSink,
   LocalIcebergSinkFullOptions,
 } from './sinks/local-iceberg-sink'

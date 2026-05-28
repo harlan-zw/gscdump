@@ -88,6 +88,46 @@ describe('icebergAppendRetrying', () => {
     expect(icebergAppend).toHaveBeenCalledTimes(4)
   })
 
+  // --- Documented CURRENT behavior (Issue 5) -----------------------------
+  //
+  // icebird's `commitWithRetry` retries 412/409 optimistic-concurrency
+  // conflicts INTERNALLY (without re-uploading data files). This wrapper must
+  // therefore NOT also retry 412/409 — doing so would re-run the full
+  // `icebergAppend`, re-uploading data files and orphaning the previous
+  // attempt's parquet objects. These tests pin that contract.
+
+  it('does NOT retry a 409 conflict (icebird retries it internally)', async () => {
+    icebergAppend.mockRejectedValueOnce(new Error('409 conflict'))
+    await expect(icebergAppendRetrying(APPEND_ARGS, FAST)).rejects.toThrow('409')
+    expect(icebergAppend).toHaveBeenCalledTimes(1)
+  })
+
+  it('does NOT retry a 412 precondition failure (icebird retries it internally)', async () => {
+    icebergAppend.mockRejectedValueOnce(new Error('412 precondition failed'))
+    await expect(icebergAppendRetrying(APPEND_ARGS, FAST)).rejects.toThrow('412')
+    expect(icebergAppend).toHaveBeenCalledTimes(1)
+  })
+
+  it('does NOT retry a 5xx transient error — it propagates on the first attempt', async () => {
+    icebergAppend.mockRejectedValueOnce(new Error('503 service unavailable'))
+    await expect(icebergAppendRetrying(APPEND_ARGS, FAST)).rejects.toThrow('503')
+    expect(icebergAppend).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-runs icebergAppend on each 429 retry — the documented re-upload-orphan risk', async () => {
+    // A 429 that escapes icebird is retried HERE by re-running the WHOLE
+    // icebergAppend, which re-prepares + re-uploads data files. The previous
+    // attempt's parquet objects become orphans. This pins that each retry is a
+    // fresh full call (the orphan source), not an internal manifest-only redo.
+    icebergAppend
+      .mockRejectedValueOnce(new Error('429 too many commits to this table'))
+      .mockResolvedValueOnce({})
+    await icebergAppendRetrying(APPEND_ARGS, FAST)
+    expect(icebergAppend).toHaveBeenCalledTimes(2)
+    // both calls received the SAME args object — a re-upload, not a manifest-only retry.
+    expect(icebergAppend.mock.calls[0][0]).toBe(icebergAppend.mock.calls[1][0])
+  })
+
   it('backs off with full-jitter exponential delay between 429 retries', async () => {
     const delays: number[] = []
     icebergAppend

@@ -1,6 +1,9 @@
 export const GSCDUMP_ONBOARDING_CONTRACT_VERSION = '2026-05-11' as const
 
 export const GSCDUMP_REQUIRED_ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly' as const
+// The broader read+write Search Console scope is a strict superset of the
+// readonly scope, so granting it satisfies the analytics requirement too.
+export const GSCDUMP_WRITE_ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/webmasters' as const
 export const GSCDUMP_OPTIONAL_INDEXING_SCOPE = 'https://www.googleapis.com/auth/indexing' as const
 
 export const accountStatuses = [
@@ -222,7 +225,7 @@ export function parseGrantedScopes(scopes: string | null | undefined): string[] 
 
 export function hasRequiredAnalyticsScope(scopes: string | string[] | null | undefined): boolean {
   const granted = Array.isArray(scopes) ? scopes : parseGrantedScopes(scopes)
-  return granted.includes(GSCDUMP_REQUIRED_ANALYTICS_SCOPE)
+  return granted.includes(GSCDUMP_REQUIRED_ANALYTICS_SCOPE) || granted.includes(GSCDUMP_WRITE_ANALYTICS_SCOPE)
 }
 
 export function hasOptionalIndexingScope(scopes: string | string[] | null | undefined): boolean {

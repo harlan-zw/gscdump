@@ -1,16 +1,17 @@
 /**
  * CONTRACT — Iceberg table schema + partition spec (Wave-1, frozen).
  *
- * The canonical definition of the 5 global Iceberg fact tables and their
+ * The canonical definition of the 9 global Iceberg fact tables and their
  * shared partition spec. Every writer (`IcebergAppendSink`, `LocalIcebergSink`)
  * and every reader (R2 SQL, DuckDB, DuckDB-WASM) is built against this file.
  *
  * Locked decisions encoded here (POC findings 2026-05-22):
- * - 5 GLOBAL tables — `pages`, `queries`, `countries`, `page_queries`,
- *   `dates` — NOT per-site tables. Avoids the unverified R2 Data
- *   Catalog table-count limit. `dates` carries true site totals + a device
- *   pivot, replacing the old standalone `devices` table and `daily_totals`
- *   rollup.
+ * - GLOBAL tables — `pages`, `queries`, `countries`, `page_queries`,
+ *   `dates`, plus the four `search_appearance*` tables — NOT per-site tables.
+ *   Avoids the unverified R2 Data Catalog table-count limit. `dates` carries
+ *   true site totals + a device pivot, replacing the old standalone `devices`
+ *   table and `daily_totals` rollup. The authoritative list/count is
+ *   {@link ICEBERG_TABLES}.
  * - Partition spec: `site_id` (identity) + `search_type` (identity) +
  *   `month(date)`. Filtering `site_id=` prunes cleanly; `month(date)` is an
  *   Iceberg partition TRANSFORM, not a stored column.
@@ -27,13 +28,28 @@ import type { ColumnType, TableName } from '@gscdump/contracts'
 import type { SearchType } from './storage'
 import { SCHEMAS } from './schema'
 
-/** The 6 fact tables that exist as global Iceberg tables. */
+/**
+ * S3-compatible credentials for the Iceberg warehouse object store (R2 in prod,
+ * MinIO in the POC). The single definition shared by every catalog/writer/sink
+ * that signs warehouse object access — keep this contract in one place so the
+ * credential shape cannot drift between the icebird and PyIceberg paths.
+ */
+export interface IcebergS3Config {
+  /** S3 endpoint host (POC MinIO: `localhost:9100`; prod: the R2 S3 endpoint). */
+  endpoint: string
+  accessKeyId: string
+  secretAccessKey: string
+  /** Defaults to `'auto'` (R2's region). */
+  region?: string
+}
+
+/** The 9 fact tables that exist as global Iceberg tables. */
 export type IcebergTableName = Extract<
   TableName,
   'pages' | 'queries' | 'countries' | 'page_queries' | 'dates' | 'search_appearance' | 'search_appearance_pages' | 'search_appearance_queries' | 'search_appearance_page_queries'
 >
 
-/** The 6 Iceberg table names, in canonical order. */
+/** The 9 Iceberg table names, in canonical order. */
 export const ICEBERG_TABLES: readonly IcebergTableName[] = [
   'pages',
   'queries',
@@ -80,7 +96,7 @@ export interface IcebergTableSpec {
   table: IcebergTableName
   columns: readonly IcebergColumn[]
   /**
-   * Partition spec — shared by all 5 tables: identity(site_id),
+   * Partition spec — shared by every table: identity(site_id),
    * identity(search_type), month(date).
    */
   partitionSpec: readonly IcebergPartitionField[]
@@ -117,7 +133,7 @@ export const ICEBERG_PARTITION_COLUMNS: readonly IcebergColumn[] = [
  */
 export const ICEBERG_FIELD_ID_BASE = 3
 
-/** Shared partition spec — identical across all 5 tables. */
+/** Shared partition spec — identical across every table. */
 export const ICEBERG_PARTITION_SPEC: readonly IcebergPartitionField[] = [
   { sourceColumn: 'site_id', transform: 'identity', name: 'site_id' },
   { sourceColumn: 'search_type', transform: 'identity', name: 'search_type' },
@@ -159,11 +175,34 @@ export function icebergTableSpec(table: IcebergTableName): IcebergTableSpec {
   }
 }
 
-/** All 5 Iceberg table specs, keyed by table name. */
+/** All Iceberg table specs, keyed by table name. */
 export const ICEBERG_SCHEMAS: Record<IcebergTableName, IcebergTableSpec>
   = Object.fromEntries(
     ICEBERG_TABLES.map(t => [t, icebergTableSpec(t)] as const),
   ) as Record<IcebergTableName, IcebergTableSpec>
+
+const ICEBERG_TABLE_SET: ReadonlySet<string> = new Set(ICEBERG_TABLES)
+
+/** True when `table` is one of the canonical {@link ICEBERG_TABLES}. */
+export function isIcebergTable(table: string): table is IcebergTableName {
+  return ICEBERG_TABLE_SET.has(table)
+}
+
+/**
+ * Narrow an arbitrary table name to a canonical {@link IcebergTableName},
+ * throwing a clear error otherwise. Guards write paths that index
+ * `ICEBERG_SCHEMAS` (a `Record<IcebergTableName, …>`) — a non-canonical name
+ * silently yields `undefined` there, propagating a corrupt/empty spec into the
+ * Iceberg job instead of failing loudly.
+ */
+export function assertIcebergTable(table: string): IcebergTableName {
+  if (!isIcebergTable(table)) {
+    throw new Error(
+      `Unknown Iceberg table '${table}'. Expected one of: ${ICEBERG_TABLES.join(', ')}`,
+    )
+  }
+  return table
+}
 
 /**
  * Re-exported so downstream agents have one import for the searchType union

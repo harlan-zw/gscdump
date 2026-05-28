@@ -1,76 +1,40 @@
 /**
- * Drizzle PgSession adapter for DuckDB-WASM.
+ * Drizzle PgAsyncSession adapter for DuckDB-WASM.
  *
  * Adapted from @proj-airi/drizzle-duckdb-wasm (MIT, (c) 2024 Neko Ayaka).
- * Updated for drizzle-orm 0.45.x. Transactions throw — the analytics
- * workload is read-only; wire a real implementation here if that changes.
+ * Updated for drizzle-orm 1.0.x (RQBv2 async session surface). Transactions
+ * throw — the analytics workload is read-only; wire a real implementation
+ * here if that changes.
  */
 
-import type { Assume, Logger, Query, RelationalSchemaConfig, TablesRelationalConfig } from 'drizzle-orm'
+import type { Assume, Logger, Query } from 'drizzle-orm'
 import type { Cache } from 'drizzle-orm/cache/core'
-import type {
-  PgDialect,
-  PgQueryResultHKT,
-  PgTransactionConfig,
-  PreparedQueryConfig,
-  SelectedFieldsOrdered,
-} from 'drizzle-orm/pg-core'
+import type { WithCacheConfig } from 'drizzle-orm/cache/core/types'
+import type { PgDialect, PgQueryResultHKT, PreparedQueryConfig } from 'drizzle-orm/pg-core'
 
 import type { DuckDBWasmClient } from './client'
 
-import { entityKind, fillPlaceholders, NoopLogger } from 'drizzle-orm'
-import { PgPreparedQuery, PgSession } from 'drizzle-orm/pg-core'
+import { entityKind, NoopLogger } from 'drizzle-orm'
+import { PgAsyncPreparedQuery, PgAsyncSession } from 'drizzle-orm/pg-core'
 
 export type Row = Record<string, unknown>
 
 interface QueryMetadata { type: 'select' | 'update' | 'delete' | 'insert', tables: string[] }
-
-class DuckDBWasmPreparedQuery<T extends PreparedQueryConfig> extends PgPreparedQuery<T> {
-  static override readonly [entityKind]: string = 'DuckDBWasmPreparedQuery'
-
-  constructor(
-    private client: Promise<DuckDBWasmClient>,
-    query: Query,
-    private logger: Logger,
-    queryMetadata: QueryMetadata | undefined,
-    cache?: Cache,
-  ) {
-    super(query, cache, queryMetadata)
-  }
-
-  async execute(placeholderValues: Record<string, unknown> | undefined = {}): Promise<T['execute']> {
-    const params = fillPlaceholders(this.query.params, placeholderValues)
-    this.logger.logQuery(this.query.sql, params)
-    const c = await this.client
-    return (await c.query(this.query.sql, params)) as T['execute']
-  }
-
-  async all(placeholderValues: Record<string, unknown> | undefined = {}): Promise<T['all']> {
-    const params = fillPlaceholders(this.query.params, placeholderValues)
-    this.logger.logQuery(this.query.sql, params)
-    const c = await this.client
-    return (await c.query(this.query.sql, params)) as T['all']
-  }
-}
 
 export interface DuckDBWasmSessionOptions {
   logger?: Logger
   cache?: Cache
 }
 
-export class DuckDBWasmSession<
-  TFullSchema extends Record<string, unknown>,
-  TSchema extends TablesRelationalConfig,
-> extends PgSession<DuckDBWasmQueryResultHKT, TFullSchema, TSchema> {
+export class DuckDBWasmSession extends PgAsyncSession<DuckDBWasmQueryResultHKT> {
   static override readonly [entityKind]: string = 'DuckDBWasmSession'
 
-  logger: Logger
-  cache?: Cache
+  private logger: Logger
+  private cache?: Cache
 
   constructor(
     public client: Promise<DuckDBWasmClient>,
     dialect: PgDialect,
-    _schema: RelationalSchemaConfig<TSchema> | undefined,
     readonly options: DuckDBWasmSessionOptions = {},
   ) {
     super(dialect)
@@ -78,37 +42,38 @@ export class DuckDBWasmSession<
     this.cache = options.cache
   }
 
-  prepareQuery<T extends PreparedQueryConfig = PreparedQueryConfig>(
+  override prepareQuery<T extends PreparedQueryConfig = PreparedQueryConfig>(
     query: Query,
-    _fields: SelectedFieldsOrdered | undefined,
-    _name: string | undefined,
-    _isResponseInArrayMode: boolean,
-    _customResultMapper?: (rows: unknown[][]) => T['execute'],
+    mode: 'arrays' | 'objects' | 'raw',
+    _name: string | boolean,
+    mapper?: (rows: any[]) => any,
     queryMetadata?: QueryMetadata,
-  ): PgPreparedQuery<T> {
-    return new DuckDBWasmPreparedQuery(
-      this.client,
+    cacheConfig?: WithCacheConfig,
+  ): PgAsyncPreparedQuery<T> {
+    const client = this.client
+    const executor = async (params: unknown[] = []): Promise<unknown[]> => {
+      const c = await client
+      const rows = await c.query(query.sql, params)
+      // DuckDB returns row objects; arrays mode wants positional value tuples.
+      return mode === 'arrays' ? rows.map(row => Object.values(row)) : rows
+    }
+    return new PgAsyncPreparedQuery<T>(
+      executor,
       query,
+      mapper,
+      mode,
       this.logger,
-      queryMetadata,
       this.cache,
+      queryMetadata,
+      cacheConfig,
     )
   }
 
-  async query(sql: string, params: unknown[]): Promise<Row[]> {
-    this.logger.logQuery(sql, params)
-    const c = await this.client
-    return c.query(sql, params)
-  }
-
-  transaction<T>(
-    _transaction: unknown,
-    _config?: PgTransactionConfig,
-  ): Promise<T> {
+  override transaction<T>(): Promise<T> {
     throw new Error(
       'Transactions are not supported by the DuckDB-WASM drizzle adapter. '
       + 'The analytics workload is read-only; if transactions become necessary, '
-      + 'implement PgSession.transaction() in @gscdump/engine-duckdb-wasm.',
+      + 'implement PgAsyncSession.transaction() in @gscdump/engine-duckdb-wasm.',
     )
   }
 }

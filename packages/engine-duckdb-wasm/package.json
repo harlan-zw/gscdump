@@ -40,6 +40,7 @@
     "dev": "obuild --stub",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
+    "test:browser": "GSCDUMP_E2E=1 vitest --run --config vitest.browser.config.ts",
     "prepack": "pnpm run build"
   },
   "peerDependencies": {
@@ -58,6 +59,9 @@
   },
   "devDependencies": {
     "@duckdb/duckdb-wasm": "catalog:",
+    "@vitest/browser": "catalog:dev-test",
+    "@vitest/browser-playwright": "catalog:",
+    "playwright": "catalog:",
     "vitest": "catalog:dev-test"
   }
 }

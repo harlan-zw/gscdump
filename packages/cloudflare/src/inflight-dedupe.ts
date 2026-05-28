@@ -42,15 +42,6 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value)
 }
 
-function hashString(value: string): string {
-  let hash = 0
-  for (let i = 0; i < value.length; i++) {
-    hash = ((hash << 5) - hash) + value.charCodeAt(i)
-    hash |= 0
-  }
-  return Math.abs(hash).toString(36)
-}
-
 export interface HostedR2QueryKeyInput {
   userId: string | number
   siteId: string
@@ -59,12 +50,17 @@ export interface HostedR2QueryKeyInput {
   comparisonFilter?: string
 }
 
+// JSON-encode each part before joining so a part's own value cannot forge a
+// segment boundary (e.g. a siteId containing ':'), and serve the full
+// stableStringify string rather than a 32-bit hash. A truncated hash collides
+// at the birthday bound and would serve one request's cached query result to a
+// different request with different state.
 export function getHostedR2QueryKey(input: HostedR2QueryKeyInput): string {
-  return [
+  return JSON.stringify([
     input.userId,
     input.siteId,
-    hashString(stableStringify(input.state)),
-    input.comparison ? hashString(stableStringify(input.comparison)) : '',
-    input.comparisonFilter ?? '',
-  ].join(':')
+    stableStringify(input.state),
+    input.comparison === undefined ? null : stableStringify(input.comparison),
+    input.comparisonFilter ?? null,
+  ])
 }

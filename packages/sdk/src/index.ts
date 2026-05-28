@@ -102,8 +102,39 @@ export type {
   SearchConsoleStageSeverity,
   SearchConsoleStageSitemap,
   SearchConsoleStageSummary,
+  SearchConsoleStageTrajectory,
 } from './search-console-stage'
 export { classifySearchConsoleStage } from './search-console-stage'
+export type {
+  PeerBaselineInput,
+  PeerConfidence,
+  PeerStanding,
+  SiteBaseline,
+  SiteType,
+  SiteTypeBaseline,
+} from './site-baseline'
+export {
+  derivePeerStanding,
+  deriveSiteBaseline,
+  normalizeSiteType,
+  SITE_TYPE_BASELINE,
+  siteTypeBaseline,
+} from './site-baseline'
+export type {
+  HealthStage,
+  HealthVerdict,
+  ReachStage,
+  ReachVerdict,
+  SiteTriage,
+  SiteTriageInput,
+  TriageEvidence,
+} from './site-triage'
+export {
+  classifyHealthStage,
+  classifyReachStage,
+  classifySiteTriage,
+  reachLivenessRatio,
+} from './site-triage'
 export {
   CANONICAL_WEBHOOK_EVENTS,
   parseWebhookPayload,

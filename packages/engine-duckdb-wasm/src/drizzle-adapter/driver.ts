@@ -7,61 +7,64 @@
  * their own client (built via createClient from ./client), so the wiring
  * composes cleanly with gscdump's existing DuckDB-WASM setup in the demo
  * and in `@gscdump/engine/node`.
+ *
+ * Targets drizzle-orm 1.0.x. The analytics workload primarily uses the SQL
+ * builder (`db.select()` / `db.execute()`), while `config.schema` is still
+ * converted into Drizzle's relation config so the public database type stays
+ * tied to the caller's schema.
  */
 
-import type { DrizzleConfig, RelationalSchemaConfig, TablesRelationalConfig } from 'drizzle-orm'
+import type { DrizzleConfig, Logger } from 'drizzle-orm'
+import type { AnyRelations, Schema as DrizzleSchema, EmptyRelations, ExtractTablesWithRelations } from 'drizzle-orm/relations'
 
 import type { DuckDBWasmClient } from './client'
 import type { DuckDBWasmQueryResultHKT } from './session'
 
-import { createTableRelationsHelpers, DefaultLogger, entityKind, extractTablesRelationalConfig } from 'drizzle-orm'
-import { PgDatabase, PgDialect } from 'drizzle-orm/pg-core'
+import { DefaultLogger, entityKind } from 'drizzle-orm'
+import { PgAsyncDatabase, PgDialect } from 'drizzle-orm/pg-core'
+import { buildRelations } from 'drizzle-orm/relations'
 
 import { DuckDBWasmSession } from './session'
 
+type SchemaRelations<TSchema extends DrizzleSchema> = ExtractTablesWithRelations<Record<string, never>, TSchema>
+
 export class DuckDBWasmDatabase<
-  TSchema extends Record<string, unknown> = Record<string, never>,
-> extends PgDatabase<DuckDBWasmQueryResultHKT, TSchema> {
+  TRelations extends AnyRelations = EmptyRelations,
+> extends PgAsyncDatabase<DuckDBWasmQueryResultHKT, TRelations> {
   static override readonly [entityKind]: string = 'DuckDBWasmDatabase'
 }
 
 export interface DuckDBWasmDrizzleDatabase<
-  TSchema extends Record<string, unknown> = Record<string, never>,
-> extends DuckDBWasmDatabase<TSchema> {
+  TSchema extends DrizzleSchema = Record<string, never>,
+  TRelations extends AnyRelations = SchemaRelations<TSchema>,
+> extends DuckDBWasmDatabase<TRelations> {
   $client: Promise<DuckDBWasmClient>
 }
 
 export function drizzle<
-  TSchema extends Record<string, unknown> = Record<string, never>,
+  TSchema extends DrizzleSchema = Record<string, never>,
+  TRelations extends AnyRelations = SchemaRelations<TSchema>,
 >(
   client: Promise<DuckDBWasmClient> | DuckDBWasmClient,
-  config: DrizzleConfig<TSchema> = {},
-): DuckDBWasmDrizzleDatabase<TSchema> {
-  const dialect = new PgDialect({ casing: config.casing })
+  config: DrizzleConfig<TSchema, TRelations> = {},
+): DuckDBWasmDrizzleDatabase<TSchema, TRelations> {
+  const dialect = new PgDialect()
   const clientPromise = Promise.resolve(client)
 
-  let logger
+  let logger: Logger | undefined
   if (config.logger === true)
     logger = new DefaultLogger()
   else if (config.logger !== false)
     logger = config.logger
 
-  let schema: RelationalSchemaConfig<TablesRelationalConfig> | undefined
-  if (config.schema) {
-    const tablesConfig = extractTablesRelationalConfig(
-      config.schema,
-      createTableRelationsHelpers,
-    )
-    schema = {
-      fullSchema: config.schema,
-      schema: tablesConfig.tables,
-      tableNamesMap: tablesConfig.tableNamesMap,
-    }
-  }
-
-  const session = new DuckDBWasmSession(clientPromise, dialect, schema, { logger })
-  const db = new DuckDBWasmDatabase(dialect, session, schema as any) as DuckDBWasmDatabase<TSchema>
+  const session = new DuckDBWasmSession(clientPromise, dialect, { logger, cache: config.cache })
+  const relations = (config.relations ?? (config.schema ? buildRelations(config.schema, {}) : {})) as TRelations
+  const db = new DuckDBWasmDatabase(
+    dialect,
+    session,
+    relations,
+  ) as DuckDBWasmDrizzleDatabase<TSchema, TRelations>
 
   ;(db as any).$client = clientPromise
-  return db as DuckDBWasmDrizzleDatabase<TSchema>
+  return db
 }
