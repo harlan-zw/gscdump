@@ -139,8 +139,6 @@
   ctr: object
   currentPstDate: function
   date: object
-  dayjs: function
-  dayjsPst: function
   daysAgo: function
   device: object
   Devices: object

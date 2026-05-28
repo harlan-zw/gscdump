@@ -11,11 +11,14 @@
   createDuckDBCodec: function
   createDuckDBExecutor: function
   createIcebergAppendSink: function
+  createIcebergResolverAdapter: function
   createIcebergTables: function
   createIngestAccumulator: function
   createInMemorySink: function
   createNoopIngestAccumulator: function
+  createParquetResolverAdapter: function
   createRowAccumulator: function
+  createSqlQuerySource: function
   createStorageEngine: function
   currentSchemaVersion: function
   dates: object
@@ -25,6 +28,7 @@
   dimensionToColumn: function
   drizzleSchema: object
   dropIcebergTables: function
+  ENGINE_QUERY_CAPABILITIES: object
   ensureIcebergNamespace: function
   enumeratePartitions: function
   FILES_PLACEHOLDER: string
@@ -62,6 +66,7 @@
   page_queries: object
   pages: object
   parseEnabledSearchTypes: function
+  pgResolverAdapter: object
   queries: object
   RAW_DAILY_COMPACT_THRESHOLD: number
   rebuildDailyFromHourly: function
@@ -162,6 +167,7 @@
   assertSchemaInSync: function
   buildExtrasQueries: function
   buildTotalsSql: function
+  createIcebergResolverAdapter: function
   createParquetResolverAdapter: function
   createResolverAdapter: function
   createSqlFragments: function

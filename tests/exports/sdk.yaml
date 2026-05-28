@@ -6,6 +6,7 @@
   analyticsRoutes: object
   analyticsStatuses: object
   analyticsStatusToSyncStatus: function
+  andFilter: function
   ARCHETYPE_EXECUTION_CLASS: object
   backfillRangeSchema: object
   backfillResponseSchema: object
@@ -15,19 +16,44 @@
   bulkRegisterPartnerSitesSchema: object
   CANONICAL_WEBHOOK_EVENTS: object
   canonicalWebhookEventTypeSchema: object
+  classifyGscError: function
+  classifySearchConsoleStage: function
+  coerceRowMetrics: function
+  COMPARE_OPTIONS: object
+  compareRange: function
   countriesResponseSchema: object
+  COUNTRY_NAMES: object
+  countryName: function
   countryRowSchema: object
+  coverageLabel: function
+  coverageLabels: object
   createAnalyticsClient: function
   createGscdumpClient: function
   createGscdumpRealtimeClient: function
   createPartnerClient: function
   createPartnerRealtimeClient: function
   createPartnerTeamSchema: object
+  CWV_GOOD_CLS: number
+  CWV_GOOD_INP: number
+  CWV_GOOD_LCP: number
+  CWV_POOR_CLS: number
+  CWV_POOR_INP: number
+  CWV_POOR_LCP: number
+  cwvBucket: function
   dataDetailOptionsSchema: object
   dataQueryOptionsSchema: object
+  dateFilter: function
+  defineGscAnalyzer: function
+  enrichIssueDetails: function
   findLifecycleSite: function
+  getGscUnstableCutoffDate: function
+  GSC_COLUMN_OPTIONS: object
+  GSC_PERIOD_OPTIONS: object
+  GSC_PERIOD_OPTIONS_LONG: object
+  GSC_STABLE_LATENCY_DAYS: number
   gscApiRangeSchema: object
   gscComparisonFilterSchema: object
+  gscConsoleUrl: function
   GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
   GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
   GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
@@ -92,6 +118,11 @@
   inspectionHistoryResponseSchema: object
   inspectionIndexSchema: object
   inspectionRecordRawSchema: object
+  investigationStatusConfig: object
+  isCustomPeriod: function
+  issueDetails: object
+  issueGroups: object
+  issueTypeToGroup: object
   jobFailedWebhookPayloadSchema: object
   lifecycleErrorCodes: object
   lifecycleErrorSchema: object
@@ -99,6 +130,8 @@
   lifecycleSiteToSyncStatus: function
   lifecycleSiteToUserSite: function
   lifecycleWebhookEvents: object
+  nuxtSeoTips: object
+  parseCustomPeriod: function
   parseGrantedScopes: function
   parseWebhookPayload: function
   PartnerApiError: function
@@ -110,6 +143,10 @@
   partnerRoutes: object
   partnerWebhookDataSchema: object
   partnerWebhookEnvelopeSchema: object
+  PERIOD_PRESETS: object
+  periodToDateRange: function
+  periodToDays: function
+  positionFor: function
   propertyNextActions: object
   propertyStatuses: object
   querySourceModes: object
@@ -122,6 +159,7 @@
   searchAppearanceRowSchema: object
   searchTypeSchema: object
   serializeWebhookPayload: function
+  severityOrder: object
   siteListItemSchema: object
   sitemapChangesResponseSchema: object
   sitemapHistoryRecordSchema: object
@@ -129,8 +167,12 @@
   sitemapIndexSchema: object
   sitemapNextActions: object
   sitemapStatuses: object
+  siteUrlToHostname: function
   sourceInfoResponseSchema: object
+  splitOpportunityTitle: function
+  summarizeDailyRows: function
   toPartnerError: function
+  truncateQuery: function
   updatePartnerUserTokensSchema: object
   VALID_WEBHOOK_EVENTS: object
   verifyWebhookSignature: function
@@ -141,6 +183,7 @@
   WEBHOOK_SIGNATURE_HEADER: string
   WEBHOOK_TIMESTAMP_HEADER: string
   webhookEventTypeSchema: object
+  weightedAnonPct: function
   whoamiResponseSchema: object
 ./query:
   and: function
@@ -154,8 +197,6 @@
   ctr: object
   currentPstDate: function
   date: object
-  dayjs: function
-  dayjsPst: function
   daysAgo: function
   device: object
   Devices: object
@@ -184,6 +225,7 @@
   parseJsonFilter: function
   position: object
   query: object
+  query_exports: object
   queryCanonical: object
   regex: function
   searchAppearance: object
