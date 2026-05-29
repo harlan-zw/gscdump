@@ -5,14 +5,10 @@
   canonicalEmptyParquetSchema: function
   coerceRow: function
   coerceRows: function
-  connectIcebergCatalog: function
-  countRawDailies: function
   countries: object
   createDuckDBCodec: function
   createDuckDBExecutor: function
-  createIcebergAppendSink: function
   createIcebergResolverAdapter: function
-  createIcebergTables: function
   createIngestAccumulator: function
   createInMemorySink: function
   createNoopIngestAccumulator: function
@@ -23,39 +19,23 @@
   currentSchemaVersion: function
   dates: object
   dayPartition: function
-  dedupeOverlappingTiers: function
   DEFAULT_SEARCH_TYPE: string
   dimensionToColumn: function
   drizzleSchema: object
-  dropIcebergTables: function
   ENGINE_QUERY_CAPABILITIES: object
-  ensureIcebergNamespace: function
   enumeratePartitions: function
   FILES_PLACEHOLDER: string
   fixedPolicy: function
   formatLiteral: function
-  gcOrphansImpl: function
   getDateWeight: function
   getTablesForTier: function
   getTableTier: function
   hourly_pages: object
   hourPartition: function
-  ICEBERG_FIELD_ID_BASE: number
-  ICEBERG_PARTITION_COLUMNS: object
-  ICEBERG_PARTITION_SPEC: object
-  ICEBERG_SCHEMAS: object
-  ICEBERG_TABLES: object
-  icebergAppendRetrying: function
-  icebergPartitionSpecFor: function
-  icebergSchemaFor: function
-  icebergTableSpec: function
   inferLegacyTier: function
   inferSearchType: function
   inferTable: function
   inspectionPolicy: function
-  isCommitRateLimited: function
-  listIcebergDataFiles: function
-  listIcebergTables: function
   MAX_DAY_BYTES: number
   MAX_GSC_PAGES_R2: number
   MAX_SITEMAP_URLS_PER_SITE: number
@@ -68,13 +48,11 @@
   parseEnabledSearchTypes: function
   pgResolverAdapter: object
   queries: object
-  RAW_DAILY_COMPACT_THRESHOLD: number
   rebuildDailyFromHourly: function
   resolveParquetSQL: function
   ROW_LIMIT_R2: number
   SCHEMAS: object
   sitemapPolicy: object
-  splitOverlappingTiers: function
   substituteNamedFiles: function
   TABLE_METADATA: object
   TABLE_TIERS: object
@@ -124,6 +102,26 @@
   decodeParquetToRows: function
   encodeRowsToParquet: function
   encodeRowsToParquetFlex: function
+./iceberg:
+  assertIcebergTable: function
+  connectIcebergCatalog: function
+  createIcebergAppendSink: function
+  createIcebergTables: function
+  dropIcebergTables: function
+  ensureIcebergNamespace: function
+  ICEBERG_FIELD_ID_BASE: number
+  ICEBERG_PARTITION_COLUMNS: object
+  ICEBERG_PARTITION_SPEC: object
+  ICEBERG_SCHEMAS: object
+  ICEBERG_TABLES: object
+  icebergAppendRetrying: function
+  icebergPartitionSpecFor: function
+  icebergSchemaFor: function
+  icebergTableSpec: function
+  isCommitRateLimited: function
+  isIcebergTable: function
+  listIcebergDataFiles: function
+  listIcebergTables: function
 ./ingest:
   assembleDatesRow: function
   createRowAccumulator: function
@@ -216,10 +214,6 @@
   topPages28dRollup: object
   weeklyTotalsRollup: object
   WINDOW_BYTE_BUDGET: number
-./schedule:
-  fixedPolicy: function
-  inspectionPolicy: function
-  sitemapPolicy: object
 ./schema:
   allTables: function
   countries: object

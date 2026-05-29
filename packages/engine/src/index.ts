@@ -1,52 +1,11 @@
 export { coerceRow, coerceRows } from './coerce'
 export type { CompactionThresholds } from './compaction'
-export { countRawDailies, dedupeOverlappingTiers, RAW_DAILY_COMPACT_THRESHOLD, splitOverlappingTiers } from './compaction'
 export { canonicalEmptyParquetSchema, createDuckDBCodec, createDuckDBExecutor } from './duckdb'
 export type { DuckDBFactory, DuckDBHandle } from './duckdb'
 export { createStorageEngine, MAX_DAY_BYTES } from './engine'
-export { gcOrphansImpl } from './gc'
-export {
-  connectIcebergCatalog,
-  createIcebergTables,
-  dropIcebergTables,
-  ensureIcebergNamespace,
-  icebergAppendRetrying,
-  icebergPartitionSpecFor,
-  icebergSchemaFor,
-  isCommitRateLimited,
-  listIcebergDataFiles,
-  listIcebergTables,
-} from './iceberg-catalog'
-export type {
-  CommitRetryOptions,
-  IcebergCatalogConfig,
-  IcebergConnection,
-  IcebergListedDataFile,
-  IcebergPartitionSpec,
-  IcebergPartitionSpecField,
-  IcebergPrimitiveType,
-  IcebergSchema,
-  IcebergSchemaField,
-  IcebergTableOpResult,
-  ListIcebergDataFilesOptions,
-} from './iceberg-catalog'
-export {
-  ICEBERG_FIELD_ID_BASE,
-  ICEBERG_PARTITION_COLUMNS,
-  ICEBERG_PARTITION_SPEC,
-  ICEBERG_SCHEMAS,
-  ICEBERG_TABLES,
-  icebergTableSpec,
-} from './iceberg-schema'
-export type {
-  IcebergColumn,
-  IcebergColumnType,
-  IcebergPartitionField,
-  IcebergPartitionTransform,
-  IcebergS3Config,
-  IcebergTableName,
-  IcebergTableSpec,
-} from './iceberg-schema'
+// Iceberg backend (schema + catalog + append-sink) lives behind the
+// `@gscdump/engine/iceberg` subpath. Node-only Iceberg writers are on
+// `@gscdump/engine/sink-node`.
 export type { GscApiRow, IngestOptions, RowAccumulator, RowAccumulatorOptions } from './ingest'
 export { assembleDatesRow, createRowAccumulator, toPath, toSumPosition, transformGscRow } from './ingest'
 export type {
@@ -82,8 +41,6 @@ export {
 } from './schema'
 export type { ColumnDef, ColumnType, DrizzleSchema, TableSchema } from './schema'
 export type {
-  IcebergAppendSinkOptions,
-  LocalIcebergSinkOptions,
   Sink,
   SinkCapabilities,
   SinkCloseResult,
@@ -91,15 +48,8 @@ export type {
   SinkSlice,
   SinkWriteResult,
 } from './sink'
-export {
-  createIcebergAppendSink,
-  createInMemorySink,
-} from './sinks'
-export type {
-  IcebergAppendSink,
-  InMemorySink,
-  StoredRow,
-} from './sinks'
+export { createInMemorySink } from './sinks'
+export type { InMemorySink, StoredRow } from './sinks'
 export { createSqlQuerySource, ENGINE_QUERY_CAPABILITIES } from './source'
 export { bindLiterals, formatLiteral } from './sql-bind'
 export {

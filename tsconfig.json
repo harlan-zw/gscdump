@@ -16,8 +16,7 @@
     { "path": "./packages/cli" },
     { "path": "./packages/analysis" },
     { "path": "./packages/contracts" },
-    { "path": "./packages/sdk" },
-    { "path": "./packages/mcp" }
+    { "path": "./packages/sdk" }
   ],
   "include": [],
   "exclude": ["node_modules", "dist"]

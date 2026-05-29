@@ -24,7 +24,7 @@ vi.mock('icebird', () => ({
   s3SignedResolver: vi.fn(),
 }))
 
-const { listIcebergDataFiles } = await import('../src/iceberg-catalog')
+const { listIcebergDataFiles } = await import('../src/iceberg/catalog')
 
 const CONN = { catalog: {} as never, resolver: {} as never, namespace: 'gsc' }
 

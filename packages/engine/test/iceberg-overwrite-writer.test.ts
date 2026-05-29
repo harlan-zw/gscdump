@@ -30,7 +30,7 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createIcebergOverwriteWriter, subprocessBackend } from '../src/iceberg-overwrite-writer'
+import { createIcebergOverwriteWriter, subprocessBackend } from '../src/iceberg/overwrite-writer'
 import { createPipelineSink } from '../src/sinks/pipeline-sink'
 
 const HERE = dirname(fileURLToPath(import.meta.url))

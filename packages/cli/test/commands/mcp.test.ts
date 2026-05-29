@@ -24,7 +24,7 @@ vi.mock('../../src/utils', () => ({
   VERSION: '1.0.0',
 }))
 
-vi.mock('@gscdump/mcp/server', () => ({
+vi.mock('../../src/mcp/server', () => ({
   createGscMcpServer: (...args: unknown[]) => {
     mocks.createGscMcpServer(...args)
     return { connect: mocks.serverConnect }

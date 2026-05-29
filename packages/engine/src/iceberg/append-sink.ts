@@ -34,14 +34,14 @@
  * injected here from `slice` — callers MUST NOT pre-populate them.
  */
 
-import type { IcebergConnection } from '../iceberg-catalog'
-import type { IcebergTableName } from '../iceberg-schema'
+import type { IcebergConnection } from './catalog'
+import type { IcebergTableName } from './schema'
 import type { IcebergAppendSinkOptions, Sink, SinkCloseResult, SinkSlice, SinkWriteResult } from '../sink'
 import type { Row } from '../storage'
 import {
   connectIcebergCatalog,
   icebergAppendRetrying,
-} from '../iceberg-catalog'
+} from './catalog'
 
 export type IcebergAppendSink = Sink
 

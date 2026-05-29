@@ -46,14 +46,14 @@
     "@gscdump/analysis": "workspace:*",
     "@gscdump/engine": "workspace:*",
     "@gscdump/engine-gsc-api": "workspace:*",
-    "@gscdump/mcp": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
     "citty": "catalog:deps",
     "consola": "catalog:deps",
     "google-auth-library": "catalog:deps",
     "gscdump": "workspace:*",
     "ofetch": "catalog:deps",
-    "open": "catalog:deps"
+    "open": "catalog:deps",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@duckdb/node-api": "catalog:",

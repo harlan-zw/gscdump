@@ -25,8 +25,8 @@
  */
 
 import type { ColumnType, TableName } from '@gscdump/contracts'
-import type { SearchType } from './storage'
-import { SCHEMAS } from './schema'
+import type { SearchType } from '../storage'
+import { SCHEMAS } from '../schema'
 
 /**
  * S3-compatible credentials for the Iceberg warehouse object store (R2 in prod,

@@ -31,6 +31,7 @@ export default defineBuildConfig({
         './src/schedule.ts',
         './src/entities.ts',
         './src/rollups.ts',
+        './src/iceberg/index.ts',
         './src/resolver/index.ts',
         './src/analyzer/index.ts',
         './src/report/index.ts',

@@ -311,9 +311,6 @@ importers:
       '@gscdump/engine-gsc-api':
         specifier: workspace:*
         version: link:../engine-gsc-api
-      '@gscdump/mcp':
-        specifier: workspace:*
-        version: link:../mcp
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.29.0(zod@4.4.3)
@@ -335,6 +332,9 @@ importers:
       open:
         specifier: catalog:deps
         version: 11.0.0
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       '@duckdb/node-api':
         specifier: 'catalog:'
@@ -520,40 +520,6 @@ importers:
       '@googleapis/searchconsole':
         specifier: catalog:deps
         version: 6.0.1
-
-  packages/mcp:
-    dependencies:
-      '@gscdump/analysis':
-        specifier: workspace:*
-        version: link:../analysis
-      '@gscdump/engine':
-        specifier: workspace:*
-        version: link:../engine
-      '@gscdump/engine-gsc-api':
-        specifier: workspace:*
-        version: link:../engine-gsc-api
-      '@modelcontextprotocol/sdk':
-        specifier: 'catalog:'
-        version: 1.29.0(zod@4.4.3)
-      consola:
-        specifier: catalog:deps
-        version: 3.4.2
-      gscdump:
-        specifier: workspace:*
-        version: link:../gscdump
-      ofetch:
-        specifier: catalog:deps
-        version: 1.5.1
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 25.9.1
-      vitest:
-        specifier: catalog:dev-test
-        version: 4.1.7(@types/node@25.9.1)(@vitest/browser-playwright@4.1.7)(vite@7.3.3(@types/node@25.9.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/sdk:
     dependencies:

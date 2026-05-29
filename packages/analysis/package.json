@@ -36,11 +36,6 @@
       "import": "./dist/default-registry.mjs",
       "default": "./dist/default-registry.mjs"
     },
-    "./query": {
-      "types": "./dist/query/index.d.mts",
-      "import": "./dist/query/index.mjs",
-      "default": "./dist/query/index.mjs"
-    },
     "./source": {
       "types": "./dist/source/index.d.mts",
       "import": "./dist/source/index.mjs",

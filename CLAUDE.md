@@ -28,8 +28,7 @@ and covered by their tests.
 - `@gscdump/sdk`: hosted partner and analytics HTTP clients.
 - `@gscdump/cloudflare`: Cloudflare/R2 helper primitives.
 - `@gscdump/nuxt`: Nuxt layer and dashboard composables/components.
-- `@gscdump/cli`: CLI and MCP wrapper.
-- `@gscdump/mcp`: frozen MCP server package.
+- `@gscdump/cli`: CLI plus the bundled MCP server (`gscdump mcp`).
 
 ## Commands
 
@@ -57,8 +56,8 @@ after e2e passes with either `GSC_ACCESS_TOKEN` or
 - Use `@gscdump/contracts` for hosted API wire shapes and routes.
 - Use `@gscdump/sdk` clients for hosted API transport.
 - Use `gscdump/query` or `@gscdump/sdk/query` for query builder types.
-- The MCP package is frozen; prefer changes in CLI/report surfaces unless a
-  bug fix is required.
+- The MCP server lives in `@gscdump/cli` (`src/mcp/`); there is no separate
+  MCP package. Edit it through the CLI surface.
 
 ## Completion Bar
 

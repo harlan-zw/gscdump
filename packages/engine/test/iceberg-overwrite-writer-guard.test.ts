@@ -6,10 +6,10 @@
  * non-canonical table name, so the writer must reject it loudly.
  */
 
-import type { OverwriteJob } from '../src/iceberg-overwrite-writer'
+import type { OverwriteJob } from '../src/iceberg/overwrite-writer'
 import type { SinkSlice } from '../src/sink'
 import { describe, expect, it } from 'vitest'
-import { createIcebergOverwriteWriter } from '../src/iceberg-overwrite-writer'
+import { createIcebergOverwriteWriter } from '../src/iceberg/overwrite-writer'
 
 const CATALOG = {
   catalogUri: 'http://localhost:8181',

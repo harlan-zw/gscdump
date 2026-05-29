@@ -18,7 +18,7 @@
  * `ICEBERG_SCHEMAS` contract — never hand-listed here.
  */
 
-import type { IcebergColumnType, IcebergS3Config, IcebergTableName } from './iceberg-schema'
+import type { IcebergColumnType, IcebergS3Config, IcebergTableName } from './schema'
 import {
   icebergAppend,
   icebergCreateTable,
@@ -34,7 +34,7 @@ import {
   ICEBERG_PARTITION_SPEC,
   ICEBERG_SCHEMAS,
   ICEBERG_TABLES,
-} from './iceberg-schema'
+} from './schema'
 
 /** icebird's lowercase Iceberg primitive types (subset we use). */
 export type IcebergPrimitiveType = 'string' | 'int' | 'long' | 'double' | 'date'

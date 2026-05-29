@@ -30,14 +30,14 @@
  * Implements the frozen `SliceOverwriteWriter` contract from `./sink`.
  */
 
-import type { IcebergS3Config } from './iceberg-schema'
-import type { Sink, SinkCloseResult, SinkSlice, SinkWriteResult, SliceOverwriteWriter } from './sink'
-import type { Row } from './storage'
+import type { IcebergS3Config } from './schema'
+import type { Sink, SinkCloseResult, SinkSlice, SinkWriteResult, SliceOverwriteWriter } from '../sink'
+import type { Row } from '../storage'
 import process from 'node:process'
-import { assertIcebergTable, ICEBERG_SCHEMAS } from './iceberg-schema'
+import { assertIcebergTable, ICEBERG_SCHEMAS } from './schema'
 
 /** Connection details for the Iceberg REST catalog the writer targets. */
-export interface IcebergCatalogConfig {
+export interface OverwriteWriterCatalogConfig {
   /**
    * Iceberg REST catalog endpoint, e.g. `http://localhost:8181` (POC) or the
    *  R2 Data Catalog endpoint (prod).
@@ -85,7 +85,7 @@ export interface OverwriteJobResult {
 export type OverwriteBackend = (job: OverwriteJob) => Promise<OverwriteJobResult>
 
 export interface IcebergOverwriteWriterOptions {
-  catalog: IcebergCatalogConfig
+  catalog: OverwriteWriterCatalogConfig
   /** The transport that runs the PyIceberg job. */
   backend: OverwriteBackend
 }

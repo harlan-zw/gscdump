@@ -18,11 +18,6 @@ export default defineBuildConfig({
     },
     {
       type: 'bundle',
-      input: ['./src/query/index.ts'],
-      outDir: './dist',
-    },
-    {
-      type: 'bundle',
       input: ['./src/source/index.ts'],
       outDir: './dist',
     },

@@ -26,12 +26,6 @@ export default defineBuildConfig({
     },
     {
       type: 'bundle',
-      input: ['./src/driver.ts'],
-      outDir: './dist',
-      name: 'driver',
-    },
-    {
-      type: 'bundle',
       input: ['./src/tenant.ts'],
       outDir: './dist',
       name: 'tenant',
@@ -53,12 +47,6 @@ export default defineBuildConfig({
       input: ['./src/sitemap.ts'],
       outDir: './dist',
       name: 'sitemap',
-    },
-    {
-      type: 'bundle',
-      input: ['./src/onboarding.ts'],
-      outDir: './dist',
-      name: 'onboarding',
     },
   ],
 })

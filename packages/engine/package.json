@@ -66,11 +66,6 @@
       "import": "./dist/sql-fragments.mjs",
       "default": "./dist/sql-fragments.mjs"
     },
-    "./schedule": {
-      "types": "./dist/schedule.d.mts",
-      "import": "./dist/schedule.mjs",
-      "default": "./dist/schedule.mjs"
-    },
     "./entities": {
       "types": "./dist/entities.d.mts",
       "import": "./dist/entities.mjs",
@@ -80,6 +75,11 @@
       "types": "./dist/rollups.d.mts",
       "import": "./dist/rollups.mjs",
       "default": "./dist/rollups.mjs"
+    },
+    "./iceberg": {
+      "types": "./dist/iceberg/index.d.mts",
+      "import": "./dist/iceberg/index.mjs",
+      "default": "./dist/iceberg/index.mjs"
     },
     "./node": {
       "types": "./dist/adapters/node.d.mts",

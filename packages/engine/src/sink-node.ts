@@ -4,12 +4,14 @@
  * `node:path` / `node:url`, which break any browser/edge bundle.
  *
  * Import from `@gscdump/engine/sink-node` in Node-only code (integration
- * tests, scheduled job boxes). The edge-safe sinks (`createInMemorySink`,
- * `createIcebergAppendSink`) remain on the main barrel.
+ * tests, scheduled job boxes). The edge-safe sinks live on the main barrel
+ * (`createInMemorySink`) and `@gscdump/engine/iceberg`
+ * (`createIcebergAppendSink`).
  */
 
-export { createLocalIcebergSink } from './sinks/local-iceberg-sink'
+export { createLocalIcebergSink } from './iceberg/local-sink'
 export type {
   LocalIcebergSink,
   LocalIcebergSinkFullOptions,
-} from './sinks/local-iceberg-sink'
+} from './iceberg/local-sink'
+export type { LocalIcebergSinkOptions } from './sink'

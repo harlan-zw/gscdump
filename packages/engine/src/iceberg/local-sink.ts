@@ -21,14 +21,14 @@
  * the canonical schema is the only source of truth, never hand-listed.
  */
 
-import type { IcebergS3Config, IcebergTableName } from '../iceberg-schema'
+import type { IcebergS3Config, IcebergTableName } from './schema'
 import type { LocalIcebergSinkOptions, Sink, SinkCloseResult, SinkSlice, SinkWriteResult } from '../sink'
 import type { Row } from '../storage'
 import { execFile } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { ICEBERG_SCHEMAS } from '../iceberg-schema'
+import { ICEBERG_SCHEMAS } from './schema'
 
 /** Full `LocalIcebergSink` options — extends the frozen contract options. */
 export interface LocalIcebergSinkFullOptions extends LocalIcebergSinkOptions {

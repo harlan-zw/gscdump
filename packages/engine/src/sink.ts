@@ -27,7 +27,7 @@
  * TYPES + INTERFACE ONLY — no emission logic.
  */
 
-import type { IcebergTableName, SearchType } from './iceberg-schema'
+import type { IcebergTableName, SearchType } from './iceberg/schema'
 import type { Row, TenantCtx } from './storage'
 
 /**
@@ -135,13 +135,13 @@ export interface PipelineSinkOptions extends SinkOptions {
  */
 export interface IcebergAppendSinkOptions extends SinkOptions {
   /** R2 Data Catalog connection config (catalog URI, warehouse, namespace, token, S3 creds). */
-  catalog: import('./iceberg-catalog').IcebergCatalogConfig
+  catalog: import('./iceberg/catalog').IcebergCatalogConfig
   /**
    * Retry policy for the per-table `icebergAppend()` commit, applied on R2
    * Data Catalog 429 ("too many commits") rate-limits. Optional — production
    * uses the defaults; tests inject a synchronous `sleep`.
    */
-  commitRetry?: import('./iceberg-catalog').CommitRetryOptions
+  commitRetry?: import('./iceberg/catalog').CommitRetryOptions
 }
 
 /** `LocalIcebergSink` options — points at the local Iceberg REST catalog. */

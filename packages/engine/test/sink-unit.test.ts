@@ -7,7 +7,7 @@
  * D1 ingested-days ledger's job, not the sink's.
  */
 
-import type { IcebergCatalogConfig } from '../src/iceberg-catalog'
+import type { IcebergCatalogConfig } from '../src/iceberg/catalog'
 import type { SinkSlice } from '../src/sink'
 import type { Row } from '../src/storage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -22,7 +22,7 @@ const s3SignedResolver = vi.fn(() => ({ reader: vi.fn() }))
 vi.mock('icebird', () => ({ icebergAppend, restCatalogConnect, s3SignedResolver }))
 
 const { createInMemorySink } = await import('../src/sinks/in-memory-sink')
-const { createIcebergAppendSink } = await import('../src/sinks/iceberg-append-sink')
+const { createIcebergAppendSink } = await import('../src/iceberg/append-sink')
 
 const CTX = { userId: 'u1', siteId: 'site-1' }
 

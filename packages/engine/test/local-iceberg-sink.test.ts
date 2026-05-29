@@ -24,7 +24,7 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createLocalIcebergSink } from '../src/sinks/local-iceberg-sink'
+import { createLocalIcebergSink } from '../src/iceberg/local-sink'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const SCRIPTS = join(HERE, '..', 'scripts')

@@ -25,12 +25,12 @@ const icebergAppendRetrying = vi.fn(async (args: { table: string, records: Recor
   appendCalls.push({ table: args.table, records: args.records })
 })
 
-vi.mock('../src/iceberg-catalog', () => ({
+vi.mock('../src/iceberg/catalog', () => ({
   connectIcebergCatalog,
   icebergAppendRetrying,
 }))
 
-const { createIcebergAppendSink } = await import('../src/sinks/iceberg-append-sink')
+const { createIcebergAppendSink } = await import('../src/iceberg/append-sink')
 
 const CATALOG = {
   catalogUri: 'https://catalog.example/acct/wh',

@@ -23,7 +23,7 @@
 //  - `arbitrary-sql` (archetype 9) is NOT translated here — its SQL is
 //    caller-supplied and runs verbatim on DuckDB.
 
-import type { IcebergTableName } from '@gscdump/engine'
+import type { IcebergTableName } from '@gscdump/engine/iceberg'
 import type {
   ArchetypeQuery,
   EntityDailySparklineQuery,
