@@ -5,6 +5,7 @@
 // R2 SQL, 2 (window functions) need DuckDB over the compacted Iceberg files.
 
 export type { ArchetypeSqlPlan } from './archetype-sql'
+export { buildArchetypeSql, TABLE_PLACEHOLDER } from './archetype-sql'
 
 export type {
   ServerTailDispatcher,
