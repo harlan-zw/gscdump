@@ -460,6 +460,26 @@ export interface StorageEngine {
    */
   runSQL: (opts: RunSQLOptions) => Promise<QueryResult>
   compactTiered: (ctx: WriteCtx, thresholds?: import('./compaction').CompactionThresholds) => Promise<void>
+  /**
+   * Write-time half of the manifest tier invariant: retire every live entry
+   * whose every covered day is already served by a finer-or-newer live entry.
+   *
+   * `compactTiered` retires the inputs it merges, but cannot retire a coarse
+   * partition that outlived the finer files it should have superseded (a D1→R2
+   * backfill writing coarse directly, a re-sync landing fresh dailies after a
+   * month already rolled up). Those stale overlaps make the query resolver
+   * union the same dates twice. Subsumption is evaluated per searchType, over
+   * the full live set (so a `web` monthly never cancels a `discover` weekly),
+   * then the subsumed set is retired via the manifest's `registerVersions([], …)`
+   * primitive — atomic, no inserts. Safe by construction: it only drops files
+   * whose days are already covered, so no data is lost.
+   *
+   * Reads and retires through the engine's own manifest store, so it is
+   * read-your-writes-consistent with the `compactTiered` that precedes it.
+   * Returns audit counters. Hosts running a cached manifest store must bust
+   * their cache afterwards — the engine has no knowledge of host-side caching.
+   */
+  reconcileSubsumed: (ctx: WriteCtx) => Promise<{ retired: number, partitions: string[] }>
   gcOrphans: (ctx: GcCtx, graceMs: number) => Promise<{ deleted: number }>
   /**
    * GDPR-grade tenant purge. Deletes every object under the tenant prefix

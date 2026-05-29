@@ -17,7 +17,7 @@ import type {
 } from './storage'
 import { normalizeUrl } from 'gscdump'
 import { buildLogicalPlan } from 'gscdump/query/plan'
-import { compactTieredImpl, dedupeOverlappingTiers } from './compaction'
+import { compactTieredImpl, dedupeOverlappingTiers, splitOverlappingTiers } from './compaction'
 import { gcOrphansImpl } from './gc'
 import { dayPartition, hourPartition, inferSearchType, objectKey, tenantPrefix } from './layout'
 import { compileLogicalQueryPlan } from './parquet-plan'
@@ -322,6 +322,23 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     )
   }
 
+  async function reconcileSubsumed(ctx: WriteCtx): Promise<{ retired: number, partitions: string[] }> {
+    // Full live set — splitOverlappingTiers groups subsumption per searchType
+    // internally, so no searchType filter here.
+    const live = await manifestStore.listLive({
+      userId: ctx.userId,
+      siteId: ctx.siteId,
+      table: ctx.table,
+    })
+    const { subsumed } = splitOverlappingTiers(live)
+    if (subsumed.length === 0)
+      return { retired: 0, partitions: [] }
+    // registerVersions([], superseding) retires `superseding` atomically with
+    // no inserts — the manifest's retire primitive, same one compactTiered uses.
+    await manifestStore.registerVersions([], subsumed)
+    return { retired: subsumed.length, partitions: subsumed.map(e => e.partition) }
+  }
+
   async function gcOrphans(ctx: GcCtx, graceMs: number): Promise<{ deleted: number }> {
     return gcOrphansImpl(
       { dataSource, manifestStore },
@@ -443,6 +460,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     query,
     runSQL,
     compactTiered,
+    reconcileSubsumed,
     gcOrphans,
     purgeTenant,
     purgeUrls,

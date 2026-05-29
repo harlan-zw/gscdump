@@ -41,6 +41,11 @@
       "import": "./dist/planner.mjs",
       "default": "./dist/planner.mjs"
     },
+    "./compaction": {
+      "types": "./dist/compaction-public.d.mts",
+      "import": "./dist/compaction-public.mjs",
+      "default": "./dist/compaction-public.mjs"
+    },
     "./schema": {
       "types": "./dist/schema.d.mts",
       "import": "./dist/schema.mjs",

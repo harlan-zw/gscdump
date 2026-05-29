@@ -23,6 +23,7 @@ export default defineBuildConfig({
         './src/contracts.ts',
         './src/snapshot.ts',
         './src/planner.ts',
+        './src/compaction-public.ts',
         './src/schema.ts',
         './src/ingest.ts',
         './src/sink-node.ts',
