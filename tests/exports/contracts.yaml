@@ -23,6 +23,7 @@
   GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
   GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
   GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
+  GSCDUMP_WRITE_ANALYTICS_SCOPE: string
   gscdumpAnalysisParamsSchema: object
   gscdumpAnalysisPresetSchema: object
   gscdumpAnalysisResponseSchema: object

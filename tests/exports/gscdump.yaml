@@ -14,9 +14,11 @@
   createFetch: function
   DAYS_PER_RANGE: number
   daysAgo: function
+  decodeSiteId: function
   deleteSite: function
   deleteSitemap: function
   discoverSitemap: function
+  encodeSiteId: function
   exchangeAuthCode: function
   fetchSitemap: function
   fetchSitemaps: function
@@ -79,6 +81,8 @@
   MS_PER_DAY: number
   normalizeGscSiteUrl: function
   normalizeRegistrationTarget: function
+  normalizeSiteUrl: function
+  normalizeUrl: function
   parseGoogleError: function
   parseGrantedScopes: function
   parseGscSiteUrl: function
@@ -101,32 +105,10 @@
   unverifySite: function
   URL_INSPECTION_DAILY_LIMIT: number
   URL_INSPECTION_EFFECTIVE_LIMIT: number
+  urlMatchKey: function
   verificationMethodsFor: function
   verifySite: function
 ./contracts: {}
-./driver: {}
-./normalize:
-  normalizeUrl: function
-./onboarding:
-  accountNextActions: object
-  accountStatuses: object
-  analyticsNextActions: object
-  analyticsStatuses: object
-  GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
-  GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
-  GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
-  hasOptionalIndexingScope: function
-  hasRequiredAnalyticsScope: function
-  indexingNextActions: object
-  indexingStatuses: object
-  lifecycleErrorCodes: object
-  lifecycleWebhookEvents: object
-  parseGrantedScopes: function
-  propertyNextActions: object
-  propertyStatuses: object
-  querySourceModes: object
-  sitemapNextActions: object
-  sitemapStatuses: object
 ./query:
   and: function
   between: function
@@ -183,12 +165,3 @@
   isStateResolvable: function
   UnresolvableDatasetError: function
   UnsupportedLogicalCapabilityError: function
-./sitemap:
-  discoverSitemap: function
-  fetchSitemapUrls: function
-./tenant:
-  decodeSiteId: function
-  encodeSiteId: function
-  normalizeSiteUrl: function
-./url:
-  urlMatchKey: function
