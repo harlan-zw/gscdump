@@ -33,7 +33,7 @@ import type {
   WatermarkFilter,
   WatermarkScope,
 } from '../storage'
-import { inferLegacyTier, inferSearchType } from '../storage'
+import { inferLegacyTier, inferSearchType } from '../layout'
 
 /** Shape of the JSON snapshot held under each shard's `v<ts>-<id>.json` key. */
 interface ManifestSnapshot {

@@ -51,26 +51,6 @@
       "types": "./dist/contracts.d.mts",
       "import": "./dist/contracts.mjs",
       "default": "./dist/contracts.mjs"
-    },
-    "./tenant": {
-      "types": "./dist/tenant.d.mts",
-      "import": "./dist/tenant.mjs",
-      "default": "./dist/tenant.mjs"
-    },
-    "./normalize": {
-      "types": "./dist/normalize.d.mts",
-      "import": "./dist/normalize.mjs",
-      "default": "./dist/normalize.mjs"
-    },
-    "./url": {
-      "types": "./dist/url.d.mts",
-      "import": "./dist/url.mjs",
-      "default": "./dist/url.mjs"
-    },
-    "./sitemap": {
-      "types": "./dist/sitemap.d.mts",
-      "import": "./dist/sitemap.mjs",
-      "default": "./dist/sitemap.mjs"
     }
   },
   "main": "./dist/index.mjs",

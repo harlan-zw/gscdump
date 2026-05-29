@@ -30,9 +30,9 @@
  * Implements the frozen `SliceOverwriteWriter` contract from `./sink`.
  */
 
-import type { IcebergS3Config } from './schema'
 import type { Sink, SinkCloseResult, SinkSlice, SinkWriteResult, SliceOverwriteWriter } from '../sink'
 import type { Row } from '../storage'
+import type { IcebergS3Config } from './schema'
 import process from 'node:process'
 import { assertIcebergTable, ICEBERG_SCHEMAS } from './schema'
 

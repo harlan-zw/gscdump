@@ -18,6 +18,14 @@ export type {
   IngestAccumulatorHooks,
 } from './ingest-accumulator'
 export { createIngestAccumulator, createNoopIngestAccumulator } from './ingest-accumulator'
+export {
+  dayPartition,
+  DEFAULT_SEARCH_TYPE,
+  hourPartition,
+  inferLegacyTier,
+  inferSearchType,
+  objectKey,
+} from './layout'
 export { enumeratePartitions, FILES_PLACEHOLDER, resolveParquetSQL, substituteNamedFiles } from './planner'
 export type { ResolvedQuery } from './planner'
 export { createIcebergResolverAdapter, createParquetResolverAdapter, pgResolverAdapter } from './resolver/pg-adapter'
@@ -52,14 +60,6 @@ export { createInMemorySink } from './sinks'
 export type { InMemorySink, StoredRow } from './sinks'
 export { createSqlQuerySource, ENGINE_QUERY_CAPABILITIES } from './source'
 export { bindLiterals, formatLiteral } from './sql-bind'
-export {
-  dayPartition,
-  DEFAULT_SEARCH_TYPE,
-  hourPartition,
-  inferLegacyTier,
-  inferSearchType,
-  objectKey,
-} from './storage'
 export type { Grain } from './storage'
 export type {
   CodecCtx,

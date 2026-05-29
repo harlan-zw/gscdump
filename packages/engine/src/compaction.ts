@@ -7,17 +7,8 @@ import type {
   WriteCtx,
 } from './storage'
 import { MS_PER_DAY } from 'gscdump'
+import { dayPartition, inferSearchType, mondayOfWeek, monthPartition, objectKey, quarterOfMonth, quarterPartition, weekPartition } from './layout'
 import { currentSchemaVersion } from './schema'
-import {
-  dayPartition,
-  inferSearchType,
-  mondayOfWeek,
-  monthPartition,
-  objectKey,
-  quarterOfMonth,
-  quarterPartition,
-  weekPartition,
-} from './storage'
 
 const DAILY_PARTITION_RE = /^daily\/(\d{4}-\d{2}-\d{2})$/
 const WEEKLY_PARTITION_RE = /^weekly\/(\d{4}-\d{2}-\d{2})$/

@@ -14,7 +14,7 @@ import {
 } from '@gscdump/analysis'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
-import { decodeSiteId, normalizeSiteUrl } from 'gscdump/tenant'
+import { decodeSiteId, normalizeSiteUrl } from 'gscdump'
 import { loadConfig, resolveDataDir } from './config'
 import { createCommandContext } from './context'
 import { LocalStoreUnsupportedError } from './error-handler'

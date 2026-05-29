@@ -27,7 +27,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { lock as lockFile } from 'proper-lockfile'
-import { inferLegacyTier, inferSearchType } from '../storage'
+import { inferLegacyTier, inferSearchType } from '../layout'
 
 export interface FilesystemDataSourceOptions {
   rootDir: string

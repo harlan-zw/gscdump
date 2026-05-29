@@ -17,8 +17,8 @@ import type {
 } from './source-types'
 import { runAnalyzerFromSource } from '../analyzer/dispatch'
 import { coerceRows } from '../coerce'
+import { DEFAULT_SEARCH_TYPE } from '../layout'
 import { assertDimensionsSupported, getFilterDimensions, pgResolverAdapter } from '../resolver'
-import { DEFAULT_SEARCH_TYPE } from '../storage'
 
 export type { AttachedTableRunner, AttachedTableSourceOptions } from './attached-table'
 export { AttachedTableMissingError, createAttachedTableSource, rewriteForTableSource } from './attached-table'

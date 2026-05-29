@@ -19,7 +19,7 @@ import type { ColumnDef } from './schema'
 import { MS_PER_DAY } from 'gscdump'
 import { encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { createIndexingMetadataStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexPrefix } from './entities'
-import { DEFAULT_SEARCH_TYPE } from './storage'
+import { DEFAULT_SEARCH_TYPE } from './layout'
 
 export interface RollupCtx extends TenantCtx {
   /** When the rollup was built. Stamped into payload + filename. */

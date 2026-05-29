@@ -21,9 +21,9 @@
  * the canonical schema is the only source of truth, never hand-listed.
  */
 
-import type { IcebergS3Config, IcebergTableName } from './schema'
 import type { LocalIcebergSinkOptions, Sink, SinkCloseResult, SinkSlice, SinkWriteResult } from '../sink'
 import type { Row } from '../storage'
+import type { IcebergS3Config, IcebergTableName } from './schema'
 import { execFile } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import process from 'node:process'

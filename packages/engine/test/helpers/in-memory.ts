@@ -16,7 +16,7 @@ import type {
   WatermarkFilter,
   WatermarkScope,
 } from '../../src/storage'
-import { inferSearchType } from '../../src/storage'
+import { inferSearchType } from '../../src/layout'
 
 export function createInMemoryDataSource(initial?: Map<string, Uint8Array>): DataSource & {
   snapshot: () => Map<string, Uint8Array>

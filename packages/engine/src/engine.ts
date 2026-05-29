@@ -15,13 +15,13 @@ import type {
   TenantCtx,
   WriteCtx,
 } from './storage'
-import { normalizeUrl } from 'gscdump/normalize'
+import { normalizeUrl } from 'gscdump'
 import { buildLogicalPlan } from 'gscdump/query/plan'
 import { compactTieredImpl, dedupeOverlappingTiers } from './compaction'
 import { gcOrphansImpl } from './gc'
+import { dayPartition, hourPartition, inferSearchType, objectKey, tenantPrefix } from './layout'
 import { compileLogicalQueryPlan } from './parquet-plan'
 import { currentSchemaVersion, dedupeByNaturalKey, SCHEMAS } from './schema'
-import { dayPartition, hourPartition, inferSearchType, objectKey, tenantPrefix } from './storage'
 
 const URL_PURGE_TABLES: readonly TableName[] = ['pages', 'page_queries']
 

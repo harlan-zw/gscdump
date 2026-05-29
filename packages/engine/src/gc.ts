@@ -1,5 +1,5 @@
 import type { DataSource, LockScope, ManifestStore, TableName } from './storage'
-import { tenantPrefix } from './storage'
+import { tenantPrefix } from './layout'
 
 export interface GcDeps {
   dataSource: DataSource
