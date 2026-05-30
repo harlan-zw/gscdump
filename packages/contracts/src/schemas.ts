@@ -610,9 +610,28 @@ export const gscdumpAnalysisResponseSchema = z.object({
 }).loose()
 
 export const gscdumpSitemapsResponseSchema = z.object({
-  sitemaps: z.array(unknownRecord),
-  history: z.array(unknownRecord),
-  perSitemapHistory: z.record(z.string(), z.array(unknownRecord)),
+  sitemaps: z.array(z.object({
+    path: z.string(),
+    urlCount: z.number(),
+    errors: z.number(),
+    warnings: z.number(),
+    isIndex: z.boolean().optional(),
+    lastSubmitted: z.string().nullable().optional(),
+    lastDownloaded: z.string().nullable().optional(),
+  }).loose()),
+  history: z.array(z.object({
+    date: z.string(),
+    errors: z.number(),
+    warnings: z.number(),
+    urlCount: z.number(),
+    urlDelta: z.number(),
+  }).loose()),
+  perSitemapHistory: z.record(z.string(), z.array(z.object({
+    date: z.string(),
+    urlCount: z.number(),
+    changed: z.boolean(),
+    urlDelta: z.number(),
+  }).loose())),
   meta: z.object({
     siteUrl: z.string(),
     syncStatus: z.string().nullable(),
@@ -620,8 +639,8 @@ export const gscdumpSitemapsResponseSchema = z.object({
 }).loose()
 
 export const gscdumpSitemapChangesResponseSchema = z.object({
-  added: z.array(unknownRecord),
-  removed: z.array(unknownRecord),
+  added: z.array(z.object({ url: z.string(), sitemap: z.string(), firstSeenAt: z.number() }).loose()),
+  removed: z.array(z.object({ url: z.string(), sitemap: z.string(), removedAt: z.number() }).loose()),
   summary: z.object({
     totalAdded: z.number(),
     totalRemoved: z.number(),
