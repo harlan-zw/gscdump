@@ -683,6 +683,12 @@ export interface GscdumpIndexingResponse {
 }
 
 export type GscdumpIndexingUrlStatus = 'indexed' | 'not_indexed' | 'pending'
+export type GscdumpIndexingIssueSeverity = 'error' | 'warning' | 'info'
+
+export interface GscdumpRichResultItem {
+  richResultType: string
+  items?: unknown[]
+}
 
 export interface GscdumpIndexingUrl {
   url: string
@@ -698,9 +704,9 @@ export interface GscdumpIndexingUrl {
   sitemaps?: string[] | null
   referringUrls?: string[] | null
   mobileVerdict?: string | null
-  mobileIssues?: unknown[] | null
+  mobileIssues?: string[] | null
   richResultsVerdict?: string | null
-  richResultsItems?: unknown[] | null
+  richResultsItems?: GscdumpRichResultItem[] | null
   inspectionResultLink?: string | null
   firstCheckedAt: string
   lastCheckedAt: string
@@ -715,7 +721,7 @@ export interface GscdumpIndexingUrlsResponse {
 
 export interface GscdumpIndexingDiagnosticsResponse {
   summary: { totalUrls: number, indexed: number, indexedPercent: number }
-  issues: { type: string, label: string, severity: string, count: number }[]
+  issues: { type: string, label: string, severity: GscdumpIndexingIssueSeverity, count: number }[]
   meta: { siteUrl: string }
 }
 
@@ -923,6 +929,21 @@ export interface GscdumpQueryTrendParams {
 
 export interface GscdumpQueryTrendResponse {
   daily: Array<{ date: string, queryCount: number }>
+  total: number
+  previousTotal?: number
+  meta: { siteUrl: string, syncStatus: string | null }
+}
+
+export interface GscdumpPageTrendParams {
+  startDate: string
+  endDate: string
+  prevStartDate?: string
+  prevEndDate?: string
+  searchType?: GscSearchType
+}
+
+export interface GscdumpPageTrendResponse {
+  daily: Array<{ date: string, pageCount: number }>
   total: number
   previousTotal?: number
   meta: { siteUrl: string, syncStatus: string | null }
@@ -1212,6 +1233,7 @@ export interface PartnerClient {
   getTopAssociation: (siteId: string, params: GscdumpTopAssociationParams) => Promise<GscdumpTopAssociationResponse>
   getKeywordSparklines: (siteId: string, params: GscdumpKeywordSparklinesParams) => Promise<GscdumpKeywordSparklinesResponse>
   getQueryTrend: (siteId: string, params: GscdumpQueryTrendParams) => Promise<GscdumpQueryTrendResponse>
+  getPageTrend: (siteId: string, params: GscdumpPageTrendParams) => Promise<GscdumpPageTrendResponse>
   getCanonicalMismatches: (siteId: string) => Promise<GscdumpCanonicalMismatchesResponse>
   getContentVelocity: <T = unknown>(siteId: string, days?: number) => Promise<T>
   getCtrCurve: <T = unknown>(siteId: string, params: GscdumpDateRangeParams) => Promise<T>

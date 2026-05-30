@@ -920,6 +920,21 @@ export const gscdumpQueryTrendResponseSchema = z.object({
   meta: z.object({ siteUrl: z.string(), syncStatus: z.string().nullable() }).loose(),
 }).loose()
 
+export const gscdumpPageTrendParamsSchema = z.object({
+  startDate: z.string(),
+  endDate: z.string(),
+  prevStartDate: z.string().optional(),
+  prevEndDate: z.string().optional(),
+  searchType: searchTypeSchema.optional(),
+})
+
+export const gscdumpPageTrendResponseSchema = z.object({
+  daily: z.array(z.object({ date: z.string(), pageCount: z.number() }).loose()),
+  total: z.number(),
+  previousTotal: z.number().optional(),
+  meta: z.object({ siteUrl: z.string(), syncStatus: z.string().nullable() }).loose(),
+}).loose()
+
 export const gscdumpDateRangeParamsSchema = z.object({
   startDate: z.string(),
   endDate: z.string(),
@@ -1130,6 +1145,7 @@ export const partnerEndpointSchemas = {
   getTopAssociation: { query: gscdumpTopAssociationParamsSchema, response: gscdumpTopAssociationResponseSchema },
   getKeywordSparklines: { body: gscdumpKeywordSparklinesParamsSchema, response: gscdumpKeywordSparklinesResponseSchema },
   getQueryTrend: { query: gscdumpQueryTrendParamsSchema, response: gscdumpQueryTrendResponseSchema },
+  getPageTrend: { query: gscdumpPageTrendParamsSchema, response: gscdumpPageTrendResponseSchema },
   getDateRangeInsight: { query: gscdumpDateRangeParamsSchema, response: unknownRecord },
   getCanonicalMismatches: { response: gscdumpCanonicalMismatchesResponseSchema },
   getIndexPercent: { query: gscdumpIndexPercentParamsSchema, response: gscdumpIndexPercentResponseSchema },

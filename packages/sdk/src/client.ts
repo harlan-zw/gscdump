@@ -22,6 +22,8 @@ import type {
   GscdumpIndexPercentResponse,
   GscdumpKeywordSparklinesParams,
   GscdumpKeywordSparklinesResponse,
+  GscdumpPageTrendParams,
+  GscdumpPageTrendResponse,
   GscdumpPermissionRecovery,
   GscdumpQueryTrendParams,
   GscdumpQueryTrendResponse,
@@ -246,6 +248,19 @@ function dateRangeQuery(params: GscdumpDateRangeParams): Record<string, string> 
 }
 
 function queryTrendQuery(params: GscdumpQueryTrendParams): Record<string, string> {
+  const query: Record<string, string> = {
+    startDate: params.startDate,
+    endDate: params.endDate,
+    searchType: params.searchType ?? DEFAULT_SEARCH_TYPE,
+  }
+  if (params.prevStartDate)
+    query.prevStartDate = params.prevStartDate
+  if (params.prevEndDate)
+    query.prevEndDate = params.prevEndDate
+  return query
+}
+
+function pageTrendQuery(params: GscdumpPageTrendParams): Record<string, string> {
   const query: Record<string, string> = {
     startDate: params.startDate,
     endDate: params.endDate,
@@ -553,6 +568,13 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       return request<GscdumpQueryTrendResponse>(partnerRoutes.sites.queryTrend(siteId), {
         query: queryTrendQuery(query),
       }, partnerEndpointSchemas.getQueryTrend.response)
+    },
+
+    getPageTrend(siteId: string, params: GscdumpPageTrendParams) {
+      const query = shouldValidate(options, 'request') ? partnerEndpointSchemas.getPageTrend.query.parse(params) : params
+      return request<GscdumpPageTrendResponse>(partnerRoutes.sites.pageTrend(siteId), {
+        query: pageTrendQuery(query),
+      }, partnerEndpointSchemas.getPageTrend.response)
     },
 
     getCanonicalMismatches(siteId: string) {

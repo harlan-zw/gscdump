@@ -39,6 +39,7 @@ export const partnerRoutes = {
     topAssociation: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/data/top-association`,
     keywordSparklines: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/data/keyword-sparklines`,
     queryTrend: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/data/query-trend`,
+    pageTrend: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/data/page-trend`,
     contentVelocity: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/content-velocity`,
     ctrCurve: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/ctr-curve`,
     darkTraffic: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/dark-traffic`,

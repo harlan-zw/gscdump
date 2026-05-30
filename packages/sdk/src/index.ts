@@ -185,6 +185,8 @@ export type {
   GscdumpKeywordSparklinesParams,
   GscdumpKeywordSparklinesResponse,
   GscdumpMeta,
+  GscdumpPageTrendParams,
+  GscdumpPageTrendResponse,
   GscdumpPermissionRecovery,
   GscdumpQueryTrendParams,
   GscdumpQueryTrendResponse,
