@@ -32,10 +32,10 @@ import { sql } from 'drizzle-orm'
 import { buildLogicalComparisonPlan, buildLogicalPlan } from 'gscdump/query/plan'
 
 const COMPARISON_FILTER_SQL: Record<ComparisonFilter, SQL> = {
-  new: sql`AND (p.impressions IS NULL OR p.impressions = 0)`,
-  lost: sql`AND p.impressions > 0 AND c.impressions = 0`,
-  improving: sql`AND c.clicks > COALESCE(p.clicks, 0)`,
-  declining: sql`AND c.clicks < p.clicks AND p.clicks > 0`,
+  new: sql`AND COALESCE(p.impressions, 0) = 0 AND COALESCE(c.impressions, 0) > 0`,
+  lost: sql`AND COALESCE(p.impressions, 0) > 0 AND COALESCE(c.impressions, 0) = 0`,
+  improving: sql`AND COALESCE(c.clicks, 0) > COALESCE(p.clicks, 0)`,
+  declining: sql`AND COALESCE(c.clicks, 0) < COALESCE(p.clicks, 0) AND COALESCE(p.clicks, 0) > 0`,
 }
 
 function collapseWs(s: string): string {
@@ -441,7 +441,7 @@ export function resolveComparisonSQL<TK extends string>(
 
   const filterClause = comparisonFilter ? COMPARISON_FILTER_SQL[comparisonFilter] : sql.raw('')
 
-  const orderSql = orderByClause(current, 'c.')
+  const orderSql = orderByClause(current, '')
   const limitSql = limitOffsetClause(current)
 
   // Outer SELECT enumerates columns explicitly (not `c.*`) and casts the
@@ -452,18 +452,18 @@ export function resolveComparisonSQL<TK extends string>(
   const outerCurrentCols: SQL[] = []
   for (const d of groupByDims) {
     const colName = d.replace(/\W/g, '')
-    outerCurrentCols.push(sql.raw(`c.${colName} as "${colName}"`))
+    outerCurrentCols.push(sql.raw(`COALESCE(c.${colName}, p.${colName}) as "${colName}"`))
   }
-  outerCurrentCols.push(sql.raw('CAST(c.clicks AS DOUBLE) as "clicks"'))
-  outerCurrentCols.push(sql.raw('CAST(c.impressions AS DOUBLE) as "impressions"'))
-  outerCurrentCols.push(sql.raw('c.ctr as "ctr"'))
-  outerCurrentCols.push(sql.raw('c.position as "position"'))
+  outerCurrentCols.push(sql.raw('CAST(COALESCE(c.clicks, 0) AS DOUBLE) as "clicks"'))
+  outerCurrentCols.push(sql.raw('CAST(COALESCE(c.impressions, 0) AS DOUBLE) as "impressions"'))
+  outerCurrentCols.push(sql.raw('COALESCE(c.ctr, 0) as "ctr"'))
+  outerCurrentCols.push(sql.raw('COALESCE(c.position, 0) as "position"'))
 
-  const mainQuery = sql`WITH current AS (${currentCte}), previous AS (${previousCte}) SELECT ${joinComma(outerCurrentCols)}, COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition" FROM current c LEFT JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause} ${orderSql} ${limitSql}`
+  const mainQuery = sql`WITH current AS (${currentCte}), previous AS (${previousCte}) SELECT ${joinComma(outerCurrentCols)}, COALESCE(CAST(p.clicks AS DOUBLE), 0) as "prevClicks", COALESCE(CAST(p.impressions AS DOUBLE), 0) as "prevImpressions", COALESCE(p.ctr, 0) as "prevCtr", COALESCE(p.position, 0) as "prevPosition" FROM current c FULL OUTER JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause} ${orderSql} ${limitSql}`
 
   const firstGroupBy = groupByDims[0] ? groupByDims[0].replace(/\W/g, '') : 'clicks'
-  const countInnerSelect = sql.raw(`c.${firstGroupBy}`)
-  const countQuery = sql`WITH current AS (${currentCte}), previous AS (${previousCte}) SELECT COUNT(*) as total FROM (SELECT ${countInnerSelect} FROM current c LEFT JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause})`
+  const countInnerSelect = groupByDims[0] ? sql.raw(`COALESCE(c.${firstGroupBy}, p.${firstGroupBy})`) : sql.raw(`c.${firstGroupBy}`)
+  const countQuery = sql`WITH current AS (${currentCte}), previous AS (${previousCte}) SELECT COUNT(*) as total FROM (SELECT ${countInnerSelect} FROM current c FULL OUTER JOIN previous p ON ${joinOn} WHERE 1=1 ${filterClause})`
 
   const main = compileCollapsed(adapter, mainQuery)
   const count = compileCollapsed(adapter, countQuery)

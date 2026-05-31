@@ -178,7 +178,11 @@ describe('resolveComparisonSQL (integration)', () => {
     expect(Number(byPage.get('/a')!.prevClicks)).toBe(15)
     expect(Number(byPage.get('/c')!.clicks)).toBe(12)
     expect(Number(byPage.get('/c')!.prevClicks)).toBe(0)
-    expect(byPage.has('/b')).toBe(false)
+    // /b is present only in the previous window — a "lost" page. The FULL OUTER
+    // JOIN surfaces it with zeroed current metrics and its prior totals.
+    expect(byPage.has('/b')).toBe(true)
+    expect(Number(byPage.get('/b')!.clicks)).toBe(0)
+    expect(Number(byPage.get('/b')!.prevClicks)).toBe(3)
   })
 
   it('filter=new returns only rows missing from previous', async () => {
