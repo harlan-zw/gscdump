@@ -53,6 +53,17 @@ export interface OpfsParquetTable {
   /** Iceberg table name — becomes the DuckDB view name. */
   table: string
   files: OpfsParquetFile[]
+  /**
+   * Recent-window overlay parquet (the non-stable tail the lake excludes). When
+   * present it is materialised into OPFS alongside `files` and the view unions
+   * it with an anti-join dedup: the lake (`files`) serves every day it has, the
+   * overlay serves ONLY days the lake lacks. So a stale overlay whose days have
+   * since landed in the lake can't double-count, and a day that stabilised but
+   * isn't yet in the lake still serves from the overlay. Its `contentHash` must
+   * change when the overlay bytes change (it is overwritten in place) so the
+   * cache re-downloads.
+   */
+  overlay?: OpfsParquetFile
 }
 
 export interface AttachOpfsTablesOptions {
@@ -315,13 +326,36 @@ async function materialiseFile(
   return { handle, outcome: 'downloaded' }
 }
 
+function quoteList(files: string[]): string {
+  return files.map(f => `'${f.replace(/'/g, '\'\'')}'`).join(', ')
+}
+
+// `SELECT * REPLACE (CAST(date AS DATE) AS date)` canonicalises the date column:
+// it can land as VARCHAR in older / overlay parquet and as DATE in compacted
+// lake parquet. No-op when already DATE; makes the union type-uniform.
+function lakeSelect(files: string[]): string {
+  return `SELECT * REPLACE (CAST(date AS DATE) AS date) FROM read_parquet([${quoteList(files)}], union_by_name = true)`
+}
+
 function readParquetViewSql(schema: string, table: string, files: string[]): string {
-  const list = files.map(f => `'${f.replace(/'/g, '\'\'')}'`).join(', ')
-  // `date` can land as VARCHAR in older parquet — REPLACE-cast it to DATE so
-  // every downstream query sees a uniform type. No-op when already DATE.
-  return `CREATE OR REPLACE VIEW ${schema}.${table} AS `
-    + `SELECT * REPLACE (CAST(date AS DATE) AS date) `
-    + `FROM read_parquet([${list}], union_by_name = true)`
+  return `CREATE OR REPLACE VIEW ${schema}.${table} AS ${lakeSelect(files)}`
+}
+
+/**
+ * View SQL for a table that has a recent-window overlay. Anti-join dedup: the
+ * lake serves every day it has; the overlay serves ONLY days the lake lacks
+ * (`date NOT IN (SELECT DISTINCT date FROM lake)`), joined with `UNION ALL BY
+ * NAME`. Mirrors the server's `lakeOverlayRelation`. When `lakeFiles` is empty
+ * (the requested range is entirely within the recent tail) the view is the
+ * overlay alone — no lake to dedup against.
+ */
+function readParquetViewWithOverlaySql(schema: string, table: string, lakeFiles: string[], overlayFile: string): string {
+  const overlay = `SELECT * REPLACE (CAST(date AS DATE) AS date) FROM read_parquet(['${overlayFile.replace(/'/g, '\'\'')}'], union_by_name = true)`
+  if (lakeFiles.length === 0)
+    return `CREATE OR REPLACE VIEW ${schema}.${table} AS ${overlay}`
+  return `CREATE OR REPLACE VIEW ${schema}.${table} AS ${lakeSelect(lakeFiles)} `
+    + `UNION ALL BY NAME ${overlay} `
+    + `WHERE CAST(date AS DATE) NOT IN (SELECT DISTINCT CAST(date AS DATE) FROM read_parquet([${quoteList(lakeFiles)}], union_by_name = true))`
 }
 
 async function runWithConcurrency<T>(
@@ -377,13 +411,24 @@ export async function attachOpfsParquetTables(
   await requestPersistentStorage()
   const root = await getOpfsRoot()
 
-  // Flatten so downloads run with global concurrency, not per-table.
-  const flat: Array<{ table: string, file: OpfsParquetFile, fileIndex: number }> = []
+  // Flatten so downloads run with global concurrency, not per-table. An overlay
+  // is just one more file to materialise; it takes the fileIndex AFTER the lake
+  // files (so its OPFS name + stale-sweep prefix never collide with a lake file)
+  // and is flagged so the view build can dedup the lake against it.
+  const flat: Array<{ table: string, file: OpfsParquetFile, fileIndex: number, overlay?: boolean }> = []
   for (const t of tables) {
     for (let i = 0; i < t.files.length; i++)
       flat.push({ table: t.table, file: t.files[i]!, fileIndex: i })
+    if (t.overlay)
+      flat.push({ table: t.table, file: t.overlay, fileIndex: t.files.length, overlay: true })
   }
   const total = flat.length
+  // Per-table OPFS name of the overlay file (when present), so the view build
+  // can split materialised names into lake vs overlay regardless of download
+  // completion order.
+  const overlayNames = new Map<string, string>()
+  // Expected materialised-file count per table = lake files + (overlay ? 1 : 0).
+  const expectedCount = new Map<string, number>(tables.map(t => [t.table, t.files.length + (t.overlay ? 1 : 0)]))
 
   const { DuckDBDataProtocol } = await import('@duckdb/duckdb-wasm')
   const registry = getOpfsRegistry(db, DuckDBDataProtocol.BROWSER_FSACCESS)
@@ -447,6 +492,8 @@ export async function attachOpfsParquetTables(
     const list = tableFiles.get(item.table) ?? []
     list.push({ name, handle: result.handle })
     tableFiles.set(item.table, list)
+    if (item.overlay)
+      overlayNames.set(item.table, name)
     bytesAttached += item.file.bytes
     onFileProgress?.({
       table: item.table,
@@ -482,19 +529,26 @@ export async function attachOpfsParquetTables(
       continue
     }
     const files = tableFiles.get(t.table) ?? []
-    // A table only attaches when every one of its files materialised. Release
-    // any handles it did acquire so they don't leak as orphan registrations.
-    if (files.length !== t.files.length) {
+    // A table only attaches when every one of its files materialised (lake +
+    // overlay). Release any handles it did acquire so they don't leak as orphan
+    // registrations.
+    if (files.length !== (expectedCount.get(t.table) ?? t.files.length)) {
       degraded.add(t.table)
       await releaseTable(t.table)
       continue
     }
+    // Split materialised names into lake vs overlay (download order is not
+    // deterministic, so identify the overlay by its tracked name).
+    const overlayName = overlayNames.get(t.table)
+    const lakeNames = overlayName ? files.map(f => f.name).filter(n => n !== overlayName) : files.map(f => f.name)
     try {
       // The abort check is INSIDE the try so an abort between view-loop
       // iterations shares the teardown path below — otherwise a bare throw here
       // escapes uncaught and leaks every handle acquired during the download loop.
       signal?.throwIfAborted()
-      await conn.query(readParquetViewSql(schema, t.table, files.map(f => f.name)))
+      await conn.query(overlayName
+        ? readParquetViewWithOverlaySql(schema, t.table, lakeNames, overlayName)
+        : readParquetViewSql(schema, t.table, lakeNames))
     }
     catch (err) {
       if (isAbortError(err)) {

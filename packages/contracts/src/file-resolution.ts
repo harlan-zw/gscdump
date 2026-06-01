@@ -80,6 +80,22 @@ export interface ResolvedTable {
   mode: 'browser' | 'server'
   /** Compacted Iceberg data files. Empty when `mode === 'server'`. */
   files: ResolvedParquetFile[]
+  /**
+   * Recent-window overlay parquet — the non-stable tail (the freshest days the
+   * ingest stability cutoff excludes from the lake), materialized out-of-band at
+   * `_recent_overlay/{site}/{searchType}/{table}.parquet`. When present, the
+   * browser unions it with an anti-join dedup (the lake wins on any shared day;
+   * the overlay supplies only days the lake lacks) so the freshest days serve
+   * from the overlay instead of returning 0. Absent (`undefined`) when no
+   * overlay exists for this `(site, searchType, table)` or for `mode: 'server'`.
+   *
+   * The overlay is OVERWRITTEN in place each sync, so its `contentHash` MUST
+   * change whenever the bytes change (the server derives it from the R2 object
+   * etag) — otherwise the OPFS cache would serve a stale overlay. The enclosing
+   * `FileResolutionResponse.snapshotVersion` folds the overlay hash in for the
+   * same reason (it gates browser re-attach).
+   */
+  overlay?: ResolvedParquetFile
   /** Total bytes across `files` — compared against the ceiling. */
   totalBytes: number
   /** Total rows across `files`. */
