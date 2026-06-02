@@ -84,6 +84,43 @@ describe('compileArchetypeSql', () => {
     expect(withOffset.params.slice(-2)).toEqual([100, 50])
   })
 
+  it('4 — top-n-breakdown: brand regex/notRegex facet → regexp_matches on the query column', () => {
+    const base: ArchetypeQuery = {
+      archetype: 'top-n-breakdown',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      dimension: 'query',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 50,
+    }
+    const branded = compileArchetypeSql({ ...base, facets: [{ column: 'query', op: 'regex', value: '(nuxt seo)' }] })
+    expect(branded.sql).toContain('regexp_matches(LOWER(query), ?)')
+    expect(branded.sql).not.toContain('NOT regexp_matches')
+    // facet param sits between the range params and the trailing LIMIT param.
+    expect(branded.params).toEqual(['2026-01-01', '2026-03-31', 'web', '(nuxt seo)', 50])
+
+    const nonBranded = compileArchetypeSql({ ...base, facets: [{ column: 'query', op: 'notRegex', value: '(nuxt seo)' }] })
+    expect(nonBranded.sql).toContain('NOT regexp_matches(LOWER(query), ?)')
+  })
+
+  it('4 — top-n-breakdown: eq facet → equality predicate', () => {
+    const c = compileArchetypeSql({
+      archetype: 'top-n-breakdown',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      dimension: 'query',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 50,
+      facets: [{ column: 'country', op: 'eq', value: 'ind' }],
+    })
+    expect(c.sql).toContain('country = ?')
+    expect(c.params).toContain('ind')
+  })
+
   it('5 — single-row-lookup: ANDs every match dimension', () => {
     const q: ArchetypeQuery = {
       archetype: 'single-row-lookup',

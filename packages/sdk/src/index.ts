@@ -8,6 +8,7 @@ export { ARCHETYPE_EXECUTION_CLASS } from './archetypes'
 export type {
   ArbitrarySqlQuery,
   ArchetypeExecutionClass,
+  ArchetypeFacet,
   ArchetypeQuery,
   ArchetypeQueryBase,
   ArchetypeResult,
