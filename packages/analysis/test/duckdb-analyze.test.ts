@@ -305,6 +305,64 @@ describe('runAnalyzerWithEngine', () => {
     expect(rising?.series[0]).toHaveProperty('clicks')
   }, 30_000)
 
+  it('movers direction param scopes to one direction, reports per-direction total, paginates, and emits canonical fields', async () => {
+    const env = await setup(dir)
+    await seed(env.engine, USER, SITE, [
+      {
+        table: 'page_queries',
+        date: '2026-04-10',
+        rows: [
+          { url: '/', query: 'rise a', date: '2026-04-10', clicks: 300, impressions: 1000, sum_position: 3000 },
+          { url: '/', query: 'rise b', date: '2026-04-10', clicks: 200, impressions: 1000, sum_position: 3000 },
+          { url: '/', query: 'rise c', date: '2026-04-10', clicks: 150, impressions: 1000, sum_position: 3000 },
+          { url: '/', query: 'fall a', date: '2026-04-10', clicks: 10, impressions: 200, sum_position: 1000 },
+        ],
+      },
+      {
+        table: 'page_queries',
+        date: '2026-04-03',
+        rows: [
+          { url: '/', query: 'rise a', date: '2026-04-03', clicks: 10, impressions: 100, sum_position: 500 },
+          { url: '/', query: 'rise b', date: '2026-04-03', clicks: 10, impressions: 100, sum_position: 500 },
+          { url: '/', query: 'rise c', date: '2026-04-03', clicks: 10, impressions: 100, sum_position: 500 },
+          { url: '/', query: 'fall a', date: '2026-04-03', clicks: 100, impressions: 1000, sum_position: 5000 },
+        ],
+      },
+    ])
+
+    const base = {
+      type: 'movers' as const,
+      startDate: '2026-04-10',
+      endDate: '2026-04-10',
+      prevStartDate: '2026-04-03',
+      prevEndDate: '2026-04-03',
+    }
+
+    // Page 1 of the rising direction: total counts the whole direction (3), the
+    // window returns `limit` rows, and every row is rising.
+    const page1 = await runAnalyzerWithEngine({ engine: env.engine }, { userId: USER, siteId: SITE }, { ...base, direction: 'rising', limit: 2, offset: 0 })
+    const p1 = page1.results as Array<Record<string, unknown>>
+    expect(p1).toHaveLength(2)
+    expect(p1.every(r => r.direction === 'rising')).toBe(true)
+    expect((page1.meta as any).total).toBe(3)
+
+    // Page 2: the remaining rising row.
+    const page2 = await runAnalyzerWithEngine({ engine: env.engine }, { userId: USER, siteId: SITE }, { ...base, direction: 'rising', limit: 2, offset: 2 })
+    expect(page2.results as unknown[]).toHaveLength(1)
+
+    // Canonical frontend field aliases are emitted directly by the analyzer.
+    const row = p1[0]
+    for (const k of ['clicks', 'impressions', 'ctr', 'position', 'prevClicks', 'prevImpressions', 'prevPosition'])
+      expect(row, `missing canonical field ${k}`).toHaveProperty(k)
+    expect(row.clicks).toBe(row.recentClicks)
+    expect(row.prevClicks).toBe(row.baselineClicks)
+
+    // direction: 'declining' is scoped independently.
+    const fall = await runAnalyzerWithEngine({ engine: env.engine }, { userId: USER, siteId: SITE }, { ...base, direction: 'declining', limit: 10, offset: 0 })
+    expect((fall.results as Array<Record<string, unknown>>).every(r => r.direction === 'declining')).toBe(true)
+    expect((fall.meta as any).total).toBe(1)
+  }, 30_000)
+
   it('decay flags pages that lost traffic beyond threshold', async () => {
     const env = await setup(dir)
     await seed(env.engine, USER, SITE, [

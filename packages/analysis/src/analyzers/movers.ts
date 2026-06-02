@@ -66,6 +66,15 @@ export interface MoversSeriesPoint {
 
 export interface MoversResultRow extends MoverData {
   direction: 'rising' | 'declining' | 'stable'
+  // Canonical frontend-facing aliases (recent* / baseline* duplicated under the
+  // names dashboard + opportunities tables read). See `reduceSql`.
+  clicks: number
+  impressions: number
+  ctr: number
+  position: number
+  prevClicks: number
+  prevImpressions: number
+  prevPosition: number
   series?: MoversSeriesPoint[]
 }
 
@@ -81,6 +90,55 @@ function parseJsonList(v: unknown): Array<Record<string, unknown>> {
     return Array.isArray(parsed) ? parsed : []
   }
   return []
+}
+
+/**
+ * Add the canonical frontend-facing field aliases (`clicks`/`impressions`/
+ * `ctr`/`position`/`prev*`) the dashboard + opportunities tables read, derived
+ * from the `recent*` / `baseline*` columns. Makes the registry output the
+ * single canonical shape so no caller has to remap.
+ */
+function withCanonicalFields(r: MoverData & { direction: 'rising' | 'declining' | 'stable', series?: MoversSeriesPoint[] }): MoversResultRow {
+  return {
+    ...r,
+    clicks: r.recentClicks,
+    impressions: r.recentImpressions,
+    ctr: r.recentImpressions > 0 ? r.recentClicks / r.recentImpressions : 0,
+    position: r.recentPosition,
+    prevClicks: r.baselineClicks,
+    prevImpressions: r.baselineImpressions,
+    prevPosition: r.baselinePosition,
+  }
+}
+
+/**
+ * Shared direction-scoped selection + pagination. When `params.direction` is
+ * set, report `total` as that direction's full pre-pagination count and slice
+ * `[offset, offset+limit]` (matches the legacy `getAnalysis` dispatcher).
+ * Direction-less callers (the dashboard top-N) get both directions uncapped and
+ * slice themselves.
+ */
+function selectMoversDirection(
+  rising: MoversResultRow[],
+  declining: MoversResultRow[],
+  stable: MoversResultRow[],
+  params: { direction?: 'rising' | 'declining', limit?: number, offset?: number },
+): { results: MoversResultRow[], meta: Record<string, number> } {
+  if (params.direction) {
+    const selected = params.direction === 'rising' ? rising : declining
+    const total = selected.length
+    const offset = params.offset ?? 0
+    const limit = params.limit ?? total
+    return {
+      results: selected.slice(offset, offset + limit),
+      meta: { total, rising: rising.length, declining: declining.length, stable: stable.length },
+    }
+  }
+  const combined = [...rising, ...declining]
+  return {
+    results: combined,
+    meta: { total: combined.length, rising: rising.length, declining: declining.length, stable: stable.length },
+  }
 }
 
 /**
@@ -192,7 +250,11 @@ export const moversAnalyzer = defineAnalyzer<AnalysisParams, Row, MoversResultRo
     const { current: cur, previous: prev } = comparisonOf(params)
     const minImpressions = params.minImpressions ?? 50
     const changeThreshold = params.changeThreshold ?? 0.2
-    const limit = params.limit ?? 2000
+    // In direction mode `params.limit` is the page size, applied in `reduceSql`
+    // after the direction split — so the SQL must fetch the full candidate pool,
+    // not the page, or the per-direction `total` and pagination are wrong.
+    // Without a direction, `limit` is the top-N cap and applies directly.
+    const limit = params.direction ? 5000 : (params.limit ?? 2000)
 
     // weekly: union both file sets so every entity gets a weekly sparkline
     // spanning prev_start → cur_end (with a gap for any dates between periods).
@@ -297,41 +359,40 @@ export const moversAnalyzer = defineAnalyzer<AnalysisParams, Row, MoversResultRo
     }
   },
 
-  reduceSql(rows) {
+  reduceSql(rows, params) {
     const arr = Array.isArray(rows) ? rows : []
-    const normalized: MoversResultRow[] = arr.map(r => ({
-      keyword: str(r.keyword),
-      page: r.page == null ? null : str(r.page),
-      recentClicks: num(r.recentClicks),
-      recentImpressions: num(r.recentImpressions),
-      recentPosition: num(r.recentPosition),
-      baselineClicks: Math.round(num(r.baselineClicks)),
-      baselineImpressions: Math.round(num(r.baselineImpressions)),
-      baselinePosition: num(r.baselinePosition),
-      clicksChange: num(r.clicksChange),
-      clicksChangePercent: num(r.clicksChangePercent),
-      impressionsChangePercent: num(r.impressionsChangePercent),
-      positionChange: num(r.positionChange),
-      direction: str(r.direction) as 'rising' | 'declining' | 'stable',
-      series: parseJsonList(r.seriesJson).map(s => ({
-        week: str(s.week),
-        clicks: num(s.clicks),
-        impressions: num(s.impressions),
-      })),
-    }))
+    const normalized: MoversResultRow[] = arr.map((r) => {
+      const recentClicks = num(r.recentClicks)
+      const recentImpressions = num(r.recentImpressions)
+      const recentPosition = num(r.recentPosition)
+      const baselineClicks = Math.round(num(r.baselineClicks))
+      const baselineImpressions = Math.round(num(r.baselineImpressions))
+      const baselinePosition = num(r.baselinePosition)
+      return {
+        keyword: str(r.keyword),
+        page: r.page == null ? null : str(r.page),
+        recentClicks,
+        recentImpressions,
+        recentPosition,
+        baselineClicks,
+        baselineImpressions,
+        baselinePosition,
+        clicksChange: num(r.clicksChange),
+        clicksChangePercent: num(r.clicksChangePercent),
+        impressionsChangePercent: num(r.impressionsChangePercent),
+        positionChange: num(r.positionChange),
+        direction: str(r.direction) as 'rising' | 'declining' | 'stable',
+        series: parseJsonList(r.seriesJson).map(s => ({
+          week: str(s.week),
+          clicks: num(s.clicks),
+          impressions: num(s.impressions),
+        })),
+      } satisfies MoverData & { direction: 'rising' | 'declining' | 'stable', series: MoversSeriesPoint[] }
+    }).map(withCanonicalFields)
     const rising = normalized.filter(r => r.direction === 'rising')
     const declining = normalized.filter(r => r.direction === 'declining')
     const stable = normalized.filter(r => r.direction === 'stable')
-    const combined = [...rising, ...declining]
-    return {
-      results: combined,
-      meta: {
-        total: combined.length,
-        rising: rising.length,
-        declining: declining.length,
-        stable: stable.length,
-      },
-    }
+    return selectMoversDirection(rising, declining, stable, params)
   },
 
   buildRows(params) {
@@ -350,12 +411,8 @@ export const moversAnalyzer = defineAnalyzer<AnalysisParams, Row, MoversResultRo
       changeThreshold: params.changeThreshold,
       minImpressions: params.minImpressions,
     })
-    return {
-      results: [
-        ...result.rising.map(r => ({ ...r, direction: 'rising' as const })),
-        ...result.declining.map(r => ({ ...r, direction: 'declining' as const })),
-      ] as MoversResultRow[],
-      meta: { rising: result.rising.length, declining: result.declining.length },
-    }
+    const rising = result.rising.map(r => withCanonicalFields({ ...r, direction: 'rising' as const }))
+    const declining = result.declining.map(r => withCanonicalFields({ ...r, direction: 'declining' as const }))
+    return selectMoversDirection(rising, declining, [], params)
   },
 })

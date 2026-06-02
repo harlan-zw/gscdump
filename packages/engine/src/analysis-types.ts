@@ -26,6 +26,14 @@ export interface AnalysisParams {
   brandTerms?: string[]
   limit?: number
   offset?: number
+  /**
+   * movers: select a single direction and paginate within it. When set, the
+   * analyzer filters to that direction, reports `meta.total` as the full
+   * pre-pagination count for the direction, and applies `limit`/`offset`. When
+   * unset, both directions are returned uncapped (the top-N callers slice
+   * themselves).
+   */
+  direction?: 'rising' | 'declining'
   /** Sort column. Each analyzer enforces its own whitelist. */
   sortBy?: string
   /** Sort direction. Default per-analyzer. */
