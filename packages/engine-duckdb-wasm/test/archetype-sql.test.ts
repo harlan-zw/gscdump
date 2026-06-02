@@ -150,20 +150,6 @@ describe('compileArchetypeSql', () => {
     expect(c.sql).toContain('GROUP BY date, country')
   })
 
-  it('7 — preset-analyzer: striking-distance HAVING shape', () => {
-    const q: ArchetypeQuery = {
-      archetype: 'preset-analyzer',
-      siteId: 's1',
-      searchType: 'web',
-      range,
-      presetId: 'striking-distance',
-      params: { minPosition: 5, maxPosition: 15, minImpressions: 20, limit: 500 },
-    }
-    const c = compileArchetypeSql(q)
-    expect(c.sql).toContain('HAVING position BETWEEN ? AND ?')
-    expect(c.params.slice(-4)).toEqual([5, 15, 20, 500])
-  })
-
   it('8 — two-dimension-detail: groups by url, query with optional filter', () => {
     const q: ArchetypeQuery = {
       archetype: 'two-dimension-detail',

@@ -29,7 +29,6 @@ import type {
   EntityDailySparklineQuery,
   EntityDailyTimeseriesQuery,
   MultiSeriesStackedDailyQuery,
-  PresetAnalyzerQuery,
   SingleRowLookupQuery,
   SiteDailyTimeseriesQuery,
   TopNBreakdownQuery,
@@ -265,45 +264,6 @@ function buildMultiSeriesStackedDaily(q: MultiSeriesStackedDailyQuery): Archetyp
   }
 }
 
-function buildPresetAnalyzer(q: PresetAnalyzerQuery): ArchetypeSqlPlan {
-  // R2-SQL-safe presets are GROUP BY + HAVING over page_queries. The named
-  // preset selects the dimension + HAVING thresholds. Striking-distance is the
-  // canonical one: queries in position 11-20 with non-trivial impressions.
-  const params = q.params ?? {}
-  const minImpressions = Number(params.minImpressions ?? 100)
-  const limit = Math.max(1, Math.floor(Number(params.limit ?? 1000)))
-  const w = partitionWhere(q)
-  const wp = [...w.params]
-  let having: string
-  switch (q.presetId) {
-    case 'striking-distance':
-      having = `HAVING SUM(impressions) >= ? AND (SUM(sum_position) / NULLIF(SUM(impressions), 0)) BETWEEN ? AND ?`
-      wp.push(minImpressions, Number(params.minPosition ?? 11), Number(params.maxPosition ?? 20))
-      break
-    case 'opportunity':
-      having = `HAVING SUM(impressions) >= ? AND SUM(clicks) = 0`
-      wp.push(minImpressions)
-      break
-    case 'zero-click':
-      having = `HAVING SUM(impressions) >= ? AND SUM(clicks) = 0`
-      wp.push(minImpressions)
-      break
-    default:
-      throw new Error(
-        `preset-analyzer: preset '${q.presetId}' is not R2-SQL-safe — window-function presets must be sent as archetype 'arbitrary-sql'`,
-      )
-  }
-  return {
-    table: 'page_queries',
-    params: wp,
-    sql: `SELECT url, query, SUM(clicks) AS clicks, SUM(impressions) AS impressions, `
-      + `SUM(clicks) / NULLIF(SUM(impressions), 0) AS ctr, `
-      + `SUM(sum_position) / NULLIF(SUM(impressions), 0) AS position `
-      + `FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause} GROUP BY url, query ${having} `
-      + `ORDER BY SUM(impressions) DESC LIMIT ${limit}`,
-  }
-}
-
 function buildTwoDimensionDetail(q: TwoDimensionDetailQuery): ArchetypeSqlPlan {
   const w = partitionWhere(q)
   const params = [...w.params]
@@ -345,8 +305,6 @@ export function buildArchetypeSql(query: ArchetypeQuery): ArchetypeSqlPlan {
       return buildSingleRowLookup(query)
     case 'multi-series-stacked-daily':
       return buildMultiSeriesStackedDaily(query)
-    case 'preset-analyzer':
-      return buildPresetAnalyzer(query)
     case 'two-dimension-detail':
       return buildTwoDimensionDetail(query)
     case 'arbitrary-sql':

@@ -131,6 +131,43 @@ function rangePredicate(q: ArchetypeQuery & { range: { start: string, end: strin
 }
 
 /**
+ * Cross-cutting facet predicates (Country/Device/Brand). `eq` → `col = ?`;
+ * `regex`/`notRegex` → DuckDB `regexp_matches(LOWER(col), ?)` (brand
+ * classification on `query`). Returns a leading ` AND …` fragment so it appends
+ * directly after the range predicate. The caller is responsible for only
+ * passing facets whose column exists on the table it reads — the GSC fact
+ * tables are single-dimension aggregates, so e.g. a `country` facet is only
+ * meaningful against the `countries`/`page_queries` views, not `pages`.
+ */
+function facetPredicate(query: ArchetypeQuery): { sql: string, params: unknown[] } {
+  const facets = (query as { facets?: readonly { column: string, op: string, value: string }[] }).facets
+  if (!facets?.length)
+    return { sql: '', params: [] }
+  const parts: string[] = []
+  const params: unknown[] = []
+  for (const f of facets) {
+    const col = DIM_COLUMN[f.column] ?? f.column
+    switch (f.op) {
+      case 'eq':
+        parts.push(`${col} = ?`)
+        params.push(f.value)
+        break
+      case 'regex':
+        parts.push(`regexp_matches(LOWER(${col}), ?)`)
+        params.push(f.value)
+        break
+      case 'notRegex':
+        parts.push(`NOT regexp_matches(LOWER(${col}), ?)`)
+        params.push(f.value)
+        break
+      default:
+        throw new Error(`[archetype-sql] unknown facet op: ${(f as { op: string }).op}`)
+    }
+  }
+  return { sql: parts.length ? ` AND ${parts.join(' AND ')}` : '', params }
+}
+
+/**
  * Compile one archetype query to DuckDB SQL. Throws for `aux-cloud-only`.
  */
 export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql {
@@ -201,10 +238,11 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
         return { table, sql, params }
       }
       const col = DIM_COLUMN[query.dimension]!
+      const facet = facetPredicate(query)
       let sql = `SELECT ${col} AS ${query.dimension}, ${metricSelectList(query.metrics)} `
-        + `FROM ${table} WHERE ${where.sql} GROUP BY ${col} `
+        + `FROM ${table} WHERE ${where.sql}${facet.sql} GROUP BY ${col} `
         + `ORDER BY ${query.orderBy.metric} ${dir} LIMIT ?`
-      const params = [...where.params, query.limit]
+      const params = [...where.params, ...facet.params, query.limit]
       if (query.offset && query.offset > 0) {
         sql += ' OFFSET ?'
         params.push(query.offset)
@@ -256,33 +294,14 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
       }
     }
 
-    // ── 7. Preset analyzer (striking-distance et al.) ───────────────────────
-    case 'preset-analyzer': {
-      // Presets that need window functions are tagged `arbitrary-sql` instead;
-      // the ones here are plain GROUP BY + HAVING. Compile the common
-      // striking-distance shape; other presets supply their own params.
-      const table = 'queries'
-      const where = rangePredicate(query)
-      const params = (query.params ?? {}) as Record<string, unknown>
-      const minPos = Number(params.minPosition ?? 4)
-      const maxPos = Number(params.maxPosition ?? 20)
-      const minImpr = Number(params.minImpressions ?? 10)
-      const limit = Number(params.limit ?? 1000)
-      return {
-        table,
-        sql: `SELECT query, ${metricExpr('clicks')} AS clicks, ${metricExpr('impressions')} AS impressions, `
-          + `${metricExpr('position')} AS position `
-          + `FROM ${table} WHERE ${where.sql} GROUP BY query `
-          + `HAVING position BETWEEN ? AND ? AND impressions > ? `
-          + `ORDER BY impressions DESC LIMIT ?`,
-        params: [...where.params, minPos, maxPos, minImpr, limit],
-      }
-    }
+    // ── 7. (retired) Preset analyzer — analysis presets run through the
+    //       analyzer registry (`analyze({ type })`), not this archetype. ADR-0044.
 
     // ── 8. Two-dimension (page × query) detail ──────────────────────────────
     case 'two-dimension-detail': {
       const table = 'page_queries'
       const where = rangePredicate(query)
+      const facet = facetPredicate(query)
       const filterParts: string[] = []
       const filterParams: unknown[] = []
       if (query.filter?.page) {
@@ -295,8 +314,8 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
       }
       const filterSql = filterParts.length ? ` AND ${filterParts.join(' AND ')}` : ''
       let sql = `SELECT url AS page, query, ${metricSelectList(query.metrics)} `
-        + `FROM ${table} WHERE ${where.sql}${filterSql} GROUP BY url, query`
-      const params = [...where.params, ...filterParams]
+        + `FROM ${table} WHERE ${where.sql}${filterSql}${facet.sql} GROUP BY url, query`
+      const params = [...where.params, ...filterParams, ...facet.params]
       if (query.orderBy) {
         const dir = query.orderBy.dir === 'asc' ? 'ASC' : 'DESC'
         sql += ` ORDER BY ${query.orderBy.metric} ${dir}`

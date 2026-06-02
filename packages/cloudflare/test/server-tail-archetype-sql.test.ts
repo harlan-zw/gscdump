@@ -2,7 +2,6 @@ import type {
   ArbitrarySqlQuery,
   EntityDailySparklineQuery,
   MultiSeriesStackedDailyQuery,
-  PresetAnalyzerQuery,
   SiteDailyTimeseriesQuery,
   TopNBreakdownQuery,
   TwoDimensionDetailQuery,
@@ -123,19 +122,6 @@ describe('buildArchetypeSql', () => {
     expect(plan.params).toContain('https://x.com/a')
   })
 
-  it('preset-analyzer striking-distance is GROUP BY + HAVING, no window fn', () => {
-    const q: PresetAnalyzerQuery = {
-      ...base,
-      archetype: 'preset-analyzer',
-      presetId: 'striking-distance',
-    }
-    const plan = buildArchetypeSql(q)
-    expect(plan.table).toBe('page_queries')
-    expect(plan.sql).toContain('HAVING')
-    expect(plan.sql).not.toMatch(/OVER\s*\(/)
-    expect(plan.sql).not.toContain('QUALIFY')
-  })
-
   it('multi-series-stacked-daily over device reads the dates pivot columns', () => {
     const q: MultiSeriesStackedDailyQuery = {
       ...base,
@@ -150,15 +136,6 @@ describe('buildArchetypeSql', () => {
     expect(plan.sql).toContain('GROUP BY date')
     expect(plan.sql).toContain('ORDER BY date ASC, device ASC')
     expect(plan.params).toHaveLength(12)
-  })
-
-  it('preset-analyzer rejects a non-R2-SQL-safe preset', () => {
-    const q: PresetAnalyzerQuery = {
-      ...base,
-      archetype: 'preset-analyzer',
-      presetId: 'cannibalization',
-    }
-    expect(() => buildArchetypeSql(q)).toThrow(/arbitrary-sql/)
   })
 
   it('arbitrary-sql is not translated here', () => {

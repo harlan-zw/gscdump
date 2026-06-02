@@ -14,6 +14,7 @@ import { comparisonOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { pagesQueryState } from '../analyzer/adapt-rows'
+import { paginateInMemory } from '../analyzer/paginate'
 import { buildPeriodMap, createMetricSorter } from '../types'
 
 export type DecaySortMetric = 'lostClicks' | 'declinePercent' | 'currentClicks'
@@ -129,7 +130,9 @@ export const decayAnalyzer = defineAnalyzer<AnalysisParams, Row, DecayResult[]>(
     const { current: cur, previous: prev } = comparisonOf(params)
     const minPreviousClicks = params.minPreviousClicks ?? 50
     const threshold = params.threshold ?? 0.2
-    const limit = params.limit ?? 2000
+    // Fetch the full candidate pool, not the page — `reduceSql` paginates via
+    // `offset`/`limit` so deep pages resolve correctly (mirrors striking-distance).
+    const limit = 2000
 
     // weekly: union both file sets for a per-page weekly sparkline that spans
     // prev_start → cur_end (with any between-period gap rendered as `·` at UI time).
@@ -217,25 +220,26 @@ export const decayAnalyzer = defineAnalyzer<AnalysisParams, Row, DecayResult[]>(
     }
   },
 
-  reduceSql(rows) {
+  reduceSql(rows, params) {
     const arr = Array.isArray(rows) ? rows : []
+    const mapped = arr.map(r => ({
+      page: str(r.page),
+      currentClicks: num(r.currentClicks),
+      previousClicks: num(r.previousClicks),
+      lostClicks: num(r.lostClicks),
+      declinePercent: num(r.declinePercent),
+      currentPosition: num(r.currentPosition),
+      previousPosition: num(r.previousPosition),
+      positionDrop: num(r.positionDrop),
+      series: parseJsonList(r.seriesJson).map(s => ({
+        week: str(s.week),
+        clicks: num(s.clicks),
+        impressions: num(s.impressions),
+      })),
+    } as DecayResult))
     return {
-      results: arr.map(r => ({
-        page: str(r.page),
-        currentClicks: num(r.currentClicks),
-        previousClicks: num(r.previousClicks),
-        lostClicks: num(r.lostClicks),
-        declinePercent: num(r.declinePercent),
-        currentPosition: num(r.currentPosition),
-        previousPosition: num(r.previousPosition),
-        positionDrop: num(r.positionDrop),
-        series: parseJsonList(r.seriesJson).map(s => ({
-          week: str(s.week),
-          clicks: num(s.clicks),
-          impressions: num(s.impressions),
-        })),
-      } as DecayResult)),
-      meta: { total: arr.length },
+      results: paginateInMemory(mapped, { limit: params.limit ?? 2000, offset: params.offset }),
+      meta: { total: mapped.length },
     }
   },
 

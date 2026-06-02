@@ -22,7 +22,7 @@
 
 import type { BuilderState, Dimension, Metric, SearchType } from 'gscdump/query'
 
-/** The 10 archetype identifiers. */
+/** The archetype identifiers. */
 export type QueryArchetype
   = | 'site-daily-timeseries' // 1
     | 'entity-daily-timeseries' // 2
@@ -30,7 +30,6 @@ export type QueryArchetype
     | 'top-n-breakdown' // 4
     | 'single-row-lookup' // 5
     | 'multi-series-stacked-daily' // 6
-    | 'preset-analyzer' // 7
     | 'two-dimension-detail' // 8
     | 'arbitrary-sql' // 9
     | 'aux-cloud-only' // 10
@@ -56,7 +55,6 @@ export const ARCHETYPE_EXECUTION_CLASS: Record<QueryArchetype, ArchetypeExecutio
   'top-n-breakdown': 'r2-sql-resolved',
   'single-row-lookup': 'r2-sql',
   'multi-series-stacked-daily': 'r2-sql',
-  'preset-analyzer': 'r2-sql',
   'two-dimension-detail': 'r2-sql',
   'arbitrary-sql': 'duckdb',
   'aux-cloud-only': 'cloud-only',
@@ -70,6 +68,24 @@ export interface DateRange {
   end: string
 }
 
+/**
+ * A post-window predicate layered onto an archetype's `WHERE` clause, on top of
+ * the site/searchType/date partition. The cross-cutting facet mechanism behind
+ * the dashboard's Country/Device/Brand filters:
+ * - `eq`       — exact column match (e.g. `country = 'ind'`, `device = 'MOBILE'`).
+ * - `regex`    — case-insensitive regex on a text column, e.g. brand
+ *                classification on `query`. DuckDB `regexp_matches(LOWER(col), …)`.
+ * - `notRegex` — its negation (non-brand traffic).
+ *
+ * `regex`/`notRegex` require DuckDB execution — R2 SQL has no regex — so the
+ * router escalates any query carrying one to the `duckdb` class.
+ */
+export interface ArchetypeFacet {
+  column: Dimension
+  op: 'eq' | 'regex' | 'notRegex'
+  value: string
+}
+
 /** Fields common to every archetype query input. */
 export interface ArchetypeQueryBase {
   archetype: QueryArchetype
@@ -81,6 +97,12 @@ export interface ArchetypeQueryBase {
    * supported total span is ~24 months (12-month period + YoY).
    */
   compareRange?: DateRange
+  /**
+   * Cross-cutting Country/Device/Brand filters applied as extra `WHERE`
+   * predicates. Applied by `top-n-breakdown` and the daily-timeseries
+   * archetypes; ignored by fully-specified shapes (`single-row-lookup`).
+   */
+  facets?: readonly ArchetypeFacet[]
 }
 
 // ── 1. Site-level daily timeseries ──────────────────────────────────────────
@@ -159,19 +181,10 @@ export interface MultiSeriesStackedDailyQuery extends ArchetypeQueryBase {
   metric: Metric
 }
 
-// ── 7. Preset analyzer ───────────────────────────────────────────────────────
-/**
- * A named analysis preset (striking-distance, opportunity, etc.). Most are
- * `GROUP BY` + `HAVING`; the ones needing window functions are tagged
- * `arbitrary-sql` (9) instead — `presetId`s here are R2-SQL-safe.
- */
-export interface PresetAnalyzerQuery extends ArchetypeQueryBase {
-  archetype: 'preset-analyzer'
-  /** Analyzer id — matches `AnalysisTool` in `@gscdump/engine`. */
-  presetId: string
-  /** Preset-specific parameters (thresholds, limits). */
-  params?: Record<string, unknown>
-}
+// ── 7. (retired) Preset analyzer ─────────────────────────────────────────────
+// The `preset-analyzer` archetype was a striking-distance stub that ignored
+// `presetId` and dropped analyzer `meta`. Analysis presets now run through the
+// analyzer registry directly (`analyze({ type })`). See ADR-0044.
 
 // ── 8. Two-dimension (page × query) detail ───────────────────────────────────
 /**
@@ -224,7 +237,6 @@ export type ArchetypeQuery
     | TopNBreakdownQuery
     | SingleRowLookupQuery
     | MultiSeriesStackedDailyQuery
-    | PresetAnalyzerQuery
     | TwoDimensionDetailQuery
     | ArbitrarySqlQuery
     | AuxCloudOnlyQuery

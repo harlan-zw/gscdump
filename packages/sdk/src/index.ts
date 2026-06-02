@@ -18,7 +18,6 @@ export type {
   EntityDailySparklineQuery,
   EntityDailyTimeseriesQuery,
   MultiSeriesStackedDailyQuery,
-  PresetAnalyzerQuery,
   QueryArchetype,
   ResolvedArchetypeQuery,
   SingleRowLookupQuery,
