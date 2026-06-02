@@ -78,20 +78,6 @@ function metricExpr(metric: Metric): string {
   }
 }
 
-/** ORDER BY expression for a metric (recomputed, not the alias — R2 SQL safe). */
-function orderMetricExpr(metric: Metric): string {
-  switch (metric) {
-    case 'clicks':
-      return 'SUM(clicks)'
-    case 'impressions':
-      return 'SUM(impressions)'
-    case 'ctr':
-      return 'SUM(clicks) / NULLIF(SUM(impressions), 0)'
-    case 'position':
-      return 'SUM(sum_position) / NULLIF(SUM(impressions), 0)'
-  }
-}
-
 const DEVICE_SUFFIXES = ['desktop', 'mobile', 'tablet'] as const
 
 function metricExprForSource(metric: Metric, source: {
@@ -248,8 +234,13 @@ function buildTopNBreakdown(q: TopNBreakdownQuery): ArchetypeSqlPlan {
     }
   }
   const col = dimColumn(q.dimension)
-  const metrics = q.metrics.map(metricExpr).join(', ')
-  const order = `${orderMetricExpr(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}`
+  // Select the order metric too (when not already requested) and ORDER BY its
+  // alias — recomputing the aggregate in ORDER BY makes DataFusion (R2 SQL) emit
+  // a duplicate unqualified field name and reject the query (40004). Mirrors the
+  // device branch above + the browser builder (engine-duckdb-wasm).
+  const metricList = q.metrics.includes(q.orderBy.metric) ? q.metrics : [...q.metrics, q.orderBy.metric]
+  const metrics = metricList.map(metricExpr).join(', ')
+  const order = `${q.orderBy.metric} ${q.orderBy.dir.toUpperCase()}`
   const facet = facetPredicate(q)
   let sql = `SELECT ${col}, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} `
     + `GROUP BY ${col} ORDER BY ${order} LIMIT ${Math.max(0, Math.floor(q.limit))}`
@@ -319,10 +310,15 @@ function buildTwoDimensionDetail(q: TwoDimensionDetailQuery): ArchetypeSqlPlan {
   const facet = facetPredicate(q)
   clause += facet.sql
   params.push(...facet.params)
-  const metrics = q.metrics.map(metricExpr).join(', ')
+  // ORDER BY the selected metric alias (not a recomputed aggregate) for R2 SQL /
+  // DataFusion compatibility — see buildTopNBreakdown. Ensure it's selected.
+  const metricList = q.orderBy && !q.metrics.includes(q.orderBy.metric)
+    ? [...q.metrics, q.orderBy.metric]
+    : q.metrics
+  const metrics = metricList.map(metricExpr).join(', ')
   let sql = `SELECT url, query, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${clause} GROUP BY url, query`
   if (q.orderBy)
-    sql += ` ORDER BY ${orderMetricExpr(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}`
+    sql += ` ORDER BY ${q.orderBy.metric} ${q.orderBy.dir.toUpperCase()}`
   if (q.limit && q.limit > 0)
     sql += ` LIMIT ${Math.floor(q.limit)}`
   return { table: 'page_queries', params, sql }

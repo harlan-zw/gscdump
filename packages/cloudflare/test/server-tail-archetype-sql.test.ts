@@ -43,8 +43,28 @@ describe('buildArchetypeSql', () => {
     expect(plan.table).toBe('pages')
     expect(plan.sql).toContain('SELECT url,')
     expect(plan.sql).toContain('GROUP BY url')
-    expect(plan.sql).toContain('ORDER BY SUM(clicks) DESC LIMIT 50')
+    // ORDER BY the selected alias, NOT a recomputed aggregate (R2 SQL / DataFusion
+    // rejects a duplicate unqualified field name otherwise — error 40004).
+    expect(plan.sql).toContain('ORDER BY clicks DESC LIMIT 50')
+    expect(plan.sql).not.toContain('ORDER BY SUM(')
     expect(plan.sql).not.toContain('OFFSET')
+  })
+
+  it('top-n-breakdown selects the order metric so ORDER BY can reference its alias', () => {
+    // order by a metric NOT in the projection — it must be added to the SELECT
+    // (else `ORDER BY impressions` references a non-existent column).
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'query',
+      metrics: ['clicks'],
+      orderBy: { metric: 'impressions', dir: 'desc' },
+      limit: 10,
+    }
+    const plan = buildArchetypeSql(q)
+    expect(plan.sql).toContain('SUM(impressions) AS impressions')
+    expect(plan.sql).toContain('ORDER BY impressions DESC')
+    expect(plan.sql).not.toContain('ORDER BY SUM(')
   })
 
   it('top-n-breakdown emits OFFSET when offset is set', () => {
