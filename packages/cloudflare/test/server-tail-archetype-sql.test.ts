@@ -122,6 +122,68 @@ describe('buildArchetypeSql', () => {
     expect(plan.params).toContain('https://x.com/a')
   })
 
+  it('top-n-breakdown applies a brand regex facet as regexp_matches on the query column', () => {
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'query',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 50,
+      facets: [{ column: 'query', op: 'regex', value: '(nuxt seo)' }],
+    }
+    const plan = buildArchetypeSql(q)
+    expect(plan.sql).toContain('regexp_matches(LOWER(query), ?)')
+    expect(plan.sql).not.toContain('NOT regexp_matches')
+    // facet param binds AFTER the 4 partition params; LIMIT is inlined, not bound.
+    expect(plan.params).toEqual(['site-1', 'web', '2026-01-01', '2026-03-31', '(nuxt seo)'])
+    // facet predicate sits in the WHERE, before GROUP BY.
+    expect(plan.sql.indexOf('regexp_matches')).toBeLessThan(plan.sql.indexOf('GROUP BY'))
+  })
+
+  it('top-n-breakdown negates a notRegex (non-brand) facet', () => {
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'query',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 50,
+      facets: [{ column: 'query', op: 'notRegex', value: '(nuxt seo)' }],
+    }
+    expect(buildArchetypeSql(q).sql).toContain('NOT regexp_matches(LOWER(query), ?)')
+  })
+
+  it('top-n-breakdown applies an eq facet as an equality predicate', () => {
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'query',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 50,
+      facets: [{ column: 'country', op: 'eq', value: 'ind' }],
+    }
+    const plan = buildArchetypeSql(q)
+    expect(plan.sql).toContain('country = ?')
+    expect(plan.params).toEqual(['site-1', 'web', '2026-01-01', '2026-03-31', 'ind'])
+  })
+
+  it('two-dimension-detail applies a facet after the page/query prefilter', () => {
+    const q: TwoDimensionDetailQuery = {
+      ...base,
+      archetype: 'two-dimension-detail',
+      metrics: ['clicks'],
+      filter: { page: 'https://x.com/a' },
+      facets: [{ column: 'query', op: 'regex', value: '(brand)' }],
+    }
+    const plan = buildArchetypeSql(q)
+    expect(plan.sql).toContain('AND url = ?')
+    expect(plan.sql).toContain('regexp_matches(LOWER(query), ?)')
+    // page prefilter param precedes the facet param.
+    expect(plan.params).toEqual(['site-1', 'web', '2026-01-01', '2026-03-31', 'https://x.com/a', '(brand)'])
+  })
+
   it('multi-series-stacked-daily over device reads the dates pivot columns', () => {
     const q: MultiSeriesStackedDailyQuery = {
       ...base,

@@ -25,6 +25,7 @@
 
 import type { IcebergTableName } from '@gscdump/engine/iceberg'
 import type {
+  ArchetypeFacet,
   ArchetypeQuery,
   EntityDailySparklineQuery,
   EntityDailyTimeseriesQuery,
@@ -143,6 +144,44 @@ function partitionWhere(q: { siteId: string, searchType: string, range: { start:
   }
 }
 
+/**
+ * Cross-cutting facet predicates (Country/Device/Brand), mirroring the browser
+ * builder's `facetPredicate` (`@gscdump/engine-duckdb-wasm`) so server-tail and
+ * browser-DuckDB emit byte-identical filtered SQL. `eq` → `col = ?`;
+ * `regex`/`notRegex` → `regexp_matches(LOWER(col), ?)` (brand classification on
+ * `query`). Returns a leading ` AND …` fragment appended after the partition
+ * predicate. SAFE on the shared builder: a `regex`/`notRegex` facet forces the
+ * dispatcher to route the query to the DuckDB engine (R2 SQL has no regex), so
+ * the R2 SQL client never receives the `regexp_matches` SQL this emits.
+ */
+function facetPredicate(query: ArchetypeQuery): { sql: string, params: unknown[] } {
+  const facets = (query as { facets?: readonly ArchetypeFacet[] }).facets
+  if (!facets?.length)
+    return { sql: '', params: [] }
+  const parts: string[] = []
+  const params: unknown[] = []
+  for (const f of facets) {
+    const col = dimColumn(f.column)
+    switch (f.op) {
+      case 'eq':
+        parts.push(`${col} = ?`)
+        params.push(f.value)
+        break
+      case 'regex':
+        parts.push(`regexp_matches(LOWER(${col}), ?)`)
+        params.push(f.value)
+        break
+      case 'notRegex':
+        parts.push(`NOT regexp_matches(LOWER(${col}), ?)`)
+        params.push(f.value)
+        break
+      default:
+        throw new Error(`[archetype-sql] unknown facet op: ${(f as { op: string }).op}`)
+    }
+  }
+  return { sql: parts.length ? ` AND ${parts.join(' AND ')}` : '', params }
+}
+
 // ── per-archetype builders ───────────────────────────────────────────────────
 
 function buildSiteDailyTimeseries(q: SiteDailyTimeseriesQuery): ArchetypeSqlPlan {
@@ -211,11 +250,12 @@ function buildTopNBreakdown(q: TopNBreakdownQuery): ArchetypeSqlPlan {
   const col = dimColumn(q.dimension)
   const metrics = q.metrics.map(metricExpr).join(', ')
   const order = `${orderMetricExpr(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}`
-  let sql = `SELECT ${col}, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause} `
+  const facet = facetPredicate(q)
+  let sql = `SELECT ${col}, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} `
     + `GROUP BY ${col} ORDER BY ${order} LIMIT ${Math.max(0, Math.floor(q.limit))}`
   if (q.offset && q.offset > 0)
     sql += ` OFFSET ${Math.floor(q.offset)}`
-  return { table, params: w.params, sql }
+  return { table, params: [...w.params, ...facet.params], sql }
 }
 
 function buildSingleRowLookup(q: SingleRowLookupQuery): ArchetypeSqlPlan {
@@ -276,6 +316,9 @@ function buildTwoDimensionDetail(q: TwoDimensionDetailQuery): ArchetypeSqlPlan {
     clause += ` AND query = ?`
     params.push(q.filter.query)
   }
+  const facet = facetPredicate(q)
+  clause += facet.sql
+  params.push(...facet.params)
   const metrics = q.metrics.map(metricExpr).join(', ')
   let sql = `SELECT url, query, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${clause} GROUP BY url, query`
   if (q.orderBy)

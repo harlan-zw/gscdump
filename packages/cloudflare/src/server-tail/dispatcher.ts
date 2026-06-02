@@ -57,8 +57,10 @@ export function resolveServerTailEngine(query: ArchetypeQuery): ServerTailEngine
     return 'duckdb'
   // Escalation: facet predicates (Country/Device/Brand) are only compiled by the
   // DuckDB builder — brand uses `regexp_matches`, which R2 SQL lacks — so any
-  // faceted query runs on DuckDB.
-  if (query.facets && query.facets.length > 0)
+  // faceted query runs on DuckDB. `facets` lives on `ArchetypeQueryBase`, but the
+  // `aux-cloud-only` union member omits it, so read it structurally.
+  const facets = (query as { facets?: readonly unknown[] }).facets
+  if (facets && facets.length > 0)
     return 'duckdb'
   return 'r2-sql'
 }

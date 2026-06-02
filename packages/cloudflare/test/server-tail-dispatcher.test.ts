@@ -68,6 +68,21 @@ describe('resolveServerTailEngine', () => {
     expect(resolveServerTailEngine({ ...q, offset: 0 })).toBe('r2-sql')
   })
 
+  it('escalates a faceted (brand regex) query to duckdb', () => {
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'query',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 50,
+      facets: [{ column: 'query', op: 'regex', value: '(nuxt seo)' }],
+    }
+    expect(resolveServerTailEngine(q)).toBe('duckdb')
+    // same query without the facet stays on r2-sql
+    expect(resolveServerTailEngine({ ...q, facets: undefined })).toBe('r2-sql')
+  })
+
   it('rejects a cloud-only archetype', () => {
     expect(() => resolveServerTailEngine({
       archetype: 'aux-cloud-only',
@@ -116,6 +131,24 @@ describe('createServerTailDispatcher', () => {
     // {{pages}} placeholder resolved to an iceberg_scan reference
     expect(svc.calls[0]).toContain('iceberg_scan(\'w/gsc/pages\')')
     expect(svc.calls[0]).toMatch(/OVER\s*\(/)
+  })
+
+  it('executes a brand-faceted breakdown via duckdb with regexp_matches in the SQL', async () => {
+    const { dispatcher, svc } = makeDispatcher([], [{ query: 'nuxt seo', clicks: 9 }])
+    const res = await dispatcher.execute({
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'query',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 50,
+      facets: [{ column: 'query', op: 'regex', value: '(nuxt seo)' }],
+    } as TopNBreakdownQuery)
+    expect(res.source).toBe('server-duckdb')
+    expect(res.rows).toEqual([{ query: 'nuxt seo', clicks: 9 }])
+    // the facet predicate is compiled into the SQL the DuckDB sibling runs;
+    // runPlan binds the `?` param as a literal, so assert the bound form.
+    expect(svc.calls[0]).toContain('regexp_matches(LOWER(query), \'(nuxt seo)\')')
   })
 
   it('route() reports the engine without executing', () => {
