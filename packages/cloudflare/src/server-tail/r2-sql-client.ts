@@ -7,17 +7,20 @@
 // the resolver has pre-resolved their entity selections to literal `IN` lists
 // (the `r2-sql-resolved` class — see `ARCHETYPE_EXECUTION_CLASS`).
 //
-// API shape (Cloudflare R2 SQL, 2026): a POST to
-//   https://api.cloudflare.com/client/v4/accounts/{account}/r2-catalog/{warehouse}/sql
-// with `{ "query": "<SQL>" }`, Bearer-token authed. The response is the
-// standard CF envelope `{ success, result, errors }` where `result` carries
-// columns + rows. R2 SQL does NOT support bound parameters, so this client
-// inlines params into the SQL via `escapeSqlValue` before sending.
+// API shape (Cloudflare R2 SQL): a POST to
+//   https://api.sql.cloudflarestorage.com/api/v1/accounts/{account}/r2-sql/query/{bucket}
+// with `{ "query": "<SQL>" }`, Bearer-token authed (the R2-Data-Catalog-scoped
+// token — the management `api.cloudflare.com/client/v4/.../r2-catalog/` API is a
+// DIFFERENT service and 404s for queries). R2 SQL addresses the catalog by
+// BUCKET, not warehouse. The response is the CF envelope `{ success, result,
+// errors }` where `result` carries columns + rows. R2 SQL does NOT support bound
+// parameters, so this client inlines params via `escapeSqlValue` before sending.
 //
-// The real endpoint needs a Cloudflare API token scoped for R2 Data Catalog
-// (provisioned later — POC Spike 4 was blocked on exactly this). The client is
-// built fully and is testable by injecting a `fetch` impl that returns a
-// recorded/fake CF envelope; see `server-tail/__tests__`.
+// CAVEAT — identity-partition equality: R2 SQL returns zero rows on a literal
+// equality against an identity-partition column (here `site_id` / `search_type`)
+// unless the column is materialized; `runPlan` wraps those predicates in
+// `CONCAT(col, '')` to force it. The client is testable by injecting a `fetch`
+// impl that returns a recorded CF envelope; see the sibling tests.
 
 import type { ArchetypeQuery } from '@gscdump/sdk'
 import type { ArchetypeSqlPlan } from './archetype-sql'
@@ -34,8 +37,8 @@ function r2TableRef(namespace: string, table: string): string {
 export interface R2SqlClientConfig {
   /** Cloudflare account id. */
   accountId: string
-  /** R2 Data Catalog warehouse name (`<bucket>` or `<account>_<bucket>`). */
-  warehouse: string
+  /** R2 bucket backing the Iceberg catalog — R2 SQL addresses the catalog by bucket. */
+  bucket: string
   /** Iceberg namespace the 5 fact tables live in. */
   namespace: string
   /** Cloudflare API token with R2 Data Catalog read scope. */
@@ -80,8 +83,19 @@ export class R2SqlTimeoutError extends Error {
   }
 }
 
-const DEFAULT_API_BASE = 'https://api.cloudflare.com/client/v4'
+const DEFAULT_API_BASE = 'https://api.sql.cloudflarestorage.com/api/v1'
 const DEFAULT_TIMEOUT_MS = 25_000
+
+// R2 SQL returns zero rows on a literal equality against an identity-partition
+// column unless the column is materialized; wrapping it in `CONCAT(col, '')`
+// forces materialization and the predicate works. `buildArchetypeSql` always
+// emits `site_id` / `search_type` as the (bare) partition predicate, so target
+// that form. Idempotent: the wrapped `site_id` inside `CONCAT(...)` is followed
+// by `,`, never `=`, so it won't re-match.
+const PARTITION_PREDICATE_RE = /\b(site_id|search_type)(\s*=)/g
+function workaroundPartitionEquality(sql: string): string {
+  return sql.replace(PARTITION_PREDICATE_RE, (_m, col: string, eq: string) => `CONCAT(${col}, '')${eq}`)
+}
 
 /**
  * Escape a JS value for inline embedding in R2 SQL. R2 SQL has no bound-param
@@ -187,7 +201,7 @@ export function createR2SqlClient(config: R2SqlClientConfig): R2SqlClient {
   const fetchImpl = config.fetchImpl ?? globalThis.fetch
   const apiBase = config.apiBase ?? DEFAULT_API_BASE
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  const endpoint = `${apiBase}/accounts/${config.accountId}/r2-catalog/${config.warehouse}/sql`
+  const endpoint = `${apiBase}/accounts/${config.accountId}/r2-sql/query/${config.bucket}`
 
   async function query(sql: string): Promise<R2SqlResult> {
     const started = Date.now()
@@ -200,6 +214,7 @@ export function createR2SqlClient(config: R2SqlClientConfig): R2SqlClient {
         headers: {
           'authorization': `Bearer ${config.token}`,
           'content-type': 'application/json',
+          'user-agent': 'gscdump-cloudflare-r2sql/1.0',
         },
         body: JSON.stringify({ query: sql }),
         signal: controller.signal,
@@ -233,7 +248,7 @@ export function createR2SqlClient(config: R2SqlClientConfig): R2SqlClient {
   function runPlan(plan: ArchetypeSqlPlan): Promise<R2SqlResult> {
     const tableRef = r2TableRef(config.namespace, plan.table)
     const resolved = plan.sql.split(TABLE_PLACEHOLDER).join(tableRef)
-    return query(inlineParams(resolved, plan.params))
+    return query(workaroundPartitionEquality(inlineParams(resolved, plan.params)))
   }
 
   function runArchetype(archetypeQuery: ArchetypeQuery): Promise<R2SqlResult> {

@@ -54,7 +54,7 @@ describe('inlineParams', () => {
 describe('createR2SqlClient', () => {
   const config = {
     accountId: 'acct',
-    warehouse: 'wh',
+    bucket: 'wh',
     namespace: 'gsc',
     token: 'tok',
   }
@@ -75,13 +75,18 @@ describe('createR2SqlClient', () => {
     const res = await client.runArchetype(q)
     expect(res.rows).toEqual([{ date: '2026-01-01', clicks: 10 }])
 
-    const [, opts] = fetchImpl.mock.calls[0]!
+    const [url, opts] = fetchImpl.mock.calls[0]!
+    // the correct R2 SQL endpoint (bucket-addressed), NOT the catalog mgmt API
+    expect(url).toBe('https://api.sql.cloudflarestorage.com/api/v1/accounts/acct/r2-sql/query/wh')
     const sentSql = JSON.parse(opts!.body as string).query as string
     // {{TABLE}} resolved to namespace.table
     expect(sentSql).toContain('FROM gsc.dates')
     // params inlined — no ? left
     expect(sentSql).not.toContain('?')
     expect(sentSql).toContain('\'site-1\'')
+    // identity-partition equality workaround applied
+    expect(sentSql).toContain('CONCAT(site_id, \'\') = \'site-1\'')
+    expect(sentSql).toContain('CONCAT(search_type, \'\') = \'web\'')
     // bearer auth header present
     expect((opts!.headers as Record<string, string>).authorization).toBe('Bearer tok')
   })
@@ -115,7 +120,7 @@ describe('createR2SqlClient', () => {
 describe('createR2SqlClient timeout', () => {
   const config = {
     accountId: 'acct',
-    warehouse: 'wh',
+    bucket: 'wh',
     namespace: 'gsc',
     token: 'tok',
   }

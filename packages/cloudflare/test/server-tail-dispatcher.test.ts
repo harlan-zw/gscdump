@@ -96,7 +96,7 @@ describe('createServerTailDispatcher', () => {
   function makeDispatcher(r2Rows: unknown[], duckRows: unknown[]) {
     const r2Sql = createR2SqlClient({
       accountId: 'a',
-      warehouse: 'w',
+      bucket: 'w',
       namespace: 'gsc',
       token: 't',
       fetchImpl: fakeFetch(r2Rows),
