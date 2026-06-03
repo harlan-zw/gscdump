@@ -25,6 +25,14 @@ export interface DuckDBWasmBootResult {
 }
 
 export interface BootDuckDBWasmOptions {
+  /**
+   * DuckDB-WASM logger. Defaults to a `ConsoleLogger` thresholded at
+   * `LogLevel.WARNING`, so real warnings/errors still surface but the per-query
+   * INFO events (START/OK/RUN) — which DuckDB's default `ConsoleLogger()` emits
+   * as raw objects, flooding the host console with dozens of lines per render —
+   * are dropped. Pass `new ConsoleLogger(LogLevel.DEBUG)` to see everything, or
+   * `new VoidLogger()` to silence it entirely.
+   */
   logger?: unknown
   /**
    * Override the jsDelivr-hosted bundle map. Required in environments where
@@ -375,14 +383,14 @@ async function dropAttachedResources(
 export async function bootDuckDBWasm(
   options: BootDuckDBWasmOptions = {},
 ): Promise<DuckDBWasmBootResult> {
-  const { getJsDelivrBundles, selectBundle, AsyncDuckDB, ConsoleLogger } = await import('@duckdb/duckdb-wasm')
+  const { getJsDelivrBundles, selectBundle, AsyncDuckDB, ConsoleLogger, LogLevel } = await import('@duckdb/duckdb-wasm')
   const bundles = options.bundles ?? getJsDelivrBundles()
   const bundle = await selectBundle(bundles)
   const workerUrl = URL.createObjectURL(
     new Blob([`importScripts("${bundle.mainWorker!}");`], { type: 'text/javascript' }),
   )
   const worker = new Worker(workerUrl)
-  const db = new AsyncDuckDB((options.logger as any) ?? new ConsoleLogger(), worker)
+  const db = new AsyncDuckDB((options.logger as any) ?? new ConsoleLogger(LogLevel.WARNING), worker)
   try {
     await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
     await db.open(rangeOnlyConfig(options.config))
