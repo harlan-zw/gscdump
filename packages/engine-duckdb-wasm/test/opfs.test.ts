@@ -174,14 +174,14 @@ describe('attachOpfsParquetTables', () => {
     expect(viewSql[0]).toContain('CREATE OR REPLACE VIEW main.pages')
     expect(opfs.files.size).toBe(1)
     const slug = await expectedSlug('iceberg/abc.parquet')
-    expect([...opfs.files.keys()][0]).toBe(`gscdump-snapshot__pages_0_${slug}.parquet`)
+    expect([...opfs.files.keys()][0]).toBe(`gscdump-snapshot__pages_${slug}.parquet`)
   })
 
   it('serves a cache hit (filename + size) without re-downloading', async () => {
     const opfs = makeFakeOpfs()
     const payload = new Uint8Array([9, 9, 9])
     const slug = await expectedSlug('iceberg/queries-0.parquet')
-    opfs.files.set(`gscdump-snapshot__queries_0_${slug}.parquet`, payload)
+    opfs.files.set(`gscdump-snapshot__queries_${slug}.parquet`, payload)
     installNavigatorStorage(opfs.root)
     const { db, conn } = stubDuckDb()
     const fetchSpy = okFetch(payload)
@@ -203,7 +203,7 @@ describe('attachOpfsParquetTables', () => {
     const opfs = makeFakeOpfs()
     // Old snapshot's cached file under the OLD content hash.
     const oldSlug = await expectedSlug('iceberg/old.parquet')
-    opfs.files.set(`gscdump-snapshot__pages_0_${oldSlug}.parquet`, new Uint8Array([0, 0, 0]))
+    opfs.files.set(`gscdump-snapshot__pages_${oldSlug}.parquet`, new Uint8Array([0, 0, 0]))
     installNavigatorStorage(opfs.root)
     const { db, conn } = stubDuckDb()
     const fresh = new Uint8Array([7, 7, 7])
@@ -220,14 +220,14 @@ describe('attachOpfsParquetTables', () => {
     // Stale entry swept; only the new file remains.
     expect(opfs.files.size).toBe(1)
     const newSlug = await expectedSlug('iceberg/new.parquet')
-    expect([...opfs.files.keys()][0]).toBe(`gscdump-snapshot__pages_0_${newSlug}.parquet`)
+    expect([...opfs.files.keys()][0]).toBe(`gscdump-snapshot__pages_${newSlug}.parquet`)
   })
 
   it('re-downloads when a cached file has the wrong byte size (partial write)', async () => {
     const opfs = makeFakeOpfs()
     const slug = await expectedSlug('iceberg/pages-0.parquet')
     // Wrong size — looks like a torn write.
-    opfs.files.set(`gscdump-snapshot__pages_0_${slug}.parquet`, new Uint8Array([0]))
+    opfs.files.set(`gscdump-snapshot__pages_${slug}.parquet`, new Uint8Array([0]))
     installNavigatorStorage(opfs.root)
     const { db, conn } = stubDuckDb()
     const fresh = new Uint8Array([1, 2, 3])

@@ -226,7 +226,7 @@ describe('opfs adversarial: multi-file table partial failure', () => {
     // Pre-compute file-1's name to mark it as a conflict.
     const { contentHashSlugFor } = await import('./helpers/slug')
     const file1Slug = await contentHashSlugFor('iceberg/p1.parquet')
-    const file1Name = `gscdump-snapshot__pages_1_${file1Slug}.parquet`
+    const file1Name = `gscdump-snapshot__pages_${file1Slug}.parquet`
     const stub = stubDuckDb({ conflictNames: new Set([file1Name]) })
 
     const handle = await attachOpfsParquetTables({
@@ -468,14 +468,22 @@ describe('opfs adversarial: cross-DB isolation', () => {
   })
 })
 
-describe('opfs adversarial: slot-boundary sweep', () => {
-  it('sweeping pages_0 must not delete pages_01 entries', async () => {
+describe('opfs adversarial: content-addressed sweep', () => {
+  it('reaps stale-hash + legacy index entries for the table, keeps sibling tables', async () => {
     const opfs = makeFakeOpfs()
-    // Seed a stale pages_0 (old hash) AND an unrelated pages_01 entry.
     const { contentHashSlugFor } = await import('./helpers/slug')
-    const oldSlug = await contentHashSlugFor('iceberg/old0.parquet')
-    opfs.files.set(`gscdump-snapshot__pages_0_${oldSlug}.parquet`, new Uint8Array([9]))
-    opfs.files.set(`gscdump-snapshot__pages_01_aaaaaaaaaaaaaaaa.parquet`, new Uint8Array([8, 8]))
+    const staleSlug = await contentHashSlugFor('iceberg/old.parquet')
+    const legacySlug = await contentHashSlugFor('iceberg/legacy.parquet')
+    // Stale content-addressed entry (hash no longer in the manifest).
+    opfs.files.set(`gscdump-snapshot__pages_${staleSlug}.parquet`, new Uint8Array([9]))
+    // Legacy index-named entries from a pre-content-addressing build — both the
+    // `<table>_<n>_<slug>` and the bare `<table>_<n>` forms.
+    opfs.files.set(`gscdump-snapshot__pages_0_${legacySlug}.parquet`, new Uint8Array([8]))
+    opfs.files.set(`gscdump-snapshot__pages_1.parquet`, new Uint8Array([7]))
+    // A DIFFERENT table whose name extends `pages` — must survive. The matcher
+    // is anchored on a pure hex/index segment, so `summary_…` can't match the
+    // `pages` sweep (this is the boundary the old per-slot sweep protected).
+    opfs.files.set(`gscdump-snapshot__pages_summary_aaaaaaaaaaaaaaaa.parquet`, new Uint8Array([6, 6]))
     installNavigatorStorage(opfs.root)
     const stub = stubDuckDb()
 
@@ -483,13 +491,19 @@ describe('opfs adversarial: slot-boundary sweep', () => {
       db: stub.db,
       conn: stub.conn,
       fetch: okFetch(() => new Uint8Array([1, 2, 3])),
-      tables: [{ table: 'pages', files: [{ url: '/x', bytes: 3, contentHash: 'iceberg/new0.parquet' }] }],
+      tables: [{ table: 'pages', files: [{ url: '/x', bytes: 3, contentHash: 'iceberg/new.parquet' }] }],
     })
 
-    // pages_01 must survive the pages_0 sweep.
-    expect([...opfs.files.keys()]).toContain('gscdump-snapshot__pages_01_aaaaaaaaaaaaaaaa.parquet')
-    // The stale pages_0 (old hash) must be gone.
-    expect([...opfs.files.keys()].some(k => k.includes(`pages_0_${oldSlug}`))).toBe(false)
+    const keys = [...opfs.files.keys()]
+    // Sibling table preserved.
+    expect(keys).toContain('gscdump-snapshot__pages_summary_aaaaaaaaaaaaaaaa.parquet')
+    // Stale + both legacy forms for `pages` reaped.
+    expect(keys.some(k => k.includes(`pages_${staleSlug}`))).toBe(false)
+    expect(keys.some(k => k.includes(`pages_0_${legacySlug}`))).toBe(false)
+    expect(keys).not.toContain('gscdump-snapshot__pages_1.parquet')
+    // The fresh file is materialised under its content address.
+    const newSlug = await contentHashSlugFor('iceberg/new.parquet')
+    expect(keys).toContain(`gscdump-snapshot__pages_${newSlug}.parquet`)
   })
 })
 
@@ -555,7 +569,7 @@ describe('opfs adversarial: table churn on a shared DB', () => {
   })
 
   it('same table in two different schemas shares one handle but keeps independent views', async () => {
-    // opfsFileName is keyed by (table, index, hash) — NOT schema — so the same
+    // opfsFileName is keyed by (table, content hash) — NOT schema — so the same
     // table attached into `main` and `site2` collapses to ONE OPFS file/handle,
     // yet each schema gets its own view. Detaching one schema must drop only its
     // view and decrement (not drop) the shared handle.

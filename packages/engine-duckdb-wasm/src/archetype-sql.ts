@@ -239,7 +239,11 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
       }
       const col = DIM_COLUMN[query.dimension]!
       const facet = facetPredicate(query)
-      let sql = `SELECT ${col} AS ${query.dimension}, ${metricSelectList(query.metrics)} `
+      // Full group count (independent of LIMIT/OFFSET) for load-more tables.
+      // `COUNT(*) OVER()` evaluates over the grouped result before LIMIT, so it
+      // reports every distinct dimension value matching the WHERE/facet.
+      const totalCol = query.includeTotal ? ', COUNT(*) OVER() AS __total' : ''
+      let sql = `SELECT ${col} AS ${query.dimension}, ${metricSelectList(query.metrics)}${totalCol} `
         + `FROM ${table} WHERE ${where.sql}${facet.sql} GROUP BY ${col} `
         + `ORDER BY ${query.orderBy.metric} ${dir} LIMIT ?`
       const params = [...where.params, ...facet.params, query.limit]

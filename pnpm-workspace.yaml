@@ -32,8 +32,8 @@ overrides:
 patchedDependencies:
   icebird@0.8.8: patches/icebird@0.8.8.patch
 catalog:
-  '@cloudflare/vitest-pool-workers': ^0.16.10
-  '@cloudflare/workers-types': ^4.20260531.1
+  '@cloudflare/vitest-pool-workers': ^0.16.11
+  '@cloudflare/workers-types': ^4.20260602.1
   '@duckdb/duckdb-wasm': ^1.32.0
   '@duckdb/node-api': 1.5.1-r.2
   '@huggingface/transformers': ^4.2.0
@@ -45,14 +45,14 @@ catalog:
   '@unovis/ts': ^1.6.5
   '@unovis/vue': ^1.6.5
   '@uwdata/flechette': ^2.5.0
-  '@vitest/browser-playwright': ^4.1.7
+  '@vitest/browser-playwright': ^4.1.8
   aws4fetch: ^1.0.20
   drizzle-orm: 1.0.0-rc.3
   h3: ^1.15.11
   hyparquet: ^1.26.0
   hyparquet-writer: ^0.15.6
   icebird: ^0.8.8
-  js-yaml: ^4.1.1
+  js-yaml: ^4.2.0
   nuxt: ^4.4.6
   nuxt-use-query: ^0.3.2
   playwright: ^1.60.0
@@ -61,7 +61,7 @@ catalog:
   tsx: ^4.22.4
   vitest-package-exports: ^1.2.0
   vue: ^3.5.35
-  wrangler: ^4.95.0
+  wrangler: ^4.96.0
   zod: ^4.4.3
 catalogs:
   deps:
@@ -86,8 +86,8 @@ catalogs:
     eslint: ^10.4.1
   dev-test:
     '@nuxt/test-utils': ^4.0.3
-    '@vitest/browser': ^4.1.7
-    vitest: ^4.1.7
+    '@vitest/browser': ^4.1.8
+    vitest: ^4.1.8
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true

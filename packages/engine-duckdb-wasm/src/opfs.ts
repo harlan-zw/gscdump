@@ -13,10 +13,16 @@
  *   Filter / date-range changes within the attached span re-query, never
  *   re-attach.
  * - CONTENT-ADDRESSED — the `contentHash` from the contract is encoded into
- *   the OPFS filename. Same hash → same filename → existence is the cache
- *   hit. Different hash → new filename → fresh download. No re-hashing on
- *   the cache-hit path. Stale entries (same `(table,index)` but a different
- *   hash) are swept at attach time.
+ *   the OPFS filename as `<table>_<slug>.parquet`. Same hash → same filename →
+ *   existence is the cache hit, REGARDLESS of the file's position in the
+ *   manifest. This is load-bearing: the resolver returns the same physical file
+ *   at different array indices across endpoints (e.g. a single-table
+ *   `bulk-sources` vs a multi-table `analysis-sources`), so any index in the
+ *   filename would re-download identical bytes under a new name and orphan the
+ *   old copy. Different hash → new filename → fresh download. No re-hashing on
+ *   the cache-hit path. Stale entries for a table (a hash no longer in the
+ *   current manifest, plus legacy index-named files from older builds) are
+ *   swept at attach time.
  * - QUOTA-SAFE — `QuotaExceededError` degrades (the caller routes that table
  *   server-side); it never crashes the page.
  * - `navigator.storage.persist()` is requested up front so the browser is less
@@ -186,24 +192,58 @@ function isOpfsAccessHandleConflict(err: unknown): boolean {
 }
 
 /**
- * OPFS file name for a `(table, index, contentHash?)` triple. When a content
- * hash is supplied, it's encoded as an 8-byte slug suffix so the filename
- * itself is the cache address: same hash → same filename → trivial cache
- * hit. The `(table, index)` prefix lets us sweep stale entries cheaply.
+ * OPFS file name for a file. When a content hash is supplied it's the cache
+ * address — `<table>_<slug>.parquet`, NO index — so the same content is one
+ * filename no matter where it sits in the manifest. The `index` is used ONLY
+ * as the disambiguator in the degraded no-`contentHash` fallback, where the
+ * filename can't be content-addressed and we have nothing else to keep two
+ * files of the same table apart.
  */
-function opfsFileName(table: string, index: number, hashSlug?: string): string {
-  const base = `${OPFS_PREFIX}${table}_${index}`
-  return hashSlug ? `${base}_${hashSlug}.parquet` : `${base}.parquet`
+function opfsFileName(table: string, hashSlug: string | undefined, index: number): string {
+  return hashSlug
+    ? `${OPFS_PREFIX}${table}_${hashSlug}.parquet`
+    : `${OPFS_PREFIX}${table}_${index}.parquet`
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 /**
- * Sweep prefix matching every cache entry for a `(table, index)` slot —
- * both legacy `<base>.parquet` and hash-suffixed `<base>_<slug>.parquet`
- * forms. The trailing-character check at the call site enforces the
- * delimiter (`.` or `_`) so `pages_0` never sweeps `pages_01`.
+ * Matcher for every OPFS entry that belongs to `table` — the content-addressed
+ * form `<table>_<16hex>.parquet` and the legacy index forms `<table>_<n>.parquet`
+ * / `<table>_<n>_<16hex>.parquet` left by older builds. Anchored on the exact
+ * slug/index shape so a sibling table whose name extends this one (`pages` vs
+ * `pages_summary`, `search_appearance` vs `search_appearance_pages`) never
+ * matches: the segment after `<table>_` is then a word, not hex-or-digits.
  */
-function opfsFileNamePrefix(table: string, index: number): string {
-  return `${OPFS_PREFIX}${table}_${index}`
+function tableEntryMatcher(table: string): RegExp {
+  return new RegExp(`^${escapeRegExp(`${OPFS_PREFIX}${table}_`)}(?:[0-9a-f]{16}|\\d+(?:_[0-9a-f]{16})?)\\.parquet$`)
+}
+
+/**
+ * Reap every cached OPFS entry for the attached tables that the current
+ * manifest no longer references — stale-hash files (content rotated to a new
+ * snapshot) and legacy index-named files from builds before content-addressing.
+ * One directory scan; an entry is removed only when it matches exactly one
+ * attached table's shape, isn't in that table's expected set, and isn't held
+ * live by the registry (a concurrent consumer of the shared DB).
+ */
+async function sweepStaleEntries(
+  root: FileSystemDirectoryHandle,
+  registry: OpfsHandleRegistry,
+  expectedByTable: Map<string, Set<string>>,
+): Promise<void> {
+  const dir = root as FileSystemDirectoryHandle & { keys?: () => AsyncIterableIterator<string> }
+  if (!dir.keys)
+    return
+  const matchers = [...expectedByTable].map(([table, expected]) => ({ expected, re: tableEntryMatcher(table) }))
+  for await (const name of dir.keys()) {
+    const m = matchers.find(m => m.re.test(name))
+    if (!m || m.expected.has(name) || registry.refs(name) > 0)
+      continue
+    await root.removeEntry(name).catch(() => {})
+  }
 }
 
 /**
@@ -258,13 +298,12 @@ async function getOpfsRoot(): Promise<FileSystemDirectoryHandle> {
  * Return an OPFS file handle for `file`, downloading it if absent. The
  * filename encodes the `contentHash` (when supplied), so existence + size
  * match is sufficient verification — no SHA recomputation on the hot path.
- * Stale entries for the same `(table, index)` but a different content hash
- * are swept before download.
+ * Stale entries are reaped once up front by {@link sweepStaleEntries}, so this
+ * is a pure cache-probe-then-download.
  */
 async function materialiseFile(
   root: FileSystemDirectoryHandle,
   name: string,
-  staleSweepPrefix: string,
   file: OpfsParquetFile,
   fetchImpl: typeof fetch,
   fetchInit: RequestInit | undefined,
@@ -283,21 +322,6 @@ async function materialiseFile(
   }
   catch {
     // Not cached yet — fall through to download.
-  }
-
-  // ---- sweep stale entries -----------------------------------------------
-  // Same `(table, index)` with a different content hash → orphaned cache
-  // entry. Remove it before writing the new one so OPFS doesn't accumulate.
-  const dir = root as FileSystemDirectoryHandle & { keys?: () => AsyncIterableIterator<string> }
-  if (dir.keys) {
-    for await (const existing of dir.keys()) {
-      if (existing === name || !existing.startsWith(staleSweepPrefix) || !existing.endsWith('.parquet'))
-        continue
-      // Enforce a slot boundary so `pages_0` never sweeps `pages_01_*.parquet`.
-      const next = existing.charAt(staleSweepPrefix.length)
-      if (next === '.' || next === '_')
-        await root.removeEntry(existing).catch(() => {})
-    }
   }
 
   // ---- download -----------------------------------------------------------
@@ -411,16 +435,31 @@ export async function attachOpfsParquetTables(
   await requestPersistentStorage()
   const root = await getOpfsRoot()
 
-  // Flatten so downloads run with global concurrency, not per-table. An overlay
-  // is just one more file to materialise; it takes the fileIndex AFTER the lake
-  // files (so its OPFS name + stale-sweep prefix never collide with a lake file)
-  // and is flagged so the view build can dedup the lake against it.
-  const flat: Array<{ table: string, file: OpfsParquetFile, fileIndex: number, overlay?: boolean }> = []
+  // Flatten so downloads run with global concurrency, not per-table. Each item
+  // carries its content-addressed OPFS name (computed once here, not per
+  // download attempt). An overlay is just one more file to materialise; its
+  // index disambiguator sits AFTER the lake files for the no-`contentHash`
+  // fallback, and it's flagged so the view build can dedup the lake against it.
+  const flat: Array<{ table: string, file: OpfsParquetFile, name: string, overlay?: boolean }> = []
+  // Expected OPFS names per table — the cache-address set the sweep keeps and
+  // everything else for the table (stale hashes, legacy index names) reaps.
+  const expectedByTable = new Map<string, Set<string>>()
   for (const t of tables) {
-    for (let i = 0; i < t.files.length; i++)
-      flat.push({ table: t.table, file: t.files[i]!, fileIndex: i })
-    if (t.overlay)
-      flat.push({ table: t.table, file: t.overlay, fileIndex: t.files.length, overlay: true })
+    const expected = new Set<string>()
+    for (let i = 0; i < t.files.length; i++) {
+      const file = t.files[i]!
+      const slug = file.contentHash ? await contentHashSlug(file.contentHash) : undefined
+      const name = opfsFileName(t.table, slug, i)
+      flat.push({ table: t.table, file, name })
+      expected.add(name)
+    }
+    if (t.overlay) {
+      const slug = t.overlay.contentHash ? await contentHashSlug(t.overlay.contentHash) : undefined
+      const name = opfsFileName(t.table, slug, t.files.length)
+      flat.push({ table: t.table, file: t.overlay, name, overlay: true })
+      expected.add(name)
+    }
+    expectedByTable.set(t.table, expected)
   }
   const total = flat.length
   // Per-table OPFS name of the overlay file (when present), so the view build
@@ -432,6 +471,11 @@ export async function attachOpfsParquetTables(
 
   const { DuckDBDataProtocol } = await import('@duckdb/duckdb-wasm')
   const registry = getOpfsRegistry(db, DuckDBDataProtocol.BROWSER_FSACCESS)
+
+  // Reap stale-hash + legacy index-named entries for these tables up front (one
+  // directory scan) so OPFS doesn't accumulate a copy per snapshot version /
+  // manifest ordering. Best-effort — a sweep failure never blocks the attach.
+  await sweepStaleEntries(root, registry, expectedByTable).catch(() => {})
 
   // Per-table OPFS file names + the registered handles, so a table that hits
   // a quota error can be dropped wholesale.
@@ -452,12 +496,10 @@ export async function attachOpfsParquetTables(
     if (degraded.has(item.table))
       return
     signal?.throwIfAborted()
-    const hashSlug = item.file.contentHash ? await contentHashSlug(item.file.contentHash) : undefined
-    const name = opfsFileName(item.table, item.fileIndex, hashSlug)
-    const sweepPrefix = opfsFileNamePrefix(item.table, item.fileIndex)
+    const name = item.name
     let result: { handle: FileSystemFileHandle, outcome: 'cache-hit' | 'downloaded' }
     try {
-      result = await materialiseFile(root, name, sweepPrefix, item.file, fetchImpl, fetchInit, signal)
+      result = await materialiseFile(root, name, item.file, fetchImpl, fetchInit, signal)
     }
     catch (err) {
       if (isAbortError(err))

@@ -181,7 +181,7 @@ describe('opfs attach against real browser OPFS', () => {
     const root = await navigator.storage.getDirectory()
     let name: string | undefined
     for await (const k of (root as any).keys()) {
-      if (k.startsWith('gscdump-snapshot__pages_0_'))
+      if (k.startsWith('gscdump-snapshot__pages_'))
         name = k
     }
     expect(name).toBeDefined()
@@ -211,7 +211,7 @@ describe('opfs attach against real browser OPFS', () => {
     const root = await navigator.storage.getDirectory()
     const keys: string[] = []
     for await (const k of (root as any).keys()) keys.push(k)
-    expect(keys.some(k => k.startsWith('gscdump-snapshot__pages_0_'))).toBe(true)
+    expect(keys.some(k => k.startsWith('gscdump-snapshot__pages_'))).toBe(true)
     await handle.detach()
   })
 
@@ -294,7 +294,7 @@ describe('opfs attach against real browser OPFS', () => {
     // Compute file-1's OPFS name and pre-materialise + pre-open it to force the
     // conflict on registration.
     const file1Slug = await slugFor('iceberg/m1.parquet')
-    const file1Name = `gscdump-snapshot__pages_1_${file1Slug}.parquet`
+    const file1Name = `gscdump-snapshot__pages_${file1Slug}.parquet`
     const root = await navigator.storage.getDirectory()
     const fh = await root.getFileHandle(file1Name, { create: true })
     // Pre-write the correct 3 bytes so materialiseFile takes the cache-hit path

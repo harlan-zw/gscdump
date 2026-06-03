@@ -158,6 +158,15 @@ export interface TopNBreakdownQuery extends ArchetypeQueryBase {
   limit: number
   /** Pagination offset. Non-zero may force `duckdb` execution. */
   offset?: number
+  /**
+   * Request the full unwindowed group count (`meta.totalRows`) so paginated /
+   * load-more tables know how many rows exist beyond the current `limit`.
+   * Computed as `COUNT(*) OVER()` over the grouped result, which requires a
+   * window function — so a query with `includeTotal` is escalated to `duckdb`
+   * on the server tail (R2 SQL cannot express it). Not honoured for the
+   * `device` dimension, which has at most a handful of rows.
+   */
+  includeTotal?: boolean
 }
 
 // ── 5. Single-row lookup ─────────────────────────────────────────────────────
@@ -255,6 +264,12 @@ export interface ArchetypeResult<R extends ArchetypeResultRow = ArchetypeResultR
   meta?: {
     rowCount: number
     queryMs: number
+    /**
+     * Full unwindowed group count for a `top-n-breakdown` requested with
+     * `includeTotal`. Independent of `limit`/`offset`; lets paginated tables
+     * show "X of Y" and stop loading. Undefined when not requested.
+     */
+    totalRows?: number
     /** Set when `compareRange` was supplied — the comparison-period rows. */
     compareRows?: R[]
     truncated?: boolean

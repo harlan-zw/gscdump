@@ -242,7 +242,11 @@ function buildTopNBreakdown(q: TopNBreakdownQuery): ArchetypeSqlPlan {
   const metrics = metricList.map(metricExpr).join(', ')
   const order = `${q.orderBy.metric} ${q.orderBy.dir.toUpperCase()}`
   const facet = facetPredicate(q)
-  let sql = `SELECT ${col}, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} `
+  // Full group count for load-more tables. `COUNT(*) OVER()` is a window
+  // function, so a query reaching this column has already been escalated to the
+  // DuckDB executor by the dispatcher (R2 SQL cannot run it).
+  const totalCol = q.includeTotal ? ', COUNT(*) OVER() AS __total' : ''
+  let sql = `SELECT ${col}, ${metrics}${totalCol} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} `
     + `GROUP BY ${col} ORDER BY ${order} LIMIT ${Math.max(0, Math.floor(q.limit))}`
   if (q.offset && q.offset > 0)
     sql += ` OFFSET ${Math.floor(q.offset)}`

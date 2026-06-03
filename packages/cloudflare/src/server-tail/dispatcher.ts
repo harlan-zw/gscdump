@@ -55,6 +55,10 @@ export function resolveServerTailEngine(query: ArchetypeQuery): ServerTailEngine
   // Escalation: top-n-breakdown with non-zero offset (R2 SQL OFFSET unverified).
   if (query.archetype === 'top-n-breakdown' && query.offset && query.offset > 0)
     return 'duckdb'
+  // Escalation: top-n-breakdown with includeTotal needs `COUNT(*) OVER()`, a
+  // window function R2 SQL cannot express — run it on DuckDB.
+  if (query.archetype === 'top-n-breakdown' && query.includeTotal)
+    return 'duckdb'
   // Escalation: facet predicates (Country/Device/Brand) are only compiled by the
   // DuckDB builder — brand uses `regexp_matches`, which R2 SQL lacks — so any
   // faceted query runs on DuckDB. `facets` lives on `ArchetypeQueryBase`, but the
@@ -68,6 +72,22 @@ export function resolveServerTailEngine(query: ArchetypeQuery): ServerTailEngine
 /** Result envelope `source` for the chosen engine. */
 function sourceFor(engine: ServerTailEngine): ArchetypeResult['source'] {
   return engine === 'r2-sql' ? 'server-r2-sql' : 'server-duckdb'
+}
+
+/**
+ * Pull the `__total` window column (emitted by `includeTotal` breakdowns) out
+ * of the rows and return it alongside the cleaned rows, so it never leaks into
+ * the dimension/metric payload the consumer renders.
+ */
+function extractTotal<R extends ArchetypeResultRow>(rows: R[]): { rows: R[], totalRows?: number } {
+  if (!rows.length || !('__total' in rows[0]!))
+    return { rows }
+  const totalRows = Number(rows[0]!.__total) || 0
+  const cleaned = rows.map((r) => {
+    const { __total, ...rest } = r as Record<string, unknown>
+    return rest as R
+  })
+  return { rows: cleaned, totalRows }
 }
 
 /** A configured server-tail dispatcher. */
@@ -129,11 +149,16 @@ export function createServerTailDispatcher(
       }
     }
     const res = await config.duckdb.runArchetype(query)
+    const { rows, totalRows } = extractTotal(res.rows as R[])
     return {
       archetype: query.archetype,
-      rows: res.rows as R[],
+      rows,
       source: sourceFor('duckdb'),
-      meta: { rowCount: res.rows.length, queryMs: res.queryMs },
+      meta: {
+        rowCount: rows.length,
+        queryMs: res.queryMs,
+        ...(totalRows !== undefined ? { totalRows } : {}),
+      },
     }
   }
 
