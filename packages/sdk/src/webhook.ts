@@ -3,8 +3,10 @@ import type {
   PartnerWebhookHeaders,
   WebhookEnvelope,
 } from '@gscdump/contracts'
+import type { Result } from 'gscdump/result'
 import { partnerWebhookEnvelopeSchema, WEBHOOK_CONTRACT_VERSION, WEBHOOK_CONTRACT_VERSION_HEADER, WEBHOOK_DELIVERY_HEADER, WEBHOOK_EVENT_HEADER, WEBHOOK_SIGNATURE_HEADER, WEBHOOK_TIMESTAMP_HEADER } from '@gscdump/contracts'
-import { PartnerApiError } from './errors'
+import { err, ok, unwrapResult } from 'gscdump/result'
+import { PartnerApiError, partnerErrorToException } from './errors'
 
 export {
   CANONICAL_WEBHOOK_EVENTS,
@@ -139,6 +141,39 @@ export async function verifyWebhookSignature(payload: string | object, signature
   return constantTimeEqual(expected, received)
 }
 
+/**
+ * Errors-as-values core for {@link parseWebhookPayload}: a failed HMAC signature
+ * check is a caller-actionable `auth` (401) failure at the webhook boundary, so
+ * it is returned as a modelled `PartnerApiError` rather than only thrown. A
+ * malformed envelope (schema parse) is a defect and keeps propagating.
+ */
+export async function parseWebhookPayloadResult<TData extends Record<string, unknown> = Record<string, unknown>>(
+  payload: string | object,
+  options: {
+    secret?: string
+    signature?: string | null
+    headers?: PartnerWebhookHeaders | Headers
+    validateSignature?: boolean
+  } = {},
+): Promise<Result<WebhookEnvelope<TData>, PartnerApiError>> {
+  const payloadString = toPayloadString(payload)
+  const signature = options.signature ?? readWebhookHeaders(options.headers).signature
+
+  if (options.secret && (options.validateSignature ?? true)) {
+    const valid = await verifyWebhookSignature(payloadString, signature, options.secret)
+    if (!valid) {
+      return err(new PartnerApiError({
+        kind: 'auth',
+        statusCode: 401,
+        message: 'Invalid webhook signature',
+      }))
+    }
+  }
+
+  const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload
+  return ok(partnerWebhookEnvelopeSchema.parse(parsed) as WebhookEnvelope<TData>)
+}
+
 export async function parseWebhookPayload<TData extends Record<string, unknown> = Record<string, unknown>>(
   payload: string | object,
   options: {
@@ -148,22 +183,7 @@ export async function parseWebhookPayload<TData extends Record<string, unknown> 
     validateSignature?: boolean
   } = {},
 ): Promise<WebhookEnvelope<TData>> {
-  const payloadString = toPayloadString(payload)
-  const signature = options.signature ?? readWebhookHeaders(options.headers).signature
-
-  if (options.secret && (options.validateSignature ?? true)) {
-    const valid = await verifyWebhookSignature(payloadString, signature, options.secret)
-    if (!valid) {
-      throw new PartnerApiError({
-        kind: 'auth',
-        statusCode: 401,
-        message: 'Invalid webhook signature',
-      })
-    }
-  }
-
-  const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload
-  return partnerWebhookEnvelopeSchema.parse(parsed) as WebhookEnvelope<TData>
+  return unwrapResult(await parseWebhookPayloadResult<TData>(payload, options), partnerErrorToException)
 }
 
 export function readWebhookHeaders(headers: Headers | PartnerWebhookHeaders | null | undefined): Required<PartnerWebhookHeaders> {

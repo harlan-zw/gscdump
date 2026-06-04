@@ -51,6 +51,7 @@
   deriveSiteBaseline: function
   enrichIssueDetails: function
   findLifecycleSite: function
+  formatPartnerError: function
   getGscUnstableCutoffDate: function
   GSC_COLUMN_OPTIONS: object
   GSC_PERIOD_OPTIONS: object
@@ -83,6 +84,8 @@
   gscdumpKeywordSparklinesParamsSchema: object
   gscdumpKeywordSparklinesResponseSchema: object
   gscdumpMetaSchema: object
+  gscdumpPageTrendParamsSchema: object
+  gscdumpPageTrendResponseSchema: object
   gscdumpPermissionRecoverySchema: object
   gscdumpQueryTrendParamsSchema: object
   gscdumpQueryTrendResponseSchema: object
@@ -126,6 +129,7 @@
   inspectionRecordRawSchema: object
   investigationStatusConfig: object
   isCustomPeriod: function
+  isPartnerError: function
   issueDetails: object
   issueGroups: object
   issueTypeToGroup: object
@@ -141,8 +145,10 @@
   parseCustomPeriod: function
   parseGrantedScopes: function
   parseWebhookPayload: function
+  parseWebhookPayloadResult: function
   PartnerApiError: function
   partnerEndpointSchemas: object
+  partnerErrorToException: function
   partnerLifecycleAccountSchema: object
   partnerLifecycleResponseSchema: object
   partnerLifecycleSiteSchema: object
@@ -199,7 +205,9 @@
   and: function
   between: function
   buildLogicalComparisonPlan: function
+  buildLogicalComparisonPlanResult: function
   buildLogicalPlan: function
+  buildLogicalPlanResult: function
   clicks: object
   contains: function
   Countries: object
@@ -215,6 +223,7 @@
   extractMetricFilters: function
   extractSearchType: function
   extractSpecialOperatorFilters: function
+  formatQueryError: function
   gsc: object
   gt: function
   gte: function
@@ -222,11 +231,13 @@
   impressions: object
   inArray: function
   isJsonFilter: function
+  isQueryError: function
   like: function
   lt: function
   lte: function
   ne: function
   normalizeBuilderState: function
+  normalizeBuilderStateResult: function
   normalizeFilter: function
   not: function
   notRegex: function
@@ -237,10 +248,15 @@
   query: object
   query_exports: object
   queryCanonical: object
+  queryErrors: object
+  queryErrorToException: function
   regex: function
+  resolveToBody: function
+  resolveToBodyResult: function
   searchAppearance: object
   searchType: object
   SearchTypes: object
   today: function
   topLevel: function
+  UnresolvableDatasetError: function
   UnsupportedLogicalCapabilityError: function

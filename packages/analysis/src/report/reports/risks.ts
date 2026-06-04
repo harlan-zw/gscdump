@@ -9,6 +9,7 @@
 import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection, ReportSeverity } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
+import { requireComparisonWindow } from '../require'
 
 export interface RisksReportParams {
   maxFindings?: number
@@ -25,10 +26,9 @@ export const risksReport = defineReport<RisksReportParams>({
     'max-findings': { type: 'number', description: 'Cap findings per section', default: DEFAULT_MAX },
   },
   plan: (_params, window) => {
-    if (!window.comparison)
-      throw new Error('risks report requires a comparison window — pass --vs prev-period')
+    const comparison = requireComparisonWindow('risks', window, 'risks report requires a comparison window — pass --vs prev-period')
     const dates = { startDate: window.start, endDate: window.end }
-    const prev = { prevStartDate: window.comparison.start, prevEndDate: window.comparison.end }
+    const prev = { prevStartDate: comparison.start, prevEndDate: comparison.end }
     return [
       { key: 'decay', type: 'decay', params: { ...dates, ...prev, limit: 100 }, required: true },
       { key: 'cannibalization', type: 'cannibalization', params: { ...dates, limit: 50 } },

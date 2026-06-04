@@ -1,8 +1,12 @@
 import type { GscSearchAnalyticsDimension, GscSearchAnalyticsFilterGroup, GscSearchAnalyticsFilterOperator, GscSearchAnalyticsRequest, GscSearchType } from '../contracts'
+import type { Result } from '../core/result'
 import type { SearchType } from './constants'
+import type { QueryError } from './errors'
 import type { BuilderState, Filter, FilterInput, InternalFilter, JsonFilter } from './types'
 import { addDays } from '../core/gsc-dates'
+import { err, ok, unwrapResult } from '../core/result'
 import { SearchTypes } from './constants'
+import { queryErrors, queryErrorToException } from './errors'
 import { isDateOperator, isMetricOperator, isQueryParam, isSpecialOperator } from './operator-meta'
 
 const KNOWN_SEARCH_TYPES = new Set<string>(Object.values(SearchTypes))
@@ -116,9 +120,15 @@ export function normalizeFilter(input?: FilterInput): Filter<any> | undefined {
 // Project an untyped partner-API request body into a typed BuilderState,
 // normalizing the embedded filter from wire format. Use at the receive edge
 // of partner endpoints that accept JSON bodies from SDK consumers.
-export function normalizeBuilderState(state: unknown): BuilderState {
+/**
+ * Errors-as-values core for {@link normalizeBuilderState}: returns an
+ * `invalid-builder-state` `QueryError` when the untrusted partner-API body is
+ * not an object, instead of throwing. Receive-edge parse, so hosts can map a bad
+ * body to a 4xx.
+ */
+export function normalizeBuilderStateResult(state: unknown): Result<BuilderState, QueryError> {
   if (!state || typeof state !== 'object')
-    throw new Error('Invalid state')
+    return err(queryErrors.invalidBuilderState(state))
   const s = state as Record<string, unknown>
   const normalized: BuilderState = {
     dimensions: s.dimensions as BuilderState['dimensions'],
@@ -132,7 +142,11 @@ export function normalizeBuilderState(state: unknown): BuilderState {
   }
   if (typeof s.searchType === 'string' && KNOWN_SEARCH_TYPES.has(s.searchType))
     normalized.searchType = s.searchType as SearchType
-  return normalized
+  return ok(normalized)
+}
+
+export function normalizeBuilderState(state: unknown): BuilderState {
+  return unwrapResult(normalizeBuilderStateResult(state), queryErrorToException)
 }
 
 interface FilterExtraction {
@@ -266,13 +280,19 @@ export function extractSearchType(state: BuilderState | undefined | null): Searc
   return KNOWN_SEARCH_TYPES.has(raw) ? raw as SearchType : undefined
 }
 
-export function resolveToBody(state: BuilderState): GscSearchAnalyticsRequest {
+/**
+ * Errors-as-values core: turns a `BuilderState` into a GSC API request body or
+ * returns a typed `QueryError` for every modelled bad-query case (missing date
+ * range, out-of-range row limit / start row, hour/dataState mismatch, illegal
+ * aggregationType combination). `resolveToBody` is the throwing wrapper over this
+ * for `.toBody()` and the live-API client paths.
+ */
+export function resolveToBodyResult(state: BuilderState): Result<GscSearchAnalyticsRequest, QueryError> {
   // Extract date constraints and query params from filter
   const { startDate, endDate, searchType, dimensionFilter } = extractSpecialFilters(state.filter)
 
-  if (!startDate || !endDate) {
-    throw new Error('Date range required: use .where(between(date, start, end)) or .where(and(gte(date, start), lte(date, end)))')
-  }
+  if (!startDate || !endDate)
+    return err(queryErrors.missingDateRange())
 
   const body: GscSearchAnalyticsRequest = {
     dimensions: state.dimensions as GscSearchAnalyticsDimension[],
@@ -288,7 +308,7 @@ export function resolveToBody(state: BuilderState): GscSearchAnalyticsRequest {
 
   if (state.rowLimit !== undefined) {
     if (!Number.isInteger(state.rowLimit) || state.rowLimit < 1)
-      throw new Error(`rowLimit must be a positive integer, got ${state.rowLimit}`)
+      return err(queryErrors.invalidRowLimit(state.rowLimit))
     // Builder `.limit(n)` is a *total* row cap; the pagination layer in
     // `client.query` paginates in ≤25k chunks. Pass through unclamped so
     // `.toBody()` callers retain the original intent.
@@ -297,16 +317,16 @@ export function resolveToBody(state: BuilderState): GscSearchAnalyticsRequest {
 
   if (state.startRow !== undefined) {
     if (!Number.isInteger(state.startRow) || state.startRow < 0)
-      throw new Error(`startRow must be a non-negative integer, got ${state.startRow}`)
+      return err(queryErrors.invalidStartRow(state.startRow))
     if (state.startRow > 0)
       body.startRow = state.startRow
   }
 
   const hasHour = state.dimensions?.includes('hour' as GscSearchAnalyticsDimension)
   if (hasHour && state.dataState !== 'hourly_all')
-    throw new Error('hour dimension requires dataState: "hourly_all"')
+    return err(queryErrors.hourDimensionRequiresHourlyState())
   if (state.dataState === 'hourly_all' && !hasHour)
-    throw new Error('dataState: "hourly_all" requires grouping by hour dimension')
+    return err(queryErrors.hourlyStateRequiresHourDimension())
 
   if (state.dataState) {
     body.dataState = state.dataState
@@ -324,25 +344,29 @@ export function resolveToBody(state: BuilderState): GscSearchAnalyticsRequest {
 
     if (state.aggregationType === 'byProperty') {
       if (body.type === 'discover' || body.type === 'googleNews')
-        throw new Error('aggregationType: "byProperty" is not supported for type "discover" or "googleNews"')
+        return err(queryErrors.byPropertyUnsupportedSearchType())
       if (groupsByPage || filtersByPage)
-        throw new Error('aggregationType: "byProperty" is not allowed when grouping or filtering by page')
+        return err(queryErrors.byPropertyNotAllowedWithPage())
     }
     if (state.aggregationType === 'byNewsShowcasePanel') {
       if (body.type !== 'discover' && body.type !== 'googleNews')
-        throw new Error('aggregationType: "byNewsShowcasePanel" requires type "discover" or "googleNews"')
+        return err(queryErrors.byNewsShowcaseRequiresSearchType())
       if (groupsByPage || filtersByPage)
-        throw new Error('aggregationType: "byNewsShowcasePanel" is not allowed when grouping or filtering by page')
+        return err(queryErrors.byNewsShowcaseNotAllowedWithPage())
       const saFilters = apiLeafFilters.filter(f => f.dimension === 'searchAppearance')
       const hasNewsShowcase = saFilters.some(f => f.operator === 'equals' && f.expression === 'NEWS_SHOWCASE')
       const hasOther = saFilters.some(f => !(f.operator === 'equals' && f.expression === 'NEWS_SHOWCASE'))
       if (!hasNewsShowcase || hasOther)
-        throw new Error('aggregationType: "byNewsShowcasePanel" requires a searchAppearance equals "NEWS_SHOWCASE" filter and no other searchAppearance filter')
+        return err(queryErrors.byNewsShowcaseRequiresShowcaseFilter())
     }
     body.aggregationType = state.aggregationType
   }
 
-  return body
+  return ok(body)
+}
+
+export function resolveToBody(state: BuilderState): GscSearchAnalyticsRequest {
+  return unwrapResult(resolveToBodyResult(state), queryErrorToException)
 }
 
 function isApiFilter(f: InternalFilter): boolean {

@@ -4,7 +4,11 @@
 // (browser) or @duckdb/node-api (Node) — the caller supplies a runner that
 // executes SQL and returns plain row objects.
 
+import type { Result } from 'gscdump/result'
+import type { EngineError } from '../errors'
 import type { SnapshotIndex } from '../snapshot'
+import { err, ok, unwrapResult } from 'gscdump/result'
+import { engineErrors } from '../errors'
 
 /**
  * Runs arbitrary SQL and returns rows as plain objects. Caller supplies
@@ -56,24 +60,51 @@ export function snapshotAlias(fileName: string): string {
   return `cold_${m[1].replace('-', '_')}`
 }
 
-export async function attachSnapshotIndex(
+// The snapshot-index validation guards historically threw `TypeError` (shape /
+// identifier / SQL-injection guardrails) while a missing presigned URL threw a
+// plain `Error`. Preserve both classes so callers' `instanceof` checks (and the
+// CLI's `rejects.toThrow(TypeError)` tests) keep holding when re-raising from the
+// `Result` core.
+const SNAPSHOT_TYPE_ERROR_KINDS = new Set<EngineError['kind']>([
+  'invalid-snapshot-filename',
+  'unsupported-snapshot-index-version',
+  'invalid-schema-identifier',
+  'invalid-year-month',
+])
+
+function snapshotAttachErrorToException(error: EngineError): Error {
+  const exception = SNAPSHOT_TYPE_ERROR_KINDS.has(error.kind)
+    ? new TypeError(error.message)
+    : new Error(error.message)
+  ;(exception as Error & { engineError?: EngineError }).engineError = error
+  return exception
+}
+
+/**
+ * Errors-as-values core: validates the snapshot index and presigned-URL map,
+ * returning a typed `EngineError` for every modelled failure (bad index version,
+ * unsafe schema/YYYY-MM identifier, missing attach URL). Underlying DuckDB
+ * `runner` IO failures stay defects and propagate. `attachSnapshotIndex` is the
+ * throwing wrapper.
+ */
+export async function attachSnapshotIndexResult(
   runner: SnapshotQueryRunner,
   opts: AttachSnapshotOptions,
-): Promise<AttachSnapshotResult> {
+): Promise<Result<AttachSnapshotResult, EngineError>> {
   const { index, attachUrls } = opts
   const schema = opts.schema ?? 'main'
   const forceDownload = opts.forceDownload !== false
 
   if (index?.version !== 1)
-    throw new TypeError(`attachSnapshotIndex: unsupported snapshot index version ${String(index?.version)}; expected 1`)
+    return err(engineErrors.unsupportedSnapshotIndexVersion(index?.version))
   if (!SCHEMA_IDENT_RE.test(schema))
-    throw new TypeError(`attachSnapshotIndex: invalid schema identifier ${JSON.stringify(schema)}`)
+    return err(engineErrors.invalidSchemaIdentifier(schema))
 
   // Validate cold entries up front; never interpolate untrusted strings into
   // SQL identifiers.
   for (const ym of index.cold) {
     if (!YEAR_MONTH_RE.test(ym))
-      throw new TypeError(`attachSnapshotIndex: invalid YYYY-MM entry ${JSON.stringify(ym)} in index.cold`)
+      return err(engineErrors.invalidYearMonth(ym))
   }
 
   // httpfs is bundled in both DuckDB-WASM and @duckdb/node-api; LOAD is a
@@ -88,14 +119,14 @@ export async function attachSnapshotIndex(
     const fileName = `cold-${ym}.duckdb`
     const url = attachUrls[fileName]
     if (!url)
-      throw new Error(`attachSnapshotIndex: attachUrls missing entry for ${fileName}`)
+      return err(engineErrors.missingAttachUrl(fileName))
     plan.push({ fileName, alias: snapshotAlias(fileName), url })
   }
   if (index.hot) {
     const fileName = 'hot.duckdb'
     const url = attachUrls[fileName]
     if (!url)
-      throw new Error(`attachSnapshotIndex: attachUrls missing entry for ${fileName}`)
+      return err(engineErrors.missingAttachUrl(fileName))
     plan.push({ fileName, alias: snapshotAlias(fileName), url })
   }
 
@@ -143,5 +174,12 @@ export async function attachSnapshotIndex(
     tables.push(table)
   }
 
-  return { schema, aliases, tables }
+  return ok({ schema, aliases, tables })
+}
+
+export async function attachSnapshotIndex(
+  runner: SnapshotQueryRunner,
+  opts: AttachSnapshotOptions,
+): Promise<AttachSnapshotResult> {
+  return unwrapResult(await attachSnapshotIndexResult(runner, opts), snapshotAttachErrorToException)
 }

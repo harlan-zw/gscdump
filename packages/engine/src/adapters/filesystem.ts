@@ -351,7 +351,18 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
         stale: 30_000,
         retries: { retries: 20, minTimeout: 50, maxTimeout: 500, factor: 1.5 },
       })
-      return await fn().finally(() => release().catch(() => {}))
+      // A failed release leaves a stale lock that blocks the next writer until
+      // its `stale` window (30s) elapses. We don't fail `fn()` over a cleanup
+      // error (the protected work already succeeded), but the failure MUST be
+      // observable rather than silently swallowed.
+      return await fn().finally(() =>
+        release().catch((releaseErr: unknown) => {
+          console.warn(
+            `[gscdump/engine] failed to release lock ${path}; it will go stale after ${30_000}ms`,
+            releaseErr,
+          )
+        }),
+      )
     },
     async purgeTenant(filter) {
       return enqueue(async () => {

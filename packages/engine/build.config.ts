@@ -20,6 +20,7 @@ export default defineBuildConfig({
       type: 'bundle',
       input: [
         './src/index.ts',
+        './src/errors.ts',
         './src/contracts.ts',
         './src/snapshot.ts',
         './src/planner.ts',

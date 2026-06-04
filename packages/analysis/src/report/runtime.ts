@@ -20,8 +20,12 @@ import type {
   ReportStepStateMeta,
 } from '@gscdump/engine/report'
 import type { AnalysisQuerySource } from '@gscdump/engine/source'
+import type { Result } from 'gscdump/result'
+import type { AnalysisError } from '../errors'
 import { runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import { computeInputHash } from '@gscdump/engine/report'
+import { err, ok, unwrapResult } from 'gscdump/result'
+import { analysisErrors, analysisErrorToException } from '../errors'
 
 export interface RunReportOptions<P extends ReportParams = ReportParams> {
   source: AnalysisQuerySource
@@ -32,6 +36,11 @@ export interface RunReportOptions<P extends ReportParams = ReportParams> {
 interface StepOutcome {
   state: ReportStepStateMeta
   result?: AnalysisResult
+  /**
+   * The original thrown value on failure, carried so a required-step
+   *  failure can surface it as the `AnalysisError`'s `cause`.
+   */
+  cause?: unknown
 }
 
 async function executeStep(
@@ -45,25 +54,35 @@ async function executeStep(
       state: { key: step.key, type: step.type, status: 'done' },
       result,
     }))
-    .catch((err: Error): StepOutcome => {
-      const message = err?.message ?? String(err)
+    .catch((thrown: Error): StepOutcome => {
+      const message = thrown?.message ?? String(thrown)
       return {
         state: { key: step.key, type: step.type, status: 'error', error: message },
+        cause: thrown,
       }
     })
 }
 
 /**
- * Run a defined report against a source. Steps execute in parallel via
- * `Promise.all`. The report's `reduce` is invoked with a results bag that
- * only contains successful steps — sections that depended on a failed step
- * should set their own `coverage: 'partial'` (the runtime additionally
- * marks `meta.degraded` when any step errored).
+ * `Result`-returning core for {@link runReport}. Models the one
+ * caller-actionable failure of a structurally-valid report run: a required
+ * step's analyzer threw (`required-step-failed`, with the underlying error as
+ * `cause`). Hosts can map that to a 4xx/partial response instead of catching an
+ * untyped `Error`.
+ *
+ * Steps execute in parallel via `Promise.all`. The report's `reduce` is invoked
+ * with a results bag that only contains successful steps — sections that
+ * depended on a failed step should set their own `coverage: 'partial'` (the
+ * runtime additionally marks `meta.degraded` when any step errored).
+ *
+ * The report's own `plan()` param-validation throws (`--target` etc.) are
+ * defects from this core's perspective and still propagate; those are modelled
+ * at the report-definition boundary, not here.
  */
-export async function runReport<P extends ReportParams = ReportParams>(
+export async function runReportResult<P extends ReportParams = ReportParams>(
   report: DefinedReport<P>,
   opts: RunReportOptions<P>,
-): Promise<ReportResult> {
+): Promise<Result<ReportResult, AnalysisError>> {
   const startedAt = Date.now()
   const generatedAt = new Date(startedAt).toISOString()
 
@@ -86,8 +105,14 @@ export async function runReport<P extends ReportParams = ReportParams>(
 
   const errored = outcomes.filter(o => o.state.status === 'error')
   for (const o of errored) {
-    if (required.has(o.state.key))
-      throw new Error(`runReport(${report.id}): required step "${o.state.key}" failed: ${o.state.error}`)
+    if (required.has(o.state.key)) {
+      return err(analysisErrors.requiredStepFailed(
+        report.id,
+        o.state.key,
+        o.state.error ?? 'unknown error',
+        o.cause,
+      ))
+    }
   }
 
   const resultsByKey: Record<string, AnalysisResult> = {}
@@ -102,7 +127,7 @@ export async function runReport<P extends ReportParams = ReportParams>(
   const degraded = errored.length > 0
   const stepStates: ReportStepStateMeta[] = outcomes.map(o => o.state)
 
-  return {
+  return ok({
     id: report.id,
     site: opts.ctx.site,
     inputHash,
@@ -115,7 +140,21 @@ export async function runReport<P extends ReportParams = ReportParams>(
       degraded,
       steps: stepStates,
     },
-  }
+  })
+}
+
+/**
+ * Throwing wrapper over {@link runReportResult}, preserving the historical
+ * call-site ergonomics (a required-step failure rejects). The thrown message is
+ * kept verbatim (`runReport(id): required step "k" failed: ...`) so existing
+ * assertions hold; the typed `AnalysisError` is reachable via `.analysisError`
+ * and the original failure via `.cause`.
+ */
+export async function runReport<P extends ReportParams = ReportParams>(
+  report: DefinedReport<P>,
+  opts: RunReportOptions<P>,
+): Promise<ReportResult> {
+  return unwrapResult(await runReportResult(report, opts), analysisErrorToException)
 }
 
 export interface DryRunReportResult {

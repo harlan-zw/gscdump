@@ -11,6 +11,7 @@ import type { ColumnDef, Row, TenantCtx } from '@gscdump/contracts'
 import type { ScheduleState } from './schedule'
 import type { DataSource } from './storage'
 import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
+import { readOptional } from './adapters/read-optional'
 
 /**
  * GSC URL inspection result fields we persist. Mirrors the
@@ -283,7 +284,9 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
         return undefined
       const out: InspectionRecord[] = []
       for (const key of keys) {
-        const bytes = await ds.read(key).catch(() => undefined)
+        // Absent shard (raced delete between list+read) → skip; a real read
+        // failure propagates rather than silently dropping the shard's records.
+        const bytes = await readOptional(ds, key)
         if (!bytes)
           continue
         const shard = await Promise.resolve()
@@ -574,10 +577,13 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
   const now = opts.now ?? (() => Date.now())
 
   async function readJson<T>(key: string): Promise<T | undefined> {
-    return await ds.read(key).then(
-      bytes => JSON.parse(new TextDecoder().decode(bytes)) as T,
-      () => undefined,
-    )
+    // Absent object → undefined (first-run no-op). A real read failure or a
+    // JSON parse error propagates: both are genuine failures the caller must
+    // not mistake for "this key has never been written".
+    const bytes = await readOptional(ds, key)
+    if (bytes === undefined)
+      return undefined
+    return JSON.parse(new TextDecoder().decode(bytes)) as T
   }
 
   async function writeJson(key: string, value: unknown): Promise<void> {
@@ -703,7 +709,7 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
       const includeRemoved = opts?.includeRemoved ?? false
       // Per-feedpath index: the whole file is this sitemap's URLs, so the read
       // is bounded by one sitemap's size regardless of how large the site is.
-      const indexBytes = await ds.read(sitemapUrlsIndexKey(ctx, fpHash)).catch(() => undefined)
+      const indexBytes = await readOptional(ds, sitemapUrlsIndexKey(ctx, fpHash))
       const indexRows = indexBytes ? await decodeParquetToRows(indexBytes) : []
       // Apply any deltas not yet folded into the index. Fold in chronological
       // order (the delta filename embeds an ISO date prefix → lexical sort).
@@ -721,7 +727,7 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
         const m = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
         if (!m || m[2] !== fpHash)
           continue
-        const dBytes = await ds.read(key).catch(() => undefined)
+        const dBytes = await readOptional(ds, key)
         if (!dBytes)
           continue
         const dRows = await decodeParquetToRows(dBytes)
@@ -770,7 +776,7 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
           continue
         if (to && date > to)
           continue
-        const bytes = await ds.read(key).catch(() => undefined)
+        const bytes = await readOptional(ds, key)
         if (!bytes)
           continue
         const rows = await decodeParquetToRows(bytes)
@@ -809,7 +815,11 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
       // sitemap's URL count plus its deltas — never the whole site's index.
       for (const [fpHash, feedDeltaKeys] of deltasByFeed) {
         const indexKey = sitemapUrlsIndexKey(ctx, fpHash)
-        const indexBytes = await ds.read(indexKey).catch(() => undefined)
+        // Highest-risk swallow: if this prior-index read fails for real and we
+        // treat it as absent, we'd rewrite the index from deltas alone and drop
+        // every URL the index held. `readOptional` keeps a genuinely-absent
+        // index as `undefined` (first compaction) but propagates a real failure.
+        const indexBytes = await readOptional(ds, indexKey)
         const indexRows = indexBytes ? await decodeParquetToRows(indexBytes) : []
         const live = new Map<string, SitemapUrlRecord>()
         const removed = new Map<string, SitemapUrlRecord>()
@@ -823,7 +833,7 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
         // Fold chronologically — the delta filename embeds an ISO date prefix.
         const consumed: string[] = []
         for (const key of feedDeltaKeys.sort()) {
-          const bytes = await ds.read(key).catch(() => undefined)
+          const bytes = await readOptional(ds, key)
           if (!bytes)
             continue
           consumed.push(key)
@@ -916,10 +926,13 @@ export function createIndexingMetadataStore(
   const hash = opts.hash ?? hashUrl
 
   async function readIndex(key: string): Promise<IndexingMetadataIndex> {
-    return await ds.read(key).then(
-      bytes => JSON.parse(new TextDecoder().decode(bytes)) as IndexingMetadataIndex,
-      () => ({ version: 1 as const, records: {} }),
-    )
+    // Absent index → the empty default (first-run no-op). A real read failure or
+    // a parse error propagates rather than masquerading as a fresh empty index,
+    // which would clobber real state on the next `writeBatch`.
+    const bytes = await readOptional(ds, key)
+    if (bytes === undefined)
+      return { version: 1, records: {} }
+    return JSON.parse(new TextDecoder().decode(bytes)) as IndexingMetadataIndex
   }
 
   return {
@@ -980,10 +993,13 @@ export function createEmptyTypesStore(opts: CreateEmptyTypesStoreOptions): Empty
   const now = opts.now ?? (() => Date.now())
 
   async function readDoc(key: string): Promise<EmptyTypesDoc> {
-    return await ds.read(key).then(
-      bytes => JSON.parse(new TextDecoder().decode(bytes)) as EmptyTypesDoc,
-      () => ({ version: 1, emptyTypes: [], markedAt: {} }),
-    )
+    // Absent doc → the empty default (first-run no-op). A real read failure or a
+    // parse error propagates rather than reading as "no empty types", which
+    // would re-probe every searchType on the next sync or lose markers on write.
+    const bytes = await readOptional(ds, key)
+    if (bytes === undefined)
+      return { version: 1, emptyTypes: [], markedAt: {} }
+    return JSON.parse(new TextDecoder().decode(bytes)) as EmptyTypesDoc
   }
 
   async function writeDoc(key: string, doc: EmptyTypesDoc): Promise<void> {

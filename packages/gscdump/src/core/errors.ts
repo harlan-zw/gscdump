@@ -191,6 +191,20 @@ export function storageError(message: string, cause?: unknown): GscError {
   return { kind: 'storage', message, cause }
 }
 
+/**
+ * Re-raises a `GscError` value as an `Error`, preserving its `cause` for
+ * stack-walking and stashing the original union under `.gscError`. Pairs with
+ * `unwrapResult` from `gscdump/result` so a `fooResult(): Result<A, GscError>`
+ * core can be wrapped by a throwing `foo()` without losing the typed error.
+ */
+export function gscErrorToException(error: GscError): Error {
+  const exception = new Error(error.message)
+  if (error.cause !== undefined)
+    (exception as Error & { cause?: unknown }).cause = error.cause
+  ;(exception as Error & { gscError?: GscError }).gscError = error
+  return exception
+}
+
 // --- Structured Google API error (parsed JSON shape) -----------------------
 // Complements `classifyError` (which routes any unknown into the `GscError`
 // union). `parseGoogleError` is the parsing layer: it pulls the canonical

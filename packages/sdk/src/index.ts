@@ -42,7 +42,7 @@ export {
   splitOpportunityTitle,
   truncateQuery,
 } from './cwv-thresholds'
-export { PartnerApiError, toPartnerError } from './errors'
+export { formatPartnerError, isPartnerError, PartnerApiError, partnerErrorToException, toPartnerError } from './errors'
 export type { PartnerErrorInfo, PartnerErrorKind } from './errors'
 export type { GscConsoleUrlOpts } from './gsc-console-url'
 export { gscConsoleUrl } from './gsc-console-url'
@@ -138,6 +138,7 @@ export {
 export {
   CANONICAL_WEBHOOK_EVENTS,
   parseWebhookPayload,
+  parseWebhookPayloadResult,
   readWebhookHeaders,
   serializeWebhookPayload,
   VALID_WEBHOOK_EVENTS,

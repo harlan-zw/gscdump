@@ -23,9 +23,12 @@
   dimensionToColumn: function
   drizzleSchema: object
   ENGINE_QUERY_CAPABILITIES: object
+  engineErrors: object
+  engineErrorToException: function
   enumeratePartitions: function
   FILES_PLACEHOLDER: string
   fixedPolicy: function
+  formatEngineError: function
   formatLiteral: function
   getDateWeight: function
   getTablesForTier: function
@@ -36,6 +39,7 @@
   inferSearchType: function
   inferTable: function
   inspectionPolicy: function
+  isEngineError: function
   MAX_DAY_BYTES: number
   MAX_GSC_PAGES_R2: number
   MAX_SITEMAP_URLS_PER_SITE: number
@@ -62,6 +66,7 @@
   toSumPosition: function
   transformGscRow: function
   validateEnabledSearchTypes: function
+  validateEnabledSearchTypesResult: function
   WEIGHT_PRIORITY: object
 ./analysis-types:
   num: function
@@ -73,6 +78,10 @@
   runAnalyzerFromSource: function
 ./arrow:
   arrowToRows: function
+./compaction:
+  dedupeOverlappingTiers: function
+  isRawDailyCompactionDue: function
+  splitOverlappingTiers: function
 ./contracts: {}
 ./entities:
   createEmptyTypesStore: function
@@ -93,6 +102,11 @@
   sitemapUrlsDeltaKey: function
   sitemapUrlsIndexKey: function
   sitemapUrlsIndexPrefix: function
+./errors:
+  engineErrors: object
+  engineErrorToException: function
+  formatEngineError: function
+  isEngineError: function
 ./filesystem:
   createFilesystemDataSource: function
   createFilesystemManifestStore: function
@@ -132,6 +146,7 @@
 ./node:
   attachParquetIndex: function
   attachSnapshotIndex: function
+  attachSnapshotIndexResult: function
   createNodeDuckDBHandle: function
   createNodeHarness: function
   resetNodeDuckDB: function
@@ -255,7 +270,9 @@
   typedQuery: function
 ./sql:
   bindLiterals: function
+  bindLiteralsResult: function
   formatLiteral: function
+  formatLiteralResult: function
   sqlEscape: function
 ./sql-fragments:
   escapeLike: function

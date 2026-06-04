@@ -1,4 +1,7 @@
 import type { TableName } from '../contracts'
+import type { Result } from '../core/result'
+
+import type { QueryError } from './errors'
 import type {
   BuilderState,
   Dimension,
@@ -9,7 +12,8 @@ import type {
   MetricOperator,
   QueryParamName,
 } from './types'
-
+import { err, ok, unwrapResult } from '../core/result'
+import { queryErrors, queryErrorToException } from './errors'
 import { isDateOperator, isMetric, isQueryParam, isRegexOperator } from './operator-meta'
 import {
   extractDateRange,
@@ -19,6 +23,10 @@ import {
 } from './resolver'
 
 export type { TableName } from '../contracts'
+// Re-exported so the `gscdump/query/plan` subpath keeps surfacing the two error
+// classes engines import from here (resolver/datasets.ts), now defined in `./errors`.
+export { UnresolvableDatasetError, UnsupportedLogicalCapabilityError } from './errors'
+export type { QueryError, QueryErrorKind } from './errors'
 
 // One source of truth: a logical dataset IS a storage table name. The engine
 // compiler and analysis adapters both consume `LogicalDataset`; keeping the
@@ -94,13 +102,6 @@ export interface LogicalComparisonPlan {
   current: LogicalQueryPlan
   previous: LogicalQueryPlan
   comparisonFilter?: ComparisonFilter
-}
-
-export class UnsupportedLogicalCapabilityError extends Error {
-  constructor(capability: keyof PlannerCapabilities, context: string) {
-    super(`${context} requires ${capability} capability`)
-    this.name = 'UnsupportedLogicalCapabilityError'
-  }
 }
 
 function collectInternalFilters(filter: FilterInput | undefined): InternalFilter[] {
@@ -184,24 +185,6 @@ export function isDatasetResolvable(
 }
 
 /**
- * Thrown when a query's grouped + filtered dimensions span more than one
- * stored dataset. Replaces the resolver's raw "unknown column" error so hosts
- * can map it to a 4xx instead of leaking an opaque 500.
- */
-export class UnresolvableDatasetError extends Error {
-  constructor(dimensions: readonly Dimension[], filterDims: readonly Dimension[] = []) {
-    const grouped = dimensions.filter(d => !TIME_AXIS_DIMENSIONS.has(d))
-    const filtered = filterDims.filter(d => !TIME_AXIS_DIMENSIONS.has(d))
-    super(
-      `Cannot resolve a [${grouped.join(', ')}] breakdown filtered by [${filtered.join(', ')}] `
-      + `from stored data: these dimensions live in separate per-dimension tables. `
-      + `Only the live GSC API computes cross-dimension aggregates.`,
-    )
-    this.name = 'UnresolvableDatasetError'
-  }
-}
-
-/**
  * `BuilderState`-level convenience for {@link isDatasetResolvable}: extracts
  * the state's dimension filters (the same way `buildLogicalPlan` does) and
  * checks them against the grouped dimensions. Lets routing code (e.g. the
@@ -215,16 +198,6 @@ export function isStateResolvable(state: BuilderState): boolean {
     .filter(f => !isQueryParam(f.dimension))
     .map(f => f.dimension as Dimension)
   return isDatasetResolvable(state.dimensions, filterDims)
-}
-
-function requireCapability(
-  capabilities: PlannerCapabilities | undefined,
-  capability: keyof PlannerCapabilities,
-  enabled: boolean,
-  context: string,
-): void {
-  if (enabled && !capabilities?.[capability])
-    throw new UnsupportedLogicalCapabilityError(capability, context)
 }
 
 // True iff the leaf is a real dimension predicate (not a date window, query
@@ -253,7 +226,6 @@ function toLogicalDimensionFilter(filter: InternalFilter): LogicalDimensionFilte
 
 function buildDimensionFilterTree(
   filter: FilterInput | undefined,
-  capabilities: PlannerCapabilities,
 ): LogicalFilterNode | undefined {
   if (!filter || !('_filters' in filter))
     return undefined
@@ -264,12 +236,11 @@ function buildDimensionFilterTree(
   for (const f of filter._filters as InternalFilter[]) {
     if (!isDimensionLeaf(f))
       continue
-    requireCapability(capabilities, 'regex', isRegexOperator(f.operator), 'logical plan')
     children.push({ kind: 'leaf', filter: toLogicalDimensionFilter(f) })
   }
 
   for (const g of filter._nestedGroups ?? []) {
-    const sub = buildDimensionFilterTree(g, capabilities)
+    const sub = buildDimensionFilterTree(g)
     if (sub)
       children.push(sub)
   }
@@ -281,10 +252,16 @@ function buildDimensionFilterTree(
   return { kind: 'group', groupType, children }
 }
 
-export function buildLogicalPlan(
+/**
+ * Errors-as-values core: builds the logical plan or returns a typed `QueryError`
+ * for every modelled failure (missing date range, a regex filter on an engine
+ * without regex pushdown, a cross-dimension query with no stored home).
+ * `buildLogicalPlan` is the throwing wrapper for call sites that prefer exceptions.
+ */
+export function buildLogicalPlanResult(
   state: BuilderState,
   capabilities: PlannerCapabilities = {},
-): LogicalQueryPlan {
+): Result<LogicalQueryPlan, QueryError> {
   // Coerce wire-format filters (`{ type, filters | column, value, from, to }`)
   // up-front so every downstream traversal sees the SDK's `_filters` shape.
   // Browser path (engine-duckdb-wasm) feeds raw consumer state; server path is
@@ -293,9 +270,16 @@ export function buildLogicalPlan(
 
   const { startDate, endDate } = extractDateRange(normalizedFilter)
   if (!startDate || !endDate)
-    throw new Error('logical plan requires date range (use between(date, ...) or gte/lte)')
+    return err(queryErrors.missingDateRange())
 
   const allFilters = collectInternalFilters(normalizedFilter)
+
+  // Regex pushdown gate, hoisted to a single pre-check over the flat (incl.
+  // nested) dimension leaves. `collectInternalFilters` already recurses nested
+  // groups, so this covers both the `dimensionFilters` list and the filter tree.
+  if (!capabilities.regex && allFilters.some(f => isDimensionLeaf(f) && isRegexOperator(f.operator)))
+    return err(queryErrors.unsupportedCapability('regex', 'logical plan'))
+
   const metricFilters = extractMetricFilters(normalizedFilter)
   const specialFilters = extractSpecialOperatorFilters(normalizedFilter)
   const normalizedPrefilter = normalizeFilter(state.prefilter) as FilterInput | undefined
@@ -316,17 +300,15 @@ export function buildLogicalPlan(
       continue
     }
 
-    const operator = filter.operator as FilterOperator
-    requireCapability(capabilities, 'regex', isRegexOperator(operator), 'logical plan')
     dimensionFilters.push({
       dimension: filter.dimension as Dimension,
-      operator,
+      operator: filter.operator as FilterOperator,
       expression: filter.expression,
       expression2: filter.expression2,
     })
   }
 
-  const dimensionFilterTree = buildDimensionFilterTree(normalizedFilter, capabilities)
+  const dimensionFilterTree = buildDimensionFilterTree(normalizedFilter)
 
   const filterDims = dimensionFilters.map(filter => filter.dimension)
   // A cross-dimension query (grouped + filtered dimensions spanning two stored
@@ -334,10 +316,10 @@ export function buildLogicalPlan(
   // typed error rather than letting the SQL resolver throw a raw "unknown
   // column" Error during compilation.
   if (!isDatasetResolvable(state.dimensions, filterDims))
-    throw new UnresolvableDatasetError(state.dimensions, filterDims)
+    return err(queryErrors.unresolvableDataset(state.dimensions, filterDims))
   const dataset = inferDataset(state.dimensions, filterDims)
 
-  return {
+  return ok({
     dataset,
     dimensions: [...state.dimensions],
     groupByDimensions: state.dimensions.filter(d => d !== 'date'),
@@ -365,7 +347,46 @@ export function buildLogicalPlan(
     orderBy: state.orderBy,
     rowLimit: state.rowLimit,
     startRow: state.startRow,
-  }
+  })
+}
+
+export function buildLogicalPlan(
+  state: BuilderState,
+  capabilities: PlannerCapabilities = {},
+): LogicalQueryPlan {
+  return unwrapResult(buildLogicalPlanResult(state, capabilities), queryErrorToException)
+}
+
+/**
+ * Errors-as-values core for the comparison plan: returns a typed `QueryError`
+ * when the engine lacks the comparison-join or multi-dataset capability the
+ * paired queries need, or when either side fails to plan.
+ */
+export function buildLogicalComparisonPlanResult(
+  current: BuilderState,
+  previous: BuilderState,
+  capabilities: PlannerCapabilities = {},
+  comparisonFilter?: ComparisonFilter,
+): Result<LogicalComparisonPlan, QueryError> {
+  if (!capabilities.comparisonJoin)
+    return err(queryErrors.unsupportedCapability('comparisonJoin', 'logical comparison plan'))
+
+  const currentResult = buildLogicalPlanResult(current, capabilities)
+  if (!currentResult.ok)
+    return currentResult
+  const previousResult = buildLogicalPlanResult(previous, capabilities)
+  if (!previousResult.ok)
+    return previousResult
+
+  const usesMultipleDatasets = currentResult.value.dataset !== previousResult.value.dataset
+  if (usesMultipleDatasets && !capabilities.multiDataset)
+    return err(queryErrors.unsupportedCapability('multiDataset', 'logical comparison plan'))
+
+  return ok({
+    current: currentResult.value,
+    previous: previousResult.value,
+    comparisonFilter,
+  })
 }
 
 export function buildLogicalComparisonPlan(
@@ -374,16 +395,8 @@ export function buildLogicalComparisonPlan(
   capabilities: PlannerCapabilities = {},
   comparisonFilter?: ComparisonFilter,
 ): LogicalComparisonPlan {
-  requireCapability(capabilities, 'comparisonJoin', true, 'logical comparison plan')
-
-  const currentPlan = buildLogicalPlan(current, capabilities)
-  const previousPlan = buildLogicalPlan(previous, capabilities)
-  const usesMultipleDatasets = currentPlan.dataset !== previousPlan.dataset
-  requireCapability(capabilities, 'multiDataset', usesMultipleDatasets, 'logical comparison plan')
-
-  return {
-    current: currentPlan,
-    previous: previousPlan,
-    comparisonFilter,
-  }
+  return unwrapResult(
+    buildLogicalComparisonPlanResult(current, previous, capabilities, comparisonFilter),
+    queryErrorToException,
+  )
 }

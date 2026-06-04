@@ -372,14 +372,21 @@ function readParquetViewSql(schema: string, table: string, files: string[]): str
  * NAME`. Mirrors the server's `lakeOverlayRelation`. When `lakeFiles` is empty
  * (the requested range is entirely within the recent tail) the view is the
  * overlay alone — no lake to dedup against.
+ *
+ * The lake is read once via a `MATERIALIZED` CTE and reused for both the served
+ * rows and the anti-join date set; a plain CTE would be inlined and re-scan the
+ * parquet files, which is the dominant cost in CPU-bound DuckDB-WASM.
  */
 function readParquetViewWithOverlaySql(schema: string, table: string, lakeFiles: string[], overlayFile: string): string {
   const overlay = `SELECT * REPLACE (CAST(date AS DATE) AS date) FROM read_parquet(['${overlayFile.replace(/'/g, '\'\'')}'], union_by_name = true)`
   if (lakeFiles.length === 0)
     return `CREATE OR REPLACE VIEW ${schema}.${table} AS ${overlay}`
-  return `CREATE OR REPLACE VIEW ${schema}.${table} AS ${lakeSelect(lakeFiles)} `
-    + `UNION ALL BY NAME ${overlay} `
-    + `WHERE CAST(date AS DATE) NOT IN (SELECT DISTINCT CAST(date AS DATE) FROM read_parquet([${quoteList(lakeFiles)}], union_by_name = true))`
+  return `CREATE OR REPLACE VIEW ${schema}.${table} AS `
+    + `WITH lake AS MATERIALIZED (${lakeSelect(lakeFiles)}), `
+    + `lake_dates AS (SELECT DISTINCT date FROM lake) `
+    + `SELECT * FROM lake `
+    + `UNION ALL BY NAME `
+    + `SELECT * FROM (${overlay}) AS overlay WHERE overlay.date NOT IN (SELECT date FROM lake_dates)`
 }
 
 async function runWithConcurrency<T>(

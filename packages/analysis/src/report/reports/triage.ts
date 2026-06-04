@@ -14,6 +14,7 @@ import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection } from '@gscdump/engine/report'
 import type { ResolveTargetKind } from '../resolve-target'
 import { defineReport } from '@gscdump/engine/report'
+import { requireReportParam } from '../require'
 import { resolveTarget } from '../resolve-target'
 
 export interface TriageReportParams {
@@ -37,8 +38,7 @@ export const triageReport = defineReport<TriageReportParams>({
     'max-findings': { type: 'number', description: 'Cap findings per section', default: DEFAULT_MAX },
   },
   plan: (params, window) => {
-    if (!params.target)
-      throw new Error('triage report requires --target <page-or-query>')
+    requireReportParam('triage', 'target', params.target, 'triage report requires --target <page-or-query>')
     const dates = { startDate: window.start, endDate: window.end }
     return [
       { key: 'change-point', type: 'change-point', params: { ...dates, limit: 200 } },

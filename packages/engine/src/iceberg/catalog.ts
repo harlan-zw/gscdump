@@ -18,7 +18,10 @@
  * `ICEBERG_SCHEMAS` contract — never hand-listed here.
  */
 
+import type { Result } from 'gscdump/result'
+import type { EngineError } from '../errors'
 import type { IcebergColumnType, IcebergS3Config, IcebergTableName } from './schema'
+import { err, ok } from 'gscdump/result'
 import {
   icebergAppend,
   icebergCreateTable,
@@ -30,6 +33,7 @@ import {
   restCatalogLoadTable,
   s3SignedResolver,
 } from 'icebird'
+import { engineErrors } from '../errors'
 import {
   ICEBERG_PARTITION_SPEC,
   ICEBERG_SCHEMAS,
@@ -247,12 +251,16 @@ export async function icebergAppendRetrying(
   }
 }
 
-/** Outcome of a single table create/drop. */
+/**
+ * Outcome of a single table create/drop: the table name plus a `Result` —
+ * `Ok(void)` on success, `Err(iceberg-table-op-failed)` carrying the failure
+ * message (and original `cause`) when the catalog rejects the op (e.g. "table
+ * already exists", a 5xx). Per-table so a partial provisioning run is fully
+ * observable; the human-readable string lives on `error.message`.
+ */
 export interface IcebergTableOpResult {
   table: string
-  ok: boolean
-  /** Present when `ok` is false. */
-  error?: string
+  outcome: Result<void, EngineError>
 }
 
 /**
@@ -288,17 +296,23 @@ export async function createIcebergTables(
       schema: icebergSchemaFor(table),
       partitionSpec: icebergPartitionSpecFor(table),
     }).then(
-      () => results.push({ table, ok: true }),
-      (e: unknown) => results.push({ table, ok: false, error: String(e) }),
+      () => results.push({ table, outcome: ok(undefined) }),
+      (e: unknown) => results.push({ table, outcome: err(engineErrors.icebergTableOpFailed('create', table, e)) }),
     )
   }
   return results
 }
 
-/** List the table names currently in the catalog namespace. */
+/**
+ * List the table names currently in the catalog namespace.
+ *
+ * A genuinely-empty namespace resolves to `[]`. A LIST *failure* (catalog
+ * unreachable, 401/403, 5xx) propagates rather than being masked as an empty
+ * list — callers must be able to tell "no tables" from "couldn't ask".
+ */
 export async function listIcebergTables(conn: IcebergConnection): Promise<string[]> {
-  return restCatalogListTables(conn.catalog, { namespace: conn.namespace })
-    .then(list => list.map(t => t.name).sort(), () => [])
+  const list = await restCatalogListTables(conn.catalog, { namespace: conn.namespace })
+  return list.map(t => t.name).sort()
 }
 
 // ---------------------------------------------------------------------------
@@ -439,9 +453,12 @@ export async function dropIcebergTables(
   conn: IcebergConnection,
   tables?: readonly string[],
 ): Promise<IcebergTableOpResult[]> {
+  // Discovering the default target set via LIST: a failure here must surface,
+  // not collapse to `[]` (which would silently drop nothing while reporting
+  // success). An empty namespace still legitimately resolves to `[]`.
   const targets = tables
-    ?? (await restCatalogListTables(conn.catalog, { namespace: conn.namespace })
-      .then(list => list.map(t => t.name), () => []))
+    ?? (await restCatalogListTables(conn.catalog, { namespace: conn.namespace }))
+      .map(t => t.name)
   const results: IcebergTableOpResult[] = []
   for (const table of targets) {
     await icebergDropTable({
@@ -450,8 +467,8 @@ export async function dropIcebergTables(
       table,
       purgeRequested: true,
     }).then(
-      () => results.push({ table, ok: true }),
-      (e: unknown) => results.push({ table, ok: false, error: String(e) }),
+      () => results.push({ table, outcome: ok(undefined) }),
+      (e: unknown) => results.push({ table, outcome: err(engineErrors.icebergTableOpFailed('drop', table, e)) }),
     )
   }
   return results

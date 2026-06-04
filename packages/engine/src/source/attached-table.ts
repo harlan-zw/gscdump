@@ -10,9 +10,11 @@
  */
 
 import type { Row } from '../contracts'
+import type { EngineError } from '../errors'
 import type { ResolverAdapter } from '../resolver/types'
 import type { AnalysisQuerySource, ExecuteSqlOptions, FileSet, QueryRow, SourceCapabilities } from './source-types'
 import { coerceRows } from '../coerce'
+import { engineErrors } from '../errors'
 
 export interface AttachedTableRunner {
   /**
@@ -50,9 +52,12 @@ export interface AttachedTableSourceOptions {
 }
 
 export class AttachedTableMissingError extends Error {
+  readonly engineError: EngineError
   constructor(public readonly missing: readonly string[]) {
-    super(`attached-table source: required table(s) not attached: ${missing.join(', ')}`)
+    const engineError = engineErrors.attachedTableMissing(missing)
+    super(engineError.message)
     this.name = 'AttachedTableMissingError'
+    this.engineError = engineError
   }
 }
 

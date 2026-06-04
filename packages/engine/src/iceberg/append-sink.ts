@@ -34,10 +34,12 @@
  * injected here from `slice` — callers MUST NOT pre-populate them.
  */
 
+import type { EngineError } from '../errors'
 import type { IcebergAppendSinkOptions, Sink, SinkCloseResult, SinkSlice, SinkWriteResult } from '../sink'
 import type { Row } from '../storage'
 import type { IcebergConnection } from './catalog'
 import type { IcebergTableName } from './schema'
+import { engineErrors } from '../errors'
 import {
   connectIcebergCatalog,
   icebergAppendRetrying,
@@ -169,25 +171,26 @@ export function createIcebergAppendSink(options: IcebergAppendSinkOptions): Iceb
      */
     async close(): Promise<SinkCloseResult> {
       const flushed: IcebergTableName[] = []
-      const failed: { table: IcebergTableName, error: string }[] = []
+      const failed: { table: IcebergTableName, error: EngineError }[] = []
       if (buffers.size === 0)
         return { flushed, failed }
 
       // Resolving the catalog connection can itself fail (network, auth). If
       // it does, NO table flushed — report them all as failed so none of
-      // their slices are ledger-recorded.
+      // their slices are ledger-recorded. `connectError` is the original cause
+      // shared across every table's typed flush error.
       const conn = await connect().then(
-        (c): IcebergConnection | { error: string } => c,
-        (err: unknown) => {
+        (c): IcebergConnection | { connectError: unknown } => c,
+        (cause: unknown) => {
           // Drop the cached rejected promise so a retry re-connects cleanly.
           connection = undefined
-          return { error: String(err) }
+          return { connectError: cause }
         },
       )
-      if ('error' in conn) {
+      if ('connectError' in conn) {
         for (const [table, records] of buffers) {
           if (records.length > 0)
-            failed.push({ table, error: conn.error })
+            failed.push({ table, error: engineErrors.sinkTableFlushFailed(table, conn.connectError) })
         }
         buffers.clear()
         return { flushed, failed }
@@ -207,7 +210,7 @@ export function createIcebergAppendSink(options: IcebergAppendSinkOptions): Iceb
           options.commitRetry,
         ).then(
           () => { flushed.push(table) },
-          (err: unknown) => { failed.push({ table, error: String(err) }) },
+          (cause: unknown) => { failed.push({ table, error: engineErrors.sinkTableFlushFailed(table, cause) }) },
         )
       }
       buffers.clear()

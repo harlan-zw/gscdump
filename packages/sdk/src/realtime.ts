@@ -96,6 +96,8 @@ function isRealtimeEvent(message: PartnerRealtimeMessage): message is PartnerRea
 
 function getWebSocketCtor(options: PartnerRealtimeOptions): PartnerWebSocketConstructor {
   const ctor = options.WebSocket ?? globalThis.WebSocket
+  // Programmer/environment-setup invariant (no `WebSocket` constructor available
+  // and none injected), not a recoverable domain failure: keep throwing.
   if (!ctor)
     throw new Error('WebSocket is not available; pass options.WebSocket')
   return ctor as PartnerWebSocketConstructor
@@ -117,6 +119,8 @@ export function createPartnerRealtimeClient(options: PartnerRealtimeOptions): Pa
   }
 
   function sendJson(payload: unknown): void {
+    // Programmer invariant: `ping`/`subscribe`/auth was called before `connect`.
+    // A misuse of the client lifecycle, not a recoverable domain failure: throw.
     if (!socket)
       throw new Error('Partner realtime client is not connected')
     socket.send(JSON.stringify(payload))

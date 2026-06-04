@@ -8,13 +8,17 @@
 
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
+import type { Result } from 'gscdump/result'
+import type { AnalysisError } from '../errors'
 import type { QueriesRow } from '../types'
 import { num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
+import { err, ok, unwrapResult } from 'gscdump/result'
 import { queriesQueryState } from '../analyzer/adapt-rows'
+import { analysisErrors, analysisErrorToException } from '../errors'
 
 export interface BrandSegmentationOptions {
   /** Brand terms to match against keywords (case-insensitive) */
@@ -53,6 +57,25 @@ function escapeRegexAlt(s: string): string {
 
 function str(v: unknown): string {
   return v == null ? '' : String(v)
+}
+
+/**
+ * `Result`-returning guard for the brand analyzer's one caller-actionable
+ * precondition: the run must carry brand terms to segment by. Modelled (not a
+ * defect) — a caller can re-run with `--brand-terms`. The `defineAnalyzer`
+ * callbacks below are synchronous and the engine dispatcher expects them to
+ * throw, so they call `requireBrandTerms`, the throwing wrapper that maps the
+ * typed error through `analysisErrorToException`; the verbatim message
+ * ("Brand analysis requires brandTerms") is preserved for existing assertions.
+ */
+function requireBrandTermsResult(
+  brandTerms: string[] | undefined,
+): Result<string[], AnalysisError> {
+  return brandTerms?.length ? ok(brandTerms) : err(analysisErrors.missingBrandTerms())
+}
+
+function requireBrandTerms(brandTerms: string[] | undefined): string[] {
+  return unwrapResult(requireBrandTermsResult(brandTerms), analysisErrorToException)
 }
 
 /**
@@ -105,13 +128,12 @@ export const brandAnalyzer = defineAnalyzer<AnalysisParams, Row, BrandResultRow[
   id: 'brand',
 
   buildSql(params) {
-    if (!params.brandTerms?.length)
-      throw new Error('Brand analysis requires brandTerms')
+    const brandTerms = requireBrandTerms(params.brandTerms)
     const { startDate, endDate } = periodOf(params)
     const minImpressions = params.minImpressions ?? 10
     const limit = params.limit ?? 10000
 
-    const regex = `(${params.brandTerms.map(t => escapeRegexAlt(t.toLowerCase())).join('|')})`
+    const regex = `(${brandTerms.map(t => escapeRegexAlt(t.toLowerCase())).join('|')})`
 
     const sql = `
     WITH agg AS (
@@ -190,11 +212,10 @@ export const brandAnalyzer = defineAnalyzer<AnalysisParams, Row, BrandResultRow[
   },
 
   reduceRows(rows, params) {
-    if (!params.brandTerms?.length)
-      throw new Error('Brand analysis requires brandTerms')
+    const brandTerms = requireBrandTerms(params.brandTerms)
     const keywords = (Array.isArray(rows) ? rows : []) as unknown as QueriesRow[]
     const result = analyzeBrandSegmentation(keywords, {
-      brandTerms: params.brandTerms,
+      brandTerms,
       minImpressions: params.minImpressions,
     })
     return {

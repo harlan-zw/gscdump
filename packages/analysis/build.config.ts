@@ -23,6 +23,11 @@ export default defineBuildConfig({
     },
     {
       type: 'bundle',
+      input: ['./src/errors.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
       input: ['./src/semantic/index.ts'],
       outDir: './dist',
     },

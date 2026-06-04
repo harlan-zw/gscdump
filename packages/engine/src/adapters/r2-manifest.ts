@@ -18,6 +18,8 @@
 // process lock. GC's grace window covers the gap between `dataSource.write`
 // and `registerVersion`.
 
+import type { Result } from 'gscdump/result'
+import type { EngineError } from '../errors'
 import type {
   ListLiveFilter,
   LockScope,
@@ -33,6 +35,8 @@ import type {
   WatermarkFilter,
   WatermarkScope,
 } from '../storage'
+import { err, ok, unwrapResult } from 'gscdump/result'
+import { engineErrors, engineErrorToException } from '../errors'
 import { inferLegacyTier, inferSearchType } from '../layout'
 
 /** Shape of the JSON snapshot held under each shard's `v<ts>-<id>.json` key. */
@@ -222,12 +226,17 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
     return { snapshot: parsed, headEtag: head.etag }
   }
 
-  async function writeShard(
+  // Errors-as-values: a single CAS round. `Ok(void)` means the conditional-PUT
+  // committed; `Err(manifest-cas-round-lost)` means HEAD moved under us (412)
+  // and the caller should re-read + replay. Underlying R2 IO failures (get/put
+  // throwing) stay defects and propagate.
+  async function writeShardResult(
     siteId: string,
     table: TableName,
     snapshot: ManifestSnapshot,
     headEtag: string | undefined,
-  ): Promise<{ ok: boolean }> {
+    attempt: number,
+  ): Promise<Result<void, EngineError>> {
     const id = newSnapshotId()
     const snapKey = snapshotKey(userId, siteId, table, id)
     // Snapshot is immutable; no precondition needed.
@@ -236,7 +245,36 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
       ? { onlyIf: { etagMatches: headEtag } }
       : { onlyIf: { etagDoesNotMatch: '*' } }
     const result = await bucket.put(headKey(userId, siteId, table), id, conditional)
-    return { ok: result !== null }
+    return result !== null
+      ? ok(undefined)
+      : err(engineErrors.manifestCasRoundLost(siteId, table, attempt))
+  }
+
+  // Errors-as-values core: the read→mutate→conditional-write CAS loop, returning
+  // a typed `manifest-cas-exhausted` `EngineError` when every round loses the
+  // race. Underlying R2 IO failures (get/put throwing) stay defects and
+  // propagate. `mutateShard` is the throwing wrapper the store methods use.
+  async function mutateShardResult(
+    siteId: string,
+    table: TableName,
+    mutate: (snapshot: ManifestSnapshot) => void | Promise<void>,
+  ): Promise<Result<void, EngineError>> {
+    let attempt = 0
+    while (attempt < maxRetries) {
+      onEvent?.({ kind: 'cas-attempt', siteId, table, attempt })
+      const { snapshot, headEtag } = await readShard(siteId, table)
+      await mutate(snapshot)
+      const round = await writeShardResult(siteId, table, snapshot, headEtag, attempt)
+      if (round.ok) {
+        onEvent?.({ kind: 'cas-committed', siteId, table, attempts: attempt + 1 })
+        return round
+      }
+      onEvent?.({ kind: 'cas-rejected', siteId, table, attempt })
+      attempt++
+      if (attempt < maxRetries)
+        await casBackoff(attempt)
+    }
+    return err(engineErrors.manifestCasExhausted(siteId, table, maxRetries))
   }
 
   async function mutateShard(
@@ -244,22 +282,7 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
     table: TableName,
     mutate: (snapshot: ManifestSnapshot) => void | Promise<void>,
   ): Promise<void> {
-    let attempt = 0
-    while (attempt < maxRetries) {
-      onEvent?.({ kind: 'cas-attempt', siteId, table, attempt })
-      const { snapshot, headEtag } = await readShard(siteId, table)
-      await mutate(snapshot)
-      const { ok } = await writeShard(siteId, table, snapshot, headEtag)
-      if (ok) {
-        onEvent?.({ kind: 'cas-committed', siteId, table, attempts: attempt + 1 })
-        return
-      }
-      onEvent?.({ kind: 'cas-rejected', siteId, table, attempt })
-      attempt++
-      if (attempt < maxRetries)
-        await casBackoff(attempt)
-    }
-    throw new Error(`R2 manifest CAS exceeded ${maxRetries} retries for ${siteId}/${table}`)
+    return unwrapResult(await mutateShardResult(siteId, table, mutate), engineErrorToException)
   }
 
   async function listShards(): Promise<Array<{ siteId: string, table: TableName }>> {

@@ -166,7 +166,8 @@ describe('rebuildRollups searchType namespacing', () => {
     expect(results).toHaveLength(2)
     const failed = results.find(r => r.id === 'boom')!
     const ok = results.find(r => r.id === 'ok')!
-    expect(failed.error).toContain('build exploded')
+    expect(failed.error?.kind).toBe('rollup-build-failed')
+    expect(failed.error?.message).toContain('build exploded')
     expect(ok.error).toBeUndefined()
     // The good def's envelope was still written despite the earlier failure.
     expect(store.has('u_u1/s1/rollups/ok__v1700000000000.json')).toBe(true)
@@ -531,7 +532,7 @@ describe('parquet rollups', () => {
       now: () => 1_700_000_000_000,
     })
     expect(results).toHaveLength(1)
-    expect(results[0].error).toMatch(/parquetColumns/)
+    expect(results[0].error?.message).toMatch(/parquetColumns/)
   })
 })
 

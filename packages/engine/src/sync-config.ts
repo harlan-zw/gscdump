@@ -3,7 +3,11 @@
 // `PROCESSING_TIMEOUT_MS`, etc).
 
 import type { TableName } from '@gscdump/contracts'
+import type { Result } from 'gscdump/result'
+import type { EngineError } from './errors'
 import type { SearchType } from './storage'
+import { err, ok, unwrapResult } from 'gscdump/result'
+import { engineErrors, engineErrorToException } from './errors'
 
 // Per-searchType table fan-out for sync orchestration. `indexing` is
 // intentionally absent — it's searchType-orthogonal and lives in its own
@@ -42,24 +46,33 @@ export function parseEnabledSearchTypes(raw: string | null | undefined): SearchT
   return valid
 }
 
-// Validate at write time. Throws so bad input surfaces rather than silently
-// downgrading to ['web'].
-export function validateEnabledSearchTypes(value: unknown): SearchType[] {
+/**
+ * Errors-as-values core for {@link validateEnabledSearchTypes}: returns a typed
+ * `invalid-search-types` `EngineError` instead of throwing, so a host saving the
+ * persisted config can map a bad value to a 4xx rather than a 500.
+ */
+export function validateEnabledSearchTypesResult(value: unknown): Result<SearchType[], EngineError> {
   if (!Array.isArray(value) || value.length === 0)
-    throw new Error('enabledSearchTypes must be a non-empty array')
+    return err(engineErrors.searchTypesNotArray())
   const seen = new Set<string>()
   const out: SearchType[] = []
   for (const v of value) {
     if (typeof v !== 'string' || !(v in TABLES_BY_SEARCH_TYPE))
-      throw new Error(`enabledSearchTypes: unknown searchType ${String(v)}`)
+      return err(engineErrors.unknownSearchType(v))
     if (seen.has(v))
       continue
     seen.add(v)
     out.push(v as SearchType)
   }
   if (!out.includes('web'))
-    throw new Error('enabledSearchTypes must include "web"')
-  return out
+    return err(engineErrors.searchTypesMissingWeb())
+  return ok(out)
+}
+
+// Validate at write time. Throws so bad input surfaces rather than silently
+// downgrading to ['web'].
+export function validateEnabledSearchTypes(value: unknown): SearchType[] {
+  return unwrapResult(validateEnabledSearchTypesResult(value), engineErrorToException)
 }
 
 // Tiered sync table priority. Hosts use this to plan sync ordering.

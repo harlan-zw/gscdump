@@ -1,4 +1,6 @@
 .:
+  analysisErrors: object
+  analysisErrorToException: function
   analyzeBrandSegmentation: function
   analyzeCannibalization: function
   analyzeClustering: function
@@ -23,8 +25,10 @@
   diffSitemapHealth: function
   dryRunReport: function
   ENGINE_QUERY_CAPABILITIES: object
+  formatAnalysisError: function
   formatReport: function
   IN_MEMORY_DEFAULT_CAPABILITIES: object
+  isAnalysisError: function
   mergePriorityActions: function
   normalizePriorityActions: function
   normalizeQuery: function
@@ -40,6 +44,7 @@
   runAnalyzerFromSource: function
   runAnalyzerWithEngine: function
   runReport: function
+  runReportResult: function
   scorePriorityActions: function
   SQL_ANALYZERS: object
   typedQuery: function
@@ -83,6 +88,11 @@
   survivalAnalyzer: object
   trendsAnalyzer: object
   zeroClickAnalyzer: object
+./errors:
+  analysisErrors: object
+  analysisErrorToException: function
+  formatAnalysisError: function
+  isAnalysisError: function
 ./registry:
   defaultAnalyzerRegistry: object
 ./report:
@@ -92,6 +102,7 @@
   REPORTS: object
   resolveTarget: function
   runReport: function
+  runReportResult: function
 ./semantic:
   analyzeContentGap: function
   ContentGapSourceUnsupportedError: function

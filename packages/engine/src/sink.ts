@@ -27,6 +27,7 @@
  * TYPES + INTERFACE ONLY — no emission logic.
  */
 
+import type { EngineError } from './errors'
 import type { IcebergTableName, SearchType } from './iceberg/schema'
 import type { Row, TenantCtx } from './storage'
 
@@ -85,8 +86,12 @@ export interface SliceOverwriteWriter {
 export interface SinkCloseResult {
   /** Tables whose buffered rows committed durably. */
   flushed: IcebergTableName[]
-  /** Tables whose flush failed — their slices must NOT be ledger-recorded. */
-  failed: { table: IcebergTableName, error: string }[]
+  /**
+   * Tables whose flush failed — their slices must NOT be ledger-recorded. Each
+   * carries a typed `sink-table-flush-failed` `EngineError`; the human-readable
+   * cause is on `error.message`.
+   */
+  failed: { table: IcebergTableName, error: EngineError }[]
 }
 
 export interface Sink {

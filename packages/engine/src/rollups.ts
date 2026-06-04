@@ -15,10 +15,12 @@
 import type { TenantCtx } from '@gscdump/contracts'
 import type { SearchType } from 'gscdump/query'
 import type { DataSource, FileSetRef, Row } from './contracts'
+import type { EngineError } from './errors'
 import type { ColumnDef } from './schema'
 import { MS_PER_DAY } from 'gscdump'
 import { encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { createIndexingMetadataStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexPrefix } from './entities'
+import { engineErrors } from './errors'
 import { DEFAULT_SEARCH_TYPE } from './layout'
 
 export interface RollupCtx extends TenantCtx {
@@ -197,9 +199,10 @@ export async function readLatestRollup<T = unknown>(
   // when it lands on a later page than the first.
   let cursor: string | undefined
   do {
-    const listing = await bucket.list({ prefix, cursor }).catch(() => null)
-    if (!listing)
-      return null
+    // A LIST failure is a real failure, NOT "no rollup": the bucket signals
+    // absence with an empty `objects` array, never by rejecting. Swallowing the
+    // rejection here would make a network/auth blip look like a first-sync site.
+    const listing = await bucket.list({ prefix, cursor })
     for (const obj of listing.objects) {
       const m = ROLLUP_FILE_RE.exec(obj.key.slice(prefix.length))
       if (!m?.groups || m.groups.id !== id)
@@ -212,7 +215,10 @@ export async function readLatestRollup<T = unknown>(
   } while (cursor !== undefined)
   if (!newest)
     return null
-  const obj = await bucket.get(newest.key).catch(() => null)
+  // `get` returns `null` for an absent key — that's the only legitimate "no
+  // rollup" signal. A rejection is a real GET failure and must surface, not be
+  // collapsed into the same `null` as a missing object.
+  const obj = await bucket.get(newest.key)
   if (!obj)
     return null
   return JSON.parse(await obj.text()) as RollupEnvelope<T>
@@ -259,9 +265,10 @@ export interface RebuildRollupResult {
   /**
    * Set when this def's build/encode/write failed. The runner records the
    * failure and continues with the remaining defs so one bad rollup never
-   * aborts the rest. Successful defs have no `error`.
+   * aborts the rest. Successful defs have no `error`. The human-readable
+   * message (including the stack when available) lives on `error.message`.
    */
-  error?: string
+  error?: EngineError
 }
 
 export async function rebuildRollups(
@@ -341,7 +348,7 @@ export async function rebuildRollups(
         objectKey: '',
         bytes: 0,
         builtAt,
-        error: err instanceof Error ? (err.stack || err.message) : String(err),
+        error: engineErrors.rollupBuildFailed(def.id, err),
       })
     }
   }

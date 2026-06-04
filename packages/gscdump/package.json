@@ -47,6 +47,11 @@
       "import": "./dist/query/plan.mjs",
       "default": "./dist/query/plan.mjs"
     },
+    "./result": {
+      "types": "./dist/core/result.d.mts",
+      "import": "./dist/core/result.mjs",
+      "default": "./dist/core/result.mjs"
+    },
     "./contracts": {
       "types": "./dist/contracts.d.mts",
       "import": "./dist/contracts.mjs",

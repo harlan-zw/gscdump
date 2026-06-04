@@ -12,6 +12,7 @@
 import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
+import { requireReportParam } from '../require'
 
 export interface PrePublishReportParams {
   /** The topic / keyword phrase or URL slug to check before publishing. Required. */
@@ -31,8 +32,7 @@ export const prePublishReport = defineReport<PrePublishReportParams>({
     'max-findings': { type: 'number', description: 'Cap findings per section', default: DEFAULT_MAX },
   },
   plan: (params, window) => {
-    if (!params.topic)
-      throw new Error('pre-publish report requires --topic <topic-or-url>')
+    requireReportParam('pre-publish', 'topic', params.topic, 'pre-publish report requires --topic <topic-or-url>')
     const dates = { startDate: window.start, endDate: window.end }
     return [
       { key: 'cannibalization', type: 'cannibalization', params: { ...dates, limit: 200 } },

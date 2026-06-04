@@ -199,7 +199,10 @@ describe('createIcebergAppendSink', () => {
     await sink.emit(slice({ table: 'queries' }), [{ query: 'nuxt', date: '2026-04-01', clicks: 2, impressions: 20, sum_position: 7 }])
     const result = await sink.close()
     expect(result.flushed).toEqual(['pages'])
-    expect(result.failed).toEqual([{ table: 'queries', error: 'Error: catalog 500' }])
+    expect(result.failed).toHaveLength(1)
+    expect(result.failed[0]!.table).toBe('queries')
+    expect(result.failed[0]!.error.kind).toBe('sink-table-flush-failed')
+    expect(result.failed[0]!.error.message).toBe('Error: catalog 500')
   })
 
   it('a 429 is retried and the table recovers — close reports it flushed', async () => {

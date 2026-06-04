@@ -44,6 +44,8 @@
   gscdumpKeywordSparklinesParamsSchema: object
   gscdumpKeywordSparklinesResponseSchema: object
   gscdumpMetaSchema: object
+  gscdumpPageTrendParamsSchema: object
+  gscdumpPageTrendResponseSchema: object
   gscdumpPermissionRecoverySchema: object
   gscdumpQueryTrendParamsSchema: object
   gscdumpQueryTrendResponseSchema: object

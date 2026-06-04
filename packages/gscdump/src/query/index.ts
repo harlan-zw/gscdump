@@ -28,13 +28,18 @@ export { Countries, Devices, SearchTypes } from './constants'
 // Types
 export type { Country, Device, SearchType } from './constants'
 
+// Query errors (errors-as-values: typed `QueryError` + factory + helpers, plus
+// the two error classes engines match on by name)
+export * from './errors'
+
 // Operators
 export { and, between, contains, eq, gt, gte, inArray, like, lt, lte, ne, not, notRegex, or, regex, topLevel } from './operators'
 
 export {
   buildLogicalComparisonPlan,
+  buildLogicalComparisonPlanResult,
   buildLogicalPlan,
-  UnsupportedLogicalCapabilityError,
+  buildLogicalPlanResult,
 } from './plan'
 export type {
   ComparisonFilter,
@@ -46,7 +51,7 @@ export type {
   PlannerCapabilities,
 } from './plan'
 // Resolver
-export { extractDateRange, extractMetricFilters, extractSearchType, extractSpecialOperatorFilters, isJsonFilter, normalizeBuilderState, normalizeFilter, parseJsonFilter } from './resolver'
+export { extractDateRange, extractMetricFilters, extractSearchType, extractSpecialOperatorFilters, isJsonFilter, normalizeBuilderState, normalizeBuilderStateResult, normalizeFilter, parseJsonFilter, resolveToBody, resolveToBodyResult } from './resolver'
 
 // Types
 export type { BuilderState, Column, Dimension, DimensionValueMap, Filter, FilterInput, GSCResult, GSCRow, InternalFilter, JsonFilter, JsonInternalFilter, Metric, MetricColumn, QueryParam, QueryParamName, QueryParamValueMap } from './types'

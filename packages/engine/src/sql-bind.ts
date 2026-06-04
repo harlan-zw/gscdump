@@ -8,6 +8,11 @@
 // we escape quotes but don't understand dialect-specific types beyond the
 // primitives below. Reject anything we can't represent safely.
 
+import type { Result } from 'gscdump/result'
+import type { EngineError } from './errors'
+import { err, ok, unwrapResult } from 'gscdump/result'
+import { engineErrors, engineErrorToException } from './errors'
+
 function containsDisallowedControlChars(value: string): boolean {
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i)
@@ -22,26 +27,34 @@ export function sqlEscape(s: string): string {
   return s.replace(/'/g, '\'\'')
 }
 
-export function formatLiteral(value: unknown): string {
+/**
+ * Errors-as-values core for {@link formatLiteral}: returns a typed
+ * `invalid-sql-literal` `EngineError` for values that can't be safely inlined.
+ */
+export function formatLiteralResult(value: unknown): Result<string, EngineError> {
   if (value == null)
-    return 'NULL'
+    return ok('NULL')
   if (typeof value === 'number') {
     if (!Number.isFinite(value))
-      throw new Error(`cannot inline non-finite number: ${value}`)
-    return String(value)
+      return err(engineErrors.nonFiniteNumberLiteral(value))
+    return ok(String(value))
   }
   if (typeof value === 'boolean')
-    return value ? 'TRUE' : 'FALSE'
+    return ok(value ? 'TRUE' : 'FALSE')
   if (typeof value === 'bigint')
-    return value.toString()
+    return ok(value.toString())
   if (value instanceof Date)
-    return `'${value.toISOString()}'`
+    return ok(`'${value.toISOString()}'`)
   if (typeof value === 'string') {
     if (containsDisallowedControlChars(value))
-      throw new Error('string literal contains disallowed control characters')
-    return `'${value.replace(/'/g, '\'\'')}'`
+      return err(engineErrors.controlCharsInLiteral())
+    return ok(`'${value.replace(/'/g, '\'\'')}'`)
   }
-  throw new Error(`cannot inline value of type ${typeof value}`)
+  return err(engineErrors.uninlinableLiteralType(typeof value))
+}
+
+export function formatLiteral(value: unknown): string {
+  return unwrapResult(formatLiteralResult(value), engineErrorToException)
 }
 
 /**
@@ -58,9 +71,15 @@ export function formatLiteral(value: unknown): string {
  * Throws when placeholder count and params length disagree, or when a `$N`
  * index is out of range.
  */
-export function bindLiterals(sql: string, params: readonly unknown[]): string {
+/**
+ * Errors-as-values core for {@link bindLiterals}: returns a typed
+ * `placeholder-arity-mismatch` / `invalid-sql-literal` `EngineError` instead of
+ * throwing, so the edge RPC / proxy callers that build SQL from untrusted params
+ * can branch on the failure.
+ */
+export function bindLiteralsResult(sql: string, params: readonly unknown[]): Result<string, EngineError> {
   if (params.length === 0)
-    return sql
+    return ok(sql)
   let out = ''
   let i = 0
   let qmarkIdx = 0
@@ -103,8 +122,11 @@ export function bindLiterals(sql: string, params: readonly unknown[]): string {
     }
     if (c === '?') {
       if (qmarkIdx >= params.length)
-        throw new Error(`bindLiterals: more '?' placeholders than params (have ${params.length})`)
-      out += formatLiteral(params[qmarkIdx++])
+        return err(engineErrors.morePlaceholdersThanParams(params.length))
+      const literal = formatLiteralResult(params[qmarkIdx++])
+      if (!literal.ok)
+        return literal
+      out += literal.value
       i++
       continue
     }
@@ -113,9 +135,12 @@ export function bindLiterals(sql: string, params: readonly unknown[]): string {
       while (j < sql.length && sql[j]! >= '0' && sql[j]! <= '9') j++
       const n = Number(sql.slice(i + 1, j))
       if (n < 1 || n > params.length)
-        throw new Error(`bindLiterals: $${n} out of range (have ${params.length} params)`)
+        return err(engineErrors.dollarPlaceholderOutOfRange(n, params.length))
       usedDollar.add(n - 1)
-      out += formatLiteral(params[n - 1])
+      const literal = formatLiteralResult(params[n - 1])
+      if (!literal.ok)
+        return literal
+      out += literal.value
       i = j
       continue
     }
@@ -123,9 +148,13 @@ export function bindLiterals(sql: string, params: readonly unknown[]): string {
     i++
   }
   if (qmarkIdx > 0 && usedDollar.size > 0)
-    throw new Error('bindLiterals: cannot mix \'?\' and \'$N\' placeholders in the same query')
+    return err(engineErrors.mixedPlaceholderStyles())
   const used = qmarkIdx > 0 ? qmarkIdx : usedDollar.size
   if (used !== params.length)
-    throw new Error(`bindLiterals: ${params.length - used} params unused`)
-  return out
+    return err(engineErrors.unusedParams(params.length - used))
+  return ok(out)
+}
+
+export function bindLiterals(sql: string, params: readonly unknown[]): string {
+  return unwrapResult(bindLiteralsResult(sql, params), engineErrorToException)
 }

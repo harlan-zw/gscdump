@@ -60,6 +60,17 @@ export { analyzeInBrowser, rewriteForTableSource } from './browser'
 export type { AnalyzerRunner, BrowserAnalyzeOptions } from './browser'
 
 export { defaultAnalyzerRegistry } from './default-registry'
+
+// Typed, caller-actionable analysis failures (the `E` channel for the report /
+// analyzer boundary). Pairs with `Result` from `gscdump/result`.
+export type { AnalysisError, AnalysisErrorKind } from './errors'
+export {
+  analysisErrors,
+  analysisErrorToException,
+  formatAnalysisError,
+  isAnalysisError,
+} from './errors'
+
 export { normalizeQuery } from './query/normalize'
 
 // Reports — public surface. `defineReport` lives at `@gscdump/engine/report`
@@ -70,6 +81,7 @@ export {
   formatReport,
   REPORTS,
   runReport,
+  runReportResult,
 } from './report'
 export type {
   DryRunReportResult,

@@ -35,7 +35,7 @@ export async function createClient(
         return arrowToRows(res)
       }
       finally {
-        stmt.close()
+        await stmt.close()
       }
     },
     async close() {

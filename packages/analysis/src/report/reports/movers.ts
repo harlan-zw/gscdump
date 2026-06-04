@@ -11,6 +11,7 @@
 import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
+import { requireComparisonWindow } from '../require'
 
 export interface MoversReportParams {
   /** Cap findings per section. Default 5. */
@@ -32,10 +33,9 @@ export const moversReport = defineReport<MoversReportParams>({
     'min-clicks-change': { type: 'number', description: 'Min absolute click change', default: DEFAULT_MIN_CHANGE },
   },
   plan: (_params, window) => {
-    if (!window.comparison)
-      throw new Error('movers report requires a comparison window — pass --vs prev-period')
+    const comparison = requireComparisonWindow('movers', window, 'movers report requires a comparison window — pass --vs prev-period')
     const cur = { startDate: window.start, endDate: window.end }
-    const prev = { prevStartDate: window.comparison.start, prevEndDate: window.comparison.end }
+    const prev = { prevStartDate: comparison.start, prevEndDate: comparison.end }
     return [
       { key: 'movers', type: 'movers', params: { ...cur, ...prev, limit: 200 }, required: true },
       { key: 'decay', type: 'decay', params: { ...cur, ...prev, limit: 100 } },

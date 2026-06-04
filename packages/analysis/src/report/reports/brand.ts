@@ -10,6 +10,7 @@
 import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
+import { requireReportParam } from '../require'
 
 export interface BrandReportParams {
   /** Comma-separated brand terms. Required. */
@@ -29,9 +30,8 @@ export const brandReport = defineReport<BrandReportParams>({
     'max-findings': { type: 'number', description: 'Cap findings per section', default: DEFAULT_MAX },
   },
   plan: (params, window) => {
-    if (!params.brandTerms || !params.brandTerms.trim())
-      throw new Error('brand report requires --brand-terms <comma,separated,list>')
-    const brandTerms = params.brandTerms.split(',').map(t => t.trim()).filter(Boolean)
+    const rawBrandTerms = requireReportParam('brand', 'brand-terms', params.brandTerms, 'brand report requires --brand-terms <comma,separated,list>')
+    const brandTerms = rawBrandTerms.split(',').map(t => t.trim()).filter(Boolean)
     const dates = { startDate: window.start, endDate: window.end }
     return [
       { key: 'brand', type: 'brand', params: { ...dates, brandTerms, limit: 200 }, required: true },

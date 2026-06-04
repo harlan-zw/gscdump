@@ -172,7 +172,8 @@ describe('icebergAppendSink', () => {
     expect(res.flushed).toEqual(['pages'])
     expect(res.failed).toHaveLength(1)
     expect(res.failed[0].table).toBe('queries')
-    expect(res.failed[0].error).toContain('catalog 500 on queries')
+    expect(res.failed[0].error.kind).toBe('sink-table-flush-failed')
+    expect(res.failed[0].error.message).toContain('catalog 500 on queries')
   })
 
   it('fails ALL buffered tables when the catalog connection fails', async () => {
@@ -185,7 +186,7 @@ describe('icebergAppendSink', () => {
     expect(res.flushed).toEqual([])
     expect(res.failed.map(f => f.table).sort()).toEqual(['pages', 'queries'])
     for (const f of res.failed)
-      expect(f.error).toContain('auth refused')
+      expect(f.error.message).toContain('auth refused')
     expect(icebergAppendRetrying).not.toHaveBeenCalled()
   })
 

@@ -6,20 +6,39 @@
  */
 
 import type { AnalysisParams, AnalysisResult } from '../analysis-types'
+import type { EngineError } from '../errors'
 import type { AnalysisQuerySource, FileSet, QueryRow } from '../source/source-types'
 import type { AnalyzerRegistry } from './registry'
 import type { Analyzer, Plan, RequiredCapability, RowQueriesPlan, SqlPlan } from './types'
+import { isQueryError } from 'gscdump/query'
+import { engineErrors } from '../errors'
 
 type AnalyzerRow = QueryRow
 
 export class AnalyzerCapabilityError extends Error {
+  readonly engineError: EngineError
   constructor(
     public readonly tool: string,
     public readonly missing: readonly RequiredCapability[],
   ) {
-    super(`analyzer "${tool}" requires capabilities [${missing.join(', ')}] not provided by source`)
+    const engineError = engineErrors.analyzerCapabilityMissing(tool, missing)
+    super(engineError.message)
     this.name = 'AnalyzerCapabilityError'
+    this.engineError = engineError
   }
+}
+
+/**
+ * True when `err` is the planner's cross-dimension `unresolvable-dataset`
+ * failure. Prefers the typed `queryError` value stashed on the thrown
+ * `UnresolvableDatasetError` (version-robust); falls back to the historical
+ * name match for errors raised by an older `gscdump`.
+ */
+function isUnresolvableDatasetError(err: unknown): boolean {
+  const queryError = (err as { queryError?: unknown } | null)?.queryError
+  if (isQueryError(queryError) && queryError.kind === 'unresolvable-dataset')
+    return true
+  return (err as { name?: string } | null)?.name === 'UnresolvableDatasetError'
 }
 
 function sourceHas(source: AnalysisQuerySource, cap: RequiredCapability): boolean {
@@ -55,12 +74,12 @@ export async function runAnalyzerFromSource(
   }
   catch (err) {
     // A cross-dimension query the SQL resolver can't satisfy from stored
-    // tables (`UnresolvableDatasetError`, matched by name across engine
-    // versions). If the analyzer has a row-query variant, dispatch that
-    // instead — its `BuilderState`s run through `queryRows`, which the
-    // composite source routes to the live GSC API. Other build errors and
-    // a missing rows variant both propagate unchanged.
-    const rowsVariant = (err as { name?: string } | null)?.name === 'UnresolvableDatasetError'
+    // tables (`unresolvable-dataset`, recognised by its typed `queryError`).
+    // If the analyzer has a row-query variant, dispatch that instead — its
+    // `BuilderState`s run through `queryRows`, which the composite source
+    // routes to the live GSC API. Other build errors and a missing rows
+    // variant both propagate unchanged.
+    const rowsVariant = isUnresolvableDatasetError(err)
       ? registry.getAnalyzerVariants(params.type)?.rows
       : undefined
     if (!rowsVariant)

@@ -48,10 +48,12 @@ import type {
   RegisterPartnerUserParams,
   UpdatePartnerUserTokensParams,
 } from '@gscdump/contracts'
+import type { Result } from 'gscdump/result'
 import type { ZodTypeAny } from 'zod'
 import { partnerEndpointSchemas, partnerRoutes } from '@gscdump/contracts'
+import { err, ok, unwrapResult } from 'gscdump/result'
 import { ofetch } from 'ofetch'
-import { PartnerApiError, toPartnerError } from './errors'
+import { PartnerApiError, partnerErrorToException, toPartnerError } from './errors'
 import { findLifecycleSite, lifecycleSiteToSyncStatus } from './lifecycle'
 
 export type PartnerFetch = <T = unknown>(request: string, options?: PartnerFetchOptions) => Promise<T>
@@ -170,10 +172,24 @@ function dataDetailQuery(state: BuilderState, options?: DataDetailOptions): Reco
   return query
 }
 
-function assertAnalysisParams(params: GscdumpAnalysisParams): void {
+/**
+ * Errors-as-values core for analysis-param validation: a missing `brandTerms`
+ * on a brand/non-brand preset is a caller-actionable `validation` failure, so
+ * return it as a modelled `PartnerApiError` rather than only throwing.
+ */
+function validateAnalysisParamsResult(params: GscdumpAnalysisParams): Result<GscdumpAnalysisParams, PartnerApiError> {
   if ((params.preset === 'non-brand' || params.preset === 'brand-only') && !params.brandTerms?.trim()) {
-    throw new Error('brandTerms is required for brand/non-brand presets')
+    return err(new PartnerApiError({
+      kind: 'validation',
+      statusCode: 400,
+      message: 'brandTerms is required for brand/non-brand presets',
+    }))
   }
+  return ok(params)
+}
+
+function assertAnalysisParams(params: GscdumpAnalysisParams): void {
+  unwrapResult(validateAnalysisParamsResult(params), partnerErrorToException)
 }
 
 function analysisQuery(params: GscdumpAnalysisParams): Record<string, string | number> {
@@ -289,18 +305,135 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
   const fetchImpl = options.fetch ?? (ofetch as PartnerFetch)
   const apiBase = trimApiBase(options.apiBase)
 
-  async function request<T>(path: string, init: FetchOptions = {}, responseSchema?: ZodTypeAny): Promise<T> {
+  // Errors-as-values core for every HTTP round-trip: a transport/HTTP/response
+  // failure is classified once via `toPartnerError` into the `PartnerErrorKind`
+  // vocabulary and returned as `Err`, so callers can branch on
+  // `error.kind` (`auth` | `rate-limit` | `not-found` | ...) instead of
+  // try/catch-ing an untyped reject. The throwing `request` wrapper below
+  // re-raises the same `PartnerApiError` to preserve existing call sites.
+  async function requestResult<T>(path: string, init: FetchOptions = {}, responseSchema?: ZodTypeAny): Promise<Result<T, PartnerApiError>> {
     const headers = mergeHeaders(await resolveHeaders(options), init.headers)
     try {
       const out = await fetchImpl<T>(buildPath(apiBase, path), {
         ...init,
         headers,
       })
-      return shouldValidate(options, 'response') ? parseWith(responseSchema, out) : out
+      return ok(shouldValidate(options, 'response') ? parseWith(responseSchema, out) : out)
     }
     catch (error) {
-      throw toPartnerError(error)
+      return err(toPartnerError(error))
     }
+  }
+
+  async function request<T>(path: string, init: FetchOptions = {}, responseSchema?: ZodTypeAny): Promise<T> {
+    return unwrapResult(await requestResult<T>(path, init, responseSchema), partnerErrorToException)
+  }
+
+  // Errors-as-values core for `waitForUserReady`: polling exhaustion while the
+  // user db is still provisioning is a caller-actionable `provisioning` failure.
+  // The `data` channel carries the last observed status so callers can inspect
+  // it. The throwing wrapper re-raises the original plain `Error` (with `.data`)
+  // identity that existing consumers catch.
+  async function waitForUserReadyResult(
+    userId: string,
+    waitOptions: { attempts?: number, intervalMs?: number } = {},
+  ): Promise<Result<GscdumpUserStatus, PartnerApiError>> {
+    const attempts = waitOptions.attempts ?? 12
+    const intervalMs = waitOptions.intervalMs ?? 1000
+    let latest: GscdumpUserStatus | null = null
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const result = await requestResult<GscdumpUserStatus>(partnerRoutes.users.status(userId))
+      if (!result.ok)
+        return result
+      latest = result.value
+      if (latest.status === 'ready')
+        return ok(latest)
+      if (attempt < attempts - 1)
+        await sleep(intervalMs)
+    }
+    return err(new PartnerApiError({
+      kind: 'provisioning',
+      statusCode: 409,
+      message: 'gscdump user database is still provisioning',
+      data: latest,
+    }))
+  }
+
+  // Re-raise the provisioning-exhaustion failure as the original plain
+  // `Error & { data }` shape (not a `PartnerApiError`) so consumers that
+  // `.catch`/`.toMatchObject` on `{ message, data }` keep working unchanged.
+  function waitForUserReadyToException(error: PartnerApiError): unknown {
+    const e = new Error(error.message) as Error & { data?: unknown }
+    e.data = error.data
+    return e
+  }
+
+  // Errors-as-values core for `waitForUserLifecycleReady`: discriminates the
+  // terminal lifecycle states into modelled `auth` (re-auth required) vs
+  // `provisioning` (not connected / still provisioning) `PartnerApiError`s.
+  async function waitForUserLifecycleReadyResult(
+    userId: string,
+    waitOptions: { attempts?: number, intervalMs?: number } = {},
+  ): Promise<Result<PartnerLifecycleResponse, PartnerApiError>> {
+    const attempts = waitOptions.attempts ?? 12
+    const intervalMs = waitOptions.intervalMs ?? 1000
+    let latest: PartnerLifecycleResponse | null = null
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const result = await requestResult<PartnerLifecycleResponse>(partnerRoutes.users.lifecycle(userId))
+      if (!result.ok)
+        return result
+      latest = result.value
+      const status = latest.account.status
+      if (status === 'ready')
+        return ok(latest)
+      if (status === 'refresh_missing' || status === 'scope_missing' || status === 'reauth_required') {
+        return err(new PartnerApiError({
+          kind: 'auth',
+          statusCode: 401,
+          message: 'Google Search Console authorization must be refreshed',
+          data: latest.account,
+        }))
+      }
+      if (status === 'disconnected' || status === 'oauth_received') {
+        return err(new PartnerApiError({
+          kind: 'provisioning',
+          statusCode: 409,
+          message: 'gscdump user is not fully connected',
+          data: latest.account,
+        }))
+      }
+      if (attempt < attempts - 1)
+        await sleep(intervalMs)
+    }
+    return err(new PartnerApiError({
+      kind: 'provisioning',
+      statusCode: 409,
+      message: 'gscdump user database is still provisioning',
+      data: latest,
+    }))
+  }
+
+  // Errors-as-values core for `getSiteSyncStatus`: a lifecycle round-trip that
+  // omits the requested site is a caller-actionable `not-found`.
+  async function getSiteSyncStatusResult(
+    siteId: string,
+    userId?: string,
+  ): Promise<Result<GscdumpSyncStatusResponse, PartnerApiError>> {
+    if (!userId)
+      return requestResult<GscdumpSyncStatusResponse>(partnerRoutes.sites.syncStatus(siteId))
+    const lifecycle = await requestResult<PartnerLifecycleResponse>(partnerRoutes.users.lifecycle(userId))
+    if (!lifecycle.ok)
+      return lifecycle
+    const site = findLifecycleSite(lifecycle.value, siteId)
+    if (!site) {
+      return err(new PartnerApiError({
+        kind: 'not-found',
+        statusCode: 404,
+        message: 'gscdump lifecycle site not found',
+        data: { siteId, userId },
+      }))
+    }
+    return ok(lifecycleSiteToSyncStatus(site))
   }
 
   return {
@@ -329,19 +462,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     async waitForUserReady(userId: string, waitOptions: { attempts?: number, intervalMs?: number } = {}) {
-      const attempts = waitOptions.attempts ?? 12
-      const intervalMs = waitOptions.intervalMs ?? 1000
-      let latest: GscdumpUserStatus | null = null
-      for (let attempt = 0; attempt < attempts; attempt++) {
-        latest = await request<GscdumpUserStatus>(partnerRoutes.users.status(userId))
-        if (latest.status === 'ready')
-          return latest
-        if (attempt < attempts - 1)
-          await sleep(intervalMs)
-      }
-      const err = new Error('gscdump user database is still provisioning') as Error & { data?: unknown }
-      err.data = latest
-      throw err
+      return unwrapResult(await waitForUserReadyResult(userId, waitOptions), waitForUserReadyToException)
     },
 
     // Lifecycle-aware variant of `waitForUserReady`. Polls
@@ -355,39 +476,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       userId: string,
       waitOptions: { attempts?: number, intervalMs?: number } = {},
     ): Promise<PartnerLifecycleResponse> {
-      const attempts = waitOptions.attempts ?? 12
-      const intervalMs = waitOptions.intervalMs ?? 1000
-      let latest: PartnerLifecycleResponse | null = null
-      for (let attempt = 0; attempt < attempts; attempt++) {
-        latest = await request<PartnerLifecycleResponse>(partnerRoutes.users.lifecycle(userId))
-        const status = latest.account.status
-        if (status === 'ready')
-          return latest
-        if (status === 'refresh_missing' || status === 'scope_missing' || status === 'reauth_required') {
-          throw new PartnerApiError({
-            kind: 'auth',
-            statusCode: 401,
-            message: 'Google Search Console authorization must be refreshed',
-            data: latest.account,
-          })
-        }
-        if (status === 'disconnected' || status === 'oauth_received') {
-          throw new PartnerApiError({
-            kind: 'provisioning',
-            statusCode: 409,
-            message: 'gscdump user is not fully connected',
-            data: latest.account,
-          })
-        }
-        if (attempt < attempts - 1)
-          await sleep(intervalMs)
-      }
-      throw new PartnerApiError({
-        kind: 'provisioning',
-        statusCode: 409,
-        message: 'gscdump user database is still provisioning',
-        data: latest,
-      })
+      return unwrapResult(await waitForUserLifecycleReadyResult(userId, waitOptions), partnerErrorToException)
     },
 
     getUserSites(userId: string) {
@@ -437,19 +526,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     // back to the dedicated sync-status endpoint otherwise. Throws `not-found`
     // when the lifecycle response doesn't include the requested site.
     async getSiteSyncStatus(siteId: string, userId?: string): Promise<GscdumpSyncStatusResponse> {
-      if (!userId)
-        return request<GscdumpSyncStatusResponse>(partnerRoutes.sites.syncStatus(siteId))
-      const lifecycle = await request<PartnerLifecycleResponse>(partnerRoutes.users.lifecycle(userId))
-      const site = findLifecycleSite(lifecycle, siteId)
-      if (!site) {
-        throw new PartnerApiError({
-          kind: 'not-found',
-          statusCode: 404,
-          message: 'gscdump lifecycle site not found',
-          data: { siteId, userId },
-        })
-      }
-      return lifecycleSiteToSyncStatus(site)
+      return unwrapResult(await getSiteSyncStatusResult(siteId, userId), partnerErrorToException)
     },
 
     getData(siteId: string, state: BuilderState, queryOptions?: DataQueryOptions) {

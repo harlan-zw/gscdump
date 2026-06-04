@@ -64,7 +64,7 @@ describe('resolveParquetSQL', () => {
   })
 
   it('throws when date range is missing', () => {
-    expect(() => resolveParquetSQL(state({ filter: undefined }), 'pages')).toThrow(/date range/)
+    expect(() => resolveParquetSQL(state({ filter: undefined }), 'pages')).toThrow(/date range/i)
   })
 })
 

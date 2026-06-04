@@ -3,6 +3,8 @@ export type { CompactionThresholds } from './compaction'
 export { canonicalEmptyParquetSchema, createDuckDBCodec, createDuckDBExecutor } from './duckdb'
 export type { DuckDBFactory, DuckDBHandle } from './duckdb'
 export { createStorageEngine, MAX_DAY_BYTES } from './engine'
+// Errors-as-values: typed `EngineError` union + factory + helpers
+export * from './errors'
 // Iceberg backend (schema + catalog + append-sink) lives behind the
 // `@gscdump/engine/iceberg` subpath. Node-only Iceberg writers are on
 // `@gscdump/engine/sink-node`.
@@ -120,5 +122,6 @@ export {
   TABLES_BY_SEARCH_TYPE,
   TIER_PRIORITY,
   validateEnabledSearchTypes,
+  validateEnabledSearchTypesResult,
   WEIGHT_PRIORITY,
 } from './sync-config'

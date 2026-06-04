@@ -19,7 +19,9 @@
   deleteSitemap: function
   discoverSitemap: function
   encodeSiteId: function
+  err: function
   exchangeAuthCode: function
+  exchangeAuthCodeResult: function
   fetchSitemap: function
   fetchSitemaps: function
   fetchSitemapUrls: function
@@ -57,6 +59,7 @@
   GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
   GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
   gscdumpApi: function
+  gscErrorToException: function
   gscPropertyMatchesTarget: function
   hasGscReadScope: function
   hasGscWriteScope: function
@@ -70,6 +73,8 @@
   indexingStatuses: object
   inspectUrl: function
   inspectUrlFlat: function
+  isErr: function
+  isOk: function
   isPermissionDeniedError: function
   isValidGscDate: function
   isVerifiedGscPermission: function
@@ -77,12 +82,16 @@
   lifecycleErrorCodes: object
   lifecycleWebhookEvents: object
   listVerifiedSites: function
+  mapErr: function
+  mapResult: function
   matchGscSite: function
+  matchResult: function
   MS_PER_DAY: number
   normalizeGscSiteUrl: function
   normalizeRegistrationTarget: function
   normalizeSiteUrl: function
   normalizeUrl: function
+  ok: function
   parseGoogleError: function
   parseGrantedScopes: function
   parseGscSiteUrl: function
@@ -92,6 +101,7 @@
   propertyStatuses: object
   querySourceModes: object
   refreshAccessToken: function
+  refreshAccessTokenResult: function
   requestIndexing: function
   rethrowAsGscApiError: function
   rowWithMetricDefaults: function
@@ -103,6 +113,7 @@
   submitSitemap: function
   toIsoDate: function
   unverifySite: function
+  unwrapResult: function
   URL_INSPECTION_DAILY_LIMIT: number
   URL_INSPECTION_EFFECTIVE_LIMIT: number
   urlMatchKey: function
@@ -113,7 +124,9 @@
   and: function
   between: function
   buildLogicalComparisonPlan: function
+  buildLogicalComparisonPlanResult: function
   buildLogicalPlan: function
+  buildLogicalPlanResult: function
   clicks: object
   contains: function
   Countries: object
@@ -129,6 +142,7 @@
   extractMetricFilters: function
   extractSearchType: function
   extractSpecialOperatorFilters: function
+  formatQueryError: function
   gsc: object
   gt: function
   gte: function
@@ -136,11 +150,13 @@
   impressions: object
   inArray: function
   isJsonFilter: function
+  isQueryError: function
   like: function
   lt: function
   lte: function
   ne: function
   normalizeBuilderState: function
+  normalizeBuilderStateResult: function
   normalizeFilter: function
   not: function
   notRegex: function
@@ -150,18 +166,34 @@
   position: object
   query: object
   queryCanonical: object
+  queryErrors: object
+  queryErrorToException: function
   regex: function
+  resolveToBody: function
+  resolveToBodyResult: function
   searchAppearance: object
   searchType: object
   SearchTypes: object
   today: function
   topLevel: function
+  UnresolvableDatasetError: function
   UnsupportedLogicalCapabilityError: function
 ./query/plan:
   buildLogicalComparisonPlan: function
+  buildLogicalComparisonPlanResult: function
   buildLogicalPlan: function
+  buildLogicalPlanResult: function
   inferDataset: function
   isDatasetResolvable: function
   isStateResolvable: function
   UnresolvableDatasetError: function
   UnsupportedLogicalCapabilityError: function
+./result:
+  err: function
+  isErr: function
+  isOk: function
+  mapErr: function
+  mapResult: function
+  matchResult: function
+  ok: function
+  unwrapResult: function

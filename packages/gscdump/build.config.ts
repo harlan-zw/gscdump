@@ -20,6 +20,12 @@ export default defineBuildConfig({
     },
     {
       type: 'bundle',
+      input: ['./src/core/result.ts'],
+      outDir: './dist',
+      name: 'result',
+    },
+    {
+      type: 'bundle',
       input: ['./src/contracts.ts'],
       outDir: './dist',
       name: 'contracts',

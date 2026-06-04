@@ -158,6 +158,9 @@ async function cacheGetMany(
   role: 'query' | 'passage',
   texts: string[],
 ): Promise<Map<string, Float32Array>> {
+  // Ignorable by design: the embedding cache is a pure optimisation. If
+  // IndexedDB is unavailable (private mode, blocked, quota), we treat every
+  // text as a cache miss and re-embed; correctness is unaffected.
   const db = await openDb().catch(() => null)
   if (db == null)
     return new Map()
@@ -193,6 +196,8 @@ async function cachePutMany(
   role: 'query' | 'passage',
   entries: Array<[string, Float32Array]>,
 ): Promise<void> {
+  // Ignorable by design: failing to persist to the embedding cache only costs
+  // a re-embed on the next run; it never changes this run's result.
   const db = await openDb().catch(() => null)
   if (db == null)
     return
@@ -274,6 +279,8 @@ async function selectDevice(requested?: 'webgpu' | 'wasm'): Promise<'webgpu' | '
   if (requested === 'webgpu' || requested == null) {
     const gpu = (globalThis as unknown as { navigator?: { gpu?: { requestAdapter: () => Promise<unknown> } } }).navigator?.gpu
     if (gpu != null) {
+      // Ignorable by design: a failed/absent WebGPU adapter is a capability
+      // probe, not an error. We fall back to the 'wasm' device.
       const adapter = await gpu.requestAdapter().catch(() => null)
       if (adapter != null)
         chosenDevice = 'webgpu'
