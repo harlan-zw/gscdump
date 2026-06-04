@@ -2,8 +2,10 @@
   attachOpfsParquetTables: function
   attachParquetTables: function
   attachParquetUrlTables: function
+  attachParquetUrlTablesResult: function
   bootDuckDBWasm: function
   BrowserAttachBudgetExceededError: function
+  browserAttachErrors: object
   clearOpfsSnapshotCache: function
   compileArchetypeSql: function
   countries: object
@@ -15,6 +17,7 @@
   DuckDBWasmDatabase: function
   estimateOpfsStorage: function
   hourly_pages: object
+  isBrowserAttachError: function
   mergeScope: function
   OpfsQuotaExceededError: function
   page_queries: object

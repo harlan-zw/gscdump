@@ -1,12 +1,14 @@
 import type { AsyncDuckDB, AsyncDuckDBConnection, DuckDBBundles, DuckDBConfig } from '@duckdb/duckdb-wasm'
 import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { AnalyzerRegistry } from '@gscdump/engine/analyzer'
+import type { Result } from 'gscdump/result'
 
 import { runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import { arrowToRows as toRows } from '@gscdump/engine/arrow'
 import { pgResolverAdapter } from '@gscdump/engine/resolver'
 import { createAttachedTableSource } from '@gscdump/engine/source'
 import { sqlEscape } from '@gscdump/engine/sql'
+import { err, ok, unwrapResult } from 'gscdump/result'
 
 export interface QueryResult {
   rows: Record<string, unknown>[]
@@ -176,6 +178,61 @@ let nextAttachId = 0
 
 export class BrowserAttachBudgetExceededError extends Error {
   override name = 'BrowserAttachBudgetExceededError'
+}
+
+// Modelled, caller-actionable failure for the browser parquet URL attach: the
+// requested file set blows the local file-count or byte budget (the runtime's
+// guard against accidentally pulling an unbounded manifest into the page). The
+// caller branches on this to route the affected tables server-side instead of
+// crashing the page. `kind`-discriminated to mirror `gscdump`/`@gscdump/engine`
+// error conventions. WASM/DuckDB/HTTP IO failures stay defects and propagate.
+export interface BrowserAttachError {
+  kind: 'browser-attach-budget-exceeded'
+  message: string
+  /** Which budget tripped: the file count, the hinted byte plan, or the running byte plan. */
+  budget: 'maxFiles' | 'maxBytes'
+}
+
+export const browserAttachErrors = {
+  maxFilesExceeded(files: number, maxFiles: number): BrowserAttachError {
+    return {
+      kind: 'browser-attach-budget-exceeded',
+      budget: 'maxFiles',
+      message: `browser parquet attach requires ${files} files, above maxFiles=${maxFiles}`,
+    }
+  },
+  hintedBytesExceeded(hintedBytes: number, maxBytes: number): BrowserAttachError {
+    return {
+      kind: 'browser-attach-budget-exceeded',
+      budget: 'maxBytes',
+      message: `browser parquet attach requires ${hintedBytes} hinted bytes, above maxBytes=${maxBytes}`,
+    }
+  },
+  plannedBytesExceeded(plannedBytes: number, maxBytes: number): BrowserAttachError {
+    return {
+      kind: 'browser-attach-budget-exceeded',
+      budget: 'maxBytes',
+      message: `browser parquet attach planned ${plannedBytes} bytes, above maxBytes=${maxBytes}`,
+    }
+  },
+} as const
+
+export function isBrowserAttachError(value: unknown): value is BrowserAttachError {
+  return typeof value === 'object' && value !== null
+    && (value as { kind?: string }).kind === 'browser-attach-budget-exceeded'
+    && typeof (value as { message?: unknown }).message === 'string'
+}
+
+/**
+ * Re-raise a {@link BrowserAttachError} as the historical
+ * {@link BrowserAttachBudgetExceededError} so existing call sites' `instanceof`
+ * checks keep holding. The `Result` core is the source of truth; the throwing
+ * `attachParquetUrlTables` wrapper maps through here.
+ */
+function browserAttachErrorToException(error: BrowserAttachError): Error {
+  const exception = new BrowserAttachBudgetExceededError(error.message)
+  ;(exception as Error & { browserAttachError?: BrowserAttachError }).browserAttachError = error
+  return exception
 }
 
 function fileName(table: string, index: number, provided?: string): string {
@@ -424,9 +481,17 @@ export async function attachParquetTables(
   }
 }
 
-export async function attachParquetUrlTables(
+/**
+ * Errors-as-values core for {@link attachParquetUrlTables}: returns a typed
+ * {@link BrowserAttachError} when the requested file set blows the local file-
+ * count / byte budget, so callers can branch (route the affected tables
+ * server-side) instead of catching an untyped throw. WASM/DuckDB/HTTP IO
+ * failures stay defects and propagate. `attachParquetUrlTables` is the thin
+ * throwing wrapper preserving the historical `BrowserAttachBudgetExceededError`.
+ */
+export async function attachParquetUrlTablesResult(
   options: AttachParquetUrlTablesOptions,
-): Promise<AttachedTablesHandle> {
+): Promise<Result<AttachedTablesHandle, BrowserAttachError>> {
   const {
     db,
     conn,
@@ -458,20 +523,14 @@ export async function attachParquetUrlTables(
     for (let i = 0; i < urls.length; i++)
       flat.push({ table, url: urls[i]!, index: i })
   }
-  if (flat.length > fileBudget) {
-    throw new BrowserAttachBudgetExceededError(
-      `browser parquet attach requires ${flat.length} files, above maxFiles=${fileBudget}`,
-    )
-  }
+  if (flat.length > fileBudget)
+    return err(browserAttachErrors.maxFilesExceeded(flat.length, fileBudget))
   const hintedBytes = flat.reduce((acc, item) => {
     const hint = sizeHintFromUrl(item.url)
     return hint === null ? acc : acc + hint
   }, 0)
-  if (hintedBytes > byteBudget) {
-    throw new BrowserAttachBudgetExceededError(
-      `browser parquet attach requires ${hintedBytes} hinted bytes, above maxBytes=${byteBudget}`,
-    )
-  }
+  if (hintedBytes > byteBudget)
+    return err(browserAttachErrors.hintedBytesExceeded(hintedBytes, byteBudget))
 
   // Two registration paths, picked per call via `attachMode`:
   //   - 'http' (default): DuckDB reads each file via HTTP range; we preflight
@@ -502,52 +561,70 @@ export async function attachParquetUrlTables(
   }
   const prepared: PreparedFile[] = []
 
-  await runWithConcurrency(flat, concurrency, async ({ table, url, index }) => {
-    if (tableFailures.has(table))
-      return
-    effectiveSignal?.throwIfAborted()
-    try {
-      let bytes: number | null = null
-      let body: Uint8Array | null = null
-
-      if (attachMode === 'buffer') {
-        // Buffer mode: download the file, learn size from the body. No HEAD
-        // round-trip — the GET itself yields both size and bytes.
-        const res = await fetchImpl(url, fetchInitFor(fetchInit, 'GET', effectiveSignal))
-        if (!res.ok)
-          throw new Error(`GET ${url} failed: ${res.status}`)
-        const buf = new Uint8Array(await res.arrayBuffer())
-        body = buf
-        bytes = buf.byteLength
-      }
-      else if (trustSizeHint && sizeHintFromUrl(url) !== null) {
-        // HTTP mode + signed size hint: take the hint, skip the preflight.
-        // Saves one round-trip per file; DuckDB learns Accept-Ranges from
-        // its first range read.
-        bytes = sizeHintFromUrl(url)!
-      }
-      else {
-        // HTTP mode without a hint: preflight as before.
-        bytes = await preflightHttpUrl(url, fetchImpl, fetchInit, effectiveSignal)
-      }
-
-      plannedBytes += bytes
-      if (plannedBytes > byteBudget) {
-        const err = new BrowserAttachBudgetExceededError(
-          `browser parquet attach planned ${plannedBytes} bytes, above maxBytes=${byteBudget}`,
-        )
-        budgetController.abort(err)
-        throw err
-      }
+  // The running-byte-plan budget guard fires mid-stream, inside the bounded
+  // concurrency workers: it aborts the in-flight preflights via
+  // `budgetController` and propagates out of `runWithConcurrency`. We keep it as
+  // an internal throw (the `BrowserAttachBudgetExceededError` class drives both
+  // the abort signal and the per-worker catch's "rethrow vs record" branch),
+  // then convert it to the modelled `Result` error at this boundary so the
+  // caller branches on `kind` rather than catching. Any OTHER throw out of the
+  // download phase is a defect (HTTP/WASM IO) and propagates unchanged.
+  try {
+    await runWithConcurrency(flat, concurrency, async ({ table, url, index }) => {
+      if (tableFailures.has(table))
+        return
       effectiveSignal?.throwIfAborted()
-      prepared.push({ table, url, index, name: attachFileName(attachId, table, index), bytes, body })
-    }
-    catch (err) {
-      if (effectiveSignal?.aborted || err instanceof BrowserAttachBudgetExceededError || isAbortError(err))
-        throw err
-      tableFailures.set(table, err instanceof Error ? err : new Error(String(err)))
-    }
-  })
+      try {
+        let bytes: number | null = null
+        let body: Uint8Array | null = null
+
+        if (attachMode === 'buffer') {
+          // Buffer mode: download the file, learn size from the body. No HEAD
+          // round-trip — the GET itself yields both size and bytes.
+          const res = await fetchImpl(url, fetchInitFor(fetchInit, 'GET', effectiveSignal))
+          if (!res.ok)
+            throw new Error(`GET ${url} failed: ${res.status}`)
+          const buf = new Uint8Array(await res.arrayBuffer())
+          body = buf
+          bytes = buf.byteLength
+        }
+        else if (trustSizeHint && sizeHintFromUrl(url) !== null) {
+          // HTTP mode + signed size hint: take the hint, skip the preflight.
+          // Saves one round-trip per file; DuckDB learns Accept-Ranges from
+          // its first range read.
+          bytes = sizeHintFromUrl(url)!
+        }
+        else {
+          // HTTP mode without a hint: preflight as before.
+          bytes = await preflightHttpUrl(url, fetchImpl, fetchInit, effectiveSignal)
+        }
+
+        plannedBytes += bytes
+        if (plannedBytes > byteBudget) {
+          const budgetErr = new BrowserAttachBudgetExceededError(
+            `browser parquet attach planned ${plannedBytes} bytes, above maxBytes=${byteBudget}`,
+          )
+          budgetController.abort(budgetErr)
+          throw budgetErr
+        }
+        effectiveSignal?.throwIfAborted()
+        prepared.push({ table, url, index, name: attachFileName(attachId, table, index), bytes, body })
+      }
+      catch (err) {
+        if (effectiveSignal?.aborted || err instanceof BrowserAttachBudgetExceededError || isAbortError(err))
+          throw err
+        tableFailures.set(table, err instanceof Error ? err : new Error(String(err)))
+      }
+    })
+  }
+  catch (downloadErr) {
+    // The mid-stream byte-budget guard is the only modelled failure here. A
+    // user-supplied `signal` abort still throws (AbortError is a defect-shaped
+    // cancellation, not a budget outcome) so it surfaces as before.
+    if (downloadErr instanceof BrowserAttachBudgetExceededError && !signal?.aborted)
+      return err(browserAttachErrors.plannedBytesExceeded(plannedBytes, byteBudget))
+    throw downloadErr
+  }
 
   const { DuckDBDataProtocol } = await import('@duckdb/duckdb-wasm')
   const attached: string[] = []
@@ -595,7 +672,7 @@ export async function attachParquetUrlTables(
   }
 
   let detached = false
-  return {
+  return ok({
     version,
     tables: attached,
     schema,
@@ -605,7 +682,20 @@ export async function attachParquetUrlTables(
       detached = true
       await dropAttachedResources(db, conn, schema, attached, registeredFiles)
     },
-  }
+  })
+}
+
+/**
+ * Attach browser parquet URL tables, throwing
+ * {@link BrowserAttachBudgetExceededError} when the requested set blows the
+ * file-count / byte budget. Thin throwing wrapper over
+ * {@link attachParquetUrlTablesResult}; existing call sites and their
+ * `instanceof BrowserAttachBudgetExceededError` checks keep holding.
+ */
+export async function attachParquetUrlTables(
+  options: AttachParquetUrlTablesOptions,
+): Promise<AttachedTablesHandle> {
+  return unwrapResult(await attachParquetUrlTablesResult(options), browserAttachErrorToException)
 }
 
 export function createBrowserAnalysisRuntime(

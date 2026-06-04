@@ -23,11 +23,14 @@ import type {
   SourceInfoResponse,
   WhoamiResponse,
 } from '@gscdump/contracts'
+import type { Result } from 'gscdump/result'
 import type { ZodTypeAny } from 'zod'
 import type { PartnerFetch, PartnerFetchOptions, PartnerHeaders } from './client'
+import type { PartnerApiError } from './errors'
 import { analyticsRoutes, partnerEndpointSchemas } from '@gscdump/contracts'
+import { err, ok, unwrapResult } from 'gscdump/result'
 import { ofetch } from 'ofetch'
-import { toPartnerError } from './errors'
+import { partnerErrorToException, toPartnerError } from './errors'
 
 export type AnalyticsFetch = PartnerFetch
 export type AnalyticsHeaders = PartnerHeaders
@@ -155,18 +158,25 @@ export function createAnalyticsClient(options: AnalyticsClientOptions = {}): Ana
   const fetchImpl = options.fetch ?? (ofetch as AnalyticsFetch)
   const apiBase = trimApiBase(options.apiBase)
 
-  async function request<T>(path: string, init: AnalyticsFetchOptions = {}, responseSchema?: ZodTypeAny): Promise<T> {
+  // Errors-as-values core: classifies any HTTP/transport failure into a typed
+  // `PartnerApiError` value so callers can branch on `error.kind`. `request` is
+  // the thin throwing wrapper, mirroring createPartnerClient in client.ts.
+  async function requestResult<T>(path: string, init: AnalyticsFetchOptions = {}, responseSchema?: ZodTypeAny): Promise<Result<T, PartnerApiError>> {
     const headers = mergeHeaders(await resolveHeaders(options), init.headers)
     try {
       const out = await fetchImpl<T>(buildPath(apiBase, path), {
         ...init,
         headers,
       })
-      return shouldValidate(options, 'response') ? parseWith(responseSchema, out) : out
+      return ok(shouldValidate(options, 'response') ? parseWith(responseSchema, out) : out)
     }
     catch (error) {
-      throw toPartnerError(error)
+      return err(toPartnerError(error))
     }
+  }
+
+  async function request<T>(path: string, init: AnalyticsFetchOptions = {}, responseSchema?: ZodTypeAny): Promise<T> {
+    return unwrapResult(await requestResult<T>(path, init, responseSchema), partnerErrorToException)
   }
 
   return {

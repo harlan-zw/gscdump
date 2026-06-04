@@ -48,9 +48,12 @@ export type { InsightRunner, InsightRunnerOptions, ScopedRunnerOptions, TableSco
 export {
   attachParquetTables,
   attachParquetUrlTables,
+  attachParquetUrlTablesResult,
   bootDuckDBWasm,
   BrowserAttachBudgetExceededError,
+  browserAttachErrors,
   createBrowserAnalysisRuntime,
+  isBrowserAttachError,
 } from './runtime'
 export type {
   AnalyzeResult,
@@ -59,6 +62,7 @@ export type {
   AttachParquetUrlTablesOptions,
   BootDuckDBWasmOptions,
   BrowserAnalysisRuntime,
+  BrowserAttachError,
   BrowserParquetFile,
   BrowserParquetTable,
   BrowserParquetUrlTable,

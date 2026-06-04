@@ -14,20 +14,10 @@ export async function requestIndexing(
   input: z.infer<typeof requestIndexingInput>,
   ctx: HandlerContext,
 ): Promise<IndexingResult> {
-  // requestIndexing now throws on error, but MCP handler probably expects to handle it or let it bubble?
-  // Previous implementation: return gscRequestIndexing(...) which returned { error } if failed?
-  // No, gscRequestIndexing in api.ts WAS catching. Now it's NOT.
-  // So if I return the promise, it will reject on error.
-  // The MCP server wrapper likely catches errors.
-  // However, I should check if I need to catch and return format with error.
-  // The return type is Promise<IndexingResult>. IndexingResult has error?: string.
-  // If I want to return an object with error, I should catch.
+  // Let a real Indexing API failure (quota/403/auth/network) propagate to the MCP
+  // error boundary rather than swallowing it into a fake-success payload — matches
+  // the query/reports handlers. `IndexingResult` has no `error` field.
   return gscRequestIndexing(ctx.client, input.url, { type: input.type || 'URL_UPDATED' })
-    .catch((e: Error) => ({
-      url: input.url,
-      type: input.type || 'URL_UPDATED',
-      error: e.message,
-    }))
 }
 
 export async function getIndexingStatus(
@@ -35,10 +25,6 @@ export async function getIndexingStatus(
   ctx: HandlerContext,
 ): Promise<IndexingMetadata> {
   return getIndexingMetadata(ctx.client, input.url)
-    .catch((e: Error) => ({
-      url: input.url,
-      error: e.message,
-    }))
 }
 
 export async function batchRequestIndexing(
