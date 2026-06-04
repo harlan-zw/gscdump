@@ -84,3 +84,49 @@ describe('createDuckDbIcebergExecutor', () => {
     await expect(exec.runSql('SELECT 1')).rejects.toThrow(/OOM in sibling/)
   })
 })
+
+describe('createDuckDbIcebergExecutor runArchetypeResult', () => {
+  it('returns ok with rows on success', async () => {
+    const svc = fakeSvc([{ url: 'a', query: 'b', clicks: 1 }])
+    const exec = createDuckDbIcebergExecutor({ svc, warehouse: 'wh', namespace: 'gsc' })
+    const res = await exec.runArchetypeResult!({
+      ...base,
+      archetype: 'two-dimension-detail',
+      metrics: ['clicks'],
+    } as TwoDimensionDetailQuery)
+    expect(res.ok).toBe(true)
+    if (res.ok)
+      expect(res.value.rows).toEqual([{ url: 'a', query: 'b', clicks: 1 }])
+  })
+
+  it('returns err with a DuckDbIcebergError for aux-cloud-only', async () => {
+    const svc = fakeSvc([])
+    const exec = createDuckDbIcebergExecutor({ svc, warehouse: 'wh', namespace: 'gsc' })
+    const res = await exec.runArchetypeResult!(
+      { archetype: 'aux-cloud-only', siteId: 's', dataset: 'indexing' } as any,
+    )
+    expect(res.ok).toBe(false)
+    if (!res.ok)
+      expect(res.error).toBeInstanceOf(DuckDbIcebergError)
+  })
+
+  it('returns err with a DuckDbIcebergError on a sibling RPC failure', async () => {
+    const svc = {
+      runSQL: vi.fn(async () => {
+        throw new Error('OOM in sibling')
+      }),
+    }
+    const exec = createDuckDbIcebergExecutor({ svc, warehouse: 'wh', namespace: 'gsc' })
+    const res = await exec.runArchetypeResult!({
+      ...base,
+      archetype: 'arbitrary-sql',
+      sql: 'SELECT 1',
+      params: [],
+    } as ArbitrarySqlQuery)
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.error).toBeInstanceOf(DuckDbIcebergError)
+      expect(res.error.message).toMatch(/OOM in sibling/)
+    }
+  })
+})

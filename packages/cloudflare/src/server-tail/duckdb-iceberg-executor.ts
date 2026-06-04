@@ -21,8 +21,10 @@
 // `server-tail/__tests__`.
 
 import type { ArchetypeQuery } from '@gscdump/sdk'
+import type { Result } from 'gscdump/result'
 import type { ArchetypeSqlPlan } from './archetype-sql'
 import { bindLiterals } from '@gscdump/engine'
+import { err, ok, unwrapResult } from 'gscdump/result'
 import { buildArchetypeSql, TABLE_PLACEHOLDER } from './archetype-sql'
 
 /** Row returned by the DuckDB sibling. */
@@ -78,6 +80,26 @@ export class DuckDbIcebergTimeoutError extends Error {
   }
 }
 
+/**
+ * The modelled, caller-actionable failure channel for a DuckDB-over-Iceberg
+ * query. As with the R2 SQL client, callers branch on which class came back: a
+ * `DuckDbIcebergTimeoutError` is the retry-able deadline overrun, a
+ * `DuckDbIcebergError` is a hard sibling-RPC failure (or the `aux-cloud-only`
+ * routing reject). The error variant IS the existing throwable class, so the
+ * throwing wrappers preserve the identity/message tests assert
+ * (`rejects.toThrow(/OOM in sibling/)`, `rejects.toThrow(DuckDbIcebergError)`).
+ */
+export type DuckDbIcebergQueryError = DuckDbIcebergError | DuckDbIcebergTimeoutError
+
+/**
+ * Re-raise a modelled DuckDB-over-Iceberg failure as itself. The error variant
+ * of the `*Result` cores already IS the throwable class, so the throwing
+ * wrappers keep the exact identity existing call sites and tests catch.
+ */
+function duckDbIcebergErrorToException(error: DuckDbIcebergQueryError): DuckDbIcebergQueryError {
+  return error
+}
+
 const DEFAULT_TIMEOUT_MS = 25_000
 
 /**
@@ -112,6 +134,16 @@ export interface DuckDbIcebergExecutor {
   runPlan: (plan: ArchetypeSqlPlan) => Promise<DuckDbIcebergResult>
   /** Translate + run an archetype query. Handles `arbitrary-sql` verbatim. */
   runArchetype: (query: ArchetypeQuery) => Promise<DuckDbIcebergResult>
+  /**
+   * Errors-as-values core for {@link DuckDbIcebergExecutor.runArchetype}:
+   * returns the modelled timeout-vs-hard-fail `DuckDbIcebergQueryError` instead
+   * of throwing, so the dispatcher can branch on retry-ability (a timeout may be
+   * worth a fallback) without `instanceof` over a `catch`. Optional so a
+   * hand-rolled executor (e.g. a host app's own service-binding executor) can
+   * implement only the throwing surface; {@link createDuckDbIcebergExecutor}
+   * always provides it.
+   */
+  runArchetypeResult?: (query: ArchetypeQuery) => Promise<Result<DuckDbIcebergResult, DuckDbIcebergQueryError>>
 }
 
 /**
@@ -134,18 +166,34 @@ export function createDuckDbIcebergExecutor(
 ): DuckDbIcebergExecutor {
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
-  async function send(sql: string): Promise<DuckDbIcebergResult> {
+  async function sendResult(sql: string): Promise<Result<DuckDbIcebergResult, DuckDbIcebergQueryError>> {
     const started = Date.now()
-    const result = await withDeadline(config.svc.runSQL({ sql }), timeoutMs).catch((err) => {
-      if (err instanceof DuckDbIcebergTimeoutError)
-        throw err
-      throw new DuckDbIcebergError(`DUCKDB_SVC.runSQL failed: ${(err as Error).message}`)
-    })
-    return {
+    // A deadline overrun is the retry-able timeout; any other sibling-RPC blow-up
+    // is a hard `DuckDbIcebergError`. The underlying RPC error is unmodellable
+    // noise, folded into the message.
+    const raced = await withDeadline(config.svc.runSQL({ sql }), timeoutMs)
+      .then(value => ok(value))
+      .catch((error: unknown): Result<{ rows: unknown[], sql: string }, DuckDbIcebergQueryError> =>
+        error instanceof DuckDbIcebergTimeoutError
+          ? err(error)
+          : err(new DuckDbIcebergError(`DUCKDB_SVC.runSQL failed: ${(error as Error).message}`)))
+    if (!raced.ok)
+      return raced
+    const result = raced.value
+    return ok({
       rows: (result.rows as DuckDbIcebergRow[]) ?? [],
       sql: result.sql ?? sql,
       queryMs: Date.now() - started,
-    }
+    })
+  }
+
+  async function send(sql: string): Promise<DuckDbIcebergResult> {
+    return unwrapResult(await sendResult(sql), duckDbIcebergErrorToException)
+  }
+
+  function runSqlResult(sql: string, params: readonly unknown[] = []): Promise<Result<DuckDbIcebergResult, DuckDbIcebergQueryError>> {
+    const resolved = resolveTablePlaceholders(sql, config)
+    return sendResult(bindLiterals(resolved, params as unknown[]))
   }
 
   function runSql(sql: string, params: readonly unknown[] = []): Promise<DuckDbIcebergResult> {
@@ -160,16 +208,25 @@ export function createDuckDbIcebergExecutor(
     return send(bindLiterals(resolved, plan.params))
   }
 
-  async function runArchetype(query: ArchetypeQuery): Promise<DuckDbIcebergResult> {
+  function runPlanResult(plan: ArchetypeSqlPlan): Promise<Result<DuckDbIcebergResult, DuckDbIcebergQueryError>> {
+    const resolved = plan.sql.split(TABLE_PLACEHOLDER).join(icebergTableRef(config, plan.table))
+    return sendResult(bindLiterals(resolved, plan.params))
+  }
+
+  function runArchetypeResult(query: ArchetypeQuery): Promise<Result<DuckDbIcebergResult, DuckDbIcebergQueryError>> {
     if (query.archetype === 'arbitrary-sql') {
       // Caller-supplied SQL — referenced tables resolve to Iceberg scans, then
       // its own `?` params bind. R2 SQL can never express this archetype.
-      return runSql(query.sql, query.params ?? [])
+      return runSqlResult(query.sql, query.params ?? [])
     }
     if (query.archetype === 'aux-cloud-only')
-      throw new DuckDbIcebergError('aux-cloud-only is not an Iceberg query')
-    return runPlan(buildArchetypeSql(query))
+      return Promise.resolve(err(new DuckDbIcebergError('aux-cloud-only is not an Iceberg query')))
+    return runPlanResult(buildArchetypeSql(query))
   }
 
-  return { runSql, runPlan, runArchetype }
+  async function runArchetype(query: ArchetypeQuery): Promise<DuckDbIcebergResult> {
+    return unwrapResult(await runArchetypeResult(query), duckDbIcebergErrorToException)
+  }
+
+  return { runSql, runPlan, runArchetype, runArchetypeResult }
 }

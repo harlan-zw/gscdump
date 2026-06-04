@@ -1,6 +1,7 @@
 import type { OAuth2Client } from 'google-auth-library'
 import type { Credentials } from 'google-auth-library/build/src/auth/credentials.js'
 import type { Auth as GscAuth } from 'gscdump'
+import type { Result } from 'gscdump/result'
 import type { Server } from 'node:http'
 import type { GscdumpConfig } from './config'
 import fs from 'node:fs/promises'
@@ -10,10 +11,36 @@ import process from 'node:process'
 import { isCancel, text } from '@clack/prompts'
 import { JWT as GoogleJWT, OAuth2Client as OAuth2ClientClass } from 'google-auth-library'
 import { createAuth } from 'gscdump'
+import { err, ok, unwrapResult } from 'gscdump/result'
 import { ofetch } from 'ofetch'
 import { getConfigDir, loadConfig } from './config'
 import { getAppliedEnvKeys, getLoadedEnvPath } from './env-file'
 import { displayPath, logger } from './utils'
+
+/**
+ * Modelled, caller-actionable auth failures. `kind`-discriminated (matching the
+ * repo's `GscError`/`EngineError` convention, not `_tag`), paired with `Result`
+ * so the `*Result` cores can be branched on / unit-tested without `try`/`catch`.
+ * The throwing wrappers preserve the exact `.message` callers print today.
+ *
+ * Defects (a network IO blowup mid-poll the loop already retries, a programmer
+ * invariant) are NOT modelled here; they keep propagating.
+ */
+export type AuthError
+  = | { kind: 'not-service-account', path: string, accountType: string, message: string }
+    | { kind: 'device-code-request-failed', message: string, cause?: unknown }
+    | { kind: 'device-code-denied', message: string }
+    | { kind: 'device-code-expired', message: string }
+    | { kind: 'device-code-failed', reason: string, message: string }
+    | { kind: 'device-code-timed-out', message: string }
+
+function authErrorToException(error: AuthError): Error {
+  const exception = new Error(error.message)
+  if ('cause' in error && error.cause !== undefined)
+    (exception as Error & { cause?: unknown }).cause = error.cause
+  ;(exception as Error & { authError?: AuthError }).authError = error
+  return exception
+}
 
 export interface BYOKOptions {
   accessToken?: string
@@ -40,16 +67,26 @@ interface ServiceAccountKey {
  * account must have been granted access to the GSC properties separately
  * (Search Console > Settings > Users and permissions).
  */
-export async function loadServiceAccount(jsonPath: string): Promise<GoogleJWT> {
+/**
+ * Errors-as-values core for {@link loadServiceAccount}: returns a typed
+ * `not-service-account` `AuthError` when the JSON the user pointed at is the
+ * wrong key type, so callers can distinguish "wrong file" from a read/parse
+ * defect. The file-read / JSON-parse failures stay defects and propagate.
+ */
+export async function loadServiceAccountResult(jsonPath: string): Promise<Result<GoogleJWT, AuthError>> {
   const raw = await fs.readFile(jsonPath, 'utf-8')
   const key = JSON.parse(raw) as ServiceAccountKey
   if (key.type !== 'service_account')
-    throw new Error(`${jsonPath} is not a service-account key (type=${key.type})`)
-  return new GoogleJWT({
+    return err({ kind: 'not-service-account', path: jsonPath, accountType: key.type, message: `${jsonPath} is not a service-account key (type=${key.type})` })
+  return ok(new GoogleJWT({
     email: key.client_email,
     key: key.private_key,
     scopes: SCOPES,
-  })
+  }))
+}
+
+export async function loadServiceAccount(jsonPath: string): Promise<GoogleJWT> {
+  return unwrapResult(await loadServiceAccountResult(jsonPath), authErrorToException)
 }
 
 /**
@@ -92,6 +129,19 @@ interface DeviceTokenResponse {
  * URL on another device, types the code; we poll the token endpoint.
  */
 export async function authenticateDeviceCode(credentials: OAuth2Credentials): Promise<Credentials> {
+  return unwrapResult(await authenticateDeviceCodeResult(credentials), authErrorToException)
+}
+
+/**
+ * Errors-as-values core for {@link authenticateDeviceCode}. Each terminal
+ * outcome of the device-code flow (Google rejected the initial request, the
+ * user denied, the code expired, the flow timed out, Google returned a hard
+ * error) is a typed `AuthError` value the caller can branch on, rather than a
+ * bare `throw` the global handler string-matches. `authorization_pending` /
+ * `slow_down` keep looping; a transient network blip mid-poll is swallowed by
+ * the inner `.catch` into a retry (a genuinely-expected, ignorable failure).
+ */
+export async function authenticateDeviceCodeResult(credentials: OAuth2Credentials): Promise<Result<Credentials, AuthError>> {
   // Step 1: ask Google for a device code.
   const init = await ofetch<DeviceCodeResponse>('https://oauth2.googleapis.com/device/code', {
     method: 'POST',
@@ -99,10 +149,13 @@ export async function authenticateDeviceCode(credentials: OAuth2Credentials): Pr
       client_id: credentials.clientId,
       scope: SCOPES.join(' '),
     }),
-  }).catch((e: Error) => {
-    throw new Error(`Device-code request failed: ${e.message}`)
-  })
+  }).then(ok<DeviceCodeResponse>).catch((e: Error) => err<AuthError>({ kind: 'device-code-request-failed', message: `Device-code request failed: ${e.message}`, cause: e }))
+  if (!init.ok)
+    return init
+  return pollDeviceCode(credentials, init.value)
+}
 
+async function pollDeviceCode(credentials: OAuth2Credentials, init: DeviceCodeResponse): Promise<Result<Credentials, AuthError>> {
   console.log()
   console.log(`  \x1B[1mDevice-code OAuth\x1B[0m`)
   console.log(`  1. On any device, open: \x1B[36m${init.verification_url}\x1B[0m`)
@@ -127,22 +180,22 @@ export async function authenticateDeviceCode(credentials: OAuth2Credentials): Pr
     }).catch((e: any) => e?.data ?? { error: 'request_failed' } as DeviceTokenResponse)
 
     if (res.access_token) {
-      return {
+      return ok({
         access_token: res.access_token,
         refresh_token: res.refresh_token,
         expiry_date: res.expires_in ? Date.now() + res.expires_in * 1000 : undefined,
-      }
+      })
     }
     if (res.error === 'authorization_pending' || res.error === 'slow_down')
       continue
     if (res.error === 'access_denied')
-      throw new Error('User denied authorization.')
+      return err({ kind: 'device-code-denied', message: 'User denied authorization.' })
     if (res.error === 'expired_token')
-      throw new Error('Device code expired. Re-run `gscdump auth login --no-browser`.')
+      return err({ kind: 'device-code-expired', message: 'Device code expired. Re-run `gscdump auth login --no-browser`.' })
     if (res.error)
-      throw new Error(`Device-code poll failed: ${res.error_description || res.error}`)
+      return err({ kind: 'device-code-failed', reason: res.error, message: `Device-code poll failed: ${res.error_description || res.error}` })
   }
-  throw new Error('Device-code flow timed out.')
+  return err({ kind: 'device-code-timed-out', message: 'Device-code flow timed out.' })
 }
 
 /**

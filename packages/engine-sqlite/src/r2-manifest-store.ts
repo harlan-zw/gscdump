@@ -18,6 +18,7 @@ import type {
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import { inferSearchType } from '@gscdump/engine'
+import { engineErrors, engineErrorToException } from '@gscdump/engine/errors'
 import { and, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm'
 import { r2Locks, r2Manifest, r2SyncStates, r2Watermarks } from './r2-manifest-schema'
 
@@ -367,7 +368,7 @@ export function createD1ManifestStore(db: AnalyticsManifestDb): ManifestStore {
         break
 
       if (Date.now() >= deadline)
-        throw new Error(`withLock: timed out acquiring ${key} after ${LOCK_ACQUIRE_TIMEOUT_MS}ms`)
+        throw engineErrorToException(engineErrors.lockAcquireTimeout(key, LOCK_ACQUIRE_TIMEOUT_MS))
 
       await new Promise(resolve => setTimeout(resolve, jitterDelay()))
     }

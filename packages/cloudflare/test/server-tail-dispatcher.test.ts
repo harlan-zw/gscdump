@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createServerTailDispatcher,
   resolveServerTailEngine,
+  resolveServerTailEngineResult,
   ServerTailRoutingError,
 } from '../src/server-tail/dispatcher'
 import { createDuckDbIcebergExecutor } from '../src/server-tail/duckdb-iceberg-executor'
@@ -89,6 +90,30 @@ describe('resolveServerTailEngine', () => {
       siteId: 'site-1',
       dataset: 'sitemaps',
     } as AuxCloudOnlyQuery)).toThrow(ServerTailRoutingError)
+  })
+})
+
+describe('resolveServerTailEngineResult', () => {
+  it('returns ok with the engine for a routable archetype', () => {
+    const res = resolveServerTailEngineResult({
+      ...base,
+      archetype: 'site-daily-timeseries',
+      metrics: ['clicks'],
+    } as SiteDailyTimeseriesQuery)
+    expect(res).toEqual({ ok: true, value: 'r2-sql' })
+  })
+
+  it('returns err with a ServerTailRoutingError for a cloud-only archetype', () => {
+    const res = resolveServerTailEngineResult({
+      archetype: 'aux-cloud-only',
+      siteId: 'site-1',
+      dataset: 'sitemaps',
+    } as AuxCloudOnlyQuery)
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.error).toBeInstanceOf(ServerTailRoutingError)
+      expect(res.error.message).toMatch(/cloud-only/)
+    }
   })
 })
 

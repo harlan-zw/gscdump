@@ -180,3 +180,66 @@ describe('createR2SqlClient timeout', () => {
     await expect(client.query('SELECT 1')).rejects.toBeInstanceOf(R2SqlError)
   })
 })
+
+describe('createR2SqlClient queryResult', () => {
+  const config = {
+    accountId: 'acct',
+    bucket: 'wh',
+    namespace: 'gsc',
+    token: 'tok',
+  }
+
+  it('returns ok with rows on success', async () => {
+    const fetchImpl = fakeFetch({ success: true, result: { rows: [{ clicks: 5 }] } })
+    const client = createR2SqlClient({ ...config, fetchImpl })
+    const res = await client.queryResult!('SELECT 1')
+    expect(res.ok).toBe(true)
+    if (res.ok)
+      expect(res.value.rows).toEqual([{ clicks: 5 }])
+  })
+
+  it('returns err with an R2SqlError on a rejected envelope', async () => {
+    const fetchImpl = fakeFetch({ success: false, errors: [{ message: 'bad table' }] })
+    const client = createR2SqlClient({ ...config, fetchImpl })
+    const res = await client.queryResult!('SELECT 1')
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.error).toBeInstanceOf(R2SqlError)
+      expect(res.error.message).toMatch(/bad table/)
+    }
+  })
+
+  it('returns err with the HTTP status on an error response', async () => {
+    const fetchImpl = fakeFetch({}, { ok: false, status: 403 })
+    const client = createR2SqlClient({ ...config, fetchImpl })
+    const res = await client.queryResult!('SELECT 1')
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.error).toBeInstanceOf(R2SqlError)
+      expect((res.error as R2SqlError).status).toBe(403)
+    }
+  })
+
+  it('returns err with an R2SqlTimeoutError on a deadline abort', async () => {
+    vi.useFakeTimers()
+    try {
+      const fetchImpl = vi.fn((_url: string, opts?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          opts?.signal?.addEventListener('abort', () => {
+            const reason = (opts.signal as AbortSignal & { reason?: unknown }).reason
+            reject(reason ?? Object.assign(new Error('aborted'), { name: 'AbortError' }))
+          })
+        }))
+      const client = createR2SqlClient({ ...config, fetchImpl, timeoutMs: 25_000 })
+      const p = client.queryResult!('SELECT 1')
+      await vi.advanceTimersByTimeAsync(25_000)
+      const res = await p
+      expect(res.ok).toBe(false)
+      if (!res.ok)
+        expect(res.error).toBeInstanceOf(R2SqlTimeoutError)
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+})

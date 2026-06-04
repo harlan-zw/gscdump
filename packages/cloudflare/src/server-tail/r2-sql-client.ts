@@ -23,7 +23,9 @@
 // impl that returns a recorded CF envelope; see the sibling tests.
 
 import type { ArchetypeQuery } from '@gscdump/sdk'
+import type { Result } from 'gscdump/result'
 import type { ArchetypeSqlPlan } from './archetype-sql'
+import { err, ok, unwrapResult } from 'gscdump/result'
 import { buildArchetypeSql, TABLE_PLACEHOLDER } from './archetype-sql'
 
 /** Iceberg table name → fully-qualified R2 SQL table reference. */
@@ -81,6 +83,28 @@ export class R2SqlTimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`R2 SQL query exceeded ${timeoutMs}ms deadline`)
   }
+}
+
+/**
+ * The modelled, caller-actionable failure channel for an R2 SQL query. Callers
+ * branch on which class came back — a `R2SqlTimeoutError` is a transient retry
+ * candidate (the query outran the per-query deadline), while a `R2SqlError`
+ * (HTTP 4xx/5xx, a rejected envelope, a transport blow-up) is a hard failure.
+ * The error variant IS the existing throwable class, so the throwing wrapper
+ * preserves the exact identity/message tests assert (`rejects.toThrow(/HTTP 403/)`,
+ * `rejects.toBeInstanceOf(R2SqlTimeoutError)`). Defects — a programmer handing
+ * the client malformed params (`escapeSqlValue` / `inlineParams`) — are NOT
+ * modelled here; they keep throwing `R2SqlError` synchronously.
+ */
+export type R2SqlQueryError = R2SqlError | R2SqlTimeoutError
+
+/**
+ * Re-raise a modelled R2 SQL failure as itself. The error variant of the
+ * `*Result` core already IS the throwable class, so the throwing wrappers keep
+ * the exact identity existing call sites and tests catch.
+ */
+function r2SqlErrorToException(error: R2SqlQueryError): R2SqlQueryError {
+  return error
 }
 
 const DEFAULT_API_BASE = 'https://api.sql.cloudflarestorage.com/api/v1'
@@ -187,6 +211,15 @@ function normalizeRows(result: CfEnvelope['result']): R2SqlRow[] {
 export interface R2SqlClient {
   /** Run a raw SQL string (table reference already resolved). */
   query: (sql: string) => Promise<R2SqlResult>
+  /**
+   * Errors-as-values core for {@link R2SqlClient.query}: returns the modelled
+   * timeout-vs-hard-fail `R2SqlQueryError` instead of throwing, so callers can
+   * branch on retry-ability without `instanceof` over a `catch`. Optional so a
+   * hand-rolled `R2SqlClient` (e.g. a host app's own endpoint-backed client) can
+   * implement only the throwing surface; {@link createR2SqlClient} always
+   * provides it.
+   */
+  queryResult?: (sql: string) => Promise<Result<R2SqlResult, R2SqlQueryError>>
   /** Run a dialect-neutral plan: resolve `{{TABLE}}`, inline params, send. */
   runPlan: (plan: ArchetypeSqlPlan) => Promise<R2SqlResult>
   /** Translate + run an archetype query end to end. */
@@ -203,7 +236,7 @@ export function createR2SqlClient(config: R2SqlClientConfig): R2SqlClient {
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const endpoint = `${apiBase}/accounts/${config.accountId}/r2-sql/query/${config.bucket}`
 
-  async function query(sql: string): Promise<R2SqlResult> {
+  async function queryResult(sql: string): Promise<Result<R2SqlResult, R2SqlQueryError>> {
     const started = Date.now()
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(new R2SqlTimeoutError(timeoutMs)), timeoutMs)
@@ -220,29 +253,38 @@ export function createR2SqlClient(config: R2SqlClientConfig): R2SqlClient {
         signal: controller.signal,
       })
     }
-    catch (err) {
-      if (err instanceof R2SqlTimeoutError || (err as Error)?.name === 'AbortError')
-        throw new R2SqlTimeoutError(timeoutMs)
-      throw new R2SqlError(`R2 SQL request failed: ${(err as Error).message}`)
+    catch (error) {
+      // Transport blow-ups are modelled: a deadline abort is the retry-able
+      // timeout, anything else is a hard `R2SqlError`. The underlying network
+      // error is genuinely unmodellable noise, so it is folded into the message.
+      if (error instanceof R2SqlTimeoutError || (error as Error)?.name === 'AbortError')
+        return err(new R2SqlTimeoutError(timeoutMs))
+      return err(new R2SqlError(`R2 SQL request failed: ${(error as Error).message}`))
     }
     finally {
       clearTimeout(timer)
     }
 
     if (!response.ok) {
+      // Best-effort error body: a failed `.text()` read on an already-failed
+      // response adds no signal, so fall back to an empty body for the message.
       const text = await response.text().catch(() => '')
-      throw new R2SqlError(`R2 SQL HTTP ${response.status}: ${text}`, response.status)
+      return err(new R2SqlError(`R2 SQL HTTP ${response.status}: ${text}`, response.status))
     }
     const envelope = (await response.json()) as CfEnvelope
     if (!envelope.success) {
       const msg = envelope.errors?.map(e => e.message).join('; ') ?? 'unknown R2 SQL error'
-      throw new R2SqlError(`R2 SQL query rejected: ${msg}`)
+      return err(new R2SqlError(`R2 SQL query rejected: ${msg}`))
     }
-    return {
+    return ok({
       rows: normalizeRows(envelope.result),
       sql,
       queryMs: Date.now() - started,
-    }
+    })
+  }
+
+  async function query(sql: string): Promise<R2SqlResult> {
+    return unwrapResult(await queryResult(sql), r2SqlErrorToException)
   }
 
   function runPlan(plan: ArchetypeSqlPlan): Promise<R2SqlResult> {
@@ -255,5 +297,5 @@ export function createR2SqlClient(config: R2SqlClientConfig): R2SqlClient {
     return runPlan(buildArchetypeSql(archetypeQuery))
   }
 
-  return { query, runPlan, runArchetype }
+  return { query, queryResult, runPlan, runArchetype }
 }

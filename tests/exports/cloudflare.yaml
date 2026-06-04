@@ -20,5 +20,6 @@
   R2SqlError: function
   R2SqlTimeoutError: function
   resolveServerTailEngine: function
+  resolveServerTailEngineResult: function
   ServerTailRoutingError: function
   TABLE_PLACEHOLDER: string

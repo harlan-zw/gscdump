@@ -15,12 +15,14 @@ export type {
 export {
   createServerTailDispatcher,
   resolveServerTailEngine,
+  resolveServerTailEngineResult,
   ServerTailRoutingError,
 } from './dispatcher'
 
 export type {
   DuckDbIcebergExecutor,
   DuckDbIcebergExecutorConfig,
+  DuckDbIcebergQueryError,
   DuckDbIcebergResult,
   DuckDbIcebergRow,
   DuckDbSvc,
@@ -34,6 +36,7 @@ export {
 export type {
   R2SqlClient,
   R2SqlClientConfig,
+  R2SqlQueryError,
   R2SqlResult,
   R2SqlRow,
 } from './r2-sql-client'

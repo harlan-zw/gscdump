@@ -3,6 +3,7 @@ import type {
   AnalysisQuerySource,
   AnalysisResult,
 } from '@gscdump/analysis'
+import type { Result } from 'gscdump/result'
 import type { LocalStore } from './local-store'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -15,6 +16,7 @@ import {
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 import { decodeSiteId, normalizeSiteUrl } from 'gscdump'
+import { err, ok, unwrapResult } from 'gscdump/result'
 import { loadConfig, resolveDataDir } from './config'
 import { createCommandContext } from './context'
 import { LocalStoreUnsupportedError } from './error-handler'
@@ -84,16 +86,34 @@ function pickLocalSite(siteUrls: readonly string[], hint: string | undefined): s
   return partial ?? null
 }
 
+/**
+ * Errors-as-values core: run one analysis, returning the modelled
+ * `LocalStoreUnsupportedError` as a value when the dispatcher reports the
+ * analyzer has no implementation for this source (`AnalyzerCapabilityError`).
+ * Any other failure is a defect and still propagates. `makeRunAnalysis` is the
+ * thin throwing wrapper that re-raises the value, preserving the
+ * `LocalStoreUnsupportedError` identity the global handler matches on.
+ */
+async function runAnalysisResult(
+  source: AnalysisQuerySource,
+  params: AnalysisParams,
+  mode: 'live' | 'local',
+): Promise<Result<AnalysisResult, LocalStoreUnsupportedError>> {
+  return runAnalyzerFromSource(source, params, defaultAnalyzerRegistry)
+    .then(ok<AnalysisResult>)
+    .catch((e: Error) => {
+      if (e instanceof AnalyzerCapabilityError)
+        return err(new LocalStoreUnsupportedError(params.type, mode))
+      throw e
+    })
+}
+
 function makeRunAnalysis(
   source: AnalysisQuerySource,
   mode: 'live' | 'local',
 ): (params: AnalysisParams) => Promise<AnalysisResult> {
-  return params =>
-    runAnalyzerFromSource(source, params, defaultAnalyzerRegistry).catch((e: Error) => {
-      if (e instanceof AnalyzerCapabilityError)
-        throw new LocalStoreUnsupportedError(params.type, mode)
-      throw e
-    })
+  return async params =>
+    unwrapResult(await runAnalysisResult(source, params, mode), e => e)
 }
 
 /**

@@ -20,9 +20,11 @@
 
 import type { ServerTailDirective } from '@gscdump/contracts'
 import type { ArchetypeQuery, ArchetypeResult, ArchetypeResultRow } from '@gscdump/sdk'
+import type { Result } from 'gscdump/result'
 import type { DuckDbIcebergExecutor } from './duckdb-iceberg-executor'
 import type { R2SqlClient } from './r2-sql-client'
 import { ARCHETYPE_EXECUTION_CLASS } from '@gscdump/sdk'
+import { err, ok, unwrapResult } from 'gscdump/result'
 
 /** The two engines the server tail can route to. */
 export type ServerTailEngine = 'r2-sql' | 'duckdb'
@@ -38,35 +40,59 @@ export class ServerTailRoutingError extends Error {
 }
 
 /**
- * Decide which engine answers an archetype query. Pure — no I/O. Exposed so
- * the file-resolution endpoint can compute the `ServerTailDirective.engine`
- * with the SAME logic the dispatcher uses at execution time.
+ * Re-raise a routing failure as itself. The error variant of
+ * {@link resolveServerTailEngineResult} already IS the throwable
+ * `ServerTailRoutingError`, so the throwing wrapper preserves the exact identity
+ * existing call sites and tests catch (`toThrow(ServerTailRoutingError)`).
  */
-export function resolveServerTailEngine(query: ArchetypeQuery): ServerTailEngine {
+function routingErrorToException(error: ServerTailRoutingError): ServerTailRoutingError {
+  return error
+}
+
+/**
+ * Errors-as-values core for {@link resolveServerTailEngine}: returns a
+ * `ServerTailRoutingError` instead of throwing when an archetype is `cloud-only`
+ * (the one caller-actionable routing failure — the consumer must route that
+ * query through the cloud endpoints, not the server tail). Pure — no I/O.
+ */
+export function resolveServerTailEngineResult(
+  query: ArchetypeQuery,
+): Result<ServerTailEngine, ServerTailRoutingError> {
   const cls = ARCHETYPE_EXECUTION_CLASS[query.archetype]
   if (cls === 'cloud-only') {
-    throw new ServerTailRoutingError(
+    return err(new ServerTailRoutingError(
       `archetype '${query.archetype}' is cloud-only — not a server-tail query`,
-    )
+    ))
   }
   if (cls === 'duckdb')
-    return 'duckdb'
+    return ok('duckdb')
   // r2-sql / r2-sql-resolved → R2 SQL, UNLESS escalated.
   // Escalation: top-n-breakdown with non-zero offset (R2 SQL OFFSET unverified).
   if (query.archetype === 'top-n-breakdown' && query.offset && query.offset > 0)
-    return 'duckdb'
+    return ok('duckdb')
   // Escalation: top-n-breakdown with includeTotal needs `COUNT(*) OVER()`, a
   // window function R2 SQL cannot express — run it on DuckDB.
   if (query.archetype === 'top-n-breakdown' && query.includeTotal)
-    return 'duckdb'
+    return ok('duckdb')
   // Escalation: facet predicates (Country/Device/Brand) are only compiled by the
   // DuckDB builder — brand uses `regexp_matches`, which R2 SQL lacks — so any
   // faceted query runs on DuckDB. `facets` lives on `ArchetypeQueryBase`, but the
   // `aux-cloud-only` union member omits it, so read it structurally.
   const facets = (query as { facets?: readonly unknown[] }).facets
   if (facets && facets.length > 0)
-    return 'duckdb'
-  return 'r2-sql'
+    return ok('duckdb')
+  return ok('r2-sql')
+}
+
+/**
+ * Decide which engine answers an archetype query. Pure — no I/O. Exposed so
+ * the file-resolution endpoint can compute the `ServerTailDirective.engine`
+ * with the SAME logic the dispatcher uses at execution time. Throws
+ * `ServerTailRoutingError` for a `cloud-only` archetype; see
+ * {@link resolveServerTailEngineResult} for the errors-as-values core.
+ */
+export function resolveServerTailEngine(query: ArchetypeQuery): ServerTailEngine {
+  return unwrapResult(resolveServerTailEngineResult(query), routingErrorToException)
 }
 
 /** Result envelope `source` for the chosen engine. */

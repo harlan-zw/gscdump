@@ -1,12 +1,29 @@
 import type { ComparisonMode, WindowPreset } from '@gscdump/engine/period'
 import type { DefinedReport, ReportArgsSpec, ReportContext, ReportParams } from '@gscdump/engine/report'
 import type { CommandDef } from 'citty'
+import type { Result } from 'gscdump/result'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { defaultReportRegistry, dryRunReport, formatReport, runReport } from '@gscdump/analysis/report'
 import { resolveWindow } from '@gscdump/engine/period'
 import { defineCommand } from 'citty'
+import { err, ok, unwrapResult } from 'gscdump/result'
 import { resolveAnalysisSource } from '../analysis-local'
 import { logger } from '../utils'
+
+/**
+ * Modelled, caller-actionable flag-parsing failures for the `report` command:
+ * an unknown `--period` or `--vs` the user passed. `kind`-discriminated, paired
+ * with `Result` so the `*Result` core can be unit-tested without `try`/`catch`.
+ */
+type ReportFlagError
+  = | { kind: 'unknown-period', value: string, message: string }
+    | { kind: 'unknown-comparison', value: string, message: string }
+
+function reportFlagErrorToException(error: ReportFlagError): Error {
+  const exception = new Error(error.message)
+  ;(exception as Error & { reportFlagError?: ReportFlagError }).reportFlagError = error
+  return exception
+}
 
 const REPORT_IDS = defaultReportRegistry.listReportIds()
 
@@ -37,22 +54,30 @@ const COMPARISON_ALIASES: Record<string, ComparisonMode> = {
   'yoy': 'yoy',
 }
 
-function resolvePeriod(input: string | undefined, fallback: WindowPreset): WindowPreset {
+function resolvePeriodResult(input: string | undefined, fallback: WindowPreset): Result<WindowPreset, ReportFlagError> {
   if (!input)
-    return fallback
+    return ok(fallback)
   const preset = PERIOD_ALIASES[input.toLowerCase()]
   if (!preset)
-    throw new Error(`Unknown --period "${input}". Supported: 7d, 28d, 30d, 90d, 180d, 365d, mtd, ytd, custom.`)
-  return preset
+    return err({ kind: 'unknown-period', value: input, message: `Unknown --period "${input}". Supported: 7d, 28d, 30d, 90d, 180d, 365d, mtd, ytd, custom.` })
+  return ok(preset)
+}
+
+function resolvePeriod(input: string | undefined, fallback: WindowPreset): WindowPreset {
+  return unwrapResult(resolvePeriodResult(input, fallback), reportFlagErrorToException)
+}
+
+function resolveComparisonResult(input: string | undefined, fallback: ComparisonMode): Result<ComparisonMode, ReportFlagError> {
+  if (!input)
+    return ok(fallback)
+  const mode = COMPARISON_ALIASES[input.toLowerCase()]
+  if (!mode)
+    return err({ kind: 'unknown-comparison', value: input, message: `Unknown --vs "${input}". Supported: none, prev-period, yoy.` })
+  return ok(mode)
 }
 
 function resolveComparison(input: string | undefined, fallback: ComparisonMode): ComparisonMode {
-  if (!input)
-    return fallback
-  const mode = COMPARISON_ALIASES[input.toLowerCase()]
-  if (!mode)
-    throw new Error(`Unknown --vs "${input}". Supported: none, prev-period, yoy.`)
-  return mode
+  return unwrapResult(resolveComparisonResult(input, fallback), reportFlagErrorToException)
 }
 
 function reportArgsToCitty(spec: ReportArgsSpec): Record<string, { type: 'string' | 'boolean', description?: string, default?: unknown, alias?: string, required?: boolean }> {

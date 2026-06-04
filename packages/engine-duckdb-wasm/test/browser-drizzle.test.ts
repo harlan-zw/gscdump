@@ -19,6 +19,7 @@ import {
   scopeFor,
   strikingMomentum,
 } from '../src'
+import { createClient } from '../src/drizzle-adapter/client'
 
 interface Captured {
   sql: string
@@ -206,6 +207,50 @@ describe('@gscdump/engine-duckdb-wasm', () => {
     expect(sql).toMatch(/sum\(sum_position\)\s*\/\s*nullif/i)
     // Tables referenced
     expect(sql).toMatch(/from\s+"page_queries"/i)
+  })
+
+  it('createClient.query awaits stmt.close() before resolving (regression: floating close promise)', async () => {
+    // A parameterised query prepares a statement and must `await stmt.close()`
+    // in its finally. Pre-fix the close was fired but not awaited, so query()
+    // resolved with cleanup still pending and any close() rejection became a
+    // dropped unhandled rejection. Gate close() on a controlled promise: with
+    // the fix, query() cannot resolve until the gate releases.
+    let releaseClose!: () => void
+    const closeGate = new Promise<void>((r) => {
+      releaseClose = r
+    })
+    let closeFinished = false
+    const conn = {
+      async prepare() {
+        return {
+          async query() {
+            return { toArray: () => [] }
+          },
+          async close() {
+            await closeGate
+            closeFinished = true
+          },
+        }
+      },
+    } as unknown as AsyncDuckDBConnection
+
+    const client = await createClient({} as unknown as AsyncDuckDB, conn)
+    let queryResolved = false
+    const done = client.query('SELECT 1 WHERE id = ?', [1]).then(() => {
+      queryResolved = true
+    })
+
+    // Drain all microtasks: prepare + stmt.query have settled and close() is now
+    // parked on the gate. With the fix, query() is awaiting close() and stays
+    // pending; pre-fix it has already resolved.
+    await new Promise(r => setTimeout(r, 0))
+    expect(closeFinished).toBe(false)
+    expect(queryResolved).toBe(false)
+
+    releaseClose()
+    await done
+    expect(closeFinished).toBe(true)
+    expect(queryResolved).toBe(true)
   })
 
   it('sql template with typed Row works as the escape hatch', async () => {

@@ -27,6 +27,7 @@ export type EngineErrorKind
     | 'iceberg-table-op-failed'
     | 'sink-table-flush-failed'
     | 'rollup-build-failed'
+    | 'lock-acquire-timeout'
 
 export type EngineError
   = | { kind: 'analyzer-not-found', tool: string, message: string }
@@ -56,6 +57,9 @@ export type EngineError
     // One rollup def's build/encode/write threw. Captured so one bad rollup
     // never aborts the rest of the batch. `cause` carries the original error.
     | { kind: 'rollup-build-failed', message: string, id: string, cause?: unknown }
+    // A scoped `withLock` could not acquire the lease before its deadline under
+    // contention. Caller-actionable: back off and retry, or fail the unit of work.
+    | { kind: 'lock-acquire-timeout', message: string, scope: string, timeoutMs: number }
 
 export const engineErrors = {
   analyzerNotFound(tool: string): EngineError {
@@ -127,6 +131,9 @@ export const engineErrors = {
   rollupBuildFailed(id: string, cause: unknown): EngineError {
     return { kind: 'rollup-build-failed', id, cause, message: cause instanceof Error ? (cause.stack || cause.message) : String(cause) }
   },
+  lockAcquireTimeout(scope: string, timeoutMs: number): EngineError {
+    return { kind: 'lock-acquire-timeout', scope, timeoutMs, message: `withLock: timed out acquiring ${scope} after ${timeoutMs}ms` }
+  },
 } as const
 
 const ENGINE_ERROR_KINDS = new Set<EngineErrorKind>([
@@ -146,6 +153,7 @@ const ENGINE_ERROR_KINDS = new Set<EngineErrorKind>([
   'iceberg-table-op-failed',
   'sink-table-flush-failed',
   'rollup-build-failed',
+  'lock-acquire-timeout',
 ])
 
 export function isEngineError(value: unknown): value is EngineError {
