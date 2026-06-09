@@ -132,9 +132,10 @@ export interface EntityDailyTimeseriesQuery extends ArchetypeQueryBase {
  * Compact daily series for the top-N entities at once (sparkline column in a
  * table). Resolver pre-resolves the top-N entity list to a literal `IN`.
  */
+
 export interface EntityDailySparklineQuery extends ArchetypeQueryBase {
   archetype: 'entity-daily-sparkline'
-  dimension: Extract<Dimension, 'page' | 'query'>
+  dimension: Extract<Dimension, 'page' | 'query' | 'queryCanonical'>
   /** Entity values already resolved by the resolver layer. */
   entities: readonly string[]
   /** Single metric the sparkline plots. */

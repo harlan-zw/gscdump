@@ -353,6 +353,12 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   // to keep expanding regardless of its non-indexed pool.
   if (isGrowing) {
     return stage('healthy_growth_ready', [
+      // Hard faults below the stage-flip floor still get surfaced as a blocker
+      // count even while growing — they remain real Sprint findings, so the card
+      // must not claim "0 blockers" while the Top Issues list routes them to the
+      // board. The STAGE stays growth-ready (one small fault should not derail a
+      // growing site); only the evidence is made honest.
+      ...(hardBlocks > 0 ? [{ label: 'Critical blockers', value: formatCount(hardBlocks), source: 'indexing' as const }] : []),
       ...(clicks90d != null ? [{ label: 'Clicks 90d', value: `+${clicks90d.toFixed(1)}%`, source: 'performance' as const }] : []),
       ...(imp90d != null ? [{ label: 'Impressions 90d', value: `+${imp90d.toFixed(1)}%`, source: 'performance' as const }] : []),
       ...((input.recoverableBacklinkCount ?? 0) > 0 ? [{ label: 'Recoverable backlinks', value: formatCount(input.recoverableBacklinkCount!), source: 'performance' as const }] : []),
@@ -424,6 +430,10 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
 
   return stage('healthy_growth_ready', [
     { label: 'Indexed', value: `${indexedPercent.toFixed(1)}%`, source: 'indexing' },
-    { label: 'Critical blockers', value: '0', source: 'indexing' },
+    // Honest count, not a hardcoded 0: hard faults below the stage-flip floor
+    // (server/access/robots crawl blocks) are still real Sprint findings the
+    // Top Issues list routes to the board. Reporting the true number keeps the
+    // card from contradicting that list.
+    { label: 'Critical blockers', value: formatCount(hardBlocks), source: 'indexing' },
   ])
 }
