@@ -74,6 +74,16 @@ export function resolveServerTailEngineResult(
   // window function R2 SQL cannot express — run it on DuckDB.
   if (query.archetype === 'top-n-breakdown' && query.includeTotal)
     return ok('duckdb')
+  // Escalation: a comparison-window breakdown is compiled as current/previous
+  // CTEs joined with FULL OUTER JOIN (for the `prev*` columns) — CTEs, FROM
+  // subqueries and outer joins are all beyond R2 SQL, so it runs on DuckDB.
+  if (query.archetype === 'top-n-breakdown' && query.compareRange)
+    return ok('duckdb')
+  // Escalation: a `queryCanonical` breakdown carries `COUNT(DISTINCT query)` for
+  // the variant count — DISTINCT-aggregate support on R2 SQL is unverified, so
+  // route it to DuckDB (mirrors the `offset` escalation rationale).
+  if (query.archetype === 'top-n-breakdown' && query.dimension === 'queryCanonical')
+    return ok('duckdb')
   // Escalation: facet predicates (Country/Device/Brand) are only compiled by the
   // DuckDB builder — brand uses `regexp_matches`, which R2 SQL lacks — so any
   // faceted query runs on DuckDB. `facets` lives on `ArchetypeQueryBase`, but the

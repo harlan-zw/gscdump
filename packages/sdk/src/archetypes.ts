@@ -167,6 +167,17 @@ export interface TopNBreakdownQuery extends ArchetypeQueryBase {
    * `device` dimension, which has at most a handful of rows.
    */
   includeTotal?: boolean
+  /**
+   * Movers mode — re-rank the breakdown by period-over-period movement instead
+   * of by `orderBy`. Requires `compareRange` (the previous-period CTE supplies
+   * the deltas); ignored without it. Forces `duckdb` on the server tail (CTE +
+   * FULL OUTER JOIN). Used by the dashboard's Growing/Declining/New/Lost lists.
+   *  - `improving` — clicks gained vs previous, largest gain first.
+   *  - `declining` — clicks lost vs previous, largest drop first.
+   *  - `new`       — impressions appeared (zero previously), by current volume.
+   *  - `lost`      — impressions disappeared (zero now), by previous volume.
+   */
+  movers?: 'improving' | 'declining' | 'new' | 'lost'
 }
 
 // ── 5. Single-row lookup ─────────────────────────────────────────────────────

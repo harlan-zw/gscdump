@@ -109,6 +109,47 @@ function deviceSource(suffix: typeof DEVICE_SUFFIXES[number]): {
   }
 }
 
+/** The four standard metrics emitted as previous-period columns when comparing. */
+const STD_METRICS = ['clicks', 'impressions', 'ctr', 'position'] as const
+
+/** `COALESCE(<src>.<metric>, 0) AS <alias>`, casting count metrics to DOUBLE. */
+function coalesceMetric(metric: string, src: string, alias: string): string {
+  const ref = `${src}.${metric}`
+  return (metric === 'clicks' || metric === 'impressions')
+    ? `CAST(COALESCE(${ref}, 0) AS DOUBLE) AS ${alias}`
+    : `COALESCE(${ref}, 0) AS ${alias}`
+}
+
+/** `prev<Metric>` alias for a comparison column. */
+function prevAlias(metric: string): string {
+  return `prev${metric.charAt(0).toUpperCase()}${metric.slice(1)}`
+}
+
+/**
+ * Movers re-ranking over the joined current (`c`) / previous (`p`) CTEs.
+ * Mirrors the browser builder (`@gscdump/engine-duckdb-wasm`) byte-for-byte so
+ * both engines agree. `improving`/`declining` rank by click delta; `new`/`lost`
+ * filter on impressions appearing / disappearing.
+ */
+function moverClause(movers: string): { where: string, order: string } {
+  const curClicks = 'COALESCE(c.clicks, 0)'
+  const prevClicks = 'COALESCE(p.clicks, 0)'
+  const curImpr = 'COALESCE(c.impressions, 0)'
+  const prevImpr = 'COALESCE(p.impressions, 0)'
+  switch (movers) {
+    case 'improving':
+      return { where: `${curClicks} > ${prevClicks}`, order: `(${curClicks} - ${prevClicks}) DESC` }
+    case 'declining':
+      return { where: `${curClicks} < ${prevClicks}`, order: `(${curClicks} - ${prevClicks}) ASC` }
+    case 'new':
+      return { where: `${prevImpr} = 0 AND ${curImpr} > 0`, order: `${curClicks} DESC, ${curImpr} DESC` }
+    case 'lost':
+      return { where: `${curImpr} = 0 AND ${prevImpr} > 0`, order: `${prevImpr} DESC` }
+    default:
+      throw new Error(`[archetype-sql] unknown movers mode: ${movers}`)
+  }
+}
+
 /**
  * Escape a string for an inline SQL literal. Used only for the pre-resolved
  * entity `IN` lists of the `r2-sql-resolved` archetypes — R2 SQL cannot bind
@@ -214,42 +255,79 @@ function buildEntityDailySparkline(q: EntityDailySparklineQuery): ArchetypeSqlPl
 function buildTopNBreakdown(q: TopNBreakdownQuery): ArchetypeSqlPlan {
   const table = inferTable([q.dimension]) as IcebergTableName
   const w = partitionWhere(q)
+  const order = `${q.orderBy.metric} ${q.orderBy.dir.toUpperCase()}`
+  const limit = `LIMIT ${Math.max(0, Math.floor(q.limit))}`
+  const offset = q.offset && q.offset > 0 ? ` OFFSET ${Math.floor(q.offset)}` : ''
+  const metricList = q.metrics.includes(q.orderBy.metric) ? q.metrics : [...q.metrics, q.orderBy.metric]
+  // `queryCanonical` rows surface the count of distinct raw queries collapsed
+  // under one canonical (the `{N}v` badge). Routed to DuckDB by the dispatcher.
+  const variantSel = q.dimension === 'queryCanonical' ? ', COUNT(DISTINCT query) AS variantCount' : ''
+
   if (q.dimension === 'device') {
-    const metricList = q.metrics.includes(q.orderBy.metric)
-      ? q.metrics
-      : [...q.metrics, q.orderBy.metric]
-    const order = `${q.orderBy.metric} ${q.orderBy.dir.toUpperCase()}`
+    if (q.compareRange) {
+      // Join each device's previous-period totals so rows carry `prev*`.
+      const wPrev = partitionWhere({ ...q, range: q.compareRange })
+      const deviceSelects = (clause: string, ml: readonly string[]) => DEVICE_SUFFIXES.map((suffix) => {
+        const source = deviceSource(suffix)
+        const metrics = ml.map(m => metricExprForSource(m as Metric, source)).join(', ')
+        return `SELECT '${suffix.toUpperCase()}' AS device, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${clause}`
+      }).join(' UNION ALL ')
+      const curCols = metricList.map(m => coalesceMetric(m, 'c', m)).join(', ')
+      const prevCols = STD_METRICS.map(m => coalesceMetric(m, 'p', prevAlias(m))).join(', ')
+      const sql = `WITH cur AS (${deviceSelects(w.clause, metricList)}), prev AS (${deviceSelects(wPrev.clause, STD_METRICS)}) `
+        + `SELECT COALESCE(c.device, p.device) AS device, ${curCols}, ${prevCols} `
+        + `FROM cur c FULL OUTER JOIN prev p ON c.device = p.device ORDER BY ${order} ${limit}${offset}`
+      return {
+        table,
+        params: [...DEVICE_SUFFIXES.flatMap(() => w.params), ...DEVICE_SUFFIXES.flatMap(() => wPrev.params)],
+        sql,
+      }
+    }
     const selects = DEVICE_SUFFIXES.map((suffix) => {
       const source = deviceSource(suffix)
       const metrics = metricList.map(m => metricExprForSource(m, source)).join(', ')
       return `SELECT '${suffix.toUpperCase()}' AS device, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}`
     })
-    let sql = `${selects.join(' UNION ALL ')} ORDER BY ${order} LIMIT ${Math.max(0, Math.floor(q.limit))}`
-    if (q.offset && q.offset > 0)
-      sql += ` OFFSET ${Math.floor(q.offset)}`
-    return {
-      table,
-      params: DEVICE_SUFFIXES.flatMap(() => w.params),
-      sql,
-    }
+    const sql = `${selects.join(' UNION ALL ')} ORDER BY ${order} ${limit}${offset}`
+    return { table, params: DEVICE_SUFFIXES.flatMap(() => w.params), sql }
   }
   const col = dimColumn(q.dimension)
-  // Select the order metric too (when not already requested) and ORDER BY its
-  // alias — recomputing the aggregate in ORDER BY makes DataFusion (R2 SQL) emit
-  // a duplicate unqualified field name and reject the query (40004). Mirrors the
-  // device branch above + the browser builder (engine-duckdb-wasm).
-  const metricList = q.metrics.includes(q.orderBy.metric) ? q.metrics : [...q.metrics, q.orderBy.metric]
-  const metrics = metricList.map(metricExpr).join(', ')
-  const order = `${q.orderBy.metric} ${q.orderBy.dir.toUpperCase()}`
   const facet = facetPredicate(q)
   // Full group count for load-more tables. `COUNT(*) OVER()` is a window
   // function, so a query reaching this column has already been escalated to the
   // DuckDB executor by the dispatcher (R2 SQL cannot run it).
   const totalCol = q.includeTotal ? ', COUNT(*) OVER() AS __total' : ''
-  let sql = `SELECT ${col}, ${metrics}${totalCol} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} `
-    + `GROUP BY ${col} ORDER BY ${order} LIMIT ${Math.max(0, Math.floor(q.limit))}`
-  if (q.offset && q.offset > 0)
-    sql += ` OFFSET ${Math.floor(q.offset)}`
+
+  if (q.compareRange) {
+    // Current + previous grouped CTEs joined per dimension key so every current
+    // row carries its TRUE previous-period metrics (`prev*`), independent of
+    // whether it ranked in the previous period's top-N. Window/CTE/JOIN shape →
+    // dispatcher escalates this to the DuckDB executor (R2 SQL cannot run it).
+    const wPrev = partitionWhere({ ...q, range: q.compareRange })
+    const curMetrics = metricList.map(metricExpr).join(', ')
+    const prevMetrics = STD_METRICS.map(m => metricExpr(m as Metric)).join(', ')
+    const curCols = metricList.map(m => coalesceMetric(m, 'c', m)).join(', ')
+    const prevCols = STD_METRICS.map(m => coalesceMetric(m, 'p', prevAlias(m))).join(', ')
+    const variantOut = q.dimension === 'queryCanonical' ? ', c.variantCount AS variantCount' : ''
+    // Movers re-rank by period-over-period movement (Growing/Declining/New/
+    // Lost); otherwise rank by the requested metric.
+    const mover = q.movers ? moverClause(q.movers) : null
+    const moverWhere = mover ? `WHERE ${mover.where} ` : ''
+    const orderSql = mover ? `ORDER BY ${mover.order}` : `ORDER BY ${order}`
+    const sql = `WITH cur AS (SELECT ${col} AS k, ${curMetrics}${variantSel} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} GROUP BY ${col}), `
+      + `prev AS (SELECT ${col} AS k, ${prevMetrics} FROM ${TABLE_PLACEHOLDER} WHERE ${wPrev.clause}${facet.sql} GROUP BY ${col}) `
+      + `SELECT COALESCE(c.k, p.k) AS ${q.dimension}, ${curCols}, ${prevCols}${variantOut}${totalCol} `
+      + `FROM cur c FULL OUTER JOIN prev p ON c.k = p.k ${moverWhere}${orderSql} ${limit}${offset}`
+    return { table, params: [...w.params, ...facet.params, ...wPrev.params, ...facet.params], sql }
+  }
+
+  // Select the order metric too (when not already requested) and ORDER BY its
+  // alias — recomputing the aggregate in ORDER BY makes DataFusion (R2 SQL) emit
+  // a duplicate unqualified field name and reject the query (40004). Mirrors the
+  // device branch above + the browser builder (engine-duckdb-wasm).
+  const metrics = metricList.map(metricExpr).join(', ')
+  const sql = `SELECT ${col}, ${metrics}${variantSel}${totalCol} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} `
+    + `GROUP BY ${col} ORDER BY ${order} ${limit}${offset}`
   return { table, params: [...w.params, ...facet.params], sql }
 }
 

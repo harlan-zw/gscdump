@@ -130,6 +130,57 @@ function rangePredicate(q: ArchetypeQuery & { range: { start: string, end: strin
   }
 }
 
+/** Same predicate over the comparison window. */
+function compareRangePredicate(q: { compareRange?: { start: string, end: string }, searchType: string }): { sql: string, params: unknown[] } | null {
+  if (!q.compareRange)
+    return null
+  return {
+    sql: 'date BETWEEN ? AND ? AND search_type = ?',
+    params: [q.compareRange.start, q.compareRange.end, q.searchType],
+  }
+}
+
+/** The four standard metrics emitted as previous-period columns when comparing. */
+const STD_METRICS = ['clicks', 'impressions', 'ctr', 'position'] as const
+
+/** `COALESCE(<src>.<metric>, 0) AS <metric>`, casting count metrics to DOUBLE. */
+function coalesceMetric(metric: string, src: string, alias: string): string {
+  const ref = `${src}.${metric}`
+  return (metric === 'clicks' || metric === 'impressions')
+    ? `CAST(COALESCE(${ref}, 0) AS DOUBLE) AS ${alias}`
+    : `COALESCE(${ref}, 0) AS ${alias}`
+}
+
+/** `prev<Metric>` alias for a comparison column. */
+function prevAlias(metric: string): string {
+  return `prev${metric.charAt(0).toUpperCase()}${metric.slice(1)}`
+}
+
+/**
+ * Movers re-ranking over the joined current (`c`) / previous (`p`) CTEs.
+ * `improving`/`declining` rank by click delta; `new`/`lost` filter on
+ * impressions appearing / disappearing. Returns the `WHERE` body (sans keyword)
+ * and the `ORDER BY` body. Shared verbatim by both engine compilers.
+ */
+function moverClause(movers: string): { where: string, order: string } {
+  const curClicks = 'COALESCE(c.clicks, 0)'
+  const prevClicks = 'COALESCE(p.clicks, 0)'
+  const curImpr = 'COALESCE(c.impressions, 0)'
+  const prevImpr = 'COALESCE(p.impressions, 0)'
+  switch (movers) {
+    case 'improving':
+      return { where: `${curClicks} > ${prevClicks}`, order: `(${curClicks} - ${prevClicks}) DESC` }
+    case 'declining':
+      return { where: `${curClicks} < ${prevClicks}`, order: `(${curClicks} - ${prevClicks}) ASC` }
+    case 'new':
+      return { where: `${prevImpr} = 0 AND ${curImpr} > 0`, order: `${curClicks} DESC, ${curImpr} DESC` }
+    case 'lost':
+      return { where: `${curImpr} = 0 AND ${prevImpr} > 0`, order: `${prevImpr} DESC` }
+    default:
+      throw new Error(`[archetype-sql] unknown movers mode: ${movers}`)
+  }
+}
+
 /**
  * Cross-cutting facet predicates (Country/Device/Brand). `eq` → `col = ?`;
  * `regex`/`notRegex` → DuckDB `regexp_matches(LOWER(col), ?)` (brand
@@ -221,12 +272,34 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
     case 'top-n-breakdown': {
       const table = tableForDimensions([query.dimension])
       const where = rangePredicate(query)
+      const cmp = compareRangePredicate(query)
       const dir = query.orderBy.dir === 'asc' ? 'ASC' : 'DESC'
+      const metricList = query.metrics.includes(query.orderBy.metric)
+        ? query.metrics
+        : [...query.metrics, query.orderBy.metric]
+      // `queryCanonical` rows surface the count of distinct raw queries collapsed
+      // under one canonical (the `{N}v` badge). The `queries` fact table carries
+      // both `query` and `query_canonical`.
+      const variantSel = query.dimension === 'queryCanonical' ? ', COUNT(DISTINCT query) AS variantCount' : ''
+
       if (query.dimension === 'device') {
         // `dates` stores the device breakdown pivoted; unpivot then rank.
-        const metricList = query.metrics.includes(query.orderBy.metric)
-          ? query.metrics
-          : [...query.metrics, query.orderBy.metric]
+        if (cmp) {
+          // Join each device's previous-period totals so rows carry `prev*`.
+          const curCols = metricList.map(m => coalesceMetric(m, 'c', m)).join(', ')
+          const prevCols = STD_METRICS.map(m => coalesceMetric(m, 'p', prevAlias(m))).join(', ')
+          let sql = `WITH cur AS (${deviceUnpivotSql(metricList, where.sql, false)}), `
+            + `prev AS (${deviceUnpivotSql(STD_METRICS, cmp.sql, false)}) `
+            + `SELECT COALESCE(c.device, p.device) AS device, ${curCols}, ${prevCols} `
+            + `FROM cur c FULL OUTER JOIN prev p ON c.device = p.device `
+            + `ORDER BY ${query.orderBy.metric} ${dir} LIMIT ?`
+          const params = [...where.params, ...where.params, ...where.params, ...cmp.params, ...cmp.params, ...cmp.params, query.limit]
+          if (query.offset && query.offset > 0) {
+            sql += ' OFFSET ?'
+            params.push(query.offset)
+          }
+          return { table, sql, params }
+        }
         let sql = `SELECT device, ${metricList.join(', ')} FROM (`
           + `${deviceUnpivotSql(metricList, where.sql, false)}) `
           + `ORDER BY ${query.orderBy.metric} ${dir} LIMIT ?`
@@ -243,7 +316,33 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
       // `COUNT(*) OVER()` evaluates over the grouped result before LIMIT, so it
       // reports every distinct dimension value matching the WHERE/facet.
       const totalCol = query.includeTotal ? ', COUNT(*) OVER() AS __total' : ''
-      let sql = `SELECT ${col} AS ${query.dimension}, ${metricSelectList(query.metrics)}${totalCol} `
+
+      if (cmp) {
+        // Current + previous grouped CTEs joined per dimension key so every
+        // current row carries its TRUE previous-period metrics (`prev*`),
+        // independent of whether it ranked in the previous period's top-N.
+        const curCols = metricList.map(m => coalesceMetric(m, 'c', m)).join(', ')
+        const prevCols = STD_METRICS.map(m => coalesceMetric(m, 'p', prevAlias(m))).join(', ')
+        const variantOut = query.dimension === 'queryCanonical' ? ', c.variantCount AS variantCount' : ''
+        // Movers re-rank by period-over-period movement (Growing/Declining/New/
+        // Lost); otherwise rank by the requested metric.
+        const mover = query.movers ? moverClause(query.movers) : null
+        const moverWhere = mover ? `WHERE ${mover.where} ` : ''
+        const orderSql = mover ? mover.order : `${query.orderBy.metric} ${dir}`
+        let sql = `WITH cur AS (SELECT ${col} AS k, ${metricSelectList(metricList)}${variantSel} FROM ${table} WHERE ${where.sql}${facet.sql} GROUP BY ${col}), `
+          + `prev AS (SELECT ${col} AS k, ${metricSelectList(STD_METRICS)} FROM ${table} WHERE ${cmp.sql}${facet.sql} GROUP BY ${col}) `
+          + `SELECT COALESCE(c.k, p.k) AS ${query.dimension}, ${curCols}, ${prevCols}${variantOut}${totalCol} `
+          + `FROM cur c FULL OUTER JOIN prev p ON c.k = p.k `
+          + `${moverWhere}ORDER BY ${orderSql} LIMIT ?`
+        const params = [...where.params, ...facet.params, ...cmp.params, ...facet.params, query.limit]
+        if (query.offset && query.offset > 0) {
+          sql += ' OFFSET ?'
+          params.push(query.offset)
+        }
+        return { table, sql, params }
+      }
+
+      let sql = `SELECT ${col} AS ${query.dimension}, ${metricSelectList(query.metrics)}${variantSel}${totalCol} `
         + `FROM ${table} WHERE ${where.sql}${facet.sql} GROUP BY ${col} `
         + `ORDER BY ${query.orderBy.metric} ${dir} LIMIT ?`
       const params = [...where.params, ...facet.params, query.limit]
