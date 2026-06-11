@@ -4,7 +4,7 @@ import type {
   InternalFilter,
   Metric,
 } from 'gscdump/query'
-import { normalizeUrl } from 'gscdump'
+import { normalizeUrl } from 'gscdump/normalize'
 
 function collectInternalFilters(filter: FilterInput | undefined): InternalFilter[] {
   if (!filter || !('_filters' in filter))

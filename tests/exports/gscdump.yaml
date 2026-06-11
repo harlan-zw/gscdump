@@ -120,6 +120,8 @@
   verificationMethodsFor: function
   verifySite: function
 ./contracts: {}
+./normalize:
+  normalizeUrl: function
 ./query:
   and: function
   between: function
@@ -197,3 +199,7 @@
   matchResult: function
   ok: function
   unwrapResult: function
+./tenant:
+  decodeSiteId: function
+  encodeSiteId: function
+  normalizeSiteUrl: function

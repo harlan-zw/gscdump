@@ -92,7 +92,11 @@
   hashUrl: function
   hashUrlList: function
   indexingMetadataIndexKey: function
+  INSPECTION_EVENT_COLUMNS: object
   INSPECTION_HISTORY_MAX_BYTES: number
+  inspectionBaseKey: function
+  inspectionEventKey: function
+  inspectionEventsPrefix: function
   inspectionHistoryPrefix: function
   inspectionHistoryShardKey: function
   inspectionIndexKey: function

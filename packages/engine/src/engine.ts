@@ -15,7 +15,7 @@ import type {
   TenantCtx,
   WriteCtx,
 } from './storage'
-import { normalizeUrl } from 'gscdump'
+import { normalizeUrl } from 'gscdump/normalize'
 import { buildLogicalPlan } from 'gscdump/query/plan'
 import { compactTieredImpl, dedupeOverlappingTiers, splitOverlappingTiers } from './compaction'
 import { gcOrphansImpl } from './gc'

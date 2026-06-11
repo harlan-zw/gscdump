@@ -1,4 +1,4 @@
-import { normalizeUrl } from 'gscdump'
+import { normalizeUrl } from 'gscdump/normalize'
 import { describe, expect, it } from 'vitest'
 
 describe('normalizeUrl', () => {

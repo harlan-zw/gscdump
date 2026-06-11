@@ -267,7 +267,7 @@ function buildTopNBreakdown(q: TopNBreakdownQuery): ArchetypeSqlPlan {
     if (q.compareRange) {
       // Join each device's previous-period totals so rows carry `prev*`.
       const wPrev = partitionWhere({ ...q, range: q.compareRange })
-      const deviceSelects = (clause: string, ml: readonly string[]) => DEVICE_SUFFIXES.map((suffix) => {
+      const deviceSelects = (clause: string, ml: readonly string[]): string => DEVICE_SUFFIXES.map((suffix) => {
         const source = deviceSource(suffix)
         const metrics = ml.map(m => metricExprForSource(m as Metric, source)).join(', ')
         return `SELECT '${suffix.toUpperCase()}' AS device, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${clause}`

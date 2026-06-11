@@ -30,5 +30,15 @@ export default defineBuildConfig({
       outDir: './dist',
       name: 'contracts',
     },
+    {
+      type: 'bundle',
+      input: ['./src/normalize.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
+      input: ['./src/tenant.ts'],
+      outDir: './dist',
+    },
   ],
 })

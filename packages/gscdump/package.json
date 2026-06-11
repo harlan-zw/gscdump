@@ -56,6 +56,16 @@
       "types": "./dist/contracts.d.mts",
       "import": "./dist/contracts.mjs",
       "default": "./dist/contracts.mjs"
+    },
+    "./normalize": {
+      "types": "./dist/normalize.d.mts",
+      "import": "./dist/normalize.mjs",
+      "default": "./dist/normalize.mjs"
+    },
+    "./tenant": {
+      "types": "./dist/tenant.d.mts",
+      "import": "./dist/tenant.mjs",
+      "default": "./dist/tenant.mjs"
     }
   },
   "main": "./dist/index.mjs",

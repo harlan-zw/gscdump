@@ -17,13 +17,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v6
         with:
           node-version: lts/*
           cache: pnpm
           registry-url: https://registry.npmjs.org
+
+      - run: corepack enable
 
       - run: npx changelogithub
         env:

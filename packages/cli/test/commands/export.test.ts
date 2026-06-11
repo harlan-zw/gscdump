@@ -12,7 +12,7 @@ import {
   createFilesystemManifestStore,
 } from '@gscdump/engine/filesystem'
 import { createNodeDuckDBHandle, resetNodeDuckDB } from '@gscdump/engine/node'
-import { encodeSiteId } from 'gscdump'
+import { encodeSiteId } from 'gscdump/tenant'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { exportToDuckDB } from '../../src/commands/export'
 
