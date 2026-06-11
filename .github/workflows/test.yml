@@ -15,14 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: pnpm/action-setup@v6
+
       - uses: actions/setup-node@v6
         with:
           node-version: lts/*
           cache: pnpm
 
-      - run: corepack enable
-
-      - run: pnpm i
+      - run: pnpm i --trust-lockfile
         env:
           PNPM_MINIMUM_RELEASE_AGE: 0
 

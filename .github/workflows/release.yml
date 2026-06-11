@@ -17,19 +17,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: pnpm/action-setup@v6
+
       - uses: actions/setup-node@v6
         with:
           node-version: lts/*
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
-      - run: corepack enable
-
       - run: npx changelogithub
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
-      - run: pnpm i
+      - run: pnpm i --trust-lockfile
         env:
           PNPM_MINIMUM_RELEASE_AGE: 0
 
