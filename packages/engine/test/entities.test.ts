@@ -660,6 +660,8 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
       inspectionResultLink: null,
       firstCheckedAt: null,
       checkCount: null,
+      nextCheckAfter: null,
+      nextCheckPriority: null,
       ...partial,
     }
   }
@@ -727,6 +729,8 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
         inspectionResultLink: 'https://search.google.com/x',
         firstCheckedAt: '2026-01-01T00:00:00Z',
         checkCount: 5,
+        nextCheckAfter: 1771417381,
+        nextCheckPriority: 'high',
       }),
     ], { batchId: 'b1' })
     const rows = await decodeParquetToRows(store.get('u_u1/s1/entities/inspections/events/2026-04/b1.parquet')!)
@@ -738,6 +742,8 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
     expect(r.inspectionResultLink).toBe('https://search.google.com/x')
     expect(r.firstCheckedAt).toBe('2026-01-01T00:00:00Z')
     expect(r.checkCount).toBe(5)
+    expect(Number(r.nextCheckAfter)).toBe(1771417381)
+    expect(r.nextCheckPriority).toBe('high')
   })
 
   it('compactInspections is a no-op when there are no events', async () => {

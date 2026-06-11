@@ -221,6 +221,14 @@ export interface InspectionEventRow extends InspectionParquetRow {
   firstCheckedAt: string | null
   /** Total number of inspections recorded for this url. */
   checkCount: number | null
+  /**
+   * Stored next-recheck unix-seconds + priority as computed AT INSPECT TIME.
+   * Carried verbatim (NOT recomputed at read) because the scheduling policy can
+   * change over time — `__gsc/inspections` must replay the historical value to
+   * keep its frozen wire shape byte-stable.
+   */
+  nextCheckAfter: number | null
+  nextCheckPriority: string | null
 }
 
 /**
@@ -348,6 +356,8 @@ export const INSPECTION_EVENT_COLUMNS: readonly ColumnDef[] = [
   { name: 'inspectionResultLink', type: 'VARCHAR', nullable: true },
   { name: 'firstCheckedAt', type: 'VARCHAR', nullable: true },
   { name: 'checkCount', type: 'INTEGER', nullable: true },
+  { name: 'nextCheckAfter', type: 'BIGINT', nullable: true },
+  { name: 'nextCheckPriority', type: 'VARCHAR', nullable: true },
 ]
 
 export function createInspectionStore(opts: CreateInspectionStoreOptions): InspectionStore {
