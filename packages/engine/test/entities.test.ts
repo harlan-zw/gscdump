@@ -1,4 +1,4 @@
-import type { InspectionParquetRow, InspectionRecord } from '../src/entities'
+import type { InspectionEventRow, InspectionParquetRow, InspectionRecord } from '../src/entities'
 import type { DataSource } from '../src/storage'
 import { describe, expect, it } from 'vitest'
 import { decodeParquetToRows } from '../src/adapters/hyparquet'
@@ -9,6 +9,9 @@ import {
   emptyTypesKey,
   hashUrl,
   INSPECTION_HISTORY_MAX_BYTES,
+  inspectionBaseKey,
+  inspectionEventKey,
+  inspectionEventsPrefix,
   inspectionHistoryPrefix,
   inspectionHistoryShardKey,
   inspectionIndexKey,
@@ -609,3 +612,229 @@ interface SitemapRecordLoaded {
   loc: string
   removedAt: number | undefined
 }
+
+describe('inspectionEventsPrefix / inspectionEventKey / inspectionBaseKey', () => {
+  it('encodes tenant + site path', () => {
+    expect(inspectionEventsPrefix({ userId: 'u1', siteId: 's1' }))
+      .toBe('u_u1/s1/entities/inspections/events')
+    expect(inspectionEventKey({ userId: 'u1', siteId: 's1' }, '2026-04', 'b1'))
+      .toBe('u_u1/s1/entities/inspections/events/2026-04/b1.parquet')
+    expect(inspectionBaseKey({ userId: 'u1', siteId: 's1' }))
+      .toBe('u_u1/s1/entities/inspections/base.parquet')
+  })
+
+  it('omits the site segment when no siteId', () => {
+    expect(inspectionEventsPrefix({ userId: 'u1' }))
+      .toBe('u_u1/entities/inspections/events')
+    expect(inspectionBaseKey({ userId: 'u1' }))
+      .toBe('u_u1/entities/inspections/base.parquet')
+  })
+})
+
+describe('createInspectionStore: appendInspectionEvents + compactInspections', () => {
+  const ctx = { userId: 'u1', siteId: 's1' }
+
+  function event(
+    partial: Partial<InspectionEventRow> & Pick<InspectionEventRow, 'url' | 'inspectedAt'>,
+  ): InspectionEventRow {
+    return {
+      urlHash: hashUrl(partial.url),
+      indexStatus: null,
+      lastCrawlTime: null,
+      googleCanonical: null,
+      userCanonical: null,
+      coverageState: null,
+      robotsTxtState: null,
+      indexingState: null,
+      pageFetchState: null,
+      mobileUsabilityVerdict: null,
+      richResultsVerdict: null,
+      scheduleNextAt: null,
+      scheduleConsecutiveUnchanged: null,
+      schedulePolicyVersion: null,
+      crawlingUserAgent: null,
+      richResultsItems: null,
+      sitemaps: null,
+      referringUrls: null,
+      mobileIssues: null,
+      inspectionResultLink: null,
+      firstCheckedAt: null,
+      checkCount: null,
+      ...partial,
+    }
+  }
+
+  it('writes an immutable per-batch parquet under events/<month>/<batchId>, no read-before-write', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const reads: string[] = []
+    const ds2: DataSource = { ...ds, async read(k) {
+      reads.push(k)
+      return ds.read(k)
+    } }
+    const inspector = createInspectionStore({ dataSource: ds2 })
+
+    const res = await inspector.appendInspectionEvents(ctx, [
+      event({ url: 'https://e.com/a', inspectedAt: '2026-04-22T10:00:00Z', indexStatus: 'PASS' }),
+      event({ url: 'https://e.com/b', inspectedAt: '2026-04-22T11:00:00Z', indexStatus: 'FAIL' }),
+    ], { batchId: 'b1' })
+
+    expect(res.rowCount).toBe(2)
+    expect(res.keys).toEqual(['u_u1/s1/entities/inspections/events/2026-04/b1.parquet'])
+    expect(store.has('u_u1/s1/entities/inspections/events/2026-04/b1.parquet')).toBe(true)
+    expect(reads).toHaveLength(0)
+  })
+
+  it('groups one call into multiple month files', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [
+      event({ url: 'https://e.com/a', inspectedAt: '2026-04-30T10:00:00Z' }),
+      event({ url: 'https://e.com/b', inspectedAt: '2026-05-01T10:00:00Z' }),
+    ], { batchId: 'b1' })
+    expect(store.has('u_u1/s1/entities/inspections/events/2026-04/b1.parquet')).toBe(true)
+    expect(store.has('u_u1/s1/entities/inspections/events/2026-05/b1.parquet')).toBe(true)
+  })
+
+  it('idempotent under retry: same batchId overwrites the same key', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [event({ url: 'https://e.com/a', inspectedAt: '2026-04-22T10:00:00Z' })], { batchId: 'b1' })
+    await inspector.appendInspectionEvents(ctx, [event({ url: 'https://e.com/a', inspectedAt: '2026-04-22T10:00:00Z' })], { batchId: 'b1' })
+    const keys = Array.from(store.keys()).filter(k => k.includes('/events/'))
+    expect(keys).toHaveLength(1)
+  })
+
+  it('empty input is a no-op', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    const res = await inspector.appendInspectionEvents(ctx, [])
+    expect(res).toEqual({ keys: [], rowCount: 0 })
+    expect(store.size).toBe(0)
+  })
+
+  it('round-trips the full fidelity column set (JSON string columns)', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [
+      event({
+        url: 'https://e.com/a',
+        inspectedAt: '2026-04-22T10:00:00Z',
+        crawlingUserAgent: 'DESKTOP',
+        richResultsItems: JSON.stringify([{ type: 'Article', issues: [] }]),
+        sitemaps: JSON.stringify(['https://e.com/sitemap.xml']),
+        referringUrls: JSON.stringify(['https://e.com/']),
+        mobileIssues: JSON.stringify([]),
+        inspectionResultLink: 'https://search.google.com/x',
+        firstCheckedAt: '2026-01-01T00:00:00Z',
+        checkCount: 5,
+      }),
+    ], { batchId: 'b1' })
+    const rows = await decodeParquetToRows(store.get('u_u1/s1/entities/inspections/events/2026-04/b1.parquet')!)
+    expect(rows).toHaveLength(1)
+    const r = rows[0]
+    expect(r.crawlingUserAgent).toBe('DESKTOP')
+    expect(JSON.parse(r.richResultsItems as string)).toEqual([{ type: 'Article', issues: [] }])
+    expect(JSON.parse(r.sitemaps as string)).toEqual(['https://e.com/sitemap.xml'])
+    expect(r.inspectionResultLink).toBe('https://search.google.com/x')
+    expect(r.firstCheckedAt).toBe('2026-01-01T00:00:00Z')
+    expect(r.checkCount).toBe(5)
+  })
+
+  it('compactInspections is a no-op when there are no events', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    const res = await inspector.compactInspections(ctx)
+    expect(res).toEqual({ baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0 })
+    expect(store.has(inspectionBaseKey(ctx))).toBe(false)
+  })
+
+  it('folds events into base (newest-wins by inspectedAt) and deletes consumed events', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    // Two observations of /a (older PASS, newer FAIL) + one of /b.
+    await inspector.appendInspectionEvents(ctx, [
+      event({ url: 'https://e.com/a', inspectedAt: '2026-04-01T00:00:00Z', indexStatus: 'PASS' }),
+    ], { batchId: 'b1' })
+    await inspector.appendInspectionEvents(ctx, [
+      event({ url: 'https://e.com/a', inspectedAt: '2026-04-20T00:00:00Z', indexStatus: 'FAIL' }),
+      event({ url: 'https://e.com/b', inspectedAt: '2026-04-20T00:00:00Z', indexStatus: 'PASS' }),
+    ], { batchId: 'b2' })
+
+    const res = await inspector.compactInspections(ctx)
+    expect(res.baseRowCount).toBe(2)
+    expect(res.eventsFolded).toBe(3)
+    expect(res.eventFilesDeleted).toBe(2)
+    // Events gone, base present.
+    expect(Array.from(store.keys()).filter(k => k.includes('/events/'))).toHaveLength(0)
+    expect(store.has(inspectionBaseKey(ctx))).toBe(true)
+
+    const rows = await decodeParquetToRows(store.get(inspectionBaseKey(ctx))!)
+    const byUrl = new Map(rows.map(r => [r.url, r]))
+    expect(byUrl.get('https://e.com/a')!.indexStatus).toBe('FAIL') // newest wins
+    expect(byUrl.get('https://e.com/b')!.indexStatus).toBe('PASS')
+    // Sorted by urlHash for prunable row-group stats.
+    const hashes = rows.map(r => r.urlHash as string)
+    expect([...hashes].sort()).toEqual(hashes)
+  })
+
+  it('preserves the earliest firstCheckedAt across the fold', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [
+      event({ url: 'https://e.com/a', inspectedAt: '2026-04-01T00:00:00Z', firstCheckedAt: '2026-01-15T00:00:00Z' }),
+    ], { batchId: 'b1' })
+    await inspector.appendInspectionEvents(ctx, [
+      // Newest observation, but its firstCheckedAt is LATER — must not overwrite.
+      event({ url: 'https://e.com/a', inspectedAt: '2026-04-20T00:00:00Z', firstCheckedAt: '2026-02-01T00:00:00Z' }),
+    ], { batchId: 'b2' })
+
+    await inspector.compactInspections(ctx)
+    const rows = await decodeParquetToRows(store.get(inspectionBaseKey(ctx))!)
+    expect(rows[0].firstCheckedAt).toBe('2026-01-15T00:00:00Z')
+  })
+
+  it('merges fresh events into an existing base + is idempotent on re-run', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [event({ url: 'https://e.com/a', inspectedAt: '2026-04-01T00:00:00Z', indexStatus: 'PASS' })], { batchId: 'b1' })
+    await inspector.compactInspections(ctx)
+
+    // Second round: a newer /a + a new /c land as events, then compact again.
+    await inspector.appendInspectionEvents(ctx, [
+      event({ url: 'https://e.com/a', inspectedAt: '2026-05-01T00:00:00Z', indexStatus: 'FAIL' }),
+      event({ url: 'https://e.com/c', inspectedAt: '2026-05-01T00:00:00Z', indexStatus: 'PASS' }),
+    ], { batchId: 'b2' })
+    const res = await inspector.compactInspections(ctx)
+    expect(res.baseRowCount).toBe(2)
+
+    const rows = await decodeParquetToRows(store.get(inspectionBaseKey(ctx))!)
+    const byUrl = new Map(rows.map(r => [r.url, r.indexStatus]))
+    expect(byUrl.get('https://e.com/a')).toBe('FAIL')
+    expect(byUrl.get('https://e.com/c')).toBe('PASS')
+
+    // Re-running with no new events leaves the base unchanged.
+    const before = store.get(inspectionBaseKey(ctx))!
+    const res2 = await inspector.compactInspections(ctx)
+    expect(res2).toEqual({ baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0 })
+    expect(store.get(inspectionBaseKey(ctx))).toBe(before)
+  })
+
+  it('propagates a real read failure on the existing base (never rebuilds from events alone)', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [event({ url: 'https://e.com/a', inspectedAt: '2026-04-01T00:00:00Z' })], { batchId: 'b1' })
+    await inspector.compactInspections(ctx)
+    await inspector.appendInspectionEvents(ctx, [event({ url: 'https://e.com/b', inspectedAt: '2026-05-01T00:00:00Z' })], { batchId: 'b2' })
+
+    const baseKey = inspectionBaseKey(ctx)
+    const failing = createInspectionStore({ dataSource: { ...ds, async read(k) {
+      if (k === baseKey)
+        throw new Error('R2 GET 503: transient backend failure')
+      return ds.read(k)
+    } } })
+    await expect(failing.compactInspections(ctx)).rejects.toThrow(/503/)
+    // Base left intact; events not deleted.
+    expect(store.has(baseKey)).toBe(true)
+    expect(Array.from(store.keys()).some(k => k.includes('/events/2026-05/'))).toBe(true)
+  })
+})

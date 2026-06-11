@@ -92,6 +92,39 @@ export function inspectionParquetKey(ctx: TenantCtx): string {
     : `u_${ctx.userId}/entities/inspections/index.parquet`
 }
 
+// --- Append-only inspection-event store (the source-of-truth replacing the
+// D1-fed `materialize` sidecar). Writes are immutable per-batch parquet under
+// `events/<YYYY-MM>/<batchId>.parquet` carrying the FULL fidelity column set;
+// `compactInspections` folds them into a `base.parquet` (latest-per-url,
+// newest-wins by `inspectedAt`). Reads merge base + uncompacted events and
+// dedup newest-wins at query time — mirrors the sitemap-urls delta/compaction
+// shape, just keyed by `urlHash` instead of feedpath. ---
+
+/** Directory prefix holding a tenant's immutable inspection-event parquets. */
+export function inspectionEventsPrefix(ctx: TenantCtx): string {
+  return ctx.siteId
+    ? `u_${ctx.userId}/${ctx.siteId}/entities/inspections/events`
+    : `u_${ctx.userId}/entities/inspections/events`
+}
+
+/**
+ * Object key for one immutable inspection-event batch, partitioned by the
+ * `YYYY-MM` of the records' `inspectedAt`. The `batchId` is caller-supplied so
+ * a job retry re-writes the SAME key (idempotent whole-file overwrite).
+ */
+export function inspectionEventKey(ctx: TenantCtx, yearMonth: string, batchId: string): string {
+  return `${inspectionEventsPrefix(ctx)}/${yearMonth}/${batchId}.parquet`
+}
+
+/** Compacted latest-per-url base produced by `compactInspections`. */
+export function inspectionBaseKey(ctx: TenantCtx): string {
+  return ctx.siteId
+    ? `u_${ctx.userId}/${ctx.siteId}/entities/inspections/base.parquet`
+    : `u_${ctx.userId}/entities/inspections/base.parquet`
+}
+
+const INSPECTION_EVENT_KEY_RE = /\/inspections\/events\/\d{4}-\d{2}\/[^/]+\.parquet$/
+
 /**
  * Directory prefix for a month's history shards. Each shard is a UUID-keyed
  * blob under this prefix; `appendHistory` writes one per call, `loadHistory`
@@ -160,6 +193,37 @@ export interface InspectionParquetRow {
 }
 
 /**
+ * Row shape for the append-only inspection-event store. Superset of
+ * {@link InspectionParquetRow}: carries the full-fidelity columns the lossy
+ * `materialize` parquet dropped (`crawlingUserAgent`, `richResultsItems`,
+ * `sitemaps`, `referringUrls`, `mobileIssues`, `inspectionResultLink`,
+ * `firstCheckedAt`, `checkCount`). Object/array fields are persisted as JSON
+ * strings — read paths unpack them with DuckDB's JSON functions.
+ *
+ * `firstCheckedAt` / `checkCount` are caller-managed: the writer carries the
+ * earliest-seen timestamp + running observation count forward. Compaction
+ * preserves the EARLIEST `firstCheckedAt` per url (mirrors the sitemap store's
+ * `firstSeenAt` preservation); every other column is taken from the
+ * newest-by-`inspectedAt` event.
+ */
+export interface InspectionEventRow extends InspectionParquetRow {
+  crawlingUserAgent: string | null
+  /** JSON-encoded `RichResultsItem[]`. */
+  richResultsItems: string | null
+  /** JSON-encoded list of sitemap URLs referencing this page. */
+  sitemaps: string | null
+  /** JSON-encoded list of referring URLs. */
+  referringUrls: string | null
+  /** JSON-encoded mobile-usability issues. */
+  mobileIssues: string | null
+  inspectionResultLink: string | null
+  /** ISO-8601 timestamp of the first inspection we ever recorded for this url. */
+  firstCheckedAt: string | null
+  /** Total number of inspections recorded for this url. */
+  checkCount: number | null
+}
+
+/**
  * Hard cap on a single `appendHistory` shard payload. Encoded bytes >
  * this threshold throws — the caller logs and moves on (D1 is
  * authoritative, R2 history is a sidecar). At `URLS_PER_JOB=3` a real
@@ -196,6 +260,35 @@ export interface InspectionStore {
    * Returns the parquet object key (matches {@link parquetUri} after write).
    */
   materialize: (ctx: TenantCtx, rows: Iterable<InspectionParquetRow>) => Promise<{ key: string, rowCount: number, bytes: number }>
+  /**
+   * Append a batch of inspection results as an immutable per-batch parquet
+   * under `events/<YYYY-MM>/<batchId>.parquet`, partitioned by the `YYYY-MM`
+   * of each row's `inspectedAt` (a batch spanning a month boundary writes one
+   * file per month). No read-before-write; idempotent under job retry (same
+   * `batchId` → same key → whole-file overwrite). Rows carry the FULL column
+   * set ({@link INSPECTION_EVENT_COLUMNS}); this is the append-only
+   * source-of-truth that supersedes {@link InspectionStore.materialize}.
+   *
+   * Returns the keys written + total row count. Empty input is a no-op.
+   */
+  appendInspectionEvents: (
+    ctx: TenantCtx,
+    rows: readonly InspectionEventRow[],
+    opts?: { batchId?: string },
+  ) => Promise<{ keys: string[], rowCount: number }>
+  /**
+   * Fold every outstanding event file into the `base.parquet`: latest-per-url
+   * by max `inspectedAt` (newest-wins), preserving the earliest non-null
+   * `firstCheckedAt` per url. Writes the new base then deletes the consumed
+   * event files — file-level only, never row-level (ADR-0002). Idempotent +
+   * re-runnable: a crash after the base write but before the delete just
+   * re-folds the same events (newest-wins makes that a no-op). A real read
+   * failure on the existing base propagates rather than rebuilding from events
+   * alone (which would drop URLs only the base held).
+   *
+   * No-op (no base rewrite) when there are zero outstanding events.
+   */
+  compactInspections: (ctx: TenantCtx) => Promise<{ baseRowCount: number, eventsFolded: number, eventFilesDeleted: number }>
   /**
    * DuckDB-resolvable URI for the materialised parquet sidecar, or
    * `undefined` if the underlying `DataSource` has no native URI shape
@@ -236,6 +329,25 @@ const INSPECTION_PARQUET_COLUMNS: readonly ColumnDef[] = [
   { name: 'scheduleNextAt', type: 'BIGINT', nullable: true },
   { name: 'scheduleConsecutiveUnchanged', type: 'INTEGER', nullable: true },
   { name: 'schedulePolicyVersion', type: 'INTEGER', nullable: true },
+]
+
+/**
+ * Column schema for the append-only inspection-event store + its compacted
+ * base. Superset of {@link INSPECTION_PARQUET_COLUMNS}: the 16 promoted columns
+ * plus the 8 full-fidelity ones the lossy `materialize` parquet dropped. The
+ * event files and `base.parquet` share this schema so DuckDB
+ * `read_parquet([...], union_by_name = true)` merges base + events cleanly.
+ */
+export const INSPECTION_EVENT_COLUMNS: readonly ColumnDef[] = [
+  ...INSPECTION_PARQUET_COLUMNS,
+  { name: 'crawlingUserAgent', type: 'VARCHAR', nullable: true },
+  { name: 'richResultsItems', type: 'VARCHAR', nullable: true },
+  { name: 'sitemaps', type: 'VARCHAR', nullable: true },
+  { name: 'referringUrls', type: 'VARCHAR', nullable: true },
+  { name: 'mobileIssues', type: 'VARCHAR', nullable: true },
+  { name: 'inspectionResultLink', type: 'VARCHAR', nullable: true },
+  { name: 'firstCheckedAt', type: 'VARCHAR', nullable: true },
+  { name: 'checkCount', type: 'INTEGER', nullable: true },
 ]
 
 export function createInspectionStore(opts: CreateInspectionStoreOptions): InspectionStore {
@@ -312,6 +424,99 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
       const key = inspectionParquetKey(ctx)
       await ds.write(key, bytes)
       return { key, rowCount: rows.length, bytes: bytes.byteLength }
+    },
+
+    async appendInspectionEvents(ctx, rows, options) {
+      if (rows.length === 0)
+        return { keys: [], rowCount: 0 }
+      const batchId = options?.batchId ?? randomBatchId()
+      // Partition the batch by the YYYY-MM of each row's inspectedAt so files
+      // group naturally by month (mirrors the history-shard layout). Malformed
+      // timestamps land in `unknown` rather than throwing the writer.
+      const byMonth = new Map<string, InspectionEventRow[]>()
+      for (const r of rows) {
+        const m = YEAR_MONTH_RE.exec(r.inspectedAt)
+        const month = m ? `${m[1]}-${m[2]}` : 'unknown'
+        const bucket = byMonth.get(month) ?? []
+        bucket.push(r)
+        byMonth.set(month, bucket)
+      }
+      const keys: string[] = []
+      for (const [month, batch] of byMonth) {
+        const bytes = encodeRowsToParquetFlex(batch as Row[], {
+          columns: INSPECTION_EVENT_COLUMNS,
+          sortKey: ['urlHash'],
+        })
+        const key = inspectionEventKey(ctx, month, batchId)
+        await ds.write(key, bytes)
+        keys.push(key)
+      }
+      return { keys, rowCount: rows.length }
+    },
+
+    async compactInspections(ctx) {
+      const eventKeys = (await ds.list(`${inspectionEventsPrefix(ctx)}/`))
+        .filter(k => INSPECTION_EVENT_KEY_RE.test(k))
+      // Nothing outstanding → leave the base untouched (no needless rewrite).
+      if (eventKeys.length === 0)
+        return { baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0 }
+
+      const baseKey = inspectionBaseKey(ctx)
+      // Highest-risk swallow: a real read failure on an existing base must NOT
+      // read as absent — that would rebuild the base from events alone and drop
+      // every URL only the base held. readOptional keeps a genuinely-absent base
+      // as `undefined` (first compaction) but propagates a real failure.
+      const baseBytes = await readOptional(ds, baseKey)
+      const baseRows = baseBytes ? await decodeParquetToRows(baseBytes) : []
+
+      // Newest-wins per urlHash by inspectedAt (ISO strings sort chronologically),
+      // tracking the earliest firstCheckedAt seen so compaction never loses it.
+      const latest = new Map<string, Row>()
+      const earliestChecked = new Map<string, string>()
+      const consider = (row: Row): void => {
+        const h = String(row.urlHash)
+        const prev = latest.get(h)
+        if (!prev || String(row.inspectedAt ?? '') > String(prev.inspectedAt ?? ''))
+          latest.set(h, row)
+        const fc = row.firstCheckedAt
+        if (fc != null) {
+          const fcStr = String(fc)
+          const cur = earliestChecked.get(h)
+          if (cur === undefined || fcStr < cur)
+            earliestChecked.set(h, fcStr)
+        }
+      }
+      for (const row of baseRows) consider(row)
+
+      let eventsFolded = 0
+      const consumed: string[] = []
+      for (const key of eventKeys.sort()) {
+        const bytes = await readOptional(ds, key)
+        if (!bytes)
+          continue
+        consumed.push(key)
+        const rows = await decodeParquetToRows(bytes)
+        for (const row of rows) {
+          consider(row)
+          eventsFolded++
+        }
+      }
+
+      const merged: Row[] = []
+      for (const [h, row] of latest) {
+        const fc = earliestChecked.get(h)
+        if (fc !== undefined)
+          row.firstCheckedAt = fc
+        merged.push(row)
+      }
+      const bytes = encodeRowsToParquetFlex(merged, {
+        columns: INSPECTION_EVENT_COLUMNS,
+        sortKey: ['urlHash'],
+      })
+      await ds.write(baseKey, bytes)
+      if (consumed.length > 0)
+        await ds.delete(consumed)
+      return { baseRowCount: merged.length, eventsFolded, eventFilesDeleted: consumed.length }
     },
 
     parquetUri(ctx) {
