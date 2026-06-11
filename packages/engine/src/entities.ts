@@ -660,6 +660,13 @@ export interface SnapshotUrlsResult {
   unchanged: boolean
 }
 
+export interface ReconcileResult {
+  /** Feedpaths that were absent from the live set and had their live URLs pruned. */
+  feedpathsPruned: number
+  /** Total URL rows transitioned live → removed across pruned feedpaths. */
+  urlsRemoved: number
+}
+
 export interface DeltaEntry {
   feedpath: string
   feedpathHash: string
@@ -777,6 +784,21 @@ export interface SitemapStore {
    * regardless of total site URL count.
    */
   compactUrls: (ctx: TenantCtx) => Promise<void>
+  /**
+   * Site-wide convergence: mark every still-live URL whose owning feedpath is
+   * absent from `liveFeedpaths` as removed. `compactUrls`/`snapshotUrls` only
+   * prune URLs *inside* a feedpath that was re-observed; a whole feed dropped
+   * from the sitemap list (no `snapshotUrls` call) leaves its URLs frozen-live
+   * forever. This is the sidecar mirror of the D1 generation sweep: it rewrites
+   * each dropped feedpath's `by-feed/<hash>/index.parquet` with `removedAt` set
+   * and deletes its outstanding deltas (write-new-base + delete-deltas,
+   * ADR-0002). Bounded per feedpath, so memory stays flat regardless of site
+   * size. Live feedpaths are never touched.
+   */
+  reconcile: (
+    ctx: TenantCtx,
+    opts: { liveFeedpaths: readonly string[], at?: number },
+  ) => Promise<ReconcileResult>
 }
 
 export interface CreateSitemapStoreOptions {
@@ -1088,6 +1110,104 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
         if (consumed.length > 0)
           await ds.delete(consumed)
       }
+    },
+
+    async reconcile(ctx, { liveFeedpaths, at: atOpt }) {
+      const at = atOpt ?? now()
+      const liveHashes = new Set(liveFeedpaths.map(fp => hash(fp)))
+
+      // Every feedpath with persisted state: compacted by-feed index files +
+      // any outstanding (uncompacted) delta files. A feedpath the live set no
+      // longer contains is a dropped feed; its live URLs must be removed.
+      const present = new Set<string>()
+      for (const key of await ds.list(`${sitemapUrlsIndexPrefix(ctx)}/`)) {
+        const m = /\/by-feed\/([0-9a-f]+)\/index\.parquet$/.exec(key)
+        if (m)
+          present.add(m[1]!)
+      }
+      const deltasByFeed = new Map<string, string[]>()
+      for (const key of await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`)) {
+        const m = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
+        if (!m)
+          continue
+        present.add(m[2]!)
+        const list = deltasByFeed.get(m[2]!) ?? []
+        list.push(key)
+        deltasByFeed.set(m[2]!, list)
+      }
+
+      let feedpathsPruned = 0
+      let urlsRemoved = 0
+      for (const fpHash of present) {
+        if (liveHashes.has(fpHash))
+          continue
+        // Fold the dropped feed's index + deltas into a final live/removed
+        // state, then transition everything still live to removed. Identical
+        // fold to compactUrls but scoped to one (now-dead) feedpath.
+        const indexKey = sitemapUrlsIndexKey(ctx, fpHash)
+        const indexBytes = await readOptional(ds, indexKey)
+        const indexRows = indexBytes ? await decodeParquetToRows(indexBytes) : []
+        const live = new Map<string, SitemapUrlRecord>()
+        const removed = new Map<string, SitemapUrlRecord>()
+        for (const row of indexRows) {
+          const r = rowToUrlRecord(row)
+          if (r.removedAt != null)
+            removed.set(r.urlHash, r)
+          else
+            live.set(r.urlHash, r)
+        }
+        const consumed: string[] = []
+        for (const key of (deltasByFeed.get(fpHash) ?? []).sort()) {
+          const bytes = await readOptional(ds, key)
+          if (!bytes)
+            continue
+          consumed.push(key)
+          const rows = await decodeParquetToRows(bytes)
+          for (const r of rows) {
+            const urlHash = String(r.url_hash)
+            const dat = Number(r.at)
+            if (String(r.op) === 'added') {
+              const prev = live.get(urlHash) ?? removed.get(urlHash)
+              removed.delete(urlHash)
+              live.set(urlHash, {
+                feedpath: String(r.feedpath),
+                feedpathHash: fpHash,
+                urlHash,
+                loc: String(r.loc),
+                lastmod: r.lastmod == null ? undefined : String(r.lastmod),
+                firstSeenAt: prev?.firstSeenAt ?? dat,
+                lastSeenAt: dat,
+              })
+            }
+            else if (String(r.op) === 'removed') {
+              const prev = live.get(urlHash)
+              live.delete(urlHash)
+              if (prev)
+                removed.set(urlHash, { ...prev, removedAt: dat })
+            }
+          }
+        }
+
+        const hadLive = live.size > 0
+        if (!hadLive && consumed.length === 0)
+          continue // already fully removed + nothing to compact
+        for (const [urlHash, r] of live) {
+          removed.set(urlHash, { ...r, removedAt: at })
+          urlsRemoved++
+        }
+        const merged = [...removed.values()]
+        merged.sort((a, b) => (a.urlHash < b.urlHash ? -1 : a.urlHash > b.urlHash ? 1 : 0))
+        const bytes = encodeRowsToParquetFlex(merged.map(urlRecordToRow), {
+          columns: URLS_INDEX_COLUMNS,
+          sortKey: ['feedpath_hash', 'url_hash'],
+        })
+        await ds.write(indexKey, bytes)
+        if (consumed.length > 0)
+          await ds.delete(consumed)
+        if (hadLive)
+          feedpathsPruned++
+      }
+      return { feedpathsPruned, urlsRemoved }
     },
   }
 }

@@ -608,6 +608,73 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
   })
 })
 
+describe('createSitemapStore: reconcile', () => {
+  const ctx = { userId: 'u1', siteId: 's1' }
+  const feedA = 'https://e.com/sitemap-a.xml'
+  const feedB = 'https://e.com/sitemap-b.xml'
+  function urls(...locs: string[]): { loc: string }[] {
+    return locs.map(loc => ({ loc }))
+  }
+
+  it('prunes a feedpath absent from the live set, keeps live feedpaths intact', async () => {
+    const { ds } = makeFakeDataSource()
+    let now = Date.parse('2026-06-01T00:00:00Z')
+    const sitemaps = createSitemapStore({ dataSource: ds, now: () => now })
+
+    await sitemaps.snapshotUrls(ctx, feedA, urls('https://e.com/a1', 'https://e.com/a2'))
+    await sitemaps.snapshotUrls(ctx, feedB, urls('https://e.com/b1'))
+    await sitemaps.compactUrls(ctx)
+
+    // feedB dropped from the sitemap list; only feedA remains live.
+    now = Date.parse('2026-06-02T00:00:00Z')
+    const res = await sitemaps.reconcile(ctx, { liveFeedpaths: [feedA] })
+    expect(res.feedpathsPruned).toBe(1)
+    expect(res.urlsRemoved).toBe(1)
+
+    // feedA untouched.
+    const aLive: string[] = []
+    for await (const r of sitemaps.loadUrls(ctx, feedA)) aLive.push(r.loc)
+    expect(aLive.sort()).toEqual(['https://e.com/a1', 'https://e.com/a2'])
+
+    // feedB fully removed.
+    const bLive: string[] = []
+    for await (const r of sitemaps.loadUrls(ctx, feedB)) bLive.push(r.loc)
+    expect(bLive).toEqual([])
+    const bAll: SitemapRecordLoaded[] = []
+    for await (const r of sitemaps.loadUrls(ctx, feedB, { includeRemoved: true }))
+      bAll.push({ loc: r.loc, removedAt: r.removedAt })
+    expect(bAll.map(r => r.removedAt)).toEqual([now])
+  })
+
+  it('prunes a dropped feedpath whose deltas were never compacted', async () => {
+    const { ds, store } = makeFakeDataSource()
+    let now = Date.parse('2026-06-01T00:00:00Z')
+    const sitemaps = createSitemapStore({ dataSource: ds, now: () => now })
+
+    await sitemaps.snapshotUrls(ctx, feedB, urls('https://e.com/b1', 'https://e.com/b2'))
+    // No compaction — only a delta file exists for feedB.
+    expect(Array.from(store.keys()).some(k => k.includes('/urls/deltas/'))).toBe(true)
+
+    now = Date.parse('2026-06-02T00:00:00Z')
+    const res = await sitemaps.reconcile(ctx, { liveFeedpaths: [feedA] })
+    expect(res.urlsRemoved).toBe(2)
+    // Deltas consumed, a removed-only base written.
+    expect(Array.from(store.keys()).filter(k => k.includes('/urls/deltas/'))).toHaveLength(0)
+    const bLive: string[] = []
+    for await (const r of sitemaps.loadUrls(ctx, feedB)) bLive.push(r.loc)
+    expect(bLive).toEqual([])
+  })
+
+  it('is a no-op when every feedpath is still live', async () => {
+    const { ds } = makeFakeDataSource()
+    const sitemaps = createSitemapStore({ dataSource: ds, now: () => Date.parse('2026-06-01T00:00:00Z') })
+    await sitemaps.snapshotUrls(ctx, feedA, urls('https://e.com/a1'))
+    await sitemaps.compactUrls(ctx)
+    const res = await sitemaps.reconcile(ctx, { liveFeedpaths: [feedA] })
+    expect(res).toEqual({ feedpathsPruned: 0, urlsRemoved: 0 })
+  })
+})
+
 interface SitemapRecordLoaded {
   loc: string
   removedAt: number | undefined

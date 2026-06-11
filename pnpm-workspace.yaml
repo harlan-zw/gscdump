@@ -32,8 +32,8 @@ overrides:
 patchedDependencies:
   icebird@0.8.8: patches/icebird@0.8.8.patch
 catalog:
-  '@cloudflare/vitest-pool-workers': ^0.16.13
-  '@cloudflare/workers-types': ^4.20260608.1
+  '@cloudflare/vitest-pool-workers': ^0.16.14
+  '@cloudflare/workers-types': ^4.20260610.1
   '@duckdb/duckdb-wasm': ^1.32.0
   '@duckdb/node-api': 1.5.1-r.2
   '@huggingface/transformers': ^4.2.0
@@ -53,7 +53,7 @@ catalog:
   hyparquet-writer: ^0.15.6
   icebird: ^0.8.8
   js-yaml: ^4.2.0
-  nuxt: ^4.4.7
+  nuxt: ^4.4.8
   nuxt-use-query: ^0.4.0
   playwright: ^1.60.0
   retriv: ^0.14.7
@@ -61,7 +61,7 @@ catalog:
   tsx: ^4.22.4
   vitest-package-exports: ^1.2.0
   vue: ^3.5.35
-  wrangler: ^4.98.0
+  wrangler: ^4.99.0
   zod: ^4.4.3
 catalogs:
   deps:
