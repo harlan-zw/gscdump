@@ -386,6 +386,75 @@ describe('attachOpfsParquetTables', () => {
     expect(sql).toMatch(/UNION ALL BY NAME/i)
     expect(sql).toMatch(/NOT IN \(SELECT date FROM lake_dates\)/i)
   })
+
+  it('withDb wraps only DB mutations — downloads run outside the lock', async () => {
+    // Consumers sharing one AsyncDuckDB pass their global attach mutex as
+    // `withDb`. ONLY the WASM-FS / catalog mutations (registerFileHandle,
+    // CREATE VIEW) may run under it; the parquet downloads must stay outside
+    // so two tables' downloads overlap instead of serialising end-to-end
+    // behind the lock (the pre-fix behaviour when callers wrapped the whole
+    // attach call).
+    const opfs = makeFakeOpfs()
+    installNavigatorStorage(opfs.root)
+
+    let lockDepth = 0
+    const withDb = async <T>(fn: () => Promise<T>): Promise<T> => {
+      lockDepth++
+      try {
+        return await fn()
+      }
+      finally {
+        lockDepth--
+      }
+    }
+
+    const lockDepthAtRegister: number[] = []
+    const lockDepthAtViewSql: number[] = []
+    const lockDepthAtFetch: number[] = []
+    const db = {
+      registerFileHandle: vi.fn(async () => {
+        lockDepthAtRegister.push(lockDepth)
+      }),
+      dropFile: vi.fn(async () => {}),
+    } as unknown as AsyncDuckDB
+    const conn = {
+      query: vi.fn(async () => {
+        lockDepthAtViewSql.push(lockDepth)
+        return { toArray: () => [] }
+      }),
+    } as unknown as AsyncDuckDBConnection
+    const payload = new Uint8Array([1, 2, 3])
+    const fetchImpl = vi.fn(async () => {
+      lockDepthAtFetch.push(lockDepth)
+      return new Response(payload.buffer.slice(0), { status: 200 })
+    }) as unknown as typeof fetch
+
+    const handle = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: fetchImpl,
+      withDb,
+      tables: [
+        {
+          table: 'pages',
+          files: [{ url: '/lake-0', bytes: 3, contentHash: 'iceberg/p-0.parquet' }],
+        },
+        {
+          table: 'queries',
+          files: [{ url: '/lake-1', bytes: 3, contentHash: 'iceberg/q-0.parquet' }],
+          overlay: { url: '/overlay', bytes: 3, contentHash: 'iceberg/q-overlay.parquet' },
+        },
+      ],
+    })
+
+    expect(handle.tables.sort()).toEqual(['pages', 'queries'])
+    expect(lockDepthAtFetch.length).toBe(3)
+    expect(lockDepthAtFetch.every(d => d === 0)).toBe(true)
+    expect(lockDepthAtRegister.length).toBe(3)
+    expect(lockDepthAtRegister.every(d => d > 0)).toBe(true)
+    expect(lockDepthAtViewSql.length).toBe(2)
+    expect(lockDepthAtViewSql.every(d => d > 0)).toBe(true)
+  })
 })
 
 describe('opfsQuotaExceededError', () => {

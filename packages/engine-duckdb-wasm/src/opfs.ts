@@ -90,6 +90,24 @@ export interface AttachOpfsTablesOptions {
   version?: string
   /** Ticks once per file as it lands in OPFS + registers. UI progress. */
   onFileProgress?: (info: OpfsFileProgress) => void
+  /**
+   * Serializer for the operations that mutate the DuckDB-WASM virtual
+   * filesystem / catalog (`registerFileHandle`, `dropFile`, `CREATE`/`DROP
+   * VIEW`) — those are not concurrency-safe across consumers sharing one
+   * `AsyncDuckDB`. Callers with a shared DB pass their global attach mutex
+   * here so ONLY these mutations serialize; the parquet downloads (network +
+   * OPFS writes, no DB interaction) run outside the lock and overlap across
+   * concurrent attaches. Wrapping the whole `attachOpfsParquetTables` call in
+   * the mutex instead serializes every table's downloads end-to-end — the
+   * dominant cold-load cost.
+   *
+   * The returned handle's `detach()` is NOT routed through this — callers
+   * that pass a lock typically already hold it around teardown, and the lock
+   * is not reentrant.
+   *
+   * Default: run inline (caller owns the DB exclusively).
+   */
+  withDb?: <T>(fn: () => Promise<T>) => Promise<T>
 }
 
 export interface OpfsFileProgress {
@@ -437,6 +455,7 @@ export async function attachOpfsParquetTables(
     signal,
     version,
     onFileProgress,
+    withDb = fn => fn(),
   } = options
 
   await requestPersistentStorage()
@@ -496,7 +515,7 @@ export async function attachOpfsParquetTables(
     const names = (tableFiles.get(table) ?? []).map(f => f.name)
     for (const n of names)
       acquiredNames.delete(n)
-    await registry.release(names)
+    await withDb(() => registry.release(names))
   }
 
   const runDownloads = (): Promise<void> => runWithConcurrency(flat, Math.max(1, fetchConcurrency), async (item, index) => {
@@ -523,8 +542,9 @@ export async function attachOpfsParquetTables(
     // registers each name once and reference-counts it, so a name another
     // consumer already holds on the same DB is reused rather than re-opened
     // (a second sync access handle on one backing file is the OPFS conflict).
+    // The registration mutates the WASM virtual filesystem → under `withDb`.
     try {
-      await registry.acquire(name, () => result.handle)
+      await withDb(() => registry.acquire(name, () => result.handle))
       acquiredNames.add(name)
     }
     catch (err) {
@@ -561,7 +581,7 @@ export async function attachOpfsParquetTables(
     await runDownloads()
   }
   catch (err) {
-    await registry.release([...acquiredNames]).catch(() => {})
+    await withDb(() => registry.release([...acquiredNames])).catch(() => {})
     throw err
   }
 
@@ -595,13 +615,13 @@ export async function attachOpfsParquetTables(
       // iterations shares the teardown path below — otherwise a bare throw here
       // escapes uncaught and leaks every handle acquired during the download loop.
       signal?.throwIfAborted()
-      await conn.query(overlayName
+      await withDb(() => conn.query(overlayName
         ? readParquetViewWithOverlaySql(schema, t.table, lakeNames, overlayName)
-        : readParquetViewSql(schema, t.table, lakeNames))
+        : readParquetViewSql(schema, t.table, lakeNames)))
     }
     catch (err) {
       if (isAbortError(err)) {
-        await detachOpfs(registry, conn, schema, attached, [...acquiredNames]).catch(() => {})
+        await withDb(() => detachOpfs(registry, conn, schema, attached, [...acquiredNames])).catch(() => {})
         throw err
       }
       // Sync-access-handle exclusivity conflict — the BROWSER_FSACCESS read
@@ -613,13 +633,13 @@ export async function attachOpfsParquetTables(
         // Only drop the half-created view if NO other consumer on this shared DB
         // holds it — otherwise we'd yank a view another attach still queries.
         if (registry.viewRefs(`${schema}.${t.table}`) === 0)
-          await conn.query(`DROP VIEW IF EXISTS ${schema}.${t.table}`).catch(() => {})
+          await withDb(() => conn.query(`DROP VIEW IF EXISTS ${schema}.${t.table}`)).catch(() => {})
         degraded.add(t.table)
         await releaseTable(t.table)
         continue
       }
       // Any other view-creation failure tears down everything registered.
-      await detachOpfs(registry, conn, schema, attached, [...acquiredNames]).catch(() => {})
+      await withDb(() => detachOpfs(registry, conn, schema, attached, [...acquiredNames])).catch(() => {})
       throw err
     }
     attached.push(t.table)
