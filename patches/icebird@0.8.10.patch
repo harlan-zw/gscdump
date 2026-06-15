@@ -1,5 +1,5 @@
 diff --git a/src/write/snapshot.js b/src/write/snapshot.js
-index bb0ee43057aa18a1764fd7ec0293d8e6c92afa2e..16606d9a6477a9da0640e57def0e8955126e06e5 100644
+index bb0ee43..16606d9 100644
 --- a/src/write/snapshot.js
 +++ b/src/write/snapshot.js
 @@ -87,8 +87,20 @@ export async function buildSnapshotUpdate({

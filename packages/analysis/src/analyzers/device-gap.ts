@@ -8,7 +8,6 @@ import { num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
-import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 
 function str(v: unknown): string {
   return v == null ? '' : String(v)
@@ -36,16 +35,44 @@ export const deviceGapAnalyzer = defineAnalyzer<AnalysisParams, Row, DeviceGapRe
 
   buildSql(params) {
     const { startDate, endDate } = periodOf(params)
+    // The `dates` table stores the device breakdown as a 9-column pivot
+    // (clicks/impressions/sum_position × desktop/mobile/tablet), NOT a long
+    // `device` dimension — there is no `device` column to GROUP BY. Read the
+    // pivot once, then UNION it back into long (date, device, …) rows so the
+    // desktop-vs-mobile reduction below has the shape it expects. `position`
+    // reverses the ingestion offset the same way as METRIC_EXPR.position
+    // (sum_position is `position - 1` summed; divide by impressions, add 1).
     const sql = `
+    WITH raw AS (
+      SELECT
+        date,
+        COALESCE(clicks_desktop, 0) AS c_desktop,
+        COALESCE(clicks_mobile, 0) AS c_mobile,
+        COALESCE(clicks_tablet, 0) AS c_tablet,
+        COALESCE(impressions_desktop, 0) AS i_desktop,
+        COALESCE(impressions_mobile, 0) AS i_mobile,
+        COALESCE(impressions_tablet, 0) AS i_tablet,
+        COALESCE(sum_position_desktop, 0) AS p_desktop,
+        COALESCE(sum_position_mobile, 0) AS p_mobile,
+        COALESCE(sum_position_tablet, 0) AS p_tablet
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+    ),
+    device_long AS (
+      SELECT date, 'DESKTOP' AS device, c_desktop AS clicks, i_desktop AS impressions, p_desktop AS sum_position FROM raw
+      UNION ALL
+      SELECT date, 'MOBILE', c_mobile, i_mobile, p_mobile FROM raw
+      UNION ALL
+      SELECT date, 'TABLET', c_tablet, i_tablet, p_tablet FROM raw
+    )
     SELECT
       date,
       device,
-      ${METRIC_EXPR.clicks} AS clicks,
-      ${METRIC_EXPR.impressions} AS impressions,
-      ${METRIC_EXPR.ctr} AS ctr,
-      ${METRIC_EXPR.position} AS position
-    FROM read_parquet({{FILES}}, union_by_name = true)
-    WHERE date >= ? AND date <= ?
+      CAST(SUM(clicks) AS DOUBLE) AS clicks,
+      CAST(SUM(impressions) AS DOUBLE) AS impressions,
+      CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
+      SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
+    FROM device_long
     GROUP BY date, device
     ORDER BY date ASC
   `

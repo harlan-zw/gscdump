@@ -6,7 +6,7 @@ minimumReleaseAgeExclude:
   - '@types/node@25.9.0'
   - nuxt@4.4.6
   - tsx@4.22.2
-  - icebird@0.8.8
+  - icebird@0.8.10
   - retriv@0.14.7
   - nuxt-use-query@0.2.7
   - nuxt-use-query@0.3.0
@@ -30,17 +30,17 @@ overrides:
   '@types/node>undici-types': ^7.0.0
   tinyexec: 1.1.2
 patchedDependencies:
-  icebird@0.8.8: patches/icebird@0.8.8.patch
+  icebird@0.8.10: patches/icebird@0.8.10.patch
 catalog:
-  '@cloudflare/vitest-pool-workers': ^0.16.14
-  '@cloudflare/workers-types': ^4.20260610.1
+  '@cloudflare/vitest-pool-workers': ^0.16.15
+  '@cloudflare/workers-types': ^4.20260613.1
   '@duckdb/duckdb-wasm': ^1.32.0
   '@duckdb/node-api': 1.5.1-r.2
   '@huggingface/transformers': ^4.2.0
   '@modelcontextprotocol/sdk': ^1.29.0
   '@nuxt/ui': ^4.8.2
   '@types/js-yaml': ^4.0.9
-  '@types/node': ^25.9.2
+  '@types/node': ^25.9.3
   '@types/proper-lockfile': ^4.1.4
   '@unovis/ts': ^1.6.5
   '@unovis/vue': ^1.6.5
@@ -51,17 +51,17 @@ catalog:
   h3: ^1.15.11
   hyparquet: ^1.26.0
   hyparquet-writer: ^0.15.6
-  icebird: ^0.8.8
+  icebird: ^0.8.10
   js-yaml: ^4.2.0
   nuxt: ^4.4.8
-  nuxt-use-query: ^0.4.0
+  nuxt-use-query: ^0.4.1
   playwright: ^1.60.0
   retriv: ^0.14.7
-  tailwindcss: ^4.3.0
+  tailwindcss: ^4.3.1
   tsx: ^4.22.4
   vitest-package-exports: ^1.2.0
-  vue: ^3.5.35
-  wrangler: ^4.99.0
+  vue: ^3.5.38
+  wrangler: ^4.100.0
   zod: ^4.4.3
 catalogs:
   deps:
@@ -83,7 +83,7 @@ catalogs:
     typescript: ^6.0.3
   dev-lint:
     '@antfu/eslint-config': ^9.0.0
-    eslint: ^10.4.1
+    eslint: ^10.5.0
   dev-test:
     '@nuxt/test-utils': ^4.0.3
     '@vitest/browser': ^4.1.8
