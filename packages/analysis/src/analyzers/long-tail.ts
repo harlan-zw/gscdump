@@ -72,8 +72,12 @@ export const longTailAnalyzer = defineAnalyzer<AnalysisParams, Row, LongTailResu
     const minQueryImpressions = params.minImpressions ?? 5
     const limit = params.limit ?? 100
 
+    // CTE must NOT be named `page_queries`: the browser DuckDB-WASM runtime
+    // registers a real VIEW with that name (columns `url`, not `page`), and the
+    // binder resolves `FROM page_queries` to the view instead of this CTE,
+    // throwing `Referenced column "page" not found`. Use a non-colliding alias.
     const sql = `
-    WITH page_queries AS (
+    WITH pq AS (
       SELECT
         url AS page,
         query,
@@ -90,7 +94,7 @@ export const longTailAnalyzer = defineAnalyzer<AnalysisParams, Row, LongTailResu
       SELECT
         page, query, impressions, clicks,
         ROW_NUMBER() OVER (PARTITION BY page ORDER BY impressions DESC, query ASC) AS rnk
-      FROM page_queries
+      FROM pq
     ),
     log_space AS (
       SELECT *,
