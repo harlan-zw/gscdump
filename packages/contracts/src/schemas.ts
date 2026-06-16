@@ -195,6 +195,9 @@ export const indexingUrlsResponseSchema = z.object({
   }).loose(),
   meta: z.object({
     siteUrl: z.string(),
+    // Authoritative GSC property identifier (`sc-domain:host` or URL-prefix) for
+    // Search Console deep-links. Optional for back-compat with older responses.
+    gscPropertyUrl: z.string().optional(),
     status: z.string(),
     issue: z.string().nullable(),
   }).loose(),
@@ -1117,11 +1120,7 @@ export const partnerWebhookEnvelopeSchema = z.object({
   data: partnerWebhookDataSchema,
 }).loose()
 
-export const partnerEndpointSchemas = {
-  appUser: { response: gscdumpUserMeResponseSchema },
-  appHealth: { response: gscdumpHealthResponseSchema },
-  appSyncProgress: { response: gscdumpSyncProgressResponseSchema },
-  appSyncJobs: { response: gscdumpSyncJobsResponseSchema },
+export const analyticsEndpointSchemas = {
   analyticsWhoami: { response: whoamiResponseSchema },
   analyticsSites: { response: z.array(siteListItemSchema) },
   analyticsCountries: { response: countriesResponseSchema },
@@ -1139,6 +1138,13 @@ export const partnerEndpointSchemas = {
   analyticsSitemapChanges: { response: sitemapChangesResponseSchema },
   analyticsAnalysisSources: { response: gscdumpAnalysisSourcesResponseSchema },
   analyticsSourceInfo: { response: sourceInfoResponseSchema },
+} as const
+
+export const partnerControlEndpointSchemas = {
+  appUser: { response: gscdumpUserMeResponseSchema },
+  appHealth: { response: gscdumpHealthResponseSchema },
+  appSyncProgress: { response: gscdumpSyncProgressResponseSchema },
+  appSyncJobs: { response: gscdumpSyncJobsResponseSchema },
   registerUser: { body: registerPartnerUserSchema, response: gscdumpUserRegistrationSchema },
   updateUserTokens: { body: updatePartnerUserTokensSchema, response: z.object({ userId: z.string(), updated: z.boolean(), sites: z.array(gscdumpAvailableSiteSchema) }).loose() },
   getUserStatus: { response: gscdumpUserStatusSchema },
@@ -1175,4 +1181,9 @@ export const partnerEndpointSchemas = {
   bindSiteToTeam: { body: bindPartnerSiteTeamSchema, response: z.object({ ok: z.literal(true), teamId: z.string().nullable() }).loose() },
   realtimeEvent: { message: partnerRealtimeEventSchema },
   webhook: { message: partnerWebhookEnvelopeSchema },
+} as const
+
+export const partnerEndpointSchemas = {
+  ...analyticsEndpointSchemas,
+  ...partnerControlEndpointSchemas,
 } as const

@@ -608,6 +608,7 @@ export interface GscdumpSitemapsResponse {
   perSitemapHistory: Record<string, GscdumpPerSitemapHistoryEntry[]>
   meta: {
     siteUrl: string
+    gscPropertyUrl?: string
     syncStatus: string | null
   }
 }
@@ -716,7 +717,7 @@ export interface GscdumpIndexingUrl {
 export interface GscdumpIndexingUrlsResponse {
   urls: GscdumpIndexingUrl[]
   pagination: { total: number, limit: number, offset: number, hasMore: boolean }
-  meta: { siteUrl: string, status: string, issue: string | null }
+  meta: { siteUrl: string, gscPropertyUrl?: string, status: string, issue: string | null }
 }
 
 export interface GscdumpIndexingDiagnosticsResponse {
