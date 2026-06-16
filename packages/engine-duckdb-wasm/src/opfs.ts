@@ -210,6 +210,26 @@ function isOpfsAccessHandleConflict(err: unknown): boolean {
 }
 
 /**
+ * True for the OPFS write-exclusivity error from `createWritable` — a
+ * `NoModificationAllowedError` (DOMException code 7, "modifications are not
+ * allowed"). It's raised when the content-addressed backing file already has an
+ * open sync access handle held by a concurrent / prior `BROWSER_FSACCESS`
+ * attach of the same file (e.g. the per-site analyzer and the multi-site fanout
+ * sharing one DB). Like the read-side {@link isOpfsAccessHandleConflict}, it's a
+ * transient exclusivity conflict, not data loss — degrade the table so the
+ * caller falls back to the in-memory buffer path instead of failing the attach.
+ */
+function isOpfsWriteConflict(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null)
+    return false
+  const name = (err as { name?: string }).name
+  const msg = err instanceof Error ? err.message : String(err)
+  return name === 'NoModificationAllowedError'
+    || (err as { code?: number }).code === 7
+    || /createWritable|modifications are not allowed/i.test(msg)
+}
+
+/**
  * OPFS file name for a file. When a content hash is supplied it's the cache
  * address — `<table>_<slug>.parquet`, NO index — so the same content is one
  * filename no matter where it sits in the manifest. The `index` is used ONLY
@@ -532,6 +552,13 @@ export async function attachOpfsParquetTables(
         throw err
       if (isQuotaError(err)) {
         // OPFS is full for this table — degrade it, keep the rest.
+        degraded.add(item.table)
+        return
+      }
+      // `createWritable` write-exclusivity conflict — the backing file is held
+      // open by another consumer of this shared DB. Degrade so the caller falls
+      // back to the buffer path instead of failing the whole table.
+      if (isOpfsWriteConflict(err)) {
         degraded.add(item.table)
         return
       }

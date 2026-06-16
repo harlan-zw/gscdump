@@ -21,12 +21,15 @@ interface FakeOpfsOptions {
   quotaBytes?: number
   /** Throw a QuotaExceededError on the write/close of any file whose URL is in this set. */
   quotaUrls?: Set<string>
+  /** Throw a NoModificationAllowedError from createWritable for any file whose OPFS name is in this set. */
+  writeConflictNames?: Set<string>
 }
 
 function makeFakeOpfs(opts: FakeOpfsOptions = {}) {
   const files = new Map<string, Uint8Array>()
   let used = 0
   const quota = opts.quotaBytes ?? Infinity
+  const writeConflictNames = opts.writeConflictNames ?? new Set<string>()
 
   function fileHandle(name: string): FileSystemFileHandle {
     return {
@@ -42,6 +45,13 @@ function makeFakeOpfs(opts: FakeOpfsOptions = {}) {
         } as unknown as File
       },
       async createWritable() {
+        if (writeConflictNames.has(name)) {
+          // OPFS write-exclusivity: the backing file is held open by another
+          // consumer's sync access handle, so createWritable is refused.
+          const err = new Error(`Failed to execute 'createWritable' on 'FileSystemFileHandle': An attempt was made to modify an object where modifications are not allowed.`)
+          err.name = 'NoModificationAllowedError'
+          throw err
+        }
         let pending: Uint8Array = new Uint8Array()
         return {
           async write(data: ArrayBuffer | Uint8Array) {
@@ -243,6 +253,38 @@ describe('opfs adversarial: multi-file table partial failure', () => {
       }],
     })
 
+    expect(handle.degradedTables).toEqual(['pages'])
+    expect(stub.liveCount()).toBe(0)
+  })
+
+  it('degrades a table when createWritable hits a write-exclusivity conflict (no leak)', async () => {
+    // file 0 materialises fine; file 1's createWritable throws
+    // NoModificationAllowedError (backing file held open by another consumer).
+    // Regression: this used to propagate and fail the whole attach instead of
+    // degrading the table to the buffer-path fallback. file 0 must not leak.
+    const { contentHashSlugFor } = await import('./helpers/slug')
+    const file1Slug = await contentHashSlugFor('iceberg/p1.parquet')
+    const file1Name = `gscdump-snapshot__pages_${file1Slug}.parquet`
+    const opfs = makeFakeOpfs({ writeConflictNames: new Set([file1Name]) })
+    installNavigatorStorage(opfs.root)
+    const stub = stubDuckDb()
+    const payload = new Uint8Array([1, 2, 3])
+
+    const handle = await attachOpfsParquetTables({
+      db: stub.db,
+      conn: stub.conn,
+      fetch: okFetch(() => payload),
+      fetchConcurrency: 1, // deterministic: file 0 before file 1
+      tables: [{
+        table: 'pages',
+        files: [
+          { url: '/pages-0', bytes: 3, contentHash: 'iceberg/p0.parquet' },
+          { url: '/pages-1', bytes: 3, contentHash: 'iceberg/p1.parquet' },
+        ],
+      }],
+    })
+
+    expect(handle.tables).toEqual([])
     expect(handle.degradedTables).toEqual(['pages'])
     expect(stub.liveCount()).toBe(0)
   })
