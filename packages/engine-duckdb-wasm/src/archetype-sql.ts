@@ -1,7 +1,7 @@
 /**
  * Archetype → DuckDB SQL compiler.
  *
- * Compiles the 10 typed `ArchetypeQuery` shapes (`@gscdump/sdk`) into SQL that
+ * Compiles the 10 typed `ArchetypeQuery` shapes (`@gscdump/contracts/archetypes`) into SQL that
  * runs against OPFS-attached parquet views. This is the BROWSER executor: every
  * archetype with execution class `r2-sql`, `r2-sql-resolved`, or `duckdb` can
  * run locally against attached views — DuckDB-WASM is a dialect superset of R2
@@ -17,7 +17,7 @@
  * (`clicks_desktop` etc.); date-only and device archetypes read it.
  */
 
-import type { ArchetypeQuery } from '@gscdump/sdk'
+import type { ArchetypeQuery } from '@gscdump/contracts/archetypes'
 
 /** A compiled, parameterised statement. */
 export interface CompiledArchetypeSql {

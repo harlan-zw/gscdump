@@ -230,7 +230,7 @@ The MCP shell is intentionally slim: agents drive the report layer for analysis 
 ## API Usage
 
 ```ts
-import { googleSearchConsole } from 'gscdump'
+import { googleSearchConsole } from 'gscdump/api'
 import { between, date, gsc, page, query } from 'gscdump/query'
 
 // Create client with auth

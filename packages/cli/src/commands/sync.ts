@@ -1,5 +1,6 @@
-import type { googleSearchConsole } from 'gscdump'
+import type { googleSearchConsole } from 'gscdump/api'
 import type { SearchType } from 'gscdump/query'
+import type { ResolvedGscdumpConfig } from '../config'
 import type { LocalStore, Row, TableName, WriteCtx } from '../local-store'
 import process from 'node:process'
 import { createEmptyTypesStore } from '@gscdump/engine/entities'
@@ -7,7 +8,7 @@ import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
 import { daysAgo, getDateRange, progressBar } from 'gscdump'
 import { SearchTypes } from 'gscdump/query'
-import { loadConfig, resolveDataDir } from '../config'
+import { loadResolvedConfig } from '../config'
 import { createCommandContext } from '../context'
 import { allTables, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, runWithConcurrency } from '../utils'
@@ -245,7 +246,7 @@ export const syncCommand = defineCommand({
   async run({ args }) {
     const { json, quiet } = applyOutputMode(args)
     if (args.status) {
-      const config = await loadConfig()
+      const config = await loadResolvedConfig()
       await printSyncStatus(config, args.site ? String(args.site) : undefined, json)
       return
     }
@@ -542,11 +543,11 @@ function isKnownSearchType(name: string): name is SearchType {
 }
 
 async function printSyncStatus(
-  config: Awaited<ReturnType<typeof loadConfig>>,
+  resolved: ResolvedGscdumpConfig,
   siteFilter: string | undefined,
   asJson: boolean,
 ): Promise<void> {
-  const store = createLocalStore({ dataDir: resolveDataDir(config) })
+  const store = createLocalStore({ dataDir: resolved.dataDir })
   const siteId = siteFilter ? store.siteIdFor(siteFilter) : undefined
 
   const watermarks = await store.engine.getWatermarks({ userId: store.userId, siteId })

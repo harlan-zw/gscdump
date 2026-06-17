@@ -49,24 +49,18 @@ import type {
   UpdatePartnerUserTokensParams,
 } from '@gscdump/contracts'
 import type { Result } from 'gscdump/result'
-import type { ZodTypeAny } from 'zod'
-import { partnerEndpointSchemas, partnerRoutes } from '@gscdump/contracts'
+import type { HostedClientOptions, HostedFetch, HostedFetchOptions, HostedHeaders } from './request'
+import { partnerEndpointSchemas, partnerRoutes } from '@gscdump/contracts/partner'
 import { err, ok, unwrapResult } from 'gscdump/result'
-import { ofetch } from 'ofetch'
-import { PartnerApiError, partnerErrorToException, toPartnerError } from './errors'
+import { PartnerApiError, partnerErrorToException } from './errors'
 import { findLifecycleSite, lifecycleSiteToSyncStatus } from './lifecycle'
+import { createHostedRequester } from './request'
 
-export type PartnerFetch = <T = unknown>(request: string, options?: PartnerFetchOptions) => Promise<T>
-export type PartnerHeaders = HeadersInit | (() => HeadersInit | Promise<HeadersInit>)
-export interface PartnerFetchOptions {
-  method?: string
-  headers?: HeadersInit
-  query?: Record<string, unknown>
-  body?: unknown
-  [key: string]: unknown
-}
+export type PartnerFetch = HostedFetch
+export type PartnerHeaders = HostedHeaders
+export type PartnerFetchOptions = HostedFetchOptions
 
-export interface PartnerClientOptions {
+export interface PartnerClientOptions extends HostedClientOptions {
   /**
    * Origin API base. Use `/api` for same-origin Nitro routes, or pass a full
    * remote origin base from the host app. The client has no baked-in origin.
@@ -82,10 +76,6 @@ export interface PartnerClientOptions {
   validate?: boolean | 'request' | 'response'
 }
 
-type FetchOptions = PartnerFetchOptions
-
-const TRAILING_SLASH_RE = /\/+$/
-const LEADING_SLASH_RE = /^\/+/
 type GscSearchType = 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews'
 interface SearchTypeOptions {
   searchType?: GscSearchType
@@ -108,35 +98,6 @@ type DataQueryOptionsWithSearchType = DataQueryOptions & SearchTypeOptions
 type DataDetailOptionsWithSearchType = DataDetailOptions & SearchTypeOptions
 type AnalysisParamsWithSearchType = GscdumpAnalysisParams & SearchTypeOptions
 const DEFAULT_SEARCH_TYPE: GscSearchType = 'web'
-
-function trimApiBase(apiBase: string | undefined): string {
-  return (apiBase ?? '/api').replace(TRAILING_SLASH_RE, '')
-}
-
-function buildPath(apiBase: string, path: string): string {
-  if (!apiBase)
-    return `/${path.replace(LEADING_SLASH_RE, '')}`
-  return `${apiBase}/${path.replace(LEADING_SLASH_RE, '')}`
-}
-
-function mergeHeaders(base: HeadersInit | undefined, extra: HeadersInit | undefined): Headers {
-  const headers = new Headers(base)
-  if (extra) {
-    for (const [key, value] of new Headers(extra).entries()) {
-      headers.set(key, value)
-    }
-  }
-  return headers
-}
-
-async function resolveHeaders(options: PartnerClientOptions): Promise<HeadersInit | undefined> {
-  const resolved = typeof options.headers === 'function'
-    ? await options.headers()
-    : options.headers
-  if (!options.apiKey)
-    return resolved
-  return mergeHeaders(resolved, { 'x-api-key': options.apiKey })
-}
 
 function withDefaultSearchType<T extends BuilderState>(state: T, searchType?: GscSearchType): T & SearchTypeOptions {
   const scoped = state as BuilderStateWithSearchType
@@ -289,45 +250,12 @@ function pageTrendQuery(params: GscdumpPageTrendParams): Record<string, string> 
   return query
 }
 
-function shouldValidate(options: PartnerClientOptions, phase: 'request' | 'response'): boolean {
-  return options.validate === true || options.validate === phase
-}
-
-function parseWith<T>(schema: ZodTypeAny | undefined, value: T): T {
-  return schema ? schema.parse(value) as T : value
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 export function createPartnerClient(options: PartnerClientOptions = {}): PartnerClient {
-  const fetchImpl = options.fetch ?? (ofetch as PartnerFetch)
-  const apiBase = trimApiBase(options.apiBase)
-
-  // Errors-as-values core for every HTTP round-trip: a transport/HTTP/response
-  // failure is classified once via `toPartnerError` into the `PartnerErrorKind`
-  // vocabulary and returned as `Err`, so callers can branch on
-  // `error.kind` (`auth` | `rate-limit` | `not-found` | ...) instead of
-  // try/catch-ing an untyped reject. The throwing `request` wrapper below
-  // re-raises the same `PartnerApiError` to preserve existing call sites.
-  async function requestResult<T>(path: string, init: FetchOptions = {}, responseSchema?: ZodTypeAny): Promise<Result<T, PartnerApiError>> {
-    const headers = mergeHeaders(await resolveHeaders(options), init.headers)
-    try {
-      const out = await fetchImpl<T>(buildPath(apiBase, path), {
-        ...init,
-        headers,
-      })
-      return ok(shouldValidate(options, 'response') ? parseWith(responseSchema, out) : out)
-    }
-    catch (error) {
-      return err(toPartnerError(error))
-    }
-  }
-
-  async function request<T>(path: string, init: FetchOptions = {}, responseSchema?: ZodTypeAny): Promise<T> {
-    return unwrapResult(await requestResult<T>(path, init, responseSchema), partnerErrorToException)
-  }
+  const { request, requestResult, shouldValidate } = createHostedRequester(options, { apiBase: '/api' })
 
   // Errors-as-values core for `waitForUserReady`: polling exhaustion while the
   // user db is still provisioning is a caller-actionable `provisioning` failure.
@@ -438,7 +366,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
 
   return {
     registerUser(params: RegisterPartnerUserParams) {
-      const body = shouldValidate(options, 'request') ? partnerEndpointSchemas.registerUser.body.parse(params) : params
+      const body = shouldValidate('request') ? partnerEndpointSchemas.registerUser.body.parse(params) : params
       return request<GscdumpUserRegistration>(partnerRoutes.users.register, {
         method: 'POST',
         body,
@@ -446,7 +374,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     updateUserTokens(userId: string, params: UpdatePartnerUserTokensParams) {
-      const body = shouldValidate(options, 'request') ? partnerEndpointSchemas.updateUserTokens.body.parse(params) : params
+      const body = shouldValidate('request') ? partnerEndpointSchemas.updateUserTokens.body.parse(params) : params
       return request<GscdumpUserTokenUpdate>(partnerRoutes.users.tokens(userId), {
         method: 'PATCH',
         body,
@@ -488,7 +416,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     registerSite(params: RegisterPartnerSiteParams) {
-      const body = shouldValidate(options, 'request') ? partnerEndpointSchemas.registerSite.body.parse(params) : params
+      const body = shouldValidate('request') ? partnerEndpointSchemas.registerSite.body.parse(params) : params
       return request<GscdumpSiteRegistration>(partnerRoutes.partner.sites.register, {
         method: 'POST',
         body,
@@ -496,7 +424,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     bulkRegisterSites(params: BulkRegisterPartnerSitesParams) {
-      const body = shouldValidate(options, 'request') ? partnerEndpointSchemas.bulkRegisterSites.body.parse(params) : params
+      const body = shouldValidate('request') ? partnerEndpointSchemas.bulkRegisterSites.body.parse(params) : params
       return request<BulkRegisterPartnerSitesResponse>(partnerRoutes.partner.sites.bulkRegister, {
         method: 'POST',
         body,
@@ -530,7 +458,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     getData(siteId: string, state: BuilderState, queryOptions?: DataQueryOptions) {
-      if (shouldValidate(options, 'request')) {
+      if (shouldValidate('request')) {
         partnerEndpointSchemas.getData.state.parse(state)
         partnerEndpointSchemas.getData.options.parse(queryOptions)
       }
@@ -540,7 +468,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     getDataDetail(siteId: string, state: BuilderState, queryOptions?: DataDetailOptions) {
-      if (shouldValidate(options, 'request')) {
+      if (shouldValidate('request')) {
         partnerEndpointSchemas.getDataDetail.state.parse(state)
         partnerEndpointSchemas.getDataDetail.options.parse(queryOptions)
       }
@@ -551,7 +479,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
 
     getAnalysis(siteId: string, params: GscdumpAnalysisParams) {
       assertAnalysisParams(params)
-      const query = shouldValidate(options, 'request') ? partnerEndpointSchemas.getAnalysis.query.parse(params) : params
+      const query = shouldValidate('request') ? partnerEndpointSchemas.getAnalysis.query.parse(params) : params
       return request<GscdumpAnalysisResponse>(partnerRoutes.sites.analysis(siteId), {
         query: analysisQuery(query),
       }, partnerEndpointSchemas.getAnalysis.response)
@@ -588,7 +516,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     getIndexingUrls(siteId: string, params: IndexingUrlsParams = {}) {
-      const parsed = shouldValidate(options, 'request') ? partnerEndpointSchemas.getIndexingUrls.query.parse(params) : params
+      const parsed = shouldValidate('request') ? partnerEndpointSchemas.getIndexingUrls.query.parse(params) : params
       return request<GscdumpIndexingUrlsResponse>(partnerRoutes.sites.indexingUrls(siteId), {
         query: indexingUrlsQuery(parsed),
       }, partnerEndpointSchemas.getIndexingUrls.response)
@@ -599,7 +527,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     requestIndexingInspect(siteId: string, body: IndexingInspectRequest) {
-      const parsed = shouldValidate(options, 'request') ? partnerEndpointSchemas.getIndexingInspect.body.parse(body) : body
+      const parsed = shouldValidate('request') ? partnerEndpointSchemas.getIndexingInspect.body.parse(body) : body
       return request<IndexingInspectResponse | IndexingInspectRateLimited>(partnerRoutes.sites.indexingInspect(siteId), {
         method: 'POST',
         body: parsed,
@@ -611,7 +539,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     patchUserSettings(body: Partial<GscdumpUserSettings>) {
-      const parsed = shouldValidate(options, 'request') ? partnerEndpointSchemas.patchUserSettings.body.parse(body) : body
+      const parsed = shouldValidate('request') ? partnerEndpointSchemas.patchUserSettings.body.parse(body) : body
       return request<GscdumpUserSettings>(partnerRoutes.settings.user, {
         method: 'PATCH',
         body: parsed,
@@ -625,7 +553,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     getTopAssociation(siteId: string, params: GscdumpTopAssociationParams) {
-      const query = shouldValidate(options, 'request') ? partnerEndpointSchemas.getTopAssociation.query.parse(params) : params
+      const query = shouldValidate('request') ? partnerEndpointSchemas.getTopAssociation.query.parse(params) : params
       return request<GscdumpTopAssociationResponse>(partnerRoutes.sites.topAssociation(siteId), {
         query: query as unknown as Record<string, unknown>,
       }, partnerEndpointSchemas.getTopAssociation.response)
@@ -633,7 +561,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
 
     getKeywordSparklines(siteId: string, params: GscdumpKeywordSparklinesParams) {
       const withSearchType = { ...params, searchType: params.searchType ?? DEFAULT_SEARCH_TYPE }
-      const body = shouldValidate(options, 'request') ? partnerEndpointSchemas.getKeywordSparklines.body.parse(withSearchType) : withSearchType
+      const body = shouldValidate('request') ? partnerEndpointSchemas.getKeywordSparklines.body.parse(withSearchType) : withSearchType
       return request<GscdumpKeywordSparklinesResponse>(partnerRoutes.sites.keywordSparklines(siteId), {
         method: 'POST',
         body,
@@ -641,14 +569,14 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     getQueryTrend(siteId: string, params: GscdumpQueryTrendParams) {
-      const query = shouldValidate(options, 'request') ? partnerEndpointSchemas.getQueryTrend.query.parse(params) : params
+      const query = shouldValidate('request') ? partnerEndpointSchemas.getQueryTrend.query.parse(params) : params
       return request<GscdumpQueryTrendResponse>(partnerRoutes.sites.queryTrend(siteId), {
         query: queryTrendQuery(query),
       }, partnerEndpointSchemas.getQueryTrend.response)
     },
 
     getPageTrend(siteId: string, params: GscdumpPageTrendParams) {
-      const query = shouldValidate(options, 'request') ? partnerEndpointSchemas.getPageTrend.query.parse(params) : params
+      const query = shouldValidate('request') ? partnerEndpointSchemas.getPageTrend.query.parse(params) : params
       return request<GscdumpPageTrendResponse>(partnerRoutes.sites.pageTrend(siteId), {
         query: pageTrendQuery(query),
       }, partnerEndpointSchemas.getPageTrend.response)
@@ -669,22 +597,22 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     getCtrCurve<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const query = shouldValidate(options, 'request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
+      const query = shouldValidate('request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
       return request<T>(partnerRoutes.sites.ctrCurve(siteId), { query: dateRangeQuery(query) })
     },
 
     getDarkTraffic<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const query = shouldValidate(options, 'request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
+      const query = shouldValidate('request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
       return request<T>(partnerRoutes.sites.darkTraffic(siteId), { query: dateRangeQuery(query) })
     },
 
     getDeviceGap<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const query = shouldValidate(options, 'request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
+      const query = shouldValidate('request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
       return request<T>(partnerRoutes.sites.deviceGap(siteId), { query: dateRangeQuery(query) })
     },
 
     getIndexPercent(siteId: string, params: { invisibleLimit?: number, invisibleOffset?: number, orphanLimit?: number } = {}) {
-      const query = shouldValidate(options, 'request') ? partnerEndpointSchemas.getIndexPercent.query.parse(params) : params
+      const query = shouldValidate('request') ? partnerEndpointSchemas.getIndexPercent.query.parse(params) : params
       return request<GscdumpIndexPercentResponse>(
         partnerRoutes.sites.indexPercent(siteId),
         { query: query as Record<string, unknown> },
@@ -693,17 +621,17 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     getKeywordBreadth<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const query = shouldValidate(options, 'request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
+      const query = shouldValidate('request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
       return request<T>(partnerRoutes.sites.keywordBreadth(siteId), { query: dateRangeQuery(query) })
     },
 
     getPositionDistribution<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const query = shouldValidate(options, 'request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
+      const query = shouldValidate('request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
       return request<T>(partnerRoutes.sites.positionDistribution(siteId), { query: dateRangeQuery(query) })
     },
 
     createTeam(params: CreatePartnerTeamParams) {
-      const body = shouldValidate(options, 'request') ? partnerEndpointSchemas.createTeam.body.parse(params) : params
+      const body = shouldValidate('request') ? partnerEndpointSchemas.createTeam.body.parse(params) : params
       return request(partnerRoutes.teams.create, {
         method: 'POST',
         body,
@@ -728,7 +656,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     addTeamMember(teamId: string, params: AddPartnerTeamMemberParams) {
-      const body = shouldValidate(options, 'request') ? partnerEndpointSchemas.addTeamMember.body.parse(params) : params
+      const body = shouldValidate('request') ? partnerEndpointSchemas.addTeamMember.body.parse(params) : params
       return request<{ ok: true, role: string, alreadyExisted?: boolean }>(partnerRoutes.teams.members(teamId), {
         method: 'POST',
         body,
@@ -749,7 +677,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     bindSiteToTeam(userId: string, siteId: string, params: BindPartnerSiteTeamParams) {
-      const body = shouldValidate(options, 'request') ? partnerEndpointSchemas.bindSiteToTeam.body.parse(params) : params
+      const body = shouldValidate('request') ? partnerEndpointSchemas.bindSiteToTeam.body.parse(params) : params
       return request(partnerRoutes.partner.users.siteTeam(userId, siteId), {
         method: 'PATCH',
         body,

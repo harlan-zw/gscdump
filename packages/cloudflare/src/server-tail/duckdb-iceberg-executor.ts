@@ -20,7 +20,7 @@
 // fake `DuckDBSvc` implementing `runSQL` returns recorded rows — see
 // `server-tail/__tests__`.
 
-import type { ArchetypeQuery } from '@gscdump/sdk'
+import type { ArchetypeQuery } from '@gscdump/contracts/archetypes'
 import type { Result } from 'gscdump/result'
 import type { ArchetypeSqlPlan } from './archetype-sql'
 import { bindLiterals } from '@gscdump/engine'

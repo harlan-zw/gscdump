@@ -2,6 +2,7 @@
   accountNextActions: object
   accountStatuses: object
   addPartnerTeamMemberSchema: object
+  analyticsEndpointSchemas: object
   analyticsNextActions: object
   analyticsRoutes: object
   analyticsStatuses: object
@@ -147,6 +148,7 @@
   parseWebhookPayload: function
   parseWebhookPayloadResult: function
   PartnerApiError: function
+  partnerControlEndpointSchemas: object
   partnerEndpointSchemas: object
   partnerErrorToException: function
   partnerLifecycleAccountSchema: object

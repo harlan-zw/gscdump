@@ -25,6 +25,21 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
+    },
+    "./analytics": {
+      "types": "./dist/analytics.d.mts",
+      "import": "./dist/analytics.mjs",
+      "default": "./dist/analytics.mjs"
+    },
+    "./archetypes": {
+      "types": "./dist/archetypes.d.mts",
+      "import": "./dist/archetypes.mjs",
+      "default": "./dist/archetypes.mjs"
+    },
+    "./partner": {
+      "types": "./dist/partner.d.mts",
+      "import": "./dist/partner.mjs",
+      "default": "./dist/partner.mjs"
     }
   },
   "main": "./dist/index.mjs",

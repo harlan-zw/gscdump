@@ -2,9 +2,11 @@
   accountNextActions: object
   accountStatuses: object
   addPartnerTeamMemberSchema: object
+  analyticsEndpointSchemas: object
   analyticsNextActions: object
   analyticsRoutes: object
   analyticsStatuses: object
+  ARCHETYPE_EXECUTION_CLASS: object
   backfillRangeSchema: object
   backfillResponseSchema: object
   bindPartnerSiteTeamSchema: object
@@ -93,6 +95,7 @@
   lifecycleProgressSchema: object
   lifecycleWebhookEvents: object
   parseGrantedScopes: function
+  partnerControlEndpointSchemas: object
   partnerEndpointSchemas: object
   partnerLifecycleAccountSchema: object
   partnerLifecycleResponseSchema: object
@@ -129,3 +132,40 @@
   WEBHOOK_TIMESTAMP_HEADER: string
   webhookEventTypeSchema: object
   whoamiResponseSchema: object
+./analytics:
+  analyticsEndpointSchemas: object
+  analyticsRoutes: object
+./archetypes:
+  ARCHETYPE_EXECUTION_CLASS: object
+./partner:
+  accountNextActions: object
+  accountStatuses: object
+  analyticsNextActions: object
+  analyticsStatuses: object
+  CANONICAL_WEBHOOK_EVENTS: object
+  GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
+  GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
+  GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
+  GSCDUMP_WRITE_ANALYTICS_SCOPE: string
+  hasOptionalIndexingScope: function
+  hasRequiredAnalyticsScope: function
+  indexingNextActions: object
+  indexingStatuses: object
+  lifecycleErrorCodes: object
+  lifecycleWebhookEvents: object
+  parseGrantedScopes: function
+  partnerControlEndpointSchemas: object
+  partnerEndpointSchemas: object
+  partnerRoutes: object
+  propertyNextActions: object
+  propertyStatuses: object
+  querySourceModes: object
+  sitemapNextActions: object
+  sitemapStatuses: object
+  VALID_WEBHOOK_EVENTS: object
+  WEBHOOK_CONTRACT_VERSION: string
+  WEBHOOK_CONTRACT_VERSION_HEADER: string
+  WEBHOOK_DELIVERY_HEADER: string
+  WEBHOOK_EVENT_HEADER: string
+  WEBHOOK_SIGNATURE_HEADER: string
+  WEBHOOK_TIMESTAMP_HEADER: string

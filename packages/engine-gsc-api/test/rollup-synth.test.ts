@@ -1,4 +1,4 @@
-import type { GoogleSearchConsoleClient } from 'gscdump'
+import type { GoogleSearchConsoleClient } from 'gscdump/api'
 import { page as pageDim } from 'gscdump/query'
 import { describe, expect, it } from 'vitest'
 import { fetchGscDaily, fetchGscTopN } from '../src/rollup-synth'

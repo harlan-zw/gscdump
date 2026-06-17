@@ -1,4 +1,4 @@
-import type { GoogleSearchConsoleClient, SearchAnalyticsQuery, SearchAnalyticsResponse } from 'gscdump'
+import type { GoogleSearchConsoleClient, SearchAnalyticsQuery, SearchAnalyticsResponse } from 'gscdump/api'
 import type { GscApiRow } from '../src/sync-slice'
 import { describe, expect, it } from 'vitest'
 import { runGscSearchAppearanceContextSlice, runGscSyncSlice } from '../src/sync-slice'

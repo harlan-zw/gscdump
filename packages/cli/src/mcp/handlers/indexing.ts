@@ -1,7 +1,7 @@
-import type { IndexingMetadata, IndexingResult, InspectUrlResult } from 'gscdump'
+import type { IndexingMetadata, IndexingResult, InspectUrlResult } from 'gscdump/api'
 import type { z } from 'zod'
 import type { batchInspectUrlsInput, batchRequestIndexingInput, HandlerContext, inspectUrlInput, requestIndexingInput } from '../types'
-import { getIndexingMetadata, batchRequestIndexing as gscBatchIndexing, batchInspectUrls as gscBatchInspect, inspectUrl as gscInspectUrl, requestIndexing as gscRequestIndexing } from 'gscdump'
+import { getIndexingMetadata, batchRequestIndexing as gscBatchIndexing, batchInspectUrls as gscBatchInspect, inspectUrl as gscInspectUrl, requestIndexing as gscRequestIndexing } from 'gscdump/api'
 
 export async function inspectUrl(
   input: z.infer<typeof inspectUrlInput>,

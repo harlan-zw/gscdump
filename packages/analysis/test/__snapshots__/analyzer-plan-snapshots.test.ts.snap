@@ -3073,6 +3073,28 @@ exports[`analyzer plan snapshots > sql plan: device-gap 1`] = `
   ],
   "previous": undefined,
   "sql": "
+    WITH raw AS (
+      SELECT
+        date,
+        COALESCE(clicks_desktop, 0) AS c_desktop,
+        COALESCE(clicks_mobile, 0) AS c_mobile,
+        COALESCE(clicks_tablet, 0) AS c_tablet,
+        COALESCE(impressions_desktop, 0) AS i_desktop,
+        COALESCE(impressions_mobile, 0) AS i_mobile,
+        COALESCE(impressions_tablet, 0) AS i_tablet,
+        COALESCE(sum_position_desktop, 0) AS p_desktop,
+        COALESCE(sum_position_mobile, 0) AS p_mobile,
+        COALESCE(sum_position_tablet, 0) AS p_tablet
+      FROM read_parquet({{FILES}}, union_by_name = true)
+      WHERE date >= ? AND date <= ?
+    ),
+    device_long AS (
+      SELECT date, 'DESKTOP' AS device, c_desktop AS clicks, i_desktop AS impressions, p_desktop AS sum_position FROM raw
+      UNION ALL
+      SELECT date, 'MOBILE', c_mobile, i_mobile, p_mobile FROM raw
+      UNION ALL
+      SELECT date, 'TABLET', c_tablet, i_tablet, p_tablet FROM raw
+    )
     SELECT
       date,
       device,
@@ -3080,8 +3102,7 @@ exports[`analyzer plan snapshots > sql plan: device-gap 1`] = `
       CAST(SUM(impressions) AS DOUBLE) AS impressions,
       CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr,
       SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position
-    FROM read_parquet({{FILES}}, union_by_name = true)
-    WHERE date >= ? AND date <= ?
+    FROM device_long
     GROUP BY date, device
     ORDER BY date ASC
   ",
@@ -3378,7 +3399,7 @@ exports[`analyzer plan snapshots > sql plan: long-tail 1`] = `
   ],
   "previous": undefined,
   "sql": "
-    WITH page_queries AS (
+    WITH pq AS (
       SELECT
         url AS page,
         query,
@@ -3395,7 +3416,7 @@ exports[`analyzer plan snapshots > sql plan: long-tail 1`] = `
       SELECT
         page, query, impressions, clicks,
         ROW_NUMBER() OVER (PARTITION BY page ORDER BY impressions DESC, query ASC) AS rnk
-      FROM page_queries
+      FROM pq
     ),
     log_space AS (
       SELECT *,

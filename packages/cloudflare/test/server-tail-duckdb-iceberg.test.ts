@@ -1,4 +1,4 @@
-import type { ArbitrarySqlQuery, TwoDimensionDetailQuery } from '@gscdump/sdk'
+import type { ArbitrarySqlQuery, TwoDimensionDetailQuery } from '@gscdump/contracts/archetypes'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createDuckDbIcebergExecutor,

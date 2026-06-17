@@ -1,4 +1,4 @@
-import type { ArchetypeQuery } from '@gscdump/sdk'
+import type { ArchetypeQuery } from '@gscdump/contracts/archetypes'
 import { describe, expect, it } from 'vitest'
 import { compileArchetypeSql, tableForArchetype } from '../src/archetype-sql'
 

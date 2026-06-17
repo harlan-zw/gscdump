@@ -86,7 +86,7 @@ Last sync: 2024-01-15 06:00
 ### Inspect URLs
 
 ```ts
-import { batchInspectUrls, inspectUrl } from 'gscdump'
+import { batchInspectUrls, inspectUrl } from 'gscdump/api'
 
 // Single URL
 const result = await inspectUrl(auth, 'sc-domain:example.com', 'https://example.com/page')
@@ -101,7 +101,7 @@ const results = await batchInspectUrls(auth, 'sc-domain:example.com', urls)
 ### Request Indexing
 
 ```ts
-import { batchRequestIndexing, requestIndexing } from 'gscdump'
+import { batchRequestIndexing, requestIndexing } from 'gscdump/api'
 
 // Single URL
 await requestIndexing(auth, 'https://example.com/new-page')
@@ -157,7 +157,7 @@ npx @gscdump/cli sitemaps delete -s sc-domain:example.com --url https://example.
 ### Programmatic
 
 ```ts
-import { deleteSitemap, fetchSitemaps, submitSitemap } from 'gscdump'
+import { deleteSitemap, fetchSitemaps, submitSitemap } from 'gscdump/api'
 
 const sitemaps = await fetchSitemaps(auth, 'sc-domain:example.com')
 

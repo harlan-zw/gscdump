@@ -24,10 +24,9 @@
 import type { LocalIcebergSinkOptions, Sink, SinkCloseResult, SinkSlice, SinkWriteResult } from '../sink'
 import type { Row } from '../storage'
 import type { IcebergS3Config, IcebergTableName } from './schema'
-import { execFile } from 'node:child_process'
 import { dirname, join } from 'node:path'
-import process from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { resolvePyIcebergPython, runPyIcebergWriter } from './pyiceberg-runtime'
 import { ICEBERG_SCHEMAS } from './schema'
 
 /** Full `LocalIcebergSink` options — extends the frozen contract options. */
@@ -76,43 +75,6 @@ function resolveWriterScript(override?: string): string {
 }
 
 /** Run the PyIceberg writer subprocess for one job, return its parsed result. */
-function runWriter(python: string, script: string, job: WriterJob): Promise<WriterResult> {
-  return new Promise((resolve, reject) => {
-    const child = execFile(
-      python,
-      [script],
-      { maxBuffer: 64 * 1024 * 1024 },
-      (err, stdout, stderr) => {
-        let parsed: WriterResult | undefined
-        if (stdout.trim()) {
-          try {
-            parsed = JSON.parse(stdout) as WriterResult
-          }
-          catch {
-            // fall through to the error path below
-          }
-        }
-        if (parsed?.error) {
-          reject(new Error(`LocalIcebergSink writer failed: ${parsed.error}`))
-          return
-        }
-        if (err) {
-          reject(new Error(
-            `LocalIcebergSink writer process failed (${err.message})${stderr ? `: ${stderr}` : ''}`,
-          ))
-          return
-        }
-        if (!parsed) {
-          reject(new Error(`LocalIcebergSink writer produced no parseable output: ${stdout || stderr}`))
-          return
-        }
-        resolve(parsed)
-      },
-    )
-    child.stdin?.end(JSON.stringify(job))
-  })
-}
-
 export interface LocalIcebergSink extends Sink {
   /** The catalog namespace the 5 tables live under. */
   readonly namespace: string
@@ -127,7 +89,7 @@ export interface LocalIcebergSink extends Sink {
  */
 export function createLocalIcebergSink(options: LocalIcebergSinkFullOptions): LocalIcebergSink {
   const s3 = options.s3 ?? POC_S3
-  const python = options.python ?? process.env.GSCDUMP_ICEBERG_PYTHON ?? 'python3'
+  const python = resolvePyIcebergPython(options.python)
   const script = resolveWriterScript(options.writerScript)
 
   function buildJob(op: 'emit', slice: SinkSlice, rows: readonly Row[]): WriterJob {
@@ -157,7 +119,15 @@ export function createLocalIcebergSink(options: LocalIcebergSinkFullOptions): Lo
     async emit(slice: SinkSlice, rows: readonly Row[]): Promise<SinkWriteResult> {
       if (rows.length === 0)
         return { rowCount: 0 }
-      const res = await runWriter(python, script, buildJob('emit', slice, rows))
+      const res = await runPyIcebergWriter<WriterResult>({
+        python,
+        script,
+        job: buildJob('emit', slice, rows),
+        label: 'LocalIcebergSink writer',
+        rejectOnProcessError: true,
+      })
+      if (res.error)
+        throw new Error(`LocalIcebergSink writer failed: ${res.error}`)
       touched.add(slice.table)
       return { rowCount: res.rowCount ?? 0 }
     },

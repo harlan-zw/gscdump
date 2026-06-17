@@ -7,7 +7,7 @@ import type { SearchType } from '@gscdump/engine'
 import type {
   GoogleSearchConsoleClient,
   SearchAnalyticsQuery,
-} from 'gscdump'
+} from 'gscdump/api'
 import type {
   GscDataState,
   GscSearchAnalyticsMetadata,

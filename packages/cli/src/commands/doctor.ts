@@ -2,10 +2,10 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { googleSearchConsole } from 'gscdump'
+import { googleSearchConsole } from 'gscdump/api'
 import { ofetch } from 'ofetch'
 import { loadTokens, resolveAuth, resolveBYOK } from '../auth'
-import { loadConfig, resolveDataDir } from '../config'
+import { loadConfig, loadResolvedConfig } from '../config'
 import { parseEnvFile } from '../env-file'
 import { createLocalStore } from '../local-store'
 import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
@@ -192,8 +192,7 @@ async function checkTimeSkew(): Promise<Check[]> {
 }
 
 async function checkDataDir(): Promise<Check[]> {
-  const config = await loadConfig()
-  const dataDir = resolveDataDir(config)
+  const { dataDir } = await loadResolvedConfig()
   const display = displayPath(dataDir)
   const stat = await fs.stat(dataDir).catch(() => null)
   if (!stat)
@@ -212,8 +211,7 @@ async function checkDataDir(): Promise<Check[]> {
 }
 
 async function checkStoreWatermarks(): Promise<Check[]> {
-  const config = await loadConfig()
-  const dataDir = resolveDataDir(config)
+  const { dataDir } = await loadResolvedConfig()
   const stat = await fs.stat(dataDir).catch(() => null)
   if (!stat?.isDirectory())
     return [{ name: 'store.watermarks', status: 'pass', detail: 'no store yet (run `gscdump sync`)' }]

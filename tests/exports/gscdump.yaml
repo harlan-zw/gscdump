@@ -119,6 +119,70 @@
   urlMatchKey: function
   verificationMethodsFor: function
   verifySite: function
+./api:
+  addSite: function
+  batchInspectUrls: function
+  batchRequestIndexing: function
+  canUseUrlInspection: function
+  classifyError: function
+  createAuth: function
+  createFetch: function
+  deleteSite: function
+  deleteSitemap: function
+  discoverSitemap: function
+  exchangeAuthCode: function
+  exchangeAuthCodeResult: function
+  fetchSitemap: function
+  fetchSitemaps: function
+  fetchSitemapUrls: function
+  fetchSites: function
+  fetchSitesWithSitemaps: function
+  findBestGscProperty: function
+  findExactGscProperty: function
+  formatErrorForCli: function
+  formatGscPropertyCandidates: function
+  getIndexingEligibility: function
+  getIndexingMetadata: function
+  getNextCheckAfter: function
+  getNextCheckPriority: function
+  getVerificationToken: function
+  getVerifiedSite: function
+  googleSearchConsole: function
+  grantedScopeList: function
+  GSC_QUOTAS: object
+  GscApiError: function
+  gscdumpApi: function
+  gscErrorToException: function
+  gscPropertyMatchesTarget: function
+  hasGscReadScope: function
+  hasGscWriteScope: function
+  hasIndexingScope: function
+  inspectUrl: function
+  inspectUrlFlat: function
+  isPermissionDeniedError: function
+  isVerifiedGscPermission: function
+  isVerifiedGscProperty: function
+  listVerifiedSites: function
+  matchGscSite: function
+  normalizeGscSiteUrl: function
+  normalizeRegistrationTarget: function
+  parseGoogleError: function
+  parseGscSiteUrl: function
+  pickBestGscProperty: function
+  refreshAccessToken: function
+  refreshAccessTokenResult: function
+  requestIndexing: function
+  rethrowAsGscApiError: function
+  runSequentialBatch: function
+  siteUrlToVerificationSite: function
+  storageError: function
+  submitSitemap: function
+  unverifySite: function
+  URL_INSPECTION_DAILY_LIMIT: number
+  URL_INSPECTION_EFFECTIVE_LIMIT: number
+  urlMatchKey: function
+  verificationMethodsFor: function
+  verifySite: function
 ./contracts: {}
 ./normalize:
   normalizeUrl: function

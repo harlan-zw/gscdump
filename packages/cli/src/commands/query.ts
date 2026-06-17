@@ -1,4 +1,4 @@
-import type { googleSearchConsole } from 'gscdump'
+import type { googleSearchConsole } from 'gscdump/api'
 import type { BuilderState, Column, Dimension, Filter, SearchType } from 'gscdump/query'
 import type { LocalStore, TableName } from '../local-store'
 import fs from 'node:fs/promises'

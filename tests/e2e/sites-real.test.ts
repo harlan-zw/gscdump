@@ -20,7 +20,7 @@ import {
   googleSearchConsole,
   siteUrlToVerificationSite,
   verificationMethodsFor,
-} from 'gscdump'
+} from 'gscdump/api'
 import { describe, expect, it } from 'vitest'
 
 function resolveAuth() {

@@ -33,7 +33,7 @@
 import type { Sink, SinkCloseResult, SinkSlice, SinkWriteResult, SliceOverwriteWriter } from '../sink'
 import type { Row } from '../storage'
 import type { IcebergS3Config } from './schema'
-import process from 'node:process'
+import { resolvePyIcebergPython, runPyIcebergWriter } from './pyiceberg-runtime'
 import { assertIcebergTable, ICEBERG_SCHEMAS } from './schema'
 
 /** Connection details for the Iceberg REST catalog the writer targets. */
@@ -165,39 +165,18 @@ export interface SubprocessBackendOptions {
  */
 export function subprocessBackend(opts: SubprocessBackendOptions = {}): OverwriteBackend {
   return async (job) => {
-    const { execFile } = await import('node:child_process')
     const { dirname, join } = await import('node:path')
     const { fileURLToPath } = await import('node:url')
-    const python = opts.python ?? process.env.GSCDUMP_ICEBERG_PYTHON ?? 'python3'
+    const python = resolvePyIcebergPython(opts.python)
     const script = opts.writerScript
       ?? join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'iceberg-writer.py')
 
-    return new Promise<OverwriteJobResult>((resolve, reject) => {
-      const child = execFile(
-        python,
-        [script],
-        { maxBuffer: 64 * 1024 * 1024 },
-        (err, stdout, stderr) => {
-          let parsed: OverwriteJobResult | undefined
-          if (stdout.trim()) {
-            try {
-              parsed = JSON.parse(stdout) as OverwriteJobResult
-            }
-            catch {
-              // fall through
-            }
-          }
-          if (parsed) {
-            resolve(parsed)
-            return
-          }
-          reject(new Error(
-            `iceberg overwrite subprocess produced no parseable output${
-              err ? ` (${err.message})` : ''}${stderr ? `: ${stderr}` : ''}`,
-          ))
-        },
-      )
-      child.stdin?.end(JSON.stringify(job))
+    return runPyIcebergWriter<OverwriteJobResult>({
+      python,
+      script,
+      job,
+      label: 'iceberg overwrite subprocess',
+      processErrorAsParseFailure: true,
     })
   }
 }

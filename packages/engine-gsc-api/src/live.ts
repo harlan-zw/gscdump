@@ -10,9 +10,9 @@
 
 import type { SearchType as EngineSearchType } from '@gscdump/engine'
 import type { AnalysisQuerySource } from '@gscdump/engine/source'
-import type { GoogleSearchConsoleClient } from 'gscdump'
+import type { GoogleSearchConsoleClient } from 'gscdump/api'
 import type { BuilderState, Filter } from 'gscdump/query'
-import { googleSearchConsole } from 'gscdump'
+import { googleSearchConsole } from 'gscdump/api'
 import { extractMetricFilters, extractSpecialOperatorFilters, normalizeFilter } from 'gscdump/query'
 import { createGscApiQuerySource } from './source'
 

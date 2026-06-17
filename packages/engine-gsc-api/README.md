@@ -21,7 +21,7 @@ npm install @gscdump/engine-gsc-api @gscdump/engine gscdump
 ```ts
 import { analyzeMoversFromSource } from '@gscdump/analysis'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
-import { googleSearchConsole } from 'gscdump'
+import { googleSearchConsole } from 'gscdump/api'
 
 const client = googleSearchConsole(auth)
 const source = createGscApiQuerySource({ client, siteUrl: 'sc-domain:example.com' })

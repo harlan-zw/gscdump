@@ -19,11 +19,11 @@
 // run on R2 SQL).
 
 import type { ServerTailDirective } from '@gscdump/contracts'
-import type { ArchetypeQuery, ArchetypeResult, ArchetypeResultRow } from '@gscdump/sdk'
+import type { ArchetypeQuery, ArchetypeResult, ArchetypeResultRow } from '@gscdump/contracts/archetypes'
 import type { Result } from 'gscdump/result'
 import type { DuckDbIcebergExecutor } from './duckdb-iceberg-executor'
 import type { R2SqlClient } from './r2-sql-client'
-import { ARCHETYPE_EXECUTION_CLASS } from '@gscdump/sdk'
+import { ARCHETYPE_EXECUTION_CLASS } from '@gscdump/contracts/archetypes'
 import { err, ok, unwrapResult } from 'gscdump/result'
 
 /** The two engines the server tail can route to. */

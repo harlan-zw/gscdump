@@ -5,7 +5,7 @@ import type {
   SiteDailyTimeseriesQuery,
   TopNBreakdownQuery,
   TwoDimensionDetailQuery,
-} from '@gscdump/sdk'
+} from '@gscdump/contracts/archetypes'
 import { describe, expect, it } from 'vitest'
 import { buildArchetypeSql, TABLE_PLACEHOLDER } from '../src/server-tail/archetype-sql'
 

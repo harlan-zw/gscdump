@@ -10,8 +10,8 @@ catalogs:
       specifier: ^0.16.15
       version: 0.16.15
     '@cloudflare/workers-types':
-      specifier: ^4.20260615.1
-      version: 4.20260615.1
+      specifier: ^4.20260616.1
+      version: 4.20260616.1
     '@duckdb/duckdb-wasm':
       specifier: ^1.32.0
       version: 1.32.0
@@ -288,7 +288,7 @@ importers:
         version: 4.2.0
       drizzle-orm:
         specifier: 'catalog:'
-        version: 1.0.0-rc.3(@cloudflare/workers-types@4.20260615.1)(zod@4.4.3)
+        version: 1.0.0-rc.3(@cloudflare/workers-types@4.20260616.1)(zod@4.4.3)
       gscdump:
         specifier: workspace:*
         version: link:../gscdump
@@ -354,9 +354,6 @@ importers:
       '@gscdump/engine-sqlite':
         specifier: workspace:*
         version: link:../engine-sqlite
-      '@gscdump/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       '@uwdata/flechette':
         specifier: 'catalog:'
         version: 2.5.0
@@ -369,10 +366,10 @@ importers:
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: 'catalog:'
-        version: 0.16.15(@cloudflare/workers-types@4.20260615.1)(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@4.1.9)
+        version: 0.16.15(@cloudflare/workers-types@4.20260616.1)(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@4.1.9)
       '@cloudflare/workers-types':
         specifier: 'catalog:'
-        version: 4.20260615.1
+        version: 4.20260616.1
       h3:
         specifier: 'catalog:'
         version: 1.15.11
@@ -381,7 +378,7 @@ importers:
         version: 6.0.3
       wrangler:
         specifier: 'catalog:'
-        version: 4.100.0(@cloudflare/workers-types@4.20260615.1)
+        version: 4.100.0(@cloudflare/workers-types@4.20260616.1)
 
   packages/contracts:
     dependencies:
@@ -403,7 +400,7 @@ importers:
         version: link:../contracts
       drizzle-orm:
         specifier: 'catalog:'
-        version: 1.0.0-rc.3(@cloudflare/workers-types@4.20260615.1)(zod@4.4.3)
+        version: 1.0.0-rc.3(@cloudflare/workers-types@4.20260616.1)(zod@4.4.3)
       gscdump:
         specifier: workspace:*
         version: link:../gscdump
@@ -438,15 +435,15 @@ importers:
 
   packages/engine-duckdb-wasm:
     dependencies:
+      '@gscdump/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@gscdump/engine':
         specifier: workspace:*
         version: link:../engine
-      '@gscdump/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       drizzle-orm:
         specifier: 'catalog:'
-        version: 1.0.0-rc.3(@cloudflare/workers-types@4.20260615.1)(zod@4.4.3)
+        version: 1.0.0-rc.3(@cloudflare/workers-types@4.20260616.1)(zod@4.4.3)
       gscdump:
         specifier: workspace:*
         version: link:../gscdump
@@ -491,7 +488,7 @@ importers:
     devDependencies:
       drizzle-orm:
         specifier: 'catalog:'
-        version: 1.0.0-rc.3(@cloudflare/workers-types@4.20260615.1)(zod@4.4.3)
+        version: 1.0.0-rc.3(@cloudflare/workers-types@4.20260616.1)(zod@4.4.3)
       vitest:
         specifier: catalog:dev-test
         version: 4.1.9(@types/node@25.9.3)(@vitest/browser-playwright@4.1.9)(vite@7.3.3(@types/node@25.9.3)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
@@ -854,8 +851,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-types@4.20260615.1':
-    resolution: {integrity: sha512-fGOiTwoLj/8bU8mj3VAfa1EULx4ceZhDwnjvY+afDBlSXI9pvY7PE9t62rGEhJjbAOGd7i5WUDun0eZCWBDrzg==}
+  '@cloudflare/workers-types@4.20260616.1':
+    resolution: {integrity: sha512-AHyA0NC2/gNOHiMN6vzS25xenMaQ0XTzfw+MUQSQHXQDjLldxCBwjjtbNfKhBg540qGXIEx31kM1+L84GyECJw==}
 
   '@colordx/core@5.4.3':
     resolution: {integrity: sha512-kIxYSfA5T8HXjav55UaaH/o/cKivF6jCCGIb8eqtcsfI46wsvlSiT8jMDyrl779qLec3c2c2oHBZo4oAhvbjrQ==}
@@ -8548,7 +8545,7 @@ snapshots:
     optionalDependencies:
       workerd: 1.20260611.1
 
-  '@cloudflare/vitest-pool-workers@0.16.15(@cloudflare/workers-types@4.20260615.1)(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@4.1.9)':
+  '@cloudflare/vitest-pool-workers@0.16.15(@cloudflare/workers-types@4.20260616.1)(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@4.1.9)':
     dependencies:
       '@vitest/runner': 4.1.9
       '@vitest/snapshot': 4.1.9
@@ -8556,7 +8553,7 @@ snapshots:
       esbuild: 0.27.3
       miniflare: 4.20260611.0
       vitest: 4.1.9(@types/node@25.9.3)(@vitest/browser-playwright@4.1.9)(vite@7.3.3(@types/node@25.9.3)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
-      wrangler: 4.100.0(@cloudflare/workers-types@4.20260615.1)
+      wrangler: 4.100.0(@cloudflare/workers-types@4.20260616.1)
       zod: 3.25.76
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
@@ -8578,7 +8575,7 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260611.1':
     optional: true
 
-  '@cloudflare/workers-types@4.20260615.1': {}
+  '@cloudflare/workers-types@4.20260616.1': {}
 
   '@colordx/core@5.4.3': {}
 
@@ -12452,9 +12449,9 @@ snapshots:
 
   dotenv@17.4.2: {}
 
-  drizzle-orm@1.0.0-rc.3(@cloudflare/workers-types@4.20260615.1)(zod@4.4.3):
+  drizzle-orm@1.0.0-rc.3(@cloudflare/workers-types@4.20260616.1)(zod@4.4.3):
     optionalDependencies:
-      '@cloudflare/workers-types': 4.20260615.1
+      '@cloudflare/workers-types': 4.20260616.1
       zod: 4.4.3
 
   dts-resolver@3.0.0: {}
@@ -16351,7 +16348,7 @@ snapshots:
       '@cloudflare/workerd-linux-arm64': 1.20260611.1
       '@cloudflare/workerd-windows-64': 1.20260611.1
 
-  wrangler@4.100.0(@cloudflare/workers-types@4.20260615.1):
+  wrangler@4.100.0(@cloudflare/workers-types@4.20260616.1):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
       '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260611.1)
@@ -16362,7 +16359,7 @@ snapshots:
       unenv: 2.0.0-rc.24
       workerd: 1.20260611.1
     optionalDependencies:
-      '@cloudflare/workers-types': 4.20260615.1
+      '@cloudflare/workers-types': 4.20260616.1
       fsevents: 2.3.3
     transitivePeerDependencies:
       - bufferutil

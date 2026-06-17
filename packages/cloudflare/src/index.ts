@@ -9,7 +9,7 @@
  *
  * The hybrid R2-SQL / DuckDB-over-Iceberg query cluster lives behind the
  * `@gscdump/cloudflare/server-tail` subpath so consumers that only presign or
- * read the env binding don't pull `@gscdump/sdk` and `@gscdump/contracts` into
+ * read the env binding don't pull the server-tail contract/compiler graph into
  * their Worker bundle.
  */
 

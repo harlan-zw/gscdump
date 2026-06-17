@@ -42,8 +42,8 @@ function buildRawResponse(params: { startDate: string, dimensions?: string[] }):
 const rawQuerySpy = vi.fn()
 const clientSitesSpy = vi.fn()
 
-vi.mock('gscdump', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump')>()
+vi.mock('gscdump/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump/api')>()
   return {
     ...actual,
     googleSearchConsole: vi.fn(() => ({
@@ -77,9 +77,14 @@ vi.mock('../../src/utils', async (importOriginal) => {
 
 vi.mock('../../src/config', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/config')>()
+  const config = () => ({ dataDir: configState.dataDir ?? undefined })
   return {
     ...actual,
-    loadConfig: vi.fn(() => Promise.resolve({ dataDir: configState.dataDir ?? undefined })),
+    loadConfig: vi.fn(() => Promise.resolve(config())),
+    loadResolvedConfig: vi.fn(() => Promise.resolve({
+      config: config(),
+      dataDir: actual.resolveDataDir(config()),
+    })),
   }
 })
 

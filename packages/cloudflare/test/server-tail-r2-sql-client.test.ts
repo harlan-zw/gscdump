@@ -1,4 +1,4 @@
-import type { SiteDailyTimeseriesQuery } from '@gscdump/sdk'
+import type { SiteDailyTimeseriesQuery } from '@gscdump/contracts/archetypes'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createR2SqlClient,

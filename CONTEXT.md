@@ -28,6 +28,14 @@ _Avoid_: provider, repository, query service. Don't reintroduce a `RowQuerySourc
 Dialect-specific translator that compiles `BuilderState` → `{ sql, params }` against a drizzle schema. Two real variants: `pgResolverAdapter` (DuckDB; single-tenant) and `sqliteResolverAdapter` (SQLite/D1; multi-tenant via `site_id`). Built via `createResolverAdapter`.
 _Avoid_: compiler, translator, dialect.
 
+**Archetype Query**:
+Typed hosted analytics query contract exported from `@gscdump/contracts/archetypes`. Describes the finite server-tail/browser query shapes (`site-daily-timeseries`, `top-n-breakdown`, `arbitrary-sql`, etc.) and their execution class without owning transport or SQL execution.
+_Avoid_: keeping archetype contracts in `@gscdump/sdk`; SDK may re-export them but does not own them.
+
+**Archetype SQL compiler**:
+Server-tail compiler that turns an `ArchetypeQuery` into `{ sql, params, table }` with a `{{TABLE}}` placeholder. Runtime adapters substitute the concrete table reference; browser/WASM keeps its own compiler because attached partition bindings use a different contract.
+_Avoid_: per-runtime server-tail SQL builders.
+
 **Analyzer** (`Analyzer<P, R>`):
 Pure contract `{ id, requires, build, reduce }`. Two families: `ROW_ANALYZERS` (against rows) and `SQL_ANALYZERS` (against `SqlQuerySource`). Dispatched by `runAnalyzerFromSource(source, params, registry)`.
 _Avoid_: tool, report, query.
@@ -39,6 +47,10 @@ _Avoid_: aggregate, summary, snapshot (collides with **Entity** snapshots).
 **Entity**:
 Per-site slow-changing state, point-lookup-by-id — URL inspections, sitemap snapshots, indexing-metadata events. Distinct family from time-series facts.
 _Avoid_: record (overloaded), object.
+
+**PyIceberg writer runtime**:
+Private Engine adapter for Python-backed Iceberg append/overwrite jobs. Owns the Python interpreter fallback and subprocess JSON contract; storage writers build jobs and interpret domain results.
+_Avoid_: each writer reading PyIceberg env defaults or parsing writer stdout independently.
 
 ### Tenancy & layout
 
@@ -53,6 +65,20 @@ _Avoid_: vertical, channel.
 **Compaction tier** (`CompactionTier`):
 `raw | d7 | d30 | d90`. Tier on each `ManifestEntry` so input cohorts are unambiguous (later tiers don't re-pick their own output).
 _Avoid_: level, generation.
+
+### Hosted APIs
+
+**Hosted surface**:
+A public API plane with its own routes and wire schemas. The partner control plane lives under `@gscdump/contracts/partner`; the analytics data plane lives under `@gscdump/contracts/analytics`. The contracts root stays as compatibility aggregation.
+_Avoid_: using `partnerEndpointSchemas` as a catch-all for unrelated hosted APIs.
+
+**Hosted requester**:
+SDK-private HTTP transport factory for hosted clients. Owns base-path joining, headers/API-key merge, validation phase policy, and partner error mapping. Surface clients own endpoint-specific schemas and method names.
+_Avoid_: duplicating request helpers in each hosted SDK client.
+
+**Search Console API surface**:
+The direct Google Search Console / Indexing / Site Verification client surface published as `gscdump/api`. The package root remains a compatibility barrel; API-only consumers should import this subpath.
+_Avoid_: importing the `gscdump` root when only Google API client operations or types are needed.
 
 ## Relationships
 

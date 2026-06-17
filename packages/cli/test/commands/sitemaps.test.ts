@@ -6,8 +6,8 @@ const getMock = vi.fn()
 const submitMock = vi.fn()
 const deleteMock = vi.fn()
 
-vi.mock('gscdump', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump')>()
+vi.mock('gscdump/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump/api')>()
   return {
     ...actual,
     googleSearchConsole: vi.fn(() => ({
@@ -26,6 +26,10 @@ vi.mock('../../src/auth', () => ({
 
 vi.mock('../../src/config', () => ({
   loadConfig: vi.fn().mockResolvedValue({ defaultSite: 'https://example.com/' }),
+  loadResolvedConfig: vi.fn().mockResolvedValue({
+    config: { defaultSite: 'https://example.com/' },
+    dataDir: '/tmp/gscdump-test',
+  }),
   resolveDataDir: vi.fn(() => '/tmp/gscdump-test'),
 }))
 

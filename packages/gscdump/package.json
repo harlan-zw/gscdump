@@ -37,6 +37,11 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     },
+    "./api": {
+      "types": "./dist/api/index.d.mts",
+      "import": "./dist/api/index.mjs",
+      "default": "./dist/api/index.mjs"
+    },
     "./query": {
       "types": "./dist/query/index.d.mts",
       "import": "./dist/query/index.mjs",

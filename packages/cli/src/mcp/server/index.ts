@@ -1,4 +1,4 @@
-import type { Auth, VerificationMethod } from 'gscdump'
+import type { Auth, VerificationMethod } from 'gscdump/api'
 import type { HandlerContext } from '../types'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
@@ -13,7 +13,7 @@ import {
   runSequentialBatch,
   unverifySite,
   verifySite,
-} from 'gscdump'
+} from 'gscdump/api'
 import { z } from 'zod'
 import * as handlers from '../handlers'
 import {

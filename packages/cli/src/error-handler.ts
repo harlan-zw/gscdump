@@ -4,7 +4,7 @@ import type { QueryError } from 'gscdump/query'
 import process from 'node:process'
 import { isAnalysisError } from '@gscdump/analysis/errors'
 import { isEngineError } from '@gscdump/engine/errors'
-import { formatErrorForCli } from 'gscdump'
+import { formatErrorForCli } from 'gscdump/api'
 import { isQueryError } from 'gscdump/query'
 import { formatAuthProvenance, isAuthError } from './auth'
 

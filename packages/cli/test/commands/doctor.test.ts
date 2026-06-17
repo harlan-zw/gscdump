@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   loadTokens: vi.fn(() => Promise.resolve(null)),
   resolveAuth: vi.fn(),
   loadConfig: vi.fn(() => Promise.resolve({})),
+  loadResolvedConfig: vi.fn(() => Promise.resolve({ config: {}, dataDir: '/tmp/gscdump-doctor-test' })),
   resolveDataDir: vi.fn(() => '/tmp/gscdump-doctor-test'),
   parseEnvFile: vi.fn(() => null),
   ofetchRaw: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('../../src/auth', () => ({
 
 vi.mock('../../src/config', () => ({
   loadConfig: mocks.loadConfig,
+  loadResolvedConfig: mocks.loadResolvedConfig,
   resolveDataDir: mocks.resolveDataDir,
 }))
 
@@ -73,8 +75,8 @@ vi.mock('node:fs/promises', () => ({
   rm: (...args: unknown[]) => mocks.fsRm(...args),
 }))
 
-vi.mock('gscdump', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump')>()
+vi.mock('gscdump/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump/api')>()
   return {
     ...actual,
     googleSearchConsole: mocks.googleSearchConsole,

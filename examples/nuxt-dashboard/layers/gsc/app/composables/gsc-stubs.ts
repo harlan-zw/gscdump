@@ -3,12 +3,13 @@
 // example builds without bringing in the full nuxtseo.com layer.
 // TODO: port from nuxtseo.com
 
-import type { ComputedRef, Ref } from 'vue'
+import type { ComputedRef, InjectionKey, Ref } from 'vue'
 import type {
   GscAnalyzerCapability,
   GscAnalyzerDefinition,
   GscAnalyzerDefinitionWithCapability,
 } from '../../types'
+import { computed, inject, provide, ref } from 'vue'
 import { defineGscAnalyzer } from '../../types'
 
 export { defineGscAnalyzer }
@@ -94,9 +95,24 @@ interface GscCurrentSiteReturn {
   site: Ref<GscCurrentSite | null>
 }
 
+type GscCurrentSiteIdSource = string | Ref<string> | ComputedRef<string>
+
+const gscCurrentSiteIdKey: InjectionKey<GscCurrentSiteIdSource> = Symbol('gsc-current-site-id')
+
+export function provideGscCurrentSite(siteId: GscCurrentSiteIdSource): void {
+  provide(gscCurrentSiteIdKey, siteId)
+}
+
 export function useGscCurrentSite(): GscCurrentSiteReturn {
   const route = useRoute()
-  const siteId = computed(() => String(route.params.id ?? ''))
+  const providedSiteId = inject(gscCurrentSiteIdKey, null)
+  const siteId = computed(() => {
+    if (typeof providedSiteId === 'string')
+      return providedSiteId
+    if (providedSiteId)
+      return providedSiteId.value
+    return String(route.params.id ?? '')
+  })
   const site = ref<GscCurrentSite | null>(null)
   return { siteId, site }
 }

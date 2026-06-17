@@ -17,7 +17,7 @@ import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { decodeSiteId, normalizeSiteUrl } from 'gscdump/tenant'
-import { loadConfig, resolveDataDir } from './config'
+import { loadResolvedConfig } from './config'
 import { createCommandContext } from './context'
 import { LocalStoreUnsupportedError } from './error-handler'
 import { createLocalStore } from './local-store'
@@ -134,8 +134,7 @@ export async function resolveAnalysisSource(
   const format = args.json ? 'json' : (args.format ? String(args.format) : 'table')
 
   if (!isLive) {
-    const config = await loadConfig()
-    const dataDir = resolveDataDir(config)
+    const { config, dataDir } = await loadResolvedConfig()
     const store = createLocalStore({ dataDir })
     const siteHint = args.site ? String(args.site) : config.defaultSite
 

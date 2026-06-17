@@ -34,6 +34,11 @@ export function resolveDataDir(config: GscdumpConfig): string {
   return expandTilde(config.dataDir ?? defaultDataDir())
 }
 
+export interface ResolvedGscdumpConfig {
+  config: GscdumpConfig
+  dataDir: string
+}
+
 function expandTilde(p: string): string {
   if (p === '~')
     return os.homedir()
@@ -46,6 +51,11 @@ export async function loadConfig(): Promise<GscdumpConfig> {
   return fs.readFile(path.join(configDir, 'config.json'), 'utf-8')
     .then(data => JSON.parse(data) as GscdumpConfig)
     .catch(() => ({}))
+}
+
+export async function loadResolvedConfig(): Promise<ResolvedGscdumpConfig> {
+  const config = await loadConfig()
+  return { config, dataDir: resolveDataDir(config) }
 }
 
 export async function saveConfig(config: GscdumpConfig): Promise<void> {

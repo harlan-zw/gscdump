@@ -54,7 +54,6 @@
     "@gscdump/contracts": "workspace:*",
     "@gscdump/engine": "workspace:*",
     "@gscdump/engine-sqlite": "workspace:*",
-    "@gscdump/sdk": "workspace:*",
     "@uwdata/flechette": "catalog:",
     "aws4fetch": "catalog:",
     "gscdump": "workspace:*"

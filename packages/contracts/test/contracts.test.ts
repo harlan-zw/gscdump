@@ -10,6 +10,14 @@ import {
   WEBHOOK_CONTRACT_VERSION,
   WEBHOOK_TIMESTAMP_HEADER,
 } from '../src'
+import {
+  analyticsRoutes as analyticsSurfaceRoutes,
+  analyticsEndpointSchemas as analyticsSurfaceSchemas,
+} from '../src/analytics'
+import {
+  partnerRoutes as partnerSurfaceRoutes,
+  partnerEndpointSchemas as partnerSurfaceSchemas,
+} from '../src/partner'
 
 describe('@gscdump/contracts', () => {
   it('exports hosted route metadata and endpoint schemas', () => {
@@ -35,6 +43,15 @@ describe('@gscdump/contracts', () => {
       rows: [],
       meta: { sourceName: 'r2', sourceKind: 'sql', queryMs: 12 },
     })).toMatchObject({ rows: [] })
+  })
+
+  it('exposes focused hosted contract subpaths', () => {
+    expect(partnerSurfaceRoutes.users.register).toBe(partnerRoutes.users.register)
+    expect(partnerSurfaceSchemas.registerSite).toBe(partnerEndpointSchemas.registerSite)
+    expect('analyticsRows' in partnerSurfaceSchemas).toBe(false)
+
+    expect(analyticsSurfaceRoutes.sites).toBe(analyticsRoutes.sites)
+    expect(analyticsSurfaceSchemas.analyticsRows).toBe(partnerEndpointSchemas.analyticsRows)
   })
 
   it('validates the current webhook envelope contract', () => {

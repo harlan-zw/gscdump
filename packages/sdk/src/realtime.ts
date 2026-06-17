@@ -1,5 +1,5 @@
 import type { PartnerRealtimeEvent, PartnerRealtimeMessage } from '@gscdump/contracts'
-import { partnerRoutes } from '@gscdump/contracts'
+import { partnerRoutes } from '@gscdump/contracts/partner'
 
 export type PartnerRealtimeScope = 'partner' | 'user'
 export type PartnerRealtimeStatus = 'idle' | 'connecting' | 'open' | 'authenticated' | 'closed' | 'error'

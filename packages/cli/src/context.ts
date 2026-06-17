@@ -1,14 +1,14 @@
 import type { OAuth2Client } from 'google-auth-library'
-import type { googleSearchConsole, Auth as GscAuth } from 'gscdump'
+import type { googleSearchConsole, Auth as GscAuth } from 'gscdump/api'
 import type { FetchOptions } from 'ofetch'
 import type { BYOKOptions } from './auth'
 import type { GscdumpConfig } from './config'
 import type { LocalStore } from './local-store'
 import process from 'node:process'
 import { cancel, isCancel, select } from '@clack/prompts'
-import { googleSearchConsole as createGsc } from 'gscdump'
+import { googleSearchConsole as createGsc } from 'gscdump/api'
 import { resolveAuth } from './auth'
-import { loadConfig, resolveDataDir } from './config'
+import { loadResolvedConfig } from './config'
 import { createLocalStore } from './local-store'
 import { logger } from './utils'
 
@@ -54,10 +54,10 @@ export async function createCommandContext(
   opts: CommandContextOptions = {},
 ): Promise<CommandContext> {
   const { needsAuth = false, needsStore = false, interactive = false, byok, fetchOptions } = opts
-  const config = await loadConfig()
+  const { config, dataDir } = await loadResolvedConfig()
   const auth = needsAuth ? await resolveAuth({ interactive, config, byok }) : null
   const client = auth ? createGsc(auth as GscAuth, { fetchOptions }) : null
-  const store = needsStore ? createLocalStore({ dataDir: resolveDataDir(config) }) : null
+  const store = needsStore ? createLocalStore({ dataDir }) : null
 
   const loadSites = async (): Promise<GscSite[]> => {
     if (!client)

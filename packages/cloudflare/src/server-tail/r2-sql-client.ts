@@ -22,7 +22,7 @@
 // `CONCAT(col, '')` to force it. The client is testable by injecting a `fetch`
 // impl that returns a recorded CF envelope; see the sibling tests.
 
-import type { ArchetypeQuery } from '@gscdump/sdk'
+import type { ArchetypeQuery } from '@gscdump/contracts/archetypes'
 import type { Result } from 'gscdump/result'
 import type { ArchetypeSqlPlan } from './archetype-sql'
 import { err, ok, unwrapResult } from 'gscdump/result'

@@ -3,7 +3,7 @@ import type {
   AuxCloudOnlyQuery,
   SiteDailyTimeseriesQuery,
   TopNBreakdownQuery,
-} from '@gscdump/sdk'
+} from '@gscdump/contracts/archetypes'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createServerTailDispatcher,
