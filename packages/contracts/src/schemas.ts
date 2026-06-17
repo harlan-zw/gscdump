@@ -1089,6 +1089,10 @@ export const partnerRealtimeEventSchema = z.discriminatedUnion('event', [
   z.object({ event: z.literal('auth.failed'), userId: z.number(), siteId: z.string(), siteUrl: z.string(), error: z.string(), timestamp: z.number() }).loose(),
   z.object({ event: z.literal('auth.needs_reauth'), userId: z.number(), failureCount: z.number(), timestamp: z.number() }).loose(),
   z.object({ event: z.literal('enrichment.complete'), siteId: z.string(), userId: z.number(), timestamp: z.number() }).loose(),
+  z.object({ event: z.literal('sitemap.progress'), userId: z.number(), siteId: z.string(), siteUrl: z.string(), discovered: z.number(), total: z.number(), progress: z.number() }).loose(),
+  z.object({ event: z.literal('sitemap.complete'), userId: z.number(), siteId: z.string(), siteUrl: z.string(), discoveredCount: z.number(), timestamp: z.number() }).loose(),
+  z.object({ event: z.literal('indexing.progress'), userId: z.number(), siteId: z.string(), siteUrl: z.string(), checked: z.number(), total: z.number(), progress: z.number() }).loose(),
+  z.object({ event: z.literal('indexing.complete'), userId: z.number(), siteId: z.string(), siteUrl: z.string(), totalUrls: z.number(), indexedCount: z.number(), timestamp: z.number() }).loose(),
 ])
 
 export const canonicalWebhookEventTypeSchema = z.enum(CANONICAL_WEBHOOK_EVENTS)

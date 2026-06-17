@@ -1265,6 +1265,10 @@ export type PartnerRealtimeEventType
     | 'site.added'
     | 'site.removed'
     | 'enrichment.complete'
+    | 'sitemap.progress'
+    | 'sitemap.complete'
+    | 'indexing.progress'
+    | 'indexing.complete'
 
 export interface RealtimeSyncProgressEvent {
   event: 'sync.progress'
@@ -1367,6 +1371,45 @@ export interface RealtimeEnrichmentCompleteEvent {
   timestamp: number
 }
 
+export interface RealtimeSitemapProgressEvent {
+  event: 'sitemap.progress'
+  userId: number
+  siteId: string
+  siteUrl: string
+  discovered: number
+  total: number
+  progress: number
+}
+
+export interface RealtimeSitemapCompleteEvent {
+  event: 'sitemap.complete'
+  userId: number
+  siteId: string
+  siteUrl: string
+  discoveredCount: number
+  timestamp: number
+}
+
+export interface RealtimeIndexingProgressEvent {
+  event: 'indexing.progress'
+  userId: number
+  siteId: string
+  siteUrl: string
+  checked: number
+  total: number
+  progress: number
+}
+
+export interface RealtimeIndexingCompleteEvent {
+  event: 'indexing.complete'
+  userId: number
+  siteId: string
+  siteUrl: string
+  totalUrls: number
+  indexedCount: number
+  timestamp: number
+}
+
 export type PartnerRealtimeEvent
   = | RealtimeSyncProgressEvent
     | RealtimeSyncCompleteEvent
@@ -1379,6 +1422,10 @@ export type PartnerRealtimeEvent
     | RealtimeAuthFailedEvent
     | RealtimeNeedsReauthEvent
     | RealtimeEnrichmentCompleteEvent
+    | RealtimeSitemapProgressEvent
+    | RealtimeSitemapCompleteEvent
+    | RealtimeIndexingProgressEvent
+    | RealtimeIndexingCompleteEvent
 
 export interface RealtimeAuthRequiredMessage {
   event: 'auth.required'
