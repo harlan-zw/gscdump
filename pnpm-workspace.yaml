@@ -33,7 +33,7 @@ patchedDependencies:
   icebird@0.8.10: patches/icebird@0.8.10.patch
 catalog:
   '@cloudflare/vitest-pool-workers': ^0.16.15
-  '@cloudflare/workers-types': ^4.20260615.1
+  '@cloudflare/workers-types': ^4.20260616.1
   '@duckdb/duckdb-wasm': ^1.32.0
   '@duckdb/node-api': 1.5.1-r.2
   '@huggingface/transformers': ^4.2.0
