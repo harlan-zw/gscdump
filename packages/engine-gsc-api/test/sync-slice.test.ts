@@ -182,7 +182,9 @@ describe('runGscSyncSlice', () => {
 
     const events: string[] = []
     let releaseWrite1!: () => void
-    const write1Gate = new Promise<void>((resolve) => { releaseWrite1 = resolve })
+    const write1Gate = new Promise<void>((resolve) => {
+      releaseWrite1 = resolve
+    })
     let batchN = 0
     const onBatch = async () => {
       const n = ++batchN
