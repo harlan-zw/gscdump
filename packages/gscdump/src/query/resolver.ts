@@ -137,12 +137,17 @@ export function normalizeBuilderStateResult(state: unknown): Result<BuilderState
     return err(queryErrors.invalidBuilderState(state))
   const s = state as Record<string, unknown>
   const normalized: BuilderState = {
-    // dimensions/metrics are list fields that downstream code iterates and calls
-    // `.includes()` on (e.g. `state.dimensions.includes('date')`). A missing or
-    // non-array value from an untrusted body crashed with `dimensions is
-    // undefined` (GSCDUMP-8); coerce to [] so the output invariant holds.
+    // `dimensions` is iterated and `.includes()`d downstream (host handlers +
+    // plan.ts `[...state.dimensions]`). A missing/non-array value from an
+    // untrusted body crashed with `dimensions is undefined` (GSCDUMP-8); coerce
+    // to [] (a valid totals query) so the output invariant holds.
     dimensions: (Array.isArray(s.dimensions) ? s.dimensions : []) as BuilderState['dimensions'],
-    metrics: (Array.isArray(s.metrics) ? s.metrics : []) as BuilderState['metrics'],
+    // `metrics` must pass through UNTOUCHED: plan.ts treats `undefined` as
+    // "default to all 4 metrics" (`state.metrics ? … : [clicks,impressions,…]`).
+    // Coercing `undefined → []` (truthy) selected NO metrics, so `ORDER BY
+    // impressions` hit an ungrouped column → R2 SQL 40004 on every range-bound
+    // page-breakdown query (GSCDUMP-A/C). Leave the undefined sentinel intact.
+    metrics: s.metrics as BuilderState['metrics'],
     filter: normalizeFilter(s.filter as FilterInput | undefined) as BuilderState['filter'],
     orderBy: s.orderBy as BuilderState['orderBy'],
     rowLimit: s.rowLimit as number | undefined,
