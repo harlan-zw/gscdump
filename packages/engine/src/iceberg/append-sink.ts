@@ -10,9 +10,12 @@
  * build-time `hysnappy` alias to a pure-JS shim.
  *
  * Ingest is 100% append-only (design v5): the 4-day stability cutoff means a
- * date is emitted exactly once, when finalized, and never revised. Exactly-once
- * is enforced upstream by the D1 `iceberg_ingested_days` ledger — re-emitting a
- * slice would append duplicate rows.
+ * date is emitted exactly once, when finalized, and never revised. Cross-RUN
+ * exactly-once is enforced upstream by the D1 `iceberg_ingested_days` ledger —
+ * a later sync that re-emits a stabilized slice lands a fresh commit the sink
+ * cannot see. WITHIN a commit, `dedupeByIdentity` collapses duplicate identity
+ * tuples last-wins, so a retried/overlapping `emit` cannot double-count; reads
+ * `SUM/GROUP BY` and never dedupe, so this commit boundary is the only guard.
  *
  * ## Buffer per table, one commit per `close()`
  *
@@ -44,6 +47,7 @@ import {
   connectIcebergCatalog,
   icebergAppendRetrying,
 } from './catalog'
+import { ICEBERG_SCHEMAS } from './schema'
 
 export type IcebergAppendSink = Sink
 
@@ -102,6 +106,41 @@ function coerceJsonSafe(value: unknown): unknown {
   if (typeof value === 'bigint')
     return Number(value)
   return value
+}
+
+/**
+ * Collapse buffered records that share an Iceberg identity tuple
+ * (`site_id` + `search_type` + the table's natural key) to one survivor,
+ * last-wins.
+ *
+ * The append commit is the ONLY dedup boundary in the Iceberg model: reads
+ * `SUM(metric) GROUP BY <dimensions>` (never by the natural key), so two rows
+ * with the same identity tuple double-count their metrics with no downstream
+ * correction — the exact class the 2026-04 compaction corruption produced.
+ *
+ * Scope is the single commit. This guards the intra-commit case: a retried or
+ * overlapping `emit` within one sink lifecycle, and byte-identical re-fetches.
+ * Cross-RUN exactly-once is still the ingest ledger's job — a later sync that
+ * re-emits a stabilized slice lands a fresh `icebergAppend` this function never
+ * sees, so retiring that ledger requires a read-before-append (or equivalent),
+ * not just this guard. Last-wins so a revised metric supersedes a stale one
+ * when both are buffered.
+ *
+ * Keyed on `identityColumns` (which includes `site_id`/`search_type`), NOT the
+ * bare table sortKey, so the same `(date, dimension)` across different sites or
+ * search types is never collapsed.
+ */
+function dedupeByIdentity(table: IcebergTableName, records: IcebergRecord[]): IcebergRecord[] {
+  if (records.length < 2)
+    return records
+  const key = ICEBERG_SCHEMAS[table].identityColumns
+  const seen = new Map<string, IcebergRecord>()
+  for (const rec of records) {
+    const k = key.map(col => `${rec[col] ?? ''}`).join('\0')
+    seen.set(k, rec)
+  }
+  // Fast path: no collisions, return the original array untouched.
+  return seen.size === records.length ? records : [...seen.values()]
 }
 
 /** Build the icebird append records for a slice — inject identity columns, encode `date`. */
@@ -199,13 +238,16 @@ export function createIcebergAppendSink(options: IcebergAppendSinkOptions): Iceb
       for (const [table, records] of buffers) {
         if (records.length === 0)
           continue
+        // Dedup at the commit boundary — the only dedup point in the append
+        // model (reads SUM/GROUP BY, never by natural key). See dedupeByIdentity.
+        const deduped = dedupeByIdentity(table, records)
         await icebergAppendRetrying(
           {
             catalog: conn.catalog,
             namespace: conn.namespace,
             table,
             resolver: conn.resolver,
-            records,
+            records: deduped,
           },
           options.commitRetry,
         ).then(

@@ -89,6 +89,39 @@ describe('icebergAppendSink', () => {
     expect(callFor('queries')!.records).toHaveLength(1)
   })
 
+  it('dedupes byte-identical re-emitted rows within a table buffer (intra-commit guard)', async () => {
+    const sink = makeSink()
+    const row = { url: '/', date: '2026-05-01', clicks: 1, impressions: 2, sum_position: 3 }
+    // Same slice emitted twice in one sink lifecycle (retried/overlapping fetch).
+    await sink.emit(slice('pages', 'web', 's1'), [row])
+    await sink.emit(slice('pages', 'web', 's1'), [row])
+    await sink.close()
+    // Read is SUM() GROUP BY dims — a duplicate identity tuple would double-count.
+    expect(callFor('pages')!.records).toHaveLength(1)
+  })
+
+  it('keeps the last value on an identity-key collision (a revised metric wins)', async () => {
+    const sink = makeSink()
+    await sink.emit(slice('pages', 'web', 's1'), [{ url: '/', date: '2026-05-01', clicks: 1, impressions: 2, sum_position: 3 }])
+    await sink.emit(slice('pages', 'web', 's1'), [{ url: '/', date: '2026-05-01', clicks: 10, impressions: 20, sum_position: 30 }])
+    await sink.close()
+    const recs = callFor('pages')!.records
+    expect(recs).toHaveLength(1)
+    expect(recs[0].clicks).toBe(10)
+    expect(recs[0].impressions).toBe(20)
+  })
+
+  it('does NOT collapse the same (date, url) across different sites or search types', async () => {
+    const sink = makeSink()
+    const row = { url: '/', date: '2026-05-01', clicks: 1, impressions: 2, sum_position: 3 }
+    await sink.emit(slice('pages', 'web', 's1'), [row])
+    await sink.emit(slice('pages', 'web', 's2'), [row])
+    await sink.emit(slice('pages', 'discover', 's1'), [row])
+    await sink.close()
+    // site_id + search_type are part of the identity key, so none collapse.
+    expect(callFor('pages')!.records).toHaveLength(3)
+  })
+
   it('returns rowCount 0 and buffers nothing for an empty emit', async () => {
     const sink = makeSink()
     const res = await sink.emit(slice('pages', 'web', 's1'), [])

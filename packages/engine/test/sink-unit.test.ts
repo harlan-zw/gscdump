@@ -149,8 +149,10 @@ describe('createIcebergAppendSink', () => {
 
   it('batches many emits for one table into a single commit, connecting the catalog once', async () => {
     const sink = createIcebergAppendSink({ catalog: CATALOG })
+    // Distinct urls — same date, so the two rows have distinct identity tuples
+    // and batch into one commit without the identity dedup collapsing them.
     await sink.emit(slice({ date: '2026-04-01' }), [pageRow('/', 10)])
-    await sink.emit(slice({ date: '2026-04-02' }), [pageRow('/', 20)])
+    await sink.emit(slice({ date: '2026-04-02' }), [pageRow('/about', 20)])
     await sink.close()
     expect(restCatalogConnect).toHaveBeenCalledTimes(1)
     expect(icebergAppend).toHaveBeenCalledTimes(1)
