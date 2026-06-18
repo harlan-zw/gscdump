@@ -306,7 +306,14 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   // On-page faults from the crawl audit join GSC crawl reasons. `noindex` is
   // EXCLUDED — it is usually intentional (the v1 model mis-flagged it).
   const hardBlocks = gscCrawlBlocks + (input.crawlAuditBlockerCount ?? 0)
-  const canonicalMismatches = input.canonicalMismatchCount ?? issueCount(issues, 'canonical_mismatch')
+  // Clamp to the non-indexed pool. A canonical mismatch only blocks indexability
+  // when it keeps a page OUT of the index — a mismatch on a page Google indexed
+  // anyway is not a blocker. So the blocking count can never exceed `notIndexed`.
+  // This defends the verdict against a dataset divergence: the unhead.unjs.io bug
+  // fed "31 canonical mismatches" against an 8-URL funnel where all 8 were indexed
+  // (notIndexed = 0), firing `indexability_blocked` on a fully-indexed sample. An
+  // unbounded, differently-scoped count must never out-vote the funnel.
+  const canonicalMismatches = Math.min(notIndexed, input.canonicalMismatchCount ?? issueCount(issues, 'canonical_mismatch'))
   const visibleNoClickPages = (input.pageInventory ?? []).filter(page => page.impressions >= 50 && page.clicks === 0).length
   const poorPositionPages = (input.pageInventory ?? []).filter(page => page.impressions >= 50 && (page.position ?? 0) > 20).length
   const ctrOutlierCount = input.ctrOutlierCount ?? 0
