@@ -113,8 +113,14 @@ export function normalizeFilter(input?: FilterInput): Filter<any> | undefined {
     return undefined
   if (isWireFilter(input))
     return convertWireGroup(input as AltFilter) ?? undefined
-  // SDK Filter / JsonFilter both expose `_filters` — pass through.
-  return input as Filter<any>
+  // SDK Filter / JsonFilter both expose an ARRAY `_filters`. Only pass an object
+  // through when it is structurally a filter group — a malformed body (no
+  // `_filters`, or a non-array `_filters`) would otherwise crash the downstream
+  // `for (const f of filter._filters)` / `filter._filters.filter(...)` consumers
+  // with `_filters is not iterable` (GSCDUMP-9). Treat it as "no filter".
+  if (typeof input === 'object' && Array.isArray((input as Filter<any>)._filters))
+    return input as Filter<any>
+  return undefined
 }
 
 // Project an untyped partner-API request body into a typed BuilderState,
@@ -131,8 +137,12 @@ export function normalizeBuilderStateResult(state: unknown): Result<BuilderState
     return err(queryErrors.invalidBuilderState(state))
   const s = state as Record<string, unknown>
   const normalized: BuilderState = {
-    dimensions: s.dimensions as BuilderState['dimensions'],
-    metrics: s.metrics as BuilderState['metrics'],
+    // dimensions/metrics are list fields that downstream code iterates and calls
+    // `.includes()` on (e.g. `state.dimensions.includes('date')`). A missing or
+    // non-array value from an untrusted body crashed with `dimensions is
+    // undefined` (GSCDUMP-8); coerce to [] so the output invariant holds.
+    dimensions: (Array.isArray(s.dimensions) ? s.dimensions : []) as BuilderState['dimensions'],
+    metrics: (Array.isArray(s.metrics) ? s.metrics : []) as BuilderState['metrics'],
     filter: normalizeFilter(s.filter as FilterInput | undefined) as BuilderState['filter'],
     orderBy: s.orderBy as BuilderState['orderBy'],
     rowLimit: s.rowLimit as number | undefined,
@@ -157,7 +167,10 @@ interface FilterExtraction {
 }
 
 function extractSpecialFilters(filter?: Filter<any>): FilterExtraction {
-  if (!filter)
+  // Defensive: a filter whose `_filters` isn't an array (malformed partner body
+  // reaching a direct caller that bypassed normalizeFilter) would crash the
+  // `for (const f of filter._filters)` below — treat it as no special filters.
+  if (!filter || !Array.isArray(filter._filters))
     return {}
 
   let startDate: string | undefined

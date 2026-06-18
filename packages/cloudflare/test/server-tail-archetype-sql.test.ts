@@ -228,4 +228,54 @@ describe('buildArchetypeSql', () => {
     }
     expect(() => buildArchetypeSql(q)).toThrow(/caller SQL/)
   })
+
+  describe('partitionPruned (DuckDB file-list path)', () => {
+    // The file-list executor reads raw Iceberg parquet via read_parquet([...]);
+    // site_id / search_type are identity-partition columns NOT materialized in
+    // the data files, so the predicate must collapse to the date range only —
+    // else DuckDB fails with `Referenced column "site_id" not found`.
+    it('drops the site_id/search_type predicate, keeping only the date range', () => {
+      const q: SiteDailyTimeseriesQuery = {
+        ...base,
+        archetype: 'site-daily-timeseries',
+        metrics: ['clicks'],
+      }
+      const plan = buildArchetypeSql(q, { partitionPruned: true })
+      expect(plan.sql).toContain('WHERE date BETWEEN ? AND ?')
+      expect(plan.sql).not.toContain('site_id')
+      expect(plan.sql).not.toContain('search_type')
+      // params drop siteId + searchType, leaving start/end only
+      expect(plan.params).toEqual(['2026-01-01', '2026-03-31'])
+    })
+
+    it('keeps the full partition predicate by default (R2 SQL catalog path)', () => {
+      const q: SiteDailyTimeseriesQuery = {
+        ...base,
+        archetype: 'site-daily-timeseries',
+        metrics: ['clicks'],
+      }
+      expect(buildArchetypeSql(q).sql).toContain('site_id = ?')
+      expect(buildArchetypeSql(q).params).toEqual(['site-1', 'web', '2026-01-01', '2026-03-31'])
+    })
+
+    it('prunes both ranges + keeps param alignment on the variantCount compareRange path', () => {
+      // The exact shape that crashed in prod: queryCanonical top-N with a
+      // compareRange (two partitionWhere calls + COUNT(DISTINCT) variantCount).
+      const q: TopNBreakdownQuery = {
+        ...base,
+        archetype: 'top-n-breakdown',
+        dimension: 'queryCanonical',
+        metrics: ['clicks'],
+        orderBy: { metric: 'clicks', dir: 'desc' },
+        limit: 25,
+        compareRange: { start: '2025-10-01', end: '2025-12-31' },
+      }
+      const plan = buildArchetypeSql(q, { partitionPruned: true })
+      expect(plan.sql).not.toContain('site_id')
+      expect(plan.sql).not.toContain('search_type')
+      expect(plan.sql).toContain('COUNT(DISTINCT query) AS variantCount')
+      // cur range + prev range, two bound params each, alignment preserved
+      expect(plan.params).toEqual(['2026-01-01', '2026-03-31', '2025-10-01', '2025-12-31'])
+    })
+  })
 })

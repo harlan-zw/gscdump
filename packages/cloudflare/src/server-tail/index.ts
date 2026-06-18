@@ -4,7 +4,7 @@
 // See architecture v4 "Read paths" and POC Spike 4: 8/10 archetypes answer in
 // R2 SQL, 2 (window functions) need DuckDB over the compacted Iceberg files.
 
-export type { ArchetypeSqlPlan } from './archetype-sql'
+export type { ArchetypeSqlPlan, BuildArchetypeSqlOptions } from './archetype-sql'
 export { buildArchetypeSql, TABLE_PLACEHOLDER } from './archetype-sql'
 
 export type {
