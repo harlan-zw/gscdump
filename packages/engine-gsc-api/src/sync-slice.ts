@@ -214,37 +214,87 @@ export async function runGscSyncSlice(
   let pageCount = 0
   let metadata: GscSearchAnalyticsMetadata | undefined
 
-  while (true) {
-    if (pageCount >= maxPages)
-      return { totalRows, hasMore: true, nextStartRow: startRow, metadata }
-    if (Date.now() - loopStart >= cpuBudgetMs)
-      return { totalRows, hasMore: true, nextStartRow: startRow, metadata }
-
+  // One GSC page fetch, wrapped so the returned promise NEVER rejects. The
+  // pipeline below may kick off a prefetch it then discards (a write timeout /
+  // a thrown write returns early); an unwrapped rejection on that orphaned
+  // promise would surface as an unhandled rejection. Timeout-like fetch failures
+  // become a `timeout` result (retry at this cursor); any other error is carried
+  // and rethrown only when the page is consumed, preserving serial throw-order.
+  type PageResult
+    = | { kind: 'ok', startRow: number, rows: GscApiRow[], metadata?: GscSearchAnalyticsMetadata }
+      | { kind: 'timeout', startRow: number }
+      | { kind: 'error', error: unknown }
+  const fetchPage = async (row: number): Promise<PageResult> => {
     const query: SearchAnalyticsQuery = {
       startDate: opts.startDate,
       endDate: opts.endDate,
       dimensions,
       rowLimit,
-      startRow,
+      startRow: row,
       dataState,
       type: searchType,
       ...(dimensionFilterGroups ? { dimensionFilterGroups } : {}),
     }
-
-    const response = await opts.client._rawQuery(opts.siteUrl, query).catch((err: unknown) => {
+    try {
+      const response = await opts.client._rawQuery(opts.siteUrl, query)
+      return {
+        kind: 'ok',
+        startRow: row,
+        rows: (response.rows ?? []) as GscApiRow[],
+        metadata: (response as { metadata?: GscSearchAnalyticsMetadata }).metadata,
+      }
+    }
+    catch (err) {
       if (isTimeoutLike(err))
-        return null
-      throw err
-    })
-    if (!response)
-      return { totalRows, hasMore: true, nextStartRow: startRow, metadata }
+        return { kind: 'timeout', startRow: row }
+      return { kind: 'error', error: err }
+    }
+  }
 
-    const rows = (response.rows ?? []) as GscApiRow[]
+  // Gate a fetch on the page budget + soft CPU budget, mirroring the serial
+  // top-of-loop checks. `null` ⇒ "don't page further"; the caller returns
+  // `hasMore` at the pending cursor.
+  const startFetchIfAllowed = (row: number): Promise<PageResult> | null => {
+    if (pageCount >= maxPages)
+      return null
+    if (Date.now() - loopStart >= cpuBudgetMs)
+      return null
+    return fetchPage(row)
+  }
+
+  // Pipeline: hold at most one page fetch in flight while the previous page's
+  // `onBatch` write runs, so the GSC round-trip latency of page N+1 overlaps the
+  // write of page N instead of serializing behind it. Peak memory is bounded at
+  // two pages (one being written, one prefetching). The CPU budget stays soft:
+  // because the prefetch gate is checked just before the write (not after), the
+  // loop may page at most ONE extra time past `cpuBudgetMs` — the inherent cost
+  // of look-ahead, negligible against the queue reservation window.
+  let pending: Promise<PageResult> | null = startFetchIfAllowed(startRow)
+  if (pending === null)
+    return { totalRows, hasMore: true, nextStartRow: startRow, metadata }
+
+  while (pending !== null) {
+    const page: PageResult = await pending
+    pending = null
+
+    if (page.kind === 'error')
+      throw page.error
+    if (page.kind === 'timeout')
+      return { totalRows, hasMore: true, nextStartRow: page.startRow, metadata }
+
+    const rows: GscApiRow[] = page.rows
     totalRows += rows.length
     pageCount++
-    if ((response as { metadata?: GscSearchAnalyticsMetadata }).metadata)
-      metadata = (response as { metadata?: GscSearchAnalyticsMetadata }).metadata
+    if (page.metadata)
+      metadata = page.metadata
     opts.onPage?.({ searchType, rowsThisPage: rows.length })
+
+    const isLastPage: boolean = rows.length < rowLimit
+    const nextStartRow: number = page.startRow + rows.length
+
+    // Kick the next fetch off NOW so its latency overlaps the write below —
+    // unless this is the final page or the budget gate stops us.
+    const prefetch: Promise<PageResult> | null = isLastPage ? null : startFetchIfAllowed(nextStartRow)
 
     if (rows.length > 0) {
       const batchTimedOut = await opts.onBatch(rows).then(() => false).catch((err: unknown) => {
@@ -253,18 +303,26 @@ export async function runGscSyncSlice(
         throw err
       })
       // A timed-out durable write is ambiguous — the rows may never have been
-      // persisted. Stop and return retry state at the CURRENT cursor so the
-      // continuation re-processes this page, rather than advancing past it
-      // (which would leave a silent gap). Mirrors the `_rawQuery` timeout path.
+      // persisted. Return retry state at THIS page's cursor so the continuation
+      // re-processes it rather than advancing past it (a silent gap). The
+      // in-flight `prefetch` is dropped (it never rejects); the continuation
+      // re-fetches that page. Mirrors the `_rawQuery` timeout path.
       if (batchTimedOut)
-        return { totalRows: totalRows - rows.length, hasMore: true, nextStartRow: startRow, metadata }
+        return { totalRows: totalRows - rows.length, hasMore: true, nextStartRow: page.startRow, metadata }
     }
 
-    if (rows.length < rowLimit)
-      break
-    startRow += rows.length
+    if (isLastPage)
+      return { totalRows, hasMore: false, nextStartRow, metadata }
+    if (prefetch === null)
+      // Budget / maxPages gate hit mid-slice — more rows remain.
+      return { totalRows, hasMore: true, nextStartRow, metadata }
+
+    startRow = nextStartRow
+    pending = prefetch
   }
 
+  // Unreachable — every loop path returns. Present so the function is total for
+  // the type-checker (the loop guard alone doesn't prove a return).
   return { totalRows, hasMore: false, nextStartRow: startRow, metadata }
 }
 

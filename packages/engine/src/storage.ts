@@ -23,9 +23,35 @@ export interface WriteCtx extends TenantCtx {
   grain?: Grain
 }
 
+/**
+ * A closed profiling span: a named slice of read-path work with its
+ * wall-clock cost and optional dimensional meta (file counts, row counts).
+ * Emitted by an injected {@link QueryProfiler}; see `./profile.ts`.
+ */
+export interface QuerySpan {
+  readonly name: string
+  readonly ms: number
+  readonly meta?: Readonly<Record<string, string | number | boolean>>
+}
+
+/**
+ * Injected read-path profiler. `start(name, meta)` opens a span and returns an
+ * `end` thunk to call when that work finishes (merging completion-only meta).
+ * Absent by default — every emit site optional-chains it, so an unprofiled
+ * query pays nothing. Build one with `createQueryProfiler` / `collectSpans`.
+ */
+export interface QueryProfiler {
+  readonly start: (
+    name: string,
+    meta?: Record<string, string | number | boolean>,
+  ) => (extra?: Record<string, string | number | boolean>) => void
+}
+
 export interface QueryCtx extends TenantCtx {
   table?: TableName
   signal?: AbortSignal
+  /** Optional read-path profiler; forwarded into `runSQL` and the executor. */
+  profiler?: QueryProfiler
   /**
    * Restrict the query to a single GSC search-type partition (`web`,
    * `discover`, etc.). Undefined preserves the cross-type union for
@@ -375,6 +401,11 @@ export interface QueryExecuteOptions {
    * not all executors implement it.
    */
   onMemoryPressure?: (info: { bytes?: number, reason: string }) => void
+  /**
+   * Optional profiler. An instrumented executor emits `files.register` and
+   * `query.run` spans through it; an absent profiler is a no-op skip.
+   */
+  profiler?: QueryProfiler
 }
 
 export interface QueryExecuteResult {
@@ -438,6 +469,12 @@ export interface RunSQLOptions {
    * Undefined keeps the legacy cross-type union.
    */
   searchType?: SearchType
+  /**
+   * Optional read-path profiler. `runSQL` emits `manifest.list` +
+   * `executor.execute` spans and forwards it into the executor for the
+   * finer `files.register` / `query.run` breakdown.
+   */
+  profiler?: QueryProfiler
 }
 
 export interface StorageEngine {

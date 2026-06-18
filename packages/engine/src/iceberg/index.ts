@@ -19,6 +19,7 @@
 // Iceberg sink option types are defined in the central `Sink` contract
 // (`../sink`); re-exported here so the Iceberg subpath is self-contained.
 export type { IcebergAppendSinkOptions } from '../sink'
+
 export { createIcebergAppendSink } from './append-sink'
 export type { IcebergAppendSink } from './append-sink'
 export {
@@ -35,6 +36,7 @@ export {
 } from './catalog'
 export type {
   CommitRetryOptions,
+  ConnectIcebergOptions,
   IcebergCatalogConfig,
   IcebergConnection,
   IcebergListedDataFile,
@@ -46,6 +48,7 @@ export type {
   IcebergTableOpResult,
   ListIcebergDataFilesOptions,
 } from './catalog'
+export type { CatalogCache } from './catalog-cache'
 export {
   assertIcebergTable,
   ICEBERG_FIELD_ID_BASE,
@@ -65,3 +68,11 @@ export type {
   IcebergTableName,
   IcebergTableSpec,
 } from './schema'
+// Low-level `icebird` primitives re-exported so the engine is the single
+// `icebird` gateway: consumers reach the patched catalog read primitives
+// through `@gscdump/engine/iceberg` and never depend on `icebird` (nor its
+// patch) directly. `icebird` is bundled into the engine dist, so the patched
+// behaviour ships with the package. Used by consumers whose tables fall outside
+// the 5 fact tables' partition spec (e.g. the lighthouse/crawl cross-source
+// resolver and the phase-2 hourly table provisioner).
+export { icebergCreateTable, icebergManifests, restCatalogLoadTable } from 'icebird'

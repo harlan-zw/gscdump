@@ -19,7 +19,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const icebergAppend = vi.fn(async () => ({}))
 const restCatalogConnect = vi.fn(async () => ({ type: 'rest', prefix: '' }))
 const s3SignedResolver = vi.fn(() => ({ reader: vi.fn() }))
-vi.mock('icebird', () => ({ icebergAppend, restCatalogConnect, s3SignedResolver }))
+// `cachingResolver` wraps the signed resolver in `connectIcebergCatalog`; mock
+// it as an identity passthrough so the mocked resolver flows through unchanged.
+vi.mock('icebird', () => ({ icebergAppend, restCatalogConnect, s3SignedResolver, cachingResolver: (r: unknown) => r }))
 
 const { createInMemorySink } = await import('../src/sinks/in-memory-sink')
 const { createIcebergAppendSink } = await import('../src/iceberg/append-sink')

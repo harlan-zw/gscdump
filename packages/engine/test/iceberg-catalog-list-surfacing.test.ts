@@ -10,6 +10,7 @@ const restCatalogListTables = vi.fn()
 const icebergDropTable = vi.fn()
 
 vi.mock('icebird', () => ({
+  cachingResolver: (r: unknown) => r,
   icebergAppend: vi.fn(),
   icebergCreateTable: vi.fn(),
   icebergDropTable,

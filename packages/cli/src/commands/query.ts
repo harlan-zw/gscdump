@@ -1,9 +1,11 @@
+import type { QuerySpan } from '@gscdump/engine'
 import type { googleSearchConsole } from 'gscdump/api'
 import type { BuilderState, Column, Dimension, Filter, SearchType } from 'gscdump/query'
 import type { LocalStore, TableName } from '../local-store'
 import fs from 'node:fs/promises'
 import process from 'node:process'
 import { cancel, isCancel, multiselect, text } from '@clack/prompts'
+import { collectSpans } from '@gscdump/engine'
 import { defineCommand } from 'citty'
 import { daysAgo } from 'gscdump'
 import { and, between, contains, country, date as dateCol, device, eq, gsc, hour, notRegex, page, query as queryCol, regex, searchAppearance } from 'gscdump/query'
@@ -248,6 +250,11 @@ export const queryCommand = defineCommand({
       default: false,
       description: 'Print the request body / planned local SQL and exit without executing',
     },
+    'profile': {
+      type: 'boolean',
+      default: false,
+      description: 'Print a query timing breakdown (manifest list / file fetch / SQL run) to stderr (local mode only)',
+    },
   },
   async run({ args }) {
     if (args.sql) {
@@ -356,18 +363,24 @@ export const queryCommand = defineCommand({
       return
     }
     await assertRangeCovered(store, siteUrl, table, startDate, endDate)
+    const profiling = Boolean(args.profile)
+    const probe = profiling ? collectSpans() : undefined
     const result = await store.engine.query(
       {
         userId: store.userId,
         siteId: store.siteIdFor(siteUrl),
         table,
         ...(searchType !== undefined ? { searchType } : {}),
+        ...(probe ? { profiler: probe.profiler } : {}),
       },
       state,
     ).catch((e: Error) => {
       logger.error(`Query failed: ${e.message}`)
       process.exit(1)
     })
+
+    if (probe)
+      logProfile(probe.spans)
 
     await writeOutput({
       output: {
@@ -585,6 +598,31 @@ async function runRawSqlMode(opts: {
   else {
     console.log(payload)
   }
+}
+
+/**
+ * Render a `--profile` timing breakdown to stderr (via `logger`, so it never
+ * mixes into the JSON/CSV stdout payload). Spans arrive in completion order:
+ * `manifest.list` (object-key lookup), then the executor's `files.register`
+ * (parquet fetch + DuckDB vFS registration — `buffered` is the count that took
+ * the serial read path) and `query.run` (SQL execution), then the
+ * `executor.execute` wrapper. `manifest.list` + `executor.execute` are the two
+ * non-overlapping top-level slices, so their sum is the wall-clock total.
+ */
+function logProfile(spans: QuerySpan[]): void {
+  if (spans.length === 0) {
+    logger.warn('No profiling spans recorded (the executor may not be instrumented).')
+    return
+  }
+  const fmtMeta = (m?: QuerySpan['meta']): string =>
+    m ? Object.entries(m).map(([k, v]) => `${k}=${v}`).join(' ') : ''
+  const row = (name: string, ms: number, meta?: QuerySpan['meta']): string =>
+    `  ${name.padEnd(18)} ${`${ms}ms`.padStart(8)}  ${fmtMeta(meta)}`.trimEnd()
+  const lines = spans.map(s => row(s.name, s.ms, s.meta))
+  const total = spans
+    .filter(s => s.name === 'manifest.list' || s.name === 'executor.execute')
+    .reduce((n, s) => n + s.ms, 0)
+  logger.info(`Query timing breakdown:\n${lines.join('\n')}\n${row('total', total)}`)
 }
 
 async function writeOutput(opts: {

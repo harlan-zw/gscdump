@@ -2,15 +2,15 @@
  * @gscdump/cloudflare — Cloudflare-Workers-flavored helpers for the gscdump
  * analytics stack.
  *
- * Owns the `AnalyticsEnv` binding contract, R2 SigV4 presigner, the size-hint
- * HMAC scheme, the DuckDB Workers shims, and the analytics engine factory.
- * Host apps wire their Nitro server handlers using these primitives plus the
- * D1 manifest store from `@gscdump/engine-sqlite`.
+ * Owns the `AnalyticsEnv` binding contract, the size-hint HMAC scheme, the
+ * DuckDB Workers shims, and the analytics engine factory. Host apps wire their
+ * Nitro server handlers using these primitives plus the D1 manifest store from
+ * `@gscdump/engine-sqlite`.
  *
  * The hybrid R2-SQL / DuckDB-over-Iceberg query cluster lives behind the
- * `@gscdump/cloudflare/server-tail` subpath so consumers that only presign or
- * read the env binding don't pull the server-tail contract/compiler graph into
- * their Worker bundle.
+ * `@gscdump/cloudflare/server-tail` subpath so consumers that only read the env
+ * binding don't pull the server-tail contract/compiler graph into their Worker
+ * bundle.
  */
 
 export type { Row } from './duckdb-wasm-handle'
@@ -24,9 +24,5 @@ export type { AnalyticsEnv } from './env'
 export { useAnalyticsEnv } from './env'
 export type { HostedR2QueryKeyInput, InflightDedupe } from './inflight-dedupe'
 export { createInflightDedupe, getHostedR2QueryKey } from './inflight-dedupe'
-export type { PresignOptions } from './r2-presign'
-
-export { createR2Presigner } from './r2-presign'
-
 export { signSizeHint, verifySizeHint } from './size-hint-sig'
 export { createDucklingsCodec, createDucklingsExecutor } from './workers-duckdb'

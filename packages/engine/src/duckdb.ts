@@ -221,35 +221,54 @@ function rewriteEmptyFileSets(
 
 export function createDuckDBExecutor(factory: DuckDBFactory): QueryExecutor {
   return {
-    async execute({ sql, params, fileKeys, placeholderTables, dataSource, table, signal }) {
+    async execute({ sql, params, fileKeys, placeholderTables, dataSource, table, signal, profiler }) {
       signal?.throwIfAborted()
       const db = await factory.getDuckDB()
 
       const placeholders: Record<string, string[]> = {}
       const registered: string[] = []
 
-      for (const [name, keys] of Object.entries(fileKeys)) {
+      const totalFiles = Object.values(fileKeys).reduce((n, keys) => n + keys.length, 0)
+      const endRegister = profiler?.start('files.register', { files: totalFiles })
+      // Resolve every placeholder's keys: a native URI is free (DuckDB reads it
+      // directly), a non-URI key must be fetched + registered into the vFS. The
+      // buffer reads are independent, so they run concurrently — a serial loop
+      // costs N × per-read latency, which on a remote DataSource (R2 without a
+      // `bucketName`, where each read is an object GET) is O(seconds) for a
+      // multi-file query. `registerFileBuffer` after the fan-out is a local
+      // memcpy, so it stays sequential. Mirrors `compactRows` above.
+      await Promise.all(Object.entries(fileKeys).map(async ([name, keys]) => {
+        const uris = keys.map(key => dataSource.uri?.(key))
+        const buffers = await Promise.all(
+          keys.map((key, i) => uris[i] !== undefined
+            ? Promise.resolve(undefined)
+            : dataSource.read(key, undefined, signal)),
+        )
         const resolved: string[] = []
-        for (const key of keys) {
-          const uri = dataSource.uri?.(key)
+        for (let i = 0; i < keys.length; i++) {
+          const uri = uris[i]
           if (uri !== undefined) {
             resolved.push(uri)
           }
           else {
-            const bytes = await dataSource.read(key, undefined, signal)
-            await db.registerFileBuffer(key, bytes)
-            registered.push(key)
-            resolved.push(key)
+            await db.registerFileBuffer(keys[i]!, buffers[i]!)
+            registered.push(keys[i]!)
+            resolved.push(keys[i]!)
           }
         }
         placeholders[name] = resolved
-      }
+      }))
+      // `buffered` is the count that took the read+register path (the rest
+      // resolved to a native URI for free).
+      endRegister?.({ buffered: registered.length })
 
       try {
         signal?.throwIfAborted()
         const rewritten = rewriteEmptyFileSets(sql, placeholders, table, placeholderTables)
         const finalSql = substituteNamedFiles(rewritten, placeholders)
+        const endQuery = profiler?.start('query.run')
         const rows = await db.query(finalSql, params)
+        endQuery?.({ rows: rows.length })
         return { rows, sql: finalSql }
       }
       finally {

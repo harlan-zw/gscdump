@@ -87,6 +87,9 @@ catalogs:
     tsx:
       specifier: ^4.22.4
       version: 4.22.4
+    unstorage:
+      specifier: ^1.17.5
+      version: 1.17.5
     vitest-package-exports:
       specifier: ^1.2.0
       version: 1.2.0
@@ -172,7 +175,7 @@ overrides:
   tinyexec: 1.1.2
 
 patchedDependencies:
-  icebird@0.8.10: e89d58887dc15a886cc4c64c68f5a804957c9ecef0a1b9de1d7fb8a15a777e06
+  icebird@0.8.10: ae93d3748cd495ae1d3c2d3309d766f5926eff0a5953bcd919f326db9b16bc35
 
 importers:
 
@@ -404,9 +407,12 @@ importers:
       gscdump:
         specifier: workspace:*
         version: link:../gscdump
-      icebird:
+      hyparquet:
         specifier: 'catalog:'
-        version: 0.8.10(patch_hash=e89d58887dc15a886cc4c64c68f5a804957c9ecef0a1b9de1d7fb8a15a777e06)
+        version: 1.26.0
+      hyparquet-writer:
+        specifier: 'catalog:'
+        version: 0.15.6
       proper-lockfile:
         specifier: catalog:deps
         version: 4.1.2
@@ -420,15 +426,15 @@ importers:
       aws4fetch:
         specifier: 'catalog:'
         version: 1.0.20
-      hyparquet:
+      icebird:
         specifier: 'catalog:'
-        version: 1.26.0
-      hyparquet-writer:
-        specifier: 'catalog:'
-        version: 0.15.6
+        version: 0.8.10(patch_hash=ae93d3748cd495ae1d3c2d3309d766f5926eff0a5953bcd919f326db9b16bc35)
       tsx:
         specifier: 'catalog:'
         version: 4.22.4
+      unstorage:
+        specifier: 'catalog:'
+        version: 1.17.5(aws4fetch@1.0.20)(db0@0.3.4)(ioredis@5.10.1)
       vitest:
         specifier: catalog:dev-test
         version: 4.1.9(@types/node@25.9.3)(@vitest/browser-playwright@4.1.9)(vite@7.3.3(@types/node@25.9.3)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
@@ -12394,7 +12400,9 @@ snapshots:
 
   date-fns@4.4.0: {}
 
-  db0@0.3.4: {}
+  db0@0.3.4(drizzle-orm@1.0.0-rc.3(@cloudflare/workers-types@4.20260617.1)(zod@4.4.3)):
+    optionalDependencies:
+      drizzle-orm: 1.0.0-rc.3(@cloudflare/workers-types@4.20260617.1)(zod@4.4.3)
 
   debug@4.4.3:
     dependencies:
@@ -13461,7 +13469,7 @@ snapshots:
 
   hysnappy@1.0.0: {}
 
-  icebird@0.8.10(patch_hash=e89d58887dc15a886cc4c64c68f5a804957c9ecef0a1b9de1d7fb8a15a777e06):
+  icebird@0.8.10(patch_hash=ae93d3748cd495ae1d3c2d3309d766f5926eff0a5953bcd919f326db9b16bc35):
     dependencies:
       hyparquet: 1.26.0
       hyparquet-compressors: 1.1.1
@@ -14340,7 +14348,7 @@ snapshots:
       cookie-es: 2.0.1
       croner: 10.0.1
       crossws: 0.3.5
-      db0: 0.3.4
+      db0: 0.3.4(drizzle-orm@1.0.0-rc.3(@cloudflare/workers-types@4.20260617.1)(zod@4.4.3))
       defu: 6.1.7
       destr: 2.0.5
       dot-prop: 10.1.0
@@ -16044,7 +16052,7 @@ snapshots:
       ufo: 1.6.4
     optionalDependencies:
       aws4fetch: 1.0.20
-      db0: 0.3.4
+      db0: 0.3.4(drizzle-orm@1.0.0-rc.3(@cloudflare/workers-types@4.20260617.1)(zod@4.4.3))
       ioredis: 5.10.1
 
   untun@0.1.3:

@@ -20,9 +20,12 @@
 
 import type { Result } from 'gscdump/result'
 import type { EngineError } from '../errors'
+import type { QueryProfiler } from '../storage'
+import type { CatalogCache } from './catalog-cache'
 import type { IcebergColumnType, IcebergS3Config, IcebergTableName } from './schema'
 import { err, ok } from 'gscdump/result'
 import {
+  cachingResolver,
   icebergAppend,
   icebergCreateTable,
   icebergDropTable,
@@ -34,6 +37,9 @@ import {
   s3SignedResolver,
 } from 'icebird'
 import { engineErrors } from '../errors'
+import { cacheGet, cachePut } from './catalog-cache'
+import { buildPartitionFilter } from './partition-prune'
+
 import {
   ICEBERG_PARTITION_SPEC,
   ICEBERG_SCHEMAS,
@@ -90,8 +96,8 @@ export interface IcebergCatalogConfig {
 export interface IcebergConnection {
   /** icebird REST catalog context, passed as `{ catalog }` to icebird write fns. */
   catalog: Awaited<ReturnType<typeof restCatalogConnect>>
-  /** icebird S3 resolver, passed as `{ resolver }` to icebird write fns. */
-  resolver: ReturnType<typeof s3SignedResolver>
+  /** icebird S3 resolver (caching-wrapped), passed as `{ resolver }` to icebird fns. */
+  resolver: ReturnType<typeof cachingResolver>
   /** The namespace the fact tables live under. */
   namespace: string
 }
@@ -147,24 +153,103 @@ export function icebergPartitionSpecFor(table: IcebergTableName): IcebergPartiti
   }
 }
 
+/** Options for {@link connectIcebergCatalog}. */
+export interface ConnectIcebergOptions {
+  /**
+   * Optional cross-isolate cache (any unstorage driver). When supplied, the
+   * `/v1/config` REST probe is served from cache on a warm catalog, removing
+   * one serial network hop from cold-isolate connects. The bearer token is
+   * NEVER cached — only the warehouse-static routing config (`url`, `prefix`,
+   * `defaults`, `overrides`) is; `requestInit` is rebuilt from `config`.
+   */
+  cache?: CatalogCache
+  /** Injectable clock for the cache TTL. Defaults to `Date.now`. */
+  clock?: () => number
+}
+
+/** The serialisable, secret-free part of an icebird REST catalog context. */
+interface CachedCatalogConfig {
+  url: string
+  prefix: string
+  defaults: Record<string, string>
+  overrides: Record<string, string>
+}
+
+/**
+ * TTL on the cached `/v1/config` routing config. It is warehouse-static
+ * (changes only if R2 re-points the warehouse prefix), so a generous TTL is
+ * safe; a miss costs one `/v1/config` probe, never a wrong route.
+ */
+const CATALOG_CONFIG_TTL_MS = 60 * 60 * 1000
+
+function catalogConfigKey(config: IcebergCatalogConfig): string {
+  // Keyed by warehouse identity, not the token: `/v1/config` depends on the
+  // warehouse + endpoint, and the token must not enter the cache.
+  return `gsc-catalog-cfg\0${config.catalogUri}\0${config.warehouse}`
+}
+
 /**
  * Connect to the R2 Data Catalog: a REST catalog context + a signed S3
  * resolver. Runs in Node and in `workerd` — SigV4 is Web Crypto, I/O is
  * `fetch`, no node builtins.
+ *
+ * With a `cache`, the `/v1/config` probe is skipped on a warm catalog and the
+ * context is rebuilt from the cached routing config plus the freshly-derived
+ * bearer `requestInit`. icebird reads only `url`/`prefix`/`requestInit` from
+ * the context downstream, so this is a faithful, secret-free reconstruction.
  */
-export async function connectIcebergCatalog(config: IcebergCatalogConfig): Promise<IcebergConnection> {
-  const catalog = await restCatalogConnect({
-    url: config.catalogUri,
-    warehouse: config.warehouse,
-    requestInit: { headers: { Authorization: `Bearer ${config.catalogToken}` } },
-  })
-  const resolver = s3SignedResolver({
+export async function connectIcebergCatalog(
+  config: IcebergCatalogConfig,
+  opts: ConnectIcebergOptions = {},
+): Promise<IcebergConnection> {
+  const now = (opts.clock ?? Date.now)()
+  const requestInit = { headers: { Authorization: `Bearer ${config.catalogToken}` } }
+
+  let catalog: Awaited<ReturnType<typeof restCatalogConnect>> | undefined
+  if (opts.cache) {
+    const cached = await cacheGet<CachedCatalogConfig>(opts.cache, catalogConfigKey(config), now)
+    if (cached) {
+      catalog = Object.freeze({
+        type: 'rest' as const,
+        url: cached.url,
+        prefix: cached.prefix,
+        defaults: cached.defaults,
+        overrides: cached.overrides,
+        requestInit,
+      })
+    }
+  }
+  if (!catalog) {
+    catalog = await restCatalogConnect({
+      url: config.catalogUri,
+      warehouse: config.warehouse,
+      requestInit,
+    })
+    if (opts.cache) {
+      const toCache: CachedCatalogConfig = {
+        url: catalog.url,
+        prefix: catalog.prefix,
+        defaults: catalog.defaults,
+        overrides: catalog.overrides,
+      }
+      await cachePut(opts.cache, catalogConfigKey(config), toCache, CATALOG_CONFIG_TTL_MS, now)
+    }
+  }
+
+  // Wrap the signed resolver in icebird's `cachingResolver`: reads of the same
+  // manifest-list / manifest avro share one fetch and one in-memory buffer for
+  // the life of the connection (the in-isolate complement to the cross-isolate
+  // `CatalogCache`). Iceberg objects are written at fresh per-commit paths, so
+  // path-level memoisation is always fresh under R2's managed compaction — a
+  // new snapshot's manifests live at new paths and miss the cache cleanly;
+  // writes through this resolver invalidate their own path on success.
+  const resolver = cachingResolver(s3SignedResolver({
     accessKeyId: config.s3.accessKeyId,
     secretAccessKey: config.s3.secretAccessKey,
     region: config.s3.region ?? 'auto',
     endpoint: config.s3.endpoint,
     pathStyle: true,
-  })
+  }))
   return { catalog, resolver, namespace: config.namespace }
 }
 
@@ -345,6 +430,53 @@ export interface ListIcebergDataFilesOptions {
    * `month(date)` is the third partition transform.
    */
   range: { start: string, end: string }
+  /**
+   * Optional cross-isolate cache (any unstorage driver). When supplied, the
+   * snapshot pointer is cached short (so a warm catalog skips `loadTable`) and
+   * the resolved file list is cached long, content-addressed by snapshot id
+   * (so it skips the manifest walk). Omit it to read straight from the catalog.
+   */
+  cache?: CatalogCache
+  /** Injectable clock for the cache TTLs. Defaults to `Date.now`. */
+  clock?: () => number
+  /**
+   * Optional read-path profiler. Emits `iceberg.snapshot` (snapshot-pointer
+   * load), `iceberg.cache` (resolved-files lookup + hit/miss), and
+   * `iceberg.walk` (manifest fetch + entry scan, with manifest/file counts) —
+   * the catalog cold-start breakdown a hosted reader wants in `Server-Timing`.
+   */
+  profiler?: QueryProfiler
+}
+
+/**
+ * Short TTL on the cached snapshot pointer `(namespace, table) → snapshotId`.
+ * Bounds how long a reader serves a previous snapshot after a new commit; a
+ * miss costs one `loadTable`, not a stale read, so this can stay small.
+ */
+const SNAPSHOT_REF_TTL_MS = 30_000
+
+/**
+ * Long TTL on the resolved file list. The cache key embeds the immutable
+ * `snapshotId`, so a hit is always correct within its lifetime — a new sync
+ * commits a NEW snapshot id and therefore a NEW key. A long TTL just maximises
+ * the cross-isolate hit rate; old snapshots' keys expire on their own.
+ */
+const RESOLVED_FILES_TTL_MS = 24 * 60 * 60 * 1000
+
+function snapshotRefKey(namespace: string, table: string): string {
+  return `gsc-snapref\0${namespace}\0${table}`
+}
+
+function resolvedFilesKey(
+  namespace: string,
+  table: string,
+  snapshotId: string,
+  siteId: string,
+  searchType: string,
+  wantedMonths: ReadonlySet<number>,
+): string {
+  const months = [...wantedMonths].sort((a, b) => a - b).join(',')
+  return `gsc-files\0${namespace}\0${table}\0${snapshotId}\0${siteId}\0${searchType}\0${months}`
 }
 
 /**
@@ -389,13 +521,43 @@ function stripBucket(filePath: string): string {
   return slash >= 0 ? rest.slice(slash + 1) : rest
 }
 
+/** Load the current snapshot id for a table, via the cache when one is given. */
+async function loadSnapshotId(
+  conn: IcebergConnection,
+  opts: ListIcebergDataFilesOptions,
+  now: number,
+): Promise<{ snapshotId: string | null, metadata: Awaited<ReturnType<typeof restCatalogLoadTable>>['metadata'] | null }> {
+  if (opts.cache) {
+    const cached = await cacheGet<string>(opts.cache, snapshotRefKey(conn.namespace, opts.table), now)
+    // `null` is cached for a genuinely-empty table; a string is a live pointer.
+    // Either way we skip `loadTable` and the metadata stays unloaded — only a
+    // resolved-files MISS below forces the metadata fetch for the walk.
+    if (cached !== undefined)
+      return { snapshotId: cached, metadata: null }
+  }
+  const { metadata } = await restCatalogLoadTable(conn.catalog, {
+    namespace: conn.namespace,
+    table: opts.table,
+  })
+  const raw = metadata['current-snapshot-id']
+  const snapshotId = raw == null ? null : String(raw)
+  if (opts.cache)
+    await cachePut(opts.cache, snapshotRefKey(conn.namespace, opts.table), snapshotId, SNAPSHOT_REF_TTL_MS, now)
+  return { snapshotId, metadata }
+}
+
 /**
- * List the parquet data files in the current snapshot of `table`, filtered
- * to a single partition slice `(siteId, searchType, month(date) ∈ range)`.
+ * List the parquet data files in the current snapshot of `table`, filtered to a
+ * single partition slice `(siteId, searchType, month(date) ∈ range)`.
  *
- * Cost: 1 REST `loadTable` + N manifest fetches (typically 1–10 small Avro
- * files). Iceberg returns the manifest list embedded in `metadata`, so a
- * cached `metadata` would let callers skip the REST call entirely.
+ * The shared `gsc.<table>` tables are multi-tenant, so a naive walk is O(all
+ * tenants). This prunes the manifest LIST by partition summaries before
+ * fetching any manifest's entries (see {@link buildPartitionFilter}), making
+ * the fetch count independent of tenant count, and — when an unstorage `cache`
+ * is supplied — skips the `loadTable` round-trip on a warm snapshot pointer and
+ * the manifest walk entirely on a resolved-files hit. The final entry-level
+ * partition filter is the authoritative correctness check; pruning only avoids
+ * reading manifests that cannot match.
  *
  * Skips deleted entries (status=2) and non-data file types (delete files).
  * Returns object keys + bytes + rowCount so the caller can build presigned
@@ -405,17 +567,44 @@ export async function listIcebergDataFiles(
   conn: IcebergConnection,
   opts: ListIcebergDataFilesOptions,
 ): Promise<IcebergListedDataFile[]> {
-  const { metadata } = await restCatalogLoadTable(conn.catalog, {
-    namespace: conn.namespace,
-    table: opts.table,
-  })
+  const profiler = opts.profiler
+  const now = (opts.clock ?? Date.now)()
+  const wantedMonths = new Set(monthsInRange(opts.range).map(monthsSinceEpoch))
 
+  const endSnapshot = profiler?.start('iceberg.snapshot')
+  let { snapshotId, metadata } = await loadSnapshotId(conn, opts, now)
+  // `metadata == null` with a live id means the snapshot pointer came warm from
+  // the cache (the `loadTable` round-trip was skipped).
+  endSnapshot?.({ cached: metadata == null && snapshotId != null })
   // No current snapshot — table exists but is empty. Empty list is correct.
-  if (metadata['current-snapshot-id'] == null)
+  if (snapshotId == null)
     return []
 
-  const wantedMonths = new Set(monthsInRange(opts.range).map(monthsSinceEpoch))
-  const manifests = await icebergManifests({ metadata, resolver: conn.resolver })
+  // Resolved-files cache is content-addressed by the (cached, possibly stale)
+  // snapshot id. A hit returns without loading metadata or walking manifests.
+  const filesKey = resolvedFilesKey(conn.namespace, opts.table, snapshotId, opts.siteId, opts.searchType, wantedMonths)
+  if (opts.cache) {
+    const endCache = profiler?.start('iceberg.cache')
+    const cached = await cacheGet<IcebergListedDataFile[]>(opts.cache, filesKey, now)
+    endCache?.({ hit: cached !== undefined })
+    if (cached !== undefined)
+      return cached
+  }
+
+  // Miss — we must walk. Ensure real metadata: a cached snapshot id gave us no
+  // `metadata` object, and a cached id can be stale, so reload to walk the
+  // genuinely-current snapshot and re-key the result against it.
+  if (!metadata) {
+    const reloaded = await loadSnapshotId(conn, { ...opts, cache: undefined }, now)
+    snapshotId = reloaded.snapshotId
+    metadata = reloaded.metadata
+    if (snapshotId == null || !metadata)
+      return []
+  }
+
+  const endWalk = profiler?.start('iceberg.walk')
+  const partitionFilter = buildPartitionFilter(opts.siteId, opts.searchType, wantedMonths)
+  const manifests = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter })
 
   const out: IcebergListedDataFile[] = []
   for (const m of manifests) {
@@ -440,6 +629,15 @@ export async function listIcebergDataFiles(
         rowCount: Number(df.record_count),
       })
     }
+  }
+  endWalk?.({ manifests: manifests.length, files: out.length })
+
+  if (opts.cache) {
+    // Re-key against the freshly-loaded snapshot id (the cached one may have
+    // been stale). Awaited only when no `defer` hook is set, so the write is
+    // never cut off when the response returns.
+    const freshKey = resolvedFilesKey(conn.namespace, opts.table, snapshotId, opts.siteId, opts.searchType, wantedMonths)
+    await cachePut(opts.cache, freshKey, out, RESOLVED_FILES_TTL_MS, now)
   }
   return out
 }

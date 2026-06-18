@@ -164,10 +164,63 @@ describe('runGscSyncSlice', () => {
       onBatch,
     })
 
-    expect(calls).toBe(1)
-    expect(captured).toHaveLength(1) // loop stopped — did not fetch page 2
+    expect(calls).toBe(1) // page 2's write never runs — we stopped after page 1 timed out
+    // Pipelining prefetches page 2 before page 1's write resolves, so page 2 IS
+    // fetched, then discarded when the write times out (the prefetch promise
+    // never rejects, so the discard is safe). The cursor still returns to page 1
+    // — no silent gap — and the continuation re-fetches + re-writes it.
+    expect(captured).toHaveLength(2)
     expect(result.hasMore).toBe(true)
     expect(result.nextStartRow).toBe(0) // cursor NOT advanced past the unwritten page
+  })
+
+  it('pipelines: fetches the next page while the current write is in flight, preserving order', async () => {
+    const onePartialRow = [{ keys: ['x'], clicks: 1, impressions: 1, ctr: 1, position: 1 }]
+    const captured: SearchAnalyticsQuery[] = []
+    // page1 full, page2 full, page3 partial (terminates the slice).
+    const client = makeClient([{ rows: fullPage2 }, { rows: fullPage2 }, { rows: onePartialRow }], captured)
+
+    const events: string[] = []
+    let releaseWrite1!: () => void
+    const write1Gate = new Promise<void>((resolve) => { releaseWrite1 = resolve })
+    let batchN = 0
+    const onBatch = async () => {
+      const n = ++batchN
+      events.push(`write${n}:start`)
+      if (n === 1)
+        await write1Gate // hold page 1's write open so we can observe the prefetch
+      events.push(`write${n}:end`)
+    }
+
+    const slicePromise = runGscSyncSlice({
+      client,
+      siteUrl: 'sc-domain:example.com',
+      table: 'pages',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      rowLimit: 2,
+      onBatch,
+    })
+
+    // Flush microtasks: page 1 fetched, its write started + pending, page 2 prefetched.
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(captured).toHaveLength(2) // page 2 fetched WHILE page 1's write is still pending
+    expect(events).toEqual(['write1:start']) // write 1 has not resolved yet
+
+    releaseWrite1()
+    const result = await slicePromise
+
+    expect(result.hasMore).toBe(false)
+    expect(captured).toHaveLength(3)
+    expect(captured.map(q => q.startRow)).toEqual([0, 2, 4]) // cursors paged in order
+    expect(events).toEqual([
+      'write1:start',
+      'write1:end',
+      'write2:start',
+      'write2:end',
+      'write3:start',
+      'write3:end',
+    ]) // writes applied strictly in page order despite the prefetch
   })
 
   it('rethrows a non-timeout (durable) onBatch failure instead of swallowing it', async () => {

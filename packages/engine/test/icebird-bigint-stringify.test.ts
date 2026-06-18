@@ -1,0 +1,49 @@
+// Regression: R2 Data Catalog's managed compaction writes 64-bit snapshot ids
+// that exceed Number.MAX_SAFE_INTEGER. icebird's `parseIcebergJson` promotes
+// them to BigInt, then the catalog commit body's `JSON.stringify` would throw
+// "TypeError: Do not know how to serialize a BigInt", breaking every Iceberg
+// ingest commit in production (2026-05-25 incident).
+//
+// The fix is a patched icebird (`patches/icebird@0.8.10.patch`) that adds a
+// BigInt-aware `stringifyIcebergJson` and uses it for the catalog commit body
+// and the metadata.json file write. The engine BUNDLES this patched icebird
+// into its dist, so this guard lives here (not in the consumer, which no longer
+// depends on icebird): it pins the contract that plain `JSON.stringify` throws
+// on a BigInt while `stringifyIcebergJson` emits it as a bare integer literal so
+// int64 precision survives the round-trip.
+
+// @ts-expect-error icebird json.js is plain JS, no .d.ts
+import { parseIcebergJson, stringifyIcebergJson } from 'icebird/src/json.js'
+import { describe, expect, it } from 'vitest'
+
+describe('icebird BigInt stringify regression', () => {
+  it('parseIcebergJson promotes >MAX_SAFE_INTEGER ints to BigInt', () => {
+    const meta = parseIcebergJson('{"current-snapshot-id":9007199254740993,"x":5}')
+    expect(typeof meta['current-snapshot-id']).toBe('bigint')
+    expect(meta['current-snapshot-id']).toBe(9007199254740993n)
+    expect(typeof meta.x).toBe('number')
+  })
+
+  it('plain JSON.stringify throws on the BigInt-laced metadata (the bug)', () => {
+    const meta = parseIcebergJson('{"current-snapshot-id":9007199254740993}')
+    expect(() => JSON.stringify(meta)).toThrow(/serialize a BigInt/)
+  })
+
+  it('stringifyIcebergJson emits BigInts as bare integer literals (the fix)', () => {
+    const meta = parseIcebergJson('{"current-snapshot-id":9007199254740993,"x":5,"s":"hi"}')
+    const text = stringifyIcebergJson(meta)
+    expect(text).toBe('{"current-snapshot-id":9007199254740993,"x":5,"s":"hi"}')
+    // Round-trip preserves exact int64 value.
+    expect(parseIcebergJson(text)['current-snapshot-id']).toBe(9007199254740993n)
+  })
+
+  it('handles nested objects, arrays, indentation', () => {
+    const v = { a: 9007199254740993n, list: [1n, 'x', null], nested: { b: 18014398509481985n } }
+    expect(stringifyIcebergJson(v)).toBe(
+      '{"a":9007199254740993,"list":[1,"x",null],"nested":{"b":18014398509481985}}',
+    )
+    const indented = stringifyIcebergJson(v, 2)
+    expect(indented).toContain('\n  "a": 9007199254740993')
+    expect(parseIcebergJson(indented).nested.b).toBe(18014398509481985n)
+  })
+})

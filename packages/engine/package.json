@@ -199,16 +199,17 @@
     "@gscdump/contracts": "workspace:*",
     "drizzle-orm": "catalog:",
     "gscdump": "workspace:*",
-    "icebird": "catalog:",
+    "hyparquet": "catalog:",
+    "hyparquet-writer": "catalog:",
     "proper-lockfile": "catalog:deps"
   },
   "devDependencies": {
     "@duckdb/duckdb-wasm": "catalog:",
     "@types/proper-lockfile": "catalog:",
     "aws4fetch": "catalog:",
-    "hyparquet": "catalog:",
-    "hyparquet-writer": "catalog:",
+    "icebird": "catalog:",
     "tsx": "catalog:",
+    "unstorage": "catalog:",
     "vitest": "catalog:dev-test"
   }
 }

@@ -233,7 +233,9 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
 
   async function runSQL(opts: RunSQLOptions): Promise<QueryResult> {
     opts.signal?.throwIfAborted()
+    const profiler = opts.profiler
     const entries = Object.entries(opts.fileSets)
+    const endList = profiler?.start('manifest.list', { fileSets: entries.length })
     const perSet = await Promise.all(
       entries.map(async ([name, ref]) => {
         // Direct-key path: skip manifest entirely. Used by entity-store
@@ -268,6 +270,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
       fileKeys[name] = keys
 
     const uniqueKeys = [...new Set(perSet.flatMap(([, keys]) => keys))]
+    endList?.({ files: uniqueKeys.length })
     let table = opts.table
     if (!table) {
       const distinctTables = new Set(entries.map(([, ref]) => ref.table))
@@ -285,6 +288,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     for (const [name, ref] of entries)
       placeholderTables[name] = ref.table
 
+    const endExec = profiler?.start('executor.execute', { files: uniqueKeys.length })
     const result = await executor.execute({
       sql: opts.sql,
       params: opts.params ?? [],
@@ -293,7 +297,9 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
       dataSource,
       table,
       signal: opts.signal,
+      ...(profiler ? { profiler } : {}),
     })
+    endExec?.({ rows: result.rows.length })
 
     return { rows: result.rows, sql: result.sql, objectKeys: uniqueKeys }
   }
@@ -310,6 +316,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
       params: resolved.params,
       signal: ctx.signal,
       ...(ctx.searchType !== undefined ? { searchType: ctx.searchType } : {}),
+      ...(ctx.profiler ? { profiler: ctx.profiler } : {}),
     })
   }
 

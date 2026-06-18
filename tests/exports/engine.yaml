@@ -5,6 +5,7 @@
   canonicalEmptyParquetSchema: function
   coerceRow: function
   coerceRows: function
+  collectSpans: function
   countries: object
   createDuckDBCodec: function
   createDuckDBExecutor: function
@@ -13,6 +14,7 @@
   createInMemorySink: function
   createNoopIngestAccumulator: function
   createParquetResolverAdapter: function
+  createQueryProfiler: function
   createRowAccumulator: function
   createSqlQuerySource: function
   createStorageEngine: function
@@ -133,6 +135,8 @@
   ICEBERG_SCHEMAS: object
   ICEBERG_TABLES: object
   icebergAppendRetrying: function
+  icebergCreateTable: function
+  icebergManifests: function
   icebergPartitionSpecFor: function
   icebergSchemaFor: function
   icebergTableSpec: function
@@ -140,6 +144,7 @@
   isIcebergTable: function
   listIcebergDataFiles: function
   listIcebergTables: function
+  restCatalogLoadTable: function
 ./ingest:
   assembleDatesRow: function
   createRowAccumulator: function

@@ -2,7 +2,6 @@
   createDucklingsCodec: function
   createDucklingsExecutor: function
   createInflightDedupe: function
-  createR2Presigner: function
   getAnalyticsEngine: function
   getHostedR2QueryKey: function
   getWasmDuckDBFactory: function
