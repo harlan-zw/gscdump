@@ -20,9 +20,12 @@ describe('normalizeBuilderState — malformed dimensions (GSCDUMP-8)', () => {
     expect(state.dimensions).toEqual([])
   })
 
-  it('coerces a non-array metrics field to an empty array', () => {
-    const state = normalizeBuilderState({ dimensions: ['page'], metrics: 'clicks' } as never)
-    expect(state.metrics).toEqual([])
+  it('leaves an omitted metrics field as undefined (the all-metrics default sentinel)', () => {
+    // plan.ts: `state.metrics ? [...] : [clicks,impressions,ctr,position]`.
+    // Coercing undefined → [] (truthy) would select NO metrics and break
+    // `ORDER BY <metric>` with a 40004 (GSCDUMP-A/C). Must stay undefined.
+    const state = normalizeBuilderState({ dimensions: ['page'], orderBy: { column: 'impressions', dir: 'desc' } } as never)
+    expect(state.metrics).toBeUndefined()
   })
 })
 
