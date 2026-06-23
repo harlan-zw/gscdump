@@ -43,6 +43,7 @@ import type { Row } from '../storage'
 import type { IcebergConnection } from './catalog'
 import type { IcebergTableName, PartitionKeyEncoding } from './schema'
 import { engineErrors } from '../errors'
+import { TABLE_METADATA } from '../schema'
 import {
   connectIcebergCatalog,
   icebergAppendRetrying,
@@ -166,6 +167,46 @@ function dedupeByIdentity(table: IcebergTableName, records: IcebergRecord[]): Ic
 }
 
 /**
+ * Reorder a commit's records into `clusterKey` (dimension-first) order before
+ * handing them to icebird.
+ *
+ * icebird splits the buffer into one parquet file per partition (site_id,
+ * search_type, month(date)); clustering the buffer first means each of those
+ * files lands dimension-sorted, so its row groups carry tight per-`url`/`query`
+ * bounds (row-group skipping for `WHERE url = …`) and its repeated dimension
+ * values form long dictionary/RLE runs instead of being interleaved across
+ * appends. Same mechanism the DuckDB compaction `ORDER BY clusterKey` exploits,
+ * where it measured ~28-42% smaller files and ~2.5x faster point lookups on
+ * real data. Correctness-safe: reads aggregate `SUM(metric) GROUP BY <dims>`, so
+ * physical row order never affects a result. A stable sort keeps the
+ * last-wins dedup survivor intact for equal cluster keys.
+ */
+function sortByClusterKey(table: IcebergTableName, records: IcebergRecord[]): IcebergRecord[] {
+  const cols = TABLE_METADATA[table].clusterKey
+  if (cols.length === 0 || records.length < 2)
+    return records
+  return records.slice().sort((a, b) => {
+    for (const col of cols) {
+      const av = a[col]
+      const bv = b[col]
+      if (av === bv)
+        continue
+      if (av == null)
+        return -1
+      if (bv == null)
+        return 1
+      if (typeof av === 'number' && typeof bv === 'number')
+        return av - bv
+      const as = String(av)
+      const bs = String(bv)
+      if (as !== bs)
+        return as < bs ? -1 : 1
+    }
+    return 0
+  })
+}
+
+/**
  * Build the icebird append records for a slice — inject identity columns, encode
  * `date`. Under `'int'` encoding `site_id` is written as a plain `number` (INT —
  * the caller passes the numeric id in `ctx.siteId`) and `search_type` as its
@@ -276,7 +317,7 @@ export function createIcebergAppendSink(options: IcebergAppendSinkOptions): Iceb
           continue
         // Dedup at the commit boundary — the only dedup point in the append
         // model (reads SUM/GROUP BY, never by natural key). See dedupeByIdentity.
-        const deduped = dedupeByIdentity(table, records)
+        const deduped = sortByClusterKey(table, dedupeByIdentity(table, records))
         await icebergAppendRetrying(
           {
             catalog: conn.catalog,

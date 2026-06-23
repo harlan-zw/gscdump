@@ -175,6 +175,7 @@
     "build": "obuild",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
+    "benchmark-store": "tsx scripts/benchmark-store.mts",
     "r2-harness": "tsx scripts/r2-contention-harness.ts",
     "backfill-audit": "tsx scripts/backfill-audit.ts",
     "prepack": "pnpm run build"

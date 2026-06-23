@@ -30,6 +30,7 @@ export {
   icebergAppendRetrying,
   icebergPartitionSpecFor,
   icebergSchemaFor,
+  icebergSortOrderFor,
   isCommitRateLimited,
   listIcebergDataFiles,
   listIcebergTables,
@@ -45,6 +46,8 @@ export type {
   IcebergPrimitiveType,
   IcebergSchema,
   IcebergSchemaField,
+  IcebergSortOrder,
+  IcebergSortOrderField,
   IcebergTableOpResult,
   ListIcebergDataFilesOptions,
 } from './catalog'

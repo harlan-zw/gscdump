@@ -37,9 +37,10 @@ import {
   s3SignedResolver,
 } from 'icebird'
 import { engineErrors } from '../errors'
+import { TABLE_METADATA } from '../schema'
 import { cacheGet, cachePut } from './catalog-cache'
-import { buildPartitionFilter } from './partition-prune'
 
+import { buildPartitionFilter } from './partition-prune'
 import {
   ICEBERG_PARTITION_SPEC,
   ICEBERG_SCHEMAS,
@@ -77,6 +78,20 @@ export interface IcebergPartitionSpecField {
 export interface IcebergPartitionSpec {
   'spec-id': number
   'fields': IcebergPartitionSpecField[]
+}
+
+/** A field in an icebird `SortOrder`. */
+export interface IcebergSortOrderField {
+  'source-id': number
+  'transform': 'identity'
+  'direction': 'asc' | 'desc'
+  'null-order': 'nulls-first' | 'nulls-last'
+}
+
+/** An icebird `SortOrder` (Iceberg write-order). */
+export interface IcebergSortOrder {
+  'order-id': number
+  'fields': IcebergSortOrderField[]
 }
 
 /** Everything needed to talk to the R2 Data Catalog. */
@@ -150,6 +165,39 @@ export function icebergPartitionSpecFor(table: IcebergTableName, encoding: Parti
       'field-id': 1000 + i,
       'name': p.name,
       'transform': p.transform,
+    })),
+  }
+}
+
+/**
+ * Build the icebird `SortOrder` for a fact table from its `clusterKey`
+ * (dimension-first, then `date`) — e.g. `pages` → sort by `url`, then `date`.
+ *
+ * Declared so any sort-aware compaction (a self-run `icebergRewrite`, or R2
+ * managed compaction if/when it honors sort order) re-clusters merged files the
+ * same way the append path already orders them ({@link sortByClusterKey} in
+ * `append-sink.ts`). R2's managed compaction currently only bin-packs small
+ * files without re-sorting, so this is forward-looking: it costs nothing today
+ * (the table simply carries the metadata) and means a future sort-aware pass
+ * produces globally clustered files for free, maximizing row-group skipping on
+ * the DuckDB-over-R2 read path. clusterKey columns are all non-null, so the
+ * null ordering is moot; `identity`/`asc` mirrors the physical write order.
+ */
+export function icebergSortOrderFor(table: IcebergTableName, encoding: PartitionKeyEncoding = 'string'): IcebergSortOrder {
+  const fields = icebergSchemasFor(encoding)[table].columns
+  const fieldId = (name: string): number => {
+    const col = fields.find(c => c.name === name)
+    if (!col)
+      throw new Error(`iceberg-catalog: table '${table}' has no '${name}' column`)
+    return col.fieldId
+  }
+  return {
+    'order-id': 1,
+    'fields': TABLE_METADATA[table].clusterKey.map(col => ({
+      'source-id': fieldId(col),
+      'transform': 'identity',
+      'direction': 'asc',
+      'null-order': 'nulls-last',
     })),
   }
 }
@@ -382,6 +430,7 @@ export async function createIcebergTables(
       table,
       schema: icebergSchemaFor(table, encoding),
       partitionSpec: icebergPartitionSpecFor(table, encoding),
+      sortOrder: icebergSortOrderFor(table, encoding),
     }).then(
       () => results.push({ table, outcome: ok(undefined) }),
       (e: unknown) => results.push({ table, outcome: err(engineErrors.icebergTableOpFailed('create', table, e)) }),

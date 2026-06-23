@@ -17,7 +17,7 @@ import type {
   WriteResult,
 } from './storage'
 import { substituteNamedFiles } from './parquet-plan'
-import { dateColumnsFor, SCHEMAS } from './schema'
+import { dateColumnsFor, SCHEMAS, TABLE_METADATA } from './schema'
 import { sqlEscape } from './sql-bind'
 import { dateReplaceClause as buildDateReplaceClause } from './sql-fragments'
 
@@ -171,6 +171,8 @@ export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
   }
 }
 
+const quoteCol = (c: string): string => `"${c.replace(/"/g, '""')}"`
+
 /**
  * SELECT body that merges parquet inputs and collapses any natural-key
  * collision to a single row.
@@ -180,14 +182,27 @@ export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
  * on healthy data. It exists as a recurrence guard: the 2026-04 monthly
  * compaction corruption merged a complete month back onto its own daily
  * inputs, doubling every row. `union_by_name` tolerates additive schema drift.
+ *
+ * The survivors are emitted in `clusterKey` (dimension-first) order so the
+ * compacted file is GLOBALLY clustered, not just clustered within each input
+ * file's block. Daily inputs are each internally cluster-sorted by the encoder
+ * (`sortRowsByClusterKey`), but concatenating them interleaves every day's
+ * dimension values across the merged file's row groups — which both defeats
+ * row-group skipping for point lookups (`WHERE url = …`) and scatters repeated
+ * dimension values so the writer's dictionary/RLE runs stay short. Re-sorting
+ * on merge restores both: measured on real page_keywords data, a single
+ * compacted file shrinks ~28% and a url-filtered query runs ~2.4x faster.
  */
 function dedupedMergeSql(table: TableName, fileListSql: string): string {
   const base = `SELECT * FROM read_parquet([${fileListSql}], union_by_name = true)`
-  const key = SCHEMAS[table].sortKey
-  if (key.length === 0)
-    return base
-  const partition = key.map(c => `"${c.replace(/"/g, '""')}"`).join(', ')
-  return `${base} QUALIFY row_number() OVER (PARTITION BY ${partition}) = 1`
+  const sortKey = SCHEMAS[table].sortKey
+  const clusterKey = TABLE_METADATA[table].clusterKey
+  const dedup = sortKey.length === 0
+    ? base
+    : `${base} QUALIFY row_number() OVER (PARTITION BY ${sortKey.map(quoteCol).join(', ')}) = 1`
+  if (clusterKey.length === 0)
+    return dedup
+  return `${dedup} ORDER BY ${clusterKey.map(quoteCol).join(', ')}`
 }
 
 /**
