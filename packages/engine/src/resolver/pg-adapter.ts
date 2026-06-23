@@ -105,10 +105,20 @@ export const pgResolverAdapter: ResolverAdapter<PgTableKey> = createResolverAdap
  * Single-use: build a fresh adapter per query. Cheap (no I/O) and avoids
  * accidental adapter caching that would lock in a stale `{{FILES}}` set.
  */
-export function createParquetResolverAdapter(): ResolverAdapter<PgTableKey> {
+export interface ResolverAdapterOptions {
+  /**
+   * Opt-in canonical-primary correctness: fold NULL/'' `query_canonical` back
+   * to the raw `query` so canonical is a total GROUP BY / join key. Default
+   * false preserves the legacy raw-column behaviour. See ADR-0018.
+   */
+  canonicalFallback?: boolean
+}
+
+export function createParquetResolverAdapter(options: ResolverAdapterOptions = {}): ResolverAdapter<PgTableKey> {
   return createResolverAdapter<PgTableKey>({
     ...PG_BASE_CONFIG,
     tableLabel: 'parquet-resolver-adapter',
+    canonicalFallback: options.canonicalFallback ?? false,
     tableRef: tk => sql.raw(`read_parquet({{FILES}}, union_by_name = true) AS "${tk}"`),
   })
 }
@@ -123,13 +133,14 @@ export function createParquetResolverAdapter(): ResolverAdapter<PgTableKey> {
  * so callers must rewrite bare table names to their qualified form (e.g.
  * `${namespace}.pages`) before sending to R2 SQL.
  */
-export function createIcebergResolverAdapter(): ResolverAdapter<PgTableKey> {
+export function createIcebergResolverAdapter(options: ResolverAdapterOptions = {}): ResolverAdapter<PgTableKey> {
   return createResolverAdapter<PgTableKey>({
     ...PG_BASE_CONFIG,
     schema: icebergSchema,
     includeSiteId: true,
     includeSearchType: true,
     tableLabel: 'iceberg-resolver-adapter',
+    canonicalFallback: options.canonicalFallback ?? false,
     // `icebergSchema` table entries are plain object spreads of drizzle tables,
     // so they preserve column symbols (for `colRef`) but lose the table-level
     // symbols drizzle needs to render `${schema[tk]}` as a name (it falls back

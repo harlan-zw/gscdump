@@ -500,7 +500,13 @@ export function buildExtrasQueries<TK extends string>(
 
   const whereExpr = whereParts.length > 0 ? sql`WHERE ${joinAnd(whereParts)}` : sql``
   const outerQueryCol = sql.raw('query')
-  const q = sql`WITH per_variant AS (SELECT ${t.query_canonical} as joinKey, ${t.query} as query, SUM(${t.clicks}) as clicks, SUM(${t.impressions}) as impressions, SUM(${t.sum_position}) as sum_pos, ROW_NUMBER() OVER (PARTITION BY ${t.query_canonical} ORDER BY SUM(${t.clicks}) DESC) as rn, COUNT(*) OVER (PARTITION BY ${t.query_canonical}) as variantCount FROM ${table} ${whereExpr} GROUP BY ${t.query_canonical}, ${t.query}) SELECT joinKey, MAX(variantCount) as variantCount, MAX(CASE WHEN rn = 1 THEN ${outerQueryCol} END) as canonicalName, GROUP_CONCAT(CASE WHEN rn <= 10 THEN ${outerQueryCol} || ':::' || clicks || ':::' || impressions || ':::' || CAST(ROUND(CAST(sum_pos AS REAL) / NULLIF(impressions, 0) + 1, 1) AS TEXT) END, '||') as variants FROM per_variant GROUP BY joinKey`
+  // Key on the total canonical — COALESCE(NULLIF(query_canonical, ''), query) —
+  // so the live extras share one key space with the canonical-fallback main
+  // query and the `query_canonical_*` rollups (ADR-0018). Folding NULL/'' to the
+  // raw query also replaces the old `IS NOT NULL` filter: a row with no stored
+  // canonical becomes its own single-variant group instead of being dropped.
+  const canonKey = sql`COALESCE(NULLIF(${t.query_canonical}, ''), ${t.query})`
+  const q = sql`WITH per_variant AS (SELECT ${canonKey} as joinKey, ${t.query} as query, SUM(${t.clicks}) as clicks, SUM(${t.impressions}) as impressions, SUM(${t.sum_position}) as sum_pos, ROW_NUMBER() OVER (PARTITION BY ${canonKey} ORDER BY SUM(${t.clicks}) DESC) as rn, COUNT(*) OVER (PARTITION BY ${canonKey}) as variantCount FROM ${table} ${whereExpr} GROUP BY ${canonKey}, ${t.query}) SELECT joinKey, MAX(variantCount) as variantCount, MAX(CASE WHEN rn = 1 THEN ${outerQueryCol} END) as canonicalName, GROUP_CONCAT(CASE WHEN rn <= 10 THEN ${outerQueryCol} || ':::' || clicks || ':::' || impressions || ':::' || CAST(ROUND(CAST(sum_pos AS REAL) / NULLIF(impressions, 0) + 1, 1) AS TEXT) END, '||') as variants FROM per_variant GROUP BY joinKey`
 
   const compiled = compileCollapsed(adapter, q)
   extras.push({ key: 'canonicalExtras', sql: compiled.sql, params: compiled.params })

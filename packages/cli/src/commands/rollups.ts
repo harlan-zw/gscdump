@@ -1,5 +1,5 @@
 import type { TableName } from '../local-store'
-import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
+import { CANONICAL_ROLLUPS, DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
@@ -12,14 +12,20 @@ const rebuildSubCommand = defineCommand({
   },
   args: {
     ...OUTPUT_ARGS,
-    site: {
+    'site': {
       type: 'string',
       alias: 's',
       description: 'Restrict to a single site (default: all sites with local data)',
     },
+    'with-canonical': {
+      type: 'boolean',
+      description: 'Also build the opt-in canonical-primary rollups (query_canonical_variants, query_canonical_daily)',
+      default: false,
+    },
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
+    const defs = args['with-canonical'] ? [...DEFAULT_ROLLUPS, ...CANONICAL_ROLLUPS] : DEFAULT_ROLLUPS
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
     const explicitSiteId = args.site ? store.siteIdFor(String(args.site)) : undefined
@@ -54,7 +60,7 @@ const rebuildSubCommand = defineCommand({
     const summary: Array<{ siteId: string, rollups: Array<{ id: string, bytes: number, objectKey: string }> }> = []
     let totalBytes = 0
     for (const siteId of allSiteIds) {
-      logger.info(`Rebuilding rollups for [${siteId}] (${DEFAULT_ROLLUPS.length} rollups)`)
+      logger.info(`Rebuilding rollups for [${siteId}] (${defs.length} rollups)`)
       const results = await rebuildRollups({
         engine: {
           runSQL: opts => store.engine.runSQL(opts),
@@ -70,7 +76,7 @@ const rebuildSubCommand = defineCommand({
         },
         dataSource: store.dataSource,
         ctx: { userId: store.userId, siteId },
-        defs: DEFAULT_ROLLUPS,
+        defs,
       })
       const site = { siteId, rollups: [] as Array<{ id: string, bytes: number, objectKey: string }> }
       for (const r of results) {

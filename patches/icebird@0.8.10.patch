@@ -120,7 +120,7 @@ index 30859983155832b6012b0e6faf1faa82c11fc73a..6b2e397c16d0e81969943b9c2f52b9f7
   * Parse Iceberg metadata JSON, preserving integer literals that exceed
   * Number.MAX_SAFE_INTEGER (2^53-1) as BigInt. Plain `JSON.parse` would
 diff --git a/src/manifest.js b/src/manifest.js
-index ba5a83e72ab90761f17bdfa1c3e876014f7b77c5..85ec8c2ee13b20803405b21b59087e7eb5273546 100644
+index ba5a83e72ab90761f17bdfa1c3e876014f7b77c5..a6018c2d4b64c47c6fb9a597b7148f20fcf84574 100644
 --- a/src/manifest.js
 +++ b/src/manifest.js
 @@ -7,13 +7,21 @@ import { fetchAvroRecords, urlResolver } from './fetch.js'
@@ -146,7 +146,7 @@ index ba5a83e72ab90761f17bdfa1c3e876014f7b77c5..85ec8c2ee13b20803405b21b59087e7e
    resolver ??= urlResolver()
    const rawTarget = snapshotId ?? metadata['current-snapshot-id']
    if (rawTarget == null || rawTarget < 0) {
-@@ -42,6 +50,23 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
+@@ -42,53 +50,102 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
      throw new Error('No manifest information found in snapshot')
    }
  
@@ -170,6 +170,118 @@ index ba5a83e72ab90761f17bdfa1c3e876014f7b77c5..85ec8c2ee13b20803405b21b59087e7e
    return await fetchManifests(manifests, resolver)
  }
  
++// gscdump patch: bound the manifest-entry fetch fan-out. The multi-tenant
++// global fact tables can have hundreds of manifests in one snapshot; an
++// unbounded `Promise.all` opened one in-flight fetch + one buffered avro per
++// manifest at once, which blows the Cloudflare Workers subrequest ceiling and
++// spikes isolate memory on a wide read. A fixed-size worker pool caps in-flight
++// fetches while preserving input order in the result.
++const MANIFEST_FETCH_CONCURRENCY = 8
++
+ /**
+- * Fetch manifest entries from a list of manifests in parallel.
++ * Fetch one manifest's entries and apply sequence-number / first-row-id
++ * inheritance. Extracted from {@link fetchManifests} so the bounded pool can
++ * call it per manifest.
+  *
+- * @param {Manifest[]} manifests
++ * @param {Manifest} manifest
+  * @param {Resolver} resolver
+- * @returns {Promise<ManifestList>}
++ * @returns {Promise<{ url: string, entries: ManifestEntry[] }>}
+  */
+-async function fetchManifests(manifests, resolver) {
+-  // Fetch manifest entries in parallel
+-  return await Promise.all(manifests.map(async manifest => {
+-    const url = manifest.manifest_path
+-    const entries = /** @type {ManifestEntry[]} */ (
+-      await fetchAvroRecords(url, resolver, Number(manifest.manifest_length))
+-    )
++async function fetchOneManifest(manifest, resolver) {
++  const url = manifest.manifest_path
++  const entries = /** @type {ManifestEntry[]} */ (
++    await fetchAvroRecords(url, resolver, Number(manifest.manifest_length))
++  )
+ 
+-    // Inherit sequence number from manifest if not present in entry
+-    for (const entry of entries) {
+-      entry.partition_spec_id = manifest.partition_spec_id ?? 0
++  // Inherit sequence number from manifest if not present in entry
++  for (const entry of entries) {
++    entry.partition_spec_id = manifest.partition_spec_id ?? 0
+ 
++    if (entry.sequence_number === undefined) {
++      // When reading v1 manifests with no sequence number column,
++      // sequence numbers for all files must default to 0.
++      entry.sequence_number = manifest.sequence_number ?? 0n
++    }
++
++    if (entry.status === 1) {
++      // only ADDED can inherit sequence number
+       if (entry.sequence_number === undefined) {
+-        // When reading v1 manifests with no sequence number column,
+-        // sequence numbers for all files must default to 0.
+-        entry.sequence_number = manifest.sequence_number ?? 0n
++        entry.sequence_number = manifest.sequence_number
+       }
+-
+-      if (entry.status === 1) {
+-        // only ADDED can inherit sequence number
+-        if (entry.sequence_number === undefined) {
+-          entry.sequence_number = manifest.sequence_number
+-        }
+-        if (entry.file_sequence_number === undefined) {
+-          entry.file_sequence_number = manifest.sequence_number
+-        }
+-      } else {
+-        if (entry.sequence_number === undefined || entry.file_sequence_number === undefined) {
+-          // spec violation "Sequence‑number inheritance"
+-          throw new Error('iceberg manifest entry missing sequence number')
+-        }
++      if (entry.file_sequence_number === undefined) {
++        entry.file_sequence_number = manifest.sequence_number
++      }
++    } else {
++      if (entry.sequence_number === undefined || entry.file_sequence_number === undefined) {
++        // spec violation "Sequence‑number inheritance"
++        throw new Error('iceberg manifest entry missing sequence number')
+       }
+     }
+-    assignFirstRowIds(manifest, entries)
++  }
++  assignFirstRowIds(manifest, entries)
++
++  return { url, entries }
++}
+ 
+-    return { url, entries }
+-  }))
++/**
++ * Fetch manifest entries from a list of manifests, bounded to
++ * {@link MANIFEST_FETCH_CONCURRENCY} in-flight fetches. Result order matches
++ * the input `manifests` order.
++ *
++ * @param {Manifest[]} manifests
++ * @param {Resolver} resolver
++ * @returns {Promise<ManifestList>}
++ */
++async function fetchManifests(manifests, resolver) {
++  const results = /** @type {ManifestList} */ (new Array(manifests.length))
++  let next = 0
++  async function worker() {
++    while (next < manifests.length) {
++      const i = next++
++      results[i] = await fetchOneManifest(manifests[i], resolver)
++    }
++  }
++  const poolSize = Math.min(MANIFEST_FETCH_CONCURRENCY, manifests.length)
++  const workers = []
++  for (let w = 0; w < poolSize; w++) workers.push(worker())
++  await Promise.all(workers)
++  return results
+ }
+ 
+ /**
 diff --git a/src/types.d.ts b/src/types.d.ts
 index d457a6a05a20d0f22fa8f456da06fc26b72f3cbc..dc744bfbc060a59611b82707c1ae61ced1ed7ba2 100644
 --- a/src/types.d.ts

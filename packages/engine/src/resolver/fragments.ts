@@ -29,6 +29,19 @@ export interface SqlFragmentsConfig<TableKey extends string> {
    * against the alias.
    */
   tableRef?: (tableKey: TableKey) => SQL
+  /**
+   * Opt-in correctness for canonical-primary lookups. When true, the
+   * `queryCanonical` dimension expression falls back to the raw `query` when
+   * the stored `query_canonical` is NULL (no normalizer ran at ingest) or `''`
+   * (a fully-stripped query like "free online"), i.e.
+   * `COALESCE(NULLIF(query_canonical, ''), query)`. This makes canonical a
+   * TOTAL key, valid for GROUP BY / comparison joins.
+   *
+   * Default (false) preserves legacy behaviour: the raw nullable column, so a
+   * NULL/'' bucket pollutes top results and — because `NULL = NULL` is UNKNOWN
+   * — double-counts in the gaining/losing FULL OUTER JOIN. See ADR-0018.
+   */
+  canonicalFallback?: boolean
 }
 
 export interface SqlFragments<TableKey extends string> {
@@ -84,6 +97,7 @@ export function createSqlFragments<TableKey extends string>(
     includeSearchType,
     urlToPathExpr: urlToPathExprOverride,
     tableRef: tableRefOverride,
+    canonicalFallback = false,
   } = config
   const DIM_COLUMN_MAP = buildDimensionColumnMap(datasetToTableKey)
 
@@ -142,6 +156,12 @@ export function createSqlFragments<TableKey extends string>(
     const colName = dimColumn(dim, tableKey)
     if (dim === 'page')
       return sql.raw(urlToPathExpr(colName))
+    // Opt-in: make canonical a TOTAL key by folding NULL/'' back to the raw
+    // query, so GROUP BY and the comparison join never see a null/empty bucket.
+    // `queryCanonical` only resolves on tables that also carry `query`, so the
+    // fallback colRef is always valid here. See ADR-0018.
+    if (canonicalFallback && dim === 'queryCanonical')
+      return sql`COALESCE(NULLIF(${colRef(tableKey, colName)}, ''), ${colRef(tableKey, 'query')})`
     return colRef(tableKey, colName)
   }
 

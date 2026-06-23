@@ -21,6 +21,7 @@ import {
   createFilesystemDataSource,
   createFilesystemManifestStore,
 } from '../src/adapters/filesystem'
+import { decodeParquetToRows } from '../src/adapters/hyparquet'
 import { enumeratePartitions } from '../src/compaction'
 import {
   createDuckDBCodec,
@@ -29,6 +30,7 @@ import {
 } from '../src/index'
 import { buildExtrasQueries, buildTotalsSql, resolveComparisonSQL } from '../src/resolver/compile'
 import { createParquetResolverAdapter } from '../src/resolver/pg-adapter'
+import { queryCanonicalVariantsRollup, rebuildRollups } from '../src/rollups'
 
 afterAll(() => {
   resetNodeDuckDB()
@@ -262,5 +264,114 @@ describe('buildExtrasQueries (integration)', () => {
       pagesState('2026-03-01', '2026-03-31'),
     )
     expect(result).toEqual([])
+  })
+})
+
+// The overlay's correctness claim (ADR-0017): the materialised
+// `query_canonical_variants` rollup must produce byte-identical extra rows to
+// the live `buildExtrasQueries` window-function SQL, so `mergeExtras` consumes
+// either source unchanged. Exercise BOTH against real DuckDB over the same
+// seed and assert the per-canonical maps match.
+describe('queryCanonicalVariantsRollup (integration)', () => {
+  let dir: string
+  beforeEach(async () => {
+    resetNodeDuckDB()
+    dir = await mkdtemp(join(tmpdir(), 'gscdump-canon-'))
+  })
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  async function setup() {
+    const handle = createNodeDuckDBHandle()
+    const factory = { getDuckDB: async () => handle }
+    const codec = createDuckDBCodec(factory)
+    const executor = createDuckDBExecutor(factory)
+    const dataSource = createFilesystemDataSource({ rootDir: dir })
+    const manifestStore = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
+    const engine = createStorageEngine({ dataSource, manifestStore, codec, executor })
+    return { engine, dataSource }
+  }
+
+  // Mirrors the CLI's RollupEngine wiring (commands/rollups.ts): runSQL passes
+  // through, listPartitions derives from the live manifest.
+  function rollupEngine(engine: StorageEngine) {
+    return {
+      runSQL: (opts: Parameters<StorageEngine['runSQL']>[0]) => engine.runSQL(opts),
+      async listPartitions({ ctx, table, searchType }: { ctx: { userId: string, siteId?: string }, table: TableName, searchType?: string }) {
+        const entries = await engine.listLive({
+          userId: ctx.userId,
+          ...(ctx.siteId !== undefined ? { siteId: ctx.siteId } : {}),
+          table,
+          ...(searchType !== undefined ? { searchType: searchType as any } : {}),
+        })
+        return entries.map(e => ({ partition: e.partition, bytes: e.bytes }))
+      },
+    }
+  }
+
+  function queryRow(query: string, queryCanonical: string, date: string, clicks: number, impressions: number): Row {
+    return { query, query_canonical: queryCanonical, date, clicks, impressions, sum_position: impressions * 5 }
+  }
+
+  function keyByJoin(rows: Array<Record<string, unknown>>) {
+    return new Map(rows.map(r => [String(r.joinKey), {
+      variantCount: Number(r.variantCount),
+      canonicalName: r.canonicalName == null ? null : String(r.canonicalName),
+      variants: r.variants == null ? null : String(r.variants),
+    }]))
+  }
+
+  async function seed(engine: StorageEngine) {
+    // 'foo' canonical: two variants, 'Foo' out-clicks 'foos' → canonicalName='Foo'.
+    // 'bar' canonical: single variant.
+    await engine.writeDay(
+      { userId: 'u1', siteId: 's1', table: 'queries', date: '2026-03-10' },
+      [
+        queryRow('Foo', 'foo', '2026-03-10', 500, 5000),
+        queryRow('foos', 'foo', '2026-03-10', 100, 1000),
+        queryRow('bar', 'bar', '2026-03-10', 100, 1000),
+      ],
+    )
+  }
+
+  function canonicalState(start: string, end: string): BuilderState {
+    return {
+      dimensions: ['queryCanonical'],
+      filter: {
+        _filters: [{ dimension: 'date', operator: 'between', expression: start, expression2: end }],
+      } as any,
+    }
+  }
+
+  it('materialises the same per-canonical extras the live query produces', async () => {
+    const { engine, dataSource } = await setup()
+    await seed(engine)
+
+    // Live path: the window-function SQL the read path runs today.
+    const liveExtras = await runExtras(engine, { userId: 'u1', siteId: 's1' }, canonicalState('2026-03-01', '2026-03-31'))
+    expect(liveExtras).toHaveLength(1)
+    expect(liveExtras[0].key).toBe('canonicalExtras')
+    const live = keyByJoin(liveExtras[0].rows)
+
+    // Materialised path: build the rollup over real DuckDB, decode the parquet.
+    const results = await rebuildRollups({
+      engine: rollupEngine(engine),
+      dataSource,
+      ctx: { userId: 'u1', siteId: 's1' },
+      defs: [queryCanonicalVariantsRollup],
+      now: () => 1_700_000_000_000,
+    })
+    expect(results[0].error).toBeUndefined()
+    const rolledUp = keyByJoin(await decodeParquetToRows(await dataSource.read(results[0].parquetKey!)))
+
+    // Byte-identical grouping: same canonicals, counts, top variant, and packed
+    // variant strings — so mergeExtras can't tell the two sources apart.
+    expect([...rolledUp.keys()].sort()).toEqual([...live.keys()].sort())
+    for (const [k, v] of live)
+      expect(rolledUp.get(k)).toEqual(v)
+
+    expect(live.get('foo')).toMatchObject({ variantCount: 2, canonicalName: 'Foo' })
+    expect(live.get('bar')).toMatchObject({ variantCount: 1, canonicalName: 'bar' })
   })
 })

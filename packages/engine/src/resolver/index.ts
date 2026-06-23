@@ -13,6 +13,7 @@
 
 export { createResolverAdapter } from './adapter'
 export type { CreateResolverAdapterConfig } from './adapter'
+export { canonicalRollupCovers, planCoveredByCanonicalRollup } from './canonical-source'
 export {
   buildExtrasQueries,
   buildTotalsSql,
@@ -37,6 +38,8 @@ export type {
   LogicalDataset,
   LogicalDatasetDefinition,
 } from './datasets'
+export { createRollupExtrasOverlay } from './extras-overlay'
+export type { RollupRowsReader } from './extras-overlay'
 export {
   dimensionValue,
   getDimensionFilters,
@@ -50,10 +53,12 @@ export {
 export { createSqlFragments } from './fragments'
 export type { SqlFragments, SqlFragmentsConfig } from './fragments'
 export { createIcebergResolverAdapter, createParquetResolverAdapter, pgResolverAdapter } from './pg-adapter'
-export type { PgTableKey } from './pg-adapter'
+export type { PgTableKey, ResolverAdapterOptions } from './pg-adapter'
 export type {
   ComparisonQueryResult,
   OptimizedQueryResult,
+  ResolveExtraFn,
+  RunOptimizedQueryOptions,
   RunQueryCtx,
   RunSQLFn,
 } from './run-query'

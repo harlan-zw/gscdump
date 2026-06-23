@@ -861,6 +861,145 @@ export const topKeywords28dParquetRollup: RollupDef = {
 }
 
 /**
+ * Materialises canonical-query variant grouping so the read path
+ * (`buildExtrasQueries` in `resolver/compile.ts`) becomes a passthrough scan
+ * instead of two window passes (`ROW_NUMBER`/`COUNT` over `PARTITION BY
+ * query_canonical`) plus a `GROUP_CONCAT` over the whole `queries` table on
+ * every request — work that is single-threaded under DuckDB-WASM/Workers and
+ * scales with table size. See ADR-0017.
+ *
+ * One row per `query_canonical` group, columns named 1:1 with the live query's
+ * output (`joinKey`, `variantCount`, `canonicalName`, `variants`) so
+ * `mergeExtras` consumes either source unchanged. `variants` packs the top-10
+ * variants as `query:::clicks:::impressions:::position` joined by `||`,
+ * identical to the live composer.
+ *
+ * Full history (`windowDays: null`), not a trailing window: grouping metadata
+ * is global (which variant is canonical, how many variants exist) and stays
+ * stable across requests rather than shifting with each query's date range.
+ * Reflects the last sync/compaction, not the live tail — readers that need the
+ * tail can layer a recent-overlay later (the envelope carries `builtAt`).
+ */
+export const queryCanonicalVariantsRollup: RollupDef = {
+  id: 'query_canonical_variants',
+  windowDays: null,
+  format: 'parquet',
+  parquetColumns: [
+    { name: 'joinKey', type: 'VARCHAR', nullable: false },
+    { name: 'variantCount', type: 'BIGINT', nullable: false },
+    { name: 'canonicalName', type: 'VARCHAR', nullable: true },
+    { name: 'variants', type: 'VARCHAR', nullable: true },
+  ],
+  parquetSortKey: ['joinKey'],
+  async build({ engine, ctx, searchType }) {
+    const parts = await engine.listPartitions({
+      ctx,
+      table: 'queries',
+      ...(searchType !== undefined ? { searchType } : {}),
+    })
+    if (parts.length === 0)
+      return []
+    const partitions = parts.map(p => p.partition)
+    const result = await engine.runSQL({
+      ctx,
+      table: 'queries',
+      fileSets: { FILES: { table: 'queries', partitions } },
+      ...(searchType !== undefined ? { searchType } : {}),
+      sql: `
+        WITH per_variant AS (
+          SELECT
+            COALESCE(NULLIF(query_canonical, ''), query) AS joinKey,
+            query AS query,
+            SUM(clicks) AS clicks,
+            SUM(impressions) AS impressions,
+            SUM(sum_position) AS sum_pos,
+            ROW_NUMBER() OVER (PARTITION BY COALESCE(NULLIF(query_canonical, ''), query) ORDER BY SUM(clicks) DESC) AS rn,
+            COUNT(*) OVER (PARTITION BY COALESCE(NULLIF(query_canonical, ''), query)) AS variantCount
+          FROM read_parquet({{FILES}}, union_by_name = true)
+          GROUP BY COALESCE(NULLIF(query_canonical, ''), query), query
+        )
+        SELECT
+          joinKey,
+          MAX(variantCount)::BIGINT AS variantCount,
+          MAX(CASE WHEN rn = 1 THEN query END) AS canonicalName,
+          GROUP_CONCAT(CASE WHEN rn <= 10 THEN query || ':::' || clicks || ':::' || impressions || ':::' || CAST(ROUND(CAST(sum_pos AS REAL) / NULLIF(impressions, 0) + 1, 1) AS TEXT) END, '||') AS variants
+        FROM per_variant
+        GROUP BY joinKey
+      `,
+    })
+    return result.rows.map(r => ({
+      joinKey: String(r.joinKey),
+      variantCount: BigInt(r.variantCount as bigint | number),
+      canonicalName: r.canonicalName == null ? null : String(r.canonicalName),
+      variants: r.variants == null ? null : String(r.variants),
+    }))
+  },
+}
+
+/**
+ * Canonical-grained fact aggregate (ADR-0018 Gap 2): pre-sums the raw
+ * `(query × date)` query rows to `(query_canonical × date)`, so canonical-
+ * primary top/gaining/losing reads a small pre-aggregated table instead of
+ * re-collapsing variants on every request. Metrics are additive, so summing
+ * these per-date sums over a window is exact — identical to aggregating the raw
+ * rows.
+ *
+ * Null-free by construction: groups by `COALESCE(NULLIF(query_canonical, ''),
+ * query)`, the same total-key expression the opt-in read path uses (ADR-0018
+ * Gap 1), so the rollup never carries a NULL/'' canonical bucket and the read
+ * path needs no fallback when pointed at it.
+ *
+ * Date-grained full history (`windowDays: null`): one rollup serves every date
+ * range (reads filter by `date`) and both windows of a comparison. Opt-in (not
+ * in `DEFAULT_ROLLUPS`); the host points the main query's file set at it for
+ * queries the rollup covers (see `canonicalRollupCovers` /
+ * `RunOptimizedQueryOptions.canonicalSource`).
+ */
+export const queryCanonicalDailyRollup: RollupDef = {
+  id: 'query_canonical_daily',
+  windowDays: null,
+  format: 'parquet',
+  parquetColumns: [
+    { name: 'query_canonical', type: 'VARCHAR', nullable: false },
+    { name: 'date', type: 'DATE', nullable: false },
+    { name: 'clicks', type: 'BIGINT', nullable: false },
+    { name: 'impressions', type: 'BIGINT', nullable: false },
+    { name: 'sum_position', type: 'DOUBLE', nullable: false },
+  ],
+  parquetSortKey: ['date', 'query_canonical'],
+  async build({ engine, ctx, searchType }) {
+    // Byte-bounded date windows: `(query_canonical × date)` is unbounded for a
+    // large site, so a single scan could exceed the Workers service-binding RPC
+    // cap (32MiB Arrow). Each window date-filters and the grain is keyed by
+    // date, so a date lands in exactly one window — the concat is exact.
+    const rows = await runWindowed({
+      engine,
+      ctx,
+      table: 'queries',
+      ...(searchType !== undefined ? { searchType } : {}),
+      sqlFor: w => `
+        SELECT
+          COALESCE(NULLIF(query_canonical, ''), query) AS query_canonical,
+          CAST(date AS VARCHAR) AS date,
+          SUM(clicks)::BIGINT AS clicks,
+          SUM(impressions)::BIGINT AS impressions,
+          SUM(sum_position)::DOUBLE AS sum_position
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= '${w.start}' AND date <= '${w.end}'
+        GROUP BY COALESCE(NULLIF(query_canonical, ''), query), date
+      `,
+    })
+    return rows.map(r => ({
+      query_canonical: String(r.query_canonical),
+      date: String(r.date),
+      clicks: BigInt(r.clicks as bigint | number),
+      impressions: BigInt(r.impressions as bigint | number),
+      sum_position: Number(r.sum_position),
+    }))
+  },
+}
+
+/**
  * Aggregates the per-URL Indexing API metadata entity store (populated by
  * `gscdump entities indexing snapshot`) into daily counts of `URL_UPDATED`
  * and `URL_REMOVED` notifications. Covers the third entity-snapshot shape
@@ -1276,4 +1415,16 @@ export const DEFAULT_ROLLUPS: readonly RollupDef[] = [
   indexPercentRollup,
   sitemapHealthRollup,
   sitemapChanges28dRollup,
+]
+
+/**
+ * Canonical-primary rollups (ADR-0017 / ADR-0018). Opt-in — kept out of
+ * `DEFAULT_ROLLUPS` because they only pay off once the consumer queries by
+ * `queryCanonical` and wires the read seams (`resolveExtra` /
+ * `canonicalSource`). Hosts opt in by concatenating these onto their def list
+ * (CLI: `gscdump rollups --with-canonical`).
+ */
+export const CANONICAL_ROLLUPS: readonly RollupDef[] = [
+  queryCanonicalVariantsRollup,
+  queryCanonicalDailyRollup,
 ]
