@@ -7,6 +7,7 @@ import {
   resetNodeDuckDB,
 } from '../src/adapters/duckdb-node'
 import { createFilesystemDataSource } from '../src/adapters/filesystem'
+import { createHyparquetCodec } from '../src/adapters/hyparquet'
 import {
   createDuckDBCodec,
   createDuckDBExecutor,
@@ -55,6 +56,45 @@ describe('duckDB (Node blocking) smoke', () => {
     expect(sorted[0].url).toBe('/')
     expect(Number(sorted[0].clicks)).toBe(5)
     expect(Number(sorted[1].impressions)).toBe(50)
+  })
+
+  it('reads hyparquet-written non-ASCII (multibyte) string columns without a UTF8 stats error', async () => {
+    // Regression: hyparquet-writer truncates parquet min/max statistics to 16
+    // bytes. Upstream cut at exactly 16 bytes, which splits a multibyte UTF8
+    // sequence mid-character — the resulting stat is invalid UTF8 and DuckDB
+    // rejects the ENTIRE file ("Invalid string encoding found in Parquet file"),
+    // so every DuckDB / DuckDB-WASM read of a slice with non-ASCII queries/urls
+    // fell back to the server. The gscdump patch (patches/hyparquet-writer)
+    // backs the cut off to a character boundary. Write via the hyparquet codec
+    // (the patched writer), then read back via DuckDB (the strict reader that
+    // validates footer stats) — the path that throws in production.
+    const handle = createNodeDuckDBHandle()
+    const codec = createHyparquetCodec()
+    const executor = createDuckDBExecutor({ getDuckDB: async () => handle })
+    const dataSource = createInMemoryDataSource()
+
+    // Persian + Japanese queries, each > 16 bytes, so the 16-byte stats window
+    // lands mid-character on the unpatched writer. The Persian string is the one
+    // from the production Sentry report.
+    const fa = 'اسکریپت نویسی پیشرفته'
+    const ja = '日本語のキーワードをもっと長く'
+    const rows = [
+      { query: fa, query_canonical: fa, date: '2025-01-01', clicks: 9, impressions: 90, sum_position: 12 },
+      { query: ja, query_canonical: ja, date: '2025-01-01', clicks: 3, impressions: 30, sum_position: 8 },
+    ]
+    await codec.writeRows({ table: 'queries' }, rows, 'multibyte.parquet', dataSource)
+
+    const result = await executor.execute({
+      sql: 'SELECT query, clicks FROM read_parquet({{FILES}}) ORDER BY clicks DESC',
+      params: [],
+      fileKeys: { FILES: ['multibyte.parquet'] },
+      dataSource,
+      table: 'queries',
+    })
+
+    expect(result.rows).toHaveLength(2)
+    expect(result.rows[0].query).toBe(fa)
+    expect(result.rows[1].query).toBe(ja)
   })
 
   it('executes a parameterized parquet SELECT via the executor', async () => {

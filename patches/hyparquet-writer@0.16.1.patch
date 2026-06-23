@@ -1,0 +1,40 @@
+diff --git a/src/unconvert.js b/src/unconvert.js
+index c984fc7c70720708adb5276fc4e0fcb8fcdc4ee7..ab1ad25d50083d18ef33987ababb84510660b516 100644
+--- a/src/unconvert.js
++++ b/src/unconvert.js
+@@ -140,14 +140,27 @@ const STATS_TRUNCATE_LENGTH = 16
+  */
+ function truncateStatistic(bytes, isMax) {
+   if (bytes.length <= STATS_TRUNCATE_LENGTH) return bytes
+-  const prefix = bytes.slice(0, STATS_TRUNCATE_LENGTH)
+-  if (!isMax) return prefix // a prefix is a valid lower bound
+-  let i = prefix.length - 1
+-  while (i >= 0 && prefix[i] === 0xff) i-- // drop trailing 0xFF
+-  if (i < 0) return undefined // all 0xFF: no valid shorter upper bound
+-  const rounded = prefix.slice(0, i + 1)
+-  rounded[i] += 1
+-  return rounded
++  // PATCH (gscdump): truncate to a UTF8 CHARACTER boundary within
++  // STATS_TRUNCATE_LENGTH bytes. The upstream code cut at exactly 16 bytes,
++  // which splits a multibyte UTF8 sequence mid-character — the resulting min/max
++  // stat is invalid UTF8, and strict parquet readers (DuckDB / DuckDB-WASM)
++  // reject the ENTIRE file ("Invalid string encoding found in Parquet file"),
++  // so every browser/worker DuckDB read of a slice with non-ASCII queries/urls
++  // fell back to the server. Backing the cut off any trailing continuation byte
++  // (0b10xxxxxx) guarantees the prefix ends on a complete character.
++  let cut = STATS_TRUNCATE_LENGTH
++  while (cut > 0 && (bytes[cut] & 0xc0) === 0x80) cut--
++  const prefix = bytes.slice(0, cut)
++  if (!isMax) return prefix // a char-boundary prefix is a valid lower bound
++  // Upper bound: prefix + U+10FFFF (the maximum code point, F4 8F BF BF) is
++  // valid UTF8 and >= the original — no valid UTF8 char can sort after U+10FFFF,
++  // so this is a sound upper bound without a byte-level increment that could
++  // itself produce invalid UTF8. Slightly looser than the tightest prefix-round
++  // but correct, and string-column range pruning is not on any hot path.
++  const out = new Uint8Array(prefix.length + 4)
++  out.set(prefix, 0)
++  out.set([0xf4, 0x8f, 0xbf, 0xbf], prefix.length)
++  return out
+ }
+ 
+ /**

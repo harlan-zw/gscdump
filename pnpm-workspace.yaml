@@ -30,6 +30,7 @@ overrides:
   '@types/node>undici-types': ^7.0.0
   tinyexec: 1.1.2
 patchedDependencies:
+  hyparquet-writer@0.16.1: patches/hyparquet-writer@0.16.1.patch
   icebird@0.8.10: patches/icebird@0.8.10.patch
 catalog:
   '@cloudflare/vitest-pool-workers': ^0.16.18
