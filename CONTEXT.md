@@ -41,12 +41,28 @@ Pure contract `{ id, requires, build, reduce }`. Two families: `ROW_ANALYZERS` (
 _Avoid_: tool, report, query.
 
 **Rollup** (`RollupDef`):
-Post-sync JSON aggregate written to `u_<u>/<s>/rollups/<id>__v<ts>.json`. Cheap reads, fixed shape. Distinct from analyzers, which run on demand.
+Post-sync aggregate written to `u_<u>/<s>/rollups/<id>__v<ts>.{json,parquet}`. Cheap reads, fixed shape. JSON for small widgets; parquet for server-side-filterable tables. The opt-in canonical-primary set (`CANONICAL_ROLLUPS`: `query_canonical_daily`, `query_canonical_variants`) is materialized from the **Query Dimension** and consumed via the read-path overlay seams. Distinct from analyzers, which run on demand.
 _Avoid_: aggregate, summary, snapshot (collides with **Entity** snapshots).
 
 **Entity**:
-Per-site slow-changing state, point-lookup-by-id — URL inspections, sitemap snapshots, indexing-metadata events. Distinct family from time-series facts.
+Per-site slow-changing state, point-lookup-by-id — URL inspections, sitemap snapshots, indexing-metadata events, the query dimension. Distinct family from time-series facts.
 _Avoid_: record (overloaded), object.
+
+**Canonical Query** (`query_canonical`; `normalizeQuery` in `@gscdump/analysis`):
+The grouping key for near-duplicate search queries — unicode-folded, lowercased, singularized, bag-of-words sorted (except asymmetric `X to Y` conversions), versioned by `NORMALIZER_VERSION`. Read paths treat it as a TOTAL key via `COALESCE(NULLIF(query_canonical, ''), query)` under the opt-in `canonicalFallback`. See ADR-0018/0019.
+_Avoid_: slug, hash. Don't bake brand into it (brand is per-tenant + mutable).
+
+**Query Dimension** (`query_dim`; `createQueryDimStore`):
+Per-site **Entity** mapping each distinct `query → { canonical, intent_code, normalizer_version, intent_version }`, built offline. The versioned home for everything derived from a query string; rollups/reads JOIN it, so re-canonicalizing is a dimension rebuild, not a fact re-ingest. The natural home for a future per-canonical embedding. See ADR-0017/0020.
+_Avoid_: lookup table, cache.
+
+**Search Intent** (`classifyQueryIntent`):
+Lexical, versioned (`INTENT_CLASSIFIER_VERSION`) class of a raw query — informational / commercial / transactional / unknown, plus a `howTo` flag, packed to a small int (`encodeIntent`). Query-pure → materialized in the dimension or computed at query time. Brand intent is deliberately excluded (per-tenant + mutable). See ADR-0020.
+_Avoid_: category, tag.
+
+**Read-path overlay seam** (`canonicalSource`, `resolveExtra`):
+Opt-in hooks on `runOptimizedQuery` that let the MAIN query read a materialized canonical rollup, and extras read a variant rollup, instead of re-aggregating facts — gated so a miss falls back to live aggregation (correct, never wrong). See ADR-0017/0018.
+_Avoid_: cache, materialized view (it's a fallback-gated source override).
 
 **PyIceberg writer runtime**:
 Private Engine adapter for Python-backed Iceberg append/overwrite jobs. Owns the Python interpreter fallback and subprocess JSON contract; storage writers build jobs and interpret domain results.

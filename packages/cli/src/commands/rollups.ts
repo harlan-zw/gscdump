@@ -1,9 +1,44 @@
 import type { TableName } from '../local-store'
+import {
+  classifyQueryIntent,
+  encodeIntent,
+  INTENT_CLASSIFIER_VERSION,
+  normalizeQuery,
+  NORMALIZER_VERSION,
+} from '@gscdump/analysis'
+import { buildQueryDimRecords, createQueryDimStore } from '@gscdump/engine/entities'
 import { CANONICAL_ROLLUPS, DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
+
+// Build the versioned query→canonical(+intent) dimension for a site from its
+// distinct queries, so the canonical rollups JOIN current-version canonical
+// instead of the stored fact column (ADR-0019 / ADR-0020). Returns the row count.
+async function buildSiteQueryDim(
+  store: NonNullable<Awaited<ReturnType<typeof createCommandContext>>['store']>,
+  siteId: string,
+): Promise<number> {
+  const ctx = { userId: store.userId, siteId }
+  const entries = await store.engine.listLive({ userId: ctx.userId, siteId, table: 'queries' as TableName })
+  if (entries.length === 0)
+    return 0
+  const { rows } = await store.engine.runSQL({
+    ctx,
+    table: 'queries' as TableName,
+    fileSets: { FILES: { table: 'queries' as TableName, partitions: entries.map(e => e.partition) } },
+    sql: `SELECT DISTINCT query FROM read_parquet({{FILES}}, union_by_name = true) WHERE query IS NOT NULL`,
+  })
+  const records = buildQueryDimRecords(rows.map(r => String(r.query)), {
+    normalizeQuery,
+    normalizerVersion: NORMALIZER_VERSION,
+    classifyIntentCode: q => encodeIntent(classifyQueryIntent(q)),
+    intentVersion: INTENT_CLASSIFIER_VERSION,
+  })
+  await createQueryDimStore({ dataSource: store.dataSource }).write(ctx, records, Date.now())
+  return records.length
+}
 
 const rebuildSubCommand = defineCommand({
   meta: {
@@ -60,6 +95,11 @@ const rebuildSubCommand = defineCommand({
     const summary: Array<{ siteId: string, rollups: Array<{ id: string, bytes: number, objectKey: string }> }> = []
     let totalBytes = 0
     for (const siteId of allSiteIds) {
+      if (args['with-canonical']) {
+        const dimRows = await buildSiteQueryDim(store, siteId)
+        if (!json)
+          logger.info(`Built query dimension for [${siteId}] (${dimRows} distinct queries, normalizer v${NORMALIZER_VERSION})`)
+      }
       logger.info(`Rebuilding rollups for [${siteId}] (${defs.length} rollups)`)
       const results = await rebuildRollups({
         engine: {

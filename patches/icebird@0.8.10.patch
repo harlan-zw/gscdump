@@ -372,3 +372,10 @@ index 9a205ab2d8e877b3652e8e0a5dad48711abfada4..5a8b0c5addf52a755753a6533d569ae3
  /**
   * Split manifest entries into data and delete manifests.
   *
+@@ -43,5 +49,6 @@ export type ManifestList = {
+ }[];
+ import type { TableMetadata } from '../src/types.js';
+ import type { Resolver } from '../src/types.js';
++import type { Manifest } from '../src/types.js';
+ import type { ManifestEntry } from '../src/types.js';
+ //# sourceMappingURL=manifest.d.ts.map

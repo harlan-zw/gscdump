@@ -84,7 +84,8 @@
     "@gscdump/engine": "workspace:*",
     "@gscdump/engine-gsc-api": "workspace:*",
     "drizzle-orm": "catalog:",
-    "gscdump": "workspace:*"
+    "gscdump": "workspace:*",
+    "pluralize": "catalog:"
   },
   "devDependencies": {
     "vitest": "catalog:dev-test"

@@ -12,7 +12,9 @@ import { join } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createNodeDuckDBHandle, resetNodeDuckDB } from '../src/adapters/duckdb-node'
 import { createFilesystemDataSource, createFilesystemManifestStore } from '../src/adapters/filesystem'
+import { decodeParquetToRows } from '../src/adapters/hyparquet'
 import { createDuckDBCodec, createDuckDBExecutor, createStorageEngine } from '../src/index'
+import { buildQueryDimRecords, createQueryDimStore } from '../src/query-dim'
 import { canonicalRollupCovers } from '../src/resolver/canonical-source'
 import { createParquetResolverAdapter } from '../src/resolver/pg-adapter'
 import { runComparisonQuery, runOptimizedQuery } from '../src/resolver/run-query'
@@ -35,6 +37,19 @@ function canonicalState(start: string, end: string, extra: Partial<BuilderState>
 describe('canonicalRollupCovers (eligibility gate)', () => {
   it('covers a canonical-only query filtered by date', () => {
     expect(canonicalRollupCovers(canonicalState('2026-03-01', '2026-03-31'), caps)).toBe(true)
+  })
+
+  it('covers a canonical-only query filtered by queryCanonical', () => {
+    const state: BuilderState = {
+      dimensions: ['queryCanonical'],
+      filter: {
+        _filters: [
+          { dimension: 'date', operator: 'between', expression: '2026-03-01', expression2: '2026-03-31' },
+          { dimension: 'queryCanonical', operator: 'equals', expression: 'bar' },
+        ],
+      } as any,
+    }
+    expect(canonicalRollupCovers(state, caps)).toBe(true)
   })
 
   it('rejects grouping by the raw query', () => {
@@ -135,6 +150,33 @@ describe('query_canonical_daily rollup (integration)', () => {
     }]))
   }
 
+  it('derives canonical from the query dimension when present (not the stored column)', async () => {
+    const { engine, dataSource } = await setup()
+    await seed(engine) // stored query_canonical is 'foo' for Foo/foos
+    // Build a dimension that maps the foo-variants to a DIFFERENT canonical,
+    // simulating an improved/newer normalizer. The rollup must reflect this
+    // without re-ingesting the facts.
+    const store = createQueryDimStore({ dataSource })
+    const recs = buildQueryDimRecords(['Foo', 'foos', 'bar', 'baz'], {
+      normalizeQuery: q => (q.toLowerCase() === 'foo' || q.toLowerCase() === 'foos' ? 'foo_v2' : q.toLowerCase()),
+      normalizerVersion: 3,
+      classifyIntentCode: () => 0,
+      intentVersion: 1,
+    })
+    await store.write({ userId: 'u1', siteId: 's1' }, recs, 1_700_000_000_000)
+
+    const key = await buildDaily(engine, dataSource)
+    const rows = await decodeParquetToRows(await dataSource.read(key))
+    // Rollup is date-grained, so sum a canonical's clicks across its date rows.
+    const sumByKey = new Map<string, number>()
+    for (const r of rows)
+      sumByKey.set(String(r.query_canonical), (sumByKey.get(String(r.query_canonical)) ?? 0) + Number(r.clicks))
+    // Grouped under the dimension's canonical, summing both foo variants.
+    expect(sumByKey.has('foo_v2')).toBe(true)
+    expect(sumByKey.has('foo')).toBe(false)
+    expect(sumByKey.get('foo_v2')).toBe(19) // 10+5 (Mar 3) + 4 (Mar 10)
+  })
+
   it('top: rollup-served results equal live raw aggregation (with fallback)', async () => {
     const { engine, dataSource } = await setup()
     await seed(engine)
@@ -153,6 +195,32 @@ describe('query_canonical_daily rollup (integration)', () => {
     // 'foo' sums both variants across both days; bar/baz folded to themselves.
     expect(liveMap.get('foo')).toEqual({ clicks: 19, impressions: 190 })
     expect(rolledMap.get('bar')).toEqual({ clicks: 7, impressions: 70 })
+  })
+
+  it('top: queryCanonical filters use fallback on live and match the rollup', async () => {
+    const { engine, dataSource } = await setup()
+    await seed(engine)
+    const key = await buildDaily(engine, dataSource)
+    const filtered: BuilderState = {
+      dimensions: ['queryCanonical'],
+      filter: {
+        _filters: [
+          { dimension: 'date', operator: 'between', expression: '2026-03-01', expression2: '2026-03-31' },
+          { dimension: 'queryCanonical', operator: 'equals', expression: 'bar' },
+        ],
+      } as any,
+    }
+    const range = { startDate: '2026-03-01', endDate: '2026-03-31' }
+
+    const live = await runOptimizedQuery(engine.runSQL, ctx, filtered, range, { canonicalFallback: true })
+    const rolled = await runOptimizedQuery(engine.runSQL, ctx, filtered, range, { canonicalSource: { keys: [key] }, canonicalFallback: true })
+
+    const liveMap = byCanonical(live.rows)
+    const rolledMap = byCanonical(rolled.rows)
+    expect([...liveMap.keys()]).toEqual(['bar'])
+    expect([...rolledMap.keys()]).toEqual(['bar'])
+    expect(rolledMap.get('bar')).toEqual(liveMap.get('bar'))
+    expect(liveMap.get('bar')).toEqual({ clicks: 7, impressions: 70 })
   })
 
   it('ignores canonicalSource (live path) for an ineligible query — never wrong data', async () => {

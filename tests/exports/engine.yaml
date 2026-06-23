@@ -86,9 +86,11 @@
   splitOverlappingTiers: function
 ./contracts: {}
 ./entities:
+  buildQueryDimRecords: function
   createEmptyTypesStore: function
   createIndexingMetadataStore: function
   createInspectionStore: function
+  createQueryDimStore: function
   createSitemapStore: function
   emptyTypesKey: function
   hashUrl: function
@@ -103,6 +105,8 @@
   inspectionHistoryShardKey: function
   inspectionIndexKey: function
   inspectionParquetKey: function
+  queryDimMetaKey: function
+  queryDimParquetKey: function
   sitemapHistoryKey: function
   sitemapIndexKey: function
   sitemapUrlsDeltaKey: function
@@ -194,9 +198,11 @@
   assertSchemaInSync: function
   buildExtrasQueries: function
   buildTotalsSql: function
+  canonicalRollupCovers: function
   createIcebergResolverAdapter: function
   createParquetResolverAdapter: function
   createResolverAdapter: function
+  createRollupExtrasOverlay: function
   createSqlFragments: function
   DIMENSION_SURFACES: object
   dimensionColumn: function
@@ -213,6 +219,7 @@
   mergeExtras: function
   metricValue: function
   pgResolverAdapter: object
+  planCoveredByCanonicalRollup: function
   resolveComparisonSQL: function
   resolveToSQL: function
   resolveToSQLOptimized: function
@@ -221,6 +228,7 @@
   supportsDimensionOnSurface: function
   UnresolvableDatasetError: function
 ./rollups:
+  CANONICAL_ROLLUPS: object
   dailyTotalsRollup: object
   DEFAULT_ROLLUPS: object
   indexingHealthRollup: object
@@ -229,6 +237,8 @@
   partitionDaySpan: function
   partitionsInRange: function
   planRollupWindows: function
+  queryCanonicalDailyRollup: object
+  queryCanonicalVariantsRollup: object
   readLatestRollup: function
   rebuildDailyFromHourly: function
   rebuildRollups: function

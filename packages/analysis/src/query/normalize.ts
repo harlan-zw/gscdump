@@ -1,6 +1,9 @@
-// Canonical form for grouping similar search queries:
-// lowercased, separators stripped, tokens sorted, synonyms collapsed,
-// trailing-s depluralized (with a hand-tuned exception list for tech terms).
+// Canonical form for grouping similar search queries: unicode-folded,
+// lowercased, separators stripped, synonyms collapsed, singularized via
+// `pluralize` (tech-term skip list), then bag-of-words sorted — except `X to Y`
+// conversions, whose word order is preserved.
+
+import pluralize from 'pluralize'
 
 const SYNONYMS: Record<string, string> = {
   // validation-related
@@ -151,43 +154,106 @@ const NO_STRIP_S = new Set([
 ])
 
 function depluralize(token: string): string {
-  if (token.length <= 3)
+  // Short tokens and curated tech terms (css, redis, kubernetes, postgres, …)
+  // are protected: `pluralize` is English-rule-based and would mangle domain
+  // jargon it doesn't know. Everything else goes through the library's
+  // singularizer, which handles irregulars (analyses→analysis), -ies/-ses/-xes,
+  // and uncountables (series, news) far more correctly than hand-rolled rules.
+  // `-sis` words are Greek-origin singulars (oasis, nemesis, basis, analysis)
+  // whose plural is `-ses`, never themselves plural — pluralize mangles some
+  // (oasis→oasi), so guard the whole ending generically.
+  if (token.length <= 3 || NO_STRIP_S.has(token) || token.endsWith('sis'))
     return token
-  if (NO_STRIP_S.has(token))
-    return token
-  // ies → y (queries→query)
-  if (token.endsWith('ies') && token.length > 4)
-    return `${token.slice(0, -3)}y`
-  // ses → se after sibilants (databases→database)
-  if (token.endsWith('ses') && token.length > 4)
-    return token.slice(0, -1)
-  // es after sh/ch/x/z (matches→match, indexes→index)
-  if (token.endsWith('shes') || token.endsWith('ches') || token.endsWith('xes') || token.endsWith('zes'))
-    return token.slice(0, -2)
-  // simple trailing s
-  if (token.endsWith('s') && !token.endsWith('ss'))
-    return token.slice(0, -1)
-  return token
+  return pluralize.singular(token)
 }
 
 const SEPARATOR_RE = /[-_/.@#:+]+/g
 const WHITESPACE_RE = /\s+/g
+const DIACRITICS_RE = /\p{Diacritic}/gu
+
+/**
+ * Algorithm version. Bump on ANY behaviour change (synonyms, depluralize,
+ * folding) so downstream stores can record which version produced a
+ * `query_canonical` and detect/repair staleness on a rule change instead of
+ * silently mixing old and new keys. v1 = the original ASCII heuristic;
+ * v2 adds Unicode folding, the empty-canonical guard, and `pluralize`-based
+ * singularization.
+ */
+export const NORMALIZER_VERSION = 2
+
+/**
+ * Fold to a script-neutral base so accented and full-width variants of the same
+ * query group together. NFKD decomposes compatibility forms (full-width
+ * `ｓｅｏ` → `seo`, ligatures) and splits diacritics off their base letter
+ * (`café` → `cafe`), which we then strip. Idempotent on already-ASCII input.
+ */
+function foldUnicode(s: string): string {
+  return s.normalize('NFKD').replace(DIACRITICS_RE, '')
+}
+
+// Asymmetric connectors where word order carries meaning (conversion /
+// direction): `a to b` ≠ `b to a`. Symmetric connectors (`vs`, `and`, `or`)
+// are intentionally absent — comparisons read the same either way and should
+// still merge under the sort.
+const DIRECTIONAL_CONNECTORS = new Set(['to', 'into', '>', '→'])
+
+// Words that make a following `to` a non-directional idiom ("how to", "guide
+// to", "best way to") rather than an `X to Y` conversion. Stored singular
+// because the check runs on already-depluralized tokens.
+const NON_DIRECTIONAL_BEFORE = new Set([
+  'how',
+  'what',
+  'why',
+  'when',
+  'where',
+  'who',
+  'which',
+  'guide',
+  'way',
+  'tip',
+  'intro',
+  'introduction',
+  'learn',
+  'tutorial',
+  'step',
+  'reason',
+  'idea',
+  'example',
+  'benefit',
+  'need',
+])
+
+// True when a directional connector sits as a real infix (a content token on
+// each side) whose left neighbour isn't an idiom word — i.e. an `X to Y`
+// conversion whose order must be preserved rather than alphabetised. Symmetric
+// `vs` and idiomatic `how to …` fall through to the sort and keep merging.
+function isOrderSensitive(tokens: readonly string[]): boolean {
+  for (let i = 1; i < tokens.length - 1; i++) {
+    if (DIRECTIONAL_CONNECTORS.has(tokens[i]!) && !NON_DIRECTIONAL_BEFORE.has(tokens[i - 1]!))
+      return true
+  }
+  return false
+}
 
 /**
  * Produce a canonical form of a search query for grouping near-duplicates.
  * Idempotent: `normalizeQuery(normalizeQuery(q)) === normalizeQuery(q)`.
  */
 export function normalizeQuery(query: string): string {
-  return query
+  const cleaned = foldUnicode(query)
     .toLowerCase()
     .replace(SEPARATOR_RE, ' ')
     .replace(WHITESPACE_RE, ' ')
     .trim()
     .split(' ')
     .filter(Boolean)
-    .map(token => SYNONYMS[token] ?? token)
-    .filter(Boolean)
-    .map(depluralize)
-    .sort()
-    .join(' ')
+  // Synonym map; a few tokens map to '' (noise words: free / online).
+  const mapped = cleaned.map(token => SYNONYMS[token] ?? token).filter(Boolean)
+  // Empty-canonical guard: if stripping noise emptied the query (e.g.
+  // "free online"), keep the original tokens. Emitting '' would collapse every
+  // noise-only query into one meaningless group and force a downstream fallback.
+  const tokens = (mapped.length > 0 ? mapped : cleaned).map(depluralize)
+  // Bag-of-words grouping (sort) EXCEPT for `X to Y` conversions, where order is
+  // meaning. See ADR-0019.
+  return (isOrderSensitive(tokens) ? tokens : tokens.sort()).join(' ')
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeQuery } from '../src/query/normalize'
+import { normalizeQuery, NORMALIZER_VERSION } from '../src/query/normalize'
 
 describe('normalizeQuery', () => {
   it('lowercases and sorts tokens', () => {
@@ -111,5 +111,73 @@ describe('normalizeQuery', () => {
 
   it('preserves unknown tokens as-is', () => {
     expect(normalizeQuery('react hooks tutorial')).toBe('hook react tutorial')
+  })
+
+  it('folds diacritics so accented variants group (café → cafe)', () => {
+    expect(normalizeQuery('café')).toBe('cafe')
+    expect(normalizeQuery('café')).toBe(normalizeQuery('cafe'))
+    expect(normalizeQuery('naïve résumé')).toBe(normalizeQuery('naive resume'))
+  })
+
+  it('folds full-width / compatibility forms to ASCII', () => {
+    expect(normalizeQuery('ｓｅｏ')).toBe('seo')
+    expect(normalizeQuery('ｎｕｘｔ ｓｅｏ')).toBe(normalizeQuery('nuxt seo'))
+  })
+
+  it('empty-canonical guard: noise-only queries keep their tokens, never ""', () => {
+    // Previously these stripped to '' (every noise query in one bogus group).
+    expect(normalizeQuery('free')).toBe('free')
+    expect(normalizeQuery('online')).toBe('online')
+    expect(normalizeQuery('free online')).toBe('free online')
+    // Noise is still stripped when real tokens remain.
+    expect(normalizeQuery('free sitemap')).toBe('sitemap')
+  })
+
+  it('is idempotent over the new folding + guard paths', () => {
+    for (const q of ['café', 'ｓｅｏ', 'free online', 'Nuxt-SEO Tools', 'naïve résumé']) {
+      const once = normalizeQuery(q)
+      expect(normalizeQuery(once)).toBe(once)
+    }
+  })
+
+  it('singularizer no longer corrupts non-plural words (was plus→plu, lotus→lotu)', () => {
+    expect(normalizeQuery('plus')).toBe('plus')
+    expect(normalizeQuery('lotus')).toBe('lotus')
+    expect(normalizeQuery('oasis')).toBe('oasis')
+    expect(normalizeQuery('nemesis')).toBe('nemesis')
+    expect(normalizeQuery('apparatus')).toBe('apparatus')
+  })
+
+  it('singularizer handles irregulars + uncountables correctly', () => {
+    expect(normalizeQuery('analyses')).toBe('analysis') // irregular plural
+    expect(normalizeQuery('series')).toBe('series') // uncountable (was → "sery")
+    expect(normalizeQuery('news')).toBe('news')
+    expect(normalizeQuery('buses')).toBe('bus')
+  })
+
+  it('preserves order for X→Y conversions (json to yaml ≠ yaml to json)', () => {
+    expect(normalizeQuery('json to yaml')).toBe('json to yaml')
+    expect(normalizeQuery('yaml to json')).toBe('yaml to json')
+    expect(normalizeQuery('json to yaml')).not.toBe(normalizeQuery('yaml to json'))
+    expect(normalizeQuery('px to rem')).toBe('px to rem')
+    expect(normalizeQuery('celsius into fahrenheit')).toBe('celsius into fahrenheit')
+  })
+
+  it('still merges idiomatic "how/guide to …" and symmetric "vs" comparisons', () => {
+    // 'to' after an idiom word is non-directional → sorts and merges.
+    expect(normalizeQuery('how to validate sitemap')).toBe(normalizeQuery('sitemap validate how to'))
+    // 'vs' is symmetric → both orders merge.
+    expect(normalizeQuery('react vs vue')).toBe(normalizeQuery('vue vs react'))
+  })
+
+  it('is idempotent over the directional path', () => {
+    for (const q of ['json to yaml', 'how to center a div', 'react vs vue', 'px to rem']) {
+      const once = normalizeQuery(q)
+      expect(normalizeQuery(once)).toBe(once)
+    }
+  })
+
+  it('exposes a bumped NORMALIZER_VERSION for staleness tracking', () => {
+    expect(NORMALIZER_VERSION).toBe(2)
   })
 })

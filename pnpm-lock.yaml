@@ -78,6 +78,9 @@ catalogs:
     playwright:
       specifier: ^1.61.0
       version: 1.61.0
+    pluralize:
+      specifier: ^8.0.0
+      version: 8.0.0
     retriv:
       specifier: ^0.14.7
       version: 0.14.7
@@ -175,7 +178,7 @@ overrides:
   tinyexec: 1.1.2
 
 patchedDependencies:
-  icebird@0.8.10: 451abe0abfda2fb7d76b9c8805d9fa977e80aabe9b70c6d806449c5c55f58343
+  icebird@0.8.10: 25652d79f68e9b1b14cf58748ec69083e2edc2d7b98f7db80e7ae89670ece397
 
 importers:
 
@@ -295,6 +298,9 @@ importers:
       gscdump:
         specifier: workspace:*
         version: link:../gscdump
+      pluralize:
+        specifier: 'catalog:'
+        version: 8.0.0
     devDependencies:
       vitest:
         specifier: catalog:dev-test
@@ -428,7 +434,7 @@ importers:
         version: 1.0.20
       icebird:
         specifier: 'catalog:'
-        version: 0.8.10(patch_hash=451abe0abfda2fb7d76b9c8805d9fa977e80aabe9b70c6d806449c5c55f58343)
+        version: 0.8.10(patch_hash=25652d79f68e9b1b14cf58748ec69083e2edc2d7b98f7db80e7ae89670ece397)
       tsx:
         specifier: 'catalog:'
         version: 4.22.4
@@ -13523,7 +13529,7 @@ snapshots:
 
   hysnappy@1.0.0: {}
 
-  icebird@0.8.10(patch_hash=451abe0abfda2fb7d76b9c8805d9fa977e80aabe9b70c6d806449c5c55f58343):
+  icebird@0.8.10(patch_hash=25652d79f68e9b1b14cf58748ec69083e2edc2d7b98f7db80e7ae89670ece397):
     dependencies:
       hyparquet: 1.26.0
       hyparquet-compressors: 1.1.1

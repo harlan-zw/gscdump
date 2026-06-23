@@ -71,7 +71,9 @@ export {
   isAnalysisError,
 } from './errors'
 
-export { normalizeQuery } from './query/normalize'
+export { classifyQueryIntent, decodeIntent, encodeIntent, INTENT_CLASSIFIER_VERSION, SEARCH_INTENT_CODE } from './query/intent'
+export type { IntentClassification, SearchIntent } from './query/intent'
+export { normalizeQuery, NORMALIZER_VERSION } from './query/normalize'
 
 // Reports — public surface. `defineReport` lives at `@gscdump/engine/report`
 // so the contract is readable without pulling the runtime in.

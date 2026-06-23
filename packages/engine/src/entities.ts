@@ -13,6 +13,10 @@ import type { DataSource } from './storage'
 import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { readOptional } from './adapters/read-optional'
 
+// The versioned query→canonical(+intent) dimension is an entity store; surface
+// it on the same `@gscdump/engine/entities` subpath.
+export * from './query-dim'
+
 /**
  * GSC URL inspection result fields we persist. Mirrors the
  *  `searchconsole_v1.Schema$UrlInspectionResult` shape but as plain JSON

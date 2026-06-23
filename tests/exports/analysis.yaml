@@ -12,26 +12,31 @@
   analyzePageConcentration: function
   AnalyzerCapabilityError: function
   analyzeSeasonality: function
+  classifyQueryIntent: function
   comparisonOf: function
   createAnalyzerRegistry: function
   createCompositeSource: function
   createEngineQuerySource: function
   createInMemoryQuerySource: function
   createSorter: function
+  decodeIntent: function
   DEFAULT_PRIORITY_SOURCES: object
   defaultAnalyzerRegistry: object
   defaultReportRegistry: object
   defineAnalyzer: function
   diffSitemapHealth: function
   dryRunReport: function
+  encodeIntent: function
   ENGINE_QUERY_CAPABILITIES: object
   formatAnalysisError: function
   formatReport: function
   IN_MEMORY_DEFAULT_CAPABILITIES: object
+  INTENT_CLASSIFIER_VERSION: number
   isAnalysisError: function
   mergePriorityActions: function
   normalizePriorityActions: function
   normalizeQuery: function
+  NORMALIZER_VERSION: number
   num: function
   padTimeseries: function
   periodOf: function
@@ -46,6 +51,7 @@
   runReport: function
   runReportResult: function
   scorePriorityActions: function
+  SEARCH_INTENT_CODE: object
   SQL_ANALYZERS: object
   typedQuery: function
   windowToComparisonPeriod: function

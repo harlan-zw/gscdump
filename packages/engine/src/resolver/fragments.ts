@@ -260,9 +260,11 @@ export function createSqlFragments<TableKey extends string>(
       if (f.operator === 'topLevel')
         continue
 
-      const colName = dimColumn(f.dimension as Dimension, tableKey)
+      const dim = f.dimension as Dimension
+      const colName = dimColumn(dim, tableKey)
       const cRef = colRef(tableKey, colName)
-      const matchExpr = f.dimension === 'page' ? dimExprSql(f.dimension as Dimension, tableKey) : cRef
+      const matchExpr = dim === 'page' || dim === 'queryCanonical' ? dimExprSql(dim, tableKey) : cRef
+      const patternExpr = dim === 'queryCanonical' ? matchExpr : cRef
 
       switch (f.operator) {
         case 'equals':
@@ -272,16 +274,16 @@ export function createSqlFragments<TableKey extends string>(
           preds.push(sql`${matchExpr} != ${f.expression}`)
           break
         case 'contains':
-          preds.push(sql`${cRef} LIKE ${`%${escapeLike(f.expression)}%`} ESCAPE '\\'`)
+          preds.push(sql`${patternExpr} LIKE ${`%${escapeLike(f.expression)}%`} ESCAPE '\\'`)
           break
         case 'notContains':
-          preds.push(sql`${cRef} NOT LIKE ${`%${escapeLike(f.expression)}%`} ESCAPE '\\'`)
+          preds.push(sql`${patternExpr} NOT LIKE ${`%${escapeLike(f.expression)}%`} ESCAPE '\\'`)
           break
         case 'includingRegex':
-          preds.push(regexPredicate(cRef, f.expression, false))
+          preds.push(regexPredicate(patternExpr, f.expression, false))
           break
         case 'excludingRegex':
-          preds.push(regexPredicate(cRef, f.expression, true))
+          preds.push(regexPredicate(patternExpr, f.expression, true))
           break
       }
     }

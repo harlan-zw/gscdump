@@ -138,6 +138,22 @@ describe('createParquetResolverAdapter', () => {
     expect(r.sql).not.toContain('INSTR')
   })
 
+  it('applies canonical fallback to queryCanonical predicates', () => {
+    const adapter = createParquetResolverAdapter({ canonicalFallback: true })
+    const r = resolveToSQLOptimized(state({
+      dimensions: ['queryCanonical'],
+      filter: {
+        _filters: [
+          { dimension: 'date', operator: 'between', expression: '2026-03-01', expression2: '2026-03-31' },
+          { dimension: 'queryCanonical', operator: 'equals', expression: 'bar' },
+        ],
+      } as any,
+    }), { adapter })
+    const coalesces = r.sql.match(/COALESCE\(NULLIF\("queries"\."query_canonical"/g) ?? []
+    expect(coalesces).toHaveLength(3)
+    expect(r.params).toContain('bar')
+  })
+
   it('produces a fresh adapter instance per call (no caching)', () => {
     expect(createParquetResolverAdapter()).not.toBe(createParquetResolverAdapter())
   })

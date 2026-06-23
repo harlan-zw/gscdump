@@ -113,6 +113,32 @@ describe('canonicalFallback (integration)', () => {
     expect([...byKey.keys()]).not.toContain('')
   })
 
+  it('fallback (flag on) also folds queryCanonical filters to the raw query', async () => {
+    const { engine } = await setup()
+    await engine.writeDay(
+      { userId: 'u1', siteId: 's1', table: 'queries', date: '2026-03-10' },
+      [
+        qRow('foo', 'foo', '2026-03-10', 10, 100),
+        qRow('bar', null, '2026-03-10', 7, 70),
+        qRow('baz', '', '2026-03-10', 3, 30),
+      ],
+    )
+    const filtered: BuilderState = {
+      dimensions: ['queryCanonical'],
+      filter: {
+        _filters: [
+          { dimension: 'date', operator: 'between', expression: '2026-03-01', expression2: '2026-03-31' },
+          { dimension: 'queryCanonical', operator: 'equals', expression: 'bar' },
+        ],
+      } as any,
+    }
+
+    const rows = await runGrouped(engine, filtered, true)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.queryCanonical).toBe('bar')
+    expect(Number(rows[0]!.clicks)).toBe(7)
+  })
+
   async function runComparison(engine: StorageEngine, canonicalFallback: boolean) {
     const adapter = createParquetResolverAdapter({ canonicalFallback })
     const current = canonicalState('2026-03-08', '2026-03-14')

@@ -22,6 +22,7 @@ import { encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { createIndexingMetadataStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexPrefix } from './entities'
 import { engineErrors } from './errors'
 import { DEFAULT_SEARCH_TYPE } from './layout'
+import { createQueryDimStore } from './query-dim'
 
 export interface RollupCtx extends TenantCtx {
   /** When the rollup was built. Stamped into payload + filename. */
@@ -528,6 +529,12 @@ export async function runWindowed(opts: {
   table: import('@gscdump/engine/contracts').TableName
   searchType?: SearchType
   sqlFor: (w: { start: string, end: string }) => string
+  /**
+   * Extra named file sets merged into every window's `runSQL` (alongside the
+   * windowed `FILES`). Use to JOIN a non-windowed sidecar (e.g. the query
+   * dimension parquet via `{ QUERY_DIM: { keys: [...] } }`) inside `sqlFor`.
+   */
+  extraFileSets?: Record<string, FileSetRef>
 }): Promise<Row[]> {
   const parts = await opts.engine.listPartitions({
     ctx: opts.ctx,
@@ -540,7 +547,7 @@ export async function runWindowed(opts: {
     const result = await opts.engine.runSQL({
       ctx: opts.ctx,
       table: opts.table,
-      fileSets: { FILES: { table: opts.table, partitions: w.partitions } },
+      fileSets: { FILES: { table: opts.table, partitions: w.partitions }, ...opts.extraFileSets },
       sql: opts.sqlFor(w),
       ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
     })
@@ -967,7 +974,18 @@ export const queryCanonicalDailyRollup: RollupDef = {
     { name: 'sum_position', type: 'DOUBLE', nullable: false },
   ],
   parquetSortKey: ['date', 'query_canonical'],
-  async build({ engine, ctx, searchType }) {
+  async build({ engine, ctx, dataSource, searchType }) {
+    // Prefer the versioned query dimension when present: derive canonical from
+    // it (JOIN on raw query) so the rollup reflects the CURRENT normalizer
+    // version without re-ingesting facts — a rebuild of the small dimension is
+    // enough. Falls back to the per-row stored `query_canonical` otherwise.
+    // See ADR-0019 / ADR-0020.
+    const dimStore = createQueryDimStore({ dataSource })
+    const useDim = (await dimStore.loadMeta(ctx)) !== null
+    const canonExpr = useDim
+      ? `COALESCE(qd.query_canonical, NULLIF(q.query_canonical, ''), q.query)`
+      : `COALESCE(NULLIF(query_canonical, ''), query)`
+
     // Byte-bounded date windows: `(query_canonical × date)` is unbounded for a
     // large site, so a single scan could exceed the Workers service-binding RPC
     // cap (32MiB Arrow). Each window date-filters and the grain is keyed by
@@ -977,17 +995,31 @@ export const queryCanonicalDailyRollup: RollupDef = {
       ctx,
       table: 'queries',
       ...(searchType !== undefined ? { searchType } : {}),
-      sqlFor: w => `
-        SELECT
-          COALESCE(NULLIF(query_canonical, ''), query) AS query_canonical,
-          CAST(date AS VARCHAR) AS date,
-          SUM(clicks)::BIGINT AS clicks,
-          SUM(impressions)::BIGINT AS impressions,
-          SUM(sum_position)::DOUBLE AS sum_position
-        FROM read_parquet({{FILES}}, union_by_name = true)
-        WHERE date >= '${w.start}' AND date <= '${w.end}'
-        GROUP BY COALESCE(NULLIF(query_canonical, ''), query), date
-      `,
+      ...(useDim ? { extraFileSets: { QUERY_DIM: { table: 'queries', keys: [dimStore.parquetKey(ctx)] } } } : {}),
+      sqlFor: useDim
+        ? w => `
+          SELECT
+            ${canonExpr} AS query_canonical,
+            CAST(q.date AS VARCHAR) AS date,
+            SUM(q.clicks)::BIGINT AS clicks,
+            SUM(q.impressions)::BIGINT AS impressions,
+            SUM(q.sum_position)::DOUBLE AS sum_position
+          FROM read_parquet({{FILES}}, union_by_name = true) q
+          LEFT JOIN read_parquet({{QUERY_DIM}}, union_by_name = true) qd ON q.query = qd.query
+          WHERE q.date >= '${w.start}' AND q.date <= '${w.end}'
+          GROUP BY ${canonExpr}, q.date
+        `
+        : w => `
+          SELECT
+            ${canonExpr} AS query_canonical,
+            CAST(date AS VARCHAR) AS date,
+            SUM(clicks)::BIGINT AS clicks,
+            SUM(impressions)::BIGINT AS impressions,
+            SUM(sum_position)::DOUBLE AS sum_position
+          FROM read_parquet({{FILES}}, union_by_name = true)
+          WHERE date >= '${w.start}' AND date <= '${w.end}'
+          GROUP BY ${canonExpr}, date
+        `,
     })
     return rows.map(r => ({
       query_canonical: String(r.query_canonical),
