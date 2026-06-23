@@ -13,9 +13,6 @@
  * bundle.
  */
 
-export type { Row } from './duckdb-wasm-handle'
-export { getWasmDuckDBFactory, resetWasmDuckDB } from './duckdb-wasm-handle'
-
 export type { AnalyticsEngineHooks } from './engine'
 export { getAnalyticsEngine } from './engine'
 

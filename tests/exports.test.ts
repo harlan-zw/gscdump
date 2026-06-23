@@ -1,8 +1,7 @@
 import { existsSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-// @ts-expect-error untyped
-import yaml from 'js-yaml'
+import { dump } from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 import { getPackageExportsManifest } from 'vitest-package-exports'
 
@@ -34,8 +33,7 @@ describe('exports-snapshot', async () => {
         importMode: 'dist',
         cwd: pkg.path,
       })
-      // @ts-expect-error untyped
-      await expect(yaml.dump(manifest.exports, { sortKeys: (a, b) => a.localeCompare(b) }))
+      await expect(dump(manifest.exports, { sortKeys: (a, b) => a.localeCompare(b) }))
         .toMatchFileSnapshot(`./exports/${pkg.name.split('/').pop()}.yaml`)
     })
     if (!hasDist) {

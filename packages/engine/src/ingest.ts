@@ -89,7 +89,12 @@ export function toPath(gscUrl: string): string {
  * ever materialising per-row position values.
  */
 export function toSumPosition(apiPosition: number, impressions: number): number {
-  return (apiPosition - 1) * Math.max(impressions, 1)
+  // Clamp position to ≥1: GSC reports position ≥ 1.0, but a missing/0 position
+  // (the `apiRow.position || 0` callers) would otherwise store a NEGATIVE
+  // sum_position ((0-1)*impr), which skews the SUM(sum_position)/SUM(impr)+1
+  // average recovery. position=1 → 0 contribution, the correct neutral default.
+  const position = apiPosition >= 1 ? apiPosition : 1
+  return (position - 1) * Math.max(impressions, 1)
 }
 
 /**
@@ -137,9 +142,14 @@ export function transformGscRow(
 
   if (table === 'hourly_pages') {
     // GSC `hourly_all` emits hour as ISO with PT offset
-    // (e.g. `2026-05-17T15:00:00-07:00`). Calendar date = leading 10 chars.
-    const hour = String(keys[0] ?? '')
-    const date = hour.slice(0, 10)
+    // (e.g. `2026-05-17T15:00:00-07:00`). Calendar date = leading 10 chars;
+    // hour-of-day (PT) = chars 11-12 as an INT (stored as INTEGER, not the
+    // 25-char timestamp — `date` already carries the day + offset is fixed PT).
+    const hourStamp = String(keys[0] ?? '')
+    const date = hourStamp.slice(0, 10)
+    const hour = Number.parseInt(hourStamp.slice(11, 13), 10)
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23)
+      throw new Error(`hourly_pages: cannot derive hour-of-day from '${hourStamp}'`)
     return {
       date,
       row: { url: toPath(String(keys[1] ?? '')), hour, date, clicks, impressions, sum_position },

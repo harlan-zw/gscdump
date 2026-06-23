@@ -55,9 +55,14 @@ export {
   ICEBERG_PARTITION_COLUMNS,
   ICEBERG_PARTITION_SPEC,
   ICEBERG_SCHEMAS,
+  ICEBERG_SCHEMAS_INT,
   ICEBERG_TABLES,
+  icebergPartitionColumns,
+  icebergSchemasFor,
   icebergTableSpec,
+  INT_SEARCH_TYPE,
   isIcebergTable,
+  SEARCH_TYPE_INT,
 } from './schema'
 export type {
   IcebergColumn,
@@ -67,6 +72,7 @@ export type {
   IcebergS3Config,
   IcebergTableName,
   IcebergTableSpec,
+  PartitionKeyEncoding,
 } from './schema'
 // Low-level `icebird` primitives re-exported so the engine is the single
 // `icebird` gateway: consumers reach the patched catalog read primitives

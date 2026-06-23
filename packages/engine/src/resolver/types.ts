@@ -41,8 +41,13 @@ export interface ResolverOptions<TableKey extends string = string> {
   adapter: ResolverAdapter<TableKey>
   /** Optional site scope. Required for multi-tenant D1; omitted for parquet. */
   siteId?: string | number
-  /** Optional searchType scope. Required for multi-tenant Iceberg; omitted for parquet. */
-  searchType?: string
+  /**
+   * Optional searchType scope. Required for multi-tenant Iceberg; omitted for
+   * parquet. `number` is the int-encoded code (`SEARCH_TYPE_INT`) for catalogs
+   * whose `search_type` partition column is INT — bound bare (unquoted) so the
+   * int partition prunes; `string` for the default string-encoded catalogs.
+   */
+  searchType?: string | number
 }
 
 export interface ResolvedSQL {

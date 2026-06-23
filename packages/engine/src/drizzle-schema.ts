@@ -134,13 +134,17 @@ export const search_appearance_page_queries = pgTable('search_appearance_page_qu
   ...metricCols(),
 })
 
-// Per-(url, hour) Discover slice. `hour` is the GSC `hourly_all` timestamp
-// (ISO 8601 with PT offset, e.g. `2026-05-17T15:00:00-07:00`). `date` is the
-// derived PT calendar day used for partitioning; one parquet file per day
-// holds 24 hourly buckets per url. Read-merge-write keyed on (url, hour).
+// Per-(url, hour) Discover slice. `hour` is the PT hour-of-day (0-23), derived
+// from the GSC `hourly_all` timestamp (ISO 8601 with PT offset, e.g.
+// `2026-05-17T15:00:00-07:00` → 15). `date` is the derived PT calendar day used
+// for partitioning; one parquet file per day holds 24 hourly buckets per url.
+// Read-merge-write keyed on (url, hour). Storing the hour as an INT (not the
+// 25-char ISO timestamp) shrinks the column to 4 bytes and keeps the (date,
+// hour) natural key compact — `date` already pins the day, so the timestamp's
+// date + offset parts were redundant.
 export const hourly_pages = pgTable('hourly_pages', {
   url: varchar('url').notNull(),
-  hour: varchar('hour').notNull(),
+  hour: integer('hour').notNull(),
   date: dateCol(),
   ...metricCols(),
 })
@@ -158,5 +162,5 @@ export const TABLE_METADATA: Record<TableName, { sortKey: string[], clusterKey: 
   search_appearance_pages: { sortKey: ['date', 'searchAppearance', 'url'], clusterKey: ['searchAppearance', 'url', 'date'], version: 1 },
   search_appearance_queries: { sortKey: ['date', 'searchAppearance', 'query'], clusterKey: ['searchAppearance', 'query', 'date'], version: 1 },
   search_appearance_page_queries: { sortKey: ['date', 'searchAppearance', 'url', 'query'], clusterKey: ['searchAppearance', 'url', 'query', 'date'], version: 1 },
-  hourly_pages: { sortKey: ['date', 'hour', 'url'], clusterKey: ['url', 'date', 'hour'], version: 1 },
+  hourly_pages: { sortKey: ['date', 'hour', 'url'], clusterKey: ['url', 'date', 'hour'], version: 2 },
 }

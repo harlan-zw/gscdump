@@ -81,6 +81,45 @@ export interface IcebergColumn {
   fieldId: number
 }
 
+/**
+ * Partition-key encoding for the two identity columns (`site_id`, `search_type`).
+ *
+ * - `'string'` (default, legacy): both columns are STRING. Correct, but R2 SQL's
+ *   string min/max statistics are truncated in predicate pushdown, so a bare
+ *   `WHERE site_id='<uuid>'` UNDERCOUNTS — callers must CONCAT(col,'') to stay
+ *   correct, which defeats partition pruning.
+ * - `'int'`: BOTH `site_id` and `search_type` are INT. Integer statistics are
+ *   fixed-width and never truncated, so `WHERE site_id=<n>` is both correct AND
+ *   prunes (empirically confirmed 2026-06-19, gscdump.com probe-int64-partition;
+ *   INT equality proven via the search_type column in the engine e2e canary). A
+ *   small INT site_id is ample (≪ 2.1B sites) — no LONG/BigInt needed. The caller
+ *   maps the UUID `site_id` ↔ int (app-owned, per-tenant serial) and uses
+ *   {@link SEARCH_TYPE_INT} for `search_type` (engine-owned, fixed enum).
+ *
+ * New per-team catalogs are provisioned `'int'`; existing catalogs stay
+ * `'string'`. Purely additive: `'string'` is the default everywhere so existing
+ * tables, writers, and readers are unchanged.
+ */
+export type PartitionKeyEncoding = 'string' | 'int'
+
+/**
+ * Stable `search_type` enum → int map for `'int'`-encoded catalogs. Engine-owned
+ * and FROZEN: never renumber or reuse an id (it's the on-disk partition value).
+ */
+export const SEARCH_TYPE_INT: Record<SearchType, number> = {
+  web: 1,
+  image: 2,
+  video: 3,
+  news: 4,
+  discover: 5,
+  googleNews: 6,
+}
+
+/** Reverse of {@link SEARCH_TYPE_INT} — int → `search_type`, for read-result mapping. */
+export const INT_SEARCH_TYPE: Record<number, SearchType> = Object.fromEntries(
+  Object.entries(SEARCH_TYPE_INT).map(([k, v]) => [v, k as SearchType]),
+) as Record<number, SearchType>
+
 /** Iceberg partition transform applied to a source column. */
 export type IcebergPartitionTransform = 'identity' | 'month'
 
@@ -121,6 +160,23 @@ export const ICEBERG_PARTITION_COLUMNS: readonly IcebergColumn[] = [
 ] as const
 
 /**
+ * The two partition-identity columns for a given {@link PartitionKeyEncoding}.
+ * `'string'` returns {@link ICEBERG_PARTITION_COLUMNS} verbatim; `'int'` swaps
+ * BOTH to INT — `site_id` (the app's small `user_sites.int_id`; ≪ 2.1B sites, so
+ * INT is ample) and `search_type` (its fixed enum code). Integer identity columns
+ * avoid R2 SQL's truncated-string-stats equality undercount and restore pruning.
+ * Field ids are unchanged (1, 2) — only the column types differ.
+ */
+export function icebergPartitionColumns(encoding: PartitionKeyEncoding = 'string'): readonly IcebergColumn[] {
+  if (encoding === 'string')
+    return ICEBERG_PARTITION_COLUMNS
+  return [
+    { name: 'site_id', type: 'INT', required: true, fieldId: 1 },
+    { name: 'search_type', type: 'INT', required: true, fieldId: 2 },
+  ]
+}
+
+/**
  * First field id used for per-table (non-partition) columns — immediately
  * after the two partition-identity columns (`site_id`=1, `search_type`=2).
  *
@@ -159,7 +215,7 @@ function mapColumnType(t: ColumnType): IcebergColumnType {
  * CONTRACT NOTE: implementation agents must treat the RETURNED VALUE as the
  * source of truth — do not hand-list columns elsewhere.
  */
-export function icebergTableSpec(table: IcebergTableName): IcebergTableSpec {
+export function icebergTableSpec(table: IcebergTableName, encoding: PartitionKeyEncoding = 'string'): IcebergTableSpec {
   const base = SCHEMAS[table]
   const dataColumns: IcebergColumn[] = base.columns.map((col, i) => ({
     name: col.name,
@@ -169,17 +225,30 @@ export function icebergTableSpec(table: IcebergTableName): IcebergTableSpec {
   }))
   return {
     table,
-    columns: [...ICEBERG_PARTITION_COLUMNS, ...dataColumns],
+    columns: [...icebergPartitionColumns(encoding), ...dataColumns],
+    // Partition spec is type-agnostic (identity transform keyed by column NAME),
+    // so it's shared across both encodings.
     partitionSpec: ICEBERG_PARTITION_SPEC,
     identityColumns: ['site_id', 'search_type', ...base.sortKey],
   }
 }
 
-/** All Iceberg table specs, keyed by table name. */
+/** All Iceberg table specs (legacy `'string'` encoding), keyed by table name. */
 export const ICEBERG_SCHEMAS: Record<IcebergTableName, IcebergTableSpec>
   = Object.fromEntries(
     ICEBERG_TABLES.map(t => [t, icebergTableSpec(t)] as const),
   ) as Record<IcebergTableName, IcebergTableSpec>
+
+/** All Iceberg table specs in `'int'` encoding (INT site_id + INT search_type). */
+export const ICEBERG_SCHEMAS_INT: Record<IcebergTableName, IcebergTableSpec>
+  = Object.fromEntries(
+    ICEBERG_TABLES.map(t => [t, icebergTableSpec(t, 'int')] as const),
+  ) as Record<IcebergTableName, IcebergTableSpec>
+
+/** Table specs for the given encoding (`'string'` default). */
+export function icebergSchemasFor(encoding: PartitionKeyEncoding = 'string'): Record<IcebergTableName, IcebergTableSpec> {
+  return encoding === 'int' ? ICEBERG_SCHEMAS_INT : ICEBERG_SCHEMAS
+}
 
 const ICEBERG_TABLE_SET: ReadonlySet<string> = new Set(ICEBERG_TABLES)
 

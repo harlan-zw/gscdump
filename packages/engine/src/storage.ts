@@ -1,5 +1,6 @@
 import type { Grain, Row, TableName, TenantCtx } from '@gscdump/contracts'
 import type { BuilderState, SearchType } from 'gscdump/query'
+import type { ParquetQueryFilter } from 'hyparquet'
 
 export type { Grain, Row, TableName, TenantCtx } from '@gscdump/contracts'
 export type { SearchType } from 'gscdump/query'
@@ -390,6 +391,15 @@ export interface QueryExecuteOptions {
    * the page_queries schema, not the analyzer's primary `table`.
    */
   placeholderTables?: Record<string, TableName>
+  /**
+   * Per-placeholder row-group pushdown filter, derived from the query's
+   * structured filter (see `extractParquetPushdown`). A pure-JS decode executor
+   * MAY pass it to the parquet reader to prune row groups and shrink the rows
+   * it materialises before the SQL WHERE re-applies. Pure optimization: the
+   * filter is a superset of the final predicate, so an executor that ignores it
+   * (e.g. native DuckDB, which pushes from the SQL itself) stays correct.
+   */
+  pushdownFilters?: Record<string, ParquetQueryFilter>
   dataSource: DataSource
   table: TableName
   signal?: AbortSignal
@@ -469,6 +479,12 @@ export interface RunSQLOptions {
    * Undefined keeps the legacy cross-type union.
    */
   searchType?: SearchType
+  /**
+   * Per-placeholder parquet pushdown filter, forwarded verbatim to the
+   * executor. Keyed by fileSet name (matching `fileSets`). See
+   * `QueryExecuteOptions.pushdownFilters` and `extractParquetPushdown`.
+   */
+  pushdownFilters?: Record<string, ParquetQueryFilter>
   /**
    * Optional read-path profiler. `runSQL` emits `manifest.list` +
    * `executor.execute` spans and forwards it into the executor for the

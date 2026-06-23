@@ -2,7 +2,9 @@ import type { StorageEngine, TableName } from '../local-store'
 import { rm } from 'node:fs/promises'
 import path from 'node:path'
 import { DuckDBInstance } from '@duckdb/node-api'
+import { dateColumnsFor } from '@gscdump/engine/schema'
 import { sqlEscape } from '@gscdump/engine/sql'
+import { dateReplaceClause } from '@gscdump/engine/sql-fragments'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
@@ -34,6 +36,10 @@ export async function exportToDuckDB(opts: ExportOptions): Promise<ExportResult>
   if (opts.force)
     await rm(outPath, { force: true })
 
+  // Native `@duckdb/node-api` rather than the engine's vFS DuckDBHandle: this
+  // command emits a *persistent* on-disk `.duckdb` database for distribution,
+  // which the in-memory WASM build can't naturally produce. The two-runtime
+  // split is deliberate — see docs/adr/0016-duckdb-two-node-runtimes-by-design.md.
   const instance = await DuckDBInstance.create(outPath)
   const conn = await instance.connect()
   const tables: ExportTableResult[] = []
@@ -50,8 +56,12 @@ export async function exportToDuckDB(opts: ExportOptions): Promise<ExportResult>
 
       const paths = entries.map(e => path.join(opts.dataDir, e.objectKey))
       const fileList = paths.map(p => `'${sqlEscape(p)}'`).join(', ')
+      // Canonicalize legacy VARCHAR `date` columns to real DATE so the packed
+      // `.duckdb` table types `date` the same way the app's DuckDB-WASM views do
+      // (CAST→DATE) — otherwise an ATTACH of this file diverges from app reads.
+      const replace = dateReplaceClause(dateColumnsFor(table as TableName), 'date')
       await conn.run(
-        `CREATE OR REPLACE TABLE ${table} AS SELECT * FROM read_parquet([${fileList}], union_by_name=true)`,
+        `CREATE OR REPLACE TABLE ${table} AS SELECT * ${replace} FROM read_parquet([${fileList}], union_by_name=true)`,
       )
 
       const reader = await conn.runAndReadAll(`SELECT count(*)::BIGINT AS n FROM ${table}`)

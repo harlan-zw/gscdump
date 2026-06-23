@@ -17,8 +17,9 @@ import type {
   WriteResult,
 } from './storage'
 import { substituteNamedFiles } from './parquet-plan'
-import { SCHEMAS } from './schema'
+import { dateColumnsFor, SCHEMAS } from './schema'
 import { sqlEscape } from './sql-bind'
+import { dateReplaceClause as buildDateReplaceClause } from './sql-fragments'
 
 export interface DuckDBHandle {
   query: (sql: string, params?: unknown[]) => Promise<Row[]>
@@ -50,8 +51,8 @@ async function encodeBytes(
   registered.push(inName)
   try {
     const sql = rows.length === 0
-      ? `COPY (SELECT * FROM ${emptyTableSchema(table)} WHERE FALSE) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`
-      : `COPY (SELECT * FROM read_json_auto('${sqlEscape(inName)}', format='array', columns=${columnsJson(table)})) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`
+      ? `COPY (SELECT * FROM ${emptyTableSchema(table)} WHERE FALSE) TO '${sqlEscape(outName)}' (FORMAT PARQUET, COMPRESSION ZSTD)`
+      : `COPY (SELECT * FROM read_json_auto('${sqlEscape(inName)}', format='array', columns=${columnsJson(table)})) TO '${sqlEscape(outName)}' (FORMAT PARQUET, COMPRESSION ZSTD)`
     await db.query(sql)
     registered.push(outName)
     return await db.copyFileToBuffer(outName)
@@ -120,7 +121,7 @@ export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
           .join(', ')
         try {
           await db.query(
-            `COPY (${dedupedMergeSql(ctx.table, fileList)}) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`,
+            `COPY (${dedupedMergeSql(ctx.table, fileList)}) TO '${sqlEscape(outName)}' (FORMAT PARQUET, COMPRESSION ZSTD)`,
           )
           const bytes = await db.copyFileToBuffer(outName)
           const countRows = await db.query(
@@ -152,7 +153,7 @@ export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
         // memory. Matches the read path. `union_by_name` lets us merge files
         // with column-additive schema drift without a binder error.
         await db.query(
-          `COPY (${dedupedMergeSql(ctx.table, fileList)}) TO '${sqlEscape(outName)}' (FORMAT PARQUET)`,
+          `COPY (${dedupedMergeSql(ctx.table, fileList)}) TO '${sqlEscape(outName)}' (FORMAT PARQUET, COMPRESSION ZSTD)`,
         )
         registered.push(outName)
         const bytes = await db.copyFileToBuffer(outName)
@@ -286,7 +287,7 @@ function emptyTableSchema(table: TableName): string {
 /**
  * Canonical "empty-file" SELECT clause for a table. Codecs that need to
  * emit a schema-correct empty Parquet can wrap this in:
- *   `COPY (SELECT * FROM <clause> WHERE FALSE) TO '<key>' (FORMAT PARQUET)`
+ *   `COPY (SELECT * FROM <clause> WHERE FALSE) TO '<key>' (FORMAT PARQUET, COMPRESSION ZSTD)`
  * to satisfy the ParquetCodec empty-rows invariant.
  */
 export function canonicalEmptyParquetSchema(table: TableName): string {
@@ -296,15 +297,10 @@ export function canonicalEmptyParquetSchema(table: TableName): string {
 function dateReplaceClause(table: TableName | undefined): string {
   if (!table)
     return ''
-  const dateCols = SCHEMAS[table].columns.filter(c => c.type === 'DATE').map(c => c.name)
-  if (dateCols.length === 0)
-    return ''
-  // CAST(.. AS DATE) defends against legacy parquets whose `date` column was
-  // written as VARCHAR (before the schema enforced DATE). strftime rejects
-  // VARCHAR; the cast is a no-op for DATE-typed columns and parses ISO date
-  // strings for VARCHAR ones, so output stays canonical either way.
-  const replacements = dateCols.map(n => `strftime(CAST(${n} AS DATE), '%Y-%m-%d') AS ${n}`)
-  return `REPLACE (${replacements.join(', ')})`
+  // Row decode emits ISO `YYYY-MM-DD` strings (the `'string'` form) so the
+  // values round-trip cleanly through JSON / Workers RPC. The clause itself is
+  // built by the shared fragment so every read path agrees on the SQL.
+  return buildDateReplaceClause(dateColumnsFor(table), 'string')
 }
 
 function columnList(table: TableName): string {

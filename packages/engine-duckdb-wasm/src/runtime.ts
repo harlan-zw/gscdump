@@ -48,6 +48,16 @@ export interface BootDuckDBWasmOptions {
    * server that cannot answer bounded reads fails closed.
    */
   config?: DuckDBConfig
+  /**
+   * Cap DuckDB's memory with `SET memory_limit=<value>` right after open (e.g.
+   * `'2GB'`, `'512MB'`). A runaway query then errors with a clean
+   * out-of-memory rather than growing the WASM heap until the tab crashes —
+   * DuckDB has no statement-level timeout, so abandoned queries are otherwise
+   * only stopped by the caller's `AbortSignal` (which the runtime forwards to
+   * `conn.cancelSent()`). Opt-in: omit to keep DuckDB-WASM's default sizing.
+   * Accepts `<number>` with an optional `B`/`KB`/`MB`/`GB`/`TB` suffix.
+   */
+  memoryLimit?: string
 }
 
 export interface BrowserParquetFile {
@@ -437,6 +447,18 @@ async function dropAttachedResources(
     await db.dropFiles([...files])
 }
 
+/**
+ * Validate a `memory_limit` value at the boot boundary. DuckDB accepts a number
+ * with an optional binary-unit suffix; reject anything else so a typo can't be
+ * inlined into the `SET` statement. Returns the normalized literal.
+ */
+function parseMemoryLimit(value: string): string {
+  const trimmed = value.trim()
+  if (!/^\d+(?:\.\d+)?\s*(?:B|KB|MB|GB|TB)?$/i.test(trimmed))
+    throw new Error(`invalid memoryLimit '${value}' — expected e.g. '512MB' or '2GB'`)
+  return trimmed
+}
+
 export async function bootDuckDBWasm(
   options: BootDuckDBWasmOptions = {},
 ): Promise<DuckDBWasmBootResult> {
@@ -452,6 +474,12 @@ export async function bootDuckDBWasm(
     await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
     await db.open(rangeOnlyConfig(options.config))
     const conn = await db.connect()
+    if (options.memoryLimit !== undefined) {
+      // Parse-don't-validate: reject a malformed limit here rather than letting
+      // it reach DuckDB as opaque SQL. `memory_limit` is a session setting, so
+      // it can't take a `?` bind param — the validated literal is inlined.
+      await conn.query(`SET memory_limit='${parseMemoryLimit(options.memoryLimit)}'`)
+    }
     return { db, conn }
   }
   catch (err) {

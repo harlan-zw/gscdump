@@ -20,6 +20,7 @@
  * pruning never drops a matching file, only avoids reading non-matching ones.
  */
 
+import type { PartitionKeyEncoding } from './schema'
 import { ICEBERG_PARTITION_SPEC } from './schema'
 
 /**
@@ -88,29 +89,41 @@ function decodeInt(bytes: Uint8Array | ArrayBuffer | null | undefined): number |
  * wanted month falls inside its `[lo, hi]` range.
  */
 export function buildPartitionFilter(
-  siteId: string,
-  searchType: string,
+  siteId: string | number,
+  searchType: string | number,
   wantedMonths: ReadonlySet<number>,
+  encoding: PartitionKeyEncoding = 'string',
 ): ManifestPartitionFilter {
   return (partitions): boolean => {
     const parts = partitions
     if (!parts || parts.length === 0)
       return true // no summaries — can't prune, keep
 
-    const siteSummary = parts[SITE_ID_FIELD_INDEX]
-    if (siteSummary && (siteSummary.lower_bound != null || siteSummary.upper_bound != null)) {
-      const lo = decodeString(siteSummary.lower_bound)
-      const hi = decodeString(siteSummary.upper_bound)
-      if (lo != null && hi != null && (siteId < lo || siteId > hi))
-        return false
-    }
+    // site_id / search_type identity bounds are UTF-8 string bytes ONLY under
+    // 'string' encoding, so the lexicographic decode+compare is valid there. Under
+    // 'int' the bounds are int bytes — decoding them as strings would compare
+    // garbage and could WRONGLY skip a matching manifest (data loss), so we don't
+    // prune on them at all. The per-file partition check in listIcebergDataFiles
+    // remains the authoritative correctness filter, and int catalogs are per-team
+    // (single-tenant), so site_id manifest pruning would save ~nothing regardless.
+    if (encoding === 'string') {
+      const siteStr = String(siteId)
+      const searchStr = String(searchType)
+      const siteSummary = parts[SITE_ID_FIELD_INDEX]
+      if (siteSummary && (siteSummary.lower_bound != null || siteSummary.upper_bound != null)) {
+        const lo = decodeString(siteSummary.lower_bound)
+        const hi = decodeString(siteSummary.upper_bound)
+        if (lo != null && hi != null && (siteStr < lo || siteStr > hi))
+          return false
+      }
 
-    const searchTypeSummary = parts[SEARCH_TYPE_FIELD_INDEX]
-    if (searchTypeSummary && (searchTypeSummary.lower_bound != null || searchTypeSummary.upper_bound != null)) {
-      const lo = decodeString(searchTypeSummary.lower_bound)
-      const hi = decodeString(searchTypeSummary.upper_bound)
-      if (lo != null && hi != null && (searchType < lo || searchType > hi))
-        return false
+      const searchTypeSummary = parts[SEARCH_TYPE_FIELD_INDEX]
+      if (searchTypeSummary && (searchTypeSummary.lower_bound != null || searchTypeSummary.upper_bound != null)) {
+        const lo = decodeString(searchTypeSummary.lower_bound)
+        const hi = decodeString(searchTypeSummary.upper_bound)
+        if (lo != null && hi != null && (searchStr < lo || searchStr > hi))
+          return false
+      }
     }
 
     const monthSummary = parts[DATE_MONTH_FIELD_INDEX]

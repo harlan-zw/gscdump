@@ -109,7 +109,8 @@ export const gsc_search_appearance_page_queries = sqliteTable('gsc_search_appear
 export const gsc_hourly_pages = sqliteTable('gsc_hourly_pages', {
   ...baseCols(),
   url: text('url').notNull(),
-  hour: text('hour').notNull(),
+  // PT hour-of-day (0-23) — mirrors the canonical INTEGER `hour` in @gscdump/engine.
+  hour: integer('hour').notNull(),
   ...metricCols(),
 })
 

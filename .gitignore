@@ -52,3 +52,7 @@ examples/browser-attach/gscdump.duckdb
 examples/browser-attach/screenshot.png
 
 .nuxt
+
+eslint-typegen.d.ts
+
+gsc-api-reference

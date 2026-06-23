@@ -147,6 +147,14 @@ export interface IcebergAppendSinkOptions extends SinkOptions {
    * uses the defaults; tests inject a synchronous `sleep`.
    */
   commitRetry?: import('./iceberg/catalog').CommitRetryOptions
+  /**
+   * Partition-key encoding (default `'string'`). `'int'` writes BOTH `site_id`
+   * and `search_type` as INT — the caller MUST pass the numeric `site_id` (a
+   * numeric string is fine; it's `Number()`-coerced) in `slice.ctx.siteId`. A
+   * small INT is ample (≪ 2.1B sites), so no LONG/BigInt is involved. See
+   * {@link import('./iceberg/schema').PartitionKeyEncoding}.
+   */
+  encoding?: import('./iceberg/schema').PartitionKeyEncoding
 }
 
 /** `LocalIcebergSink` options — points at the local Iceberg REST catalog. */

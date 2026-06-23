@@ -38,3 +38,38 @@ export const METRIC_EXPR: Record<Metric, string> = {
 export function topLevelPagePredicateSql(pathExpr: string): string {
   return `LENGTH(${pathExpr}) - LENGTH(REPLACE(${pathExpr}, '/', '')) <= 1`
 }
+
+/**
+ * How a canonicalized date column is emitted by {@link dateReplaceClause}:
+ * - `'date'` keeps a real `DATE` value (`CAST(col AS DATE)`). Right for views
+ *   and `.duckdb` exports the app re-queries, where the column type matters.
+ * - `'string'` emits an ISO `YYYY-MM-DD` string (`strftime(CAST(col AS DATE)…)`).
+ *   Right for row materialisation to JSON/CSV/NDJSON, where a `DATE` would
+ *   serialize as an opaque object / epoch.
+ */
+export type DateCanonicalForm = 'date' | 'string'
+
+/**
+ * Build a `read_parquet` `REPLACE (…)` clause that canonicalizes legacy `date`
+ * columns. `date` lands as VARCHAR in older parquets (BYTE_ARRAY/UTF8, written
+ * before the schema enforced DATE); DuckDB infers the column type from the file,
+ * so without this every read path would expose VARCHAR despite SCHEMAS declaring
+ * DATE. The `CAST(col AS DATE)` is a no-op for already-DATE columns and
+ * vectorized parsing for VARCHAR ones, so output stays canonical either way.
+ *
+ * Pure: the caller passes the table's DATE column names (derived from `SCHEMAS`)
+ * so this fragment carries no schema/drizzle dependency. Returns `''` when the
+ * table has no DATE columns, so callers can interpolate it unconditionally:
+ *   `SELECT * ${dateReplaceClause(cols)} FROM read_parquet(…)`.
+ */
+export function dateReplaceClause(
+  dateColumns: readonly string[],
+  form: DateCanonicalForm = 'string',
+): string {
+  if (dateColumns.length === 0)
+    return ''
+  const cast = (n: string): string => form === 'date'
+    ? `CAST(${n} AS DATE) AS ${n}`
+    : `strftime(CAST(${n} AS DATE), '%Y-%m-%d') AS ${n}`
+  return `REPLACE (${dateColumns.map(cast).join(', ')})`
+}

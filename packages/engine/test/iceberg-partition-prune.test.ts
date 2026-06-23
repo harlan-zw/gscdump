@@ -53,6 +53,16 @@ describe('buildPartitionFilter', () => {
     expect(f(p)).toBe(true)
   })
 
+  it('coerces numeric keys before string-encoded lexicographic pruning', () => {
+    const f = buildPartitionFilter(2, 2, MONTHS, 'string')
+    const p = parts(
+      summary(strBound('10'), strBound('2')),
+      summary(intBound(676), intBound(676)),
+      summary(strBound('10'), strBound('2')),
+    )
+    expect(f(p)).toBe(true)
+  })
+
   it('skips when the target site is above the range', () => {
     const f = buildPartitionFilter('s9', 'web', MONTHS)
     const p = parts(summary(strBound('s1'), strBound('s5')), summary(intBound(670), intBound(680)))

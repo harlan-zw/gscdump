@@ -150,6 +150,38 @@ describe('icebergAppendSink', () => {
     expect(callFor('pages')!.records[0].site_id).toBe('')
   })
 
+  it('writes numeric site_id and search_type partition keys under int encoding', async () => {
+    const sink = makeSink({ encoding: 'int' })
+    await sink.emit(slice('pages', 'discover', '42'), [
+      { url: '/', date: '2026-05-01', clicks: 1, impressions: 2, sum_position: 3 },
+    ])
+    await sink.close()
+    const rec = callFor('pages')!.records[0]
+    expect(rec.site_id).toBe(42)
+    expect(rec.search_type).toBe(5)
+  })
+
+  it('rejects invalid int site ids before buffering rows', async () => {
+    const badSiteIds: Array<[string | undefined, RegExp]> = [
+      [undefined, /siteId is required/],
+      ['', /siteId is required/],
+      ['legacy-site', /safe integer/],
+      ['9007199254740992', /safe integer/],
+      ['2147483648', /fit Iceberg INT/],
+    ]
+
+    for (const [siteId, message] of badSiteIds) {
+      const sink = makeSink({ encoding: 'int' })
+      await expect(
+        sink.emit(slice('pages', 'web', siteId), [
+          { url: '/', date: '2026-05-01', clicks: 1, impressions: 2, sum_position: 3 },
+        ]),
+      ).rejects.toThrow(message)
+    }
+    expect(connectIcebergCatalog).not.toHaveBeenCalled()
+    expect(icebergAppendRetrying).not.toHaveBeenCalled()
+  })
+
   it('converts a YYYY-MM-DD date string to the integer day-count', async () => {
     const sink = makeSink()
     // 2026-05-01 is 20574 days after the Unix epoch.

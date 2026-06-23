@@ -4,8 +4,6 @@
   createInflightDedupe: function
   getAnalyticsEngine: function
   getHostedR2QueryKey: function
-  getWasmDuckDBFactory: function
-  resetWasmDuckDB: function
   signSizeHint: function
   useAnalyticsEnv: function
   verifySizeHint: function

@@ -21,6 +21,7 @@ import { compactTieredImpl, dedupeOverlappingTiers, splitOverlappingTiers } from
 import { gcOrphansImpl } from './gc'
 import { dayPartition, hourPartition, inferSearchType, objectKey, tenantPrefix } from './layout'
 import { compileLogicalQueryPlan } from './parquet-plan'
+import { extractParquetPushdown } from './parquet-pushdown'
 import { currentSchemaVersion, dedupeByNaturalKey, SCHEMAS } from './schema'
 
 const URL_PURGE_TABLES: readonly TableName[] = ['pages', 'page_queries']
@@ -297,6 +298,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
       dataSource,
       table,
       signal: opts.signal,
+      ...(opts.pushdownFilters ? { pushdownFilters: opts.pushdownFilters } : {}),
       ...(profiler ? { profiler } : {}),
     })
     endExec?.({ rows: result.rows.length })
@@ -308,6 +310,9 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     const plan = buildLogicalPlan(state, { regex: true })
     const table: TableName = ctx.table ?? plan.dataset
     const resolved = compileLogicalQueryPlan(plan, table)
+    // Prune row groups in the pure-JS decode path (ignored by SQL-native
+    // executors). The `FILES` placeholder is the only fileSet this path emits.
+    const pushdown = extractParquetPushdown(state, table)
     return runSQL({
       ctx: { userId: ctx.userId, siteId: ctx.siteId },
       table,
@@ -315,6 +320,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
       sql: resolved.sql,
       params: resolved.params,
       signal: ctx.signal,
+      ...(pushdown ? { pushdownFilters: { FILES: pushdown } } : {}),
       ...(ctx.searchType !== undefined ? { searchType: ctx.searchType } : {}),
       ...(ctx.profiler ? { profiler: ctx.profiler } : {}),
     })

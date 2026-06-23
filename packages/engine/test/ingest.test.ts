@@ -121,7 +121,7 @@ describe('assembleDatesRow', () => {
     expect(zeroImpr.row.anonymized_impressions_pct).toBe(0)
   })
 
-  it('maps hourly_pages (keys=[hour, page]) and derives date from the hour prefix', () => {
+  it('maps hourly_pages (keys=[hour, page]), deriving date + INT hour-of-day from the hour prefix', () => {
     const out = transformGscRow('hourly_pages', {
       keys: ['2026-05-17T15:00:00-07:00', 'https://example.com/foo'],
       clicks: 4,
@@ -132,7 +132,7 @@ describe('assembleDatesRow', () => {
       date: '2026-05-17',
       row: {
         url: '/foo',
-        hour: '2026-05-17T15:00:00-07:00',
+        hour: 15,
         date: '2026-05-17',
         clicks: 4,
         impressions: 20,

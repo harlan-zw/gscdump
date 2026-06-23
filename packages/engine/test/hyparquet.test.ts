@@ -6,6 +6,7 @@
  */
 
 import type { DataSource, Row, TableName } from '../src/index'
+import { parquetMetadata } from 'hyparquet'
 import { describe, expect, it } from 'vitest'
 import {
   createHyparquetCodec,
@@ -100,8 +101,8 @@ const FIXTURES: Record<TableName, Row[]> = {
     { searchAppearance: 'AMP_TOP_STORIES', url: '/a', query: 'foo', query_canonical: 'foo', date: '2025-01-01', clicks: 4, impressions: 40, sum_position: 16 },
   ],
   hourly_pages: [
-    { url: '/a', hour: '2025-01-01T08:00:00-07:00', date: '2025-01-01', clicks: 2, impressions: 12, sum_position: 18 },
-    { url: '/a', hour: '2025-01-01T09:00:00-07:00', date: '2025-01-01', clicks: 1, impressions: 6, sum_position: 9 },
+    { url: '/a', hour: 8, date: '2025-01-01', clicks: 2, impressions: 12, sum_position: 18 },
+    { url: '/a', hour: 9, date: '2025-01-01', clicks: 1, impressions: 6, sum_position: 9 },
   ],
 }
 
@@ -201,6 +202,33 @@ describe('hyparquet codec', () => {
     expect(rows[0]!.url).toBe('/stub')
   })
 
+  it('encodes the date column as a native parquet DATE (INT32), not a UTF8 string', () => {
+    const bytes = encodeRowsToParquet('pages', [
+      { url: '/a', date: '2025-01-01', clicks: 1, impressions: 2, sum_position: 3 },
+    ])
+    const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+    const meta = parquetMetadata(buf as ArrayBuffer)
+    const dateEl = meta.schema.find(s => s.name === 'date')
+    expect(dateEl?.type).toBe('INT32')
+    expect(dateEl?.converted_type).toBe('DATE')
+  })
+
+  it('round-trips a native DATE column back to an ISO YYYY-MM-DD string', async () => {
+    const bytes = encodeRowsToParquet('pages', [
+      { url: '/a', date: '2025-03-14', clicks: 1, impressions: 2, sum_position: 3 },
+    ])
+    const rows = await decodeParquetToRows(bytes)
+    expect(rows[0]!.date).toBe('2025-03-14')
+  })
+
+  it('accepts a JS Date for a DATE column and round-trips it as an ISO string', async () => {
+    const bytes = encodeRowsToParquet('pages', [
+      { url: '/a', date: new Date('2025-07-09T00:00:00Z'), clicks: 1, impressions: 2, sum_position: 3 },
+    ])
+    const rows = await decodeParquetToRows(bytes)
+    expect(rows[0]!.date).toBe('2025-07-09')
+  })
+
   it('exports raw encode/decode helpers for ad-hoc use', async () => {
     const bytes = encodeRowsToParquet('countries', [
       { country: 'usa', date: '2025-01-01', clicks: 1, impressions: 2, sum_position: 3 },
@@ -287,5 +315,25 @@ describe('decodeParquetToRows — pushed-down filter', () => {
   it('returns every row when no filter is given (back-compat)', async () => {
     const bytes = encodeRowsToParquetFlex(rows, { columns: [...columns], sortKey: ['feedpath_hash'] })
     expect(await decodeParquetToRows(bytes)).toHaveLength(5)
+  })
+
+  it('projects only the requested columns', async () => {
+    const bytes = encodeRowsToParquetFlex(rows, { columns: [...columns], sortKey: ['feedpath_hash'] })
+    const got = await decodeParquetToRows(bytes, { columns: ['loc'] })
+    expect(got).toHaveLength(5)
+    for (const r of got) {
+      expect(Object.keys(r)).toEqual(['loc'])
+      expect(typeof r.loc).toBe('string')
+    }
+  })
+
+  it('combines projection with a pushed-down filter', async () => {
+    const bytes = encodeRowsToParquetFlex(rows, { columns: [...columns], sortKey: ['feedpath_hash'] })
+    const got = await decodeParquetToRows(bytes, {
+      columns: ['loc'],
+      filter: { feedpath_hash: { $eq: 'aaa' } },
+    })
+    expect(got.map(r => r.loc).sort()).toEqual(['https://x/1', 'https://x/3'])
+    for (const r of got) expect(Object.keys(r)).toEqual(['loc'])
   })
 })

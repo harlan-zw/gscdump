@@ -24,8 +24,12 @@ export interface CreateSqlQuerySourceOptions<TKey extends string> {
   execute: (sql: string, params: unknown[]) => Promise<QueryRow[]>
   /** Tenant id for multi-tenant dialects; forwarded to `resolveToSQL`. */
   siteId?: string | number
-  /** Search-type scope for multi-tenant dialects; forwarded to `resolveToSQL`. */
-  searchType?: string
+  /**
+   * Search-type scope for multi-tenant dialects; forwarded to `resolveToSQL`.
+   * `number` = int-encoded code (`SEARCH_TYPE_INT`) for INT `search_type`
+   * catalogs (bound bare so the int partition prunes); `string` otherwise.
+   */
+  searchType?: string | number
   /** Additional capability flags merged on top of `adapter.capabilities`. */
   extraCapabilities?: Partial<SourceCapabilities>
 }

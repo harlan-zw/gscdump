@@ -43,6 +43,10 @@ interface PreparedStatementLike {
 }
 
 let singleton: Promise<{ db: DuckDBNodeBindings, conn: DuckDBConnection }> | null = null
+// Opts captured on first init. The instance is a process-wide singleton, so a
+// later caller's opts can't re-configure it; we keep the first set to detect
+// (and warn about) a divergent second request rather than silently dropping it.
+let singletonOpts: NodeDuckDBOptions | null = null
 
 function bundles(): unknown {
   return {
@@ -65,13 +69,40 @@ async function initialize(opts: NodeDuckDBOptions): Promise<{ db: DuckDBNodeBind
   return { db, conn }
 }
 
-export function createNodeDuckDBHandle(opts: NodeDuckDBOptions = {}): DuckDBHandle {
-  if (!singleton)
+/**
+ * Return the live instance, initializing it on demand. Lazy so a handle held
+ * across a `resetNodeDuckDB()` (which nulls `singleton`) transparently re-inits
+ * on its next call instead of dereferencing null — the handle stays usable for
+ * its whole lifetime regardless of reset cycles. Silent by design: the
+ * divergent-opts warning fires once at `createNodeDuckDBHandle` time, not on
+ * every method call.
+ */
+function getSingleton(opts: NodeDuckDBOptions): Promise<{ db: DuckDBNodeBindings, conn: DuckDBConnection }> {
+  if (!singleton) {
     singleton = initialize(opts)
+    singletonOpts = opts
+  }
+  return singleton
+}
+
+export function createNodeDuckDBHandle(opts: NodeDuckDBOptions = {}): DuckDBHandle {
+  if (singleton && opts.verbose !== undefined && opts.verbose !== (singletonOpts?.verbose ?? false)) {
+    // The shared instance is already running; its logger can't be swapped. Say
+    // so instead of silently honoring the first caller's verbosity only.
+    console.warn(
+      `[gscdump] createNodeDuckDBHandle: ignoring verbose=${opts.verbose} — a shared `
+      + `DuckDB instance was already initialized with verbose=${singletonOpts?.verbose ?? false}. `
+      + `Call resetNodeDuckDB() before re-initializing to change it.`,
+    )
+  }
+  // Eagerly ensure the instance exists at create time (preserves the historical
+  // init-on-create timing); `getSingleton` then re-inits lazily if a later
+  // reset nulls it out from under this handle.
+  void getSingleton(opts)
 
   return {
     async query(sql: string, params?: unknown[]): Promise<Row[]> {
-      const { conn } = await singleton!
+      const { conn } = await getSingleton(opts)
       if (!params || params.length === 0) {
         const result = conn.query(sql)
         return arrowToRows(result) as Row[]
@@ -86,15 +117,15 @@ export function createNodeDuckDBHandle(opts: NodeDuckDBOptions = {}): DuckDBHand
       }
     },
     async registerFileBuffer(name: string, bytes: Uint8Array): Promise<void> {
-      const { db } = await singleton!
+      const { db } = await getSingleton(opts)
       db.registerFileBuffer(name, bytes)
     },
     async copyFileToBuffer(name: string): Promise<Uint8Array> {
-      const { db } = await singleton!
+      const { db } = await getSingleton(opts)
       return db.copyFileToBuffer(name)
     },
     async dropFiles(names: string[]): Promise<void> {
-      const { db } = await singleton!
+      const { db } = await getSingleton(opts)
       for (const name of names) {
         try {
           db.dropFile(name)
@@ -124,6 +155,7 @@ export function resetNodeDuckDB(): void {
   // Null the singleton first so the next `createNodeDuckDBHandle` re-inits a
   // fresh instance rather than racing the teardown below.
   singleton = null
+  singletonOpts = null
   // Best-effort: close the connection and reset the bindings so the native
   // DuckDB instance is released instead of leaking across CLI/test runs.
   // Fire-and-forget keeps the synchronous signature the many call sites rely on.
@@ -132,5 +164,9 @@ export function resetNodeDuckDB(): void {
       conn.close()
       db.reset()
     })
-    .catch(() => {})
+    // Don't swallow silently: a failed release means a leaked native instance,
+    // which compounds across long CLI/test runs. Surface it so it's diagnosable.
+    .catch((err) => {
+      console.warn('[gscdump] resetNodeDuckDB: failed to release DuckDB instance', err)
+    })
 }

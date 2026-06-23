@@ -41,23 +41,31 @@ import type { EngineError } from '../errors'
 import type { IcebergAppendSinkOptions, Sink, SinkCloseResult, SinkSlice, SinkWriteResult } from '../sink'
 import type { Row } from '../storage'
 import type { IcebergConnection } from './catalog'
-import type { IcebergTableName } from './schema'
+import type { IcebergTableName, PartitionKeyEncoding } from './schema'
 import { engineErrors } from '../errors'
 import {
   connectIcebergCatalog,
   icebergAppendRetrying,
 } from './catalog'
-import { ICEBERG_SCHEMAS } from './schema'
+import { ICEBERG_SCHEMAS, SEARCH_TYPE_INT } from './schema'
 
 export type IcebergAppendSink = Sink
 
-/** An icebird append record — table data columns + injected partition identity columns. */
+/**
+ * An icebird append record — table data columns + injected partition identity
+ * columns. The identity columns are STRING under `'string'` encoding and plain
+ * `number` (site_id INT, search_type INT) under `'int'` — a small INT site_id is
+ * ample (≪ 2.1B sites) and avoids the R2 SQL string-equality undercount, so no
+ * LONG/BigInt is needed.
+ */
 type IcebergRecord = Record<string, unknown> & {
-  site_id: string
-  search_type: string
+  site_id: string | number
+  search_type: string | number
 }
 
 const DAY_MILLIS = 86_400_000
+const INT32_MIN = -2_147_483_648
+const INT32_MAX = 2_147_483_647
 
 /**
  * Convert a row's `date` to the integer "days since the Unix epoch" the
@@ -108,6 +116,20 @@ function coerceJsonSafe(value: unknown): unknown {
   return value
 }
 
+function toIntPartitionSiteId(value: unknown): number {
+  if (value == null || (typeof value === 'string' && value.trim() === ''))
+    throw new TypeError('toRecords: slice.ctx.siteId is required for int partition encoding')
+  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'bigint')
+    throw new TypeError(`toRecords: int partition site_id must be a safe integer, got '${String(value)}'`)
+
+  const siteId = Number(value)
+  if (!Number.isSafeInteger(siteId))
+    throw new TypeError(`toRecords: int partition site_id must be a safe integer, got '${String(value)}'`)
+  if (siteId < INT32_MIN || siteId > INT32_MAX)
+    throw new TypeError(`toRecords: int partition site_id must fit Iceberg INT, got '${String(value)}'`)
+  return siteId
+}
+
 /**
  * Collapse buffered records that share an Iceberg identity tuple
  * (`site_id` + `search_type` + the table's natural key) to one survivor,
@@ -143,15 +165,28 @@ function dedupeByIdentity(table: IcebergTableName, records: IcebergRecord[]): Ic
   return seen.size === records.length ? records : [...seen.values()]
 }
 
-/** Build the icebird append records for a slice — inject identity columns, encode `date`. */
-function toRecords(slice: SinkSlice, rows: readonly Row[]): IcebergRecord[] {
-  const siteId = slice.ctx.siteId ?? ''
+/**
+ * Build the icebird append records for a slice — inject identity columns, encode
+ * `date`. Under `'int'` encoding `site_id` is written as a plain `number` (INT —
+ * the caller passes the numeric id in `ctx.siteId`) and `search_type` as its
+ * {@link SEARCH_TYPE_INT} code (INT); int identity values are fixed-width so
+ * R2 SQL prunes `WHERE site_id=<n>` correctly (no CONCAT workaround needed).
+ * The probe (gscdump.com probe-int64-engine-e2e, 2026-06-19) confirmed the full
+ * int-partition append + commit + read path round-trips on real R2.
+ */
+function toRecords(slice: SinkSlice, rows: readonly Row[], encoding: PartitionKeyEncoding): IcebergRecord[] {
+  // 'int': site_id is a small INT (the app's user_sites.int_id), search_type its
+  // INT enum code — both plain numbers (INT columns), no BigInt.
+  const siteVal: string | number = encoding === 'int'
+    ? toIntPartitionSiteId(slice.ctx.siteId)
+    : slice.ctx.siteId ?? ''
+  const searchVal: string | number = encoding === 'int' ? SEARCH_TYPE_INT[slice.searchType] : slice.searchType
   return rows.map((row) => {
     const out: Record<string, unknown> = {}
     for (const k in row) out[k] = coerceJsonSafe((row as Record<string, unknown>)[k])
     out.date = toIcebergDate(out.date)
-    out.site_id = siteId
-    out.search_type = slice.searchType
+    out.site_id = siteVal
+    out.search_type = searchVal
     return out as IcebergRecord
   })
 }
@@ -166,6 +201,7 @@ function toRecords(slice: SinkSlice, rows: readonly Row[]): IcebergRecord[] {
  */
 export function createIcebergAppendSink(options: IcebergAppendSinkOptions): IcebergAppendSink {
   let connection: Promise<IcebergConnection> | undefined
+  const encoding: PartitionKeyEncoding = options.encoding ?? 'string'
   // Per-table row buffer, drained by `close()`.
   const buffers = new Map<IcebergTableName, IcebergRecord[]>()
 
@@ -180,7 +216,7 @@ export function createIcebergAppendSink(options: IcebergAppendSinkOptions): Iceb
     async emit(slice: SinkSlice, rows: readonly Row[]): Promise<SinkWriteResult> {
       if (rows.length === 0)
         return { rowCount: 0 }
-      const records = toRecords(slice, rows)
+      const records = toRecords(slice, rows, encoding)
       const buffer = buffers.get(slice.table)
       // NB: never spread `records` into `push`/an array literal — a whale
       // slice is hundreds of thousands of rows, and `push(...records)` passes

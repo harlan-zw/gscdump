@@ -24,6 +24,17 @@ describe('duckDB (Node blocking) smoke', () => {
     expect(rows).toEqual([{ x: 1 }, { x: 2 }])
   })
 
+  it('a held handle survives resetNodeDuckDB() and lazily re-inits', async () => {
+    // Capture the handle once (as createNodeHarness does), then reset the
+    // singleton out from under it. The same handle must keep working by
+    // re-initializing on its next call rather than dereferencing a null
+    // singleton. Guards the ADR-0016 reclaim-between-sites path.
+    const handle = createNodeDuckDBHandle()
+    expect(await handle.query('SELECT 1 AS x')).toEqual([{ x: 1 }])
+    resetNodeDuckDB()
+    expect(await handle.query('SELECT 2 AS x')).toEqual([{ x: 2 }])
+  })
+
   it('roundtrips rows through parquet via the codec', async () => {
     const handle = createNodeDuckDBHandle()
     const codec = createDuckDBCodec({ getDuckDB: async () => handle })

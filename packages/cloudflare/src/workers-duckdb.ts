@@ -342,7 +342,7 @@ export interface DucklingsExecutorOptions {
 
 export function createDucklingsExecutor(env: AnalyticsEnv, opts: DucklingsExecutorOptions = {}): QueryExecutor {
   return {
-    async execute({ sql, params, fileKeys, placeholderTables, dataSource, signal, table }) {
+    async execute({ sql, params, fileKeys, placeholderTables, pushdownFilters, dataSource, signal, table }) {
       signal?.throwIfAborted()
       const svc = resolveSvc(env)
       assertWorkerReadBudget({ fileKeys })
@@ -368,15 +368,25 @@ export function createDucklingsExecutor(env: AnalyticsEnv, opts: DucklingsExecut
 
       for (const [placeholder, keys] of Object.entries(fileKeys)) {
         signal?.throwIfAborted()
+        // Row-group pushdown for this placeholder, if the query carried one.
+        // A filtered decode yields a SUBSET of the file's rows, so it bypasses
+        // the row cache entirely: caching the subset under the file key would
+        // corrupt a later unfiltered read, and reading a cached full set would
+        // forfeit the IPC-shrinking win. The SQL WHERE re-applies downstream,
+        // so a superset filter (a dropped AND-conjunct) is still correct.
+        const filter = pushdownFilters?.[placeholder]
         const perFile = await mapLimit(keys, WORKER_R2_DECODE_CONCURRENCY, async (key) => {
-          const cached = rowCacheGet(key)
-          if (cached)
-            return cached
+          if (!filter) {
+            const cached = rowCacheGet(key)
+            if (cached)
+              return cached
+          }
           signal?.throwIfAborted()
           const bytes = await dataSource.read(key, undefined, signal)
           signal?.throwIfAborted()
-          const rows = await decodeParquetToRows(bytes)
-          rowCachePut(key, rows)
+          const rows = await decodeParquetToRows(bytes, filter ? { filter } : {})
+          if (!filter)
+            rowCachePut(key, rows)
           return rows
         })
         const merged: Row[] = []

@@ -22,7 +22,7 @@ import type { Result } from 'gscdump/result'
 import type { EngineError } from '../errors'
 import type { QueryProfiler } from '../storage'
 import type { CatalogCache } from './catalog-cache'
-import type { IcebergColumnType, IcebergS3Config, IcebergTableName } from './schema'
+import type { IcebergColumnType, IcebergS3Config, IcebergTableName, PartitionKeyEncoding } from './schema'
 import { err, ok } from 'gscdump/result'
 import {
   cachingResolver,
@@ -44,6 +44,7 @@ import {
   ICEBERG_PARTITION_SPEC,
   ICEBERG_SCHEMAS,
   ICEBERG_TABLES,
+  icebergSchemasFor,
 } from './schema'
 
 /** icebird's lowercase Iceberg primitive types (subset we use). */
@@ -115,11 +116,11 @@ const ICEBERG_TYPE_MAP: Record<IcebergColumnType, IcebergPrimitiveType> = {
  * `ICEBERG_SCHEMAS` contract. Field ids are advisory — R2 Data Catalog
  * re-assigns them on `createTable` (see `ICEBERG_FIELD_ID_BASE`).
  */
-export function icebergSchemaFor(table: IcebergTableName): IcebergSchema {
+export function icebergSchemaFor(table: IcebergTableName, encoding: PartitionKeyEncoding = 'string'): IcebergSchema {
   return {
     'type': 'struct',
     'schema-id': 0,
-    'fields': ICEBERG_SCHEMAS[table].columns.map(col => ({
+    'fields': icebergSchemasFor(encoding)[table].columns.map(col => ({
       id: col.fieldId,
       name: col.name,
       required: col.required,
@@ -134,8 +135,8 @@ export function icebergSchemaFor(table: IcebergTableName): IcebergSchema {
  * partition field's `source-id` is resolved to the real column field id from
  * {@link icebergSchemaFor}.
  */
-export function icebergPartitionSpecFor(table: IcebergTableName): IcebergPartitionSpec {
-  const fields = ICEBERG_SCHEMAS[table].columns
+export function icebergPartitionSpecFor(table: IcebergTableName, encoding: PartitionKeyEncoding = 'string'): IcebergPartitionSpec {
+  const fields = icebergSchemasFor(encoding)[table].columns
   const fieldId = (name: string): number => {
     const col = fields.find(c => c.name === name)
     if (!col)
@@ -369,6 +370,7 @@ export async function ensureIcebergNamespace(conn: IcebergConnection): Promise<v
 export async function createIcebergTables(
   conn: IcebergConnection,
   tables: readonly IcebergTableName[] = ICEBERG_TABLES,
+  encoding: PartitionKeyEncoding = 'string',
 ): Promise<IcebergTableOpResult[]> {
   const results: IcebergTableOpResult[] = []
   for (const table of tables) {
@@ -378,8 +380,8 @@ export async function createIcebergTables(
       catalog: conn.catalog,
       namespace: conn.namespace,
       table,
-      schema: icebergSchemaFor(table),
-      partitionSpec: icebergPartitionSpecFor(table),
+      schema: icebergSchemaFor(table, encoding),
+      partitionSpec: icebergPartitionSpecFor(table, encoding),
     }).then(
       () => results.push({ table, outcome: ok(undefined) }),
       (e: unknown) => results.push({ table, outcome: err(engineErrors.icebergTableOpFailed('create', table, e)) }),
@@ -421,10 +423,16 @@ export interface IcebergListedDataFile {
 
 export interface ListIcebergDataFilesOptions {
   table: IcebergTableName
-  /** Partition identity column. */
-  siteId: string
-  /** Partition identity column. */
-  searchType: string
+  /** Partition identity column. `number` for `'int'`-encoded catalogs. */
+  siteId: string | number
+  /** Partition identity column. `number` (int code) for `'int'`-encoded catalogs. */
+  searchType: string | number
+  /**
+   * Partition-key encoding of the catalog. `'int'` changes how manifest-summary
+   * bounds are decoded (int bytes vs UTF-8) and how the per-file partition value
+   * is compared. Defaults to `'string'`.
+   */
+  encoding?: PartitionKeyEncoding
   /**
    * Inclusive date range. Every month touched by `[start, end]` is scanned;
    * `month(date)` is the third partition transform.
@@ -471,8 +479,8 @@ function resolvedFilesKey(
   namespace: string,
   table: string,
   snapshotId: string,
-  siteId: string,
-  searchType: string,
+  siteId: string | number,
+  searchType: string | number,
   wantedMonths: ReadonlySet<number>,
 ): string {
   const months = [...wantedMonths].sort((a, b) => a - b).join(',')
@@ -603,9 +611,15 @@ export async function listIcebergDataFiles(
   }
 
   const endWalk = profiler?.start('iceberg.walk')
-  const partitionFilter = buildPartitionFilter(opts.siteId, opts.searchType, wantedMonths)
+  const partitionFilter = buildPartitionFilter(opts.siteId, opts.searchType, wantedMonths, opts.encoding ?? 'string')
   const manifests = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter })
 
+  // Authoritative per-file partition check. Compare via String() so it is robust
+  // across encodings: 'string' → uuid vs uuid; 'int' → the manifest's numeric
+  // site_id/search_type vs the numeric opts values (number/number, or even
+  // number/bigint, all coerce consistently).
+  const wantSite = String(opts.siteId)
+  const wantSearch = String(opts.searchType)
   const out: IcebergListedDataFile[] = []
   for (const m of manifests) {
     for (const entry of m.entries) {
@@ -615,9 +629,9 @@ export async function listIcebergDataFiles(
       if (df.content !== 0)
         continue
       const part = df.partition as Record<string, unknown>
-      if (part.site_id !== opts.siteId)
+      if (String(part.site_id) !== wantSite)
         continue
-      if (part.search_type !== opts.searchType)
+      if (String(part.search_type) !== wantSearch)
         continue
       const month = part.date_month
       if (typeof month !== 'number' || !wantedMonths.has(month))

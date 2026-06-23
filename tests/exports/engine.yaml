@@ -133,18 +133,23 @@
   ICEBERG_PARTITION_COLUMNS: object
   ICEBERG_PARTITION_SPEC: object
   ICEBERG_SCHEMAS: object
+  ICEBERG_SCHEMAS_INT: object
   ICEBERG_TABLES: object
   icebergAppendRetrying: function
   icebergCreateTable: function
   icebergManifests: function
+  icebergPartitionColumns: function
   icebergPartitionSpecFor: function
   icebergSchemaFor: function
+  icebergSchemasFor: function
   icebergTableSpec: function
+  INT_SEARCH_TYPE: object
   isCommitRateLimited: function
   isIcebergTable: function
   listIcebergDataFiles: function
   listIcebergTables: function
   restCatalogLoadTable: function
+  SEARCH_TYPE_INT: object
 ./ingest:
   assembleDatesRow: function
   createRowAccumulator: function
@@ -242,6 +247,7 @@
   allTables: function
   countries: object
   currentSchemaVersion: function
+  dateColumnsFor: function
   dates: object
   dedupeByNaturalKey: function
   dimensionToColumn: function
@@ -284,6 +290,7 @@
   formatLiteralResult: function
   sqlEscape: function
 ./sql-fragments:
+  dateReplaceClause: function
   escapeLike: function
   METRIC_EXPR: object
   topLevelPagePredicateSql: function
