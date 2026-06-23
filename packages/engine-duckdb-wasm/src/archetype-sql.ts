@@ -122,21 +122,30 @@ function deviceUnpivotSql(
   }).join(' UNION ALL ')
 }
 
-/** `date BETWEEN ? AND ? AND search_type = ?` predicate + params. */
-function rangePredicate(q: ArchetypeQuery & { range: { start: string, end: string }, searchType: string }): { sql: string, params: unknown[] } {
+// `date BETWEEN ? AND ?` predicate + params. NB: NO `search_type` predicate.
+// The attached DuckDB view is ALREADY scoped to one (site, searchType) — the
+// host attaches a per-`<table>_<sid>_<searchType>` view per analyzer instance and
+// rewrites the logical table name to it, so every row already belongs to this
+// searchType. A `search_type = '<str>'` predicate is therefore redundant, and on
+// an INT-encoded catalog it is also WRONG: the column is INT (search_type code),
+// so binding the string `'web'` throws `Conversion Error: Could not convert
+// string 'web' to INT32` and the whole browser query falls back to the server.
+// Dropping it makes the browser path encoding-agnostic. (Mirrors the existing
+// "sliced by search type, so no search_type predicate is needed" convention.)
+function rangePredicate(q: { range: { start: string, end: string } }): { sql: string, params: unknown[] } {
   return {
-    sql: 'date BETWEEN ? AND ? AND search_type = ?',
-    params: [q.range.start, q.range.end, q.searchType],
+    sql: 'date BETWEEN ? AND ?',
+    params: [q.range.start, q.range.end],
   }
 }
 
-/** Same predicate over the comparison window. */
-function compareRangePredicate(q: { compareRange?: { start: string, end: string }, searchType: string }): { sql: string, params: unknown[] } | null {
+/** Same predicate over the comparison window (also without `search_type`). */
+function compareRangePredicate(q: { compareRange?: { start: string, end: string } }): { sql: string, params: unknown[] } | null {
   if (!q.compareRange)
     return null
   return {
-    sql: 'date BETWEEN ? AND ? AND search_type = ?',
-    params: [q.compareRange.start, q.compareRange.end, q.searchType],
+    sql: 'date BETWEEN ? AND ?',
+    params: [q.compareRange.start, q.compareRange.end],
   }
 }
 

@@ -17,7 +17,9 @@ describe('compileArchetypeSql', () => {
     expect(c.table).toBe('dates')
     expect(c.sql).toContain('GROUP BY date')
     expect(c.sql).toContain('SUM(clicks) AS clicks')
-    expect(c.params).toEqual(['2026-01-01', '2026-03-31', 'web'])
+    // NB: no trailing search_type param — the attached view is per-searchType,
+    // so the predicate (and its param) were dropped (encoding-agnostic).
+    expect(c.params).toEqual(['2026-01-01', '2026-03-31'])
   })
 
   it('2 — entity-daily-timeseries: filters one resolved entity', () => {
@@ -99,7 +101,8 @@ describe('compileArchetypeSql', () => {
     expect(branded.sql).toContain('regexp_matches(LOWER(query), ?)')
     expect(branded.sql).not.toContain('NOT regexp_matches')
     // facet param sits between the range params and the trailing LIMIT param.
-    expect(branded.params).toEqual(['2026-01-01', '2026-03-31', 'web', '(nuxt seo)', 50])
+    // (No search_type param — dropped; the view is already per-searchType.)
+    expect(branded.params).toEqual(['2026-01-01', '2026-03-31', '(nuxt seo)', 50])
 
     const nonBranded = compileArchetypeSql({ ...base, facets: [{ column: 'query', op: 'notRegex', value: '(nuxt seo)' }] })
     expect(nonBranded.sql).toContain('NOT regexp_matches(LOWER(query), ?)')
