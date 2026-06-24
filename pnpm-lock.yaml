@@ -414,12 +414,6 @@ importers:
       gscdump:
         specifier: workspace:*
         version: link:../gscdump
-      hyparquet:
-        specifier: 'catalog:'
-        version: 1.26.1
-      hyparquet-writer:
-        specifier: 'catalog:'
-        version: 0.16.1(patch_hash=7a5e451ac7634d7546ac56bcc5eadacf7715a6241640c2b5a5bc0cfc9763b8ec)
       proper-lockfile:
         specifier: catalog:deps
         version: 4.1.2
@@ -433,6 +427,12 @@ importers:
       aws4fetch:
         specifier: 'catalog:'
         version: 1.0.20
+      hyparquet:
+        specifier: 'catalog:'
+        version: 1.26.1
+      hyparquet-writer:
+        specifier: 'catalog:'
+        version: 0.16.1(patch_hash=7a5e451ac7634d7546ac56bcc5eadacf7715a6241640c2b5a5bc0cfc9763b8ec)
       icebird:
         specifier: 'catalog:'
         version: 0.8.10(patch_hash=25652d79f68e9b1b14cf58748ec69083e2edc2d7b98f7db80e7ae89670ece397)
