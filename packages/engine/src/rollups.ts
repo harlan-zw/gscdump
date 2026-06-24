@@ -18,7 +18,7 @@ import type { DataSource, FileSetRef, Row, TableName } from './contracts'
 import type { EngineError } from './errors'
 import type { ColumnDef } from './schema'
 import { MS_PER_DAY } from 'gscdump'
-import { encodeRowsToParquetFlex } from './adapters/hyparquet'
+import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { createIndexingMetadataStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexPrefix } from './entities'
 import { engineErrors } from './errors'
 import { DEFAULT_SEARCH_TYPE } from './layout'
@@ -1142,40 +1142,149 @@ export const queryCanonicalDailyRollup: RollupDef = {
       // bounded regardless of cardinality.
       paginate: { orderBy: 'date, query_canonical', pageRows: ROLLUP_PAGE_ROWS_DAILY },
       maxWindowDays: DAILY_MAX_WINDOW_DAYS,
-      sqlFor: useDim
-        ? w => `
-          SELECT
-            ${canonExpr} AS query_canonical,
-            CAST(q.date AS VARCHAR) AS date,
-            SUM(q.clicks)::BIGINT AS clicks,
-            SUM(q.impressions)::BIGINT AS impressions,
-            SUM(q.sum_position)::DOUBLE AS sum_position
-          FROM read_parquet({{FILES}}, union_by_name = true) q
-          LEFT JOIN read_parquet({{QUERY_DIM}}, union_by_name = true) qd ON q.query = qd.query
-          WHERE q.date >= '${w.start}' AND q.date <= '${w.end}'
-          GROUP BY ${canonExpr}, q.date
-        `
-        : w => `
-          SELECT
-            ${canonExpr} AS query_canonical,
-            CAST(date AS VARCHAR) AS date,
-            SUM(clicks)::BIGINT AS clicks,
-            SUM(impressions)::BIGINT AS impressions,
-            SUM(sum_position)::DOUBLE AS sum_position
-          FROM read_parquet({{FILES}}, union_by_name = true)
-          WHERE date >= '${w.start}' AND date <= '${w.end}'
-          GROUP BY ${canonExpr}, date
-        `,
+      sqlFor: dailyWindowSqlFor(useDim, canonExpr),
     })
-    return rows.map(r => ({
-      query_canonical: String(r.query_canonical),
-      date: String(r.date),
-      clicks: BigInt(r.clicks as bigint | number),
-      impressions: BigInt(r.impressions as bigint | number),
-      sum_position: Number(r.sum_position),
-    }))
+    return rows.map(mapDailyRow)
   },
 }
+
+// Shared between the one-shot `queryCanonicalDailyRollup.build` and the resumable
+// `rebuildCanonicalDailyResumable` builder so the two can't drift.
+function dailyWindowSqlFor(useDim: boolean, canonExpr: string): (w: { start: string, end: string }) => string {
+  return useDim
+    ? w => `
+        SELECT
+          ${canonExpr} AS query_canonical,
+          CAST(q.date AS VARCHAR) AS date,
+          SUM(q.clicks)::BIGINT AS clicks,
+          SUM(q.impressions)::BIGINT AS impressions,
+          SUM(q.sum_position)::DOUBLE AS sum_position
+        FROM read_parquet({{FILES}}, union_by_name = true) q
+        LEFT JOIN read_parquet({{QUERY_DIM}}, union_by_name = true) qd ON q.query = qd.query
+        WHERE q.date >= '${w.start}' AND q.date <= '${w.end}'
+        GROUP BY ${canonExpr}, q.date
+      `
+    : w => `
+        SELECT
+          ${canonExpr} AS query_canonical,
+          CAST(date AS VARCHAR) AS date,
+          SUM(clicks)::BIGINT AS clicks,
+          SUM(impressions)::BIGINT AS impressions,
+          SUM(sum_position)::DOUBLE AS sum_position
+        FROM read_parquet({{FILES}}, union_by_name = true)
+        WHERE date >= '${w.start}' AND date <= '${w.end}'
+        GROUP BY ${canonExpr}, date
+      `
+}
+
+function mapDailyRow(r: Row): Row {
+  return {
+    query_canonical: String(r.query_canonical),
+    date: String(r.date),
+    clicks: BigInt(r.clicks as bigint | number),
+    impressions: BigInt(r.impressions as bigint | number),
+    sum_position: Number(r.sum_position),
+  }
+}
+
+// Staging-partial object-id stem for the resumable daily build. Each invocation's
+// window batch is written under `<stem>__w<offset>` (disjoint dates), then merged
+// into the real `query_canonical_daily` parquet on the final invocation.
+const CANONICAL_DAILY_STAGING_STEM = 'query_canonical_daily__staging'
+
+/**
+ * Resumable, cross-invocation build of `query_canonical_daily` for a high-
+ * cardinality site whose full windowed build exceeds one job reservation (300s).
+ *
+ * Each call builds the day-capped windows from `windowOffset` until `deadlineMs`,
+ * writes that batch's rows to a STAGING partial parquet (windows are disjoint by
+ * date, so partials never overlap), and returns `{ done:false, nextWindowOffset }`
+ * for the caller to re-enqueue. When the last window is built it MERGES every
+ * staging partial into the canonical `query_canonical_daily` parquet + envelope
+ * (the read path is unchanged — still one rollup file) and deletes the staging,
+ * returning `{ done:true }`. `builtAt` MUST be stable across the continuation chain
+ * (it versions both the staging keys and the final rollup key).
+ */
+export async function rebuildCanonicalDailyResumable(opts: {
+  engine: RollupEngine
+  ctx: TenantCtx
+  dataSource: DataSource
+  searchType?: SearchType
+  builtAt: number
+  windowOffset: number
+  deadlineMs: number
+}): Promise<{ done: boolean, nextWindowOffset: number, windowsTotal: number, windowsBuilt: number, rowsWritten: number }> {
+  const { engine, ctx, dataSource, searchType, builtAt, windowOffset, deadlineMs } = opts
+  const sType = searchType !== undefined ? { searchType } : {}
+
+  const parts = await engine.listPartitions({ ctx, table: 'queries', ...sType })
+  const windows = planRollupWindows(parts.map(p => ({ partition: p.partition, bytes: p.bytes })), undefined, DAILY_MAX_WINDOW_DAYS)
+  const windowsTotal = windows.length
+
+  const dimStore = createQueryDimStore({ dataSource })
+  const useDim = (await dimStore.loadMeta(ctx)) !== null
+  const canonExpr = useDim
+    ? `COALESCE(qd.query_canonical, NULLIF(q.query_canonical, ''), q.query)`
+    : `COALESCE(NULLIF(query_canonical, ''), query)`
+  const extraFileSets = useDim ? { QUERY_DIM: { table: 'queries' as TableName, keys: [dimStore.parquetKey(ctx)] } } : undefined
+  const sqlFor = dailyWindowSqlFor(useDim, canonExpr)
+  const cols = queryCanonicalDailyRollup.parquetColumns!
+  const sortKey = queryCanonicalDailyRollup.parquetSortKey
+
+  // Build windows [windowOffset, …] until the deadline (or all done).
+  const batchRows: Row[] = []
+  let i = windowOffset
+  for (; i < windowsTotal; i++) {
+    const w = windows[i]!
+    const winRows = await runPagedQuery({
+      engine,
+      ctx,
+      table: 'queries',
+      ...sType,
+      fileSets: { FILES: { table: 'queries', partitions: w.partitions }, ...extraFileSets },
+      coreSql: sqlFor(w),
+      orderBy: 'date, query_canonical',
+      pageRows: ROLLUP_PAGE_ROWS_DAILY,
+    })
+    for (const r of winRows)
+      batchRows.push(mapDailyRow(r))
+    if (Date.now() > deadlineMs) {
+      i++ // this window is done; resume from the next
+      break
+    }
+  }
+  const nextWindowOffset = i
+
+  // Persist this invocation's window batch as a staging partial.
+  const stagingKey = rollupParquetKey(ctx, `${CANONICAL_DAILY_STAGING_STEM}__w${windowOffset}`, builtAt, searchType)
+  await dataSource.write(stagingKey, encodeRowsToParquetFlex(batchRows, { columns: cols, sortKey }))
+
+  if (nextWindowOffset < windowsTotal)
+    return { done: false, nextWindowOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten: batchRows.length }
+
+  // FINAL window built → merge all staging partials into the canonical rollup.
+  const stagingPrefix = rollupParquetKey(ctx, `${CANONICAL_DAILY_STAGING_STEM}__`, builtAt, searchType).replace(/__v\d+\.parquet$/, '')
+  const allKeys = await dataSource.list(stagingPrefix.replace(/[^/]*$/, ''))
+  const stagingKeys = allKeys.filter(k => k.includes(`${CANONICAL_DAILY_STAGING_STEM}__w`) && k.includes(`__v${builtAt}.parquet`))
+  const merged: Row[] = []
+  for (const k of stagingKeys)
+    merged.push(...await decodeParquetToRows(await dataSource.read(k), { columns: cols.map(c => c.name) }))
+
+  const parquetKey = rollupParquetKey(ctx, CANONICAL_DAILY_ROLLUP_FINAL_ID, builtAt, searchType)
+  await dataSource.write(parquetKey, encodeRowsToParquetFlex(merged, { columns: cols, sortKey }))
+  const envelope: RollupEnvelope<ParquetRollupPointer> = {
+    version: 1,
+    id: CANONICAL_DAILY_ROLLUP_FINAL_ID,
+    builtAt,
+    windowDays: queryCanonicalDailyRollup.windowDays,
+    payload: { parquetKey, rowCount: merged.length },
+  }
+  await dataSource.write(rollupKey(ctx, CANONICAL_DAILY_ROLLUP_FINAL_ID, builtAt, searchType), new TextEncoder().encode(JSON.stringify(envelope)))
+  await dataSource.delete(stagingKeys)
+  return { done: true, nextWindowOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten: merged.length }
+}
+
+const CANONICAL_DAILY_ROLLUP_FINAL_ID = 'query_canonical_daily'
 
 /**
  * Aggregates the per-URL Indexing API metadata entity store (populated by
