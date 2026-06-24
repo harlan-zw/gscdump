@@ -35,6 +35,7 @@
 import type { AsyncDuckDB, AsyncDuckDBConnection, DuckDBDataProtocol } from '@duckdb/duckdb-wasm'
 import type { OpfsHandleRegistry } from './opfs-registry'
 import { createOpfsHandleRegistry } from './opfs-registry'
+import { overlayViewBody } from './overlay-view'
 
 /** A parquet data file to materialise into OPFS. */
 export interface OpfsParquetFile {
@@ -404,27 +405,21 @@ function readParquetViewSql(schema: string, table: string, files: string[]): str
 }
 
 /**
- * View SQL for a table that has a recent-window overlay. Anti-join dedup: the
- * lake serves every day it has; the overlay serves ONLY days the lake lacks
- * (`date NOT IN (SELECT DISTINCT date FROM lake)`), joined with `UNION ALL BY
- * NAME`. Mirrors the server's `lakeOverlayRelation`. When `lakeFiles` is empty
- * (the requested range is entirely within the recent tail) the view is the
- * overlay alone — no lake to dedup against.
- *
- * The lake is read once via a `MATERIALIZED` CTE and reused for both the served
- * rows and the anti-join date set; a plain CTE would be inlined and re-scan the
- * parquet files, which is the dominant cost in CPU-bound DuckDB-WASM.
+ * View SQL for a table that has a recent-window overlay. The merge body (anti-join
+ * dedup, `MATERIALIZED` lake reuse, `UNION ALL BY NAME`) is built by the shared
+ * {@link overlayViewBody}; here we only supply the two date-normalised SELECTs and
+ * wrap the result in `CREATE OR REPLACE VIEW`. When `lakeFiles` is empty (the
+ * requested range is entirely within the recent tail) the body is the overlay
+ * alone — no lake to dedup against.
  */
 function readParquetViewWithOverlaySql(schema: string, table: string, lakeFiles: string[], overlayFile: string): string {
   const overlay = `SELECT * REPLACE (CAST(date AS DATE) AS date) FROM read_parquet(['${overlayFile.replace(/'/g, '\'\'')}'], union_by_name = true)`
-  if (lakeFiles.length === 0)
-    return `CREATE OR REPLACE VIEW ${schema}.${table} AS ${overlay}`
-  return `CREATE OR REPLACE VIEW ${schema}.${table} AS `
-    + `WITH lake AS MATERIALIZED (${lakeSelect(lakeFiles)}), `
-    + `lake_dates AS (SELECT DISTINCT date FROM lake) `
-    + `SELECT * FROM lake `
-    + `UNION ALL BY NAME `
-    + `SELECT * FROM (${overlay}) AS overlay WHERE overlay.date NOT IN (SELECT date FROM lake_dates)`
+  const body = overlayViewBody({
+    lakeSelect: lakeFiles.length === 0 ? null : lakeSelect(lakeFiles),
+    overlaySelect: overlay,
+    materializeLake: true,
+  })!
+  return `CREATE OR REPLACE VIEW ${schema}.${table} AS ${body}`
 }
 
 async function runWithConcurrency<T>(

@@ -14,7 +14,7 @@
 
 import type { TenantCtx } from '@gscdump/contracts'
 import type { SearchType } from 'gscdump/query'
-import type { DataSource, FileSetRef, Row } from './contracts'
+import type { DataSource, FileSetRef, Row, TableName } from './contracts'
 import type { EngineError } from './errors'
 import type { ColumnDef } from './schema'
 import { MS_PER_DAY } from 'gscdump'
@@ -395,6 +395,27 @@ function utcDateMinusDays(at: number, days: number): string {
  */
 export const WINDOW_BYTE_BUDGET = 10 * 1024 * 1024
 
+/**
+ * Per-page OUTPUT row cap for key-paginated rollups (`runWindowed({ paginate })`
+ * and `runPagedQuery`). `planRollupWindows` bounds the *input* parquet bytes a
+ * window scans, which is a fine proxy for output size on fact aggregations whose
+ * grain matches the input (one output row per input date). It is NOT a proxy for
+ * aggregations that COLLAPSE to a smaller-cardinality grain whose row count is
+ * driven by a high-cardinality GROUP key — `(query_canonical × date)` and
+ * `(query_canonical)` — where output rows scale with distinct canonicals, not
+ * input bytes. For those, each `runSQL` result (shipped as an Arrow IPC stream
+ * over the Workers service-binding RPC; 28MiB guard in `@gscdump/cloudflare`,
+ * duckdb-worker `assertResultBudget` at 24MiB / 100k rows) must be bounded by
+ * paging the OUTPUT, independent of how the input is windowed.
+ *
+ * Narrow rows — `(canonical, date, 3 metrics)` — page at 50k (≈16MiB at the
+ * worker's `cols×64` heuristic, well under both guards). WIDE rows carry a
+ * `GROUP_CONCAT` variants string (up to ~10 variants × ~60 chars) the heuristic
+ * under-counts, so they page smaller to keep the real IPC payload bounded.
+ */
+export const ROLLUP_PAGE_ROWS = 50_000
+export const ROLLUP_PAGE_ROWS_WIDE = 20_000
+
 const DAY_RE = /^daily\/(\d{4})-(\d{2})-(\d{2})$/
 const WEEK_RE = /^weekly\/(\d{4})-(\d{2})-(\d{2})$/
 const MONTH_RE = /^monthly\/(\d{4})-(\d{2})$/
@@ -519,14 +540,60 @@ export function partitionsInRange(
 }
 
 /**
+ * Run one aggregation over a FIXED file set, paging the OUTPUT by appending
+ * `ORDER BY <orderBy> LIMIT <pageRows> OFFSET <n>` until a short page. Bounds
+ * each `runSQL` result — and thus the Arrow IPC payload shipped over the Workers
+ * service-binding RPC — regardless of GROUP cardinality (see `ROLLUP_PAGE_ROWS`).
+ *
+ * Contract: `coreSql` MUST be a complete `SELECT … GROUP BY …` with NO trailing
+ * `ORDER BY`/`LIMIT` (they're appended here), and `orderBy` MUST be a TOTAL order
+ * over the result (a superkey of the GROUP grain) so offset paging is
+ * gap/overlap-free. OFFSET paging re-runs the aggregation per page; that's
+ * acceptable for a post-sync background build, and the common case is a single
+ * short page (no extra scans).
+ */
+async function runPagedQuery(opts: {
+  engine: RollupEngine
+  ctx: TenantCtx
+  table: TableName
+  searchType?: SearchType
+  fileSets: Record<string, FileSetRef>
+  coreSql: string
+  orderBy: string
+  pageRows: number
+}): Promise<Row[]> {
+  const out: Row[] = []
+  for (let offset = 0; ; offset += opts.pageRows) {
+    const result = await opts.engine.runSQL({
+      ctx: opts.ctx,
+      table: opts.table,
+      fileSets: opts.fileSets,
+      sql: `${opts.coreSql}\nORDER BY ${opts.orderBy}\nLIMIT ${opts.pageRows} OFFSET ${offset}`,
+      ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
+    })
+    out.push(...result.rows)
+    if (result.rows.length < opts.pageRows)
+      break
+  }
+  return out
+}
+
+/**
  * Run a full-history aggregation in byte-bounded windows and concat the rows.
  * Each window's SQL MUST date-filter to `[w.start, w.end]` (see `sqlFor`) so a
  * tier file spanning a window boundary doesn't double-count calendar dates.
+ *
+ * `paginate` additionally pages each window's OUTPUT (see `runPagedQuery`) so a
+ * window whose GROUP cardinality is high — `(query_canonical × date)` on a large
+ * site — can't ship an oversized result even though its input bytes fit a window.
+ * Date-windowing bounds the per-query scan; output paging bounds the IPC payload.
+ * The two are orthogonal and compose. When `paginate` is set, `sqlFor` MUST emit
+ * no trailing `ORDER BY`/`LIMIT` and `paginate.orderBy` MUST be a total order.
  */
 export async function runWindowed(opts: {
   engine: RollupEngine
   ctx: TenantCtx
-  table: import('@gscdump/engine/contracts').TableName
+  table: TableName
   searchType?: SearchType
   sqlFor: (w: { start: string, end: string }) => string
   /**
@@ -535,6 +602,8 @@ export async function runWindowed(opts: {
    * dimension parquet via `{ QUERY_DIM: { keys: [...] } }`) inside `sqlFor`.
    */
   extraFileSets?: Record<string, FileSetRef>
+  /** Page each window's output by a total-order key. See `runPagedQuery`. */
+  paginate?: { orderBy: string, pageRows: number }
 }): Promise<Row[]> {
   const parts = await opts.engine.listPartitions({
     ctx: opts.ctx,
@@ -544,10 +613,24 @@ export async function runWindowed(opts: {
   const windows = planRollupWindows(parts)
   const rows: Row[] = []
   for (const w of windows) {
+    const fileSets = { FILES: { table: opts.table, partitions: w.partitions }, ...opts.extraFileSets }
+    if (opts.paginate) {
+      rows.push(...await runPagedQuery({
+        engine: opts.engine,
+        ctx: opts.ctx,
+        table: opts.table,
+        ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
+        fileSets,
+        coreSql: opts.sqlFor(w),
+        orderBy: opts.paginate.orderBy,
+        pageRows: opts.paginate.pageRows,
+      }))
+      continue
+    }
     const result = await opts.engine.runSQL({
       ctx: opts.ctx,
       table: opts.table,
-      fileSets: { FILES: { table: opts.table, partitions: w.partitions }, ...opts.extraFileSets },
+      fileSets,
       sql: opts.sqlFor(w),
       ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
     })
@@ -907,12 +990,21 @@ export const queryCanonicalVariantsRollup: RollupDef = {
     if (parts.length === 0)
       return []
     const partitions = parts.map(p => p.partition)
-    const result = await engine.runSQL({
+    // One row per distinct `query_canonical` over full history: row count scales
+    // with canonical cardinality, not input bytes, and (unlike the daily rollup)
+    // it CAN'T be date-windowed — the variant ranking is global per canonical, so
+    // splitting dates across windows would mis-rank. Page the output by its unique
+    // joinKey grain so a high-cardinality site can't ship an oversized result.
+    // WIDE page: the `variants` GROUP_CONCAT column the byte heuristic under-counts.
+    const rows = await runPagedQuery({
+      engine,
       ctx,
       table: 'queries',
-      fileSets: { FILES: { table: 'queries', partitions } },
       ...(searchType !== undefined ? { searchType } : {}),
-      sql: `
+      fileSets: { FILES: { table: 'queries', partitions } },
+      orderBy: 'joinKey',
+      pageRows: ROLLUP_PAGE_ROWS_WIDE,
+      coreSql: `
         WITH per_variant AS (
           SELECT
             COALESCE(NULLIF(query_canonical, ''), query) AS joinKey,
@@ -934,7 +1026,7 @@ export const queryCanonicalVariantsRollup: RollupDef = {
         GROUP BY joinKey
       `,
     })
-    return result.rows.map(r => ({
+    return rows.map(r => ({
       joinKey: String(r.joinKey),
       variantCount: BigInt(r.variantCount as bigint | number),
       canonicalName: r.canonicalName == null ? null : String(r.canonicalName),
@@ -996,6 +1088,12 @@ export const queryCanonicalDailyRollup: RollupDef = {
       table: 'queries',
       ...(searchType !== undefined ? { searchType } : {}),
       ...(useDim ? { extraFileSets: { QUERY_DIM: { table: 'queries', keys: [dimStore.parquetKey(ctx)] } } } : {}),
+      // `(query_canonical × date)` row count scales with distinct canonicals, not
+      // input bytes, so a byte-sized window can still over-produce on a high-
+      // cardinality site (GSCDUMP-P: 20.5k rows tripped the old 10k cap). Page the
+      // output by its unique (date, query_canonical) grain so each runSQL stays
+      // bounded regardless of cardinality.
+      paginate: { orderBy: 'date, query_canonical', pageRows: ROLLUP_PAGE_ROWS },
       sqlFor: useDim
         ? w => `
           SELECT

@@ -43,6 +43,7 @@ export type {
   OpfsParquetFile,
   OpfsParquetTable,
 } from './opfs'
+export { overlayViewBody } from './overlay-view'
 export { createInsightRunner, mergeScope, scopeFor } from './runner'
 export type { InsightRunner, InsightRunnerOptions, ScopedRunnerOptions, TableScope } from './runner'
 export {

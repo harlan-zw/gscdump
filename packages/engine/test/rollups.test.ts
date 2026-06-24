@@ -9,10 +9,15 @@ import {
   indexingHealthRollup,
   indexingMetadataRollup,
   indexPercentRollup,
+  queryCanonicalDailyRollup,
+  queryCanonicalVariantsRollup,
   readLatestRollup,
   rebuildRollups,
+  ROLLUP_PAGE_ROWS,
+  ROLLUP_PAGE_ROWS_WIDE,
   rollupKey,
   rollupParquetKey,
+  runWindowed,
   sitemapChanges28dRollup,
   sitemapHealthRollup,
   topCountries28dRollup,
@@ -920,5 +925,110 @@ describe('rebuildRollups idempotency', () => {
     expect(r3).toEqual(r1)
     expect(first.store.size).toBe(1)
     expect(new TextDecoder().decode(first.store.get(r3[0].objectKey)!)).toBe(before)
+  })
+})
+
+describe('rollup output pagination (bounds each runSQL/IPC payload by GROUP cardinality)', () => {
+  // SQL-aware fake: honours the `LIMIT <n> OFFSET <m>` that runPagedQuery
+  // appends, so we can prove paging reassembles the full set AND that every
+  // single runSQL stays under the page cap. The fake ignores the aggregation
+  // body and paginates a pre-shaped result set — the SUT under test is the
+  // paging control flow, not DuckDB.
+  function makePagingEngine(dataset: Row[]): { engine: RollupEngine, calls: Array<{ sql: string, returned: number }> } {
+    const calls: Array<{ sql: string, returned: number }> = []
+    const engine: RollupEngine = {
+      async runSQL({ sql }) {
+        const m = /LIMIT (\d+) OFFSET (\d+)/.exec(sql)
+        const rows = m ? dataset.slice(Number(m[2]), Number(m[2]) + Number(m[1])) : dataset
+        calls.push({ sql, returned: rows.length })
+        return { rows }
+      },
+      // One recent partition → planRollupWindows yields exactly one window.
+      async listPartitions() {
+        return [{ partition: 'daily/2023-11-10', bytes: 1000 }]
+      },
+    }
+    return { engine, calls }
+  }
+
+  it('runWindowed({ paginate }) pages a window by its key until a short page, concatenating all rows in order', async () => {
+    const dataset: Row[] = Array.from({ length: 120_000 }, (_, i) => ({ k: i }))
+    const { engine, calls } = makePagingEngine(dataset)
+    const rows = await runWindowed({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      table: 'queries',
+      sqlFor: () => 'SELECT k FROM read_parquet({{FILES}}) GROUP BY k',
+      paginate: { orderBy: 'k', pageRows: 50_000 },
+    })
+    // All rows reassembled, in order, no gaps/dupes.
+    expect(rows.length).toBe(120_000)
+    expect((rows[0] as { k: number }).k).toBe(0)
+    expect((rows[119_999] as { k: number }).k).toBe(119_999)
+    // 3 pages: 50k, 50k, 20k — the short final page ends the loop.
+    expect(calls.map(c => c.returned)).toEqual([50_000, 50_000, 20_000])
+    expect(calls.every(c => c.returned <= 50_000)).toBe(true)
+    // The appended clause carried the total-order key + offset paging.
+    expect(calls[0]!.sql).toContain('ORDER BY k')
+    expect(calls[0]!.sql).toContain('LIMIT 50000 OFFSET 0')
+    expect(calls[1]!.sql).toContain('OFFSET 50000')
+  })
+
+  it('runWindowed without paginate keeps the single-call behaviour (regression)', async () => {
+    const dataset: Row[] = Array.from({ length: 5 }, (_, i) => ({ k: i }))
+    const { engine, calls } = makePagingEngine(dataset)
+    const rows = await runWindowed({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      table: 'queries',
+      sqlFor: () => 'SELECT k FROM read_parquet({{FILES}}) GROUP BY k',
+    })
+    expect(rows.length).toBe(5)
+    expect(calls.length).toBe(1)
+    expect(calls[0]!.sql).not.toContain('OFFSET')
+  })
+
+  it('queryCanonicalDailyRollup.build pages output by (date, query_canonical) — GSCDUMP-P regression', async () => {
+    const { ds } = makeFakeDataSource() // empty store → no query dim → useDim=false
+    const n = ROLLUP_PAGE_ROWS + 1234 // forces a second page
+    const dataset: Row[] = Array.from({ length: n }, (_, i) => ({
+      query_canonical: `c${i}`,
+      date: '2023-11-10',
+      clicks: 1,
+      impressions: 10,
+      sum_position: 5,
+    }))
+    const { engine, calls } = makePagingEngine(dataset)
+    const out = await queryCanonicalDailyRollup.build({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource: ds,
+      windowAnchorMs: 1_700_000_000_000,
+    }) as Array<{ query_canonical: string }>
+    expect(out.length).toBe(n)
+    expect(calls.length).toBe(Math.ceil(n / ROLLUP_PAGE_ROWS))
+    expect(calls.every(c => c.returned <= ROLLUP_PAGE_ROWS)).toBe(true)
+    expect(calls[0]!.sql).toContain('ORDER BY date, query_canonical')
+  })
+
+  it('queryCanonicalVariantsRollup.build pages the (previously unbounded) single full-history scan by joinKey', async () => {
+    const n = ROLLUP_PAGE_ROWS_WIDE + 77 // forces a second page
+    const dataset: Row[] = Array.from({ length: n }, (_, i) => ({
+      joinKey: `c${i}`,
+      variantCount: 1,
+      canonicalName: `c${i}`,
+      variants: `c${i}:::1:::10:::5.0`,
+    }))
+    const { engine, calls } = makePagingEngine(dataset)
+    const out = await queryCanonicalVariantsRollup.build({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource: makeFakeDataSource().ds,
+      windowAnchorMs: 1_700_000_000_000,
+    }) as Array<{ joinKey: string }>
+    expect(out.length).toBe(n)
+    expect(calls.length).toBe(Math.ceil(n / ROLLUP_PAGE_ROWS_WIDE))
+    expect(calls.every(c => c.returned <= ROLLUP_PAGE_ROWS_WIDE)).toBe(true)
+    expect(calls[0]!.sql).toContain('ORDER BY joinKey')
   })
 })
