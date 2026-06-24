@@ -18,7 +18,7 @@ import type { DataSource, FileSetRef, Row, TableName } from './contracts'
 import type { EngineError } from './errors'
 import type { ColumnDef } from './schema'
 import { MS_PER_DAY } from 'gscdump'
-import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
+import { encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { createIndexingMetadataStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexPrefix } from './entities'
 import { engineErrors } from './errors'
 import { DEFAULT_SEARCH_TYPE } from './layout'
@@ -143,6 +143,15 @@ export interface RollupEnvelope<T = unknown> {
 export interface ParquetRollupPointer {
   parquetKey: string
   rowCount: number
+  /**
+   * MULTI-FILE rollup: when set, the rollup is the UNION of these parquet keys
+   * (disjoint by the grain's partition column, e.g. `date` for the resumable
+   * `query_canonical_daily` build). Readers MUST union all keys; `parquetKey`
+   * stays populated (the first part) for single-file readers. Avoids a JS
+   * merge/re-encode of the whole rollup — the scaling bottleneck for a
+   * cross-invocation resumable build.
+   */
+  parquetKeys?: string[]
 }
 
 function rollupPrefix(ctx: TenantCtx, searchType?: SearchType): string {
@@ -1187,11 +1196,6 @@ function mapDailyRow(r: Row): Row {
   }
 }
 
-// Staging-partial object-id stem for the resumable daily build. Each invocation's
-// window batch is written under `<stem>__w<offset>` (disjoint dates), then merged
-// into the real `query_canonical_daily` parquet on the final invocation.
-const CANONICAL_DAILY_STAGING_STEM = 'query_canonical_daily__staging'
-
 /**
  * Resumable, cross-invocation build of `query_canonical_daily` for a high-
  * cardinality site whose full windowed build exceeds one job reservation (300s).
@@ -1256,35 +1260,37 @@ export async function rebuildCanonicalDailyResumable(opts: {
   const nextWindowOffset = i
 
   // Persist this invocation's window batch as a staging partial.
-  const stagingKey = rollupParquetKey(ctx, `${CANONICAL_DAILY_STAGING_STEM}__w${windowOffset}`, builtAt, searchType)
-  await dataSource.write(stagingKey, encodeRowsToParquetFlex(batchRows, { columns: cols, sortKey }))
+  // Each window batch is a permanent rollup PART (disjoint by date), keyed by its
+  // start offset + builtAt. The parts ARE the rollup — no merge.
+  const partKey = rollupParquetKey(ctx, `${CANONICAL_DAILY_PART_STEM}__w${windowOffset}`, builtAt, searchType)
+  await dataSource.write(partKey, encodeRowsToParquetFlex(batchRows, { columns: cols, sortKey }))
 
   if (nextWindowOffset < windowsTotal)
     return { done: false, nextWindowOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten: batchRows.length }
 
-  // FINAL window built → merge all staging partials into the canonical rollup.
-  const stagingPrefix = rollupParquetKey(ctx, `${CANONICAL_DAILY_STAGING_STEM}__`, builtAt, searchType).replace(/__v\d+\.parquet$/, '')
-  const allKeys = await dataSource.list(stagingPrefix.replace(/[^/]*$/, ''))
-  const stagingKeys = allKeys.filter(k => k.includes(`${CANONICAL_DAILY_STAGING_STEM}__w`) && k.includes(`__v${builtAt}.parquet`))
-  const merged: Row[] = []
-  for (const k of stagingKeys)
-    merged.push(...await decodeParquetToRows(await dataSource.read(k), { columns: cols.map(c => c.name) }))
-
-  const parquetKey = rollupParquetKey(ctx, CANONICAL_DAILY_ROLLUP_FINAL_ID, builtAt, searchType)
-  await dataSource.write(parquetKey, encodeRowsToParquetFlex(merged, { columns: cols, sortKey }))
+  // FINAL window built → publish a MULTI-FILE envelope listing every part for this
+  // builtAt. The read path unions the parts (disjoint dates). No decode+re-encode
+  // of the whole rollup (the scaling bottleneck that timed out the merge): the
+  // build is now genuinely O(rows) across invocations with no quadratic finalize.
+  // Old-builtAt parts are orphaned; a GC sweep can prune them — the read path only
+  // follows the latest envelope's `parquetKeys`.
+  const partPrefixDir = rollupParquetKey(ctx, CANONICAL_DAILY_PART_STEM, builtAt, searchType).replace(/[^/]*$/, '')
+  const partKeys = (await dataSource.list(partPrefixDir))
+    .filter(k => k.includes(`${CANONICAL_DAILY_PART_STEM}__w`) && k.endsWith(`__v${builtAt}.parquet`))
+    .sort()
   const envelope: RollupEnvelope<ParquetRollupPointer> = {
     version: 1,
     id: CANONICAL_DAILY_ROLLUP_FINAL_ID,
     builtAt,
     windowDays: queryCanonicalDailyRollup.windowDays,
-    payload: { parquetKey, rowCount: merged.length },
+    payload: { parquetKey: partKeys[0] ?? partKey, parquetKeys: partKeys, rowCount: 0 },
   }
   await dataSource.write(rollupKey(ctx, CANONICAL_DAILY_ROLLUP_FINAL_ID, builtAt, searchType), new TextEncoder().encode(JSON.stringify(envelope)))
-  await dataSource.delete(stagingKeys)
-  return { done: true, nextWindowOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten: merged.length }
+  return { done: true, nextWindowOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten: batchRows.length }
 }
 
 const CANONICAL_DAILY_ROLLUP_FINAL_ID = 'query_canonical_daily'
+const CANONICAL_DAILY_PART_STEM = 'query_canonical_daily__part'
 
 /**
  * Aggregates the per-URL Indexing API metadata entity store (populated by
