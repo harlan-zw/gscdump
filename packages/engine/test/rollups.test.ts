@@ -14,6 +14,7 @@ import {
   readLatestRollup,
   rebuildRollups,
   ROLLUP_PAGE_ROWS,
+  ROLLUP_PAGE_ROWS_DAILY,
   ROLLUP_PAGE_ROWS_WIDE,
   rollupKey,
   rollupParquetKey,
@@ -990,7 +991,7 @@ describe('rollup output pagination (bounds each runSQL/IPC payload by GROUP card
 
   it('queryCanonicalDailyRollup.build pages output by (date, query_canonical) — GSCDUMP-P regression', async () => {
     const { ds } = makeFakeDataSource() // empty store → no query dim → useDim=false
-    const n = ROLLUP_PAGE_ROWS + 1234 // forces a second page
+    const n = ROLLUP_PAGE_ROWS_DAILY + 1234 // forces a second page
     const dataset: Row[] = Array.from({ length: n }, (_, i) => ({
       query_canonical: `c${i}`,
       date: '2023-11-10',
@@ -1006,8 +1007,8 @@ describe('rollup output pagination (bounds each runSQL/IPC payload by GROUP card
       windowAnchorMs: 1_700_000_000_000,
     }) as Array<{ query_canonical: string }>
     expect(out.length).toBe(n)
-    expect(calls.length).toBe(Math.ceil(n / ROLLUP_PAGE_ROWS))
-    expect(calls.every(c => c.returned <= ROLLUP_PAGE_ROWS)).toBe(true)
+    expect(calls.length).toBe(Math.ceil(n / ROLLUP_PAGE_ROWS_DAILY))
+    expect(calls.every(c => c.returned <= ROLLUP_PAGE_ROWS_DAILY)).toBe(true)
     expect(calls[0]!.sql).toContain('ORDER BY date, query_canonical')
   })
 

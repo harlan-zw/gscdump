@@ -415,6 +415,16 @@ export const WINDOW_BYTE_BUDGET = 10 * 1024 * 1024
  */
 export const ROLLUP_PAGE_ROWS = 50_000
 export const ROLLUP_PAGE_ROWS_WIDE = 20_000
+// Daily canonical rollup: page closer to the duckdb-worker result guard (100k
+// rows / 24MiB) — its rows are narrow (`canonical, date, 3 metrics` ≈ 50B, so 90k
+// ≈ 4.5MiB), so a higher cap means fewer (often zero) re-aggregating OFFSET pages
+// per window once windows are day-capped (see `DAILY_MAX_WINDOW_DAYS`).
+export const ROLLUP_PAGE_ROWS_DAILY = 90_000
+// Day-span cap for the daily rollup's windows: keeps each window's
+// `(query_canonical × date)` output under one page on a high-cardinality site so
+// the build is single-pass (no OFFSET re-aggregation). The per-window pager is the
+// safety net for any window that still over-produces.
+export const DAILY_MAX_WINDOW_DAYS = 7
 
 const DAY_RE = /^daily\/(\d{4})-(\d{2})-(\d{2})$/
 const WEEK_RE = /^weekly\/(\d{4})-(\d{2})-(\d{2})$/
@@ -477,6 +487,15 @@ function clamp(n: number, lo: number, hi: number): number {
 export function planRollupWindows(
   parts: Array<{ partition: string, bytes: number }>,
   clampRange?: { start: string, end: string },
+  // Hard upper bound on a window's day span, INDEPENDENT of the byte budget. The
+  // byte budget bounds INPUT scan size, but a rollup whose OUTPUT row count scales
+  // with cardinality × days (e.g. `query_canonical × date`) can over-produce per
+  // window on a high-cardinality site even within a byte budget, forcing OFFSET
+  // output-paging that RE-RUNS the aggregation per page (the canonical-daily
+  // timeout). Capping the day span keeps each window's output under the page cap
+  // → one page → single-pass, no re-aggregation. Smaller-but-more windows; the
+  // total input scan is unchanged (windows are disjoint).
+  maxWindowDays?: number,
 ): Array<{ start: string, end: string, partitions: string[] }> {
   const clampStartMs = clampRange ? Date.parse(`${clampRange.start}T00:00:00Z`) : undefined
   const clampEndMs = clampRange ? Date.parse(`${clampRange.end}T00:00:00Z`) : undefined
@@ -504,7 +523,10 @@ export function planRollupWindows(
   const totalBytes = spans.reduce((a, s) => a + s.bytes, 0)
   const spanDays = Math.floor((rangeEndMs - rangeStartMs) / MS_PER_DAY) + 1
   const bytesPerDay = Math.max(1, totalBytes / spanDays)
-  const windowDays = clamp(Math.floor(WINDOW_BYTE_BUDGET / bytesPerDay), 7, 400)
+  const byteWindowDays = clamp(Math.floor(WINDOW_BYTE_BUDGET / bytesPerDay), 7, 400)
+  // Apply the output-cardinality cap on top of the byte budget (min wins). Floor
+  // at 1 so a tiny cap still makes progress.
+  const windowDays = maxWindowDays != null ? Math.max(1, Math.min(byteWindowDays, maxWindowDays)) : byteWindowDays
 
   const windows: Array<{ start: string, end: string, partitions: string[] }> = []
   let cursorMs = rangeStartMs
@@ -604,13 +626,15 @@ export async function runWindowed(opts: {
   extraFileSets?: Record<string, FileSetRef>
   /** Page each window's output by a total-order key. See `runPagedQuery`. */
   paginate?: { orderBy: string, pageRows: number }
+  /** Cap each window's day span (output-cardinality bound). See `planRollupWindows`. */
+  maxWindowDays?: number
 }): Promise<Row[]> {
   const parts = await opts.engine.listPartitions({
     ctx: opts.ctx,
     table: opts.table,
     ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
   })
-  const windows = planRollupWindows(parts)
+  const windows = planRollupWindows(parts, undefined, opts.maxWindowDays)
   const rows: Row[] = []
   for (const w of windows) {
     const fileSets = { FILES: { table: opts.table, partitions: w.partitions }, ...opts.extraFileSets }
@@ -1116,7 +1140,8 @@ export const queryCanonicalDailyRollup: RollupDef = {
       // cardinality site (GSCDUMP-P: 20.5k rows tripped the old 10k cap). Page the
       // output by its unique (date, query_canonical) grain so each runSQL stays
       // bounded regardless of cardinality.
-      paginate: { orderBy: 'date, query_canonical', pageRows: ROLLUP_PAGE_ROWS },
+      paginate: { orderBy: 'date, query_canonical', pageRows: ROLLUP_PAGE_ROWS_DAILY },
+      maxWindowDays: DAILY_MAX_WINDOW_DAYS,
       sqlFor: useDim
         ? w => `
           SELECT
