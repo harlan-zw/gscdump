@@ -1011,24 +1011,62 @@ describe('rollup output pagination (bounds each runSQL/IPC payload by GROUP card
     expect(calls[0]!.sql).toContain('ORDER BY date, query_canonical')
   })
 
-  it('queryCanonicalVariantsRollup.build pages the (previously unbounded) single full-history scan by joinKey', async () => {
-    const n = ROLLUP_PAGE_ROWS_WIDE + 77 // forces a second page
-    const dataset: Row[] = Array.from({ length: n }, (_, i) => ({
-      joinKey: `c${i}`,
-      variantCount: 1,
-      canonicalName: `c${i}`,
-      variants: `c${i}:::1:::10:::5.0`,
+  // Keyset-aware fake: returns the next page of per-variant rows AFTER the
+  // `query > '<cursor>'` predicate (sorted by query), emulating the clusterKey
+  // pruning the real engine gets — so the build's keyset loop terminates.
+  function makeKeysetEngine(dataset: Row[]): { engine: RollupEngine, calls: Array<{ sql: string, returned: number }> } {
+    const calls: Array<{ sql: string, returned: number }> = []
+    const sorted = [...dataset].sort((a, b) => String(a.query).localeCompare(String(b.query)))
+    const engine: RollupEngine = {
+      async runSQL({ sql }) {
+        const lim = /LIMIT (\d+)/.exec(sql)
+        const limit = lim ? Number(lim[1]) : sorted.length
+        const cur = /query > '([^']*)'/.exec(sql)
+        const cursor = cur ? cur[1] : null
+        const filtered = cursor === null ? sorted : sorted.filter(r => String(r.query) > cursor)
+        const rows = filtered.slice(0, limit)
+        calls.push({ sql, returned: rows.length })
+        return { rows }
+      },
+      async listPartitions() {
+        return [{ partition: 'daily/2023-11-10', bytes: 1000 }]
+      },
+    }
+    return { engine, calls }
+  }
+
+  it('queryCanonicalVariantsRollup.build keyset-pages per-variant by query + regroups canonicals across page boundaries', async () => {
+    // Per-variant rows (one per distinct query); two canonicals interleaved so
+    // each canonical's variants STRADDLE the 20k page boundary — proves the JS
+    // regroup reassembles a canonical that was split across pages.
+    const total = ROLLUP_PAGE_ROWS_WIDE + 50 // forces a 2nd page
+    const dataset: Row[] = Array.from({ length: total }, (_, i) => ({
+      joinKey: i % 2 === 0 ? 'ca' : 'cb',
+      query: `q${String(i).padStart(7, '0')}`,
+      clicks: total - i, // distinct, descending → deterministic ranking
+      impressions: 100,
+      sum_pos: 100, // position = 100/100 + 1 = 2.0
     }))
-    const { engine, calls } = makePagingEngine(dataset)
+    const { engine, calls } = makeKeysetEngine(dataset)
     const out = await queryCanonicalVariantsRollup.build({
       engine,
       ctx: { userId: 'u1', siteId: 's1' },
       dataSource: makeFakeDataSource().ds,
       windowAnchorMs: 1_700_000_000_000,
-    }) as Array<{ joinKey: string }>
-    expect(out.length).toBe(n)
-    expect(calls.length).toBe(Math.ceil(n / ROLLUP_PAGE_ROWS_WIDE))
+    }) as Array<{ joinKey: string, variantCount: bigint, canonicalName: string | null, variants: string | null }>
+    // KEYSET paging by query (not OFFSET, not the derived joinKey), exactly 2 pages.
+    expect(calls[0]!.sql).toContain('ORDER BY query')
+    expect(calls[0]!.sql).not.toContain('OFFSET')
+    expect(calls.length).toBe(2)
     expect(calls.every(c => c.returned <= ROLLUP_PAGE_ROWS_WIDE)).toBe(true)
-    expect(calls[0]!.sql).toContain('ORDER BY joinKey')
+    // Two canonicals reassembled from variants interleaved across both pages.
+    expect(out.length).toBe(2)
+    const ca = out.find(r => r.joinKey === 'ca')!
+    expect(Number(ca.variantCount)).toBe(Math.ceil(total / 2))
+    // Top variant by clicks is the lowest index (q0000000, clicks=total).
+    expect(ca.canonicalName).toBe('q0000000')
+    const terms = ca.variants!.split('||')
+    expect(terms.length).toBe(10) // top-10 only
+    expect(terms[0]).toBe(`q0000000:::${total}:::100:::2.0`)
   })
 })

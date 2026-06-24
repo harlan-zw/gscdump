@@ -990,48 +990,71 @@ export const queryCanonicalVariantsRollup: RollupDef = {
     if (parts.length === 0)
       return []
     const partitions = parts.map(p => p.partition)
-    // One row per distinct `query_canonical` over full history: row count scales
-    // with canonical cardinality, not input bytes, and (unlike the daily rollup)
-    // it CAN'T be date-windowed — the variant ranking is global per canonical, so
-    // splitting dates across windows would mis-rank. Page the output by its unique
-    // joinKey grain so a high-cardinality site can't ship an oversized result.
-    // WIDE page: the `variants` GROUP_CONCAT column the byte heuristic under-counts.
-    const rows = await runPagedQuery({
-      engine,
-      ctx,
-      table: 'queries',
-      ...(searchType !== undefined ? { searchType } : {}),
-      fileSets: { FILES: { table: 'queries', partitions } },
-      orderBy: 'joinKey',
-      pageRows: ROLLUP_PAGE_ROWS_WIDE,
-      coreSql: `
-        WITH per_variant AS (
+    // Per-VARIANT (one row per distinct `query`) clicks/impressions/sum_pos over
+    // full history, KEYSET-paged by `query`. `query` is the table's physical
+    // clusterKey (TABLE_METADATA.queries.clusterKey = ['query','date']), so
+    // `query > cursor` lets DuckDB PRUNE every row group whose max(query) <= cursor
+    // → each page scans only its query slice → ~one pass total. The OLD shape ran a
+    // full-table `PARTITION BY canonical` window aggregation re-executed per OFFSET
+    // page (N× full scans), which blew the 300s job reservation on high-cardinality
+    // sites (plan §8; 60dbadbb). Paging by the RAW query (not the derived canonical
+    // joinKey) is SAFE because we emit per-variant rows and regroup by canonical in
+    // JS below — a canonical whose variants straddle a page boundary is reassembled.
+    interface Variant { query: string, clicks: number, impressions: number, sumPos: number }
+    const byCanonical = new Map<string, Variant[]>()
+    let cursor: string | null = null
+    for (;;) {
+      const after = cursor === null ? '' : `AND query > '${cursor.replace(/'/g, '\'\'')}'`
+      const { rows } = await engine.runSQL({
+        ctx,
+        table: 'queries',
+        ...(searchType !== undefined ? { searchType } : {}),
+        fileSets: { FILES: { table: 'queries', partitions } },
+        sql: `
           SELECT
             COALESCE(NULLIF(query_canonical, ''), query) AS joinKey,
             query AS query,
             SUM(clicks) AS clicks,
             SUM(impressions) AS impressions,
-            SUM(sum_position) AS sum_pos,
-            ROW_NUMBER() OVER (PARTITION BY COALESCE(NULLIF(query_canonical, ''), query) ORDER BY SUM(clicks) DESC) AS rn,
-            COUNT(*) OVER (PARTITION BY COALESCE(NULLIF(query_canonical, ''), query)) AS variantCount
+            SUM(sum_position) AS sum_pos
           FROM read_parquet({{FILES}}, union_by_name = true)
+          WHERE query IS NOT NULL ${after}
           GROUP BY COALESCE(NULLIF(query_canonical, ''), query), query
-        )
-        SELECT
-          joinKey,
-          MAX(variantCount)::BIGINT AS variantCount,
-          MAX(CASE WHEN rn = 1 THEN query END) AS canonicalName,
-          GROUP_CONCAT(CASE WHEN rn <= 10 THEN query || ':::' || clicks || ':::' || impressions || ':::' || CAST(ROUND(CAST(sum_pos AS REAL) / NULLIF(impressions, 0) + 1, 1) AS TEXT) END, '||') AS variants
-        FROM per_variant
-        GROUP BY joinKey
-      `,
-    })
-    return rows.map(r => ({
-      joinKey: String(r.joinKey),
-      variantCount: BigInt(r.variantCount as bigint | number),
-      canonicalName: r.canonicalName == null ? null : String(r.canonicalName),
-      variants: r.variants == null ? null : String(r.variants),
-    }))
+          ORDER BY query
+          LIMIT ${ROLLUP_PAGE_ROWS_WIDE}
+        `,
+      })
+      for (const r of rows) {
+        const joinKey = String(r.joinKey)
+        const list = byCanonical.get(joinKey)
+        const v: Variant = { query: String(r.query), clicks: Number(r.clicks), impressions: Number(r.impressions), sumPos: Number(r.sum_pos) }
+        if (list)
+          list.push(v)
+        else
+          byCanonical.set(joinKey, [v])
+      }
+      if (rows.length < ROLLUP_PAGE_ROWS_WIDE)
+        break
+      cursor = String(rows[rows.length - 1]!.query)
+    }
+
+    // Final per-canonical format (in JS over the merged variants): rank by clicks
+    // desc with a `query` tiebreak for deterministic output across rebuilds, then
+    // pack the top-10 as `query:::clicks:::impressions:::position` joined by `||`,
+    // identical to the old GROUP_CONCAT. `variantCount` counts ALL variants;
+    // `canonicalName` is the top variant; a 0-impression variant is dropped from
+    // the string (matching the old NULL-position omission) but still counted.
+    const out: Array<{ joinKey: string, variantCount: bigint, canonicalName: string | null, variants: string | null }> = []
+    for (const [joinKey, variants] of byCanonical) {
+      variants.sort((a, b) => b.clicks - a.clicks || a.query.localeCompare(b.query))
+      const canonicalName = variants[0]?.query ?? null
+      const top = variants.slice(0, 10).filter(v => v.impressions > 0)
+      const variantsStr = top.length === 0
+        ? null
+        : top.map(v => `${v.query}:::${v.clicks}:::${v.impressions}:::${(v.sumPos / v.impressions + 1).toFixed(1)}`).join('||')
+      out.push({ joinKey, variantCount: BigInt(variants.length), canonicalName, variants: variantsStr })
+    }
+    return out
   },
 }
 
