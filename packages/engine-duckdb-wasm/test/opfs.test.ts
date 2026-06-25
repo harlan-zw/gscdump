@@ -15,10 +15,11 @@ import { attachOpfsParquetTables, OpfsQuotaExceededError } from '../src/opfs'
 
 // ── in-memory OPFS fake ─────────────────────────────────────────────────────
 
-function makeFakeOpfs(opts: { quotaBytes?: number } = {}) {
+function makeFakeOpfs(opts: { quotaBytes?: number, writeConflict?: Set<string> } = {}) {
   const files = new Map<string, Uint8Array>()
   let used = 0
   const quota = opts.quotaBytes ?? Infinity
+  const writeConflict = opts.writeConflict ?? new Set<string>()
 
   function fileHandle(name: string): FileSystemFileHandle {
     return {
@@ -34,6 +35,13 @@ function makeFakeOpfs(opts: { quotaBytes?: number } = {}) {
         } as unknown as File
       },
       async createWritable() {
+        // Model the OPFS write-exclusivity conflict (another tab holds the sync
+        // access handle): createWritable throws NoModificationAllowedError.
+        if (writeConflict.has(name)) {
+          const err = new Error(`modifications are not allowed (${name})`)
+          err.name = 'NoModificationAllowedError'
+          throw err
+        }
         let pending: Uint8Array = new Uint8Array()
         return {
           async write(data: ArrayBuffer | Uint8Array) {
@@ -97,16 +105,20 @@ function installNavigatorStorage(root: FileSystemDirectoryHandle): void {
   })
 }
 
-function stubDuckDb(): {
+function stubDuckDb(opts: { live?: Set<string> } = {}): {
   db: AsyncDuckDB
   conn: AsyncDuckDBConnection
   registerFileHandle: ReturnType<typeof vi.fn>
+  registerFileBuffer: ReturnType<typeof vi.fn>
   dropFile: ReturnType<typeof vi.fn>
+  bufferNames: string[]
   viewSql: string[]
 } {
   // Model OPFS exclusivity: a name allows only one live sync access handle, so
   // a second registerFileHandle on a live name throws the conflict DuckDB would.
-  const live = new Set<string>()
+  // `live` can be SHARED across two stub DBs to model cross-tab exclusivity
+  // (OPFS handles are exclusive per origin, not per AsyncDuckDB instance).
+  const live = opts.live ?? new Set<string>()
   const registerFileHandle = vi.fn(async (name: string) => {
     if (live.has(name)) {
       const err = new Error(`Access Handles cannot be created (${name})`)
@@ -114,6 +126,12 @@ function stubDuckDb(): {
       throw err
     }
     live.add(name)
+  })
+  // In-memory buffer registration (the contention-recovery fallback). No
+  // exclusivity — buffers live in WASM linear memory, not OPFS.
+  const bufferNames: string[] = []
+  const registerFileBuffer = vi.fn(async (name: string) => {
+    bufferNames.push(name)
   })
   const dropFile = vi.fn(async (name: string) => {
     live.delete(name)
@@ -124,10 +142,12 @@ function stubDuckDb(): {
     return { toArray: () => [] }
   })
   return {
-    db: { registerFileHandle, dropFile } as unknown as AsyncDuckDB,
+    db: { registerFileHandle, registerFileBuffer, dropFile } as unknown as AsyncDuckDB,
     conn: { query } as unknown as AsyncDuckDBConnection,
     registerFileHandle,
+    registerFileBuffer,
     dropFile,
+    bufferNames,
     viewSql,
   }
 }
@@ -454,6 +474,109 @@ describe('attachOpfsParquetTables', () => {
     expect(lockDepthAtRegister.every(d => d > 0)).toBe(true)
     expect(lockDepthAtViewSql.length).toBe(2)
     expect(lockDepthAtViewSql.every(d => d > 0)).toBe(true)
+  })
+
+  it('recovers a cross-tab contended table from the shared OPFS cache (no re-download)', async () => {
+    // Two tabs = two AsyncDuckDB instances sharing ONE origin's OPFS. Tab A
+    // attaches the file (writes it to OPFS, holds the exclusive sync handle).
+    // Tab B attaches the SAME file: its registerFileHandle hits the exclusivity
+    // conflict → the table degrades `contention` → in-engine recovery reads the
+    // already-cached bytes via the lock-free getFile and registers them as a
+    // buffer. B attaches cleanly with NO HTTP re-download.
+    const opfs = makeFakeOpfs()
+    installNavigatorStorage(opfs.root)
+    const live = new Set<string>() // shared exclusivity across both "tabs"
+    const a = stubDuckDb({ live })
+    const b = stubDuckDb({ live })
+    const file = { url: '/shared', bytes: 3, contentHash: 'iceberg/shared.parquet' }
+    const aFetch = okFetch(new Uint8Array([1, 2, 3]))
+    const bFetch = okFetch(new Uint8Array([1, 2, 3]))
+
+    const first = await attachOpfsParquetTables({ db: a.db, conn: a.conn, fetch: aFetch, tables: [{ table: 'dates', files: [file] }] })
+    const second = await attachOpfsParquetTables({ db: b.db, conn: b.conn, fetch: bFetch, tables: [{ table: 'dates', files: [file] }] })
+
+    expect(first.tables).toEqual(['dates'])
+    // B recovered: the table is attached, NOT degraded.
+    expect(second.tables).toEqual(['dates'])
+    expect(second.degradedTables).toEqual([])
+    // Recovery read from the shared cache, not the network.
+    expect(bFetch).not.toHaveBeenCalled()
+    // B registered a buffer (the recovery path) + created its view.
+    expect(b.registerFileBuffer).toHaveBeenCalledOnce()
+    expect(b.bufferNames[0]).toMatch(/^gscdump-recover__dates_0\.parquet$/)
+    expect(b.viewSql.some(s => s.includes('CREATE OR REPLACE VIEW main.dates'))).toBe(true)
+
+    // Detach drops B's recovery buffer + view.
+    await second.detach()
+    expect(b.dropFile).toHaveBeenCalledWith(b.bufferNames[0])
+    expect(b.viewSql.some(s => s.includes('DROP VIEW IF EXISTS main.dates'))).toBe(true)
+  })
+
+  it('recovery falls back to HTTP when the contended file is not in the cache', async () => {
+    // Write-exclusivity conflict (createWritable throws): our own write never
+    // lands, so the file is absent from OPFS. Recovery's getFile misses → it
+    // fetches over HTTP, registers the buffer, and the table still attaches.
+    const slug = await expectedSlug('iceberg/miss.parquet')
+    const name = `gscdump-snapshot__queries_${slug}.parquet`
+    const opfs = makeFakeOpfs({ writeConflict: new Set([name]) })
+    installNavigatorStorage(opfs.root)
+    const { db, conn, registerFileBuffer, bufferNames } = stubDuckDb()
+    const fetchSpy = okFetch(new Uint8Array([7, 7, 7]))
+
+    const handle = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: fetchSpy,
+      tables: [{ table: 'queries', files: [{ url: '/x', bytes: 3, contentHash: 'iceberg/miss.parquet' }] }],
+    })
+
+    expect(handle.tables).toEqual(['queries'])
+    expect(handle.degradedTables).toEqual([])
+    expect(registerFileBuffer).toHaveBeenCalledOnce()
+    expect(bufferNames[0]).toMatch(/^gscdump-recover__queries_0\.parquet$/)
+    // At least one HTTP read happened (the recovery fetch).
+    expect(fetchSpy).toHaveBeenCalled()
+  })
+
+  it('does NOT buffer-recover a quota-degraded table (OOM-safe)', async () => {
+    const opfs = makeFakeOpfs({ quotaBytes: 0 })
+    installNavigatorStorage(opfs.root)
+    const { db, conn, registerFileBuffer } = stubDuckDb()
+
+    const handle = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(new Uint8Array([1, 2, 3])),
+      tables: [{ table: 'pages', files: [{ url: '/x', bytes: 3, contentHash: 'iceberg/q.parquet' }] }],
+    })
+
+    expect(handle.tables).toEqual([])
+    expect(handle.degradedTables).toEqual(['pages'])
+    // Quota degradations are never buffer-recovered.
+    expect(registerFileBuffer).not.toHaveBeenCalled()
+  })
+
+  it('recoverContention:false leaves a contended table degraded', async () => {
+    const slug = await expectedSlug('iceberg/shared.parquet')
+    const name = `gscdump-snapshot__dates_${slug}.parquet`
+    // Pre-seed the exclusivity set so the single attach hits the conflict.
+    const live = new Set<string>([name])
+    const opfs = makeFakeOpfs()
+    opfs.files.set(name, new Uint8Array([1, 2, 3]))
+    installNavigatorStorage(opfs.root)
+    const { db, conn, registerFileBuffer } = stubDuckDb({ live })
+
+    const handle = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(new Uint8Array([1, 2, 3])),
+      recoverContention: false,
+      tables: [{ table: 'dates', files: [{ url: '/shared', bytes: 3, contentHash: 'iceberg/shared.parquet' }] }],
+    })
+
+    expect(handle.tables).toEqual([])
+    expect(handle.degradedTables).toEqual(['dates'])
+    expect(registerFileBuffer).not.toHaveBeenCalled()
   })
 })
 

@@ -6,7 +6,7 @@ minimumReleaseAgeExclude:
   - '@types/node@25.9.0'
   - nuxt@4.4.6
   - tsx@4.22.2
-  - icebird@0.8.10
+  - icebird@0.8.11
   - retriv@0.14.7
   - nuxt-use-query@0.2.7
   - nuxt-use-query@0.3.0
@@ -31,10 +31,10 @@ overrides:
   tinyexec: 1.1.2
 patchedDependencies:
   hyparquet-writer@0.16.1: patches/hyparquet-writer@0.16.1.patch
-  icebird@0.8.10: patches/icebird@0.8.10.patch
+  icebird@0.8.11: patches/icebird@0.8.11.patch
 catalog:
-  '@cloudflare/vitest-pool-workers': ^0.16.18
-  '@cloudflare/workers-types': ^4.20260621.1
+  '@cloudflare/vitest-pool-workers': ^0.16.19
+  '@cloudflare/workers-types': ^4.20260623.1
   '@duckdb/duckdb-wasm': ^1.32.0
   '@duckdb/node-api': 1.5.1-r.2
   '@huggingface/transformers': ^4.2.0
@@ -52,11 +52,11 @@ catalog:
   h3: ^1.15.11
   hyparquet: ^1.26.1
   hyparquet-writer: ^0.16.1
-  icebird: ^0.8.10
-  js-yaml: ^5.0.0
+  icebird: ^0.8.11
+  js-yaml: ^5.1.0
   nuxt: ^4.4.8
   nuxt-use-query: ^0.5.2
-  playwright: ^1.61.0
+  playwright: ^1.61.1
   pluralize: ^8.0.0
   retriv: ^0.14.7
   tailwindcss: ^4.3.1
@@ -64,7 +64,7 @@ catalog:
   unstorage: ^1.17.5
   vitest-package-exports: ^1.2.0
   vue: ^3.5.38
-  wrangler: ^4.103.0
+  wrangler: ^4.104.0
   zod: ^4.4.3
 catalogs:
   deps:

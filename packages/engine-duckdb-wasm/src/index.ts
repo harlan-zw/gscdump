@@ -34,6 +34,7 @@ export {
   clearOpfsSnapshotCache,
   estimateOpfsStorage,
   OpfsQuotaExceededError,
+  readOpfsSnapshotFile,
   requestPersistentStorage,
 } from './opfs'
 export type {

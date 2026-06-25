@@ -4,7 +4,7 @@
 // "TypeError: Do not know how to serialize a BigInt", breaking every Iceberg
 // ingest commit in production (2026-05-25 incident).
 //
-// The fix is a patched icebird (`patches/icebird@0.8.10.patch`) that adds a
+// The fix is a patched icebird (`patches/icebird@0.8.11.patch`) that adds a
 // BigInt-aware `stringifyIcebergJson` and uses it for the catalog commit body
 // and the metadata.json file write. The engine BUNDLES this patched icebird
 // into its dist, so this guard lives here (not in the consumer, which no longer

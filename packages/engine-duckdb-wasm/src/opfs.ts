@@ -109,6 +109,17 @@ export interface AttachOpfsTablesOptions {
    * Default: run inline (caller owns the DB exclusively).
    */
   withDb?: <T>(fn: () => Promise<T>) => Promise<T>
+  /**
+   * Recover a table degraded by an OPFS sync-access-handle / write conflict
+   * (the multi-tab case — another tab holds the file's exclusive handle) by
+   * reading the already-cached bytes via the lock-free File API (or HTTP on a
+   * genuine cache miss) and registering them as in-memory buffers, so the table
+   * attaches from the shared cache instead of being pushed back to the caller.
+   * Quota / incomplete degradations are NEVER recovered this way — buffering a
+   * quota-exceeding set risks OOM, and the caller routes those to its tail.
+   * Default true.
+   */
+  recoverContention?: boolean
 }
 
 export interface OpfsFileProgress {
@@ -159,6 +170,13 @@ export class OpfsQuotaExceededError extends Error {
 const DEFAULT_CONCURRENCY = 2
 /** OPFS file-name prefix so our cache entries are namespaced + reapable. */
 const OPFS_PREFIX = 'gscdump-snapshot__'
+/**
+ * Virtual-filesystem prefix for the in-memory buffers registered by the
+ * contention-recovery fallback. Distinct from {@link OPFS_PREFIX} (those are
+ * OPFS handles) so the two never collide in the DuckDB-WASM virtual FS, and so
+ * the OPFS sweep never reaps a live recovery buffer.
+ */
+const RECOVER_BUFFER_PREFIX = 'gscdump-recover__'
 
 /**
  * Per-DB reference-counted registry of OPFS file handles. BROWSER_FSACCESS
@@ -334,6 +352,40 @@ async function getOpfsRoot(): Promise<FileSystemDirectoryHandle> {
 }
 
 /**
+ * Read a content-addressed OPFS snapshot file via the async File API and return
+ * its bytes, or null when absent / size-mismatched (partial / stale write).
+ *
+ * `getFile()` takes NO lock — unlike DuckDB's `BROWSER_FSACCESS` sync access
+ * handle — so it reads cleanly while ANOTHER tab holds the same file open. That
+ * is the basis for cross-tab cache sharing: a tab that loses the exclusive-handle
+ * race reads the shared cached bytes here instead of re-downloading. The
+ * filename derivation is the SAME `opfsFileName` + `contentHashSlug` the attach
+ * path writes, so consumers reuse the engine's naming with no replicated slug
+ * logic to drift out of lock-step. `index` is only the disambiguator for the
+ * degraded no-`contentHash` fallback (mirrors `attachOpfsParquetTables`).
+ */
+export async function readOpfsSnapshotFile(
+  table: string,
+  contentHash: string | undefined,
+  index: number,
+  expectedBytes: number,
+): Promise<Uint8Array | null> {
+  try {
+    const root = await getOpfsRoot()
+    const slug = contentHash ? await contentHashSlug(contentHash) : undefined
+    const name = opfsFileName(table, slug, index)
+    const handle = await root.getFileHandle(name)
+    const file = await handle.getFile()
+    if (file.size !== expectedBytes)
+      return null
+    return new Uint8Array(await file.arrayBuffer())
+  }
+  catch {
+    return null
+  }
+}
+
+/**
  * Return an OPFS file handle for `file`, downloading it if absent. The
  * filename encodes the `contentHash` (when supplied), so existence + size
  * match is sufficient verification — no SHA recomputation on the hot path.
@@ -471,6 +523,7 @@ export async function attachOpfsParquetTables(
     version,
     onFileProgress,
     withDb = fn => fn(),
+    recoverContention = true,
   } = options
 
   await requestPersistentStorage()
@@ -522,7 +575,14 @@ export async function attachOpfsParquetTables(
   // a quota error can be dropped wholesale.
   const tableFiles = new Map<string, Array<{ name: string, handle: FileSystemFileHandle }>>()
   const degraded = new Set<string>()
+  // Why each degraded table degraded — only `contention` is buffer-recoverable.
+  const degradeReason = new Map<string, 'quota' | 'contention' | 'incomplete'>()
   const acquiredNames = new Set<string>()
+  // Virtual-FS names + view names created by the contention-recovery fallback,
+  // tracked separately from the OPFS registry (buffers aren't refcounted handles)
+  // so `detach()` can drop them directly.
+  const bufferFiles: string[] = []
+  const bufferViews: string[] = []
   let bytesAttached = 0
   // Release every OPFS handle acquired for a table (decrements the registry
   // refcount, dropping the sync access handle when no other consumer holds it).
@@ -548,6 +608,7 @@ export async function attachOpfsParquetTables(
       if (isQuotaError(err)) {
         // OPFS is full for this table — degrade it, keep the rest.
         degraded.add(item.table)
+        degradeReason.set(item.table, 'quota')
         return
       }
       // `createWritable` write-exclusivity conflict — the backing file is held
@@ -555,6 +616,7 @@ export async function attachOpfsParquetTables(
       // back to the buffer path instead of failing the whole table.
       if (isOpfsWriteConflict(err)) {
         degraded.add(item.table)
+        degradeReason.set(item.table, 'contention')
         return
       }
       throw err
@@ -576,6 +638,7 @@ export async function attachOpfsParquetTables(
       // caller can fall back to the buffer path instead of failing.
       if (isOpfsAccessHandleConflict(err)) {
         degraded.add(item.table)
+        degradeReason.set(item.table, 'contention')
         return
       }
       throw err
@@ -625,6 +688,7 @@ export async function attachOpfsParquetTables(
     // registrations.
     if (files.length !== (expectedCount.get(t.table) ?? t.files.length)) {
       degraded.add(t.table)
+      degradeReason.set(t.table, degradeReason.get(t.table) ?? 'incomplete')
       await releaseTable(t.table)
       continue
     }
@@ -657,6 +721,7 @@ export async function attachOpfsParquetTables(
         if (registry.viewRefs(`${schema}.${t.table}`) === 0)
           await withDb(() => conn.query(`DROP VIEW IF EXISTS ${schema}.${t.table}`)).catch(() => {})
         degraded.add(t.table)
+        degradeReason.set(t.table, 'contention')
         await releaseTable(t.table)
         continue
       }
@@ -672,10 +737,87 @@ export async function attachOpfsParquetTables(
       registeredNames.push(f.name)
   }
 
+  // ---- contention recovery (in-engine buffer fallback) --------------------
+  // A table degraded by an OPFS sync-access-handle / write conflict is the
+  // multi-tab case: another tab (a SEPARATE AsyncDuckDB) holds this content-
+  // addressed file's exclusive handle, so BROWSER_FSACCESS can't open it here.
+  // Rather than push the table back to the caller (re-read server-side / re-
+  // download), read the already-cached bytes via the lock-free File API — or
+  // HTTP on a genuine cache miss — and register them as in-memory buffers. The
+  // table then attaches from the shared cache. Quota / incomplete degradations
+  // are left alone (buffering a quota-exceeding set risks OOM).
+  const recoverTableToBuffers = async (t: OpfsParquetTable): Promise<boolean> => {
+    const readOne = async (file: OpfsParquetFile, index: number): Promise<Uint8Array> => {
+      const cached = await readOpfsSnapshotFile(t.table, file.contentHash, index, file.bytes)
+      if (cached)
+        return cached
+      // Genuine cache miss (eviction, or this tab never finished its own write
+      // before the conflict) — fetch over HTTP, the same source the OPFS path
+      // would have used.
+      signal?.throwIfAborted()
+      const resp = await fetchImpl(file.url, { ...fetchInit, signal })
+      if (!resp.ok)
+        throw new Error(`[engine-duckdb-wasm/opfs] recover ${file.url} failed: ${resp.status}`)
+      return new Uint8Array(await resp.arrayBuffer())
+    }
+    const lakeNames: string[] = []
+    for (let i = 0; i < t.files.length; i++) {
+      const buf = await readOne(t.files[i]!, i)
+      const name = `${RECOVER_BUFFER_PREFIX}${t.table}_${i}.parquet`
+      await withDb(() => db.registerFileBuffer(name, buf))
+      bufferFiles.push(name)
+      lakeNames.push(name)
+      bytesAttached += t.files[i]!.bytes
+    }
+    let overlayName: string | undefined
+    if (t.overlay) {
+      const buf = await readOne(t.overlay, t.files.length)
+      overlayName = `${RECOVER_BUFFER_PREFIX}${t.table}_overlay.parquet`
+      await withDb(() => db.registerFileBuffer(overlayName!, buf))
+      bufferFiles.push(overlayName)
+      bytesAttached += t.overlay.bytes
+    }
+    // Buffers already sit in WASM linear memory, so use the streaming (non-
+    // MATERIALIZED) overlay body — a MATERIALIZED CTE would copy them again.
+    const body = overlayViewBody({
+      lakeSelect: lakeNames.length ? lakeSelect(lakeNames) : null,
+      overlaySelect: overlayName
+        ? `SELECT * REPLACE (CAST(date AS DATE) AS date) FROM read_parquet(['${overlayName.replace(/'/g, '\'\'')}'], union_by_name = true)`
+        : null,
+      materializeLake: false,
+    })
+    if (!body)
+      return false
+    await withDb(() => conn.query(`CREATE OR REPLACE VIEW ${schema}.${t.table} AS ${body}`))
+    bufferViews.push(t.table)
+    return true
+  }
+
+  if (recoverContention && !signal?.aborted) {
+    for (const t of tables) {
+      if (!degraded.has(t.table) || degradeReason.get(t.table) !== 'contention')
+        continue
+      const before = bufferFiles.length
+      const ok = await recoverTableToBuffers(t).catch(() => false)
+      if (ok) {
+        degraded.delete(t.table)
+      }
+      else {
+        // Recovery failed (cache miss + network error, or abort): drop any
+        // buffers it registered so they don't leak, and leave the table degraded
+        // for the caller to route to its server tail.
+        for (const n of bufferFiles.slice(before))
+          await withDb(() => db.dropFile(n)).catch(() => {})
+        bufferFiles.length = before
+      }
+    }
+  }
+
   let detached = false
   return {
     version,
-    tables: attached,
+    // OPFS-attached tables (registry-managed) plus any buffer-recovered ones.
+    tables: [...attached, ...bufferViews],
     schema,
     bytesAttached,
     degradedTables: [...degraded],
@@ -684,6 +826,11 @@ export async function attachOpfsParquetTables(
         return
       detached = true
       await detachOpfs(registry, conn, schema, attached, registeredNames)
+      // Buffer-recovered views/files aren't in the OPFS registry — drop directly.
+      for (const v of bufferViews)
+        await conn.query(`DROP VIEW IF EXISTS ${schema}.${v}`).catch(() => {})
+      for (const n of bufferFiles)
+        await db.dropFile(n).catch(() => {})
     },
   }
 }
