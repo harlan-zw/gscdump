@@ -287,9 +287,23 @@ export function createPartnerRealtimeClient(options: PartnerRealtimeOptions): Pa
     close(code?: number, reason?: string) {
       manualClose = true
       clearReconnectTimer()
-      socket?.close(code, reason)
+      const ws = socket
       socket = null
       setStatus('closed')
+      if (!ws)
+        return
+      // Closing a socket that is still CONNECTING makes the browser log
+      // "WebSocket is closed before the connection is established." A consumer
+      // that mounts then unmounts before the handshake completes (or whose
+      // credential watch re-fires and tears the client down mid-connect) hits
+      // this on the `/ws/user` channel. Defer the close until the socket opens;
+      // the onopen override also stops the auth payload firing on a socket we're
+      // about to drop. `manualClose` keeps the ensuing onclose from reconnecting.
+      // readyState 0 === WebSocket.CONNECTING (spec constant).
+      if (ws.readyState === 0)
+        ws.onopen = () => ws.close(code, reason)
+      else
+        ws.close(code, reason)
     },
     ping() {
       sendJson({ type: 'ping' })
