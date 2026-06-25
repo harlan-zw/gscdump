@@ -1071,3 +1071,28 @@ describe('rollup output pagination (bounds each runSQL/IPC payload by GROUP card
     expect(terms[0]).toBe(`q0000000:::${total}:::100:::2.0`)
   })
 })
+
+describe('rollup page-row caps fit the duckdb-worker result budget', () => {
+  // The duckdb service worker (workers/duckdb) rejects a runSQL whose estimate
+  // `rows × cols × WORKER_COL_BYTES` exceeds its WORKER_MAX_RESULT_BYTES budget.
+  // The estimate is PESSIMISTIC (fixed bytes/col, not real width), so a page-row
+  // cap must be sized against it, not the real payload — 90k daily rows tripped it
+  // (5 cols × 64 × 90k = 28.8MB > 24MB) on a high-cardinality site (comparaja.pt).
+  const WORKER_MAX_RESULT_BYTES = 24 * 1024 * 1024
+  const WORKER_COL_BYTES = 64
+  const estimate = (rows: number, cols: number) => rows * cols * WORKER_COL_BYTES
+
+  it('daily canonical page (5 cols) stays under the worker budget', () => {
+    // SELECT query_canonical, date, clicks, impressions, sum_position
+    expect(estimate(ROLLUP_PAGE_ROWS_DAILY, 5)).toBeLessThan(WORKER_MAX_RESULT_BYTES)
+  })
+
+  it('wide variants page (5 cols) stays under the worker budget', () => {
+    // SELECT joinKey, query, clicks, impressions, sum_pos
+    expect(estimate(ROLLUP_PAGE_ROWS_WIDE, 5)).toBeLessThan(WORKER_MAX_RESULT_BYTES)
+  })
+
+  it('narrow page stays under the worker budget up to ~7 columns', () => {
+    expect(estimate(ROLLUP_PAGE_ROWS, 7)).toBeLessThan(WORKER_MAX_RESULT_BYTES)
+  })
+})

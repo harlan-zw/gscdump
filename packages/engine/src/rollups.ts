@@ -424,11 +424,14 @@ export const WINDOW_BYTE_BUDGET = 10 * 1024 * 1024
  */
 export const ROLLUP_PAGE_ROWS = 50_000
 export const ROLLUP_PAGE_ROWS_WIDE = 20_000
-// Daily canonical rollup: page closer to the duckdb-worker result guard (100k
-// rows / 24MiB) — its rows are narrow (`canonical, date, 3 metrics` ≈ 50B, so 90k
-// ≈ 4.5MiB), so a higher cap means fewer (often zero) re-aggregating OFFSET pages
-// per window once windows are day-capped (see `DAILY_MAX_WINDOW_DAYS`).
-export const ROLLUP_PAGE_ROWS_DAILY = 90_000
+// Daily canonical rollup: `(query_canonical, date, clicks, impressions,
+// sum_position)` = 5 columns. The duckdb-worker result guard rejects a page whose
+// estimate `rows × cols × 64` exceeds its 24MiB service-binding budget — and that
+// estimate is intentionally PESSIMISTIC (64B/col regardless of real width), NOT
+// the ~50B real row size. So the ceiling is 24MiB / (5 × 64) ≈ 78,643 rows; 90k
+// (5 × 64 × 90k = 28.8MB) tripped it on a high-cardinality site whose window
+// filled a full page (comparaja.pt). Page at 70k (≈21.4MiB estimate) with margin.
+export const ROLLUP_PAGE_ROWS_DAILY = 70_000
 // Day-span cap for the daily rollup's windows: keeps each window's
 // `(query_canonical × date)` output under one page on a high-cardinality site so
 // the build is single-pass (no OFFSET re-aggregation). The per-window pager is the
