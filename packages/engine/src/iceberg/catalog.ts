@@ -506,11 +506,26 @@ export interface ListIcebergDataFilesOptions {
 }
 
 /**
- * Short TTL on the cached snapshot pointer `(namespace, table) → snapshotId`.
- * Bounds how long a reader serves a previous snapshot after a new commit; a
- * miss costs one `loadTable`, not a stale read, so this can stay small.
+ * TTL on the cached snapshot pointer `(namespace, table) → snapshotId`. Bounds
+ * how long a reader serves a previous snapshot after a new commit.
+ *
+ * Raised 30s → 5min after profiling the bulk file-resolution path: a pointer
+ * MISS is NOT cheap — it costs one `restCatalogLoadTable`, measured at ~1.8s
+ * cold (the dominant phase of a ~3.5s resolve). At 30s nearly every real
+ * navigation re-paid that 1.8s. The original "a miss is cheap" assumption was
+ * wrong; the round-trip is the single most expensive read-path phase.
+ *
+ * Safe to lengthen because staleness here is benign and bounded:
+ *   - the resolved-files cache is keyed by the (immutable) snapshotId, so a
+ *     slightly-stale pointer returns a SELF-CONSISTENT file set, never a torn read;
+ *   - the recent-window overlay is HEADed fresh on every resolve, so the
+ *     non-stable tail (the data users actually watch move) stays current
+ *     regardless of pointer age;
+ *   - GSC lake data lags days and finalizes hourly, so a ≤5min-old stable
+ *     snapshot is indistinguishable to the user.
+ * A new sync commits a new snapshotId; the next post-TTL refresh picks it up.
  */
-const SNAPSHOT_REF_TTL_MS = 30_000
+const SNAPSHOT_REF_TTL_MS = 5 * 60 * 1000
 
 /**
  * Long TTL on the resolved file list. The cache key embeds the immutable
