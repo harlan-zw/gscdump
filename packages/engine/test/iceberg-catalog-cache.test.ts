@@ -108,12 +108,31 @@ describe('listIcebergDataFiles cache', () => {
     expect(restCatalogLoadTable).toHaveBeenCalledTimes(1)
     expect(icebergManifests).toHaveBeenCalledTimes(1)
 
-    // Past the 30s snapshot-ref TTL, but well inside the 24h file-list TTL.
-    t = 1_000 + 31_000
+    // Past the 30min snapshot-ref TTL, but well inside the 24h file-list TTL.
+    t = 1_000 + 30 * 60_000 + 1_000
     await listIcebergDataFiles(CONN, opts({ cache, clock: () => t }))
     // snapshot-ref expired → one reload; resolved-files still valid → no walk.
     expect(restCatalogLoadTable).toHaveBeenCalledTimes(2)
     expect(icebergManifests).toHaveBeenCalledTimes(1)
+  })
+
+  it('a resolved-files MISS with a warm pointer recovers metadata from cache, skipping the loadTable reload', async () => {
+    withSnapshot()
+    const cache: CatalogCache = { storage: createStorage() }
+
+    // Call 1 warms the snapshot-ref pointer, the snapshotId-keyed metadata, and
+    // resolved-files for the May range.
+    await listIcebergDataFiles(CONN, opts({ cache }))
+    expect(restCatalogLoadTable).toHaveBeenCalledTimes(1)
+    expect(icebergManifests).toHaveBeenCalledTimes(1)
+
+    // Call 2 with a DIFFERENT range → resolved-files MISS, but the snapshot
+    // pointer is still warm (so `loadSnapshotId` returns metadata=null). The
+    // metadata cache (keyed by the immutable snapshotId) supplies it for the
+    // walk, so there is NO second loadTable round-trip — only a fresh walk.
+    await listIcebergDataFiles(CONN, opts({ cache, range: { start: '2026-04-01', end: '2026-04-30' } }))
+    expect(restCatalogLoadTable).toHaveBeenCalledTimes(1) // the fix: reload avoided
+    expect(icebergManifests).toHaveBeenCalledTimes(2)
   })
 
   it('routes cache writes through the defer hook when provided', async () => {
