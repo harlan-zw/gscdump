@@ -527,7 +527,7 @@ export interface ListIcebergDataFilesOptions {
  *     snapshot is indistinguishable to the user.
  * A new sync commits a new snapshotId; the next post-TTL refresh picks it up.
  */
-const SNAPSHOT_REF_TTL_MS = 5 * 60 * 1000
+const SNAPSHOT_REF_TTL_MS = 30 * 60 * 1000
 
 /**
  * Long TTL on the resolved file list. The cache key embeds the immutable
