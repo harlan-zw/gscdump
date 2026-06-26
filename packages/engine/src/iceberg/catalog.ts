@@ -509,11 +509,13 @@ export interface ListIcebergDataFilesOptions {
  * TTL on the cached snapshot pointer `(namespace, table) → snapshotId`. Bounds
  * how long a reader serves a previous snapshot after a new commit.
  *
- * Raised 30s → 5min after profiling the bulk file-resolution path: a pointer
+ * Raised 30s → 30min after profiling the bulk file-resolution path: a pointer
  * MISS is NOT cheap — it costs one `restCatalogLoadTable`, measured at ~1.8s
  * cold (the dominant phase of a ~3.5s resolve). At 30s nearly every real
  * navigation re-paid that 1.8s. The original "a miss is cheap" assumption was
- * wrong; the round-trip is the single most expensive read-path phase.
+ * wrong; the round-trip is the single most expensive read-path phase. 30min
+ * keeps the pointer warm across a whole working session, so cold-first only
+ * hits genuinely-idle tables.
  *
  * Safe to lengthen because staleness here is benign and bounded:
  *   - the resolved-files cache is keyed by the (immutable) snapshotId, so a
@@ -535,8 +537,31 @@ const SNAPSHOT_REF_TTL_MS = 5 * 60 * 1000
  */
 const RESOLVED_FILES_TTL_MS = 24 * 60 * 60 * 1000
 
+/**
+ * TTL on the cached table metadata, keyed by the IMMUTABLE snapshotId (so a hit
+ * is always correct — a new sync mints a new snapshotId hence a new key). Lets a
+ * resolved-files MISS that arrived with a warm snapshot pointer (metadata
+ * unloaded) walk WITHOUT re-paying the ~1.8s `restCatalogLoadTable` reload. 24h
+ * to match the resolved-files list it serves alongside.
+ */
+const METADATA_TTL_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Size guard on the cached metadata. `metadata.json` is normally small — schema
+ * + partition specs + the snapshot LIST (each entry is an id + manifest-list
+ * path + summary), NOT the per-file entry arrays that live in manifests and once
+ * blew past the 25MB KV ceiling. A pathological snapshot history could still
+ * bloat it, so over-budget docs are simply not cached (the reload path still
+ * works); this keeps the metadata cache from ever reintroducing the KV-blob risk.
+ */
+const MAX_CACHED_METADATA_BYTES = 2 * 1024 * 1024
+
 function snapshotRefKey(namespace: string, table: string): string {
   return `gsc-snapref\0${namespace}\0${table}`
+}
+
+function metadataRefKey(namespace: string, table: string, snapshotId: string): string {
+  return `gsc-snapmeta\0${namespace}\0${table}\0${snapshotId}`
 }
 
 function resolvedFilesKey(
@@ -593,12 +618,14 @@ function stripBucket(filePath: string): string {
   return slash >= 0 ? rest.slice(slash + 1) : rest
 }
 
+type LoadedTableMetadata = Awaited<ReturnType<typeof restCatalogLoadTable>>['metadata']
+
 /** Load the current snapshot id for a table, via the cache when one is given. */
 async function loadSnapshotId(
   conn: IcebergConnection,
   opts: ListIcebergDataFilesOptions,
   now: number,
-): Promise<{ snapshotId: string | null, metadata: Awaited<ReturnType<typeof restCatalogLoadTable>>['metadata'] | null }> {
+): Promise<{ snapshotId: string | null, metadata: LoadedTableMetadata | null }> {
   if (opts.cache) {
     const cached = await cacheGet<string>(opts.cache, snapshotRefKey(conn.namespace, opts.table), now)
     // `null` is cached for a genuinely-empty table; a string is a live pointer.
@@ -613,8 +640,18 @@ async function loadSnapshotId(
   })
   const raw = metadata['current-snapshot-id']
   const snapshotId = raw == null ? null : String(raw)
-  if (opts.cache)
+  if (opts.cache) {
     await cachePut(opts.cache, snapshotRefKey(conn.namespace, opts.table), snapshotId, SNAPSHOT_REF_TTL_MS, now)
+    // Also cache the metadata, keyed by the immutable snapshotId, so a later
+    // resolved-files MISS arriving with a warm pointer (metadata unloaded) can
+    // walk without re-paying this ~1.8s loadTable. Size-guarded so a bloated
+    // snapshot history can never push a giant value into KV.
+    if (snapshotId != null) {
+      const serialized = JSON.stringify(metadata)
+      if (serialized.length <= MAX_CACHED_METADATA_BYTES)
+        await cachePut(opts.cache, metadataRefKey(conn.namespace, opts.table, snapshotId), metadata, METADATA_TTL_MS, now)
+    }
+  }
   return { snapshotId, metadata }
 }
 
@@ -663,9 +700,18 @@ export async function listIcebergDataFiles(
       return cached
   }
 
-  // Miss — we must walk. Ensure real metadata: a cached snapshot id gave us no
-  // `metadata` object, and a cached id can be stale, so reload to walk the
-  // genuinely-current snapshot and re-key the result against it.
+  // Miss — we must walk, which needs real metadata. A warm snapshot pointer gave
+  // us `metadata == null`. First try the snapshotId-keyed metadata cache: the
+  // snapshot's metadata is immutable, so recovering it here walks the SAME
+  // snapshot the resolved-files key was built from, WITHOUT the ~1.8s loadTable.
+  if (!metadata && opts.cache) {
+    const cachedMeta = await cacheGet<LoadedTableMetadata>(opts.cache, metadataRefKey(conn.namespace, opts.table, snapshotId), now)
+    if (cachedMeta != null)
+      metadata = cachedMeta
+  }
+  // Still no metadata (cache miss, or none supplied). Reload uncached — and
+  // because a cached pointer can be stale, re-key the walk result against the
+  // genuinely-current snapshot the reload returns.
   if (!metadata) {
     const reloaded = await loadSnapshotId(conn, { ...opts, cache: undefined }, now)
     snapshotId = reloaded.snapshotId
