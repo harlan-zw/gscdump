@@ -179,7 +179,7 @@ overrides:
 
 patchedDependencies:
   hyparquet-writer@0.16.1: 7a5e451ac7634d7546ac56bcc5eadacf7715a6241640c2b5a5bc0cfc9763b8ec
-  icebird@0.8.11: 2228a14313c507b1bff32c7dab7153d03a4a4994181b49bf2152995d7ca7e3ba
+  icebird@0.8.11: 33016cb46045779e59c411034b2a57b5bbcf1d6aab3510cf13717914ce56dfc4
 
 importers:
 
@@ -435,7 +435,7 @@ importers:
         version: 0.16.1(patch_hash=7a5e451ac7634d7546ac56bcc5eadacf7715a6241640c2b5a5bc0cfc9763b8ec)
       icebird:
         specifier: 'catalog:'
-        version: 0.8.11(patch_hash=2228a14313c507b1bff32c7dab7153d03a4a4994181b49bf2152995d7ca7e3ba)
+        version: 0.8.11(patch_hash=33016cb46045779e59c411034b2a57b5bbcf1d6aab3510cf13717914ce56dfc4)
       tsx:
         specifier: 'catalog:'
         version: 4.22.4
@@ -13250,7 +13250,7 @@ snapshots:
 
   hysnappy@1.0.0: {}
 
-  icebird@0.8.11(patch_hash=2228a14313c507b1bff32c7dab7153d03a4a4994181b49bf2152995d7ca7e3ba):
+  icebird@0.8.11(patch_hash=33016cb46045779e59c411034b2a57b5bbcf1d6aab3510cf13717914ce56dfc4):
     dependencies:
       hyparquet: 1.26.1
       hyparquet-compressors: 1.1.1

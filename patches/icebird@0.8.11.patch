@@ -1,5 +1,5 @@
 diff --git a/src/catalog/rest.js b/src/catalog/rest.js
-index 2ae314e..92e9980 100644
+index 2ae314e8ee745c71d63d8678e3d13d474f338028..92e9980fccf75a627a4e0c48f3def2709e50c86e 100644
 --- a/src/catalog/rest.js
 +++ b/src/catalog/rest.js
 @@ -1,4 +1,4 @@
@@ -54,7 +54,7 @@ index 2ae314e..92e9980 100644
  }
  
 diff --git a/src/create.js b/src/create.js
-index 86e58d1..997d928 100644
+index 86e58d1f2499a81a0f3a4b0fd5723671fed62ca1..997d92896b65bcb42bd3d62cd9d85a6b6c0a7f04 100644
 --- a/src/create.js
 +++ b/src/create.js
 @@ -1,3 +1,4 @@
@@ -72,7 +72,7 @@ index 86e58d1..997d928 100644
    await metadataWriter.finish()
  
 diff --git a/src/json.js b/src/json.js
-index 3085998..6b2e397 100644
+index 30859983155832b6012b0e6faf1faa82c11fc73a..6b2e397c16d0e81969943b9c2f52b9f729c1a18d 100644
 --- a/src/json.js
 +++ b/src/json.js
 @@ -1,5 +1,43 @@
@@ -120,7 +120,7 @@ index 3085998..6b2e397 100644
   * Parse Iceberg metadata JSON, preserving integer literals that exceed
   * Number.MAX_SAFE_INTEGER (2^53-1) as BigInt. Plain `JSON.parse` would
 diff --git a/src/manifest.js b/src/manifest.js
-index ba5a83e..a6018c2 100644
+index ba5a83e72ab90761f17bdfa1c3e876014f7b77c5..a6018c2d4b64c47c6fb9a597b7148f20fcf84574 100644
 --- a/src/manifest.js
 +++ b/src/manifest.js
 @@ -7,13 +7,21 @@ import { fetchAvroRecords, urlResolver } from './fetch.js'
@@ -283,7 +283,7 @@ index ba5a83e..a6018c2 100644
  
  /**
 diff --git a/src/types.d.ts b/src/types.d.ts
-index d457a6a..dc744bf 100644
+index d457a6a05a20d0f22fa8f456da06fc26b72f3cbc..dc744bfbc060a59611b82707c1ae61ced1ed7ba2 100644
 --- a/src/types.d.ts
 +++ b/src/types.d.ts
 @@ -175,7 +175,7 @@ interface PartitionStatistics {
@@ -296,7 +296,7 @@ index d457a6a..dc744bf 100644
    'fields': SortField[]
  }
 diff --git a/src/write/commit.js b/src/write/commit.js
-index 2a9b13d..298850c 100644
+index 2a9b13deb7f83932fcd7a5ee6a83a3b0b6e56fb1..298850c73a925d44c1d8ad5f61e1199ea4e35ea1 100644
 --- a/src/write/commit.js
 +++ b/src/write/commit.js
 @@ -1,3 +1,4 @@
@@ -314,7 +314,7 @@ index 2a9b13d..298850c 100644
  
    // version-hint last so a partial write doesn't surface a torn commit.
 diff --git a/src/write/snapshot.js b/src/write/snapshot.js
-index bb0ee43..16606d9 100644
+index bb0ee43057aa18a1764fd7ec0293d8e6c92afa2e..16606d9a6477a9da0640e57def0e8955126e06e5 100644
 --- a/src/write/snapshot.js
 +++ b/src/write/snapshot.js
 @@ -87,8 +87,20 @@ export async function buildSnapshotUpdate({
@@ -349,8 +349,54 @@ index bb0ee43..16606d9 100644
      },
    ]
    if (rowLineage) {
+diff --git a/src/write/stage.js b/src/write/stage.js
+index 35f6f6476ec9c3448e1fff3544265ab861fee898..df43706bb0113df3d149cac2324997e03d7658f7 100644
+--- a/src/write/stage.js
++++ b/src/write/stage.js
+@@ -170,7 +170,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
+  * @param {Resolver} options.resolver
+  * @returns {Promise<StagedUpdate>}
+  */
+-export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, resolver }) {
++export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, resolver, snapshotProperties }) {
+   if (!tableUrl) throw new Error('tableUrl is required')
+   if (!resolver?.writer) throw new Error('resolver.writer is required')
+   const sequenceNumber = BigInt(metadata['last-sequence-number'] ?? 0) + 1n
+@@ -213,6 +213,11 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
+     'total-delete-files': '0',
+     'total-position-deletes': '0',
+     'total-equality-deletes': '0',
++    // Caller-supplied extra summary properties (e.g. an idempotency token a
++    // commit-retry wrapper reads back to detect a landed-but-errored commit).
++    // Spread last; callers must namespace their keys so they never shadow the
++    // Iceberg-reserved counters above.
++    ...(snapshotProperties ?? {}),
+   }
+   return await buildSnapshotUpdate({
+     tableUrl, metadata, resolver,
+diff --git a/src/write/write.js b/src/write/write.js
+index d12377f7a9a9cd728faa2dba93830c439e97836c..74b88bd025cd18ca6993af9f2d5426a622135d41 100644
+--- a/src/write/write.js
++++ b/src/write/write.js
+@@ -34,7 +34,7 @@ const DEFAULT_RETRY = Object.freeze({
+  * @param {number} [options.sortOrderId] - Sort order id to apply; defaults to the table default.
+  * @returns {Promise<TableMetadata>}
+  */
+-export async function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId }) {
++export async function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId, snapshotProperties }) {
+   const ctx = await loadTable({ catalog, namespace, table, tableUrl, resolver })
+   // Spec v3 §"Manifest Inheritance": data and manifest files do NOT need to
+   // be rewritten on optimistic-commit retry. Prepare them once outside the
+@@ -55,6 +55,7 @@ export async function icebergAppend({ catalog, namespace, table, tableUrl, resol
+       metadata: workingCtx.metadata,
+       prepared,
+       resolver: requireResolver(workingCtx.resolver, 'icebergAppend'),
++      snapshotProperties,
+     }),
+   })
+ }
 diff --git a/types/manifest.d.ts b/types/manifest.d.ts
-index 9a205ab..437fb39 100644
+index 9a205ab2d8e877b3652e8e0a5dad48711abfada4..437fb39df684e05c04064a017ce1c282fc32a3cd 100644
 --- a/types/manifest.d.ts
 +++ b/types/manifest.d.ts
 @@ -11,11 +11,17 @@
@@ -380,3 +426,24 @@ index 9a205ab..437fb39 100644
  import type { ManifestEntry } from '../src/types.js';
  //# sourceMappingURL=manifest.d.ts.map
 \ No newline at end of file
+diff --git a/types/write/write.d.ts b/types/write/write.d.ts
+index e95e5f1d5349ac10ba484c4ac3a3fc66e9fee8ad..ab2844fc5a8146bea0bce9641875419658fdee74 100644
+--- a/types/write/write.d.ts
++++ b/types/write/write.d.ts
+@@ -12,7 +12,7 @@
+  * @param {number} [options.sortOrderId] - Sort order id to apply; defaults to the table default.
+  * @returns {Promise<TableMetadata>}
+  */
+-export function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId }: {
++export function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId, snapshotProperties }: {
+     catalog: Catalog;
+     namespace?: string | string[] | undefined;
+     table?: string | undefined;
+@@ -20,6 +20,7 @@ export function icebergAppend({ catalog, namespace, table, tableUrl, resolver, r
+     resolver?: Resolver | undefined;
+     records: Record<string, any>[];
+     sortOrderId?: number | undefined;
++    snapshotProperties?: Record<string, string> | undefined;
+ }): Promise<TableMetadata>;
+ /**
+  * Compact / rewrite a table in one call: load metadata, read every live row

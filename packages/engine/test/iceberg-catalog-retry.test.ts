@@ -9,10 +9,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Mock the whole icebird module — the retry wrapper only needs `icebergAppend`.
+// Mock the whole icebird module — the retry wrapper needs `icebergAppend` plus
+// `restCatalogLoadTable` (the landed-check reloads the table to look for the
+// stamped append-id). Default load returns no snapshots → "not landed".
 const icebergAppend = vi.fn(async () => ({}))
+const restCatalogLoadTable = vi.fn(async () => ({ metadata: { snapshots: [] as Array<{ summary?: Record<string, string> }> } }))
 vi.mock('icebird', () => ({
   icebergAppend,
+  restCatalogLoadTable,
   icebergCreateTable: vi.fn(),
   icebergDropTable: vi.fn(),
   restCatalogConnect: vi.fn(),
@@ -51,7 +55,10 @@ describe('isCommitRateLimited', () => {
 })
 
 describe('icebergAppendRetrying', () => {
-  beforeEach(() => icebergAppend.mockReset().mockResolvedValue({}))
+  beforeEach(() => {
+    icebergAppend.mockReset().mockResolvedValue({})
+    restCatalogLoadTable.mockReset().mockResolvedValue({ metadata: { snapshots: [] } })
+  })
   afterEach(() => vi.restoreAllMocks())
 
   it('passes through on first-attempt success — no retry', async () => {
@@ -114,11 +121,12 @@ describe('icebergAppendRetrying', () => {
     expect(icebergAppend).toHaveBeenCalledTimes(1)
   })
 
-  it('re-runs icebergAppend on each 429 retry — the documented re-upload-orphan risk', async () => {
-    // A 429 that escapes icebird is retried HERE by re-running the WHOLE
-    // icebergAppend, which re-prepares + re-uploads data files. The previous
-    // attempt's parquet objects become orphans. This pins that each retry is a
-    // fresh full call (the orphan source), not an internal manifest-only redo.
+  it('re-runs icebergAppend on a 429 that did NOT land (orphan, no double)', async () => {
+    // A 429 whose commit did not apply is retried HERE by re-running the WHOLE
+    // icebergAppend (re-prepare + re-upload); the prior attempt's parquet is an
+    // orphan. The landed-check (default mock → no matching snapshot) confirms it
+    // didn't land, so the re-run is safe. Pins that each retry is a fresh full
+    // call, not an internal manifest-only redo.
     icebergAppend
       .mockRejectedValueOnce(new Error('429 too many commits to this table'))
       .mockResolvedValueOnce({})
@@ -126,6 +134,51 @@ describe('icebergAppendRetrying', () => {
     expect(icebergAppend).toHaveBeenCalledTimes(2)
     // both calls received the SAME args object — a re-upload, not a manifest-only retry.
     expect(icebergAppend.mock.calls[0][0]).toBe(icebergAppend.mock.calls[1][0])
+  })
+
+  // --- Idempotent re-run: a landed-but-errored commit must NOT double ------
+  //
+  // R2 Data Catalog can apply a commit and STILL surface 429 (or a lost ack
+  // looks identical). Re-running icebergAppend then appends a SECOND copy of the
+  // rows → silent double-count. The wrapper stamps a per-call `gscdump.append-id`
+  // into the snapshot summary and reloads the table to check whether it already
+  // landed before retrying or giving up.
+
+  it('stamps a per-call append-id into the snapshot summary', async () => {
+    await icebergAppendRetrying(APPEND_ARGS, { ...FAST, appendId: 'id-123' })
+    expect(icebergAppend.mock.calls[0][0].snapshotProperties).toEqual({ 'gscdump.append-id': 'id-123' })
+  })
+
+  it('does NOT re-append a 429 whose commit LANDED (the double-count fix)', async () => {
+    // First attempt: the commit applied at R2 but the response was a 429.
+    icebergAppend.mockRejectedValueOnce(new Error('429 too many commits to this table'))
+    // The landed-check finds the stamped id in a recent snapshot → already there.
+    restCatalogLoadTable.mockResolvedValue({
+      metadata: { snapshots: [{ summary: { 'operation': 'append', 'gscdump.append-id': 'landed-1' } }] },
+    })
+    await icebergAppendRetrying(APPEND_ARGS, { ...FAST, appendId: 'landed-1' })
+    // Crucially: only ONE icebergAppend — no second copy appended.
+    expect(icebergAppend).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns success for a non-429 error whose commit LANDED (lost ack)', async () => {
+    icebergAppend.mockRejectedValueOnce(new Error('503 service unavailable'))
+    restCatalogLoadTable.mockResolvedValue({
+      metadata: { snapshots: [{ summary: { 'gscdump.append-id': 'landed-2' } }] },
+    })
+    // Without the landed-check this would throw 503 → the job re-drives → double.
+    await expect(icebergAppendRetrying(APPEND_ARGS, { ...FAST, appendId: 'landed-2' })).resolves.toBeUndefined()
+    expect(icebergAppend).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats a landed-check load failure as "not landed" (falls back to retry)', async () => {
+    icebergAppend
+      .mockRejectedValueOnce(new Error('429 too many commits to this table'))
+      .mockResolvedValueOnce({})
+    restCatalogLoadTable.mockRejectedValue(new Error('catalog unreachable'))
+    await icebergAppendRetrying(APPEND_ARGS, { ...FAST, appendId: 'x' })
+    // Load failed → can't confirm landing → safe fallback is to re-run (no false skip).
+    expect(icebergAppend).toHaveBeenCalledTimes(2)
   })
 
   it('backs off with full-jitter exponential delay between 429 retries', async () => {

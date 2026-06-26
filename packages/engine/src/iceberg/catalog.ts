@@ -326,7 +326,26 @@ export interface CommitRetryOptions {
   sleep?: (ms: number) => Promise<void>
   /** Injectable RNG for the jitter — tests pass a deterministic value. */
   random?: () => number
+  /**
+   * Idempotency token stamped into the appended snapshot's summary
+   * (`gscdump.append-id`) and matched by the landed-check before any outer
+   * retry. Generated per call (`crypto.randomUUID`) so it is STABLE across this
+   * call's retries but UNIQUE per call — a content hash would risk a false
+   * "already landed" skip (silent data loss). Injectable for deterministic tests.
+   */
+  appendId?: string
 }
+
+/**
+ * Snapshot-summary key carrying the per-call idempotency token. Stamped by
+ * {@link icebergAppendRetrying} via icebird's `snapshotProperties` passthrough,
+ * read back by {@link appendAlreadyLanded}. Namespaced so it can never collide
+ * with an Iceberg-reserved summary key.
+ */
+const APPEND_ID_SUMMARY_KEY = 'gscdump.append-id'
+
+/** How many of the most-recent snapshots the landed-check scans for the token. */
+const APPEND_LANDED_SCAN_DEPTH = 25
 
 /**
  * True when `err` is an R2 Data Catalog commit rate-limit response
@@ -351,15 +370,18 @@ function defaultCommitSleep(ms: number): Promise<void> {
  * retries 412/409 internally; 429 is the gap this closes. Non-429 errors
  * (and 429s that survive every attempt) propagate unchanged.
  *
- * RESIDUAL RISK — re-upload orphans. icebird's `icebergAppend` prepares the
- * data + manifest files ONCE, outside its internal 412/409 retry loop, so
- * those retries never re-upload data. A 429 that escapes that loop and is
- * retried HERE re-runs the whole `icebergAppend` call, which re-prepares and
- * re-uploads the data files; the previous attempt's parquet objects become
- * orphans (referenced by no snapshot). 429s should be rare and clear within
- * an attempt or two, so orphan volume is small, and R2 orphan-file cleanup
- * reclaims them. Eliminating the 429 source entirely (per-table commit
- * coalescing) is assessed in the Phase-1.5 report.
+ * IDEMPOTENT RE-RUN. A 429 that escapes icebird's internal loop is retried HERE
+ * by re-running the whole `icebergAppend`, which re-prepares + re-uploads the
+ * data files. That is safe ONLY if the prior attempt's commit did NOT land — but
+ * R2 Data Catalog can apply a commit and STILL return 429 (rate-limit on the
+ * response path), and a lost ack looks identical. A blind re-run then appends a
+ * SECOND copy of the same rows → silent double-count (observed: a re-resynced
+ * site read 2× its true totals). To close this, every attempt stamps a per-call
+ * `gscdump.append-id` into the snapshot summary, and BEFORE retrying or giving
+ * up we reload the table and check whether that id already landed
+ * ({@link appendAlreadyLanded}); if so the append succeeded and we return without
+ * re-appending. A non-landed 429 still re-runs (the previous attempt's parquet is
+ * an orphan, reclaimed by R2 cleanup) — same as before, no double.
  */
 export async function icebergAppendRetrying(
   args: Parameters<typeof icebergAppend>[0],
@@ -370,10 +392,24 @@ export async function icebergAppendRetrying(
   const maxDelayMs = options.maxDelayMs ?? 20_000
   const sleep = options.sleep ?? defaultCommitSleep
   const random = options.random ?? Math.random
+  const appendId = options.appendId ?? globalThis.crypto.randomUUID()
+  // Stamp the token once; the SAME object is passed every attempt so a re-run is
+  // a faithful retry of the identical append (and the id is stable across them).
+  const stampedArgs = {
+    ...args,
+    snapshotProperties: { ...(args as { snapshotProperties?: Record<string, string> }).snapshotProperties, [APPEND_ID_SUMMARY_KEY]: appendId },
+  } as Parameters<typeof icebergAppend>[0]
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const err = await icebergAppend(args).then(() => undefined, (e: unknown) => e)
+    const err = await icebergAppend(stampedArgs).then(() => undefined, (e: unknown) => e)
     if (err === undefined)
+      return
+    // The error may be a false negative: the commit landed but the catalog
+    // surfaced 429/a lost ack. Re-appending then would double. Verify landing by
+    // the stamped id before EITHER retrying (429) or propagating (non-429/last).
+    // A load failure is treated as "not landed" — falls through to the prior
+    // behavior (retry/throw), never a false skip that would lose data.
+    if (await appendAlreadyLanded(args, appendId).catch(() => false))
       return
     if (!isCommitRateLimited(err) || attempt === maxAttempts - 1)
       throw err
@@ -383,6 +419,35 @@ export async function icebergAppendRetrying(
     const ceiling = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt)
     await sleep(Math.floor(random() * ceiling))
   }
+}
+
+/**
+ * Did the append carrying `appendId` already commit? Reloads the table and scans
+ * the most recent {@link APPEND_LANDED_SCAN_DEPTH} snapshots for the token in
+ * their summary. A match is DEFINITIVE — that snapshot contains exactly this
+ * append — so returning `true` (skip the re-append) can never drop data; the
+ * worst case of a miss is a redundant re-append (the existing orphan behavior).
+ * REST catalogs only (the token round-trips through the REST snapshot summary);
+ * other catalog shapes return `false` and keep the prior retry semantics.
+ */
+async function appendAlreadyLanded(
+  args: Parameters<typeof icebergAppend>[0],
+  appendId: string,
+): Promise<boolean> {
+  const a = args as { catalog?: { type?: string }, namespace?: string | string[], table?: string }
+  if (a.catalog?.type !== 'rest' || a.namespace == null || a.table == null)
+    return false
+  const { metadata } = await restCatalogLoadTable(a.catalog as Parameters<typeof restCatalogLoadTable>[0], {
+    namespace: a.namespace,
+    table: a.table,
+  })
+  const snapshots = (metadata as { snapshots?: Array<{ summary?: Record<string, string | undefined> }> }).snapshots ?? []
+  const from = Math.max(0, snapshots.length - APPEND_LANDED_SCAN_DEPTH)
+  for (let i = snapshots.length - 1; i >= from; i--) {
+    if (snapshots[i]?.summary?.[APPEND_ID_SUMMARY_KEY] === appendId)
+      return true
+  }
+  return false
 }
 
 /**
