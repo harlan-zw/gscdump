@@ -240,10 +240,10 @@ function stage(
       sprintFindingTypes: ['search-console-stage', 'negative-movers'],
     },
     healthy_growth_ready: {
-      label: 'Healthy, growth ready',
+      label: 'Healthy',
       severity: 'success',
-      summary: 'Google can discover, index, and show the site. The next work is growth, not cleanup.',
-      primaryAction: 'Use expansion work: striking-distance pages, content gaps, and authority building.',
+      summary: 'Google can discover, index, and show your pages.',
+      primaryAction: 'Push striking-distance pages (positions 11 to 20) and close content gaps to grow impressions.',
       nextStage: null,
       sprintFindingTypes: ['striking-distance', 'competitor-content-gap'],
     },
