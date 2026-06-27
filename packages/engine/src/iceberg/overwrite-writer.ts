@@ -49,6 +49,8 @@ export interface OverwriteWriterCatalogConfig {
   warehouse: string
   /** S3-compatible object store backing the catalog. */
   s3: IcebergS3Config
+  /** Bearer token for a token-authed REST catalog (R2 Data Catalog). */
+  catalogToken?: string
 }
 
 /**
@@ -71,18 +73,43 @@ export interface OverwriteJob {
   rows: readonly Row[]
 }
 
+/**
+ * Per-site delete job — removes EVERY row for one `siteId` across a whole
+ * table (all dates / search types). Recovery op for clearing a corrupt site
+ * (e.g. a cross-run append double) from a shared per-team shard before a clean
+ * re-backfill, without touching sibling sites. Carries no rows. `siteId` is a
+ * `number` for an INT-encoded shard, a `string` for STRING encoding.
+ */
+export interface DeleteJob {
+  op: 'delete'
+  catalogUri: string
+  namespace: string
+  warehouse: string
+  s3: IcebergS3Config
+  /** Bearer token for a token-authed REST catalog (R2 Data Catalog). */
+  catalogToken?: string
+  table: string
+  siteId: string | number
+}
+
+/** Any job the shared PyIceberg backend can execute. */
+export type PyIcebergJob = OverwriteJob | DeleteJob
+
 /** Result wire-format from the PyIceberg backend. */
 export interface OverwriteJobResult {
+  /** Rows written (emit/overwrite) or removed (delete). */
   rowCount?: number
   error?: string
 }
 
 /**
- * A transport that executes one PyIceberg overwrite job and returns its
- * result. `subprocessBackend` and `httpBackend` are the two shipped
- * implementations; tests inject a fake.
+ * A transport that executes one PyIceberg job and returns its result.
+ * `subprocessBackend` and `httpBackend` are the two shipped implementations;
+ * tests inject a fake. The param is the `OverwriteJob | DeleteJob` union, so a
+ * backend value is still assignable where the narrower `OverwriteBackend` is
+ * expected (a wider-param function accepts the narrower call).
  */
-export type OverwriteBackend = (job: OverwriteJob) => Promise<OverwriteJobResult>
+export type OverwriteBackend = (job: PyIcebergJob) => Promise<OverwriteJobResult>
 
 export interface IcebergOverwriteWriterOptions {
   catalog: OverwriteWriterCatalogConfig
@@ -232,4 +259,51 @@ export function overwriteWriterAsSink(writer: IcebergOverwriteWriter): Sink & Sl
     overwriteSlice: (slice, rows) => writer.overwriteSlice(slice, rows),
     close: () => writer.close(),
   }
+}
+
+/** Per-table outcome of a {@link deleteSiteFromShard} run. */
+export interface DeleteSiteResult {
+  table: string
+  /** Rows removed, when the backend reported a count. */
+  rowCount?: number
+  /** Present when this table's delete failed; the sweep continues regardless. */
+  error?: string
+}
+
+/**
+ * Remove every row for one `siteId` from a per-team Iceberg shard, across the
+ * given tables. Recovery op: clear a corrupt site (e.g. a cross-run append
+ * double) before a clean re-backfill, leaving sibling sites in the shared shard
+ * untouched. `site_id` is an identity partition column, so PyIceberg prunes
+ * whole data files (no row-level delete files).
+ *
+ * Runs SEQUENTIALLY (one commit per table at a time) so the per-table catalog
+ * commit-rate ceiling is never tripped. A table failure is captured in its
+ * result row, not thrown — the sweep always attempts every table so a partial
+ * failure is visible and re-runnable (delete is idempotent: re-deleting an
+ * already-empty site is a no-op).
+ */
+export async function deleteSiteFromShard(args: {
+  catalog: OverwriteWriterCatalogConfig
+  backend: OverwriteBackend
+  siteId: string | number
+  tables: readonly string[]
+}): Promise<DeleteSiteResult[]> {
+  const { catalog, backend, siteId, tables } = args
+  const results: DeleteSiteResult[] = []
+  for (const table of tables) {
+    const job: DeleteJob = {
+      op: 'delete',
+      catalogUri: catalog.catalogUri,
+      namespace: catalog.namespace,
+      warehouse: catalog.warehouse,
+      s3: catalog.s3,
+      ...(catalog.catalogToken ? { catalogToken: catalog.catalogToken } : {}),
+      table,
+      siteId,
+    }
+    const res: OverwriteJobResult = await backend(job).catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }))
+    results.push(res.error ? { table, error: res.error } : { table, rowCount: res.rowCount })
+  }
+  return results
 }

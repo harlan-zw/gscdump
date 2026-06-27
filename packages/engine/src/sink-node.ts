@@ -14,4 +14,22 @@ export type {
   LocalIcebergSink,
   LocalIcebergSinkFullOptions,
 } from './iceberg/local-sink'
+export {
+  createIcebergOverwriteWriter,
+  deleteSiteFromShard,
+  httpBackend,
+  overwriteWriterAsSink,
+  subprocessBackend,
+} from './iceberg/overwrite-writer'
+export type {
+  DeleteJob,
+  DeleteSiteResult,
+  IcebergOverwriteWriter,
+  IcebergOverwriteWriterOptions,
+  OverwriteBackend,
+  OverwriteJob,
+  OverwriteJobResult,
+  OverwriteWriterCatalogConfig,
+  PyIcebergJob,
+} from './iceberg/overwrite-writer'
 export type { LocalIcebergSinkOptions } from './sink'

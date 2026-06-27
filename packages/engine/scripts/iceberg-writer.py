@@ -8,7 +8,7 @@ exactly as the Phase-0 POC loader (`poc/iceberg/scripts/load_iceberg.py`) does.
 Protocol: one JSON job per process, read from stdin, result written to stdout.
 
   job = {
-    "op": "emit" | "overwrite" | "close",
+    "op": "emit" | "overwrite" | "delete" | "close",
     "catalogUri": "http://localhost:8181",
     "namespace": "gsc",
     "warehouse": "gscdump-poc-warehouse",
@@ -25,6 +25,8 @@ Protocol: one JSON job per process, read from stdin, result written to stdout.
 
 `emit` appends; `overwrite` replaces every row in the
 (site_id, search_type, month(date)) partition matching the slice's exact date.
+`delete` removes every row for a `site_id` (recovery: clear one site's data
+from a per-team shard before a clean re-backfill); it carries no rows.
 `close` is a no-op (PyIceberg commits per call).
 """
 import json
@@ -74,17 +76,24 @@ def _s3_endpoint(s3):
 
 def _catalog(job):
     s3 = job["s3"]
+    props = {
+        "s3.endpoint": _s3_endpoint(s3),
+        "s3.access-key-id": s3["accessKeyId"],
+        "s3.secret-access-key": s3["secretAccessKey"],
+        "s3.region": s3.get("region", "us-east-1"),
+        "s3.path-style-access": "true",
+    }
+    # R2 Data Catalog's REST endpoint is token-authed (the POC's local catalog
+    # is open). When `catalogToken` is present, pass it as the RestCatalog
+    # bearer token so the same script drives both stacks.
+    token = job.get("catalogToken")
+    if token:
+        props["token"] = token
     return RestCatalog(
         "local",
         uri=job["catalogUri"],
         warehouse=job["warehouse"],
-        **{
-            "s3.endpoint": _s3_endpoint(s3),
-            "s3.access-key-id": s3["accessKeyId"],
-            "s3.secret-access-key": s3["secretAccessKey"],
-            "s3.region": s3.get("region", "us-east-1"),
-            "s3.path-style-access": "true",
-        },
+        **props,
     )
 
 
@@ -177,6 +186,22 @@ def main():
         return
 
     cat = _catalog(job)
+
+    if op == "delete":
+        # Remove every row for one site across the whole table (all dates /
+        # search types). Recovery op: clear a corrupt site (e.g. a cross-run
+        # double) before a clean re-backfill, without touching sibling sites
+        # in the shared per-team shard. `site_id` is an identity partition
+        # column, so this prunes whole data files (no row-level delete files).
+        # The table must already exist (no `spec` needed to delete) — load it
+        # directly rather than _ensure_table.
+        ident = f"{job['namespace']}.{job['table']}"
+        tbl = cat.load_table(ident)
+        deleted_before = tbl.scan(row_filter=EqualTo("site_id", job["siteId"])).count()
+        tbl.delete(delete_filter=EqualTo("site_id", job["siteId"]))
+        json.dump({"rowCount": deleted_before}, sys.stdout)
+        return
+
     tbl = _ensure_table(cat, job)
     rows = _inject_partition_columns(job)
     arrow = _arrow_table(job["spec"], rows)
