@@ -328,10 +328,26 @@ export interface CommitRetryOptions {
   random?: () => number
   /**
    * Idempotency token stamped into the appended snapshot's summary
-   * (`gscdump.append-id`) and matched by the landed-check before any outer
-   * retry. Generated per call (`crypto.randomUUID`) so it is STABLE across this
-   * call's retries but UNIQUE per call — a content hash would risk a false
-   * "already landed" skip (silent data loss). Injectable for deterministic tests.
+   * (`gscdump.append-id`) and matched by the landed-check. When omitted it is
+   * DERIVED from the records' content (a SHA-256 over each row's full
+   * key/value, order-independent — see {@link deriveAppendId}), making the
+   * token STABLE across PROCESSES, not just within one call's retry loop.
+   *
+   * Why content-derived (superseding the old "random per call" choice): the
+   * double we actually hit is a CROSS-RUN re-append — a job commits the
+   * Iceberg snapshot, then dies/evicts before its D1 ledger write, so a queue
+   * RETRY (or operator re-resync) re-runs from scratch, re-emits the identical
+   * buffer, and appends a second copy. A random per-call id can't catch that
+   * (the retry is a new process → new id). A content hash CAN: the retry
+   * re-derives the same id, the pre-append landed-check finds it, and skips.
+   *
+   * The old "content hash risks a false skip / data loss" fear does NOT apply
+   * to this fact model: a date is appended exactly once when finalized and
+   * never revised (revisions go through the OVERWRITE path), and pagination
+   * pages carry DIFFERENT rows → a different content hash → never falsely
+   * skipped. Two appends collide only if their full row-sets are byte-identical
+   * — which is precisely a duplicate that SHOULD be skipped. Injectable for
+   * deterministic tests.
    */
   appendId?: string
 }
@@ -392,13 +408,25 @@ export async function icebergAppendRetrying(
   const maxDelayMs = options.maxDelayMs ?? 20_000
   const sleep = options.sleep ?? defaultCommitSleep
   const random = options.random ?? Math.random
-  const appendId = options.appendId ?? globalThis.crypto.randomUUID()
+  // Content-derived token (stable across processes) unless the caller pins one.
+  const appendId = options.appendId ?? await deriveAppendId(args)
   // Stamp the token once; the SAME object is passed every attempt so a re-run is
   // a faithful retry of the identical append (and the id is stable across them).
   const stampedArgs = {
     ...args,
     snapshotProperties: { ...(args as { snapshotProperties?: Record<string, string> }).snapshotProperties, [APPEND_ID_SUMMARY_KEY]: appendId },
   } as Parameters<typeof icebergAppend>[0]
+
+  // PRE-APPEND landed-check — closes the cross-run double. A queue retry of a
+  // job that already committed (but died before its ledger write) re-derives the
+  // SAME content token; if it's already in a recent snapshot, the data is
+  // present and appending again would duplicate it, so skip. Without this the
+  // first attempt would SUCCEED (append never errors on duplicates) and the
+  // in-loop check below — which only runs on error — would never fire. A load
+  // failure → "not landed" → falls through to a normal append (never a false
+  // skip that loses data).
+  if (await appendAlreadyLanded(args, appendId).catch(() => false))
+    return
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const err = await icebergAppend(stampedArgs).then(() => undefined, (e: unknown) => e)
@@ -419,6 +447,31 @@ export async function icebergAppendRetrying(
     const ceiling = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt)
     await sleep(Math.floor(random() * ceiling))
   }
+}
+
+/**
+ * Derive a deterministic, content-addressed idempotency token for an append:
+ * SHA-256 over a canonical serialization of the records (each row's keys sorted,
+ * then the rows sorted) so the token is independent of buffer/iteration order
+ * and identical across processes for the same data. A queue retry that re-emits
+ * the same buffer derives the same token → {@link appendAlreadyLanded} skips it.
+ *
+ * Pagination-safe: page 2 of a date carries DIFFERENT rows than page 1, so its
+ * serialization (and token) differ — it is never mistaken for an already-landed
+ * append. An empty record set falls back to a random token (nothing to dedup;
+ * never skip).
+ */
+async function deriveAppendId(args: Parameters<typeof icebergAppend>[0]): Promise<string> {
+  const records = ((args as { records?: ReadonlyArray<Record<string, unknown>> }).records) ?? []
+  if (records.length === 0)
+    return globalThis.crypto.randomUUID()
+  // Canonical per-row string: keys sorted so column order can't change the hash;
+  // values stringified (numbers/strings/dates all serialize deterministically).
+  const rowSig = (r: Record<string, unknown>): string =>
+    Object.keys(r).sort().map(k => `${k}=${String(r[k])}`).join('')
+  const body = records.map(rowSig).sort().join('')
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('')
 }
 
 /**

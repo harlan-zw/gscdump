@@ -150,9 +150,11 @@ describe('icebergAppendRetrying', () => {
   })
 
   it('does NOT re-append a 429 whose commit LANDED (the double-count fix)', async () => {
+    // Pre-append check sees nothing yet (not previously landed) → proceeds.
+    restCatalogLoadTable.mockResolvedValueOnce({ metadata: { snapshots: [] } })
     // First attempt: the commit applied at R2 but the response was a 429.
     icebergAppend.mockRejectedValueOnce(new Error('429 too many commits to this table'))
-    // The landed-check finds the stamped id in a recent snapshot → already there.
+    // The post-error landed-check finds the stamped id in a recent snapshot.
     restCatalogLoadTable.mockResolvedValue({
       metadata: { snapshots: [{ summary: { 'operation': 'append', 'gscdump.append-id': 'landed-1' } }] },
     })
@@ -162,6 +164,7 @@ describe('icebergAppendRetrying', () => {
   })
 
   it('returns success for a non-429 error whose commit LANDED (lost ack)', async () => {
+    restCatalogLoadTable.mockResolvedValueOnce({ metadata: { snapshots: [] } }) // pre-check: not landed
     icebergAppend.mockRejectedValueOnce(new Error('503 service unavailable'))
     restCatalogLoadTable.mockResolvedValue({
       metadata: { snapshots: [{ summary: { 'gscdump.append-id': 'landed-2' } }] },
@@ -169,6 +172,31 @@ describe('icebergAppendRetrying', () => {
     // Without the landed-check this would throw 503 → the job re-drives → double.
     await expect(icebergAppendRetrying(APPEND_ARGS, { ...FAST, appendId: 'landed-2' })).resolves.toBeUndefined()
     expect(icebergAppend).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips the append entirely when the content token already landed (cross-run double fix)', async () => {
+    // A queue RETRY of a job that committed-then-died re-derives the SAME content
+    // token; the PRE-append check finds it already in a snapshot → no append at all.
+    // This is the case a random per-call id could never catch.
+    restCatalogLoadTable.mockResolvedValue({
+      metadata: { snapshots: [{ summary: { 'gscdump.append-id': 'prior-run' } }] },
+    })
+    await icebergAppendRetrying(APPEND_ARGS, { ...FAST, appendId: 'prior-run' })
+    expect(icebergAppend).toHaveBeenCalledTimes(0)
+  })
+
+  it('derives a STABLE content token across calls (same records → same id), pagination-safe', async () => {
+    await icebergAppendRetrying(APPEND_ARGS, FAST)
+    const id1 = (icebergAppend.mock.calls[0][0] as { snapshotProperties: Record<string, string> }).snapshotProperties['gscdump.append-id']
+    icebergAppend.mockClear()
+    await icebergAppendRetrying(APPEND_ARGS, FAST) // identical records → identical id
+    const id2 = (icebergAppend.mock.calls[0][0] as { snapshotProperties: Record<string, string> }).snapshotProperties['gscdump.append-id']
+    expect(id2).toBe(id1)
+    // Different rows (a "page 2") → DIFFERENT token, so it is never falsely skipped.
+    icebergAppend.mockClear()
+    await icebergAppendRetrying({ ...APPEND_ARGS, records: [{ url: '/p2', site_id: 's1', search_type: 'web' }] }, FAST)
+    const id3 = (icebergAppend.mock.calls[0][0] as { snapshotProperties: Record<string, string> }).snapshotProperties['gscdump.append-id']
+    expect(id3).not.toBe(id1)
   })
 
   it('treats a landed-check load failure as "not landed" (falls back to retry)', async () => {
