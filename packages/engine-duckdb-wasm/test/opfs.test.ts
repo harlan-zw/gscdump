@@ -219,6 +219,48 @@ describe('attachOpfsParquetTables', () => {
     expect(progress).toEqual(['cache-hit'])
   })
 
+  it('reports attach timing phases and per-file durations', async () => {
+    const opfs = makeFakeOpfs()
+    installNavigatorStorage(opfs.root)
+    const { db, conn } = stubDuckDb()
+    const payload = new Uint8Array([1, 2, 3])
+    const timings: Array<{ stage: string, durationMs: number, table?: string, outcome?: string }> = []
+    const progress: Array<{ materialiseMs?: number, registerMs?: number, totalMs?: number }> = []
+
+    const handle = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(payload),
+      tables: [{ table: 'dates', files: [{ url: '/dates-0', bytes: 3, contentHash: 'iceberg/timing.parquet' }] }],
+      onTiming: info => timings.push(info),
+      onFileProgress: info => progress.push(info),
+    })
+
+    expect(handle.tables).toEqual(['dates'])
+    expect(progress).toHaveLength(1)
+    expect(progress[0]!.materialiseMs).toEqual(expect.any(Number))
+    expect(progress[0]!.registerMs).toEqual(expect.any(Number))
+    expect(progress[0]!.totalMs).toEqual(expect.any(Number))
+
+    const stages = timings.map(t => t.stage)
+    expect(stages).toEqual(expect.arrayContaining([
+      'persist',
+      'root',
+      'plan',
+      'duckdb-import',
+      'sweep',
+      'materialise',
+      'register',
+      'downloads',
+      'view',
+      'total',
+    ]))
+    expect(timings.every(t => Number.isFinite(t.durationMs) && t.durationMs >= 0)).toBe(true)
+    expect(timings.find(t => t.stage === 'materialise')).toMatchObject({ table: 'dates', outcome: 'downloaded' })
+    expect(timings.find(t => t.stage === 'register')).toMatchObject({ table: 'dates', outcome: 'downloaded' })
+    expect(timings.find(t => t.stage === 'view')).toMatchObject({ table: 'dates' })
+  })
+
   it('re-downloads when the content hash changes (new filename)', async () => {
     const opfs = makeFakeOpfs()
     // Old snapshot's cached file under the OLD content hash.

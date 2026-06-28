@@ -40,6 +40,8 @@ export {
 export type {
   AttachOpfsTablesOptions,
   OpfsAttachedHandle,
+  OpfsAttachTiming,
+  OpfsAttachTimingStage,
   OpfsFileProgress,
   OpfsParquetFile,
   OpfsParquetTable,

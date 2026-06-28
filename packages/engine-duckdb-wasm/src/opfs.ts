@@ -92,6 +92,12 @@ export interface AttachOpfsTablesOptions {
   /** Ticks once per file as it lands in OPFS + registers. UI progress. */
   onFileProgress?: (info: OpfsFileProgress) => void
   /**
+   * Low-volume diagnostics for the OPFS attach waterfall. This is intentionally
+   * phase-level rather than a logger so hosts can join it with their own route
+   * timings without parsing console text.
+   */
+  onTiming?: (info: OpfsAttachTiming) => void
+  /**
    * Serializer for the operations that mutate the DuckDB-WASM virtual
    * filesystem / catalog (`registerFileHandle`, `dropFile`, `CREATE`/`DROP
    * VIEW`) — those are not concurrency-safe across consumers sharing one
@@ -134,6 +140,36 @@ export interface OpfsFileProgress {
   bytes: number
   /** `'cache-hit'` — already in OPFS, verified; `'downloaded'` — fetched. */
   outcome: 'cache-hit' | 'downloaded'
+  /** Time spent probing/downloading/writing this file before DuckDB registration. */
+  materialiseMs?: number
+  /** Time spent inside DuckDB's file-registration mutation lock for this file. */
+  registerMs?: number
+  /** End-to-end file phase time, materialise + register + callback overhead. */
+  totalMs?: number
+}
+
+export type OpfsAttachTimingStage
+  = | 'persist'
+    | 'root'
+    | 'plan'
+    | 'duckdb-import'
+    | 'sweep'
+    | 'materialise'
+    | 'register'
+    | 'downloads'
+    | 'view'
+    | 'recovery'
+    | 'total'
+
+export interface OpfsAttachTiming {
+  stage: OpfsAttachTimingStage
+  durationMs: number
+  table?: string
+  file?: string
+  files?: number
+  tables?: number
+  bytes?: number
+  outcome?: 'cache-hit' | 'downloaded'
 }
 
 /** Handle returned from {@link attachOpfsParquetTables}. */
@@ -177,6 +213,36 @@ const OPFS_PREFIX = 'gscdump-snapshot__'
  * the OPFS sweep never reaps a live recovery buffer.
  */
 const RECOVER_BUFFER_PREFIX = 'gscdump-recover__'
+const MAX_CONTENT_HASH_SLUG_CACHE = 4096
+const contentHashSlugCache = new Map<string, Promise<string>>()
+
+function nowMs(): number {
+  return globalThis.performance?.now?.() ?? Date.now()
+}
+
+function emitTiming(onTiming: ((info: OpfsAttachTiming) => void) | undefined, info: OpfsAttachTiming): void {
+  try {
+    onTiming?.(info)
+  }
+  catch {
+    // Diagnostics must not make attach less reliable.
+  }
+}
+
+async function timed<T>(
+  onTiming: ((info: OpfsAttachTiming) => void) | undefined,
+  stage: OpfsAttachTimingStage,
+  meta: Omit<OpfsAttachTiming, 'stage' | 'durationMs'>,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const started = nowMs()
+  try {
+    return await fn()
+  }
+  finally {
+    emitTiming(onTiming, { ...meta, stage, durationMs: nowMs() - started })
+  }
+}
 
 /**
  * Per-DB reference-counted registry of OPFS file handles. BROWSER_FSACCESS
@@ -333,6 +399,24 @@ export async function estimateOpfsStorage(): Promise<{ usageBytes?: number, quot
  * entropy that collisions across distinct payloads are vanishingly unlikely.
  */
 async function contentHashSlug(contentHash: string): Promise<string> {
+  const cached = contentHashSlugCache.get(contentHash)
+  if (cached)
+    return cached
+  if (contentHashSlugCache.size >= MAX_CONTENT_HASH_SLUG_CACHE) {
+    const oldest = contentHashSlugCache.keys().next().value
+    if (oldest !== undefined)
+      contentHashSlugCache.delete(oldest)
+  }
+  const promise = deriveContentHashSlug(contentHash)
+    .catch((err) => {
+      contentHashSlugCache.delete(contentHash)
+      throw err
+    })
+  contentHashSlugCache.set(contentHash, promise)
+  return promise
+}
+
+async function deriveContentHashSlug(contentHash: string): Promise<string> {
   const digest = await globalThis.crypto.subtle.digest(
     'SHA-256',
     new TextEncoder().encode(contentHash),
@@ -522,12 +606,14 @@ export async function attachOpfsParquetTables(
     signal,
     version,
     onFileProgress,
+    onTiming,
     withDb = fn => fn(),
     recoverContention = true,
   } = options
 
-  await requestPersistentStorage()
-  const root = await getOpfsRoot()
+  const totalStarted = nowMs()
+  await timed(onTiming, 'persist', {}, requestPersistentStorage)
+  const root = await timed(onTiming, 'root', {}, getOpfsRoot)
 
   // Flatten so downloads run with global concurrency, not per-table. Each item
   // carries its content-addressed OPFS name (computed once here, not per
@@ -538,23 +624,25 @@ export async function attachOpfsParquetTables(
   // Expected OPFS names per table — the cache-address set the sweep keeps and
   // everything else for the table (stale hashes, legacy index names) reaps.
   const expectedByTable = new Map<string, Set<string>>()
-  for (const t of tables) {
-    const expected = new Set<string>()
-    for (let i = 0; i < t.files.length; i++) {
-      const file = t.files[i]!
-      const slug = file.contentHash ? await contentHashSlug(file.contentHash) : undefined
-      const name = opfsFileName(t.table, slug, i)
-      flat.push({ table: t.table, file, name })
-      expected.add(name)
+  await timed(onTiming, 'plan', { tables: tables.length }, async () => {
+    for (const t of tables) {
+      const expected = new Set<string>()
+      for (let i = 0; i < t.files.length; i++) {
+        const file = t.files[i]!
+        const slug = file.contentHash ? await contentHashSlug(file.contentHash) : undefined
+        const name = opfsFileName(t.table, slug, i)
+        flat.push({ table: t.table, file, name })
+        expected.add(name)
+      }
+      if (t.overlay) {
+        const slug = t.overlay.contentHash ? await contentHashSlug(t.overlay.contentHash) : undefined
+        const name = opfsFileName(t.table, slug, t.files.length)
+        flat.push({ table: t.table, file: t.overlay, name, overlay: true })
+        expected.add(name)
+      }
+      expectedByTable.set(t.table, expected)
     }
-    if (t.overlay) {
-      const slug = t.overlay.contentHash ? await contentHashSlug(t.overlay.contentHash) : undefined
-      const name = opfsFileName(t.table, slug, t.files.length)
-      flat.push({ table: t.table, file: t.overlay, name, overlay: true })
-      expected.add(name)
-    }
-    expectedByTable.set(t.table, expected)
-  }
+  })
   const total = flat.length
   // Per-table OPFS name of the overlay file (when present), so the view build
   // can split materialised names into lake vs overlay regardless of download
@@ -563,13 +651,14 @@ export async function attachOpfsParquetTables(
   // Expected materialised-file count per table = lake files + (overlay ? 1 : 0).
   const expectedCount = new Map<string, number>(tables.map(t => [t.table, t.files.length + (t.overlay ? 1 : 0)]))
 
-  const { DuckDBDataProtocol } = await import('@duckdb/duckdb-wasm')
+  const { DuckDBDataProtocol } = await timed(onTiming, 'duckdb-import', {}, () => import('@duckdb/duckdb-wasm'))
   const registry = getOpfsRegistry(db, DuckDBDataProtocol.BROWSER_FSACCESS)
 
   // Reap stale-hash + legacy index-named entries for these tables up front (one
   // directory scan) so OPFS doesn't accumulate a copy per snapshot version /
   // manifest ordering. Best-effort — a sweep failure never blocks the attach.
-  await sweepStaleEntries(root, registry, expectedByTable).catch(() => {})
+  await timed(onTiming, 'sweep', { files: total, tables: tables.length }, () => sweepStaleEntries(root, registry, expectedByTable))
+    .catch(() => {})
 
   // Per-table OPFS file names + the registered handles, so a table that hits
   // a quota error can be dropped wholesale.
@@ -597,10 +686,23 @@ export async function attachOpfsParquetTables(
     if (degraded.has(item.table))
       return
     signal?.throwIfAborted()
+    const fileStarted = nowMs()
     const name = item.name
     let result: { handle: FileSystemFileHandle, outcome: 'cache-hit' | 'downloaded' }
+    let materialiseMs = 0
+    let registerMs = 0
     try {
+      const materialiseStarted = nowMs()
       result = await materialiseFile(root, name, item.file, fetchImpl, fetchInit, signal)
+      materialiseMs = nowMs() - materialiseStarted
+      emitTiming(onTiming, {
+        stage: 'materialise',
+        durationMs: materialiseMs,
+        table: item.table,
+        file: name,
+        bytes: item.file.bytes,
+        outcome: result.outcome,
+      })
     }
     catch (err) {
       if (isAbortError(err))
@@ -628,7 +730,17 @@ export async function attachOpfsParquetTables(
     // (a second sync access handle on one backing file is the OPFS conflict).
     // The registration mutates the WASM virtual filesystem → under `withDb`.
     try {
+      const registerStarted = nowMs()
       await withDb(() => registry.acquire(name, () => result.handle))
+      registerMs = nowMs() - registerStarted
+      emitTiming(onTiming, {
+        stage: 'register',
+        durationMs: registerMs,
+        table: item.table,
+        file: name,
+        bytes: item.file.bytes,
+        outcome: result.outcome,
+      })
       acquiredNames.add(name)
     }
     catch (err) {
@@ -656,6 +768,9 @@ export async function attachOpfsParquetTables(
       total,
       bytes: item.file.bytes,
       outcome: result.outcome,
+      materialiseMs,
+      registerMs,
+      totalMs: nowMs() - fileStarted,
     })
   })
 
@@ -663,7 +778,7 @@ export async function attachOpfsParquetTables(
   // every handle it managed to acquire before the throw escapes — there is no
   // view loop to clean up after a download-phase failure.
   try {
-    await runDownloads()
+    await timed(onTiming, 'downloads', { files: total, tables: tables.length }, runDownloads)
   }
   catch (err) {
     await withDb(() => registry.release([...acquiredNames])).catch(() => {})
@@ -701,9 +816,9 @@ export async function attachOpfsParquetTables(
       // iterations shares the teardown path below — otherwise a bare throw here
       // escapes uncaught and leaks every handle acquired during the download loop.
       signal?.throwIfAborted()
-      await withDb(() => conn.query(overlayName
+      await timed(onTiming, 'view', { table: t.table, files: files.length }, () => withDb(() => conn.query(overlayName
         ? readParquetViewWithOverlaySql(schema, t.table, lakeNames, overlayName)
-        : readParquetViewSql(schema, t.table, lakeNames)))
+        : readParquetViewSql(schema, t.table, lakeNames))))
     }
     catch (err) {
       if (isAbortError(err)) {
@@ -747,50 +862,52 @@ export async function attachOpfsParquetTables(
   // table then attaches from the shared cache. Quota / incomplete degradations
   // are left alone (buffering a quota-exceeding set risks OOM).
   const recoverTableToBuffers = async (t: OpfsParquetTable): Promise<boolean> => {
-    const readOne = async (file: OpfsParquetFile, index: number): Promise<Uint8Array> => {
-      const cached = await readOpfsSnapshotFile(t.table, file.contentHash, index, file.bytes)
-      if (cached)
-        return cached
-      // Genuine cache miss (eviction, or this tab never finished its own write
-      // before the conflict) — fetch over HTTP, the same source the OPFS path
-      // would have used.
-      signal?.throwIfAborted()
-      const resp = await fetchImpl(file.url, { ...fetchInit, signal })
-      if (!resp.ok)
-        throw new Error(`[engine-duckdb-wasm/opfs] recover ${file.url} failed: ${resp.status}`)
-      return new Uint8Array(await resp.arrayBuffer())
-    }
-    const lakeNames: string[] = []
-    for (let i = 0; i < t.files.length; i++) {
-      const buf = await readOne(t.files[i]!, i)
-      const name = `${RECOVER_BUFFER_PREFIX}${t.table}_${i}.parquet`
-      await withDb(() => db.registerFileBuffer(name, buf))
-      bufferFiles.push(name)
-      lakeNames.push(name)
-      bytesAttached += t.files[i]!.bytes
-    }
-    let overlayName: string | undefined
-    if (t.overlay) {
-      const buf = await readOne(t.overlay, t.files.length)
-      overlayName = `${RECOVER_BUFFER_PREFIX}${t.table}_overlay.parquet`
-      await withDb(() => db.registerFileBuffer(overlayName!, buf))
-      bufferFiles.push(overlayName)
-      bytesAttached += t.overlay.bytes
-    }
-    // Buffers already sit in WASM linear memory, so use the streaming (non-
-    // MATERIALIZED) overlay body — a MATERIALIZED CTE would copy them again.
-    const body = overlayViewBody({
-      lakeSelect: lakeNames.length ? lakeSelect(lakeNames) : null,
-      overlaySelect: overlayName
-        ? `SELECT * REPLACE (CAST(date AS DATE) AS date) FROM read_parquet(['${overlayName.replace(/'/g, '\'\'')}'], union_by_name = true)`
-        : null,
-      materializeLake: false,
+    return timed(onTiming, 'recovery', { table: t.table, files: t.files.length + (t.overlay ? 1 : 0) }, async () => {
+      const readOne = async (file: OpfsParquetFile, index: number): Promise<Uint8Array> => {
+        const cached = await readOpfsSnapshotFile(t.table, file.contentHash, index, file.bytes)
+        if (cached)
+          return cached
+        // Genuine cache miss (eviction, or this tab never finished its own write
+        // before the conflict) — fetch over HTTP, the same source the OPFS path
+        // would have used.
+        signal?.throwIfAborted()
+        const resp = await fetchImpl(file.url, { ...fetchInit, signal })
+        if (!resp.ok)
+          throw new Error(`[engine-duckdb-wasm/opfs] recover ${file.url} failed: ${resp.status}`)
+        return new Uint8Array(await resp.arrayBuffer())
+      }
+      const lakeNames: string[] = []
+      for (let i = 0; i < t.files.length; i++) {
+        const buf = await readOne(t.files[i]!, i)
+        const name = `${RECOVER_BUFFER_PREFIX}${t.table}_${i}.parquet`
+        await withDb(() => db.registerFileBuffer(name, buf))
+        bufferFiles.push(name)
+        lakeNames.push(name)
+        bytesAttached += t.files[i]!.bytes
+      }
+      let overlayName: string | undefined
+      if (t.overlay) {
+        const buf = await readOne(t.overlay, t.files.length)
+        overlayName = `${RECOVER_BUFFER_PREFIX}${t.table}_overlay.parquet`
+        await withDb(() => db.registerFileBuffer(overlayName!, buf))
+        bufferFiles.push(overlayName)
+        bytesAttached += t.overlay.bytes
+      }
+      // Buffers already sit in WASM linear memory, so use the streaming (non-
+      // MATERIALIZED) overlay body — a MATERIALIZED CTE would copy them again.
+      const body = overlayViewBody({
+        lakeSelect: lakeNames.length ? lakeSelect(lakeNames) : null,
+        overlaySelect: overlayName
+          ? `SELECT * REPLACE (CAST(date AS DATE) AS date) FROM read_parquet(['${overlayName.replace(/'/g, '\'\'')}'], union_by_name = true)`
+          : null,
+        materializeLake: false,
+      })
+      if (!body)
+        return false
+      await withDb(() => conn.query(`CREATE OR REPLACE VIEW ${schema}.${t.table} AS ${body}`))
+      bufferViews.push(t.table)
+      return true
     })
-    if (!body)
-      return false
-    await withDb(() => conn.query(`CREATE OR REPLACE VIEW ${schema}.${t.table} AS ${body}`))
-    bufferViews.push(t.table)
-    return true
   }
 
   if (recoverContention && !signal?.aborted) {
@@ -812,6 +929,8 @@ export async function attachOpfsParquetTables(
       }
     }
   }
+
+  emitTiming(onTiming, { stage: 'total', durationMs: nowMs() - totalStarted, files: total, tables: tables.length, bytes: bytesAttached })
 
   let detached = false
   return {
