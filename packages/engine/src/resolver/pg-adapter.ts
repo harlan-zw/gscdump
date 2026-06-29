@@ -114,6 +114,15 @@ export interface ResolverAdapterOptions {
   canonicalFallback?: boolean
 }
 
+export interface R2SqlResolverAdapterOptions extends ResolverAdapterOptions {
+  /**
+   * R2 SQL string partition equality can undercount on identity partitions;
+   * string-encoded catalogs use CONCAT(col, '') in partition predicates. Int
+   * catalogs do not need the workaround and keep bare equality for pruning.
+   */
+  partitionKeyEncoding?: 'string' | 'int'
+}
+
 export function createParquetResolverAdapter(options: ResolverAdapterOptions = {}): ResolverAdapter<PgTableKey> {
   return createResolverAdapter<PgTableKey>({
     ...PG_BASE_CONFIG,
@@ -148,4 +157,41 @@ export function createIcebergResolverAdapter(options: ResolverAdapterOptions = {
     // rewrites `"pages"` → `gsc.pages` before sending to R2 SQL.
     tableRef: tk => sql.raw(`"${tk}"`),
   })
+}
+
+/**
+ * R2 SQL adapter for the Iceberg fact tables.
+ *
+ * It shares the multi-tenant Iceberg schema with `createIcebergResolverAdapter`
+ * but models R2 SQL's narrower execution surface: no window-total plans and no
+ * comparison joins. For string-partition catalogs it also emits
+ * `CONCAT(partition_col, '') = ?` predicates, working around R2 SQL's
+ * partition-string equality undercount while preserving bound params.
+ */
+export function createR2SqlResolverAdapter(
+  options: R2SqlResolverAdapterOptions = {},
+): ResolverAdapter<PgTableKey> {
+  const adapter = createResolverAdapter<PgTableKey>({
+    ...PG_BASE_CONFIG,
+    schema: icebergSchema,
+    includeSiteId: true,
+    includeSearchType: true,
+    tableLabel: 'r2-sql-resolver-adapter',
+    canonicalFallback: options.canonicalFallback ?? false,
+    capabilities: {
+      regex: false,
+      comparisonJoin: false,
+      windowTotals: false,
+    },
+    tableRef: tk => sql.raw(`"${tk}"`),
+  })
+
+  if (options.partitionKeyEncoding === 'int')
+    return adapter
+
+  return {
+    ...adapter,
+    siteIdColRef: tk => sql`CONCAT(${adapter.siteIdColRef!(tk)}, '')`,
+    searchTypeColRef: tk => sql`CONCAT(${adapter.searchTypeColRef!(tk)}, '')`,
+  }
 }

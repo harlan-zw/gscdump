@@ -125,9 +125,33 @@ const SHARD_RE = /^u_[^/]+\/manifest\/(?<siteId>[^/]+)\/(?<table>[^/]+)\/HEAD$/
 // converge. Edge-safe: `setTimeout` exists in Workers, browsers, and node.
 const CAS_BACKOFF_BASE_MS = 5
 const CAS_BACKOFF_CAP_MS = 250
+const SHARD_IO_CONCURRENCY = 8
+
 async function casBackoff(attempt: number): Promise<void> {
   const ceil = Math.min(CAS_BACKOFF_CAP_MS, CAS_BACKOFF_BASE_MS * 2 ** attempt)
   await new Promise(resolve => setTimeout(resolve, Math.random() * ceil))
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0)
+    return []
+  const workerCount = Math.max(1, Math.min(items.length, Math.floor(concurrency)))
+  const results = Array.from({ length: items.length }, () => undefined as R | undefined)
+  let nextIndex = 0
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = nextIndex++
+      if (index >= items.length)
+        return
+      results[index] = await fn(items[index]!, index)
+    }
+  }
+  await Promise.all(Array.from({ length: workerCount }, worker))
+  return results as R[]
 }
 
 function defaultSnapshotId(): string {
@@ -317,17 +341,18 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
     includeRetired: boolean,
   ): Promise<ManifestEntry[]> {
     const shards = await shardsForFilter(filter)
-    const all: ManifestEntry[] = []
-    for (const { siteId, table } of shards) {
+    const batches = await mapWithConcurrency(shards, SHARD_IO_CONCURRENCY, async ({ siteId, table }) => {
       const { snapshot } = await readShard(siteId, table)
+      const entries: ManifestEntry[] = []
       for (const entry of snapshot.entries) {
         if (!includeRetired && entry.retiredAt !== undefined)
           continue
         if (matchesEntryFilter(entry, filter))
-          all.push(entry)
+          entries.push(entry)
       }
-    }
-    return all
+      return entries
+    })
+    return batches.flat()
   }
 
   function groupBySiteTable(entries: readonly ManifestEntry[]): Map<string, ManifestEntry[]> {
@@ -370,7 +395,7 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
       for (const e of superseding) bucket(e, 'super')
     }
 
-    for (const [shardKey, { newEntries: news, superseding: supers }] of byShard) {
+    await mapWithConcurrency([...byShard], SHARD_IO_CONCURRENCY, async ([shardKey, { newEntries: news, superseding: supers }]) => {
       const [siteId, table] = shardKey.split('\0') as [string, TableName]
       await mutateShard(siteId, table, (snap) => {
         const byObjectKey = new Map(snap.entries.map(e => [e.objectKey, e]))
@@ -382,7 +407,7 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
         for (const n of news) byObjectKey.set(n.objectKey, n)
         snap.entries = Array.from(byObjectKey.values())
       })
-    }
+    })
   }
 
   return {
@@ -409,39 +434,41 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
 
     async listRetired(olderThan) {
       const shards = await listShards()
-      const out: ManifestEntry[] = []
-      for (const { siteId, table } of shards) {
+      const batches = await mapWithConcurrency(shards, SHARD_IO_CONCURRENCY, async ({ siteId, table }) => {
         const { snapshot } = await readShard(siteId, table)
+        const retired: ManifestEntry[] = []
         for (const e of snapshot.entries) {
           if (e.retiredAt !== undefined && e.retiredAt <= olderThan)
-            out.push(e)
+            retired.push(e)
         }
-      }
-      return out
+        return retired
+      })
+      return batches.flat()
     },
 
     async delete(toDelete) {
       const grouped = groupBySiteTable(toDelete)
-      for (const [shardKey, entries] of grouped) {
+      await mapWithConcurrency([...grouped], SHARD_IO_CONCURRENCY, async ([shardKey, entries]) => {
         const [siteId, table] = shardKey.split('\0') as [string, TableName]
         await mutateShard(siteId, table, (snap) => {
           const drop = new Set(entries.map(e => e.objectKey))
           snap.entries = snap.entries.filter(e => !drop.has(e.objectKey))
         })
-      }
+      })
     },
 
     async getWatermarks(filter) {
       const shards = await shardsForFilter(filter)
-      const out: Watermark[] = []
-      for (const { siteId, table } of shards) {
+      const batches = await mapWithConcurrency(shards, SHARD_IO_CONCURRENCY, async ({ siteId, table }) => {
         const { snapshot } = await readShard(siteId, table)
+        const watermarks: Watermark[] = []
         for (const w of snapshot.watermarks) {
           if (matchesWatermarkFilter(w, filter))
-            out.push(w)
+            watermarks.push(w)
         }
-      }
-      return out
+        return watermarks
+      })
+      return batches.flat()
     },
 
     async bumpWatermark(scope: WatermarkScope, date: string, at?: number) {
@@ -475,15 +502,16 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
 
     async getSyncStates(filter) {
       const shards = await shardsForFilter(filter)
-      const out: SyncState[] = []
-      for (const { siteId, table } of shards) {
+      const batches = await mapWithConcurrency(shards, SHARD_IO_CONCURRENCY, async ({ siteId, table }) => {
         const { snapshot } = await readShard(siteId, table)
+        const states: SyncState[] = []
         for (const s of snapshot.syncStates) {
           if (matchesSyncStateFilter(s, filter))
-            out.push(s)
+            states.push(s)
         }
-      }
-      return out
+        return states
+      })
+      return batches.flat()
     },
 
     async setSyncState(scope: SyncStateScope, state: SyncStateKind, detail?: SyncStateDetail) {

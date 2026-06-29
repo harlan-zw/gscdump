@@ -8,7 +8,20 @@
 
 import type { BuilderState } from 'gscdump/query'
 import type { Row } from '../src/index'
-import { and, between, contains, date, eq, inArray, or, page, query } from 'gscdump/query'
+import {
+  and,
+  between,
+  contains,
+  country,
+  date,
+  eq,
+  inArray,
+  or,
+  page,
+  query,
+  queryCanonical,
+  searchAppearance,
+} from 'gscdump/query'
 import { describe, expect, it } from 'vitest'
 import { decodeParquetToRows, encodeRowsToParquet } from '../src/adapters/hyparquet'
 import { extractParquetPushdown } from '../src/parquet-pushdown'
@@ -28,10 +41,26 @@ describe('extractParquetPushdown', () => {
       .toEqual({ $or: [{ query: { $eq: 'a' } }, { query: { $eq: 'b' } }] })
   })
 
+  it('translates country equality on the countries table', () => {
+    expect(extractParquetPushdown(state(eq(country, 'usa')), 'countries'))
+      .toEqual({ country: { $eq: 'usa' } })
+  })
+
+  it('translates search appearance equality on contextual tables', () => {
+    expect(extractParquetPushdown(state(eq(searchAppearance, 'AMP_TOP_STORIES')), 'search_appearance_page_queries'))
+      .toEqual({ searchAppearance: { $eq: 'AMP_TOP_STORIES' } })
+  })
+
   it('keeps the query conjunct and drops a coexisting date range', () => {
     const filter = and(eq(query, 'foo'), between(date, '2025-01-01', '2025-01-31'))
     expect(extractParquetPushdown(state(filter), 'queries'))
       .toEqual({ query: { $eq: 'foo' } })
+  })
+
+  it('combines multiple verbatim string dimensions under AND', () => {
+    const filter = and(eq(searchAppearance, 'FAQ'), eq(query, 'foo'))
+    expect(extractParquetPushdown(state(filter), 'search_appearance_queries'))
+      .toEqual({ $and: [{ searchAppearance: { $eq: 'FAQ' } }, { query: { $eq: 'foo' } }] })
   })
 
   it('refuses a top-level OR with a non-pushable branch (would narrow)', () => {
@@ -39,8 +68,18 @@ describe('extractParquetPushdown', () => {
     expect(extractParquetPushdown(state(filter), 'queries')).toBeUndefined()
   })
 
+  it('keeps a top-level OR when every branch is exactly pushable', () => {
+    const filter = or(eq(country, 'usa'), eq(country, 'gbr'))
+    expect(extractParquetPushdown(state(filter), 'countries'))
+      .toEqual({ $or: [{ country: { $eq: 'usa' } }, { country: { $eq: 'gbr' } }] })
+  })
+
   it('does not push page equality (url normalization mismatch risk)', () => {
     expect(extractParquetPushdown(state(eq(page, '/x')), 'pages')).toBeUndefined()
+  })
+
+  it('does not push canonical query equality (fallback mismatch risk)', () => {
+    expect(extractParquetPushdown(state(eq(queryCanonical, 'foo')), 'queries')).toBeUndefined()
   })
 
   it('does not push non-equality operators', () => {

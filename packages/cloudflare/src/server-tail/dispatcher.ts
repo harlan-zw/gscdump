@@ -19,7 +19,7 @@
 // run on R2 SQL).
 
 import type { ServerTailDirective } from '@gscdump/contracts'
-import type { ArchetypeQuery, ArchetypeResult, ArchetypeResultRow } from '@gscdump/contracts/archetypes'
+import type { ArchetypeFacet, ArchetypeQuery, ArchetypeResult, ArchetypeResultRow } from '@gscdump/contracts/archetypes'
 import type { Result } from 'gscdump/result'
 import type { DuckDbIcebergExecutor } from './duckdb-iceberg-executor'
 import type { R2SqlClient } from './r2-sql-client'
@@ -47,6 +47,11 @@ export class ServerTailRoutingError extends Error {
  */
 function routingErrorToException(error: ServerTailRoutingError): ServerTailRoutingError {
   return error
+}
+
+function hasRegexFacet(query: ArchetypeQuery): boolean {
+  const facets = (query as { facets?: readonly ArchetypeFacet[] }).facets
+  return facets?.some(f => f.op === 'regex' || f.op === 'notRegex') ?? false
 }
 
 /**
@@ -84,12 +89,10 @@ export function resolveServerTailEngineResult(
   // route it to DuckDB (mirrors the `offset` escalation rationale).
   if (query.archetype === 'top-n-breakdown' && query.dimension === 'queryCanonical')
     return ok('duckdb')
-  // Escalation: facet predicates (Country/Device/Brand) are only compiled by the
-  // DuckDB builder — brand uses `regexp_matches`, which R2 SQL lacks — so any
-  // faceted query runs on DuckDB. `facets` lives on `ArchetypeQueryBase`, but the
-  // `aux-cloud-only` union member omits it, so read it structurally.
-  const facets = (query as { facets?: readonly unknown[] }).facets
-  if (facets && facets.length > 0)
+  // Escalation: regex facets compile to `regexp_matches`, which R2 SQL lacks.
+  // Equality facets are plain `col = ?` predicates and can stay on R2 SQL when
+  // the rest of the archetype is R2-compatible.
+  if (hasRegexFacet(query))
     return ok('duckdb')
   return ok('r2-sql')
 }

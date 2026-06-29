@@ -21,6 +21,8 @@ export interface ArchetypeSqlPlan {
   table: ArchetypeFactTable
 }
 
+export type PartitionPredicateMode = 'bare' | 'r2-sql-concat'
+
 export interface BuildArchetypeSqlOptions {
   /**
    * Set by the DuckDB file-list executor, which reads raw Iceberg parquet
@@ -38,6 +40,12 @@ export interface BuildArchetypeSqlOptions {
    * virtual columns and needs the full predicate.
    */
   partitionPruned?: boolean
+  /**
+   * R2 SQL currently undercounts bare equality against identity-partition
+   * columns. The client can request CONCAT-wrapped predicates directly instead
+   * of post-processing generated SQL.
+   */
+  partitionPredicateMode?: PartitionPredicateMode
 }
 
 function dimColumn(dim: Dimension): string {
@@ -141,7 +149,11 @@ function sqlStringLiteral(value: string): string {
   return `'${value.replace(/'/g, '\'\'')}'`
 }
 
-function partitionWhere(q: { siteId: string, searchType: string, range: { start: string, end: string } }, partitionPruned = false): {
+function partitionWhere(
+  q: { siteId: string, searchType: string, range: { start: string, end: string } },
+  partitionPruned = false,
+  mode: PartitionPredicateMode = 'bare',
+): {
   clause: string
   params: unknown[]
 } {
@@ -153,8 +165,10 @@ function partitionWhere(q: { siteId: string, searchType: string, range: { start:
       params: [q.range.start, q.range.end],
     }
   }
+  const siteIdCol = mode === 'r2-sql-concat' ? 'CONCAT(site_id, \'\')' : 'site_id'
+  const searchTypeCol = mode === 'r2-sql-concat' ? 'CONCAT(search_type, \'\')' : 'search_type'
   return {
-    clause: 'site_id = ? AND search_type = ? AND date BETWEEN ? AND ?',
+    clause: `${siteIdCol} = ? AND ${searchTypeCol} = ? AND date BETWEEN ? AND ?`,
     params: [q.siteId, q.searchType, q.range.start, q.range.end],
   }
 }
@@ -187,8 +201,8 @@ function facetPredicate(query: ArchetypeQuery): { sql: string, params: unknown[]
   return { sql: parts.length ? ` AND ${parts.join(' AND ')}` : '', params }
 }
 
-function buildSiteDailyTimeseries(q: SiteDailyTimeseriesQuery, pruned: boolean): ArchetypeSqlPlan {
-  const w = partitionWhere(q, pruned)
+function buildSiteDailyTimeseries(q: SiteDailyTimeseriesQuery, pruned: boolean, mode: PartitionPredicateMode): ArchetypeSqlPlan {
+  const w = partitionWhere(q, pruned, mode)
   const metrics = q.metrics.map(metricExpr).join(', ')
   return {
     table: 'dates',
@@ -197,9 +211,9 @@ function buildSiteDailyTimeseries(q: SiteDailyTimeseriesQuery, pruned: boolean):
   }
 }
 
-function buildEntityDailyTimeseries(q: EntityDailyTimeseriesQuery, pruned: boolean): ArchetypeSqlPlan {
+function buildEntityDailyTimeseries(q: EntityDailyTimeseriesQuery, pruned: boolean, mode: PartitionPredicateMode): ArchetypeSqlPlan {
   const table = tableForDimensions([q.entity.dimension])
-  const w = partitionWhere(q, pruned)
+  const w = partitionWhere(q, pruned, mode)
   const col = dimColumn(q.entity.dimension)
   const metrics = q.metrics.map(metricExpr).join(', ')
   return {
@@ -209,9 +223,9 @@ function buildEntityDailyTimeseries(q: EntityDailyTimeseriesQuery, pruned: boole
   }
 }
 
-function buildEntityDailySparkline(q: EntityDailySparklineQuery, pruned: boolean): ArchetypeSqlPlan {
+function buildEntityDailySparkline(q: EntityDailySparklineQuery, pruned: boolean, mode: PartitionPredicateMode): ArchetypeSqlPlan {
   const table = tableForDimensions([q.dimension])
-  const w = partitionWhere(q, pruned)
+  const w = partitionWhere(q, pruned, mode)
   const col = dimColumn(q.dimension)
   if (q.entities.length === 0)
     throw new Error('entity-daily-sparkline: empty entities - resolver must pre-resolve the top-N list')
@@ -224,9 +238,9 @@ function buildEntityDailySparkline(q: EntityDailySparklineQuery, pruned: boolean
   }
 }
 
-function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean): ArchetypeSqlPlan {
+function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: PartitionPredicateMode): ArchetypeSqlPlan {
   const table = tableForDimensions([q.dimension])
-  const w = partitionWhere(q, pruned)
+  const w = partitionWhere(q, pruned, mode)
   const order = `${q.orderBy.metric} ${q.orderBy.dir.toUpperCase()}`
   const limit = `LIMIT ${Math.max(0, Math.floor(q.limit))}`
   const offset = q.offset && q.offset > 0 ? ` OFFSET ${Math.floor(q.offset)}` : ''
@@ -235,7 +249,7 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean): ArchetypeSq
 
   if (q.dimension === 'device') {
     if (q.compareRange) {
-      const wPrev = partitionWhere({ ...q, range: q.compareRange }, pruned)
+      const wPrev = partitionWhere({ ...q, range: q.compareRange }, pruned, mode)
       const deviceSelects = (clause: string, ml: readonly Metric[]): string => DEVICE_SUFFIXES.map((suffix) => {
         const source = deviceSource(suffix)
         const metrics = ml.map(m => metricExprForSource(m, source)).join(', ')
@@ -266,7 +280,7 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean): ArchetypeSq
   const totalCol = q.includeTotal ? ', COUNT(*) OVER() AS __total' : ''
 
   if (q.compareRange) {
-    const wPrev = partitionWhere({ ...q, range: q.compareRange }, pruned)
+    const wPrev = partitionWhere({ ...q, range: q.compareRange }, pruned, mode)
     const curMetrics = metricList.map(metricExpr).join(', ')
     const prevMetrics = STD_METRICS.map(m => metricExpr(m)).join(', ')
     const curCols = metricList.map(m => coalesceMetric(m, 'c', m)).join(', ')
@@ -288,10 +302,10 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean): ArchetypeSq
   return { table, params: [...w.params, ...facet.params], sql }
 }
 
-function buildSingleRowLookup(q: SingleRowLookupQuery, pruned: boolean): ArchetypeSqlPlan {
+function buildSingleRowLookup(q: SingleRowLookupQuery, pruned: boolean, mode: PartitionPredicateMode): ArchetypeSqlPlan {
   const dims = Object.keys(q.match) as Dimension[]
   const table = tableForDimensions(dims)
-  const w = partitionWhere(q, pruned)
+  const w = partitionWhere(q, pruned, mode)
   const params = [...w.params]
   let clause = w.clause
   for (const dim of dims) {
@@ -308,9 +322,9 @@ function buildSingleRowLookup(q: SingleRowLookupQuery, pruned: boolean): Archety
   }
 }
 
-function buildMultiSeriesStackedDaily(q: MultiSeriesStackedDailyQuery, pruned: boolean): ArchetypeSqlPlan {
+function buildMultiSeriesStackedDaily(q: MultiSeriesStackedDailyQuery, pruned: boolean, mode: PartitionPredicateMode): ArchetypeSqlPlan {
   const table = tableForDimensions([q.seriesDimension])
-  const w = partitionWhere(q, pruned)
+  const w = partitionWhere(q, pruned, mode)
   if (q.seriesDimension === 'device') {
     const selects = DEVICE_SUFFIXES.map((suffix) => {
       const source = deviceSource(suffix)
@@ -332,8 +346,8 @@ function buildMultiSeriesStackedDaily(q: MultiSeriesStackedDailyQuery, pruned: b
   }
 }
 
-function buildTwoDimensionDetail(q: TwoDimensionDetailQuery, pruned: boolean): ArchetypeSqlPlan {
-  const w = partitionWhere(q, pruned)
+function buildTwoDimensionDetail(q: TwoDimensionDetailQuery, pruned: boolean, mode: PartitionPredicateMode): ArchetypeSqlPlan {
+  const w = partitionWhere(q, pruned, mode)
   const params = [...w.params]
   let clause = w.clause
   if (q.filter?.page) {
@@ -361,21 +375,22 @@ function buildTwoDimensionDetail(q: TwoDimensionDetailQuery, pruned: boolean): A
 
 export function buildArchetypeSql(query: ArchetypeQuery, opts: BuildArchetypeSqlOptions = {}): ArchetypeSqlPlan {
   const pruned = opts.partitionPruned ?? false
+  const mode = opts.partitionPredicateMode ?? 'bare'
   switch (query.archetype) {
     case 'site-daily-timeseries':
-      return buildSiteDailyTimeseries(query, pruned)
+      return buildSiteDailyTimeseries(query, pruned, mode)
     case 'entity-daily-timeseries':
-      return buildEntityDailyTimeseries(query, pruned)
+      return buildEntityDailyTimeseries(query, pruned, mode)
     case 'entity-daily-sparkline':
-      return buildEntityDailySparkline(query, pruned)
+      return buildEntityDailySparkline(query, pruned, mode)
     case 'top-n-breakdown':
-      return buildTopNBreakdown(query, pruned)
+      return buildTopNBreakdown(query, pruned, mode)
     case 'single-row-lookup':
-      return buildSingleRowLookup(query, pruned)
+      return buildSingleRowLookup(query, pruned, mode)
     case 'multi-series-stacked-daily':
-      return buildMultiSeriesStackedDaily(query, pruned)
+      return buildMultiSeriesStackedDaily(query, pruned, mode)
     case 'two-dimension-detail':
-      return buildTwoDimensionDetail(query, pruned)
+      return buildTwoDimensionDetail(query, pruned, mode)
     case 'arbitrary-sql':
       throw new Error('buildArchetypeSql: arbitrary-sql carries caller SQL - the DuckDB executor runs it verbatim')
     case 'aux-cloud-only':

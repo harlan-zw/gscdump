@@ -22,6 +22,7 @@ import { createD1ManifestStore } from '../src/r2-manifest-store'
 // bind(...params) → { run(), all(), raw() }, plus client.batch([stmts]).
 // Each result is shaped { results, success, meta } like a real D1Result.
 function createD1Shim(sqlite: DatabaseSync) {
+  let batchCalls = 0
   function makeStmt(sqlText: string, bound: unknown[] = []) {
     return {
       bind(...params: unknown[]) {
@@ -47,7 +48,11 @@ function createD1Shim(sqlite: DatabaseSync) {
     prepare(sqlText: string) {
       return makeStmt(sqlText)
     },
+    get batchCalls() {
+      return batchCalls
+    },
     async batch(stmts: Array<ReturnType<typeof makeStmt>>) {
+      batchCalls++
       // node:sqlite has no nested-transaction needs here; run sequentially.
       // A real D1 batch is atomic — a throw mid-batch aborts the rest, which
       // is what the UNIQUE-constraint test below relies on.
@@ -78,6 +83,7 @@ CREATE TABLE r2_manifest (
 );
 CREATE UNIQUE INDEX r2_manifest_object_key_unique ON r2_manifest (object_key);
 CREATE INDEX idx_r2_manifest_live ON r2_manifest (user_id, site_id, "table", partition, retired_at);
+CREATE INDEX idx_r2_manifest_lookup ON r2_manifest (user_id, site_id, "table", search_type, tier, partition, retired_at);
 `
 
 // SPEC.md section 2 partial unique index. Lives in the host's
@@ -110,9 +116,10 @@ function setup(withUniqueIndex = false) {
   sqlite.exec(MANIFEST_DDL)
   if (withUniqueIndex)
     sqlite.exec(ONE_LIVE_INDEX_DDL)
-  const db = drizzle(createD1Shim(sqlite) as never) as unknown as AnalyticsManifestDb
+  const d1 = createD1Shim(sqlite)
+  const db = drizzle(d1 as never) as unknown as AnalyticsManifestDb
   const store = createD1ManifestStore(db)
-  return { sqlite, db, store }
+  return { sqlite, db, d1, store }
 }
 
 describe('@gscdump/engine-sqlite createD1ManifestStore', () => {
@@ -194,6 +201,34 @@ describe('@gscdump/engine-sqlite createD1ManifestStore', () => {
       const live = await store.listLive({ userId: '1', siteId: 'site-a' })
       expect(live).toHaveLength(2)
       expect(live.some(r => r.objectKey === web.objectKey && r.retiredAt === undefined)).toBe(true)
+    })
+
+    it('batches chunked partition lookups into one D1 batch call', async () => {
+      const { d1, store } = setup()
+      const a = entry({ partition: 'daily/2026-05-01' })
+      const b = entry({ partition: 'daily/2026-07-20' })
+      await store.registerVersions([a, b])
+      const batchCallsBefore = d1.batchCalls
+
+      const partitions = Array.from({ length: 82 }, (_, i) =>
+        `daily/2026-${String(Math.floor(i / 31) + 5).padStart(2, '0')}-${String((i % 31) + 1).padStart(2, '0')}`)
+      const live = await store.listLive({ userId: '1', siteId: 'site-a', table: 'gsc_pages', partitions })
+
+      expect(d1.batchCalls - batchCallsBefore).toBe(1)
+      expect(live.map(e => e.partition).sort()).toEqual(['daily/2026-05-01', 'daily/2026-07-20'])
+    })
+
+    it('batches chunked deletes into one D1 batch call', async () => {
+      const { d1, store } = setup()
+      const entries = Array.from({ length: 91 }, (_, i) =>
+        entry({ partition: `daily/2026-05-${String(i + 1).padStart(2, '0')}` }))
+      await store.registerVersions(entries)
+      const batchCallsBefore = d1.batchCalls
+
+      await store.delete(entries)
+
+      expect(d1.batchCalls - batchCallsBefore).toBe(1)
+      expect(await store.listLive({ userId: '1', siteId: 'site-a' })).toHaveLength(0)
     })
   })
 

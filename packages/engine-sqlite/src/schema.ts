@@ -11,7 +11,7 @@ import type { TableName } from '@gscdump/engine/contracts'
 import { assertSchemaInSync } from '@gscdump/engine/resolver'
 import { sql } from 'drizzle-orm'
 
-import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 function metricCols(): {
   clicks: ReturnType<ReturnType<ReturnType<typeof integer>['notNull']>['default']>
@@ -47,26 +47,34 @@ export const gsc_pages = sqliteTable('gsc_pages', {
   ...baseCols(),
   url: text('url').notNull(),
   ...metricCols(),
-})
+}, t => [
+  index('idx_gsc_pages_site_date').on(t.site_id, t.date),
+])
 
 export const gsc_keywords = sqliteTable('gsc_keywords', {
   ...baseCols(),
   query: text('query').notNull(),
   query_canonical: text('query_canonical'),
   ...metricCols(),
-})
+}, t => [
+  index('idx_gsc_keywords_site_date').on(t.site_id, t.date),
+])
 
 export const gsc_countries = sqliteTable('gsc_countries', {
   ...baseCols(),
   country: text('country').notNull(),
   ...metricCols(),
-})
+}, t => [
+  index('idx_gsc_countries_site_date').on(t.site_id, t.date),
+])
 
 export const gsc_devices = sqliteTable('gsc_devices', {
   ...baseCols(),
   device: text('device').notNull(),
   ...metricCols(),
-})
+}, t => [
+  index('idx_gsc_devices_site_date').on(t.site_id, t.date),
+])
 
 export const gsc_page_keywords = sqliteTable('gsc_page_keywords', {
   ...baseCols(),
@@ -74,20 +82,26 @@ export const gsc_page_keywords = sqliteTable('gsc_page_keywords', {
   query: text('query').notNull(),
   query_canonical: text('query_canonical'),
   ...metricCols(),
-})
+}, t => [
+  index('idx_gsc_page_keywords_site_date').on(t.site_id, t.date),
+])
 
 export const gsc_search_appearance = sqliteTable('gsc_search_appearance', {
   ...baseCols(),
   searchAppearance: text('searchAppearance').notNull(),
   ...metricCols(),
-})
+}, t => [
+  index('idx_gsc_search_appearance_site_date').on(t.site_id, t.date),
+])
 
 export const gsc_search_appearance_pages = sqliteTable('gsc_search_appearance_pages', {
   ...baseCols(),
   searchAppearance: text('searchAppearance').notNull(),
   url: text('url').notNull(),
   ...metricCols(),
-})
+}, t => [
+  index('idx_gsc_search_appearance_pages_site_date').on(t.site_id, t.date),
+])
 
 export const gsc_search_appearance_queries = sqliteTable('gsc_search_appearance_queries', {
   ...baseCols(),
@@ -95,7 +109,9 @@ export const gsc_search_appearance_queries = sqliteTable('gsc_search_appearance_
   query: text('query').notNull(),
   query_canonical: text('query_canonical'),
   ...metricCols(),
-})
+}, t => [
+  index('idx_gsc_search_appearance_queries_site_date').on(t.site_id, t.date),
+])
 
 export const gsc_search_appearance_page_queries = sqliteTable('gsc_search_appearance_page_queries', {
   ...baseCols(),
@@ -104,7 +120,9 @@ export const gsc_search_appearance_page_queries = sqliteTable('gsc_search_appear
   query: text('query').notNull(),
   query_canonical: text('query_canonical'),
   ...metricCols(),
-})
+}, t => [
+  index('idx_gsc_search_appearance_page_queries_site_date').on(t.site_id, t.date),
+])
 
 export const gsc_hourly_pages = sqliteTable('gsc_hourly_pages', {
   ...baseCols(),
@@ -112,7 +130,9 @@ export const gsc_hourly_pages = sqliteTable('gsc_hourly_pages', {
   // PT hour-of-day (0-23) — mirrors the canonical INTEGER `hour` in @gscdump/engine.
   hour: integer('hour').notNull(),
   ...metricCols(),
-})
+}, t => [
+  index('idx_gsc_hourly_pages_site_date').on(t.site_id, t.date),
+])
 
 export const schema = {
   gsc_pages,

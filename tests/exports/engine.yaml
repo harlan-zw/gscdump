@@ -15,6 +15,7 @@
   createNoopIngestAccumulator: function
   createParquetResolverAdapter: function
   createQueryProfiler: function
+  createR2SqlResolverAdapter: function
   createRowAccumulator: function
   createSqlQuerySource: function
   createStorageEngine: function
@@ -201,6 +202,7 @@
   canonicalRollupCovers: function
   createIcebergResolverAdapter: function
   createParquetResolverAdapter: function
+  createR2SqlResolverAdapter: function
   createResolverAdapter: function
   createRollupExtrasOverlay: function
   createSqlFragments: function

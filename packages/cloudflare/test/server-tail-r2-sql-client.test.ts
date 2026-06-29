@@ -91,6 +91,24 @@ describe('createR2SqlClient', () => {
     expect((opts!.headers as Record<string, string>).authorization).toBe('Bearer tok')
   })
 
+  it('runPlan still rewrites bare partition equality for external plans', async () => {
+    const fetchImpl = fakeFetch({
+      success: true,
+      result: { rows: [] },
+    })
+    const client = createR2SqlClient({ ...config, fetchImpl })
+    await client.runPlan({
+      table: 'dates',
+      sql: `SELECT date FROM {{TABLE}} WHERE site_id = ? AND search_type = ? AND date BETWEEN ? AND ?`,
+      params: ['site-1', 'web', range.start, range.end],
+    })
+
+    const [, opts] = fetchImpl.mock.calls[0]!
+    const sentSql = JSON.parse(opts!.body as string).query as string
+    expect(sentSql).toContain('CONCAT(site_id, \'\') = \'site-1\'')
+    expect(sentSql).toContain('CONCAT(search_type, \'\') = \'web\'')
+  })
+
   it('normalizes the columns+data envelope shape', async () => {
     const fetchImpl = fakeFetch({
       success: true,

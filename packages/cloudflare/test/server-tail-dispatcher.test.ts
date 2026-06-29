@@ -18,7 +18,7 @@ const range = { start: '2026-01-01', end: '2026-03-31' }
 const base = { siteId: 'site-1', searchType: 'web' as const, range }
 
 function fakeFetch(rows: unknown[]) {
-  return vi.fn(async () => ({
+  return vi.fn(async (_url: string, _opts?: RequestInit) => ({
     ok: true,
     status: 200,
     json: async () => ({ success: true, result: { rows } }),
@@ -82,6 +82,8 @@ describe('resolveServerTailEngine', () => {
     expect(resolveServerTailEngine(q)).toBe('duckdb')
     // same query without the facet stays on r2-sql
     expect(resolveServerTailEngine({ ...q, facets: undefined })).toBe('r2-sql')
+    // equality facets compile to plain predicates and stay on r2-sql
+    expect(resolveServerTailEngine({ ...q, facets: [{ column: 'query', op: 'eq', value: 'nuxt seo' }] })).toBe('r2-sql')
   })
 
   it('rejects a cloud-only archetype', () => {
@@ -119,16 +121,17 @@ describe('resolveServerTailEngineResult', () => {
 
 describe('createServerTailDispatcher', () => {
   function makeDispatcher(r2Rows: unknown[], duckRows: unknown[]) {
+    const fetchImpl = fakeFetch(r2Rows)
     const r2Sql = createR2SqlClient({
       accountId: 'a',
       bucket: 'w',
       namespace: 'gsc',
       token: 't',
-      fetchImpl: fakeFetch(r2Rows),
+      fetchImpl,
     })
     const svc = fakeSvc(duckRows)
     const duckdb = createDuckDbIcebergExecutor({ svc, warehouse: 'w', namespace: 'gsc' })
-    return { dispatcher: createServerTailDispatcher({ r2Sql, duckdb }), svc }
+    return { dispatcher: createServerTailDispatcher({ r2Sql, duckdb }), fetchImpl, svc }
   }
 
   it('runs an r2-sql archetype via the R2 SQL client', async () => {
@@ -174,6 +177,25 @@ describe('createServerTailDispatcher', () => {
     // the facet predicate is compiled into the SQL the DuckDB sibling runs;
     // runPlan binds the `?` param as a literal, so assert the bound form.
     expect(svc.calls[0]).toContain('regexp_matches(LOWER(query), \'(nuxt seo)\')')
+  })
+
+  it('keeps equality-faceted breakdowns on R2 SQL', async () => {
+    const { dispatcher, fetchImpl, svc } = makeDispatcher([{ query: 'nuxt seo', clicks: 9 }], [])
+    const res = await dispatcher.execute({
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'query',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 50,
+      facets: [{ column: 'query', op: 'eq', value: 'nuxt seo' }],
+    } as TopNBreakdownQuery)
+    expect(res.source).toBe('server-r2-sql')
+    expect(res.rows).toEqual([{ query: 'nuxt seo', clicks: 9 }])
+    expect(svc.runSQL).not.toHaveBeenCalled()
+    const [, opts] = fetchImpl.mock.calls[0]!
+    const sentSql = JSON.parse(opts!.body as string).query as string
+    expect(sentSql).toContain('query = \'nuxt seo\'')
   })
 
   it('route() reports the engine without executing', () => {

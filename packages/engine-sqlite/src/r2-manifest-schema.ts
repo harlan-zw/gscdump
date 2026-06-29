@@ -50,6 +50,7 @@ export const r2Manifest = sqliteTable('r2_manifest', {
   schemaVersion: integer('schema_version'),
 }, t => [
   index('idx_r2_manifest_live').on(t.userId, t.siteId, t.table, t.partition, t.retiredAt),
+  index('idx_r2_manifest_lookup').on(t.userId, t.siteId, t.table, t.searchType, t.tier, t.partition, t.retiredAt),
   index('idx_r2_manifest_retired').on(t.retiredAt),
   index('idx_r2_manifest_tier').on(t.userId, t.siteId, t.table, t.tier, t.retiredAt),
   unique('r2_manifest_object_key_unique').on(t.objectKey),

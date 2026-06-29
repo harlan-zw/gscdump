@@ -287,14 +287,19 @@ export function createR2SqlClient(config: R2SqlClientConfig): R2SqlClient {
     return unwrapResult(await queryResult(sql), r2SqlErrorToException)
   }
 
-  function runPlan(plan: ArchetypeSqlPlan): Promise<R2SqlResult> {
+  function materializePlan(plan: ArchetypeSqlPlan): string {
     const tableRef = r2TableRef(config.namespace, plan.table)
     const resolved = plan.sql.split(TABLE_PLACEHOLDER).join(tableRef)
-    return query(workaroundPartitionEquality(inlineParams(resolved, plan.params)))
+    return inlineParams(resolved, plan.params)
+  }
+
+  function runPlan(plan: ArchetypeSqlPlan): Promise<R2SqlResult> {
+    return query(workaroundPartitionEquality(materializePlan(plan)))
   }
 
   function runArchetype(archetypeQuery: ArchetypeQuery): Promise<R2SqlResult> {
-    return runPlan(buildArchetypeSql(archetypeQuery))
+    const plan = buildArchetypeSql(archetypeQuery, { partitionPredicateMode: 'r2-sql-concat' })
+    return query(materializePlan(plan))
   }
 
   return { query, queryResult, runPlan, runArchetype }

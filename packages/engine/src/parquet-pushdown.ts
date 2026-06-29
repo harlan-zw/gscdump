@@ -5,12 +5,15 @@
 // would keep.
 //
 // Safety model:
-// - Only `query`-dimension EQUALITY is translated. `query` is stored verbatim
-//   (no write- or read-time normalization — see resolver/filter-utils
-//   `matchesDimensionFilter`, which special-cases only `page`), so `query = x`
-//   maps to an EXACT parquet predicate. `page`/`url` is deliberately excluded:
-//   `toPath` stores pathname-only while the read matcher re-normalizes via
-//   `normalizeUrl`, so a pushed equality could drop fallback-encoded URLs.
+// - Only string dimensions stored verbatim are translated. `query`, `country`,
+//   and `searchAppearance` carry no write- or read-time normalization — see
+//   resolver/filter-utils `matchesDimensionFilter`, which special-cases only
+//   `page` — so `dimension = x` maps to an EXACT parquet predicate. `page`/`url`
+//   is deliberately excluded: `toPath` stores pathname-only while the read
+//   matcher re-normalizes via `normalizeUrl`, so a pushed equality could drop
+//   fallback-encoded URLs. `queryCanonical` is also excluded because the
+//   canonical fallback seam can read `query` when the canonical column is NULL
+//   or empty.
 // - A top-level AND may push the conjuncts that translate and DROP the rest:
 //   dropping a conjunct only widens the row set, and the executor's SQL WHERE
 //   narrows it back. This is the one place correctness leans on downstream
@@ -27,8 +30,12 @@ import { SCHEMAS } from './schema'
 // Builder dimension -> parquet column, for dimensions whose stored value is the
 // filter value verbatim. Keep this map minimal: every entry is a correctness
 // claim that the column carries no normalization on either the write or read
-// side. `query` qualifies; `page` does not (see file header).
-const PUSHABLE_COLUMN: Readonly<Record<string, string>> = { query: 'query' }
+// side. `page` and `queryCanonical` do not qualify (see file header).
+const PUSHABLE_COLUMN: Readonly<Record<string, string>> = {
+  country: 'country',
+  query: 'query',
+  searchAppearance: 'searchAppearance',
+}
 
 function txLeaf(leaf: InternalFilter, columns: ReadonlySet<string>): ParquetQueryFilter | null {
   if (leaf.operator !== 'equals')

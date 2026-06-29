@@ -31,7 +31,12 @@ export {
 export { enumeratePartitions, FILES_PLACEHOLDER, resolveParquetSQL, substituteNamedFiles } from './planner'
 export type { ResolvedQuery } from './planner'
 export { collectSpans, createQueryProfiler } from './profile'
-export { createIcebergResolverAdapter, createParquetResolverAdapter, pgResolverAdapter } from './resolver/pg-adapter'
+export {
+  createIcebergResolverAdapter,
+  createParquetResolverAdapter,
+  createR2SqlResolverAdapter,
+  pgResolverAdapter,
+} from './resolver/pg-adapter'
 export { rebuildDailyFromHourly } from './rollups'
 export type { InspectionVerdict, SchedulePolicy, ScheduleState } from './schedule'
 export { fixedPolicy, inspectionPolicy, sitemapPolicy } from './schedule'

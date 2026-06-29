@@ -99,6 +99,10 @@ function makeEntry(partial: Partial<ManifestEntry> = {}): ManifestEntry {
   }
 }
 
+async function delay(ms: number): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, ms))
+}
+
 describe('createR2ManifestStore — happy path', () => {
   it('writes HEAD pointer + immutable snapshot on first registerVersion', async () => {
     const bucket = makeFakeBucket()
@@ -160,6 +164,38 @@ describe('createR2ManifestStore — happy path', () => {
     const justKeywords = await store.listLive({ userId: 'u1', table: 'queries' })
     expect(justKeywords).toHaveLength(1)
     expect(justKeywords[0].table).toBe('queries')
+  })
+
+  it('reads broad shard scans with bounded parallel R2 gets', async () => {
+    const bucket = makeFakeBucket()
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+    await store.registerVersions(Array.from({ length: 12 }, (_, i) =>
+      makeEntry({
+        siteId: `s${i}`,
+        objectKey: `u_u1/s${i}/pages/daily/2026-04-10__v1.parquet`,
+      })))
+
+    const realGet = bucket.get.bind(bucket)
+    let inFlightHeads = 0
+    let peakHeads = 0
+    bucket.get = async (key) => {
+      if (!key.endsWith('/HEAD'))
+        return realGet(key)
+      inFlightHeads++
+      peakHeads = Math.max(peakHeads, inFlightHeads)
+      try {
+        await delay(5)
+        return await realGet(key)
+      }
+      finally {
+        inFlightHeads--
+      }
+    }
+
+    const live = await store.listLive({ userId: 'u1' })
+    expect(live).toHaveLength(12)
+    expect(peakHeads).toBeGreaterThan(1)
+    expect(peakHeads).toBeLessThanOrEqual(8)
   })
 
   it('filters by tier, treating legacy entries via inferLegacyTier', async () => {
@@ -332,6 +368,75 @@ describe('createR2ManifestStore — happy path', () => {
 })
 
 describe('createR2ManifestStore — concurrency', () => {
+  it('registerVersions mutates independent shards with bounded parallel R2 gets', async () => {
+    const bucket = makeFakeBucket()
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+    const entries = Array.from({ length: 12 }, (_, i) =>
+      makeEntry({
+        siteId: `s${i}`,
+        objectKey: `u_u1/s${i}/pages/daily/2026-04-10__v1.parquet`,
+      }))
+
+    const realGet = bucket.get.bind(bucket)
+    let inFlightHeads = 0
+    let peakHeads = 0
+    bucket.get = async (key) => {
+      if (!key.endsWith('/HEAD'))
+        return realGet(key)
+      inFlightHeads++
+      peakHeads = Math.max(peakHeads, inFlightHeads)
+      try {
+        await delay(5)
+        return await realGet(key)
+      }
+      finally {
+        inFlightHeads--
+      }
+    }
+
+    await store.registerVersions(entries)
+    expect(peakHeads).toBeGreaterThan(1)
+    expect(peakHeads).toBeLessThanOrEqual(8)
+
+    const live = await store.listLive({ userId: 'u1' })
+    expect(live).toHaveLength(12)
+  })
+
+  it('delete mutates independent shards with bounded parallel R2 gets', async () => {
+    const bucket = makeFakeBucket()
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+    const entries = Array.from({ length: 12 }, (_, i) =>
+      makeEntry({
+        siteId: `s${i}`,
+        objectKey: `u_u1/s${i}/pages/daily/2026-04-10__v1.parquet`,
+      }))
+    await store.registerVersions(entries)
+
+    const realGet = bucket.get.bind(bucket)
+    let inFlightHeads = 0
+    let peakHeads = 0
+    bucket.get = async (key) => {
+      if (!key.endsWith('/HEAD'))
+        return realGet(key)
+      inFlightHeads++
+      peakHeads = Math.max(peakHeads, inFlightHeads)
+      try {
+        await delay(5)
+        return await realGet(key)
+      }
+      finally {
+        inFlightHeads--
+      }
+    }
+
+    await store.delete(entries)
+    expect(peakHeads).toBeGreaterThan(1)
+    expect(peakHeads).toBeLessThanOrEqual(8)
+
+    const live = await store.listLive({ userId: 'u1' })
+    expect(live).toHaveLength(0)
+  })
+
   it('cAS retries when HEAD etag changes mid-flight', async () => {
     const bucket = makeFakeBucket()
     const store = createR2ManifestStore({ bucket, userId: 'u1' })

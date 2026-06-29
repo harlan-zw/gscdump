@@ -52,8 +52,13 @@ export {
 } from './filter-utils'
 export { createSqlFragments } from './fragments'
 export type { SqlFragments, SqlFragmentsConfig } from './fragments'
-export { createIcebergResolverAdapter, createParquetResolverAdapter, pgResolverAdapter } from './pg-adapter'
-export type { PgTableKey, ResolverAdapterOptions } from './pg-adapter'
+export {
+  createIcebergResolverAdapter,
+  createParquetResolverAdapter,
+  createR2SqlResolverAdapter,
+  pgResolverAdapter,
+} from './pg-adapter'
+export type { PgTableKey, R2SqlResolverAdapterOptions, ResolverAdapterOptions } from './pg-adapter'
 export type {
   ComparisonQueryResult,
   OptimizedQueryResult,

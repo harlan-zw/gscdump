@@ -4,6 +4,7 @@
  */
 
 import { desc, sql as drizzleSql, eq, sum } from 'drizzle-orm'
+import { getTableConfig } from 'drizzle-orm/sqlite-core'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -13,6 +14,7 @@ import {
   gsc_pages,
   mergeScope,
   resolveWindow,
+  schema,
   scopeFor,
 } from '../src'
 
@@ -36,6 +38,17 @@ describe('@gscdump/engine-sqlite', () => {
     expect(cols).toContain('date')
     expect(cols).toContain('url')
     expect(cols).toContain('sum_position')
+  })
+
+  it('schema declares compact site/date range indexes for resolver scans', () => {
+    for (const [tableName, table] of Object.entries(schema)) {
+      const indexes = getTableConfig(table).indexes
+      expect(indexes.some((idx) => {
+        const config = (idx as any).config as { name: string, columns: Array<{ name: string }> }
+        return config.name === `idx_${tableName}_site_date`
+          && config.columns.map(col => col.name).join(',') === 'site_id,date'
+      })).toBe(true)
+    }
   })
 
   it('resolveWindow works from /sqlite re-export', () => {

@@ -29,7 +29,7 @@ import type {
 } from '../storage'
 import { parquetReadObjects } from 'hyparquet'
 import { ByteWriter, parquetWriteRows } from 'hyparquet-writer'
-import { dedupeByNaturalKey, SCHEMAS, TABLE_METADATA } from '../schema'
+import { SCHEMAS, TABLE_METADATA } from '../schema'
 
 // 25k rows/group keeps a typical day file in 2-10 row groups so DuckDB's
 // stats-based row-group pruning has something to skip. The hyparquet-writer
@@ -186,6 +186,11 @@ function sortRowsByClusterKey(table: TableName, rows: readonly Row[]): readonly 
     return 0
   })
   return copy
+}
+
+function naturalKeyFor(table: TableName, row: Row): string {
+  const key = TABLE_METADATA[table].sortKey
+  return key.map(col => `${row[col] ?? ''}`).join('\0')
 }
 
 // Encode an already-ordered row array to a parquet buffer. Feeds rows through
@@ -389,22 +394,19 @@ export function createHyparquetCodec(options: HyparquetCodecOptions = {}): Parqu
         await dataSource.write(outputKey, bytes)
         return { bytes: bytes.byteLength, rowCount: 0 }
       }
-      const allRows: Row[] = []
+      const byNaturalKey = new Map<string, Row>()
       for (const key of inputKeys) {
         const input = await dataSource.read(key)
         const rows = await decodeParquetToRows(input)
-        // NB: never `allRows.push(...rows)` — a whale-site daily shard is
-        // hundreds of thousands of rows, and spreading them as call arguments
-        // overflows the stack (`RangeError: Maximum call stack size exceeded`)
-        // past ~125k. A bounded loop appends in O(n) with constant stack depth.
-        // Same hazard documented in iceberg/append-sink.ts.
         for (let i = 0; i < rows.length; i++)
-          allRows.push(rows[i])
+          byNaturalKey.set(naturalKeyFor(ctx.table, rows[i]!), rows[i]!)
       }
       // Recurrence guard: correct compaction inputs own disjoint natural keys,
       // but a duplicated-row regression must not survive a merge — collapse
-      // any natural-key collision before encoding. See dedupeByNaturalKey.
-      const rows = dedupeByNaturalKey(ctx.table, allRows)
+      // any natural-key collision before encoding. Accumulating directly into
+      // the map avoids holding both `allRows` and a second dedupe map for
+      // whale-site compactions.
+      const rows = [...byNaturalKey.values()]
       const bytes = encodeRowsToParquet(ctx.table, rows)
       await dataSource.write(outputKey, bytes)
       return { bytes: bytes.byteLength, rowCount: rows.length }

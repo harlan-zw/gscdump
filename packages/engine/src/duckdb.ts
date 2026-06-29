@@ -38,6 +38,30 @@ export interface DuckDBFactory {
   getDuckDB: () => Promise<DuckDBHandle>
 }
 
+const BUFFER_READ_BATCH_SIZE = 8
+
+async function registerBufferedFiles(
+  db: DuckDBHandle,
+  files: readonly { key: string, name: string }[],
+  dataSource: DataSource,
+  registered: string[],
+  signal?: AbortSignal,
+): Promise<void> {
+  for (let i = 0; i < files.length; i += BUFFER_READ_BATCH_SIZE) {
+    signal?.throwIfAborted()
+    const batch = files.slice(i, i + BUFFER_READ_BATCH_SIZE)
+    const buffers = await Promise.all(
+      batch.map(file => dataSource.read(file.key, undefined, signal)),
+    )
+    for (let j = 0; j < batch.length; j++) {
+      signal?.throwIfAborted()
+      const file = batch[j]!
+      await db.registerFileBuffer(file.name, buffers[j]!)
+      registered.push(file.name)
+    }
+  }
+}
+
 async function encodeBytes(
   db: DuckDBHandle,
   table: TableName,
@@ -136,18 +160,17 @@ export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
         }
       }
 
-      const inputs = await Promise.all(inputKeys.map(k => dataSource.read(k)))
       const inNames: string[] = []
       const outName = db.makeTempPath('parquet')
       const registered: string[] = []
-      for (let i = 0; i < inputs.length; i++) {
+      const bufferedInputs = inputKeys.map((key) => {
         const name = db.makeTempPath('parquet')
-        await db.registerFileBuffer(name, inputs[i]!)
         inNames.push(name)
-        registered.push(name)
-      }
+        return { key, name }
+      })
 
       try {
+        await registerBufferedFiles(db, bufferedInputs, dataSource, registered)
         const fileList = inNames.map(n => `'${sqlEscape(n)}'`).join(', ')
         // DuckDB streams read_parquet → COPY without materialising all rows in
         // memory. Matches the read path. `union_by_name` lets us merge files
@@ -251,34 +274,30 @@ export function createDuckDBExecutor(factory: DuckDBFactory): QueryExecutor {
       // buffer reads are independent, so they run concurrently — a serial loop
       // costs N × per-read latency, which on a remote DataSource (R2 without a
       // `bucketName`, where each read is an object GET) is O(seconds) for a
-      // multi-file query. `registerFileBuffer` after the fan-out is a local
-      // memcpy, so it stays sequential. Mirrors `compactRows` above.
-      await Promise.all(Object.entries(fileKeys).map(async ([name, keys]) => {
-        const uris = keys.map(key => dataSource.uri?.(key))
-        const buffers = await Promise.all(
-          keys.map((key, i) => uris[i] !== undefined
-            ? Promise.resolve(undefined)
-            : dataSource.read(key, undefined, signal)),
-        )
-        const resolved: string[] = []
-        for (let i = 0; i < keys.length; i++) {
-          const uri = uris[i]
-          if (uri !== undefined) {
-            resolved.push(uri)
-          }
-          else {
-            await db.registerFileBuffer(keys[i]!, buffers[i]!)
-            registered.push(keys[i]!)
-            resolved.push(keys[i]!)
-          }
-        }
-        placeholders[name] = resolved
-      }))
-      // `buffered` is the count that took the read+register path (the rest
-      // resolved to a native URI for free).
-      endRegister?.({ buffered: registered.length })
-
+      // multi-file query. Reads are batched so a large remote file set doesn't
+      // also retain every Uint8Array in JS while DuckDB already owns registered
+      // vFS buffers. Mirrors `compactRows` above.
       try {
+        await Promise.all(Object.entries(fileKeys).map(async ([name, keys]) => {
+          const resolved: string[] = []
+          const buffered: Array<{ key: string, name: string }> = []
+          for (let i = 0; i < keys.length; i++) {
+            const key = keys[i]!
+            const uri = dataSource.uri?.(key)
+            if (uri !== undefined) {
+              resolved.push(uri)
+            }
+            else {
+              buffered.push({ key, name: key })
+              resolved.push(key)
+            }
+          }
+          await registerBufferedFiles(db, buffered, dataSource, registered, signal)
+          placeholders[name] = resolved
+        }))
+        // `buffered` is the count that took the read+register path (the rest
+        // resolved to a native URI for free).
+        endRegister?.({ buffered: registered.length })
         signal?.throwIfAborted()
         const rewritten = rewriteEmptyFileSets(sql, placeholders, table, placeholderTables)
         const finalSql = substituteNamedFiles(rewritten, placeholders)

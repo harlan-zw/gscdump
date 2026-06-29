@@ -258,6 +258,18 @@ describe('buildArchetypeSql', () => {
       expect(buildArchetypeSql(q).params).toEqual(['site-1', 'web', '2026-01-01', '2026-03-31'])
     })
 
+    it('can emit R2 SQL CONCAT predicates without client-side rewriting', () => {
+      const q: SiteDailyTimeseriesQuery = {
+        ...base,
+        archetype: 'site-daily-timeseries',
+        metrics: ['clicks'],
+      }
+      const plan = buildArchetypeSql(q, { partitionPredicateMode: 'r2-sql-concat' })
+      expect(plan.sql).toContain('CONCAT(site_id, \'\') = ?')
+      expect(plan.sql).toContain('CONCAT(search_type, \'\') = ?')
+      expect(plan.params).toEqual(['site-1', 'web', '2026-01-01', '2026-03-31'])
+    })
+
     it('prunes both ranges + keeps param alignment on the variantCount compareRange path', () => {
       // The exact shape that crashed in prod: queryCanonical top-N with a
       // compareRange (two partitionWhere calls + COUNT(DISTINCT) variantCount).

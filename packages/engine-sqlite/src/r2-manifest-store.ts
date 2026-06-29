@@ -87,6 +87,8 @@ const LOCK_TTL_MS = 30_000
 const LOCK_ACQUIRE_TIMEOUT_MS = 5_000
 const LOCK_RETRY_MIN_MS = 25
 const LOCK_RETRY_MAX_MS = 150
+const D1_BATCH_LIMIT = 95
+const D1_IN_CLAUSE_CHUNK = 90
 
 function lockScopeKey(scope: LockScope): string {
   return `${scope.userId}|${siteIdOf(scope.siteId)}|${scope.table}|${scope.partition}`
@@ -142,14 +144,14 @@ export function createD1ManifestStore(db: AnalyticsManifestDb): ManifestStore {
     // date range expands to 200+ partitions across daily/weekly/monthly/quarterly tiers.
     const PARTITION_CHUNK = 80
     if (filter.partitions && filter.partitions.length > 0) {
-      const out: ManifestEntry[] = []
+      const statements: BatchItem<'sqlite'>[] = []
       for (let i = 0; i < filter.partitions.length; i += PARTITION_CHUNK) {
         const slice = filter.partitions.slice(i, i + PARTITION_CHUNK)
         const conds = [...baseConds, inArray(r2Manifest.partition, slice)]
-        const rows = await db.select().from(r2Manifest).where(and(...conds))
-        for (const r of rows) out.push(fromRow(r))
+        statements.push(db.select().from(r2Manifest).where(and(...conds)))
       }
-      return out
+      const batches = await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]])
+      return batches.flat().map(r => fromRow(r as typeof r2Manifest.$inferSelect))
     }
 
     const rows = await db.select().from(r2Manifest).where(and(...baseConds))
@@ -168,10 +170,8 @@ export function createD1ManifestStore(db: AnalyticsManifestDb): ManifestStore {
 
     if (superseding && superseding.length > 0) {
       const keys = superseding.map(s => s.objectKey)
-      // D1_BATCH_LIMIT = 95; chunk if needed
-      const CHUNK = 90
-      for (let i = 0; i < keys.length; i += CHUNK) {
-        const slice = keys.slice(i, i + CHUNK)
+      for (let i = 0; i < keys.length; i += D1_IN_CLAUSE_CHUNK) {
+        const slice = keys.slice(i, i + D1_IN_CLAUSE_CHUNK)
         statements.push(
           db.update(r2Manifest)
             .set({ retiredAt: supersededAt })
@@ -210,9 +210,8 @@ export function createD1ManifestStore(db: AnalyticsManifestDb): ManifestStore {
     // The single-statement "await builder" path was silently producing
     // "Failed query" errors without a stack — batch() returns the real
     // D1 error (e.g. UNIQUE constraint failed) and is transactional.
-    const BATCH_LIMIT = 95
-    for (let i = 0; i < statements.length; i += BATCH_LIMIT) {
-      const chunk = statements.slice(i, i + BATCH_LIMIT) as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]]
+    for (let i = 0; i < statements.length; i += D1_BATCH_LIMIT) {
+      const chunk = statements.slice(i, i + D1_BATCH_LIMIT) as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]]
       await db.batch(chunk)
     }
   }
@@ -228,9 +227,18 @@ export function createD1ManifestStore(db: AnalyticsManifestDb): ManifestStore {
     if (entries.length === 0)
       return
     const keys = entries.map(e => e.objectKey)
-    const CHUNK = 90
-    for (let i = 0; i < keys.length; i += CHUNK)
-      await db.delete(r2Manifest).where(inArray(r2Manifest.objectKey, keys.slice(i, i + CHUNK)))
+    const statements: BatchItem<'sqlite'>[] = []
+    for (let i = 0; i < keys.length; i += D1_IN_CLAUSE_CHUNK) {
+      statements.push(
+        db.delete(r2Manifest)
+          .where(inArray(r2Manifest.objectKey, keys.slice(i, i + D1_IN_CLAUSE_CHUNK))),
+      )
+    }
+    for (let i = 0; i < statements.length; i += D1_BATCH_LIMIT) {
+      await db.batch(
+        statements.slice(i, i + D1_BATCH_LIMIT) as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]],
+      )
+    }
   }
 
   async function getWatermarks(filter: WatermarkFilter): Promise<Watermark[]> {

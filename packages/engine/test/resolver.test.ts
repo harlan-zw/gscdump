@@ -2,7 +2,12 @@ import type { BuilderState } from 'gscdump/query'
 import { describe, expect, it } from 'vitest'
 import { FILES_PLACEHOLDER, resolveParquetSQL, substituteNamedFiles } from '../src/index'
 import { resolveToSQL as resolverResolveToSQL, resolveToSQLOptimized } from '../src/resolver/compile'
-import { createIcebergResolverAdapter, createParquetResolverAdapter, pgResolverAdapter } from '../src/resolver/pg-adapter'
+import {
+  createIcebergResolverAdapter,
+  createParquetResolverAdapter,
+  createR2SqlResolverAdapter,
+  pgResolverAdapter,
+} from '../src/resolver/pg-adapter'
 
 function state(partial: Partial<BuilderState>): BuilderState {
   return {
@@ -302,6 +307,35 @@ describe('createIcebergResolverAdapter', () => {
     expect(r.sql).not.toContain('"pages"."site_id"')
     expect(r.sql).toContain('"pages"."search_type"')
     expect(r.params).toContain('image')
+  })
+})
+
+describe('createR2SqlResolverAdapter', () => {
+  it('uses CONCAT partition predicates for string-encoded R2 SQL catalogs', () => {
+    const adapter = createR2SqlResolverAdapter()
+    const r = resolverResolveToSQL(state({}), { adapter, siteId: 'site-42', searchType: 'web' })
+    expect(r.sql).toContain('CONCAT("pages"."site_id", \'\') = $1')
+    expect(r.sql).toContain('CONCAT("pages"."search_type", \'\') = $2')
+    expect(r.params).toContain('site-42')
+    expect(r.params).toContain('web')
+    expect(r.sql).not.toContain('"pages"."site_id" = $1')
+  })
+
+  it('keeps bare partition predicates for int-encoded R2 SQL catalogs', () => {
+    const adapter = createR2SqlResolverAdapter({ partitionKeyEncoding: 'int' })
+    const r = resolverResolveToSQL(state({}), { adapter, siteId: 42, searchType: 1 })
+    expect(r.sql).toContain('"pages"."site_id" = $1')
+    expect(r.sql).toContain('"pages"."search_type" = $2')
+    expect(r.sql).not.toContain('CONCAT("pages"."site_id"')
+    expect(r.params).toContain(42)
+    expect(r.params).toContain(1)
+  })
+
+  it('advertises the narrower R2 SQL execution surface', () => {
+    const adapter = createR2SqlResolverAdapter()
+    expect(adapter.capabilities.regex).toBe(false)
+    expect(adapter.capabilities.comparisonJoin).toBe(false)
+    expect(adapter.capabilities.windowTotals).toBe(false)
   })
 })
 
