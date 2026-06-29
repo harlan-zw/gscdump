@@ -84,7 +84,7 @@ export interface IcebergColumn {
 /**
  * Partition-key encoding for the two identity columns (`site_id`, `search_type`).
  *
- * - `'string'` (default, legacy): both columns are STRING. Correct, but R2 SQL's
+ * - `'string'` (legacy): both columns are STRING. Correct, but R2 SQL's
  *   string min/max statistics are truncated in predicate pushdown, so a bare
  *   `WHERE site_id='<uuid>'` UNDERCOUNTS — callers must CONCAT(col,'') to stay
  *   correct, which defeats partition pruning.
@@ -97,10 +97,13 @@ export interface IcebergColumn {
  *   {@link SEARCH_TYPE_INT} for `search_type` (engine-owned, fixed enum).
  *
  * New per-team catalogs are provisioned `'int'`; existing catalogs stay
- * `'string'`. Purely additive: `'string'` is the default everywhere so existing
- * tables, writers, and readers are unchanged.
+ * `'string'`. Callers that read or write legacy catalogs must pass
+ * `encoding: 'string'` explicitly.
  */
 export type PartitionKeyEncoding = 'string' | 'int'
+
+/** Default for new Iceberg/R2 Data Catalog tables. */
+export const DEFAULT_PARTITION_KEY_ENCODING: PartitionKeyEncoding = 'int'
 
 /**
  * Stable `search_type` enum → int map for `'int'`-encoded catalogs. Engine-owned
@@ -167,7 +170,7 @@ export const ICEBERG_PARTITION_COLUMNS: readonly IcebergColumn[] = [
  * avoid R2 SQL's truncated-string-stats equality undercount and restore pruning.
  * Field ids are unchanged (1, 2) — only the column types differ.
  */
-export function icebergPartitionColumns(encoding: PartitionKeyEncoding = 'string'): readonly IcebergColumn[] {
+export function icebergPartitionColumns(encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING): readonly IcebergColumn[] {
   if (encoding === 'string')
     return ICEBERG_PARTITION_COLUMNS
   return [
@@ -215,7 +218,7 @@ function mapColumnType(t: ColumnType): IcebergColumnType {
  * CONTRACT NOTE: implementation agents must treat the RETURNED VALUE as the
  * source of truth — do not hand-list columns elsewhere.
  */
-export function icebergTableSpec(table: IcebergTableName, encoding: PartitionKeyEncoding = 'string'): IcebergTableSpec {
+export function icebergTableSpec(table: IcebergTableName, encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING): IcebergTableSpec {
   const base = SCHEMAS[table]
   const dataColumns: IcebergColumn[] = base.columns.map((col, i) => ({
     name: col.name,
@@ -233,10 +236,10 @@ export function icebergTableSpec(table: IcebergTableName, encoding: PartitionKey
   }
 }
 
-/** All Iceberg table specs (legacy `'string'` encoding), keyed by table name. */
-export const ICEBERG_SCHEMAS: Record<IcebergTableName, IcebergTableSpec>
+/** All Iceberg table specs in legacy `'string'` encoding, keyed by table name. */
+export const ICEBERG_SCHEMAS_STRING: Record<IcebergTableName, IcebergTableSpec>
   = Object.fromEntries(
-    ICEBERG_TABLES.map(t => [t, icebergTableSpec(t)] as const),
+    ICEBERG_TABLES.map(t => [t, icebergTableSpec(t, 'string')] as const),
   ) as Record<IcebergTableName, IcebergTableSpec>
 
 /** All Iceberg table specs in `'int'` encoding (INT site_id + INT search_type). */
@@ -245,9 +248,12 @@ export const ICEBERG_SCHEMAS_INT: Record<IcebergTableName, IcebergTableSpec>
     ICEBERG_TABLES.map(t => [t, icebergTableSpec(t, 'int')] as const),
   ) as Record<IcebergTableName, IcebergTableSpec>
 
-/** Table specs for the given encoding (`'string'` default). */
-export function icebergSchemasFor(encoding: PartitionKeyEncoding = 'string'): Record<IcebergTableName, IcebergTableSpec> {
-  return encoding === 'int' ? ICEBERG_SCHEMAS_INT : ICEBERG_SCHEMAS
+/** All Iceberg table specs for the default new-catalog encoding. */
+export const ICEBERG_SCHEMAS: Record<IcebergTableName, IcebergTableSpec> = ICEBERG_SCHEMAS_INT
+
+/** Table specs for the given encoding (`'int'` default). */
+export function icebergSchemasFor(encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING): Record<IcebergTableName, IcebergTableSpec> {
+  return encoding === 'int' ? ICEBERG_SCHEMAS_INT : ICEBERG_SCHEMAS_STRING
 }
 
 const ICEBERG_TABLE_SET: ReadonlySet<string> = new Set(ICEBERG_TABLES)

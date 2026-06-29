@@ -79,8 +79,8 @@ describe('duckDB (Node blocking) smoke', () => {
     const fa = 'اسکریپت نویسی پیشرفته'
     const ja = '日本語のキーワードをもっと長く'
     const rows = [
-      { query: fa, query_canonical: fa, date: '2025-01-01', clicks: 9, impressions: 90, sum_position: 12 },
-      { query: ja, query_canonical: ja, date: '2025-01-01', clicks: 3, impressions: 30, sum_position: 8 },
+      { query: fa, date: '2025-01-01', clicks: 9, impressions: 90, sum_position: 12 },
+      { query: ja, date: '2025-01-01', clicks: 3, impressions: 30, sum_position: 8 },
     ]
     await codec.writeRows({ table: 'queries' }, rows, 'multibyte.parquet', dataSource)
 

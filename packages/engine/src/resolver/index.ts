@@ -60,14 +60,20 @@ export {
 } from './pg-adapter'
 export type { PgTableKey, R2SqlResolverAdapterOptions, ResolverAdapterOptions } from './pg-adapter'
 export type {
+  CanonicalQueryDimSource,
   ComparisonQueryResult,
   OptimizedQueryResult,
+  PrimaryColumnarSource,
+  QuerySourceDecision,
+  QuerySourceFallback,
+  QuerySourceFallbackKind,
+  QuerySourceKind,
   ResolveExtraFn,
   RunOptimizedQueryOptions,
   RunQueryCtx,
   RunSQLFn,
 } from './run-query'
-export { runComparisonQuery, runOptimizedQuery } from './run-query'
+export { QuerySourceCoverageError, runComparisonQuery, runOptimizedQuery } from './run-query'
 export { assertSchemaInSync } from './schema-drift'
 export type { AssertSchemaInSyncOptions } from './schema-drift'
 export type {

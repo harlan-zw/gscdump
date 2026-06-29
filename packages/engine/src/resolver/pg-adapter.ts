@@ -11,6 +11,7 @@ import type { ResolverAdapter } from './types'
 import { sql } from 'drizzle-orm'
 import { PgDialect, pgTable, varchar } from 'drizzle-orm/pg-core'
 import { drizzleSchema } from '../drizzle-schema'
+import { DEFAULT_PARTITION_KEY_ENCODING } from '../iceberg/schema'
 import { createResolverAdapter } from './adapter'
 
 export type PgTableKey = TableName
@@ -107,11 +108,17 @@ export const pgResolverAdapter: ResolverAdapter<PgTableKey> = createResolverAdap
  */
 export interface ResolverAdapterOptions {
   /**
-   * Opt-in canonical-primary correctness: fold NULL/'' `query_canonical` back
-   * to the raw `query` so canonical is a total GROUP BY / join key. Default
-   * false preserves the legacy raw-column behaviour. See ADR-0018.
+   * Deprecated compatibility flag. Fact tables no longer carry
+   * `query_canonical`; canonical reads derive from `query_dim`, or from a
+   * canonical rollup relation when `queryCanonicalSource: 'column'` is set.
    */
   canonicalFallback?: boolean
+  /**
+   * `queryDim` reads canonical from a joined query dimension. `column` is only
+   * for derived canonical rollup relations whose primary relation already
+   * carries a null-free `query_canonical` output column.
+   */
+  queryCanonicalSource?: 'queryDim' | 'column'
 }
 
 export interface R2SqlResolverAdapterOptions extends ResolverAdapterOptions {
@@ -128,7 +135,9 @@ export function createParquetResolverAdapter(options: ResolverAdapterOptions = {
     ...PG_BASE_CONFIG,
     tableLabel: 'parquet-resolver-adapter',
     canonicalFallback: options.canonicalFallback ?? false,
+    queryCanonicalSource: options.queryCanonicalSource ?? 'queryDim',
     tableRef: tk => sql.raw(`read_parquet({{FILES}}, union_by_name = true) AS "${tk}"`),
+    queryDimTableRef: () => sql.raw('read_parquet({{QUERY_DIM}}, union_by_name = true) AS "query_dim"'),
   })
 }
 
@@ -150,12 +159,14 @@ export function createIcebergResolverAdapter(options: ResolverAdapterOptions = {
     includeSearchType: true,
     tableLabel: 'iceberg-resolver-adapter',
     canonicalFallback: options.canonicalFallback ?? false,
+    queryCanonicalSource: options.queryCanonicalSource ?? 'queryDim',
     // `icebergSchema` table entries are plain object spreads of drizzle tables,
     // so they preserve column symbols (for `colRef`) but lose the table-level
     // symbols drizzle needs to render `${schema[tk]}` as a name (it falls back
     // to `[object Object]`). Emit the bare quoted name; gscdump.com's qualifier
     // rewrites `"pages"` → `gsc.pages` before sending to R2 SQL.
     tableRef: tk => sql.raw(`"${tk}"`),
+    queryDimTableRef: () => sql.raw('"query_dim"'),
   })
 }
 
@@ -164,9 +175,11 @@ export function createIcebergResolverAdapter(options: ResolverAdapterOptions = {
  *
  * It shares the multi-tenant Iceberg schema with `createIcebergResolverAdapter`
  * but models R2 SQL's narrower execution surface: no window-total plans and no
- * comparison joins. For string-partition catalogs it also emits
- * `CONCAT(partition_col, '') = ?` predicates, working around R2 SQL's
- * partition-string equality undercount while preserving bound params.
+ * comparison joins. Int-partition catalogs are the default and emit bare
+ * equality predicates for pruning. Legacy string-partition catalogs must pass
+ * `partitionKeyEncoding: 'string'` to emit `CONCAT(partition_col, '') = ?`,
+ * working around R2 SQL's partition-string equality undercount while preserving
+ * bound params.
  */
 export function createR2SqlResolverAdapter(
   options: R2SqlResolverAdapterOptions = {},
@@ -178,15 +191,17 @@ export function createR2SqlResolverAdapter(
     includeSearchType: true,
     tableLabel: 'r2-sql-resolver-adapter',
     canonicalFallback: options.canonicalFallback ?? false,
+    queryCanonicalSource: options.queryCanonicalSource ?? 'queryDim',
     capabilities: {
       regex: false,
       comparisonJoin: false,
       windowTotals: false,
     },
     tableRef: tk => sql.raw(`"${tk}"`),
+    queryDimTableRef: () => sql.raw('"query_dim"'),
   })
 
-  if (options.partitionKeyEncoding === 'int')
+  if ((options.partitionKeyEncoding ?? DEFAULT_PARTITION_KEY_ENCODING) === 'int')
     return adapter
 
   return {

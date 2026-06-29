@@ -1056,7 +1056,7 @@ describe('rollup output pagination (bounds each runSQL/IPC payload by GROUP card
       windowAnchorMs: 1_700_000_000_000,
     }) as Array<{ joinKey: string, variantCount: bigint, canonicalName: string | null, variants: string | null }>
     // KEYSET paging by query (not OFFSET, not the derived joinKey), exactly 2 pages.
-    expect(calls[0]!.sql).toContain('ORDER BY query')
+    expect(calls[0]!.sql).toContain('ORDER BY q.query')
     expect(calls[0]!.sql).not.toContain('OFFSET')
     expect(calls.length).toBe(2)
     expect(calls.every(c => c.returned <= ROLLUP_PAGE_ROWS_WIDE)).toBe(true)

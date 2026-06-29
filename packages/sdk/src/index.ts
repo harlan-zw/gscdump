@@ -207,6 +207,7 @@ export type {
   GscdumpUserSite,
   GscdumpUserStatus,
   GscdumpUserTokenUpdate,
+  IndexingDiagnosticsParams,
   IndexingUrlsParams,
   InspectionHistoryResponse,
   InspectionIndex,

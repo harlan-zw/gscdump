@@ -49,7 +49,7 @@ Per-site slow-changing state, point-lookup-by-id — URL inspections, sitemap sn
 _Avoid_: record (overloaded), object.
 
 **Canonical Query** (`query_canonical`; `normalizeQuery` in `@gscdump/analysis`):
-The grouping key for near-duplicate search queries — unicode-folded, lowercased, singularized, bag-of-words sorted (except asymmetric `X to Y` conversions), versioned by `NORMALIZER_VERSION`. Read paths treat it as a TOTAL key via `COALESCE(NULLIF(query_canonical, ''), query)` under the opt-in `canonicalFallback`. See ADR-0018/0019.
+The grouping key for near-duplicate search queries — unicode-folded, lowercased, singularized, bag-of-words sorted (except asymmetric `X to Y` conversions), versioned by `NORMALIZER_VERSION`. Fact-table reads derive it by joining the **Query Dimension** and falling back to raw `query`; canonical rollups may materialize the derived `query_canonical` output. See ADR-0018/0019.
 _Avoid_: slug, hash. Don't bake brand into it (brand is per-tenant + mutable).
 
 **Query Dimension** (`query_dim`; `createQueryDimStore`):

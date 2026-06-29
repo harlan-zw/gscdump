@@ -29,7 +29,6 @@ function pageKeywordRow(url: string, query: string, date: string): Row {
   return {
     url,
     query,
-    query_canonical: query,
     date,
     clicks: 1,
     impressions: 10,
@@ -170,7 +169,7 @@ describe('storageEngine.purgeUrls', () => {
     const { engine, manifestStore } = makeEngine({ now: () => 1000 })
     await engine.writeDay(
       makeCtx({ table: 'queries' }),
-      [{ query: 'foo', query_canonical: 'foo', date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 5 }],
+      [{ query: 'foo', date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 5 }],
     )
     const before = manifestStore.snapshot()
 

@@ -52,7 +52,6 @@ export const pages = pgTable('pages', {
 
 export const queries = pgTable('queries', {
   query: varchar('query').notNull(),
-  query_canonical: varchar('query_canonical'),
   date: dateCol(),
   ...metricCols(),
 })
@@ -66,7 +65,6 @@ export const countries = pgTable('countries', {
 export const page_queries = pgTable('page_queries', {
   url: varchar('url').notNull(),
   query: varchar('query').notNull(),
-  query_canonical: varchar('query_canonical'),
   date: dateCol(),
   ...metricCols(),
 })
@@ -120,7 +118,6 @@ export const search_appearance_pages = pgTable('search_appearance_pages', {
 export const search_appearance_queries = pgTable('search_appearance_queries', {
   searchAppearance: varchar('searchAppearance').notNull(),
   query: varchar('query').notNull(),
-  query_canonical: varchar('query_canonical'),
   date: dateCol(),
   ...metricCols(),
 })
@@ -129,7 +126,6 @@ export const search_appearance_page_queries = pgTable('search_appearance_page_qu
   searchAppearance: varchar('searchAppearance').notNull(),
   url: varchar('url').notNull(),
   query: varchar('query').notNull(),
-  query_canonical: varchar('query_canonical'),
   date: dateCol(),
   ...metricCols(),
 })
@@ -154,13 +150,13 @@ export type DrizzleSchema = typeof drizzleSchema
 
 export const TABLE_METADATA: Record<TableName, { sortKey: string[], clusterKey: string[], version: number }> = {
   pages: { sortKey: ['date', 'url'], clusterKey: ['url', 'date'], version: 1 },
-  queries: { sortKey: ['date', 'query'], clusterKey: ['query', 'date'], version: 2 },
+  queries: { sortKey: ['date', 'query'], clusterKey: ['query', 'date'], version: 3 },
   countries: { sortKey: ['date', 'country'], clusterKey: ['country', 'date'], version: 1 },
-  page_queries: { sortKey: ['date', 'url', 'query'], clusterKey: ['url', 'query', 'date'], version: 2 },
+  page_queries: { sortKey: ['date', 'url', 'query'], clusterKey: ['url', 'query', 'date'], version: 3 },
   dates: { sortKey: ['date'], clusterKey: ['date'], version: 1 },
   search_appearance: { sortKey: ['date', 'searchAppearance'], clusterKey: ['searchAppearance', 'date'], version: 1 },
   search_appearance_pages: { sortKey: ['date', 'searchAppearance', 'url'], clusterKey: ['searchAppearance', 'url', 'date'], version: 1 },
-  search_appearance_queries: { sortKey: ['date', 'searchAppearance', 'query'], clusterKey: ['searchAppearance', 'query', 'date'], version: 1 },
-  search_appearance_page_queries: { sortKey: ['date', 'searchAppearance', 'url', 'query'], clusterKey: ['searchAppearance', 'url', 'query', 'date'], version: 1 },
+  search_appearance_queries: { sortKey: ['date', 'searchAppearance', 'query'], clusterKey: ['searchAppearance', 'query', 'date'], version: 2 },
+  search_appearance_page_queries: { sortKey: ['date', 'searchAppearance', 'url', 'query'], clusterKey: ['searchAppearance', 'url', 'query', 'date'], version: 2 },
   hourly_pages: { sortKey: ['date', 'hour', 'url'], clusterKey: ['url', 'date', 'hour'], version: 2 },
 }

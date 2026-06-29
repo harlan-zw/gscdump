@@ -86,7 +86,7 @@ describe('listIcebergDataFiles cache', () => {
   it('hands the manifest list a partition filter that prunes a non-matching manifest', async () => {
     withSnapshot()
     const cache: CatalogCache = { storage: createStorage() }
-    await listIcebergDataFiles(CONN, opts({ cache, siteId: 's1' }))
+    await listIcebergDataFiles(CONN, opts({ cache, siteId: 's1', encoding: 'string' }))
 
     const arg = icebergManifests.mock.calls[0]![0] as { partitionFilter?: (p: unknown) => boolean }
     expect(typeof arg.partitionFilter).toBe('function')

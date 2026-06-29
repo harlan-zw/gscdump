@@ -61,8 +61,8 @@ const FIXTURES: Record<TableName, Row[]> = {
     { url: '/b', date: '2025-01-01', clicks: 0, impressions: 3, sum_position: 18 },
   ],
   queries: [
-    { query: 'foo', query_canonical: 'foo', date: '2025-01-01', clicks: 5, impressions: 50, sum_position: 21.5 },
-    { query: 'bar', query_canonical: null, date: '2025-01-02', clicks: 1, impressions: 2, sum_position: 4 },
+    { query: 'foo', date: '2025-01-01', clicks: 5, impressions: 50, sum_position: 21.5 },
+    { query: 'bar', date: '2025-01-02', clicks: 1, impressions: 2, sum_position: 4 },
   ],
   countries: [
     { country: 'usa', date: '2025-01-01', clicks: 7, impressions: 70, sum_position: 14 },
@@ -86,7 +86,7 @@ const FIXTURES: Record<TableName, Row[]> = {
     },
   ],
   page_queries: [
-    { url: '/a', query: 'foo', query_canonical: 'foo', date: '2025-01-01', clicks: 2, impressions: 20, sum_position: 40 },
+    { url: '/a', query: 'foo', date: '2025-01-01', clicks: 2, impressions: 20, sum_position: 40 },
   ],
   search_appearance: [
     { searchAppearance: 'AMP_TOP_STORIES', date: '2025-01-01', clicks: 4, impressions: 40, sum_position: 16 },
@@ -95,10 +95,10 @@ const FIXTURES: Record<TableName, Row[]> = {
     { searchAppearance: 'AMP_TOP_STORIES', url: '/a', date: '2025-01-01', clicks: 4, impressions: 40, sum_position: 16 },
   ],
   search_appearance_queries: [
-    { searchAppearance: 'AMP_TOP_STORIES', query: 'foo', query_canonical: 'foo', date: '2025-01-01', clicks: 4, impressions: 40, sum_position: 16 },
+    { searchAppearance: 'AMP_TOP_STORIES', query: 'foo', date: '2025-01-01', clicks: 4, impressions: 40, sum_position: 16 },
   ],
   search_appearance_page_queries: [
-    { searchAppearance: 'AMP_TOP_STORIES', url: '/a', query: 'foo', query_canonical: 'foo', date: '2025-01-01', clicks: 4, impressions: 40, sum_position: 16 },
+    { searchAppearance: 'AMP_TOP_STORIES', url: '/a', query: 'foo', date: '2025-01-01', clicks: 4, impressions: 40, sum_position: 16 },
   ],
   hourly_pages: [
     { url: '/a', hour: 8, date: '2025-01-01', clicks: 2, impressions: 12, sum_position: 18 },

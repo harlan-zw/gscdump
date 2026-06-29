@@ -48,6 +48,8 @@ export function createSqliteResolverAdapter(
       : sql`${expr} REGEXP ${pattern}`,
     tableLabel: 'sqlite/resolver-adapter',
     includeSiteId: true,
+    queryDimTableRef: () => sql.raw('"gsc_query_dim" AS "query_dim"'),
+    queryDimSiteScoped: true,
     compile: compileSqlite,
     capabilities: {
       regex: options.regex ?? false,

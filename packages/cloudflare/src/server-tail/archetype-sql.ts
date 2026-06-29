@@ -22,6 +22,7 @@ export interface ArchetypeSqlPlan {
 }
 
 export type PartitionPredicateMode = 'bare' | 'r2-sql-concat'
+export type PartitionKeyEncoding = 'int' | 'string'
 
 export interface BuildArchetypeSqlOptions {
   /**
@@ -41,19 +42,26 @@ export interface BuildArchetypeSqlOptions {
    */
   partitionPruned?: boolean
   /**
-   * R2 SQL currently undercounts bare equality against identity-partition
-   * columns. The client can request CONCAT-wrapped predicates directly instead
-   * of post-processing generated SQL.
+   * Int-partition catalogs are the default and use bare equality. Legacy
+   * string-partition catalogs can request CONCAT-wrapped predicates directly
+   * instead of post-processing generated SQL.
    */
   partitionPredicateMode?: PartitionPredicateMode
+  /** Preferred input for new callers. Defaults to `'int'`. */
+  partitionKeyEncoding?: PartitionKeyEncoding
 }
 
 function dimColumn(dim: Dimension): string {
   if (dim === 'page')
     return 'url'
   if (dim === 'queryCanonical')
-    return 'query_canonical'
+    return 'COALESCE((SELECT qd.query_canonical FROM query_dim qd WHERE qd.query = query LIMIT 1), query)'
   return dim
+}
+
+function dimSelect(dim: Dimension): string {
+  const col = dimColumn(dim)
+  return dim === 'queryCanonical' ? `${col} AS queryCanonical` : col
 }
 
 function tableForDimensions(dims: readonly string[]): ArchetypeFactTable {
@@ -233,7 +241,7 @@ function buildEntityDailySparkline(q: EntityDailySparklineQuery, pruned: boolean
   return {
     table,
     params: w.params,
-    sql: `SELECT date, ${col}, ${metricExpr(q.metric)} FROM ${TABLE_PLACEHOLDER} `
+    sql: `SELECT date, ${dimSelect(q.dimension)}, ${metricExpr(q.metric)} FROM ${TABLE_PLACEHOLDER} `
       + `WHERE ${w.clause} AND ${col} IN (${inList}) GROUP BY date, ${col} ORDER BY date ASC`,
   }
 }
@@ -297,7 +305,7 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
   }
 
   const metrics = metricList.map(metricExpr).join(', ')
-  const sql = `SELECT ${col}, ${metrics}${variantSel}${totalCol} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} `
+  const sql = `SELECT ${dimSelect(q.dimension)}, ${metrics}${variantSel}${totalCol} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} `
     + `GROUP BY ${col} ORDER BY ${order} ${limit}${offset}`
   return { table, params: [...w.params, ...facet.params], sql }
 }
@@ -314,7 +322,7 @@ function buildSingleRowLookup(q: SingleRowLookupQuery, pruned: boolean, mode: Pa
   }
   const metrics = q.metrics.map(metricExpr).join(', ')
   const groupBy = dims.length > 0 ? ` GROUP BY ${dims.map(dimColumn).join(', ')}` : ''
-  const select = dims.length > 0 ? `${dims.map(dimColumn).join(', ')}, ${metrics}` : metrics
+  const select = dims.length > 0 ? `${dims.map(dimSelect).join(', ')}, ${metrics}` : metrics
   return {
     table,
     params,
@@ -341,7 +349,7 @@ function buildMultiSeriesStackedDaily(q: MultiSeriesStackedDailyQuery, pruned: b
   return {
     table,
     params: w.params,
-    sql: `SELECT date, ${col}, ${metricExpr(q.metric)} FROM ${TABLE_PLACEHOLDER} `
+    sql: `SELECT date, ${dimSelect(q.seriesDimension)}, ${metricExpr(q.metric)} FROM ${TABLE_PLACEHOLDER} `
       + `WHERE ${w.clause} GROUP BY date, ${col} ORDER BY date ASC`,
   }
 }
@@ -375,7 +383,8 @@ function buildTwoDimensionDetail(q: TwoDimensionDetailQuery, pruned: boolean, mo
 
 export function buildArchetypeSql(query: ArchetypeQuery, opts: BuildArchetypeSqlOptions = {}): ArchetypeSqlPlan {
   const pruned = opts.partitionPruned ?? false
-  const mode = opts.partitionPredicateMode ?? 'bare'
+  const mode = opts.partitionPredicateMode
+    ?? (opts.partitionKeyEncoding === 'string' ? 'r2-sql-concat' : 'bare')
   switch (query.archetype) {
     case 'site-daily-timeseries':
       return buildSiteDailyTimeseries(query, pruned, mode)

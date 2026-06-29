@@ -6,6 +6,7 @@ import type {
   CountriesResponse,
   GscRowQueryResponse,
   IndexingDiagnostics,
+  IndexingDiagnosticsParams,
   IndexingInspectRateLimited,
   IndexingInspectRequest,
   IndexingInspectResponse,
@@ -114,6 +115,18 @@ function indexingUrlsQuery(params: { limit?: number, offset?: number, status?: I
   return query
 }
 
+function indexingDiagnosticsQuery(params: IndexingDiagnosticsParams = {}): Record<string, string | number> {
+  const query: Record<string, string | number> = {}
+  if (params.sampleIssues) {
+    query.sampleIssues = Array.isArray(params.sampleIssues)
+      ? params.sampleIssues.join(',')
+      : params.sampleIssues
+  }
+  if (params.sampleLimit != null)
+    query.sampleLimit = params.sampleLimit
+  return query
+}
+
 export function createAnalyticsClient(options: AnalyticsClientOptions = {}): AnalyticsClient {
   const { request, shouldValidate } = createHostedRequester(options, { apiBase: '' })
 
@@ -161,8 +174,9 @@ export function createAnalyticsClient(options: AnalyticsClientOptions = {}): Ana
     getIndexingUrls(siteId: string, params = {}) {
       return request<IndexingUrlsResponse>(analyticsRoutes.site.indexingUrls(siteId), { query: indexingUrlsQuery(params) }, analyticsEndpointSchemas.analyticsIndexingUrls.response)
     },
-    getIndexingDiagnostics(siteId: string) {
-      return request<IndexingDiagnostics>(analyticsRoutes.site.indexingDiagnostics(siteId), {}, analyticsEndpointSchemas.analyticsIndexingDiagnostics.response)
+    getIndexingDiagnostics(siteId: string, params: IndexingDiagnosticsParams = {}) {
+      const parsed = shouldValidate('request') ? analyticsEndpointSchemas.analyticsIndexingDiagnostics.query.parse(params) : params
+      return request<IndexingDiagnostics>(analyticsRoutes.site.indexingDiagnostics(siteId), { query: indexingDiagnosticsQuery(parsed) }, analyticsEndpointSchemas.analyticsIndexingDiagnostics.response)
     },
     requestIndexingInspect(siteId: string, body: IndexingInspectRequest) {
       const parsed = shouldValidate('request') ? analyticsEndpointSchemas.analyticsIndexingInspect.body.parse(body) : body

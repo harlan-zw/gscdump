@@ -56,12 +56,7 @@ export interface GscApiRow {
 }
 
 export interface IngestOptions {
-  /**
-   * Canonical form of a query string, stored alongside `query` as
-   * `query_canonical`. Site-specific (e.g. synonym groups, stemming); if
-   * omitted, `query_canonical` is null. Applied to `queries` +
-   * `page_queries` tables only.
-   */
+  /** @deprecated Canonical query data is built through query_dim, not fact rows. */
   normalizeQuery?: (query: string) => string | null | undefined
   /** Date for one-day `searchAppearance` total queries, whose keys omit date. */
   date?: string
@@ -125,10 +120,9 @@ export function transformGscRow(
   if (table === 'queries') {
     const query = String(keys[0] ?? '')
     const date = String(keys[1] ?? '')
-    const query_canonical = options.normalizeQuery?.(query) ?? null
     return {
       date,
-      row: { query, query_canonical, date, clicks, impressions, sum_position },
+      row: { query, date, clicks, impressions, sum_position },
     }
   }
 
@@ -175,20 +169,18 @@ export function transformGscRow(
   if (table === 'search_appearance_queries') {
     const query = String(keys[0] ?? '')
     const date = String(keys[1] ?? '')
-    const query_canonical = options.normalizeQuery?.(query) ?? null
     return {
       date,
-      row: { searchAppearance: String(options.searchAppearance ?? ''), query, query_canonical, date, clicks, impressions, sum_position },
+      row: { searchAppearance: String(options.searchAppearance ?? ''), query, date, clicks, impressions, sum_position },
     }
   }
 
   if (table === 'search_appearance_page_queries') {
     const query = String(keys[1] ?? '')
     const date = String(keys[2] ?? '')
-    const query_canonical = options.normalizeQuery?.(query) ?? null
     return {
       date,
-      row: { searchAppearance: String(options.searchAppearance ?? ''), url: toPath(String(keys[0] ?? '')), query, query_canonical, date, clicks, impressions, sum_position },
+      row: { searchAppearance: String(options.searchAppearance ?? ''), url: toPath(String(keys[0] ?? '')), query, date, clicks, impressions, sum_position },
     }
   }
 
@@ -202,13 +194,11 @@ export function transformGscRow(
   // page_queries
   const query = String(keys[1] ?? '')
   const date = String(keys[2] ?? '')
-  const query_canonical = options.normalizeQuery?.(query) ?? null
   return {
     date,
     row: {
       url: toPath(String(keys[0] ?? '')),
       query,
-      query_canonical,
       date,
       clicks,
       impressions,

@@ -59,14 +59,14 @@ describe('createR2SqlClient', () => {
     token: 'tok',
   }
 
-  it('runArchetype POSTs inlined SQL with the resolved table reference', async () => {
+  it('runArchetype POSTs inlined int-catalog SQL with the resolved table reference by default', async () => {
     const fetchImpl = fakeFetch({
       success: true,
       result: { rows: [{ date: '2026-01-01', clicks: 10 }] },
     })
     const client = createR2SqlClient({ ...config, fetchImpl })
     const q: SiteDailyTimeseriesQuery = {
-      siteId: 'site-1',
+      siteId: '42',
       searchType: 'web',
       range,
       archetype: 'site-daily-timeseries',
@@ -83,20 +83,84 @@ describe('createR2SqlClient', () => {
     expect(sentSql).toContain('FROM gsc.dates')
     // params inlined — no ? left
     expect(sentSql).not.toContain('?')
-    expect(sentSql).toContain('\'site-1\'')
-    // identity-partition equality workaround applied
-    expect(sentSql).toContain('CONCAT(site_id, \'\') = \'site-1\'')
-    expect(sentSql).toContain('CONCAT(search_type, \'\') = \'web\'')
+    expect(sentSql).toContain('site_id = 42')
+    expect(sentSql).toContain('search_type = 1')
+    // int-catalog default: bare predicates, no string materialization workaround
+    expect(sentSql).not.toContain('CONCAT(site_id')
+    expect(sentSql).not.toContain('CONCAT(search_type')
     // bearer auth header present
     expect((opts!.headers as Record<string, string>).authorization).toBe('Bearer tok')
   })
 
-  it('runPlan still rewrites bare partition equality for external plans', async () => {
+  it('runArchetype uses CONCAT predicates for explicit legacy string catalogs', async () => {
+    const fetchImpl = fakeFetch({
+      success: true,
+      result: { rows: [] },
+    })
+    const client = createR2SqlClient({ ...config, fetchImpl, partitionKeyEncoding: 'string' })
+    const q: SiteDailyTimeseriesQuery = {
+      siteId: 'site-1',
+      searchType: 'web',
+      range,
+      archetype: 'site-daily-timeseries',
+      metrics: ['clicks'],
+    }
+    await client.runArchetype(q)
+
+    const [, opts] = fetchImpl.mock.calls[0]!
+    const sentSql = JSON.parse(opts!.body as string).query as string
+    expect(sentSql).toContain('CONCAT(site_id, \'\') = \'site-1\'')
+    expect(sentSql).toContain('CONCAT(search_type, \'\') = \'web\'')
+  })
+
+  it('runArchetype maps public site ids for int catalogs when a mapper is provided', async () => {
+    const fetchImpl = fakeFetch({
+      success: true,
+      result: { rows: [] },
+    })
+    const client = createR2SqlClient({
+      ...config,
+      fetchImpl,
+      partitionSiteId: siteId => (siteId === 'site-1' ? 42 : siteId),
+    })
+    const q: SiteDailyTimeseriesQuery = {
+      siteId: 'site-1',
+      searchType: 'discover',
+      range,
+      archetype: 'site-daily-timeseries',
+      metrics: ['clicks'],
+    }
+    await client.runArchetype(q)
+
+    const [, opts] = fetchImpl.mock.calls[0]!
+    const sentSql = JSON.parse(opts!.body as string).query as string
+    expect(sentSql).toContain('site_id = 42')
+    expect(sentSql).toContain('search_type = 5')
+  })
+
+  it('runArchetype fails fast for int catalogs without a numeric site id', async () => {
     const fetchImpl = fakeFetch({
       success: true,
       result: { rows: [] },
     })
     const client = createR2SqlClient({ ...config, fetchImpl })
+    const q: SiteDailyTimeseriesQuery = {
+      siteId: 'site-1',
+      searchType: 'web',
+      range,
+      archetype: 'site-daily-timeseries',
+      metrics: ['clicks'],
+    }
+    expect(() => client.runArchetype(q)).toThrow(/numeric site_id/)
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('runPlan rewrites bare partition equality for explicit legacy string catalogs', async () => {
+    const fetchImpl = fakeFetch({
+      success: true,
+      result: { rows: [] },
+    })
+    const client = createR2SqlClient({ ...config, fetchImpl, partitionKeyEncoding: 'string' })
     await client.runPlan({
       table: 'dates',
       sql: `SELECT date FROM {{TABLE}} WHERE site_id = ? AND search_type = ? AND date BETWEEN ? AND ?`,
@@ -107,6 +171,26 @@ describe('createR2SqlClient', () => {
     const sentSql = JSON.parse(opts!.body as string).query as string
     expect(sentSql).toContain('CONCAT(site_id, \'\') = \'site-1\'')
     expect(sentSql).toContain('CONCAT(search_type, \'\') = \'web\'')
+  })
+
+  it('runPlan keeps bare partition equality by default for int catalogs', async () => {
+    const fetchImpl = fakeFetch({
+      success: true,
+      result: { rows: [] },
+    })
+    const client = createR2SqlClient({ ...config, fetchImpl })
+    await client.runPlan({
+      table: 'dates',
+      sql: `SELECT date FROM {{TABLE}} WHERE site_id = ? AND search_type = ? AND date BETWEEN ? AND ?`,
+      params: [42, 1, range.start, range.end],
+    })
+
+    const [, opts] = fetchImpl.mock.calls[0]!
+    const sentSql = JSON.parse(opts!.body as string).query as string
+    expect(sentSql).toContain('site_id = 42')
+    expect(sentSql).toContain('search_type = 1')
+    expect(sentSql).not.toContain('CONCAT(site_id')
+    expect(sentSql).not.toContain('CONCAT(search_type')
   })
 
   it('normalizes the columns+data envelope shape', async () => {

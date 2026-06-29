@@ -7,6 +7,7 @@ import type { Grain } from '@gscdump/contracts'
 import type { BuilderState } from 'gscdump/query'
 import type { SearchType, TableName } from '../storage'
 import type { ComparisonFilter } from './types'
+import { buildLogicalPlan } from 'gscdump/query/plan'
 import { enumeratePartitions } from '../planner'
 import { canonicalRollupCovers } from './canonical-source'
 import { buildExtrasQueries, buildTotalsSql, resolveComparisonSQL, resolveToSQLOptimized } from './compile'
@@ -38,6 +39,23 @@ export interface RunSQLFn {
   }): Promise<{ rows: Array<Record<string, unknown>> }>
 }
 
+export interface CanonicalQueryDimSource {
+  /** Object keys for the versioned query_dim parquet. */
+  keys: string[]
+  normalizerVersion: number
+  intentVersion?: number
+  builtAt?: number
+}
+
+export interface PrimaryColumnarSource {
+  /** Pre-resolved compacted/Iceberg parquet object keys for the requested fact table. */
+  keys: string[]
+  /** Oldest covered date (`YYYY-MM-DD`). Omit to assert the source covers all older dates. */
+  coversFrom?: string
+  /** Newest covered date (`YYYY-MM-DD`). Omit to assert the source covers the current tail. */
+  coversThrough?: string
+}
+
 /**
  * Optional overlay that serves a resolver extra (e.g. canonical-variant
  * grouping, keyed `'canonicalExtras'`) from a precomputed source — typically a
@@ -60,32 +78,92 @@ export interface RunOptimizedQueryOptions {
   /** Overlay tried per extra before the live SQL; absent → today's live path. */
   resolveExtra?: ResolveExtraFn
   /**
-   * Opt-in canonical-primary correctness: group/compare `queryCanonical` as a
-   * total key (NULL/'' folds to the raw `query`). Default false = legacy raw
-   * nullable column. See ADR-0018.
+   * Deprecated compatibility flag. Canonical reads now derive from query_dim,
+   * not a nullable fact-table `query_canonical` column.
    */
   canonicalFallback?: boolean
   /**
+   * Versioned query dimension backing canonical reads over fact rows. Required
+   * whenever a query groups or filters by `queryCanonical`; a canonical rollup
+   * source may carry the same metadata/key set via `canonicalSource.queryDim`.
+   */
+  queryDim?: CanonicalQueryDimSource
+  /**
+   * Primary fact-file source for consumer reads. Callers pass compacted or
+   * Iceberg data-file keys with explicit coverage metadata; raw daily
+   * partitions are only used when `primarySourceFallback: 'raw'` is set.
+   */
+  primarySource?: PrimaryColumnarSource
+  /**
+   * Explicit compatibility escape hatch for raw daily shards. Default is
+   * strict: missing/empty/stale primary coverage fails with
+   * `QuerySourceCoverageError`.
+   */
+  primarySourceFallback?: 'raw'
+  /**
    * Opt-in canonical-primary performance (ADR-0018 Gap 2): object keys of the
    * `query_canonical_daily` rollup parquet(s). When supplied AND the query is
-   * coverable (`canonicalRollupCovers`) AND `canonicalFallback` is on AND the
-   * window is within the rollup's coverage, the MAIN query reads these
+   * coverable (`canonicalRollupCovers`) AND the window is within the rollup's
+   * coverage, the MAIN query reads these
    * pre-summed `(query_canonical × date)` rows instead of re-aggregating raw
-   * partitions; variant extras still read raw. Ignored (live path) on any miss,
-   * so a mis-wired host degrades to correct-but-slow, never wrong.
-   *
-   * `canonicalFallback` is REQUIRED: the rollup is built with
-   * `COALESCE(NULLIF(query_canonical, ''), query)` (fallback semantics), so
-   * serving it to a legacy (`canonicalFallback: false`) caller would change
-   * NULL/'' rows from legacy buckets to raw-query keys. The rollup is already
-   * null-free, so the rollup READ itself runs without fallback.
+   * partitions. Variant extras still need fact-grain rows, so they read
+   * `primarySource` when present and raw partitions only via
+   * `primarySourceFallback: 'raw'`.
    *
    * `coversThrough` (ISO `YYYY-MM-DD`, the rollup's newest covered date) gates
    * staleness: the source is used only when `dateRange.endDate <= coversThrough`,
-   * else the live path serves the window so the recent tail is never silently
-   * undercounted. Omit to assert full coverage (use with care).
+   * else strict mode fails so the recent tail is never silently undercounted.
+   * Omit to assert full coverage (use with care).
    */
-  canonicalSource?: { keys: string[], coversThrough?: string }
+  canonicalSource?: {
+    keys: string[]
+    coversThrough?: string
+    queryDim?: CanonicalQueryDimSource
+  }
+  /**
+   * @deprecated Canonical-source misses are recorded on `source.fallbacks`;
+   * raw daily fallback is controlled by `primarySourceFallback: 'raw'`.
+   */
+  canonicalSourceFallback?: 'raw'
+  /** Optional version gates for the query dimension backing `canonicalSource`. */
+  canonicalRequirements?: {
+    normalizerVersion?: number
+    intentVersion?: number
+  }
+}
+
+export type QuerySourceKind = 'canonical-rollup' | 'primary-columnar' | 'raw-partitions'
+
+export type QuerySourceFallbackKind
+  = | 'primary-source-missing'
+    | 'primary-source-empty'
+    | 'primary-source-missing-coverage'
+    | 'primary-source-stale-coverage'
+    | 'canonical-source-missing'
+    | 'canonical-source-empty'
+    | 'canonical-source-not-coverable'
+    | 'canonical-source-stale-coverage'
+    | 'query-dim-missing'
+    | 'query-dim-empty'
+    | 'query-dim-stale-version'
+
+export interface QuerySourceFallback {
+  kind: QuerySourceFallbackKind
+  message: string
+}
+
+export interface QuerySourceDecision {
+  kind: QuerySourceKind
+  fallback?: QuerySourceFallback
+  fallbacks?: QuerySourceFallback[]
+}
+
+export class QuerySourceCoverageError extends Error {
+  override name = 'QuerySourceCoverageError'
+
+  constructor(readonly fallback: QuerySourceFallback) {
+    super(fallback.message)
+  }
 }
 
 export interface OptimizedQueryResult {
@@ -93,12 +171,15 @@ export interface OptimizedQueryResult {
   totalCount: number
   totals: { clicks: number, impressions: number, ctr: number, position: number }
   extras: Array<{ key: string, rows: Array<Record<string, unknown>> }>
+  source: QuerySourceDecision
+  extraSource?: QuerySourceDecision
 }
 
 export interface ComparisonQueryResult {
   rows: Array<Record<string, unknown>>
   totalCount: number
   totals: Record<string, unknown>
+  source: QuerySourceDecision
 }
 
 // The rollup is full-history but may lag the newest synced day. Serve it only
@@ -108,12 +189,199 @@ function canonicalSourceWithinCoverage(source: { coversThrough?: string }, windo
   return source.coversThrough === undefined || windowEnd <= source.coversThrough
 }
 
+function querySourceDecision(kind: QuerySourceKind, fallbacks: QuerySourceFallback[] = []): QuerySourceDecision {
+  const first = fallbacks[0]
+  return {
+    kind,
+    ...(first ? { fallback: first, fallbacks } : {}),
+  }
+}
+
+function canonicalFeatureRequested(state: BuilderState, capabilities: ReturnType<typeof createParquetResolverAdapter>['capabilities']): boolean {
+  const plan = buildLogicalPlan(state, capabilities)
+  return plan.groupByDimensions.includes('queryCanonical')
+    || plan.dimensionFilters.some(f => f.dimension === 'queryCanonical')
+}
+
+function fallback(kind: QuerySourceFallbackKind, message: string): QuerySourceFallback {
+  return { kind, message }
+}
+
+function staleQueryDim(
+  source: CanonicalQueryDimSource,
+  requirements: RunOptimizedQueryOptions['canonicalRequirements'] | undefined,
+): QuerySourceFallback | undefined {
+  if (requirements?.normalizerVersion !== undefined && source.normalizerVersion !== requirements.normalizerVersion) {
+    return fallback(
+      'query-dim-stale-version',
+      `canonical query dimension normalizer v${source.normalizerVersion} does not match required v${requirements.normalizerVersion}`,
+    )
+  }
+  if (requirements?.intentVersion !== undefined && source.intentVersion !== requirements.intentVersion) {
+    return fallback(
+      'query-dim-stale-version',
+      `canonical query dimension intent v${source.intentVersion ?? 'missing'} does not match required v${requirements.intentVersion}`,
+    )
+  }
+  return undefined
+}
+
+function canonicalQueryDim(options: RunOptimizedQueryOptions): CanonicalQueryDimSource | undefined {
+  return options.queryDim ?? options.canonicalSource?.queryDim
+}
+
+function queryDimMiss(
+  source: CanonicalQueryDimSource | undefined,
+  requirements: RunOptimizedQueryOptions['canonicalRequirements'] | undefined,
+): QuerySourceFallback | undefined {
+  if (!source) {
+    return fallback(
+      'query-dim-missing',
+      'canonical query requires queryDim; fact tables do not carry query_canonical',
+    )
+  }
+  if (source.keys.length === 0) {
+    return fallback(
+      'query-dim-empty',
+      'queryDim has no parquet keys; refusing to run canonical query from an empty dimension',
+    )
+  }
+  return staleQueryDim(source, requirements)
+}
+
+function decideCanonicalSource(
+  state: BuilderState,
+  capabilities: ReturnType<typeof createParquetResolverAdapter>['capabilities'],
+  options: RunOptimizedQueryOptions,
+  windowEnd: string,
+): QuerySourceDecision {
+  const canonicalRequested = canonicalFeatureRequested(state, capabilities)
+  if (!canonicalRequested) {
+    return querySourceDecision('raw-partitions')
+  }
+
+  const dimMiss = queryDimMiss(canonicalQueryDim(options), options.canonicalRequirements)
+  if (dimMiss)
+    throw new QuerySourceCoverageError(dimMiss)
+
+  const source = options.canonicalSource
+  const miss = (() => {
+    if (!source) {
+      return fallback(
+        'canonical-source-missing',
+        'canonical rollup source missing; falling back to primary facts joined through query_dim',
+      )
+    }
+    if (source.keys.length === 0) {
+      return fallback(
+        'canonical-source-empty',
+        'canonicalSource has no parquet keys; falling back to primary facts joined through query_dim',
+      )
+    }
+    if (!canonicalSourceWithinCoverage(source, windowEnd)) {
+      return fallback(
+        'canonical-source-stale-coverage',
+        `canonicalSource covers through ${source.coversThrough}, but query needs ${windowEnd}`,
+      )
+    }
+    if (!canonicalRollupCovers(state, capabilities)) {
+      return fallback(
+        'canonical-source-not-coverable',
+        'canonicalSource only covers queryCanonical/date reads without raw-grain filters',
+      )
+    }
+    return undefined
+  })()
+
+  if (!miss)
+    return querySourceDecision('canonical-rollup')
+  return querySourceDecision('raw-partitions', [miss])
+}
+
+function primarySourceMiss(
+  source: PrimaryColumnarSource | undefined,
+  dateRange: { startDate: string, endDate: string },
+): QuerySourceFallback | undefined {
+  if (!source) {
+    return fallback(
+      'primary-source-missing',
+      'primary columnar source is required; pass primarySourceFallback: "raw" to use raw daily partitions explicitly',
+    )
+  }
+  if (source.keys.length === 0) {
+    return fallback(
+      'primary-source-empty',
+      'primarySource has no parquet keys; refusing to return partial or empty data implicitly',
+    )
+  }
+  if (source.coversFrom !== undefined && dateRange.startDate < source.coversFrom) {
+    return fallback(
+      'primary-source-missing-coverage',
+      `primarySource covers from ${source.coversFrom}, but query starts ${dateRange.startDate}`,
+    )
+  }
+  if (source.coversThrough !== undefined && dateRange.endDate > source.coversThrough) {
+    return fallback(
+      'primary-source-stale-coverage',
+      `primarySource covers through ${source.coversThrough}, but query needs ${dateRange.endDate}`,
+    )
+  }
+  return undefined
+}
+
+function decidePrimarySource(
+  options: RunOptimizedQueryOptions,
+  dateRange: { startDate: string, endDate: string },
+  priorFallbacks: QuerySourceFallback[] = [],
+): QuerySourceDecision {
+  const miss = primarySourceMiss(options.primarySource, dateRange)
+  if (!miss)
+    return querySourceDecision('primary-columnar', priorFallbacks)
+
+  const fallbacks = [...priorFallbacks, miss]
+  if (options.primarySourceFallback === 'raw')
+    return querySourceDecision('raw-partitions', fallbacks)
+
+  throw new QuerySourceCoverageError(miss)
+}
+
+function sourceFallbacks(source: QuerySourceDecision): QuerySourceFallback[] {
+  if (source.fallbacks)
+    return source.fallbacks
+  return source.fallback ? [source.fallback] : []
+}
+
 function runArgs(ctx: RunQueryCtx, partitions: string[]): { ctx: { userId: string, siteId: string }, table: RunQueryCtx['table'], fileSets: { FILES: { table: RunQueryCtx['table'], partitions: string[] } }, searchType?: RunQueryCtx['searchType'] } {
   return {
     ctx: { userId: ctx.userId, siteId: ctx.siteId },
     table: ctx.table,
     fileSets: { FILES: { table: ctx.table, partitions } },
     ...(ctx.searchType !== undefined ? { searchType: ctx.searchType } : {}),
+  }
+}
+
+function primaryRunArgs(ctx: RunQueryCtx, keys: string[]): { ctx: { userId: string, siteId: string }, table: RunQueryCtx['table'], fileSets: { FILES: { table: RunQueryCtx['table'], keys: string[] } }, searchType?: RunQueryCtx['searchType'] } {
+  return {
+    ctx: { userId: ctx.userId, siteId: ctx.siteId },
+    table: ctx.table,
+    fileSets: { FILES: { table: ctx.table, keys } },
+    ...(ctx.searchType !== undefined ? { searchType: ctx.searchType } : {}),
+  }
+}
+
+function withQueryDimFileSet<T extends { fileSets: Record<string, { table: TableName, partitions?: string[], keys?: string[] }> }>(
+  args: T,
+  queryDim: CanonicalQueryDimSource | undefined,
+  enabled: boolean,
+): T {
+  if (!enabled || !queryDim)
+    return args
+  return {
+    ...args,
+    fileSets: {
+      ...args.fileSets,
+      QUERY_DIM: { table: 'queries', keys: queryDim.keys },
+    },
   }
 }
 
@@ -129,28 +397,40 @@ export async function runOptimizedQuery(
 
   // Decide whether the MAIN query can read the pre-summed canonical rollup.
   // Capabilities don't depend on the fallback flag, so a probe adapter is fine.
-  const probe = createParquetResolverAdapter({ canonicalFallback: options.canonicalFallback ?? false })
-  const useCanonicalSource = options.canonicalSource !== undefined
-    // Rollup carries fallback (COALESCE) semantics — only valid when opted in.
-    && (options.canonicalFallback ?? false)
-    // Never serve a window newer than the rollup's coverage (silent undercount).
-    && canonicalSourceWithinCoverage(options.canonicalSource, dateRange.endDate)
-    && canonicalRollupCovers(state, probe.capabilities)
+  const probe = createParquetResolverAdapter()
+  const canonicalRequested = canonicalFeatureRequested(state, probe.capabilities)
+  const canonicalDecision = decideCanonicalSource(state, probe.capabilities, options, dateRange.endDate)
+  const useCanonicalSource = canonicalDecision.kind === 'canonical-rollup'
+  const source = useCanonicalSource
+    ? canonicalDecision
+    : decidePrimarySource(options, dateRange, sourceFallbacks(canonicalDecision))
 
   // Rollup is already null-free → no fallback needed (and it lacks the raw
   // `query` column the fallback COALESCE would reference).
   const adapter = useCanonicalSource
-    ? createParquetResolverAdapter({ canonicalFallback: false })
+    ? createParquetResolverAdapter({ queryCanonicalSource: 'column' })
     : probe
 
   const optimized = resolveToSQLOptimized(state, { adapter, siteId: undefined })
-  const extras = buildExtrasQueries(state, { adapter, siteId: undefined })
+  const extras = buildExtrasQueries(state, { adapter: probe, siteId: undefined })
+  const extraSource = extras.length > 0
+    ? (useCanonicalSource ? decidePrimarySource(options, dateRange) : source)
+    : undefined
 
-  // Main reads the rollup keys when eligible; extras always read raw partitions
-  // (variant enrichment needs the per-query rows the rollup collapsed away).
-  const mainArgs = useCanonicalSource
+  // Main reads rollup keys when eligible. Extras need fact-grain rows, so they
+  // use the primary fact source when present and raw partitions only through an
+  // explicit fallback.
+  const queryDim = canonicalQueryDim(options)
+  const mainArgsBase = useCanonicalSource
     ? { ...base, fileSets: { FILES: { table: ctx.table, keys: options.canonicalSource!.keys } } }
+    : source.kind === 'primary-columnar'
+      ? primaryRunArgs(ctx, options.primarySource!.keys)
+      : base
+  const mainArgs = withQueryDimFileSet(mainArgsBase, queryDim, canonicalRequested && !useCanonicalSource)
+  const extraArgsBase = extraSource?.kind === 'primary-columnar'
+    ? primaryRunArgs(ctx, options.primarySource!.keys)
     : base
+  const extraArgs = withQueryDimFileSet(extraArgsBase, queryDim, extras.length > 0)
 
   // Each extra prefers the optional overlay (e.g. a materialised rollup); a
   // `null` result means "not available / declined" and we run the live SQL.
@@ -164,7 +444,7 @@ export async function runOptimizedQuery(
         : null
       return overlaid !== null
         ? { rows: overlaid }
-        : runSQL({ ...base, sql: e.sql, params: e.params })
+        : runSQL({ ...extraArgs, sql: e.sql, params: e.params })
     }),
   ])
 
@@ -192,6 +472,8 @@ export async function runOptimizedQuery(
     totalCount,
     totals,
     extras: extras.map((e, i) => ({ key: e.key, rows: extrasRows[i]!.rows })),
+    source,
+    ...(extraSource ? { extraSource } : {}),
   }
 }
 
@@ -205,33 +487,40 @@ export async function runComparisonQuery(
     previous: { startDate: string, endDate: string }
   },
   filter?: ComparisonFilter,
-  options: { canonicalFallback?: boolean, canonicalSource?: { keys: string[], coversThrough?: string } } = {},
+  options: RunOptimizedQueryOptions = {},
 ): Promise<ComparisonQueryResult> {
-  const probe = createParquetResolverAdapter({ canonicalFallback: options.canonicalFallback ?? false })
-  // Both windows must be coverable; the date-grained rollup serves both from
-  // the same keys. Requires fallback opt-in (rollup has COALESCE semantics) and
-  // coverage through the newer window's end. Otherwise live raw aggregation.
-  const useCanonicalSource = options.canonicalSource !== undefined
-    && (options.canonicalFallback ?? false)
-    && canonicalSourceWithinCoverage(options.canonicalSource, windows.current.endDate > windows.previous.endDate ? windows.current.endDate : windows.previous.endDate)
-    && canonicalRollupCovers(current, probe.capabilities)
-    && canonicalRollupCovers(previous, probe.capabilities)
-  const adapter = useCanonicalSource
-    ? createParquetResolverAdapter({ canonicalFallback: false })
-    : probe
-  const comparison = resolveComparisonSQL(current, previous, { adapter, siteId: undefined }, filter)
-  const totals = buildTotalsSql(current, { adapter, siteId: undefined })
-
+  const probe = createParquetResolverAdapter()
+  const maxWindowEnd = windows.current.endDate > windows.previous.endDate ? windows.current.endDate : windows.previous.endDate
+  const currentSource = decideCanonicalSource(current, probe.capabilities, options, maxWindowEnd)
+  const previousSource = decideCanonicalSource(previous, probe.capabilities, options, maxWindowEnd)
   const startDate = windows.current.startDate < windows.previous.startDate
     ? windows.current.startDate
     : windows.previous.startDate
   const endDate = windows.current.endDate > windows.previous.endDate
     ? windows.current.endDate
     : windows.previous.endDate
+  const comparisonRange = { startDate, endDate }
+  const source: QuerySourceDecision = currentSource.kind === 'canonical-rollup' && previousSource.kind === 'canonical-rollup'
+    ? querySourceDecision('canonical-rollup')
+    : decidePrimarySource(options, comparisonRange, [
+        ...sourceFallbacks(currentSource),
+        ...sourceFallbacks(previousSource),
+      ])
+  const useCanonicalSource = source.kind === 'canonical-rollup'
+  const adapter = useCanonicalSource
+    ? createParquetResolverAdapter({ queryCanonicalSource: 'column' })
+    : probe
+  const comparison = resolveComparisonSQL(current, previous, { adapter, siteId: undefined }, filter)
+  const totals = buildTotalsSql(current, { adapter, siteId: undefined })
   const partitions = enumeratePartitions(startDate, endDate)
-  const base = useCanonicalSource
+  const baseRaw = useCanonicalSource
     ? { ...runArgs(ctx, partitions), fileSets: { FILES: { table: ctx.table, keys: options.canonicalSource!.keys } } }
-    : runArgs(ctx, partitions)
+    : source.kind === 'primary-columnar'
+      ? primaryRunArgs(ctx, options.primarySource!.keys)
+      : runArgs(ctx, partitions)
+  const base = withQueryDimFileSet(baseRaw, canonicalQueryDim(options), !useCanonicalSource && (
+    canonicalFeatureRequested(current, probe.capabilities) || canonicalFeatureRequested(previous, probe.capabilities)
+  ))
 
   const main = await runSQL({ ...base, sql: comparison.sql, params: comparison.params })
   const count = await runSQL({ ...base, sql: comparison.countSql, params: comparison.countParams })
@@ -241,5 +530,6 @@ export async function runComparisonQuery(
     rows: main.rows,
     totalCount: Number(count.rows[0]?.total ?? 0),
     totals: (totalsRow.rows[0] ?? {}) as Record<string, unknown>,
+    source,
   }
 }

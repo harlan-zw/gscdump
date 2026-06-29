@@ -16,7 +16,7 @@ export interface LogicalDatasetDefinition {
 export const DIMENSION_SURFACES: Record<Dimension, readonly DimensionSurface[]> = {
   page: ['api', 'stored'],
   query: ['api', 'stored'],
-  queryCanonical: ['stored', 'derived'],
+  queryCanonical: ['derived'],
   country: ['api', 'stored'],
   device: ['api', 'stored'],
   searchAppearance: ['api', 'stored'],
@@ -34,7 +34,7 @@ export const LOGICAL_DATASETS: Record<LogicalDataset, LogicalDatasetDefinition> 
   queries: {
     dimensions: {
       query: { column: 'query', surfaces: ['api', 'stored'] },
-      queryCanonical: { column: 'query_canonical', surfaces: ['stored', 'derived'] },
+      queryCanonical: { column: 'query_canonical', surfaces: ['derived'] },
       date: { column: 'date', surfaces: ['api', 'stored'] },
     },
   },
@@ -42,7 +42,7 @@ export const LOGICAL_DATASETS: Record<LogicalDataset, LogicalDatasetDefinition> 
     dimensions: {
       page: { column: 'url', surfaces: ['api', 'stored'] },
       query: { column: 'query', surfaces: ['api', 'stored'] },
-      queryCanonical: { column: 'query_canonical', surfaces: ['stored', 'derived'] },
+      queryCanonical: { column: 'query_canonical', surfaces: ['derived'] },
       date: { column: 'date', surfaces: ['api', 'stored'] },
     },
   },
@@ -78,7 +78,7 @@ export const LOGICAL_DATASETS: Record<LogicalDataset, LogicalDatasetDefinition> 
     dimensions: {
       searchAppearance: { column: 'searchAppearance', surfaces: ['stored'] },
       query: { column: 'query', surfaces: ['stored'] },
-      queryCanonical: { column: 'query_canonical', surfaces: ['stored', 'derived'] },
+      queryCanonical: { column: 'query_canonical', surfaces: ['derived'] },
       date: { column: 'date', surfaces: ['stored'] },
     },
   },
@@ -87,7 +87,7 @@ export const LOGICAL_DATASETS: Record<LogicalDataset, LogicalDatasetDefinition> 
       searchAppearance: { column: 'searchAppearance', surfaces: ['stored'] },
       page: { column: 'url', surfaces: ['stored'] },
       query: { column: 'query', surfaces: ['stored'] },
-      queryCanonical: { column: 'query_canonical', surfaces: ['stored', 'derived'] },
+      queryCanonical: { column: 'query_canonical', surfaces: ['derived'] },
       date: { column: 'date', surfaces: ['stored'] },
     },
   },

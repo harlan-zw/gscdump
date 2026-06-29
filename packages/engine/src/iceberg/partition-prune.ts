@@ -21,7 +21,7 @@
  */
 
 import type { PartitionKeyEncoding } from './schema'
-import { ICEBERG_PARTITION_SPEC } from './schema'
+import { DEFAULT_PARTITION_KEY_ENCODING, ICEBERG_PARTITION_SPEC } from './schema'
 
 /**
  * Minimal shape of an icebird manifest-list `partitions` field-summary. icebird
@@ -92,7 +92,7 @@ export function buildPartitionFilter(
   siteId: string | number,
   searchType: string | number,
   wantedMonths: ReadonlySet<number>,
-  encoding: PartitionKeyEncoding = 'string',
+  encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING,
 ): ManifestPartitionFilter {
   return (partitions): boolean => {
     const parts = partitions

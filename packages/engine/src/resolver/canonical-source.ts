@@ -15,9 +15,8 @@ const ALLOWED_FILTER_DIMS = new Set(['date', 'queryCanonical'])
 /**
  * True when `plan` can be served from the canonical-grained rollup instead of
  * the raw `queries` fact partitions. Conservative: anything that would read a
- * dropped column or the raw row grain disqualifies the query, so a false
- * negative just falls back to live aggregation (correct, slower) — never wrong
- * data.
+ * dropped column or the raw row grain disqualifies the query. Callers decide
+ * whether that miss is a typed raw fallback or a hard coverage error.
  */
 export function planCoveredByCanonicalRollup(plan: LogicalQueryPlan): boolean {
   // Rollup is built from the `queries` table only.

@@ -28,7 +28,10 @@ function env(key: string): string {
 }
 
 const argv = process.argv.slice(2)
-function arg(f: string) { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : undefined }
+function arg(f: string) {
+  const i = argv.indexOf(f)
+  return i >= 0 ? argv[i + 1] : undefined
+}
 const team = arg('--team')
 const intId = Number.parseInt(arg('--int-id') ?? '', 10)
 const apply = argv.includes('--apply')
@@ -66,7 +69,10 @@ const results = await deleteSiteFromShard({
 })
 let bad = false
 for (const r of results) {
-  if (r.error) { bad = true; console.log(`  ✗ ${r.table.padEnd(14)} ${r.error}`) }
+  if (r.error) {
+    bad = true
+    console.log(`  ✗ ${r.table.padEnd(14)} ${r.error}`)
+  }
   else {
     console.log(`  ✓ ${r.table.padEnd(14)} deleted ${r.rowCount ?? '?'} rows`)
   }

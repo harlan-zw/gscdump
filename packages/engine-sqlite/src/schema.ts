@@ -54,7 +54,6 @@ export const gsc_pages = sqliteTable('gsc_pages', {
 export const gsc_keywords = sqliteTable('gsc_keywords', {
   ...baseCols(),
   query: text('query').notNull(),
-  query_canonical: text('query_canonical'),
   ...metricCols(),
 }, t => [
   index('idx_gsc_keywords_site_date').on(t.site_id, t.date),
@@ -80,7 +79,6 @@ export const gsc_page_keywords = sqliteTable('gsc_page_keywords', {
   ...baseCols(),
   url: text('url').notNull(),
   query: text('query').notNull(),
-  query_canonical: text('query_canonical'),
   ...metricCols(),
 }, t => [
   index('idx_gsc_page_keywords_site_date').on(t.site_id, t.date),
@@ -107,7 +105,6 @@ export const gsc_search_appearance_queries = sqliteTable('gsc_search_appearance_
   ...baseCols(),
   searchAppearance: text('searchAppearance').notNull(),
   query: text('query').notNull(),
-  query_canonical: text('query_canonical'),
   ...metricCols(),
 }, t => [
   index('idx_gsc_search_appearance_queries_site_date').on(t.site_id, t.date),
@@ -118,10 +115,21 @@ export const gsc_search_appearance_page_queries = sqliteTable('gsc_search_appear
   searchAppearance: text('searchAppearance').notNull(),
   url: text('url').notNull(),
   query: text('query').notNull(),
-  query_canonical: text('query_canonical'),
   ...metricCols(),
 }, t => [
   index('idx_gsc_search_appearance_page_queries_site_date').on(t.site_id, t.date),
+])
+
+export const gsc_query_dim = sqliteTable('gsc_query_dim', {
+  site_id: text('site_id').notNull(),
+  query: text('query').notNull(),
+  query_canonical: text('query_canonical').notNull(),
+  normalizer_version: integer('normalizer_version').notNull(),
+  intent_code: integer('intent_code'),
+  intent_version: integer('intent_version'),
+  built_at: integer('built_at'),
+}, t => [
+  index('idx_gsc_query_dim_site_query').on(t.site_id, t.query),
 ])
 
 export const gsc_hourly_pages = sqliteTable('gsc_hourly_pages', {
@@ -145,6 +153,7 @@ export const schema = {
   gsc_search_appearance_queries,
   gsc_search_appearance_page_queries,
   gsc_hourly_pages,
+  gsc_query_dim,
 }
 
 export type Schema = typeof schema
@@ -175,6 +184,7 @@ const GSC_TABLE_TO_LOGICAL: Record<keyof typeof schema, TableName | null> = {
   gsc_search_appearance_queries: 'search_appearance_queries',
   gsc_search_appearance_page_queries: 'search_appearance_page_queries',
   gsc_hourly_pages: 'hourly_pages',
+  gsc_query_dim: null,
 }
 
 const driftSchema = Object.fromEntries(

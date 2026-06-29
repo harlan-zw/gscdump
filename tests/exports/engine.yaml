@@ -132,6 +132,7 @@
   connectIcebergCatalog: function
   createIcebergAppendSink: function
   createIcebergTables: function
+  DEFAULT_PARTITION_KEY_ENCODING: string
   dropIcebergTables: function
   ensureIcebergNamespace: function
   ICEBERG_FIELD_ID_BASE: number
@@ -139,6 +140,7 @@
   ICEBERG_PARTITION_SPEC: object
   ICEBERG_SCHEMAS: object
   ICEBERG_SCHEMAS_INT: object
+  ICEBERG_SCHEMAS_STRING: object
   ICEBERG_TABLES: object
   icebergAppendRetrying: function
   icebergCreateTable: function
@@ -147,6 +149,7 @@
   icebergPartitionSpecFor: function
   icebergSchemaFor: function
   icebergSchemasFor: function
+  icebergSortOrderFor: function
   icebergTableSpec: function
   INT_SEARCH_TYPE: object
   isCommitRateLimited: function
@@ -222,6 +225,7 @@
   metricValue: function
   pgResolverAdapter: object
   planCoveredByCanonicalRollup: function
+  QuerySourceCoverageError: function
   resolveComparisonSQL: function
   resolveToSQL: function
   resolveToSQLOptimized: function
@@ -231,6 +235,7 @@
   UnresolvableDatasetError: function
 ./rollups:
   CANONICAL_ROLLUPS: object
+  DAILY_MAX_WINDOW_DAYS: number
   dailyTotalsRollup: object
   DEFAULT_ROLLUPS: object
   indexingHealthRollup: object
@@ -242,8 +247,12 @@
   queryCanonicalDailyRollup: object
   queryCanonicalVariantsRollup: object
   readLatestRollup: function
+  rebuildCanonicalDailyResumable: function
   rebuildDailyFromHourly: function
   rebuildRollups: function
+  ROLLUP_PAGE_ROWS: number
+  ROLLUP_PAGE_ROWS_DAILY: number
+  ROLLUP_PAGE_ROWS_WIDE: number
   rollupKey: function
   rollupParquetKey: function
   runWindowed: function
@@ -282,7 +291,12 @@
   createScopedHelpers: function
   mergeScope: function
 ./sink-node:
+  createIcebergOverwriteWriter: function
   createLocalIcebergSink: function
+  deleteSiteFromShard: function
+  httpBackend: function
+  overwriteWriterAsSink: function
+  subprocessBackend: function
 ./snapshot: {}
 ./source:
   AttachedTableMissingError: function

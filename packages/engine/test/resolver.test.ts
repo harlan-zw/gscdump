@@ -143,8 +143,8 @@ describe('createParquetResolverAdapter', () => {
     expect(r.sql).not.toContain('INSTR')
   })
 
-  it('applies canonical fallback to queryCanonical predicates', () => {
-    const adapter = createParquetResolverAdapter({ canonicalFallback: true })
+  it('derives queryCanonical predicates from QUERY_DIM', () => {
+    const adapter = createParquetResolverAdapter()
     const r = resolveToSQLOptimized(state({
       dimensions: ['queryCanonical'],
       filter: {
@@ -154,8 +154,9 @@ describe('createParquetResolverAdapter', () => {
         ],
       } as any,
     }), { adapter })
-    const coalesces = r.sql.match(/COALESCE\(NULLIF\("queries"\."query_canonical"/g) ?? []
-    expect(coalesces).toHaveLength(3)
+    expect(r.sql).toContain('LEFT JOIN read_parquet({{QUERY_DIM}}, union_by_name = true) AS "query_dim"')
+    expect(r.sql).toContain('COALESCE("query_dim"."query_canonical", "queries"."query")')
+    expect(r.sql).not.toContain('"queries"."query_canonical"')
     expect(r.params).toContain('bar')
   })
 
@@ -311,8 +312,8 @@ describe('createIcebergResolverAdapter', () => {
 })
 
 describe('createR2SqlResolverAdapter', () => {
-  it('uses CONCAT partition predicates for string-encoded R2 SQL catalogs', () => {
-    const adapter = createR2SqlResolverAdapter()
+  it('uses CONCAT partition predicates for explicit string-encoded R2 SQL catalogs', () => {
+    const adapter = createR2SqlResolverAdapter({ partitionKeyEncoding: 'string' })
     const r = resolverResolveToSQL(state({}), { adapter, siteId: 'site-42', searchType: 'web' })
     expect(r.sql).toContain('CONCAT("pages"."site_id", \'\') = $1')
     expect(r.sql).toContain('CONCAT("pages"."search_type", \'\') = $2')
@@ -321,8 +322,8 @@ describe('createR2SqlResolverAdapter', () => {
     expect(r.sql).not.toContain('"pages"."site_id" = $1')
   })
 
-  it('keeps bare partition predicates for int-encoded R2 SQL catalogs', () => {
-    const adapter = createR2SqlResolverAdapter({ partitionKeyEncoding: 'int' })
+  it('keeps bare partition predicates by default for int-encoded R2 SQL catalogs', () => {
+    const adapter = createR2SqlResolverAdapter()
     const r = resolverResolveToSQL(state({}), { adapter, siteId: 42, searchType: 1 })
     expect(r.sql).toContain('"pages"."site_id" = $1')
     expect(r.sql).toContain('"pages"."search_type" = $2')

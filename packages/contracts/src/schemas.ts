@@ -164,6 +164,7 @@ export const indexingUrlStatusSchema = z.enum(['indexed', 'not_indexed', 'pendin
 
 export const indexingUrlRowSchema = z.object({
   url: z.string(),
+  issueType: z.string().nullable().optional(),
   verdict: z.string().nullable(),
   coverageState: z.string().nullable(),
   indexingState: z.string().nullable(),
@@ -217,6 +218,7 @@ export const indexingDiagnosticsSchema = z.object({
     indexedPercent: z.number(),
   }).loose(),
   issues: z.array(indexingIssueSchema),
+  samples: z.record(z.string(), z.array(indexingUrlRowSchema)).optional(),
   meta: z.object({ siteUrl: z.string() }).loose(),
 }).loose()
 
@@ -659,6 +661,11 @@ export const indexingUrlsParamsSchema = z.object({
   search: z.string().optional(),
 }).optional()
 
+export const indexingDiagnosticsParamsSchema = z.object({
+  sampleIssues: z.union([z.string(), z.array(z.string())]).optional(),
+  sampleLimit: z.number().min(1).max(25).optional(),
+}).optional()
+
 export const gscdumpIndexingResponseSchema = z.object({
   trend: z.array(z.object({
     date: z.string(),
@@ -722,7 +729,7 @@ export const gscdumpIndexingResponseSchema = z.object({
 }).loose()
 
 export const gscdumpIndexingUrlsResponseSchema = z.object({
-  urls: z.array(unknownRecord),
+  urls: z.array(indexingUrlRowSchema),
   pagination: z.object({
     total: z.number(),
     limit: z.number(),
@@ -742,7 +749,8 @@ export const gscdumpIndexingDiagnosticsResponseSchema = z.object({
     indexed: z.number(),
     indexedPercent: z.number(),
   }).loose(),
-  issues: z.array(unknownRecord),
+  issues: z.array(indexingIssueSchema),
+  samples: z.record(z.string(), z.array(indexingUrlRowSchema)).optional(),
   meta: z.object({ siteUrl: z.string() }).loose(),
 }).loose()
 
@@ -1137,7 +1145,7 @@ export const analyticsEndpointSchemas = {
   analyticsRollup: { response: rollupEnvelopeSchema },
   analyticsBackfill: { body: backfillRangeSchema, response: backfillResponseSchema },
   analyticsIndexingUrls: { response: indexingUrlsResponseSchema },
-  analyticsIndexingDiagnostics: { response: indexingDiagnosticsSchema },
+  analyticsIndexingDiagnostics: { query: indexingDiagnosticsParamsSchema, response: indexingDiagnosticsSchema },
   analyticsIndexingInspect: { body: indexingInspectRequestSchema, response: indexingInspectAnyResponseSchema },
   analyticsSitemapChanges: { response: sitemapChangesResponseSchema },
   analyticsAnalysisSources: { response: gscdumpAnalysisSourcesResponseSchema },
@@ -1166,7 +1174,7 @@ export const partnerControlEndpointSchemas = {
   getSitemapChanges: { response: gscdumpSitemapChangesResponseSchema },
   getIndexing: { response: gscdumpIndexingResponseSchema },
   getIndexingUrls: { query: indexingUrlsParamsSchema, response: gscdumpIndexingUrlsResponseSchema },
-  getIndexingDiagnostics: { response: gscdumpIndexingDiagnosticsResponseSchema },
+  getIndexingDiagnostics: { query: indexingDiagnosticsParamsSchema, response: gscdumpIndexingDiagnosticsResponseSchema },
   getIndexingInspect: { body: indexingInspectRequestSchema, response: indexingInspectAnyResponseSchema },
   getUserSettings: { response: gscdumpUserSettingsSchema },
   patchUserSettings: { body: gscdumpUserSettingsSchema.partial(), response: gscdumpUserSettingsSchema },

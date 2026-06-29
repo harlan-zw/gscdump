@@ -16,15 +16,15 @@
 // errors }` where `result` carries columns + rows. R2 SQL does NOT support bound
 // parameters, so this client inlines params via `escapeSqlValue` before sending.
 //
-// CAVEAT — identity-partition equality: R2 SQL returns zero rows on a literal
-// equality against an identity-partition column (here `site_id` / `search_type`)
-// unless the column is materialized; `runPlan` wraps those predicates in
-// `CONCAT(col, '')` to force it. The client is testable by injecting a `fetch`
-// impl that returns a recorded CF envelope; see the sibling tests.
+// CAVEAT — legacy string identity-partition equality: R2 SQL returns zero rows
+// on a literal equality against a STRING identity-partition column (here
+// `site_id` / `search_type`) unless the column is materialized. String catalogs
+// use `CONCAT(col, '')` to force it; int catalogs use bare equality.
 
 import type { ArchetypeQuery } from '@gscdump/contracts/archetypes'
 import type { Result } from 'gscdump/result'
-import type { ArchetypeSqlPlan } from './archetype-sql'
+import type { ArchetypeSqlPlan, PartitionKeyEncoding } from './archetype-sql'
+import { SEARCH_TYPE_INT } from '@gscdump/engine/iceberg'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { buildArchetypeSql, TABLE_PLACEHOLDER } from './archetype-sql'
 
@@ -57,6 +57,14 @@ export interface R2SqlClientConfig {
   fetchImpl?: typeof fetch
   /** Per-query wall-clock deadline (ms). Default 25s — under the Worker CPU budget. */
   timeoutMs?: number
+  /** Partition-key encoding of the target catalog. Defaults to `'int'`. */
+  partitionKeyEncoding?: PartitionKeyEncoding
+  /**
+   * Host-owned mapping from public site id to the INT `site_id` partition
+   * value. Required for non-numeric public ids when `partitionKeyEncoding` is
+   * `'int'`.
+   */
+  partitionSiteId?: (siteId: string) => string | number
 }
 
 /** A row as returned by R2 SQL — flat dimension + metric values. */
@@ -110,12 +118,11 @@ function r2SqlErrorToException(error: R2SqlQueryError): R2SqlQueryError {
 const DEFAULT_API_BASE = 'https://api.sql.cloudflarestorage.com/api/v1'
 const DEFAULT_TIMEOUT_MS = 25_000
 
-// R2 SQL returns zero rows on a literal equality against an identity-partition
-// column unless the column is materialized; wrapping it in `CONCAT(col, '')`
-// forces materialization and the predicate works. `buildArchetypeSql` always
-// emits `site_id` / `search_type` as the (bare) partition predicate, so target
-// that form. Idempotent: the wrapped `site_id` inside `CONCAT(...)` is followed
-// by `,`, never `=`, so it won't re-match.
+// Legacy STRING catalogs can return zero rows on literal equality against an
+// identity-partition column unless the column is materialized; wrapping it in
+// `CONCAT(col, '')` forces materialization and the predicate works. Int
+// catalogs never use this rewrite. Idempotent: the wrapped `site_id` inside
+// `CONCAT(...)` is followed by `,`, never `=`, so it won't re-match.
 const PARTITION_PREDICATE_RE = /\b(site_id|search_type)(\s*=)/g
 function workaroundPartitionEquality(sql: string): string {
   return sql.replace(PARTITION_PREDICATE_RE, (_m, col: string, eq: string) => `CONCAT(${col}, '')${eq}`)
@@ -207,6 +214,32 @@ function normalizeRows(result: CfEnvelope['result']): R2SqlRow[] {
   return []
 }
 
+function coerceIntSiteId(siteId: string, mapper?: (siteId: string) => string | number): number {
+  const mapped = mapper ? mapper(siteId) : siteId
+  const n = Number(mapped)
+  if (!Number.isSafeInteger(n))
+    throw new R2SqlError('int R2 SQL catalog requires a numeric site_id partition value; pass partitionSiteId for public ids')
+  return n
+}
+
+function withEncodedPartitions(
+  query: ArchetypeQuery,
+  encoding: PartitionKeyEncoding,
+  siteIdMapper?: (siteId: string) => string | number,
+): ArchetypeQuery {
+  if (encoding === 'string')
+    return query
+  const scoped = query as ArchetypeQuery & { siteId: string, searchType: keyof typeof SEARCH_TYPE_INT }
+  const searchType = SEARCH_TYPE_INT[scoped.searchType]
+  if (searchType === undefined)
+    throw new R2SqlError(`unknown search_type for int R2 SQL catalog: ${String(scoped.searchType)}`)
+  return {
+    ...query,
+    siteId: coerceIntSiteId(scoped.siteId, siteIdMapper),
+    searchType,
+  } as unknown as ArchetypeQuery
+}
+
 /** A configured R2 SQL client. */
 export interface R2SqlClient {
   /** Run a raw SQL string (table reference already resolved). */
@@ -234,6 +267,7 @@ export function createR2SqlClient(config: R2SqlClientConfig): R2SqlClient {
   const fetchImpl = config.fetchImpl ?? globalThis.fetch
   const apiBase = config.apiBase ?? DEFAULT_API_BASE
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const partitionKeyEncoding = config.partitionKeyEncoding ?? 'int'
   const endpoint = `${apiBase}/accounts/${config.accountId}/r2-sql/query/${config.bucket}`
 
   async function queryResult(sql: string): Promise<Result<R2SqlResult, R2SqlQueryError>> {
@@ -294,11 +328,15 @@ export function createR2SqlClient(config: R2SqlClientConfig): R2SqlClient {
   }
 
   function runPlan(plan: ArchetypeSqlPlan): Promise<R2SqlResult> {
-    return query(workaroundPartitionEquality(materializePlan(plan)))
+    const sql = materializePlan(plan)
+    return query(partitionKeyEncoding === 'string' ? workaroundPartitionEquality(sql) : sql)
   }
 
   function runArchetype(archetypeQuery: ArchetypeQuery): Promise<R2SqlResult> {
-    const plan = buildArchetypeSql(archetypeQuery, { partitionPredicateMode: 'r2-sql-concat' })
+    const plan = buildArchetypeSql(
+      withEncodedPartitions(archetypeQuery, partitionKeyEncoding, config.partitionSiteId),
+      { partitionKeyEncoding },
+    )
     return query(materializePlan(plan))
   }
 

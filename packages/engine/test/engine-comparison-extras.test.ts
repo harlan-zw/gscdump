@@ -28,6 +28,7 @@ import {
   createDuckDBExecutor,
   createStorageEngine,
 } from '../src/index'
+import { buildQueryDimRecords, createQueryDimStore } from '../src/query-dim'
 import { buildExtrasQueries, buildTotalsSql, resolveComparisonSQL } from '../src/resolver/compile'
 import { createParquetResolverAdapter } from '../src/resolver/pg-adapter'
 import { queryCanonicalVariantsRollup, rebuildRollups } from '../src/rollups'
@@ -87,6 +88,7 @@ async function runExtras(
   engine: StorageEngine,
   ctx: { userId: string, siteId: string, table?: TableName },
   state: BuilderState,
+  queryDim?: { table: TableName, keys: string[] },
 ): Promise<Array<{ key: string, rows: Row[] }>> {
   const adapter = createParquetResolverAdapter()
   const extras = buildExtrasQueries(state, { adapter, siteId: undefined })
@@ -95,7 +97,10 @@ async function runExtras(
   const plan = buildLogicalPlan(state, adapter.capabilities)
   const table: TableName = ctx.table ?? plan.dataset
   const partitions = enumeratePartitions(plan.dateRange.startDate, plan.dateRange.endDate)
-  const fileSets = { FILES: { table, partitions } }
+  const fileSets = {
+    FILES: { table, partitions },
+    ...(queryDim ? { QUERY_DIM: queryDim } : {}),
+  }
   const baseCtx = { userId: ctx.userId, siteId: ctx.siteId }
   const results = await Promise.all(extras.map(e =>
     engine.runSQL({ ctx: baseCtx, table, fileSets, sql: e.sql, params: e.params }),
@@ -310,8 +315,8 @@ describe('queryCanonicalVariantsRollup (integration)', () => {
     }
   }
 
-  function queryRow(query: string, queryCanonical: string, date: string, clicks: number, impressions: number): Row {
-    return { query, query_canonical: queryCanonical, date, clicks, impressions, sum_position: impressions * 5 }
+  function queryRow(query: string, date: string, clicks: number, impressions: number): Row {
+    return { query, date, clicks, impressions, sum_position: impressions * 5 }
   }
 
   function keyByJoin(rows: Array<Record<string, unknown>>) {
@@ -328,11 +333,26 @@ describe('queryCanonicalVariantsRollup (integration)', () => {
     await engine.writeDay(
       { userId: 'u1', siteId: 's1', table: 'queries', date: '2026-03-10' },
       [
-        queryRow('Foo', 'foo', '2026-03-10', 500, 5000),
-        queryRow('foos', 'foo', '2026-03-10', 100, 1000),
-        queryRow('bar', 'bar', '2026-03-10', 100, 1000),
+        queryRow('Foo', '2026-03-10', 500, 5000),
+        queryRow('foos', '2026-03-10', 100, 1000),
+        queryRow('bar', '2026-03-10', 100, 1000),
       ],
     )
+  }
+
+  async function writeQueryDim(dataSource: ReturnType<typeof createFilesystemDataSource>) {
+    const store = createQueryDimStore({ dataSource })
+    const records = buildQueryDimRecords(['Foo', 'foos', 'bar'], {
+      normalizeQuery: (query) => {
+        const lower = query.toLowerCase()
+        return lower === 'foos' ? 'foo' : lower
+      },
+      normalizerVersion: 2,
+      classifyIntentCode: () => 0,
+      intentVersion: 1,
+    })
+    await store.write({ userId: 'u1', siteId: 's1' }, records, 1_700_000_000_000)
+    return { table: 'queries' as TableName, keys: [store.parquetKey({ userId: 'u1', siteId: 's1' })] }
   }
 
   function canonicalState(start: string, end: string): BuilderState {
@@ -347,9 +367,10 @@ describe('queryCanonicalVariantsRollup (integration)', () => {
   it('materialises the same per-canonical extras the live query produces', async () => {
     const { engine, dataSource } = await setup()
     await seed(engine)
+    const queryDim = await writeQueryDim(dataSource)
 
     // Live path: the window-function SQL the read path runs today.
-    const liveExtras = await runExtras(engine, { userId: 'u1', siteId: 's1' }, canonicalState('2026-03-01', '2026-03-31'))
+    const liveExtras = await runExtras(engine, { userId: 'u1', siteId: 's1' }, canonicalState('2026-03-01', '2026-03-31'), queryDim)
     expect(liveExtras).toHaveLength(1)
     expect(liveExtras[0].key).toBe('canonicalExtras')
     const live = keyByJoin(liveExtras[0].rows)

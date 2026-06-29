@@ -39,18 +39,24 @@ const METRIC_SQL: Record<string, string> = {
  * GSC dimension → parquet column. `device` has no long column on `dates` — it
  * is served by the device-pivot archetypes, not generic dimension SQL.
  *
- * `queryCanonical` is the normalised form stored alongside `query` on
- * `queries` / `page_queries` — case-folded + variants collapsed so e.g.
- * `nuxt seo` and `Nuxt SEO` group together. Distinct from the cloud SDK's
- * dimColumn (`'query_canonical'`).
+ * `queryCanonical` is derived from a `query_dim` relation joined by raw query,
+ * with raw query as the fallback. The fact views do not carry
+ * `query_canonical`.
  */
 const DIM_COLUMN: Record<string, string> = {
   page: 'url',
   query: 'query',
-  queryCanonical: 'query_canonical',
   country: 'country',
   date: 'date',
   searchAppearance: 'search_appearance',
+}
+
+function queryCanonicalExpr(queryRef = 'query'): string {
+  return `COALESCE((SELECT qd.query_canonical FROM query_dim qd WHERE qd.query = ${queryRef} LIMIT 1), ${queryRef})`
+}
+
+function dimExpr(dim: string): string {
+  return dim === 'queryCanonical' ? queryCanonicalExpr() : (DIM_COLUMN[dim] ?? dim)
 }
 
 /**
@@ -206,7 +212,7 @@ function facetPredicate(query: ArchetypeQuery): { sql: string, params: unknown[]
   const parts: string[] = []
   const params: unknown[] = []
   for (const f of facets) {
-    const col = DIM_COLUMN[f.column] ?? f.column
+    const col = dimExpr(f.column)
     switch (f.op) {
       case 'eq':
         parts.push(`${col} = ?`)
@@ -250,7 +256,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
     // ── 2. Per-entity daily timeseries ──────────────────────────────────────
     case 'entity-daily-timeseries': {
       const table = tableForDimensions([query.entity.dimension])
-      const col = DIM_COLUMN[query.entity.dimension]!
+      const col = dimExpr(query.entity.dimension)
       const where = rangePredicate(query)
       return {
         table,
@@ -263,7 +269,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
     // ── 3. Per-entity daily sparkline (top-N entities at once) ──────────────
     case 'entity-daily-sparkline': {
       const table = tableForDimensions([query.dimension])
-      const col = DIM_COLUMN[query.dimension]!
+      const col = dimExpr(query.dimension)
       const where = rangePredicate(query)
       if (query.entities.length === 0)
         throw new Error('[archetype-sql] entity-daily-sparkline requires resolved entities')
@@ -287,8 +293,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
         ? query.metrics
         : [...query.metrics, query.orderBy.metric]
       // `queryCanonical` rows surface the count of distinct raw queries collapsed
-      // under one canonical (the `{N}v` badge). The `queries` fact table carries
-      // both `query` and `query_canonical`.
+      // under one canonical (the `{N}v` badge).
       const variantSel = query.dimension === 'queryCanonical' ? ', COUNT(DISTINCT query) AS variantCount' : ''
 
       if (query.dimension === 'device') {
@@ -319,7 +324,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
         }
         return { table, sql, params }
       }
-      const col = DIM_COLUMN[query.dimension]!
+      const col = dimExpr(query.dimension)
       const facet = facetPredicate(query)
       // Full group count (independent of LIMIT/OFFSET) for load-more tables.
       // `COUNT(*) OVER()` evaluates over the grouped result before LIMIT, so it
@@ -370,7 +375,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
       const matchParts: string[] = []
       const matchParams: unknown[] = []
       for (const [dim, value] of Object.entries(query.match)) {
-        const col = DIM_COLUMN[dim]
+        const col = dimExpr(dim)
         if (!col)
           throw new Error(`[archetype-sql] single-row-lookup: unknown dimension ${dim}`)
         matchParts.push(`${col} = ?`)
@@ -397,7 +402,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
           params: [...where.params, ...where.params, ...where.params],
         }
       }
-      const col = DIM_COLUMN[query.seriesDimension]!
+      const col = dimExpr(query.seriesDimension)
       return {
         table,
         sql: `SELECT date, ${col} AS ${query.seriesDimension}, ${metricExpr(query.metric)} AS ${query.metric} `

@@ -43,7 +43,7 @@ const CATALOG = {
 const FAKE_CONN = { catalog: { type: 'rest' }, resolver: { signed: true }, namespace: 'gsc' }
 
 function makeSink(overrides: Partial<IcebergAppendSinkOptions> = {}) {
-  return createIcebergAppendSink({ catalog: CATALOG, ...overrides })
+  return createIcebergAppendSink({ catalog: CATALOG, encoding: 'string', ...overrides })
 }
 
 function slice(table: SinkSlice['table'], searchType: SinkSlice['searchType'], siteId?: string): SinkSlice {
@@ -159,6 +159,17 @@ describe('icebergAppendSink', () => {
     const rec = callFor('pages')!.records[0]
     expect(rec.site_id).toBe(42)
     expect(rec.search_type).toBe(5)
+  })
+
+  it('defaults new sinks to int partition encoding', async () => {
+    const sink = createIcebergAppendSink({ catalog: CATALOG })
+    await sink.emit(slice('pages', 'web', '42'), [
+      { url: '/', date: '2026-05-01', clicks: 1, impressions: 2, sum_position: 3 },
+    ])
+    await sink.close()
+    const rec = callFor('pages')!.records[0]
+    expect(rec.site_id).toBe(42)
+    expect(rec.search_type).toBe(1)
   })
 
   it('rejects invalid int site ids before buffering rows', async () => {

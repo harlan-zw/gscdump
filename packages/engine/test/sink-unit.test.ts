@@ -99,6 +99,12 @@ const CATALOG: IcebergCatalogConfig = {
   s3: { endpoint: 'https://acct.r2.example', accessKeyId: 'ak', secretAccessKey: 'sk' },
 }
 
+function createLegacyIcebergAppendSink(
+  options: Omit<Parameters<typeof createIcebergAppendSink>[0], 'catalog' | 'encoding'> = {},
+) {
+  return createIcebergAppendSink({ catalog: CATALOG, encoding: 'string', ...options })
+}
+
 describe('createIcebergAppendSink', () => {
   beforeEach(() => {
     // Reset implementations too — tests below install per-table failure /
@@ -109,12 +115,12 @@ describe('createIcebergAppendSink', () => {
   })
 
   it('declares append-only capabilities', () => {
-    const sink = createIcebergAppendSink({ catalog: CATALOG })
+    const sink = createLegacyIcebergAppendSink()
     expect(sink.capabilities).toEqual({ appendOnly: true })
   })
 
   it('emit buffers without touching the network; nothing is written before close', async () => {
-    const sink = createIcebergAppendSink({ catalog: CATALOG })
+    const sink = createLegacyIcebergAppendSink()
     const res = await sink.emit(slice(), [pageRow('/', 10)])
     expect(res.rowCount).toBe(1)
     expect(restCatalogConnect).not.toHaveBeenCalled()
@@ -122,7 +128,7 @@ describe('createIcebergAppendSink', () => {
   })
 
   it('emit of an empty slice buffers nothing', async () => {
-    const sink = createIcebergAppendSink({ catalog: CATALOG })
+    const sink = createLegacyIcebergAppendSink()
     const res = await sink.emit(slice(), [])
     expect(res.rowCount).toBe(0)
     await sink.close()
@@ -130,7 +136,7 @@ describe('createIcebergAppendSink', () => {
   })
 
   it('close flushes one icebergAppend per table with identity columns + date encoded', async () => {
-    const sink = createIcebergAppendSink({ catalog: CATALOG })
+    const sink = createLegacyIcebergAppendSink()
     await sink.emit(slice({ searchType: 'discover' }), [pageRow('/', 10), pageRow('/about', 5)])
     await sink.close()
 
@@ -147,8 +153,17 @@ describe('createIcebergAppendSink', () => {
     expect(args.records[0].date).toBe(Math.floor(Date.parse('2026-04-01T00:00:00Z') / 86_400_000))
   })
 
-  it('batches many emits for one table into a single commit, connecting the catalog once', async () => {
+  it('defaults to int partition encoding for new Iceberg sinks', async () => {
     const sink = createIcebergAppendSink({ catalog: CATALOG })
+    await sink.emit(slice({ ctx: { userId: 'u1', siteId: '42' }, searchType: 'discover' }), [pageRow('/', 10)])
+    await sink.close()
+
+    const args = icebergAppend.mock.calls[0][0] as { records: Record<string, unknown>[] }
+    expect(args.records[0]).toMatchObject({ site_id: 42, search_type: 5, url: '/' })
+  })
+
+  it('batches many emits for one table into a single commit, connecting the catalog once', async () => {
+    const sink = createLegacyIcebergAppendSink()
     // Distinct urls — same date, so the two rows have distinct identity tuples
     // and batch into one commit without the identity dedup collapsing them.
     await sink.emit(slice({ date: '2026-04-01' }), [pageRow('/', 10)])
@@ -161,7 +176,7 @@ describe('createIcebergAppendSink', () => {
   })
 
   it('flushes a separate icebergAppend for each table touched', async () => {
-    const sink = createIcebergAppendSink({ catalog: CATALOG })
+    const sink = createLegacyIcebergAppendSink()
     await sink.emit(slice({ table: 'pages' }), [pageRow('/', 1)])
     await sink.emit(slice({ table: 'queries' }), [{ query: 'nuxt', date: '2026-04-01', clicks: 2, impressions: 20, sum_position: 7 }])
     await sink.close()
@@ -170,7 +185,7 @@ describe('createIcebergAppendSink', () => {
   })
 
   it('close is idempotent — a second close after a flush is a no-op', async () => {
-    const sink = createIcebergAppendSink({ catalog: CATALOG })
+    const sink = createLegacyIcebergAppendSink()
     await sink.emit(slice(), [pageRow('/', 10)])
     await sink.close()
     await sink.close()
@@ -178,7 +193,7 @@ describe('createIcebergAppendSink', () => {
   })
 
   it('close reports each flushed table — the ledger ordering signal', async () => {
-    const sink = createIcebergAppendSink({ catalog: CATALOG })
+    const sink = createLegacyIcebergAppendSink()
     await sink.emit(slice({ table: 'pages' }), [pageRow('/', 1)])
     await sink.emit(slice({ table: 'queries' }), [{ query: 'nuxt', date: '2026-04-01', clicks: 2, impressions: 20, sum_position: 7 }])
     const result = await sink.close()
@@ -187,7 +202,7 @@ describe('createIcebergAppendSink', () => {
   })
 
   it('an empty close reports nothing flushed and nothing failed', async () => {
-    const sink = createIcebergAppendSink({ catalog: CATALOG })
+    const sink = createLegacyIcebergAppendSink()
     expect(await sink.close()).toEqual({ flushed: [], failed: [] })
   })
 
@@ -198,7 +213,7 @@ describe('createIcebergAppendSink', () => {
         throw new Error('catalog 500')
       return {}
     })
-    const sink = createIcebergAppendSink({ catalog: CATALOG })
+    const sink = createLegacyIcebergAppendSink()
     await sink.emit(slice({ table: 'pages' }), [pageRow('/', 1)])
     await sink.emit(slice({ table: 'queries' }), [{ query: 'nuxt', date: '2026-04-01', clicks: 2, impressions: 20, sum_position: 7 }])
     const result = await sink.close()
@@ -217,8 +232,7 @@ describe('createIcebergAppendSink', () => {
         throw new Error('429 too many commits to this table')
       return {}
     })
-    const sink = createIcebergAppendSink({
-      catalog: CATALOG,
+    const sink = createLegacyIcebergAppendSink({
       commitRetry: { sleep: async () => {}, random: () => 0 },
     })
     await sink.emit(slice(), [pageRow('/', 10)])
@@ -230,7 +244,7 @@ describe('createIcebergAppendSink', () => {
 
   it('a catalog connection failure marks every buffered table failed', async () => {
     restCatalogConnect.mockRejectedValueOnce(new Error('catalog unreachable'))
-    const sink = createIcebergAppendSink({ catalog: CATALOG })
+    const sink = createLegacyIcebergAppendSink()
     await sink.emit(slice({ table: 'pages' }), [pageRow('/', 1)])
     await sink.emit(slice({ table: 'queries' }), [{ query: 'nuxt', date: '2026-04-01', clicks: 2, impressions: 20, sum_position: 7 }])
     const result = await sink.close()

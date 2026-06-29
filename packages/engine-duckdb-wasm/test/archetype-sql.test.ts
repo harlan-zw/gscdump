@@ -86,6 +86,24 @@ describe('compileArchetypeSql', () => {
     expect(withOffset.params.slice(-2)).toEqual([100, 50])
   })
 
+  it('4 — top-n-breakdown: derives queryCanonical from query_dim', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'top-n-breakdown',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      dimension: 'queryCanonical',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 50,
+    }
+    const c = compileArchetypeSql(q)
+    expect(c.table).toBe('queries')
+    expect(c.sql).toContain('SELECT qd.query_canonical FROM query_dim qd')
+    expect(c.sql).toContain('AS queryCanonical')
+    expect(c.sql).not.toContain('GROUP BY query_canonical')
+  })
+
   it('4 — top-n-breakdown: brand regex/notRegex facet → regexp_matches on the query column', () => {
     const base: ArchetypeQuery = {
       archetype: 'top-n-breakdown',

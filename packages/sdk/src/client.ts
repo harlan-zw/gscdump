@@ -38,6 +38,7 @@ import type {
   GscdumpUserSite,
   GscdumpUserStatus,
   GscdumpUserTokenUpdate,
+  IndexingDiagnosticsParams,
   IndexingInspectRateLimited,
   IndexingInspectRequest,
   IndexingInspectResponse,
@@ -195,6 +196,18 @@ function indexingUrlsQuery(params: IndexingUrlsParams = {}): Record<string, stri
     query.issue = params.issue
   if (params.search)
     query.search = params.search
+  return query
+}
+
+function indexingDiagnosticsQuery(params: IndexingDiagnosticsParams = {}): Record<string, string | number> {
+  const query: Record<string, string | number> = {}
+  if (params.sampleIssues) {
+    query.sampleIssues = Array.isArray(params.sampleIssues)
+      ? params.sampleIssues.join(',')
+      : params.sampleIssues
+  }
+  if (params.sampleLimit != null)
+    query.sampleLimit = params.sampleLimit
   return query
 }
 
@@ -522,8 +535,11 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       }, partnerEndpointSchemas.getIndexingUrls.response)
     },
 
-    getIndexingDiagnostics(siteId: string) {
-      return request<GscdumpIndexingDiagnosticsResponse>(partnerRoutes.sites.indexingDiagnostics(siteId), {}, partnerEndpointSchemas.getIndexingDiagnostics.response)
+    getIndexingDiagnostics(siteId: string, params: IndexingDiagnosticsParams = {}) {
+      const parsed = shouldValidate('request') ? partnerEndpointSchemas.getIndexingDiagnostics.query.parse(params) : params
+      return request<GscdumpIndexingDiagnosticsResponse>(partnerRoutes.sites.indexingDiagnostics(siteId), {
+        query: indexingDiagnosticsQuery(parsed),
+      }, partnerEndpointSchemas.getIndexingDiagnostics.response)
     },
 
     requestIndexingInspect(siteId: string, body: IndexingInspectRequest) {

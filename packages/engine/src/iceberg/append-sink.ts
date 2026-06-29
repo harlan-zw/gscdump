@@ -48,7 +48,7 @@ import {
   connectIcebergCatalog,
   icebergAppendRetrying,
 } from './catalog'
-import { ICEBERG_SCHEMAS, SEARCH_TYPE_INT } from './schema'
+import { DEFAULT_PARTITION_KEY_ENCODING, ICEBERG_SCHEMAS, SEARCH_TYPE_INT } from './schema'
 
 export type IcebergAppendSink = Sink
 
@@ -242,7 +242,7 @@ function toRecords(slice: SinkSlice, rows: readonly Row[], encoding: PartitionKe
  */
 export function createIcebergAppendSink(options: IcebergAppendSinkOptions): IcebergAppendSink {
   let connection: Promise<IcebergConnection> | undefined
-  const encoding: PartitionKeyEncoding = options.encoding ?? 'string'
+  const encoding: PartitionKeyEncoding = options.encoding ?? DEFAULT_PARTITION_KEY_ENCODING
   // Per-table row buffer, drained by `close()`.
   const buffers = new Map<IcebergTableName, IcebergRecord[]>()
 

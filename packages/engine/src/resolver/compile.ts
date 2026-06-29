@@ -86,6 +86,7 @@ interface BuiltScope<TK extends string> {
   dimFilters: InternalFilter[]
   startDate?: string
   endDate?: string
+  queryCanonicalUsed: boolean
 }
 
 function toInternalDimensionFilters(filters: LogicalDimensionFilter[]): InternalFilter[] {
@@ -163,6 +164,8 @@ function buildScope<TK extends string>(
   const groupByDims = plan.groupByDimensions
   const hasDate = plan.hasDate
   const metrics = plan.metrics
+  const queryCanonicalUsed = groupByDims.includes('queryCanonical')
+    || plan.dimensionFilters.some(filter => filter.dimension === 'queryCanonical')
 
   const wherePredicates: SQL[] = []
   if (adapter.siteIdColRef && siteId != null)
@@ -200,6 +203,7 @@ function buildScope<TK extends string>(
     dimFilters,
     startDate: plan.dateRange.startDate,
     endDate: plan.dateRange.endDate,
+    queryCanonicalUsed,
   }
 }
 
@@ -228,8 +232,8 @@ export function resolveToSQLOptimized<TK extends string>(
   options: ResolverOptions<TK>,
 ): ResolvedSQLOptimized {
   const { adapter } = options
-  const { tableKey, groupByDims, hasDate, metrics, wherePredicates, having } = buildScope(state, options)
-  const table = adapter.tableRef(tableKey)
+  const { tableKey, groupByDims, hasDate, metrics, wherePredicates, having, queryCanonicalUsed } = buildScope(state, options)
+  const table = adapter.fromSql(tableKey, { queryCanonical: queryCanonicalUsed })
   const schema = adapter.schema as Record<string, Record<string, SQL>>
 
   const cteSelect: SQL[] = []
@@ -300,8 +304,8 @@ export function resolveToSQL<TK extends string>(
   options: ResolverOptions<TK>,
 ): ResolvedSQL {
   const { adapter } = options
-  const { tableKey, groupByDims, hasDate, metrics, wherePredicates, having } = buildScope(state, options)
-  const table = adapter.tableRef(tableKey)
+  const { tableKey, groupByDims, hasDate, metrics, wherePredicates, having, queryCanonicalUsed } = buildScope(state, options)
+  const table = adapter.fromSql(tableKey, { queryCanonical: queryCanonicalUsed })
 
   const selectExprs: SQL[] = []
   for (const d of groupByDims) {
@@ -355,8 +359,8 @@ export function buildTotalsSql<TK extends string>(
   options: ResolverOptions<TK>,
 ): { sql: string, params: unknown[] } {
   const { adapter } = options
-  const { tableKey, metrics, wherePredicates } = buildScope(state, options)
-  const table = adapter.tableRef(tableKey)
+  const { tableKey, metrics, wherePredicates, queryCanonicalUsed } = buildScope(state, options)
+  const table = adapter.fromSql(tableKey, { queryCanonical: queryCanonicalUsed })
   const selectExprs: SQL[] = metrics.map(m => sql`${adapter.metricSql(m, tableKey)} as ${aliasRaw(m)}`)
   const query = wherePredicates.length > 0
     ? sql`SELECT ${joinComma(selectExprs)} FROM ${table} WHERE ${joinAnd(wherePredicates)}`
@@ -375,7 +379,7 @@ export function resolveComparisonSQL<TK extends string>(
   const currentScope = buildScope(current, options)
   const previousScope = buildScope(previous, options)
   const { tableKey, groupByDims, metrics, wherePredicates: currentWhere, having } = currentScope
-  const table = adapter.tableRef(tableKey)
+  const table = adapter.fromSql(tableKey, { queryCanonical: currentScope.queryCanonicalUsed || previousScope.queryCanonicalUsed })
 
   const dimSelectExprs: SQL[] = []
   for (const d of groupByDims) {
@@ -488,7 +492,7 @@ export function buildExtrasQueries<TK extends string>(
   const queriesKey = adapter.tableKeyForDataset('queries') as TK
   const schema = adapter.schema as Record<string, Record<string, SQL>>
   const t = schema[queriesKey]!
-  const table = adapter.tableRef(queriesKey)
+  const table = adapter.fromSql(queriesKey, { queryCanonical: true })
 
   const whereParts: SQL[] = []
   if (adapter.siteIdColRef && siteId != null)
@@ -500,12 +504,10 @@ export function buildExtrasQueries<TK extends string>(
 
   const whereExpr = whereParts.length > 0 ? sql`WHERE ${joinAnd(whereParts)}` : sql``
   const outerQueryCol = sql.raw('query')
-  // Key on the total canonical — COALESCE(NULLIF(query_canonical, ''), query) —
-  // so the live extras share one key space with the canonical-fallback main
-  // query and the `query_canonical_*` rollups (ADR-0018). Folding NULL/'' to the
-  // raw query also replaces the old `IS NOT NULL` filter: a row with no stored
-  // canonical becomes its own single-variant group instead of being dropped.
-  const canonKey = sql`COALESCE(NULLIF(${t.query_canonical}, ''), ${t.query})`
+  // Key on the total canonical derived from query_dim, with raw query as the
+  // fallback. The live extras then share one key space with the main canonical
+  // query and the `query_canonical_*` rollups.
+  const canonKey = adapter.dimExprSql('queryCanonical', queriesKey)
   const q = sql`WITH per_variant AS (SELECT ${canonKey} as joinKey, ${t.query} as query, SUM(${t.clicks}) as clicks, SUM(${t.impressions}) as impressions, SUM(${t.sum_position}) as sum_pos, ROW_NUMBER() OVER (PARTITION BY ${canonKey} ORDER BY SUM(${t.clicks}) DESC) as rn, COUNT(*) OVER (PARTITION BY ${canonKey}) as variantCount FROM ${table} ${whereExpr} GROUP BY ${canonKey}, ${t.query}) SELECT joinKey, MAX(variantCount) as variantCount, MAX(CASE WHEN rn = 1 THEN ${outerQueryCol} END) as canonicalName, GROUP_CONCAT(CASE WHEN rn <= 10 THEN ${outerQueryCol} || ':::' || clicks || ':::' || impressions || ':::' || CAST(ROUND(CAST(sum_pos AS REAL) / NULLIF(impressions, 0) + 1, 1) AS TEXT) END, '||') as variants FROM per_variant GROUP BY joinKey`
 
   const compiled = compileCollapsed(adapter, q)

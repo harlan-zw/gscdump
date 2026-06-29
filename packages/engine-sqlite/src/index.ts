@@ -68,6 +68,7 @@ export {
   gsc_keywords,
   gsc_page_keywords,
   gsc_pages,
+  gsc_query_dim,
   schema,
 } from './schema'
 export type { Schema } from './schema'

@@ -1,7 +1,7 @@
 /**
  * gscdump/analytics/ingest — GSC API row → storage Row transform + the
  * bucketing accumulator. Covers all five tables' key-indexing, overflow
- * behaviour, drain semantics, and the normalizeQuery hook.
+ * behaviour and drain semantics.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -27,18 +27,19 @@ describe('transformGscRow', () => {
     })
   })
 
-  it('maps keywords + applies normalizeQuery hook', () => {
+  it('maps keywords without writing a canonical fact column', () => {
     const out = transformGscRow(
       'queries',
       { keys: ['Foo Bar', '2026-04-10'], clicks: 1, impressions: 2, position: 10 },
       { normalizeQuery: q => q.toLowerCase() },
     )
-    expect(out?.row).toMatchObject({ query: 'Foo Bar', query_canonical: 'foo bar', date: '2026-04-10' })
+    expect(out?.row).toEqual({ query: 'Foo Bar', date: '2026-04-10', clicks: 1, impressions: 2, sum_position: 18 })
+    expect(out?.row).not.toHaveProperty('query_canonical')
   })
 
-  it('keywords without normalizeQuery sets query_canonical=null', () => {
+  it('keywords without normalizeQuery omit query_canonical', () => {
     const out = transformGscRow('queries', { keys: ['foo', '2026-04-10'], clicks: 0, impressions: 0, position: 0 })
-    expect(out?.row.query_canonical).toBeNull()
+    expect(out?.row).not.toHaveProperty('query_canonical')
   })
 
   it('maps countries', () => {
@@ -70,7 +71,6 @@ describe('transformGscRow', () => {
       searchAppearance: 'AMP_TOP_STORIES',
       url: '/foo',
       query: 'Blue Widgets',
-      query_canonical: 'blue widgets',
       date: '2026-04-10',
       clicks: 2,
       impressions: 20,
@@ -152,7 +152,6 @@ describe('assembleDatesRow', () => {
       row: {
         url: '/foo',
         query: 'bar',
-        query_canonical: 'bar',
         date: '2026-04-10',
         clicks: 2,
         impressions: 20,

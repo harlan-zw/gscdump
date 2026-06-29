@@ -42,6 +42,7 @@ import { cacheGet, cachePut } from './catalog-cache'
 
 import { buildPartitionFilter } from './partition-prune'
 import {
+  DEFAULT_PARTITION_KEY_ENCODING,
   ICEBERG_PARTITION_SPEC,
   ICEBERG_SCHEMAS,
   ICEBERG_TABLES,
@@ -131,7 +132,7 @@ const ICEBERG_TYPE_MAP: Record<IcebergColumnType, IcebergPrimitiveType> = {
  * `ICEBERG_SCHEMAS` contract. Field ids are advisory — R2 Data Catalog
  * re-assigns them on `createTable` (see `ICEBERG_FIELD_ID_BASE`).
  */
-export function icebergSchemaFor(table: IcebergTableName, encoding: PartitionKeyEncoding = 'string'): IcebergSchema {
+export function icebergSchemaFor(table: IcebergTableName, encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING): IcebergSchema {
   return {
     'type': 'struct',
     'schema-id': 0,
@@ -150,7 +151,7 @@ export function icebergSchemaFor(table: IcebergTableName, encoding: PartitionKey
  * partition field's `source-id` is resolved to the real column field id from
  * {@link icebergSchemaFor}.
  */
-export function icebergPartitionSpecFor(table: IcebergTableName, encoding: PartitionKeyEncoding = 'string'): IcebergPartitionSpec {
+export function icebergPartitionSpecFor(table: IcebergTableName, encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING): IcebergPartitionSpec {
   const fields = icebergSchemasFor(encoding)[table].columns
   const fieldId = (name: string): number => {
     const col = fields.find(c => c.name === name)
@@ -183,7 +184,7 @@ export function icebergPartitionSpecFor(table: IcebergTableName, encoding: Parti
  * the DuckDB-over-R2 read path. clusterKey columns are all non-null, so the
  * null ordering is moot; `identity`/`asc` mirrors the physical write order.
  */
-export function icebergSortOrderFor(table: IcebergTableName, encoding: PartitionKeyEncoding = 'string'): IcebergSortOrder {
+export function icebergSortOrderFor(table: IcebergTableName, encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING): IcebergSortOrder {
   const fields = icebergSchemasFor(encoding)[table].columns
   const fieldId = (name: string): number => {
     const col = fields.find(c => c.name === name)
@@ -536,7 +537,7 @@ export async function ensureIcebergNamespace(conn: IcebergConnection): Promise<v
 export async function createIcebergTables(
   conn: IcebergConnection,
   tables: readonly IcebergTableName[] = ICEBERG_TABLES,
-  encoding: PartitionKeyEncoding = 'string',
+  encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING,
 ): Promise<IcebergTableOpResult[]> {
   const results: IcebergTableOpResult[] = []
   for (const table of tables) {
@@ -597,7 +598,8 @@ export interface ListIcebergDataFilesOptions {
   /**
    * Partition-key encoding of the catalog. `'int'` changes how manifest-summary
    * bounds are decoded (int bytes vs UTF-8) and how the per-file partition value
-   * is compared. Defaults to `'string'`.
+   * is compared. Defaults to `'int'` for new catalogs; pass `'string'` for
+   * legacy catalogs.
    */
   encoding?: PartitionKeyEncoding
   /**
@@ -839,7 +841,12 @@ export async function listIcebergDataFiles(
   }
 
   const endWalk = profiler?.start('iceberg.walk')
-  const partitionFilter = buildPartitionFilter(opts.siteId, opts.searchType, wantedMonths, opts.encoding ?? 'string')
+  const partitionFilter = buildPartitionFilter(
+    opts.siteId,
+    opts.searchType,
+    wantedMonths,
+    opts.encoding ?? DEFAULT_PARTITION_KEY_ENCODING,
+  )
   const manifests = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter })
 
   // Authoritative per-file partition check. Compare via String() so it is robust

@@ -54,11 +54,13 @@ export type {
 export type { CatalogCache } from './catalog-cache'
 export {
   assertIcebergTable,
+  DEFAULT_PARTITION_KEY_ENCODING,
   ICEBERG_FIELD_ID_BASE,
   ICEBERG_PARTITION_COLUMNS,
   ICEBERG_PARTITION_SPEC,
   ICEBERG_SCHEMAS,
   ICEBERG_SCHEMAS_INT,
+  ICEBERG_SCHEMAS_STRING,
   ICEBERG_TABLES,
   icebergPartitionColumns,
   icebergSchemasFor,

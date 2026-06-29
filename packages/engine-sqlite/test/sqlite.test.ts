@@ -42,6 +42,8 @@ describe('@gscdump/engine-sqlite', () => {
 
   it('schema declares compact site/date range indexes for resolver scans', () => {
     for (const [tableName, table] of Object.entries(schema)) {
+      if (tableName === 'gsc_query_dim')
+        continue
       const indexes = getTableConfig(table).indexes
       expect(indexes.some((idx) => {
         const config = (idx as any).config as { name: string, columns: Array<{ name: string }> }
@@ -97,7 +99,7 @@ describe('@gscdump/engine-sqlite', () => {
         clicks: sum(gsc_keywords.clicks),
       })
       .from(gsc_keywords)
-      .where(mergeScope(scope, eq(gsc_keywords.query_canonical, 'seo')))
+      .where(mergeScope(scope, eq(gsc_keywords.query, 'seo')))
       .groupBy(gsc_keywords.query)
       .orderBy(desc(sum(gsc_keywords.clicks)))
       .limit(10)
@@ -188,11 +190,13 @@ describe('@gscdump/engine-sqlite adapter primitives', () => {
     expect(sqliteResolverAdapter.inferTable(['date'])).toBe('gsc_devices')
   })
 
-  it('dimColumn maps dimension aliases to real columns', async () => {
-    const { sqliteResolverAdapter } = await import('../src')
+  it('dimColumn maps stored dimension aliases and queryCanonical compiles via query_dim', async () => {
+    const { compileSqlite, sqliteResolverAdapter } = await import('../src')
     expect(sqliteResolverAdapter.dimColumn('page', 'gsc_pages')).toBe('url')
-    expect(sqliteResolverAdapter.dimColumn('queryCanonical', 'gsc_keywords')).toBe('query_canonical')
     expect(sqliteResolverAdapter.dimColumn('country', 'gsc_countries')).toBe('country')
+    const canonicalExpr = compileSqlite(sqliteResolverAdapter.dimExprSql('queryCanonical', 'gsc_keywords')).sql
+    expect(canonicalExpr).toContain('"query_dim"."query_canonical"')
+    expect(canonicalExpr).toContain('"gsc_keywords"."query"')
   })
 
   it('metricSql compiles to expected aggregate SQL per metric', async () => {

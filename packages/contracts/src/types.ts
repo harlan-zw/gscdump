@@ -212,6 +212,7 @@ export type IndexingUrlStatus = 'indexed' | 'not_indexed' | 'pending'
 
 export interface IndexingUrlRow {
   url: string
+  issueType?: string | null
   verdict: string | null
   coverageState: string | null
   indexingState: string | null
@@ -255,7 +256,20 @@ export interface IndexingDiagnostics {
     indexedPercent: number
   }
   issues: IndexingIssue[]
-  meta: { siteUrl: string }
+  samples?: Record<string, IndexingUrlRow[]>
+  meta: {
+    siteUrl: string
+    indexingStatus?: 'pending' | 'partial' | 'complete'
+    indexingProgress?: number
+    sitemapTotal?: number
+    inspectedCount?: number
+    rollupBuiltAt?: number
+  }
+}
+
+export interface IndexingDiagnosticsParams {
+  sampleIssues?: string[] | string
+  sampleLimit?: number
 }
 
 export interface IndexingInspectRequest {
@@ -364,7 +378,7 @@ export interface AnalyticsClient {
   getInspections: (siteId: string) => Promise<InspectionIndex>
   getInspectionHistory: (siteId: string, hash: string) => Promise<InspectionHistoryResponse>
   getIndexingUrls: (siteId: string, params?: { limit?: number, offset?: number, status?: IndexingUrlStatus, issue?: string, search?: string }) => Promise<IndexingUrlsResponse>
-  getIndexingDiagnostics: (siteId: string) => Promise<IndexingDiagnostics>
+  getIndexingDiagnostics: (siteId: string, params?: IndexingDiagnosticsParams) => Promise<IndexingDiagnostics>
   requestIndexingInspect: (siteId: string, body: IndexingInspectRequest) => Promise<IndexingInspectResponse | IndexingInspectRateLimited>
   getCountries: (siteId: string, range: { start: string, end: string }) => Promise<CountriesResponse>
   getSearchAppearance: (siteId: string, range: { start: string, end: string }) => Promise<SearchAppearanceResponse>
@@ -693,6 +707,7 @@ export interface GscdumpRichResultItem {
 
 export interface GscdumpIndexingUrl {
   url: string
+  issueType?: string | null
   verdict: string | null
   coverageState: string | null
   indexingState: string | null
@@ -723,7 +738,15 @@ export interface GscdumpIndexingUrlsResponse {
 export interface GscdumpIndexingDiagnosticsResponse {
   summary: { totalUrls: number, indexed: number, indexedPercent: number }
   issues: { type: string, label: string, severity: GscdumpIndexingIssueSeverity, count: number }[]
-  meta: { siteUrl: string }
+  samples?: Record<string, GscdumpIndexingUrl[]>
+  meta: {
+    siteUrl: string
+    indexingStatus?: 'pending' | 'partial' | 'complete'
+    indexingProgress?: number
+    sitemapTotal?: number
+    inspectedCount?: number
+    rollupBuiltAt?: number
+  }
 }
 
 export type GscdumpIndexingInspectRequest = IndexingInspectRequest
@@ -1226,7 +1249,7 @@ export interface PartnerClient {
   refreshSitemaps: (siteId: string) => Promise<{ success: boolean, action: 'refreshed', sitemapCount: number, changed: boolean }>
   getIndexing: (siteId: string, days?: number) => Promise<GscdumpIndexingResponse>
   getIndexingUrls: (siteId: string, params?: IndexingUrlsParams) => Promise<GscdumpIndexingUrlsResponse>
-  getIndexingDiagnostics: (siteId: string) => Promise<GscdumpIndexingDiagnosticsResponse>
+  getIndexingDiagnostics: (siteId: string, params?: IndexingDiagnosticsParams) => Promise<GscdumpIndexingDiagnosticsResponse>
   requestIndexingInspect: (siteId: string, body: IndexingInspectRequest) => Promise<IndexingInspectResponse | IndexingInspectRateLimited>
   getUserSettings: () => Promise<GscdumpUserSettings>
   patchUserSettings: (body: Partial<GscdumpUserSettings>) => Promise<GscdumpUserSettings>

@@ -30,17 +30,19 @@ export interface SqlFragmentsConfig<TableKey extends string> {
    */
   tableRef?: (tableKey: TableKey) => SQL
   /**
-   * Opt-in correctness for canonical-primary lookups. When true, the
-   * `queryCanonical` dimension expression falls back to the raw `query` when
-   * the stored `query_canonical` is NULL (no normalizer ran at ingest) or `''`
-   * (a fully-stripped query like "free online"), i.e.
-   * `COALESCE(NULLIF(query_canonical, ''), query)`. This makes canonical a
-   * TOTAL key, valid for GROUP BY / comparison joins.
+   * Where `queryCanonical` comes from when compiling fact-table reads.
    *
-   * Default (false) preserves legacy behaviour: the raw nullable column, so a
-   * NULL/'' bucket pollutes top results and — because `NULL = NULL` is UNKNOWN
-   * — double-counts in the gaining/losing FULL OUTER JOIN. See ADR-0018.
+   * - `queryDim` (default): LEFT JOIN a query dimension relation and derive
+   *   `COALESCE(query_dim.query_canonical, fact.query)`.
+   * - `column`: read a `query_canonical` column from the primary relation. This
+   *   is reserved for derived canonical rollup relations, not fact tables.
    */
+  queryCanonicalSource?: 'queryDim' | 'column'
+  /** Relation used for the query-dimension join when `queryCanonicalSource=queryDim`. */
+  queryDimTableRef?: () => SQL
+  /** When true, also joins query_dim on site_id (SQLite/D1 dimension table). */
+  queryDimSiteScoped?: boolean
+  /** @deprecated Canonical reads now derive from query_dim or canonical rollups. */
   canonicalFallback?: boolean
 }
 
@@ -54,6 +56,7 @@ export interface SqlFragments<TableKey extends string> {
   urlToPathExpr: (col: string) => string
   colRef: (tableKey: TableKey, colName: string) => SQL
   tableRef: (tableKey: TableKey) => SQL
+  fromSql: (tableKey: TableKey, options?: { queryCanonical?: boolean }) => SQL
   dateColRef: (tableKey: TableKey) => SQL
   siteIdColRef?: (tableKey: TableKey) => SQL
   searchTypeColRef?: (tableKey: TableKey) => SQL
@@ -66,6 +69,15 @@ export interface SqlFragments<TableKey extends string> {
 }
 
 const METRIC_NAMES: Metric[] = ['clicks', 'impressions', 'ctr', 'position']
+const QUERY_DIM_ALIAS = 'query_dim'
+
+function quoteIdent(id: string): string {
+  return `"${id.replace(/"/g, '""')}"`
+}
+
+function qualifiedRaw(alias: string, column: string): SQL {
+  return sql.raw(`${quoteIdent(alias)}.${quoteIdent(column)}`)
+}
 
 function defaultSqliteUrlToPathExpr(col: string): string {
   return `CASE WHEN ${col} LIKE 'http%' THEN CASE WHEN INSTR(SUBSTR(${col}, INSTR(${col}, '://') + 3), '/') > 0 THEN SUBSTR(${col}, INSTR(${col}, '://') + 2 + INSTR(SUBSTR(${col}, INSTR(${col}, '://') + 3), '/')) ELSE '/' END ELSE ${col} END`
@@ -97,7 +109,9 @@ export function createSqlFragments<TableKey extends string>(
     includeSearchType,
     urlToPathExpr: urlToPathExprOverride,
     tableRef: tableRefOverride,
-    canonicalFallback = false,
+    queryCanonicalSource = 'queryDim',
+    queryDimTableRef,
+    queryDimSiteScoped = false,
   } = config
   const DIM_COLUMN_MAP = buildDimensionColumnMap(datasetToTableKey)
 
@@ -140,6 +154,17 @@ export function createSqlFragments<TableKey extends string>(
     return sql`${schema[tableKey]}`
   }
 
+  function fromSql(tableKey: TableKey, options: { queryCanonical?: boolean } = {}): SQL {
+    const base = tableRef(tableKey)
+    if (!options.queryCanonical || queryCanonicalSource !== 'queryDim')
+      return base
+    const dimTable = queryDimTableRef?.() ?? sql.raw(`${quoteIdent(QUERY_DIM_ALIAS)}`)
+    const joinOn = queryDimSiteScoped
+      ? sql`${colRef(tableKey, 'query')} = ${qualifiedRaw(QUERY_DIM_ALIAS, 'query')} AND ${colRef(tableKey, 'site_id')} = ${qualifiedRaw(QUERY_DIM_ALIAS, 'site_id')}`
+      : sql`${colRef(tableKey, 'query')} = ${qualifiedRaw(QUERY_DIM_ALIAS, 'query')}`
+    return sql`${base} LEFT JOIN ${dimTable} ON ${joinOn}`
+  }
+
   function dateColRef(tableKey: TableKey): SQL {
     return colRef(tableKey, 'date')
   }
@@ -156,12 +181,11 @@ export function createSqlFragments<TableKey extends string>(
     const colName = dimColumn(dim, tableKey)
     if (dim === 'page')
       return sql.raw(urlToPathExpr(colName))
-    // Opt-in: make canonical a TOTAL key by folding NULL/'' back to the raw
-    // query, so GROUP BY and the comparison join never see a null/empty bucket.
-    // `queryCanonical` only resolves on tables that also carry `query`, so the
-    // fallback colRef is always valid here. See ADR-0018.
-    if (canonicalFallback && dim === 'queryCanonical')
-      return sql`COALESCE(NULLIF(${colRef(tableKey, colName)}, ''), ${colRef(tableKey, 'query')})`
+    if (dim === 'queryCanonical') {
+      if (queryCanonicalSource === 'queryDim')
+        return sql`COALESCE(${qualifiedRaw(QUERY_DIM_ALIAS, 'query_canonical')}, ${colRef(tableKey, 'query')})`
+      return qualifiedRaw(String(tableKey), 'query_canonical')
+    }
     return colRef(tableKey, colName)
   }
 
@@ -261,10 +285,11 @@ export function createSqlFragments<TableKey extends string>(
         continue
 
       const dim = f.dimension as Dimension
-      const colName = dimColumn(dim, tableKey)
-      const cRef = colRef(tableKey, colName)
-      const matchExpr = dim === 'page' || dim === 'queryCanonical' ? dimExprSql(dim, tableKey) : cRef
-      const patternExpr = dim === 'queryCanonical' ? matchExpr : cRef
+      const cRef = dim === 'queryCanonical'
+        ? undefined
+        : colRef(tableKey, dimColumn(dim, tableKey))
+      const matchExpr = dim === 'page' || dim === 'queryCanonical' ? dimExprSql(dim, tableKey) : cRef!
+      const patternExpr = dim === 'queryCanonical' ? matchExpr : cRef!
 
       switch (f.operator) {
         case 'equals':
@@ -307,6 +332,7 @@ export function createSqlFragments<TableKey extends string>(
     urlToPathExpr,
     colRef,
     tableRef,
+    fromSql,
     dateColRef,
     siteIdColRef: includeSiteId ? siteIdColRef : undefined,
     searchTypeColRef: includeSearchType ? searchTypeColRef : undefined,

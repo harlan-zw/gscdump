@@ -111,21 +111,21 @@ describe('query_canonical_daily rollup (integration)', () => {
     }
   }
 
-  function qRow(query: string, canonical: string | null, date: string, clicks: number, impressions: number): Row {
-    return { query, query_canonical: canonical, date, clicks, impressions, sum_position: impressions * 5 }
+  function qRow(query: string, date: string, clicks: number, impressions: number): Row {
+    return { query, date, clicks, impressions, sum_position: impressions * 5 }
   }
 
   async function seed(engine: StorageEngine) {
-    // 'foo' has two variants across two days; bar (null) and baz ('') exercise
-    // the null-free COALESCE the rollup is built with.
+    // 'foo' has two variants across two days. Canonical grouping is supplied
+    // by query_dim, not by a fact-table `query_canonical` column.
     await engine.writeDay({ userId: 'u1', siteId: 's1', table: 'queries', date: '2026-03-03' }, [
-      qRow('Foo', 'foo', '2026-03-03', 10, 100),
-      qRow('foos', 'foo', '2026-03-03', 5, 50),
-      qRow('bar', null, '2026-03-03', 7, 70),
+      qRow('Foo', '2026-03-03', 10, 100),
+      qRow('foos', '2026-03-03', 5, 50),
+      qRow('bar', '2026-03-03', 7, 70),
     ])
     await engine.writeDay({ userId: 'u1', siteId: 's1', table: 'queries', date: '2026-03-10' }, [
-      qRow('Foo', 'foo', '2026-03-10', 4, 40),
-      qRow('baz', '', '2026-03-10', 3, 30),
+      qRow('Foo', '2026-03-10', 4, 40),
+      qRow('baz', '2026-03-10', 3, 30),
     ])
   }
 
@@ -141,6 +141,32 @@ describe('query_canonical_daily rollup (integration)', () => {
     return results[0].parquetKey!
   }
 
+  async function writeDefaultQueryDim(dataSource: any, normalizerVersion = 2) {
+    const store = createQueryDimStore({ dataSource })
+    const recs = buildQueryDimRecords(['Foo', 'foos', 'bar', 'baz'], {
+      normalizeQuery: (q) => {
+        const lower = q.toLowerCase()
+        return lower === 'foos' ? 'foo' : lower
+      },
+      normalizerVersion,
+      classifyIntentCode: () => 0,
+      intentVersion: 1,
+    })
+    await store.write({ userId: 'u1', siteId: 's1' }, recs, 1_700_000_000_000)
+    return {
+      keys: [store.parquetKey({ userId: 'u1', siteId: 's1' })],
+      normalizerVersion,
+      intentVersion: 1,
+    }
+  }
+
+  function canonicalSource(key: string, queryDim: Awaited<ReturnType<typeof writeDefaultQueryDim>>) {
+    return {
+      keys: [key],
+      queryDim,
+    }
+  }
+
   const ctx = { userId: 'u1', siteId: 's1', table: 'queries' as TableName }
 
   function byCanonical(rows: Array<Record<string, unknown>>) {
@@ -152,7 +178,7 @@ describe('query_canonical_daily rollup (integration)', () => {
 
   it('derives canonical from the query dimension when present (not the stored column)', async () => {
     const { engine, dataSource } = await setup()
-    await seed(engine) // stored query_canonical is 'foo' for Foo/foos
+    await seed(engine)
     // Build a dimension that maps the foo-variants to a DIFFERENT canonical,
     // simulating an improved/newer normalizer. The rollup must reflect this
     // without re-ingesting the facts.
@@ -180,12 +206,19 @@ describe('query_canonical_daily rollup (integration)', () => {
   it('top: rollup-served results equal live raw aggregation (with fallback)', async () => {
     const { engine, dataSource } = await setup()
     await seed(engine)
+    const queryDim = await writeDefaultQueryDim(dataSource)
     const key = await buildDaily(engine, dataSource)
     const state = canonicalState('2026-03-01', '2026-03-31')
     const range = { startDate: '2026-03-01', endDate: '2026-03-31' }
 
-    const live = await runOptimizedQuery(engine.runSQL, ctx, state, range, { canonicalFallback: true })
-    const rolled = await runOptimizedQuery(engine.runSQL, ctx, state, range, { canonicalSource: { keys: [key] }, canonicalFallback: true })
+    const live = await runOptimizedQuery(engine.runSQL, ctx, state, range, {
+      queryDim,
+      primarySourceFallback: 'raw',
+    })
+    const rolled = await runOptimizedQuery(engine.runSQL, ctx, state, range, {
+      canonicalSource: canonicalSource(key, queryDim),
+      primarySourceFallback: 'raw',
+    })
 
     const liveMap = byCanonical(live.rows)
     const rolledMap = byCanonical(rolled.rows)
@@ -195,11 +228,22 @@ describe('query_canonical_daily rollup (integration)', () => {
     // 'foo' sums both variants across both days; bar/baz folded to themselves.
     expect(liveMap.get('foo')).toEqual({ clicks: 19, impressions: 190 })
     expect(rolledMap.get('bar')).toEqual({ clicks: 7, impressions: 70 })
+    expect(live.source).toMatchObject({
+      kind: 'raw-partitions',
+      fallback: { kind: 'canonical-source-missing' },
+      fallbacks: [
+        { kind: 'canonical-source-missing' },
+        { kind: 'primary-source-missing' },
+      ],
+    })
+    expect(rolled.source).toEqual({ kind: 'canonical-rollup' })
+    expect(rolled.extraSource).toMatchObject({ kind: 'raw-partitions', fallback: { kind: 'primary-source-missing' } })
   })
 
   it('top: queryCanonical filters use fallback on live and match the rollup', async () => {
     const { engine, dataSource } = await setup()
     await seed(engine)
+    const queryDim = await writeDefaultQueryDim(dataSource)
     const key = await buildDaily(engine, dataSource)
     const filtered: BuilderState = {
       dimensions: ['queryCanonical'],
@@ -212,8 +256,14 @@ describe('query_canonical_daily rollup (integration)', () => {
     }
     const range = { startDate: '2026-03-01', endDate: '2026-03-31' }
 
-    const live = await runOptimizedQuery(engine.runSQL, ctx, filtered, range, { canonicalFallback: true })
-    const rolled = await runOptimizedQuery(engine.runSQL, ctx, filtered, range, { canonicalSource: { keys: [key] }, canonicalFallback: true })
+    const live = await runOptimizedQuery(engine.runSQL, ctx, filtered, range, {
+      queryDim,
+      primarySourceFallback: 'raw',
+    })
+    const rolled = await runOptimizedQuery(engine.runSQL, ctx, filtered, range, {
+      canonicalSource: canonicalSource(key, queryDim),
+      primarySourceFallback: 'raw',
+    })
 
     const liveMap = byCanonical(live.rows)
     const rolledMap = byCanonical(rolled.rows)
@@ -232,47 +282,103 @@ describe('query_canonical_daily rollup (integration)', () => {
     const rawState: BuilderState = { ...canonicalState('2026-03-01', '2026-03-31'), dimensions: ['query'] }
     const res = await runOptimizedQuery(engine.runSQL, ctx, rawState, { startDate: '2026-03-01', endDate: '2026-03-31' }, {
       canonicalSource: { keys: ['u_u1/s1/rollups/DOES_NOT_EXIST.parquet'] },
+      primarySourceFallback: 'raw',
     })
     expect(res.rows.length).toBeGreaterThan(0)
     expect(res.rows.some(r => r.query === 'Foo')).toBe(true)
   })
 
-  it('requires canonicalFallback opt-in — coalesced rollup not served to a legacy caller', async () => {
+  it('uses a canonical rollup without the legacy fallback flag', async () => {
     const { engine, dataSource } = await setup()
     await seed(engine)
-    await buildDaily(engine, dataSource)
-    // Eligible query + a BOGUS key, but no fallback opt-in. The rollup carries
-    // COALESCE semantics, so the gate must refuse it (bogus key would error if
-    // used) and serve the live legacy path instead.
+    const queryDim = await writeDefaultQueryDim(dataSource)
+    const key = await buildDaily(engine, dataSource)
     const res = await runOptimizedQuery(engine.runSQL, ctx, canonicalState('2026-03-01', '2026-03-31'), { startDate: '2026-03-01', endDate: '2026-03-31' }, {
-      canonicalSource: { keys: ['u_u1/s1/rollups/DOES_NOT_EXIST.parquet'] },
+      canonicalSource: canonicalSource(key, queryDim),
+      primarySourceFallback: 'raw',
     })
-    expect(res.rows.length).toBeGreaterThan(0)
+    expect(res.source).toEqual({ kind: 'canonical-rollup' })
   })
 
-  it('declines a window newer than the rollup coverage (no silent undercount)', async () => {
+  it('fails a window newer than the rollup coverage by default (no silent undercount)', async () => {
     const { engine, dataSource } = await setup()
     await seed(engine)
-    await buildDaily(engine, dataSource)
-    // Window ends 2026-03-31 but the rollup only covers through 2026-03-10 → the
-    // staleness guard falls back to live (bogus key proves the rollup is unused).
+    const queryDim = await writeDefaultQueryDim(dataSource)
+    const key = await buildDaily(engine, dataSource)
+    // Window ends 2026-03-31 but the rollup only covers through 2026-03-10.
+    await expect(runOptimizedQuery(engine.runSQL, ctx, canonicalState('2026-03-01', '2026-03-31'), { startDate: '2026-03-01', endDate: '2026-03-31' }, {
+      canonicalSource: { ...canonicalSource(key, queryDim), coversThrough: '2026-03-10' },
+    })).rejects.toMatchObject({
+      fallback: { kind: 'primary-source-missing' },
+    })
+  })
+
+  it('allows stale coverage only through explicit raw fallback', async () => {
+    const { engine, dataSource } = await setup()
+    await seed(engine)
+    const queryDim = await writeDefaultQueryDim(dataSource)
+    const key = await buildDaily(engine, dataSource)
     const res = await runOptimizedQuery(engine.runSQL, ctx, canonicalState('2026-03-01', '2026-03-31'), { startDate: '2026-03-01', endDate: '2026-03-31' }, {
-      canonicalFallback: true,
-      canonicalSource: { keys: ['u_u1/s1/rollups/DOES_NOT_EXIST.parquet'], coversThrough: '2026-03-10' },
+      canonicalSource: { ...canonicalSource(key, queryDim), coversThrough: '2026-03-10' },
+      primarySourceFallback: 'raw',
     })
     expect(res.rows.length).toBeGreaterThan(0)
+    expect(res.source).toMatchObject({ kind: 'raw-partitions', fallback: { kind: 'canonical-source-stale-coverage' } })
+  })
+
+  it('uses raw facts through query_dim when canonicalSource is missing', async () => {
+    const { engine, dataSource } = await setup()
+    await seed(engine)
+    const queryDim = await writeDefaultQueryDim(dataSource)
+    const res = await runOptimizedQuery(engine.runSQL, ctx, canonicalState('2026-03-01', '2026-03-31'), { startDate: '2026-03-01', endDate: '2026-03-31' }, {
+      queryDim,
+      primarySourceFallback: 'raw',
+    })
+    expect(res.rows.length).toBeGreaterThan(0)
+    expect(res.source).toMatchObject({ kind: 'raw-partitions', fallback: { kind: 'canonical-source-missing' } })
+  })
+
+  it('fails canonical reads when query dimension metadata is missing from the source', async () => {
+    const { engine, dataSource } = await setup()
+    await seed(engine)
+    await writeDefaultQueryDim(dataSource)
+    const key = await buildDaily(engine, dataSource)
+    await expect(runOptimizedQuery(engine.runSQL, ctx, canonicalState('2026-03-01', '2026-03-31'), { startDate: '2026-03-01', endDate: '2026-03-31' }, {
+      canonicalSource: { keys: [key] },
+    })).rejects.toMatchObject({
+      fallback: { kind: 'query-dim-missing' },
+    })
+  })
+
+  it('fails canonical reads when query dimension version is stale', async () => {
+    const { engine, dataSource } = await setup()
+    await seed(engine)
+    const queryDim = await writeDefaultQueryDim(dataSource, 2)
+    const key = await buildDaily(engine, dataSource)
+    await expect(runOptimizedQuery(engine.runSQL, ctx, canonicalState('2026-03-01', '2026-03-31'), { startDate: '2026-03-01', endDate: '2026-03-31' }, {
+      canonicalSource: canonicalSource(key, queryDim),
+      canonicalRequirements: { normalizerVersion: 3 },
+    })).rejects.toMatchObject({
+      fallback: { kind: 'query-dim-stale-version' },
+    })
   })
 
   it('gaining/losing: rollup-served comparison equals live raw comparison', async () => {
     const { engine, dataSource } = await setup()
     await seed(engine)
+    const queryDim = await writeDefaultQueryDim(dataSource)
     const key = await buildDaily(engine, dataSource)
     const current = canonicalState('2026-03-08', '2026-03-14')
     const previous = canonicalState('2026-03-01', '2026-03-07')
     const windows = { current: { startDate: '2026-03-08', endDate: '2026-03-14' }, previous: { startDate: '2026-03-01', endDate: '2026-03-07' } }
 
-    const live = await runComparisonQuery(engine.runSQL, ctx, current, previous, windows, undefined, { canonicalFallback: true })
-    const rolled = await runComparisonQuery(engine.runSQL, ctx, current, previous, windows, undefined, { canonicalSource: { keys: [key] }, canonicalFallback: true })
+    const live = await runComparisonQuery(engine.runSQL, ctx, current, previous, windows, undefined, {
+      queryDim,
+      primarySourceFallback: 'raw',
+    })
+    const rolled = await runComparisonQuery(engine.runSQL, ctx, current, previous, windows, undefined, {
+      canonicalSource: canonicalSource(key, queryDim),
+    })
 
     const liveFoo = live.rows.find(r => r.queryCanonical === 'foo')
     const rolledFoo = rolled.rows.find(r => r.queryCanonical === 'foo')

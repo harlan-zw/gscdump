@@ -68,6 +68,16 @@ Always import `sql` from `@gscdump/engine-sqlite` — not `drizzle-orm` directly
 - `sqliteResolverAdapter` / `createSqliteResolverAdapter` / `probeSqliteRegex` — dialect adapter for the resolver kit.
 - `resolveWindow` (re-exported from `@gscdump/engine/period`).
 
+## D1 Analytics Table Status
+
+The `gsc_*` analytics tables remain a supported compatibility surface. The
+2026-06-29 Iceberg migration audit found active package exports, resolver tests,
+and docs for `gsc_pages`, `gsc_keywords`, `gsc_page_keywords`, `gsc_countries`,
+and `gsc_devices`. Do not remove these tables as part of the Iceberg/canonical
+migration. A future retirement should be staged behind a consumer usage audit,
+dual-read/shadow-read checks, and a release note that names the replacement
+Iceberg/R2 SQL path.
+
 ## Related
 
 - [`@gscdump/engine`](../engine) — Storage contracts + dialect-neutral resolver.

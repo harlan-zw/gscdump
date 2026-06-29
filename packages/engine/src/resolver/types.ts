@@ -22,6 +22,7 @@ export interface ResolverAdapter<TableKey extends string = string> {
   dimColumn: (dim: Dimension, tableKey: TableKey) => string
   isMetricDimension: (dim: string) => dim is Metric
   tableRef: (tableKey: TableKey) => SQL
+  fromSql: (tableKey: TableKey, options?: { queryCanonical?: boolean }) => SQL
   dateColRef: (tableKey: TableKey) => SQL
   urlToPathExpr: (col: string) => string
   siteIdColRef?: (tableKey: TableKey) => SQL

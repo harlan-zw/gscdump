@@ -1017,7 +1017,7 @@ export const queryCanonicalVariantsRollup: RollupDef = {
     { name: 'variants', type: 'VARCHAR', nullable: true },
   ],
   parquetSortKey: ['joinKey'],
-  async build({ engine, ctx, searchType }) {
+  async build({ engine, ctx, dataSource, searchType }) {
     const parts = await engine.listPartitions({
       ctx,
       table: 'queries',
@@ -1038,25 +1038,32 @@ export const queryCanonicalVariantsRollup: RollupDef = {
     // JS below — a canonical whose variants straddle a page boundary is reassembled.
     interface Variant { query: string, clicks: number, impressions: number, sumPos: number }
     const byCanonical = new Map<string, Variant[]>()
+    const dimStore = createQueryDimStore({ dataSource })
+    const useDim = (await dimStore.loadMeta(ctx)) !== null
+    const canonExpr = useDim ? 'COALESCE(qd.query_canonical, q.query)' : 'q.query'
     let cursor: string | null = null
     for (;;) {
-      const after = cursor === null ? '' : `AND query > '${cursor.replace(/'/g, '\'\'')}'`
+      const after = cursor === null ? '' : `AND q.query > '${cursor.replace(/'/g, '\'\'')}'`
+      const fileSets: Record<string, FileSetRef> = { FILES: { table: 'queries', partitions } }
+      if (useDim)
+        fileSets.QUERY_DIM = { table: 'queries', keys: [dimStore.parquetKey(ctx)] }
       const { rows } = await engine.runSQL({
         ctx,
         table: 'queries',
         ...(searchType !== undefined ? { searchType } : {}),
-        fileSets: { FILES: { table: 'queries', partitions } },
+        fileSets,
         sql: `
           SELECT
-            COALESCE(NULLIF(query_canonical, ''), query) AS joinKey,
-            query AS query,
-            SUM(clicks) AS clicks,
-            SUM(impressions) AS impressions,
-            SUM(sum_position) AS sum_pos
-          FROM read_parquet({{FILES}}, union_by_name = true)
-          WHERE query IS NOT NULL ${after}
-          GROUP BY COALESCE(NULLIF(query_canonical, ''), query), query
-          ORDER BY query
+            ${canonExpr} AS joinKey,
+            q.query AS query,
+            SUM(q.clicks) AS clicks,
+            SUM(q.impressions) AS impressions,
+            SUM(q.sum_position) AS sum_pos
+          FROM read_parquet({{FILES}}, union_by_name = true) q
+          ${useDim ? 'LEFT JOIN read_parquet({{QUERY_DIM}}, union_by_name = true) qd ON q.query = qd.query' : ''}
+          WHERE q.query IS NOT NULL ${after}
+          GROUP BY ${canonExpr}, q.query
+          ORDER BY q.query
           LIMIT ${ROLLUP_PAGE_ROWS_WIDE}
         `,
       })
@@ -1094,6 +1101,9 @@ export const queryCanonicalVariantsRollup: RollupDef = {
   },
 }
 
+const CANONICAL_DAILY_ROLLUP_FINAL_ID = 'query_canonical_daily'
+const CANONICAL_DAILY_PART_STEM = 'query_canonical_daily__part'
+
 /**
  * Canonical-grained fact aggregate (ADR-0018 Gap 2): pre-sums the raw
  * `(query × date)` query rows to `(query_canonical × date)`, so canonical-
@@ -1102,10 +1112,10 @@ export const queryCanonicalVariantsRollup: RollupDef = {
  * these per-date sums over a window is exact — identical to aggregating the raw
  * rows.
  *
- * Null-free by construction: groups by `COALESCE(NULLIF(query_canonical, ''),
- * query)`, the same total-key expression the opt-in read path uses (ADR-0018
- * Gap 1), so the rollup never carries a NULL/'' canonical bucket and the read
- * path needs no fallback when pointed at it.
+ * Null-free by construction: groups by the versioned query dimension when it
+ * exists, with raw query as the fallback, so the rollup never carries a NULL/''
+ * canonical bucket and the read path can treat the rollup's `query_canonical`
+ * column as already-derived.
  *
  * Date-grained full history (`windowDays: null`): one rollup serves every date
  * range (reads filter by `date`) and both windows of a comparison. Opt-in (not
@@ -1129,13 +1139,13 @@ export const queryCanonicalDailyRollup: RollupDef = {
     // Prefer the versioned query dimension when present: derive canonical from
     // it (JOIN on raw query) so the rollup reflects the CURRENT normalizer
     // version without re-ingesting facts — a rebuild of the small dimension is
-    // enough. Falls back to the per-row stored `query_canonical` otherwise.
+    // enough. Falls back to raw query grouping when the dimension is absent.
     // See ADR-0019 / ADR-0020.
     const dimStore = createQueryDimStore({ dataSource })
     const useDim = (await dimStore.loadMeta(ctx)) !== null
     const canonExpr = useDim
-      ? `COALESCE(qd.query_canonical, NULLIF(q.query_canonical, ''), q.query)`
-      : `COALESCE(NULLIF(query_canonical, ''), query)`
+      ? `COALESCE(qd.query_canonical, q.query)`
+      : `query`
 
     // Byte-bounded date windows: `(query_canonical × date)` is unbounded for a
     // large site, so a single scan could exceed the Workers service-binding RPC
@@ -1231,8 +1241,8 @@ export async function rebuildCanonicalDailyResumable(opts: {
   const dimStore = createQueryDimStore({ dataSource })
   const useDim = (await dimStore.loadMeta(ctx)) !== null
   const canonExpr = useDim
-    ? `COALESCE(qd.query_canonical, NULLIF(q.query_canonical, ''), q.query)`
-    : `COALESCE(NULLIF(query_canonical, ''), query)`
+    ? `COALESCE(qd.query_canonical, q.query)`
+    : `query`
   const extraFileSets = useDim ? { QUERY_DIM: { table: 'queries' as TableName, keys: [dimStore.parquetKey(ctx)] } } : undefined
   const sqlFor = dailyWindowSqlFor(useDim, canonExpr)
   const cols = queryCanonicalDailyRollup.parquetColumns!
@@ -1291,9 +1301,6 @@ export async function rebuildCanonicalDailyResumable(opts: {
   await dataSource.write(rollupKey(ctx, CANONICAL_DAILY_ROLLUP_FINAL_ID, builtAt, searchType), new TextEncoder().encode(JSON.stringify(envelope)))
   return { done: true, nextWindowOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten: batchRows.length }
 }
-
-const CANONICAL_DAILY_ROLLUP_FINAL_ID = 'query_canonical_daily'
-const CANONICAL_DAILY_PART_STEM = 'query_canonical_daily__part'
 
 /**
  * Aggregates the per-URL Indexing API metadata entity store (populated by

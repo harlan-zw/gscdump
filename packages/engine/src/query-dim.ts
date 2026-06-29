@@ -70,8 +70,8 @@ export interface QueryDimDeps {
 
 /**
  * Pure: distinct raw queries → dimension records. De-dupes, drops empties, and
- * folds an empty/whitespace canonical back to the raw query so the key is
- * total (matches the read path's `COALESCE(NULLIF(query_canonical, ''), query)`).
+ * folds an empty/whitespace canonical back to the raw query so the dimension
+ * is total for read-time joins.
  */
 export function buildQueryDimRecords(queries: Iterable<string>, deps: QueryDimDeps): QueryDimRecord[] {
   const seen = new Set<string>()

@@ -97,10 +97,10 @@ describe('extractParquetPushdown', () => {
 
 describe('pushdown decode parity (queries table)', () => {
   const rows: Row[] = [
-    { query: 'foo', query_canonical: 'foo', date: '2025-01-01', clicks: 5, impressions: 50, sum_position: 21.5 },
-    { query: 'bar', query_canonical: 'bar', date: '2025-01-01', clicks: 1, impressions: 2, sum_position: 4 },
-    { query: 'foo', query_canonical: 'foo', date: '2025-01-02', clicks: 9, impressions: 90, sum_position: 30 },
-    { query: 'baz', query_canonical: null, date: '2025-01-03', clicks: 3, impressions: 8, sum_position: 12 },
+    { query: 'foo', date: '2025-01-01', clicks: 5, impressions: 50, sum_position: 21.5 },
+    { query: 'bar', date: '2025-01-01', clicks: 1, impressions: 2, sum_position: 4 },
+    { query: 'foo', date: '2025-01-02', clicks: 9, impressions: 90, sum_position: 30 },
+    { query: 'baz', date: '2025-01-03', clicks: 3, impressions: 8, sum_position: 12 },
   ]
   const bytes = encodeRowsToParquet('queries', rows)
 

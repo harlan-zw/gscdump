@@ -40,15 +40,19 @@ function parts(
 
 const MONTHS = new Set([676]) // 2026-05
 
+function stringFilter(siteId: string | number, searchType: string | number, months: ReadonlySet<number>) {
+  return buildPartitionFilter(siteId, searchType, months, 'string')
+}
+
 describe('buildPartitionFilter', () => {
   it('keeps a manifest with no summaries (cannot prune)', () => {
-    const f = buildPartitionFilter('s3', 'web', MONTHS)
+    const f = stringFilter('s3', 'web', MONTHS)
     expect(f(undefined)).toBe(true)
     expect(f([])).toBe(true)
   })
 
   it('keeps when the target site is inside the summary range', () => {
-    const f = buildPartitionFilter('s3', 'web', MONTHS)
+    const f = stringFilter('s3', 'web', MONTHS)
     const p = parts(summary(strBound('s1'), strBound('s5')), summary(intBound(670), intBound(680)))
     expect(f(p)).toBe(true)
   })
@@ -63,44 +67,56 @@ describe('buildPartitionFilter', () => {
     expect(f(p)).toBe(true)
   })
 
+  it('defaults to int encoding and avoids string-bound pruning on identity columns', () => {
+    const f = buildPartitionFilter('s9', 'discover', MONTHS)
+    const p = parts(
+      summary(strBound('s1'), strBound('s5')),
+      summary(intBound(676), intBound(676)),
+      summary(strBound('web'), strBound('web')),
+    )
+    // Under int encoding these identity bounds are int bytes, not UTF-8. The
+    // default path keeps the manifest instead of decoding string garbage.
+    expect(f(p)).toBe(true)
+  })
+
   it('skips when the target site is above the range', () => {
-    const f = buildPartitionFilter('s9', 'web', MONTHS)
+    const f = stringFilter('s9', 'web', MONTHS)
     const p = parts(summary(strBound('s1'), strBound('s5')), summary(intBound(670), intBound(680)))
     expect(f(p)).toBe(false)
   })
 
   it('skips when the target site is below the range', () => {
-    const f = buildPartitionFilter('s0', 'web', MONTHS)
+    const f = stringFilter('s0', 'web', MONTHS)
     const p = parts(summary(strBound('s1'), strBound('s5')), summary(intBound(670), intBound(680)))
     expect(f(p)).toBe(false)
   })
 
   it('skips when no wanted month overlaps the date_month range', () => {
-    const f = buildPartitionFilter('s3', 'web', MONTHS)
+    const f = stringFilter('s3', 'web', MONTHS)
     const p = parts(summary(strBound('s1'), strBound('s5')), summary(intBound(600), intBound(650)))
     expect(f(p)).toBe(false)
   })
 
   it('keeps when at least one wanted month overlaps', () => {
-    const f = buildPartitionFilter('s3', 'web', new Set([650, 676, 700]))
+    const f = stringFilter('s3', 'web', new Set([650, 676, 700]))
     const p = parts(summary(strBound('s1'), strBound('s5')), summary(intBound(670), intBound(680)))
     expect(f(p)).toBe(true)
   })
 
   it('skips when site matches but month is out of range', () => {
-    const f = buildPartitionFilter('s3', 'web', MONTHS)
+    const f = stringFilter('s3', 'web', MONTHS)
     const p = parts(summary(strBound('s1'), strBound('s5')), summary(intBound(600), intBound(650)))
     expect(f(p)).toBe(false)
   })
 
   it('keeps when a site bound is absent (cannot prune that dimension)', () => {
-    const f = buildPartitionFilter('s9', 'web', MONTHS)
+    const f = stringFilter('s9', 'web', MONTHS)
     const p = parts(summary(undefined, undefined), summary(intBound(670), intBound(680)))
     expect(f(p)).toBe(true)
   })
 
   it('keeps a single-site manifest (lower == upper == target)', () => {
-    const f = buildPartitionFilter('site-abc', 'web', MONTHS)
+    const f = stringFilter('site-abc', 'web', MONTHS)
     const p = parts(summary(strBound('site-abc'), strBound('site-abc')), summary(intBound(676), intBound(676)))
     expect(f(p)).toBe(true)
   })
@@ -110,7 +126,7 @@ describe('buildPartitionFilter', () => {
   it('skips when the target search_type is outside a single-type manifest bound', () => {
     // A manifest holding only `web` appends: bound is `[web, web]`. A `discover`
     // query proves it cannot match → skip without fetching entries.
-    const f = buildPartitionFilter('s3', 'discover', MONTHS)
+    const f = stringFilter('s3', 'discover', MONTHS)
     const p = parts(
       summary(strBound('s1'), strBound('s5')),
       summary(intBound(670), intBound(680)),
@@ -121,7 +137,7 @@ describe('buildPartitionFilter', () => {
 
   it('keeps when the target search_type falls inside a mixed-type manifest bound', () => {
     // A manifest spanning `discover`..`web` could hold `news` → keep.
-    const f = buildPartitionFilter('s3', 'news', MONTHS)
+    const f = stringFilter('s3', 'news', MONTHS)
     const p = parts(
       summary(strBound('s1'), strBound('s5')),
       summary(intBound(670), intBound(680)),
@@ -131,7 +147,7 @@ describe('buildPartitionFilter', () => {
   })
 
   it('keeps when the target search_type equals a single-type bound', () => {
-    const f = buildPartitionFilter('s3', 'web', MONTHS)
+    const f = stringFilter('s3', 'web', MONTHS)
     const p = parts(
       summary(strBound('s1'), strBound('s5')),
       summary(intBound(670), intBound(680)),
@@ -141,7 +157,7 @@ describe('buildPartitionFilter', () => {
   })
 
   it('keeps when the search_type bound is absent (cannot prune that dimension)', () => {
-    const f = buildPartitionFilter('s3', 'discover', MONTHS)
+    const f = stringFilter('s3', 'discover', MONTHS)
     const p = parts(
       summary(strBound('s1'), strBound('s5')),
       summary(intBound(670), intBound(680)),
@@ -151,7 +167,7 @@ describe('buildPartitionFilter', () => {
   })
 
   it('prunes on search_type even when site and month both match', () => {
-    const f = buildPartitionFilter('s3', 'image', MONTHS)
+    const f = stringFilter('s3', 'image', MONTHS)
     const p = parts(
       summary(strBound('s1'), strBound('s5')),
       summary(intBound(670), intBound(680)),

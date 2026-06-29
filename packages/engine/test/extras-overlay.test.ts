@@ -28,12 +28,17 @@ const canonicalState: BuilderState = {
 }
 
 describe('runOptimizedQuery extras overlay', () => {
+  const rawCanonicalFallback = {
+    queryDim: { keys: ['u_u1/s1/entities/query_dim/index.parquet'], normalizerVersion: 2, intentVersion: 1 },
+    primarySourceFallback: 'raw' as const,
+  }
+
   it('serves the extra from the overlay and skips the live SQL on a hit', async () => {
     const overlayRows = [{ joinKey: 'foo', variantCount: 2, canonicalName: 'Foo', variants: 'Foo:::5:::50:::2.0' }]
     const runSQL = vi.fn(fakeRunSQL([{ joinKey: 'SHOULD_NOT_BE_USED' }]))
     const resolveExtra = vi.fn(async () => overlayRows)
 
-    const result = await runOptimizedQuery(runSQL, ctx, canonicalState, dateRange, { resolveExtra })
+    const result = await runOptimizedQuery(runSQL, ctx, canonicalState, dateRange, { resolveExtra, ...rawCanonicalFallback })
 
     expect(resolveExtra).toHaveBeenCalledOnce()
     expect(resolveExtra.mock.calls[0]![0]).toMatchObject({ key: 'canonicalExtras' })
@@ -47,7 +52,7 @@ describe('runOptimizedQuery extras overlay', () => {
     const runSQL = vi.fn(fakeRunSQL(liveRows))
     const resolveExtra = vi.fn(async () => null)
 
-    const result = await runOptimizedQuery(runSQL, ctx, canonicalState, dateRange, { resolveExtra })
+    const result = await runOptimizedQuery(runSQL, ctx, canonicalState, dateRange, { resolveExtra, ...rawCanonicalFallback })
 
     expect(resolveExtra).toHaveBeenCalledOnce()
     // Both the main query and the extra's live SQL run.
@@ -55,11 +60,11 @@ describe('runOptimizedQuery extras overlay', () => {
     expect(result.extras).toEqual([{ key: 'canonicalExtras', rows: liveRows }])
   })
 
-  it('runs the live SQL when no overlay is supplied (unchanged default path)', async () => {
+  it('runs the live SQL when no overlay is supplied and raw fallback is explicit', async () => {
     const liveRows = [{ joinKey: 'bar', variantCount: 1, canonicalName: 'bar', variants: '' }]
     const runSQL = vi.fn(fakeRunSQL(liveRows))
 
-    const result = await runOptimizedQuery(runSQL, ctx, canonicalState, dateRange)
+    const result = await runOptimizedQuery(runSQL, ctx, canonicalState, dateRange, rawCanonicalFallback)
 
     expect(runSQL).toHaveBeenCalledTimes(2)
     expect(result.extras).toEqual([{ key: 'canonicalExtras', rows: liveRows }])
