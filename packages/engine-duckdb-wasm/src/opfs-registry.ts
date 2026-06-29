@@ -38,6 +38,11 @@ interface RegistryEntry {
   refs: number
 }
 
+interface ViewRegistryEntry {
+  refs: number
+  signature: string | undefined
+}
+
 export interface OpfsHandleRegistry {
   /**
    * Ensure `name` is registered with the backend exactly once, then increment
@@ -64,7 +69,7 @@ export interface OpfsHandleRegistry {
    * A view shared by two consumers on one DB must not be dropped until both
    * detach, otherwise the first detach breaks the second consumer's queries.
    */
-  acquireView: (key: string) => void
+  acquireView: (key: string, signature?: string) => void
   /**
    * Decrement a view's reference count; when it reaches zero, run `drop` (the
    * caller's `DROP VIEW IF EXISTS`). Unknown keys run `drop` (best-effort
@@ -73,6 +78,8 @@ export interface OpfsHandleRegistry {
   releaseView: (key: string, drop: () => Promise<void>) => Promise<void>
   /** Current reference count for a view key (0 when no consumer holds it). */
   viewRefs: (key: string) => number
+  /** Signature of the live view definition, if this registry owns it. */
+  viewSignature: (key: string) => string | undefined
 }
 
 export function createOpfsHandleRegistry(backend: OpfsHandleBackend): OpfsHandleRegistry {
@@ -136,16 +143,24 @@ export function createOpfsHandleRegistry(backend: OpfsHandleBackend): OpfsHandle
     }
   }
 
-  const viewRefs = new Map<string, number>()
+  const viewRefs = new Map<string, ViewRegistryEntry>()
 
-  function acquireView(key: string): void {
-    viewRefs.set(key, (viewRefs.get(key) ?? 0) + 1)
+  function acquireView(key: string, signature?: string): void {
+    const existing = viewRefs.get(key)
+    if (existing) {
+      if (existing.signature !== signature)
+        throw new Error(`view ${key} is already attached with a different signature`)
+      existing.refs++
+      return
+    }
+    viewRefs.set(key, { refs: 1, signature })
   }
 
   async function releaseView(key: string, drop: () => Promise<void>): Promise<void> {
-    const next = (viewRefs.get(key) ?? 0) - 1
+    const existing = viewRefs.get(key)
+    const next = (existing?.refs ?? 0) - 1
     if (next > 0) {
-      viewRefs.set(key, next)
+      viewRefs.set(key, { refs: next, signature: existing?.signature })
       return
     }
     viewRefs.delete(key)
@@ -159,6 +174,7 @@ export function createOpfsHandleRegistry(backend: OpfsHandleBackend): OpfsHandle
     refs: name => entries.get(name)?.refs ?? 0,
     acquireView,
     releaseView,
-    viewRefs: key => viewRefs.get(key) ?? 0,
+    viewRefs: key => viewRefs.get(key)?.refs ?? 0,
+    viewSignature: key => viewRefs.get(key)?.signature,
   }
 }

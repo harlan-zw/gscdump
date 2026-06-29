@@ -197,6 +197,27 @@ describe('attachOpfsParquetTables', () => {
     expect([...opfs.files.keys()][0]).toBe(`gscdump-snapshot__pages_${slug}.parquet`)
   })
 
+  it('rejects invalid SQL identifiers before building DuckDB view SQL', async () => {
+    const opfs = makeFakeOpfs()
+    installNavigatorStorage(opfs.root)
+    const { db, conn } = stubDuckDb()
+
+    await expect(attachOpfsParquetTables({
+      db,
+      conn,
+      schema: 'bad-schema',
+      fetch: okFetch(new Uint8Array([1])),
+      tables: [{ table: 'dates', files: [{ url: '/x', bytes: 1, contentHash: 'iceberg/x.parquet' }] }],
+    })).rejects.toThrow(/invalid schema identifier/)
+
+    await expect(attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(new Uint8Array([1])),
+      tables: [{ table: 'bad-table', files: [{ url: '/x', bytes: 1, contentHash: 'iceberg/x.parquet' }] }],
+    })).rejects.toThrow(/invalid table identifier/)
+  })
+
   it('serves a cache hit (filename + size) without re-downloading', async () => {
     const opfs = makeFakeOpfs()
     const payload = new Uint8Array([9, 9, 9])
@@ -387,6 +408,101 @@ describe('attachOpfsParquetTables', () => {
     expect(dropFile).toHaveBeenCalledOnce()
   })
 
+  it('reuses an already-live identical view without recreating DDL', async () => {
+    const opfs = makeFakeOpfs()
+    installNavigatorStorage(opfs.root)
+    const { db, conn, registerFileHandle, viewSql } = stubDuckDb()
+    const payload = new Uint8Array([1, 2, 3])
+    const file = { url: '/shared', bytes: 3, contentHash: 'iceberg/shared-view.parquet' }
+
+    const first = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(payload),
+      tables: [{ table: 'dates', files: [file] }],
+    })
+    const second = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(payload),
+      tables: [{ table: 'dates', files: [file] }],
+    })
+
+    expect(registerFileHandle).toHaveBeenCalledOnce()
+    expect(viewSql.filter(sql => sql.includes('CREATE OR REPLACE VIEW main.dates'))).toHaveLength(1)
+
+    await first.detach()
+    expect(viewSql.filter(sql => sql.includes('DROP VIEW IF EXISTS main.dates'))).toHaveLength(0)
+    await second.detach()
+    expect(viewSql.filter(sql => sql.includes('DROP VIEW IF EXISTS main.dates'))).toHaveLength(1)
+  })
+
+  it('refcounts recovered buffers and view across sibling consumers', async () => {
+    const opfs = makeFakeOpfs()
+    const payload = new Uint8Array([1, 2, 3])
+    const slug = await expectedSlug('iceberg/recovered.parquet')
+    const opfsName = `gscdump-snapshot__dates_${slug}.parquet`
+    opfs.files.set(opfsName, payload)
+    installNavigatorStorage(opfs.root)
+    const live = new Set<string>([opfsName])
+    const { db, conn, registerFileBuffer, dropFile, bufferNames, viewSql } = stubDuckDb({ live })
+    const file = { url: '/shared', bytes: 3, contentHash: 'iceberg/recovered.parquet' }
+
+    const first = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(payload),
+      tables: [{ table: 'dates', files: [file] }],
+    })
+    const second = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(payload),
+      tables: [{ table: 'dates', files: [file] }],
+    })
+
+    expect(first.tables).toEqual(['dates'])
+    expect(second.tables).toEqual(['dates'])
+    expect(registerFileBuffer).toHaveBeenCalledOnce()
+    expect(bufferNames).toEqual([`gscdump-recover__dates_${slug}.parquet`])
+    expect(viewSql.filter(sql => sql.includes('CREATE OR REPLACE VIEW main.dates'))).toHaveLength(1)
+
+    await first.detach()
+    expect(viewSql.filter(sql => sql.includes('DROP VIEW IF EXISTS main.dates'))).toHaveLength(0)
+    expect(dropFile).not.toHaveBeenCalledWith(bufferNames[0])
+
+    await second.detach()
+    expect(viewSql.filter(sql => sql.includes('DROP VIEW IF EXISTS main.dates'))).toHaveLength(1)
+    expect(dropFile).toHaveBeenCalledWith(bufferNames[0])
+  })
+
+  it('rejects replacing a live view with a different fileset', async () => {
+    const opfs = makeFakeOpfs()
+    installNavigatorStorage(opfs.root)
+    const { db, conn, dropFile, viewSql } = stubDuckDb()
+
+    const first = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(new Uint8Array([1, 2, 3])),
+      tables: [{ table: 'dates', files: [{ url: '/a', bytes: 3, contentHash: 'iceberg/a.parquet' }] }],
+    })
+
+    await expect(attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(new Uint8Array([4, 5, 6])),
+      tables: [{ table: 'dates', files: [{ url: '/b', bytes: 3, contentHash: 'iceberg/b.parquet' }] }],
+    })).rejects.toThrow(/different fileset/)
+
+    expect(viewSql.filter(sql => sql.includes('CREATE OR REPLACE VIEW main.dates'))).toHaveLength(1)
+    expect(viewSql.filter(sql => sql.includes('DROP VIEW IF EXISTS main.dates'))).toHaveLength(0)
+
+    await first.detach()
+    expect(viewSql.filter(sql => sql.includes('DROP VIEW IF EXISTS main.dates'))).toHaveLength(1)
+    expect(dropFile).toHaveBeenCalled()
+  })
+
   it('two CONCURRENT attaches of the same file on one DB dedup to a single handle', async () => {
     // Home fanout + per-site analyzer can fire attachOpfsParquetTables
     // concurrently on the shared DB, racing two acquire(sameName) calls. The
@@ -545,7 +661,8 @@ describe('attachOpfsParquetTables', () => {
     expect(bFetch).not.toHaveBeenCalled()
     // B registered a buffer (the recovery path) + created its view.
     expect(b.registerFileBuffer).toHaveBeenCalledOnce()
-    expect(b.bufferNames[0]).toMatch(/^gscdump-recover__dates_0\.parquet$/)
+    const recoverSlug = await expectedSlug('iceberg/shared.parquet')
+    expect(b.bufferNames[0]).toBe(`gscdump-recover__dates_${recoverSlug}.parquet`)
     expect(b.viewSql.some(s => s.includes('CREATE OR REPLACE VIEW main.dates'))).toBe(true)
 
     // Detach drops B's recovery buffer + view.
@@ -575,7 +692,8 @@ describe('attachOpfsParquetTables', () => {
     expect(handle.tables).toEqual(['queries'])
     expect(handle.degradedTables).toEqual([])
     expect(registerFileBuffer).toHaveBeenCalledOnce()
-    expect(bufferNames[0]).toMatch(/^gscdump-recover__queries_0\.parquet$/)
+    const recoverSlug = await expectedSlug('iceberg/miss.parquet')
+    expect(bufferNames[0]).toBe(`gscdump-recover__queries_${recoverSlug}.parquet`)
     // At least one HTTP read happened (the recovery fetch).
     expect(fetchSpy).toHaveBeenCalled()
   })

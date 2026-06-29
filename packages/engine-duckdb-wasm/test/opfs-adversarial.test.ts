@@ -288,6 +288,41 @@ describe('opfs adversarial: multi-file table partial failure', () => {
     expect(handle.degradedTables).toEqual(['pages'])
     expect(stub.liveCount()).toBe(0)
   })
+
+  it('releases handles acquired by slower workers after a concurrent download failure', async () => {
+    // Two workers start together. `/bad` fails immediately while `/good` is
+    // still downloading. The attach must wait for the in-flight worker before
+    // it runs failure cleanup, otherwise `/good` can register after cleanup and
+    // leak a live handle.
+    const opfs = makeFakeOpfs()
+    installNavigatorStorage(opfs.root)
+    const stub = stubDuckDb()
+    const payload = new Uint8Array([1, 2])
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : String(input)
+      if (url === '/bad')
+        throw new Error('network boom')
+      await new Promise(r => setTimeout(r, 5))
+      return new Response(payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength), { status: 200 })
+    }) as unknown as typeof fetch
+
+    await expect(attachOpfsParquetTables({
+      db: stub.db,
+      conn: stub.conn,
+      fetch: fetchImpl,
+      fetchConcurrency: 2,
+      tables: [{
+        table: 'pages',
+        files: [
+          { url: '/good', bytes: 2, contentHash: 'iceberg/good.parquet' },
+          { url: '/bad', bytes: 2, contentHash: 'iceberg/bad.parquet' },
+        ],
+      }],
+    })).rejects.toThrow(/network boom/)
+
+    await new Promise(r => setTimeout(r, 20))
+    expect(stub.liveCount()).toBe(0)
+  })
 })
 
 describe('opfs adversarial: view-creation conflict', () => {
@@ -642,12 +677,10 @@ describe('opfs adversarial: table churn on a shared DB', () => {
     expect(stub.liveCount()).toBe(0)
   })
 
-  it('a consumer that degrades on a view conflict must NOT drop a sibling consumer\'s live view', async () => {
+  it('a same-signature reattach skips view DDL and keeps the sibling view alive', async () => {
     // Consumer A holds `dates`. Consumer B re-attaches the same table on the
-    // shared DB but hits a view-creation conflict and degrades. B's cleanup
-    // `DROP VIEW IF EXISTS` must be suppressed because A still holds the view
-    // (viewRefs > 0) — without the guard, B's degrade would nuke A's working
-    // view. The conflict is forced only on the SECOND CREATE so A succeeds first.
+    // shared DB. The same-signature view is already live, so B should not run
+    // another CREATE at all; it only bumps the view/file refs.
     installNavigatorStorage(makeFakeOpfs().root)
     const live = new Set<string>()
     const views = new Set<string>()
@@ -668,11 +701,6 @@ describe('opfs adversarial: table churn on a shared DB', () => {
         const create = /CREATE OR REPLACE VIEW (\w+\.\w+)/.exec(sql)
         if (create) {
           createCount++
-          if (createCount === 2) {
-            const e = new Error('Access Handle conflict on view')
-            e.name = 'InvalidStateError'
-            throw e
-          }
           views.add(create[1]!)
         }
         const drop = /DROP VIEW IF EXISTS (\w+\.\w+)/.exec(sql)
@@ -688,13 +716,18 @@ describe('opfs adversarial: table churn on a shared DB', () => {
     expect(a.tables).toEqual(['dates'])
     expect(views.has('main.dates')).toBe(true)
 
-    const b = await mk() // second CREATE throws → B degrades
-    expect(b.degradedTables).toEqual(['dates'])
+    const b = await mk()
+    expect(b.tables).toEqual(['dates'])
+    expect(b.degradedTables).toEqual([])
+    expect(createCount).toBe(1)
     // A's view MUST survive B's degrade cleanup, and A keeps its single handle.
     expect(views.has('main.dates')).toBe(true)
     expect(live.size).toBe(1)
 
     await a.detach()
+    expect(views.has('main.dates')).toBe(true)
+    expect(live.size).toBe(1)
+    await b.detach()
     expect(views.has('main.dates')).toBe(false)
     expect(live.size).toBe(0)
   })

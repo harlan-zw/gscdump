@@ -219,6 +219,18 @@ describe('createOpfsHandleRegistry', () => {
     expect(registry.viewRefs('main.dates')).toBe(0)
   })
 
+  it('tracks view signatures and rejects a conflicting active view', async () => {
+    const { backend } = makeExclusivityBackend()
+    const registry = createOpfsHandleRegistry(backend)
+
+    registry.acquireView('main.dates', 'hash-a')
+    registry.acquireView('main.dates', 'hash-a')
+
+    expect(registry.viewRefs('main.dates')).toBe(2)
+    expect(registry.viewSignature('main.dates')).toBe('hash-a')
+    expect(() => registry.acquireView('main.dates', 'hash-b')).toThrow(/different signature/)
+  })
+
   it('releaseView of an unknown key still runs drop (best-effort cleanup)', async () => {
     const { backend } = makeExclusivityBackend()
     const registry = createOpfsHandleRegistry(backend)
