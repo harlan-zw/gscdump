@@ -1,5 +1,4 @@
-import type { BuilderState } from 'gscdump/query'
-import type { FilterInput, InternalFilter, JsonInternalFilter } from 'gscdump/query'
+import type { BuilderState, FilterInput, InternalFilter, JsonInternalFilter } from 'gscdump/query'
 import {
   matchesDimensionFilter,
   matchesMetricFilter,
