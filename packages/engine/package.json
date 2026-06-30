@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/engine",
   "type": "module",
-  "version": "0.33.0",
+  "version": "0.33.1",
   "description": "Append-only Parquet/DuckDB storage engine + planner + adapters for the gscdump pipeline. Node + edge runtimes; opt-in heavy peers.",
   "author": {
     "name": "Harlan Wilton",
