@@ -13,7 +13,7 @@ import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { GoogleSearchConsoleClient } from 'gscdump/api'
 import type { BuilderState, Filter } from 'gscdump/query'
 import { googleSearchConsole } from 'gscdump/api'
-import { extractMetricFilters, extractSpecialOperatorFilters, normalizeFilter } from 'gscdump/query'
+import { normalizeFilter } from 'gscdump/query'
 import { createGscApiQuerySource } from './source'
 
 // Dimensions the GSC API can't produce (engine-derived).
@@ -21,10 +21,6 @@ const PRO_ONLY_DIMENSIONS = new Set<string>(['queryCanonical', 'page_keywords'])
 
 export function canProxyToGsc(state: BuilderState): boolean {
   if (state.dimensions.some(d => PRO_ONLY_DIMENSIONS.has(d)))
-    return false
-  if (extractMetricFilters(state.filter).length > 0)
-    return false
-  if (extractSpecialOperatorFilters(state.filter).length > 0)
     return false
   return true
 }

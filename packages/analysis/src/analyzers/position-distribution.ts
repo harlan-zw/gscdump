@@ -9,6 +9,7 @@ import { num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
+import { rowString as str } from '../analyzer/row-values'
 
 export interface PositionDistributionResult {
   date: string
@@ -17,10 +18,6 @@ export interface PositionDistributionResult {
   pos_11_20: number
   pos_20_plus: number
   total: number
-}
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
 }
 
 export const positionDistributionAnalyzer = defineAnalyzer<AnalysisParams, Row, PositionDistributionResult[]>({

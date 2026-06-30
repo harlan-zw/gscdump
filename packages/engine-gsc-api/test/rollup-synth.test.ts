@@ -27,7 +27,7 @@ describe('rollup live synthesis', () => {
       { page: 'https://example.com/', clicks: 1, impressions: 2, position: 3 },
     ])
 
-    await fetchGscTopN({
+    const rows = await fetchGscTopN({
       client,
       siteUrl: 'sc-domain:example.com',
       dimension: pageDim,
@@ -41,6 +41,7 @@ describe('rollup live synthesis', () => {
       startDate: '2026-05-10',
       endDate: '2026-05-12',
     })
+    expect(rows[0]!.sum_position).toBe(4)
   })
 
   it('passes explicit searchType to daily GSC queries', async () => {
@@ -49,7 +50,7 @@ describe('rollup live synthesis', () => {
       { date: '2026-05-10', clicks: 1, impressions: 2, position: 3 },
     ])
 
-    await fetchGscDaily({
+    const rows = await fetchGscDaily({
       client,
       siteUrl: 'sc-domain:example.com',
       range: { start: '2026-05-10', end: '2026-05-12' },
@@ -62,5 +63,6 @@ describe('rollup live synthesis', () => {
       startDate: '2026-05-10',
       endDate: '2026-05-12',
     })
+    expect(rows[0]!.sum_position).toBe(4)
   })
 })

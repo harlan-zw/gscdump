@@ -13,6 +13,7 @@ import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
 import { requireReportParam } from '../require'
+import { reportRows, sectionArtifact, sectionCoverage, truncation } from '../sections'
 
 export interface PrePublishReportParams {
   /** The topic / keyword phrase or URL slug to check before publishing. Required. */
@@ -66,7 +67,7 @@ function buildCannibalizationSection(
   matches: (val: string | null | undefined) => boolean,
   max: number,
 ): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as CannibalizationRow[])
+  const rows = reportRows<CannibalizationRow>(res)
     .filter(r => matches(r.keyword) || (r.competitors ?? []).some(p => matches(p.url)))
     .sort((a, b) => b.totalClicks - a.totalClicks)
   const kept = rows.slice(0, max)
@@ -88,13 +89,13 @@ function buildCannibalizationSection(
     severity: kept.length ? 'high' : 'info',
     summary: { magnitudeLabel: kept.length ? `${kept.length} existing competition` : 'no existing competition' },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: kept.slice(0, 1).map(() => ({
       kind: 'fix',
       rationale: 'Decide before publishing: redirect existing page, target a different angle, or accept overlap.',
     })),
-    artifact: res ? { analyzer: 'cannibalization', params: { type: 'cannibalization' } } : undefined,
+    artifact: sectionArtifact(res, 'cannibalization'),
   }
 }
 
@@ -114,7 +115,7 @@ function buildStrikingPeersSection(
   max: number,
   topic: string,
 ): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as StrikingRow[])
+  const rows = reportRows<StrikingRow>(res)
     .filter(r => matches(r.keyword) || matches(r.page))
     .sort((a, b) => b.potentialClicks - a.potentialClicks)
   const kept = rows.slice(0, max)
@@ -129,9 +130,9 @@ function buildStrikingPeersSection(
     severity: kept.length ? 'low' : 'info',
     summary: { magnitudeLabel: kept.length ? `${kept.length} adjacent rankings for "${topic}"` : 'no adjacent rankings' },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'striking-distance', params: { type: 'striking-distance' } } : undefined,
+    artifact: sectionArtifact(res, 'striking-distance'),
   }
 }

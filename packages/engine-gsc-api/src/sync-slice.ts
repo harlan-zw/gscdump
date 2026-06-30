@@ -116,12 +116,18 @@ export interface RunGscSearchAppearanceContextSliceOptions {
   onTotalBatch?: (rows: GscApiRow[]) => Promise<void>
   onContextBatch: (batch: { searchAppearance: string, table: SearchAppearanceContextTable, rows: GscApiRow[] }) => Promise<void>
   onPage?: (info: { searchType: SearchType, rowsThisPage: number }) => void
+  continuation?: SearchAppearanceContinuation
 }
+
+export type SearchAppearanceContinuation
+  = | { phase: 'discovery', appearances: string[], nextStartRow: number }
+    | { phase: 'context', appearances: string[], appearanceIndex: number, nextStartRow: number }
 
 export interface RunGscSearchAppearanceContextSliceResult {
   appearances: string[]
   totalRows: number
   hasMore: boolean
+  continuation?: SearchAppearanceContinuation
 }
 
 // Keyed by engine `SyncTableName` (post Iceberg rename). `dates` fetches the
@@ -205,7 +211,7 @@ export async function runGscSyncSlice(
   const dimensions = opts.dimensions
     ? [...opts.dimensions]
     : [...DIMENSIONS_BY_TABLE[opts.table]]
-  const dataState: GscDataState = opts.dataState ?? 'all'
+  const dataState: GscDataState = opts.dataState ?? (dimensions.includes('hour') ? 'hourly_all' : 'all')
   const dimensionFilterGroups = buildDimensionFilterGroups(opts.domainFilter, opts.dimensionFilters)
 
   const loopStart = Date.now()
@@ -289,7 +295,7 @@ export async function runGscSyncSlice(
       metadata = page.metadata
     opts.onPage?.({ searchType, rowsThisPage: rows.length })
 
-    const isLastPage: boolean = rows.length < rowLimit
+    const isLastPage: boolean = rows.length === 0
     const nextStartRow: number = page.startRow + rows.length
 
     // Kick the next fetch off NOW so its latency overlaps the write below —
@@ -346,12 +352,12 @@ export async function runGscSearchAppearanceContextSlice(
   opts: RunGscSearchAppearanceContextSliceOptions,
 ): Promise<RunGscSearchAppearanceContextSliceResult> {
   const table = opts.table ?? contextTableForGrain(opts.grain ?? 'page_query')
-  const appearances = opts.appearances?.slice() ?? []
+  const appearances = opts.continuation?.appearances?.slice() ?? opts.appearances?.slice() ?? []
   let totalRows = 0
   let hasMore = false
 
-  if (!opts.appearances) {
-    const discovered = new Set<string>()
+  if (!opts.appearances && opts.continuation?.phase !== 'context') {
+    const discovered = new Set<string>(appearances)
     const discovery = await runGscSyncSlice({
       client: opts.client,
       siteUrl: opts.siteUrl,
@@ -364,6 +370,7 @@ export async function runGscSearchAppearanceContextSlice(
       maxPages: opts.maxPages,
       cpuBudgetMs: opts.cpuBudgetMs,
       searchType: opts.searchType,
+      initialStartRow: opts.continuation?.phase === 'discovery' ? opts.continuation.nextStartRow : undefined,
       onPage: opts.onPage,
       onBatch: async (rows) => {
         for (const row of rows) {
@@ -375,11 +382,22 @@ export async function runGscSearchAppearanceContextSlice(
       },
     })
     totalRows += discovery.totalRows
+    if (discovery.hasMore) {
+      return {
+        appearances: [...discovered],
+        totalRows,
+        hasMore: true,
+        continuation: { phase: 'discovery', appearances: [...discovered], nextStartRow: discovery.nextStartRow },
+      }
+    }
     hasMore ||= discovery.hasMore
-    appearances.push(...discovered)
+    appearances.splice(0, appearances.length, ...discovered)
   }
 
-  for (const searchAppearance of appearances) {
+  const startIndex = opts.continuation?.phase === 'context' ? opts.continuation.appearanceIndex : 0
+  const startRow = opts.continuation?.phase === 'context' ? opts.continuation.nextStartRow : 0
+  for (let i = startIndex; i < appearances.length; i++) {
+    const searchAppearance = appearances[i]!
     const context = await runGscSyncSlice({
       client: opts.client,
       siteUrl: opts.siteUrl,
@@ -393,10 +411,19 @@ export async function runGscSearchAppearanceContextSlice(
       maxPages: opts.maxPages,
       cpuBudgetMs: opts.cpuBudgetMs,
       searchType: opts.searchType,
+      initialStartRow: i === startIndex ? startRow : undefined,
       onPage: opts.onPage,
       onBatch: rows => opts.onContextBatch({ searchAppearance, table, rows }),
     })
     totalRows += context.totalRows
+    if (context.hasMore) {
+      return {
+        appearances,
+        totalRows,
+        hasMore: true,
+        continuation: { phase: 'context', appearances, appearanceIndex: i, nextStartRow: context.nextStartRow },
+      }
+    }
     hasMore ||= context.hasMore
   }
 

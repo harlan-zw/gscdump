@@ -533,6 +533,7 @@ export const bulkRegisterPartnerSitesSchema = z.object({
     externalSiteUrl: z.string().optional(),
     webhookUrl: z.url().optional(),
     webhookEvents: z.array(z.enum(CANONICAL_WEBHOOK_EVENTS)).optional(),
+    enabledSearchTypes: z.array(searchTypeSchema).optional(),
   }).loose()).optional(),
 }).refine(value => (value.siteUrls?.length ?? 0) > 0 || (value.sites?.length ?? 0) > 0, {
   message: 'siteUrls or sites is required',
@@ -919,9 +920,37 @@ export const gscdumpTopAssociationResponseSchema = z.object({
 }).loose()
 
 export const gscdumpAnalysisSourcesResponseSchema = z.object({
-  tables: z.record(z.string(), z.array(z.string())),
+  siteId: z.string(),
+  searchType: searchTypeSchema,
+  range: z.object({ start: z.string(), end: z.string() }),
+  snapshotVersion: z.string(),
   generatedAt: z.string(),
-  manifestVersion: z.string(),
+  tables: z.array(z.object({
+    table: z.enum(['pages', 'queries', 'countries', 'page_queries', 'dates', 'search_appearance', 'search_appearance_pages', 'search_appearance_queries', 'search_appearance_page_queries']),
+    mode: z.enum(['browser', 'server']),
+    files: z.array(z.object({
+      url: z.string(),
+      bytes: z.number(),
+      contentHash: z.string(),
+      rowCount: z.number(),
+    }).loose()),
+    overlay: z.object({
+      url: z.string(),
+      bytes: z.number(),
+      contentHash: z.string(),
+      rowCount: z.number(),
+    }).loose().optional(),
+    totalBytes: z.number(),
+    totalRows: z.number(),
+  }).loose()),
+  serverTail: z.object({
+    engine: z.enum(['r2-sql', 'duckdb']),
+    endpoint: z.string(),
+  }).optional(),
+  eligibilityCeiling: z.object({
+    maxBytes: z.number(),
+    maxRows: z.number(),
+  }),
 }).loose()
 
 export const gscdumpKeywordSparklinesParamsSchema = z.object({

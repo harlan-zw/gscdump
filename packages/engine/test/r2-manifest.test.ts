@@ -120,6 +120,13 @@ describe('createR2ManifestStore — happy path', () => {
     expect(snapshotKeys).toHaveLength(1)
   })
 
+  it('rejects entries for a different user than the scoped store', async () => {
+    const bucket = makeFakeBucket()
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+
+    await expect(store.registerVersion(makeEntry({ userId: 'u2' }))).rejects.toThrow(/scoped to userId=u1/)
+  })
+
   it('retires superseded entries on the next registerVersion', async () => {
     const bucket = makeFakeBucket()
     const store = createR2ManifestStore({ bucket, userId: 'u1' })

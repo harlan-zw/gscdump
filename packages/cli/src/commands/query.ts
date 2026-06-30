@@ -89,13 +89,14 @@ async function runLiveQuery(
   },
 ): Promise<{ rows: Record<string, unknown>[] }> {
   const allRows: Record<string, unknown>[] = []
+  const totalLimit = Math.max(0, opts.rowLimit)
+  const pageSize = Math.min(totalLimit, 25000)
   let startRow = 0
   // Use the builder to derive a body so we get filterGroups for free.
   const baseBody: Record<string, unknown> = {
     startDate: opts.startDate,
     endDate: opts.endDate,
     dimensions: opts.dimensions,
-    rowLimit: opts.rowLimit,
   }
   if (opts.searchType)
     baseBody.type = opts.searchType
@@ -109,8 +110,12 @@ async function runLiveQuery(
       baseBody.dimensionFilterGroups = groups
   }
 
-  while (true) {
-    const response = await client._rawQuery(siteUrl, { ...baseBody, startRow } as any)
+  while (allRows.length < totalLimit) {
+    const remaining = totalLimit - allRows.length
+    const rowLimit = Math.min(pageSize, remaining)
+    if (rowLimit <= 0)
+      break
+    const response = await client._rawQuery(siteUrl, { ...baseBody, rowLimit, startRow } as any)
     const rows = (response.rows || []).map((row) => {
       const result: Record<string, unknown> = {
         clicks: row.clicks ?? 0,
@@ -123,9 +128,9 @@ async function runLiveQuery(
       })
       return result
     })
-    allRows.push(...rows)
-    if (rows.length < opts.rowLimit)
+    if (rows.length === 0)
       break
+    allRows.push(...rows)
     startRow += rows.length
   }
 

@@ -10,21 +10,7 @@ import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
-
-function num(v: unknown): number {
-  if (typeof v === 'number')
-    return v
-  if (typeof v === 'bigint')
-    return Number(v)
-  if (v == null)
-    return 0
-  const n = Number(v)
-  return Number.isFinite(n) ? n : 0
-}
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
-}
+import { rowNumber as num, rowString as str } from '../analyzer/row-values'
 
 export interface BayesianCtrResult {
   keyword: string

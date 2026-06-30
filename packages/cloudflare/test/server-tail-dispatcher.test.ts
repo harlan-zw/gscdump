@@ -128,6 +128,7 @@ describe('createServerTailDispatcher', () => {
       namespace: 'gsc',
       token: 't',
       fetchImpl,
+      partitionSiteId: siteId => (siteId === 'site-1' ? 1 : siteId),
     })
     const svc = fakeSvc(duckRows)
     const duckdb = createDuckDbIcebergExecutor({ svc, warehouse: 'w', namespace: 'gsc' })

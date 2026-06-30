@@ -229,11 +229,13 @@ describe('createGscAuth', () => {
     expect(r1.token).toBe('new-access-token')
     expect(ofetchSpy).toHaveBeenCalledWith('https://oauth2.googleapis.com/token', expect.objectContaining({
       method: 'POST',
-      body: expect.objectContaining({
-        refresh_token: 'rtoken',
-        grant_type: 'refresh_token',
-      }),
+      body: expect.any(URLSearchParams),
     }))
+    const body = (ofetchSpy.mock.calls[0]![1] as { body: URLSearchParams }).body
+    expect(body.get('client_id')).toBe('cid')
+    expect(body.get('client_secret')).toBe('csec')
+    expect(body.get('refresh_token')).toBe('rtoken')
+    expect(body.get('grant_type')).toBe('refresh_token')
 
     // Check credentials updated
     expect(auth.credentials?.access_token).toBe('new-access-token')

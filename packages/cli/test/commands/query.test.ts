@@ -136,9 +136,11 @@ describe('query command', () => {
   })
 
   it('--live mode pages through GSC API and emits JSON output', async () => {
-    mocks.rawQuery.mockResolvedValueOnce({
-      rows: [{ keys: ['/a', 'foo'], clicks: 10, impressions: 100, ctr: 0.1, position: 5 }],
-    })
+    mocks.rawQuery
+      .mockResolvedValueOnce({
+        rows: [{ keys: ['/a', 'foo'], clicks: 10, impressions: 100, ctr: 0.1, position: 5 }],
+      })
+      .mockResolvedValueOnce({ rows: [] })
 
     await queryCommand.run!({
       args: {
@@ -155,7 +157,8 @@ describe('query command', () => {
       cmd: queryCommand,
     } as any)
 
-    expect(mocks.rawQuery).toHaveBeenCalled()
+    expect(mocks.rawQuery).toHaveBeenCalledTimes(2)
+    expect(mocks.rawQuery.mock.calls[1]![1]).toMatchObject({ rowLimit: 999, startRow: 1 })
     const jsonLine = consoleOutput.find(l => l.startsWith('{'))
     expect(jsonLine).toBeDefined()
     const parsed = JSON.parse(jsonLine!)

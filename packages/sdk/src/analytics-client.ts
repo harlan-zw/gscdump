@@ -11,7 +11,6 @@ import type {
   IndexingInspectRequest,
   IndexingInspectResponse,
   IndexingUrlsResponse,
-  IndexingUrlStatus,
   InspectionHistoryResponse,
   InspectionIndex,
   RollupEnvelope,
@@ -24,8 +23,16 @@ import type {
   SourceInfoResponse,
   WhoamiResponse,
 } from '@gscdump/contracts'
+import type { AnalysisSourcesOptions, SearchTypeOptions, SourceRangeOptions } from './hosted-query'
 import type { HostedClientOptions, HostedFetch, HostedFetchOptions, HostedHeaders } from './request'
 import { analyticsEndpointSchemas, analyticsRoutes } from '@gscdump/contracts/analytics'
+import {
+  indexingDiagnosticsQuery,
+  indexingUrlsQuery,
+  sourceInfoQuery,
+  tablesQuery,
+  withDefaultSearchType,
+} from './hosted-query'
 import { createHostedRequester } from './request'
 
 export type AnalyticsFetch = HostedFetch
@@ -37,94 +44,6 @@ export interface AnalyticsClientOptions extends HostedClientOptions {
   fetch?: AnalyticsFetch
   headers?: AnalyticsHeaders
   validate?: boolean | 'request' | 'response'
-}
-
-type GscSearchType = 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews'
-interface AnalysisSourcesOptions {
-  tables?: string[] | string
-  searchType?: GscSearchType
-  start?: string
-  end?: string
-  startDate?: string
-  endDate?: string
-}
-const DEFAULT_SEARCH_TYPE: GscSearchType = 'web'
-
-function isAnalysisSourcesOptions(value: unknown): value is AnalysisSourcesOptions {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function searchTypeQuery(searchType?: GscSearchType): Record<string, string> {
-  return { searchType: searchType ?? DEFAULT_SEARCH_TYPE }
-}
-
-function dateRangeOptionsQuery(options: { start?: string, end?: string, startDate?: string, endDate?: string } | undefined): Record<string, string> {
-  const query: Record<string, string> = {}
-  const start = options?.start ?? options?.startDate
-  const end = options?.end ?? options?.endDate
-  if (start)
-    query.start = start
-  if (end)
-    query.end = end
-  return query
-}
-
-function sourceInfoQuery(options: SourceInfoOptions | undefined): Record<string, string> {
-  return {
-    ...searchTypeQuery(options?.searchType),
-    ...dateRangeOptionsQuery(options),
-  }
-}
-
-function tablesQuery(
-  tablesOrOptions: string[] | string | AnalysisSourcesOptions | undefined,
-  options?: { searchType?: GscSearchType, start?: string, end?: string, startDate?: string, endDate?: string },
-): Record<string, string> {
-  const tables = isAnalysisSourcesOptions(tablesOrOptions) ? tablesOrOptions.tables : tablesOrOptions
-  const source = isAnalysisSourcesOptions(tablesOrOptions) ? tablesOrOptions : options
-  const query = {
-    ...searchTypeQuery(source?.searchType),
-    ...dateRangeOptionsQuery(source),
-  }
-  if (tables)
-    query.tables = Array.isArray(tables) ? tables.join(',') : tables
-  return query
-}
-
-function withDefaultSearchType<T>(value: T): T {
-  if (!value || typeof value !== 'object' || Array.isArray(value))
-    return value
-  return {
-    ...(value as Record<string, unknown>),
-    searchType: (value as { searchType?: GscSearchType }).searchType ?? DEFAULT_SEARCH_TYPE,
-  } as T
-}
-
-function indexingUrlsQuery(params: { limit?: number, offset?: number, status?: IndexingUrlStatus, issue?: string, search?: string } = {}): Record<string, string | number> {
-  const query: Record<string, string | number> = {}
-  if (params.limit != null)
-    query.limit = params.limit
-  if (params.offset != null)
-    query.offset = params.offset
-  if (params.status)
-    query.status = params.status
-  if (params.issue)
-    query.issue = params.issue
-  if (params.search)
-    query.search = params.search
-  return query
-}
-
-function indexingDiagnosticsQuery(params: IndexingDiagnosticsParams = {}): Record<string, string | number> {
-  const query: Record<string, string | number> = {}
-  if (params.sampleIssues) {
-    query.sampleIssues = Array.isArray(params.sampleIssues)
-      ? params.sampleIssues.join(',')
-      : params.sampleIssues
-  }
-  if (params.sampleLimit != null)
-    query.sampleLimit = params.sampleLimit
-  return query
 }
 
 export function createAnalyticsClient(options: AnalyticsClientOptions = {}): AnalyticsClient {
@@ -140,7 +59,7 @@ export function createAnalyticsClient(options: AnalyticsClientOptions = {}): Ana
     getSourceInfo(siteId: string, options?: SourceInfoOptions) {
       return request<SourceInfoResponse>(analyticsRoutes.site.sourceInfo(siteId), { query: sourceInfoQuery(options) }, analyticsEndpointSchemas.analyticsSourceInfo.response)
     },
-    getAnalysisSources(siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: { searchType?: GscSearchType, start?: string, end?: string, startDate?: string, endDate?: string }) {
+    getAnalysisSources(siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: SearchTypeOptions & SourceRangeOptions) {
       return request<AnalysisSourcesResponse>(analyticsRoutes.site.analysisSources(siteId), { query: tablesQuery(tables, options) }, analyticsEndpointSchemas.analyticsAnalysisSources.response)
     },
     analyze<T = unknown>(siteId: string, params: unknown) {

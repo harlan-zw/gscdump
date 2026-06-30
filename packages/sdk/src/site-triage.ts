@@ -16,6 +16,7 @@
 // share. See docs/search-console-stage-v2-audit.md §10.
 
 import type { SearchConsoleStageIssue } from './search-console-stage'
+import { countSearchConsoleIssues, formatSearchConsoleCount } from './search-console-signals'
 import { normalizeSiteType } from './site-baseline'
 
 export type ReachStage
@@ -153,17 +154,6 @@ export function reachLivenessRatio(daily: Array<{ impressions: number }> | null 
   return peakWeek > 0 ? latestWeek / peakWeek : null
 }
 
-function issueCount(issues: SearchConsoleStageIssue[] | null | undefined, ...types: string[]): number {
-  if (!issues?.length)
-    return 0
-  const wanted = new Set(types)
-  return issues.reduce((sum, i) => sum + (wanted.has(i.type) ? i.count : 0), 0)
-}
-
-function fmt(n: number): string {
-  return new Intl.NumberFormat('en').format(Math.max(0, Math.round(n)))
-}
-
 function clamp01(n: number): number {
   if (!Number.isFinite(n))
     return 0
@@ -256,11 +246,11 @@ function isIntentionalRetirementSite(input: SiteTriageInput, notFound: number, s
 export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
   const issues = input.issues ?? []
   const totalUrls = input.totalUrls ?? 0
-  const noindex = issueCount(issues, 'noindex')
-  const notFound = issueCount(issues, 'not_found')
-  const softFound = issueCount(issues, 'soft_404')
-  const serverError = issueCount(issues, 'server_error', 'blocked_robots', 'access_denied', 'forbidden')
-  const crawledNotIndexed = issueCount(issues, 'crawled_not_indexed')
+  const noindex = countSearchConsoleIssues(issues, 'noindex')
+  const notFound = countSearchConsoleIssues(issues, 'not_found')
+  const softFound = countSearchConsoleIssues(issues, 'soft_404')
+  const serverError = countSearchConsoleIssues(issues, 'server_error', 'blocked_robots', 'access_denied', 'forbidden')
+  const crawledNotIndexed = countSearchConsoleIssues(issues, 'crawled_not_indexed')
 
   const intentionalDead = isIntentionalRetirementSite(input, notFound, serverError) ? notFound : 0
   const indexableUrls = Math.max(1, totalUrls - noindex - intentionalDead)
@@ -274,13 +264,13 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
     return {
       stage: 'crawl_faults',
       ...HEALTH_COPY.crawl_faults,
-      evidence: [{ label: 'Access faults (5xx / broken)', value: fmt(hardBlocks) }],
+      evidence: [{ label: 'Access faults (5xx / broken)', value: formatSearchConsoleCount(hardBlocks) }],
       progression: escapeReduce(
         'healthy',
         'access faults',
         hardBlocks,
         faultTarget,
-        `${fmt(hardBlocks)} faults — fix ~${fmt(toFix)} to clear the gate`,
+        `${formatSearchConsoleCount(hardBlocks)} faults — fix ~${formatSearchConsoleCount(toFix)} to clear the gate`,
       ),
     }
   }
@@ -296,7 +286,7 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
       stage: 'quality_rejection',
       ...HEALTH_COPY.quality_rejection,
       evidence: [
-        { label: 'Crawled, then refused', value: fmt(rejectPool) },
+        { label: 'Crawled, then refused', value: formatSearchConsoleCount(rejectPool) },
         { label: 'Share of known URLs', value: `${(share * 100).toFixed(0)}%` },
       ],
       progression: escapeReduce(
@@ -304,7 +294,7 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
         'crawled-rejected share',
         share,
         REJECT_SHARE,
-        `${(share * 100).toFixed(0)}% rejected — improve/consolidate ~${fmt(toClear)} pages to clear`,
+        `${(share * 100).toFixed(0)}% rejected — improve/consolidate ~${formatSearchConsoleCount(toClear)} pages to clear`,
       ),
     }
   }
@@ -371,13 +361,13 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
   if (imp12m != null && imp12m < LIFETIME_FLOOR) {
     return reach(
       'waiting_for_data',
-      [{ label: 'Impressions (12m)', value: fmt(imp12m) }],
+      [{ label: 'Impressions (12m)', value: formatSearchConsoleCount(imp12m) }],
       advance(
         'emerging',
         'lifetime impressions',
         imp12m,
         LIFETIME_FLOOR,
-        `${fmt(imp12m)} of ${fmt(LIFETIME_FLOOR)} lifetime impressions — collecting data, keep indexing`,
+        `${formatSearchConsoleCount(imp12m)} of ${formatSearchConsoleCount(LIFETIME_FLOOR)} lifetime impressions — collecting data, keep indexing`,
       ),
     )
   }
@@ -431,17 +421,19 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
   }
 
   if (isGrowing) {
-    const growthPct = clicks90dPct ?? imp90dPct ?? 0
-    const growthLabel = clicks90dPct != null
-      ? `${pctStr(clicks90dPct)} 90d clicks — comfortably growing; defend & expand`
+    const clickGrowth = clicks90dPct != null && clicks90dPct > GROWTH_CLICKS_PCT
+    const growthPct = clickGrowth ? clicks90dPct : (imp90dPct ?? clicks90dPct ?? 0)
+    const growthMetric = clickGrowth ? '90d clicks growth' : '90d impressions growth'
+    const growthLabel = clickGrowth
+      ? `${pctStr(clicks90dPct!)} 90d clicks — comfortably growing; defend & expand`
       : `${pctStr(growthPct)} 90d impressions — comfortably growing; defend & expand`
     return reach(
       'growing',
       [
-        ...(clicks90dPct != null ? [{ label: 'Clicks 90d', value: `+${clicks90dPct.toFixed(0)}%` }] : []),
-        ...(imp90dPct != null ? [{ label: 'Impressions 90d', value: `+${imp90dPct.toFixed(0)}%` }] : []),
+        ...(clicks90dPct != null ? [{ label: 'Clicks 90d', value: pctStr(clicks90dPct) }] : []),
+        ...(imp90dPct != null ? [{ label: 'Impressions 90d', value: pctStr(imp90dPct) }] : []),
       ],
-      sustain('90d clicks growth', growthPct, growthLabel),
+      sustain(growthMetric, growthPct, growthLabel),
     )
   }
 
@@ -452,15 +444,15 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
     return reach(
       'decayed',
       [
-        { label: 'Impressions (28d)', value: fmt(imp28d) },
-        { label: 'Clicks (28d)', value: fmt(clicks28d ?? 0) },
+        { label: 'Impressions (28d)', value: formatSearchConsoleCount(imp28d) },
+        { label: 'Clicks (28d)', value: formatSearchConsoleCount(clicks28d ?? 0) },
       ],
       escapeToward(
         'growing',
         'CTR (clicks/impressions)',
         ctr,
         DECAY_CTR,
-        `${(ctr * 100).toFixed(2)}% CTR on ${fmt(imp28d)} impressions — refresh content toward ~${(DECAY_CTR * 100).toFixed(1)}%`,
+        `${(ctr * 100).toFixed(2)}% CTR on ${formatSearchConsoleCount(imp28d)} impressions — refresh content toward ~${(DECAY_CTR * 100).toFixed(1)}%`,
       ),
     )
   }
@@ -480,10 +472,10 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
 
   // Established + neither up nor down → plateaued; small-but-real → emerging.
   if (imp28d >= ESTABLISHED_IMPRESSIONS_28D)
-    return reach('plateaued', [{ label: 'Impressions (28d)', value: fmt(imp28d) }], growthProgression('plateaued'))
+    return reach('plateaued', [{ label: 'Impressions (28d)', value: formatSearchConsoleCount(imp28d) }], growthProgression('plateaued'))
   if (imp28d < NASCENT_IMPRESSIONS_28D)
-    return reach('emerging', [{ label: 'Impressions (28d)', value: fmt(imp28d) }], growthProgression('emerging'))
-  return reach('plateaued', [{ label: 'Impressions (28d)', value: fmt(imp28d) }], growthProgression('plateaued'))
+    return reach('emerging', [{ label: 'Impressions (28d)', value: formatSearchConsoleCount(imp28d) }], growthProgression('emerging'))
+  return reach('plateaued', [{ label: 'Impressions (28d)', value: formatSearchConsoleCount(imp28d) }], growthProgression('plateaued'))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

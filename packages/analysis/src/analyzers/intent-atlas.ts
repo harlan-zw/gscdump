@@ -15,20 +15,7 @@ import { defaultEndDate } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { daysAgo } from 'gscdump'
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
-}
-
-function parseJsonList(v: unknown): Row[] {
-  if (Array.isArray(v))
-    return v as Row[]
-  if (typeof v === 'string' && v.length > 0) {
-    const parsed = JSON.parse(v)
-    return Array.isArray(parsed) ? parsed : []
-  }
-  return []
-}
+import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 
 const INTENT_ATLAS_STOP_WORDS = [
   'the',

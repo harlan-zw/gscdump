@@ -1,4 +1,13 @@
-import type { AnalysisQuerySource, QueryRow } from '@gscdump/engine/source'
+import type { AnalysisQuerySource } from '@gscdump/engine/source'
+import type { ContentGapQueryCandidate } from './content-gap-inputs'
+import {
+  CONTENT_GAP_MODEL_ID,
+  CONTENT_GAP_QUERY_PREFIX,
+  embedContentGapTexts,
+  loadContentGapExtractor,
+  selectContentGapDevice,
+} from './content-gap-embeddings'
+import { fetchContentGapInputs } from './content-gap-inputs'
 
 export interface ContentGapResult {
   query: string
@@ -71,23 +80,6 @@ const HASH_RE = /#.*$/
 const QUERY_RE = /\?.*$/
 const TRAIL_SLASH_RE = /(?<=.)\/$/
 
-const MODEL_ID = 'Xenova/bge-base-en-v1.5'
-const QUERY_PREFIX = 'Represent this sentence for searching relevant passages: '
-
-const DB_NAME = 'content-gap-embeddings'
-const STORE = 'vectors'
-let dbPromise: Promise<IDBDatabase> | null = null
-
-type Extractor = (texts: string[], opts: { pooling: 'mean', normalize: boolean }) => Promise<{ data: Float32Array, dims: number[] }>
-
-interface QueryCandidate {
-  query: string
-  impressions: number
-  clicks: number
-  avgPosition: number
-  currentUrl: string
-}
-
 export function normalizeUrl(u: string): string {
   try {
     const url = new URL(u)
@@ -134,237 +126,8 @@ function notify(onProgress: ContentGapOptions['onProgress'], progress: ContentGa
   onProgress?.(progress)
 }
 
-function openDb(): Promise<IDBDatabase> {
-  if (dbPromise != null)
-    return dbPromise
-  dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1)
-    req.onupgradeneeded = () => {
-      const db = req.result
-      if (!db.objectStoreNames.contains(STORE))
-        db.createObjectStore(STORE)
-    }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error ?? new Error('indexedDB open failed'))
-  })
-  return dbPromise
-}
-
-function cacheKey(role: 'query' | 'passage', text: string): string {
-  return `${MODEL_ID}|${role}|${text}`
-}
-
-async function cacheGetMany(
-  role: 'query' | 'passage',
-  texts: string[],
-): Promise<Map<string, Float32Array>> {
-  // Ignorable by design: the embedding cache is a pure optimisation. If
-  // IndexedDB is unavailable (private mode, blocked, quota), we treat every
-  // text as a cache miss and re-embed; correctness is unaffected.
-  const db = await openDb().catch(() => null)
-  if (db == null)
-    return new Map()
-  return new Promise((resolve) => {
-    const tx = db.transaction(STORE, 'readonly')
-    const store = tx.objectStore(STORE)
-    const out = new Map<string, Float32Array>()
-    let pending = texts.length
-    if (pending === 0) {
-      resolve(out)
-      return
-    }
-    for (const t of texts) {
-      const req = store.get(cacheKey(role, t))
-      req.onsuccess = () => {
-        const v = req.result
-        if (v instanceof Float32Array)
-          out.set(t, v)
-        pending -= 1
-        if (pending === 0)
-          resolve(out)
-      }
-      req.onerror = () => {
-        pending -= 1
-        if (pending === 0)
-          resolve(out)
-      }
-    }
-  })
-}
-
-async function cachePutMany(
-  role: 'query' | 'passage',
-  entries: Array<[string, Float32Array]>,
-): Promise<void> {
-  // Ignorable by design: failing to persist to the embedding cache only costs
-  // a re-embed on the next run; it never changes this run's result.
-  const db = await openDb().catch(() => null)
-  if (db == null)
-    return
-  await new Promise<void>((resolve) => {
-    const tx = db.transaction(STORE, 'readwrite')
-    for (const [text, vec] of entries)
-      tx.objectStore(STORE).put(vec, cacheKey(role, text))
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => resolve()
-    tx.onabort = () => resolve()
-  })
-}
-
-async function embedRawBatch(
-  extractor: Extractor,
-  texts: string[],
-  onProgress: (done: number) => void,
-  batchSize = 32,
-): Promise<Float32Array[]> {
-  const result: Float32Array[] = []
-  for (let i = 0; i < texts.length; i += batchSize) {
-    const batch = texts.slice(i, i + batchSize)
-    const out = await extractor(batch, { pooling: 'mean', normalize: true })
-    const dim = out.dims[out.dims.length - 1]!
-    for (let k = 0; k < batch.length; k++) {
-      const start = k * dim
-      result.push(new Float32Array(out.data.buffer, out.data.byteOffset + start * 4, dim).slice())
-    }
-    onProgress(result.length)
-  }
-  return result
-}
-
-async function embedCached(
-  extractor: Extractor,
-  role: 'query' | 'passage',
-  texts: string[],
-  transform: (t: string) => string,
-  onProgress: (done: number, total: number) => void,
-): Promise<{ vectors: Float32Array[], hits: number, misses: number }> {
-  const cached = await cacheGetMany(role, texts)
-  const vectors: Float32Array[] = Array.from({ length: texts.length })
-  const missIdx: number[] = []
-  const missTexts: string[] = []
-
-  for (let i = 0; i < texts.length; i++) {
-    const hit = cached.get(texts[i]!)
-    if (hit != null) {
-      vectors[i] = hit
-    }
-    else {
-      missIdx.push(i)
-      missTexts.push(transform(texts[i]!))
-    }
-  }
-
-  const hits = cached.size
-  const misses = missTexts.length
-  onProgress(hits, texts.length)
-
-  if (missTexts.length > 0) {
-    const embedded = await embedRawBatch(extractor, missTexts, (done) => {
-      onProgress(hits + done, texts.length)
-    })
-    const toPersist: Array<[string, Float32Array]> = []
-    for (let m = 0; m < embedded.length; m++) {
-      const i = missIdx[m]!
-      vectors[i] = embedded[m]!
-      toPersist.push([texts[i]!, embedded[m]!])
-    }
-    await cachePutMany(role, toPersist)
-  }
-
-  return { vectors, hits, misses }
-}
-
-async function selectDevice(requested?: 'webgpu' | 'wasm'): Promise<'webgpu' | 'wasm'> {
-  let chosenDevice: 'webgpu' | 'wasm' = 'wasm'
-  if (requested === 'webgpu' || requested == null) {
-    const gpu = (globalThis as unknown as { navigator?: { gpu?: { requestAdapter: () => Promise<unknown> } } }).navigator?.gpu
-    if (gpu != null) {
-      // Ignorable by design: a failed/absent WebGPU adapter is a capability
-      // probe, not an error. We fall back to the 'wasm' device.
-      const adapter = await gpu.requestAdapter().catch(() => null)
-      if (adapter != null)
-        chosenDevice = 'webgpu'
-    }
-  }
-  return chosenDevice
-}
-
-async function loadExtractor(device: 'webgpu' | 'wasm'): Promise<Extractor> {
-  const { pipeline, env } = await import('@huggingface/transformers')
-  // eslint-disable-next-line ts/ban-ts-comment
-  // @ts-ignore runtime-only field; typings lag behind
-  env.useBrowserCache = true
-  return await pipeline('feature-extraction', MODEL_ID, { device, dtype: 'fp32' }) as unknown as Extractor
-}
-
-async function fetchContentGapInputs(
-  executeSql: (sql: string, params?: unknown[]) => Promise<QueryRow[]>,
-  options: Required<Pick<ContentGapOptions, 'maxQueries' | 'maxUrls' | 'minImpressions'>>,
-): Promise<{ queries: QueryCandidate[], urls: string[], sqlMs: number }> {
-  const t1 = performance.now()
-  const queryRows = await executeSql(`
-    WITH query_totals AS (
-      SELECT query,
-        SUM(impressions)::BIGINT AS total_impressions,
-        SUM(clicks)::BIGINT AS total_clicks,
-        SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS avg_position
-      FROM main.page_queries
-      WHERE query IS NOT NULL AND query <> ''
-      GROUP BY query
-      HAVING SUM(impressions) >= ?
-      ORDER BY total_impressions DESC
-      LIMIT ?
-    ),
-    per_query_url AS (
-      SELECT pk.query, pk.url,
-        SUM(pk.impressions)::BIGINT AS url_impressions,
-        SUM(pk.sum_position) / NULLIF(SUM(pk.impressions), 0) + 1 AS url_position,
-        ROW_NUMBER() OVER (PARTITION BY pk.query ORDER BY SUM(pk.impressions) DESC) AS rnk
-      FROM main.page_queries pk
-      JOIN query_totals qt USING (query)
-      WHERE pk.url IS NOT NULL AND pk.url <> ''
-      GROUP BY pk.query, pk.url
-    )
-    SELECT q.query, q.total_impressions AS impressions, q.total_clicks AS clicks, q.avg_position,
-      pu.url AS current_url, pu.url_position AS current_position
-    FROM query_totals q
-    JOIN per_query_url pu USING (query)
-    WHERE pu.rnk = 1
-  `, [Number(options.minImpressions), Number(options.maxQueries)])
-
-  const urlRows = await executeSql(`
-    SELECT url, SUM(impressions)::BIGINT AS impressions
-    FROM main.page_queries
-    WHERE url IS NOT NULL AND url <> ''
-    GROUP BY url
-    ORDER BY impressions DESC
-    LIMIT ?
-  `, [Number(options.maxUrls)])
-  const sqlMs = performance.now() - t1
-
-  const queries = queryRows.map(row => ({
-    query: String(row.query),
-    impressions: Number(row.impressions),
-    clicks: Number(row.clicks),
-    avgPosition: Number(row.avg_position),
-    currentUrl: normalizeUrl(String(row.current_url)),
-  }))
-
-  const urlAgg = new Map<string, number>()
-  for (const row of urlRows) {
-    const norm = normalizeUrl(String(row.url))
-    urlAgg.set(norm, (urlAgg.get(norm) ?? 0) + Number(row.impressions))
-  }
-  const urls = [...urlAgg.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, Number(options.maxUrls))
-    .map(([url]) => url)
-
-  return { queries, urls, sqlMs }
-}
-
 export function rankContentGaps(
-  queries: QueryCandidate[],
+  queries: ContentGapQueryCandidate[],
   urls: string[],
   queryEmbeddings: Float32Array[],
   urlEmbeddings: Float32Array[],
@@ -436,12 +199,12 @@ export async function analyzeContentGap(
 
   notify(onProgress, { phase: 'loading-model', message: 'Checking device...' })
   const t0 = performance.now()
-  const chosenDevice = await selectDevice(device)
+  const chosenDevice = await selectContentGapDevice(device)
   notify(onProgress, {
     phase: 'loading-model',
-    message: `Loading ${MODEL_ID} on ${chosenDevice} (~110MB, cached after first run)...`,
+    message: `Loading ${CONTENT_GAP_MODEL_ID} on ${chosenDevice} (~110MB, cached after first run)...`,
   })
-  const extractor = await loadExtractor(chosenDevice)
+  const extractor = await loadContentGapExtractor(chosenDevice)
   const modelMs = performance.now() - t0
 
   notify(onProgress, {
@@ -453,7 +216,7 @@ export async function analyzeContentGap(
     maxQueries,
     maxUrls,
     minImpressions,
-  })
+  }, normalizeUrl)
 
   if (queries.length === 0 || urls.length === 0) {
     notify(onProgress, {
@@ -472,7 +235,7 @@ export async function analyzeContentGap(
         cacheHits: 0,
         totalInputs: 0,
         device: chosenDevice,
-        modelId: MODEL_ID,
+        modelId: CONTENT_GAP_MODEL_ID,
       },
     }
   }
@@ -489,11 +252,11 @@ export async function analyzeContentGap(
     sqlMs,
   })
   const t2 = performance.now()
-  const queryEmbed = await embedCached(
+  const queryEmbed = await embedContentGapTexts(
     extractor,
     'query',
     queryTexts,
-    t => QUERY_PREFIX + t,
+    t => CONTENT_GAP_QUERY_PREFIX + t,
     (done, total) => {
       notify(onProgress, {
         phase: 'embedding-queries',
@@ -514,7 +277,7 @@ export async function analyzeContentGap(
     modelMs,
     sqlMs,
   })
-  const urlEmbed = await embedCached(
+  const urlEmbed = await embedContentGapTexts(
     extractor,
     'passage',
     urlTexts,
@@ -571,7 +334,7 @@ export async function analyzeContentGap(
       cacheHits: totalHits,
       totalInputs,
       device: chosenDevice,
-      modelId: MODEL_ID,
+      modelId: CONTENT_GAP_MODEL_ID,
     },
   }
 }

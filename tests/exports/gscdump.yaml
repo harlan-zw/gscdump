@@ -52,8 +52,12 @@
   groupIntoRanges: function
   GSC_FINALIZED_LAG_DAYS: number
   GSC_FRESHEST_LAG_DAYS: number
+  GSC_INDEXING_SCOPE: string
   GSC_QUOTAS: object
+  GSC_READ_SCOPE: string
   GSC_RETENTION_MONTHS: number
+  GSC_SITE_VERIFICATION_SCOPE: string
+  GSC_WRITE_SCOPE: string
   GscApiError: function
   GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
   GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
@@ -61,6 +65,7 @@
   gscdumpApi: function
   gscErrorToException: function
   gscPropertyMatchesTarget: function
+  hasGoogleScope: function
   hasGscReadScope: function
   hasGscWriteScope: function
   hasIndexingScope: function
@@ -93,6 +98,7 @@
   normalizeUrl: function
   ok: function
   parseGoogleError: function
+  parseGoogleScopes: function
   parseGrantedScopes: function
   parseGscSiteUrl: function
   pickBestGscProperty: function
@@ -149,11 +155,16 @@
   getVerifiedSite: function
   googleSearchConsole: function
   grantedScopeList: function
+  GSC_INDEXING_SCOPE: string
   GSC_QUOTAS: object
+  GSC_READ_SCOPE: string
+  GSC_SITE_VERIFICATION_SCOPE: string
+  GSC_WRITE_SCOPE: string
   GscApiError: function
   gscdumpApi: function
   gscErrorToException: function
   gscPropertyMatchesTarget: function
+  hasGoogleScope: function
   hasGscReadScope: function
   hasGscWriteScope: function
   hasIndexingScope: function
@@ -167,6 +178,7 @@
   normalizeGscSiteUrl: function
   normalizeRegistrationTarget: function
   parseGoogleError: function
+  parseGoogleScopes: function
   parseGscSiteUrl: function
   pickBestGscProperty: function
   refreshAccessToken: function

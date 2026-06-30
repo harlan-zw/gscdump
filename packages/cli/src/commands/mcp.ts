@@ -1,12 +1,16 @@
 import process from 'node:process'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { defineCommand } from 'citty'
-import { getAuth, loadTokens, resolveBYOK } from '../auth'
+import { loadTokens, resolveAuth, resolveBYOK, resolveServiceAccount } from '../auth'
 import { loadConfig } from '../config'
 import { createGscMcpServer } from '../mcp/server'
 import { VERSION } from '../utils'
 
 async function checkAuth(): Promise<{ ok: boolean, error?: string }> {
+  // Service-account auth is sufficient when configured.
+  if (await resolveServiceAccount().then(Boolean).catch(() => false))
+    return { ok: true }
+
   // BYOK (GSC_* or GOOGLE_* env vars) is sufficient on its own.
   if (resolveBYOK())
     return { ok: true }
@@ -60,7 +64,7 @@ export const mcpCommand = defineCommand({
     const server = createGscMcpServer({
       name: 'gscdump',
       version: VERSION,
-      getAuth: () => getAuth({ interactive: false }),
+      getAuth: () => resolveAuth({ interactive: false }),
     })
 
     const transport = new StdioServerTransport()

@@ -149,7 +149,7 @@ async function runOneDate(
       if (transformed)
         rows.push(transformed.row)
     }
-    if (batch.length < rowLimit)
+    if (batch.length === 0)
       break
     startRow += batch.length
   }

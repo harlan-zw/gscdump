@@ -17,6 +17,7 @@
   gsc_keywords: object
   gsc_page_keywords: object
   gsc_pages: object
+  gsc_query_dim: object
   gte: function
   lte: function
   mergeScope: function

@@ -1,3 +1,4 @@
+import type { FileResolutionResponse } from './file-resolution'
 import type { AccountNextAction, AccountStatus, PartnerLifecycleResponse, PartnerLifecycleSite } from './onboarding'
 
 export type {
@@ -814,6 +815,7 @@ export interface RegisterPartnerSiteParams {
   webhookUrl?: string
   webhookEvents?: WebhookEventType[]
   teamId?: string
+  enabledSearchTypes?: GscSearchType[]
 }
 
 export interface BulkRegisterPartnerSitesParams {
@@ -827,6 +829,7 @@ export interface BulkRegisterPartnerSitesParams {
     externalSiteUrl?: string
     webhookUrl?: string
     webhookEvents?: WebhookEventType[]
+    enabledSearchTypes?: GscSearchType[]
   }>
 }
 
@@ -859,18 +862,7 @@ export interface DeletePartnerUserResponse {
   publicId: string
 }
 
-export interface GscdumpAnalysisSourcesResponse {
-  tables: Record<string, string[]>
-  generatedAt: string
-  manifestVersion: string
-  searchType?: GscSearchType
-  canUseBrowser?: boolean
-  fallback?: string
-  reason?: string
-  estimatedBytes?: number
-  estimatedFiles?: number
-  coveragePlan?: unknown
-}
+export type GscdumpAnalysisSourcesResponse = FileResolutionResponse
 
 export interface SearchTypeOptions {
   searchType?: GscSearchType

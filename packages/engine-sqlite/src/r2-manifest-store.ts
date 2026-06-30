@@ -143,7 +143,9 @@ export function createD1ManifestStore(db: AnalyticsManifestDb): ManifestStore {
     // while leaving headroom for the other conditions above. A multi-month
     // date range expands to 200+ partitions across daily/weekly/monthly/quarterly tiers.
     const PARTITION_CHUNK = 80
-    if (filter.partitions && filter.partitions.length > 0) {
+    if (filter.partitions) {
+      if (filter.partitions.length === 0)
+        return []
       const statements: BatchItem<'sqlite'>[] = []
       for (let i = 0; i < filter.partitions.length; i += PARTITION_CHUNK) {
         const slice = filter.partitions.slice(i, i + PARTITION_CHUNK)
@@ -272,7 +274,7 @@ export function createD1ManifestStore(db: AnalyticsManifestDb): ManifestStore {
       set: {
         newestDateSynced: sql`CASE WHEN excluded.newest_date_synced > newest_date_synced THEN excluded.newest_date_synced ELSE newest_date_synced END`,
         oldestDateSynced: sql`CASE WHEN excluded.oldest_date_synced < oldest_date_synced THEN excluded.oldest_date_synced ELSE oldest_date_synced END`,
-        lastSyncAt: sql`excluded.last_sync_at`,
+        lastSyncAt: sql`CASE WHEN excluded.last_sync_at > last_sync_at THEN excluded.last_sync_at ELSE last_sync_at END`,
       },
     }).run()
   }

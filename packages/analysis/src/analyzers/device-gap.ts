@@ -8,10 +8,7 @@ import { num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
-}
+import { rowString as str } from '../analyzer/row-values'
 
 interface DeviceDayMetrics { clicks: number, impressions: number, ctr: number, position: number }
 interface DeviceDayRow {

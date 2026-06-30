@@ -43,6 +43,13 @@ describe('filesystemDataSource', () => {
   it('rejects paths that escape root', async () => {
     const ds = createFilesystemDataSource({ rootDir: dir })
     await expect(ds.write('../evil.parquet', new Uint8Array([1]))).rejects.toThrow(/escapes root/)
+    await expect(ds.list('../')).rejects.toThrow(/escapes root/)
+    await expect(async () => {
+      for await (const _ of ds.streamList!('../')) {
+        void _
+        // Consume the iterator so path validation runs.
+      }
+    }).rejects.toThrow(/escapes root/)
   })
 })
 

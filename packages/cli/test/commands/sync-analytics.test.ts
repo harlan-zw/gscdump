@@ -100,7 +100,11 @@ describe('sync command (local analytics)', () => {
     configState.dataDir = tmpDir
     rawQuerySpy.mockReset()
     clientSitesSpy.mockReset()
-    rawQuerySpy.mockImplementation((_siteUrl, params) => Promise.resolve(buildRawResponse(params)))
+    rawQuerySpy.mockImplementation((_siteUrl, params) => {
+      if ((params.startRow ?? 0) > 0)
+        return Promise.resolve({ rows: [] })
+      return Promise.resolve(buildRawResponse(params))
+    })
     clientSitesSpy.mockResolvedValue(gscSites)
   })
 
@@ -126,8 +130,8 @@ describe('sync command (local analytics)', () => {
     })
 
     expect(rawQuerySpy).toHaveBeenCalled()
-    // 3 days x 2 tables = 6 calls
-    expect(rawQuerySpy).toHaveBeenCalledTimes(6)
+    // 3 days x 2 tables x (data page + empty terminal page) = 12 calls
+    expect(rawQuerySpy).toHaveBeenCalledTimes(12)
 
     const harness = createNodeHarness({ dataDir: configState.dataDir! })
     const siteId = harness.siteIdFor(SITE)
@@ -191,7 +195,7 @@ describe('sync command (local analytics)', () => {
     const args = { site: SITE, start: day, end: day, tables: 'pages', quiet: true }
 
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
-    expect(rawQuerySpy).toHaveBeenCalledTimes(1)
+    expect(rawQuerySpy).toHaveBeenCalledTimes(2)
 
     rawQuerySpy.mockClear()
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })

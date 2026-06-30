@@ -1,3 +1,4 @@
+import type { FileResolutionResponse, RegisterPartnerSiteParams } from '../src'
 import {
   analyticsRoutes,
   builderStateSchema,
@@ -19,6 +20,27 @@ import {
   partnerEndpointSchemas as partnerSurfaceSchemas,
 } from '../src/partner'
 
+const analysisSourcesResponse: FileResolutionResponse = {
+  siteId: 'site_1',
+  searchType: 'web',
+  range: { start: '2026-05-01', end: '2026-05-07' },
+  snapshotVersion: 'snapshot_1',
+  generatedAt: '2026-05-11T00:00:00.000Z',
+  tables: [{
+    table: 'pages',
+    mode: 'browser',
+    files: [{
+      url: '/api/r2-data/pages.parquet?sig=abc',
+      bytes: 1234,
+      contentHash: 'file_1',
+      rowCount: 12,
+    }],
+    totalBytes: 1234,
+    totalRows: 12,
+  }],
+  eligibilityCeiling: { maxBytes: 150_000_000, maxRows: 10_000_000 },
+}
+
 describe('@gscdump/contracts', () => {
   it('exports hosted route metadata and endpoint schemas', () => {
     expect(partnerRoutes.users.register).toBe('/users/register')
@@ -34,11 +56,22 @@ describe('@gscdump/contracts', () => {
       userId: 'user_1',
       siteUrl: 'sc-domain:example.com',
       webhookEvents: ['site.analytics.ready'],
+      enabledSearchTypes: ['web', 'discover'],
     })).toMatchObject({ userId: 'user_1' })
     expect(partnerEndpointSchemas.bulkRegisterSites.body.parse({
       userId: 'user_1',
-      siteUrls: ['sc-domain:example.com'],
+      sites: [{ siteUrl: 'sc-domain:example.com', enabledSearchTypes: ['web', 'news'] }],
     })).toMatchObject({ userId: 'user_1' })
+    const typedRegister: RegisterPartnerSiteParams = {
+      userId: 'user_1',
+      siteUrl: 'sc-domain:example.com',
+      enabledSearchTypes: ['web', 'discover'],
+    }
+    expect(typedRegister.enabledSearchTypes).toEqual(['web', 'discover'])
+    expect(partnerEndpointSchemas.getAnalysisSources.response.parse(analysisSourcesResponse)).toMatchObject({
+      snapshotVersion: 'snapshot_1',
+      tables: [{ table: 'pages', mode: 'browser' }],
+    })
     expect(partnerEndpointSchemas.analyticsRows.response.parse({
       rows: [],
       meta: { sourceName: 'r2', sourceKind: 'sql', queryMs: 12 },

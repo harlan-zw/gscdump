@@ -10,6 +10,7 @@ import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection, ReportSeverity } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
 import { requireComparisonWindow } from '../require'
+import { reportRows, sectionArtifact, sectionCoverage, truncation } from '../sections'
 
 export interface RisksReportParams {
   maxFindings?: number
@@ -58,7 +59,7 @@ interface DecayRow {
 }
 
 function buildDecaySection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as DecayRow[])
+  const rows = reportRows<DecayRow>(res)
     .sort((a, b) => b.lostClicks - a.lostClicks)
   const kept = rows.slice(0, max)
   const totalLost = kept.reduce((s, r) => s + r.lostClicks, 0)
@@ -74,15 +75,15 @@ function buildDecaySection(res: AnalysisResult | undefined, max: number): Report
     severity,
     summary: { delta: -totalLost, direction: totalLost > 0 ? 'down' : 'flat', magnitudeLabel: `${Math.round(totalLost)} clicks lost` },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: kept.slice(0, 1).map(r => ({
       kind: 'analyzer',
       target: { kind: 'page', value: r.page },
       params: { type: 'change-point' },
       rationale: 'Investigate change-point on the worst-affected page',
     })),
-    artifact: res ? { analyzer: 'decay', params: { type: 'decay' } } : undefined,
+    artifact: sectionArtifact(res, 'decay'),
   }
 }
 
@@ -95,7 +96,7 @@ interface CannibalizationRow {
 }
 
 function buildCannibalizationSection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as CannibalizationRow[])
+  const rows = reportRows<CannibalizationRow>(res)
     .sort((a, b) => b.totalClicks - a.totalClicks)
   const kept = rows.slice(0, max)
   const findings: ReportFinding[] = kept.map((r) => {
@@ -116,10 +117,10 @@ function buildCannibalizationSection(res: AnalysisResult | undefined, max: numbe
     severity: kept.length ? 'medium' : 'info',
     summary: {},
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'cannibalization', params: { type: 'cannibalization' } } : undefined,
+    artifact: sectionArtifact(res, 'cannibalization'),
   }
 }
 
@@ -132,7 +133,7 @@ interface DarkTrafficRow {
 }
 
 function buildDarkTrafficSection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as DarkTrafficRow[])
+  const rows = reportRows<DarkTrafficRow>(res)
     .sort((a, b) => b.darkClicks - a.darkClicks)
   const kept = rows.slice(0, max)
   const totalDark = kept.reduce((s, r) => s + r.darkClicks, 0)
@@ -146,10 +147,10 @@ function buildDarkTrafficSection(res: AnalysisResult | undefined, max: number): 
     severity: kept.length ? 'low' : 'info',
     summary: { magnitudeLabel: `${Math.round(totalDark)} unattributed clicks` },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'dark-traffic', params: { type: 'dark-traffic' } } : undefined,
+    artifact: sectionArtifact(res, 'dark-traffic'),
   }
 }
 
@@ -161,7 +162,7 @@ interface DeviceGapRow {
 }
 
 function buildDeviceGapSection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as DeviceGapRow[])
+  const rows = reportRows<DeviceGapRow>(res)
     .sort((a, b) => Math.abs(b.gaps.positionGap) - Math.abs(a.gaps.positionGap))
   const kept = rows.slice(0, max)
   const findings: ReportFinding[] = kept.map(r => ({
@@ -180,9 +181,9 @@ function buildDeviceGapSection(res: AnalysisResult | undefined, max: number): Re
     severity: 'info',
     summary: {},
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'device-gap', params: { type: 'device-gap' } } : undefined,
+    artifact: sectionArtifact(res, 'device-gap'),
   }
 }

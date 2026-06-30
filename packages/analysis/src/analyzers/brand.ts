@@ -18,6 +18,7 @@ import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { queriesQueryState } from '../analyzer/adapt-rows'
+import { rowString as str } from '../analyzer/row-values'
 import { analysisErrors, analysisErrorToException } from '../errors'
 
 export interface BrandSegmentationOptions {
@@ -53,10 +54,6 @@ export interface BrandResultRow {
 
 function escapeRegexAlt(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
 }
 
 /**

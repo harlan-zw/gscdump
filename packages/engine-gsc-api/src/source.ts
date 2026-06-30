@@ -54,7 +54,11 @@ export function createGscApiQuerySource(
       buildLogicalPlan(state, GSC_API_CAPABILITIES)
       const filterDims = getFilterDimensions(state.filter, isMetricDimension)
       assertDimensionsSupported([...state.dimensions, ...filterDims], 'api', 'gsc-api query source')
-      const rows = await collectRows(client.query(siteUrl, builderFromState(state)))
+      // The live source performs ordering, metric/special filters, offset and
+      // limit after row collection. Do not let the API client page the candidate
+      // set first, or those post-processing steps operate on a truncated window.
+      const apiState: BuilderState = { ...state, rowLimit: undefined, startRow: undefined }
+      const rows = await collectRows(client.query(siteUrl, builderFromState(apiState)))
       return applyBuilderStatePostProcessing(rows as QueryRow[], state)
     },
   }

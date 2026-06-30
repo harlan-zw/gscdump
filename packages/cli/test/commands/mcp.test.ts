@@ -3,8 +3,9 @@ import { mcpCommand } from '../../src/commands/mcp'
 
 const mocks = vi.hoisted(() => ({
   resolveBYOK: vi.fn(() => null),
+  resolveAuth: vi.fn(),
+  resolveServiceAccount: vi.fn(() => Promise.resolve(null)),
   loadTokens: vi.fn(),
-  getAuth: vi.fn(),
   loadConfig: vi.fn(),
   createGscMcpServer: vi.fn(),
   serverConnect: vi.fn(),
@@ -12,8 +13,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../src/auth', () => ({
   resolveBYOK: mocks.resolveBYOK,
+  resolveAuth: mocks.resolveAuth,
+  resolveServiceAccount: mocks.resolveServiceAccount,
   loadTokens: mocks.loadTokens,
-  getAuth: mocks.getAuth,
 }))
 
 vi.mock('../../src/config', () => ({
@@ -41,6 +43,8 @@ describe('mcp command', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.resolveServiceAccount.mockResolvedValue(null)
+    mocks.resolveAuth.mockResolvedValue('resolved-auth')
     mocks.serverConnect.mockResolvedValue(undefined)
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`__exit_${code}__`)
@@ -93,7 +97,22 @@ describe('mcp command', () => {
       name: 'gscdump',
       version: '1.0.0',
     }))
+    const options = mocks.createGscMcpServer.mock.calls[0]![0] as { getAuth: () => Promise<unknown> }
+    await expect(options.getAuth()).resolves.toBe('resolved-auth')
+    expect(mocks.resolveAuth).toHaveBeenCalledWith({ interactive: false })
     expect(mocks.serverConnect).toHaveBeenCalled()
+  })
+
+  it('starts the MCP server when service-account auth is configured', async () => {
+    mocks.resolveServiceAccount.mockResolvedValue({ email: 'service@example.com' })
+    mocks.resolveBYOK.mockReturnValue(null)
+
+    await mcpCommand.run!({ args: {}, rawArgs: [], cmd: mcpCommand } as any)
+
+    expect(exitSpy).not.toHaveBeenCalled()
+    expect(mocks.createGscMcpServer).toHaveBeenCalled()
+    expect(mocks.loadConfig).not.toHaveBeenCalled()
+    expect(mocks.loadTokens).not.toHaveBeenCalled()
   })
 
   it('starts the MCP server when saved tokens exist', async () => {

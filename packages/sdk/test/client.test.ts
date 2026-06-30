@@ -1,6 +1,16 @@
 import type { PartnerFetch } from '../src'
 import { createPartnerClient } from '../src'
 
+const analysisSourcesResponse = {
+  siteId: 's_1',
+  searchType: 'web',
+  range: { start: '2026-05-01', end: '2026-05-07' },
+  snapshotVersion: 'v1',
+  generatedAt: '2026-05-11T00:00:00.000Z',
+  tables: [],
+  eligibilityCeiling: { maxBytes: 150_000_000, maxRows: 10_000_000 },
+}
+
 describe('createPartnerClient', () => {
   it('uses injected ofetch-compatible transport with api key and lazy headers', async () => {
     const calls: Array<{ url: string, options: any }> = []
@@ -155,7 +165,7 @@ describe('createPartnerClient', () => {
     const fetch = ((url: string, options: any) => {
       calls.push({ url, options })
       if (url.endsWith('/analysis-sources'))
-        return Promise.resolve({ tables: {}, generatedAt: '2026-05-11T00:00:00.000Z', manifestVersion: 'v1' })
+        return Promise.resolve(analysisSourcesResponse)
       if (url.endsWith('/keyword-sparklines'))
         return Promise.resolve({ sparklines: { test: [1, 2] } })
       if (url.endsWith('/query-trend')) {

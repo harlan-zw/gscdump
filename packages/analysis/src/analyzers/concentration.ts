@@ -16,6 +16,7 @@ import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { pagesQueryState, queriesQueryState } from '../analyzer/adapt-rows'
+import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 
 export type ConcentrationRiskLevel = 'low' | 'medium' | 'high'
 
@@ -47,20 +48,6 @@ export interface ConcentrationResult {
   totalClicks: number
   /** Risk level derived from HHI: <1500 low, 1500-2500 medium, >2500 high */
   riskLevel: ConcentrationRiskLevel
-}
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
-}
-
-function parseJsonList(v: unknown): Row[] {
-  if (Array.isArray(v))
-    return v as Row[]
-  if (typeof v === 'string' && v.length > 0) {
-    const parsed = JSON.parse(v)
-    return Array.isArray(parsed) ? parsed : []
-  }
-  return []
 }
 
 function calculateGini(values: number[]): number {

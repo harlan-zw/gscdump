@@ -35,6 +35,77 @@ export interface CreateGscMcpServerOptions {
   getAuth: () => Promise<Auth> | Auth
 }
 
+interface QueryToolArgs {
+  siteUrl: string
+  startDate: string
+  endDate: string
+  dimensions: string[]
+  rowLimit?: number
+  type?: string
+  dataState?: string
+  aggregationType?: string
+  dimensionFilterGroups?: Array<{
+    groupType?: string
+    filters: Array<{ dimension: string, operator: string, expression: string }>
+  }>
+}
+
+type RawQueryClient = Pick<ReturnType<typeof googleSearchConsole>, '_rawQuery'>
+
+export async function runMcpSearchAnalyticsQuery(
+  client: RawQueryClient,
+  args: QueryToolArgs,
+): Promise<{ siteUrl: string, rowCount: number, rows: Record<string, unknown>[] }> {
+  const totalLimit = Math.max(0, args.rowLimit ?? 25000)
+  const pageSize = Math.min(totalLimit, 25000)
+  const allRows: Record<string, unknown>[] = []
+  let startRow = 0
+
+  while (allRows.length < totalLimit) {
+    const remaining = totalLimit - allRows.length
+    const currentLimit = Math.min(pageSize, remaining)
+    if (currentLimit <= 0)
+      break
+
+    const response = await client._rawQuery(args.siteUrl, {
+      startDate: args.startDate,
+      endDate: args.endDate,
+      dimensions: args.dimensions,
+      rowLimit: currentLimit,
+      startRow,
+      ...(args.type ? { type: args.type } : {}),
+      ...(args.dataState ? { dataState: args.dataState } : {}),
+      ...(args.aggregationType ? { aggregationType: args.aggregationType } : {}),
+      ...(args.dimensionFilterGroups
+        ? {
+            dimensionFilterGroups: args.dimensionFilterGroups.map(g => ({
+              groupType: g.groupType ?? 'and',
+              filters: g.filters,
+            })),
+          }
+        : {}),
+    } as any)
+    const rows = (response.rows || []).map((row) => {
+      const result: Record<string, unknown> = {
+        clicks: row.clicks ?? 0,
+        impressions: row.impressions ?? 0,
+        ctr: row.ctr ?? 0,
+        position: row.position ?? 0,
+      }
+      args.dimensions.forEach((dim, i) => {
+        result[dim] = row.keys?.[i]
+      })
+      return result
+    })
+    if (rows.length === 0)
+      break
+    allRows.push(...rows)
+    startRow += rows.length
+  }
+
+  return { siteUrl: args.siteUrl, rowCount: allRows.length, rows: allRows }
+}
+
 export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServer {
   const { name = 'gscdump', version = '1.0.0', getAuth } = options
 
@@ -193,46 +264,18 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
     async ({ siteUrl, startDate, endDate, dimensions, rowLimit, type, dataState, aggregationType, dimensionFilterGroups }) => {
       const client = await getClient()
-      const limit = (rowLimit as number | undefined) ?? 25000
-      const allRows: Record<string, unknown>[] = []
-      let startRow = 0
-      while (true) {
-        const response = await client._rawQuery(siteUrl as string, {
-          startDate: startDate as string,
-          endDate: endDate as string,
-          dimensions: dimensions as string[],
-          rowLimit: limit,
-          startRow,
-          ...(type ? { type } : {}),
-          ...(dataState ? { dataState } : {}),
-          ...(aggregationType ? { aggregationType } : {}),
-          ...(dimensionFilterGroups
-            ? {
-                dimensionFilterGroups: (dimensionFilterGroups as Array<{ groupType?: string, filters: Array<{ dimension: string, operator: string, expression: string }> }>).map(g => ({
-                  groupType: g.groupType ?? 'and',
-                  filters: g.filters,
-                })),
-              }
-            : {}),
-        } as any)
-        const rows = (response.rows || []).map((row) => {
-          const result: Record<string, unknown> = {
-            clicks: row.clicks ?? 0,
-            impressions: row.impressions ?? 0,
-            ctr: row.ctr ?? 0,
-            position: row.position ?? 0,
-          }
-          ;(dimensions as string[]).forEach((dim, i) => {
-            result[dim] = row.keys?.[i]
-          })
-          return result
-        })
-        allRows.push(...rows)
-        if (rows.length < limit)
-          break
-        startRow += rows.length
-      }
-      return { content: [{ type: 'text', text: JSON.stringify({ siteUrl, rowCount: allRows.length, rows: allRows }, null, 2) }] }
+      const result = await runMcpSearchAnalyticsQuery(client, {
+        siteUrl: siteUrl as string,
+        startDate: startDate as string,
+        endDate: endDate as string,
+        dimensions: dimensions as string[],
+        rowLimit: rowLimit as number | undefined,
+        type: type as string | undefined,
+        dataState: dataState as string | undefined,
+        aggregationType: aggregationType as string | undefined,
+        dimensionFilterGroups: dimensionFilterGroups as QueryToolArgs['dimensionFilterGroups'],
+      })
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
 

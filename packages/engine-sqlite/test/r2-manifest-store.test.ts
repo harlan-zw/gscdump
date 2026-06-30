@@ -15,6 +15,7 @@ import type { AnalyticsManifestDb } from '../src/r2-manifest-store'
 import { DatabaseSync } from 'node:sqlite'
 import { drizzle } from 'drizzle-orm/d1'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { createCachedManifestStore } from '../src/cached-manifest-store'
 import { createD1ManifestStore } from '../src/r2-manifest-store'
 
 // --- Minimal D1Database shim over node:sqlite ----------------------------
@@ -84,7 +85,31 @@ CREATE TABLE r2_manifest (
 CREATE UNIQUE INDEX r2_manifest_object_key_unique ON r2_manifest (object_key);
 CREATE INDEX idx_r2_manifest_live ON r2_manifest (user_id, site_id, "table", partition, retired_at);
 CREATE INDEX idx_r2_manifest_lookup ON r2_manifest (user_id, site_id, "table", search_type, tier, partition, retired_at);
-`
+
+CREATE TABLE r2_watermarks (
+  user_id INTEGER NOT NULL,
+  site_id TEXT NOT NULL DEFAULT '',
+  "table" TEXT NOT NULL,
+  newest_date_synced TEXT NOT NULL,
+  oldest_date_synced TEXT NOT NULL,
+  last_sync_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, site_id, "table")
+);
+
+CREATE TABLE r2_sync_states (
+  user_id INTEGER NOT NULL,
+  site_id TEXT NOT NULL DEFAULT '',
+  "table" TEXT NOT NULL,
+  date TEXT NOT NULL,
+  search_type TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  PRIMARY KEY (user_id, site_id, "table", date, search_type)
+);
+CREATE INDEX idx_r2_sync_states_state ON r2_sync_states (state);
+	`
 
 // SPEC.md section 2 partial unique index. Lives in the host's
 // database/main migration 0011, NOT in this package's schema. Applied here
@@ -216,6 +241,43 @@ describe('@gscdump/engine-sqlite createD1ManifestStore', () => {
 
       expect(d1.batchCalls - batchCallsBefore).toBe(1)
       expect(live.map(e => e.partition).sort()).toEqual(['daily/2026-05-01', 'daily/2026-07-20'])
+    })
+
+    it('treats an explicit empty partition set as match-none', async () => {
+      await store.registerVersion(entry())
+
+      await expect(store.listLive({
+        userId: '1',
+        siteId: 'site-a',
+        table: 'gsc_pages',
+        partitions: [],
+      })).resolves.toEqual([])
+    })
+
+    it('does not regress watermark lastSyncAt on older retries', async () => {
+      await store.bumpWatermark({ userId: '1', siteId: 'site-a', table: 'gsc_pages' }, '2026-05-10', 3000)
+      await store.bumpWatermark({ userId: '1', siteId: 'site-a', table: 'gsc_pages' }, '2026-05-08', 500)
+
+      const marks = await store.getWatermarks({ userId: '1', siteId: 'site-a', table: 'gsc_pages' })
+      expect(marks).toHaveLength(1)
+      expect(marks[0]!.oldestDateSynced).toBe('2026-05-08')
+      expect(marks[0]!.newestDateSynced).toBe('2026-05-10')
+      expect(marks[0]!.lastSyncAt).toBe(3000)
+    })
+
+    it('invalidates cached live lists after delete and purge', async () => {
+      const { store } = setup()
+      const cached = createCachedManifestStore(store, { ttlMs: 60_000 })
+      const first = entry({ objectKey: 'users/1/site-a/gsc_pages/daily/2026-05-01/first.parquet' })
+      const second = entry({ objectKey: 'users/1/site-a/gsc_pages/daily/2026-05-02/second.parquet', partition: 'daily/2026-05-02' })
+      await cached.registerVersions([first, second])
+
+      expect(await cached.listLive({ userId: '1', siteId: 'site-a', table: 'gsc_pages' })).toHaveLength(2)
+      await cached.delete([first])
+      expect((await cached.listLive({ userId: '1', siteId: 'site-a', table: 'gsc_pages' })).map(e => e.objectKey)).toEqual([second.objectKey])
+
+      await cached.purgeTenant({ userId: '1', siteId: 'site-a' })
+      expect(await cached.listLive({ userId: '1', siteId: 'site-a', table: 'gsc_pages' })).toEqual([])
     })
 
     it('batches chunked deletes into one D1 batch call', async () => {

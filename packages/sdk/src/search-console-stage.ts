@@ -1,3 +1,4 @@
+import { countSearchConsoleIssues, formatSearchConsoleCount } from './search-console-signals'
 import { siteTypeBaseline } from './site-baseline'
 
 // 13-stage diagnostic classifier for a site's Search Console health.
@@ -121,21 +122,14 @@ export interface ClassifySearchConsoleStageInput {
   siteType?: string | null
 }
 
-function formatCount(value: number): string {
-  return new Intl.NumberFormat('en').format(Math.max(0, Math.round(value)))
-}
-
-function issueCount(issues: SearchConsoleStageIssue[] | null | undefined, ...types: string[]): number {
-  if (!issues?.length)
-    return 0
-  const wanted = new Set(types)
-  return issues.reduce((sum, issue) => sum + (wanted.has(issue.type) ? issue.count : 0), 0)
-}
-
 function totalSitemapErrors(sitemaps: SearchConsoleStageSitemap[] | null | undefined): number {
   return (sitemaps ?? []).reduce((sum, sitemap) => {
     return sum + (sitemap.errors ?? 0) + (sitemap.lastError ? 1 : 0)
   }, 0)
+}
+
+function signedPct1(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
 }
 
 function stage(
@@ -297,12 +291,12 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   }
 
   const sitemapErrors = totalSitemapErrors(sitemaps)
-  const unknown = issueCount(issues, 'unknown_to_google')
-  const discovered = issueCount(issues, 'discovered_not_indexed')
-  const crawled = issueCount(issues, 'crawled_not_indexed')
+  const unknown = countSearchConsoleIssues(issues, 'unknown_to_google')
+  const discovered = countSearchConsoleIssues(issues, 'discovered_not_indexed')
+  const crawled = countSearchConsoleIssues(issues, 'crawled_not_indexed')
   // not_found / soft_404 are NOT hard faults — a 404 is a missing page (often
   // an intentionally retired one), a 5xx is a broken one. Only the latter blocks.
-  const gscCrawlBlocks = issueCount(issues, 'blocked_robots', 'server_error', 'access_denied', 'forbidden')
+  const gscCrawlBlocks = countSearchConsoleIssues(issues, 'blocked_robots', 'server_error', 'access_denied', 'forbidden')
   // On-page faults from the crawl audit join GSC crawl reasons. `noindex` is
   // EXCLUDED — it is usually intentional (the v1 model mis-flagged it).
   const hardBlocks = gscCrawlBlocks + (input.crawlAuditBlockerCount ?? 0)
@@ -313,7 +307,7 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   // fed "31 canonical mismatches" against an 8-URL funnel where all 8 were indexed
   // (notIndexed = 0), firing `indexability_blocked` on a fully-indexed sample. An
   // unbounded, differently-scoped count must never out-vote the funnel.
-  const canonicalMismatches = Math.min(notIndexed, input.canonicalMismatchCount ?? issueCount(issues, 'canonical_mismatch'))
+  const canonicalMismatches = Math.min(notIndexed, input.canonicalMismatchCount ?? countSearchConsoleIssues(issues, 'canonical_mismatch'))
   const visibleNoClickPages = (input.pageInventory ?? []).filter(page => page.impressions >= 50 && page.clicks === 0).length
   const poorPositionPages = (input.pageInventory ?? []).filter(page => page.impressions >= 50 && (page.position ?? 0) > 20).length
   const ctrOutlierCount = input.ctrOutlierCount ?? 0
@@ -341,8 +335,8 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   // everything except connection — even on a growing site they need a flag.
   if (hasHardBlocker) {
     return stage('crawl_blocked', [
-      { label: 'Crawl / on-page faults', value: formatCount(hardBlocks), source: 'indexing' },
-      { label: 'Indexed pages', value: `${formatCount(indexed)} of ${formatCount(totalUrls)}`, source: 'indexing' },
+      { label: 'Crawl / on-page faults', value: formatSearchConsoleCount(hardBlocks), source: 'indexing' },
+      { label: 'Indexed pages', value: `${formatSearchConsoleCount(indexed)} of ${formatSearchConsoleCount(totalUrls)}`, source: 'indexing' },
     ])
   }
 
@@ -365,11 +359,11 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
       // must not claim "0 blockers" while the Top Issues list routes them to the
       // board. The STAGE stays growth-ready (one small fault should not derail a
       // growing site); only the evidence is made honest.
-      ...(hardBlocks > 0 ? [{ label: 'Critical blockers', value: formatCount(hardBlocks), source: 'indexing' as const }] : []),
-      ...(clicks90d != null ? [{ label: 'Clicks 90d', value: `+${clicks90d.toFixed(1)}%`, source: 'performance' as const }] : []),
-      ...(imp90d != null ? [{ label: 'Impressions 90d', value: `+${imp90d.toFixed(1)}%`, source: 'performance' as const }] : []),
-      ...((input.recoverableBacklinkCount ?? 0) > 0 ? [{ label: 'Recoverable backlinks', value: formatCount(input.recoverableBacklinkCount!), source: 'performance' as const }] : []),
-      ...((input.competitorGapCount ?? 0) > 0 ? [{ label: 'Competitor content gaps', value: formatCount(input.competitorGapCount!), source: 'performance' as const }] : []),
+      ...(hardBlocks > 0 ? [{ label: 'Critical blockers', value: formatSearchConsoleCount(hardBlocks), source: 'indexing' as const }] : []),
+      ...(clicks90d != null ? [{ label: 'Clicks 90d', value: signedPct1(clicks90d), source: 'performance' as const }] : []),
+      ...(imp90d != null ? [{ label: 'Impressions 90d', value: signedPct1(imp90d), source: 'performance' as const }] : []),
+      ...((input.recoverableBacklinkCount ?? 0) > 0 ? [{ label: 'Recoverable backlinks', value: formatSearchConsoleCount(input.recoverableBacklinkCount!), source: 'performance' as const }] : []),
+      ...((input.competitorGapCount ?? 0) > 0 ? [{ label: 'Competitor content gaps', value: formatSearchConsoleCount(input.competitorGapCount!), source: 'performance' as const }] : []),
     ])
   }
 
@@ -378,8 +372,8 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   // so it sits ABOVE the nascent floor.
   if (crawled > Math.max(10, totalUrls * 0.30) && totalUrls > 500) {
     return stage('index_rejection', [
-      { label: 'Crawled, not indexed', value: formatCount(crawled), source: 'indexing' },
-      { label: 'Not indexed', value: formatCount(notIndexed), source: 'indexing' },
+      { label: 'Crawled, not indexed', value: formatSearchConsoleCount(crawled), source: 'indexing' },
+      { label: 'Not indexed', value: formatSearchConsoleCount(notIndexed), source: 'indexing' },
     ])
   }
 
@@ -387,8 +381,8 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   // sites the v1 model wrongly flagged as a discovery defect.
   if (isNascent) {
     return stage('waiting_for_data', [
-      { label: 'Impressions (28d)', value: formatCount(impressions28d ?? 0), source: 'performance' },
-      { label: 'Indexed pages', value: `${formatCount(indexed)} of ${formatCount(totalUrls)}`, source: 'indexing' },
+      { label: 'Impressions (28d)', value: formatSearchConsoleCount(impressions28d ?? 0), source: 'performance' },
+      { label: 'Indexed pages', value: `${formatSearchConsoleCount(indexed)} of ${formatSearchConsoleCount(totalUrls)}`, source: 'indexing' },
     ])
   }
 
@@ -397,21 +391,21 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   // often reports it null, which the v1 model mistook for "no coverage".
   if (!isEstablished && (sitemaps.length === 0 || sitemapErrors > 0 || unknown > Math.max(5, totalUrls * 0.1))) {
     return stage('weak_discovery', [
-      { label: 'Sitemaps', value: sitemaps.length === 0 ? 'None registered' : `${formatCount(sitemapErrors)} errors`, source: 'sitemap' },
-      ...(unknown > 0 ? [{ label: 'Unknown URLs', value: formatCount(unknown), source: 'indexing' as const }] : []),
+      { label: 'Sitemaps', value: sitemaps.length === 0 ? 'None registered' : `${formatSearchConsoleCount(sitemapErrors)} errors`, source: 'sitemap' },
+      ...(unknown > 0 ? [{ label: 'Unknown URLs', value: formatSearchConsoleCount(unknown), source: 'indexing' as const }] : []),
     ])
   }
 
   if (discovered > Math.max(10, totalUrls * 0.15)) {
     return stage('discovery_backlog', [
-      { label: 'Discovered, not crawled', value: formatCount(discovered), source: 'indexing' },
+      { label: 'Discovered, not crawled', value: formatSearchConsoleCount(discovered), source: 'indexing' },
       { label: 'Indexed pages', value: `${indexedPercent.toFixed(1)}%`, source: 'indexing' },
     ])
   }
 
   if (canonicalMismatches > Math.max(5, totalUrls * 0.05)) {
     return stage('indexability_blocked', [
-      { label: 'Canonical mismatches', value: formatCount(canonicalMismatches), source: 'canonical' },
+      { label: 'Canonical mismatches', value: formatSearchConsoleCount(canonicalMismatches), source: 'canonical' },
     ])
   }
 
@@ -424,14 +418,14 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   const noClickTrigger = visibleNoClickPages >= Math.max(1, (input.pageInventory?.length ?? 0) * noClickShare)
   if ((ctrOutlierCount > 0 && !lowCtrType) || noClickTrigger) {
     return stage('visible_not_clicked', [
-      ...(ctrOutlierCount > 0 ? [{ label: 'CTR outliers', value: formatCount(ctrOutlierCount), source: 'performance' as const }] : []),
-      ...(visibleNoClickPages > 0 ? [{ label: 'Visible, no clicks', value: formatCount(visibleNoClickPages), source: 'performance' as const }] : []),
+      ...(ctrOutlierCount > 0 ? [{ label: 'CTR outliers', value: formatSearchConsoleCount(ctrOutlierCount), source: 'performance' as const }] : []),
+      ...(visibleNoClickPages > 0 ? [{ label: 'Visible, no clicks', value: formatSearchConsoleCount(visibleNoClickPages), source: 'performance' as const }] : []),
     ])
   }
 
   if (poorPositionPages >= Math.max(1, (input.pageInventory?.length ?? 0) * 0.25)) {
     return stage('ranking_stalled', [
-      { label: 'Low-ranking visible pages', value: formatCount(poorPositionPages), source: 'performance' },
+      { label: 'Low-ranking visible pages', value: formatSearchConsoleCount(poorPositionPages), source: 'performance' },
     ])
   }
 
@@ -441,6 +435,6 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
     // (server/access/robots crawl blocks) are still real Sprint findings the
     // Top Issues list routes to the board. Reporting the true number keeps the
     // card from contradicting that list.
-    { label: 'Critical blockers', value: formatCount(hardBlocks), source: 'indexing' },
+    { label: 'Critical blockers', value: formatSearchConsoleCount(hardBlocks), source: 'indexing' },
   ])
 }

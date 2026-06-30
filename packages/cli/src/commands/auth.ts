@@ -1,6 +1,7 @@
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
+import { hasGscWriteScope, hasIndexingScope } from 'gscdump/api'
 import { ofetch } from 'ofetch'
 import { authenticate, clearTokens, formatAuthProvenance, getAuth, getAuthCredentials, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { loadConfig, saveConfig } from '../config'
@@ -22,6 +23,21 @@ const REQUIRED_SCOPES = [
   'https://www.googleapis.com/auth/indexing',
   'https://www.googleapis.com/auth/siteverification',
 ]
+
+function hasGoogleScope(scopes: string[], scope: string): boolean {
+  const suffix = scope.replace('https://www.googleapis.com/auth/', '')
+  return scopes.includes(scope) || scopes.includes(suffix)
+}
+
+function missingRequiredScopes(scopes: string[]): string[] {
+  return REQUIRED_SCOPES.filter((scope) => {
+    if (scope.endsWith('/webmasters'))
+      return !hasGscWriteScope(scopes)
+    if (scope.endsWith('/indexing'))
+      return !hasIndexingScope(scopes)
+    return !hasGoogleScope(scopes, scope)
+  })
+}
 
 async function fetchTokenInfo(accessToken: string): Promise<TokenInfo | null> {
   return ofetch<TokenInfo>('https://oauth2.googleapis.com/tokeninfo', {
@@ -54,8 +70,7 @@ async function resolveLiveAuthState(): Promise<{
 
   const tokenInfo = liveToken ? await fetchTokenInfo(liveToken) : null
   const scopes = tokenInfo?.scope ? tokenInfo.scope.split(/\s+/).filter(Boolean) : []
-  const has = (s: string): boolean => scopes.includes(s) || scopes.includes(s.replace('.readonly', ''))
-  const missing = REQUIRED_SCOPES.filter(s => !has(s))
+  const missing = missingRequiredScopes(scopes)
 
   return { byok, tokens, liveToken, tokenInfo, scopes, missing }
 }

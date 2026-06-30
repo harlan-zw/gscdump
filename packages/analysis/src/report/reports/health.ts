@@ -10,6 +10,7 @@
 import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
+import { reportRows, sectionArtifact, sectionCoverage, truncation } from '../sections'
 
 export interface HealthReportParams {
   maxFindings?: number
@@ -56,7 +57,7 @@ interface CtrAnomalyRow {
 }
 
 function buildCtrAnomalySection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as CtrAnomalyRow[])
+  const rows = reportRows<CtrAnomalyRow>(res)
     .filter(r => r.breachDaysDown > 0)
     .sort((a, b) => b.clicksLost - a.clicksLost)
   const kept = rows.slice(0, max)
@@ -84,10 +85,10 @@ function buildCtrAnomalySection(res: AnalysisResult | undefined, max: number): R
       magnitudeLabel: `${Math.round(totalLost)} clicks lost vs baseline`,
     },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'ctr-anomaly', params: { type: 'ctr-anomaly' } } : undefined,
+    artifact: sectionArtifact(res, 'ctr-anomaly'),
   }
 }
 
@@ -101,7 +102,7 @@ interface ChangePointRow {
 }
 
 function buildChangePointSection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as ChangePointRow[])
+  const rows = reportRows<ChangePointRow>(res)
     .filter(r => r.direction === 'worsened')
     .sort((a, b) => b.llr - a.llr)
   const kept = rows.slice(0, max)
@@ -118,10 +119,10 @@ function buildChangePointSection(res: AnalysisResult | undefined, max: number): 
     severity: kept.length ? 'medium' : 'info',
     summary: { magnitudeLabel: `${kept.length} worsening segments` },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'change-point', params: { type: 'change-point' } } : undefined,
+    artifact: sectionArtifact(res, 'change-point'),
   }
 }
 
@@ -133,7 +134,7 @@ interface PositionVolatilityRow {
 }
 
 function buildPositionVolatilitySection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as PositionVolatilityRow[])
+  const rows = reportRows<PositionVolatilityRow>(res)
     .sort((a, b) => b.peakVolatility - a.peakVolatility)
   const kept = rows.slice(0, max)
 
@@ -152,9 +153,9 @@ function buildPositionVolatilitySection(res: AnalysisResult | undefined, max: nu
     severity: kept.length ? 'low' : 'info',
     summary: {},
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'position-volatility', params: { type: 'position-volatility' } } : undefined,
+    artifact: sectionArtifact(res, 'position-volatility'),
   }
 }

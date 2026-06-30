@@ -20,23 +20,10 @@ import { num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
+import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 
 const BIPARTITE_PAGERANK_ITERATIONS = 25
 const BIPARTITE_PAGERANK_DAMPING = 0.85
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
-}
-
-function parseJsonList(v: unknown): Row[] {
-  if (Array.isArray(v))
-    return v as Row[]
-  if (typeof v === 'string' && v.length > 0) {
-    const parsed = JSON.parse(v)
-    return Array.isArray(parsed) ? parsed : []
-  }
-  return []
-}
 
 export interface BipartitePagerankNode {
   kind: 'query' | 'url'

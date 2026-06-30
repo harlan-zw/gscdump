@@ -11,6 +11,7 @@ import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
 import { requireReportParam } from '../require'
+import { reportRows, sectionArtifact, sectionCoverage } from '../sections'
 
 export interface BrandReportParams {
   /** Comma-separated brand terms. Required. */
@@ -68,7 +69,7 @@ interface BrandSummary {
 }
 
 function buildBrandSplitSection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = (res?.results ?? []) as unknown as BrandRow[]
+  const rows = reportRows<BrandRow>(res)
   const summary = res?.meta?.summary as BrandSummary | undefined
   const brandKws = rows.filter(r => r.segment === 'brand').sort((a, b) => b.clicks - a.clicks).slice(0, max)
   const findings: ReportFinding[] = brandKws.map(r => ({
@@ -88,9 +89,9 @@ function buildBrandSplitSection(res: AnalysisResult | undefined, max: number): R
     severity: 'info',
     summary: { magnitudeLabel },
     findings,
-    coverage: res ? 'full' : 'partial',
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'brand', params: { type: 'brand' } } : undefined,
+    artifact: sectionArtifact(res, 'brand'),
   }
 }
 
@@ -112,7 +113,7 @@ interface ConcentrationResult {
 
 function buildConcentrationSection(res: AnalysisResult | undefined, max: number): ReportSection {
   // concentration analyzer returns a single-row result list (per call).
-  const rows = (res?.results ?? []) as unknown as ConcentrationResult[]
+  const rows = reportRows<ConcentrationResult>(res)
   const head = rows[0]
   const top = (head?.topNItems ?? []).slice(0, max)
   const findings: ReportFinding[] = top.map(it => ({
@@ -128,8 +129,8 @@ function buildConcentrationSection(res: AnalysisResult | undefined, max: number)
       ? { magnitudeLabel: `HHI ${head.hhi.toFixed(0)} (${head.riskLevel}); top-N share ${(head.topNConcentration * 100).toFixed(1)}%` }
       : {},
     findings,
-    coverage: res ? 'full' : 'partial',
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'concentration', params: { type: 'concentration', dimension: 'keywords' } } : undefined,
+    artifact: sectionArtifact(res, 'concentration', { dimension: 'keywords' }),
   }
 }

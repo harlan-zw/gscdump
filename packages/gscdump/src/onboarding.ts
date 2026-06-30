@@ -1,7 +1,12 @@
+import { GSC_INDEXING_SCOPE, GSC_READ_SCOPE, parseGoogleScopes } from './core/scope-values'
+import { hasGscReadScope, hasIndexingScope } from './core/scopes'
+
+type GoogleScopesInput = string | readonly string[] | null | undefined
+
 export const GSCDUMP_ONBOARDING_CONTRACT_VERSION = '2026-05-11' as const
 
-export const GSCDUMP_REQUIRED_ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly' as const
-export const GSCDUMP_OPTIONAL_INDEXING_SCOPE = 'https://www.googleapis.com/auth/indexing' as const
+export const GSCDUMP_REQUIRED_ANALYTICS_SCOPE = GSC_READ_SCOPE
+export const GSCDUMP_OPTIONAL_INDEXING_SCOPE = GSC_INDEXING_SCOPE
 
 export const accountStatuses = [
   'disconnected',
@@ -216,16 +221,14 @@ export interface LifecycleWebhookEnvelope<TData extends Record<string, unknown> 
   data: TData
 }
 
-export function parseGrantedScopes(scopes: string | null | undefined): string[] {
-  return (scopes ?? '').split(/\s+/).map(s => s.trim()).filter(Boolean)
+export function parseGrantedScopes(scopes: GoogleScopesInput): string[] {
+  return parseGoogleScopes(scopes)
 }
 
-export function hasRequiredAnalyticsScope(scopes: string | string[] | null | undefined): boolean {
-  const granted = Array.isArray(scopes) ? scopes : parseGrantedScopes(scopes)
-  return granted.includes(GSCDUMP_REQUIRED_ANALYTICS_SCOPE)
+export function hasRequiredAnalyticsScope(scopes: GoogleScopesInput): boolean {
+  return hasGscReadScope(scopes)
 }
 
-export function hasOptionalIndexingScope(scopes: string | string[] | null | undefined): boolean {
-  const granted = Array.isArray(scopes) ? scopes : parseGrantedScopes(scopes)
-  return granted.includes(GSCDUMP_OPTIONAL_INDEXING_SCOPE)
+export function hasOptionalIndexingScope(scopes: GoogleScopesInput): boolean {
+  return hasIndexingScope(scopes)
 }

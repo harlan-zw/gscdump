@@ -27,8 +27,11 @@ import {
   between,
   clicks,
   date,
+  eq,
   gsc,
   gte,
+  impressions,
+  or,
   page,
   query,
   regex,
@@ -127,6 +130,62 @@ describe('analysis sources', () => {
 
     expect(rows).toHaveLength(1)
     expect(rows[0].page).toBe('https://example.com/docs')
+  })
+
+  it('gsc api source applies limit after collecting rows for client-side ordering', async () => {
+    const client = {
+      async* query(_siteUrl: string, builder: GSCQueryBuilder<any, any>) {
+        const state = builder.getState()
+        const candidates = [
+          { page: 'https://example.com/low-impressions', clicks: 100, impressions: 10, ctr: 10, position: 1 },
+          { page: 'https://example.com/high-impressions', clicks: 1, impressions: 1000, ctr: 0.001, position: 2 },
+        ]
+        const start = state.startRow ?? 0
+        const end = state.rowLimit == null ? candidates.length : start + state.rowLimit
+        yield candidates.slice(start, end)
+      },
+    } as unknown as GoogleSearchConsoleClient
+
+    const source = createGscApiQuerySource({ client, siteUrl: 'sc-domain:example.com' })
+    const state = gsc
+      .select(page)
+      .where(between(date, '2026-04-01', '2026-04-30'))
+      .orderBy(impressions, 'desc')
+      .limit(1)
+      .getState()
+
+    const rows = await queryRows(source, state)
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0].page).toBe('https://example.com/high-impressions')
+  })
+
+  it('gsc api source preserves OR semantics during local dimension filtering', async () => {
+    const client = {
+      async* query() {
+        yield [
+          { page: 'https://example.com/a', clicks: 1, impressions: 10, ctr: 0.1, position: 1 },
+          { page: 'https://example.com/b', clicks: 2, impressions: 20, ctr: 0.1, position: 2 },
+          { page: 'https://example.com/c', clicks: 3, impressions: 30, ctr: 0.1, position: 3 },
+        ]
+      },
+    } as unknown as GoogleSearchConsoleClient
+
+    const source = createGscApiQuerySource({ client, siteUrl: 'sc-domain:example.com' })
+    const state = gsc
+      .select(page)
+      .where(and(
+        between(date, '2026-04-01', '2026-04-30'),
+        or(eq(page, '/a'), eq(page, '/b')),
+      ))
+      .getState()
+
+    const rows = await queryRows(source, state)
+
+    expect(rows.map(row => row.page).sort()).toEqual([
+      'https://example.com/a',
+      'https://example.com/b',
+    ])
   })
 
   it('gsc api source applies regex filters with regex semantics client-side', async () => {

@@ -12,6 +12,7 @@ import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
 import { requireComparisonWindow } from '../require'
+import { reportRows, sectionArtifact, sectionCoverage, truncation } from '../sections'
 
 export interface MoversReportParams {
   /** Cap findings per section. Default 5. */
@@ -75,7 +76,7 @@ function buildMoversSection(
   max: number,
   minChange: number,
 ): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as MoverRow[])
+  const rows = reportRows<MoverRow>(res)
     .filter(r => r.direction === direction && Math.abs(r.clicksChange) >= minChange)
     .sort((a, b) => Math.abs(b.clicksChange) - Math.abs(a.clicksChange))
 
@@ -108,10 +109,10 @@ function buildMoversSection(
       direction: totalDelta > 0 ? 'up' : totalDelta < 0 ? 'down' : 'flat',
     },
     findings,
-    truncated: total > max ? { kept: kept.length, total } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(total, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'movers', params: { type: 'movers' } } : undefined,
+    artifact: sectionArtifact(res, 'movers'),
   }
 }
 
@@ -129,11 +130,11 @@ function buildDeclinersSection(
   max: number,
   minChange: number,
 ): ReportSection {
-  const decliningQueries = ((moversRes?.results ?? []) as unknown as MoverRow[])
+  const decliningQueries = reportRows<MoverRow>(moversRes)
     .filter(r => r.direction === 'declining' && Math.abs(r.clicksChange) >= minChange)
     .slice(0, max)
 
-  const lostPages = ((decayRes?.results ?? []) as unknown as DecayRow[])
+  const lostPages = reportRows<DecayRow>(decayRes)
     .sort((a, b) => b.lostClicks - a.lostClicks)
     .slice(0, max)
 
@@ -183,7 +184,7 @@ interface StrikingRow {
 }
 
 function buildStrikingSection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as StrikingRow[])
+  const rows = reportRows<StrikingRow>(res)
     .sort((a, b) => b.potentialClicks - a.potentialClicks)
   const kept = rows.slice(0, max)
 
@@ -204,9 +205,9 @@ function buildStrikingSection(res: AnalysisResult | undefined, max: number): Rep
     severity: 'low',
     summary: { magnitudeLabel: `${kept.reduce((s, r) => s + r.potentialClicks, 0)} potential clicks` },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'striking-distance', params: { type: 'striking-distance' } } : undefined,
+    artifact: sectionArtifact(res, 'striking-distance'),
   }
 }

@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { googleSearchConsole } from 'gscdump/api'
+import { googleSearchConsole, hasGscWriteScope, hasIndexingScope } from 'gscdump/api'
 import { ofetch } from 'ofetch'
 import { loadTokens, resolveAuth, resolveBYOK } from '../auth'
 import { loadConfig, loadResolvedConfig } from '../config'
@@ -45,6 +45,21 @@ function redact(v: string | undefined): string {
   if (v.length <= 6)
     return '***'
   return `***${v.slice(-6)}`
+}
+
+function hasGoogleScope(scopes: string[], scope: string): boolean {
+  const suffix = scope.replace('https://www.googleapis.com/auth/', '')
+  return scopes.includes(scope) || scopes.includes(suffix)
+}
+
+function missingRequiredScopes(scopes: string[]): string[] {
+  return REQUIRED_SCOPES.filter((scope) => {
+    if (scope.endsWith('/webmasters'))
+      return !hasGscWriteScope(scopes)
+    if (scope.endsWith('/indexing'))
+      return !hasIndexingScope(scopes)
+    return !hasGoogleScope(scopes, scope)
+  })
 }
 
 // Inventory only — does NOT validate the credentials. The `auth` check below
@@ -148,7 +163,7 @@ async function checkAuth(envKeys: Set<string>): Promise<{ checks: Check[], liveT
     checks.push({ name: 'auth.account', status: 'pass', detail: info.email })
 
   const scopes = info.scope ? info.scope.split(/\s+/) : []
-  const missing = REQUIRED_SCOPES.filter(s => !scopes.includes(s) && !scopes.includes(s.replace('.readonly', '')))
+  const missing = missingRequiredScopes(scopes)
   if (missing.length > 0)
     checks.push({ name: 'auth.scopes', status: 'warn', detail: `missing: ${missing.join(', ')} — \`gscdump auth login --force\` to re-consent` })
   else

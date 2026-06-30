@@ -13,6 +13,7 @@ import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { datesQueryState } from '../analyzer/adapt-rows'
+import { rowBoolean as bool, rowString as str } from '../analyzer/row-values'
 
 export type SeasonalityMetric = 'clicks' | 'impressions'
 
@@ -37,14 +38,6 @@ export interface SeasonalityResult {
   troughMonths: string[] // e.g., ['06'] for June
   monthlyBreakdown: MonthlyData[]
   insufficientData: boolean // true if <12 months
-}
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
-}
-
-function bool(v: unknown): boolean {
-  return v === true || v === 1 || v === 'true'
 }
 
 function calculateCV(values: number[]): number {

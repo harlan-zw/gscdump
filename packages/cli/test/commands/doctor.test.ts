@@ -159,4 +159,19 @@ describe('doctor command', () => {
     expect(auth.status).toBe('pass')
     expect(auth.detail).toContain('BYOK')
   })
+
+  it('accepts bare Google scope suffixes from tokeninfo', async () => {
+    mocks.resolveBYOK.mockReturnValue('byok-token')
+    mocks.ofetch.mockResolvedValue({
+      scope: 'webmasters indexing siteverification',
+      email: 'user@example.com',
+    })
+
+    await doctorCommand.run!({ args: { json: true }, rawArgs: [], cmd: doctorCommand } as any)
+
+    const jsonLine = consoleOutput.find(l => l.startsWith('{'))
+    const parsed = JSON.parse(jsonLine!)
+    const scopes = parsed.checks.find((c: any) => c.name === 'auth.scopes')
+    expect(scopes.status).toBe('pass')
+  })
 })

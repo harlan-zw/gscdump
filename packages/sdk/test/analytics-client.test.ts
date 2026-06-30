@@ -1,6 +1,16 @@
 import type { AnalyticsFetch } from '../src'
 import { createAnalyticsClient } from '../src'
 
+const analysisSourcesResponse = {
+  siteId: 's_1',
+  searchType: 'web',
+  range: { start: '2026-05-01', end: '2026-05-07' },
+  snapshotVersion: 'v1',
+  generatedAt: '2026-05-11T00:00:00.000Z',
+  tables: [],
+  eligibilityCeiling: { maxBytes: 150_000_000, maxRows: 10_000_000 },
+}
+
 describe('createAnalyticsClient', () => {
   it('uses injected transport with analytics route contracts', async () => {
     const calls: Array<{ url: string, options: any }> = []
@@ -11,7 +21,7 @@ describe('createAnalyticsClient', () => {
       if (url.endsWith('/source-info'))
         return Promise.resolve({ name: 'r2', kind: 'sql', capabilities: { attachedTables: true }, supportedAnalyzerIds: [], browserAttachEligible: true })
       if (url.endsWith('/analysis-sources'))
-        return Promise.resolve({ tables: {}, generatedAt: '2026-05-11T00:00:00.000Z', manifestVersion: 'v1' })
+        return Promise.resolve(analysisSourcesResponse)
       return Promise.resolve({ rows: [], meta: { sourceName: 'r2', sourceKind: 'sql', queryMs: 1 } })
     }) as AnalyticsFetch
 

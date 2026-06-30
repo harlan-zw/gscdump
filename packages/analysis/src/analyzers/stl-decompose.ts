@@ -17,6 +17,11 @@ import { defaultEndDate } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { daysAgo } from 'gscdump'
+import {
+  rowBoolean as bool,
+  parseJsonRows as parseJsonList,
+  rowString as str,
+} from '../analyzer/row-values'
 
 export interface StlDecomposeSeriesPoint {
   date: string
@@ -37,24 +42,6 @@ export interface StlDecomposeResult {
   residualAnomalies: number
   trendSlope: number
   series: StlDecomposeSeriesPoint[]
-}
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
-}
-
-function bool(v: unknown): boolean {
-  return v === true || v === 1 || v === 'true'
-}
-
-function parseJsonList(v: unknown): Row[] {
-  if (Array.isArray(v))
-    return v as Row[]
-  if (typeof v === 'string' && v.length > 0) {
-    const parsed = JSON.parse(v)
-    return Array.isArray(parsed) ? parsed : []
-  }
-  return []
 }
 
 export const stlDecomposeAnalyzer = defineAnalyzer<AnalysisParams, Row, StlDecomposeResult[]>({

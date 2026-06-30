@@ -9,6 +9,7 @@
 import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
+import { reportRows, sectionArtifact, sectionCoverage, truncation } from '../sections'
 
 export interface OpportunitiesReportParams {
   maxFindings?: number
@@ -57,7 +58,7 @@ interface StrikingRow {
 }
 
 function buildStrikingSection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as StrikingRow[])
+  const rows = reportRows<StrikingRow>(res)
     .sort((a, b) => b.potentialClicks - a.potentialClicks)
   const kept = rows.slice(0, max)
   const findings: ReportFinding[] = kept.map(r => ({
@@ -72,10 +73,10 @@ function buildStrikingSection(res: AnalysisResult | undefined, max: number): Rep
     severity: 'low',
     summary: { magnitudeLabel: `${Math.round(totalPotential)} potential clicks` },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'striking-distance', params: { type: 'striking-distance' } } : undefined,
+    artifact: sectionArtifact(res, 'striking-distance'),
   }
 }
 
@@ -91,7 +92,7 @@ interface OpportunityRow {
 }
 
 function buildOpportunitySection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as OpportunityRow[])
+  const rows = reportRows<OpportunityRow>(res)
     .sort((a, b) => b.opportunityScore - a.opportunityScore)
   const kept = rows.slice(0, max)
   const findings: ReportFinding[] = kept.map(r => ({
@@ -111,14 +112,14 @@ function buildOpportunitySection(res: AnalysisResult | undefined, max: number): 
     severity: 'low',
     summary: {},
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: kept.slice(0, 1).map(r => ({
       kind: 'fix',
       target: r.page ? { kind: 'page', value: r.page } : { kind: 'query', value: r.keyword },
       rationale: 'Rewrite title/description to lift CTR at this position',
     })),
-    artifact: res ? { analyzer: 'opportunity', params: { type: 'opportunity' } } : undefined,
+    artifact: sectionArtifact(res, 'opportunity'),
   }
 }
 
@@ -132,7 +133,7 @@ interface ZeroClickRow {
 }
 
 function buildZeroClickSection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as ZeroClickRow[])
+  const rows = reportRows<ZeroClickRow>(res)
     .sort((a, b) => b.impressions - a.impressions)
   const kept = rows.slice(0, max)
   const findings: ReportFinding[] = kept.map(r => ({
@@ -146,10 +147,10 @@ function buildZeroClickSection(res: AnalysisResult | undefined, max: number): Re
     severity: 'info',
     summary: { magnitudeLabel: `${kept.reduce((s, r) => s + r.impressions, 0)} impressions wasted` },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'zero-click', params: { type: 'zero-click' } } : undefined,
+    artifact: sectionArtifact(res, 'zero-click'),
   }
 }
 
@@ -161,7 +162,7 @@ interface MigrationRow {
 }
 
 function buildMigrationSection(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as MigrationRow[])
+  const rows = reportRows<MigrationRow>(res)
     .sort((a, b) => b.weight - a.weight)
   const kept = rows.slice(0, max)
   const findings: ReportFinding[] = kept.map(r => ({
@@ -175,9 +176,9 @@ function buildMigrationSection(res: AnalysisResult | undefined, max: number): Re
     severity: 'info',
     summary: {},
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'query-migration', params: { type: 'query-migration' } } : undefined,
+    artifact: sectionArtifact(res, 'query-migration'),
   }
 }

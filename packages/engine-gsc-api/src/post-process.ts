@@ -1,6 +1,6 @@
 import type { BuilderState } from 'gscdump/query'
+import type { FilterInput, InternalFilter, JsonInternalFilter } from 'gscdump/query'
 import {
-  getDimensionFilters,
   matchesDimensionFilter,
   matchesMetricFilter,
   matchesTopLevelPage,
@@ -13,21 +13,46 @@ import {
 } from 'gscdump/query'
 
 const METRIC_NAMES = ['clicks', 'impressions', 'ctr', 'position'] as const
+type LocalFilter = InternalFilter | JsonInternalFilter
 
 function isMetricDimension(dim: string): dim is typeof METRIC_NAMES[number] {
   return METRIC_NAMES.includes(dim as typeof METRIC_NAMES[number])
+}
+
+function isLocalDimensionFilter(filter: LocalFilter): boolean {
+  return filter.dimension !== 'date'
+    && !isMetricDimension(filter.dimension)
+    && filter.operator !== 'topLevel'
+    && !filter.operator.startsWith('metric')
+}
+
+function matchesDimensionFilterTree(row: Record<string, unknown>, filter: FilterInput | undefined): boolean {
+  if (!filter || !('_filters' in filter))
+    return true
+  const localFilters = filter._filters as LocalFilter[]
+  const checks = [
+    ...localFilters
+      .filter(isLocalDimensionFilter)
+      .map(f => matchesDimensionFilter(row, f as InternalFilter)),
+    ...(filter._nestedGroups ?? [])
+      .map(group => matchesDimensionFilterTree(row, group)),
+  ]
+  if (checks.length === 0)
+    return true
+  return filter._groupType === 'or'
+    ? checks.some(Boolean)
+    : checks.every(Boolean)
 }
 
 export function applyBuilderStatePostProcessing(
   rows: Record<string, unknown>[],
   state: BuilderState,
 ): Record<string, unknown>[] {
-  const dimensionFilters = getDimensionFilters(state.filter, isMetricDimension)
   const metricFilters = extractMetricFilters(state.filter)
   const specialFilters = extractSpecialOperatorFilters(state.filter)
 
   const filtered = rows.filter((row) => {
-    if (!dimensionFilters.every(filter => matchesDimensionFilter(row, filter)))
+    if (!matchesDimensionFilterTree(row, state.filter))
       return false
     if (!metricFilters.every(filter => matchesMetricFilter(row, filter)))
       return false

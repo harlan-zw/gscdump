@@ -45,6 +45,9 @@ export function createCachedManifestStore(
     const userId = String(scope.userId)
     if (scope.siteId && scope.table && scope.searchType !== undefined) {
       cache.delete(`${userId}\0${scope.siteId}\0${scope.table}\0${scope.searchType}`)
+      // The unscoped read unions every searchType slice, so any slice mutation
+      // also invalidates that cached union.
+      cache.delete(`${userId}\0${scope.siteId}\0${scope.table}\0`)
       return
     }
     const prefix = scope.siteId && scope.table
@@ -75,20 +78,32 @@ export function createCachedManifestStore(
     registerVersion: async (entry, superseding) => {
       await inner.registerVersion(entry, superseding)
       bust({ userId: entry.userId, siteId: entry.siteId ?? '', table: entry.table, searchType: entry.searchType })
+      for (const e of superseding ?? [])
+        bust({ userId: e.userId, siteId: e.siteId ?? '', table: e.table, searchType: e.searchType })
     },
     registerVersions: async (entries, superseding) => {
       await inner.registerVersions(entries, superseding)
       for (const e of entries)
         bust({ userId: e.userId, siteId: e.siteId ?? '', table: e.table, searchType: e.searchType })
+      for (const e of superseding ?? [])
+        bust({ userId: e.userId, siteId: e.siteId ?? '', table: e.table, searchType: e.searchType })
     },
     listRetired: inner.listRetired.bind(inner),
-    delete: inner.delete.bind(inner),
+    delete: async (entries) => {
+      await inner.delete(entries)
+      for (const e of entries)
+        bust({ userId: e.userId, siteId: e.siteId ?? '', table: e.table, searchType: e.searchType })
+    },
     getWatermarks: inner.getWatermarks.bind(inner),
     bumpWatermark: inner.bumpWatermark.bind(inner),
     getSyncStates: inner.getSyncStates.bind(inner),
     setSyncState: inner.setSyncState.bind(inner),
     withLock: inner.withLock.bind(inner),
-    purgeTenant: inner.purgeTenant.bind(inner),
+    purgeTenant: async (filter) => {
+      const result = await inner.purgeTenant(filter)
+      bust({ userId: filter.userId, siteId: filter.siteId })
+      return result
+    },
     bust,
     clear: () => cache.clear(),
     stats: () => ({ size: cache.size }),

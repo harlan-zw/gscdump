@@ -71,6 +71,7 @@ describe('runGscSyncSlice', () => {
     })
 
     expect(captured[0]!.dimensions).toEqual(['hour', 'page'])
+    expect(captured[0]!.dataState).toBe('hourly_all')
   })
 
   it('defaults search_appearance dimensions to searchAppearance only', async () => {
@@ -177,8 +178,8 @@ describe('runGscSyncSlice', () => {
   it('pipelines: fetches the next page while the current write is in flight, preserving order', async () => {
     const onePartialRow = [{ keys: ['x'], clicks: 1, impressions: 1, ctr: 1, position: 1 }]
     const captured: SearchAnalyticsQuery[] = []
-    // page1 full, page2 full, page3 partial (terminates the slice).
-    const client = makeClient([{ rows: fullPage2 }, { rows: fullPage2 }, { rows: onePartialRow }], captured)
+    // page1 full, page2 full, page3 partial, page4 empty (terminates the slice).
+    const client = makeClient([{ rows: fullPage2 }, { rows: fullPage2 }, { rows: onePartialRow }, { rows: [] }], captured)
 
     const events: string[] = []
     let releaseWrite1!: () => void
@@ -213,8 +214,8 @@ describe('runGscSyncSlice', () => {
     const result = await slicePromise
 
     expect(result.hasMore).toBe(false)
-    expect(captured).toHaveLength(3)
-    expect(captured.map(q => q.startRow)).toEqual([0, 2, 4]) // cursors paged in order
+    expect(captured).toHaveLength(4)
+    expect(captured.map(q => q.startRow)).toEqual([0, 2, 4, 5]) // cursors paged in order
     expect(events).toEqual([
       'write1:start',
       'write1:end',
@@ -267,6 +268,32 @@ describe('runGscSyncSlice', () => {
     expect(result.totalRows).toBe(0)
   })
 
+  it('continues after short non-empty pages until an empty page', async () => {
+    const captured: SearchAnalyticsQuery[] = []
+    const client = makeClient([
+      { rows: [{ keys: ['a'], clicks: 1, impressions: 1, ctr: 1, position: 1 }] },
+      { rows: [{ keys: ['b'], clicks: 1, impressions: 1, ctr: 1, position: 1 }] },
+      { rows: [] },
+    ], captured)
+    const batches: GscApiRow[][] = []
+
+    const result = await runGscSyncSlice({
+      client,
+      siteUrl: 'sc-domain:example.com',
+      table: 'pages',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      rowLimit: 2,
+      onBatch: async rows => batches.push(rows),
+    })
+
+    expect(result.hasMore).toBe(false)
+    expect(result.totalRows).toBe(2)
+    expect(result.nextStartRow).toBe(2)
+    expect(captured.map(q => q.startRow)).toEqual([0, 1, 2])
+    expect(batches).toHaveLength(2)
+  })
+
   it('scopes the slice to the registered host via a page-regex filter (ADR-0033)', async () => {
     const captured: SearchAnalyticsQuery[] = []
     const client = makeClient([{ rows: [] }], captured)
@@ -311,6 +338,7 @@ describe('runGscSyncSlice', () => {
     const captured: SearchAnalyticsQuery[] = []
     const client = makeClient([
       { rows: [{ keys: ['AMP_BLUE_LINK'], clicks: 3, impressions: 30, ctr: 0.1, position: 2 }] },
+      { rows: [] },
       { rows: [{ keys: ['https://example.com/a', 'blue widgets', '2026-05-10'], clicks: 1, impressions: 10, ctr: 0.1, position: 2 }] },
     ], captured)
     const contextRows: Array<{ searchAppearance: string, table: string, rows: GscApiRow[] }> = []
@@ -325,13 +353,58 @@ describe('runGscSyncSlice', () => {
 
     expect(result.appearances).toEqual(['AMP_BLUE_LINK'])
     expect(captured[0]!.dimensions).toEqual(['searchAppearance'])
-    expect(captured[1]!.dimensions).toEqual(['page', 'query', 'date'])
+    expect(captured[1]!.dimensions).toEqual(['searchAppearance'])
+    expect(captured[2]!.dimensions).toEqual(['page', 'query', 'date'])
     expect(contextRows[0]!.table).toBe('search_appearance_page_queries')
-    expect(captured[1]!.dimensionFilterGroups).toEqual([{
+    expect(captured[2]!.dimensionFilterGroups).toEqual([{
       filters: [{ dimension: 'searchAppearance', operator: 'equals', expression: 'AMP_BLUE_LINK' }],
     }])
     expect(contextRows[0]!.searchAppearance).toBe('AMP_BLUE_LINK')
     expect(contextRows[0]!.rows).toHaveLength(1)
+  })
+
+  it('returns a resumable continuation for partial search appearance discovery', async () => {
+    const captured: SearchAnalyticsQuery[] = []
+    const client = makeClient([
+      { rows: [{ keys: ['AMP_BLUE_LINK'], clicks: 3, impressions: 30, ctr: 0.1, position: 2 }] },
+      { rows: [{ keys: ['WEB_LIGHT_RESULT'], clicks: 2, impressions: 20, ctr: 0.1, position: 3 }] },
+      { rows: [] },
+    ], captured)
+
+    const first = await runGscSearchAppearanceContextSlice({
+      client,
+      siteUrl: 'sc-domain:example.com',
+      startDate: '2026-05-10',
+      endDate: '2026-05-10',
+      rowLimit: 1,
+      maxPages: 1,
+      onContextBatch: async () => {},
+    })
+
+    expect(first.hasMore).toBe(true)
+    expect(first.continuation).toEqual({
+      phase: 'discovery',
+      appearances: ['AMP_BLUE_LINK'],
+      nextStartRow: 1,
+    })
+
+    const second = await runGscSearchAppearanceContextSlice({
+      client,
+      siteUrl: 'sc-domain:example.com',
+      startDate: '2026-05-10',
+      endDate: '2026-05-10',
+      rowLimit: 1,
+      maxPages: 1,
+      continuation: first.continuation,
+      onContextBatch: async () => {},
+    })
+
+    expect(second.continuation).toMatchObject({
+      phase: 'discovery',
+      appearances: ['AMP_BLUE_LINK', 'WEB_LIGHT_RESULT'],
+      nextStartRow: 2,
+    })
+    expect(captured.map(q => q.startRow)).toEqual([0, 1])
   })
 
   it('defaults searchType to web and forwards an explicit searchType to the query', async () => {

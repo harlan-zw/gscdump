@@ -34,4 +34,23 @@ describe('classifySearchConsoleStage canonical clamp', () => {
 
     expect(stage.key).toBe('indexability_blocked')
   })
+
+  it('renders negative growth evidence without a duplicated plus sign', () => {
+    const stage = classifySearchConsoleStage({
+      connected: true,
+      summary: { totalUrls: 100, indexed: 90, indexedPercent: 90 },
+      issues: [],
+      sitemaps: [{ urlCount: 100 }],
+      impressions28d: 50000,
+      trajectory: {
+        clicksPct90d: -5,
+        impressionsPct90d: 30,
+        positionDelta90d: -1,
+      },
+    })
+
+    expect(stage.key).toBe('healthy_growth_ready')
+    expect(stage.evidence.find(evidence => evidence.label === 'Clicks 90d')?.value).toBe('-5.0%')
+    expect(stage.evidence.find(evidence => evidence.label === 'Impressions 90d')?.value).toBe('+30.0%')
+  })
 })

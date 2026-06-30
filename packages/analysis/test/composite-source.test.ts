@@ -7,7 +7,7 @@
  */
 
 import type { AnalysisQuerySource, SourceCapabilities } from '@gscdump/engine/source'
-import { and, between, date, device, eq, gsc, page, query } from 'gscdump/query'
+import { and, between, clicks, date, device, eq, gsc, gte, page, query } from 'gscdump/query'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createCompositeSource, hasGapInCoveredSpans, shouldRouteToLive } from '../src/source/composite'
@@ -72,6 +72,28 @@ describe('createCompositeSource', () => {
       site: { oldestDateSynced: '2024-06-01', newestDateSynced: '2024-12-31' },
     })
     await c.queryRows(stateInRange('2024-01-01', '2024-01-31'))
+    expect(live.queryRows).toHaveBeenCalledTimes(1)
+    expect(engine.queryRows).not.toHaveBeenCalled()
+  })
+
+  it('routes out-of-range metric-filtered queries to live', async () => {
+    const engine = makeSource()
+    const live = makeSource()
+    const c = createCompositeSource({
+      engine,
+      live,
+      site: { oldestDateSynced: null, newestDateSynced: null },
+    })
+    const state = gsc
+      .select(page)
+      .where(and(
+        between(date, '2024-01-01', '2024-01-31'),
+        gte(clicks, 10),
+      ))
+      .getState()
+
+    await c.queryRows(state)
+
     expect(live.queryRows).toHaveBeenCalledTimes(1)
     expect(engine.queryRows).not.toHaveBeenCalled()
   })

@@ -50,10 +50,23 @@ import type {
   UpdatePartnerUserTokensParams,
 } from '@gscdump/contracts'
 import type { Result } from 'gscdump/result'
+import type { AnalysisSourcesOptions, SearchTypeOptions, SourceRangeOptions } from './hosted-query'
 import type { HostedClientOptions, HostedFetch, HostedFetchOptions, HostedHeaders } from './request'
 import { partnerEndpointSchemas, partnerRoutes } from '@gscdump/contracts/partner'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { PartnerApiError, partnerErrorToException } from './errors'
+import {
+  analysisQuery,
+  dataDetailQuery,
+  dataQuery,
+  dateRangeQuery,
+  DEFAULT_SEARCH_TYPE,
+  indexingDiagnosticsQuery,
+  indexingUrlsQuery,
+  pageTrendQuery,
+  queryTrendQuery,
+  tablesQuery,
+} from './hosted-query'
 import { findLifecycleSite, lifecycleSiteToSyncStatus } from './lifecycle'
 import { createHostedRequester } from './request'
 
@@ -77,63 +90,6 @@ export interface PartnerClientOptions extends HostedClientOptions {
   validate?: boolean | 'request' | 'response'
 }
 
-type GscSearchType = 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews'
-interface SearchTypeOptions {
-  searchType?: GscSearchType
-}
-interface SourceRangeOptions {
-  start?: string
-  end?: string
-  startDate?: string
-  endDate?: string
-}
-interface AnalysisSourcesOptions extends SearchTypeOptions {
-  tables?: string[] | string
-  start?: string
-  end?: string
-  startDate?: string
-  endDate?: string
-}
-type BuilderStateWithSearchType = BuilderState & SearchTypeOptions
-type DataQueryOptionsWithSearchType = DataQueryOptions & SearchTypeOptions
-type DataDetailOptionsWithSearchType = DataDetailOptions & SearchTypeOptions
-type AnalysisParamsWithSearchType = GscdumpAnalysisParams & SearchTypeOptions
-const DEFAULT_SEARCH_TYPE: GscSearchType = 'web'
-
-function withDefaultSearchType<T extends BuilderState>(state: T, searchType?: GscSearchType): T & SearchTypeOptions {
-  const scoped = state as BuilderStateWithSearchType
-  return {
-    ...state,
-    searchType: searchType ?? scoped.searchType ?? DEFAULT_SEARCH_TYPE,
-  }
-}
-
-function dataQuery(state: BuilderState, options?: DataQueryOptions): Record<string, string> {
-  const opts = options as DataQueryOptionsWithSearchType | undefined
-  const scoped = withDefaultSearchType(state, opts?.searchType)
-  const query: Record<string, string> = {
-    q: JSON.stringify(scoped),
-    searchType: scoped.searchType ?? DEFAULT_SEARCH_TYPE,
-  }
-  if (opts?.comparison)
-    query.qc = JSON.stringify(withDefaultSearchType(opts.comparison, scoped.searchType))
-  if (opts?.filter)
-    query.filter = opts.filter
-  return query
-}
-
-function dataDetailQuery(state: BuilderState, options?: DataDetailOptions): Record<string, string> {
-  const opts = options as DataDetailOptionsWithSearchType | undefined
-  const scoped = withDefaultSearchType(state, opts?.searchType)
-  const query: Record<string, string> = {
-    q: JSON.stringify(scoped),
-    searchType: scoped.searchType ?? DEFAULT_SEARCH_TYPE,
-  }
-  if (opts?.comparison)
-    query.qc = JSON.stringify(withDefaultSearchType(opts.comparison, scoped.searchType))
-  return query
-}
-
 /**
  * Errors-as-values core for analysis-param validation: a missing `brandTerms`
  * on a brand/non-brand preset is a caller-actionable `validation` failure, so
@@ -152,115 +108,6 @@ function validateAnalysisParamsResult(params: GscdumpAnalysisParams): Result<Gsc
 
 function assertAnalysisParams(params: GscdumpAnalysisParams): void {
   unwrapResult(validateAnalysisParamsResult(params), partnerErrorToException)
-}
-
-function analysisQuery(params: GscdumpAnalysisParams): Record<string, string | number> {
-  const query: Record<string, string | number> = {
-    preset: params.preset,
-    startDate: params.startDate,
-    endDate: params.endDate,
-  }
-  if (params.prevStartDate)
-    query.prevStartDate = params.prevStartDate
-  if (params.prevEndDate)
-    query.prevEndDate = params.prevEndDate
-  if (params.brandTerms)
-    query.brandTerms = params.brandTerms
-  if (params.limit != null)
-    query.limit = params.limit
-  if (params.offset != null)
-    query.offset = params.offset
-  if (params.search)
-    query.search = params.search
-  if (params.minImpressions != null)
-    query.minImpressions = params.minImpressions
-  if (params.minPosition != null)
-    query.minPosition = params.minPosition
-  if (params.maxPosition != null)
-    query.maxPosition = params.maxPosition
-  if (params.maxCtr != null)
-    query.maxCtr = params.maxCtr
-  query.searchType = (params as AnalysisParamsWithSearchType).searchType ?? DEFAULT_SEARCH_TYPE
-  return query
-}
-
-function indexingUrlsQuery(params: IndexingUrlsParams = {}): Record<string, string | number> {
-  const query: Record<string, string | number> = {}
-  if (params.limit != null)
-    query.limit = params.limit
-  if (params.offset != null)
-    query.offset = params.offset
-  if (params.status)
-    query.status = params.status
-  if (params.issue)
-    query.issue = params.issue
-  if (params.search)
-    query.search = params.search
-  return query
-}
-
-function indexingDiagnosticsQuery(params: IndexingDiagnosticsParams = {}): Record<string, string | number> {
-  const query: Record<string, string | number> = {}
-  if (params.sampleIssues) {
-    query.sampleIssues = Array.isArray(params.sampleIssues)
-      ? params.sampleIssues.join(',')
-      : params.sampleIssues
-  }
-  if (params.sampleLimit != null)
-    query.sampleLimit = params.sampleLimit
-  return query
-}
-
-function isAnalysisSourcesOptions(value: unknown): value is AnalysisSourcesOptions {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function tablesQuery(
-  tablesOrOptions: string[] | string | AnalysisSourcesOptions | undefined,
-  options?: SearchTypeOptions & SourceRangeOptions,
-): Record<string, string> {
-  const tables = isAnalysisSourcesOptions(tablesOrOptions) ? tablesOrOptions.tables : tablesOrOptions
-  const source = isAnalysisSourcesOptions(tablesOrOptions) ? tablesOrOptions : options
-  const query: Record<string, string> = { searchType: source?.searchType ?? DEFAULT_SEARCH_TYPE }
-  const start = source?.start ?? source?.startDate
-  const end = source?.end ?? source?.endDate
-  if (start)
-    query.start = start
-  if (end)
-    query.end = end
-  if (tables)
-    query.tables = Array.isArray(tables) ? tables.join(',') : tables
-  return query
-}
-
-function dateRangeQuery(params: GscdumpDateRangeParams): Record<string, string> {
-  return { startDate: params.startDate, endDate: params.endDate }
-}
-
-function queryTrendQuery(params: GscdumpQueryTrendParams): Record<string, string> {
-  const query: Record<string, string> = {
-    startDate: params.startDate,
-    endDate: params.endDate,
-    searchType: params.searchType ?? DEFAULT_SEARCH_TYPE,
-  }
-  if (params.prevStartDate)
-    query.prevStartDate = params.prevStartDate
-  if (params.prevEndDate)
-    query.prevEndDate = params.prevEndDate
-  return query
-}
-
-function pageTrendQuery(params: GscdumpPageTrendParams): Record<string, string> {
-  const query: Record<string, string> = {
-    startDate: params.startDate,
-    endDate: params.endDate,
-    searchType: params.searchType ?? DEFAULT_SEARCH_TYPE,
-  }
-  if (params.prevStartDate)
-    query.prevStartDate = params.prevStartDate
-  if (params.prevEndDate)
-    query.prevEndDate = params.prevEndDate
-  return query
 }
 
 function sleep(ms: number): Promise<void> {

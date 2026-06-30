@@ -20,9 +20,11 @@
   isBrowserAttachError: function
   mergeScope: function
   OpfsQuotaExceededError: function
+  overlayViewBody: function
   page_queries: object
   pages: object
   queries: object
+  readOpfsSnapshotFile: function
   requestPersistentStorage: function
   resolveWindow: function
   schema: object

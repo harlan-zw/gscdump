@@ -15,6 +15,7 @@
 import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
+import { reportRows, sectionArtifact, sectionCoverage, truncation } from '../sections'
 
 export interface GrowthReportParams {
   maxFindings?: number
@@ -59,7 +60,7 @@ interface ContentVelocityRow {
 }
 
 function buildContentVelocity(res: AnalysisResult | undefined): ReportSection {
-  const rows = (res?.results ?? []) as unknown as ContentVelocityRow[]
+  const rows = reportRows<ContentVelocityRow>(res)
   const totalNew = rows.reduce((s, r) => s + r.newKeywords, 0)
   const avgPerWeek = rows.length > 0 ? totalNew / rows.length : 0
   return {
@@ -68,9 +69,9 @@ function buildContentVelocity(res: AnalysisResult | undefined): ReportSection {
     severity: 'info',
     summary: { magnitudeLabel: `${totalNew} new keywords across ${rows.length} weeks (avg ${avgPerWeek.toFixed(1)}/wk)` },
     findings: [],
-    coverage: res ? 'full' : 'partial',
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'content-velocity', params: { type: 'content-velocity' } } : undefined,
+    artifact: sectionArtifact(res, 'content-velocity'),
   }
 }
 
@@ -80,7 +81,7 @@ interface KeywordBreadthRow {
 }
 
 function buildKeywordBreadth(res: AnalysisResult | undefined): ReportSection {
-  const rows = (res?.results ?? []) as unknown as KeywordBreadthRow[]
+  const rows = reportRows<KeywordBreadthRow>(res)
   const totalPages = rows.reduce((s, r) => s + r.pageCount, 0)
   const top = rows[0]
   return {
@@ -89,9 +90,9 @@ function buildKeywordBreadth(res: AnalysisResult | undefined): ReportSection {
     severity: 'info',
     summary: { magnitudeLabel: top ? `${totalPages} pages; modal bucket "${top.bucket}" (${top.pageCount} pages)` : 'no data' },
     findings: [],
-    coverage: res ? 'full' : 'partial',
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'keyword-breadth', params: { type: 'keyword-breadth' } } : undefined,
+    artifact: sectionArtifact(res, 'keyword-breadth'),
   }
 }
 
@@ -105,7 +106,7 @@ interface IntentAtlasRow {
 }
 
 function buildIntentAtlas(res: AnalysisResult | undefined): ReportSection {
-  const rows = (res?.results ?? []) as unknown as IntentAtlasRow[]
+  const rows = reportRows<IntentAtlasRow>(res)
   const totalClusters = rows.length
   const totalKeywords = rows.reduce((s, r) => s + r.keywordCount, 0)
   return {
@@ -114,9 +115,9 @@ function buildIntentAtlas(res: AnalysisResult | undefined): ReportSection {
     severity: 'info',
     summary: { magnitudeLabel: `${totalClusters} clusters covering ${totalKeywords} keywords` },
     findings: [],
-    coverage: res ? 'full' : 'partial',
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'intent-atlas', params: { type: 'intent-atlas' } } : undefined,
+    artifact: sectionArtifact(res, 'intent-atlas'),
   }
 }
 
@@ -130,7 +131,7 @@ interface LongTailRow {
 }
 
 function buildLongTail(res: AnalysisResult | undefined, max: number): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as LongTailRow[])
+  const rows = reportRows<LongTailRow>(res)
     // Surface head-heavy pages first — most fragile / most concentrated.
     .sort((a, b) => {
       const rank: Record<LongTailRow['fingerprint'], number> = { 'head-heavy': 0, 'balanced': 1, 'flat-tail': 2 }
@@ -154,9 +155,9 @@ function buildLongTail(res: AnalysisResult | undefined, max: number): ReportSect
     severity: headHeavy > rows.length / 3 ? 'medium' : 'info',
     summary: { magnitudeLabel: `${rows.length} pages analysed; ${headHeavy} head-heavy` },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'long-tail', params: { type: 'long-tail' } } : undefined,
+    artifact: sectionArtifact(res, 'long-tail'),
   }
 }

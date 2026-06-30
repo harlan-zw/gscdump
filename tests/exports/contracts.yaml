@@ -72,6 +72,7 @@
   gscRowQueryResponseSchema: object
   hasOptionalIndexingScope: function
   hasRequiredAnalyticsScope: function
+  indexingDiagnosticsParamsSchema: object
   indexingDiagnosticsSchema: object
   indexingInspectAnyResponseSchema: object
   indexingInspectRateLimitedSchema: object

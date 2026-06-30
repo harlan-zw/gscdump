@@ -1,6 +1,5 @@
 import type {
   DataSource,
-  ListLiveFilter,
   LockScope,
   ManifestEntry,
   ManifestStore,
@@ -8,15 +7,17 @@ import type {
   QueryExecutor,
   Row,
   SyncState,
-  SyncStateDetail,
-  SyncStateFilter,
-  SyncStateKind,
-  SyncStateScope,
   Watermark,
-  WatermarkFilter,
-  WatermarkScope,
 } from '../../src/storage'
-import { inferSearchType } from '../../src/layout'
+import {
+  manifestEntryKey,
+  matchesManifestEntryFilter,
+  matchesSyncStateFilter,
+  matchesWatermarkFilter,
+  mergeSyncState,
+  syncStateKey,
+  watermarkKey,
+} from '../../src/manifest-store-utils'
 
 export function createInMemoryDataSource(initial?: Map<string, Uint8Array>): DataSource & {
   snapshot: () => Map<string, Uint8Array>
@@ -56,83 +57,6 @@ export function createInMemoryDataSource(initial?: Map<string, Uint8Array>): Dat
   }
 }
 
-function entryKey(e: Pick<ManifestEntry, 'objectKey'>): string {
-  return e.objectKey
-}
-
-function matchesFilter(entry: ManifestEntry, filter: ListLiveFilter): boolean {
-  if (entry.userId !== filter.userId)
-    return false
-  if (filter.siteId !== undefined && entry.siteId !== filter.siteId)
-    return false
-  if (filter.table !== undefined && entry.table !== filter.table)
-    return false
-  if (filter.partitions && !filter.partitions.includes(entry.partition))
-    return false
-  if (filter.searchType !== undefined && inferSearchType(entry) !== filter.searchType)
-    return false
-  return true
-}
-
-function watermarkKey(w: WatermarkScope): string {
-  return `${w.userId}|${w.siteId ?? ''}|${w.table}`
-}
-
-function matchesWatermarkFilter(w: Watermark, filter: WatermarkFilter): boolean {
-  if (w.userId !== filter.userId)
-    return false
-  if (filter.siteId !== undefined && w.siteId !== filter.siteId)
-    return false
-  if (filter.table !== undefined && w.table !== filter.table)
-    return false
-  return true
-}
-
-function syncStateKey(s: SyncStateScope): string {
-  return `${s.userId}|${s.siteId ?? ''}|${s.table}|${s.date}`
-}
-
-function matchesSyncStateFilter(s: SyncState, filter: SyncStateFilter): boolean {
-  if (s.userId !== filter.userId)
-    return false
-  if (filter.siteId !== undefined && s.siteId !== filter.siteId)
-    return false
-  if (filter.table !== undefined && s.table !== filter.table)
-    return false
-  if (filter.state !== undefined && s.state !== filter.state)
-    return false
-  return true
-}
-
-function mergeSyncState(
-  existing: SyncState | undefined,
-  scope: SyncStateScope,
-  state: SyncStateKind,
-  detail?: SyncStateDetail,
-): SyncState {
-  const at = detail?.at ?? Date.now()
-  const attemptsBump = state === 'inflight' ? 1 : 0
-  if (!existing) {
-    return {
-      userId: scope.userId,
-      siteId: scope.siteId,
-      table: scope.table,
-      date: scope.date,
-      state,
-      updatedAt: at,
-      attempts: attemptsBump,
-      error: detail?.error,
-    }
-  }
-  return {
-    ...existing,
-    state,
-    updatedAt: at,
-    attempts: existing.attempts + attemptsBump,
-    error: state === 'done' ? undefined : (detail?.error ?? existing.error),
-  }
-}
-
 function lockKey(s: LockScope): string {
   return `${s.userId}|${s.siteId ?? ''}|${s.table}|${s.partition}`
 }
@@ -150,14 +74,14 @@ export function createInMemoryManifestStore(): ManifestStore & {
     const supersededAt = newEntries[0]?.createdAt ?? Date.now()
     if (superseding) {
       for (const s of superseding) {
-        const existing = entries.get(entryKey(s))
+        const existing = entries.get(manifestEntryKey(s))
         if (existing && existing.retiredAt === undefined) {
-          entries.set(entryKey(s), { ...existing, retiredAt: supersededAt })
+          entries.set(manifestEntryKey(s), { ...existing, retiredAt: supersededAt })
         }
       }
     }
     for (const e of newEntries) {
-      entries.set(entryKey(e), e)
+      entries.set(manifestEntryKey(e), e)
     }
     return Promise.resolve()
   }
@@ -168,7 +92,7 @@ export function createInMemoryManifestStore(): ManifestStore & {
       for (const e of entries.values()) {
         if (e.retiredAt !== undefined)
           continue
-        if (matchesFilter(e, filter))
+        if (matchesManifestEntryFilter(e, filter))
           out.push(e)
       }
       return Promise.resolve(out)
@@ -176,7 +100,7 @@ export function createInMemoryManifestStore(): ManifestStore & {
     listAll(filter) {
       const out: ManifestEntry[] = []
       for (const e of entries.values()) {
-        if (matchesFilter(e, filter))
+        if (matchesManifestEntryFilter(e, filter))
           out.push(e)
       }
       return Promise.resolve(out)
@@ -194,7 +118,7 @@ export function createInMemoryManifestStore(): ManifestStore & {
       return Promise.resolve(out)
     },
     delete(toDelete) {
-      for (const e of toDelete) entries.delete(entryKey(e))
+      for (const e of toDelete) entries.delete(manifestEntryKey(e))
       return Promise.resolve()
     },
     getWatermarks(filter) {

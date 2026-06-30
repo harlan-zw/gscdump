@@ -1,5 +1,6 @@
 import type { z } from 'zod'
 import type { HandlerContext, listSitesInput } from '../types'
+import { hasGscWriteScope, hasIndexingScope } from 'gscdump/api'
 import { ofetch } from 'ofetch'
 
 const REQUIRED_SCOPES = [
@@ -19,6 +20,21 @@ export interface DiagnosticsCheck {
 export interface DiagnosticsResult {
   ok: boolean
   checks: DiagnosticsCheck[]
+}
+
+function hasGoogleScope(scopes: string[], scope: string): boolean {
+  const suffix = scope.replace('https://www.googleapis.com/auth/', '')
+  return scopes.includes(scope) || scopes.includes(suffix)
+}
+
+function missingRequiredScopes(scopes: string[]): string[] {
+  return REQUIRED_SCOPES.filter((scope) => {
+    if (scope.endsWith('/webmasters'))
+      return !hasGscWriteScope(scopes)
+    if (scope.endsWith('/indexing'))
+      return !hasIndexingScope(scopes)
+    return !hasGoogleScope(scopes, scope)
+  })
 }
 
 export async function diagnostics(
@@ -50,7 +66,7 @@ export async function diagnostics(
   else {
     checks.push({ name: 'auth', status: 'pass', detail: tokenInfo.email ?? 'token valid' })
     const scopes = tokenInfo.scope ? tokenInfo.scope.split(/\s+/) : []
-    const missing = REQUIRED_SCOPES.filter(s => !scopes.includes(s))
+    const missing = missingRequiredScopes(scopes)
     checks.push(missing.length > 0
       ? { name: 'auth.scopes', status: 'warn', detail: `missing: ${missing.join(', ')}` }
       : { name: 'auth.scopes', status: 'pass', detail: `${scopes.length} granted` })

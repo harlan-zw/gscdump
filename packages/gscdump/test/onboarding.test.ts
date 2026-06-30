@@ -35,5 +35,7 @@ describe('partner onboarding contract', () => {
     expect(hasRequiredAnalyticsScope(scopes)).toBe(true)
     expect(hasOptionalIndexingScope(scopes)).toBe(true)
     expect(hasRequiredAnalyticsScope(GSCDUMP_OPTIONAL_INDEXING_SCOPE)).toBe(false)
+    expect(hasRequiredAnalyticsScope('webmasters.readonly')).toBe(true)
+    expect(hasOptionalIndexingScope(['indexing'])).toBe(true)
   })
 })

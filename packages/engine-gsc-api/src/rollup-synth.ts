@@ -7,8 +7,8 @@
 // Design:
 //  - No H3, no runtime config, no site-id encoding — pure functions over a
 //    `GoogleSearchConsoleClient` + a fully-resolved `siteUrl`.
-//  - `sum_position` is reconstructed as `position * impressions` so the
-//    consumer's `sum_position / impressions` formula recovers the mean.
+//  - `sum_position` is reconstructed as `(position - 1) * impressions` so the
+//    shared `sum_position / impressions + 1` formula recovers the GSC mean.
 //  - Metric filter + ordering happens server-side on the GSC API where it
 //    can; everything else trims after row collection.
 
@@ -74,12 +74,12 @@ export async function fetchGscTopN<D extends Dimension>(
       if (typeof key !== 'string' || !key)
         return null
       const impressions = Number(row.impressions ?? 0)
-      const position = Number(row.position ?? 0)
+      const position = Math.max(1, Number(row.position ?? 0))
       return {
         key,
         clicks: Number(row.clicks ?? 0),
         impressions,
-        sum_position: position * impressions,
+        sum_position: (position - 1) * impressions,
       }
     })
     .filter((x): x is GscTopNRow => x != null)
@@ -123,7 +123,7 @@ export async function fetchGscDaily(opts: {
         date: Date.parse(`${row.date}T00:00:00Z`),
         clicks: row.clicks ?? 0,
         impressions,
-        sum_position: (row.position ?? 0) * impressions,
+        sum_position: (Math.max(1, row.position ?? 0) - 1) * impressions,
         anonymizedImpressionsPct: 0,
       }
     })

@@ -27,17 +27,20 @@ import type {
   ManifestStore,
   SyncState,
   SyncStateDetail,
-  SyncStateFilter,
   SyncStateKind,
   SyncStateScope,
   TableName,
   Watermark,
-  WatermarkFilter,
   WatermarkScope,
 } from '../storage'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { engineErrors, engineErrorToException } from '../errors'
-import { inferLegacyTier, inferSearchType } from '../layout'
+import { inferSearchType } from '../layout'
+import {
+  matchesManifestEntryFilter,
+  matchesSyncStateFilter,
+  matchesWatermarkFilter,
+} from '../manifest-store-utils'
 
 /** Shape of the JSON snapshot held under each shard's `v<ts>-<id>.json` key. */
 interface ManifestSnapshot {
@@ -186,40 +189,6 @@ function shardScopesFromEntries(entries: readonly ManifestEntry[]): Set<string> 
   return out
 }
 
-function matchesEntryFilter(entry: ManifestEntry, filter: ListLiveFilter): boolean {
-  if (filter.siteId !== undefined && entry.siteId !== filter.siteId)
-    return false
-  if (filter.table !== undefined && entry.table !== filter.table)
-    return false
-  if (filter.partitions && !filter.partitions.includes(entry.partition))
-    return false
-  if (filter.tier !== undefined && inferLegacyTier(entry) !== filter.tier)
-    return false
-  if (filter.searchType !== undefined && inferSearchType(entry) !== filter.searchType)
-    return false
-  return true
-}
-
-function matchesWatermarkFilter(w: Watermark, filter: WatermarkFilter): boolean {
-  if (filter.siteId !== undefined && w.siteId !== filter.siteId)
-    return false
-  if (filter.table !== undefined && w.table !== filter.table)
-    return false
-  return true
-}
-
-function matchesSyncStateFilter(s: SyncState, filter: SyncStateFilter): boolean {
-  if (filter.siteId !== undefined && s.siteId !== filter.siteId)
-    return false
-  if (filter.table !== undefined && s.table !== filter.table)
-    return false
-  if (filter.state !== undefined && s.state !== filter.state)
-    return false
-  if (filter.searchType !== undefined && inferSearchType(s) !== filter.searchType)
-    return false
-  return true
-}
-
 export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): ManifestStore {
   const { bucket, userId } = opts
   const newSnapshotId = opts.newSnapshotId ?? defaultSnapshotId
@@ -336,10 +305,16 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
     )
   }
 
+  function assertScopedUser(got: string, op: string): void {
+    if (got !== userId)
+      throw new Error(`${op}: R2 manifest store is scoped to userId=${userId}, got ${got}`)
+  }
+
   async function readEntriesAcrossShards(
     filter: ListLiveFilter,
     includeRetired: boolean,
   ): Promise<ManifestEntry[]> {
+    assertScopedUser(filter.userId, includeRetired ? 'listAll' : 'listLive')
     const shards = await shardsForFilter(filter)
     const batches = await mapWithConcurrency(shards, SHARD_IO_CONCURRENCY, async ({ siteId, table }) => {
       const { snapshot } = await readShard(siteId, table)
@@ -347,7 +322,7 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
       for (const entry of snapshot.entries) {
         if (!includeRetired && entry.retiredAt !== undefined)
           continue
-        if (matchesEntryFilter(entry, filter))
+        if (matchesManifestEntryFilter(entry, filter, { ignoreUserId: true }))
           entries.push(entry)
       }
       return entries
@@ -377,6 +352,7 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
     // Group both new and superseded by shard so each (siteId, table) is one CAS.
     const byShard = new Map<string, { newEntries: ManifestEntry[], superseding: ManifestEntry[] }>()
     function bucket(entry: ManifestEntry, kind: 'new' | 'super'): void {
+      assertScopedUser(entry.userId, 'registerVersions')
       if (entry.siteId === undefined)
         throw new Error('R2 manifest store requires entries to carry siteId')
       const key = `${entry.siteId}\0${entry.table}`
@@ -458,12 +434,13 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
     },
 
     async getWatermarks(filter) {
+      assertScopedUser(filter.userId, 'getWatermarks')
       const shards = await shardsForFilter(filter)
       const batches = await mapWithConcurrency(shards, SHARD_IO_CONCURRENCY, async ({ siteId, table }) => {
         const { snapshot } = await readShard(siteId, table)
         const watermarks: Watermark[] = []
         for (const w of snapshot.watermarks) {
-          if (matchesWatermarkFilter(w, filter))
+          if (matchesWatermarkFilter(w, filter, { ignoreUserId: true }))
             watermarks.push(w)
         }
         return watermarks
@@ -472,6 +449,7 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
     },
 
     async bumpWatermark(scope: WatermarkScope, date: string, at?: number) {
+      assertScopedUser(scope.userId, 'bumpWatermark')
       if (scope.siteId === undefined)
         throw new Error('R2 manifest store requires watermarks to carry siteId')
       const ts = at ?? now()
@@ -501,12 +479,13 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
     },
 
     async getSyncStates(filter) {
+      assertScopedUser(filter.userId, 'getSyncStates')
       const shards = await shardsForFilter(filter)
       const batches = await mapWithConcurrency(shards, SHARD_IO_CONCURRENCY, async ({ siteId, table }) => {
         const { snapshot } = await readShard(siteId, table)
         const states: SyncState[] = []
         for (const s of snapshot.syncStates) {
-          if (matchesSyncStateFilter(s, filter))
+          if (matchesSyncStateFilter(s, filter, { ignoreUserId: true }))
             states.push(s)
         }
         return states
@@ -515,6 +494,7 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
     },
 
     async setSyncState(scope: SyncStateScope, state: SyncStateKind, detail?: SyncStateDetail) {
+      assertScopedUser(scope.userId, 'setSyncState')
       if (scope.siteId === undefined)
         throw new Error('R2 manifest store requires sync states to carry siteId')
       const at = detail?.at ?? now()

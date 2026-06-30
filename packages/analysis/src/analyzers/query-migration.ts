@@ -19,6 +19,7 @@ import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { MS_PER_DAY, toIsoDate } from 'gscdump'
+import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 
 export interface QueryMigrationExample {
   sourceQuery: string
@@ -35,20 +36,6 @@ export interface QueryMigrationResult {
   exactCount: number
   fuzzyCount: number
   examples: QueryMigrationExample[]
-}
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
-}
-
-function parseJsonList(v: unknown): Row[] {
-  if (Array.isArray(v))
-    return v as Row[]
-  if (typeof v === 'string' && v.length > 0) {
-    const parsed = JSON.parse(v)
-    return Array.isArray(parsed) ? parsed : []
-  }
-  return []
 }
 
 export const queryMigrationAnalyzer = defineAnalyzer<AnalysisParams, Row, QueryMigrationResult[]>({

@@ -96,12 +96,12 @@ export function createAuth(options: AuthOptions): AuthClient {
 
       const response = await ofetch<{ access_token: string, expires_in: number }>('https://oauth2.googleapis.com/token', {
         method: 'POST',
-        body: {
+        body: new URLSearchParams({
           client_id: options.clientId,
           client_secret: options.clientSecret,
           refresh_token: options.refreshToken,
           grant_type: 'refresh_token',
-        },
+        }),
       })
 
       credentials = {

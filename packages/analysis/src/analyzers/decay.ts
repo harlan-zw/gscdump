@@ -15,6 +15,7 @@ import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { pagesQueryState } from '../analyzer/adapt-rows'
 import { paginateInMemory } from '../analyzer/paginate'
+import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 import { buildPeriodMap, createMetricSorter } from '../types'
 
 export type DecaySortMetric = 'lostClicks' | 'declinePercent' | 'currentClicks'
@@ -56,20 +57,6 @@ const sortResults = createMetricSorter<DecayResult, DecaySortMetric>('lostClicks
   declinePercent: 'desc',
   currentClicks: 'asc',
 })
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
-}
-
-function parseJsonList(v: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray(v))
-    return v as Array<Record<string, unknown>>
-  if (typeof v === 'string' && v.length > 0) {
-    const parsed = JSON.parse(v)
-    return Array.isArray(parsed) ? parsed : []
-  }
-  return []
-}
 
 /**
  * Pure helper: identify "decaying" content — pages that have lost

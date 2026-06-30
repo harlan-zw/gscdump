@@ -15,6 +15,7 @@ import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
+import { rowString as str } from '../analyzer/row-values'
 
 export interface PositionVolatilityDay {
   date: string
@@ -34,10 +35,6 @@ export interface PositionVolatilityResult {
   peakVolatility: number
   totalImpressions: number
   days: PositionVolatilityDay[]
-}
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
 }
 
 export const positionVolatilityAnalyzer = defineAnalyzer<AnalysisParams, Row, PositionVolatilityResult[]>({

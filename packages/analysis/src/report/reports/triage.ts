@@ -16,6 +16,7 @@ import type { ResolveTargetKind } from '../resolve-target'
 import { defineReport } from '@gscdump/engine/report'
 import { requireReportParam } from '../require'
 import { resolveTarget } from '../resolve-target'
+import { reportRows, sectionArtifact, sectionCoverage, truncation } from '../sections'
 
 export interface TriageReportParams {
   /** `'page'` or `'query'`. Default `'page'`. */
@@ -79,7 +80,7 @@ function buildChangePointSection(
   matches: (val: string) => boolean,
   max: number,
 ): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as ChangePointRow[])
+  const rows = reportRows<ChangePointRow>(res)
     .filter(r => matches(kind === 'page' ? r.page : r.keyword))
     .sort((a, b) => b.llr - a.llr)
   const kept = rows.slice(0, max)
@@ -94,10 +95,10 @@ function buildChangePointSection(
     severity: kept.length ? 'medium' : 'info',
     summary: { magnitudeLabel: `${kept.length} change-point${kept.length === 1 ? '' : 's'}` },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'change-point', params: { type: 'change-point' } } : undefined,
+    artifact: sectionArtifact(res, 'change-point'),
   }
 }
 
@@ -115,7 +116,7 @@ function buildMigrationSection(
   max: number,
   _rawTarget: string,
 ): ReportSection {
-  const rows = ((res?.results ?? []) as unknown as MigrationRow[])
+  const rows = reportRows<MigrationRow>(res)
     // For pages, match either side of the migration; query-mode this section
     // is N/A so it'll filter to empty (still useful as artifact pointer).
     .filter(r => kind === 'page' ? (matches(r.sourcePage) || matches(r.targetPage)) : false)
@@ -132,10 +133,10 @@ function buildMigrationSection(
     severity: 'info',
     summary: { magnitudeLabel: kind === 'page' ? `${kept.length} migration edges touching target` : 'N/A for query target' },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'query-migration', params: { type: 'query-migration' } } : undefined,
+    artifact: sectionArtifact(res, 'query-migration'),
   }
 }
 
@@ -153,7 +154,7 @@ function buildVolatilitySection(
   max: number,
 ): ReportSection {
   const rows = kind === 'page'
-    ? ((res?.results ?? []) as unknown as VolatilityRow[]).filter(r => matches(r.page))
+    ? reportRows<VolatilityRow>(res).filter(r => matches(r.page))
     : []
   const sorted = rows.sort((a, b) => b.peakVolatility - a.peakVolatility)
   const kept = sorted.slice(0, max)
@@ -167,9 +168,9 @@ function buildVolatilitySection(
     severity: kept.length ? 'low' : 'info',
     summary: { magnitudeLabel: kind === 'page' ? `${kept.length} volatile day${kept.length === 1 ? '' : 's'}` : 'N/A for query target' },
     findings,
-    truncated: rows.length > max ? { kept: kept.length, total: rows.length } : undefined,
-    coverage: res ? 'full' : 'partial',
+    truncated: truncation(rows.length, kept.length),
+    coverage: sectionCoverage(res),
     actions: [],
-    artifact: res ? { analyzer: 'position-volatility', params: { type: 'position-volatility' } } : undefined,
+    artifact: sectionArtifact(res, 'position-volatility'),
   }
 }

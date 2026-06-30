@@ -9,25 +9,26 @@
 
 import type {
   DataSource,
-  ListLiveFilter,
   LockScope,
   ManifestEntry,
   ManifestStore,
   SyncState,
-  SyncStateDetail,
-  SyncStateFilter,
-  SyncStateKind,
-  SyncStateScope,
   Watermark,
-  WatermarkFilter,
-  WatermarkScope,
 } from '../storage'
 import { Buffer } from 'node:buffer'
 import { randomBytes } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { lock as lockFile } from 'proper-lockfile'
-import { inferLegacyTier, inferSearchType } from '../layout'
+import {
+  manifestEntryKey,
+  matchesManifestEntryFilter,
+  matchesSyncStateFilter,
+  matchesWatermarkFilter,
+  mergeSyncState,
+  syncStateKey,
+  watermarkKey,
+} from '../manifest-store-utils'
 
 export interface FilesystemDataSourceOptions {
   rootDir: string
@@ -64,13 +65,13 @@ export function createFilesystemDataSource(opts: FilesystemDataSourceOptions): D
       }))
     },
     async list(prefix) {
-      const full = resolve(root, prefix)
+      const full = pathFor(prefix)
       const out: string[] = []
       await walk(full, out)
       return out.map(p => p.slice(root.length + 1))
     },
     async* streamList(prefix) {
-      const full = resolve(root, prefix)
+      const full = pathFor(prefix)
       for await (const p of walkStream(full))
         yield p.slice(root.length + 1)
     },
@@ -133,86 +134,6 @@ interface ManifestFile {
   syncStates?: SyncState[]
 }
 
-function watermarkKey(w: WatermarkScope): string {
-  return `${w.userId}|${w.siteId ?? ''}|${w.table}`
-}
-
-function matchesWatermarkFilter(w: Watermark, filter: WatermarkFilter): boolean {
-  if (w.userId !== filter.userId)
-    return false
-  if (filter.siteId !== undefined && w.siteId !== filter.siteId)
-    return false
-  if (filter.table !== undefined && w.table !== filter.table)
-    return false
-  return true
-}
-
-function syncStateKey(s: SyncStateScope): string {
-  return `${s.userId}|${s.siteId ?? ''}|${s.table}|${s.date}|${inferSearchType(s)}`
-}
-
-function matchesSyncStateFilter(s: SyncState, filter: SyncStateFilter): boolean {
-  if (s.userId !== filter.userId)
-    return false
-  if (filter.siteId !== undefined && s.siteId !== filter.siteId)
-    return false
-  if (filter.table !== undefined && s.table !== filter.table)
-    return false
-  if (filter.state !== undefined && s.state !== filter.state)
-    return false
-  if (filter.searchType !== undefined && inferSearchType(s) !== filter.searchType)
-    return false
-  return true
-}
-
-function mergeSyncState(
-  existing: SyncState | undefined,
-  scope: SyncStateScope,
-  state: SyncStateKind,
-  detail?: SyncStateDetail,
-): SyncState {
-  const at = detail?.at ?? Date.now()
-  // Increment attempt counter whenever we enter inflight — that's one "try".
-  const attemptsBump = state === 'inflight' ? 1 : 0
-  if (!existing) {
-    return {
-      userId: scope.userId,
-      siteId: scope.siteId,
-      table: scope.table,
-      date: scope.date,
-      state,
-      updatedAt: at,
-      attempts: attemptsBump,
-      error: detail?.error,
-      ...(scope.searchType !== undefined ? { searchType: scope.searchType } : {}),
-    }
-  }
-  return {
-    ...existing,
-    state,
-    updatedAt: at,
-    attempts: existing.attempts + attemptsBump,
-    // 'done' clears a prior error; 'failed' records a new one; others preserve.
-    error: state === 'done' ? undefined : (detail?.error ?? existing.error),
-  }
-}
-
-function matchesFilter(entry: ManifestEntry, filter: ListLiveFilter): boolean {
-  if (entry.userId !== filter.userId)
-    return false
-  if (filter.siteId !== undefined && entry.siteId !== filter.siteId)
-    return false
-  if (filter.table !== undefined && entry.table !== filter.table)
-    return false
-  if (filter.partitions && !filter.partitions.includes(entry.partition))
-    return false
-  if (filter.tier !== undefined && inferLegacyTier(entry) !== filter.tier)
-    return false
-  if (filter.searchType !== undefined && inferSearchType(entry) !== filter.searchType)
-    return false
-  return true
-}
-
 function lockFileFor(locksDir: string, scope: LockScope): string {
   // Encode scope so it's safe as a filename — partition contains `/`.
   const raw = `${scope.userId}|${scope.siteId ?? ''}|${scope.table}|${scope.partition}`
@@ -271,25 +192,21 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
     running = false
   }
 
-  function entryKey(e: Pick<ManifestEntry, 'objectKey'>): string {
-    return e.objectKey
-  }
-
   async function registerVersionsImpl(
     newEntries: ManifestEntry[],
     superseding?: ManifestEntry[],
   ): Promise<void> {
     const data = await load()
     const supersededAt = newEntries[0]?.createdAt ?? Date.now()
-    const byKey = new Map(data.entries.map(e => [entryKey(e), e]))
+    const byKey = new Map(data.entries.map(e => [manifestEntryKey(e), e]))
     if (superseding) {
       for (const s of superseding) {
-        const existing = byKey.get(entryKey(s))
+        const existing = byKey.get(manifestEntryKey(s))
         if (existing && existing.retiredAt === undefined)
-          byKey.set(entryKey(s), { ...existing, retiredAt: supersededAt })
+          byKey.set(manifestEntryKey(s), { ...existing, retiredAt: supersededAt })
       }
     }
-    for (const e of newEntries) byKey.set(entryKey(e), e)
+    for (const e of newEntries) byKey.set(manifestEntryKey(e), e)
     data.entries = Array.from(byKey.values())
     await save(data)
   }
@@ -297,11 +214,11 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
   return {
     async listLive(filter) {
       const data = await load()
-      return data.entries.filter(e => e.retiredAt === undefined && matchesFilter(e, filter))
+      return data.entries.filter(e => e.retiredAt === undefined && matchesManifestEntryFilter(e, filter))
     },
     async listAll(filter) {
       const data = await load()
-      return data.entries.filter(e => matchesFilter(e, filter))
+      return data.entries.filter(e => matchesManifestEntryFilter(e, filter))
     },
     async registerVersion(entry, superseding) {
       return enqueue(() => registerVersionsImpl([entry], superseding))
@@ -316,8 +233,8 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
     async delete(toDelete) {
       return enqueue(async () => {
         const data = await load()
-        const toDeleteKeys = new Set(toDelete.map(entryKey))
-        data.entries = data.entries.filter(e => !toDeleteKeys.has(entryKey(e)))
+        const toDeleteKeys = new Set(toDelete.map(manifestEntryKey))
+        data.entries = data.entries.filter(e => !toDeleteKeys.has(manifestEntryKey(e)))
         await save(data)
       })
     },

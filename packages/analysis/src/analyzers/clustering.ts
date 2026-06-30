@@ -16,6 +16,7 @@ import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { queriesQueryState } from '../analyzer/adapt-rows'
+import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 
 export type ClusterType = 'prefix' | 'intent' | 'both'
 
@@ -67,20 +68,6 @@ const INTENT_PREFIXES = [
 ]
 
 const WHITESPACE_RE = /\s+/
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
-}
-
-function parseJsonList(v: unknown): Row[] {
-  if (Array.isArray(v))
-    return v as Row[]
-  if (typeof v === 'string' && v.length > 0) {
-    const parsed = JSON.parse(v)
-    return Array.isArray(parsed) ? parsed : []
-  }
-  return []
-}
 
 function extractIntentPrefix(keyword: string): string | null {
   const lower = keyword.toLowerCase()

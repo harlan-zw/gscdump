@@ -1,8 +1,9 @@
 // Shape-canonicalising helpers for GSC row payloads.
 //
 // Free-tier rows (GSC API) ship `position`; engine rows ship `sum_position`.
-// Both formats coerce to the same denominator: `sum_position = position * impressions`,
-// so downstream `weightedPosition / impressions` math works without branching.
+// Both formats coerce to the same denominator:
+// `sum_position = (position - 1) * impressions`, so downstream
+// `weightedPosition / impressions + 1` math works without branching.
 // The `+1` in `position` is GSC's 1-indexed convention (position 1 == top
 // result), applied once after weighting.
 
@@ -34,13 +35,13 @@ export interface GscDailySummary {
   chartData: Array<{ date: string, clicks: number, impressions: number }>
 }
 
-/** Fill `sum_position` from `position * impressions` when the row only carries `position`. */
+/** Fill `sum_position` from `(position - 1) * impressions` when the row only carries `position`. */
 export function coerceRowMetrics<
   T extends { impressions: number, sum_position?: number, position?: number },
 >(row: T): T & { sum_position: number } {
   return {
     ...row,
-    sum_position: row.sum_position ?? (row.position ?? 0) * row.impressions,
+    sum_position: row.sum_position ?? (Math.max(1, row.position ?? 0) - 1) * row.impressions,
   }
 }
 

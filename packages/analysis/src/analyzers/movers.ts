@@ -16,6 +16,7 @@ import { comparisonOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { queriesQueryState } from '../analyzer/adapt-rows'
+import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 import { percentDifference } from '../scoring'
 import { buildPeriodMap } from '../types'
 
@@ -76,20 +77,6 @@ export interface MoversResultRow extends MoverData {
   prevImpressions: number
   prevPosition: number
   series?: MoversSeriesPoint[]
-}
-
-function str(v: unknown): string {
-  return v == null ? '' : String(v)
-}
-
-function parseJsonList(v: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray(v))
-    return v as Array<Record<string, unknown>>
-  if (typeof v === 'string' && v.length > 0) {
-    const parsed = JSON.parse(v)
-    return Array.isArray(parsed) ? parsed : []
-  }
-  return []
 }
 
 /**
