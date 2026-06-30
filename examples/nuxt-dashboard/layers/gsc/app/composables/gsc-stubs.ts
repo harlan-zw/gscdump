@@ -3,13 +3,15 @@
 // example builds without bringing in the full nuxtseo.com layer.
 // TODO: port from nuxtseo.com
 
-import type { ComputedRef, InjectionKey, Ref } from 'vue'
+import type { AnalysisParams, AnalysisResult } from '@gscdump/analysis'
+import type { InspectionRecord, SitemapRecord } from '@gscdump/engine/entities'
+import type { ComputedRef, InjectionKey, Ref, ShallowRef } from 'vue'
 import type {
   GscAnalyzerCapability,
   GscAnalyzerDefinition,
   GscAnalyzerDefinitionWithCapability,
 } from '../../types'
-import { computed, inject, provide, ref } from 'vue'
+import { computed, customRef, inject, provide, ref, shallowRef } from 'vue'
 import { defineGscAnalyzer } from '../../types'
 
 export { defineGscAnalyzer }
@@ -36,14 +38,16 @@ export interface GscDateRange {
 }
 
 export type GscCompareMode = 'none' | 'previous' | 'year'
+export type CompareMode = GscCompareMode
+export type Period = string
 
 interface GscPeriodReturn {
-  period: Ref<string>
+  period: Ref<Period>
   compareMode: Ref<GscCompareMode>
   stableData: Ref<boolean>
   range: Ref<GscDateRange>
-  presets: Ref<Array<{ id: string, label: string }>>
-  compareOptions: Ref<Array<{ id: GscCompareMode, label: string }>>
+  presets: Ref<Array<{ value: Period, label: string }>>
+  compareOptions: Ref<Array<{ value: GscCompareMode, label: string }>>
 }
 
 function todayIso(): string {
@@ -68,15 +72,15 @@ export function useGscPeriod(): GscPeriodReturn {
     yearStart: isoMinusDays(365 + 28),
     yearEnd: isoMinusDays(365),
   })
-  const presets = ref<Array<{ id: string, label: string }>>([
-    { id: '7d', label: 'Last 7 days' },
-    { id: '28d', label: 'Last 28 days' },
-    { id: '90d', label: 'Last 90 days' },
+  const presets = ref<Array<{ value: Period, label: string }>>([
+    { value: '7d', label: 'Last 7 days' },
+    { value: '28d', label: 'Last 28 days' },
+    { value: '90d', label: 'Last 90 days' },
   ])
-  const compareOptions = ref<Array<{ id: GscCompareMode, label: string }>>([
-    { id: 'none', label: 'No comparison' },
-    { id: 'previous', label: 'Previous period' },
-    { id: 'year', label: 'Year over year' },
+  const compareOptions = ref<Array<{ value: GscCompareMode, label: string }>>([
+    { value: 'none', label: 'No comparison' },
+    { value: 'previous', label: 'Previous period' },
+    { value: 'year', label: 'Year over year' },
   ])
   return { period, compareMode, stableData, range, presets, compareOptions }
 }
@@ -86,6 +90,7 @@ export function useGscPeriod(): GscPeriodReturn {
 export interface GscCurrentSite {
   id: string
   hostname: string
+  label: string
   propertyType: 'domain' | 'url-prefix'
   url?: string
 }
@@ -156,10 +161,13 @@ export function useGscAnalyticsConfig(): GscAnalyticsConfig {
 }
 
 export interface GscBootProgressEntry {
-  stage: 'idle' | 'resolving' | 'downloading' | 'attaching' | 'ready' | 'error'
+  stage: 'idle' | 'manifest' | 'resolving' | 'wasm' | 'downloading' | 'attach' | 'attaching' | 'ready' | 'error'
   filesAttached: number
   filesTotal: number
-  error?: string
+  source?: string | undefined
+  startedAt?: number | undefined
+  endedAt?: number | undefined
+  error?: string | undefined
 }
 
 interface GscAnalyticsContextReturn {
@@ -196,14 +204,24 @@ export function useGscBootProgress(): Pick<GscAnalyticsContextReturn, 'progress'
   return { progress }
 }
 
+interface GscAnalyticsSourceInfo {
+  browserAttachEligible?: boolean
+  capabilities: {
+    attachedTables?: boolean
+    analyzers?: Record<string, boolean>
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
 interface GscAnalyticsSourceInfoReturn {
-  info: Ref<Record<string, unknown> | null>
-  supports: Ref<Record<string, boolean>>
+  info: Ref<GscAnalyticsSourceInfo | null>
+  supports: (id: string) => ComputedRef<boolean>
 }
 
 export function useGscAnalyticsSourceInfo(_siteId: unknown): GscAnalyticsSourceInfoReturn {
-  const info = ref<Record<string, unknown> | null>(null)
-  const supports = ref<Record<string, boolean>>({})
+  const info = ref<GscAnalyticsSourceInfo | null>(null)
+  const supports = (id: string): ComputedRef<boolean> => computed(() => info.value?.capabilities.analyzers?.[id] ?? true)
   return { info, supports }
 }
 
@@ -243,22 +261,53 @@ export function useGscQuery(): GscQueryReturn {
   return { run: async () => ({ rows: [] as Record<string, unknown>[], queryMs: 0 }) }
 }
 
-interface GscAnalyzerBatchReturn {
-  results: Ref<Record<string, unknown>>
-  loading: Ref<boolean>
+type GscAnalyzerBatchState<T>
+  = | { status: 'idle' | 'pending' | 'running' | 'skipped' }
+    | { status: 'done', result: T }
+    | { status: 'error', error: Error }
+
+interface GscAnalyzerBatchReturn<T> {
+  states: Ref<Record<string, GscAnalyzerBatchState<T>>>
+  run: () => Promise<void>
 }
 
-export function useGscAnalyzerBatch(): GscAnalyzerBatchReturn {
-  const results = ref<Record<string, unknown>>({})
-  const loading = ref(false)
-  return { results, loading }
+export function useGscAnalyzerBatch<T = { results: unknown[], meta: Record<string, unknown> }>(
+  runner?: { analyze: (params: AnalysisParams) => Promise<T> },
+  ids: readonly string[] = [],
+  _range?: unknown,
+  options: { concurrency?: number, filter?: (id: string) => boolean } = {},
+): GscAnalyzerBatchReturn<T> {
+  const states = ref<Record<string, GscAnalyzerBatchState<T>>>(
+    Object.fromEntries(ids.map(id => [id, { status: 'idle' as const }])),
+  )
+
+  async function run(): Promise<void> {
+    if (!runner)
+      return
+    for (const id of ids) {
+      if (options.filter && !options.filter(id)) {
+        states.value = { ...states.value, [id]: { status: 'skipped' } }
+        continue
+      }
+      states.value = { ...states.value, [id]: { status: 'running' } }
+      try {
+        const result = await runner.analyze({ type: id as AnalysisParams['type'] })
+        states.value = { ...states.value, [id]: { status: 'done', result } }
+      }
+      catch (err) {
+        states.value = { ...states.value, [id]: { status: 'error', error: err instanceof Error ? err : new Error(String(err)) } }
+      }
+    }
+  }
+
+  return { states, run }
 }
 
 interface GscAnalyzerQueryReturn {
   ready: Ref<boolean>
   error: Ref<Error | null>
   tables: Ref<Record<string, GscBootProgressEntry>>
-  analyze: () => Promise<{ results: unknown[], meta: Record<string, unknown>, queryMs: number }>
+  analyze: (params: AnalysisParams, opts?: { signal?: AbortSignal }) => Promise<AnalysisResult & { queryMs: number }>
   runQuery: <T = Record<string, unknown>>(_sql: string, _params?: readonly unknown[]) => Promise<{ rows: T[], queryMs: number }>
   query: <T = Record<string, unknown>>(_opts: { sql: string, needs: readonly unknown[], params?: readonly unknown[] }) => Promise<T[]>
 }
@@ -279,31 +328,61 @@ export function useGscAnalyzerQuery(_siteId: unknown, _range?: unknown): GscAnal
 
 // --- Panel runner ---------------------------------------------------------
 
+export interface GscPanelRunner {
+  query: (sql: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[], queryMs: number }>
+  analyze: (params: AnalysisParams) => Promise<AnalysisResult & { queryMs?: number }>
+}
+
 interface GscPanelRunnerReturn {
-  runner: Ref<Record<string, unknown>>
-  ready: Ref<boolean>
+  runner: ComputedRef<GscPanelRunner>
+  ready: ComputedRef<boolean>
+}
+
+export const gscPanelRunnerKey: InjectionKey<{ runner: GscPanelRunner, ready: Ref<boolean> | ComputedRef<boolean> }> = Symbol('gsc-panel-runner')
+
+const emptyPanelRunner: GscPanelRunner = {
+  query: async () => ({ rows: [], queryMs: 0 }),
+  analyze: async () => ({ results: [], meta: {}, queryMs: 0 }),
 }
 
 export function useGscPanelRunner(): GscPanelRunnerReturn {
-  const ready = ref(false)
-  const runner = ref<Record<string, unknown>>({})
+  const injected = inject(gscPanelRunnerKey, null)
+  const runner = computed(() => injected?.runner ?? emptyPanelRunner)
+  const ready = computed(() => injected?.ready.value ?? false)
   return { runner, ready }
 }
 
 // --- Data sources --------------------------------------------------------
 
-interface GscCollectionReturn<T = unknown> {
+export interface MetricRow {
+  clicks: number
+  impressions: number
+  sum_position: number
+}
+
+export interface CountryRow extends MetricRow {
+  country: string
+}
+
+export interface SearchAppearanceRow extends MetricRow {
+  searchAppearance: string
+}
+
+interface GscCollectionReturn<T> {
   data: Ref<T[]>
+  rows: Ref<T[]>
   loading: Ref<boolean>
   error: Ref<Error | null>
 }
 
-export function useGscCountries(_siteId: unknown, _range?: unknown): GscCollectionReturn {
-  return { data: ref<unknown[]>([]), loading: ref(false), error: ref<Error | null>(null) }
+export function useGscCountries(_siteId: unknown, _range?: unknown): GscCollectionReturn<CountryRow> {
+  const rows = ref<CountryRow[]>([])
+  return { data: rows, rows, loading: ref(false), error: ref<Error | null>(null) }
 }
 
-export function useGscSearchAppearance(_siteId: unknown, _range?: unknown): GscCollectionReturn {
-  return { data: ref<unknown[]>([]), loading: ref(false), error: ref<Error | null>(null) }
+export function useGscSearchAppearance(_siteId: unknown, _range?: unknown): GscCollectionReturn<SearchAppearanceRow> {
+  const rows = ref<SearchAppearanceRow[]>([])
+  return { data: rows, rows, loading: ref(false), error: ref<Error | null>(null) }
 }
 
 interface GscRecordsReturn<T = unknown> {
@@ -311,59 +390,90 @@ interface GscRecordsReturn<T = unknown> {
   loading: Ref<boolean>
 }
 
-export function useGscSitemaps(_siteId: unknown): GscRecordsReturn {
-  const records = ref<unknown[]>([])
+export function useGscSitemaps(_siteId: unknown): GscRecordsReturn<SitemapRecord> {
+  const records = ref<SitemapRecord[]>([])
   const loading = ref(false)
   return { records, loading }
 }
 
-interface GscPathHistoryReturn<T = unknown> extends GscRecordsReturn<T> {
+interface GscSitemapHistoryReturn extends GscRecordsReturn<SitemapRecord> {
+  snapshots: Ref<SitemapRecord[]>
   path: Ref<string | null>
 }
 
-export function useGscSitemapHistory(_siteId: unknown, _feedpathHash: unknown): GscPathHistoryReturn {
-  const snapshots = ref<unknown[]>([])
+export function useGscSitemapHistory(_siteId: unknown, _feedpathHash: unknown): GscSitemapHistoryReturn {
+  const snapshots = ref<SitemapRecord[]>([])
   const path = ref<string | null>(null)
   const loading = ref(false)
-  return { snapshots, path, loading }
+  return { records: snapshots, snapshots, path, loading }
 }
 
-interface GscInspectionsReturn<T = unknown> extends GscRecordsReturn<T> {
+interface GscInspectionsReturn extends GscRecordsReturn<InspectionRecord> {
   statusCounts: Ref<Record<string, number>>
 }
 
 export function useGscInspections(_siteId: unknown): GscInspectionsReturn {
-  const records = ref<unknown[]>([])
+  const records = ref<InspectionRecord[]>([])
   const statusCounts = ref<Record<string, number>>({})
   const loading = ref(false)
   return { records, statusCounts, loading }
 }
 
-export function useGscInspectionHistory(_siteId: unknown, _urlHash: unknown): GscPathHistoryReturn {
-  const records = ref<unknown[]>([])
+interface GscInspectionHistoryReturn extends GscRecordsReturn<InspectionRecord> {
+  url: Ref<string | null>
+}
+
+export function useGscInspectionHistory(_siteId: unknown, _urlHash: unknown): GscInspectionHistoryReturn {
+  const records = ref<InspectionRecord[]>([])
   const url = ref<string | null>(null)
   const loading = ref(false)
   return { records, url, loading }
 }
 
+interface GscRollupEnvelope<T> {
+  version?: number
+  id?: string
+  builtAt?: number
+  windowDays?: number | null
+  payload: T
+}
+
 interface GscRollupReturn<T> {
-  data: Ref<T | null>
+  data: ComputedRef<T | null>
+  envelope: ShallowRef<GscRollupEnvelope<T> | null>
   loading: Ref<boolean>
   error: Ref<Error | null>
 }
 
 export function useGscRollup<T = unknown>(_siteId: unknown, _name?: unknown): GscRollupReturn<T> {
-  return { data: ref<T | null>(null), loading: ref(false), error: ref<Error | null>(null) }
+  const envelope = shallowRef<GscRollupEnvelope<T> | null>(null)
+  const data = computed<T | null>(() => envelope.value?.payload ?? null)
+  return { data, envelope, loading: ref(false), error: ref<Error | null>(null) }
 }
 
-export function useGscTableState(): Ref<{ sort: string | null, filter: string }> {
-  const state = ref({ sort: null as string | null, filter: '' })
-  return state
+export function useGscTableState<TFilter extends Record<string, unknown> = Record<string, never>>(
+  options: { defaultFilter?: TFilter } = {},
+): { q: Ref<string>, filter: Ref<TFilter>, sort: Ref<string | null> } {
+  const q = ref('')
+  let filterValue = (options.defaultFilter ?? {}) as TFilter
+  const filter = customRef<TFilter>((track, trigger) => ({
+    get() {
+      track()
+      return filterValue
+    },
+    set(next) {
+      filterValue = next
+      trigger()
+    },
+  }))
+  const sort = ref<string | null>(null)
+  return { q, filter, sort }
 }
 
 // --- RPC -----------------------------------------------------------------
 
 interface GscRpcReturn {
+  query: <T = unknown>(_query: unknown, _options?: unknown) => Promise<T>
   analysisSources: () => Promise<{ files: unknown[] }>
   sourceInfo: () => Promise<Record<string, never>>
   sites: () => Promise<unknown[]>
@@ -371,6 +481,7 @@ interface GscRpcReturn {
 
 export function useGscRpc(): GscRpcReturn {
   return {
+    query: async <T = unknown>() => ({} as T),
     analysisSources: async () => ({ files: [] as unknown[] }),
     sourceInfo: async () => ({}),
     sites: async () => [] as unknown[],
@@ -382,9 +493,12 @@ export function useGscRpc(): GscRpcReturn {
 export interface GscAuthInput {
   accessToken?: string
   refreshToken?: string
-  apiKey?: string
+  apiKey?: string | null
+  apiBase?: string
+  browserAnalyzerEnabled?: boolean
+  userId?: string | null
 }
 
-export function setGscAuth(_auth: GscAuthInput | null): void {
+export function setGscAuth(_auth: GscAuthInput | (() => GscAuthInput) | null): void {
   // No-op stub; real layer wires headers onto `$gscFetch`/`$gscAnalyticsClient`.
 }

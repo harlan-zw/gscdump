@@ -209,8 +209,11 @@ function encodeOrderedRows(
   // in it), so DATE can be expressed as INT32 + converted_type DATE — something
   // the `BasicType`-inferred path cannot do.
   const schema = buildWriteSchema(columns)
-  const isDate = columns.map(col => col.type === 'DATE')
-  const types = columns.map(col => basicTypeFor(col.type))
+  const codecs = columns.map(col => ({
+    name: col.name,
+    isDate: col.type === 'DATE',
+    type: basicTypeFor(col.type),
+  }))
   // Page-level statistics let DuckDB prune below the row-group granularity for
   // high-cardinality columns (url, query). Cheap to write, free to skip. The
   // schema fixes the physical type, so the spec only needs name + flags.
@@ -222,11 +225,12 @@ function encodeOrderedRows(
   function* coercedRows(): Generator<Record<string, unknown>> {
     for (const r of rows) {
       const out: Record<string, unknown> = {}
-      for (let c = 0; c < columns.length; c++) {
-        const name = columns[c].name
+      for (const codec of codecs) {
         // DATE → int-days (plain number) so the writer dictionary-dedupes it
         // correctly; everything else through the type-aware value coercion.
-        out[name] = isDate[c] ? toEpochDays(r[name]) : coerceValue(r[name], types[c])
+        out[codec.name] = codec.isDate
+          ? toEpochDays(r[codec.name])
+          : coerceValue(r[codec.name], codec.type)
       }
       yield out
     }

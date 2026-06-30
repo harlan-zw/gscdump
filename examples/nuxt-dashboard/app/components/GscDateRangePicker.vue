@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CompareMode, Period } from '#imports'
+import type { CompareMode, Period } from '../../layers/gsc/app/composables/gsc-stubs'
 
 const period = defineModel<Period>('period', { required: true })
 const compareMode = defineModel<CompareMode>('compareMode', { required: true })

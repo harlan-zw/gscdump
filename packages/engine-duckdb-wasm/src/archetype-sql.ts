@@ -93,7 +93,11 @@ function metricSelectList(metrics: readonly string[]): string {
 
 /** `dates` device-pivot column suffixes. */
 const DEVICE_VALUES = ['DESKTOP', 'MOBILE', 'TABLET'] as const
-const DEVICE_SUFFIX: Record<string, string> = { DESKTOP: 'desktop', MOBILE: 'mobile', TABLET: 'tablet' }
+const DEVICE_SUFFIX: Record<typeof DEVICE_VALUES[number], string> = {
+  DESKTOP: 'desktop',
+  MOBILE: 'mobile',
+  TABLET: 'tablet',
+}
 
 /**
  * Per-device metric expression reading the wide pivot columns on `dates`.

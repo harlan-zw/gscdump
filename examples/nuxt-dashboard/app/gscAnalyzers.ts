@@ -402,3 +402,5 @@ export const ANALYZERS = [
     },
   }),
 ]
+
+export default ANALYZERS

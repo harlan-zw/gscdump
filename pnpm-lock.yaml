@@ -48,6 +48,9 @@ catalogs:
     '@vitest/browser-playwright':
       specifier: ^4.1.9
       version: 4.1.9
+    '@vueuse/core':
+      specifier: ^14.3.0
+      version: 14.3.0
     aws4fetch:
       specifier: ^1.0.20
       version: 1.0.20
@@ -75,6 +78,9 @@ catalogs:
     nuxt-use-query:
       specifier: ^0.6.0
       version: 0.6.0
+    pathe:
+      specifier: ^2.0.3
+      version: 2.0.3
     playwright:
       specifier: ^1.61.1
       version: 1.61.1
@@ -239,6 +245,9 @@ importers:
       '@gscdump/analysis':
         specifier: workspace:*
         version: link:../../packages/analysis
+      '@gscdump/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@gscdump/engine':
         specifier: workspace:*
         version: link:../../packages/engine
@@ -251,6 +260,12 @@ importers:
       '@gscdump/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
+      '@nuxt/kit':
+        specifier: 4.4.4
+        version: 4.4.4(magicast@0.5.3)
+      '@nuxt/schema':
+        specifier: 4.4.4
+        version: 4.4.4
       '@nuxt/ui':
         specifier: 'catalog:'
         version: 4.9.0(9fe1932e1de418de231db7701fbfe5e5)
@@ -260,6 +275,9 @@ importers:
       '@unovis/vue':
         specifier: 'catalog:'
         version: 1.6.6(@unovis/ts@1.6.6)(vue@3.5.39(typescript@6.0.3))
+      '@vueuse/core':
+        specifier: 'catalog:'
+        version: 14.3.0(vue@3.5.39(typescript@6.0.3))
       aws4fetch:
         specifier: 'catalog:'
         version: 1.0.20
@@ -272,6 +290,12 @@ importers:
       nuxt-use-query:
         specifier: 'catalog:'
         version: 0.6.0(magicast@0.5.3)(nuxt@4.4.8(@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7))(@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7))(@parcel/watcher@2.5.6)(@types/node@26.0.1)(@vue/compiler-sfc@3.5.39)(aws4fetch@1.0.20)(cac@6.7.14)(db0@0.3.4)(eslint@10.6.0(jiti@2.7.0))(ioredis@5.10.1)(lightningcss@1.32.0)(magicast@0.5.3)(optionator@0.9.4)(rolldown@1.1.2)(rollup-plugin-visualizer@7.0.1(rolldown@1.1.2)(rollup@4.60.4))(rollup@4.60.4)(srvx@0.11.16)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(vite@7.3.3(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(yaml@2.9.0))(rolldown@1.1.2)(vue@3.5.39(typescript@6.0.3))
+      ofetch:
+        specifier: catalog:deps
+        version: 1.5.1
+      pathe:
+        specifier: 'catalog:'
+        version: 2.0.3
       retriv:
         specifier: 'catalog:'
         version: 0.14.7(typescript@6.0.3)
@@ -281,6 +305,9 @@ importers:
       vue:
         specifier: 'catalog:'
         version: 3.5.39(typescript@6.0.3)
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
 
   packages/analysis:
     dependencies:
@@ -9425,7 +9452,7 @@ snapshots:
       '@nuxt/devalue': 2.0.2
       '@nuxt/kit': 4.4.4(magicast@0.5.3)
       '@unhead/vue': 2.1.15(vue@3.5.39(typescript@6.0.3))
-      '@vue/shared': 3.5.38
+      '@vue/shared': 3.5.39
       consola: 3.4.2
       defu: 6.1.7
       destr: 2.0.5
@@ -9492,7 +9519,7 @@ snapshots:
 
   '@nuxt/schema@4.4.4':
     dependencies:
-      '@vue/shared': 3.5.38
+      '@vue/shared': 3.5.39
       defu: 6.1.7
       pathe: 2.0.3
       pkg-types: 2.3.1
@@ -10941,8 +10968,8 @@ snapshots:
 
   '@typescript-eslint/project-service@8.60.0(typescript@6.0.3)':
     dependencies:
-      '@typescript-eslint/tsconfig-utils': 8.61.0(typescript@6.0.3)
-      '@typescript-eslint/types': 8.61.0
+      '@typescript-eslint/tsconfig-utils': 8.62.0(typescript@6.0.3)
+      '@typescript-eslint/types': 8.62.0
       debug: 4.4.3
       typescript: 6.0.3
     transitivePeerDependencies:
@@ -11334,7 +11361,7 @@ snapshots:
 
   '@vue-macros/common@3.1.2(vue@3.5.39(typescript@6.0.3))':
     dependencies:
-      '@vue/compiler-sfc': 3.5.38
+      '@vue/compiler-sfc': 3.5.39
       ast-kit: 2.2.0
       local-pkg: 1.2.1
       magic-string-ast: 1.0.3
@@ -11354,7 +11381,7 @@ snapshots:
       '@babel/types': 7.29.7
       '@vue/babel-helper-vue-transform-on': 2.0.1
       '@vue/babel-plugin-resolve-type': 2.0.1(@babel/core@7.29.7)
-      '@vue/shared': 3.5.38
+      '@vue/shared': 3.5.39
     optionalDependencies:
       '@babel/core': 7.29.7
     transitivePeerDependencies:

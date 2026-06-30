@@ -14,19 +14,26 @@
   "dependencies": {
     "@duckdb/duckdb-wasm": "catalog:",
     "@gscdump/analysis": "workspace:*",
+    "@gscdump/contracts": "workspace:*",
     "@gscdump/engine": "workspace:*",
     "@gscdump/engine-duckdb-wasm": "workspace:*",
     "@gscdump/engine-sqlite": "workspace:*",
     "@gscdump/sdk": "workspace:*",
+    "@nuxt/kit": "catalog:",
+    "@nuxt/schema": "catalog:",
     "@nuxt/ui": "catalog:",
     "@unovis/ts": "catalog:",
     "@unovis/vue": "catalog:",
+    "@vueuse/core": "catalog:",
     "aws4fetch": "catalog:",
     "gscdump": "workspace:*",
     "nuxt": "catalog:",
     "nuxt-use-query": "catalog:",
+    "ofetch": "catalog:deps",
+    "pathe": "catalog:",
     "retriv": "catalog:",
     "tailwindcss": "catalog:",
-    "vue": "catalog:"
+    "vue": "catalog:",
+    "zod": "catalog:"
   }
 }

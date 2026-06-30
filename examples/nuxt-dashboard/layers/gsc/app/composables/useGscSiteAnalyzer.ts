@@ -39,7 +39,11 @@ export interface UseGscSiteAnalyzerReturn {
   analyze: (params: unknown, opts?: { signal?: AbortSignal }) => Promise<unknown>
 }
 
-export function useGscSiteAnalyzer(): UseGscSiteAnalyzerReturn {
+export function useGscSiteAnalyzer(
+  _siteId?: unknown,
+  _range?: unknown,
+  _options?: { searchType?: string },
+): UseGscSiteAnalyzerReturn {
   const tables = ref({} as Record<GscFactTable, GscTableStatus>)
   const ready = ref(false)
   const error = ref<Error | null>(null)

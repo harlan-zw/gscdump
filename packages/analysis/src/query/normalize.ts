@@ -3,6 +3,8 @@
 // `pluralize` (tech-term skip list), then bag-of-words sorted — except `X to Y`
 // conversions, whose word order is preserved.
 
+/// <reference path="./pluralize.d.ts" />
+
 import pluralize from 'pluralize'
 
 const SYNONYMS: Record<string, string> = {

@@ -5,7 +5,7 @@
 // TODO: port from nuxtseo.com
 
 import type { GscAnalyzerDefinition } from '../../types'
-import { defineNuxtPlugin } from '#app'
+import { defineNuxtPlugin } from 'nuxt/app'
 
 export default defineNuxtPlugin(() => {
   return {

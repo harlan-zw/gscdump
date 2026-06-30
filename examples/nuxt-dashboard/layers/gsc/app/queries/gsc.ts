@@ -3,13 +3,16 @@
 // shape consumed by the example dashboard (chiefly `analysisSources`).
 // TODO: port from nuxtseo.com
 
+import type { NuxtRpcKey } from 'nuxt-use-query/rpc'
 import { defineNuxtQueryGroup, defineNuxtRpcQuery } from 'nuxt-use-query/rpc'
 import { z } from 'zod'
 
 const passthrough = z.any()
 
-function key(...parts: unknown[]): unknown[] {
-  return parts
+function key(first: string, ...parts: unknown[]): NuxtRpcKey {
+  if (parts.length === 0)
+    return first
+  return [first, ...parts]
 }
 
 export const gscQueries = defineNuxtQueryGroup('gsc', {

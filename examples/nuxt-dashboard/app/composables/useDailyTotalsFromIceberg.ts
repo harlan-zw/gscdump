@@ -20,7 +20,17 @@
 // + file counts without any UI plumbing on the page itself.
 
 import type { FileResolutionResponse, RollupEnvelope } from '@gscdump/contracts'
-import type { OpfsAttachedHandle } from '@gscdump/engine-duckdb-wasm'
+import type {
+  AttachedTablesHandle,
+  DuckDBWasmBootResult,
+  OpfsAttachedHandle,
+  OpfsParquetTable,
+} from '@gscdump/engine-duckdb-wasm'
+import {
+  attachOpfsParquetTables,
+  attachParquetUrlTables,
+  bootDuckDBWasm,
+} from '@gscdump/engine-duckdb-wasm'
 import { useGscRpc } from '../../layers/gsc/app/composables/gsc-stubs'
 import { gscQueries } from '../../layers/gsc/app/queries/gsc'
 
@@ -62,6 +72,71 @@ interface DateRow {
   anonymized_impressions_pct: number
 }
 
+type BrowserAttachedHandle = Pick<OpfsAttachedHandle | AttachedTablesHandle, 'detach'>
+
+let sharedBootPromise: Promise<DuckDBWasmBootResult> | null = null
+
+function sharedGscDuckDBWasm(_bundleBase?: string): Promise<DuckDBWasmBootResult> {
+  sharedBootPromise ??= bootDuckDBWasm()
+  return sharedBootPromise
+}
+
+async function attachParquetWithFallback(options: {
+  db: DuckDBWasmBootResult['db']
+  conn: DuckDBWasmBootResult['conn']
+  viewName: string
+  files: FileResolutionResponse['tables'][number]['files']
+  overlay?: FileResolutionResponse['tables'][number]['overlay']
+  version: string
+  useOpfsCache: boolean
+  fetchConcurrency: number
+  onFileProgress?: () => void
+}): Promise<BrowserAttachedHandle> {
+  const { db, conn, viewName, files, overlay, version, fetchConcurrency, onFileProgress } = options
+
+  if (!options.useOpfsCache) {
+    return attachParquetUrlTables({
+      db,
+      conn,
+      version,
+      fetchConcurrency,
+      maxFiles: Math.max(1, files.length + (overlay ? 1 : 0)),
+      maxBytes: Number.MAX_SAFE_INTEGER,
+      tables: [{ table: viewName, urls: [...files.map(file => file.url), ...(overlay ? [overlay.url] : [])] }],
+      onFileAttached: onFileProgress,
+    })
+  }
+
+  const table: OpfsParquetTable = {
+    table: viewName,
+    files: files.map(file => ({
+      url: file.url,
+      bytes: file.bytes,
+      contentHash: file.contentHash,
+      rowCount: file.rowCount,
+    })),
+    ...(overlay
+      ? {
+          overlay: {
+            url: overlay.url,
+            bytes: overlay.bytes,
+            contentHash: overlay.contentHash,
+            rowCount: overlay.rowCount,
+          },
+        }
+      : {}),
+  }
+
+  return attachOpfsParquetTables({
+    db,
+    conn,
+    version,
+    fetchConcurrency,
+    tables: [table],
+    onFileProgress,
+  })
+}
+
 // View-name segment must be a SQL identifier. Site IDs are `s_<base64>`; the
 // `s_` prefix is fine but base64 chars `/` and `+` aren't — sanitise just in
 // case (current ids are URL-safe base64, but don't bet downstream sites are).
@@ -90,14 +165,15 @@ export function useDailyTotalsFromIceberg(
     if (!import.meta.client)
       return
     const siteIds = (toValue(sites) ?? []).map(s => s.id).filter(Boolean)
-    const range = toValue(opts.range) ?? null
+    const resolvedRange = toValue(opts.range) ?? null
 
     error.value = null
-    if (!siteIds.length || !range?.start || !range?.end) {
+    if (!siteIds.length || !resolvedRange?.start || !resolvedRange?.end) {
       envelopes.value = {}
       progress.value = { completed: 0, total: 0 }
       return
     }
+    const range = resolvedRange
 
     loading.value = true
     progress.value = { completed: 0, total: siteIds.length }
@@ -129,7 +205,7 @@ export function useDailyTotalsFromIceberg(
       const mark = (phase: string): PerformanceMark => performance.mark(`gsc:${publicId}:${phase}`)
       mark('start')
       let perSiteConn: Awaited<ReturnType<Awaited<typeof bootPromise>['db']['connect']>> | null = null
-      let opfsHandle: OpfsAttachedHandle | null = null
+      let opfsHandle: BrowserAttachedHandle | null = null
       try {
         // ── manifest ────────────────────────────────────────────────────
         const res = await rpc.query(
@@ -190,6 +266,7 @@ export function useDailyTotalsFromIceberg(
           conn: perSiteConn,
           viewName,
           files: browserFiles,
+          overlay: datesTable?.overlay,
           version: full.snapshotVersion,
           useOpfsCache,
           fetchConcurrency: browserFiles.length,

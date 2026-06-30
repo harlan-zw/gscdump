@@ -1013,6 +1013,8 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
         if (!m)
           continue
         const date = m[1]
+        if (!date)
+          continue
         if (from && date < from)
           continue
         if (to && date > to)
@@ -1047,9 +1049,12 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
         const m = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
         if (!m)
           continue
-        const list = deltasByFeed.get(m[2]) ?? []
+        const feedpathHash = m[2]
+        if (!feedpathHash)
+          continue
+        const list = deltasByFeed.get(feedpathHash) ?? []
         list.push(key)
-        deltasByFeed.set(m[2], list)
+        deltasByFeed.set(feedpathHash, list)
       }
 
       // Compact one feedpath at a time. Peak memory is bounded by a single

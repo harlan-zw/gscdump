@@ -9,7 +9,7 @@ const props = defineProps<{
 }>()
 
 const injected = props.runner ? null : useGscPanelRunner()
-const runner = computed(() => props.runner ?? injected?.runner)
+const runner = computed(() => props.runner ?? injected?.runner.value ?? null)
 const ready = computed(() => props.ready ?? injected?.ready.value ?? false)
 const repo = useSemanticKeywordRepo()
 const activeBucketId = ref<string | null>(null)

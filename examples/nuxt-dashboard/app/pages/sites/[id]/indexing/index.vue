@@ -5,6 +5,7 @@
 
 import type { InspectionRecord } from '@gscdump/engine/entities'
 import { hashUrl } from '@gscdump/engine/entities'
+import { refDebounced } from '@vueuse/core'
 
 definePageMeta({ key: route => `site-indexing:${route.params.id}` })
 
@@ -70,9 +71,9 @@ const summary = computed(() => {
   const payload = metadata.value?.payload
   return {
     totalInspections: records.value.length,
-    pass: statusCounts.value.PASS,
-    fail: statusCounts.value.FAIL,
-    neutral: statusCounts.value.NEUTRAL,
+    pass: statusCounts.value.PASS ?? 0,
+    fail: statusCounts.value.FAIL ?? 0,
+    neutral: statusCounts.value.NEUTRAL ?? 0,
     totalUpdates: payload?.totals.updates ?? 0,
     totalRemoves: payload?.totals.removes ?? 0,
     latestUpdate: payload?.latestUpdate,

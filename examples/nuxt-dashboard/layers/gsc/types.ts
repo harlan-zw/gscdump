@@ -3,6 +3,7 @@
 // imports directly.
 // TODO: port from nuxtseo.com
 
+import type { ActionSource } from '@gscdump/analysis'
 import type { AnalyticsClient } from '@gscdump/sdk'
 import type { $Fetch } from 'ofetch'
 import type { Component } from 'vue'
@@ -38,7 +39,7 @@ export interface GscAnalyzerPanelSpec {
 
 export interface GscAnalyzerCapabilities {
   insightCard?: GscAnalyzerInsightCard
-  actionPriority?: string
+  actionPriority?: ActionSource
   panel?: GscAnalyzerPanelSpec
 }
 
@@ -76,7 +77,7 @@ declare module '@nuxt/schema' {
   }
 }
 
-declare module '#app' {
+declare module 'nuxt/app' {
   interface NuxtApp {
     $gscAnalytics: unknown
     $gscQueryDispatcher: unknown

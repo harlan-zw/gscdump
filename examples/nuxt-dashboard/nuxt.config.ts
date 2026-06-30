@@ -48,6 +48,9 @@ export default defineNuxtConfig({
       analytics: {
         mode,
         apiBase,
+        duckdbBundleBase: '',
+        timezone: '',
+        defaultEngine: 'auto',
         // Auto-toast errors via classifyGscError + useToast (Nuxt UI).
         // Off in `local` mode where there's no remote and toasts would be
         // noise; on for origin/consumer which actually hit a server.

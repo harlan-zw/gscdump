@@ -46,6 +46,15 @@ function txLeaf(leaf: InternalFilter, columns: ReadonlySet<string>): ParquetQuer
   return { [column]: { $eq: leaf.expression } }
 }
 
+function combineFilters(parts: readonly ParquetQueryFilter[], groupType: 'and' | 'or'): ParquetQueryFilter | null {
+  const first = parts[0]
+  if (!first)
+    return null
+  if (parts.length === 1)
+    return first
+  return groupType === 'or' ? { $or: [...parts] } : { $and: [...parts] }
+}
+
 // Exact translation of a filter node, or null if ANY part is untranslatable.
 // Exactness is what makes a node safe to drop wholesale: an OR branch that
 // can't be translated nulls the whole node rather than silently narrowing.
@@ -62,7 +71,7 @@ function txExact(node: Filter<object>, columns: ReadonlySet<string>): ParquetQue
     // `or()` forbids nested groups; treat any as untranslatable.
     if (node._nestedGroups?.length || leafParts.length === 0)
       return null
-    return leafParts.length === 1 ? leafParts[0] : { $or: leafParts }
+    return combineFilters(leafParts, 'or')
   }
   const parts = leafParts
   for (const group of node._nestedGroups ?? []) {
@@ -73,7 +82,7 @@ function txExact(node: Filter<object>, columns: ReadonlySet<string>): ParquetQue
   }
   if (parts.length === 0)
     return null
-  return parts.length === 1 ? parts[0] : { $and: parts }
+  return combineFilters(parts, 'and')
 }
 
 /**
@@ -109,5 +118,5 @@ export function extractParquetPushdown(
   }
   if (parts.length === 0)
     return undefined
-  return parts.length === 1 ? parts[0] : { $and: parts }
+  return combineFilters(parts, 'and') ?? undefined
 }

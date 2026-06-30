@@ -11,15 +11,6 @@ export interface GscdumpAnalyticsModuleOptions {
   analyzers?: string
 }
 
-declare module '@nuxt/schema' {
-  interface NuxtConfig {
-    gscdumpAnalytics?: GscdumpAnalyticsModuleOptions
-  }
-  interface NuxtOptions {
-    gscdumpAnalytics?: GscdumpAnalyticsModuleOptions
-  }
-}
-
 export default defineNuxtModule<GscdumpAnalyticsModuleOptions>({
   meta: {
     name: '@gscdump/nuxt',

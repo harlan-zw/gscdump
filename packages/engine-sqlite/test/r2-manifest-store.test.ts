@@ -109,7 +109,7 @@ CREATE TABLE r2_sync_states (
   PRIMARY KEY (user_id, site_id, "table", date, search_type)
 );
 CREATE INDEX idx_r2_sync_states_state ON r2_sync_states (state);
-	`
+  `
 
 // SPEC.md section 2 partial unique index. Lives in the host's
 // database/main migration 0011, NOT in this package's schema. Applied here
