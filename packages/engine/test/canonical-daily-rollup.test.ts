@@ -430,6 +430,42 @@ describe('query_canonical_daily rollup (integration)', () => {
     expect(gotMap.get('foo')).toEqual({ clicks: 19, impressions: 190 })
   })
 
+  it('resumable build honours a tighter maxWindowDays override', async () => {
+    const { engine, dataSource } = await setup()
+    await engine.writeDay({ userId: 'u1', siteId: 's1', table: 'queries', date: '2026-03-03' }, [
+      qRow('Foo', '2026-03-03', 10, 100),
+    ])
+    await engine.writeDay({ userId: 'u1', siteId: 's1', table: 'queries', date: '2026-03-04' }, [
+      qRow('bar', '2026-03-04', 7, 70),
+    ])
+    await writeDefaultQueryDim(dataSource)
+
+    const base = rollupEngine(engine)
+    const sqlCalls: string[] = []
+    const r = await rebuildCanonicalDailyResumable({
+      engine: {
+        ...base,
+        async runSQL(opts) {
+          sqlCalls.push(opts.sql)
+          return base.runSQL(opts)
+        },
+      } as any,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource,
+      builtAt: 1_700_000_222_222,
+      windowOffset: 0,
+      pageRows: 100,
+      maxWindowDays: 1,
+      deadlineMs: Date.now() + 60_000,
+    })
+
+    expect(r.done).toBe(true)
+    expect(r.windowsTotal).toBe(2)
+    expect(sqlCalls).toHaveLength(2)
+    expect(sqlCalls[0]).toContain("q.date >= '2026-03-03' AND q.date <= '2026-03-03'")
+    expect(sqlCalls[1]).toContain("q.date >= '2026-03-04' AND q.date <= '2026-03-04'")
+  })
+
   it('gaining/losing: rollup-served comparison equals live raw comparison', async () => {
     const { engine, dataSource } = await setup()
     await seed(engine)

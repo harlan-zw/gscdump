@@ -1241,15 +1241,18 @@ export async function rebuildCanonicalDailyResumable(opts: {
   pageOffset?: number
   /** Output rows per page (default `ROLLUP_PAGE_ROWS_DAILY`). Injectable for tests. */
   pageRows?: number
+  /** Cap each input window's day span (default `DAILY_MAX_WINDOW_DAYS`). */
+  maxWindowDays?: number
   deadlineMs: number
 }): Promise<{ done: boolean, nextWindowOffset: number, nextPageOffset: number, windowsTotal: number, windowsBuilt: number, rowsWritten: number }> {
   const { engine, ctx, dataSource, searchType, builtAt, windowOffset, deadlineMs } = opts
   const sType = searchType !== undefined ? { searchType } : {}
   const startPageOffset = opts.pageOffset ?? 0
   const pageRows = opts.pageRows ?? ROLLUP_PAGE_ROWS_DAILY
+  const maxWindowDays = opts.maxWindowDays ?? DAILY_MAX_WINDOW_DAYS
 
   const parts = await engine.listPartitions({ ctx, table: 'queries', ...sType })
-  const windows = planRollupWindows(parts.map(p => ({ partition: p.partition, bytes: p.bytes })), undefined, DAILY_MAX_WINDOW_DAYS)
+  const windows = planRollupWindows(parts.map(p => ({ partition: p.partition, bytes: p.bytes })), undefined, maxWindowDays)
   const windowsTotal = windows.length
 
   const dimStore = createQueryDimStore({ dataSource })
