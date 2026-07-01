@@ -1213,14 +1213,22 @@ function mapDailyRow(r: Row): Row {
  * Resumable, cross-invocation build of `query_canonical_daily` for a high-
  * cardinality site whose full windowed build exceeds one job reservation (300s).
  *
- * Each call builds the day-capped windows from `windowOffset` until `deadlineMs`,
- * writes that batch's rows to a STAGING partial parquet (windows are disjoint by
- * date, so partials never overlap), and returns `{ done:false, nextWindowOffset }`
- * for the caller to re-enqueue. When the last window is built it MERGES every
- * staging partial into the canonical `query_canonical_daily` parquet + envelope
- * (the read path is unchanged — still one rollup file) and deletes the staging,
+ * Each call builds from `(windowOffset, pageOffset)` until `deadlineMs`, writes
+ * that batch's rows to a PART parquet, and returns `{ done:false, nextWindowOffset,
+ * nextPageOffset }` for the caller to re-enqueue. When the last window is fully
+ * paged it publishes a multi-file envelope listing every part (parts are disjoint
+ * by `(query_canonical, date)`, so the read path just unions them — no merge),
  * returning `{ done:true }`. `builtAt` MUST be stable across the continuation chain
- * (it versions both the staging keys and the final rollup key).
+ * (it versions both the part keys and the final rollup key).
+ *
+ * INTRA-WINDOW resumability: the deadline is checked between OUTPUT PAGES, not just
+ * between windows. A single high-cardinality window's paged aggregation can exceed
+ * one 300s reservation on its own; checking only between windows let that window
+ * run unbounded and stale-reservation-loop forever (huuto.net/comparaja.pt never
+ * completed window 0). `pageOffset` lets a continuation resume the SAME window at
+ * the next page, so no single invocation runs past the deadline by more than one
+ * page. Parts are keyed by `(windowOffset, pageOffset)` so a mid-window pause and
+ * its continuation write disjoint, non-colliding files.
  */
 export async function rebuildCanonicalDailyResumable(opts: {
   engine: RollupEngine
@@ -1229,10 +1237,16 @@ export async function rebuildCanonicalDailyResumable(opts: {
   searchType?: SearchType
   builtAt: number
   windowOffset: number
+  /** Resume the `windowOffset` window at this output-page offset (0 = window start). */
+  pageOffset?: number
+  /** Output rows per page (default `ROLLUP_PAGE_ROWS_DAILY`). Injectable for tests. */
+  pageRows?: number
   deadlineMs: number
-}): Promise<{ done: boolean, nextWindowOffset: number, windowsTotal: number, windowsBuilt: number, rowsWritten: number }> {
+}): Promise<{ done: boolean, nextWindowOffset: number, nextPageOffset: number, windowsTotal: number, windowsBuilt: number, rowsWritten: number }> {
   const { engine, ctx, dataSource, searchType, builtAt, windowOffset, deadlineMs } = opts
   const sType = searchType !== undefined ? { searchType } : {}
+  const startPageOffset = opts.pageOffset ?? 0
+  const pageRows = opts.pageRows ?? ROLLUP_PAGE_ROWS_DAILY
 
   const parts = await engine.listPartitions({ ctx, table: 'queries', ...sType })
   const windows = planRollupWindows(parts.map(p => ({ partition: p.partition, bytes: p.bytes })), undefined, DAILY_MAX_WINDOW_DAYS)
@@ -1248,38 +1262,59 @@ export async function rebuildCanonicalDailyResumable(opts: {
   const cols = queryCanonicalDailyRollup.parquetColumns!
   const sortKey = queryCanonicalDailyRollup.parquetSortKey
 
-  // Build windows [windowOffset, …] until the deadline (or all done).
+  // Build from (windowOffset, startPageOffset), paging each window's output until
+  // the deadline (or all windows done). The deadline is honoured BETWEEN PAGES so
+  // an oversized window can't blow the reservation.
   const batchRows: Row[] = []
   let i = windowOffset
-  for (; i < windowsTotal; i++) {
+  // `page` is the FIRST window's resume cursor; every later window starts at 0.
+  let page = startPageOffset
+  // Resume coordinates when we stop early. Default to "all done".
+  let nextWindowOffset = windowsTotal
+  let nextPageOffset = 0
+  windowLoop: for (; i < windowsTotal; i++) {
     const w = windows[i]!
-    const winRows = await runPagedQuery({
-      engine,
-      ctx,
-      table: 'queries',
-      ...sType,
-      fileSets: { FILES: { table: 'queries', partitions: w.partitions }, ...extraFileSets },
-      coreSql: sqlFor(w),
-      orderBy: 'date, query_canonical',
-      pageRows: ROLLUP_PAGE_ROWS_DAILY,
-    })
-    for (const r of winRows)
-      batchRows.push(mapDailyRow(r))
+    const coreSql = sqlFor(w)
+    for (;;) {
+      const result = await engine.runSQL({
+        ctx,
+        table: 'queries',
+        ...sType,
+        fileSets: { FILES: { table: 'queries', partitions: w.partitions }, ...extraFileSets },
+        sql: `${coreSql}\nORDER BY date, query_canonical\nLIMIT ${pageRows} OFFSET ${page}`,
+      })
+      for (const r of result.rows)
+        batchRows.push(mapDailyRow(r))
+      const windowDone = result.rows.length < pageRows
+      page += pageRows
+      if (windowDone) {
+        page = 0 // next window starts fresh
+        break
+      }
+      if (Date.now() > deadlineMs) {
+        // Pause mid-window; the continuation resumes THIS window at `page`.
+        nextWindowOffset = i
+        nextPageOffset = page
+        break windowLoop
+      }
+    }
+    // Full window built. Honour the deadline before starting the next one.
     if (Date.now() > deadlineMs) {
-      i++ // this window is done; resume from the next
+      nextWindowOffset = i + 1
+      nextPageOffset = 0
       break
     }
   }
-  const nextWindowOffset = i
 
-  // Persist this invocation's window batch as a staging partial.
-  // Each window batch is a permanent rollup PART (disjoint by date), keyed by its
-  // start offset + builtAt. The parts ARE the rollup — no merge.
-  const partKey = rollupParquetKey(ctx, `${CANONICAL_DAILY_PART_STEM}__w${windowOffset}`, builtAt, searchType)
+  // Persist this invocation's batch as a PART, keyed by its start coordinates so a
+  // mid-window pause + continuation never collide. Rows are globally disjoint by
+  // (query_canonical, date) across windows AND across page segments, so parts union
+  // cleanly. The parts ARE the rollup — no merge.
+  const partKey = rollupParquetKey(ctx, `${CANONICAL_DAILY_PART_STEM}__w${windowOffset}_p${startPageOffset}`, builtAt, searchType)
   await dataSource.write(partKey, encodeRowsToParquetFlex(batchRows, { columns: cols, sortKey }))
 
-  if (nextWindowOffset < windowsTotal)
-    return { done: false, nextWindowOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten: batchRows.length }
+  if (nextWindowOffset < windowsTotal || nextPageOffset > 0)
+    return { done: false, nextWindowOffset, nextPageOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten: batchRows.length }
 
   // FINAL window built → publish a MULTI-FILE envelope listing every part for this
   // builtAt. The read path unions the parts (disjoint dates). No decode+re-encode
@@ -1299,7 +1334,7 @@ export async function rebuildCanonicalDailyResumable(opts: {
     payload: { parquetKey: partKeys[0] ?? partKey, parquetKeys: partKeys, rowCount: 0 },
   }
   await dataSource.write(rollupKey(ctx, CANONICAL_DAILY_ROLLUP_FINAL_ID, builtAt, searchType), new TextEncoder().encode(JSON.stringify(envelope)))
-  return { done: true, nextWindowOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten: batchRows.length }
+  return { done: true, nextWindowOffset, nextPageOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten: batchRows.length }
 }
 
 /**

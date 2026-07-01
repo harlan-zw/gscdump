@@ -18,7 +18,7 @@ import { buildQueryDimRecords, createQueryDimStore } from '../src/query-dim'
 import { canonicalRollupCovers } from '../src/resolver/canonical-source'
 import { createParquetResolverAdapter } from '../src/resolver/pg-adapter'
 import { runComparisonQuery, runOptimizedQuery } from '../src/resolver/run-query'
-import { queryCanonicalDailyRollup, rebuildRollups } from '../src/rollups'
+import { queryCanonicalDailyRollup, rebuildCanonicalDailyResumable, rebuildRollups, rollupKey } from '../src/rollups'
 
 afterAll(() => {
   resetNodeDuckDB()
@@ -361,6 +361,73 @@ describe('query_canonical_daily rollup (integration)', () => {
     })).rejects.toMatchObject({
       fallback: { kind: 'query-dim-stale-version' },
     })
+  })
+
+  it('resumable build across page + window boundaries equals the one-shot rollup', async () => {
+    const { engine, dataSource } = await setup()
+    await seed(engine)
+    await writeDefaultQueryDim(dataSource)
+
+    // One-shot reference (single parquet).
+    const refKey = await buildDaily(engine, dataSource)
+    const sumByCanonical = (rows: Row[]) => {
+      const m = new Map<string, { clicks: number, impressions: number }>()
+      for (const r of rows) {
+        const k = String(r.query_canonical)
+        const prev = m.get(k) ?? { clicks: 0, impressions: 0 }
+        m.set(k, { clicks: prev.clicks + Number(r.clicks), impressions: prev.impressions + Number(r.impressions) })
+      }
+      return m
+    }
+    const refMap = sumByCanonical(await decodeParquetToRows(await dataSource.read(refKey)))
+
+    // Resumable: pageRows=1 + an already-passed deadline forces a pause after EVERY
+    // page, so the build fragments across both mid-window (pageOffset) and window
+    // (windowOffset) boundaries — the intra-window resume path under test.
+    const rCtx = { userId: 'u1', siteId: 's1' }
+    const builtAt = 1_700_000_111_111
+    let windowOffset = 0
+    let pageOffset = 0
+    let done = false
+    let iters = 0
+    let sawMidWindowPause = false
+    while (!done) {
+      const r = await rebuildCanonicalDailyResumable({
+        engine: rollupEngine(engine) as any,
+        ctx: rCtx,
+        dataSource,
+        builtAt,
+        windowOffset,
+        pageOffset,
+        pageRows: 1,
+        deadlineMs: Date.now() - 1,
+      })
+      if (!r.done && r.nextWindowOffset === windowOffset && r.nextPageOffset > pageOffset)
+        sawMidWindowPause = true
+      done = r.done
+      windowOffset = r.nextWindowOffset
+      pageOffset = r.nextPageOffset
+      if (++iters > 500)
+        throw new Error('resumable build did not converge')
+    }
+    // The fragmentation actually exercised the mid-window resume path.
+    expect(sawMidWindowPause).toBe(true)
+
+    // Read the published multi-file envelope and union every part.
+    const envKey = rollupKey(rCtx, 'query_canonical_daily', builtAt)
+    const envelope = JSON.parse(new TextDecoder().decode(await dataSource.read(envKey)))
+    const partKeys: string[] = envelope.payload.parquetKeys
+    expect(partKeys.length).toBeGreaterThan(1) // genuinely fragmented into parts
+    const unioned: Row[] = []
+    for (const k of partKeys)
+      unioned.push(...await decodeParquetToRows(await dataSource.read(k)))
+    const gotMap = sumByCanonical(unioned)
+
+    expect([...gotMap.keys()].sort()).toEqual([...refMap.keys()].sort())
+    for (const [k, v] of refMap)
+      expect(gotMap.get(k)).toEqual(v)
+    // Sanity: 'foo' still sums both variants across both days.
+    expect(gotMap.get('foo')).toEqual({ clicks: 19, impressions: 190 })
   })
 
   it('gaining/losing: rollup-served comparison equals live raw comparison', async () => {
