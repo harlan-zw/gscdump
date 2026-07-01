@@ -1278,6 +1278,7 @@ export async function rebuildCanonicalDailyResumable(opts: {
   let nextWindowOffset = windowsTotal
   let nextPageOffset = 0
   let rowsWritten = 0
+  let pausedMidWindow = false
   const flushPage = async (windowIdx: number, pageOffset: number, rows: Row[]): Promise<void> => {
     if (rows.length === 0)
       return
@@ -1285,7 +1286,7 @@ export async function rebuildCanonicalDailyResumable(opts: {
     await dataSource.write(key, encodeRowsToParquetFlex(rows, { columns: cols, sortKey }))
     rowsWritten += rows.length
   }
-  windowLoop: for (; i < windowsTotal; i++) {
+  for (; i < windowsTotal; i++) {
     const w = windows[i]!
     const coreSql = sqlFor(w)
     for (;;) {
@@ -1307,9 +1308,12 @@ export async function rebuildCanonicalDailyResumable(opts: {
         // Pause mid-window; the continuation resumes THIS window at `page`.
         nextWindowOffset = i
         nextPageOffset = page
-        break windowLoop
+        pausedMidWindow = true
+        break
       }
     }
+    if (pausedMidWindow)
+      break
     // Full window built. Honour the deadline before starting the next one.
     if (Date.now() > deadlineMs) {
       nextWindowOffset = i + 1
