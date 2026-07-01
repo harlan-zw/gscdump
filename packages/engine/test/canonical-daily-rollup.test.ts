@@ -381,9 +381,9 @@ describe('query_canonical_daily rollup (integration)', () => {
     }
     const refMap = sumByCanonical(await decodeParquetToRows(await dataSource.read(refKey)))
 
-    // Resumable: pageRows=1 + an already-passed deadline forces a pause after EVERY
-    // page, so the build fragments across both mid-window (pageOffset) and window
-    // (windowOffset) boundaries — the intra-window resume path under test.
+    // Resumable: shardCount=3 + an already-passed deadline forces a pause after
+    // every raw-query hash shard, so the build fragments across both mid-window
+    // (pageOffset as shard cursor) and window (windowOffset) boundaries.
     const rCtx = { userId: 'u1', siteId: 's1' }
     const builtAt = 1_700_000_111_111
     let windowOffset = 0
@@ -399,7 +399,8 @@ describe('query_canonical_daily rollup (integration)', () => {
         builtAt,
         windowOffset,
         pageOffset,
-        pageRows: 1,
+        pageRows: 100,
+        shardCount: 3,
         deadlineMs: Date.now() - 1,
       })
       if (!r.done && r.nextWindowOffset === windowOffset && r.nextPageOffset > pageOffset)
@@ -428,6 +429,36 @@ describe('query_canonical_daily rollup (integration)', () => {
       expect(gotMap.get(k)).toEqual(v)
     // Sanity: 'foo' still sums both variants across both days.
     expect(gotMap.get('foo')).toEqual({ clicks: 19, impressions: 190 })
+  })
+
+  it('resumable build shards the daily aggregate without row offsets', async () => {
+    const { engine, dataSource } = await setup()
+    await seed(engine)
+    await writeDefaultQueryDim(dataSource)
+
+    const base = rollupEngine(engine)
+    const sqlCalls: string[] = []
+    const r = await rebuildCanonicalDailyResumable({
+      engine: {
+        ...base,
+        async runSQL(opts) {
+          sqlCalls.push(opts.sql)
+          return base.runSQL(opts)
+        },
+      } as any,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource,
+      builtAt: 1_700_000_333_333,
+      windowOffset: 0,
+      pageRows: 100,
+      shardCount: 4,
+      deadlineMs: Date.now() + 60_000,
+    })
+
+    expect(r.done).toBe(true)
+    expect(sqlCalls.some(sql => sql.includes('hash(q.query) % 4'))).toBe(true)
+    expect(sqlCalls.every(sql => !sql.includes('OFFSET'))).toBe(true)
+    expect(sqlCalls.every(sql => sql.includes('LIMIT 100'))).toBe(true)
   })
 
   it('resumable build honours a tighter maxWindowDays override', async () => {

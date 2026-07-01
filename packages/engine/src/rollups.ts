@@ -37,7 +37,7 @@ export interface RollupEngine {
   runSQL: (opts: {
     ctx: TenantCtx
     fileSets: Record<string, FileSetRef>
-    table?: import('@gscdump/engine/contracts').TableName
+    table?: TableName
     sql: string
     params?: unknown[]
     /**
@@ -47,7 +47,7 @@ export interface RollupEngine {
      * the legacy cross-type union (web-only tenants).
      */
     searchType?: SearchType
-  }) => Promise<{ rows: import('@gscdump/engine/contracts').Row[] }>
+  }) => Promise<{ rows: Row[] }>
   /**
    * Read the live manifest for a (tenant, table[, searchType]) cohort —
    * cheap, no parquet decode. Builders use this to chunk a full-history scan
@@ -57,7 +57,7 @@ export interface RollupEngine {
    */
   listPartitions: (opts: {
     ctx: TenantCtx
-    table: import('@gscdump/engine/contracts').TableName
+    table: TableName
     searchType?: SearchType
   }) => Promise<Array<{ partition: string, bytes: number }>>
 }
@@ -1172,9 +1172,15 @@ export const queryCanonicalDailyRollup: RollupDef = {
 
 // Shared between the one-shot `queryCanonicalDailyRollup.build` and the resumable
 // `rebuildCanonicalDailyResumable` builder so the two can't drift.
-function dailyWindowSqlFor(useDim: boolean, canonExpr: string): (w: { start: string, end: string }) => string {
+function canonicalDailyShardPredicate(queryExpr: string, shardIndex: number, shardCount: number): string {
+  return shardCount <= 1
+    ? ''
+    : ` AND (hash(${queryExpr}) % ${shardCount}) = ${shardIndex}`
+}
+
+function dailyWindowSqlFor(useDim: boolean, canonExpr: string): (w: { start: string, end: string }, shard?: { index: number, count: number }) => string {
   return useDim
-    ? w => `
+    ? (w, shard) => `
         SELECT
           ${canonExpr} AS query_canonical,
           CAST(q.date AS VARCHAR) AS date,
@@ -1183,19 +1189,19 @@ function dailyWindowSqlFor(useDim: boolean, canonExpr: string): (w: { start: str
           SUM(q.sum_position)::DOUBLE AS sum_position
         FROM read_parquet({{FILES}}, union_by_name = true) q
         LEFT JOIN read_parquet({{QUERY_DIM}}, union_by_name = true) qd ON q.query = qd.query
-        WHERE q.date >= '${w.start}' AND q.date <= '${w.end}'
+        WHERE q.date >= '${w.start}' AND q.date <= '${w.end}'${canonicalDailyShardPredicate('q.query', shard?.index ?? 0, shard?.count ?? 1)}
         GROUP BY ${canonExpr}, q.date
       `
-    : w => `
+    : (w, shard) => `
         SELECT
           ${canonExpr} AS query_canonical,
-          CAST(date AS VARCHAR) AS date,
-          SUM(clicks)::BIGINT AS clicks,
-          SUM(impressions)::BIGINT AS impressions,
-          SUM(sum_position)::DOUBLE AS sum_position
-        FROM read_parquet({{FILES}}, union_by_name = true)
-        WHERE date >= '${w.start}' AND date <= '${w.end}'
-        GROUP BY ${canonExpr}, date
+          CAST(q.date AS VARCHAR) AS date,
+          SUM(q.clicks)::BIGINT AS clicks,
+          SUM(q.impressions)::BIGINT AS impressions,
+          SUM(q.sum_position)::DOUBLE AS sum_position
+        FROM read_parquet({{FILES}}, union_by_name = true) q
+        WHERE q.date >= '${w.start}' AND q.date <= '${w.end}'${canonicalDailyShardPredicate('q.query', shard?.index ?? 0, shard?.count ?? 1)}
+        GROUP BY ${canonExpr}, q.date
       `
 }
 
@@ -1221,14 +1227,13 @@ function mapDailyRow(r: Row): Row {
  * returning `{ done:true }`. `builtAt` MUST be stable across the continuation chain
  * (it versions both the part keys and the final rollup key).
  *
- * INTRA-WINDOW resumability: the deadline is checked between OUTPUT PAGES, not just
- * between windows. A single high-cardinality window's paged aggregation can exceed
- * one 300s reservation on its own; checking only between windows let that window
- * run unbounded and stale-reservation-loop forever (huuto.net/comparaja.pt never
- * completed window 0). `pageOffset` lets a continuation resume the SAME window at
- * the next page, so no single invocation runs past the deadline by more than one
- * page. Parts are keyed by `(windowOffset, pageOffset)` so a mid-window pause and
- * its continuation write disjoint, non-colliding files.
+ * INTRA-WINDOW resumability: the deadline is checked between raw-query hash shards,
+ * not just between date windows. A single high-cardinality day can spend a full
+ * reservation inside one grouped/sorted aggregate before the deadline check gets
+ * control back. `pageOffset` is the next shard index for the current window, so a
+ * continuation resumes the SAME day at the next shard. Parts are keyed by
+ * `(windowOffset, pageOffset)`; multiple parts may contain the same canonical/date
+ * from different raw-query shards, and rollup reads sum over the union.
  */
 export async function rebuildCanonicalDailyResumable(opts: {
   engine: RollupEngine
@@ -1237,12 +1242,14 @@ export async function rebuildCanonicalDailyResumable(opts: {
   searchType?: SearchType
   builtAt: number
   windowOffset: number
-  /** Resume the `windowOffset` window at this output-page offset (0 = window start). */
+  /** Resume the `windowOffset` window at this shard offset (0 = window start). */
   pageOffset?: number
   /** Output rows per page (default `ROLLUP_PAGE_ROWS_DAILY`). Injectable for tests. */
   pageRows?: number
   /** Cap each input window's day span (default `DAILY_MAX_WINDOW_DAYS`). */
   maxWindowDays?: number
+  /** Split each date window by raw-query hash before grouping (1 = no sharding). */
+  shardCount?: number
   deadlineMs: number
 }): Promise<{ done: boolean, nextWindowOffset: number, nextPageOffset: number, windowsTotal: number, windowsBuilt: number, rowsWritten: number }> {
   const { engine, ctx, dataSource, searchType, builtAt, windowOffset, deadlineMs } = opts
@@ -1250,6 +1257,7 @@ export async function rebuildCanonicalDailyResumable(opts: {
   const startPageOffset = opts.pageOffset ?? 0
   const pageRows = opts.pageRows ?? ROLLUP_PAGE_ROWS_DAILY
   const maxWindowDays = opts.maxWindowDays ?? DAILY_MAX_WINDOW_DAYS
+  const shardCount = Math.max(1, Math.floor(opts.shardCount ?? 1))
 
   const parts = await engine.listPartitions({ ctx, table: 'queries', ...sType })
   const windows = planRollupWindows(parts.map(p => ({ partition: p.partition, bytes: p.bytes })), undefined, maxWindowDays)
@@ -1265,17 +1273,13 @@ export async function rebuildCanonicalDailyResumable(opts: {
   const cols = queryCanonicalDailyRollup.parquetColumns!
   const sortKey = queryCanonicalDailyRollup.parquetSortKey
 
-  // Build from (windowOffset, startPageOffset), paging each window's output until
-  // the deadline (or all windows done). Each page is FLUSHED to its own PART
-  // immediately, so orchestrator memory stays bounded to a single page regardless
-  // of window size or invocation length — accumulating a whole invocation's rows
-  // and encoding one part at the end OOM/CPU-killed the isolate on the largest
-  // sites (`largemirage`: the daily encode crashed after ~170s of paging). Parts
-  // are keyed by (window, page) and disjoint by `(query_canonical, date)`, so they
-  // union with no merge. The deadline is honoured BETWEEN PAGES so neither time nor
-  // memory can blow the 300s reservation.
+  // Build from (windowOffset, startPageOffset), sharding each window's raw query
+  // input until the deadline (or all windows done). Each shard is FLUSHED to its own
+  // PART immediately, so orchestrator memory stays bounded to one shard. Parts are
+  // keyed by (window, shard); the read path sums over the union, so duplicate
+  // canonical/date keys across raw-query shards remain exact.
   let i = windowOffset
-  // `page` is the FIRST window's resume cursor; every later window starts at 0.
+  // `page` is the FIRST window's shard cursor; every later window starts at 0.
   let page = startPageOffset
   // Resume coordinates when we stop early. Default to "all done".
   let nextWindowOffset = windowsTotal
@@ -1291,22 +1295,22 @@ export async function rebuildCanonicalDailyResumable(opts: {
   }
   for (; i < windowsTotal; i++) {
     const w = windows[i]!
-    const coreSql = sqlFor(w)
-    for (;;) {
+    for (; page < shardCount;) {
+      const coreSql = sqlFor(w, { index: page, count: shardCount })
       const result = await engine.runSQL({
         ctx,
         table: 'queries',
         ...sType,
         fileSets: { FILES: { table: 'queries', partitions: w.partitions }, ...extraFileSets },
-        sql: `${coreSql}\nORDER BY date, query_canonical\nLIMIT ${pageRows} OFFSET ${page}`,
+        sql: `${coreSql}\nORDER BY date, query_canonical\nLIMIT ${pageRows}`,
       })
-      await flushPage(i, page, result.rows.map(mapDailyRow))
-      const windowDone = result.rows.length < pageRows
-      page += pageRows
-      if (windowDone) {
-        page = 0 // next window starts fresh
-        break
+      if (result.rows.length >= pageRows) {
+        throw new Error(
+          `query_canonical_daily shard overflow: window=${i} shard=${page}/${shardCount} returned >= ${pageRows} rows; increase shardCount or pageRows`,
+        )
       }
+      await flushPage(i, page, result.rows.map(mapDailyRow))
+      page += 1
       if (Date.now() > deadlineMs) {
         // Pause mid-window; the continuation resumes THIS window at `page`.
         nextWindowOffset = i
@@ -1317,6 +1321,7 @@ export async function rebuildCanonicalDailyResumable(opts: {
     }
     if (pausedMidWindow)
       break
+    page = 0 // next window starts fresh
     // Full window built. Honour the deadline before starting the next one.
     if (Date.now() > deadlineMs) {
       nextWindowOffset = i + 1
