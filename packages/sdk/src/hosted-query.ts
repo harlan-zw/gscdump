@@ -155,6 +155,10 @@ export function indexingUrlsQuery(params: IndexingUrlsParams = {}): Record<strin
     query.issue = params.issue
   if (params.search)
     query.search = params.search
+  // Only forward the count opt-out; the endpoint reads `count=0`/`false` to skip
+  // the total COUNT(*) scan. Leaving it unset keeps the default (exact total).
+  if (params.count === 0 || params.count === false)
+    query.count = 0
   return query
 }
 

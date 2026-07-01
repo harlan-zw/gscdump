@@ -660,6 +660,9 @@ export const indexingUrlsParamsSchema = z.object({
   status: z.enum(['indexed', 'not_indexed', 'pending']).optional(),
   issue: z.string().optional(),
   search: z.string().optional(),
+  // Opt out of the total COUNT(*) full-scan; only `0`/`false` are meaningful
+  // (the endpoint treats any other value as "want count").
+  count: z.union([z.literal(0), z.literal(false)]).optional(),
 }).optional()
 
 export const indexingDiagnosticsParamsSchema = z.object({

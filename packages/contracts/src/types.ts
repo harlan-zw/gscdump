@@ -900,6 +900,13 @@ export interface IndexingUrlsParams {
   status?: GscdumpIndexingUrlStatus
   issue?: string
   search?: string
+  /**
+   * Pass `0`/`false` to skip the total COUNT(*) — a second full scan of the
+   * joined url_indexing_status/sitemap_urls set. Sample callers that read only
+   * `urls` (e.g. the assess page-issue collector) should opt out; paginated UI
+   * reads that show an exact total leave it unset.
+   */
+  count?: 0 | false
 }
 
 export interface GscdumpUserSettings {
