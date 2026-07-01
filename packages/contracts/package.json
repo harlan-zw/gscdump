@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/contracts",
   "type": "module",
-  "version": "0.33.5",
+  "version": "0.33.6",
   "description": "Shared gscdump.com API, webhook, realtime, and lifecycle contracts.",
   "author": {
     "name": "Harlan Wilton",
