@@ -1263,15 +1263,28 @@ export async function rebuildCanonicalDailyResumable(opts: {
   const sortKey = queryCanonicalDailyRollup.parquetSortKey
 
   // Build from (windowOffset, startPageOffset), paging each window's output until
-  // the deadline (or all windows done). The deadline is honoured BETWEEN PAGES so
-  // an oversized window can't blow the reservation.
-  const batchRows: Row[] = []
+  // the deadline (or all windows done). Each page is FLUSHED to its own PART
+  // immediately, so orchestrator memory stays bounded to a single page regardless
+  // of window size or invocation length — accumulating a whole invocation's rows
+  // and encoding one part at the end OOM/CPU-killed the isolate on the largest
+  // sites (`largemirage`: the daily encode crashed after ~170s of paging). Parts
+  // are keyed by (window, page) and disjoint by `(query_canonical, date)`, so they
+  // union with no merge. The deadline is honoured BETWEEN PAGES so neither time nor
+  // memory can blow the 300s reservation.
   let i = windowOffset
   // `page` is the FIRST window's resume cursor; every later window starts at 0.
   let page = startPageOffset
   // Resume coordinates when we stop early. Default to "all done".
   let nextWindowOffset = windowsTotal
   let nextPageOffset = 0
+  let rowsWritten = 0
+  const flushPage = async (windowIdx: number, pageOffset: number, rows: Row[]): Promise<void> => {
+    if (rows.length === 0)
+      return
+    const key = rollupParquetKey(ctx, `${CANONICAL_DAILY_PART_STEM}__w${windowIdx}_p${pageOffset}`, builtAt, searchType)
+    await dataSource.write(key, encodeRowsToParquetFlex(rows, { columns: cols, sortKey }))
+    rowsWritten += rows.length
+  }
   windowLoop: for (; i < windowsTotal; i++) {
     const w = windows[i]!
     const coreSql = sqlFor(w)
@@ -1283,8 +1296,7 @@ export async function rebuildCanonicalDailyResumable(opts: {
         fileSets: { FILES: { table: 'queries', partitions: w.partitions }, ...extraFileSets },
         sql: `${coreSql}\nORDER BY date, query_canonical\nLIMIT ${pageRows} OFFSET ${page}`,
       })
-      for (const r of result.rows)
-        batchRows.push(mapDailyRow(r))
+      await flushPage(i, page, result.rows.map(mapDailyRow))
       const windowDone = result.rows.length < pageRows
       page += pageRows
       if (windowDone) {
@@ -1306,15 +1318,8 @@ export async function rebuildCanonicalDailyResumable(opts: {
     }
   }
 
-  // Persist this invocation's batch as a PART, keyed by its start coordinates so a
-  // mid-window pause + continuation never collide. Rows are globally disjoint by
-  // (query_canonical, date) across windows AND across page segments, so parts union
-  // cleanly. The parts ARE the rollup — no merge.
-  const partKey = rollupParquetKey(ctx, `${CANONICAL_DAILY_PART_STEM}__w${windowOffset}_p${startPageOffset}`, builtAt, searchType)
-  await dataSource.write(partKey, encodeRowsToParquetFlex(batchRows, { columns: cols, sortKey }))
-
   if (nextWindowOffset < windowsTotal || nextPageOffset > 0)
-    return { done: false, nextWindowOffset, nextPageOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten: batchRows.length }
+    return { done: false, nextWindowOffset, nextPageOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten }
 
   // FINAL window built → publish a MULTI-FILE envelope listing every part for this
   // builtAt. The read path unions the parts (disjoint dates). No decode+re-encode
@@ -1326,15 +1331,22 @@ export async function rebuildCanonicalDailyResumable(opts: {
   const partKeys = (await dataSource.list(partPrefixDir))
     .filter(k => k.includes(`${CANONICAL_DAILY_PART_STEM}__w`) && k.endsWith(`__v${builtAt}.parquet`))
     .sort()
+  // Per-page flush writes nothing for empty pages, so a slice with zero rows would
+  // leave no parts. Guarantee ≥1 file so the envelope always has a valid pointer.
+  if (partKeys.length === 0) {
+    const emptyKey = rollupParquetKey(ctx, `${CANONICAL_DAILY_PART_STEM}__w0_p0`, builtAt, searchType)
+    await dataSource.write(emptyKey, encodeRowsToParquetFlex([], { columns: cols, sortKey }))
+    partKeys.push(emptyKey)
+  }
   const envelope: RollupEnvelope<ParquetRollupPointer> = {
     version: 1,
     id: CANONICAL_DAILY_ROLLUP_FINAL_ID,
     builtAt,
     windowDays: queryCanonicalDailyRollup.windowDays,
-    payload: { parquetKey: partKeys[0] ?? partKey, parquetKeys: partKeys, rowCount: 0 },
+    payload: { parquetKey: partKeys[0]!, parquetKeys: partKeys, rowCount: 0 },
   }
   await dataSource.write(rollupKey(ctx, CANONICAL_DAILY_ROLLUP_FINAL_ID, builtAt, searchType), new TextEncoder().encode(JSON.stringify(envelope)))
-  return { done: true, nextWindowOffset, nextPageOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten: batchRows.length }
+  return { done: true, nextWindowOffset, nextPageOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten }
 }
 
 /**
