@@ -164,6 +164,8 @@ export interface PartnerLifecycleAccount {
 
 export interface PartnerLifecycleSite {
   siteId: string
+  /** Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize into their own catalog namespaces. Nullable only for pre-0029 unbackfilled rows. */
+  intId: number | null
   externalSiteId: string | null
   requestedUrl: string
   gscPropertyUrl: string | null

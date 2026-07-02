@@ -493,6 +493,8 @@ export interface GscdumpAvailableSite {
   permissionLevel: string
   registered: boolean
   siteId?: string
+  /** Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize into their own catalog namespaces. Present on registered sites. */
+  intId?: number | null
   syncStatus?: 'pending' | 'syncing' | 'synced' | 'error'
   syncProgress?: { completed: number, failed?: number, total: number, percent: number }
   lastSyncAt?: number | null
@@ -502,6 +504,8 @@ export interface GscdumpAvailableSite {
 
 export interface GscdumpSiteRegistration {
   siteId: string
+  /** Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize into their own catalog namespaces. */
+  intId?: number | null
   status: 'idle' | 'pending' | 'syncing' | 'synced' | 'error'
   message?: string
   existing?: boolean

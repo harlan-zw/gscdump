@@ -425,6 +425,9 @@ export const partnerLifecycleAccountSchema = z.object({
 
 export const partnerLifecycleSiteSchema = z.object({
   siteId: z.string(),
+  // Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize
+  // into their own catalog namespaces. Nullable only for pre-0029 unbackfilled rows.
+  intId: z.number().nullable(),
   externalSiteId: z.string().nullable(),
   requestedUrl: z.string(),
   gscPropertyUrl: z.string().nullable(),
@@ -474,6 +477,9 @@ export const gscdumpAvailableSiteSchema = z.object({
   permissionLevel: z.string(),
   registered: z.boolean(),
   siteId: z.string().optional(),
+  // Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize
+  // into their own catalog namespaces. Present on registered sites.
+  intId: z.number().nullable().optional(),
   syncStatus: z.enum(['pending', 'syncing', 'synced', 'error']).nullable().optional(),
   syncProgress: z.object({
     completed: z.number(),
@@ -497,6 +503,9 @@ export const gscdumpUserSiteSchema = z.object({
 
 export const gscdumpSiteRegistrationSchema = z.object({
   siteId: z.string(),
+  // Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize
+  // into their own catalog namespaces.
+  intId: z.number().nullable().optional(),
   status: z.enum(['idle', 'pending', 'syncing', 'synced', 'error']),
   message: z.string().optional(),
   existing: z.boolean().optional(),
