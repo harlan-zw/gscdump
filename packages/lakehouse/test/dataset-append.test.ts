@@ -191,3 +191,26 @@ describe('icebergDataset.appendSink — ledger-after-flush ordering', () => {
     expect(ensureIcebergNamespace).toHaveBeenCalledWith(FAKE_CONN)
   })
 })
+
+describe('icebergDataset.prepareRows — pure guard/dedupe/sort, no network', () => {
+  const ds = defineIcebergDataset(DEF)
+
+  it('applies the identity guard, dedupe and cluster sort without touching icebergAppendRetrying', () => {
+    icebergAppendRetrying.mockClear()
+    const { records, skipped } = ds.prepareRows([
+      { site_id: 1, date: 100, url: '/z' },
+      { site_id: 1, date: 100, url: '/a' },
+      { site_id: undefined, date: 100, url: '/bad' },
+      { site_id: 1, date: 100, url: '/a', word_count: 99 },
+    ])
+    expect(skipped).toBe(1)
+    expect(records.map(r => r.url)).toEqual(['/a', '/z'])
+    expect(records.find(r => r.url === '/a')!.word_count).toBe(99)
+    expect(icebergAppendRetrying).not.toHaveBeenCalled()
+  })
+
+  it('lets a consumer route records straight into a frozen icebergAppendRetrying call site', () => {
+    const { records } = ds.prepareRows([{ site_id: 1, date: 100, url: '/' }])
+    expect(records).toEqual([{ site_id: 1, date: 100, url: '/' }])
+  })
+})

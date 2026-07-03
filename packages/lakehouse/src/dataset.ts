@@ -285,6 +285,16 @@ export interface IcebergDataset {
    * date column pre-converted via {@link toIcebergDayCount}.
    */
   appendRows: (conn: IcebergConnection, rows: readonly Record<string, unknown>[], opts?: AppendCommitOptions) => Promise<AppendResult>
+  /**
+   * PURE row processing — the identity INT32 guard, dedupe (identity+dims+
+   * naturalKey, last-wins) and cluster pre-sort `appendRows`/`appendSink`
+   * apply before committing, exposed standalone with NO network/icebird call.
+   * Lets a consumer that owns its own commit call-site (e.g. one still
+   * calling a frozen `icebergAppendRetrying` import directly, for test-mock
+   * compatibility) still route its dedupe/guard/sort logic through the
+   * dataset definition.
+   */
+  prepareRows: (rows: readonly Record<string, unknown>[]) => { records: Record<string, unknown>[], skipped: number }
   /** Buffered multi-emit sink — owns its own connect/close lifecycle (ADR-0021's primary contract). */
   appendSink: (opts: AppendSinkOptions) => AppendSink
   /** `PartitionValueMatch[]` for one identity value (+ optional dims), for manual manifest filtering. */
@@ -513,6 +523,7 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     icebergSortOrder: () => sortOrder,
     createTable,
     appendRows,
+    prepareRows: process,
     appendSink,
     readerPredicate,
     partitionBoundFilter,
