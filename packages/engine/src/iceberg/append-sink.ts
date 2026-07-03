@@ -35,6 +35,27 @@
  * The 5 fact tables share one global Iceberg table each (`gsc.<table>`);
  * `site_id` + `search_type` are real Iceberg identity-partition columns,
  * injected here from `slice` — callers MUST NOT pre-populate them.
+ *
+ * ADR-0021 R2-FIXES C5 (amendment 10): this sink is a THIN ADAPTER over the
+ * `gsc.*` `IcebergDataset` registry instances (`./schema.ts`'s `gscDataset`,
+ * built on `@gscdump/lakehouse`'s `defineIcebergDataset`) — the dedupe key
+ * (`dedupeByIdentity`) and the physical pre-sort (`sortByClusterKey`) read
+ * `tableSpec.identityColumns`/`.clusterKey` from the dataset def instead of
+ * the frozen `ICEBERG_SCHEMAS`/`TABLE_METADATA` constants (those constants
+ * are themselves now def-derived — see `./schema.ts` — so this is a direct,
+ * not transitive, read). The `search_type` partition-value mapping also
+ * reads through the def's `dims.search_type.toPartitionValue` rather than a
+ * second inline `SEARCH_TYPE_INT` lookup.
+ *
+ * Deliberately NOT routed through the dataset's `prepareRows`/`appendSink`
+ * guard-and-buffer pipeline: that pipeline SILENTLY DROPS a row whose
+ * required identity value is missing/out-of-range (the behavior nuxtseo's
+ * newer single-table `crawl.*`/`lighthouse.*`/`dataforseo.*` writers adopt).
+ * GSC's `Sink` contract instead THROWS synchronously on an invalid `'int'`
+ * `site_id` (see `toIntPartitionSiteId`) and, for legacy `'string'` encoding,
+ * writes an empty `site_id` through rather than dropping the row — both are
+ * pre-existing, test-pinned behaviors this port preserves byte-for-byte
+ * rather than silently swapping in the drop-on-invalid-identity semantics.
  */
 
 import type { EngineError } from '../errors'
@@ -43,12 +64,11 @@ import type { Row } from '../storage'
 import type { IcebergConnection } from './catalog'
 import type { IcebergTableName, PartitionKeyEncoding } from './schema'
 import { engineErrors } from '../errors'
-import { TABLE_METADATA } from '../schema'
 import {
   connectIcebergCatalog,
   icebergAppendRetrying,
 } from './catalog'
-import { DEFAULT_PARTITION_KEY_ENCODING, ICEBERG_SCHEMAS, SEARCH_TYPE_INT } from './schema'
+import { DEFAULT_PARTITION_KEY_ENCODING, gscDataset } from './schema'
 
 export type IcebergAppendSink = Sink
 
@@ -156,7 +176,11 @@ function toIntPartitionSiteId(value: unknown): number {
 function dedupeByIdentity(table: IcebergTableName, records: IcebergRecord[]): IcebergRecord[] {
   if (records.length < 2)
     return records
-  const key = ICEBERG_SCHEMAS[table].identityColumns
+  // Read from the dataset def (ADR-0021 amendment 3: identity + dims +
+  // naturalKey) rather than the frozen `ICEBERG_SCHEMAS` constant — the column
+  // NAME list is identical across encodings, so the encoding argument doesn't
+  // matter here; `'int'` is used as an arbitrary fixed choice.
+  const key = gscDataset(table, 'int').tableSpec.identityColumns
   const seen = new Map<string, IcebergRecord>()
   for (const rec of records) {
     const k = key.map(col => `${rec[col] ?? ''}`).join('\0')
@@ -182,7 +206,9 @@ function dedupeByIdentity(table: IcebergTableName, records: IcebergRecord[]): Ic
  * last-wins dedup survivor intact for equal cluster keys.
  */
 function sortByClusterKey(table: IcebergTableName, records: IcebergRecord[]): IcebergRecord[] {
-  const cols = TABLE_METADATA[table].clusterKey
+  // Cluster key is encoding-independent (column names, not values) — same
+  // rationale as `dedupeByIdentity` above.
+  const cols = gscDataset(table, 'int').tableSpec.clusterKey ?? []
   if (cols.length === 0 || records.length < 2)
     return records
   return records.slice().sort((a, b) => {
@@ -221,7 +247,10 @@ function toRecords(slice: SinkSlice, rows: readonly Row[], encoding: PartitionKe
   const siteVal: string | number = encoding === 'int'
     ? toIntPartitionSiteId(slice.ctx.siteId)
     : slice.ctx.siteId ?? ''
-  const searchVal: string | number = encoding === 'int' ? SEARCH_TYPE_INT[slice.searchType] : slice.searchType
+  // search_type's partition-value mapping is read from the dataset def's
+  // `dims` declaration (ADR-0021 amendment 5) instead of a second inline
+  // `SEARCH_TYPE_INT` lookup — one definition of the mapping, not two.
+  const searchVal: string | number = gscDataset(slice.table, encoding).def.dims!.search_type.toPartitionValue(slice.searchType)
   return rows.map((row) => {
     const out: Record<string, unknown> = {}
     for (const k in row) out[k] = coerceJsonSafe((row as Record<string, unknown>)[k])
