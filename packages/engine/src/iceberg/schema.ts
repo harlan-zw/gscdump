@@ -1,9 +1,11 @@
 /**
- * CONTRACT — Iceberg table schema + partition spec (Wave-1, frozen).
+ * CONTRACT — `gsc.*` Iceberg table schema + partition spec (Wave-1, frozen).
  *
- * The canonical definition of the 9 global Iceberg fact tables and their
- * shared partition spec. Every writer (`IcebergAppendSink`, `LocalIcebergSink`)
- * and every reader (R2 SQL, DuckDB, DuckDB-WASM) is built against this file.
+ * The canonical definition of the 9 global GSC Iceberg fact tables and their
+ * shared partition spec — the engine's OWN registry instance (ADR-0021
+ * amendment 8: the generic type shapes moved to `@gscdump/lakehouse`; the
+ * frozen `gsc.*` constants stay here). Every writer (`IcebergAppendSink`) and
+ * every reader (R2 SQL, DuckDB, DuckDB-WASM) is built against this file.
  *
  * Locked decisions encoded here (POC findings 2026-05-22):
  * - GLOBAL tables — `pages`, `queries`, `countries`, `page_queries`,
@@ -25,23 +27,40 @@
  */
 
 import type { ColumnType, TableName } from '@gscdump/contracts'
+import type {
+  IcebergColumn,
+  IcebergColumnType,
+  IcebergPartitionField,
+  IcebergTableSpec,
+  PartitionKeyEncoding,
+} from '@gscdump/lakehouse'
 import type { SearchType } from '../storage'
+import { DEFAULT_PARTITION_KEY_ENCODING } from '@gscdump/lakehouse'
 import { SCHEMAS } from '../schema'
 
-/**
- * S3-compatible credentials for the Iceberg warehouse object store (R2 in prod,
- * MinIO in the POC). The single definition shared by every catalog/writer/sink
- * that signs warehouse object access — keep this contract in one place so the
- * credential shape cannot drift between the icebird and PyIceberg paths.
- */
-export interface IcebergS3Config {
-  /** S3 endpoint host (POC MinIO: `localhost:9100`; prod: the R2 S3 endpoint). */
-  endpoint: string
-  accessKeyId: string
-  secretAccessKey: string
-  /** Defaults to `'auto'` (R2's region). */
-  region?: string
+function mapColumnType(t: ColumnType): IcebergColumnType {
+  switch (t) {
+    case 'VARCHAR': return 'STRING'
+    case 'INTEGER': return 'INT'
+    case 'BIGINT': return 'LONG'
+    case 'DOUBLE': return 'DOUBLE'
+    case 'DATE': return 'DATE'
+  }
 }
+
+// Generic shapes now live in `@gscdump/lakehouse` (ADR-0021 amendment 8) —
+// re-exported here so existing `@gscdump/engine/iceberg` consumers see no
+// change to their import surface.
+export { DEFAULT_PARTITION_KEY_ENCODING } from '@gscdump/lakehouse'
+export type {
+  IcebergColumn,
+  IcebergColumnType,
+  IcebergPartitionField,
+  IcebergPartitionTransform,
+  IcebergS3Config,
+  IcebergTableSpec,
+  PartitionKeyEncoding,
+} from '@gscdump/lakehouse'
 
 /** The 9 fact tables that exist as global Iceberg tables. */
 export type IcebergTableName = Extract<
@@ -63,49 +82,6 @@ export const ICEBERG_TABLES: readonly IcebergTableName[] = [
 ] as const
 
 /**
- * Iceberg-native column type. Superset-mapped from the engine `ColumnType`;
- * `LONG` is Iceberg's name for 64-bit integers, `STRING` for varchar.
- */
-export type IcebergColumnType = 'STRING' | 'INT' | 'LONG' | 'DOUBLE' | 'DATE'
-
-export interface IcebergColumn {
-  /** Column name as written into the Iceberg table (snake_case). */
-  name: string
-  type: IcebergColumnType
-  /** Iceberg field nullability. Partition identity columns are never null. */
-  required: boolean
-  /**
-   * Stable Iceberg field id. Field ids — not names — are the schema-evolution
-   * identity in Iceberg; never reuse or renumber an id once a table is live.
-   */
-  fieldId: number
-}
-
-/**
- * Partition-key encoding for the two identity columns (`site_id`, `search_type`).
- *
- * - `'string'` (legacy): both columns are STRING. Correct, but R2 SQL's
- *   string min/max statistics are truncated in predicate pushdown, so a bare
- *   `WHERE site_id='<uuid>'` UNDERCOUNTS — callers must CONCAT(col,'') to stay
- *   correct, which defeats partition pruning.
- * - `'int'`: BOTH `site_id` and `search_type` are INT. Integer statistics are
- *   fixed-width and never truncated, so `WHERE site_id=<n>` is both correct AND
- *   prunes (empirically confirmed 2026-06-19, gscdump.com probe-int64-partition;
- *   INT equality proven via the search_type column in the engine e2e canary). A
- *   small INT site_id is ample (≪ 2.1B sites) — no LONG/BigInt needed. The caller
- *   maps the UUID `site_id` ↔ int (app-owned, per-tenant serial) and uses
- *   {@link SEARCH_TYPE_INT} for `search_type` (engine-owned, fixed enum).
- *
- * New per-team catalogs are provisioned `'int'`; existing catalogs stay
- * `'string'`. Callers that read or write legacy catalogs must pass
- * `encoding: 'string'` explicitly.
- */
-export type PartitionKeyEncoding = 'string' | 'int'
-
-/** Default for new Iceberg/R2 Data Catalog tables. */
-export const DEFAULT_PARTITION_KEY_ENCODING: PartitionKeyEncoding = 'int'
-
-/**
  * Stable `search_type` enum → int map for `'int'`-encoded catalogs. Engine-owned
  * and FROZEN: never renumber or reuse an id (it's the on-disk partition value).
  */
@@ -122,34 +98,6 @@ export const SEARCH_TYPE_INT: Record<SearchType, number> = {
 export const INT_SEARCH_TYPE: Record<number, SearchType> = Object.fromEntries(
   Object.entries(SEARCH_TYPE_INT).map(([k, v]) => [v, k as SearchType]),
 ) as Record<number, SearchType>
-
-/** Iceberg partition transform applied to a source column. */
-export type IcebergPartitionTransform = 'identity' | 'month'
-
-export interface IcebergPartitionField {
-  /** Source column the transform reads. */
-  sourceColumn: 'site_id' | 'search_type' | 'date'
-  transform: IcebergPartitionTransform
-  /** Partition field name as it appears in Iceberg metadata. */
-  name: string
-}
-
-export interface IcebergTableSpec {
-  table: IcebergTableName
-  columns: readonly IcebergColumn[]
-  /**
-   * Partition spec — shared by every table: identity(site_id),
-   * identity(search_type), month(date).
-   */
-  partitionSpec: readonly IcebergPartitionField[]
-  /**
-   * Natural-key columns: a row is uniquely identified by this tuple within
-   * its partition. Drives partition-overwrite revision correctness and
-   * dedup. Mirrors `TABLE_METADATA[table].sortKey` plus `site_id` +
-   * `search_type`.
-   */
-  identityColumns: readonly string[]
-}
 
 /**
  * The two partition-identity columns Iceberg rows carry that the legacy
@@ -182,13 +130,6 @@ export function icebergPartitionColumns(encoding: PartitionKeyEncoding = DEFAULT
 /**
  * First field id used for per-table (non-partition) columns — immediately
  * after the two partition-identity columns (`site_id`=1, `search_type`=2).
- *
- * ADVISORY ONLY. The icebird spike (2026-05-22) established that R2 Data
- * Catalog's `createTable` endpoint re-assigns field ids sequentially and does
- * NOT preserve caller-supplied ids. The contiguous numbering here matches what
- * the catalog produces (`site_id`=1, `search_type`=2, data columns 3, 4, …) so
- * the contract describes reality, but ids are authoritatively assigned by the
- * catalog. Iceberg still guarantees ids are stable once a table exists.
  */
 export const ICEBERG_FIELD_ID_BASE = 3
 
@@ -198,16 +139,6 @@ export const ICEBERG_PARTITION_SPEC: readonly IcebergPartitionField[] = [
   { sourceColumn: 'search_type', transform: 'identity', name: 'search_type' },
   { sourceColumn: 'date', transform: 'month', name: 'date_month' },
 ] as const
-
-function mapColumnType(t: ColumnType): IcebergColumnType {
-  switch (t) {
-    case 'VARCHAR': return 'STRING'
-    case 'INTEGER': return 'INT'
-    case 'BIGINT': return 'LONG'
-    case 'DOUBLE': return 'DOUBLE'
-    case 'DATE': return 'DATE'
-  }
-}
 
 /**
  * Derive the full Iceberg table spec for a table from the engine `SCHEMAS`
@@ -227,11 +158,13 @@ export function icebergTableSpec(table: IcebergTableName, encoding: PartitionKey
     fieldId: ICEBERG_FIELD_ID_BASE + i,
   }))
   return {
+    namespace: 'gsc',
     table,
     columns: [...icebergPartitionColumns(encoding), ...dataColumns],
     // Partition spec is type-agnostic (identity transform keyed by column NAME),
     // so it's shared across both encodings.
     partitionSpec: ICEBERG_PARTITION_SPEC,
+    naturalKey: base.sortKey,
     identityColumns: ['site_id', 'search_type', ...base.sortKey],
   }
 }

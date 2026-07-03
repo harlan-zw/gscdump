@@ -292,7 +292,6 @@
   mergeScope: function
 ./sink-node:
   createIcebergOverwriteWriter: function
-  createLocalIcebergSink: function
   deleteSiteFromShard: function
   httpBackend: function
   overwriteWriterAsSink: function

@@ -51,7 +51,7 @@ export type {
   IcebergTableOpResult,
   ListIcebergDataFilesOptions,
 } from './catalog'
-export type { CatalogCache } from './catalog-cache'
+export type { CatalogCache } from './catalog'
 export {
   assertIcebergTable,
   DEFAULT_PARTITION_KEY_ENCODING,

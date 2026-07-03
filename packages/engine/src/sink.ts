@@ -157,13 +157,3 @@ export interface IcebergAppendSinkOptions extends SinkOptions {
    */
   encoding?: import('./iceberg/schema').PartitionKeyEncoding
 }
-
-/** `LocalIcebergSink` options — points at the local Iceberg REST catalog. */
-export interface LocalIcebergSinkOptions extends SinkOptions {
-  /** Iceberg REST catalog URI (POC: `apache/iceberg-rest-fixture`). */
-  catalogUri: string
-  /** Catalog namespace the 5 tables live under. */
-  namespace: string
-  /** S3-compatible warehouse location (POC: MinIO). */
-  warehouse: string
-}

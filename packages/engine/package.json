@@ -190,6 +190,7 @@
   },
   "dependencies": {
     "@gscdump/contracts": "workspace:*",
+    "@gscdump/lakehouse": "workspace:*",
     "drizzle-orm": "catalog:",
     "gscdump": "workspace:*",
     "proper-lockfile": "catalog:deps"

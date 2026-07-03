@@ -1,6 +1,18 @@
 /**
  * Unit tests for the `Sink` storage layer — the in-memory fake and the
- * `IcebergAppendSink` (against a mocked `icebird`). No I/O, no docker.
+ * `IcebergAppendSink` (against a mocked `./iceberg/catalog`). No I/O, no docker.
+ *
+ * `connectIcebergCatalog` / `icebergAppendRetrying` now live in
+ * `@gscdump/lakehouse` (ADR-0021 C1) — this module's own `catalog.ts` is a
+ * thin re-export of lakehouse's BUILT dist, which bundles `icebird` (so the
+ * patched BigInt-safe commit path ships to every consumer without their own
+ * pnpm patch). That bundling means `vi.mock('icebird')` can no longer
+ * intercept calls made through it, so this test mocks at the `./catalog`
+ * module boundary instead — `icebergAppendRetrying`'s real 429-retry
+ * algorithm is exercised by `@gscdump/lakehouse`'s own `catalog-retry.test.ts`
+ * now that the implementation lives there; this file keeps its GSC-specific
+ * sink behavior (identity injection, dedup, per-table batching, ledger
+ * ordering) covered end-to-end against a lightweight fake standing in for it.
  *
  * Ingest is 100% append-only (design v5): there is no overwrite path. `emit`
  * appends; re-emitting a slice accumulates duplicates. Exactly-once is the
@@ -12,16 +24,33 @@ import type { SinkSlice } from '../src/sink'
 import type { Row } from '../src/storage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// `IcebergAppendSink` (and `connectIcebergCatalog`) talk to the R2 Data
-// Catalog through `icebird`. Mock the whole module so the unit tests stay
-// network-free; the real append path is covered by the local-Iceberg test
-// and the synthetic end-to-end script.
 const icebergAppend = vi.fn(async () => ({}))
-const restCatalogConnect = vi.fn(async () => ({ type: 'rest', prefix: '' }))
-const s3SignedResolver = vi.fn(() => ({ reader: vi.fn() }))
-// `cachingResolver` wraps the signed resolver in `connectIcebergCatalog`; mock
-// it as an identity passthrough so the mocked resolver flows through unchanged.
-vi.mock('icebird', () => ({ icebergAppend, restCatalogConnect, s3SignedResolver, cachingResolver: (r: unknown) => r }))
+const connectIcebergCatalog = vi.fn(async (config: { namespace: string }) => ({
+  catalog: { type: 'rest' as const },
+  resolver: {},
+  namespace: config.namespace,
+}))
+// Minimal retry loop standing in for the real one (tested in
+// `@gscdump/lakehouse`'s `catalog-retry.test.ts`) — enough to exercise the
+// sink's "a 429 recovers" close()-outcome test below.
+const icebergAppendRetrying = vi.fn(async (args: { table: string }, opts: { maxAttempts?: number } = {}) => {
+  const maxAttempts = opts.maxAttempts ?? 6
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      await icebergAppend(args)
+      return
+    }
+    catch (e) {
+      if (!String(e).includes('429') || attempt === maxAttempts - 1)
+        throw e
+    }
+  }
+})
+
+vi.mock('../src/iceberg/catalog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/iceberg/catalog')>()
+  return { ...actual, connectIcebergCatalog, icebergAppendRetrying }
+})
 
 const { createInMemorySink } = await import('../src/sinks/in-memory-sink')
 const { createIcebergAppendSink } = await import('../src/iceberg/append-sink')
@@ -110,8 +139,20 @@ describe('createIcebergAppendSink', () => {
     // Reset implementations too — tests below install per-table failure /
     // 429 / connection-failure behaviours that must not leak across cases.
     icebergAppend.mockReset().mockResolvedValue({})
-    restCatalogConnect.mockReset().mockResolvedValue({ type: 'rest', prefix: '' })
-    s3SignedResolver.mockReset().mockReturnValue({ reader: vi.fn() })
+    connectIcebergCatalog.mockReset().mockResolvedValue({ catalog: { type: 'rest' as const }, resolver: {}, namespace: 'gsc' })
+    icebergAppendRetrying.mockReset().mockImplementation(async (args: { table: string }, opts: { maxAttempts?: number } = {}) => {
+      const maxAttempts = opts.maxAttempts ?? 6
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          await icebergAppend(args)
+          return
+        }
+        catch (e) {
+          if (!String(e).includes('429') || attempt === maxAttempts - 1)
+            throw e
+        }
+      }
+    })
   })
 
   it('declares append-only capabilities', () => {
@@ -123,7 +164,7 @@ describe('createIcebergAppendSink', () => {
     const sink = createLegacyIcebergAppendSink()
     const res = await sink.emit(slice(), [pageRow('/', 10)])
     expect(res.rowCount).toBe(1)
-    expect(restCatalogConnect).not.toHaveBeenCalled()
+    expect(connectIcebergCatalog).not.toHaveBeenCalled()
     expect(icebergAppend).not.toHaveBeenCalled()
   })
 
@@ -169,7 +210,7 @@ describe('createIcebergAppendSink', () => {
     await sink.emit(slice({ date: '2026-04-01' }), [pageRow('/', 10)])
     await sink.emit(slice({ date: '2026-04-02' }), [pageRow('/about', 20)])
     await sink.close()
-    expect(restCatalogConnect).toHaveBeenCalledTimes(1)
+    expect(connectIcebergCatalog).toHaveBeenCalledTimes(1)
     expect(icebergAppend).toHaveBeenCalledTimes(1)
     const args = icebergAppend.mock.calls[0][0] as { records: unknown[] }
     expect(args.records).toHaveLength(2)
@@ -243,7 +284,7 @@ describe('createIcebergAppendSink', () => {
   })
 
   it('a catalog connection failure marks every buffered table failed', async () => {
-    restCatalogConnect.mockRejectedValueOnce(new Error('catalog unreachable'))
+    connectIcebergCatalog.mockRejectedValueOnce(new Error('catalog unreachable'))
     const sink = createLegacyIcebergAppendSink()
     await sink.emit(slice({ table: 'pages' }), [pageRow('/', 1)])
     await sink.emit(slice({ table: 'queries' }), [{ query: 'nuxt', date: '2026-04-01', clicks: 2, impressions: 20, sum_position: 7 }])

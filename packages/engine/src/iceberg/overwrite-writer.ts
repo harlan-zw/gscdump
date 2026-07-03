@@ -33,7 +33,7 @@
 import type { Sink, SinkCloseResult, SinkSlice, SinkWriteResult, SliceOverwriteWriter } from '../sink'
 import type { Row } from '../storage'
 import type { IcebergS3Config } from './schema'
-import { resolvePyIcebergPython, runPyIcebergWriter } from './pyiceberg-runtime'
+import { resolvePyIcebergPython, runPyIcebergWriter } from '@gscdump/lakehouse'
 import { assertIcebergTable, ICEBERG_SCHEMAS } from './schema'
 
 /** Connection details for the Iceberg REST catalog the writer targets. */
