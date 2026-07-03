@@ -53,30 +53,30 @@ before registering files. `bootDuckDBWasm()` opens DuckDB with full HTTP reads
 disabled, so a server that cannot satisfy range reads routes to server-side
 fallback instead of causing broad browser object downloads.
 
-OPFS is intentionally not used as a write-through parquet cache yet. If it is
-added later, the cache key must include manifest version and object key, and
-the same file/byte budgets must gate admission before any object is materialized
-locally.
+OPFS (`attachOpfsParquetTables` et al., in `src/opfs.ts`) is the primary
+write-through parquet cache: attached snapshot files persist keyed by
+manifest `contentHash`/object key, gated by the same file/byte budgets before
+anything is materialized locally.
 
-### Engine source for analyzer dispatch
+### Attaching parquet as analyzer sources
 
-```ts
-import { createEngine } from '@gscdump/engine-duckdb-wasm'
-
-const source = createEngine({
-  runner: { query: (sql, params) => conn.query(sql, params) },
-})
-```
+Per [ADR-0001](../../docs/adr/0001-browser-engine-uses-attached-tables.md), the
+browser engine dispatches over attached parquet tables (`createAttachedTableSource`
+from `@gscdump/engine/source`, wired up inside `createBrowserAnalysisRuntime`),
+not a canonical-schema `SqlQuerySource`. An earlier `createEngine()` wrapping the
+canonical-schema path had zero callers and was deleted in 2026-05 — don't
+reintroduce it; extend `createAttachedTableSource` or the attach helpers below
+instead.
 
 ## Exports
 
-- `createEngine({ runner })` — builds a `SqlQuerySource` over a DuckDB-WASM connection.
 - `createInsightRunner({ db, conn })` — drizzle-orm handle for typed `.select()` / window functions, with `sql\`...\`` raw escape hatch.
 - `bootDuckDBWasm()` / `attachParquetTables()` / `attachParquetUrlTables()` / `attachSingleTable()` / `createBrowserAnalysisRuntime()` / `createDuckDBBundlesFromBase()` / `listAttachedTables()` — browser runtime primitives.
+- `attachOpfsParquetTables()` / `readOpfsSnapshotFile()` / `estimateOpfsStorage()` / `requestPersistentStorage()` / `clearOpfsSnapshotCache()` — OPFS-backed parquet cache.
 - `strikingMomentum(runner, options)` — first-class browser insight.
 - `scopeFor(table, { siteId, window })` / `mergeScope()` — tenant scope predicates.
-- `pages` / `queries` / `page_queries` / `countries` / `dates` / `schema` — drizzle schema mirroring `gscdump/analytics` `SCHEMAS`. Drift fails loudly at module load.
-- `browserResolverAdapter` — dialect adapter for the resolver kit.
+- `pages` / `queries` / `page_queries` / `countries` / `dates` / `hourly_pages` / `schema` — drizzle schema mirroring `gscdump/analytics` `SCHEMAS`. Drift fails loudly at module load.
+- `compileArchetypeSql()` / `tableForArchetype()` — archetype query compilation.
 - `createClient` / `drizzle` / `DuckDBWasmDatabase` — vendored drizzle-orm DuckDB-WASM adapter.
 - `resolveWindow` (re-exported from `@gscdump/engine/period`).
 
