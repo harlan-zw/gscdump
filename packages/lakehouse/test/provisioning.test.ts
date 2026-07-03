@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { adoptCatalog, selfProvisionCatalog, suppliedCatalog } from '../src/provisioning/index'
+import { adoptCatalog, deriveBucketName, enableCatalogMaintenance, selfProvisionCatalog, suppliedCatalog } from '../src/provisioning/index'
 
 describe('adoptCatalog', () => {
   it('returns no-catalog when the remote ref is null or incomplete', () => {
@@ -94,5 +94,63 @@ describe('selfProvisionCatalog', () => {
       onWarn: m => warnings.push(m),
     })).resolves.toBeDefined()
     expect(warnings.some(w => w.includes('maintenance-configs'))).toBe(true)
+  })
+})
+
+describe('enableCatalogMaintenance', () => {
+  it('sets the credential then enables compaction, WITHOUT touching bucket/CORS/enable', async () => {
+    const calls: string[] = []
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${new URL(url).pathname}`)
+      return new Response(JSON.stringify({ success: true }), { status: 200 })
+    })
+
+    await enableCatalogMaintenance({
+      accountId: 'acct',
+      catalogToken: 'cat',
+      bucket: 'gsc-team-1',
+      compactionCredentialToken: 'cred',
+      fetch: fetchImpl as unknown as typeof fetch,
+      onWarn: () => {},
+    })
+
+    expect(calls).toEqual([
+      'POST /client/v4/accounts/acct/r2-catalog/gsc-team-1/credential',
+      'POST /client/v4/accounts/acct/r2-catalog/gsc-team-1/maintenance-configs',
+    ])
+  })
+
+  it('skips the credential-set call when no compactionCredentialToken is given', async () => {
+    const calls: string[] = []
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${new URL(url).pathname}`)
+      return new Response(JSON.stringify({ success: true }), { status: 200 })
+    })
+
+    await enableCatalogMaintenance({
+      accountId: 'acct',
+      catalogToken: 'cat',
+      bucket: 'gsc-team-1',
+      fetch: fetchImpl as unknown as typeof fetch,
+      onWarn: () => {},
+    })
+
+    expect(calls).toEqual(['POST /client/v4/accounts/acct/r2-catalog/gsc-team-1/maintenance-configs'])
+  })
+})
+
+describe('deriveBucketName', () => {
+  it('derives prefix+key, lowercased, invalid chars collapsed to hyphens', () => {
+    expect(deriveBucketName('gsc-team-', 't_AbC123')).toBe('gsc-team-t-abc123')
+    expect(deriveBucketName('gsc-team-', 'abc')).toBe('gsc-team-abc')
+  })
+
+  it('clamps to the 63-char R2 bucket-name limit', () => {
+    const long = 'x'.repeat(80)
+    expect(deriveBucketName('gsc-team-', long).length).toBeLessThanOrEqual(63)
+  })
+
+  it('throws when the result cannot form a valid bucket name', () => {
+    expect(() => deriveBucketName('', '')).toThrow()
   })
 })

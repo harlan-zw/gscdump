@@ -174,6 +174,71 @@ async function ensureCredential(
     })
 }
 
+export interface EnableCatalogMaintenanceOptions {
+  accountId: string
+  /** R2-Data-Catalog-scoped token (credential-set / maintenance-configs). */
+  catalogToken: string
+  bucket: string
+  /** See {@link CloudflareProvisionCreds.compactionCredentialToken}. */
+  compactionCredentialToken?: string
+  /** Injectable fetch — defaults to the global. */
+  fetch?: typeof fetch
+  /** Injectable warn sink for best-effort maintenance failures. Defaults to `console.warn`. */
+  onWarn?: (message: string) => void
+}
+
+/**
+ * Standalone credential-set + compaction/snapshot-expiry enable — the same two
+ * steps {@link selfProvisionCatalog} ends with, WITHOUT its bucket-create /
+ * CORS / catalog-enable side effects. For the "backfill maintenance onto an
+ * already-ready catalog" case (re-provision / admin-repair jobs), where
+ * re-running bucket-create or catalog-enable would be wasted CF calls, not
+ * just idempotent no-ops.
+ *
+ * R2-FIXES C3 note: this export postdates the version both nuxtseo's
+ * `provision-team-catalog.ts` and gscdump.com's `team-catalog-provisioner.ts`
+ * synced against (published 0.1.0 had no such entry point), so BOTH apps still
+ * hand-roll this exact sequence locally for their idempotent-backfill branch.
+ * Swap their local duplicates for this export on the next publish + bump.
+ */
+export async function enableCatalogMaintenance(opts: EnableCatalogMaintenanceOptions): Promise<void> {
+  const fetchImpl = opts.fetch ?? fetch
+  const onWarn = opts.onWarn ?? ((m: string) => console.warn(m))
+  if (opts.compactionCredentialToken)
+    await ensureCredential(fetchImpl, opts.accountId, opts.catalogToken, opts.compactionCredentialToken, opts.bucket, onWarn)
+  await enableMaintenance(fetchImpl, opts.accountId, opts.catalogToken, opts.bucket, onWarn)
+}
+
+/**
+ * R2 bucket names: 3–63 chars, lowercase a-z/0-9/hyphen, no leading/trailing
+ * hyphen — the constraint every consumer's own bucket-name derivation encodes.
+ */
+const MAX_BUCKET_NAME = 63
+
+/**
+ * Generic `prefix + key` bucket-name normalization (R2-FIXES C3 TODO): lowercase,
+ * collapse non-`[a-z0-9-]` runs to a single hyphen, trim, clamp to the R2
+ * 63-char limit. Throws if the result isn't a valid bucket name.
+ *
+ * Neither app has switched over yet: nuxtseo's `teamCatalogBucketName` and
+ * gscdump.com's `teamCatalogBucket` predate this export AND encode slightly
+ * different schemes (gscdump.com additionally suffixes the partition-key
+ * encoding, e.g. `-int`) — see their own TODO(lakehouse@next) comments for the
+ * planned migration once a version carrying this export is published.
+ */
+export function deriveBucketName(prefix: string, key: string): string {
+  const bucket = `${prefix}${key}`
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, MAX_BUCKET_NAME)
+    .replace(/-+$/g, '')
+  if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket))
+    throw new Error(`Cannot derive a valid R2 bucket name from prefix "${prefix}" + key "${key}" (got "${bucket}")`)
+  return bucket
+}
+
 export interface SelfProvisionOptions {
   creds: CloudflareProvisionCreds
   bucket: string
