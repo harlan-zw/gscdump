@@ -435,6 +435,9 @@ importers:
       '@gscdump/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@gscdump/lakehouse':
+        specifier: workspace:*
+        version: link:../lakehouse
       drizzle-orm:
         specifier: 'catalog:'
         version: 1.0.0-rc.3(@cloudflare/workers-types@4.20260630.1)(zod@4.4.3)
@@ -557,6 +560,24 @@ importers:
       '@googleapis/searchconsole':
         specifier: catalog:deps
         version: 6.0.1
+
+  packages/lakehouse:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.0.1
+      hyparquet:
+        specifier: 'catalog:'
+        version: 1.26.1
+      icebird:
+        specifier: 'catalog:'
+        version: 0.8.11(patch_hash=33016cb46045779e59c411034b2a57b5bbcf1d6aab3510cf13717914ce56dfc4)
+      unstorage:
+        specifier: 'catalog:'
+        version: 1.17.5(aws4fetch@1.0.20)(db0@0.3.4)(ioredis@5.10.1)
+      vitest:
+        specifier: catalog:dev-test
+        version: 4.1.9(@types/node@26.0.1)(@vitest/browser-playwright@4.1.9)(vite@7.3.3(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/sdk:
     dependencies:
@@ -3435,9 +3456,6 @@ packages:
 
   '@types/node@20.19.41':
     resolution: {integrity: sha512-ECymXOukMnOoVkC2bb1Vc/w/836DXncOg5m8Xj1RH7xSHZJWNYY6Zh7EH477vcnD5egKNNfy2RpNOmuChhFPgQ==}
-
-  '@types/node@26.0.0':
-    resolution: {integrity: sha512-vf2YFi1iY9lHGwNJMs01biZFbKJkrZR1T6/MlzjhJLPdntOHLhTrDSnSVcdtvjihi4VQNlrFRIxLsDBlQpAipA==}
 
   '@types/node@26.0.1':
     resolution: {integrity: sha512-fc3KiUoBt6kie0N9bIW3E47vZsuaMf0PM2AaUpLCLT0s/LvX1nxAim6Fc049cNxODPpGm6qRAuUOB86SkRuPQw==}
@@ -10868,10 +10886,6 @@ snapshots:
     dependencies:
       undici-types: 7.27.2
 
-  '@types/node@26.0.0':
-    dependencies:
-      undici-types: 7.27.2
-
   '@types/node@26.0.1':
     dependencies:
       undici-types: 7.27.2
@@ -15282,7 +15296,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.1
-      '@types/node': 26.0.0
+      '@types/node': 26.0.1
       long: 5.3.2
 
   protocol-buffers-schema@3.6.1: {}

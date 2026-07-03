@@ -1,0 +1,33 @@
+.:
+  buildManifestPartitionFilter: function
+  cacheGet: function
+  cachePut: function
+  connectIcebergCatalog: function
+  DEFAULT_PARTITION_KEY_ENCODING: string
+  defineIcebergDataset: function
+  deriveTableSpec: function
+  dropIcebergTables: function
+  ensureIcebergNamespace: function
+  ICEBERG_TYPE_MAP: object
+  listIcebergTables: function
+  resolveIcebergDataFiles: function
+  resolvePyIcebergPython: function
+  runPyIcebergWriter: function
+  toIcebergDayCount: function
+./provisioning:
+  adoptCatalog: function
+  allocateCatalogSiteId: function
+  selfProvisionCatalog: function
+  suppliedCatalog: function
+./unsafe-raw:
+  icebergAppend: function
+  icebergAppendRetrying: function
+  icebergCreateTable: function
+  icebergDropTable: function
+  icebergManifests: function
+  isCommitRateLimited: function
+  restCatalogConnect: function
+  restCatalogCreateNamespace: function
+  restCatalogListTables: function
+  restCatalogLoadTable: function
+  s3SignedResolver: function

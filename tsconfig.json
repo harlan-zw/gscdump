@@ -13,6 +13,7 @@
   "references": [
     { "path": "./packages/gscdump" },
     { "path": "./packages/engine" },
+    { "path": "./packages/lakehouse" },
     { "path": "./packages/cli" },
     { "path": "./packages/analysis" },
     { "path": "./packages/contracts" },

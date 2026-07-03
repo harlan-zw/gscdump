@@ -1,0 +1,126 @@
+/**
+ * Manifest-list partition pruning for the catalog read path — generalized
+ * (ADR-0021 amendment 9) from the engine's `site_id`/`search_type`-hardcoded
+ * version to accept an arbitrary partition spec + arbitrary identity/dims
+ * value matches, so any dataset def's reader benefits from the same pruning.
+ *
+ * The manifest-LIST avro already carries each manifest's `partitions`
+ * field-summary bounds (in partition-spec field order) — in hand the moment the
+ * list is parsed, BEFORE any manifest's entries are fetched. The patched
+ * `icebergManifests` accepts a `partitionFilter` that runs against those
+ * summaries; returning `false` skips fetching that manifest entirely.
+ *
+ * Safety: this is an inclusive projection (Iceberg scan planning) — a manifest
+ * is skipped only when its summary bounds PROVE it cannot hold the target
+ * slice; any uncertainty (missing summaries, null bound) keeps the manifest, so
+ * pruning never drops a matching file, only avoids reading non-matching ones.
+ */
+
+import type { IcebergPartitionField } from './schema'
+
+/** Minimal shape of an icebird manifest-list `partitions` field-summary. */
+export interface IcebergFieldSummary {
+  contains_null: boolean
+  contains_nan?: boolean | null
+  lower_bound?: Uint8Array | null
+  upper_bound?: Uint8Array | null
+}
+
+/** Predicate handed to icebird's patched `icebergManifests({ partitionFilter })`. */
+export type ManifestPartitionFilter = (partitions: IcebergFieldSummary[] | undefined) => boolean
+
+/**
+ * One identity/dims value to prune an `identity`-transform partition field by.
+ *
+ * `'int32'`-encoded fields are deliberately NOT pruned here (mirrors the
+ * original engine behavior): an INT column's bound bytes are a 4-byte int, but
+ * per-team catalogs are single-tenant, so identity pruning on them saves ~nothing
+ * — the per-file partition check in the resolver remains the authoritative
+ * correctness filter. Only `'string'`-encoded identity fields are pruned by
+ * lexicographic UTF-8 bound comparison (the truncated-string-stats case R2 SQL
+ * needs the workaround for).
+ */
+export interface PartitionValueMatch {
+  /** Partition field name as declared in the partition spec (e.g. `'site_id'`). */
+  field: string
+  value: string | number
+  encoding: 'string' | 'int32'
+}
+
+function toUint8(bytes: Uint8Array | ArrayBuffer | null | undefined): Uint8Array | null {
+  if (bytes == null)
+    return null
+  return bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
+}
+
+/** identity(<col>) lower/upper bounds are UTF-8 string bytes under `'string'` encoding. */
+function decodeString(bytes: Uint8Array | ArrayBuffer | null | undefined): string | null {
+  const u = toUint8(bytes)
+  return u == null ? null : new TextDecoder().decode(u)
+}
+
+/** month(date)=<name> bounds are 4-byte little-endian int32 (months since epoch). */
+function decodeMonthInt(bytes: Uint8Array | ArrayBuffer | null | undefined): number | null {
+  const u = toUint8(bytes)
+  if (u == null)
+    return null
+  return new DataView(u.buffer, u.byteOffset, u.byteLength).getInt32(0, true)
+}
+
+/**
+ * Build the `partitionFilter` predicate for a slice of `matches` (identity/dims
+ * value equality) plus an optional `wantedMonths` set (for a `month`-transform
+ * field in `partitionSpec`). Returns `false` to skip a manifest, `true` to keep
+ * it. Keep-all when a manifest carries no `partitions` summaries.
+ */
+export function buildManifestPartitionFilter(
+  partitionSpec: readonly IcebergPartitionField[],
+  matches: readonly PartitionValueMatch[],
+  wantedMonths?: ReadonlySet<number>,
+): ManifestPartitionFilter {
+  const fieldIndex = (name: string): number => partitionSpec.findIndex(f => f.name === name || f.sourceColumn === name)
+  const monthFieldIndex = partitionSpec.findIndex(f => f.transform === 'month')
+
+  return (partitions): boolean => {
+    if (!partitions || partitions.length === 0)
+      return true // no summaries — can't prune, keep
+
+    for (const match of matches) {
+      // Only string-encoded identity fields are pruned — see PartitionValueMatch doc.
+      if (match.encoding !== 'string')
+        continue
+      const idx = fieldIndex(match.field)
+      if (idx < 0)
+        continue
+      const summary = partitions[idx]
+      if (!summary || (summary.lower_bound == null && summary.upper_bound == null))
+        continue
+      const lo = decodeString(summary.lower_bound)
+      const hi = decodeString(summary.upper_bound)
+      const wantStr = String(match.value)
+      if (lo != null && hi != null && (wantStr < lo || wantStr > hi))
+        return false
+    }
+
+    if (wantedMonths && wantedMonths.size > 0 && monthFieldIndex >= 0) {
+      const monthSummary = partitions[monthFieldIndex]
+      if (monthSummary && (monthSummary.lower_bound != null || monthSummary.upper_bound != null)) {
+        const lo = decodeMonthInt(monthSummary.lower_bound)
+        const hi = decodeMonthInt(monthSummary.upper_bound)
+        if (lo != null && hi != null) {
+          let anyInRange = false
+          for (const wm of wantedMonths) {
+            if (wm >= lo && wm <= hi) {
+              anyInRange = true
+              break
+            }
+          }
+          if (!anyInRange)
+            return false
+        }
+      }
+    }
+
+    return true
+  }
+}

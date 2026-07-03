@@ -1,0 +1,62 @@
+{
+  "name": "@gscdump/lakehouse",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Dataset-agnostic Iceberg lakehouse layer + dataset registry for R2 Data Catalog producers (ADR-0021).",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "funding": "https://github.com/sponsors/harlan-zw",
+  "homepage": "https://github.com/harlan-zw/gscdump/tree/main/packages/lakehouse#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/lakehouse"
+  },
+  "bugs": {
+    "url": "https://github.com/harlan-zw/gscdump/issues"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./unsafe-raw": {
+      "types": "./dist/unsafe-raw.d.mts",
+      "import": "./dist/unsafe-raw.mjs",
+      "default": "./dist/unsafe-raw.mjs"
+    },
+    "./provisioning": {
+      "types": "./dist/provisioning/index.d.mts",
+      "import": "./dist/provisioning/index.mjs",
+      "default": "./dist/provisioning/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "obuild --stub",
+    "build": "obuild",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "prepack": "pnpm run build"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "hyparquet": "catalog:",
+    "icebird": "catalog:",
+    "unstorage": "catalog:",
+    "vitest": "catalog:dev-test"
+  }
+}

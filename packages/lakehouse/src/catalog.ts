@@ -1,0 +1,563 @@
+/**
+ * R2 Data Catalog (Iceberg REST catalog) connection + generic read/write
+ * primitives, built on `icebird` (ADR-0021 "clean moves": connect /
+ * ensureNamespace / list / drop / `icebergAppendRetrying` (+ append-id
+ * idempotency) / the data-file resolver — all dataset-agnostic already).
+ *
+ * Raw `icebird` primitives (`icebergCreateTable`, `icebergManifests`,
+ * `restCatalogLoadTable`) are NOT re-exported from here for public consumption
+ * — see `./unsafe-raw.ts` (ADR-0021 amendment 1). This module uses them
+ * internally.
+ */
+
+import type { CatalogCache } from './catalog-cache'
+import type { PartitionValueMatch } from './partition-prune'
+import type { IcebergColumnType, IcebergS3Config } from './schema'
+import {
+  cachingResolver,
+  icebergAppend,
+  icebergDropTable,
+  icebergManifests,
+  restCatalogConnect,
+  restCatalogCreateNamespace,
+  restCatalogListTables,
+  restCatalogLoadTable,
+  s3SignedResolver,
+} from 'icebird'
+import { cacheGet, cachePut } from './catalog-cache'
+import { buildManifestPartitionFilter } from './partition-prune'
+
+/** icebird's lowercase Iceberg primitive types (subset we use). */
+export type IcebergPrimitiveType = 'string' | 'int' | 'long' | 'double' | 'date' | 'boolean'
+
+/** A field in an icebird table `Schema`. */
+export interface IcebergSchemaField {
+  id: number
+  name: string
+  required: boolean
+  type: IcebergPrimitiveType
+}
+
+/** An icebird table `Schema` (Iceberg `struct`). */
+export interface IcebergSchema {
+  'type': 'struct'
+  'schema-id': number
+  'fields': IcebergSchemaField[]
+}
+
+/** A field in an icebird `PartitionSpec`. */
+export interface IcebergPartitionSpecField {
+  'source-id': number
+  'field-id': number
+  'name': string
+  'transform': 'identity' | 'month'
+}
+
+/** An icebird `PartitionSpec`. */
+export interface IcebergPartitionSpec {
+  'spec-id': number
+  'fields': IcebergPartitionSpecField[]
+}
+
+/** A field in an icebird `SortOrder`. */
+export interface IcebergSortOrderField {
+  'source-id': number
+  'transform': 'identity'
+  'direction': 'asc' | 'desc'
+  'null-order': 'nulls-first' | 'nulls-last'
+}
+
+/** An icebird `SortOrder` (Iceberg write-order). */
+export interface IcebergSortOrder {
+  'order-id': number
+  'fields': IcebergSortOrderField[]
+}
+
+/** Everything needed to talk to the R2 Data Catalog. */
+export interface IcebergCatalogConfig {
+  /** REST catalog URI, e.g. `https://catalog.cloudflarestorage.com/<acct>/<warehouse>`. */
+  catalogUri: string
+  /** Warehouse identifier, e.g. `<acct>_<bucket>`. */
+  warehouse: string
+  /** Catalog namespace the dataset's table lives under (e.g. `gsc`, `crawl`). */
+  namespace: string
+  /** Bearer token for the REST catalog. */
+  catalogToken: string
+  /** R2 S3 credentials for the warehouse objects. */
+  s3: IcebergS3Config
+}
+
+/** The connected catalog context + a signed S3 resolver — the icebird call inputs. */
+export interface IcebergConnection {
+  /** icebird REST catalog context, passed as `{ catalog }` to icebird write fns. */
+  catalog: Awaited<ReturnType<typeof restCatalogConnect>>
+  /** icebird S3 resolver (caching-wrapped), passed as `{ resolver }` to icebird fns. */
+  resolver: ReturnType<typeof cachingResolver>
+  /** The namespace the dataset's table lives under. */
+  namespace: string
+}
+
+export const ICEBERG_TYPE_MAP: Record<IcebergColumnType, IcebergPrimitiveType> = {
+  STRING: 'string',
+  INT: 'int',
+  LONG: 'long',
+  DOUBLE: 'double',
+  DATE: 'date',
+  BOOLEAN: 'boolean',
+}
+
+/** Options for {@link connectIcebergCatalog}. */
+export interface ConnectIcebergOptions {
+  /**
+   * Optional cross-isolate cache (any unstorage driver). When supplied, the
+   * `/v1/config` REST probe is served from cache on a warm catalog.
+   */
+  cache?: CatalogCache
+  /** Injectable clock for the cache TTL. Defaults to `Date.now`. */
+  clock?: () => number
+}
+
+/** The serialisable, secret-free part of an icebird REST catalog context. */
+interface CachedCatalogConfig {
+  url: string
+  prefix: string
+  defaults: Record<string, string>
+  overrides: Record<string, string>
+}
+
+/**
+ * TTL on the cached `/v1/config` routing config. It is warehouse-static
+ * (changes only if R2 re-points the warehouse prefix), so a generous TTL is
+ * safe; a miss costs one `/v1/config` probe, never a wrong route.
+ */
+const CATALOG_CONFIG_TTL_MS = 60 * 60 * 1000
+
+function catalogConfigKey(config: IcebergCatalogConfig): string {
+  return `lakehouse-catalog-cfg\0${config.catalogUri}\0${config.warehouse}`
+}
+
+/**
+ * Connect to the R2 Data Catalog: a REST catalog context + a signed S3
+ * resolver. Runs in Node and in `workerd` — SigV4 is Web Crypto, I/O is
+ * `fetch`, no node builtins.
+ */
+export async function connectIcebergCatalog(
+  config: IcebergCatalogConfig,
+  opts: ConnectIcebergOptions = {},
+): Promise<IcebergConnection> {
+  const now = (opts.clock ?? Date.now)()
+  const requestInit = { headers: { Authorization: `Bearer ${config.catalogToken}` } }
+
+  let catalog: Awaited<ReturnType<typeof restCatalogConnect>> | undefined
+  if (opts.cache) {
+    const cached = await cacheGet<CachedCatalogConfig>(opts.cache, catalogConfigKey(config), now)
+    if (cached) {
+      catalog = Object.freeze({
+        type: 'rest' as const,
+        url: cached.url,
+        prefix: cached.prefix,
+        defaults: cached.defaults,
+        overrides: cached.overrides,
+        requestInit,
+      })
+    }
+  }
+  if (!catalog) {
+    catalog = await restCatalogConnect({
+      url: config.catalogUri,
+      warehouse: config.warehouse,
+      requestInit,
+    })
+    if (opts.cache) {
+      const toCache: CachedCatalogConfig = {
+        url: catalog.url,
+        prefix: catalog.prefix,
+        defaults: catalog.defaults,
+        overrides: catalog.overrides,
+      }
+      await cachePut(opts.cache, catalogConfigKey(config), toCache, CATALOG_CONFIG_TTL_MS, now)
+    }
+  }
+
+  const resolver = cachingResolver(s3SignedResolver({
+    accessKeyId: config.s3.accessKeyId,
+    secretAccessKey: config.s3.secretAccessKey,
+    region: config.s3.region ?? 'auto',
+    endpoint: config.s3.endpoint,
+    pathStyle: true,
+  }))
+  return { catalog, resolver, namespace: config.namespace }
+}
+
+/**
+ * Ensure the catalog namespace exists. Idempotent — an "already exists"
+ * response from the REST catalog is swallowed.
+ */
+export async function ensureIcebergNamespace(conn: IcebergConnection): Promise<void> {
+  await restCatalogCreateNamespace(conn.catalog, { namespace: conn.namespace })
+    .catch(() => {
+      // namespace already exists — fine
+    })
+}
+
+/**
+ * List the table names currently in the catalog namespace.
+ *
+ * A genuinely-empty namespace resolves to `[]`. A LIST *failure* (catalog
+ * unreachable, 401/403, 5xx) propagates rather than being masked as an empty
+ * list — callers must be able to tell "no tables" from "couldn't ask".
+ */
+export async function listIcebergTables(conn: IcebergConnection): Promise<string[]> {
+  const list = await restCatalogListTables(conn.catalog, { namespace: conn.namespace })
+  return list.map(t => t.name).sort()
+}
+
+/** Outcome of a single table create/drop op. */
+export interface IcebergTableOpResult {
+  table: string
+  ok: boolean
+  error?: string
+}
+
+/**
+ * Drop tables from the catalog namespace, purging their data objects.
+ * Defaults to every table currently in the namespace.
+ */
+export async function dropIcebergTables(
+  conn: IcebergConnection,
+  tables?: readonly string[],
+): Promise<IcebergTableOpResult[]> {
+  const targets = tables
+    ?? (await restCatalogListTables(conn.catalog, { namespace: conn.namespace }))
+      .map(t => t.name)
+  const results: IcebergTableOpResult[] = []
+  for (const table of targets) {
+    await icebergDropTable({
+      catalog: conn.catalog,
+      namespace: conn.namespace,
+      table,
+      purgeRequested: true,
+    }).then(
+      () => results.push({ table, ok: true }),
+      (e: unknown) => results.push({ table, ok: false, error: e instanceof Error ? e.message : String(e) }),
+    )
+  }
+  return results
+}
+
+// ---------------------------------------------------------------------------
+// 429 commit-retry — R2 Data Catalog rate-limits.
+// ---------------------------------------------------------------------------
+
+/** Tunable retry policy for {@link icebergAppendRetrying}. */
+export interface CommitRetryOptions {
+  /** Total attempts, including the first. Default 6. */
+  maxAttempts?: number
+  /** Base (ms) for the exponential back-off ceiling. Default 1000. */
+  baseDelayMs?: number
+  /** Hard cap (ms) on the back-off ceiling. Default 20_000. */
+  maxDelayMs?: number
+  /** Injectable sleep — tests pass a synchronous no-op. */
+  sleep?: (ms: number) => Promise<void>
+  /** Injectable RNG for the jitter — tests pass a deterministic value. */
+  random?: () => number
+  /**
+   * Idempotency token stamped into the appended snapshot's summary
+   * (`lakehouse.append-id`) and matched by the landed-check. When omitted it is
+   * DERIVED from the records' content, making the token STABLE across
+   * PROCESSES, not just within one call's retry loop.
+   */
+  appendId?: string
+}
+
+const APPEND_ID_SUMMARY_KEY = 'lakehouse.append-id'
+const APPEND_LANDED_SCAN_DEPTH = 25
+
+/**
+ * True when `err` is an R2 Data Catalog commit rate-limit response
+ * (`429 too many commits to this table`).
+ */
+export function isCommitRateLimited(err: unknown): boolean {
+  if (err && typeof err === 'object' && (err as { status?: unknown }).status === 429)
+    return true
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
+  return msg.includes('429') || msg.includes('too many commits') || msg.includes('rate limit')
+}
+
+function defaultCommitSleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * `icebergAppend` wrapped with retry on R2 Data Catalog 429 commit
+ * rate-limits, using full-jitter exponential back-off, plus a landed-check
+ * idempotency guard so a 429 whose commit actually landed is never re-applied
+ * (see `deriveAppendId`/`appendAlreadyLanded`).
+ */
+export async function icebergAppendRetrying(
+  args: Parameters<typeof icebergAppend>[0],
+  options: CommitRetryOptions = {},
+): Promise<void> {
+  const maxAttempts = options.maxAttempts ?? 6
+  const baseDelayMs = options.baseDelayMs ?? 1000
+  const maxDelayMs = options.maxDelayMs ?? 20_000
+  const sleep = options.sleep ?? defaultCommitSleep
+  const random = options.random ?? Math.random
+  const appendId = options.appendId ?? await deriveAppendId(args)
+  const stampedArgs = {
+    ...args,
+    snapshotProperties: { ...(args as { snapshotProperties?: Record<string, string> }).snapshotProperties, [APPEND_ID_SUMMARY_KEY]: appendId },
+  } as Parameters<typeof icebergAppend>[0]
+
+  if (await appendAlreadyLanded(args, appendId).catch(() => false))
+    return
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const err = await icebergAppend(stampedArgs).then(() => undefined, (e: unknown) => e)
+    if (err === undefined)
+      return
+    if (await appendAlreadyLanded(args, appendId).catch(() => false))
+      return
+    if (!isCommitRateLimited(err) || attempt === maxAttempts - 1)
+      throw err
+    const ceiling = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt)
+    await sleep(Math.floor(random() * ceiling))
+  }
+}
+
+/** Content-addressed idempotency token — see `@gscdump/engine`'s original for full rationale. */
+async function deriveAppendId(args: Parameters<typeof icebergAppend>[0]): Promise<string> {
+  const records = ((args as { records?: ReadonlyArray<Record<string, unknown>> }).records) ?? []
+  if (records.length === 0)
+    return globalThis.crypto.randomUUID()
+  const rowSig = (r: Record<string, unknown>): string =>
+    Object.keys(r).sort().map(k => `${k}=${String(r[k])}`).join('')
+  const body = records.map(rowSig).sort().join('')
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** Did the append carrying `appendId` already commit? REST catalogs only. */
+async function appendAlreadyLanded(
+  args: Parameters<typeof icebergAppend>[0],
+  appendId: string,
+): Promise<boolean> {
+  const a = args as { catalog?: { type?: string }, namespace?: string | string[], table?: string }
+  if (a.catalog?.type !== 'rest' || a.namespace == null || a.table == null)
+    return false
+  const { metadata } = await restCatalogLoadTable(a.catalog as Parameters<typeof restCatalogLoadTable>[0], {
+    namespace: a.namespace,
+    table: a.table,
+  })
+  const snapshots = (metadata as { snapshots?: Array<{ summary?: Record<string, string | undefined> }> }).snapshots ?? []
+  const from = Math.max(0, snapshots.length - APPEND_LANDED_SCAN_DEPTH)
+  for (let i = snapshots.length - 1; i >= from; i--) {
+    if (snapshots[i]?.summary?.[APPEND_ID_SUMMARY_KEY] === appendId)
+      return true
+  }
+  return false
+}
+
+// ---------------------------------------------------------------------------
+// Read path — resolve data files for a partition slice (generic, ADR-0021
+// amendment 9: parameterized over an arbitrary partition spec + value matches
+// instead of the frozen `site_id`/`search_type` pair).
+// ---------------------------------------------------------------------------
+
+/** A data file in the current snapshot's manifest, scoped to one partition. */
+export interface IcebergListedDataFile {
+  filePath: string
+  objectKey: string
+  bytes: number
+  rowCount: number
+}
+
+/** Minimal profiler contract — start a named span, get back an end callback. */
+export interface QueryProfiler {
+  start: (name: string) => ((meta?: Record<string, unknown>) => void) | undefined
+}
+
+export interface ResolveIcebergDataFilesOptions {
+  namespace: string
+  table: string
+  /** Partition spec for this table — used both for the manifest prune and the per-file check. */
+  partitionSpec: readonly { sourceColumn: string, transform: 'identity' | 'month', name: string }[]
+  /** Identity/dims values to match. */
+  matches: readonly PartitionValueMatch[]
+  /** Inclusive date range. Every month touched by `[start, end]` is scanned. */
+  range: { start: string, end: string }
+  cache?: CatalogCache
+  clock?: () => number
+  profiler?: QueryProfiler
+}
+
+const SNAPSHOT_REF_TTL_MS = 30 * 60 * 1000
+const RESOLVED_FILES_TTL_MS = 24 * 60 * 60 * 1000
+const METADATA_TTL_MS = 24 * 60 * 60 * 1000
+const MAX_CACHED_METADATA_BYTES = 2 * 1024 * 1024
+
+function snapshotRefKey(namespace: string, table: string): string {
+  return `lh-snapref\0${namespace}\0${table}`
+}
+
+function metadataRefKey(namespace: string, table: string, snapshotId: string): string {
+  return `lh-snapmeta\0${namespace}\0${table}\0${snapshotId}`
+}
+
+function resolvedFilesKey(
+  namespace: string,
+  table: string,
+  snapshotId: string,
+  matches: readonly PartitionValueMatch[],
+  wantedMonths: ReadonlySet<number>,
+): string {
+  const matchKey = [...matches].map(m => `${m.field}=${m.value}`).sort().join(',')
+  const months = [...wantedMonths].sort((a, b) => a - b).join(',')
+  return `lh-files\0${namespace}\0${table}\0${snapshotId}\0${matchKey}\0${months}`
+}
+
+function monthsInRange(range: { start: string, end: string }): string[] {
+  const [sy, sm] = range.start.split('-').map(Number) as [number, number]
+  const [ey, em] = range.end.split('-').map(Number) as [number, number]
+  const out: string[] = []
+  let y = sy
+  let m = sm
+  while (y < ey || (y === ey && m <= em)) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`)
+    m++
+    if (m > 12) {
+      m = 1
+      y++
+    }
+  }
+  return out
+}
+
+function monthsSinceEpoch(ym: string): number {
+  const [y, m] = ym.split('-').map(Number) as [number, number]
+  return (y - 1970) * 12 + (m - 1)
+}
+
+function stripBucket(filePath: string): string {
+  if (!filePath.startsWith('s3://'))
+    return filePath
+  const rest = filePath.slice(5)
+  const slash = rest.indexOf('/')
+  return slash >= 0 ? rest.slice(slash + 1) : rest
+}
+
+type LoadedTableMetadata = Awaited<ReturnType<typeof restCatalogLoadTable>>['metadata']
+
+async function loadSnapshotId(
+  conn: IcebergConnection,
+  namespace: string,
+  table: string,
+  cache: CatalogCache | undefined,
+  now: number,
+): Promise<{ snapshotId: string | null, metadata: LoadedTableMetadata | null }> {
+  if (cache) {
+    const cached = await cacheGet<string>(cache, snapshotRefKey(namespace, table), now)
+    if (cached !== undefined)
+      return { snapshotId: cached, metadata: null }
+  }
+  const { metadata } = await restCatalogLoadTable(conn.catalog, { namespace, table })
+  const raw = metadata['current-snapshot-id']
+  const snapshotId = raw == null ? null : String(raw)
+  if (cache) {
+    await cachePut(cache, snapshotRefKey(namespace, table), snapshotId, SNAPSHOT_REF_TTL_MS, now)
+    if (snapshotId != null) {
+      const serialized = JSON.stringify(metadata)
+      if (serialized.length <= MAX_CACHED_METADATA_BYTES)
+        await cachePut(cache, metadataRefKey(namespace, table, snapshotId), metadata, METADATA_TTL_MS, now)
+    }
+  }
+  return { snapshotId, metadata }
+}
+
+/**
+ * List the parquet data files in the current snapshot of `table`, filtered to
+ * one partition slice (`matches` + `range`). Generic over the partition spec —
+ * the `IcebergDataset.resolveDataFiles` method is a thin wrapper that supplies
+ * the def's own spec + identity/dims values.
+ */
+export async function resolveIcebergDataFiles(
+  conn: IcebergConnection,
+  opts: ResolveIcebergDataFilesOptions,
+): Promise<IcebergListedDataFile[]> {
+  const { namespace, table } = opts
+  const profiler = opts.profiler
+  const now = (opts.clock ?? Date.now)()
+  const wantedMonths = new Set(monthsInRange(opts.range).map(monthsSinceEpoch))
+
+  const endSnapshot = profiler?.start('iceberg.snapshot')
+  let { snapshotId, metadata } = await loadSnapshotId(conn, namespace, table, opts.cache, now)
+  endSnapshot?.({ cached: metadata == null && snapshotId != null })
+  if (snapshotId == null)
+    return []
+
+  const filesKey = resolvedFilesKey(namespace, table, snapshotId, opts.matches, wantedMonths)
+  if (opts.cache) {
+    const endCache = profiler?.start('iceberg.cache')
+    const cached = await cacheGet<IcebergListedDataFile[]>(opts.cache, filesKey, now)
+    endCache?.({ hit: cached !== undefined })
+    if (cached !== undefined)
+      return cached
+  }
+
+  if (!metadata && opts.cache) {
+    const cachedMeta = await cacheGet<LoadedTableMetadata>(opts.cache, metadataRefKey(namespace, table, snapshotId), now)
+    if (cachedMeta != null)
+      metadata = cachedMeta
+  }
+  if (!metadata) {
+    const reloaded = await loadSnapshotId(conn, namespace, table, undefined, now)
+    snapshotId = reloaded.snapshotId
+    metadata = reloaded.metadata
+    if (snapshotId == null || !metadata)
+      return []
+  }
+
+  const endWalk = profiler?.start('iceberg.walk')
+  const partitionFilter = buildManifestPartitionFilter(opts.partitionSpec, opts.matches, wantedMonths)
+  const manifests = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter })
+
+  const monthFieldName = opts.partitionSpec.find(f => f.transform === 'month')?.name
+  const out: IcebergListedDataFile[] = []
+  for (const m of manifests) {
+    for (const entry of m.entries) {
+      if (entry.status === 2)
+        continue
+      const df = entry.data_file
+      if (df.content !== 0)
+        continue
+      const part = df.partition as Record<string, unknown>
+      let matchesAll = true
+      for (const match of opts.matches) {
+        if (String(part[match.field]) !== String(match.value)) {
+          matchesAll = false
+          break
+        }
+      }
+      if (!matchesAll)
+        continue
+      if (monthFieldName) {
+        const month = part[monthFieldName]
+        if (typeof month !== 'number' || !wantedMonths.has(month))
+          continue
+      }
+      out.push({
+        filePath: df.file_path,
+        objectKey: stripBucket(df.file_path),
+        bytes: Number(df.file_size_in_bytes),
+        rowCount: Number(df.record_count),
+      })
+    }
+  }
+  endWalk?.({ manifests: manifests.length, files: out.length })
+
+  if (opts.cache) {
+    const freshKey = resolvedFilesKey(namespace, table, snapshotId, opts.matches, wantedMonths)
+    await cachePut(opts.cache, freshKey, out, RESOLVED_FILES_TTL_MS, now)
+  }
+  return out
+}
