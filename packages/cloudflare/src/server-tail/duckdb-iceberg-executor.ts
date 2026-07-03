@@ -1,11 +1,20 @@
 // DuckDB-over-Iceberg-files executor — server-tail executor for the `duckdb`
 // archetypes.
 //
-// R2 SQL has no window functions, no `QUALIFY`, no `COUNT(DISTINCT)`, and
-// unverified `OFFSET` (POC Spike 4). The 2 archetypes that need those —
-// `arbitrary-sql` (9) and any `top-n-breakdown` escalated by a non-zero
-// `offset` — route here instead. DuckDB is a full SQL engine and reads the
-// SAME compacted Iceberg parquet data files R2 SQL queries.
+// R2 SQL gained window functions, `COUNT(DISTINCT)`, JOINs/CTEs, and set
+// operations in CF's 2026-05-14 / 2026-06-21 ships (empirically re-verified
+// 2026-07-03 — see `r2-sql-client.ts` and `dispatcher.ts` for the capability
+// matrix and the specific escalations that survive). What still routes here:
+// `arbitrary-sql` (9, caller-supplied SQL DuckDB runs verbatim — `QUALIFY` and
+// anything else caller code writes needs a real SQL engine regardless), any
+// `top-n-breakdown` escalated by a non-zero `offset` (R2 SQL `OFFSET` is
+// CONFIRMED unsupported, not just unverified), a `queryCanonical`-dimensioned
+// breakdown (its dimension column is a correlated subquery against a
+// `query_dim` sidecar table that is NOT an Iceberg table R2 SQL can see), and
+// regex facets (R2 SQL's regex predicate is a different function+shape than
+// the dialect-neutral SQL this package emits — see `dispatcher.ts`). DuckDB is
+// a full SQL engine and reads the SAME compacted Iceberg parquet data files
+// R2 SQL queries.
 //
 // This reuses the `DUCKDB_SVC` service binding from `workers-duckdb.ts`: a
 // sibling Worker that runs DuckDB and exposes `runSQL`. Unlike the bespoke

@@ -1,8 +1,13 @@
 // Server-tail query executor — the hybrid R2 SQL / DuckDB-over-Iceberg path
 // for whale deep-history queries that exceed the browser OPFS ceiling.
 //
-// See architecture v4 "Read paths" and POC Spike 4: 8/10 archetypes answer in
-// R2 SQL, 2 (window functions) need DuckDB over the compacted Iceberg files.
+// See architecture v4 "Read paths" and POC Spike 4 for the original split.
+// R2 SQL has since (2026-05-14 / 2026-06-21 CF ships, re-verified 2026-07-03)
+// gained JOINs, CTEs, window functions, `COUNT(DISTINCT)`, and set operations
+// — it is no longer "no window functions" vs DuckDB. `dispatcher.ts` carries
+// the current, empirically-verified per-query escalation rules (`arbitrary-sql`,
+// non-zero `offset`, `queryCanonical` dimension, regex facets → DuckDB;
+// everything else, including `includeTotal`/`compareRange` breakdowns → R2 SQL).
 
 export type { ArchetypeSqlPlan, BuildArchetypeSqlOptions } from './archetype-sql'
 export { buildArchetypeSql, TABLE_PLACEHOLDER } from './archetype-sql'

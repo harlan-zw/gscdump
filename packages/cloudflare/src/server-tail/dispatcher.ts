@@ -3,14 +3,29 @@
 //
 // The hybrid server tail (architecture v4, "Read paths"; POC Spike 4):
 //  - `r2-sql` / `r2-sql-resolved` archetypes → R2 SQL client.
-//  - `duckdb` archetypes (window functions) → DuckDB-over-Iceberg executor.
+//  - `duckdb` archetypes (arbitrary caller SQL) → DuckDB-over-Iceberg executor.
 //  - `cloud-only` → not an Iceberg query; the dispatcher rejects it (the
 //    consumer routes aux data through the existing cloud endpoints).
 //
-// Escalation rule (CONTRACTS.md decision #5): a `top-n-breakdown` with a
-// non-zero `offset` is escalated from `r2-sql-resolved` to `duckdb`, because
-// R2 SQL `OFFSET` is unverified. The escalation is the dispatcher's job — the
-// static `ARCHETYPE_EXECUTION_CLASS` tag cannot see the per-query `offset`.
+// R2 SQL capability re-audit (2026-07-03, empirically verified against a real
+// per-team warehouse — see the capability matrix in the re-audit notes): CF
+// shipped JOINs + subqueries + multi-table CTEs (2026-05-14) and window
+// functions + `COUNT(DISTINCT ...)` + set operations (2026-06-21). Verified
+// working: `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)`, bare
+// `COUNT(*) OVER()`, `COUNT(DISTINCT col)`, cross-namespace two-table `JOIN`,
+// `WITH` CTEs + `FULL OUTER JOIN`, `UNION ALL`. Still confirmed unsupported:
+// `OFFSET` (`[40003] OFFSET clause is not supported`), a named `WINDOW`
+// clause (`[40003] WINDOW clause is not supported`), and bound params (no
+// channel — SQL is inlined). `regexp_matches` (DuckDB spelling) errors
+// (`Invalid function 'regexp_matches'. Did you mean 'regexp_match'?`);
+// `regexp_match(col, pattern) IS NOT NULL` DOES work as an R2-SQL boolean
+// predicate, but `buildArchetypeSql` emits one dialect-neutral SQL string for
+// both executors and DuckDB has no `regexp_match` singular — wiring this in
+// needs per-dialect facet compilation, which is a real change, not a routing
+// flip. Left on `duckdb` below; not reclassified.
+//
+// Escalation rules below are the dispatcher's job — the static
+// `ARCHETYPE_EXECUTION_CLASS` tag cannot see per-query fields like `offset`.
 //
 // The dispatcher honours a `ServerTailDirective.engine` when one is supplied
 // (the file-resolution endpoint already decided), but the directive only ever
@@ -72,26 +87,38 @@ export function resolveServerTailEngineResult(
   if (cls === 'duckdb')
     return ok('duckdb')
   // r2-sql / r2-sql-resolved → R2 SQL, UNLESS escalated.
-  // Escalation: top-n-breakdown with non-zero offset (R2 SQL OFFSET unverified).
+  // Escalation: top-n-breakdown with non-zero offset. CONFIRMED still
+  // unsupported (2026-07-03 empirical re-audit): R2 SQL rejects `OFFSET`
+  // outright (`[40003] OFFSET clause is not supported`).
   if (query.archetype === 'top-n-breakdown' && query.offset && query.offset > 0)
     return ok('duckdb')
-  // Escalation: top-n-breakdown with includeTotal needs `COUNT(*) OVER()`, a
-  // window function R2 SQL cannot express — run it on DuckDB.
-  if (query.archetype === 'top-n-breakdown' && query.includeTotal)
-    return ok('duckdb')
-  // Escalation: a comparison-window breakdown is compiled as current/previous
-  // CTEs joined with FULL OUTER JOIN (for the `prev*` columns) — CTEs, FROM
-  // subqueries and outer joins are all beyond R2 SQL, so it runs on DuckDB.
-  if (query.archetype === 'top-n-breakdown' && query.compareRange)
-    return ok('duckdb')
-  // Escalation: a `queryCanonical` breakdown carries `COUNT(DISTINCT query)` for
-  // the variant count — DISTINCT-aggregate support on R2 SQL is unverified, so
-  // route it to DuckDB (mirrors the `offset` escalation rationale).
+  // `includeTotal` needs `COUNT(*) OVER()` and `compareRange` compiles to
+  // `WITH cur AS (...), prev AS (...) ... FULL OUTER JOIN` — both EMPIRICALLY
+  // VERIFIED working on R2 SQL as of the 2026-06-21 (window functions) and
+  // 2026-05-14 (CTEs/JOINs) CF ships (re-confirmed 2026-07-03 against a real
+  // per-team warehouse, including the two combined in one query). No escalation
+  // needed; these stay on r2-sql/r2-sql-resolved below.
+  //
+  // Escalation: a `queryCanonical` breakdown's dimension column is a
+  // correlated subquery against a `query_dim` sidecar table
+  // (`COALESCE((SELECT qd.query_canonical FROM query_dim qd WHERE qd.query =
+  // query LIMIT 1), query)`). `COUNT(DISTINCT query)` itself is EMPIRICALLY
+  // VERIFIED to work on R2 SQL now, but `query_dim` is NOT an Iceberg table in
+  // the catalog (`[40010] iceberg table not found "gsc.query_dim"` — confirmed
+  // 2026-07-03), so this escalation is NOT about DISTINCT-aggregate support
+  // any more — it stays on DuckDB because the sidecar dimension table itself
+  // is unreachable from R2 SQL, independent of the DISTINCT question.
   if (query.archetype === 'top-n-breakdown' && query.dimension === 'queryCanonical')
     return ok('duckdb')
-  // Escalation: regex facets compile to `regexp_matches`, which R2 SQL lacks.
-  // Equality facets are plain `col = ?` predicates and can stay on R2 SQL when
-  // the rest of the archetype is R2-compatible.
+  // Escalation: regex facets compile to `regexp_matches`, which R2 SQL lacks
+  // under that name (`Invalid function 'regexp_matches'. Did you mean
+  // 'regexp_match'?`). R2 SQL's `regexp_match(col, pattern) IS NOT NULL` IS a
+  // working boolean predicate (verified 2026-07-03), but `buildArchetypeSql`
+  // emits one dialect-neutral SQL string consumed by both executors and
+  // DuckDB has no singular `regexp_match` — wiring this in needs per-dialect
+  // facet compilation, a real change, not a routing flip. Not reclassified;
+  // stays on DuckDB. Equality facets are plain `col = ?` predicates and can
+  // stay on R2 SQL when the rest of the archetype is R2-compatible.
   if (hasRegexFacet(query))
     return ok('duckdb')
   return ok('r2-sql')

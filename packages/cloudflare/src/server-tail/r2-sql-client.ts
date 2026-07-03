@@ -14,12 +14,34 @@
 // DIFFERENT service and 404s for queries). R2 SQL addresses the catalog by
 // BUCKET, not warehouse. The response is the CF envelope `{ success, result,
 // errors }` where `result` carries columns + rows. R2 SQL does NOT support bound
-// parameters, so this client inlines params via `escapeSqlValue` before sending.
+// parameters (a `params` field in the request body is silently ignored — a
+// `$1`-style placeholder in `query` errors `Placeholder '$1' was not provided a
+// value for execution`), so this client inlines params via `escapeSqlValue`
+// before sending.
 //
 // CAVEAT — legacy string identity-partition equality: R2 SQL returns zero rows
 // on a literal equality against a STRING identity-partition column (here
 // `site_id` / `search_type`) unless the column is materialized. String catalogs
 // use `CONCAT(col, '')` to force it; int catalogs use bare equality.
+//
+// CAPABILITIES (empirically re-verified 2026-07-03 against a real per-team
+// warehouse — see the re-audit capability matrix). Cloudflare shipped JOINs +
+// subqueries + multi-table CTEs (2026-05-14) and window functions +
+// `COUNT(DISTINCT ...)` + set operations (2026-06-21); this client's callers
+// (`dispatcher.ts`) route accordingly. Confirmed WORKING: window functions
+// including `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)` and bare
+// `COUNT(*) OVER()`, `COUNT(DISTINCT col)`, `GROUP BY`, cross-namespace
+// two-table `JOIN`, `WITH` CTEs combined with `FULL OUTER JOIN`, `UNION ALL`.
+// Confirmed STILL UNSUPPORTED: `OFFSET` (`[40003] OFFSET clause is not
+// supported`), a named `WINDOW` clause (`[40003] WINDOW clause is not
+// supported`). `regexp_matches` (the DuckDB spelling) is rejected — R2 SQL's
+// equivalent is `regexp_match(col, pattern) IS NOT NULL` (a different function
+// name AND return type: `regexp_match` returns a match-groups list, not a
+// bool). Pricing: $2.50/TB scanned (announced); default `LIMIT` when the query
+// omits one is 500 rows; heavy DISTINCT/JOIN queries are resource-gated by CF
+// but none of the shapes tested here (fleet-scale: low hundreds of files, low
+// MBs scanned) tripped a resource-gate response — latency stayed ~1-2.5s per
+// query, well under this client's 25s deadline.
 
 import type { ArchetypeQuery } from '@gscdump/contracts/archetypes'
 import type { Result } from 'gscdump/result'

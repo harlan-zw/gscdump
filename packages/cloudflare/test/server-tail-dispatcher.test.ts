@@ -69,6 +69,74 @@ describe('resolveServerTailEngine', () => {
     expect(resolveServerTailEngine({ ...q, offset: 0 })).toBe('r2-sql')
   })
 
+  it('keeps a top-n-breakdown with includeTotal on r2-sql (COUNT(*) OVER() verified working 2026-07-03)', () => {
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'page',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 20,
+      includeTotal: true,
+    }
+    expect(resolveServerTailEngine(q)).toBe('r2-sql')
+  })
+
+  it('keeps a compareRange top-n-breakdown on r2-sql (CTE + FULL OUTER JOIN verified working 2026-07-03)', () => {
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'page',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 20,
+      compareRange: { start: '2025-10-01', end: '2025-12-31' },
+    }
+    expect(resolveServerTailEngine(q)).toBe('r2-sql')
+  })
+
+  it('keeps a top-n-breakdown with BOTH compareRange and includeTotal on r2-sql (combined shape verified working 2026-07-03)', () => {
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'page',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 20,
+      compareRange: { start: '2025-10-01', end: '2025-12-31' },
+      includeTotal: true,
+    }
+    expect(resolveServerTailEngine(q)).toBe('r2-sql')
+  })
+
+  it('still escalates a queryCanonical-dimensioned breakdown to duckdb (query_dim sidecar table is not an Iceberg table, independent of COUNT(DISTINCT) support)', () => {
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'queryCanonical',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 20,
+    }
+    expect(resolveServerTailEngine(q)).toBe('duckdb')
+  })
+
+  it('escalates a top-n-breakdown with non-zero offset to duckdb, still confirmed unsupported', () => {
+    // Distinct from the generic offset test above: OFFSET is CONFIRMED
+    // rejected by R2 SQL (`[40003] OFFSET clause is not supported`,
+    // 2026-07-03), not merely "unverified" as the original POC comment said.
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'page',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 20,
+      offset: 1,
+    }
+    expect(resolveServerTailEngine(q)).toBe('duckdb')
+  })
+
   it('escalates a faceted (brand regex) query to duckdb', () => {
     const q: TopNBreakdownQuery = {
       ...base,

@@ -106,8 +106,11 @@ export interface ResolvedTable {
 export interface ServerTailDirective {
   /**
    * `'r2-sql'`  — server runs the query via R2 SQL over the Iceberg table.
-   * `'duckdb'`  — server runs DuckDB-over-Iceberg-files (window functions).
-   * The hybrid split (POC Spike 4): 8/10 archetypes `r2-sql`, 2 `duckdb`.
+   * `'duckdb'`  — server runs DuckDB-over-Iceberg-files (caller-supplied SQL,
+   * or a query R2 SQL still can't run — see `dispatcher.ts` for the current
+   * escalation rules, re-verified against real R2 SQL 2026-07-03; R2 SQL now
+   * supports window functions, `COUNT(DISTINCT)`, JOINs and CTEs, so the split
+   * is no longer a fixed "window functions → duckdb" rule).
    */
   engine: 'r2-sql' | 'duckdb'
   /** Endpoint the consumer POSTs the archetype query to. */
