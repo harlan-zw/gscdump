@@ -144,6 +144,7 @@ describe('@gscdump/contracts', () => {
       contractVersion: GSCDUMP_ONBOARDING_CONTRACT_VERSION,
       userId: 'user_1',
       partnerId: 'partner_1',
+      currentTeamId: 'team_1',
       account: {
         status: 'ready',
         grantedScopes: ['https://www.googleapis.com/auth/webmasters.readonly'],

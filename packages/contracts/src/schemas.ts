@@ -468,6 +468,10 @@ export const partnerLifecycleResponseSchema = z.object({
   contractVersion: z.literal(GSCDUMP_ONBOARDING_CONTRACT_VERSION),
   userId: z.string(),
   partnerId: z.string().nullable(),
+  // `users.current_team_id` — the team the user's dashboard is currently
+  // scoped to. Additive field for partners that need to resolve a team-scoped
+  // catalog (see teamCatalogRefSchema) without a separate round trip.
+  currentTeamId: z.string().nullable(),
   account: partnerLifecycleAccountSchema,
   sites: z.array(partnerLifecycleSiteSchema),
 }).loose()
@@ -566,6 +570,23 @@ export const bulkRegisterPartnerSitesResponseSchema = z.object({
     notFound: z.number(),
     errors: z.number(),
   }),
+}).loose()
+
+// GET /api/partner/teams/{teamId}/catalog response — the read-side counterpart
+// to the Stage-3 injection endpoint (registerPartnerSiteSchema's neighbor,
+// team_catalogs table). Deliberately omits `provisioningError`: that field can
+// carry internal diagnostic detail (bucket names, stack-adjacent strings) and
+// partners have no actionable use for it, so it's never returned here.
+export const teamCatalogRefSchema = z.object({
+  teamId: z.string(),
+  catalogUri: z.string().nullable(),
+  warehouse: z.string().nullable(),
+  bucket: z.string().nullable(),
+  namespace: z.string().nullable(),
+  provisioningState: z.string().nullable(),
+  keyEncoding: z.string().nullable(),
+  catalogTablesReady: z.boolean(),
+  readsEnabled: z.boolean(),
 }).loose()
 
 export const dataQueryOptionsSchema = z.object({
