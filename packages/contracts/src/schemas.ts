@@ -428,6 +428,10 @@ export const partnerLifecycleSiteSchema = z.object({
   // Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize
   // into their own catalog namespaces. Nullable only for pre-0029 unbackfilled rows.
   intId: z.number().nullable(),
+  // Team-scoped catalog identifier (`user_sites.catalog_site_id`, migration
+  // 0032). Caller-supplied at registration or defaults to `intId`. See
+  // `registerPartnerSiteSchema.catalogSiteId`.
+  catalogSiteId: z.number().nullable(),
   externalSiteId: z.string().nullable(),
   requestedUrl: z.string(),
   gscPropertyUrl: z.string().nullable(),
@@ -510,6 +514,9 @@ export const gscdumpSiteRegistrationSchema = z.object({
   // Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize
   // into their own catalog namespaces.
   intId: z.number().nullable().optional(),
+  // Team-scoped catalog identifier (`user_sites.catalog_site_id`, migration
+  // 0032). Echoes the supplied `catalogSiteId` or the `int_id` default.
+  catalogSiteId: z.number().nullable().optional(),
   status: z.enum(['idle', 'pending', 'syncing', 'synced', 'error']),
   message: z.string().optional(),
   existing: z.boolean().optional(),
@@ -533,6 +540,12 @@ export const registerPartnerSiteSchema = z.object({
   // (validateEnabledSearchTypes) always implies 'web'; missing field defaults
   // to ['web']. Invalid slices are rejected with 400.
   enabledSearchTypes: z.array(searchTypeSchema).optional(),
+  // Team-scoped catalog identifier (R2-FIXES E5). Optional — when supplied,
+  // the server validates it is unique within the target team (409 on
+  // conflict) and stores it on `user_sites.catalog_site_id`; when absent it
+  // defaults to the site's global `int_id`. Distinct from `int_id`, which is
+  // a GLOBAL atomic sequence and cannot be caller-supplied without colliding.
+  catalogSiteId: z.number().int().positive().optional(),
 })
 
 export const bulkRegisterPartnerSitesSchema = z.object({
