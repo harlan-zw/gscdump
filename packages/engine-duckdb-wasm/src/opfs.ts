@@ -185,6 +185,13 @@ export interface OpfsAttachedHandle {
    * caller routes these to the server tail. Empty on a clean attach.
    */
   degradedTables: string[]
+  /**
+   * Why each degraded table degraded. 'quota' is actionable (the caller can
+   * reclaim space via `clearOpfsSnapshotCache` and retry once); 'contention'
+   * and 'incomplete' are transient multi-tab races the buffer fallback
+   * already absorbs.
+   */
+  degradeReasons: Partial<Record<string, 'quota' | 'contention' | 'incomplete'>>
   /** Detach the created views + release the registered OPFS file handles. */
   detach: () => Promise<void>
 }
@@ -1010,6 +1017,7 @@ export async function attachOpfsParquetTables(
     schema,
     bytesAttached,
     degradedTables: [...degraded],
+    degradeReasons: Object.fromEntries(degradeReason),
     async detach() {
       if (detached)
         return
