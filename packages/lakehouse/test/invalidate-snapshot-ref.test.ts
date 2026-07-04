@@ -15,7 +15,13 @@ describe('invalidateSnapshotRef', () => {
   it('deletes exactly the snapshot-ref key loadSnapshotId reads/writes', async () => {
     const removeItem = vi.fn(async () => {})
     await invalidateSnapshotRef(cacheWith(removeItem), 'gsc', 'queries')
-    expect(removeItem).toHaveBeenCalledExactlyOnceWith('lh-snapref\0gsc\0queries')
+    expect(removeItem).toHaveBeenCalledExactlyOnceWith('lh-snapref\0\0gsc\0queries')
+  })
+
+  it('scopes the key by catalog identity when a cacheScope is given', async () => {
+    const removeItem = vi.fn(async () => {})
+    await invalidateSnapshotRef(cacheWith(removeItem), 'gsc', 'queries', 'https://cat\0team-7-int')
+    expect(removeItem).toHaveBeenCalledExactlyOnceWith('lh-snapref\0https://cat\0team-7-int\0gsc\0queries')
   })
 
   it('swallows driver errors — a failed delete must not fail the commit path', async () => {

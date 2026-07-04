@@ -38,7 +38,7 @@ import {
 // non-breaking for every existing `@gscdump/engine/iceberg` consumer.
 // ---------------------------------------------------------------------------
 
-export { connectIcebergCatalog, ensureIcebergNamespace, invalidateSnapshotRef, listIcebergTables } from '@gscdump/lakehouse'
+export { catalogCacheScope, connectIcebergCatalog, ensureIcebergNamespace, invalidateSnapshotRef, listIcebergTables } from '@gscdump/lakehouse'
 export type {
   CatalogCache,
   CommitRetryOptions,

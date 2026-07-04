@@ -23,6 +23,7 @@ export type { IcebergAppendSinkOptions } from '../sink'
 export { createIcebergAppendSink } from './append-sink'
 export type { IcebergAppendSink } from './append-sink'
 export {
+  catalogCacheScope,
   connectIcebergCatalog,
   createIcebergTables,
   dropIcebergTables,

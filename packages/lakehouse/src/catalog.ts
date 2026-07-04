@@ -95,6 +95,15 @@ export interface IcebergConnection {
   resolver: ReturnType<typeof cachingResolver>
   /** The namespace the dataset's table lives under. */
   namespace: string
+  /**
+   * Catalog identity baked into every cross-isolate cache key. Namespaces are
+   * NOT unique across catalogs (every per-team catalog uses the same 'gsc'
+   * namespace) while deployments share one KV, so a key of (namespace, table)
+   * alone lets one team's snapshot pointer/metadata poison every other team's
+   * reads. Set by {@link connectIcebergCatalog}; hand-built connections may
+   * omit it ONLY when their cache is not shared across catalogs.
+   */
+  cacheScope?: string
 }
 
 export const ICEBERG_TYPE_MAP: Record<IcebergColumnType, IcebergPrimitiveType> = {
@@ -186,7 +195,16 @@ export async function connectIcebergCatalog(
     endpoint: config.s3.endpoint,
     pathStyle: true,
   }))
-  return { catalog, resolver, namespace: config.namespace }
+  return { catalog, resolver, namespace: config.namespace, cacheScope: catalogCacheScope(config) }
+}
+
+/**
+ * The catalog-identity component of every cross-isolate cache key. Exported so
+ * write paths that only hold the config (not a connection) can invalidate the
+ * exact keys readers populate — see {@link invalidateSnapshotRef}.
+ */
+export function catalogCacheScope(config: Pick<IcebergCatalogConfig, 'catalogUri' | 'warehouse'>): string {
+  return `${config.catalogUri}\0${config.warehouse}`
 }
 
 /**
@@ -406,8 +424,8 @@ const RESOLVED_FILES_TTL_MS = 24 * 60 * 60 * 1000
 const METADATA_TTL_MS = 24 * 60 * 60 * 1000
 const MAX_CACHED_METADATA_BYTES = 2 * 1024 * 1024
 
-function snapshotRefKey(namespace: string, table: string): string {
-  return `lh-snapref\0${namespace}\0${table}`
+function snapshotRefKey(scope: string, namespace: string, table: string): string {
+  return `lh-snapref\0${scope}\0${namespace}\0${table}`
 }
 
 /**
@@ -420,17 +438,20 @@ function snapshotRefKey(namespace: string, table: string): string {
  * next read. Best-effort like every cache path here — a failed delete only
  * means TTL-bounded staleness, never an error.
  */
-export async function invalidateSnapshotRef(cache: CatalogCache, namespace: string, table: string): Promise<void> {
+export async function invalidateSnapshotRef(cache: CatalogCache, namespace: string, table: string, cacheScope = ''): Promise<void> {
   // Swallowed by design (cache-hygiene failure must not fail the commit path
   // that calls this); the TTL bounds staleness if the delete never lands.
-  await cache.storage.removeItem(snapshotRefKey(namespace, table)).catch(() => {})
+  // `cacheScope` must match the reader's connection scope (`catalogCacheScope`
+  // over the same config) or the delete silently misses the live key.
+  await cache.storage.removeItem(snapshotRefKey(cacheScope, namespace, table)).catch(() => {})
 }
 
-function metadataRefKey(namespace: string, table: string, snapshotId: string): string {
-  return `lh-snapmeta\0${namespace}\0${table}\0${snapshotId}`
+function metadataRefKey(scope: string, namespace: string, table: string, snapshotId: string): string {
+  return `lh-snapmeta\0${scope}\0${namespace}\0${table}\0${snapshotId}`
 }
 
 function resolvedFilesKey(
+  scope: string,
   namespace: string,
   table: string,
   snapshotId: string,
@@ -439,7 +460,7 @@ function resolvedFilesKey(
 ): string {
   const matchKey = [...matches].map(m => `${m.field}=${m.value}`).sort().join(',')
   const months = [...wantedMonths].sort((a, b) => a - b).join(',')
-  return `lh-files\0${namespace}\0${table}\0${snapshotId}\0${matchKey}\0${months}`
+  return `lh-files\0${scope}\0${namespace}\0${table}\0${snapshotId}\0${matchKey}\0${months}`
 }
 
 function monthsInRange(range: { start: string, end: string }): string[] {
@@ -481,8 +502,9 @@ async function loadSnapshotId(
   cache: CatalogCache | undefined,
   now: number,
 ): Promise<{ snapshotId: string | null, metadata: LoadedTableMetadata | null }> {
+  const scope = conn.cacheScope ?? ''
   if (cache) {
-    const cached = await cacheGet<string>(cache, snapshotRefKey(namespace, table), now)
+    const cached = await cacheGet<string>(cache, snapshotRefKey(scope, namespace, table), now)
     if (cached !== undefined)
       return { snapshotId: cached, metadata: null }
   }
@@ -490,11 +512,11 @@ async function loadSnapshotId(
   const raw = metadata['current-snapshot-id']
   const snapshotId = raw == null ? null : String(raw)
   if (cache) {
-    await cachePut(cache, snapshotRefKey(namespace, table), snapshotId, SNAPSHOT_REF_TTL_MS, now)
+    await cachePut(cache, snapshotRefKey(scope, namespace, table), snapshotId, SNAPSHOT_REF_TTL_MS, now)
     if (snapshotId != null) {
       const serialized = JSON.stringify(metadata)
       if (serialized.length <= MAX_CACHED_METADATA_BYTES)
-        await cachePut(cache, metadataRefKey(namespace, table, snapshotId), metadata, METADATA_TTL_MS, now)
+        await cachePut(cache, metadataRefKey(scope, namespace, table, snapshotId), metadata, METADATA_TTL_MS, now)
     }
   }
   return { snapshotId, metadata }
@@ -521,7 +543,8 @@ export async function resolveIcebergDataFiles(
   if (snapshotId == null)
     return []
 
-  const filesKey = resolvedFilesKey(namespace, table, snapshotId, opts.matches, wantedMonths)
+  const scope = conn.cacheScope ?? ''
+  const filesKey = resolvedFilesKey(scope, namespace, table, snapshotId, opts.matches, wantedMonths)
   if (opts.cache) {
     const endCache = profiler?.start('iceberg.cache')
     const cached = await cacheGet<IcebergListedDataFile[]>(opts.cache, filesKey, now)
@@ -531,7 +554,7 @@ export async function resolveIcebergDataFiles(
   }
 
   if (!metadata && opts.cache) {
-    const cachedMeta = await cacheGet<LoadedTableMetadata>(opts.cache, metadataRefKey(namespace, table, snapshotId), now)
+    const cachedMeta = await cacheGet<LoadedTableMetadata>(opts.cache, metadataRefKey(scope, namespace, table, snapshotId), now)
     if (cachedMeta != null)
       metadata = cachedMeta
   }
@@ -582,7 +605,7 @@ export async function resolveIcebergDataFiles(
   endWalk?.({ manifests: manifests.length, files: out.length })
 
   if (opts.cache) {
-    const freshKey = resolvedFilesKey(namespace, table, snapshotId, opts.matches, wantedMonths)
+    const freshKey = resolvedFilesKey(scope, namespace, table, snapshotId, opts.matches, wantedMonths)
     await cachePut(opts.cache, freshKey, out, RESOLVED_FILES_TTL_MS, now)
   }
   return out

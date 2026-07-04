@@ -6,6 +6,7 @@
  */
 
 export {
+  catalogCacheScope,
   connectIcebergCatalog,
   dropIcebergTables,
   ensureIcebergNamespace,
