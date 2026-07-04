@@ -66,7 +66,8 @@ interface MoverRow {
   baselineClicks: number
   clicksChange: number
   clicksChangePercent: number
-  positionChange: number
+  /** `null` for brand-new keywords with no previous-period position to diff against. */
+  positionChange: number | null
   direction: 'rising' | 'declining' | 'stable'
 }
 
@@ -88,7 +89,9 @@ function buildMoversSection(
       clicks: r.recentClicks,
       clicksChange: r.clicksChange,
       clicksChangePercent: r.clicksChangePercent,
-      positionChange: r.positionChange,
+      // Omit rather than fake a 0 — `ReportFinding.metrics` is a plain
+      // Record<string, number>, and this is null for brand-new keywords.
+      ...(r.positionChange != null ? { positionChange: r.positionChange } : {}),
     },
     delta: {
       metric: 'clicks',

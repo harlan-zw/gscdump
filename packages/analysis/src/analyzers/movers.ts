@@ -46,11 +46,13 @@ export interface MoverData {
   recentPosition: number
   baselineClicks: number
   baselineImpressions: number
-  baselinePosition: number
+  /** `null` when the keyword has no previous-period data (a genuinely new query), not "position 0". */
+  baselinePosition: number | null
   clicksChange: number
   clicksChangePercent: number
   impressionsChangePercent: number
-  positionChange: number
+  /** `null` unless both recentPosition and baselinePosition exist. */
+  positionChange: number | null
 }
 
 export interface MoversResult {
@@ -75,7 +77,7 @@ export interface MoversResultRow extends MoverData {
   position: number
   prevClicks: number
   prevImpressions: number
-  prevPosition: number
+  prevPosition: number | null
   series?: MoversSeriesPoint[]
 }
 
@@ -177,9 +179,16 @@ export function analyzeMovers(
     if (impressions < minImpressions)
       continue
 
-    const baseline = baselineMap.get(row.query) || { clicks: 0, impressions: 0, position: 0, page: null }
-    const clicksChangePercent = percentDifference(clicks, baseline.clicks)
-    const impressionsChangePercent = percentDifference(impressions, baseline.impressions)
+    // A missing baseline means this keyword is genuinely new this period —
+    // 0 clicks/impressions is correct, but a fabricated position 0 would
+    // read as "#1" and produce a spurious huge positionChange. Keep the
+    // baseline position (and the derived change) `null` instead.
+    const baseline = baselineMap.get(row.query)
+    const baselineClicksRaw = baseline?.clicks ?? 0
+    const baselineImpressionsRaw = baseline?.impressions ?? 0
+    const baselinePosition = baseline?.position ?? null
+    const clicksChangePercent = percentDifference(clicks, baselineClicksRaw)
+    const impressionsChangePercent = percentDifference(impressions, baselineImpressionsRaw)
 
     const data: MoverData = {
       keyword: row.query,
@@ -187,13 +196,13 @@ export function analyzeMovers(
       recentClicks: clicks,
       recentImpressions: impressions,
       recentPosition: position,
-      baselineClicks: Math.round(baseline.clicks),
-      baselineImpressions: Math.round(baseline.impressions),
-      baselinePosition: baseline.position,
-      clicksChange: clicks - Math.round(baseline.clicks),
+      baselineClicks: Math.round(baselineClicksRaw),
+      baselineImpressions: Math.round(baselineImpressionsRaw),
+      baselinePosition,
+      clicksChange: clicks - Math.round(baselineClicksRaw),
       clicksChangePercent,
       impressionsChangePercent,
-      positionChange: position - baseline.position,
+      positionChange: baselinePosition != null ? position - baselinePosition : null,
     }
 
     const absChange = Math.abs(clicksChangePercent / 100)
@@ -217,7 +226,8 @@ export function analyzeMovers(
       case 'impressionsChange':
         return Math.abs(b.impressionsChangePercent) - Math.abs(a.impressionsChangePercent)
       case 'positionChange':
-        return Math.abs(b.positionChange) - Math.abs(a.positionChange)
+        // Rows with no positionChange signal (brand-new keywords) sort last.
+        return Math.abs(b.positionChange ?? 0) - Math.abs(a.positionChange ?? 0)
       default:
         return Math.abs(b.clicksChangePercent) - Math.abs(a.clicksChangePercent)
     }
@@ -298,7 +308,7 @@ export const moversAnalyzer = defineAnalyzer<AnalysisParams, Row, MoversResultRo
           c.position AS recentPosition,
           COALESCE(p.clicks, 0.0) AS baselineClicks,
           COALESCE(p.impressions, 0.0) AS baselineImpressions,
-          COALESCE(p.position, 0.0) AS baselinePosition,
+          p.position AS baselinePosition,
           (c.clicks - COALESCE(p.clicks, 0.0)) AS clicksChange,
           CASE
             WHEN COALESCE(p.clicks, 0.0) = 0 THEN CASE WHEN c.clicks > 0 THEN 100.0 ELSE 0.0 END
@@ -308,7 +318,7 @@ export const moversAnalyzer = defineAnalyzer<AnalysisParams, Row, MoversResultRo
             WHEN COALESCE(p.impressions, 0.0) = 0 THEN CASE WHEN c.impressions > 0 THEN 100.0 ELSE 0.0 END
             ELSE (c.impressions - p.impressions) * 100.0 / p.impressions
           END AS impressionsChangePercent,
-          (c.position - COALESCE(p.position, 0.0)) AS positionChange,
+          CASE WHEN p.position IS NOT NULL THEN (c.position - p.position) ELSE NULL END AS positionChange,
           s.seriesJson
         FROM cur c
         LEFT JOIN prev p ON c.query = p.query AND c.url = p.url
@@ -354,7 +364,7 @@ export const moversAnalyzer = defineAnalyzer<AnalysisParams, Row, MoversResultRo
       const recentPosition = num(r.recentPosition)
       const baselineClicks = Math.round(num(r.baselineClicks))
       const baselineImpressions = Math.round(num(r.baselineImpressions))
-      const baselinePosition = num(r.baselinePosition)
+      const baselinePosition = r.baselinePosition == null ? null : num(r.baselinePosition)
       return {
         keyword: str(r.keyword),
         page: r.page == null ? null : str(r.page),
@@ -367,7 +377,7 @@ export const moversAnalyzer = defineAnalyzer<AnalysisParams, Row, MoversResultRo
         clicksChange: num(r.clicksChange),
         clicksChangePercent: num(r.clicksChangePercent),
         impressionsChangePercent: num(r.impressionsChangePercent),
-        positionChange: num(r.positionChange),
+        positionChange: r.positionChange == null ? null : num(r.positionChange),
         direction: str(r.direction) as 'rising' | 'declining' | 'stable',
         series: parseJsonList(r.seriesJson).map(s => ({
           week: str(s.week),

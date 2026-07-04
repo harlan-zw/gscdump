@@ -282,6 +282,17 @@ describe('prefilter (row-level WHERE on raw metrics)', () => {
     }), { adapter })
     expect(r.params).not.toContain(0.05)
   })
+
+  it('skips position (raw sum_position is impression-scaled, not comparable to a plain position threshold)', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolveToSQLOptimized(state({
+      prefilter: {
+        _filters: [{ dimension: 'position', operator: 'metricLte', expression: '10' }],
+      } as any,
+    }), { adapter })
+    expect(r.sql).not.toMatch(/"sum_position"\s*<=/)
+    expect(r.params).not.toContain(10)
+  })
 })
 
 describe('createIcebergResolverAdapter', () => {

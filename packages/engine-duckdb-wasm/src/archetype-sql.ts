@@ -32,7 +32,10 @@ const METRIC_SQL: Record<string, string> = {
   clicks: 'SUM(clicks)',
   impressions: 'SUM(impressions)',
   ctr: 'CASE WHEN SUM(impressions) = 0 THEN 0 ELSE SUM(clicks) * 1.0 / SUM(impressions) END',
-  position: 'CASE WHEN SUM(impressions) = 0 THEN NULL ELSE SUM(sum_position) * 1.0 / SUM(impressions) END',
+  // Fact-table convention: `sum_position = (position − 1) × impressions`, so
+  // the mean must be recovered with `+ 1` (parity with the cloudflare
+  // sibling's `metricExpr`).
+  position: 'CASE WHEN SUM(impressions) = 0 THEN NULL ELSE SUM(sum_position) * 1.0 / SUM(impressions) + 1 END',
 }
 
 /**
@@ -108,7 +111,10 @@ function deviceMetricExpr(metric: string, suffix: string): string {
     case 'clicks': return `SUM(clicks_${suffix})`
     case 'impressions': return `SUM(impressions_${suffix})`
     case 'ctr': return `CASE WHEN SUM(impressions_${suffix}) = 0 THEN 0 ELSE SUM(clicks_${suffix}) * 1.0 / SUM(impressions_${suffix}) END`
-    case 'position': return `CASE WHEN SUM(impressions_${suffix}) = 0 THEN NULL ELSE SUM(sum_position_${suffix}) * 1.0 / SUM(impressions_${suffix}) END`
+    // Fact-table convention: `sum_position_{d} = (position − 1) × impressions_{d}`,
+    // so the mean must be recovered with `+ 1` (parity with the non-device
+    // `position` metric above and the cloudflare sibling's `metricExpr`).
+    case 'position': return `CASE WHEN SUM(impressions_${suffix}) = 0 THEN NULL ELSE SUM(sum_position_${suffix}) * 1.0 / SUM(impressions_${suffix}) + 1 END`
     default: throw new Error(`[archetype-sql] unknown metric: ${metric}`)
   }
 }

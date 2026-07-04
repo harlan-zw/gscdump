@@ -246,8 +246,11 @@ export function createSqlFragments<TableKey extends string>(
         col = t.clicks
       else if (metric === 'impressions')
         col = t.impressions
-      else if (metric === 'position')
-        col = t.sum_position
+      // position has no per-row equivalent: `sum_position` is impression-scaled
+      // ((position − 1) × impressions), so comparing it against a plain
+      // position threshold is a unit mismatch (falls through and is skipped,
+      // same as ctr). The aggregate is filtered correctly post-aggregation via
+      // `havingPredicates`, which recovers the true mean with `+ 1`.
       if (!col)
         continue
       const v = Number(f.expression)

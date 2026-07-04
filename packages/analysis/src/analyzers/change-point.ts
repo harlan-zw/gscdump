@@ -51,6 +51,17 @@ export const changePointAnalyzer = defineAnalyzer<AnalysisParams, Row, ChangePoi
       ? METRIC_EXPR.position
       : `CAST(SUM(${metric}) AS DOUBLE)`
 
+    // For position, each day's value is a per-day impression-weighted mean —
+    // averaging those unweighted would let low-impression days skew segment
+    // means/variance. Weight by day impressions for position; weight 1 for
+    // clicks/impressions (additive metrics, unweighted day mean is correct;
+    // with weight = 1 every w_* term reduces to the old n_*-based math).
+    // Day counts (n_left / n_total) are kept alongside for the min-side
+    // gates and the LLR scaling, which are per-day by design.
+    const weightExpr = metric === 'position'
+      ? METRIC_EXPR.impressions
+      : '1.0'
+
     const sql = `
     WITH daily AS (
       SELECT
@@ -62,7 +73,8 @@ export const changePointAnalyzer = defineAnalyzer<AnalysisParams, Row, ChangePoi
         CAST(date AS DATE) AS date,
         ${METRIC_EXPR.clicks} AS clicks,
         ${METRIC_EXPR.impressions} AS impressions,
-        ${valueExpr} AS value
+        ${valueExpr} AS value,
+        ${weightExpr} AS weight
       FROM read_parquet({{FILES}}, union_by_name = true)
       WHERE date >= ? AND date <= ?
         AND query IS NOT NULL AND query <> ''
@@ -74,8 +86,9 @@ export const changePointAnalyzer = defineAnalyzer<AnalysisParams, Row, ChangePoi
       SELECT query, page,
         COUNT(*) AS n_total,
         SUM(impressions) AS total_impressions,
-        SUM(value) AS sum_total,
-        SUM(value * value) AS sumsq_total
+        SUM(weight) AS w_total,
+        SUM(value * weight) AS sum_total,
+        SUM(value * value * weight) AS sumsq_total
       FROM daily
       GROUP BY query, page
       HAVING COUNT(*) >= ${Number(minDays)}
@@ -83,15 +96,16 @@ export const changePointAnalyzer = defineAnalyzer<AnalysisParams, Row, ChangePoi
     ),
     filtered AS (
       SELECT d.*,
-        e.n_total, e.sum_total, e.sumsq_total, e.total_impressions
+        e.n_total, e.w_total, e.sum_total, e.sumsq_total, e.total_impressions
       FROM daily d
       JOIN entity_stats e USING (query, page)
     ),
     cumulated AS (
       SELECT *,
         COUNT(*) OVER w AS n_left,
-        SUM(value) OVER w AS sum_left,
-        SUM(value * value) OVER w AS sumsq_left
+        SUM(weight) OVER w AS w_left,
+        SUM(value * weight) OVER w AS sum_left,
+        SUM(value * value * weight) OVER w AS sumsq_left
       FROM filtered
       WINDOW w AS (
         PARTITION BY query, page
@@ -102,22 +116,23 @@ export const changePointAnalyzer = defineAnalyzer<AnalysisParams, Row, ChangePoi
     llr_scored AS (
       SELECT *,
         (n_total - n_left) AS n_right,
+        (w_total - w_left) AS w_right,
         (sum_total - sum_left) AS sum_right,
         (sumsq_total - sumsq_left) AS sumsq_right,
         GREATEST(
-          (sumsq_left / NULLIF(n_left, 0))
-            - (sum_left / NULLIF(n_left, 0)) * (sum_left / NULLIF(n_left, 0)),
+          (sumsq_left / NULLIF(w_left, 0))
+            - (sum_left / NULLIF(w_left, 0)) * (sum_left / NULLIF(w_left, 0)),
           1e-9
         ) AS var_left,
         GREATEST(
-          ((sumsq_total - sumsq_left) / NULLIF(n_total - n_left, 0))
-            - ((sum_total - sum_left) / NULLIF(n_total - n_left, 0))
-              * ((sum_total - sum_left) / NULLIF(n_total - n_left, 0)),
+          ((sumsq_total - sumsq_left) / NULLIF(w_total - w_left, 0))
+            - ((sum_total - sum_left) / NULLIF(w_total - w_left, 0))
+              * ((sum_total - sum_left) / NULLIF(w_total - w_left, 0)),
           1e-9
         ) AS var_right,
         GREATEST(
-          (sumsq_total / NULLIF(n_total, 0))
-            - (sum_total / NULLIF(n_total, 0)) * (sum_total / NULLIF(n_total, 0)),
+          (sumsq_total / NULLIF(w_total, 0))
+            - (sum_total / NULLIF(w_total, 0)) * (sum_total / NULLIF(w_total, 0)),
           1e-9
         ) AS var_single
       FROM cumulated
@@ -137,8 +152,8 @@ export const changePointAnalyzer = defineAnalyzer<AnalysisParams, Row, ChangePoi
       SELECT query, page, n_total, total_impressions,
         arg_max(date, llr) AS change_date,
         MAX(llr) AS best_llr,
-        arg_max(sum_left / NULLIF(n_left, 0), llr) AS left_mean,
-        arg_max((sum_total - sum_left) / NULLIF(n_total - n_left, 0), llr) AS right_mean,
+        arg_max(sum_left / NULLIF(w_left, 0), llr) AS left_mean,
+        arg_max((sum_total - sum_left) / NULLIF(w_total - w_left, 0), llr) AS right_mean,
         arg_max(sqrt(var_left), llr) AS left_std,
         arg_max(sqrt(var_right), llr) AS right_std
       FROM llr

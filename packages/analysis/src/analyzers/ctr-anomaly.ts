@@ -84,7 +84,11 @@ export const ctrAnomalyAnalyzer = defineAnalyzer<AnalysisParams, Row, CtrAnomaly
       SELECT *,
         AVG(day_ctr)           OVER w AS rolling_ctr,
         STDDEV_POP(day_ctr)    OVER w AS rolling_stddev,
-        AVG(day_position)      OVER w AS rolling_position,
+        -- Impression-weighted rolling mean: day_position is already a recovered
+        -- 1-based daily weighted mean, so weighting by day impressions directly
+        -- is algebraically exact (no -1/+1 dance needed).
+        SUM(day_position * day_impressions) OVER w
+          / NULLIF(SUM(day_impressions) OVER w, 0) AS rolling_position,
         COUNT(*)               OVER w AS rolling_n
       FROM daily
       WINDOW w AS (
@@ -133,7 +137,8 @@ export const ctrAnomalyAnalyzer = defineAnalyzer<AnalysisParams, Row, CtrAnomaly
         END) AS severity_raw,
         MAX(CASE WHEN is_breach THEN ABS(z_score) ELSE 0.0 END) AS max_z,
         AVG(rolling_ctr) FILTER (WHERE rolling_n >= ${Number(minRollingN)}) AS baseline_ctr,
-        AVG(rolling_position) FILTER (WHERE rolling_n >= ${Number(minRollingN)}) AS baseline_position,
+        SUM(rolling_position * day_impressions) FILTER (WHERE rolling_n >= ${Number(minRollingN)})
+          / NULLIF(SUM(day_impressions) FILTER (WHERE rolling_n >= ${Number(minRollingN)}), 0) AS baseline_position,
         SUM(day_impressions) AS total_impressions,
         SUM(day_clicks) AS total_clicks
       FROM breaches

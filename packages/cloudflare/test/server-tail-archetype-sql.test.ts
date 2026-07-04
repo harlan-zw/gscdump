@@ -23,7 +23,7 @@ describe('buildArchetypeSql', () => {
     expect(plan.table).toBe('dates')
     expect(plan.sql).toContain('SUM(clicks) AS clicks')
     expect(plan.sql).toContain('SUM(clicks) / NULLIF(SUM(impressions), 0) AS ctr')
-    expect(plan.sql).toContain('SUM(sum_position) / NULLIF(SUM(impressions), 0) AS position')
+    expect(plan.sql).toContain('SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position')
     expect(plan.sql).toContain('GROUP BY date')
     // partition-pruning prefix is 4 bound params
     expect(plan.params).toEqual(['site-1', 'web', '2026-01-01', '2026-03-31'])
@@ -80,6 +80,42 @@ describe('buildArchetypeSql', () => {
     expect(buildArchetypeSql(q).sql).toContain('LIMIT 20 OFFSET 40')
   })
 
+  // Regression: a malformed metric must fail loud, never fall through to an
+  // `undefined` token in the SQL. Silent `undefined` produced R2 SQL 40004
+  // "No field named undefined" (GSCDUMP-21) and a missing orderBy threw an
+  // opaque "reading 'metric'" TypeError (GSCDUMP-20).
+  it('rejects an unknown metric instead of emitting `undefined` SQL', () => {
+    const q = {
+      ...base,
+      archetype: 'site-daily-timeseries',
+      metrics: ['clicks', 'clickz'],
+    } as unknown as SiteDailyTimeseriesQuery
+    expect(() => buildArchetypeSql(q)).toThrow(/unknown metric/)
+  })
+
+  it('rejects top-n-breakdown with a missing orderBy', () => {
+    const q = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'page',
+      metrics: ['clicks'],
+      limit: 50,
+    } as unknown as TopNBreakdownQuery
+    expect(() => buildArchetypeSql(q)).toThrow(/requires orderBy/)
+  })
+
+  it('rejects top-n-breakdown with an undefined orderBy metric', () => {
+    const q = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'page',
+      metrics: ['clicks'],
+      orderBy: { metric: undefined, dir: 'desc' },
+      limit: 50,
+    } as unknown as TopNBreakdownQuery
+    expect(() => buildArchetypeSql(q)).toThrow(/requires orderBy/)
+  })
+
   it('top-n-breakdown over device reads the dates pivot columns', () => {
     const q: TopNBreakdownQuery = {
       ...base,
@@ -94,7 +130,7 @@ describe('buildArchetypeSql', () => {
     expect(plan.sql).toContain('UNION ALL')
     expect(plan.sql).toContain('SUM(clicks_desktop) AS clicks')
     expect(plan.sql).toContain('SUM(impressions_mobile) AS impressions')
-    expect(plan.sql).toContain('SUM(sum_position_tablet) / NULLIF(SUM(impressions_tablet), 0) AS position')
+    expect(plan.sql).toContain('SUM(sum_position_tablet) / NULLIF(SUM(impressions_tablet), 0) + 1 AS position')
     expect(plan.sql).toContain('ORDER BY clicks DESC LIMIT 3')
     expect(plan.params).toHaveLength(12)
   })

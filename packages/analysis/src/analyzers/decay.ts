@@ -46,9 +46,11 @@ export interface DecayResult {
   previousClicks: number
   lostClicks: number
   declinePercent: number
-  currentPosition: number
+  /** `null` when the page had no ranking data in the current period (not "position 0"). */
+  currentPosition: number | null
   previousPosition: number
-  positionDrop: number
+  /** `null` unless both currentPosition and previousPosition exist. */
+  positionDrop: number | null
   series?: DecaySeriesPoint[]
 }
 
@@ -88,21 +90,26 @@ export function analyzeDecay(
   const results: DecayResult[] = []
 
   for (const [page, prev] of previousMap) {
-    const curr = currentMap.get(page) || { clicks: 0, position: 0 }
+    // No entry means the page had zero visibility this period: 0 clicks is
+    // correct, but position 0 would read as "#1" — keep it `null` (unranked)
+    // rather than inventing a sentinel position.
+    const curr = currentMap.get(page)
+    const currentClicks = curr?.clicks ?? 0
+    const currentPosition = curr?.position ?? null
 
-    const lostClicks = prev.clicks - curr.clicks
+    const lostClicks = prev.clicks - currentClicks
     const declinePercent = prev.clicks > 0 ? lostClicks / prev.clicks : 0
 
     if (declinePercent >= threshold && lostClicks > 0) {
       results.push({
         page,
-        currentClicks: curr.clicks,
+        currentClicks,
         previousClicks: prev.clicks,
         lostClicks,
         declinePercent,
-        currentPosition: curr.position,
+        currentPosition,
         previousPosition: prev.position,
-        positionDrop: curr.position - prev.position,
+        positionDrop: currentPosition != null ? currentPosition - prev.position : null,
       })
     }
   }
@@ -173,9 +180,9 @@ export const decayAnalyzer = defineAnalyzer<AnalysisParams, Row, DecayResult[]>(
           p.clicks AS previousClicks,
           (p.clicks - COALESCE(c.clicks, 0.0)) AS lostClicks,
           (p.clicks - COALESCE(c.clicks, 0.0)) / NULLIF(p.clicks, 0) AS declinePercent,
-          COALESCE(c.position, 0.0) AS currentPosition,
+          c.position AS currentPosition,
           p.position AS previousPosition,
-          (COALESCE(c.position, 0.0) - p.position) AS positionDrop,
+          CASE WHEN c.position IS NOT NULL THEN (c.position - p.position) ELSE NULL END AS positionDrop,
           s.seriesJson
         FROM prev p
         LEFT JOIN cur c ON p.url = c.url
@@ -215,9 +222,9 @@ export const decayAnalyzer = defineAnalyzer<AnalysisParams, Row, DecayResult[]>(
       previousClicks: num(r.previousClicks),
       lostClicks: num(r.lostClicks),
       declinePercent: num(r.declinePercent),
-      currentPosition: num(r.currentPosition),
+      currentPosition: r.currentPosition == null ? null : num(r.currentPosition),
       previousPosition: num(r.previousPosition),
-      positionDrop: num(r.positionDrop),
+      positionDrop: r.positionDrop == null ? null : num(r.positionDrop),
       series: parseJsonList(r.seriesJson).map(s => ({
         week: str(s.week),
         clicks: num(s.clicks),

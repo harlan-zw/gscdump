@@ -146,7 +146,7 @@ export const intentAtlasAnalyzer = defineAnalyzer<AnalysisParams, Row, IntentAtl
       SUM(impressions) AS totalImpressions,
       SUM(clicks) AS totalClicks,
       SUM(clicks) / NULLIF(SUM(impressions), 0) AS ctr,
-      AVG(position) AS avgPosition,
+      SUM((position - 1) * impressions) / NULLIF(SUM(impressions), 0) + 1 AS avgPosition,
       to_json(list({
         'query': query,
         'impressions': impressions,

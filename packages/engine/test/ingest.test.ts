@@ -168,8 +168,8 @@ describe('assembleDatesRow', () => {
     expect(toPath('/already-a-path')).toBe('/already-a-path')
   })
 
-  it('toSumPosition guards impressions=0 to avoid losing sign', () => {
-    expect(toSumPosition(5, 0)).toBe(4)
+  it('toSumPosition returns 0 for impressions=0 (zero-impression rows must contribute nothing to either side of the weighted mean)', () => {
+    expect(toSumPosition(5, 0)).toBe(0)
     expect(toSumPosition(1, 0)).toBe(0)
   })
 })

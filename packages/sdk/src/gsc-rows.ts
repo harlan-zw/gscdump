@@ -35,13 +35,19 @@ export interface GscDailySummary {
   chartData: Array<{ date: string, clicks: number, impressions: number }>
 }
 
-/** Fill `sum_position` from `(position - 1) * impressions` when the row only carries `position`. */
+/**
+ * Fill `sum_position` from `(position - 1) * impressions` when the row only
+ * carries `position`. GSC positions are 1-based and 0/absent is a no-data
+ * sentinel — the old `Math.max(1, …)` clamp synthesized rank #1 (sum 0 with
+ * full impression weight) for such rows instead of contributing nothing.
+ */
 export function coerceRowMetrics<
   T extends { impressions: number, sum_position?: number, position?: number },
 >(row: T): T & { sum_position: number } {
+  const position = row.position ?? 0
   return {
     ...row,
-    sum_position: row.sum_position ?? (Math.max(1, row.position ?? 0) - 1) * row.impressions,
+    sum_position: row.sum_position ?? (position > 0 ? (position - 1) * row.impressions : 0),
   }
 }
 

@@ -372,9 +372,19 @@ export interface IcebergListedDataFile {
   rowCount: number
 }
 
-/** Minimal profiler contract — start a named span, get back an end callback. */
+/**
+ * Minimal profiler contract — start a named span, get back an end callback.
+ *
+ * The `meta` shape is pinned to `Record<string, string | number | boolean>`
+ * to stay structurally identical to `@gscdump/engine`'s `QueryProfiler`
+ * (`packages/engine/src/storage.ts`). Engine depends on lakehouse (not the
+ * reverse), so this can't be a cross-package re-export without a cycle —
+ * matching the shape exactly is what lets a profiler built with engine's
+ * `createQueryProfiler` flow into `resolveIcebergDataFiles`/
+ * `listIcebergDataFiles` without a type error at the call boundary.
+ */
 export interface QueryProfiler {
-  start: (name: string) => ((meta?: Record<string, unknown>) => void) | undefined
+  start: (name: string) => ((meta?: Record<string, string | number | boolean>) => void) | undefined
 }
 
 export interface ResolveIcebergDataFilesOptions {

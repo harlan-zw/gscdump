@@ -1795,7 +1795,8 @@ exports[`analyzer plan snapshots > sql plan: change-point 1`] = `
         CAST(date AS DATE) AS date,
         CAST(SUM(clicks) AS DOUBLE) AS clicks,
         CAST(SUM(impressions) AS DOUBLE) AS impressions,
-        CAST(SUM(clicks) AS DOUBLE) AS value
+        CAST(SUM(clicks) AS DOUBLE) AS value,
+        1.0 AS weight
       FROM read_parquet({{FILES}}, union_by_name = true)
       WHERE date >= ? AND date <= ?
         AND query IS NOT NULL AND query <> ''
@@ -1807,8 +1808,9 @@ exports[`analyzer plan snapshots > sql plan: change-point 1`] = `
       SELECT query, page,
         COUNT(*) AS n_total,
         SUM(impressions) AS total_impressions,
-        SUM(value) AS sum_total,
-        SUM(value * value) AS sumsq_total
+        SUM(weight) AS w_total,
+        SUM(value * weight) AS sum_total,
+        SUM(value * value * weight) AS sumsq_total
       FROM daily
       GROUP BY query, page
       HAVING COUNT(*) >= 21
@@ -1816,15 +1818,16 @@ exports[`analyzer plan snapshots > sql plan: change-point 1`] = `
     ),
     filtered AS (
       SELECT d.*,
-        e.n_total, e.sum_total, e.sumsq_total, e.total_impressions
+        e.n_total, e.w_total, e.sum_total, e.sumsq_total, e.total_impressions
       FROM daily d
       JOIN entity_stats e USING (query, page)
     ),
     cumulated AS (
       SELECT *,
         COUNT(*) OVER w AS n_left,
-        SUM(value) OVER w AS sum_left,
-        SUM(value * value) OVER w AS sumsq_left
+        SUM(weight) OVER w AS w_left,
+        SUM(value * weight) OVER w AS sum_left,
+        SUM(value * value * weight) OVER w AS sumsq_left
       FROM filtered
       WINDOW w AS (
         PARTITION BY query, page
@@ -1835,22 +1838,23 @@ exports[`analyzer plan snapshots > sql plan: change-point 1`] = `
     llr_scored AS (
       SELECT *,
         (n_total - n_left) AS n_right,
+        (w_total - w_left) AS w_right,
         (sum_total - sum_left) AS sum_right,
         (sumsq_total - sumsq_left) AS sumsq_right,
         GREATEST(
-          (sumsq_left / NULLIF(n_left, 0))
-            - (sum_left / NULLIF(n_left, 0)) * (sum_left / NULLIF(n_left, 0)),
+          (sumsq_left / NULLIF(w_left, 0))
+            - (sum_left / NULLIF(w_left, 0)) * (sum_left / NULLIF(w_left, 0)),
           1e-9
         ) AS var_left,
         GREATEST(
-          ((sumsq_total - sumsq_left) / NULLIF(n_total - n_left, 0))
-            - ((sum_total - sum_left) / NULLIF(n_total - n_left, 0))
-              * ((sum_total - sum_left) / NULLIF(n_total - n_left, 0)),
+          ((sumsq_total - sumsq_left) / NULLIF(w_total - w_left, 0))
+            - ((sum_total - sum_left) / NULLIF(w_total - w_left, 0))
+              * ((sum_total - sum_left) / NULLIF(w_total - w_left, 0)),
           1e-9
         ) AS var_right,
         GREATEST(
-          (sumsq_total / NULLIF(n_total, 0))
-            - (sum_total / NULLIF(n_total, 0)) * (sum_total / NULLIF(n_total, 0)),
+          (sumsq_total / NULLIF(w_total, 0))
+            - (sum_total / NULLIF(w_total, 0)) * (sum_total / NULLIF(w_total, 0)),
           1e-9
         ) AS var_single
       FROM cumulated
@@ -1870,8 +1874,8 @@ exports[`analyzer plan snapshots > sql plan: change-point 1`] = `
       SELECT query, page, n_total, total_impressions,
         arg_max(date, llr) AS change_date,
         MAX(llr) AS best_llr,
-        arg_max(sum_left / NULLIF(n_left, 0), llr) AS left_mean,
-        arg_max((sum_total - sum_left) / NULLIF(n_total - n_left, 0), llr) AS right_mean,
+        arg_max(sum_left / NULLIF(w_left, 0), llr) AS left_mean,
+        arg_max((sum_total - sum_left) / NULLIF(w_total - w_left, 0), llr) AS right_mean,
         arg_max(sqrt(var_left), llr) AS left_std,
         arg_max(sqrt(var_right), llr) AS right_std
       FROM llr
@@ -1998,7 +2002,7 @@ exports[`analyzer plan snapshots > sql plan: clustering 1`] = `
         CAST(COUNT(*) AS DOUBLE) AS keywordCount,
         CAST(SUM(clicks) AS DOUBLE) AS totalClicks,
         CAST(SUM(impressions) AS DOUBLE) AS totalImpressions,
-        AVG(position) AS avgPosition,
+        SUM((position - 1) * impressions) / NULLIF(SUM(impressions), 0) + 1 AS avgPosition,
         to_json(list({ 'query': query, 'clicks': clicks, 'impressions': impressions, 'ctr': ctr, 'position': position })) AS keywords
       FROM keyed
       GROUP BY cluster_name
@@ -2355,7 +2359,11 @@ exports[`analyzer plan snapshots > sql plan: ctr-anomaly 1`] = `
       SELECT *,
         AVG(day_ctr)           OVER w AS rolling_ctr,
         STDDEV_POP(day_ctr)    OVER w AS rolling_stddev,
-        AVG(day_position)      OVER w AS rolling_position,
+        -- Impression-weighted rolling mean: day_position is already a recovered
+        -- 1-based daily weighted mean, so weighting by day impressions directly
+        -- is algebraically exact (no -1/+1 dance needed).
+        SUM(day_position * day_impressions) OVER w
+          / NULLIF(SUM(day_impressions) OVER w, 0) AS rolling_position,
         COUNT(*)               OVER w AS rolling_n
       FROM daily
       WINDOW w AS (
@@ -2404,7 +2412,8 @@ exports[`analyzer plan snapshots > sql plan: ctr-anomaly 1`] = `
         END) AS severity_raw,
         MAX(CASE WHEN is_breach THEN ABS(z_score) ELSE 0.0 END) AS max_z,
         AVG(rolling_ctr) FILTER (WHERE rolling_n >= 14) AS baseline_ctr,
-        AVG(rolling_position) FILTER (WHERE rolling_n >= 14) AS baseline_position,
+        SUM(rolling_position * day_impressions) FILTER (WHERE rolling_n >= 14)
+          / NULLIF(SUM(day_impressions) FILTER (WHERE rolling_n >= 14), 0) AS baseline_position,
         SUM(day_impressions) AS total_impressions,
         SUM(day_clicks) AS total_clicks
       FROM breaches
@@ -2521,7 +2530,7 @@ exports[`analyzer plan snapshots > sql plan: ctr-curve 1`] = `
           ELSE '20+'
         END AS bucket,
         AVG(CAST(clicks AS DOUBLE) / NULLIF(impressions, 0)) AS avgCtr,
-        AVG(avg_pos) AS medianPosition,
+        (SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1) AS medianPosition,
         CAST(COUNT(DISTINCT query) AS DOUBLE) AS keywordCount,
         CAST(SUM(clicks) AS DOUBLE) AS totalClicks,
         CAST(SUM(impressions) AS DOUBLE) AS totalImpressions
@@ -3004,9 +3013,9 @@ exports[`analyzer plan snapshots > sql plan: decay 1`] = `
           p.clicks AS previousClicks,
           (p.clicks - COALESCE(c.clicks, 0.0)) AS lostClicks,
           (p.clicks - COALESCE(c.clicks, 0.0)) / NULLIF(p.clicks, 0) AS declinePercent,
-          COALESCE(c.position, 0.0) AS currentPosition,
+          c.position AS currentPosition,
           p.position AS previousPosition,
-          (COALESCE(c.position, 0.0) - p.position) AS positionDrop,
+          CASE WHEN c.position IS NOT NULL THEN (c.position - p.position) ELSE NULL END AS positionDrop,
           s.seriesJson
         FROM prev p
         LEFT JOIN cur c ON p.url = c.url
@@ -3218,7 +3227,7 @@ exports[`analyzer plan snapshots > sql plan: intent-atlas 1`] = `
       SUM(impressions) AS totalImpressions,
       SUM(clicks) AS totalClicks,
       SUM(clicks) / NULLIF(SUM(impressions), 0) AS ctr,
-      AVG(position) AS avgPosition,
+      SUM((position - 1) * impressions) / NULLIF(SUM(impressions), 0) + 1 AS avgPosition,
       to_json(list({
         'query': query,
         'impressions': impressions,
@@ -3631,7 +3640,7 @@ exports[`analyzer plan snapshots > sql plan: movers 1`] = `
           c.position AS recentPosition,
           COALESCE(p.clicks, 0.0) AS baselineClicks,
           COALESCE(p.impressions, 0.0) AS baselineImpressions,
-          COALESCE(p.position, 0.0) AS baselinePosition,
+          p.position AS baselinePosition,
           (c.clicks - COALESCE(p.clicks, 0.0)) AS clicksChange,
           CASE
             WHEN COALESCE(p.clicks, 0.0) = 0 THEN CASE WHEN c.clicks > 0 THEN 100.0 ELSE 0.0 END
@@ -3641,7 +3650,7 @@ exports[`analyzer plan snapshots > sql plan: movers 1`] = `
             WHEN COALESCE(p.impressions, 0.0) = 0 THEN CASE WHEN c.impressions > 0 THEN 100.0 ELSE 0.0 END
             ELSE (c.impressions - p.impressions) * 100.0 / p.impressions
           END AS impressionsChangePercent,
-          (c.position - COALESCE(p.position, 0.0)) AS positionChange,
+          CASE WHEN p.position IS NOT NULL THEN (c.position - p.position) ELSE NULL END AS positionChange,
           s.seriesJson
         FROM cur c
         LEFT JOIN prev p ON c.query = p.query AND c.url = p.url

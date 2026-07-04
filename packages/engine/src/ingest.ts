@@ -89,7 +89,12 @@ export function toSumPosition(apiPosition: number, impressions: number): number 
   // sum_position ((0-1)*impr), which skews the SUM(sum_position)/SUM(impr)+1
   // average recovery. position=1 → 0 contribution, the correct neutral default.
   const position = apiPosition >= 1 ? apiPosition : 1
-  return (position - 1) * Math.max(impressions, 1)
+  // Do NOT clamp impressions: a zero-impression row must contribute nothing
+  // to either side of the weighted mean. Clamping to 1 here wrote phantom
+  // numerator weight (e.g. position=5, impressions=0 stored sum_position=4)
+  // that the denominator (SUM(impressions)) never saw, skewing the recovered
+  // average.
+  return (position - 1) * impressions
 }
 
 /**

@@ -86,7 +86,32 @@ function metricExpr(metric: Metric): string {
     case 'ctr':
       return 'SUM(clicks) / NULLIF(SUM(impressions), 0) AS ctr'
     case 'position':
-      return 'SUM(sum_position) / NULLIF(SUM(impressions), 0) AS position'
+      // Fact-table convention: `sum_position = (position − 1) × impressions`
+      // (engine `metrics.ts`), so the mean must be recovered with `+ 1` — the
+      // omission served every archetype position exactly 1 low (the sole
+      // remaining `archetype_seam.parity_diff` class, R2-FIXES G1).
+      return 'SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position'
+    default:
+      // A malformed caller metric would otherwise fall through to `undefined`
+      // and be interpolated as the literal token `undefined`, producing R2 SQL
+      // 40004 "No field named undefined". Fail loud instead (parity with the
+      // engine-duckdb-wasm sibling's `metricExpr`).
+      throw new Error(`[archetype-sql] unknown metric: ${JSON.stringify(metric)}`)
+  }
+}
+
+// The metric doubles as the SELECT-list alias referenced by ORDER BY (`ORDER BY
+// clicks DESC`). Validate it against the known set so a malformed value can't be
+// interpolated as a bare `undefined`/injection token into the ORDER BY clause.
+function metricAlias(metric: Metric): string {
+  switch (metric) {
+    case 'clicks':
+    case 'impressions':
+    case 'ctr':
+    case 'position':
+      return metric
+    default:
+      throw new Error(`[archetype-sql] unknown order metric: ${JSON.stringify(metric)}`)
   }
 }
 
@@ -105,7 +130,11 @@ function metricExprForSource(metric: Metric, source: {
     case 'ctr':
       return `SUM(${source.clicks}) / NULLIF(SUM(${source.impressions}), 0) AS ctr`
     case 'position':
-      return `SUM(${source.sumPosition}) / NULLIF(SUM(${source.impressions}), 0) AS position`
+      // Same `+ 1` recovery as `metricExpr` — device-suffixed sums share the
+      // `(position − 1) × impressions` storage convention.
+      return `SUM(${source.sumPosition}) / NULLIF(SUM(${source.impressions}), 0) + 1 AS position`
+    default:
+      throw new Error(`[archetype-sql] unknown metric: ${JSON.stringify(metric)}`)
   }
 }
 
@@ -249,7 +278,12 @@ function buildEntityDailySparkline(q: EntityDailySparklineQuery, pruned: boolean
 function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: PartitionPredicateMode): ArchetypeSqlPlan {
   const table = tableForDimensions([q.dimension])
   const w = partitionWhere(q, pruned, mode)
-  const order = `${q.orderBy.metric} ${q.orderBy.dir.toUpperCase()}`
+  // `orderBy` is mandatory for this archetype; a missing/malformed one would
+  // otherwise deref undefined (TypeError) or interpolate `ORDER BY undefined`
+  // (R2 SQL 40004). Validate up front so the failure names the real cause.
+  if (!q.orderBy || !q.orderBy.metric || !q.orderBy.dir)
+    throw new Error(`[archetype-sql] top-n-breakdown requires orderBy.{metric,dir}, got: ${JSON.stringify(q.orderBy)}`)
+  const order = `${metricAlias(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}`
   const limit = `LIMIT ${Math.max(0, Math.floor(q.limit))}`
   const offset = q.offset && q.offset > 0 ? ` OFFSET ${Math.floor(q.offset)}` : ''
   const metricList = q.metrics.includes(q.orderBy.metric) ? q.metrics : [...q.metrics, q.orderBy.metric]
@@ -375,7 +409,7 @@ function buildTwoDimensionDetail(q: TwoDimensionDetailQuery, pruned: boolean, mo
   const metrics = metricList.map(metricExpr).join(', ')
   let sql = `SELECT url, query, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${clause} GROUP BY url, query`
   if (q.orderBy)
-    sql += ` ORDER BY ${q.orderBy.metric} ${q.orderBy.dir.toUpperCase()}`
+    sql += ` ORDER BY ${metricAlias(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}`
   if (q.limit && q.limit > 0)
     sql += ` LIMIT ${Math.floor(q.limit)}`
   return { table: 'page_queries', params, sql }

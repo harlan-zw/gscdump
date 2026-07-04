@@ -60,7 +60,7 @@ export const ctrCurveAnalyzer = defineAnalyzer<AnalysisParams, Row, CtrCurveBuck
           ELSE '20+'
         END AS bucket,
         AVG(CAST(clicks AS DOUBLE) / NULLIF(impressions, 0)) AS avgCtr,
-        AVG(avg_pos) AS medianPosition,
+        (SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1) AS medianPosition,
         CAST(COUNT(DISTINCT query) AS DOUBLE) AS keywordCount,
         ${METRIC_EXPR.clicks} AS totalClicks,
         ${METRIC_EXPR.impressions} AS totalImpressions

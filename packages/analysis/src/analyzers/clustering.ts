@@ -150,7 +150,22 @@ export function analyzeClustering(
 
     const totalClicks = data.keywords.reduce((sum, k) => sum + num(k.clicks), 0)
     const totalImpressions = data.keywords.reduce((sum, k) => sum + num(k.impressions), 0)
-    const avgPosition = data.keywords.reduce((sum, k) => sum + num(k.position), 0) / data.keywords.length
+    // Impression-weighted mean position: recover each keyword's summed
+    // position (position - 1) * impressions, re-aggregate, then convert
+    // back. Keywords with no impressions carry no weight and are excluded
+    // from both sides of the ratio; if the whole cluster has zero weight,
+    // fall back to the unweighted mean rather than dividing by zero.
+    const weightedPositionSum = data.keywords.reduce((sum, k) => {
+      const impressions = num(k.impressions)
+      return impressions > 0 ? sum + (num(k.position) - 1) * impressions : sum
+    }, 0)
+    const positionWeight = data.keywords.reduce((sum, k) => {
+      const impressions = num(k.impressions)
+      return impressions > 0 ? sum + impressions : sum
+    }, 0)
+    const avgPosition = positionWeight > 0
+      ? weightedPositionSum / positionWeight + 1
+      : data.keywords.reduce((sum, k) => sum + num(k.position), 0) / data.keywords.length
 
     clusters.push({
       clusterName: name,
@@ -227,7 +242,7 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
         CAST(COUNT(*) AS DOUBLE) AS keywordCount,
         ${METRIC_EXPR.clicks} AS totalClicks,
         ${METRIC_EXPR.impressions} AS totalImpressions,
-        AVG(position) AS avgPosition,
+        SUM((position - 1) * impressions) / NULLIF(SUM(impressions), 0) + 1 AS avgPosition,
         to_json(list({ 'query': query, 'clicks': clicks, 'impressions': impressions, 'ctr': ctr, 'position': position })) AS keywords
       FROM keyed
       GROUP BY cluster_name
