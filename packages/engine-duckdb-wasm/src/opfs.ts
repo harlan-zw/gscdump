@@ -285,6 +285,9 @@ function assertSqlIdentifier(kind: 'schema' | 'table', value: string): void {
     throw new TypeError(`[engine-duckdb-wasm/opfs] invalid ${kind} identifier ${JSON.stringify(value)}`)
 }
 
+/** Per-file download deadline — see the comment at the fetch in `materialiseFile`. */
+const DOWNLOAD_DEADLINE_MS = 120_000
+
 function isQuotaError(err: unknown): boolean {
   if (typeof err !== 'object' || err === null)
     return false
@@ -520,7 +523,15 @@ async function materialiseFile(
 
   // ---- download -----------------------------------------------------------
   signal?.throwIfAborted()
-  const resp = await fetchImpl(file.url, { ...fetchInit, signal })
+  // Hard deadline on the download itself: a hung fetch (connection stalls, no
+  // bytes) would otherwise park the attach forever with no error for the
+  // caller's fallback policy to act on. 120s keeps slow-but-alive links viable
+  // (150MB ceiling needs ~10Mbps); the timeout rejects with a 'TimeoutError'
+  // DOMException, deliberately NOT matched by `isAbortError`, so it surfaces
+  // as a table failure rather than a caller abort.
+  const deadline = AbortSignal.timeout(DOWNLOAD_DEADLINE_MS)
+  const fetchSignal = signal ? AbortSignal.any([signal, deadline]) : deadline
+  const resp = await fetchImpl(file.url, { ...fetchInit, signal: fetchSignal })
   if (!resp.ok)
     throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} failed: ${resp.status}`)
   const buf = await resp.arrayBuffer()

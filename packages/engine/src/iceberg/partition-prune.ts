@@ -34,6 +34,9 @@ export function buildPartitionFilter(
         { field: 'site_id', value: siteId, encoding: 'string' },
         { field: 'search_type', value: searchType, encoding: 'string' },
       ]
-    : []
+    : [
+        { field: 'site_id', value: siteId, encoding: 'int32' },
+        { field: 'search_type', value: searchType, encoding: 'int32' },
+      ]
   return buildManifestPartitionFilter(ICEBERG_PARTITION_SPEC, matches, wantedMonths)
 }

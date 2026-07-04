@@ -209,14 +209,21 @@ export async function listIcebergDataFiles(
   opts: ListIcebergDataFilesOptions,
 ) {
   const encoding = opts.encoding ?? DEFAULT_PARTITION_KEY_ENCODING
+  // BOTH encodings must pass identity matches: a per-team catalog holds every
+  // site (and search type) in the team, and the browser attaches the returned
+  // file set with no site_id filter in SQL — the per-file check in
+  // `resolveIcebergDataFiles` is the ONLY isolation boundary. 'int32' matches
+  // are skipped by manifest-level pruning (see lakehouse's partition-prune doc)
+  // but still drive that authoritative per-file check.
   const matches = encoding === 'string'
     ? [
         { field: 'site_id', value: opts.siteId, encoding: 'string' as const },
         { field: 'search_type', value: opts.searchType, encoding: 'string' as const },
       ]
-    // 'int'-encoded identity fields are deliberately not manifest-pruned (see
-    // lakehouse's partition-prune doc) — the per-file check stays authoritative.
-    : []
+    : [
+        { field: 'site_id', value: opts.siteId, encoding: 'int32' as const },
+        { field: 'search_type', value: opts.searchType, encoding: 'int32' as const },
+      ]
   return resolveIcebergDataFiles(conn, {
     namespace: conn.namespace,
     table: opts.table,
