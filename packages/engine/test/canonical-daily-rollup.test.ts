@@ -493,8 +493,8 @@ describe('query_canonical_daily rollup (integration)', () => {
     expect(r.done).toBe(true)
     expect(r.windowsTotal).toBe(2)
     expect(sqlCalls).toHaveLength(2)
-    expect(sqlCalls[0]).toContain("q.date >= '2026-03-03' AND q.date <= '2026-03-03'")
-    expect(sqlCalls[1]).toContain("q.date >= '2026-03-04' AND q.date <= '2026-03-04'")
+    expect(sqlCalls[0]).toContain('q.date >= \'2026-03-03\' AND q.date <= \'2026-03-03\'')
+    expect(sqlCalls[1]).toContain('q.date >= \'2026-03-04\' AND q.date <= \'2026-03-04\'')
   })
 
   it('gaining/losing: rollup-served comparison equals live raw comparison', async () => {

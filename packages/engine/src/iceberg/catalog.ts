@@ -9,7 +9,7 @@
  * surface (non-breaking for this pass; the major-bump gut is a later release).
  */
 
-import type { IcebergConnection, QueryProfiler } from '@gscdump/lakehouse'
+import type { IcebergConnection, IcebergListedDataFile, QueryProfiler } from '@gscdump/lakehouse'
 import type { Result } from 'gscdump/result'
 import type { EngineError } from '../errors'
 import type { IcebergTableName, PartitionKeyEncoding } from './schema'
@@ -22,6 +22,14 @@ import { err, ok } from 'gscdump/result'
 import { icebergCreateTable } from 'icebird'
 import { engineErrors } from '../errors'
 import { TABLE_METADATA } from '../schema'
+
+import {
+  DEFAULT_PARTITION_KEY_ENCODING,
+  ICEBERG_PARTITION_SPEC,
+  ICEBERG_SCHEMAS,
+  ICEBERG_TABLES,
+  icebergSchemasFor,
+} from './schema'
 
 // ---------------------------------------------------------------------------
 // Dataset-agnostic primitives — thin re-exports from `@gscdump/lakehouse`.
@@ -48,24 +56,24 @@ export type {
 } from '@gscdump/lakehouse'
 export { icebergAppendRetrying, isCommitRateLimited } from '@gscdump/lakehouse/unsafe-raw'
 
-import {
-  DEFAULT_PARTITION_KEY_ENCODING,
-  ICEBERG_PARTITION_SPEC,
-  ICEBERG_SCHEMAS,
-  ICEBERG_TABLES,
-  icebergSchemasFor,
-} from './schema'
-
 // ---------------------------------------------------------------------------
 // GSC-specific schema/partition/sort-order derivation (frozen, Wave-1).
 // ---------------------------------------------------------------------------
+
+// icebird declares Schema/PartitionSpec/SortOrder ambiently (src/types.d.ts)
+// without exporting them from the package root, so the return types of the
+// derivation helpers are recovered from `icebergCreateTable`'s own options.
+type IcebirdCreateTableOptions = Parameters<typeof icebergCreateTable>[0]
+type IcebirdSchema = NonNullable<IcebirdCreateTableOptions['schema']>
+type IcebirdPartitionSpec = NonNullable<IcebirdCreateTableOptions['partitionSpec']>
+type IcebirdSortOrder = NonNullable<IcebirdCreateTableOptions['sortOrder']>
 
 /**
  * Build the icebird `Schema` for one of the 9 fact tables from the frozen
  * `ICEBERG_SCHEMAS` contract. Field ids are advisory — R2 Data Catalog
  * re-assigns them on `createTable`.
  */
-export function icebergSchemaFor(table: IcebergTableName, encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING) {
+export function icebergSchemaFor(table: IcebergTableName, encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING): IcebirdSchema {
   return {
     'type': 'struct' as const,
     'schema-id': 0,
@@ -82,7 +90,7 @@ export function icebergSchemaFor(table: IcebergTableName, encoding: PartitionKey
  * Build the icebird `PartitionSpec` for one of the 9 fact tables: the locked
  * spec `identity(site_id) + identity(search_type) + month(date)`.
  */
-export function icebergPartitionSpecFor(table: IcebergTableName, encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING) {
+export function icebergPartitionSpecFor(table: IcebergTableName, encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING): IcebirdPartitionSpec {
   const fields = icebergSchemasFor(encoding)[table].columns
   const fieldId = (name: string): number => {
     const col = fields.find(c => c.name === name)
@@ -105,7 +113,7 @@ export function icebergPartitionSpecFor(table: IcebergTableName, encoding: Parti
  * Build the icebird `SortOrder` for a fact table from its `clusterKey`
  * (dimension-first, then `date`).
  */
-export function icebergSortOrderFor(table: IcebergTableName, encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING) {
+export function icebergSortOrderFor(table: IcebergTableName, encoding: PartitionKeyEncoding = DEFAULT_PARTITION_KEY_ENCODING): IcebirdSortOrder {
   const fields = icebergSchemasFor(encoding)[table].columns
   const fieldId = (name: string): number => {
     const col = fields.find(c => c.name === name)
@@ -207,7 +215,7 @@ export interface ListIcebergDataFilesOptions {
 export async function listIcebergDataFiles(
   conn: IcebergConnection,
   opts: ListIcebergDataFilesOptions,
-) {
+): Promise<IcebergListedDataFile[]> {
   const encoding = opts.encoding ?? DEFAULT_PARTITION_KEY_ENCODING
   // BOTH encodings must pass identity matches: a per-team catalog holds every
   // site (and search type) in the team, and the browser attaches the returned

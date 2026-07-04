@@ -306,7 +306,11 @@ export interface IcebergDataset {
 }
 
 /** Build the dedupe key columns + per-row identity guard from a dataset def. */
-function buildRowProcessor(def: IcebergDatasetDef, tableSpec: IcebergTableSpec) {
+function buildRowProcessor(def: IcebergDatasetDef, tableSpec: IcebergTableSpec): {
+  guard: (row: Record<string, unknown>) => Record<string, unknown> | null
+  dedupe: (rows: Record<string, unknown>[]) => Record<string, unknown>[]
+  sort: (rows: Record<string, unknown>[]) => Record<string, unknown>[]
+} {
   const idNames = identityColumnNames(def.identity)
   const idEncodings = identityEncodings(def.identity)
   const dimNames = def.dims ? Object.keys(def.dims) : []

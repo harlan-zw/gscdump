@@ -25,10 +25,10 @@
  * Catalog Site Id allocator lives alongside it in `./allocator`.
  */
 
+import type { PartitionKeyEncoding } from '../schema'
+
 export type { AllocateCatalogSiteIdOptions, AllocateCatalogSiteIdResult } from './allocator'
 export { allocateCatalogSiteId } from './allocator'
-
-import type { PartitionKeyEncoding } from '../schema'
 
 const CF_API_BASE = 'https://api.cloudflare.com/client/v4'
 
