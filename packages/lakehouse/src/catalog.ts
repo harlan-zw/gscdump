@@ -410,6 +410,22 @@ function snapshotRefKey(namespace: string, table: string): string {
   return `lh-snapref\0${namespace}\0${table}`
 }
 
+/**
+ * Drop the cached snapshot pointer for `(namespace, table)` so the next read
+ * re-loads the table and sees the just-committed snapshot immediately instead
+ * of after {@link SNAPSHOT_REF_TTL_MS} (writers call this post-commit; without
+ * it worst-case reader staleness is TTL + the downstream ref's own TTL). Only
+ * the snapshot REF is dropped: `lh-snapmeta`/`lh-files` entries are keyed by
+ * snapshotId, so stale ones age out harmlessly and fresh ones rebuild on the
+ * next read. Best-effort like every cache path here — a failed delete only
+ * means TTL-bounded staleness, never an error.
+ */
+export async function invalidateSnapshotRef(cache: CatalogCache, namespace: string, table: string): Promise<void> {
+  // Swallowed by design (cache-hygiene failure must not fail the commit path
+  // that calls this); the TTL bounds staleness if the delete never lands.
+  await cache.storage.removeItem(snapshotRefKey(namespace, table)).catch(() => {})
+}
+
 function metadataRefKey(namespace: string, table: string, snapshotId: string): string {
   return `lh-snapmeta\0${namespace}\0${table}\0${snapshotId}`
 }

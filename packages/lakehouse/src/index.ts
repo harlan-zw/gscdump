@@ -10,6 +10,7 @@ export {
   dropIcebergTables,
   ensureIcebergNamespace,
   ICEBERG_TYPE_MAP,
+  invalidateSnapshotRef,
   listIcebergTables,
   resolveIcebergDataFiles,
 } from './catalog'

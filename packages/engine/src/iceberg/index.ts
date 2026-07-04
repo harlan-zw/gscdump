@@ -31,6 +31,7 @@ export {
   icebergPartitionSpecFor,
   icebergSchemaFor,
   icebergSortOrderFor,
+  invalidateSnapshotRef,
   isCommitRateLimited,
   listIcebergDataFiles,
   listIcebergTables,
