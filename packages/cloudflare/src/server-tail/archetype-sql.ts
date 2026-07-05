@@ -284,6 +284,14 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
   if (!q.orderBy || !q.orderBy.metric || !q.orderBy.dir)
     throw new Error(`[archetype-sql] top-n-breakdown requires orderBy.{metric,dir}, got: ${JSON.stringify(q.orderBy)}`)
   const order = `${metricAlias(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}`
+  // compareRange branches build `FROM cur c FULL OUTER JOIN prev p`, which
+  // exposes the join-input column as qualified `c.clicks` while the SELECT list
+  // re-aliases it back to the bare output name `clicks`. `ORDER BY clicks` is
+  // then ambiguous under R2 SQL / DataFusion (40004: "qualified field name
+  // c.clicks and unqualified field name clicks"). Order by the qualified,
+  // coalesced current-range value instead — same ordering as the output alias
+  // (COALESCE(c.metric, 0)), mirroring `moverClause`, but unambiguous.
+  const compareOrder = `COALESCE(c.${metricAlias(q.orderBy.metric)}, 0) ${q.orderBy.dir.toUpperCase()}`
   const limit = `LIMIT ${Math.max(0, Math.floor(q.limit))}`
   const offset = q.offset && q.offset > 0 ? ` OFFSET ${Math.floor(q.offset)}` : ''
   const metricList = q.metrics.includes(q.orderBy.metric) ? q.metrics : [...q.metrics, q.orderBy.metric]
@@ -301,7 +309,7 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
       const prevCols = STD_METRICS.map(m => coalesceMetric(m, 'p', prevAlias(m))).join(', ')
       const sql = `WITH cur AS (${deviceSelects(w.clause, metricList)}), prev AS (${deviceSelects(wPrev.clause, STD_METRICS)}) `
         + `SELECT COALESCE(c.device, p.device) AS device, ${curCols}, ${prevCols} `
-        + `FROM cur c FULL OUTER JOIN prev p ON c.device = p.device ORDER BY ${order} ${limit}${offset}`
+        + `FROM cur c FULL OUTER JOIN prev p ON c.device = p.device ORDER BY ${compareOrder} ${limit}${offset}`
       return {
         table,
         params: [...DEVICE_SUFFIXES.flatMap(() => w.params), ...DEVICE_SUFFIXES.flatMap(() => wPrev.params)],
@@ -330,7 +338,7 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
     const variantOut = q.dimension === 'queryCanonical' ? ', c.variantCount AS variantCount' : ''
     const mover = q.movers ? moverClause(q.movers) : null
     const moverWhere = mover ? `WHERE ${mover.where} ` : ''
-    const orderSql = mover ? `ORDER BY ${mover.order}` : `ORDER BY ${order}`
+    const orderSql = mover ? `ORDER BY ${mover.order}` : `ORDER BY ${compareOrder}`
     const sql = `WITH cur AS (SELECT ${col} AS k, ${curMetrics}${variantSel} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} GROUP BY ${col}), `
       + `prev AS (SELECT ${col} AS k, ${prevMetrics} FROM ${TABLE_PLACEHOLDER} WHERE ${wPrev.clause}${facet.sql} GROUP BY ${col}) `
       + `SELECT COALESCE(c.k, p.k) AS ${q.dimension}, ${curCols}, ${prevCols}${variantOut}${totalCol} `

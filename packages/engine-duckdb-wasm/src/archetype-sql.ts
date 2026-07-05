@@ -299,6 +299,13 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
       const where = rangePredicate(query)
       const cmp = compareRangePredicate(query)
       const dir = query.orderBy.dir === 'asc' ? 'ASC' : 'DESC'
+      // compareRange branches join `FROM cur c FULL OUTER JOIN prev p` and
+      // re-alias the qualified `c.<metric>` back to the bare output name, which
+      // makes a bare `ORDER BY <metric>` ambiguous on strict planners (R2 SQL /
+      // DataFusion 40004; DuckDB tolerates it). Order by the qualified coalesced
+      // current-range value — same ordering, unambiguous. Mirrors the
+      // @gscdump/cloudflare server-tail sibling.
+      const compareOrder = `COALESCE(c.${query.orderBy.metric}, 0) ${dir}`
       const metricList = query.metrics.includes(query.orderBy.metric)
         ? query.metrics
         : [...query.metrics, query.orderBy.metric]
@@ -316,7 +323,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
             + `prev AS (${deviceUnpivotSql(STD_METRICS, cmp.sql, false)}) `
             + `SELECT COALESCE(c.device, p.device) AS device, ${curCols}, ${prevCols} `
             + `FROM cur c FULL OUTER JOIN prev p ON c.device = p.device `
-            + `ORDER BY ${query.orderBy.metric} ${dir} LIMIT ?`
+            + `ORDER BY ${compareOrder} LIMIT ?`
           const params = [...where.params, ...where.params, ...where.params, ...cmp.params, ...cmp.params, ...cmp.params, query.limit]
           if (query.offset && query.offset > 0) {
             sql += ' OFFSET ?'
@@ -352,7 +359,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
         // Lost); otherwise rank by the requested metric.
         const mover = query.movers ? moverClause(query.movers) : null
         const moverWhere = mover ? `WHERE ${mover.where} ` : ''
-        const orderSql = mover ? mover.order : `${query.orderBy.metric} ${dir}`
+        const orderSql = mover ? mover.order : compareOrder
         let sql = `WITH cur AS (SELECT ${col} AS k, ${metricSelectList(metricList)}${variantSel} FROM ${table} WHERE ${where.sql}${facet.sql} GROUP BY ${col}), `
           + `prev AS (SELECT ${col} AS k, ${metricSelectList(STD_METRICS)} FROM ${table} WHERE ${cmp.sql}${facet.sql} GROUP BY ${col}) `
           + `SELECT COALESCE(c.k, p.k) AS ${query.dimension}, ${curCols}, ${prevCols}${variantOut}${totalCol} `

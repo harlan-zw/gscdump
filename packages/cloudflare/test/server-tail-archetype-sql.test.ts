@@ -340,4 +340,58 @@ describe('buildArchetypeSql', () => {
       expect(plan.params).toEqual(['2026-01-01', '2026-03-31', '2025-10-01', '2025-12-31'])
     })
   })
+
+  describe('compareRange ORDER BY is unambiguous under R2 SQL', () => {
+    // Regression for R2 SQL 40004 "Schema contains qualified field name c.clicks
+    // and unqualified field name clicks which would be ambiguous" (GSCDUMP-1W).
+    // The FULL OUTER JOIN exposes qualified `c.clicks` while the SELECT list
+    // re-aliases it to bare `clicks`; a bare `ORDER BY clicks` is then ambiguous.
+    it('qualifies the generic-dimension compareRange ORDER BY with COALESCE(c.<metric>)', () => {
+      const q: TopNBreakdownQuery = {
+        ...base,
+        archetype: 'top-n-breakdown',
+        dimension: 'query',
+        metrics: ['clicks', 'impressions'],
+        orderBy: { metric: 'clicks', dir: 'desc' },
+        limit: 25,
+        compareRange: { start: '2025-10-01', end: '2025-12-31' },
+      }
+      const plan = buildArchetypeSql(q)
+      expect(plan.sql).toContain('FULL OUTER JOIN prev p ON c.k = p.k')
+      expect(plan.sql).toContain('ORDER BY COALESCE(c.clicks, 0) DESC')
+      // no bare `ORDER BY clicks` (would bind ambiguously to c.clicks / alias)
+      expect(plan.sql).not.toMatch(/ORDER BY clicks\b/)
+    })
+
+    it('qualifies the device compareRange ORDER BY with COALESCE(c.<metric>)', () => {
+      const q: TopNBreakdownQuery = {
+        ...base,
+        archetype: 'top-n-breakdown',
+        dimension: 'device',
+        metrics: ['clicks'],
+        orderBy: { metric: 'impressions', dir: 'desc' },
+        limit: 3,
+        compareRange: { start: '2025-10-01', end: '2025-12-31' },
+      }
+      const plan = buildArchetypeSql(q)
+      expect(plan.sql).toContain('FULL OUTER JOIN prev p ON c.device = p.device')
+      expect(plan.sql).toContain('ORDER BY COALESCE(c.impressions, 0) DESC')
+      expect(plan.sql).not.toMatch(/ORDER BY impressions\b/)
+    })
+
+    it('leaves the movers ORDER BY (already qualified) intact', () => {
+      const q: TopNBreakdownQuery = {
+        ...base,
+        archetype: 'top-n-breakdown',
+        dimension: 'query',
+        metrics: ['clicks'],
+        orderBy: { metric: 'clicks', dir: 'desc' },
+        movers: 'improving',
+        limit: 25,
+        compareRange: { start: '2025-10-01', end: '2025-12-31' },
+      }
+      const plan = buildArchetypeSql(q)
+      expect(plan.sql).toContain('ORDER BY (COALESCE(c.clicks, 0) - COALESCE(p.clicks, 0)) DESC')
+    })
+  })
 })
