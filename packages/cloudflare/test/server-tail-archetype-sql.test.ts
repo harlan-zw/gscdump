@@ -345,8 +345,14 @@ describe('buildArchetypeSql', () => {
     // Regression for R2 SQL 40004 "Schema contains qualified field name c.clicks
     // and unqualified field name clicks which would be ambiguous" (GSCDUMP-1W).
     // The FULL OUTER JOIN exposes qualified `c.clicks` while the SELECT list
-    // re-aliases it to bare `clicks`; a bare `ORDER BY clicks` is then ambiguous.
-    it('qualifies the generic-dimension compareRange ORDER BY with COALESCE(c.<metric>)', () => {
+    // re-aliases it to bare `clicks`; ordering the join directly (bare `clicks`
+    // OR qualified `c.clicks`) is ambiguous. Fix: wrap the join in a derived
+    // table and ORDER BY the unqualified output alias on the OUTER select.
+    // The invariant the fix must uphold: no ORDER BY references a qualified
+    // `c.<col>` / `p.<col>` column anywhere.
+    const orderBySegment = (sql: string) => sql.slice(sql.lastIndexOf('ORDER BY'))
+
+    it('wraps the generic-dimension compareRange join and orders by the output alias', () => {
       const q: TopNBreakdownQuery = {
         ...base,
         archetype: 'top-n-breakdown',
@@ -358,12 +364,12 @@ describe('buildArchetypeSql', () => {
       }
       const plan = buildArchetypeSql(q)
       expect(plan.sql).toContain('FULL OUTER JOIN prev p ON c.k = p.k')
-      expect(plan.sql).toContain('ORDER BY COALESCE(c.clicks, 0) DESC')
-      // no bare `ORDER BY clicks` (would bind ambiguously to c.clicks / alias)
-      expect(plan.sql).not.toMatch(/ORDER BY clicks\b/)
+      expect(plan.sql).toMatch(/\) t ORDER BY clicks DESC LIMIT 25/)
+      // the ORDER BY must not reference any qualified join column
+      expect(orderBySegment(plan.sql)).not.toMatch(/\b[cp]\.\w+/)
     })
 
-    it('qualifies the device compareRange ORDER BY with COALESCE(c.<metric>)', () => {
+    it('wraps the device compareRange join and orders by the output alias', () => {
       const q: TopNBreakdownQuery = {
         ...base,
         archetype: 'top-n-breakdown',
@@ -375,11 +381,11 @@ describe('buildArchetypeSql', () => {
       }
       const plan = buildArchetypeSql(q)
       expect(plan.sql).toContain('FULL OUTER JOIN prev p ON c.device = p.device')
-      expect(plan.sql).toContain('ORDER BY COALESCE(c.impressions, 0) DESC')
-      expect(plan.sql).not.toMatch(/ORDER BY impressions\b/)
+      expect(plan.sql).toMatch(/\) t ORDER BY impressions DESC LIMIT 3/)
+      expect(orderBySegment(plan.sql)).not.toMatch(/\b[cp]\.\w+/)
     })
 
-    it('leaves the movers ORDER BY (already qualified) intact', () => {
+    it('ranks movers on output-alias deltas, keeps the mover filter on the join', () => {
       const q: TopNBreakdownQuery = {
         ...base,
         archetype: 'top-n-breakdown',
@@ -391,7 +397,30 @@ describe('buildArchetypeSql', () => {
         compareRange: { start: '2025-10-01', end: '2025-12-31' },
       }
       const plan = buildArchetypeSql(q)
-      expect(plan.sql).toContain('ORDER BY (COALESCE(c.clicks, 0) - COALESCE(p.clicks, 0)) DESC')
+      // filter stays on the qualified join columns (a WHERE resolves them fine)
+      expect(plan.sql).toContain('WHERE COALESCE(c.clicks, 0) > COALESCE(p.clicks, 0)')
+      // ORDER BY ranks on the unqualified output aliases only
+      expect(plan.sql).toContain(') t ORDER BY (clicks - prevClicks) DESC')
+      expect(orderBySegment(plan.sql)).not.toMatch(/\b[cp]\.\w+/)
+      // movers force clicks + impressions into the projection to rank on
+      expect(plan.sql).toContain('AS clicks')
+      expect(plan.sql).toContain('AS impressions')
+    })
+
+    it('ranks "new" movers on clicks then impressions output aliases', () => {
+      const q: TopNBreakdownQuery = {
+        ...base,
+        archetype: 'top-n-breakdown',
+        dimension: 'query',
+        metrics: ['clicks'],
+        orderBy: { metric: 'clicks', dir: 'desc' },
+        movers: 'new',
+        limit: 25,
+        compareRange: { start: '2025-10-01', end: '2025-12-31' },
+      }
+      const plan = buildArchetypeSql(q)
+      expect(plan.sql).toContain(') t ORDER BY clicks DESC, impressions DESC')
+      expect(orderBySegment(plan.sql)).not.toMatch(/\b[cp]\.\w+/)
     })
   })
 })

@@ -163,20 +163,40 @@ function prevAlias(metric: string): string {
   return `prev${metric.charAt(0).toUpperCase()}${metric.slice(1)}`
 }
 
-function moverClause(movers: string): { where: string, order: string } {
+function moverClause(movers: string): { where: string } {
   const curClicks = 'COALESCE(c.clicks, 0)'
   const prevClicks = 'COALESCE(p.clicks, 0)'
   const curImpr = 'COALESCE(c.impressions, 0)'
   const prevImpr = 'COALESCE(p.impressions, 0)'
   switch (movers) {
     case 'improving':
-      return { where: `${curClicks} > ${prevClicks}`, order: `(${curClicks} - ${prevClicks}) DESC` }
+      return { where: `${curClicks} > ${prevClicks}` }
     case 'declining':
-      return { where: `${curClicks} < ${prevClicks}`, order: `(${curClicks} - ${prevClicks}) ASC` }
+      return { where: `${curClicks} < ${prevClicks}` }
     case 'new':
-      return { where: `${prevImpr} = 0 AND ${curImpr} > 0`, order: `${curClicks} DESC, ${curImpr} DESC` }
+      return { where: `${prevImpr} = 0 AND ${curImpr} > 0` }
     case 'lost':
-      return { where: `${curImpr} = 0 AND ${prevImpr} > 0`, order: `${prevImpr} DESC` }
+      return { where: `${curImpr} = 0 AND ${prevImpr} > 0` }
+    default:
+      throw new Error(`[archetype-sql] unknown movers mode: ${movers}`)
+  }
+}
+
+// The mover ORDER BY runs on the OUTER select over the join's derived table, so
+// it references the unqualified OUTPUT aliases (`clicks` = COALESCE(c.clicks, 0),
+// `prevClicks` = COALESCE(p.clicks, 0), …) rather than the qualified join columns.
+// Ordering on a qualified `c.clicks` there would collide with the same-named
+// output alias and R2 SQL / DataFusion rejects it as ambiguous (40004).
+function moverOrderByAlias(movers: string): string {
+  switch (movers) {
+    case 'improving':
+      return '(clicks - prevClicks) DESC'
+    case 'declining':
+      return '(clicks - prevClicks) ASC'
+    case 'new':
+      return 'clicks DESC, impressions DESC'
+    case 'lost':
+      return 'prevImpressions DESC'
     default:
       throw new Error(`[archetype-sql] unknown movers mode: ${movers}`)
   }
@@ -283,18 +303,25 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
   // (R2 SQL 40004). Validate up front so the failure names the real cause.
   if (!q.orderBy || !q.orderBy.metric || !q.orderBy.dir)
     throw new Error(`[archetype-sql] top-n-breakdown requires orderBy.{metric,dir}, got: ${JSON.stringify(q.orderBy)}`)
+  // ORDER BY the SELECT-list alias (`clicks`), never a recomputed aggregate. The
+  // compareRange branches below build `FROM cur c FULL OUTER JOIN prev p` and
+  // re-alias the qualified join column `c.clicks` back to the bare output name
+  // `clicks`; ordering that join directly is ambiguous under R2 SQL / DataFusion
+  // (40004: "qualified field name c.clicks and unqualified field name clicks") —
+  // and qualifying the ORDER BY as `c.clicks` fails the same way, because the
+  // sort still pulls the qualified column in beside the identically-named output
+  // alias. Both compareRange branches therefore wrap the join in a derived table
+  // `(...) t` and apply this ORDER BY on the OUTER select, where only the final
+  // unqualified output columns are in scope.
   const order = `${metricAlias(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}`
-  // compareRange branches build `FROM cur c FULL OUTER JOIN prev p`, which
-  // exposes the join-input column as qualified `c.clicks` while the SELECT list
-  // re-aliases it back to the bare output name `clicks`. `ORDER BY clicks` is
-  // then ambiguous under R2 SQL / DataFusion (40004: "qualified field name
-  // c.clicks and unqualified field name clicks"). Order by the qualified,
-  // coalesced current-range value instead — same ordering as the output alias
-  // (COALESCE(c.metric, 0)), mirroring `moverClause`, but unambiguous.
-  const compareOrder = `COALESCE(c.${metricAlias(q.orderBy.metric)}, 0) ${q.orderBy.dir.toUpperCase()}`
   const limit = `LIMIT ${Math.max(0, Math.floor(q.limit))}`
   const offset = q.offset && q.offset > 0 ? ` OFFSET ${Math.floor(q.offset)}` : ''
-  const metricList = q.metrics.includes(q.orderBy.metric) ? q.metrics : [...q.metrics, q.orderBy.metric]
+  const metricList0 = q.metrics.includes(q.orderBy.metric) ? q.metrics : [...q.metrics, q.orderBy.metric]
+  // compareRange movers rank on clicks/impressions deltas (see moverOrderByAlias),
+  // so those columns must be projected into the output even when not requested.
+  const metricList = q.compareRange && q.movers
+    ? [...new Set<Metric>([...metricList0, 'clicks', 'impressions'])]
+    : metricList0
   const variantSel = q.dimension === 'queryCanonical' ? ', COUNT(DISTINCT query) AS variantCount' : ''
 
   if (q.dimension === 'device') {
@@ -307,9 +334,13 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
       }).join(' UNION ALL ')
       const curCols = metricList.map(m => coalesceMetric(m, 'c', m)).join(', ')
       const prevCols = STD_METRICS.map(m => coalesceMetric(m, 'p', prevAlias(m))).join(', ')
+      // Wrap the join in a derived table so the outer ORDER BY sees only the
+      // unqualified output columns (`t.clicks`), never the qualified join input
+      // `c.clicks` — see `order`/derived-table note above (R2 SQL 40004).
+      const inner = `SELECT COALESCE(c.device, p.device) AS device, ${curCols}, ${prevCols} `
+        + `FROM cur c FULL OUTER JOIN prev p ON c.device = p.device`
       const sql = `WITH cur AS (${deviceSelects(w.clause, metricList)}), prev AS (${deviceSelects(wPrev.clause, STD_METRICS)}) `
-        + `SELECT COALESCE(c.device, p.device) AS device, ${curCols}, ${prevCols} `
-        + `FROM cur c FULL OUTER JOIN prev p ON c.device = p.device ORDER BY ${compareOrder} ${limit}${offset}`
+        + `SELECT * FROM (${inner}) t ORDER BY ${order} ${limit}${offset}`
       return {
         table,
         params: [...DEVICE_SUFFIXES.flatMap(() => w.params), ...DEVICE_SUFFIXES.flatMap(() => wPrev.params)],
@@ -336,13 +367,18 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
     const curCols = metricList.map(m => coalesceMetric(m, 'c', m)).join(', ')
     const prevCols = STD_METRICS.map(m => coalesceMetric(m, 'p', prevAlias(m))).join(', ')
     const variantOut = q.dimension === 'queryCanonical' ? ', c.variantCount AS variantCount' : ''
-    const mover = q.movers ? moverClause(q.movers) : null
-    const moverWhere = mover ? `WHERE ${mover.where} ` : ''
-    const orderSql = mover ? `ORDER BY ${mover.order}` : `ORDER BY ${compareOrder}`
+    // The mover WHERE stays on the join (it filters on the qualified input
+    // columns `c.clicks`/`p.clicks`, which a WHERE resolves without ambiguity);
+    // the ORDER BY moves to the OUTER select over the derived table and ranks on
+    // the unqualified output aliases (`clicks`, `prevClicks`) so it never pulls a
+    // qualified join column into the sort schema (R2 SQL 40004).
+    const moverWhere = q.movers ? `WHERE ${moverClause(q.movers).where} ` : ''
+    const outerOrder = q.movers ? moverOrderByAlias(q.movers) : order
+    const inner = `SELECT COALESCE(c.k, p.k) AS ${q.dimension}, ${curCols}, ${prevCols}${variantOut}${totalCol} `
+      + `FROM cur c FULL OUTER JOIN prev p ON c.k = p.k ${moverWhere}`
     const sql = `WITH cur AS (SELECT ${col} AS k, ${curMetrics}${variantSel} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} GROUP BY ${col}), `
       + `prev AS (SELECT ${col} AS k, ${prevMetrics} FROM ${TABLE_PLACEHOLDER} WHERE ${wPrev.clause}${facet.sql} GROUP BY ${col}) `
-      + `SELECT COALESCE(c.k, p.k) AS ${q.dimension}, ${curCols}, ${prevCols}${variantOut}${totalCol} `
-      + `FROM cur c FULL OUTER JOIN prev p ON c.k = p.k ${moverWhere}${orderSql} ${limit}${offset}`
+      + `SELECT * FROM (${inner}) t ORDER BY ${outerOrder} ${limit}${offset}`
     return { table, params: [...w.params, ...facet.params, ...wPrev.params, ...facet.params], sql }
   }
 
