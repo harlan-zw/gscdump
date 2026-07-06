@@ -100,8 +100,10 @@ describe('compileArchetypeSql', () => {
     const c = compileArchetypeSql(q)
     expect(c.table).toBe('queries')
     expect(c.sql).toContain('SELECT qd.query_canonical FROM query_dim qd')
+    expect(c.sql).toContain('WHERE qd.query = "queries"."query"')
     expect(c.sql).toContain('AS queryCanonical')
     expect(c.sql).not.toContain('GROUP BY query_canonical')
+    expect(c.sql).not.toContain('WHERE qd.query = query')
   })
 
   it('4 — top-n-breakdown: brand regex/notRegex facet → regexp_matches on the query column', () => {
@@ -155,6 +157,7 @@ describe('compileArchetypeSql', () => {
       facets: [{ column: 'page', op: 'eq', value: 'https://x.com/a' }],
     })
     expect(c.table).toBe('page_queries')
+    expect(c.sql).toContain('WHERE qd.query = "page_queries"."query"')
     expect(c.sql).toContain('url = ?')
     expect(c.params).toContain('https://x.com/a')
   })

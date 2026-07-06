@@ -54,12 +54,21 @@ const DIM_COLUMN: Record<string, string> = {
   searchAppearance: 'search_appearance',
 }
 
-function queryCanonicalExpr(queryRef = 'query'): string {
+function quoteIdent(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`
+}
+
+function qualifiedColumn(table: string, column: string): string {
+  return `${quoteIdent(table)}.${quoteIdent(column)}`
+}
+
+function queryCanonicalExpr(table: string): string {
+  const queryRef = qualifiedColumn(table, 'query')
   return `COALESCE((SELECT qd.query_canonical FROM query_dim qd WHERE qd.query = ${queryRef} LIMIT 1), ${queryRef})`
 }
 
-function dimExpr(dim: string): string {
-  return dim === 'queryCanonical' ? queryCanonicalExpr() : (DIM_COLUMN[dim] ?? dim)
+function dimExpr(dim: string, table: string): string {
+  return dim === 'queryCanonical' ? queryCanonicalExpr(table) : (DIM_COLUMN[dim] ?? dim)
 }
 
 /**
@@ -226,14 +235,14 @@ function moverClause(movers: string): { where: string, order: string } {
  * tables are single-dimension aggregates, so e.g. a `country` facet is only
  * meaningful against the `countries`/`page_queries` views, not `pages`.
  */
-function facetPredicate(query: ArchetypeQuery): { sql: string, params: unknown[] } {
+function facetPredicate(query: ArchetypeQuery, table: string): { sql: string, params: unknown[] } {
   const facets = (query as { facets?: readonly { column: string, op: string, value: string }[] }).facets
   if (!facets?.length)
     return { sql: '', params: [] }
   const parts: string[] = []
   const params: unknown[] = []
   for (const f of facets) {
-    const col = dimExpr(f.column)
+    const col = dimExpr(f.column, table)
     switch (f.op) {
       case 'eq':
         parts.push(`${col} = ?`)
@@ -277,7 +286,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
     // ── 2. Per-entity daily timeseries ──────────────────────────────────────
     case 'entity-daily-timeseries': {
       const table = tableForDimensions([query.entity.dimension])
-      const col = dimExpr(query.entity.dimension)
+      const col = dimExpr(query.entity.dimension, table)
       const where = rangePredicate(query)
       return {
         table,
@@ -290,7 +299,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
     // ── 3. Per-entity daily sparkline (top-N entities at once) ──────────────
     case 'entity-daily-sparkline': {
       const table = tableForDimensions([query.dimension])
-      const col = dimExpr(query.dimension)
+      const col = dimExpr(query.dimension, table)
       const where = rangePredicate(query)
       if (query.entities.length === 0)
         throw new Error('[archetype-sql] entity-daily-sparkline requires resolved entities')
@@ -352,8 +361,8 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
         }
         return { table, sql, params }
       }
-      const col = dimExpr(query.dimension)
-      const facet = facetPredicate(query)
+      const col = dimExpr(query.dimension, table)
+      const facet = facetPredicate(query, table)
       // Full group count (independent of LIMIT/OFFSET) for load-more tables.
       // `COUNT(*) OVER()` evaluates over the grouped result before LIMIT, so it
       // reports every distinct dimension value matching the WHERE/facet.
@@ -403,7 +412,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
       const matchParts: string[] = []
       const matchParams: unknown[] = []
       for (const [dim, value] of Object.entries(query.match)) {
-        const col = dimExpr(dim)
+        const col = dimExpr(dim, table)
         if (!col)
           throw new Error(`[archetype-sql] single-row-lookup: unknown dimension ${dim}`)
         matchParts.push(`${col} = ?`)
@@ -430,7 +439,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
           params: [...where.params, ...where.params, ...where.params],
         }
       }
-      const col = dimExpr(query.seriesDimension)
+      const col = dimExpr(query.seriesDimension, table)
       return {
         table,
         sql: `SELECT date, ${col} AS ${query.seriesDimension}, ${metricExpr(query.metric)} AS ${query.metric} `
@@ -446,7 +455,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
     case 'two-dimension-detail': {
       const table = 'page_queries'
       const where = rangePredicate(query)
-      const facet = facetPredicate(query)
+      const facet = facetPredicate(query, table)
       const filterParts: string[] = []
       const filterParams: unknown[] = []
       if (query.filter?.page) {

@@ -12,6 +12,11 @@ import type {
 } from '@gscdump/contracts/archetypes'
 
 export const TABLE_PLACEHOLDER = '{{TABLE}}'
+const FACT_ALIAS = 'fact'
+
+function factTableRef(): string {
+  return `${TABLE_PLACEHOLDER} AS ${FACT_ALIAS}`
+}
 
 export type ArchetypeFactTable = 'pages' | 'queries' | 'countries' | 'page_queries' | 'dates'
 
@@ -55,7 +60,7 @@ function dimColumn(dim: Dimension): string {
   if (dim === 'page')
     return 'url'
   if (dim === 'queryCanonical')
-    return 'COALESCE((SELECT qd.query_canonical FROM query_dim qd WHERE qd.query = query LIMIT 1), query)'
+    return `COALESCE((SELECT qd.query_canonical FROM query_dim qd WHERE qd.query = ${FACT_ALIAS}.query LIMIT 1), ${FACT_ALIAS}.query)`
   return dim
 }
 
@@ -275,7 +280,7 @@ function buildSiteDailyTimeseries(q: SiteDailyTimeseriesQuery, pruned: boolean, 
   return {
     table: 'dates',
     params: w.params,
-    sql: `SELECT date, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause} GROUP BY date ORDER BY date ASC`,
+    sql: `SELECT date, ${metrics} FROM ${factTableRef()} WHERE ${w.clause} GROUP BY date ORDER BY date ASC`,
   }
 }
 
@@ -287,7 +292,7 @@ function buildEntityDailyTimeseries(q: EntityDailyTimeseriesQuery, pruned: boole
   return {
     table,
     params: [...w.params, q.entity.value],
-    sql: `SELECT date, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause} AND ${col} = ? GROUP BY date ORDER BY date ASC`,
+    sql: `SELECT date, ${metrics} FROM ${factTableRef()} WHERE ${w.clause} AND ${col} = ? GROUP BY date ORDER BY date ASC`,
   }
 }
 
@@ -301,7 +306,7 @@ function buildEntityDailySparkline(q: EntityDailySparklineQuery, pruned: boolean
   return {
     table,
     params: w.params,
-    sql: `SELECT date, ${dimSelect(q.dimension)}, ${metricExpr(q.metric)} FROM ${TABLE_PLACEHOLDER} `
+    sql: `SELECT date, ${dimSelect(q.dimension)}, ${metricExpr(q.metric)} FROM ${factTableRef()} `
       + `WHERE ${w.clause} AND ${col} IN (${inList}) GROUP BY date, ${col} ORDER BY date ASC`,
   }
 }
@@ -341,7 +346,7 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
       const deviceSelects = (clause: string, ml: readonly Metric[]): string => DEVICE_SUFFIXES.map((suffix) => {
         const source = deviceSource(suffix)
         const metrics = ml.map(m => metricExprForSource(m, source)).join(', ')
-        return `SELECT '${suffix.toUpperCase()}' AS device, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${clause}`
+        return `SELECT '${suffix.toUpperCase()}' AS device, ${metrics} FROM ${factTableRef()} WHERE ${clause}`
       }).join(' UNION ALL ')
       const curCols = metricList.map(m => coalesceMetric(m, 'c', m)).join(', ')
       const prevCols = STD_METRICS.map(m => coalesceMetric(m, 'p', prevAlias(m))).join(', ')
@@ -361,7 +366,7 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
     const selects = DEVICE_SUFFIXES.map((suffix) => {
       const source = deviceSource(suffix)
       const metrics = metricList.map(m => metricExprForSource(m, source)).join(', ')
-      return `SELECT '${suffix.toUpperCase()}' AS device, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}`
+      return `SELECT '${suffix.toUpperCase()}' AS device, ${metrics} FROM ${factTableRef()} WHERE ${w.clause}`
     })
     const sql = `${selects.join(' UNION ALL ')} ORDER BY ${order} ${limit}${offset}`
     return { table, params: DEVICE_SUFFIXES.flatMap(() => w.params), sql }
@@ -387,14 +392,14 @@ function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: Partit
     const outerOrder = q.movers ? moverOrderByAlias(q.movers) : order
     const inner = `SELECT COALESCE(c.k, p.k) AS ${q.dimension}, ${curCols}, ${prevCols}${variantOut}${totalCol} `
       + `FROM cur c FULL OUTER JOIN prev p ON c.k = p.k ${moverWhere}`
-    const sql = `WITH cur AS (SELECT ${col} AS k, ${curMetrics}${variantSel} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} GROUP BY ${col}), `
-      + `prev AS (SELECT ${col} AS k, ${prevMetrics} FROM ${TABLE_PLACEHOLDER} WHERE ${wPrev.clause}${facet.sql} GROUP BY ${col}) `
+    const sql = `WITH cur AS (SELECT ${col} AS k, ${curMetrics}${variantSel} FROM ${factTableRef()} WHERE ${w.clause}${facet.sql} GROUP BY ${col}), `
+      + `prev AS (SELECT ${col} AS k, ${prevMetrics} FROM ${factTableRef()} WHERE ${wPrev.clause}${facet.sql} GROUP BY ${col}) `
       + `SELECT * FROM (${inner}) t ORDER BY ${outerOrder} ${limit}${offset}`
     return { table, params: [...w.params, ...facet.params, ...wPrev.params, ...facet.params], sql }
   }
 
   const metrics = metricList.map(metricExpr).join(', ')
-  const sql = `SELECT ${dimSelect(q.dimension)}, ${metrics}${variantSel}${totalCol} FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause}${facet.sql} `
+  const sql = `SELECT ${dimSelect(q.dimension)}, ${metrics}${variantSel}${totalCol} FROM ${factTableRef()} WHERE ${w.clause}${facet.sql} `
     + `GROUP BY ${col} ORDER BY ${order} ${limit}${offset}`
   return { table, params: [...w.params, ...facet.params], sql }
 }
@@ -415,7 +420,7 @@ function buildSingleRowLookup(q: SingleRowLookupQuery, pruned: boolean, mode: Pa
   return {
     table,
     params,
-    sql: `SELECT ${select} FROM ${TABLE_PLACEHOLDER} WHERE ${clause}${groupBy}`,
+    sql: `SELECT ${select} FROM ${factTableRef()} WHERE ${clause}${groupBy}`,
   }
 }
 
@@ -426,7 +431,7 @@ function buildMultiSeriesStackedDaily(q: MultiSeriesStackedDailyQuery, pruned: b
     const selects = DEVICE_SUFFIXES.map((suffix) => {
       const source = deviceSource(suffix)
       return `SELECT date, '${suffix.toUpperCase()}' AS device, ${metricExprForSource(q.metric, source)} `
-        + `FROM ${TABLE_PLACEHOLDER} WHERE ${w.clause} GROUP BY date`
+        + `FROM ${factTableRef()} WHERE ${w.clause} GROUP BY date`
     })
     return {
       table,
@@ -438,7 +443,7 @@ function buildMultiSeriesStackedDaily(q: MultiSeriesStackedDailyQuery, pruned: b
   return {
     table,
     params: w.params,
-    sql: `SELECT date, ${dimSelect(q.seriesDimension)}, ${metricExpr(q.metric)} FROM ${TABLE_PLACEHOLDER} `
+    sql: `SELECT date, ${dimSelect(q.seriesDimension)}, ${metricExpr(q.metric)} FROM ${factTableRef()} `
       + `WHERE ${w.clause} GROUP BY date, ${col} ORDER BY date ASC`,
   }
 }
@@ -462,7 +467,7 @@ function buildTwoDimensionDetail(q: TwoDimensionDetailQuery, pruned: boolean, mo
     ? [...q.metrics, q.orderBy.metric]
     : q.metrics
   const metrics = metricList.map(metricExpr).join(', ')
-  let sql = `SELECT url, query, ${metrics} FROM ${TABLE_PLACEHOLDER} WHERE ${clause} GROUP BY url, query`
+  let sql = `SELECT url, query, ${metrics} FROM ${factTableRef()} WHERE ${clause} GROUP BY url, query`
   if (q.orderBy)
     sql += ` ORDER BY ${metricAlias(q.orderBy.metric)} ${q.orderBy.dir.toUpperCase()}`
   if (q.limit && q.limit > 0)

@@ -237,6 +237,8 @@ describe('buildArchetypeSql', () => {
     }
     const plan = buildArchetypeSql(q)
     expect(plan.table).toBe('page_queries')
+    expect(plan.sql).toContain('WHERE qd.query = fact.query')
+    expect(plan.sql).not.toContain('WHERE qd.query = query')
     expect(plan.sql).toContain('url = ?')
     expect(plan.params).toEqual(['site-1', 'web', '2026-01-01', '2026-03-31', 'https://x.com/a'])
   })
@@ -351,6 +353,8 @@ describe('buildArchetypeSql', () => {
       expect(plan.sql).not.toContain('search_type')
       expect(plan.sql).toContain('COUNT(DISTINCT query) AS variantCount')
       expect(plan.sql).toContain('SELECT qd.query_canonical FROM query_dim qd')
+      expect(plan.sql).toContain('WHERE qd.query = fact.query')
+      expect(plan.sql).not.toContain('WHERE qd.query = query')
       expect(plan.sql).not.toContain('GROUP BY query_canonical')
       // cur range + prev range, two bound params each, alignment preserved
       expect(plan.params).toEqual(['2026-01-01', '2026-03-31', '2025-10-01', '2025-12-31'])
