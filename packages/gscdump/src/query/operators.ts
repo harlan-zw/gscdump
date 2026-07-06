@@ -187,6 +187,9 @@ function invertOperator(op: FilterOperator): FilterOperator {
 // invertible; date and metric operators have no GSC equivalent inversion
 // and are rejected to avoid silently dropping clauses.
 export function not<F extends Filter<any>>(filter: F): Filter<object> {
+  if ((filter._nestedGroups?.length ?? 0) > 0 || filter._filters.length !== 1)
+    throw new Error('not() can only invert a single leaf filter. GSC filter groups do not support compound negation.')
+
   const inverted: InternalFilter[] = []
   for (const f of filter._filters) {
     if (DATE_OPERATORS.includes(f.operator as any))

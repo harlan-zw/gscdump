@@ -50,11 +50,13 @@ function joinComma(parts: SQL[]): SQL {
   return sql.join(parts, sql`, `)
 }
 
+const ORDER_BY_HELPER_PREFIX = '__order_'
+
 // ORDER BY is safe-stripped because `column` / `dir` come from `BuilderState`
 // (typed union) but we still guard against raw strings reaching SQL.
-function orderByClause(state: BuilderState, prefix: string = ''): SQL {
+function orderByClause(state: BuilderState, prefix: string = '', columnOverride?: string): SQL {
   if (state.orderBy) {
-    const safeCol = state.orderBy.column.replace(/\W/g, '')
+    const safeCol = (columnOverride ?? state.orderBy.column).replace(/\W/g, '')
     const safeDir = state.orderBy.dir.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'
     return sql.raw(`ORDER BY ${prefix}${safeCol} ${safeDir}`)
   }
@@ -284,6 +286,25 @@ export function resolveToSQLOptimized<TK extends string>(
         break
     }
   }
+  let orderByColumnOverride: string | undefined
+  const orderColumn = state.orderBy?.column
+  if (orderColumn && orderColumn !== 'date' && !metrics.includes(orderColumn)) {
+    orderByColumnOverride = `${ORDER_BY_HELPER_PREFIX}${orderColumn}`
+    switch (orderColumn) {
+      case 'clicks':
+        outerSelect.push(sql.raw(`clicks as "${orderByColumnOverride}"`))
+        break
+      case 'impressions':
+        outerSelect.push(sql.raw(`impressions as "${orderByColumnOverride}"`))
+        break
+      case 'ctr':
+        outerSelect.push(sql.raw(`CAST(clicks AS REAL) / NULLIF(impressions, 0) as "${orderByColumnOverride}"`))
+        break
+      case 'position':
+        outerSelect.push(sql.raw(`sum_position / NULLIF(impressions, 0) + 1 as "${orderByColumnOverride}"`))
+        break
+    }
+  }
   outerSelect.push(sql.raw('COUNT(*) OVER() as totalCount'))
   for (const totalExpr of outerTotals) outerSelect.push(totalExpr)
 
@@ -295,7 +316,7 @@ export function resolveToSQLOptimized<TK extends string>(
   if (having.length > 0)
     cte = sql`${cte} HAVING ${joinAnd(having)}`
 
-  const query = sql`WITH aggregated AS (${cte}) SELECT ${joinComma(outerSelect)} FROM aggregated ${orderByClause(state)} ${limitOffsetClause(state)}`
+  const query = sql`WITH aggregated AS (${cte}) SELECT ${joinComma(outerSelect)} FROM aggregated ${orderByClause(state, '', orderByColumnOverride)} ${limitOffsetClause(state)}`
   return compileCollapsed(adapter, query)
 }
 

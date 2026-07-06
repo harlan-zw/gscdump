@@ -506,6 +506,8 @@ export interface GscdumpSiteRegistration {
   siteId: string
   /** Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize into their own catalog namespaces. */
   intId?: number | null
+  /** Team-scoped catalog identifier (`user_sites.catalog_site_id`). Echoes caller input or defaults to `intId`. */
+  catalogSiteId?: number | null
   status: 'idle' | 'pending' | 'syncing' | 'synced' | 'error'
   message?: string
   existing?: boolean
@@ -820,6 +822,7 @@ export interface RegisterPartnerSiteParams {
   webhookEvents?: WebhookEventType[]
   teamId?: string
   enabledSearchTypes?: GscSearchType[]
+  catalogSiteId?: number
 }
 
 export interface BulkRegisterPartnerSitesParams {

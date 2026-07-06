@@ -290,9 +290,8 @@ export function extractSearchType(state: BuilderState | undefined | null): Searc
   if (state.searchType && KNOWN_SEARCH_TYPES.has(state.searchType))
     return state.searchType
   const filter = (state as { filter?: unknown }).filter
-  if (!filter || typeof filter !== 'object')
-    return undefined
-  const raw = (filter as { searchType?: unknown }).searchType
+  const normalized = normalizeFilter(filter as FilterInput | undefined)
+  const raw = extractSpecialFilters(normalized).searchType
   if (typeof raw !== 'string' || raw.length === 0)
     return undefined
   return KNOWN_SEARCH_TYPES.has(raw) ? raw as SearchType : undefined

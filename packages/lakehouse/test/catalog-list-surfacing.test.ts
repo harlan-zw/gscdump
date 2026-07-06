@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const restCatalogListTables = vi.fn()
+const restCatalogCreateNamespace = vi.fn()
 const icebergDropTable = vi.fn()
 
 vi.mock('icebird', () => ({
@@ -14,13 +15,13 @@ vi.mock('icebird', () => ({
   icebergDropTable,
   icebergManifests: vi.fn(),
   restCatalogConnect: vi.fn(),
-  restCatalogCreateNamespace: vi.fn(),
+  restCatalogCreateNamespace,
   restCatalogListTables,
   restCatalogLoadTable: vi.fn(),
   s3SignedResolver: vi.fn(),
 }))
 
-const { listIcebergTables, dropIcebergTables } = await import('../src/catalog')
+const { listIcebergTables, dropIcebergTables, ensureIcebergNamespace } = await import('../src/catalog')
 
 const CONN = { catalog: {} as never, resolver: {} as never, namespace: 'crawl' }
 const LIST_FAILURE = 'catalog list failed (network / 401)'
@@ -42,5 +43,17 @@ describe('dropIcebergTables: list failure surfacing', () => {
     restCatalogListTables.mockRejectedValueOnce(new Error(LIST_FAILURE))
     await expect(dropIcebergTables(CONN)).rejects.toThrow(LIST_FAILURE)
     expect(icebergDropTable).not.toHaveBeenCalled()
+  })
+})
+
+describe('ensureIcebergNamespace: create failure surfacing', () => {
+  it('swallows only namespace-exists conflicts', async () => {
+    restCatalogCreateNamespace.mockRejectedValueOnce(Object.assign(new Error('already exists'), { status: 409 }))
+    await expect(ensureIcebergNamespace(CONN)).resolves.toBeUndefined()
+  })
+
+  it('surfaces non-conflict namespace creation failures', async () => {
+    restCatalogCreateNamespace.mockRejectedValueOnce(Object.assign(new Error('unauthorized'), { status: 401 }))
+    await expect(ensureIcebergNamespace(CONN)).rejects.toThrow('unauthorized')
   })
 })

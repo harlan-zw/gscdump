@@ -143,7 +143,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
         }
         await manifestStore.registerVersion(entry, superseding)
         await manifestStore.bumpWatermark(
-          { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table },
+          { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table, ...(searchType !== undefined ? { searchType } : {}) },
           date,
           now,
         )
@@ -224,7 +224,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
         }
         await manifestStore.registerVersion(entry, live)
         await manifestStore.bumpWatermark(
-          { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table },
+          { userId: ctx.userId, siteId: ctx.siteId, table: ctx.table, ...(searchType !== undefined ? { searchType } : {}) },
           date,
           now,
         )
@@ -374,12 +374,12 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
           for (const k of await dataSource.list(prefix)) yield k
         }())
     for await (const key of keyStream) keys.push(key)
-    if (keys.length > 0)
-      await dataSource.delete(keys)
     const manifestResult = await manifestStore.purgeTenant({
       userId: ctx.userId,
       siteId: ctx.siteId,
     })
+    if (keys.length > 0)
+      await dataSource.delete(keys)
     return {
       userId: ctx.userId,
       siteId: ctx.siteId,

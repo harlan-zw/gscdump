@@ -207,13 +207,22 @@ export function catalogCacheScope(config: Pick<IcebergCatalogConfig, 'catalogUri
   return `${config.catalogUri}\0${config.warehouse}`
 }
 
+function isNamespaceAlreadyExistsError(err: unknown): boolean {
+  if (err && typeof err === 'object' && (err as { status?: unknown }).status === 409)
+    return true
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
+  return msg.includes('already exists') || msg.includes('409') || msg.includes('conflict')
+}
+
 /**
  * Ensure the catalog namespace exists. Idempotent — an "already exists"
  * response from the REST catalog is swallowed.
  */
 export async function ensureIcebergNamespace(conn: IcebergConnection): Promise<void> {
   await restCatalogCreateNamespace(conn.catalog, { namespace: conn.namespace })
-    .catch(() => {
+    .catch((err: unknown) => {
+      if (!isNamespaceAlreadyExistsError(err))
+        throw err
       // namespace already exists — fine
     })
 }
@@ -327,16 +336,18 @@ export async function icebergAppendRetrying(
     snapshotProperties: { ...(args as { snapshotProperties?: Record<string, string> }).snapshotProperties, [APPEND_ID_SUMMARY_KEY]: appendId },
   } as Parameters<typeof icebergAppend>[0]
 
-  if (await appendAlreadyLanded(args, appendId).catch(() => false))
+  if (await appendAlreadyLanded(args, appendId))
     return
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const err = await icebergAppend(stampedArgs).then(() => undefined, (e: unknown) => e)
     if (err === undefined)
       return
-    if (await appendAlreadyLanded(args, appendId).catch(() => false))
+    if (!isCommitRateLimited(err))
+      throw err
+    if (await appendAlreadyLanded(args, appendId))
       return
-    if (!isCommitRateLimited(err) || attempt === maxAttempts - 1)
+    if (attempt === maxAttempts - 1)
       throw err
     const ceiling = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt)
     await sleep(Math.floor(random() * ceiling))

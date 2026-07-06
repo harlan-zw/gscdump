@@ -75,6 +75,10 @@ async function runOptimized(
       totalPosition: _tp,
       ...rest
     } = r as Record<string, unknown>
+    for (const key of Object.keys(rest)) {
+      if (key.startsWith('__order_'))
+        delete rest[key]
+    }
     return rest as Row
   })
   return { rows, totalCount, totals }
@@ -214,6 +218,24 @@ describe('resolveToSQLOptimized (integration)', () => {
     expect(result.rows).toEqual([])
     expect(result.totalCount).toBe(0)
     expect(result.totals).toEqual({ clicks: 0, impressions: 0, ctr: 0, position: 0 })
+  })
+
+  it('orders by an unselected metric without leaking helper columns', async () => {
+    const { engine } = await setup()
+    await seedPages(engine)
+
+    const state: BuilderState = {
+      dimensions: ['page'],
+      metrics: ['clicks'],
+      filter: dateFilter('2026-04-01', '2026-04-30'),
+      rowLimit: 2,
+      orderBy: { column: 'impressions', dir: 'desc' },
+    }
+
+    const result = await runOptimized(engine, { userId: 'u1', siteId: 's1' }, state)
+
+    expect(result.rows.map(row => (row as Record<string, unknown>).page)).toEqual(['/a', '/b'])
+    expect(Object.keys(result.rows[0] as Record<string, unknown>)).toEqual(['page', 'clicks'])
   })
 
   it('per-metric totals match independent recomputation from fixture', async () => {

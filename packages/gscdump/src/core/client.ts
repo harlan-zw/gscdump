@@ -84,6 +84,7 @@ export function createAuth(options: AuthOptions): AuthClient {
   let credentials: AuthClient['credentials'] = {
     refresh_token: options.refreshToken,
   }
+  let refreshPromise: Promise<string> | null = null
 
   return {
     get credentials() {
@@ -94,7 +95,7 @@ export function createAuth(options: AuthOptions): AuthClient {
         return { token: credentials.access_token }
       }
 
-      const response = await ofetch<{ access_token: string, expires_in: number }>('https://oauth2.googleapis.com/token', {
+      refreshPromise ??= ofetch<{ access_token: string, expires_in: number }>('https://oauth2.googleapis.com/token', {
         method: 'POST',
         body: new URLSearchParams({
           client_id: options.clientId,
@@ -102,15 +103,18 @@ export function createAuth(options: AuthOptions): AuthClient {
           refresh_token: options.refreshToken,
           grant_type: 'refresh_token',
         }),
+      }).then((response) => {
+        credentials = {
+          ...credentials,
+          access_token: response.access_token,
+          expiry_date: Date.now() + response.expires_in * 1000,
+        }
+        return response.access_token
+      }).finally(() => {
+        refreshPromise = null
       })
 
-      credentials = {
-        ...credentials,
-        access_token: response.access_token,
-        expiry_date: Date.now() + response.expires_in * 1000,
-      }
-
-      return { token: response.access_token }
+      return { token: await refreshPromise }
     },
   }
 }

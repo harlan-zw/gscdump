@@ -256,6 +256,28 @@ describe('createGscAuth', () => {
     expect(r3.token).toBe('refreshed-again')
     expect(ofetchSpy).toHaveBeenCalled()
   })
+
+  it('coalesces concurrent token refreshes', async () => {
+    const { createAuth } = await import('../src')
+    ofetchSpy.mockClear()
+    const auth = createAuth({
+      clientId: 'cid',
+      clientSecret: 'csec',
+      refreshToken: 'rtoken',
+    })
+    ofetchSpy.mockResolvedValue({ access_token: 'shared-token', expires_in: 3600 })
+
+    const [a, b, c] = await Promise.all([
+      auth.getAccessToken(),
+      auth.getAccessToken(),
+      auth.getAccessToken(),
+    ])
+
+    expect(a.token).toBe('shared-token')
+    expect(b.token).toBe('shared-token')
+    expect(c.token).toBe('shared-token')
+    expect(ofetchSpy).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('createGscFetch integration', () => {

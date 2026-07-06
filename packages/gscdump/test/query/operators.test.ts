@@ -210,5 +210,12 @@ describe('operators', () => {
       const doubleInverted = not(not(original))
       expect(doubleInverted._filters[0].operator).toBe('equals')
     })
+
+    it('rejects compound filters instead of changing boolean semantics', () => {
+      expect(() => not(and(
+        eq(device, Devices.MOBILE),
+        eq(country, Countries.USA),
+      ))).toThrow(/single leaf/)
+    })
   })
 })

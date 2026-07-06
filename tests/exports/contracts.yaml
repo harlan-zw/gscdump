@@ -123,6 +123,7 @@
   sitemapNextActions: object
   sitemapStatuses: object
   sourceInfoResponseSchema: object
+  teamCatalogRefSchema: object
   updatePartnerUserTokensSchema: object
   VALID_WEBHOOK_EVENTS: object
   WEBHOOK_CONTRACT_VERSION: string

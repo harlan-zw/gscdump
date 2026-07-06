@@ -200,6 +200,11 @@ export interface WatermarkScope {
   userId: string
   siteId?: string
   table: TableName
+  /**
+   * GSC search-type this watermark covers. Omitted = `web` for legacy
+   * compatibility with pre-searchType watermarks.
+   */
+  searchType?: SearchType
 }
 
 export interface Watermark extends WatermarkScope {
@@ -212,6 +217,7 @@ export interface WatermarkFilter {
   userId: string
   siteId?: string
   table?: TableName
+  searchType?: SearchType
 }
 
 export type SyncStateKind = 'pending' | 'inflight' | 'done' | 'failed'
@@ -311,8 +317,9 @@ export interface ManifestStore {
    * GDPR-grade tenant purge. Removes every manifest entry, watermark, and
    * sync-state record matching the filter. Does NOT touch the underlying
    * data-source bytes; callers (typically {@link StorageEngine.purgeTenant})
-   * must sweep the tenant prefix separately before invoking this so that
-   * mid-flight failures can't leave orphan parquet with no manifest record.
+   * remove manifest visibility first, then sweep tenant-prefix bytes so that
+   * mid-flight failures cannot leave live manifest entries pointing at deleted
+   * objects.
    *
    * On stores with CAS-backed sharding (R2 manifest) this may issue one
    * mutation per shard. On read-only stores (HTTP) this throws.

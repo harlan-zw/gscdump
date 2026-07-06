@@ -190,6 +190,7 @@
   sourceInfoResponseSchema: object
   splitOpportunityTitle: function
   summarizeDailyRows: function
+  teamCatalogRefSchema: object
   toPartnerError: function
   truncateQuery: function
   updatePartnerUserTokensSchema: object

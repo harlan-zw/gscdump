@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { gsc } from '../../src/query/builder'
-import { date, hour, page, query, searchAppearance } from '../../src/query/columns'
+import { date, hour, page, query, searchAppearance, searchType } from '../../src/query/columns'
 import { and, between, eq } from '../../src/query/operators'
+import { extractSearchType } from '../../src/query/resolver'
 
 describe('resolveToBody validation', () => {
   const dateRange = between(date, '2026-05-01', '2026-05-07')
@@ -109,5 +110,16 @@ describe('builder .type()', () => {
     // Using state directly since the filter form is internal.
     const state = gsc.select(page).where(dateRange).type('news').getState()
     expect(state.searchType).toBe('news')
+  })
+
+  it('extracts searchType from query-param filter leaves', () => {
+    const state = gsc
+      .select(page)
+      .where(and(dateRange, eq(searchType, 'discover')))
+      .getState()
+
+    expect(extractSearchType(state)).toBe('discover')
+    expect(state.searchType).toBeUndefined()
+    expect(gsc.select(page).where(and(dateRange, eq(searchType, 'discover'))).toBody().type).toBe('discover')
   })
 })

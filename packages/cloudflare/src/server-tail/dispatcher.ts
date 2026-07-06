@@ -207,11 +207,16 @@ export function createServerTailDispatcher(
   ): Promise<ArchetypeResult<R>> {
     if (engine === 'r2-sql') {
       const res = await config.r2Sql.runArchetype(query)
+      const { rows, totalRows } = extractTotal(res.rows as R[])
       return {
         archetype: query.archetype,
-        rows: res.rows as R[],
+        rows,
         source: sourceFor('r2-sql'),
-        meta: { rowCount: res.rows.length, queryMs: res.queryMs },
+        meta: {
+          rowCount: rows.length,
+          queryMs: res.queryMs,
+          ...(totalRows !== undefined ? { totalRows } : {}),
+        },
       }
     }
     const res = await config.duckdb.runArchetype(query)

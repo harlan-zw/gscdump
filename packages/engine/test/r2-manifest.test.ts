@@ -280,6 +280,27 @@ describe('createR2ManifestStore — happy path', () => {
     expect(all).toHaveLength(3)
   })
 
+  it('lists only the site shard prefix when siteId is provided without table', async () => {
+    const bucket = makeFakeBucket()
+    const prefixes: string[] = []
+    const originalList = bucket.list.bind(bucket)
+    bucket.list = async (options) => {
+      prefixes.push(options?.prefix ?? '')
+      return originalList(options)
+    }
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+
+    await store.registerVersion(makeEntry({ siteId: 's1', table: 'pages', objectKey: 's1-pages' }))
+    await store.registerVersion(makeEntry({ siteId: 's2', table: 'pages', objectKey: 's2-pages' }))
+
+    prefixes.length = 0
+    const live = await store.listLive({ userId: 'u1', siteId: 's1' })
+
+    expect(live.map(e => e.objectKey)).toEqual(['s1-pages'])
+    expect(prefixes).toContain('u_u1/manifest/s1/')
+    expect(prefixes).not.toContain('u_u1/manifest/')
+  })
+
   it('tracks watermarks per shard', async () => {
     const bucket = makeFakeBucket()
     const store = createR2ManifestStore({ bucket, userId: 'u1' })
@@ -295,6 +316,21 @@ describe('createR2ManifestStore — happy path', () => {
     expect(ws[0].oldestDateSynced).toBe('2026-03-10')
     expect(ws[0].newestDateSynced).toBe('2026-03-20')
     expect(ws[0].lastSyncAt).toBe(3000)
+  })
+
+  it('tracks watermarks per searchType within a shard', async () => {
+    const bucket = makeFakeBucket()
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+
+    await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'pages' }, '2026-04-10', 1000)
+    await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'pages', searchType: 'discover' }, '2026-04-11', 2000)
+
+    const all = await store.getWatermarks({ userId: 'u1', siteId: 's1', table: 'pages' })
+    expect(all).toHaveLength(2)
+    expect(await store.getWatermarks({ userId: 'u1', siteId: 's1', table: 'pages', searchType: 'web' }))
+      .toMatchObject([{ newestDateSynced: '2026-04-10' }])
+    expect(await store.getWatermarks({ userId: 'u1', siteId: 's1', table: 'pages', searchType: 'discover' }))
+      .toMatchObject([{ newestDateSynced: '2026-04-11', searchType: 'discover' }])
   })
 
   it('tracks sync state per searchType — different types do not collide', async () => {

@@ -323,6 +323,7 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
               userId: scope.userId,
               siteId: scope.siteId,
               table: scope.table,
+              ...(scope.searchType !== undefined ? { searchType: scope.searchType } : {}),
               newestDateSynced: date,
               oldestDateSynced: date,
               lastSyncAt: nowMs,

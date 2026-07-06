@@ -197,6 +197,26 @@ describe('attachOpfsParquetTables', () => {
     expect([...opfs.files.keys()][0]).toBe(`gscdump-snapshot__pages_${slug}.parquet`)
   })
 
+  it('rejects downloaded files whose byte length does not match the manifest', async () => {
+    const opfs = makeFakeOpfs()
+    installNavigatorStorage(opfs.root)
+    const { db, conn, registerFileHandle } = stubDuckDb()
+    const payload = new Uint8Array([1, 2, 3])
+
+    await expect(attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(payload),
+      tables: [{
+        table: 'pages',
+        files: [{ url: '/api/r2-data/pages-0.parquet', bytes: 5, contentHash: 'iceberg/abc.parquet' }],
+      }],
+    })).rejects.toThrow(/byte length mismatch/)
+
+    expect(registerFileHandle).not.toHaveBeenCalled()
+    expect(opfs.files.size).toBe(0)
+  })
+
   it('rejects invalid SQL identifiers before building DuckDB view SQL', async () => {
     const opfs = makeFakeOpfs()
     installNavigatorStorage(opfs.root)

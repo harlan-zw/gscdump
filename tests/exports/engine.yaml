@@ -129,6 +129,7 @@
   encodeRowsToParquetFlex: function
 ./iceberg:
   assertIcebergTable: function
+  catalogCacheScope: function
   connectIcebergCatalog: function
   createIcebergAppendSink: function
   createIcebergTables: function
@@ -152,6 +153,7 @@
   icebergSortOrderFor: function
   icebergTableSpec: function
   INT_SEARCH_TYPE: object
+  invalidateSnapshotRef: function
   isCommitRateLimited: function
   isIcebergTable: function
   listIcebergDataFiles: function

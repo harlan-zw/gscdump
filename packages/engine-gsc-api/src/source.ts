@@ -5,6 +5,7 @@ import type { BuilderState, GSCQueryBuilder } from 'gscdump/query'
 import type { PlannerCapabilities } from 'gscdump/query/plan'
 
 import { assertDimensionsSupported, getFilterDimensions } from '@gscdump/engine/resolver'
+import { extractMetricFilters, extractSpecialOperatorFilters } from 'gscdump/query'
 import { buildLogicalPlan } from 'gscdump/query/plan'
 import { applyBuilderStatePostProcessing } from './post-process'
 import { collectRows } from './rollup-synth'
@@ -33,6 +34,12 @@ function builderFromState(state: BuilderState): GSCQueryBuilder<any, any> {
   } as unknown as GSCQueryBuilder<any, any>
 }
 
+function canPushDownPagination(state: BuilderState): boolean {
+  return !state.orderBy
+    && extractMetricFilters(state.filter).length === 0
+    && extractSpecialOperatorFilters(state.filter).length === 0
+}
+
 export interface GscApiQuerySourceOptions {
   client: GoogleSearchConsoleClient
   siteUrl: string
@@ -54,12 +61,18 @@ export function createGscApiQuerySource(
       buildLogicalPlan(state, GSC_API_CAPABILITIES)
       const filterDims = getFilterDimensions(state.filter, isMetricDimension)
       assertDimensionsSupported([...state.dimensions, ...filterDims], 'api', 'gsc-api query source')
-      // The live source performs ordering, metric/special filters, offset and
-      // limit after row collection. Do not let the API client page the candidate
-      // set first, or those post-processing steps operate on a truncated window.
-      const apiState: BuilderState = { ...state, rowLimit: undefined, startRow: undefined }
+      // The live source performs explicit ordering and metric/special filters
+      // after row collection. Push pagination down only when those steps are not
+      // present, so simple bounded queries do not page the whole GSC result set.
+      const pushDownPagination = canPushDownPagination(state)
+      const apiState: BuilderState = pushDownPagination
+        ? state
+        : { ...state, rowLimit: undefined, startRow: undefined }
       const rows = await collectRows(client.query(siteUrl, builderFromState(apiState)))
-      return applyBuilderStatePostProcessing(rows as QueryRow[], state)
+      const postState = pushDownPagination
+        ? { ...state, rowLimit: undefined, startRow: undefined }
+        : state
+      return applyBuilderStatePostProcessing(rows as QueryRow[], postState)
     },
   }
 }

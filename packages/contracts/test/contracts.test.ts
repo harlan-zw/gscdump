@@ -153,6 +153,8 @@ describe('@gscdump/contracts', () => {
       },
       sites: [{
         siteId: 'site_1',
+        intId: 1001,
+        catalogSiteId: 2001,
         externalSiteId: null,
         requestedUrl: 'sc-domain:example.com',
         gscPropertyUrl: 'sc-domain:example.com',

@@ -77,13 +77,9 @@ export const DAYS_PER_RANGE = 30
  * (older than retention or newer than the freshest date).
  */
 export function generateGscDateRange(startDate: string, endDate: string): string[] {
-  const dates: string[] = []
-  let current = startDate
-  while (current <= endDate && isValidGscDate(current)) {
-    dates.push(current)
-    current = getNextDate(current)
-  }
-  return dates
+  const start = startDate < getOldestGscDate() ? getOldestGscDate() : startDate
+  const end = endDate > getFreshestGscDate() ? getFreshestGscDate() : endDate
+  return start <= end ? getDateRange(start, end) : []
 }
 
 /**
@@ -172,8 +168,8 @@ export function getBackfillProgress(
   const oldestGsc = getOldestGscDate()
   const newestGsc = getLatestGscDate()
 
-  const totalDays = Math.ceil((new Date(newestGsc).getTime() - new Date(oldestGsc).getTime()) / MS_PER_DAY)
-  const syncedDays = Math.ceil((new Date(newestDateSynced).getTime() - new Date(oldestDateSynced).getTime()) / MS_PER_DAY)
+  const totalDays = countDays(oldestGsc, newestGsc)
+  const syncedDays = countDays(oldestDateSynced, newestDateSynced)
 
   return {
     progress: Math.round(Math.min(1, syncedDays / totalDays) * 100) / 100,

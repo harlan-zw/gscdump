@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createFilesystemDataSource,
   createFilesystemManifestStore,
@@ -159,6 +159,24 @@ describe('filesystemManifestStore', () => {
     const ws = await b.getWatermarks({ userId: 'u1' })
     expect(ws).toHaveLength(1)
     expect(ws[0].newestDateSynced).toBe('2026-04-10')
+  })
+
+  it('tracks sync watermarks per searchType with legacy web compatibility', async () => {
+    const store = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
+
+    await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'pages' }, '2026-04-10', 1000)
+    await store.bumpWatermark({ userId: 'u1', siteId: 's1', table: 'pages', searchType: 'discover' }, '2026-04-11', 2000)
+
+    const all = await store.getWatermarks({ userId: 'u1', siteId: 's1', table: 'pages' })
+    expect(all).toHaveLength(2)
+
+    const web = await store.getWatermarks({ userId: 'u1', siteId: 's1', table: 'pages', searchType: 'web' })
+    expect(web).toHaveLength(1)
+    expect(web[0].newestDateSynced).toBe('2026-04-10')
+
+    const discover = await store.getWatermarks({ userId: 'u1', siteId: 's1', table: 'pages', searchType: 'discover' })
+    expect(discover).toHaveLength(1)
+    expect(discover[0].newestDateSynced).toBe('2026-04-11')
   })
 
   it('tracks sync state transitions per (userId, siteId, table, date)', async () => {
@@ -386,5 +404,39 @@ describe('integration: filesystem + JSON codec (no DuckDB)', () => {
     expect(live[0]!.siteId).toBe('s2')
     expect((await dataSource.list('u_u1/s2/')).length).toBeGreaterThan(0)
     expect(await dataSource.list('u_u1/s1/')).toEqual([])
+  })
+
+  it('does not delete tenant bytes when manifest purge fails', async () => {
+    const dataSource = {
+      read: vi.fn(),
+      write: vi.fn(),
+      delete: vi.fn(),
+      list: vi.fn(async () => ['u_u1/s1/pages/daily/2026-03-09__v1.parquet']),
+    }
+    const manifestStore = {
+      listLive: vi.fn(),
+      listAll: vi.fn(),
+      registerVersion: vi.fn(),
+      registerVersions: vi.fn(),
+      listRetired: vi.fn(),
+      delete: vi.fn(),
+      getWatermarks: vi.fn(),
+      bumpWatermark: vi.fn(),
+      getSyncStates: vi.fn(),
+      setSyncState: vi.fn(),
+      withLock: vi.fn(async (_scope: unknown, fn: () => Promise<unknown>) => fn()),
+      purgeTenant: vi.fn(async () => {
+        throw new Error('manifest unavailable')
+      }),
+    }
+    const engine = createStorageEngine({
+      dataSource: dataSource as never,
+      manifestStore: manifestStore as never,
+      codec: createJsonCodec(),
+      executor: createUnionExecutor(createJsonCodec()),
+    })
+
+    await expect(engine.purgeTenant({ userId: 'u1', siteId: 's1' })).rejects.toThrow('manifest unavailable')
+    expect(dataSource.delete).not.toHaveBeenCalled()
   })
 })

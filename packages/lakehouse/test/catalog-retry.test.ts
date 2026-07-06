@@ -94,6 +94,17 @@ describe('icebergAppendRetrying', () => {
     expect(icebergAppend).toHaveBeenCalledTimes(1)
   })
 
+  it('does NOT retry when the landed-check fails after a 429', async () => {
+    restCatalogLoadTable.mockResolvedValueOnce({ metadata: { snapshots: [] } })
+    icebergAppend.mockRejectedValueOnce(new Error('429 too many commits to this table'))
+    restCatalogLoadTable.mockRejectedValueOnce(new Error('catalog unavailable'))
+
+    await expect(
+      icebergAppendRetrying(APPEND_ARGS, { ...FAST, appendId: 'ambiguous-1' }),
+    ).rejects.toThrow('catalog unavailable')
+    expect(icebergAppend).toHaveBeenCalledTimes(1)
+  })
+
   it('skips the append entirely when the content token already landed (cross-run double fix)', async () => {
     restCatalogLoadTable.mockResolvedValue({
       metadata: { snapshots: [{ summary: { 'lakehouse.append-id': 'prior-run' } }] },

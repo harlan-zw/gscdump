@@ -21,7 +21,7 @@ export function manifestEntryKey(entry: Pick<ManifestEntry, 'objectKey'>): strin
 }
 
 export function watermarkKey(watermark: WatermarkScope): string {
-  return `${watermark.userId}|${watermark.siteId ?? ''}|${watermark.table}`
+  return `${watermark.userId}|${watermark.siteId ?? ''}|${watermark.table}|${inferSearchType(watermark)}`
 }
 
 export function syncStateKey(state: SyncStateScope): string {
@@ -58,6 +58,8 @@ export function matchesWatermarkFilter(
   if (filter.siteId !== undefined && watermark.siteId !== filter.siteId)
     return false
   if (filter.table !== undefined && watermark.table !== filter.table)
+    return false
+  if (filter.searchType !== undefined && inferSearchType(watermark) !== filter.searchType)
     return false
   return true
 }

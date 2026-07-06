@@ -267,6 +267,25 @@ describe('createServerTailDispatcher', () => {
     expect(sentSql).toContain('query = \'nuxt seo\'')
   })
 
+  it('extracts includeTotal metadata from R2 SQL rows', async () => {
+    const { dispatcher, svc } = makeDispatcher([{ page: '/a', clicks: 9, __total: 42 }], [])
+    const res = await dispatcher.execute({
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'page',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 20,
+      includeTotal: true,
+    } as TopNBreakdownQuery)
+
+    expect(res.source).toBe('server-r2-sql')
+    expect(res.rows).toEqual([{ page: '/a', clicks: 9 }])
+    expect(res.meta?.rowCount).toBe(1)
+    expect(res.meta?.totalRows).toBe(42)
+    expect(svc.runSQL).not.toHaveBeenCalled()
+  })
+
   it('route() reports the engine without executing', () => {
     const { dispatcher } = makeDispatcher([], [])
     expect(dispatcher.route({

@@ -542,6 +542,9 @@ async function materialiseFile(
   if (!resp.ok)
     throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} failed: ${resp.status}`)
   const buf = await resp.arrayBuffer()
+  if (buf.byteLength !== file.bytes) {
+    throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} byte length mismatch: expected ${file.bytes}, got ${buf.byteLength}`)
+  }
 
   // ---- write to OPFS ------------------------------------------------------
   // A `QuotaExceededError` can surface from createWritable / write / close.

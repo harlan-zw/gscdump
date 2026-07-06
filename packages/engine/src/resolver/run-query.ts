@@ -465,6 +465,10 @@ export async function runOptimizedQuery(
       totalPosition: _tp,
       ...rest
     } = r as Record<string, unknown>
+    for (const key of Object.keys(rest)) {
+      if (key.startsWith('__order_'))
+        delete rest[key]
+    }
     return rest
   })
   return {

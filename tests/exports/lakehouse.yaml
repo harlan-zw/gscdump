@@ -2,6 +2,7 @@
   buildManifestPartitionFilter: function
   cacheGet: function
   cachePut: function
+  catalogCacheScope: function
   connectIcebergCatalog: function
   DEFAULT_PARTITION_KEY_ENCODING: string
   defineIcebergDataset: function
@@ -9,6 +10,7 @@
   dropIcebergTables: function
   ensureIcebergNamespace: function
   ICEBERG_TYPE_MAP: object
+  invalidateSnapshotRef: function
   listIcebergTables: function
   resolveIcebergDataFiles: function
   resolvePyIcebergPython: function
@@ -17,6 +19,8 @@
 ./provisioning:
   adoptCatalog: function
   allocateCatalogSiteId: function
+  deriveBucketName: function
+  enableCatalogMaintenance: function
   selfProvisionCatalog: function
   suppliedCatalog: function
 ./unsafe-raw:
@@ -31,3 +35,4 @@
   restCatalogListTables: function
   restCatalogLoadTable: function
   s3SignedResolver: function
+  sweepUncommittedOrphans: function

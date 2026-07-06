@@ -1,6 +1,6 @@
 import type { Row, TableName } from '@gscdump/engine/contracts'
 import type { GoogleSearchConsoleClient } from 'gscdump/api'
-import type { GSCQueryBuilder } from 'gscdump/query'
+import type { BuilderState, GSCQueryBuilder } from 'gscdump/query'
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -158,6 +158,38 @@ describe('analysis sources', () => {
 
     expect(rows).toHaveLength(1)
     expect(rows[0].page).toBe('https://example.com/high-impressions')
+  })
+
+  it('gsc api source pushes pagination down for simple bounded live queries', async () => {
+    const seenStates: BuilderState[] = []
+    const candidates = [
+      { page: 'https://example.com/a', clicks: 30, impressions: 300, ctr: 0.1, position: 1 },
+      { page: 'https://example.com/b', clicks: 20, impressions: 200, ctr: 0.1, position: 2 },
+      { page: 'https://example.com/c', clicks: 10, impressions: 100, ctr: 0.1, position: 3 },
+    ]
+    const client = {
+      async* query(_siteUrl: string, builder: GSCQueryBuilder<any, any>) {
+        const state = builder.getState()
+        seenStates.push(state)
+        const start = state.startRow ?? 0
+        const end = state.rowLimit == null ? candidates.length : start + state.rowLimit
+        yield candidates.slice(start, end)
+      },
+    } as unknown as GoogleSearchConsoleClient
+
+    const source = createGscApiQuerySource({ client, siteUrl: 'sc-domain:example.com' })
+    const state = gsc
+      .select(page)
+      .where(between(date, '2026-04-01', '2026-04-30'))
+      .offset(1)
+      .limit(1)
+      .getState()
+
+    const rows = await queryRows(source, state)
+
+    expect(seenStates[0]).toMatchObject({ startRow: 1, rowLimit: 1 })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].page).toBe('https://example.com/b')
   })
 
   it('gsc api source preserves OR semantics during local dimension filtering', async () => {

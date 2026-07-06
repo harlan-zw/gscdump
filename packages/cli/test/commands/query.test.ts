@@ -184,7 +184,7 @@ describe('query command', () => {
     expect(exitSpy).toHaveBeenCalledWith(1)
   })
 
-  it('rejects --type=image without --live', async () => {
+  it('scopes local --type coverage checks and query execution', async () => {
     mocks.storeWatermarks.mockResolvedValue([{
       newestDateSynced: '2026-04-30',
       oldestDateSynced: '2026-01-01',
@@ -195,6 +195,8 @@ describe('query command', () => {
       args: {
         site: 'https://example.com/',
         type: 'image',
+        start: '2026-04-01',
+        end: '2026-04-07',
         live: false,
         format: 'json',
         limit: '100',
@@ -204,6 +206,8 @@ describe('query command', () => {
       cmd: queryCommand,
     } as any).catch(() => {})
 
-    expect(exitSpy).toHaveBeenCalledWith(1)
+    expect(exitSpy).not.toHaveBeenCalled()
+    expect(mocks.storeWatermarks).toHaveBeenCalledWith(expect.objectContaining({ searchType: 'image' }))
+    expect(mocks.storeQuery.mock.calls[0]![0]).toMatchObject({ searchType: 'image' })
   })
 })

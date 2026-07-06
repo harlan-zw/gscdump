@@ -367,7 +367,7 @@ export const queryCommand = defineCommand({
       console.log(JSON.stringify({ siteUrl, table, state }, null, 2))
       return
     }
-    await assertRangeCovered(store, siteUrl, table, startDate, endDate)
+    await assertRangeCovered(store, siteUrl, table, startDate, endDate, searchType)
     const profiling = Boolean(args.profile)
     const probe = profiling ? collectSpans() : undefined
     const result = await store.engine.query(
@@ -543,11 +543,13 @@ async function assertRangeCovered(
   table: TableName,
   startDate: string,
   endDate: string,
+  searchType?: SearchType,
 ): Promise<void> {
   const watermarks = await store.engine.getWatermarks({
     userId: store.userId,
     siteId: store.siteIdFor(siteUrl),
     table,
+    ...(searchType !== undefined ? { searchType } : {}),
   })
   const wm = watermarks[0]
   if (!wm) {

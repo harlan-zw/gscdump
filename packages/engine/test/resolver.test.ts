@@ -192,6 +192,17 @@ describe('resolveToSQLOptimized SUM casts', () => {
     expect(r.sql).not.toMatch(/(?<!CAST\()SUM\(clicks\) OVER\(\) as totalClicks/)
     expect(r.sql).not.toMatch(/(?<!CAST\()SUM\(impressions\) OVER\(\) as totalImpressions/)
   })
+
+  it('projects a hidden helper when ordering by an unselected metric', () => {
+    const adapter = createParquetResolverAdapter()
+    const r = resolveToSQLOptimized(state({
+      metrics: ['clicks'],
+      orderBy: { column: 'impressions', dir: 'desc' },
+    }), { adapter })
+
+    expect(r.sql).toContain('impressions as "__order_impressions"')
+    expect(r.sql).toContain('ORDER BY __order_impressions DESC')
+  })
 })
 
 describe('cross-dimension queries (unresolvable datasets)', () => {

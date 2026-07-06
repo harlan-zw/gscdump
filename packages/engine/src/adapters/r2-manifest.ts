@@ -278,11 +278,14 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
     return unwrapResult(await mutateShardResult(siteId, table, mutate), engineErrorToException)
   }
 
-  async function listShards(): Promise<Array<{ siteId: string, table: TableName }>> {
+  async function listShards(siteId?: string): Promise<Array<{ siteId: string, table: TableName }>> {
     const shards: Array<{ siteId: string, table: TableName }> = []
     let cursor: string | undefined
+    const prefix = siteId === undefined
+      ? `u_${userId}/manifest/`
+      : `u_${userId}/manifest/${siteId}/`
     do {
-      const res = await bucket.list({ prefix: `u_${userId}/manifest/`, cursor, limit: 1000 })
+      const res = await bucket.list({ prefix, cursor, limit: 1000 })
       for (const obj of res.objects) {
         const m = SHARD_RE.exec(obj.key)
         if (m?.groups)
@@ -298,7 +301,7 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
   > {
     if (filter.siteId !== undefined && filter.table !== undefined)
       return [{ siteId: filter.siteId, table: filter.table }]
-    const all = await listShards()
+    const all = await listShards(filter.siteId)
     return all.filter(s =>
       (filter.siteId === undefined || s.siteId === filter.siteId)
       && (filter.table === undefined || s.table === filter.table),
@@ -453,17 +456,20 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
       if (scope.siteId === undefined)
         throw new Error('R2 manifest store requires watermarks to carry siteId')
       const ts = at ?? now()
+      const scopeSearchType = inferSearchType(scope)
       await mutateShard(scope.siteId, scope.table, (snap) => {
         const idx = snap.watermarks.findIndex(w =>
           w.userId === userId
           && w.siteId === scope.siteId
-          && w.table === scope.table,
+          && w.table === scope.table
+          && inferSearchType(w) === scopeSearchType,
         )
         if (idx === -1) {
           snap.watermarks.push({
             userId,
             siteId: scope.siteId,
             table: scope.table,
+            ...(scope.searchType !== undefined ? { searchType: scope.searchType } : {}),
             newestDateSynced: date,
             oldestDateSynced: date,
             lastSyncAt: ts,
