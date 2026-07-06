@@ -184,7 +184,7 @@ describe('createPartnerClient', () => {
     await client.getQueryTrend('s_1', { startDate: '2026-05-01', endDate: '2026-05-10', prevStartDate: '2026-04-20' })
     await client.getCtrCurve('s_1', { startDate: '2026-05-01', endDate: '2026-05-10' })
 
-    expect(calls[0]).toMatchObject({ url: '/api/sites/s_1/analysis-sources', options: { query: { tables: 'pages,keywords', searchType: 'web', start: '2026-05-01', end: '2026-05-07' } } })
+    expect(calls[0]).toMatchObject({ url: '/api/sites/s_1/analysis-sources', options: { query: { tables: 'keywords,pages', searchType: 'web', start: '2026-05-01', end: '2026-05-07' } } })
     expect(calls[1]).toMatchObject({ url: '/api/sites/s_1/data/keyword-sparklines', options: { method: 'POST' } })
     expect(calls[2]).toMatchObject({ url: '/api/sites/s_1/data/query-trend' })
     expect(calls[3]).toMatchObject({ url: '/api/sites/s_1/ctr-curve' })

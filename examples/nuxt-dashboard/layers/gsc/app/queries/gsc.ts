@@ -15,6 +15,22 @@ function key(first: string, ...parts: unknown[]): NuxtRpcKey {
   return [first, ...parts]
 }
 
+function canonicalTables(tables: unknown): string | undefined {
+  if (Array.isArray(tables))
+    return [...new Set(tables.map(String).filter(Boolean))].sort().join(',')
+  if (typeof tables === 'string')
+    return [...new Set(tables.split(',').map(t => t.trim()).filter(Boolean))].sort().join(',')
+  return undefined
+}
+
+function canonicalRange(options?: { searchType?: string, start?: string, end?: string, startDate?: string, endDate?: string }): Record<string, string | undefined> {
+  return {
+    ...(options?.searchType ? { searchType: options.searchType } : {}),
+    ...(options?.start || options?.startDate ? { start: options.start ?? options.startDate } : {}),
+    ...(options?.end || options?.endDate ? { end: options.end ?? options.endDate } : {}),
+  }
+}
+
 export const gscQueries = defineNuxtQueryGroup('gsc', {
   whoami: () => defineNuxtRpcQuery({
     key: key('gsc', 'whoami'),
@@ -31,7 +47,7 @@ export const gscQueries = defineNuxtQueryGroup('gsc', {
     tables?: unknown,
     options?: { searchType?: string, start?: string, end?: string, startDate?: string, endDate?: string },
   ) => defineNuxtRpcQuery({
-    key: key('gsc', 'analysis-sources', siteId, tables, options),
+    key: key('gsc', 'analysis-sources', siteId, canonicalTables(tables), canonicalRange(options)),
     path: `/api/__gsc/sites/${siteId}/analysis-sources`,
     response: passthrough,
   }),

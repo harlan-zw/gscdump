@@ -82,8 +82,11 @@ export function tablesQuery(
     ...searchTypeQuery(source?.searchType),
     ...dateRangeOptionsQuery(source),
   }
-  if (tables)
-    query.tables = Array.isArray(tables) ? tables.join(',') : tables
+  if (tables) {
+    query.tables = Array.isArray(tables)
+      ? [...new Set(tables.filter(Boolean))].sort().join(',')
+      : [...new Set(tables.split(',').map(t => t.trim()).filter(Boolean))].sort().join(',')
+  }
   return query
 }
 
