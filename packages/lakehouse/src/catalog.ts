@@ -134,6 +134,9 @@ interface CachedCatalogConfig {
   overrides: Record<string, string>
 }
 
+type IcebergResolver = ReturnType<typeof cachingResolver>
+type IcebergWriter = ReturnType<NonNullable<IcebergResolver['writer']>>
+
 /**
  * TTL on the cached `/v1/config` routing config. It is warehouse-static
  * (changes only if R2 re-points the warehouse prefix), so a generous TTL is
@@ -188,14 +191,58 @@ export async function connectIcebergCatalog(
     }
   }
 
-  const resolver = cachingResolver(s3SignedResolver({
+  const resolver = withVerifiedWriterByteLengths(cachingResolver(s3SignedResolver({
     accessKeyId: config.s3.accessKeyId,
     secretAccessKey: config.s3.secretAccessKey,
     region: config.s3.region ?? 'auto',
     endpoint: config.s3.endpoint,
     pathStyle: true,
-  }))
+  })))
   return { catalog, resolver, namespace: config.namespace, cacheScope: catalogCacheScope(config) }
+}
+
+/**
+ * icebird records `data_file.file_size_in_bytes` from the writer's `offset`
+ * after `writer.finish()` resolves. For buffered writers (the S3/R2 path uses
+ * hyparquet's `ByteWriter`) the actual uploaded body is `getBytes().byteLength`.
+ * Keep that invariant local to the catalog resolver so every dataset writer gets
+ * the same protection and callers cannot commit stale byte counts by accident.
+ */
+function withVerifiedWriterByteLengths(resolver: IcebergResolver): IcebergResolver {
+  if (!resolver.writer)
+    return resolver
+  const baseWriter = resolver.writer
+  return {
+    ...resolver,
+    writer(path, options) {
+      const writer = baseWriter(path, options)
+      const finish = writer.finish.bind(writer)
+      writer.finish = async function() {
+        await finish()
+        const actual = bufferedByteLength(writer)
+        if (actual == null || writer.offset === actual)
+          return
+        console.warn(`[lakehouse] corrected Iceberg writer byte length for ${path}: offset=${writer.offset} actual=${actual}`)
+        writer.offset = actual
+      }
+      return writer
+    },
+  }
+}
+
+function bufferedByteLength(writer: IcebergWriter): number | null {
+  // A flushing writer may have `offset` as total bytes and `getBytes()` as only
+  // the buffered tail. Only ByteWriter-style non-flushing writers are safe to
+  // reconcile this way.
+  if (typeof writer.flush === 'function')
+    return null
+  try {
+    const bytes = writer.getBytes()
+    return Number.isFinite(bytes.byteLength) ? bytes.byteLength : null
+  }
+  catch {
+    return null
+  }
 }
 
 /**

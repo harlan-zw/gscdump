@@ -102,7 +102,7 @@ export function resolveServerTailEngineResult(
   // Escalation: a `queryCanonical` breakdown's dimension column is a
   // correlated subquery against a `query_dim` sidecar table
   // (`COALESCE((SELECT qd.query_canonical FROM query_dim qd WHERE qd.query =
-  // query LIMIT 1), query)`). `COUNT(DISTINCT query)` itself is EMPIRICALLY
+  // fact.query LIMIT 1), fact.query)`). `COUNT(DISTINCT query)` itself is EMPIRICALLY
   // VERIFIED to work on R2 SQL now, but `query_dim` is NOT an Iceberg table in
   // the catalog (`[40010] iceberg table not found "gsc.query_dim"` — confirmed
   // 2026-07-03), so this escalation is NOT about DISTINCT-aggregate support
