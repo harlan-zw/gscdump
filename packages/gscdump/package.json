@@ -1,7 +1,7 @@
 {
   "name": "gscdump",
   "type": "module",
-  "version": "0.35.12",
+  "version": "0.36.0",
   "description": "Google Search Console API wrapper with typed query builder, streaming pagination, and SEO analysis functions",
   "author": {
     "name": "Harlan Wilton",
