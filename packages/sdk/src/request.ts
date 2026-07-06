@@ -13,6 +13,8 @@ export interface HostedFetchOptions {
   headers?: HeadersInit
   query?: Record<string, unknown>
   body?: unknown
+  /** Opt into in-flight de-dupe for safe read-style POST requests. */
+  dedupe?: boolean
   [key: string]: unknown
 }
 
@@ -21,6 +23,10 @@ export interface HostedClientOptions {
   fetch?: HostedFetch
   headers?: HostedHeaders
   validate?: boolean | 'request' | 'response'
+  /** Coalesce concurrent identical GET/HEAD requests within this client instance. */
+  dedupe?: boolean
+  /** Optional shared in-flight map for de-duping across related client instances. */
+  dedupeScope?: Map<string, Promise<Result<unknown, PartnerApiError>>>
 }
 
 export interface HostedRequestOptions extends HostedClientOptions {
@@ -72,29 +78,79 @@ function parseWith<T>(schema: ZodTypeAny | undefined, value: T): T {
   return schema ? schema.parse(value) as T : value
 }
 
+function stableJson(value: unknown): string {
+  if (value == null || typeof value !== 'object')
+    return JSON.stringify(value) ?? 'undefined'
+  if (Array.isArray(value))
+    return `[${value.map(item => item === undefined ? 'undefined' : stableJson(item)).join(',')}]`
+  return `{${Object.entries(value as Record<string, unknown>)
+    .filter(([, item]) => item !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+    .join(',')}}`
+}
+
+function headersKey(headers: Headers): string {
+  return [...headers.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}:${value}`)
+    .join('\n')
+}
+
+function isDedupeable(init: HostedFetchOptions): boolean {
+  if ('signal' in init && init.signal)
+    return false
+  const method = (init.method ?? 'GET').toUpperCase()
+  return method === 'GET' || method === 'HEAD' || init.dedupe === true
+}
+
 export function createHostedRequester(
   options: HostedRequestOptions,
   defaults: { apiBase: string },
 ): HostedRequester {
   const fetchImpl = options.fetch ?? (ofetch as HostedFetch)
   const apiBase = trimApiBase(options.apiBase, defaults.apiBase)
+  const dedupe = options.dedupe !== false
+  const inflight = options.dedupeScope ?? new Map<string, Promise<Result<unknown, PartnerApiError>>>()
 
   async function requestResult<T>(
     path: string,
     init: HostedFetchOptions = {},
     responseSchema?: ZodTypeAny,
   ): Promise<Result<T, PartnerApiError>> {
+    const { dedupe: _dedupe, ...fetchInit } = init
     const headers = mergeHeaders(await resolveHeaders(options), init.headers)
-    try {
-      const out = await fetchImpl<T>(buildPath(apiBase, path), {
-        ...init,
-        headers,
+    const fullPath = buildPath(apiBase, path)
+    const dedupeKey = dedupe && isDedupeable(init)
+      ? `${(init.method ?? 'GET').toUpperCase()} ${fullPath}\nq=${stableJson(init.query)}\nb=${stableJson(init.body)}\nh=${headersKey(headers)}`
+      : null
+    if (dedupeKey) {
+      const existing = inflight.get(dedupeKey)
+      if (existing)
+        return existing as Promise<Result<T, PartnerApiError>>
+    }
+
+    const run = (async (): Promise<Result<T, PartnerApiError>> => {
+      try {
+        const out = await fetchImpl<T>(fullPath, {
+          ...fetchInit,
+          headers,
+        })
+        return ok(shouldValidate(options, 'response') ? parseWith(responseSchema, out) : out)
+      }
+      catch (error) {
+        return err(toPartnerError(error))
+      }
+    })()
+
+    if (dedupeKey) {
+      inflight.set(dedupeKey, run as Promise<Result<unknown, PartnerApiError>>)
+      run.finally(() => {
+        if (inflight.get(dedupeKey) === run)
+          inflight.delete(dedupeKey)
       })
-      return ok(shouldValidate(options, 'response') ? parseWith(responseSchema, out) : out)
     }
-    catch (error) {
-      return err(toPartnerError(error))
-    }
+    return run
   }
 
   async function request<T>(

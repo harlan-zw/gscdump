@@ -428,6 +428,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       return request<GscdumpKeywordSparklinesResponse>(partnerRoutes.sites.keywordSparklines(siteId), {
         method: 'POST',
         body,
+        dedupe: true,
       }, partnerEndpointSchemas.getKeywordSparklines.response)
     },
 

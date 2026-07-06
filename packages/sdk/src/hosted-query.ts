@@ -54,6 +54,18 @@ export function searchTypeQuery(searchType?: GscSearchType): Record<string, stri
   return { searchType: searchType ?? DEFAULT_SEARCH_TYPE }
 }
 
+function stableJson(value: unknown): string {
+  if (value == null || typeof value !== 'object')
+    return JSON.stringify(value) ?? 'null'
+  if (Array.isArray(value))
+    return `[${value.map(item => item === undefined ? 'null' : stableJson(item)).join(',')}]`
+  return `{${Object.entries(value as Record<string, unknown>)
+    .filter(([, item]) => item !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+    .join(',')}}`
+}
+
 export function dateRangeOptionsQuery(options: SourceRangeOptions | undefined): Record<string, string> {
   const query: Record<string, string> = {}
   const start = options?.start ?? options?.startDate
@@ -94,11 +106,11 @@ export function dataQuery(state: BuilderState, options?: DataQueryOptions): Reco
   const opts = options as DataQueryOptionsWithSearchType | undefined
   const scoped = withDefaultSearchType(state, opts?.searchType)
   const query: Record<string, string> = {
-    q: JSON.stringify(scoped),
+    q: stableJson(scoped),
     searchType: scoped.searchType ?? DEFAULT_SEARCH_TYPE,
   }
   if (opts?.comparison)
-    query.qc = JSON.stringify(withDefaultSearchType(opts.comparison, scoped.searchType))
+    query.qc = stableJson(withDefaultSearchType(opts.comparison, scoped.searchType))
   if (opts?.filter)
     query.filter = opts.filter
   return query
@@ -108,11 +120,11 @@ export function dataDetailQuery(state: BuilderState, options?: DataDetailOptions
   const opts = options as DataDetailOptionsWithSearchType | undefined
   const scoped = withDefaultSearchType(state, opts?.searchType)
   const query: Record<string, string> = {
-    q: JSON.stringify(scoped),
+    q: stableJson(scoped),
     searchType: scoped.searchType ?? DEFAULT_SEARCH_TYPE,
   }
   if (opts?.comparison)
-    query.qc = JSON.stringify(withDefaultSearchType(opts.comparison, scoped.searchType))
+    query.qc = stableJson(withDefaultSearchType(opts.comparison, scoped.searchType))
   return query
 }
 
@@ -169,7 +181,7 @@ export function indexingDiagnosticsQuery(params: IndexingDiagnosticsParams = {})
   const query: Record<string, string | number> = {}
   if (params.sampleIssues) {
     query.sampleIssues = Array.isArray(params.sampleIssues)
-      ? params.sampleIssues.join(',')
+      ? [...new Set(params.sampleIssues.map(item => String(item).trim()).filter(Boolean))].sort().join(',')
       : params.sampleIssues
   }
   if (params.sampleLimit != null)

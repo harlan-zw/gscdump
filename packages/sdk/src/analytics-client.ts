@@ -63,10 +63,10 @@ export function createAnalyticsClient(options: AnalyticsClientOptions = {}): Ana
       return request<AnalysisSourcesResponse>(analyticsRoutes.site.analysisSources(siteId), { query: tablesQuery(tables, options) }, analyticsEndpointSchemas.analyticsAnalysisSources.response)
     },
     analyze<T = unknown>(siteId: string, params: unknown) {
-      return request<T>(analyticsRoutes.site.analyze(siteId), { method: 'POST', body: withDefaultSearchType(params) })
+      return request<T>(analyticsRoutes.site.analyze(siteId), { method: 'POST', body: withDefaultSearchType(params), dedupe: true })
     },
     queryRows<T = Record<string, unknown>>(siteId: string, state: unknown) {
-      return request<GscRowQueryResponse<T>>(analyticsRoutes.site.rows(siteId), { method: 'POST', body: withDefaultSearchType(state) }, analyticsEndpointSchemas.analyticsRows.response)
+      return request<GscRowQueryResponse<T>>(analyticsRoutes.site.rows(siteId), { method: 'POST', body: withDefaultSearchType(state), dedupe: true }, analyticsEndpointSchemas.analyticsRows.response)
     },
     getRollup<T = unknown>(siteId: string, rollupId: string, params?: { start?: string, end?: string }) {
       return request<RollupEnvelope<T>>(analyticsRoutes.site.rollup(siteId, rollupId), { query: params }, analyticsEndpointSchemas.analyticsRollup.response)

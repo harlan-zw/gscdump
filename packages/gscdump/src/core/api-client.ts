@@ -66,7 +66,7 @@ export function gscdumpApi(options: GscdumpApiOptions): GoogleSearchConsoleClien
     baseURL: baseUrl,
     retry: 3,
     retryDelay: 1000,
-    retryStatusCodes: [408, 409, 425, 429, 500, 502, 503, 504],
+    retryStatusCodes: [408, 425, 429, 500, 502, 503, 504],
     headers: {
       'x-api-key': options.apiKey,
       'Content-Type': 'application/json',

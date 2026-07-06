@@ -142,6 +142,23 @@ describe('compileArchetypeSql', () => {
     expect(c.params).toContain('ind')
   })
 
+  it('4 — top-n-breakdown: page/query cross-dimension facet reads page_queries', () => {
+    const c = compileArchetypeSql({
+      archetype: 'top-n-breakdown',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      dimension: 'queryCanonical',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 50,
+      facets: [{ column: 'page', op: 'eq', value: 'https://x.com/a' }],
+    })
+    expect(c.table).toBe('page_queries')
+    expect(c.sql).toContain('url = ?')
+    expect(c.params).toContain('https://x.com/a')
+  })
+
   it('5 — single-row-lookup: ANDs every match dimension', () => {
     const q: ArchetypeQuery = {
       archetype: 'single-row-lookup',

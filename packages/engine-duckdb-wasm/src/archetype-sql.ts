@@ -83,6 +83,17 @@ function tableForDimensions(dims: readonly string[]): string {
   return 'pages'
 }
 
+function tableForTopNBreakdown(query: Extract<ArchetypeQuery, { archetype: 'top-n-breakdown' }>): string {
+  const dims = [query.dimension]
+  for (const facet of query.facets ?? []) {
+    const hasPage = query.dimension === 'page' || facet.column === 'page'
+    const hasQuery = query.dimension === 'query' || query.dimension === 'queryCanonical' || facet.column === 'query' || facet.column === 'queryCanonical'
+    if (hasPage && hasQuery)
+      dims.push(facet.column)
+  }
+  return tableForDimensions(dims)
+}
+
 function metricExpr(metric: string): string {
   const expr = METRIC_SQL[metric]
   if (!expr)
@@ -295,7 +306,7 @@ export function compileArchetypeSql(query: ArchetypeQuery): CompiledArchetypeSql
 
     // ── 4. Top-N breakdown table ────────────────────────────────────────────
     case 'top-n-breakdown': {
-      const table = tableForDimensions([query.dimension])
+      const table = tableForTopNBreakdown(query)
       const where = rangePredicate(query)
       const cmp = compareRangePredicate(query)
       const dir = query.orderBy.dir === 'asc' ? 'ASC' : 'DESC'

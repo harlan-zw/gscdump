@@ -225,6 +225,22 @@ describe('buildArchetypeSql', () => {
     expect(plan.params).toEqual(['site-1', 'web', '2026-01-01', '2026-03-31', 'ind'])
   })
 
+  it('top-n-breakdown uses page_queries when a page/query facet needs both dimensions', () => {
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'queryCanonical',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 50,
+      facets: [{ column: 'page', op: 'eq', value: 'https://x.com/a' }],
+    }
+    const plan = buildArchetypeSql(q)
+    expect(plan.table).toBe('page_queries')
+    expect(plan.sql).toContain('url = ?')
+    expect(plan.params).toEqual(['site-1', 'web', '2026-01-01', '2026-03-31', 'https://x.com/a'])
+  })
+
   it('two-dimension-detail applies a facet after the page/query prefilter', () => {
     const q: TwoDimensionDetailQuery = {
       ...base,

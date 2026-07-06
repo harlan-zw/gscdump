@@ -1,5 +1,6 @@
 import type { PartnerFetch } from '../src'
 import { createPartnerClient } from '../src'
+import { dataQuery, indexingDiagnosticsQuery } from '../src/hosted-query'
 
 const analysisSourcesResponse = {
   siteId: 's_1',
@@ -82,6 +83,19 @@ describe('createPartnerClient', () => {
           searchType: 'image',
         },
       },
+    })
+  })
+
+  it('canonicalizes hosted query params that are semantically order-insensitive', () => {
+    const a = dataQuery({ rowLimit: 10, dimensions: ['page'] } as any)
+    const b = dataQuery({ dimensions: ['page'], rowLimit: 10 } as any)
+
+    expect(a.q).toBe(b.q)
+    expect(indexingDiagnosticsQuery({ sampleIssues: ['soft_404', 'not_found'] })).toEqual({
+      sampleIssues: 'not_found,soft_404',
+    })
+    expect(indexingDiagnosticsQuery({ sampleIssues: ['not_found', 'soft_404', 'not_found'] })).toEqual({
+      sampleIssues: 'not_found,soft_404',
     })
   })
 
@@ -188,5 +202,57 @@ describe('createPartnerClient', () => {
     expect(calls[1]).toMatchObject({ url: '/api/sites/s_1/data/keyword-sparklines', options: { method: 'POST' } })
     expect(calls[2]).toMatchObject({ url: '/api/sites/s_1/data/query-trend' })
     expect(calls[3]).toMatchObject({ url: '/api/sites/s_1/ctr-curve' })
+  })
+
+  it('dedupes concurrent identical GET requests only while in flight', async () => {
+    const calls: Array<{ url: string, options: any }> = []
+    const resolvers: Array<(value: unknown) => void> = []
+    const fetch = ((url: string, options: any) => {
+      calls.push({ url, options })
+      return new Promise((resolve) => {
+        resolvers.push(resolve)
+      })
+    }) as PartnerFetch
+    const client = createPartnerClient({ fetch })
+
+    const a = client.getAnalysisSources('s_1', ['pages'], { start: '2026-05-01', end: '2026-05-07' })
+    const b = client.getAnalysisSources('s_1', ['pages'], { start: '2026-05-01', end: '2026-05-07' })
+
+    await Promise.resolve()
+    expect(calls).toHaveLength(1)
+    resolvers.shift()!(analysisSourcesResponse)
+    await expect(Promise.all([a, b])).resolves.toEqual([analysisSourcesResponse, analysisSourcesResponse])
+
+    const c = client.getAnalysisSources('s_1', ['pages'], { start: '2026-05-01', end: '2026-05-07' })
+    await Promise.resolve()
+    expect(calls).toHaveLength(2)
+    resolvers.shift()!(analysisSourcesResponse)
+    await expect(c).resolves.toEqual(analysisSourcesResponse)
+  })
+
+  it('dedupes opt-in read POST requests while in flight', async () => {
+    const calls: Array<{ url: string, options: any }> = []
+    let resolveFetch!: (value: unknown) => void
+    const fetch = ((url: string, options: any) => {
+      calls.push({ url, options })
+      return new Promise((resolve) => {
+        resolveFetch = resolve
+      })
+    }) as PartnerFetch
+    const client = createPartnerClient({ fetch })
+
+    const params = { keywords: ['nuxt'], startDate: '2026-05-01', endDate: '2026-05-10' }
+    const a = client.getKeywordSparklines('s_1', params)
+    const b = client.getKeywordSparklines('s_1', params)
+
+    await Promise.resolve()
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.options).toMatchObject({ method: 'POST' })
+    expect('dedupe' in calls[0]!.options).toBe(false)
+    resolveFetch({ sparklines: { nuxt: [1, 2, 3] } })
+    await expect(Promise.all([a, b])).resolves.toEqual([
+      { sparklines: { nuxt: [1, 2, 3] } },
+      { sparklines: { nuxt: [1, 2, 3] } },
+    ])
   })
 })

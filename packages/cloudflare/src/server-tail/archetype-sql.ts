@@ -77,6 +77,17 @@ function tableForDimensions(dims: readonly string[]): ArchetypeFactTable {
   return 'pages'
 }
 
+function tableForTopNBreakdown(q: TopNBreakdownQuery): ArchetypeFactTable {
+  const dims = [q.dimension]
+  for (const facet of q.facets ?? []) {
+    const hasPage = q.dimension === 'page' || facet.column === 'page'
+    const hasQuery = q.dimension === 'query' || q.dimension === 'queryCanonical' || facet.column === 'query' || facet.column === 'queryCanonical'
+    if (hasPage && hasQuery)
+      dims.push(facet.column)
+  }
+  return tableForDimensions(dims)
+}
+
 function metricExpr(metric: Metric): string {
   switch (metric) {
     case 'clicks':
@@ -296,7 +307,7 @@ function buildEntityDailySparkline(q: EntityDailySparklineQuery, pruned: boolean
 }
 
 function buildTopNBreakdown(q: TopNBreakdownQuery, pruned: boolean, mode: PartitionPredicateMode): ArchetypeSqlPlan {
-  const table = tableForDimensions([q.dimension])
+  const table = tableForTopNBreakdown(q)
   const w = partitionWhere(q, pruned, mode)
   // `orderBy` is mandatory for this archetype; a missing/malformed one would
   // otherwise deref undefined (TypeError) or interpolate `ORDER BY undefined`
