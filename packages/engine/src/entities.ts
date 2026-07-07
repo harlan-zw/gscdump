@@ -10,6 +10,7 @@
 import type { ColumnDef, Row, TenantCtx } from '@gscdump/contracts'
 import type { ScheduleState } from './schedule'
 import type { DataSource } from './storage'
+import { encodeJsonBigintSafe } from '@gscdump/lakehouse'
 import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { readOptional } from './adapters/read-optional'
 
@@ -394,7 +395,7 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
       }
       for (const [yearMonth, batch] of byMonth) {
         const shard: InspectionHistoryShard = { version: 1, records: batch }
-        const bytes = new TextEncoder().encode(JSON.stringify(shard))
+        const bytes = encodeJsonBigintSafe(shard)
         if (bytes.byteLength > INSPECTION_HISTORY_MAX_BYTES) {
           throw new Error(
             `inspection history shard exceeds ${INSPECTION_HISTORY_MAX_BYTES} bytes (got ${bytes.byteLength}); split the batch`,
@@ -828,7 +829,7 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
   }
 
   async function writeJson(key: string, value: unknown): Promise<void> {
-    await ds.write(key, new TextEncoder().encode(JSON.stringify(value)))
+    await ds.write(key, encodeJsonBigintSafe(value))
   }
 
   return {
@@ -1286,7 +1287,7 @@ export function createIndexingMetadataStore(
       const key = indexingMetadataIndexKey(ctx)
       const index = await readIndex(key)
       for (const r of records) index.records[hash(r.url)] = r
-      await ds.write(key, new TextEncoder().encode(JSON.stringify(index)))
+      await ds.write(key, encodeJsonBigintSafe(index))
     },
 
     async loadIndex(ctx) {
@@ -1347,7 +1348,7 @@ export function createEmptyTypesStore(opts: CreateEmptyTypesStoreOptions): Empty
   }
 
   async function writeDoc(key: string, doc: EmptyTypesDoc): Promise<void> {
-    await ds.write(key, new TextEncoder().encode(JSON.stringify(doc)))
+    await ds.write(key, encodeJsonBigintSafe(doc))
   }
 
   return {

@@ -31,6 +31,7 @@ import type {
   IcebergTableSpec,
 } from './schema'
 import { icebergCreateTable } from 'icebird'
+import { coerceBigIntToNumber } from './bigint'
 import {
   connectIcebergCatalog,
   ensureIcebergNamespace,
@@ -220,11 +221,6 @@ export function toIcebergDayCount(value: string | Date | number): number {
   return Math.floor(ms / DAY_MILLIS)
 }
 
-/** BigInt values (D1 large INTEGER columns) fail JSON.stringify inside icebird's commit path. */
-function coerceJsonSafe(value: unknown): unknown {
-  return typeof value === 'bigint' ? Number(value) : value
-}
-
 function asInt32(value: unknown): number | null {
   if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'bigint')
     return null
@@ -336,7 +332,9 @@ function buildRowProcessor(def: IcebergDatasetDef, tableSpec: IcebergTableSpec):
       out[name] = def.dims![name].toPartitionValue(String(row[name]))
     }
     for (const col of def.columns) {
-      out[col.name] = coerceJsonSafe(row[col.name])
+      // D1 large INTEGER columns arrive as BigInt and fail JSON.stringify inside
+      // icebird's commit path — coerce to number before the row is serialized.
+      out[col.name] = coerceBigIntToNumber(row[col.name])
     }
     return out
   }

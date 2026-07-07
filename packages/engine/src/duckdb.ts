@@ -16,6 +16,8 @@ import type {
   TableName,
   WriteResult,
 } from './storage'
+import { encodeJsonBigintSafe } from '@gscdump/lakehouse'
+import { coerceRows } from './coerce'
 import { substituteNamedFiles } from './parquet-plan'
 import { dateColumnsFor, SCHEMAS, TABLE_METADATA } from './schema'
 import { sqlEscape } from './sql-bind'
@@ -69,7 +71,10 @@ async function encodeBytes(
 ): Promise<Uint8Array> {
   const inName = db.makeTempPath('json')
   const outName = db.makeTempPath('parquet')
-  const jsonBytes = new TextEncoder().encode(JSON.stringify(rows))
+  // Rows crossing a source boundary are already number-coerced, but this codec
+  // can be handed computed rows directly — coerce defensively so a stray int64
+  // aggregate serializes as a number (not a crash) into the typed parquet copy.
+  const jsonBytes = encodeJsonBigintSafe(coerceRows(rows))
   const registered: string[] = []
   await db.registerFileBuffer(inName, jsonBytes)
   registered.push(inName)

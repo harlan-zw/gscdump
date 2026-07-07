@@ -1,6 +1,7 @@
 import type { Grain, Row, TableName, TenantCtx } from '@gscdump/contracts'
 import type { BuilderState, SearchType } from 'gscdump/query'
 import type { ParquetQueryFilter } from 'hyparquet'
+import { encodeJsonBigintSafe } from '@gscdump/lakehouse'
 
 export type { Grain, Row, TableName, TenantCtx } from '@gscdump/contracts'
 export type { SearchType } from 'gscdump/query'
@@ -194,6 +195,18 @@ export interface DataSource {
    * `streamList` when available, or chunk by narrower prefixes.
    */
   streamList?: (prefix: string) => AsyncIterable<string>
+}
+
+/**
+ * Serialize `value` to a `DataSource.write` payload — the single JSON-to-storage
+ * funnel. BigInt identity ids (iceberg snapshot ids, D1 row ids) serialize
+ * losslessly as strings instead of throwing `Do not know how to serialize a
+ * BigInt`; already-number-coerced rows pass through unchanged. Every envelope /
+ * index / doc / shard writer routes through here so no raw `JSON.stringify` sits
+ * on a path that can see an int64.
+ */
+export async function writeJson(ds: DataSource, key: string, value: unknown): Promise<void> {
+  await ds.write(key, encodeJsonBigintSafe(value))
 }
 
 export interface WatermarkScope {

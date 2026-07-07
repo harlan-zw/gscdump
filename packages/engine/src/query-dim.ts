@@ -12,6 +12,7 @@ import type { TenantCtx } from '@gscdump/contracts'
 import type { Row } from './contracts'
 import type { ColumnDef } from './schema'
 import type { DataSource } from './storage'
+import { encodeJsonBigintSafe } from '@gscdump/lakehouse'
 import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
 
 export interface QueryDimRecord {
@@ -125,7 +126,7 @@ export function createQueryDimStore({ dataSource }: { dataSource: DataSource }):
         normalizerVersion: records[0]?.normalizer_version ?? 0,
         intentVersion: records[0]?.intent_version ?? 0,
       }
-      await dataSource.write(queryDimMetaKey(ctx), new TextEncoder().encode(JSON.stringify(meta)))
+      await dataSource.write(queryDimMetaKey(ctx), encodeJsonBigintSafe(meta))
       return { parquetKey, rowCount: records.length }
     },
 

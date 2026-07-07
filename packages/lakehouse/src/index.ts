@@ -6,6 +6,13 @@
  */
 
 export {
+  bigintJsonReplacer,
+  coerceBigIntToNumber,
+  encodeJsonBigintSafe,
+  stringifyBigintSafe,
+} from './bigint'
+
+export {
   catalogCacheScope,
   connectIcebergCatalog,
   dropIcebergTables,

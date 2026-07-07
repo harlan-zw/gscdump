@@ -24,6 +24,7 @@ import {
   restCatalogLoadTable,
   s3SignedResolver,
 } from 'icebird'
+import { stringifyBigintSafe } from './bigint'
 import { cacheGet, cachePut } from './catalog-cache'
 import { buildManifestPartitionFilter } from './partition-prune'
 
@@ -217,7 +218,7 @@ function withVerifiedWriterByteLengths(resolver: IcebergResolver): IcebergResolv
     writer(path, options) {
       const writer = baseWriter(path, options)
       const finish = writer.finish.bind(writer)
-      writer.finish = async function() {
+      writer.finish = async function () {
         await finish()
         const actual = bufferedByteLength(writer)
         if (actual == null || writer.offset === actual)
@@ -572,7 +573,10 @@ async function loadSnapshotId(
   if (cache) {
     await cachePut(cache, snapshotRefKey(scope, namespace, table), snapshotId, SNAPSHOT_REF_TTL_MS, now)
     if (snapshotId != null) {
-      const serialized = JSON.stringify(metadata)
+      // metadata carries BigInt snapshot ids (see catalog-cache docstring), so a
+      // plain JSON.stringify throws — stringifyBigintSafe measures the byte size
+      // for the cache gate without crashing on those ids.
+      const serialized = stringifyBigintSafe(metadata)
       if (serialized.length <= MAX_CACHED_METADATA_BYTES)
         await cachePut(cache, metadataRefKey(scope, namespace, table, snapshotId), metadata, METADATA_TTL_MS, now)
     }

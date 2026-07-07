@@ -17,6 +17,7 @@ import type { SearchType } from 'gscdump/query'
 import type { DataSource, FileSetRef, Row, TableName } from './contracts'
 import type { EngineError } from './errors'
 import type { ColumnDef } from './schema'
+import { encodeJsonBigintSafe } from '@gscdump/lakehouse'
 import { MS_PER_DAY } from 'gscdump'
 import { encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { createIndexingMetadataStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexPrefix } from './entities'
@@ -324,7 +325,7 @@ export async function rebuildRollups(
           windowDays: def.windowDays,
           payload: pointer,
         }
-        const envelopeBytes = new TextEncoder().encode(JSON.stringify(envelope))
+        const envelopeBytes = encodeJsonBigintSafe(envelope)
         const key = rollupKey(opts.ctx, def.id, builtAt, defSearchType)
         await opts.dataSource.write(key, envelopeBytes)
         results.push({
@@ -344,8 +345,7 @@ export async function rebuildRollups(
         windowDays: def.windowDays,
         payload,
       }
-      const json = JSON.stringify(envelope)
-      const bytes = new TextEncoder().encode(json)
+      const bytes = encodeJsonBigintSafe(envelope)
       const key = rollupKey(opts.ctx, def.id, builtAt, defSearchType)
       await opts.dataSource.write(key, bytes)
       results.push({ id: def.id, objectKey: key, bytes: bytes.byteLength, builtAt })
@@ -1357,7 +1357,7 @@ export async function rebuildCanonicalDailyResumable(opts: {
     windowDays: queryCanonicalDailyRollup.windowDays,
     payload: { parquetKey: partKeys[0]!, parquetKeys: partKeys, rowCount: 0 },
   }
-  await dataSource.write(rollupKey(ctx, CANONICAL_DAILY_ROLLUP_FINAL_ID, builtAt, searchType), new TextEncoder().encode(JSON.stringify(envelope)))
+  await dataSource.write(rollupKey(ctx, CANONICAL_DAILY_ROLLUP_FINAL_ID, builtAt, searchType), encodeJsonBigintSafe(envelope))
   return { done: true, nextWindowOffset, nextPageOffset, windowsTotal, windowsBuilt: nextWindowOffset - windowOffset, rowsWritten }
 }
 

@@ -6,7 +6,7 @@ minimumReleaseAgeExclude:
   - '@types/node@25.9.0'
   - nuxt@4.4.6
   - tsx@4.22.2
-  - icebird@0.8.12
+  - icebird@0.8.13
   - retriv@0.14.7
   - nuxt-use-query@0.2.7 || 0.3.0 || 0.7.1
 shellEmulator: true
@@ -30,10 +30,10 @@ overrides:
   tinyexec: 1.1.2
 patchedDependencies:
   hyparquet-writer@0.16.1: patches/hyparquet-writer@0.16.1.patch
-  icebird@0.8.12: patches/icebird@0.8.12.patch
+  icebird@0.8.13: patches/icebird@0.8.13.patch
 catalog:
   '@cloudflare/vitest-pool-workers': ^0.18.0
-  '@cloudflare/workers-types': ^5.20260703.1
+  '@cloudflare/workers-types': ^5.20260706.1
   '@duckdb/duckdb-wasm': ^1.32.0
   '@duckdb/node-api': 1.5.1-r.2
   '@huggingface/transformers': ^4.2.0
@@ -54,16 +54,16 @@ catalog:
   h3: ^1.15.11
   hyparquet: ^1.26.2
   hyparquet-writer: ^0.16.1
-  icebird: ^0.8.12
+  icebird: ^0.8.13
   js-yaml: ^5.2.1
   nuxt: ^4.4.8
-  nuxt-use-query: ^0.7.2
+  nuxt-use-query: ^0.8.0
   pathe: ^2.0.3
   playwright: ^1.61.1
   pluralize: ^8.0.0
   retriv: ^0.14.7
   tailwindcss: ^4.3.2
-  tsx: ^4.22.5
+  tsx: ^4.23.0
   unstorage: ^1.17.5
   vitest-package-exports: ^1.2.0
   vue: ^3.5.39
@@ -71,7 +71,7 @@ catalog:
   zod: ^4.4.3
 catalogs:
   deps:
-    '@clack/prompts': ^1.6.0
+    '@clack/prompts': ^1.7.0
     '@googleapis/indexing': ^6.0.1
     '@googleapis/searchconsole': ^6.0.1
     citty: ^0.2.2

@@ -163,6 +163,23 @@ describe('resolveIcebergDataFiles', () => {
     expect(arg.partitionFilter!(aboveRange)).toBe(false)
   })
 
+  it('does not throw when metadata carries BigInt snapshot ids and a cache is supplied', async () => {
+    // Real REST load-table metadata parses int64 fields (current-snapshot-id,
+    // per-snapshot snapshot-id/sequence-number) as BigInt. The metadata cache
+    // size-gate must not JSON.stringify those raw (throws "serialize a BigInt").
+    restCatalogLoadTable.mockResolvedValue({
+      metadata: {
+        'current-snapshot-id': 8114363535789397000n,
+        'snapshots': [{ 'snapshot-id': 8114363535789397000n, 'sequence-number': 42n }],
+      },
+    })
+    icebergManifests.mockResolvedValue([{ entries: [dataFile({ site_id: 1, date_month: monthVal('2026-05') })] }])
+    const cache = { storage: createStorage() }
+
+    const out = await resolveIcebergDataFiles(CONN, opts({ cache }))
+    expect(out).toHaveLength(1)
+  })
+
   it('caches an empty table without ever walking manifests', async () => {
     restCatalogLoadTable.mockResolvedValue({ metadata: { 'current-snapshot-id': null } })
     const cache = { storage: createStorage() }
