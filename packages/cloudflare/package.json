@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/cloudflare",
   "type": "module",
-  "version": "0.37.0",
+  "version": "0.37.1",
   "description": "Cloudflare-Workers-flavored helpers for the gscdump analytics stack: AnalyticsEnv binding contract, R2 SigV4 presigner, size-hint HMAC, DuckDB Workers shims, engine factory.",
   "author": {
     "name": "Harlan Wilton",
