@@ -30,6 +30,34 @@ export const issueDetails: Record<string, IndexingIssueDetail> = {
     description: 'Google encountered 5xx server errors when trying to crawl these URLs. The pages were unreachable at crawl time.',
     fix: 'Check your server logs for errors. Ensure your hosting can handle Googlebot traffic. Fix any backend issues causing 500/502/503 errors.',
   },
+  access_forbidden: {
+    description: 'Your server returned 403 Forbidden to Googlebot. Usually a WAF, bot-protection rule, or firewall treating the crawler as an attacker — a human visitor may see the page fine.',
+    fix: 'Allowlist Googlebot in your WAF / bot-protection rules and verify by IP, not user agent. Check Cloudflare bot-fight mode, rate limits, and any geo or ASN blocking. Re-test with the URL Inspection tool\'s "Test live URL".',
+  },
+  access_denied: {
+    description: 'Your server returned 401 Unauthorized to Googlebot. The URL sits behind an authentication wall.',
+    fix: 'If the page should rank, remove the auth requirement for crawlers or move the content to a public URL. If it is genuinely private, block it in robots.txt or noindex it so it stops being reported as an indexing failure.',
+  },
+  blocked_4xx: {
+    description: 'Google got a 4xx response other than 401, 403, or 404 — commonly 410 Gone, 429 Too Many Requests, or 451.',
+    fix: 'Check which status the URL actually returns. A 429 means Googlebot is being rate-limited: raise or exempt the crawler limit. A 410 is intentional deletion and will clear on its own.',
+  },
+  redirect_error: {
+    description: 'Google could not follow the redirect — a redirect chain that is too long, a loop, an empty Location header, or a URL that exceeds the maximum length.',
+    fix: 'Collapse redirect chains to a single hop. Look for loops (A→B→A) and self-redirects. Point internal links and sitemap entries at the final destination URL.',
+  },
+  crawl_error: {
+    description: 'Google hit an internal crawl error or considered the URL malformed. Often transient on Google\'s side, but a persistent count means the URL itself is invalid.',
+    fix: 'Verify the URL parses and resolves. Remove malformed URLs from your sitemap and internal links. If the URLs are valid, re-inspect in a few days — transient crawl errors clear themselves.',
+  },
+  sitemap_redirect: {
+    description: 'These URLs are submitted in your sitemap but redirect elsewhere. A sitemap should only list final, canonical, 200-status URLs — a redirecting entry wastes crawl budget and tells Google your sitemap is stale.',
+    fix: 'Replace each redirecting entry with its destination URL, or drop it from the sitemap entirely. Then resubmit the sitemap.',
+  },
+  alternate_canonical: {
+    description: 'These pages declare a canonical pointing at another page, and Google honoured it. The canonical target is what gets indexed. Usually intentional.',
+    fix: 'Nothing to fix if the canonical is deliberate. If these pages should rank on their own, make each one self-canonical and give it genuinely distinct content.',
+  },
   unknown_to_google: {
     description: 'These URLs exist on your site but Google hasn\'t discovered them yet. They may be orphaned pages or missing from your sitemap.',
     fix: 'Add these URLs to your sitemap. Create internal links to them from well-indexed pages. Submit the sitemap in Google Search Console.',
@@ -121,6 +149,12 @@ export const coverageLabels: Record<string, { short: string, color: string }> = 
   'Soft 404': { short: 'Soft 404', color: 'text-error' },
   'URL is unknown to Google': { short: 'Unknown', color: 'text-warning' },
   'Blocked by robots.txt': { short: 'Robots blocked', color: 'text-warning' },
+  'Blocked due to access forbidden (403)': { short: 'Forbidden (403)', color: 'text-error' },
+  'Blocked due to unauthorized request (401)': { short: 'Unauthorized (401)', color: 'text-error' },
+  'Blocked due to other 4xx issue': { short: 'Blocked (4xx)', color: 'text-error' },
+  'Redirect error': { short: 'Redirect error', color: 'text-error' },
+  'Page with redirect': { short: 'Redirect', color: 'text-muted' },
+  'Alternate page with proper canonical tag': { short: 'Alternate canonical', color: 'text-muted' },
 }
 
 export function coverageLabel(state: string): { short: string, color: string } {
@@ -150,8 +184,8 @@ export const issueGroups: IssueGroup[] = [
     description: 'Configuration changes you can make right now',
     effort: 'quick',
     controlLevel: 'full',
-    education: 'These issues are caused by your site\'s configuration preventing Google from indexing certain pages. If these pages should be indexed, the fix is usually a one-line config change — remove a robots.txt rule or fix a canonical URL. Highest-ROI fixes, zero content work.',
-    issueTypes: ['blocked_robots', 'canonical_mismatch'],
+    education: 'These issues are caused by your site\'s configuration preventing Google from indexing certain pages. If these pages should be indexed, the fix is usually a one-line config change — remove a robots.txt rule, fix a canonical URL, or drop a redirecting entry from your sitemap. Highest-ROI fixes, zero content work.',
+    issueTypes: ['blocked_robots', 'canonical_mismatch', 'sitemap_redirect'],
   },
   {
     id: 'technical',
@@ -160,8 +194,8 @@ export const issueGroups: IssueGroup[] = [
     description: 'Server and URL issues to resolve',
     effort: 'moderate',
     controlLevel: 'full',
-    education: 'These are infrastructure problems — your server is returning errors, pages have been deleted without redirects, or pages appear empty to Google. Fix server errors first (they affect crawl budget), then handle 404s with redirects, and ensure pages with real content return proper status codes.',
-    issueTypes: ['server_error', 'not_found', 'soft_404'],
+    education: 'These are infrastructure problems — your server is returning errors, blocking Googlebot at the edge, failing to follow redirects, or serving pages that look empty. Fix crawl blocks and server errors first (they cost crawl budget and can drop indexed pages), then handle 404s with redirects.',
+    issueTypes: ['server_error', 'not_found', 'soft_404', 'access_forbidden', 'access_denied', 'blocked_4xx', 'redirect_error', 'crawl_error'],
   },
   {
     id: 'content-discovery',
@@ -180,8 +214,8 @@ export const issueGroups: IssueGroup[] = [
     description: 'Usually intentional — review but likely fine',
     effort: 'quick',
     controlLevel: 'none',
-    education: 'These aren\'t really "issues" — they\'re usually intentional. Noindex tags are set deliberately to keep pages out of search. Redirects are normal when you move pages. Fragment URLs are stripped by Google by design. Review to make sure nothing unexpected is here.',
-    issueTypes: ['noindex', 'redirect', 'fragment_url'],
+    education: 'These aren\'t really "issues" — they\'re usually intentional. Noindex tags are set deliberately to keep pages out of search. Redirects are normal when you move pages. An alternate page with a proper canonical is consolidation working as designed. Fragment URLs are stripped by Google. Review to make sure nothing unexpected is here.',
+    issueTypes: ['noindex', 'redirect', 'alternate_canonical', 'fragment_url'],
   },
 ]
 
