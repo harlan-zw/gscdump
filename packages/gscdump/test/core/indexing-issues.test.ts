@@ -55,6 +55,29 @@ describe('iNDEXING_ISSUE_FILTERS', () => {
     expect(INDEXING_ISSUE_FILTERS.sitemap_redirect).toContain(`coverage_state = 'Page with redirect'`)
     expect(INDEXING_ISSUE_FILTERS.sitemap_redirect).toContain('sitemaps')
   })
+
+  // Regression: a soft 404 returns HTTP 200, so Google reports pageFetchState
+  // SUCCESSFUL and never SOFT_404. Prod check: 45/45 soft 404s had SUCCESSFUL, and
+  // zero rows fleet-wide carried the SOFT_404 fetch state — the fetch-state-only
+  // predicate matched nothing for the lifetime of the bucket.
+  it('soft_404 matches on coverage_state, since the fetch state is SUCCESSFUL', () => {
+    expect(INDEXING_ISSUE_FILTERS.soft_404).toContain(`coverage_state = 'Soft 404'`)
+    const fetchStateOnly = INDEXING_ISSUE_FILTERS.soft_404
+      .split(' OR ')
+      .every(clause => clause.includes('page_fetch_state'))
+    expect(fetchStateOnly, 'soft_404 must not depend on page_fetch_state alone').toBe(false)
+  })
+
+  // Regression: `canonical_mismatch` requires BOTH canonicals non-null, so it can
+  // never match a page that declared no canonical at all. Prod had 10 such rows,
+  // every one with `user_canonical IS NULL`, silently absorbed by `not_indexed`.
+  it('duplicate_no_canonical does not rely on canonical_mismatch', () => {
+    expect(INDEXING_ISSUE_FILTERS.canonical_mismatch).toContain('user_canonical IS NOT NULL')
+    expect(INDEXING_ISSUE_FILTERS.duplicate_no_canonical)
+      .toBe(`coverage_state = 'Duplicate without user-selected canonical'`)
+    expect(INDEXING_ISSUE_FILTERS.duplicate_no_canonical).not.toContain('canonical IS NOT NULL')
+    expect(INDEXING_ISSUE_SEVERITY.duplicate_no_canonical).toBe('warning')
+  })
 })
 
 describe('unmappedInspectionReasons', () => {
@@ -91,12 +114,14 @@ describe('unmappedInspectionReasons', () => {
       'Indexed, though blocked by robots.txt',
       'Indexed; consider marking as canonical',
     ])
-    // Matched by predicate shape rather than by literal string.
+    // Matched by predicate shape rather than by literal string. Everything else
+    // MUST appear verbatim in a filter — a "the generic bucket covers it" excuse
+    // is how `Duplicate without user-selected canonical` hid 10 prod rows behind
+    // `canonical_mismatch`, whose `user_canonical IS NOT NULL` clause it can never
+    // satisfy.
     const structural = new Set([
       'Excluded by ‘noindex’ tag', // noindex: coverage_state LIKE '%noindex%'
-      'Duplicate without user-selected canonical', // canonical_mismatch / not_indexed
-      'Duplicate, Google chose different canonical than user', // canonical_mismatch
-      'Blocked by page removal tool', // no fetch state; falls to not_indexed
+      'Duplicate, Google chose different canonical than user', // canonical_mismatch: both canonicals set, differing
       'Blocked by robots.txt', // blocked_robots: robots_txt_state = 'DISALLOWED'
     ])
     const allFilters = Object.values(INDEXING_ISSUE_FILTERS).join(' ')

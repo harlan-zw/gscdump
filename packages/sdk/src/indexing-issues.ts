@@ -58,6 +58,14 @@ export const issueDetails: Record<string, IndexingIssueDetail> = {
     description: 'These pages declare a canonical pointing at another page, and Google honoured it. The canonical target is what gets indexed. Usually intentional.',
     fix: 'Nothing to fix if the canonical is deliberate. If these pages should rank on their own, make each one self-canonical and give it genuinely distinct content.',
   },
+  duplicate_no_canonical: {
+    description: 'Google decided these pages duplicate another URL and picked the canonical itself, because the page declared no preference. You did not choose which URL ranks — Google did.',
+    fix: 'Add a canonical link to every page. Point it at itself for pages that should rank, or at the preferred URL for genuine duplicates. Leaving it unset hands the decision to Google.',
+  },
+  page_removed: {
+    description: 'These URLs are suppressed by a request in Search Console\'s Removals tool. The block is temporary — roughly six months — and then they become eligible again.',
+    fix: 'If the removal was intentional, back it with a real signal: a noindex tag, a 404/410, or authentication. The removal tool alone does not keep a page out of Search permanently.',
+  },
   unknown_to_google: {
     description: 'These URLs exist on your site but Google hasn\'t discovered them yet. They may be orphaned pages or missing from your sitemap.',
     fix: 'Add these URLs to your sitemap. Create internal links to them from well-indexed pages. Submit the sitemap in Google Search Console.',
@@ -155,6 +163,9 @@ export const coverageLabels: Record<string, { short: string, color: string }> = 
   'Redirect error': { short: 'Redirect error', color: 'text-error' },
   'Page with redirect': { short: 'Redirect', color: 'text-muted' },
   'Alternate page with proper canonical tag': { short: 'Alternate canonical', color: 'text-muted' },
+  'Duplicate without user-selected canonical': { short: 'Duplicate, no canonical', color: 'text-warning' },
+  'Duplicate, Google chose different canonical than user': { short: 'Canonical overridden', color: 'text-warning' },
+  'Blocked by page removal tool': { short: 'Removal tool', color: 'text-muted' },
 }
 
 export function coverageLabel(state: string): { short: string, color: string } {
@@ -185,7 +196,7 @@ export const issueGroups: IssueGroup[] = [
     effort: 'quick',
     controlLevel: 'full',
     education: 'These issues are caused by your site\'s configuration preventing Google from indexing certain pages. If these pages should be indexed, the fix is usually a one-line config change — remove a robots.txt rule, fix a canonical URL, or drop a redirecting entry from your sitemap. Highest-ROI fixes, zero content work.',
-    issueTypes: ['blocked_robots', 'canonical_mismatch', 'sitemap_redirect'],
+    issueTypes: ['blocked_robots', 'canonical_mismatch', 'duplicate_no_canonical', 'sitemap_redirect'],
   },
   {
     id: 'technical',
@@ -215,7 +226,7 @@ export const issueGroups: IssueGroup[] = [
     effort: 'quick',
     controlLevel: 'none',
     education: 'These aren\'t really "issues" — they\'re usually intentional. Noindex tags are set deliberately to keep pages out of search. Redirects are normal when you move pages. An alternate page with a proper canonical is consolidation working as designed. Fragment URLs are stripped by Google. Review to make sure nothing unexpected is here.',
-    issueTypes: ['noindex', 'redirect', 'alternate_canonical', 'fragment_url'],
+    issueTypes: ['noindex', 'redirect', 'alternate_canonical', 'page_removed', 'fragment_url'],
   },
 ]
 

@@ -17,6 +17,12 @@ export const INDEXING_ISSUE_FILTERS = {
   crawled_not_indexed: `coverage_state = 'Crawled - currently not indexed'`,
   discovered_not_indexed: `coverage_state = 'Discovered - currently not indexed'`,
   not_found: `page_fetch_state = 'NOT_FOUND' OR coverage_state = 'Not found (404)'`,
+  // The `coverage_state` half is load-bearing, not belt-and-braces: a soft 404 is BY
+  // DEFINITION a page that returns HTTP 200 with error-looking content, so Google
+  // reports `pageFetchState: SUCCESSFUL` on it. `page_fetch_state = 'SOFT_404'` is a
+  // state the API effectively never emits — measured on prod, 45/45 soft 404s carried
+  // `SUCCESSFUL`, and 0 rows fleet-wide had the SOFT_404 fetch state. Dropping the
+  // coverage_state clause silently zeroes an error-severity bucket.
   soft_404: `page_fetch_state = 'SOFT_404' OR coverage_state = 'Soft 404'`,
   server_error: `page_fetch_state = 'SERVER_ERROR' OR coverage_state = 'Server error (5xx)'`,
   access_forbidden: `page_fetch_state = 'ACCESS_FORBIDDEN' OR coverage_state = 'Blocked due to access forbidden (403)'`,
@@ -32,6 +38,12 @@ export const INDEXING_ISSUE_FILTERS = {
   // the same line — it mails "pages in a sitemap" separately from "pages".
   sitemap_redirect: `coverage_state = 'Page with redirect' AND sitemaps IS NOT NULL AND sitemaps != '[]'`,
   alternate_canonical: `coverage_state = 'Alternate page with proper canonical tag'`,
+  // NOT reachable via `canonical_mismatch`: that predicate needs BOTH canonicals
+  // non-null, and this state means the page declared none at all (verified on prod:
+  // 10/10 such rows have `user_canonical IS NULL`). Without its own key these URLs
+  // fall into the generic `not_indexed` bucket and disappear.
+  duplicate_no_canonical: `coverage_state = 'Duplicate without user-selected canonical'`,
+  page_removed: `coverage_state = 'Blocked by page removal tool'`,
   fragment_url: `url LIKE '%#%'`,
   mobile_fail: `mobile_verdict IN ('FAIL', 'PARTIAL')`,
   rich_results_fail: `rich_results_verdict = 'FAIL'`,
@@ -62,6 +74,8 @@ export const INDEXING_ISSUE_LABELS: Record<IndexingIssueType, string> = {
   redirect: 'Redirect',
   sitemap_redirect: 'Sitemap URL redirects',
   alternate_canonical: 'Alternate page with canonical',
+  duplicate_no_canonical: 'Duplicate, no canonical declared',
+  page_removed: 'Removed via removal tool',
   fragment_url: 'Fragment URL (#)',
   mobile_fail: 'Mobile usability issues',
   rich_results_fail: 'Rich results errors',
@@ -90,6 +104,11 @@ export const INDEXING_ISSUE_SEVERITY: Record<IndexingIssueType, 'error' | 'warni
   redirect: 'info',
   sitemap_redirect: 'warning',
   alternate_canonical: 'info',
+  // Google folded this page into another URL because the page named no preference.
+  // Fixable in one line (declare a self-canonical, or consolidate on purpose), so
+  // it earns a warning — unlike `alternate_canonical`, where the fold was intended.
+  duplicate_no_canonical: 'warning',
+  page_removed: 'info',
   fragment_url: 'warning',
   mobile_fail: 'warning',
   rich_results_fail: 'error',
