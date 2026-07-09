@@ -672,6 +672,31 @@ export interface ReconcileResult {
   urlsRemoved: number
 }
 
+/**
+ * Bounds on a single `compactUrls` call. `compactUrls` is memory-bounded (one
+ * feedpath at a time) but was previously unbounded in TIME: a tenant with a
+ * large accumulated delta backlog could run past a caller's execution budget.
+ * Both bounds are checked BETWEEN feedpaths and only after at least one has
+ * been compacted, so a call always makes forward progress.
+ */
+export interface CompactUrlsOptions {
+  /** Stop before starting another feedpath once this many ms have elapsed. */
+  deadlineMs?: number
+  /** Stop after compacting this many feedpaths. */
+  maxFeedpaths?: number
+}
+
+export interface CompactUrlsResult {
+  /** Feedpaths whose deltas were folded and deleted by this call. */
+  compactedFeedpaths: number
+  /**
+   * Feedpaths that still hold outstanding deltas. Call `compactUrls` again to
+   * continue — no cursor is needed, because a compacted feedpath's deltas are
+   * deleted, so the next call simply doesn't see it.
+   */
+  remainingFeedpaths: number
+}
+
 export interface DeltaEntry {
   feedpath: string
   feedpathHash: string
@@ -787,8 +812,13 @@ export interface SitemapStore {
    * rewrites each touched feedpath's `by-feed/<hash>/index.parquet` and deletes
    * the consumed delta files. Bounded per feedpath, so it stays within memory
    * regardless of total site URL count.
+   *
+   * Optionally bounded in TIME too (`opts.deadlineMs` / `opts.maxFeedpaths`).
+   * A bounded call is safe to stop mid-way: each feedpath's deltas are deleted
+   * as soon as its index is rewritten, so the remainder is simply what the next
+   * call finds. Callers drive this from `remainingFeedpaths`, not a cursor.
    */
-  compactUrls: (ctx: TenantCtx) => Promise<void>
+  compactUrls: (ctx: TenantCtx, opts?: CompactUrlsOptions) => Promise<CompactUrlsResult>
   /**
    * Site-wide convergence: mark every still-live URL whose owning feedpath is
    * absent from `liveFeedpaths` as removed. `compactUrls`/`snapshotUrls` only
@@ -1041,7 +1071,11 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
       }
     },
 
-    async compactUrls(ctx) {
+    async compactUrls(ctx, opts = {}) {
+      const startedAt = now()
+      const deadlineMs = opts.deadlineMs ?? Number.POSITIVE_INFINITY
+      const maxFeedpaths = opts.maxFeedpaths ?? Number.POSITIVE_INFINITY
+
       const deltaKeys = await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`)
       // Group outstanding deltas by feedpath. Only feedpaths with new deltas
       // need recompaction; every other per-feedpath index is already current.
@@ -1058,9 +1092,17 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
         deltasByFeed.set(feedpathHash, list)
       }
 
+      const totalFeedpaths = deltasByFeed.size
+      let compactedFeedpaths = 0
+
       // Compact one feedpath at a time. Peak memory is bounded by a single
       // sitemap's URL count plus its deltas — never the whole site's index.
       for (const [fpHash, feedDeltaKeys] of deltasByFeed) {
+        // Both bounds are gated on having compacted ≥1 feedpath, so a call can
+        // never spin without progress (which would leave `remainingFeedpaths`
+        // unchanged and make the caller's continuation loop non-terminating).
+        if (compactedFeedpaths > 0 && (compactedFeedpaths >= maxFeedpaths || now() - startedAt >= deadlineMs))
+          break
         const indexKey = sitemapUrlsIndexKey(ctx, fpHash)
         // Highest-risk swallow: if this prior-index read fails for real and we
         // treat it as absent, we'd rewrite the index from deltas alone and drop
@@ -1116,10 +1158,16 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
           columns: URLS_INDEX_COLUMNS,
           sortKey: ['feedpath_hash', 'url_hash'],
         })
+        // Index rewritten, THEN deltas dropped: a crash between the two re-folds
+        // the same deltas next call (idempotent), never loses them. This is also
+        // what makes a bounded call resumable without a cursor.
         await ds.write(indexKey, bytes)
         if (consumed.length > 0)
           await ds.delete(consumed)
+        compactedFeedpaths++
       }
+
+      return { compactedFeedpaths, remainingFeedpaths: totalFeedpaths - compactedFeedpaths }
     },
 
     async reconcile(ctx, { liveFeedpaths, at: atOpt }) {

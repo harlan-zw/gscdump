@@ -572,6 +572,85 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
     expect(removed).toEqual(['https://e.com/a'])
   })
 
+  // `compactUrls` is memory-bounded (one feedpath at a time) but was unbounded in
+  // TIME: a tenant with a large delta backlog ran past its caller's execution
+  // budget. gscdump.com's `sitemap/compact` job died on the 300s Cloudflare
+  // durable-job lease that way. A bounded call must stop cleanly and leave the
+  // remainder discoverable, with NO cursor — a compacted feedpath's deltas are
+  // deleted, so the next call simply doesn't see it.
+  describe('compactUrls bounding', () => {
+    const feeds = [
+      'https://example.com/a.xml',
+      'https://example.com/b.xml',
+      'https://example.com/c.xml',
+    ]
+
+    /** Three feedpaths, each with one outstanding delta. */
+    async function seedThreeFeeds() {
+      const { ds, store } = makeFakeDataSource()
+      const sitemaps = createSitemapStore({ dataSource: ds, now: () => Date.parse('2026-05-09T00:00:00Z') })
+      for (const [i, f] of feeds.entries())
+        await sitemaps.snapshotUrls(ctx, f, urls(`https://e.com/${i}`))
+      return { ds, store, sitemaps }
+    }
+
+    const deltaCount = (store: Map<string, unknown>) =>
+      Array.from(store.keys()).filter(k => k.includes('/urls/deltas/')).length
+
+    it('compacts everything and reports no remainder when unbounded', async () => {
+      const { store, sitemaps } = await seedThreeFeeds()
+      const r = await sitemaps.compactUrls(ctx)
+      expect(r).toEqual({ compactedFeedpaths: 3, remainingFeedpaths: 0 })
+      expect(deltaCount(store)).toBe(0)
+    })
+
+    it('stops at maxFeedpaths and reports the remainder', async () => {
+      const { store, sitemaps } = await seedThreeFeeds()
+      const r = await sitemaps.compactUrls(ctx, { maxFeedpaths: 2 })
+      expect(r).toEqual({ compactedFeedpaths: 2, remainingFeedpaths: 1 })
+      // Only the untouched feedpath's delta survives.
+      expect(deltaCount(store)).toBe(1)
+    })
+
+    it('resumes without a cursor — a second call finishes exactly the remainder', async () => {
+      const { store, sitemaps } = await seedThreeFeeds()
+      const first = await sitemaps.compactUrls(ctx, { maxFeedpaths: 1 })
+      expect(first).toEqual({ compactedFeedpaths: 1, remainingFeedpaths: 2 })
+      const second = await sitemaps.compactUrls(ctx)
+      expect(second).toEqual({ compactedFeedpaths: 2, remainingFeedpaths: 0 })
+      expect(deltaCount(store)).toBe(0)
+
+      // Every feed's URLs survived being compacted across two bounded calls.
+      for (const [i, f] of feeds.entries()) {
+        const live: string[] = []
+        for await (const r of sitemaps.loadUrls(ctx, f)) live.push(r.loc)
+        expect(live).toEqual([`https://e.com/${i}`])
+      }
+    })
+
+    it('stops on the deadline, but only AFTER one feedpath — never spins without progress', async () => {
+      const { ds, store } = makeFakeDataSource()
+      // Clock jumps a full second per read: the deadline is already blown by the
+      // time the first feedpath finishes. An ungated check would compact nothing,
+      // leave `remainingFeedpaths` unchanged, and hang the caller's loop forever.
+      let clock = 0
+      const sitemaps = createSitemapStore({ dataSource: ds, now: () => (clock += 1000) })
+      for (const [i, f] of feeds.entries())
+        await sitemaps.snapshotUrls(ctx, f, urls(`https://e.com/${i}`))
+
+      const r = await sitemaps.compactUrls(ctx, { deadlineMs: 1 })
+      expect(r.compactedFeedpaths).toBe(1)
+      expect(r.remainingFeedpaths).toBe(2)
+      expect(deltaCount(store)).toBe(2)
+    })
+
+    it('is a no-op with no outstanding deltas', async () => {
+      const { ds } = makeFakeDataSource()
+      const sitemaps = createSitemapStore({ dataSource: ds, now: () => 0 })
+      expect(await sitemaps.compactUrls(ctx)).toEqual({ compactedFeedpaths: 0, remainingFeedpaths: 0 })
+    })
+  })
+
   it('loadUrls before compaction merges index + outstanding deltas', async () => {
     const { ds } = makeFakeDataSource()
     let now = Date.parse('2026-05-09T00:00:00Z')
