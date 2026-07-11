@@ -253,7 +253,7 @@ const loginCommand = defineCommand({
 
     // Smoke-test: catch project-level misconfig (API not enabled, missing
     // scopes) here rather than letting the user discover it on first query.
-    await runSmokeTest(oauth).catch(() => {})
+    await runSmokeTest(oauth)
 
     // Auto-adopt: if no profile was active, derive one from the Google account
     // email so subsequent runs are scoped per-account without manual setup.
@@ -262,7 +262,11 @@ const loginCommand = defineCommand({
       const info = tokens?.access_token ? await fetchTokenInfo(tokens.access_token) : null
       if (info?.email) {
         const name = profileNameFromEmail(info.email)
-        const dir = await adoptCurrentConfigAsProfile(name).catch(() => null)
+        const dir = await adoptCurrentConfigAsProfile(name).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error)
+          logger.warn(`Login succeeded, but the config could not be moved into profile "${name}": ${message}`)
+          return null
+        })
         if (dir)
           logger.success(`Saved as profile "${name}" (active)`)
       }

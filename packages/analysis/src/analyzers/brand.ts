@@ -89,23 +89,34 @@ export function analyzeBrandSegmentation(
 
   const brand: QueriesRow[] = []
   const nonBrand: QueriesRow[] = []
+  let brandClicks = 0
+  let nonBrandClicks = 0
+  let brandImpressions = 0
+  let nonBrandImpressions = 0
 
   for (const row of keywords) {
-    if (num(row.impressions) < minImpressions)
+    const impressions = num(row.impressions)
+    if (impressions < minImpressions)
       continue
 
+    const clicks = num(row.clicks)
+    const query = row.query.toLowerCase()
     const isBrand = lowerBrandTerms.some(term =>
-      row.query.toLowerCase().includes(term),
+      query.includes(term),
     )
 
-    if (isBrand)
+    if (isBrand) {
       brand.push(row)
-    else
+      brandClicks += clicks
+      brandImpressions += impressions
+    }
+    else {
       nonBrand.push(row)
+      nonBrandClicks += clicks
+      nonBrandImpressions += impressions
+    }
   }
 
-  const brandClicks = brand.reduce((sum, k) => sum + num(k.clicks), 0)
-  const nonBrandClicks = nonBrand.reduce((sum, k) => sum + num(k.clicks), 0)
   const totalClicks = brandClicks + nonBrandClicks
 
   return {
@@ -115,8 +126,8 @@ export function analyzeBrandSegmentation(
       brandClicks,
       nonBrandClicks,
       brandShare: totalClicks > 0 ? brandClicks / totalClicks : 0,
-      brandImpressions: brand.reduce((sum, k) => sum + num(k.impressions), 0),
-      nonBrandImpressions: nonBrand.reduce((sum, k) => sum + num(k.impressions), 0),
+      brandImpressions,
+      nonBrandImpressions,
     },
   }
 }

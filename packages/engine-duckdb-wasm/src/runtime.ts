@@ -771,7 +771,9 @@ export function createBrowserAnalysisRuntime(
     const next = chain.then(work, work)
     // Keep the chain alive even on rejection so later callers do not inherit
     // the failure, but do not surface unhandled rejections.
-    chain = next.catch(() => {})
+    // The caller observes `next`; the rejection branch only converts the
+    // internal queue tail back to a fulfilled state for subsequent calls.
+    chain = next.then(() => undefined, () => undefined)
     return raceSignal(next, signal)
   }
 
@@ -782,7 +784,9 @@ export function createBrowserAnalysisRuntime(
       throw abortError(signal)
     }
     const onAbort = (): void => {
-      conn.cancelSent().catch(() => {})
+      void conn.cancelSent().catch((error: unknown) => {
+        console.warn('[gscdump/engine-duckdb-wasm] failed to cancel aborted query', error)
+      })
     }
     signal.addEventListener('abort', onAbort, { once: true })
     try {

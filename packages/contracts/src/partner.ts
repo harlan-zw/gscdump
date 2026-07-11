@@ -1,3 +1,4 @@
+export { partnerEndpoints } from './endpoints'
 export * from './onboarding'
 export { partnerRoutes } from './routes'
 export {

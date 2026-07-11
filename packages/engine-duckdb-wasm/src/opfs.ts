@@ -228,12 +228,29 @@ function nowMs(): number {
   return globalThis.performance?.now?.() ?? Date.now()
 }
 
+function isNotFoundError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { name?: string }).name === 'NotFoundError'
+}
+
+function reportBestEffortFailure(operation: string, error: unknown): void {
+  console.warn(`[gscdump/engine-duckdb-wasm] ${operation} failed`, error)
+}
+
+async function attemptCleanup(operation: string, cleanup: () => Promise<unknown>): Promise<void> {
+  try {
+    await cleanup()
+  }
+  catch (error) {
+    reportBestEffortFailure(operation, error)
+  }
+}
+
 function emitTiming(onTiming: ((info: OpfsAttachTiming) => void) | undefined, info: OpfsAttachTiming): void {
   try {
     onTiming?.(info)
   }
-  catch {
-    // Diagnostics must not make attach less reliable.
+  catch (error) {
+    reportBestEffortFailure('timing callback', error)
   }
 }
 
@@ -394,7 +411,13 @@ async function sweepStaleEntries(
     const m = matchers.find(m => m.re.test(name))
     if (!m || m.expected.has(name) || registry.refs(name) > 0)
       continue
-    await root.removeEntry(name).catch(() => {})
+    try {
+      await root.removeEntry(name)
+    }
+    catch (error) {
+      if (!isNotFoundError(error))
+        reportBestEffortFailure(`removing stale OPFS entry ${name}`, error)
+    }
   }
 }
 
@@ -493,7 +516,9 @@ export async function readOpfsSnapshotFile(
       return null
     return new Uint8Array(await file.arrayBuffer())
   }
-  catch {
+  catch (error) {
+    if (!isNotFoundError(error))
+      reportBestEffortFailure(`reading OPFS snapshot ${table}`, error)
     return null
   }
 }
@@ -524,8 +549,9 @@ async function materialiseFile(
       return { handle, outcome: 'cache-hit' }
     // Size mismatch — partial / corrupt write. Re-download.
   }
-  catch {
-    // Not cached yet — fall through to download.
+  catch (error) {
+    if (!isNotFoundError(error))
+      throw error
   }
 
   // ---- download -----------------------------------------------------------
@@ -557,9 +583,10 @@ async function materialiseFile(
     await writable.close()
   }
   catch (err) {
-    await writable.abort?.().catch(() => {})
+    if (writable.abort)
+      await attemptCleanup(`aborting partial OPFS write ${name}`, () => writable.abort!())
     // The partial / empty file is useless — remove it so a later run re-downloads.
-    await root.removeEntry(name).catch(() => {})
+    await attemptCleanup(`removing partial OPFS file ${name}`, () => root.removeEntry(name))
     throw err
   }
   return { handle, outcome: 'downloaded' }
@@ -739,7 +766,9 @@ export async function attachOpfsParquetTables(
   // directory scan) so OPFS doesn't accumulate a copy per snapshot version /
   // manifest ordering. Best-effort — a sweep failure never blocks the attach.
   await timed(onTiming, 'sweep', { files: total, tables: tables.length }, () => sweepStaleEntries(root, registry, expectedByTable))
-    .catch(() => {})
+    .catch((error: unknown) => {
+      reportBestEffortFailure('stale OPFS cache sweep', error)
+    })
 
   // Per-table OPFS file names + the registered handles, so a table that hits
   // a quota error can be dropped wholesale.
@@ -862,7 +891,7 @@ export async function attachOpfsParquetTables(
     await timed(onTiming, 'downloads', { files: total, tables: tables.length }, runDownloads)
   }
   catch (err) {
-    await withDb(() => registry.release([...acquiredNames])).catch(() => {})
+    await attemptCleanup('releasing handles after download failure', () => withDb(() => registry.release([...acquiredNames])))
     throw err
   }
 
@@ -904,7 +933,7 @@ export async function attachOpfsParquetTables(
     }
     catch (err) {
       if (isAbortError(err)) {
-        await withDb(() => detachOpfs(registry, conn, schema, attached, [...acquiredNames])).catch(() => {})
+        await attemptCleanup('detaching OPFS resources after abort', () => withDb(() => detachOpfs(registry, conn, schema, attached, [...acquiredNames])))
         throw err
       }
       // Sync-access-handle exclusivity conflict — the BROWSER_FSACCESS read
@@ -916,14 +945,14 @@ export async function attachOpfsParquetTables(
         // Only drop the half-created view if NO other consumer on this shared DB
         // holds it — otherwise we'd yank a view another attach still queries.
         if (registry.viewRefs(viewKey(schema, t.table)) === 0)
-          await withDb(() => conn.query(`DROP VIEW IF EXISTS ${schema}.${t.table}`)).catch(() => {})
+          await attemptCleanup(`dropping incomplete view ${schema}.${t.table}`, () => withDb(() => conn.query(`DROP VIEW IF EXISTS ${schema}.${t.table}`)))
         degraded.add(t.table)
         degradeReason.set(t.table, 'contention')
         await releaseTable(t.table)
         continue
       }
       // Any other view-creation failure tears down everything registered.
-      await withDb(() => detachOpfs(registry, conn, schema, attached, [...acquiredNames])).catch(() => {})
+      await attemptCleanup('detaching OPFS resources after view failure', () => withDb(() => detachOpfs(registry, conn, schema, attached, [...acquiredNames])))
       throw err
     }
     attached.push(t.table)
@@ -1004,7 +1033,7 @@ export async function attachOpfsParquetTables(
         // Recovery failed (cache miss + network error, or abort): drop any
         // buffers it registered so they don't leak, and leave the table degraded
         // for the caller to route to its server tail.
-        await withDb(() => bufferRegistry.release(bufferFiles.slice(before))).catch(() => {})
+        await attemptCleanup(`releasing recovery buffers for ${t.table}`, () => withDb(() => bufferRegistry.release(bufferFiles.slice(before))))
         bufferFiles.length = before
       }
     }
@@ -1064,7 +1093,10 @@ async function detachOpfs(
  * are ignored.
  */
 export async function clearOpfsSnapshotCache(): Promise<void> {
-  const root = await getOpfsRoot().catch(() => null)
+  const root = await getOpfsRoot().catch((error: unknown) => {
+    reportBestEffortFailure('opening OPFS cache for clearing', error)
+    return null
+  })
   if (!root)
     return
   const removable: string[] = []
@@ -1076,6 +1108,13 @@ export async function clearOpfsSnapshotCache(): Promise<void> {
         removable.push(name)
     }
   }
-  for (const name of removable)
-    await root.removeEntry(name).catch(() => {})
+  for (const name of removable) {
+    try {
+      await root.removeEntry(name)
+    }
+    catch (error) {
+      if (!isNotFoundError(error))
+        reportBestEffortFailure(`clearing OPFS cache entry ${name}`, error)
+    }
+  }
 }

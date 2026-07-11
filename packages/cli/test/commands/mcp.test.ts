@@ -67,7 +67,7 @@ describe('mcp command', () => {
     mocks.loadConfig.mockResolvedValue({})
     mocks.loadTokens.mockResolvedValue(null)
 
-    await mcpCommand.run!({ args: {}, rawArgs: [], cmd: mcpCommand } as any).catch(() => {})
+    await expect(mcpCommand.run!({ args: {}, rawArgs: [], cmd: mcpCommand } as any)).rejects.toThrow('__exit_1__')
 
     expect(exitSpy).toHaveBeenCalledWith(1)
     const message = stderrSpy.mock.calls.map(c => String(c[0])).join('')
@@ -80,7 +80,7 @@ describe('mcp command', () => {
     mocks.loadConfig.mockResolvedValue({ clientId: 'x', clientSecret: 'y' })
     mocks.loadTokens.mockResolvedValue(null)
 
-    await mcpCommand.run!({ args: {}, rawArgs: [], cmd: mcpCommand } as any).catch(() => {})
+    await expect(mcpCommand.run!({ args: {}, rawArgs: [], cmd: mcpCommand } as any)).rejects.toThrow('__exit_1__')
 
     expect(exitSpy).toHaveBeenCalledWith(1)
     const message = stderrSpy.mock.calls.map(c => String(c[0])).join('')

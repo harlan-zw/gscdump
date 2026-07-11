@@ -9,7 +9,7 @@ import type { Row } from '@gscdump/engine/contracts'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
-import { toIsoDate } from 'gscdump'
+import { toIsoDate } from 'gscdump/dates'
 import { rowNumber as num, rowString as str } from '../analyzer/row-values'
 
 export interface ContentVelocityWeek {

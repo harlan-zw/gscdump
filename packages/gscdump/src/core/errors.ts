@@ -244,7 +244,13 @@ export function parseGoogleError(text: string, httpStatus?: number): GscApiError
   try {
     parsed = JSON.parse(text)
   }
-  catch { /* ignore */ }
+  catch (error) {
+    // A non-JSON response body is a valid transport error payload. JSON.parse
+    // only throws SyntaxError, but retain the guard so unexpected failures are
+    // not converted into a generic API error.
+    if (!(error instanceof SyntaxError))
+      throw error
+  }
 
   if (!parsed || !('error' in parsed))
     return { code: httpStatus ?? 500, message: text || 'Unknown Google API error' }

@@ -6,14 +6,13 @@ import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { getConfigDir, setConfigDir } from '../config'
+import { resolveCliEnvironment } from '../environment'
+import { useCliRuntime } from '../runtime'
 import { applyOutputMode, displayPath, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
 
 const ROOT_DIR = path.join(os.homedir(), '.config', 'gscdump')
 const PROFILES_DIR = path.join(ROOT_DIR, 'profiles')
 const ACTIVE_MARKER = path.join(ROOT_DIR, 'active-profile')
-
-let activeOverride: string | null = null
-let configDirOverridden = false
 
 export function getProfilesDir(): string {
   return PROFILES_DIR
@@ -31,25 +30,25 @@ function readActiveMarkerSync(): string | null {
 }
 
 export function resolveActiveProfile(): string | null {
-  return activeOverride ?? process.env.GSCDUMP_PROFILE ?? readActiveMarkerSync()
+  return useCliRuntime().activeProfileOverride ?? resolveCliEnvironment().profile ?? readActiveMarkerSync()
 }
 
 /**
  * Apply CLI-resolved config-dir / profile to the global config-dir state.
  * Priority: explicit --config-dir > --profile flag > GSCDUMP_PROFILE env > persisted active marker > root dir.
  */
-export function applyProfileFromCli(opts: { configDir?: string | null, profile?: string | null }): void {
+export function applyProfileFromCli(opts: { configDir?: string | null, profile?: string | null, envProfile?: string | null }): void {
   if (opts.configDir) {
     setConfigDir(opts.configDir)
-    configDirOverridden = true
+    useCliRuntime().configDirOverridden = true
     return
   }
   if (opts.profile) {
-    activeOverride = opts.profile
+    useCliRuntime().activeProfileOverride = opts.profile
     setConfigDir(getProfileDir(opts.profile))
     return
   }
-  const envProfile = process.env.GSCDUMP_PROFILE
+  const envProfile = opts.envProfile ?? resolveCliEnvironment().profile
   if (envProfile) {
     setConfigDir(getProfileDir(envProfile))
     return
@@ -63,7 +62,7 @@ export function applyProfileFromCli(opts: { configDir?: string | null, profile?:
 export async function setActiveProfile(name: string | null): Promise<void> {
   await fsp.mkdir(ROOT_DIR, { recursive: true, mode: 0o700 })
   if (name == null) {
-    await fsp.rm(ACTIVE_MARKER, { force: true }).catch(() => {})
+    await fsp.rm(ACTIVE_MARKER, { force: true })
     return
   }
   await fsp.writeFile(ACTIVE_MARKER, name, { mode: 0o600 })
@@ -92,7 +91,8 @@ export function profileNameFromEmail(email: string): string {
  * profile is already active.
  */
 export async function adoptCurrentConfigAsProfile(name: string): Promise<string | null> {
-  if (configDirOverridden)
+  const runtime = useCliRuntime()
+  if (runtime.configDirOverridden)
     return null
   if (resolveActiveProfile())
     return null
@@ -106,10 +106,10 @@ export async function adoptCurrentConfigAsProfile(name: string): Promise<string 
     const dst = path.join(targetDir, f)
     const exists = await fsp.stat(src).then(() => true).catch(() => false)
     if (exists)
-      await fsp.rename(src, dst).catch(() => {})
+      await fsp.rename(src, dst)
   }
   await setActiveProfile(name)
-  activeOverride = name
+  runtime.activeProfileOverride = name
   setConfigDir(targetDir)
   return targetDir
 }

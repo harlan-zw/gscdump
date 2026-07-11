@@ -164,7 +164,12 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
     const tmp = `${manifestPath}.${randomBytes(6).toString('hex')}.tmp`
     await writeFile(tmp, JSON.stringify(data), 'utf8')
     await rename(tmp, manifestPath).catch(async (err) => {
-      await unlink(tmp).catch(() => {})
+      try {
+        await unlink(tmp)
+      }
+      catch (cleanupError) {
+        throw new AggregateError([err, cleanupError], `failed to replace manifest and remove temporary file ${tmp}`)
+      }
       throw err
     })
   }
@@ -187,7 +192,7 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
     running = true
     while (queue.length > 0) {
       const fn = queue.shift()!
-      await fn().catch(() => {})
+      await fn()
     }
     running = false
   }

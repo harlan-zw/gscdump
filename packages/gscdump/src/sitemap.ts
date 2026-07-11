@@ -100,16 +100,21 @@ export async function fetchSitemapUrls(
       throw new Error(`Fetch ${url} failed: ${res.status}`)
     const text = await res.text()
     const isIndex = SITEMAPINDEX_RE.test(text)
-    const matches = [...text.matchAll(LOC_RE)].map(m => m[1].trim()).filter(Boolean)
     if (isIndex) {
-      for (const child of matches) {
+      for (const match of text.matchAll(LOC_RE)) {
         if (limit != null && out.length >= limit)
           return
+        const child = match[1].trim()
+        if (!child)
+          continue
         await visit(child, depth + 1)
       }
       return
     }
-    for (const u of matches) {
+    for (const match of text.matchAll(LOC_RE)) {
+      const u = match[1].trim()
+      if (!u)
+        continue
       if (seen.has(u))
         continue
       seen.add(u)

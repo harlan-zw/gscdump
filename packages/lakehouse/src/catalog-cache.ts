@@ -30,6 +30,8 @@ export interface CatalogCache {
    * inline so it is never cut off when the response returns.
    */
   defer?: (write: Promise<unknown>) => void
+  /** Optional warning sink for best-effort cache driver failures. */
+  onError?: (operation: 'get' | 'set' | 'remove', key: string, error: unknown) => void
 }
 
 /** A cached value boxed with its absolute expiry (epoch ms). */
@@ -38,13 +40,28 @@ interface Boxed<T> {
   exp: number
 }
 
+export function reportCatalogCacheError(cache: CatalogCache, operation: 'get' | 'set' | 'remove', key: string, error: unknown): void {
+  try {
+    if (cache.onError)
+      cache.onError(operation, key, error)
+    else
+      console.warn(`[gscdump/lakehouse] cache ${operation} failed for ${key}`, error)
+  }
+  catch (reportError) {
+    console.warn(`[gscdump/lakehouse] cache error reporter failed during ${operation} for ${key}`, reportError)
+  }
+}
+
 /**
  * Read a cached value. Returns `undefined` on a miss, an expired entry, a
  * malformed box, or any driver error (the cache is best-effort: a read failure
  * degrades to a fresh load, never to an error).
  */
 export async function cacheGet<T>(cache: CatalogCache, key: string, now: number): Promise<T | undefined> {
-  const boxed = await cache.storage.getItem<Boxed<T>>(key).catch(() => null)
+  const boxed = await cache.storage.getItem<Boxed<T>>(key).catch((error: unknown) => {
+    reportCatalogCacheError(cache, 'get', key, error)
+    return null
+  })
   if (!boxed || typeof boxed.exp !== 'number' || boxed.exp <= now)
     return undefined
   return boxed.v
@@ -56,12 +73,14 @@ export async function cacheGet<T>(cache: CatalogCache, key: string, now: number)
  * Returns the write promise. With a `defer` hook the write is handed to the
  * hook and a resolved promise is returned (the response is not blocked on it);
  * without one the write promise is returned for the caller to await, so a
- * fire-and-forget put is never silently dropped. Driver errors are swallowed —
- * a failed cache write must not fail the read.
+ * fire-and-forget put is never silently dropped. Driver errors are reported
+ * through `onError` (or `console.warn`) but do not fail the read.
  */
 export function cachePut<T>(cache: CatalogCache, key: string, value: T, ttlMs: number, now: number): Promise<void> {
   const boxed: Boxed<T> = { v: value, exp: now + ttlMs }
-  const write = cache.storage.setItem(key, boxed, { ttl: Math.ceil(ttlMs / 1000) }).catch(() => {})
+  const write = cache.storage.setItem(key, boxed, { ttl: Math.ceil(ttlMs / 1000) }).catch((error: unknown) => {
+    reportCatalogCacheError(cache, 'set', key, error)
+  })
   if (cache.defer) {
     cache.defer(write)
     return Promise.resolve()

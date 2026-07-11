@@ -115,7 +115,7 @@ let activeWorker: ReturnType<typeof makeHandleWorker> | undefined
 afterEach(async () => {
   activeWorker?.dispose()
   activeWorker = undefined
-  await clearOpfsSnapshotCache().catch(() => {})
+  await clearOpfsSnapshotCache()
 })
 
 describe('opfs attach against real browser OPFS', () => {
@@ -130,7 +130,8 @@ describe('opfs attach against real browser OPFS', () => {
     await hw.open('probe', fh)
     // A second open of the same backing file must throw the OPFS conflict.
     await expect(hw.open('probe-again', fh)).rejects.toThrow()
-    await root.removeEntry('exclusivity-probe.bin').catch(() => {})
+    await hw.close('probe')
+    await root.removeEntry('exclusivity-probe.bin')
   })
 
   it('characterization: real OPFS tolerates concurrent createWritable (materialise race is safe)', async () => {
@@ -150,8 +151,8 @@ describe('opfs attach against real browser OPFS', () => {
     catch {
       secondThrew = true
     }
-    await w1.close().catch(() => {})
-    await root.removeEntry('concurrent-writable-probe.bin').catch(() => {})
+    await w1.close()
+    await root.removeEntry('concurrent-writable-probe.bin')
     expect(secondThrew).toBe(false)
   })
 

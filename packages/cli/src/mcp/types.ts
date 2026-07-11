@@ -1,6 +1,6 @@
 import type { Period, ResolvedAnalyticsRange } from 'gscdump'
 import type { Auth, GoogleSearchConsoleClient, Site } from 'gscdump/api'
-import { MS_PER_DAY, toIsoDate } from 'gscdump'
+import { MS_PER_DAY, toIsoDate } from 'gscdump/dates'
 import { z } from 'zod'
 
 export type { Auth, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site }

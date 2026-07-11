@@ -1,15 +1,14 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-
-let configDir = path.join(os.homedir(), '.config', 'gscdump')
+import { useCliRuntime } from './runtime'
 
 export function setConfigDir(dir: string): void {
-  configDir = dir
+  useCliRuntime().configDir = dir
 }
 
 export function getConfigDir(): string {
-  return configDir
+  return useCliRuntime().configDir
 }
 
 export interface GscdumpConfig {
@@ -48,7 +47,7 @@ function expandTilde(p: string): string {
 }
 
 export async function loadConfig(): Promise<GscdumpConfig> {
-  return fs.readFile(path.join(configDir, 'config.json'), 'utf-8')
+  return fs.readFile(path.join(getConfigDir(), 'config.json'), 'utf-8')
     .then(data => JSON.parse(data) as GscdumpConfig)
     .catch(() => ({}))
 }
@@ -59,10 +58,11 @@ export async function loadResolvedConfig(): Promise<ResolvedGscdumpConfig> {
 }
 
 export async function saveConfig(config: GscdumpConfig): Promise<void> {
+  const configDir = getConfigDir()
   await fs.mkdir(configDir, { recursive: true, mode: 0o700 })
   await fs.writeFile(path.join(configDir, 'config.json'), JSON.stringify(config, null, 2), { mode: 0o600 })
 }
 
 export function getConfigPath(): string {
-  return path.join(configDir, 'config.json')
+  return path.join(getConfigDir(), 'config.json')
 }

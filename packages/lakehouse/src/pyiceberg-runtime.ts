@@ -1,6 +1,6 @@
-import process from 'node:process'
-
+/** @deprecated PyIceberg subprocess writing now lives in `@gscdump/engine`. */
 export const PYICEBERG_PYTHON_ENV = 'GSCDUMP_ICEBERG_PYTHON'
+/** @deprecated PyIceberg subprocess writing now lives in `@gscdump/engine`. */
 export const DEFAULT_PYICEBERG_PYTHON = 'python3'
 
 export interface PyIcebergWriterResult {
@@ -17,14 +17,31 @@ export interface RunPyIcebergWriterOptions {
   rejectOnProcessError?: boolean
 }
 
-export function resolvePyIcebergPython(override?: string): string {
-  return override ?? process.env[PYICEBERG_PYTHON_ENV] ?? DEFAULT_PYICEBERG_PYTHON
+function importRuntimeModule(specifier: string): Promise<unknown> {
+  return import(specifier)
 }
 
+/**
+ * @deprecated Import the engine-owned PyIceberg runtime instead. Retained as a
+ * compatibility shim for consumers of `@gscdump/lakehouse` 0.x.
+ */
+export function resolvePyIcebergPython(override?: string): string {
+  const runtimeProcess = Reflect.get(globalThis, 'process') as { env?: Record<string, string | undefined> } | undefined
+  const env = runtimeProcess?.env
+  return override ?? env?.[PYICEBERG_PYTHON_ENV] ?? DEFAULT_PYICEBERG_PYTHON
+}
+
+/**
+ * @deprecated Import the engine-owned PyIceberg runtime instead. Retained as a
+ * compatibility shim for consumers of `@gscdump/lakehouse` 0.x.
+ */
 export async function runPyIcebergWriter<T extends PyIcebergWriterResult>(
   options: RunPyIcebergWriterOptions,
 ): Promise<T> {
-  const { execFile } = await import('node:child_process')
+  // Keep the Node-only module opaque to browser bundlers. This compatibility
+  // path is loaded only when a consumer actually invokes the legacy helper.
+  const childProcess = await importRuntimeModule('node:child_process') as typeof import('node:child_process')
+  const { execFile } = childProcess
   return new Promise((resolve, reject) => {
     const child = execFile(
       options.python,
@@ -37,7 +54,7 @@ export async function runPyIcebergWriter<T extends PyIcebergWriterResult>(
             parsed = JSON.parse(stdout) as T
           }
           catch {
-            // fall through to the error path below
+            // Fall through to the existing error handling below.
           }
         }
         if (parsed && !(err && options.rejectOnProcessError)) {

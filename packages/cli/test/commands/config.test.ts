@@ -48,7 +48,7 @@ describe('config command', () => {
       await fs.writeFile(CONFIG_FILE, originalConfig)
     }
     else {
-      await fs.rm(CONFIG_FILE).catch(() => {})
+      await fs.rm(CONFIG_FILE, { force: true })
     }
   })
 
@@ -76,7 +76,7 @@ describe('config command', () => {
     })
 
     it('should warn when no config exists', async () => {
-      await fs.rm(CONFIG_FILE).catch(() => {})
+      await fs.rm(CONFIG_FILE, { force: true })
 
       await configCommand.subCommands!.show.run!({
         args: {},

@@ -4,7 +4,7 @@ export default defineBuildConfig({
   entries: [
     {
       type: 'bundle',
-      input: ['./src/index.ts'],
+      input: ['./src/cli.ts'],
       rolldown: {
         external: [
           /@duckdb\/node-api/,

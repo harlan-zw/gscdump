@@ -6,6 +6,8 @@ export const GSCDUMP_REQUIRED_ANALYTICS_SCOPE = 'https://www.googleapis.com/auth
 export const GSCDUMP_WRITE_ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/webmasters' as const
 export const GSCDUMP_OPTIONAL_INDEXING_SCOPE = 'https://www.googleapis.com/auth/indexing' as const
 
+type GoogleScopesInput = string | readonly string[] | null | undefined
+
 export const accountStatuses = [
   'disconnected',
   'oauth_received',
@@ -224,16 +226,25 @@ export interface LifecycleWebhookEnvelope<TData extends Record<string, unknown> 
   data: TData
 }
 
-export function parseGrantedScopes(scopes: string | null | undefined): string[] {
-  return (scopes ?? '').split(/\s+/).map(s => s.trim()).filter(Boolean)
+export function parseGrantedScopes(scopes: GoogleScopesInput): string[] {
+  if (!scopes)
+    return []
+  if (typeof scopes === 'string')
+    return scopes.split(/\s+/).map(scope => scope.trim()).filter(Boolean)
+  return scopes.map(scope => scope.trim()).filter(Boolean)
 }
 
-export function hasRequiredAnalyticsScope(scopes: string | string[] | null | undefined): boolean {
-  const granted = Array.isArray(scopes) ? scopes : parseGrantedScopes(scopes)
-  return granted.includes(GSCDUMP_REQUIRED_ANALYTICS_SCOPE) || granted.includes(GSCDUMP_WRITE_ANALYTICS_SCOPE)
+function hasGoogleScope(scopes: GoogleScopesInput, scope: string): boolean {
+  const granted = parseGrantedScopes(scopes)
+  const suffix = scope.replace('https://www.googleapis.com/auth/', '')
+  return granted.includes(scope) || granted.includes(suffix)
 }
 
-export function hasOptionalIndexingScope(scopes: string | string[] | null | undefined): boolean {
-  const granted = Array.isArray(scopes) ? scopes : parseGrantedScopes(scopes)
-  return granted.includes(GSCDUMP_OPTIONAL_INDEXING_SCOPE)
+export function hasRequiredAnalyticsScope(scopes: GoogleScopesInput): boolean {
+  return hasGoogleScope(scopes, GSCDUMP_REQUIRED_ANALYTICS_SCOPE)
+    || hasGoogleScope(scopes, GSCDUMP_WRITE_ANALYTICS_SCOPE)
+}
+
+export function hasOptionalIndexingScope(scopes: GoogleScopesInput): boolean {
+  return hasGoogleScope(scopes, GSCDUMP_OPTIONAL_INDEXING_SCOPE)
 }

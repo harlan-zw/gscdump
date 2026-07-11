@@ -8,7 +8,7 @@
  */
 
 import type { AnalysisParams } from '../analysis-types'
-import { daysAgo, MS_PER_DAY, toIsoDate } from 'gscdump'
+import { daysAgoUtc as daysAgo, MS_PER_DAY, toIsoDate } from 'gscdump/dates'
 
 export type WindowPreset
   = | 'last-7d'

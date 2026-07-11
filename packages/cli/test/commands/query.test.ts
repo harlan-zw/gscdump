@@ -80,7 +80,9 @@ describe('query command', () => {
     vi.clearAllMocks()
     mocks.resolveSite.mockResolvedValue('https://example.com/')
     mocks.loadConfig.mockResolvedValue({})
-    exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined as never) as never)
+    exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`__exit_${code}__`)
+    }) as never)
   })
 
   afterEach(() => {
@@ -168,7 +170,7 @@ describe('query command', () => {
   })
 
   it('rejects invalid --data-state', async () => {
-    await queryCommand.run!({
+    await expect(queryCommand.run!({
       args: {
         'site': 'https://example.com/',
         'live': true,
@@ -179,7 +181,7 @@ describe('query command', () => {
       },
       rawArgs: [],
       cmd: queryCommand,
-    } as any).catch(() => {})
+    } as any)).rejects.toThrow('__exit_1__')
 
     expect(exitSpy).toHaveBeenCalledWith(1)
   })
@@ -204,7 +206,7 @@ describe('query command', () => {
       },
       rawArgs: [],
       cmd: queryCommand,
-    } as any).catch(() => {})
+    } as any)
 
     expect(exitSpy).not.toHaveBeenCalled()
     expect(mocks.storeWatermarks).toHaveBeenCalledWith(expect.objectContaining({ searchType: 'image' }))

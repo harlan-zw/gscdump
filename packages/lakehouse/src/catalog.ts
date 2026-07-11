@@ -25,7 +25,7 @@ import {
   s3SignedResolver,
 } from 'icebird'
 import { stringifyBigintSafe } from './bigint'
-import { cacheGet, cachePut } from './catalog-cache'
+import { cacheGet, cachePut, reportCatalogCacheError } from './catalog-cache'
 import { buildManifestPartitionFilter } from './partition-prune'
 
 /** icebird's lowercase Iceberg primitive types (subset we use). */
@@ -498,11 +498,14 @@ function snapshotRefKey(scope: string, namespace: string, table: string): string
  * means TTL-bounded staleness, never an error.
  */
 export async function invalidateSnapshotRef(cache: CatalogCache, namespace: string, table: string, cacheScope = ''): Promise<void> {
-  // Swallowed by design (cache-hygiene failure must not fail the commit path
-  // that calls this); the TTL bounds staleness if the delete never lands.
+  // Reported without rejecting (cache-hygiene failure must not fail the commit
+  // path that calls this); the TTL bounds staleness if the delete never lands.
   // `cacheScope` must match the reader's connection scope (`catalogCacheScope`
   // over the same config) or the delete silently misses the live key.
-  await cache.storage.removeItem(snapshotRefKey(cacheScope, namespace, table)).catch(() => {})
+  const key = snapshotRefKey(cacheScope, namespace, table)
+  await cache.storage.removeItem(key).catch((error: unknown) => {
+    reportCatalogCacheError(cache, 'remove', key, error)
+  })
 }
 
 function metadataRefKey(scope: string, namespace: string, table: string, snapshotId: string): string {

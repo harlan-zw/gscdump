@@ -189,7 +189,8 @@ describe('createOpfsHandleRegistry', () => {
     expect(register).toHaveBeenCalledTimes(2)
   })
 
-  it('swallows a failing drop but still forgets the entry', async () => {
+  it('reports a failing drop but still forgets the entry', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const register = vi.fn(async () => {})
     const drop = vi.fn(async () => {
       throw new Error('dropFile failed')
@@ -199,6 +200,11 @@ describe('createOpfsHandleRegistry', () => {
     await registry.acquire('a', () => ({}))
     await expect(registry.release(['a'])).resolves.toBeUndefined()
     expect(registry.size()).toBe(0)
+    expect(warn).toHaveBeenCalledWith(
+      '[gscdump/engine-duckdb-wasm] dropping OPFS handle a failed',
+      expect.objectContaining({ message: 'dropFile failed' }),
+    )
+    warn.mockRestore()
   })
 
   it('refcounts views: drop only fires on the last release', async () => {

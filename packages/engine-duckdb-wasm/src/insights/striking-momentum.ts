@@ -19,7 +19,7 @@
 import type { InsightRunner } from '../runner'
 
 import { sql } from 'drizzle-orm'
-import { toIsoDate } from 'gscdump'
+import { toIsoDate } from 'gscdump/dates'
 
 import { page_queries } from '../schema'
 

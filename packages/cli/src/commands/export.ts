@@ -1,13 +1,9 @@
 import type { StorageEngine, TableName } from '../local-store'
-import { rm } from 'node:fs/promises'
 import path from 'node:path'
-import { DuckDBInstance } from '@duckdb/node-api'
-import { dateColumnsFor } from '@gscdump/engine/schema'
-import { sqlEscape } from '@gscdump/engine/sql'
-import { dateReplaceClause } from '@gscdump/engine/sql-fragments'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
+import { materializeParquetTables } from '../native-duckdb'
 import { applyOutputMode, displayPath, OUTPUT_ARGS } from '../utils'
 
 export interface ExportOptions {
@@ -33,47 +29,22 @@ export interface ExportResult {
 
 export async function exportToDuckDB(opts: ExportOptions): Promise<ExportResult> {
   const outPath = path.resolve(opts.outPath)
-  if (opts.force)
-    await rm(outPath, { force: true })
-
-  // Native `@duckdb/node-api` rather than the engine's vFS DuckDBHandle: this
-  // command emits a *persistent* on-disk `.duckdb` database for distribution,
-  // which the in-memory WASM build can't naturally produce. The two-runtime
-  // split is deliberate — see docs/adr/0016-duckdb-two-node-runtimes-by-design.md.
-  const instance = await DuckDBInstance.create(outPath)
-  const conn = await instance.connect()
-  const tables: ExportTableResult[] = []
-
-  try {
-    for (const table of allTables()) {
-      const entries = await opts.engine.listLive({
-        userId: opts.userId,
-        siteId: opts.siteId,
+  const inputs = []
+  for (const table of allTables()) {
+    const entries = await opts.engine.listLive({
+      userId: opts.userId,
+      siteId: opts.siteId,
+      table: table as TableName,
+    })
+    if (entries.length > 0) {
+      inputs.push({
         table: table as TableName,
+        filePaths: entries.map(entry => path.join(opts.dataDir, entry.objectKey)),
       })
-      if (entries.length === 0)
-        continue
-
-      const paths = entries.map(e => path.join(opts.dataDir, e.objectKey))
-      const fileList = paths.map(p => `'${sqlEscape(p)}'`).join(', ')
-      // Canonicalize legacy VARCHAR `date` columns to real DATE so the packed
-      // `.duckdb` table types `date` the same way the app's DuckDB-WASM views do
-      // (CAST→DATE) — otherwise an ATTACH of this file diverges from app reads.
-      const replace = dateReplaceClause(dateColumnsFor(table as TableName), 'date')
-      await conn.run(
-        `CREATE OR REPLACE TABLE ${table} AS SELECT * ${replace} FROM read_parquet([${fileList}], union_by_name=true)`,
-      )
-
-      const reader = await conn.runAndReadAll(`SELECT count(*)::BIGINT AS n FROM ${table}`)
-      const rows = reader.getRowObjects() as Array<{ n: bigint }>
-      const rowCount = Number(rows[0]?.n ?? 0)
-      tables.push({ table: table as TableName, files: entries.length, rows: rowCount })
     }
   }
-  finally {
-    conn.closeSync()
-    instance.closeSync()
-  }
+
+  const tables: ExportTableResult[] = await materializeParquetTables(outPath, inputs, opts.force)
 
   const totalRows = tables.reduce((acc, t) => acc + t.rows, 0)
   return { outPath, tables, totalRows }

@@ -391,7 +391,9 @@ export function createD1ManifestStore(db: AnalyticsManifestDb): ManifestStore {
         db.delete(r2Locks)
           .where(and(eq(r2Locks.scope, key), eq(r2Locks.holderId, holderId)))
           .run(),
-      ).catch(() => {})
+      ).catch((error: unknown) => {
+        console.warn(`[gscdump/engine-sqlite] failed to release manifest lock ${key}; lease will expire`, error)
+      })
     })
   }
 

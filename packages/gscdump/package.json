@@ -62,6 +62,11 @@
       "import": "./dist/contracts.mjs",
       "default": "./dist/contracts.mjs"
     },
+    "./dates": {
+      "types": "./dist/dates.d.mts",
+      "import": "./dist/dates.mjs",
+      "default": "./dist/dates.mjs"
+    },
     "./normalize": {
       "types": "./dist/normalize.d.mts",
       "import": "./dist/normalize.mjs",

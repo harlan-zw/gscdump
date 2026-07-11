@@ -169,7 +169,7 @@ export function createInMemoryManifestStore(): ManifestStore & {
       const key = lockKey(scope)
       const prev = lockChains.get(key) ?? Promise.resolve()
       const result = prev.then(() => fn())
-      lockChains.set(key, result.catch(() => {}))
+      lockChains.set(key, result.then(() => undefined, () => undefined))
       return result
     },
     purgeTenant(filter) {

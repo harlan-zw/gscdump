@@ -67,22 +67,72 @@ export async function fetchGscTopN<D extends Dimension>(
   const rows = await collectRows(
     client.query(siteUrl, builder as unknown as GSCQueryBuilder<never, never>),
   )
-  const mapped = rows
-    .map((r) => {
-      const row = r as Record<string, unknown>
-      const key = row[dimension.dimension]
-      if (typeof key !== 'string' || !key)
-        return null
-      const impressions = Number(row.impressions ?? 0)
-      const position = Math.max(1, Number(row.position ?? 0))
-      return {
-        key,
-        clicks: Number(row.clicks ?? 0),
-        impressions,
-        sum_position: (position - 1) * impressions,
+  const mapRow = (raw: unknown): GscTopNRow | null => {
+    const row = raw as Record<string, unknown>
+    const key = row[dimension.dimension]
+    if (typeof key !== 'string' || !key)
+      return null
+    const impressions = Number(row.impressions ?? 0)
+    const position = Math.max(1, Number(row.position ?? 0))
+    return {
+      key,
+      clicks: Number(row.clicks ?? 0),
+      impressions,
+      sum_position: (position - 1) * impressions,
+    }
+  }
+
+  // Preserve Array#slice edge semantics for unusual negative/fractional
+  // values; optimize the normal non-negative integer top-N contract.
+  const topLimit = typeof sliceTop === 'number' && Number.isInteger(sliceTop) && sliceTop >= 0
+    ? sliceTop
+    : undefined
+  const mapped: GscTopNRow[] = []
+  if (topLimit === 0)
+    return mapped
+
+  if (orderByClicksDesc && topLimit !== undefined) {
+    for (const row of rows) {
+      const value = mapRow(row)
+      if (value)
+        mapped.push(value)
+      if (mapped.length >= topLimit)
+        break
+    }
+    return mapped
+  }
+
+  // Insertion selection wins for the small dashboard top-Ns. Above this bound,
+  // the fallback full sort is cheaper than O(rows * N) insertion work.
+  if (!orderByClicksDesc && topLimit !== undefined && topLimit <= 128) {
+    let requiresFullSort = false
+    for (const row of rows) {
+      const value = mapRow(row)
+      if (!value)
+        continue
+      if (!Number.isFinite(value.clicks)) {
+        requiresFullSort = true
+        break
       }
-    })
-    .filter((x): x is GscTopNRow => x != null)
+      let insertAt = 0
+      while (insertAt < mapped.length && mapped[insertAt]!.clicks >= value.clicks)
+        insertAt++
+      if (insertAt < topLimit) {
+        mapped.splice(insertAt, 0, value)
+        if (mapped.length > topLimit)
+          mapped.pop()
+      }
+    }
+    if (!requiresFullSort)
+      return mapped
+    mapped.length = 0
+  }
+
+  for (const row of rows) {
+    const value = mapRow(row)
+    if (value)
+      mapped.push(value)
+  }
 
   if (!orderByClicksDesc)
     mapped.sort((a, b) => b.clicks - a.clicks)

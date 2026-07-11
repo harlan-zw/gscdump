@@ -9,7 +9,7 @@ import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { defaultEndDate } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
-import { MS_PER_DAY, toIsoDate } from 'gscdump'
+import { MS_PER_DAY, toIsoDate } from 'gscdump/dates'
 import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 
 export type TrendCategory = 'accelerating' | 'growing' | 'steady' | 'declining' | 'cratering'

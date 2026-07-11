@@ -7,8 +7,8 @@ import type { CatalogCache } from '../src/catalog-cache'
 import { describe, expect, it, vi } from 'vitest'
 import { invalidateSnapshotRef } from '../src/catalog'
 
-function cacheWith(removeItem: (key: string) => Promise<void>): CatalogCache {
-  return { storage: { removeItem } as unknown as CatalogCache['storage'] }
+function cacheWith(removeItem: (key: string) => Promise<void>, onError?: CatalogCache['onError']): CatalogCache {
+  return { storage: { removeItem } as unknown as CatalogCache['storage'], onError }
 }
 
 describe('invalidateSnapshotRef', () => {
@@ -24,10 +24,13 @@ describe('invalidateSnapshotRef', () => {
     expect(removeItem).toHaveBeenCalledExactlyOnceWith('lh-snapref\0https://cat\0team-7-int\0gsc\0queries')
   })
 
-  it('swallows driver errors — a failed delete must not fail the commit path', async () => {
+  it('reports driver errors without failing the commit path', async () => {
+    const onError = vi.fn()
+    const failure = new Error('kv down')
     const removeItem = vi.fn(async () => {
-      throw new Error('kv down')
+      throw failure
     })
-    await expect(invalidateSnapshotRef(cacheWith(removeItem), 'gsc', 'queries')).resolves.toBeUndefined()
+    await expect(invalidateSnapshotRef(cacheWith(removeItem, onError), 'gsc', 'queries')).resolves.toBeUndefined()
+    expect(onError).toHaveBeenCalledExactlyOnceWith('remove', 'lh-snapref\0\0gsc\0queries', failure)
   })
 })

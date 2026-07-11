@@ -25,7 +25,7 @@ import type {
 } from '@gscdump/contracts'
 import type { AnalysisSourcesOptions, SearchTypeOptions, SourceRangeOptions } from './hosted-query'
 import type { HostedClientOptions, HostedFetch, HostedFetchOptions, HostedHeaders } from './request'
-import { analyticsEndpointSchemas, analyticsRoutes } from '@gscdump/contracts/analytics'
+import { analyticsEndpoints } from '@gscdump/contracts/analytics'
 import {
   indexingDiagnosticsQuery,
   indexingUrlsQuery,
@@ -51,61 +51,79 @@ export function createAnalyticsClient(options: AnalyticsClientOptions = {}): Ana
 
   return {
     whoami() {
-      return request<WhoamiResponse>(analyticsRoutes.whoami, {}, analyticsEndpointSchemas.analyticsWhoami.response)
+      const endpoint = analyticsEndpoints.whoami
+      return request<WhoamiResponse>(endpoint.path, { method: endpoint.method }, endpoint.response)
     },
     listSites() {
-      return request<SiteListItem[]>(analyticsRoutes.sites, {}, analyticsEndpointSchemas.analyticsSites.response)
+      const endpoint = analyticsEndpoints.listSites
+      return request<SiteListItem[]>(endpoint.path, { method: endpoint.method }, endpoint.response)
     },
     getSourceInfo(siteId: string, options?: SourceInfoOptions) {
-      return request<SourceInfoResponse>(analyticsRoutes.site.sourceInfo(siteId), { query: sourceInfoQuery(options) }, analyticsEndpointSchemas.analyticsSourceInfo.response)
+      const endpoint = analyticsEndpoints.getSourceInfo
+      return request<SourceInfoResponse>(endpoint.path(siteId), { method: endpoint.method, query: sourceInfoQuery(options) }, endpoint.response)
     },
     getAnalysisSources(siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: SearchTypeOptions & SourceRangeOptions) {
-      return request<AnalysisSourcesResponse>(analyticsRoutes.site.analysisSources(siteId), { query: tablesQuery(tables, options) }, analyticsEndpointSchemas.analyticsAnalysisSources.response)
+      const endpoint = analyticsEndpoints.getAnalysisSources
+      return request<AnalysisSourcesResponse>(endpoint.path(siteId), { method: endpoint.method, query: tablesQuery(tables, options) }, endpoint.response)
     },
     analyze<T = unknown>(siteId: string, params: unknown) {
-      return request<T>(analyticsRoutes.site.analyze(siteId), { method: 'POST', body: withDefaultSearchType(params), dedupe: true })
+      const endpoint = analyticsEndpoints.analyze
+      return request<T>(endpoint.path(siteId), { method: endpoint.method, body: withDefaultSearchType(params), dedupe: true })
     },
     queryRows<T = Record<string, unknown>>(siteId: string, state: unknown) {
-      return request<GscRowQueryResponse<T>>(analyticsRoutes.site.rows(siteId), { method: 'POST', body: withDefaultSearchType(state), dedupe: true }, analyticsEndpointSchemas.analyticsRows.response)
+      const endpoint = analyticsEndpoints.queryRows
+      return request<GscRowQueryResponse<T>>(endpoint.path(siteId), { method: endpoint.method, body: withDefaultSearchType(state), dedupe: true }, endpoint.response)
     },
     getRollup<T = unknown>(siteId: string, rollupId: string, params?: { start?: string, end?: string }) {
-      return request<RollupEnvelope<T>>(analyticsRoutes.site.rollup(siteId, rollupId), { query: params }, analyticsEndpointSchemas.analyticsRollup.response)
+      const endpoint = analyticsEndpoints.getRollup
+      return request<RollupEnvelope<T>>(endpoint.path(siteId, rollupId), { method: endpoint.method, query: params }, endpoint.response)
     },
     requestBackfill(siteId: string, range: BackfillRange) {
-      const body = shouldValidate('request') ? analyticsEndpointSchemas.analyticsBackfill.body.parse(range) : range
-      return request<BackfillResponse>(analyticsRoutes.site.backfill(siteId), { method: 'POST', body }, analyticsEndpointSchemas.analyticsBackfill.response)
+      const endpoint = analyticsEndpoints.requestBackfill
+      const body = shouldValidate('request') ? endpoint.body.parse(range) : range
+      return request<BackfillResponse>(endpoint.path(siteId), { method: endpoint.method, body }, endpoint.response)
     },
     getSitemaps(siteId: string) {
-      return request<SitemapIndex>(analyticsRoutes.site.sitemaps(siteId), {}, analyticsEndpointSchemas.analyticsSitemaps.response)
+      const endpoint = analyticsEndpoints.getSitemaps
+      return request<SitemapIndex>(endpoint.path(siteId), { method: endpoint.method }, endpoint.response)
     },
     getSitemapHistory(siteId: string, hash: string) {
-      return request<SitemapHistoryResponse>(analyticsRoutes.site.sitemapHistory(siteId, hash), {}, analyticsEndpointSchemas.analyticsSitemapHistory.response)
+      const endpoint = analyticsEndpoints.getSitemapHistory
+      return request<SitemapHistoryResponse>(endpoint.path(siteId, hash), { method: endpoint.method }, endpoint.response)
     },
     getSitemapChanges(siteId: string, params: { days?: number } = {}) {
-      return request<SitemapChangesResponse>(analyticsRoutes.site.sitemapChanges(siteId), { query: params }, analyticsEndpointSchemas.analyticsSitemapChanges.response)
+      const endpoint = analyticsEndpoints.getSitemapChanges
+      return request<SitemapChangesResponse>(endpoint.path(siteId), { method: endpoint.method, query: params }, endpoint.response)
     },
     getInspections(siteId: string) {
-      return request<InspectionIndex>(analyticsRoutes.site.inspections(siteId), {}, analyticsEndpointSchemas.analyticsInspections.response)
+      const endpoint = analyticsEndpoints.getInspections
+      return request<InspectionIndex>(endpoint.path(siteId), { method: endpoint.method }, endpoint.response)
     },
     getInspectionHistory(siteId: string, hash: string) {
-      return request<InspectionHistoryResponse>(analyticsRoutes.site.inspectionHistory(siteId, hash), {}, analyticsEndpointSchemas.analyticsInspectionHistory.response)
+      const endpoint = analyticsEndpoints.getInspectionHistory
+      return request<InspectionHistoryResponse>(endpoint.path(siteId, hash), { method: endpoint.method }, endpoint.response)
     },
     getIndexingUrls(siteId: string, params = {}) {
-      return request<IndexingUrlsResponse>(analyticsRoutes.site.indexingUrls(siteId), { query: indexingUrlsQuery(params) }, analyticsEndpointSchemas.analyticsIndexingUrls.response)
+      const endpoint = analyticsEndpoints.getIndexingUrls
+      return request<IndexingUrlsResponse>(endpoint.path(siteId), { method: endpoint.method, query: indexingUrlsQuery(params) }, endpoint.response)
     },
     getIndexingDiagnostics(siteId: string, params: IndexingDiagnosticsParams = {}) {
-      const parsed = shouldValidate('request') ? analyticsEndpointSchemas.analyticsIndexingDiagnostics.query.parse(params) : params
-      return request<IndexingDiagnostics>(analyticsRoutes.site.indexingDiagnostics(siteId), { query: indexingDiagnosticsQuery(parsed) }, analyticsEndpointSchemas.analyticsIndexingDiagnostics.response)
+      const endpoint = analyticsEndpoints.getIndexingDiagnostics
+      const parsed = shouldValidate('request') ? endpoint.query.parse(params) : params
+      return request<IndexingDiagnostics>(endpoint.path(siteId), { method: endpoint.method, query: indexingDiagnosticsQuery(parsed) }, endpoint.response)
     },
     requestIndexingInspect(siteId: string, body: IndexingInspectRequest) {
-      const parsed = shouldValidate('request') ? analyticsEndpointSchemas.analyticsIndexingInspect.body.parse(body) : body
-      return request<IndexingInspectResponse | IndexingInspectRateLimited>(analyticsRoutes.site.indexingInspect(siteId), { method: 'POST', body: parsed }, analyticsEndpointSchemas.analyticsIndexingInspect.response)
+      const endpoint = analyticsEndpoints.requestIndexingInspect
+      const parsed = shouldValidate('request') ? endpoint.body.parse(body) : body
+      return request<IndexingInspectResponse | IndexingInspectRateLimited>(endpoint.path(siteId), { method: endpoint.method, body: parsed }, endpoint.response)
     },
     getCountries(siteId: string, range: { start: string, end: string }) {
-      return request<CountriesResponse>(analyticsRoutes.site.countries(siteId), { query: range }, analyticsEndpointSchemas.analyticsCountries.response)
+      const endpoint = analyticsEndpoints.getCountries
+      return request<CountriesResponse>(endpoint.path(siteId), { method: endpoint.method, query: range }, endpoint.response)
     },
     getSearchAppearance(siteId: string, range: { start: string, end: string }) {
-      return request<SearchAppearanceResponse>(analyticsRoutes.site.searchAppearance(siteId), { query: range }, analyticsEndpointSchemas.analyticsSearchAppearance.response)
+      const endpoint = analyticsEndpoints.getSearchAppearance
+      return request<SearchAppearanceResponse>(endpoint.path(siteId), { method: endpoint.method, query: range }, endpoint.response)
     },
   }
 }

@@ -55,7 +55,8 @@ export interface OpfsHandleRegistry {
    * Decrement the reference count for each name; when a name reaches zero its
    * handle is dropped (releasing the OPFS sync access handle). Unknown names
    * are ignored so callers can release optimistically. Best-effort: a failing
-   * `drop` still removes the entry so a later acquire can re-register.
+   * `drop` is reported but still removes the entry so a later acquire can
+   * re-register.
    */
   release: (names: readonly string[]) => Promise<void>
   /** Live (non-zero refcount) registration count. Diagnostics + tests. */
@@ -93,6 +94,10 @@ export function createOpfsHandleRegistry(backend: OpfsHandleBackend): OpfsHandle
   // await that registration instead of starting their own.
   const pending = new Map<string, Promise<void>>()
 
+  function reportCleanupFailure(operation: string, error: unknown): void {
+    console.warn(`[gscdump/engine-duckdb-wasm] ${operation} failed`, error)
+  }
+
   async function acquire(name: string, openHandle: () => Promise<unknown> | unknown): Promise<void> {
     const existing = entries.get(name)
     if (existing) {
@@ -103,7 +108,9 @@ export function createOpfsHandleRegistry(backend: OpfsHandleBackend): OpfsHandle
     if (inflight) {
       // Another acquire is registering this name. Wait for it, then just bump
       // the refcount. If it failed, retry as a fresh first-registrant.
-      await inflight.catch(() => {})
+      // The first registrant observes the rejection. This waiter treats it as
+      // a retry signal and attempts a fresh registration below.
+      await inflight.then(() => undefined, () => undefined)
       const settled = entries.get(name)
       if (settled) {
         settled.refs++
@@ -139,7 +146,9 @@ export function createOpfsHandleRegistry(backend: OpfsHandleBackend): OpfsHandle
       if (entry.refs > 0)
         continue
       entries.delete(name)
-      await backend.drop(name).catch(() => {})
+      await backend.drop(name).catch((error: unknown) => {
+        reportCleanupFailure(`dropping OPFS handle ${name}`, error)
+      })
     }
   }
 
@@ -164,7 +173,9 @@ export function createOpfsHandleRegistry(backend: OpfsHandleBackend): OpfsHandle
       return
     }
     viewRefs.delete(key)
-    await drop().catch(() => {})
+    await drop().catch((error: unknown) => {
+      reportCleanupFailure(`dropping view ${key}`, error)
+    })
   }
 
   return {

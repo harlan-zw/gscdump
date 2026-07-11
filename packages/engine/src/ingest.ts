@@ -64,11 +64,70 @@ export interface IngestOptions {
   searchAppearance?: string
 }
 
+const COMMON_HTTP_AUTHORITY_RE = /^([\w.~-]+)(?::(\d{1,5}))?$/
+const IPV4_HOST_RE = /^\d+(?:\.\d+){3}$/
+
+function isCommonHttpAuthority(value: string): boolean {
+  const match = COMMON_HTTP_AUTHORITY_RE.exec(value)
+  if (!match)
+    return false
+  if (match[2] !== undefined && Number(match[2]) > 65_535)
+    return false
+  const host = match[1]!
+  if (IPV4_HOST_RE.test(host) && host.split('.').some(part => Number(part) > 255))
+    return false
+  return true
+}
+
 /**
  * Strip a GSC URL to its pathname. Core analytics stores pages by path so
  * queries don't carry origin-prefix filters.
  */
 export function toPath(gscUrl: string): string {
+  // GSC emits absolute HTTP(S) URLs. Extract the overwhelmingly common,
+  // already-normalized form without constructing a URL object per row. Fall
+  // back for inputs on which URL parsing performs meaningful normalization.
+  const authorityStart = gscUrl.startsWith('https://')
+    ? 8
+    : gscUrl.startsWith('http://')
+      ? 7
+      : -1
+  if (authorityStart > 0) {
+    const slash = gscUrl.indexOf('/', authorityStart)
+    const query = gscUrl.indexOf('?', authorityStart)
+    const hash = gscUrl.indexOf('#', authorityStart)
+    const backslash = gscUrl.indexOf('\\', authorityStart)
+    let firstDelimiter = gscUrl.length
+    if (slash >= 0 && slash < firstDelimiter)
+      firstDelimiter = slash
+    if (query >= 0 && query < firstDelimiter)
+      firstDelimiter = query
+    if (hash >= 0 && hash < firstDelimiter)
+      firstDelimiter = hash
+
+    // Empty/malformed authorities still belong on the standards-compliant
+    // fallback. A query/fragment directly after a valid authority means '/'.
+    const authority = gscUrl.slice(authorityStart, firstDelimiter)
+    if (backslash < 0
+      && !/\s/.test(gscUrl)
+      && firstDelimiter > authorityStart
+      && isCommonHttpAuthority(authority)) {
+      if (firstDelimiter !== slash)
+        return '/'
+      let pathEnd = gscUrl.length
+      if (query > slash && query < pathEnd)
+        pathEnd = query
+      if (hash > slash && hash < pathEnd)
+        pathEnd = hash
+      const path = gscUrl.slice(slash, pathEnd)
+      // URL.pathname resolves dot segments, backslashes, spaces/non-ASCII, and
+      // encoded dot segments. Preserve those edge-case semantics via fallback.
+      if (!/[^\x20-\x7E]/.test(path)
+        && !/(?:^|\/)(?:\.|%2e){1,2}(?:\/|$)/i.test(path)) {
+        return path
+      }
+    }
+  }
   try {
     return new URL(gscUrl).pathname
   }
@@ -338,20 +397,6 @@ export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAc
   let total = 0
   let overflowed = false
 
-  function bucketFor(table: TableName, date: string): Row[] {
-    let byDate = buckets.get(table)
-    if (!byDate) {
-      byDate = new Map()
-      buckets.set(table, byDate)
-    }
-    let rows = byDate.get(date)
-    if (!rows) {
-      rows = []
-      byDate.set(date, rows)
-    }
-    return rows
-  }
-
   return {
     get totalRows() {
       return total
@@ -362,22 +407,34 @@ export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAc
     push(table, rows) {
       if (overflowed)
         return false
+      let byDate = buckets.get(table)
+      let newestDate = trackDateBoundary ? latestDate.get(table) : undefined
       for (const r of rows) {
         const t = transformGscRow(table, r, options)
         if (!t || !t.date)
           continue
-        bucketFor(table, t.date).push(t.row)
-        total++
-        if (trackDateBoundary) {
-          const prev = latestDate.get(table)
-          if (!prev || t.date > prev)
-            latestDate.set(table, t.date)
+        if (!byDate) {
+          byDate = new Map()
+          buckets.set(table, byDate)
         }
+        let dateRows = byDate.get(t.date)
+        if (!dateRows) {
+          dateRows = []
+          byDate.set(t.date, dateRows)
+        }
+        dateRows.push(t.row)
+        total++
+        if (trackDateBoundary && (!newestDate || t.date > newestDate))
+          newestDate = t.date
         if (total > maxRows) {
+          if (newestDate)
+            latestDate.set(table, newestDate)
           overflowed = true
           return false
         }
       }
+      if (newestDate)
+        latestDate.set(table, newestDate)
       return true
     },
     drain() {

@@ -121,10 +121,11 @@ export function analyzeClustering(
   }
 
   if (clusterBy === 'prefix' || clusterBy === 'both') {
-    const unclustered = filtered.filter(kw => !clusteredKeywords.has(kw.query))
     const prefixMap = new Map<string, QueriesRow[]>()
 
-    for (const kw of unclustered) {
+    for (const kw of filtered) {
+      if (clusteredKeywords.has(kw.query))
+        continue
       const prefix = extractWordPrefix(kw.query)
       if (prefix) {
         const existing = prefixMap.get(prefix)
@@ -138,7 +139,8 @@ export function analyzeClustering(
     for (const [prefix, kws] of prefixMap) {
       if (kws.length >= minClusterSize) {
         clusterMap.set(prefix, { type: 'prefix', keywords: kws })
-        kws.forEach(kw => clusteredKeywords.add(kw.query))
+        for (const kw of kws)
+          clusteredKeywords.add(kw.query)
       }
     }
   }
@@ -148,24 +150,30 @@ export function analyzeClustering(
     if (data.keywords.length < minClusterSize)
       continue
 
-    const totalClicks = data.keywords.reduce((sum, k) => sum + num(k.clicks), 0)
-    const totalImpressions = data.keywords.reduce((sum, k) => sum + num(k.impressions), 0)
+    let totalClicks = 0
+    let totalImpressions = 0
+    let weightedPositionSum = 0
+    let positionWeight = 0
+    let positionSum = 0
     // Impression-weighted mean position: recover each keyword's summed
     // position (position - 1) * impressions, re-aggregate, then convert
     // back. Keywords with no impressions carry no weight and are excluded
     // from both sides of the ratio; if the whole cluster has zero weight,
     // fall back to the unweighted mean rather than dividing by zero.
-    const weightedPositionSum = data.keywords.reduce((sum, k) => {
+    for (const k of data.keywords) {
       const impressions = num(k.impressions)
-      return impressions > 0 ? sum + (num(k.position) - 1) * impressions : sum
-    }, 0)
-    const positionWeight = data.keywords.reduce((sum, k) => {
-      const impressions = num(k.impressions)
-      return impressions > 0 ? sum + impressions : sum
-    }, 0)
+      const position = num(k.position)
+      totalClicks += num(k.clicks)
+      totalImpressions += impressions
+      positionSum += position
+      if (impressions > 0) {
+        weightedPositionSum += (position - 1) * impressions
+        positionWeight += impressions
+      }
+    }
     const avgPosition = positionWeight > 0
       ? weightedPositionSum / positionWeight + 1
-      : data.keywords.reduce((sum, k) => sum + num(k.position), 0) / data.keywords.length
+      : positionSum / data.keywords.length
 
     clusters.push({
       clusterName: name,

@@ -62,6 +62,7 @@
   GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
   GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
   GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
+  GSCDUMP_WRITE_ANALYTICS_SCOPE: string
   gscdumpApi: function
   gscErrorToException: function
   gscPropertyMatchesTarget: function
@@ -84,6 +85,8 @@
   isValidGscDate: function
   isVerifiedGscPermission: function
   isVerifiedGscProperty: function
+  KNOWN_COVERAGE_STATES: object
+  KNOWN_PAGE_FETCH_STATES: object
   lifecycleErrorCodes: object
   lifecycleWebhookEvents: object
   listVerifiedSites: function
@@ -118,6 +121,7 @@
   storageError: function
   submitSitemap: function
   toIsoDate: function
+  unmappedInspectionReasons: function
   unverifySite: function
   unwrapResult: function
   URL_INSPECTION_DAILY_LIMIT: number
@@ -196,6 +200,27 @@
   verificationMethodsFor: function
   verifySite: function
 ./contracts: {}
+./dates:
+  countDays: function
+  currentPstDate: function
+  DAYS_PER_RANGE: number
+  daysAgoPst: function
+  daysAgoUtc: function
+  generateGscDateRange: function
+  getBackfillProgress: function
+  getDateRange: function
+  getFreshestGscDate: function
+  getLatestGscDate: function
+  getNextDate: function
+  getOldestGscDate: function
+  getPendingDates: function
+  getPstDate: function
+  groupIntoRanges: function
+  GSC_FINALIZED_LAG_DAYS: number
+  GSC_FRESHEST_LAG_DAYS: number
+  GSC_RETENTION_MONTHS: number
+  MS_PER_DAY: number
+  toIsoDate: function
 ./normalize:
   normalizeUrl: function
 ./query:

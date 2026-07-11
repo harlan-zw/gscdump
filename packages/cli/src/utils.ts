@@ -1,11 +1,12 @@
+import type { ConsolaInstance } from 'consola'
 import type { SearchType } from 'gscdump/query'
 import { Buffer } from 'node:buffer'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import process from 'node:process'
-import { createConsola } from 'consola'
 import { SearchTypes } from 'gscdump/query'
 import pkg from '../package.json' with { type: 'json' }
+import { useCliRuntime } from './runtime'
 
 export const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
 
@@ -19,10 +20,11 @@ export const VERSION: string = pkg.version
  * default.
  */
 export function noSubcommandSelected(parent: string, subNames: readonly string[]): boolean {
-  const idx = process.argv.indexOf(parent)
+  const argv = useCliRuntime().rawArgs
+  const idx = argv.indexOf(parent)
   if (idx < 0)
     return true
-  const next = process.argv[idx + 1]
+  const next = argv[idx + 1]
   if (!next)
     return true
   return !subNames.includes(next)
@@ -32,20 +34,29 @@ export function noSubcommandSelected(parent: string, subNames: readonly string[]
 // machine-readable output (JSON, CSV, raw query results). Consola's default
 // instance writes info/success/warn to stdout, which collides with `--json`
 // pipes — this override fixes that without per-call branching.
-const baseLogger = createConsola({
-  stdout: process.stderr,
-  stderr: process.stderr,
+export const logger = new Proxy({} as ConsolaInstance, {
+  get(_target, property) {
+    const active = useCliRuntime().logger as unknown as Record<PropertyKey, unknown>
+    const value = active[property]
+    return typeof value === 'function' ? value.bind(active) : value
+  },
+  set(_target, property, value) {
+    const active = useCliRuntime().logger as unknown as Record<PropertyKey, unknown>
+    active[property] = value
+    return true
+  },
 })
-
-export const logger = baseLogger.withTag('gscdump')
 
 /**
  * Silence info/success/warn so only errors surface. Use under `--quiet` /
  * `--json`; never call with `false` (we'd undo a `CONSOLA_LEVEL` env override).
  */
 export function setQuiet(quiet: boolean): void {
-  if (quiet)
-    baseLogger.level = 1 // errors only (LogLevels.error = 0, .warn = 1; pause warns too if called explicitly)
+  if (quiet) {
+    const runtime = useCliRuntime()
+    runtime.quiet = true
+    runtime.logger.level = 1 // errors only (LogLevels.error = 0, .warn = 1; pause warns too if called explicitly)
+  }
 }
 
 /** Standard JSON/quiet args; spread into citty `args` blocks. */
@@ -81,55 +92,45 @@ export function parseSearchType(value: unknown, flag: string = '--search-type'):
   return v as SearchType
 }
 
-// ANSI helpers honour NO_COLOR (https://no-color.org), `--no-color` argv,
-// and non-TTY stdout. `setNoColor(true)` lets the top-level CLI override.
-let colorEnabled: boolean = (() => {
-  if (process.env.NO_COLOR)
-    return false
-  if (process.argv.includes('--no-color'))
-    return false
-  // Stderr-attached colour is fine even when stdout is piped — `logger` writes
-  // to stderr, so check stderr's TTY status, not stdout's.
-  return Boolean(process.stderr.isTTY) || Boolean(process.env.FORCE_COLOR)
-})()
-
+// Colour is configured deliberately by the CLI creation layer. Keeping the
+// module default declaration-only avoids env reads and stdout mutation during
+// import; direct programmatic callers may opt out with `setNoColor(true)`.
 // Match a CSI escape sequence (ANSI colour code).
 // eslint-disable-next-line no-control-regex
 const ANSI_RE = /\x1B\[[0-9;]*m/g
 
-let stdoutWrapped = false
-function wrapStdoutForNoColor(): void {
-  if (stdoutWrapped)
-    return
-  stdoutWrapped = true
-  // Strip ANSI from any stdout write so inline literals scattered across
-  // commands automatically respect the no-colour setting without a sweep.
-  // Stderr (the logger) is left alone — interactive users still get colour
-  // even when piping stdout.
-  const original = process.stdout.write.bind(process.stdout)
+export function setNoColor(disable: boolean): void {
+  if (disable)
+    useCliRuntime().colorEnabled = false
+}
+
+export function configureColor(opts: { noColor: boolean, forceColor: boolean, stderrIsTTY: boolean }): void {
+  if (opts.noColor || (!opts.forceColor && !opts.stderrIsTTY))
+    setNoColor(true)
+}
+
+export function isColorEnabled(): boolean {
+  return useCliRuntime().colorEnabled
+}
+
+export async function withConfiguredOutput<T>(run: () => Promise<T>): Promise<T> {
+  if (isColorEnabled())
+    return run()
+  const original = process.stdout.write
+  const write = original.bind(process.stdout)
   process.stdout.write = ((chunk: any, ...rest: any[]): boolean => {
     if (typeof chunk === 'string')
       chunk = chunk.replace(ANSI_RE, '')
     else if (chunk instanceof Uint8Array)
       chunk = Buffer.from(chunk).toString('utf8').replace(ANSI_RE, '')
-    return original(chunk, ...rest)
+    return write(chunk, ...rest)
   }) as typeof process.stdout.write
-}
-
-export function setNoColor(disable: boolean): void {
-  if (disable) {
-    colorEnabled = false
-    wrapStdoutForNoColor()
+  try {
+    return await run()
   }
-}
-
-// Apply the initial state — if colour was disabled before any code ran (e.g.
-// NO_COLOR env), wrap stdout immediately.
-if (!colorEnabled)
-  wrapStdoutForNoColor()
-
-export function isColorEnabled(): boolean {
-  return colorEnabled
+  finally {
+    process.stdout.write = original
+  }
 }
 
 const ANSI = {
@@ -145,7 +146,7 @@ const ANSI = {
 export type Color = keyof typeof ANSI
 
 export function color(c: Color, s: string | number): string {
-  if (!colorEnabled)
+  if (!isColorEnabled())
     return String(s)
   return `${ANSI[c]}${s}${ANSI.reset}`
 }

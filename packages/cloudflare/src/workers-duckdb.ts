@@ -176,8 +176,6 @@ export function assertWorkerReadBudget(opts: WorkerReadBudgetInput): void {
 // of partitioned data per isolate without contending with DuckDB's 48 MB
 // memory limit.
 const ROW_CACHE_MAX_BYTES = 16 * 1024 * 1024
-let rowCacheBytes = 0
-const rowCache = new Map<string, { rows: Row[], bytes: number }>()
 
 function estimateRowsBytes(rows: Row[]): number {
   if (rows.length === 0)
@@ -198,62 +196,66 @@ export interface ArrowIPCChunkOptions {
   placeholder?: string
 }
 
-function inferExtraColumnType(values: unknown[]): ColumnDef['type'] {
-  let hasValue = false
-  let hasString = false
-  let hasFloat = false
-  let hasBigInt = false
-  for (const value of values) {
-    if (value === null || value === undefined)
-      continue
-    hasValue = true
-    if (typeof value === 'string') {
-      hasString = true
-      break
-    }
-    if (typeof value === 'bigint') {
-      hasBigInt = true
-      continue
-    }
-    if (typeof value === 'number') {
-      if (!Number.isInteger(value))
-        hasFloat = true
-      if (value > 2_147_483_647 || value < -2_147_483_648)
-        hasBigInt = true
-    }
+interface ColumnTypeInference {
+  hasValue: boolean
+  hasString: boolean
+  hasFloat: boolean
+  hasBigInt: boolean
+}
+
+function addInferredValue(inference: ColumnTypeInference, value: unknown): void {
+  if (value === null || value === undefined)
+    return
+  inference.hasValue = true
+  if (typeof value === 'string') {
+    inference.hasString = true
+    return
   }
-  if (!hasValue || hasString)
+  if (typeof value === 'bigint') {
+    inference.hasBigInt = true
+    return
+  }
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value))
+      inference.hasFloat = true
+    if (value > 2_147_483_647 || value < -2_147_483_648)
+      inference.hasBigInt = true
+  }
+}
+
+function inferredColumnType(inference: ColumnTypeInference): ColumnDef['type'] {
+  if (!inference.hasValue || inference.hasString)
     return 'VARCHAR'
-  if (hasFloat)
+  if (inference.hasFloat)
     return 'DOUBLE'
-  return hasBigInt ? 'BIGINT' : 'INTEGER'
+  return inference.hasBigInt ? 'BIGINT' : 'INTEGER'
 }
 
 function chunkSchemaColumns(rows: Row[], schemaColumns?: readonly ColumnDef[]): ColumnDef[] | undefined {
   const columns = schemaColumns ? [...schemaColumns] : []
   const seen = new Set(columns.map(c => c.name))
-  const extraValues = new Map<string, unknown[]>()
+  const extraColumns = new Map<string, ColumnTypeInference>()
 
   for (const row of rows) {
     for (const key in row) {
       if (seen.has(key))
         continue
-      let values = extraValues.get(key)
-      if (!values) {
-        values = []
-        extraValues.set(key, values)
+      let inference = extraColumns.get(key)
+      if (!inference) {
+        inference = { hasValue: false, hasString: false, hasFloat: false, hasBigInt: false }
+        extraColumns.set(key, inference)
       }
-      values.push(row[key])
+      addInferredValue(inference, row[key])
     }
   }
 
-  if (extraValues.size === 0)
+  if (extraColumns.size === 0)
     return schemaColumns ? columns : undefined
 
-  for (const [name, values] of extraValues) {
+  for (const [name, inference] of extraColumns) {
     columns.push({
       name,
-      type: inferExtraColumnType(values),
+      type: inferredColumnType(inference),
       nullable: true,
     })
   }
@@ -308,39 +310,60 @@ export function rowsToArrowIPCChunks(
   return chunks
 }
 
-function rowCacheGet(key: string): Row[] | undefined {
-  const hit = rowCache.get(key)
-  if (!hit)
-    return undefined
-  // Reinsert to move to LRU tail.
-  rowCache.delete(key)
-  rowCache.set(key, hit)
-  return hit.rows
+export interface DucklingsRowCache {
+  clear: () => void
+  get: (key: string) => Row[] | undefined
+  put: (key: string, rows: Row[]) => void
 }
 
-function rowCachePut(key: string, rows: Row[]): void {
-  const bytes = estimateRowsBytes(rows)
-  if (bytes > ROW_CACHE_MAX_BYTES)
-    return
-  while (rowCacheBytes + bytes > ROW_CACHE_MAX_BYTES) {
-    const oldest = rowCache.keys().next().value
-    if (oldest === undefined)
-      break
-    const evicted = rowCache.get(oldest)!
-    rowCache.delete(oldest)
-    rowCacheBytes -= evicted.bytes
+export function createDucklingsRowCache(maxBytes = ROW_CACHE_MAX_BYTES): DucklingsRowCache {
+  let totalBytes = 0
+  const entries = new Map<string, { rows: Row[], bytes: number }>()
+  return {
+    clear() {
+      entries.clear()
+      totalBytes = 0
+    },
+    get(key) {
+      const hit = entries.get(key)
+      if (!hit)
+        return undefined
+      entries.delete(key)
+      entries.set(key, hit)
+      return hit.rows
+    },
+    put(key, rows) {
+      const bytes = estimateRowsBytes(rows)
+      if (bytes > maxBytes)
+        return
+      const existing = entries.get(key)
+      if (existing) {
+        entries.delete(key)
+        totalBytes -= existing.bytes
+      }
+      while (totalBytes + bytes > maxBytes) {
+        const oldest = entries.keys().next().value
+        if (oldest === undefined)
+          break
+        const evicted = entries.get(oldest)!
+        entries.delete(oldest)
+        totalBytes -= evicted.bytes
+      }
+      entries.set(key, { rows, bytes })
+      totalBytes += bytes
+    },
   }
-  rowCache.set(key, { rows, bytes })
-  rowCacheBytes += bytes
 }
 
 export interface DucklingsExecutorOptions {
   ipcChunkBytes?: number
   ipcDirectCallBytes?: number
   ipcTotalBytes?: number
+  rowCache?: DucklingsRowCache
 }
 
 export function createDucklingsExecutor(env: AnalyticsEnv, opts: DucklingsExecutorOptions = {}): QueryExecutor {
+  const rowCache = opts.rowCache ?? createDucklingsRowCache()
   return {
     async execute({ sql, params, fileKeys, placeholderTables, pushdownFilters, dataSource, signal, table }) {
       signal?.throwIfAborted()
@@ -377,7 +400,7 @@ export function createDucklingsExecutor(env: AnalyticsEnv, opts: DucklingsExecut
         const filter = pushdownFilters?.[placeholder]
         const perFile = await mapLimit(keys, WORKER_R2_DECODE_CONCURRENCY, async (key) => {
           if (!filter) {
-            const cached = rowCacheGet(key)
+            const cached = rowCache.get(key)
             if (cached)
               return cached
           }
@@ -386,7 +409,7 @@ export function createDucklingsExecutor(env: AnalyticsEnv, opts: DucklingsExecut
           signal?.throwIfAborted()
           const rows = await decodeParquetToRows(bytes, filter ? { filter } : {})
           if (!filter)
-            rowCachePut(key, rows)
+            rowCache.put(key, rows)
           return rows
         })
         const merged: Row[] = []

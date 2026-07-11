@@ -775,7 +775,27 @@ function isoDate(ms: number): string {
  */
 export function hashUrlList(urls: readonly ParsedUrl[]): string {
   const locs = urls.map(u => u.loc).sort()
-  return hashUrl(locs.join('\n'))
+  return hashSortedUrlList(locs)
+}
+
+/** Hash sorted URL strings as though joined by `\n`, without allocating the join. */
+function hashSortedUrlList(locs: readonly string[]): string {
+  let hi = 0x811C9DC5
+  let lo = 0xCBF29CE4
+  for (let locIndex = 0; locIndex < locs.length; locIndex++) {
+    const loc = locs[locIndex]!
+    const length = loc.length + (locIndex < locs.length - 1 ? 1 : 0)
+    for (let i = 0; i < length; i++) {
+      const c = i < loc.length ? loc.charCodeAt(i) : 10
+      lo ^= c
+      const loMul = Math.imul(lo, 0x000001B3) >>> 0
+      const carry = Math.floor((lo * 0x000001B3) / 0x100000000)
+      const hiMul = (Math.imul(hi, 0x000001B3) + Math.imul(lo, 0x00000001) + carry) >>> 0
+      lo = loMul
+      hi = hiMul
+    }
+  }
+  return ((hi >>> 0).toString(16).padStart(8, '0') + (lo >>> 0).toString(16).padStart(8, '0'))
 }
 
 export interface SitemapStore {
@@ -908,7 +928,7 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
       // Compare only when the prior set was non-empty; first-run always writes.
       if (livePrior.length > 0) {
         const priorLocs = livePrior.map(r => String(r.loc)).sort()
-        const priorContentHash = hashUrl(priorLocs.join('\n'))
+        const priorContentHash = hashSortedUrlList(priorLocs)
         if (priorContentHash === contentHash) {
           return {
             added: 0,

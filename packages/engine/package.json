@@ -197,6 +197,7 @@
   },
   "devDependencies": {
     "@duckdb/duckdb-wasm": "catalog:",
+    "@types/node": "catalog:",
     "@types/proper-lockfile": "catalog:",
     "aws4fetch": "catalog:",
     "hyparquet": "catalog:",

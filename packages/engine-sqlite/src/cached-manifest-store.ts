@@ -40,14 +40,24 @@ export function createCachedManifestStore(
 ): CachedManifestStore {
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS
   const cache = new Map<string, CacheEntry>()
+  const inflight = new Map<string, Promise<ManifestEntry[]>>()
+  let generation = 0
+
+  function invalidateKey(key: string): void {
+    cache.delete(key)
+    // The load itself cannot be cancelled, but removing it ensures a read that
+    // starts after the mutation does not join a stale pre-mutation request.
+    inflight.delete(key)
+  }
 
   function bust(scope: { userId: string | number, siteId?: string, table?: string, searchType?: string }): void {
+    generation++
     const userId = String(scope.userId)
     if (scope.siteId && scope.table && scope.searchType !== undefined) {
-      cache.delete(`${userId}\0${scope.siteId}\0${scope.table}\0${scope.searchType}`)
+      invalidateKey(`${userId}\0${scope.siteId}\0${scope.table}\0${scope.searchType}`)
       // The unscoped read unions every searchType slice, so any slice mutation
       // also invalidates that cached union.
-      cache.delete(`${userId}\0${scope.siteId}\0${scope.table}\0`)
+      invalidateKey(`${userId}\0${scope.siteId}\0${scope.table}\0`)
       return
     }
     const prefix = scope.siteId && scope.table
@@ -55,9 +65,9 @@ export function createCachedManifestStore(
       : scope.siteId
         ? `${userId}\0${scope.siteId}\0`
         : `${userId}\0`
-    for (const k of cache.keys()) {
-      if (k.startsWith(prefix))
-        cache.delete(k)
+    for (const key of new Set([...cache.keys(), ...inflight.keys()])) {
+      if (key.startsWith(prefix))
+        invalidateKey(key)
     }
   }
 
@@ -70,9 +80,26 @@ export function createCachedManifestStore(
       const hit = cache.get(k)
       if (hit && hit.expiresAt > now)
         return hit.value
-      const value = await inner.listLive(filter)
-      cache.set(k, { value, expiresAt: now + ttlMs })
-      return value
+      const pending = inflight.get(k)
+      if (pending)
+        return pending
+
+      const loadGeneration = generation
+      const load = inner.listLive(filter)
+        .then((value) => {
+          // A mutation may have invalidated this read while it was in flight.
+          // Its original caller may still consume the result, but it must not
+          // repopulate the cache or displace a newer post-mutation load.
+          if (generation === loadGeneration && inflight.get(k) === load)
+            cache.set(k, { value, expiresAt: Date.now() + ttlMs })
+          return value
+        })
+        .finally(() => {
+          if (inflight.get(k) === load)
+            inflight.delete(k)
+        })
+      inflight.set(k, load)
+      return load
     },
     listAll: inner.listAll.bind(inner),
     registerVersion: async (entry, superseding) => {
@@ -105,7 +132,11 @@ export function createCachedManifestStore(
       return result
     },
     bust,
-    clear: () => cache.clear(),
+    clear: () => {
+      generation++
+      cache.clear()
+      inflight.clear()
+    },
     stats: () => ({ size: cache.size }),
   }
 }

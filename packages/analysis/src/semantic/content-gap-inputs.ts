@@ -21,8 +21,9 @@ export async function fetchContentGapInputs(
   executeSql: ExecuteSql,
   options: ContentGapInputOptions,
   normalizeUrl: NormalizeUrl,
+  now: () => number = () => performance.now(),
 ): Promise<{ queries: ContentGapQueryCandidate[], urls: string[], sqlMs: number }> {
-  const t1 = performance.now()
+  const t1 = now()
   const queryRows = await executeSql(`
     WITH query_totals AS (
       SELECT query,
@@ -61,7 +62,7 @@ export async function fetchContentGapInputs(
     ORDER BY impressions DESC
     LIMIT ?
   `, [Number(options.maxUrls)])
-  const sqlMs = performance.now() - t1
+  const sqlMs = now() - t1
 
   const queries = queryRows.map(row => ({
     query: String(row.query),

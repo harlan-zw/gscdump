@@ -29,25 +29,27 @@ export interface LongTailResult {
 }
 
 function downsampleLogRank(points: Row[]): Array<{ rank: number, impressions: number, clicks: number, query: string }> {
-  const all = points.map(p => ({
+  const toPoint = (p: Row): { rank: number, impressions: number, clicks: number, query: string } => ({
     rank: num(p.rank),
     impressions: num(p.impressions),
     clicks: num(p.clicks),
     query: str(p.query),
-  }))
-  if (all.length <= 80)
-    return all
-  const top = all.slice(0, 10)
-  const rest = all.slice(10)
-  const stepped: typeof all = []
+  })
+  if (points.length <= 80)
+    return points.map(toPoint)
+
+  // Select by raw rank before normalizing objects: a page can carry hundreds
+  // of thousands of query points, while the chart emits only ~80.
+  const sampled = points.slice(0, 10).map(toPoint)
   let nextThreshold = 1.15
-  for (const p of rest) {
-    if (p.rank >= nextThreshold) {
-      stepped.push(p)
+  for (let i = 10; i < points.length; i++) {
+    const point = points[i]!
+    if (num(point.rank) >= nextThreshold) {
+      sampled.push(toPoint(point))
       nextThreshold *= 1.15
     }
   }
-  return [...top, ...stepped]
+  return sampled
 }
 
 export const longTailAnalyzer = defineAnalyzer<AnalysisParams, Row, LongTailResult[]>({

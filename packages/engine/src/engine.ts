@@ -122,10 +122,16 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
         }
 
         if (bytes > MAX_DAY_BYTES) {
-          await dataSource.delete([key]).catch(() => {})
-          throw new Error(
+          const sizeError = new Error(
             `writeDay payload ${bytes} bytes exceeds ${MAX_DAY_BYTES} hard ceiling (table=${ctx.table}, key=${key})`,
           )
+          try {
+            await dataSource.delete([key])
+          }
+          catch (deleteError) {
+            throw new AggregateError([sizeError, deleteError], `${sizeError.message}; failed to delete oversized object`)
+          }
+          throw sizeError
         }
 
         const entry: ManifestEntry = {
@@ -203,10 +209,16 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
             bytes = probed.bytes
         }
         if (bytes > MAX_DAY_BYTES) {
-          await dataSource.delete([key]).catch(() => {})
-          throw new Error(
+          const sizeError = new Error(
             `writeHour payload ${bytes} bytes exceeds ${MAX_DAY_BYTES} hard ceiling (table=${ctx.table}, key=${key})`,
           )
+          try {
+            await dataSource.delete([key])
+          }
+          catch (deleteError) {
+            throw new AggregateError([sizeError, deleteError], `${sizeError.message}; failed to delete oversized object`)
+          }
+          throw sizeError
         }
 
         const entry: ManifestEntry = {

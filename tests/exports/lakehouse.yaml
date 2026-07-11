@@ -1,13 +1,16 @@
 .:
+  bigintJsonReplacer: function
   buildManifestPartitionFilter: function
   cacheGet: function
   cachePut: function
   catalogCacheScope: function
+  coerceBigIntToNumber: function
   connectIcebergCatalog: function
   DEFAULT_PARTITION_KEY_ENCODING: string
   defineIcebergDataset: function
   deriveTableSpec: function
   dropIcebergTables: function
+  encodeJsonBigintSafe: function
   ensureIcebergNamespace: function
   ICEBERG_TYPE_MAP: object
   invalidateSnapshotRef: function
@@ -15,6 +18,7 @@
   resolveIcebergDataFiles: function
   resolvePyIcebergPython: function
   runPyIcebergWriter: function
+  stringifyBigintSafe: function
   toIcebergDayCount: function
 ./provisioning:
   adoptCatalog: function

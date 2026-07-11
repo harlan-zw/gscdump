@@ -12,10 +12,12 @@ import {
   WEBHOOK_TIMESTAMP_HEADER,
 } from '../src'
 import {
+  analyticsEndpoints,
   analyticsRoutes as analyticsSurfaceRoutes,
   analyticsEndpointSchemas as analyticsSurfaceSchemas,
 } from '../src/analytics'
 import {
+  partnerEndpoints,
   partnerRoutes as partnerSurfaceRoutes,
   partnerEndpointSchemas as partnerSurfaceSchemas,
 } from '../src/partner'
@@ -85,6 +87,17 @@ describe('@gscdump/contracts', () => {
 
     expect(analyticsSurfaceRoutes.sites).toBe(analyticsRoutes.sites)
     expect(analyticsSurfaceSchemas.analyticsRows).toBe(partnerEndpointSchemas.analyticsRows)
+  })
+
+  it('keeps endpoint method, path, and validation metadata together', () => {
+    expect(partnerEndpoints.registerUser).toMatchObject({ method: 'POST', path: '/users/register' })
+    expect(partnerEndpoints.updateUserTokens.path('user 1')).toBe('/users/user%201/tokens')
+    expect(partnerEndpoints.updateUserTokens.body).toBe(partnerSurfaceSchemas.updateUserTokens.body)
+    expect(partnerEndpoints.deleteSite).toMatchObject({ method: 'DELETE' })
+
+    expect(analyticsEndpoints.queryRows).toMatchObject({ method: 'POST' })
+    expect(analyticsEndpoints.queryRows.path('site 1')).toBe('/api/__gsc/sites/site%201/rows')
+    expect(analyticsEndpoints.queryRows.response).toBe(analyticsSurfaceSchemas.analyticsRows.response)
   })
 
   it('validates the current webhook envelope contract', () => {

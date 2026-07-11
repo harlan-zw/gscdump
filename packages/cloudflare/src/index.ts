@@ -13,8 +13,8 @@
  * bundle.
  */
 
-export type { AnalyticsEngineHooks } from './engine'
-export { getAnalyticsEngine } from './engine'
+export type { AnalyticsEngineHooks, AnalyticsEngineRuntime } from './engine'
+export { createAnalyticsEngineRuntime, getAnalyticsEngine } from './engine'
 
 export type { AnalyticsEnv } from './env'
 
@@ -22,4 +22,5 @@ export { useAnalyticsEnv } from './env'
 export type { HostedR2QueryKeyInput, InflightDedupe } from './inflight-dedupe'
 export { createInflightDedupe, getHostedR2QueryKey } from './inflight-dedupe'
 export { signSizeHint, verifySizeHint } from './size-hint-sig'
-export { createDucklingsCodec, createDucklingsExecutor } from './workers-duckdb'
+export type { DucklingsRowCache } from './workers-duckdb'
+export { createDucklingsCodec, createDucklingsExecutor, createDucklingsRowCache } from './workers-duckdb'

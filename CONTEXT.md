@@ -60,6 +60,10 @@ _Avoid_: lookup table, cache.
 Lexical, versioned (`INTENT_CLASSIFIER_VERSION`) class of a raw query — informational / commercial / transactional / unknown, plus a `howTo` flag, packed to a small int (`encodeIntent`). Query-pure → materialized in the dimension or computed at query time. Brand intent is deliberately excluded (per-tenant + mutable). See ADR-0020.
 _Avoid_: category, tag.
 
+**GSC Date Semantics** (`gscdump/dates`):
+Lightweight date seam separating UTC storage arithmetic (`daysAgoUtc`, `MS_PER_DAY`, `toIsoDate`) from Search Console's Pacific reporting calendar (`daysAgoPst`, freshness/finalization helpers). Engine, analysis, browser, and CLI code import this subpath instead of the compatibility root.
+_Avoid_: an unqualified `daysAgo` outside the query-builder compatibility surface; it hides whether a UTC or Pacific day was intended.
+
 **Read-path overlay seam** (`canonicalSource`, `resolveExtra`):
 Opt-in hooks on `runOptimizedQuery` that let the MAIN query read a materialized canonical rollup, and extras read a variant rollup, instead of re-aggregating facts — gated so a miss falls back to live aggregation (correct, never wrong). See ADR-0017/0018.
 _Avoid_: cache, materialized view (it's a fallback-gated source override).

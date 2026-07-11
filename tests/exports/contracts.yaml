@@ -135,6 +135,7 @@
   webhookEventTypeSchema: object
   whoamiResponseSchema: object
 ./analytics:
+  analyticsEndpoints: object
   analyticsEndpointSchemas: object
   analyticsRoutes: object
 ./archetypes:
@@ -157,6 +158,7 @@
   lifecycleWebhookEvents: object
   parseGrantedScopes: function
   partnerControlEndpointSchemas: object
+  partnerEndpoints: object
   partnerEndpointSchemas: object
   partnerRoutes: object
   propertyNextActions: object

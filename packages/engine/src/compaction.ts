@@ -6,7 +6,7 @@ import type {
   ParquetCodec,
   WriteCtx,
 } from './storage'
-import { MS_PER_DAY } from 'gscdump'
+import { MS_PER_DAY } from 'gscdump/dates'
 import { dayPartition, inferSearchType, mondayOfWeek, monthPartition, objectKey, quarterOfMonth, quarterPartition, weekPartition } from './layout'
 import { currentSchemaVersion } from './schema'
 

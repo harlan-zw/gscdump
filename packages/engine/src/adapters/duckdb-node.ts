@@ -130,8 +130,10 @@ export function createNodeDuckDBHandle(opts: NodeDuckDBOptions = {}): DuckDBHand
         try {
           db.dropFile(name)
         }
-        catch {
-          // tolerate missing files
+        catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          if (!/not found|does not exist|unknown file/i.test(message))
+            throw error
         }
         // `COPY TO '...'` under NODE_RUNTIME writes to the actual filesystem;
         // `dropFile` only unregisters the virtual-FS entry. Unlink the real
@@ -139,8 +141,9 @@ export function createNodeDuckDBHandle(opts: NodeDuckDBOptions = {}): DuckDBHand
         try {
           unlinkSync(name)
         }
-        catch {
-          // fine — either virtual-only or already gone
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
+            throw error
         }
       }
     },

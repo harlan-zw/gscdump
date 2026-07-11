@@ -5,8 +5,10 @@ import { defineCommand } from 'citty'
 import { googleSearchConsole, hasGscWriteScope, hasIndexingScope } from 'gscdump/api'
 import { ofetch } from 'ofetch'
 import { loadTokens, resolveAuth, resolveBYOK } from '../auth'
-import { loadConfig, loadResolvedConfig } from '../config'
+import { loadConfig } from '../config'
+import { createCommandContext } from '../context'
 import { parseEnvFile } from '../env-file'
+import { resolveCliEnvironment } from '../environment'
 import { createLocalStore } from '../local-store'
 import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
 
@@ -109,11 +111,7 @@ async function checkAuth(envKeys: Set<string>): Promise<{ checks: Check[], liveT
   }
 
   // Pull the client ID we'll be authenticating with, regardless of source.
-  const clientId
-    = process.env.GSC_CLIENT_ID
-      ?? process.env.GOOGLE_CLIENT_ID
-      ?? (await loadConfig()).clientId
-      ?? null
+  const clientId = resolveCliEnvironment().clientId ?? (await loadConfig()).clientId ?? null
   if (clientId)
     checks.push({ name: 'auth.client_id', status: 'info', detail: clientId })
 
@@ -206,8 +204,7 @@ async function checkTimeSkew(): Promise<Check[]> {
   return [{ name: 'time', status: 'pass', detail: `in sync (${human})` }]
 }
 
-async function checkDataDir(): Promise<Check[]> {
-  const { dataDir } = await loadResolvedConfig()
+async function checkDataDir(dataDir: string): Promise<Check[]> {
   const display = displayPath(dataDir)
   const stat = await fs.stat(dataDir).catch(() => null)
   if (!stat)
@@ -225,8 +222,7 @@ async function checkDataDir(): Promise<Check[]> {
     : [{ name: 'dataDir', status: 'fail', detail: `${display} not writable` }]
 }
 
-async function checkStoreWatermarks(): Promise<Check[]> {
-  const { dataDir } = await loadResolvedConfig()
+async function checkStoreWatermarks(dataDir: string): Promise<Check[]> {
   const stat = await fs.stat(dataDir).catch(() => null)
   if (!stat?.isDirectory())
     return [{ name: 'store.watermarks', status: 'pass', detail: 'no store yet (run `gscdump sync`)' }]
@@ -315,6 +311,7 @@ export const doctorCommand = defineCommand({
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
+    const { dataDir } = await createCommandContext()
     // Cheap probes run unconditionally and in parallel. The auth check yields
     // the live token used by gsc.sites, so it stays sequential to that.
     // env runs first so the auth check can report which env var drives BYOK.
@@ -322,8 +319,8 @@ export const doctorCommand = defineCommand({
     const [authResult, timeChecks, dataDirChecks, watermarkChecks, gscApi, indexingApi, siteVerificationApi] = await Promise.all([
       checkAuth(envResult.envKeys),
       checkTimeSkew(),
-      checkDataDir(),
-      checkStoreWatermarks(),
+      checkDataDir(dataDir),
+      checkStoreWatermarks(dataDir),
       checkApiReachable('gsc.api', 'https://searchconsole.googleapis.com/$discovery/rest?version=v1'),
       checkApiReachable('indexing.api', 'https://indexing.googleapis.com/$discovery/rest?version=v3'),
       checkApiReachable('siteverification.api', 'https://www.googleapis.com/discovery/v1/apis/siteVerification/v1/rest'),

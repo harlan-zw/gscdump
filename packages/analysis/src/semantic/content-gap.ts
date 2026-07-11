@@ -1,11 +1,8 @@
 import type { AnalysisQuerySource } from '@gscdump/engine/source'
+import type { ContentGapEmbeddingRuntime } from './content-gap-embeddings'
 import type { ContentGapQueryCandidate } from './content-gap-inputs'
 import {
-  CONTENT_GAP_MODEL_ID,
-  CONTENT_GAP_QUERY_PREFIX,
-  embedContentGapTexts,
-  loadContentGapExtractor,
-  selectContentGapDevice,
+  createContentGapEmbeddingRuntime,
 } from './content-gap-embeddings'
 import { fetchContentGapInputs } from './content-gap-inputs'
 
@@ -68,6 +65,22 @@ export interface ContentGapAnalysis {
     device: 'webgpu' | 'wasm'
     modelId: string
   }
+}
+
+export interface ContentGapAnalyzer {
+  analyze: (source: AnalysisQuerySource, opts?: ContentGapOptions) => Promise<ContentGapAnalysis>
+}
+
+export interface CreateContentGapAnalyzerOptions {
+  embeddings?: ContentGapEmbeddingRuntime
+  loadInputs?: typeof fetchContentGapInputs
+  now?: () => number
+}
+
+interface ResolvedContentGapRuntime {
+  embeddings: ContentGapEmbeddingRuntime
+  loadInputs: typeof fetchContentGapInputs
+  now: () => number
 }
 
 const ORIGIN_RE = /^https?:\/\/[^/]+/
@@ -142,19 +155,32 @@ export function rankContentGaps(
     const qr = queries[i]!
     const qEmb = queryEmbeddings[i]!
     const currentIdx = urlIndex.get(qr.currentUrl)
-
-    const scored: Array<{ url: string, similarity: number }> = Array.from({ length: urls.length })
+    const top: Array<{ url: string, similarity: number }> = []
+    let currentSimilarity = 0
     for (let j = 0; j < urls.length; j++) {
-      scored[j] = {
-        url: urls[j]!,
-        similarity: cosineNormalized(qEmb, urlEmbeddings[j]!),
+      const similarity = cosineNormalized(qEmb, urlEmbeddings[j]!)
+      if (j === currentIdx)
+        currentSimilarity = similarity
+
+      // Only the recommendation and three alternatives are returned. Keep a
+      // stable top-four list instead of allocating and sorting every URL for
+      // every query (the default 1,500 x 400 input otherwise creates 600k
+      // short-lived objects and performs 1,500 full sorts).
+      let insertAt = top.length
+      while (insertAt > 0 && similarity > top[insertAt - 1]!.similarity)
+        insertAt--
+      if (insertAt < 4) {
+        top.splice(insertAt, 0, { url: urls[j]!, similarity })
+        if (top.length > 4)
+          top.pop()
       }
     }
-    scored.sort((a, b) => b.similarity - a.similarity)
 
-    const currentSimilarity = currentIdx != null ? cosineNormalized(qEmb, urlEmbeddings[currentIdx]!) : 0
-    const suggestedUrl = scored[0]!.url
-    const suggestedSimilarity = scored[0]!.similarity
+    const suggested = top[0]
+    if (!suggested)
+      continue
+    const suggestedUrl = suggested.url
+    const suggestedSimilarity = suggested.similarity
 
     if (suggestedUrl === qr.currentUrl)
       continue
@@ -171,7 +197,7 @@ export function rankContentGaps(
       currentSimilarity,
       suggestedUrl,
       suggestedSimilarity,
-      alternatives: scored.slice(1, 4),
+      alternatives: top.slice(1),
       divergence,
       impact: qr.impressions * divergence,
     })
@@ -181,9 +207,10 @@ export function rankContentGaps(
   return gaps
 }
 
-export async function analyzeContentGap(
+async function runContentGapAnalysis(
   source: AnalysisQuerySource,
   opts: ContentGapOptions = {},
+  runtime: ResolvedContentGapRuntime,
 ): Promise<ContentGapAnalysis> {
   if (!source.executeSql)
     throw new ContentGapSourceUnsupportedError(source.name ?? 'unknown')
@@ -198,25 +225,25 @@ export async function analyzeContentGap(
   } = opts
 
   notify(onProgress, { phase: 'loading-model', message: 'Checking device...' })
-  const t0 = performance.now()
-  const chosenDevice = await selectContentGapDevice(device)
+  const t0 = runtime.now()
+  const chosenDevice = await runtime.embeddings.selectDevice(device)
   notify(onProgress, {
     phase: 'loading-model',
-    message: `Loading ${CONTENT_GAP_MODEL_ID} on ${chosenDevice} (~110MB, cached after first run)...`,
+    message: `Loading ${runtime.embeddings.modelId} on ${chosenDevice} (~110MB, cached after first run)...`,
   })
-  const extractor = await loadContentGapExtractor(chosenDevice)
-  const modelMs = performance.now() - t0
+  const extractor = await runtime.embeddings.loadExtractor(chosenDevice)
+  const modelMs = runtime.now() - t0
 
   notify(onProgress, {
     phase: 'fetching-data',
     message: `Running SQL (device: ${chosenDevice})...`,
     modelMs,
   })
-  const { queries, urls, sqlMs } = await fetchContentGapInputs(executeSql, {
+  const { queries, urls, sqlMs } = await runtime.loadInputs(executeSql, {
     maxQueries,
     maxUrls,
     minImpressions,
-  }, normalizeUrl)
+  }, normalizeUrl, runtime.now)
 
   if (queries.length === 0 || urls.length === 0) {
     notify(onProgress, {
@@ -235,7 +262,7 @@ export async function analyzeContentGap(
         cacheHits: 0,
         totalInputs: 0,
         device: chosenDevice,
-        modelId: CONTENT_GAP_MODEL_ID,
+        modelId: runtime.embeddings.modelId,
       },
     }
   }
@@ -251,12 +278,12 @@ export async function analyzeContentGap(
     modelMs,
     sqlMs,
   })
-  const t2 = performance.now()
-  const queryEmbed = await embedContentGapTexts(
+  const t2 = runtime.now()
+  const queryEmbed = await runtime.embeddings.embed(
     extractor,
     'query',
     queryTexts,
-    t => CONTENT_GAP_QUERY_PREFIX + t,
+    t => runtime.embeddings.queryPrefix + t,
     (done, total) => {
       notify(onProgress, {
         phase: 'embedding-queries',
@@ -277,7 +304,7 @@ export async function analyzeContentGap(
     modelMs,
     sqlMs,
   })
-  const urlEmbed = await embedContentGapTexts(
+  const urlEmbed = await runtime.embeddings.embed(
     extractor,
     'passage',
     urlTexts,
@@ -293,7 +320,7 @@ export async function analyzeContentGap(
       })
     },
   )
-  const embedMs = performance.now() - t2
+  const embedMs = runtime.now() - t2
 
   notify(onProgress, {
     phase: 'computing-gaps',
@@ -302,7 +329,7 @@ export async function analyzeContentGap(
     sqlMs,
     embedMs,
   })
-  const t3 = performance.now()
+  const t3 = runtime.now()
   const gaps = rankContentGaps(
     queries,
     urls,
@@ -310,7 +337,7 @@ export async function analyzeContentGap(
     urlEmbed.vectors,
     minDivergence,
   )
-  const computeMs = performance.now() - t3
+  const computeMs = runtime.now() - t3
   const totalHits = queryEmbed.hits + urlEmbed.hits
   const totalInputs = queryTexts.length + urls.length
   const cacheNote = totalHits > 0 ? ` · ${totalHits}/${totalInputs} cache hits` : ''
@@ -334,7 +361,27 @@ export async function analyzeContentGap(
       cacheHits: totalHits,
       totalInputs,
       device: chosenDevice,
-      modelId: CONTENT_GAP_MODEL_ID,
+      modelId: runtime.embeddings.modelId,
     },
   }
+}
+
+export function createContentGapAnalyzer(opts: CreateContentGapAnalyzerOptions = {}): ContentGapAnalyzer {
+  const runtime: ResolvedContentGapRuntime = {
+    embeddings: opts.embeddings ?? createContentGapEmbeddingRuntime(),
+    loadInputs: opts.loadInputs ?? fetchContentGapInputs,
+    now: opts.now ?? (() => performance.now()),
+  }
+  return {
+    analyze(source, options) {
+      return runContentGapAnalysis(source, options, runtime)
+    },
+  }
+}
+
+export function analyzeContentGap(
+  source: AnalysisQuerySource,
+  opts: ContentGapOptions = {},
+): Promise<ContentGapAnalysis> {
+  return createContentGapAnalyzer().analyze(source, opts)
 }

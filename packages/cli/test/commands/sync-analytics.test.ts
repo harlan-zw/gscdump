@@ -109,7 +109,7 @@ describe('sync command (local analytics)', () => {
   })
 
   afterEach(async () => {
-    await fs.rm(tmpDir, { recursive: true }).catch(() => {})
+    await fs.rm(tmpDir, { recursive: true, force: true })
     configState.dataDir = null
   })
 

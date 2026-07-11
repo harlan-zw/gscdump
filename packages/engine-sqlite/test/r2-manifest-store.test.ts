@@ -14,7 +14,7 @@ import type { ManifestEntry } from '@gscdump/engine/contracts'
 import type { AnalyticsManifestDb } from '../src/r2-manifest-store'
 import { DatabaseSync } from 'node:sqlite'
 import { drizzle } from 'drizzle-orm/d1'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createCachedManifestStore } from '../src/cached-manifest-store'
 import { createD1ManifestStore } from '../src/r2-manifest-store'
 
@@ -278,6 +278,23 @@ describe('@gscdump/engine-sqlite createD1ManifestStore', () => {
 
       await cached.purgeTenant({ userId: '1', siteId: 'site-a' })
       expect(await cached.listLive({ userId: '1', siteId: 'site-a', table: 'gsc_pages' })).toEqual([])
+    })
+
+    it('coalesces concurrent cache misses for the same manifest scope', async () => {
+      const { store } = setup()
+      await store.registerVersion(entry())
+      const listLive = vi.spyOn(store, 'listLive')
+      const cached = createCachedManifestStore(store, { ttlMs: 60_000 })
+      const filter = { userId: '1', siteId: 'site-a', table: 'gsc_pages' }
+
+      const results = await Promise.all(
+        Array.from({ length: 20 }, () => cached.listLive(filter)),
+      )
+
+      expect(results.every(rows => rows.length === 1)).toBe(true)
+      expect(listLive).toHaveBeenCalledOnce()
+      await cached.listLive(filter)
+      expect(listLive).toHaveBeenCalledOnce()
     })
 
     it('batches chunked deletes into one D1 batch call', async () => {

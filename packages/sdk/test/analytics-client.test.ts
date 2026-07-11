@@ -46,7 +46,7 @@ describe('createAnalyticsClient', () => {
     })
     expect(calls[2]).toMatchObject({
       url: 'https://origin.example/api/__gsc/sites/s_1/analysis-sources',
-      options: { query: { tables: 'pages,keywords', searchType: 'web', start: '2026-05-01', end: '2026-05-07' } },
+      options: { query: { tables: 'keywords,pages', searchType: 'web', start: '2026-05-01', end: '2026-05-07' } },
     })
     expect(calls[3]).toMatchObject({
       url: 'https://origin.example/api/__gsc/sites/s_1/rows',

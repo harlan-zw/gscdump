@@ -331,10 +331,23 @@ export function useDailyTotalsFromIceberg(
         console.error(`[useDailyTotalsFromIceberg] site ${publicId} failed after ${Date.now() - siteStart}ms`, err)
       }
       finally {
+        const cleanups: Array<{ label: string, promise: Promise<unknown> }> = []
         if (opfsHandle)
-          await opfsHandle.detach().catch(() => {})
+          cleanups.push({ label: 'detach OPFS handle', promise: opfsHandle.detach() })
         if (perSiteConn)
-          await perSiteConn.close().catch(() => {})
+          cleanups.push({ label: 'close DuckDB connection', promise: perSiteConn.close() })
+        const cleanupResults = await Promise.allSettled(cleanups.map(cleanup => cleanup.promise))
+        for (const [index, result] of cleanupResults.entries()) {
+          if (result.status === 'fulfilled')
+            continue
+          const cleanup = cleanups[index]!
+          const cleanupError = result.reason instanceof Error ? result.reason : new Error(String(result.reason))
+          console.error(`[useDailyTotalsFromIceberg] failed to ${cleanup.label} for site ${publicId}`, cleanupError)
+          if (token === runToken) {
+            analyticsCtx.patchProgress(publicId, { stage: 'error', error: cleanupError.message, endedAt: Date.now() })
+            error.value ??= cleanupError
+          }
+        }
       }
     }
 

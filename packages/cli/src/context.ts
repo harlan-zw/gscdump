@@ -21,6 +21,8 @@ type GscClient = ReturnType<typeof googleSearchConsole>
 
 export interface CommandContext {
   config: GscdumpConfig
+  /** Fully resolved local data directory from the same config load. */
+  dataDir: string
   /** Auth used to construct the GSC client; OAuth2Client for saved-token flow, lightweight `Auth` for BYOK. */
   auth: OAuth2Client | GscAuth | null
   /** Non-null only when `needsAuth: true`; wraps `auth`. */
@@ -96,5 +98,5 @@ export async function createCommandContext(
     return selected as string
   }
 
-  return { config, auth, client, store, loadSites, resolveSite }
+  return { config, dataDir, auth, client, store, loadSites, resolveSite }
 }

@@ -127,19 +127,27 @@ export function analyzeCannibalization(
     if (pages.length < minPages)
       continue
 
-    pages.sort((a, b) => b.clicks - a.clicks)
-
-    const positions = pages.map(p => p.position)
-    const positionSpread = Math.max(...positions) - Math.min(...positions)
+    let minPosition = Number.POSITIVE_INFINITY
+    let maxPosition = Number.NEGATIVE_INFINITY
+    let totalClicks = 0
+    let totalImpressions = 0
+    for (const page of pages) {
+      minPosition = Math.min(minPosition, page.position)
+      maxPosition = Math.max(maxPosition, page.position)
+      totalClicks += page.clicks
+      totalImpressions += page.impressions
+    }
+    const positionSpread = maxPosition - minPosition
 
     if (positionSpread > maxPositionSpread)
       continue
 
+    pages.sort((a, b) => b.clicks - a.clicks)
     results.push({
       query,
       pages,
-      totalClicks: pages.reduce((sum, p) => sum + p.clicks, 0),
-      totalImpressions: pages.reduce((sum, p) => sum + p.impressions, 0),
+      totalClicks,
+      totalImpressions,
       positionSpread,
     })
   }

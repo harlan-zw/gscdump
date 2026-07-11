@@ -13,7 +13,7 @@
 import type { TableName, TenantCtx } from '@gscdump/contracts'
 import type { SearchType } from 'gscdump/query'
 import type { CompactionTier, ManifestEntry } from './storage'
-import { MS_PER_DAY, toIsoDate } from 'gscdump'
+import { MS_PER_DAY, toIsoDate } from 'gscdump/dates'
 
 export function dayPartition(date: string): string {
   return `daily/${date}`

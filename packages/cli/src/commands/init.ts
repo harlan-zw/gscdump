@@ -7,6 +7,7 @@ import { defineCommand } from 'citty'
 import { googleSearchConsole } from 'gscdump/api'
 import { authenticate, getAuthCredentials, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { defaultDataDir, loadConfig, saveConfig } from '../config'
+import { applyCliEnvironment } from '../environment'
 import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
 
 const ENV_LINE_RE = /^([^=]+)=(.*)$/
@@ -106,11 +107,12 @@ export const initCommand = defineCommand({
     if (envCid && envSec && envRef) {
       logger.info('Found .env file with credentials')
 
-      process.env.GOOGLE_CLIENT_ID = envCid
-      process.env.GOOGLE_CLIENT_SECRET = envSec
-      process.env.GOOGLE_REFRESH_TOKEN = envRef
-      if (envAcc)
-        process.env.GOOGLE_ACCESS_TOKEN = envAcc
+      applyCliEnvironment({
+        GOOGLE_ACCESS_TOKEN: envAcc,
+        GOOGLE_CLIENT_ID: envCid,
+        GOOGLE_CLIENT_SECRET: envSec,
+        GOOGLE_REFRESH_TOKEN: envRef,
+      })
 
       await saveConfig({
         ...config,

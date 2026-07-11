@@ -33,7 +33,7 @@ describe('data dir resolution', () => {
   })
 
   afterEach(async () => {
-    await fs.rm(tmp, { recursive: true }).catch(() => {})
+    await fs.rm(tmp, { recursive: true, force: true })
   })
 
   it('falls back to the default dir when config.dataDir is absent', () => {

@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { useCliRuntime } from './runtime'
 
 const ENV_LINE_RE = /^([^=]+)=(.*)$/
 
@@ -60,7 +61,11 @@ export function getLoadedEnvPath(): string | null {
  * Returns the keys that were actually applied (i.e. weren't already set).
  */
 export function loadEnvFromCwd(): string[] {
-  const envPath = path.join(process.cwd(), '.env')
+  return loadEnvFile({ cwd: process.cwd(), env: useCliRuntime().environment })
+}
+
+export function loadEnvFile(opts: { cwd: string, env: Record<string, string | undefined> }): string[] {
+  const envPath = path.join(opts.cwd, '.env')
   const parsed = parseEnvFile(envPath)
   if (!parsed)
     return []
@@ -68,8 +73,8 @@ export function loadEnvFromCwd(): string[] {
   loadedEnvPath = envPath
   const applied: string[] = []
   for (const [key, value] of Object.entries(parsed)) {
-    if (process.env[key] === undefined) {
-      process.env[key] = value
+    if (opts.env[key] === undefined) {
+      opts.env[key] = value
       applied.push(key)
       appliedEnvKeys.add(key)
     }

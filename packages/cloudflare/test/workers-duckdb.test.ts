@@ -2,7 +2,7 @@ import type { Row } from '@gscdump/engine/contracts'
 import { encodeRowsToParquet } from '@gscdump/engine/hyparquet'
 import { tableFromIPC } from '@uwdata/flechette'
 import { describe, expect, it, vi } from 'vitest'
-import { assertWorkerReadBudget, createDucklingsExecutor, DuckDBServiceTimeoutError, mapLimit, rowsToArrowIPCChunks, withDuckDBDeadline } from '../src/workers-duckdb'
+import { assertWorkerReadBudget, createDucklingsExecutor, createDucklingsRowCache, DuckDBServiceTimeoutError, mapLimit, rowsToArrowIPCChunks, withDuckDBDeadline } from '../src/workers-duckdb'
 
 describe('withDuckDBDeadline', () => {
   it('resolves when the op finishes before the deadline', async () => {
@@ -19,7 +19,7 @@ describe('withDuckDBDeadline', () => {
   it('surfaces the timeout fast — never rides the wall ceiling', async () => {
     const stalled = new Promise<string>(() => {})
     const started = Date.now()
-    await withDuckDBDeadline(stalled, 30).catch(() => {})
+    await expect(withDuckDBDeadline(stalled, 30)).rejects.toBeInstanceOf(DuckDBServiceTimeoutError)
     expect(Date.now() - started).toBeLessThan(500)
   })
 
@@ -111,6 +111,22 @@ describe('worker read guardrails', () => {
     expect(head).toHaveBeenCalled()
     expect(read).not.toHaveBeenCalled()
     expect(runSQL).not.toHaveBeenCalled()
+  })
+})
+
+describe('ducklings row cache', () => {
+  it('owns capacity and eviction per cache instance', () => {
+    const first = createDucklingsRowCache(64)
+    const second = createDucklingsRowCache(64)
+    const row = [{ value: 1 }]
+
+    first.put('a', row)
+    expect(first.get('a')).toBe(row)
+    expect(second.get('a')).toBeUndefined()
+
+    first.put('b', [{ value: 2 }])
+    expect(first.get('a')).toBeUndefined()
+    expect(first.get('b')).toEqual([{ value: 2 }])
   })
 })
 

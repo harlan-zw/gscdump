@@ -59,7 +59,7 @@ describe('analysis-local', () => {
   })
 
   afterEach(async () => {
-    await fs.rm(tmpDir, { recursive: true }).catch(() => {})
+    await fs.rm(tmpDir, { recursive: true, force: true })
   })
 
   it('hasLocalData returns false on an empty store', async () => {

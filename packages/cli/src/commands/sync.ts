@@ -6,9 +6,9 @@ import process from 'node:process'
 import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
-import { daysAgo, getDateRange, progressBar } from 'gscdump'
+import { progressBar } from 'gscdump'
+import { daysAgoUtc as daysAgo, getDateRange } from 'gscdump/dates'
 import { SearchTypes } from 'gscdump/query'
-import { loadResolvedConfig } from '../config'
 import { createCommandContext } from '../context'
 import { allTables, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, runWithConcurrency } from '../utils'
@@ -246,8 +246,8 @@ export const syncCommand = defineCommand({
   async run({ args }) {
     const { json, quiet } = applyOutputMode(args)
     if (args.status) {
-      const config = await loadResolvedConfig()
-      await printSyncStatus(config, args.site ? String(args.site) : undefined, json)
+      const ctx = await createCommandContext()
+      await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, args.site ? String(args.site) : undefined, json)
       return
     }
 

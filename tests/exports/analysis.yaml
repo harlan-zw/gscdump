@@ -113,6 +113,8 @@
   analyzeContentGap: function
   ContentGapSourceUnsupportedError: function
   cosineNormalized: function
+  createContentGapAnalyzer: function
+  createMemoryContentGapCache: function
   deriveUrlText: function
   normalizeUrl: function
   rankContentGaps: function

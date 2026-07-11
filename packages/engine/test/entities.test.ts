@@ -8,6 +8,7 @@ import {
   createSitemapStore,
   emptyTypesKey,
   hashUrl,
+  hashUrlList,
   INSPECTION_HISTORY_MAX_BYTES,
   inspectionBaseKey,
   inspectionEventKey,
@@ -453,6 +454,12 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
   function urls(...locs: string[]): { loc: string }[] {
     return locs.map(loc => ({ loc }))
   }
+
+  it('hashes URL lists exactly like the sorted newline-joined representation', () => {
+    const list = urls('https://e.com/c', 'https://e.com/a', 'https://e.com/b')
+    expect(hashUrlList(list)).toBe(hashUrl(list.map(item => item.loc).sort().join('\n')))
+    expect(hashUrlList([])).toBe(hashUrl(''))
+  })
 
   it('first run: every URL is added; one delta parquet is written', async () => {
     const { ds, store } = makeFakeDataSource()

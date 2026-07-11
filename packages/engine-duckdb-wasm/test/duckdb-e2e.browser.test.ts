@@ -76,7 +76,7 @@ describe('real DuckDB-WASM + real OPFS e2e', () => {
   }, 60_000)
 
   afterEach(async () => {
-    await clearOpfsSnapshotCache().catch(() => {})
+    await clearOpfsSnapshotCache()
   })
 
   it('attaches a real parquet into OPFS and queries it through BROWSER_FSACCESS', async () => {

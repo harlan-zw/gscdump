@@ -4,13 +4,10 @@ import { Buffer } from 'node:buffer'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
-import { DuckDBInstance } from '@duckdb/node-api'
-import { dateColumnsFor } from '@gscdump/engine/schema'
-import { sqlEscape } from '@gscdump/engine/sql'
-import { dateReplaceClause } from '@gscdump/engine/sql-fragments'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
+import { readParquetRows } from '../native-duckdb'
 import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseSearchType, toCSV } from '../utils'
 
 const DEFAULT_OUT = './gscdump-export'
@@ -180,7 +177,7 @@ async function dumpRowFormat(
   let totalRows = 0
   for (const [table, tableEntries] of byTable) {
     const filePaths = tableEntries.map(e => path.join(store.dataDir, e.objectKey))
-    const rows = await readTableRows(filePaths, table)
+    const rows = await readParquetRows(filePaths, table)
     const ext = format === 'csv' ? 'csv' : format === 'ndjson' ? 'ndjson' : 'json'
     const target = path.join(siteDir, `${table}.${ext}`)
     let body: string
@@ -195,28 +192,6 @@ async function dumpRowFormat(
     totalRows += rows.length
   }
   return { files, rows: totalRows }
-}
-
-async function readTableRows(filePaths: string[], table: TableName): Promise<Record<string, unknown>[]> {
-  // Native `@duckdb/node-api` (not the engine vFS handle) for a one-shot bulk
-  // read of on-disk partitions at native speed. Read semantics that must match
-  // the engine — e.g. the date canonicalization below — go through the shared
-  // sql-fragments helper. See docs/adr/0016-duckdb-two-node-runtimes-by-design.md.
-  const instance = await DuckDBInstance.create(':memory:')
-  const conn = await instance.connect()
-  try {
-    const fileList = filePaths.map(p => `'${sqlEscape(p)}'`).join(', ')
-    // Canonicalize legacy VARCHAR `date` columns to ISO strings, matching the
-    // engine codec's read path — without it `dump --format json|csv|ndjson`
-    // emits a different date shape than every other read of the same parquet.
-    const replace = dateReplaceClause(dateColumnsFor(table), 'string')
-    const reader = await conn.runAndReadAll(`SELECT * ${replace} FROM read_parquet([${fileList}], union_by_name=true)`)
-    return reader.getRowObjects() as Record<string, unknown>[]
-  }
-  finally {
-    conn.closeSync()
-    instance.closeSync()
-  }
 }
 
 async function compactClosedMonths(store: LocalStore, siteUrl: string, quiet: unknown): Promise<void> {

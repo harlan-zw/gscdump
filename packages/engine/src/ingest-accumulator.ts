@@ -113,6 +113,19 @@ export function createIngestAccumulator(opts: CreateIngestAccumulatorOptions): I
   const { engine, ctx, hooks, ...accOpts } = opts
   const acc: RowAccumulator = createRowAccumulator(accOpts)
 
+  function reportHookFailure(hook: string, error: unknown): void {
+    console.warn(`[gscdump/engine] ${hook} hook failed`, error)
+  }
+
+  async function notifyWriteError(info: Parameters<IngestAccumulatorHooks['onWriteError']>[0]): Promise<void> {
+    try {
+      await hooks.onWriteError(info)
+    }
+    catch (hookError) {
+      reportHookFailure('onWriteError', hookError)
+    }
+  }
+
   async function writeOne(table: TableName, date: string, rows: Row[]): Promise<{ ok: true, rows: number } | { ok: false }> {
     const scope = scopeOf(ctx, table, date)
     const write = ctx.grain === 'hour'
@@ -125,16 +138,21 @@ export function createIngestAccumulator(opts: CreateIngestAccumulatorOptions): I
         return { ok: true as const, rows: rows.length }
       })
       .catch(async (err) => {
-        await hooks.onWriteError({ table, date, error: err }).catch(() => {})
+        await notifyWriteError({ table, date, error: err })
         return { ok: false as const }
       })
   }
 
   async function recover(table: TableName, date: string): Promise<boolean> {
     const scope = scopeOf(ctx, table, date)
-    await engine.setSyncState(scope, 'failed', { error: 'mid-continuation-skip' }).catch(() => {})
+    try {
+      await engine.setSyncState(scope, 'failed', { error: 'mid-continuation-skip' })
+    }
+    catch (stateError) {
+      await notifyWriteError({ table, date, error: stateError })
+    }
     return hooks.onRecover(table, date).catch(async (err) => {
-      await hooks.onWriteError({ table, date, error: err }).catch(() => {})
+      await notifyWriteError({ table, date, error: err })
       return false
     })
   }
@@ -155,15 +173,15 @@ export function createIngestAccumulator(opts: CreateIngestAccumulatorOptions): I
             tasks.push(recover(table, date))
         }
         const results = await Promise.all(tasks).catch(async (err) => {
-          await hooks.onWriteError({ table: null, date: null, error: err }).catch(() => {})
+          await notifyWriteError({ table: null, date: null, error: err })
           return [] as boolean[]
         })
         if (overflowed) {
-          await hooks.onWriteError({
+          await notifyWriteError({
             table: null,
             date: null,
             error: new Error(`ingest accumulator overflow at ${totalRows} rows; recovering via forced re-sync`),
-          }).catch(() => {})
+          })
         }
         return { flushed: 0, recovered: results.filter(Boolean).length, failed: 0, rowsWritten: 0 }
       }
@@ -188,8 +206,14 @@ export function createIngestAccumulator(opts: CreateIngestAccumulatorOptions): I
         }
       }
 
-      if (flushed > 0)
-        await hooks.onJobComplete?.({ flushed, rowsWritten }).catch(() => {})
+      if (flushed > 0 && hooks.onJobComplete) {
+        try {
+          await hooks.onJobComplete({ flushed, rowsWritten })
+        }
+        catch (hookError) {
+          reportHookFailure('onJobComplete', hookError)
+        }
+      }
 
       return { flushed, recovered: 0, failed, rowsWritten }
     },

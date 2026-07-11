@@ -168,6 +168,27 @@ describe('assembleDatesRow', () => {
     expect(toPath('/already-a-path')).toBe('/already-a-path')
   })
 
+  it('extracts common URL paths without changing query, fragment, or root semantics', () => {
+    expect(toPath('https://example.com/foo/bar?utm_source=test#intro')).toBe('/foo/bar')
+    expect(toPath('http://example.com?utm_source=test')).toBe('/')
+    expect(toPath('https://example.com')).toBe('/')
+  })
+
+  it('preserves URL pathname normalization for uncommon inputs', () => {
+    expect(toPath('https://example.com/a/../b')).toBe('/b')
+    expect(toPath('https://example.com/café')).toBe('/caf%C3%A9')
+    expect(toPath('https://example.com/a%2e%2e/b')).toBe('/a%2e%2e/b')
+    expect(toPath('https://example.com\\windows\\path')).toBe('/windows/path')
+  })
+
+  it('preserves malformed absolute URL inputs instead of partially parsing them', () => {
+    expect(toPath('https://example.com:bad/foo')).toBe('https://example.com:bad/foo')
+    expect(toPath('https://example.com:99999/foo')).toBe('https://example.com:99999/foo')
+    expect(toPath('https://%zz/foo')).toBe('https://%zz/foo')
+    expect(toPath('https://[bad]/foo')).toBe('https://[bad]/foo')
+    expect(toPath('https://999.999.999.999/foo')).toBe('https://999.999.999.999/foo')
+  })
+
   it('toSumPosition returns 0 for impressions=0 (zero-impression rows must contribute nothing to either side of the weighted mean)', () => {
     expect(toSumPosition(5, 0)).toBe(0)
     expect(toSumPosition(1, 0)).toBe(0)
@@ -237,6 +258,13 @@ describe('createRowAccumulator', () => {
       { keys: ['/a'], clicks: 0, impressions: 0, position: 0 },
     ])
     expect(acc.totalRows).toBe(0)
+    expect(acc.drain().size).toBe(0)
+  })
+
+  it('does not create an empty table bucket for an empty push', () => {
+    const acc = createRowAccumulator()
+    expect(acc.push('pages', [])).toBe(true)
+    expect(acc.drain().size).toBe(0)
   })
 
   it('drainCompleted is a no-op when trackDateBoundary is off', () => {

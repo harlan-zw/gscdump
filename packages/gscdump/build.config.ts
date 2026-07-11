@@ -38,6 +38,11 @@ export default defineBuildConfig({
     },
     {
       type: 'bundle',
+      input: ['./src/dates.ts'],
+      outDir: './dist',
+    },
+    {
+      type: 'bundle',
       input: ['./src/normalize.ts'],
       outDir: './dist',
     },

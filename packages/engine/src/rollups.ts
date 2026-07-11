@@ -18,7 +18,7 @@ import type { DataSource, FileSetRef, Row, TableName } from './contracts'
 import type { EngineError } from './errors'
 import type { ColumnDef } from './schema'
 import { encodeJsonBigintSafe } from '@gscdump/lakehouse'
-import { MS_PER_DAY } from 'gscdump'
+import { MS_PER_DAY } from 'gscdump/dates'
 import { encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { createIndexingMetadataStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexPrefix } from './entities'
 import { engineErrors } from './errors'
@@ -1006,6 +1006,42 @@ export const topKeywords28dParquetRollup: RollupDef = {
  * Reflects the last sync/compaction, not the live tail — readers that need the
  * tail can layer a recent-overlay later (the envelope carries `builtAt`).
  */
+interface CanonicalVariant {
+  query: string
+  clicks: number
+  impressions: number
+  sumPos: number
+}
+
+interface CanonicalVariantBucket {
+  count: number
+  top: CanonicalVariant[]
+}
+
+const CANONICAL_VARIANT_LIMIT = 10
+
+function retainCanonicalVariant(
+  bucket: CanonicalVariantBucket,
+  query: string,
+  clicks: number,
+  impressions: number,
+  sumPos: number,
+): void {
+  bucket.count++
+  let insertAt = 0
+  while (insertAt < bucket.top.length) {
+    const existing = bucket.top[insertAt]!
+    if (clicks > existing.clicks || (clicks === existing.clicks && query.localeCompare(existing.query) < 0))
+      break
+    insertAt++
+  }
+  if (insertAt >= CANONICAL_VARIANT_LIMIT)
+    return
+  bucket.top.splice(insertAt, 0, { query, clicks, impressions, sumPos })
+  if (bucket.top.length > CANONICAL_VARIANT_LIMIT)
+    bucket.top.pop()
+}
+
 export const queryCanonicalVariantsRollup: RollupDef = {
   id: 'query_canonical_variants',
   windowDays: null,
@@ -1036,8 +1072,7 @@ export const queryCanonicalVariantsRollup: RollupDef = {
     // sites (plan §8; 60dbadbb). Paging by the RAW query (not the derived canonical
     // joinKey) is SAFE because we emit per-variant rows and regroup by canonical in
     // JS below — a canonical whose variants straddle a page boundary is reassembled.
-    interface Variant { query: string, clicks: number, impressions: number, sumPos: number }
-    const byCanonical = new Map<string, Variant[]>()
+    const byCanonical = new Map<string, CanonicalVariantBucket>()
     const dimStore = createQueryDimStore({ dataSource })
     const useDim = (await dimStore.loadMeta(ctx)) !== null
     const canonExpr = useDim ? 'COALESCE(qd.query_canonical, q.query)' : 'q.query'
@@ -1069,33 +1104,36 @@ export const queryCanonicalVariantsRollup: RollupDef = {
       })
       for (const r of rows) {
         const joinKey = String(r.joinKey)
-        const list = byCanonical.get(joinKey)
-        const v: Variant = { query: String(r.query), clicks: Number(r.clicks), impressions: Number(r.impressions), sumPos: Number(r.sum_pos) }
-        if (list)
-          list.push(v)
-        else
-          byCanonical.set(joinKey, [v])
+        let bucket = byCanonical.get(joinKey)
+        if (!bucket) {
+          bucket = { count: 0, top: [] }
+          byCanonical.set(joinKey, bucket)
+        }
+        retainCanonicalVariant(
+          bucket,
+          String(r.query),
+          Number(r.clicks),
+          Number(r.impressions),
+          Number(r.sum_pos),
+        )
       }
       if (rows.length < ROLLUP_PAGE_ROWS_WIDE)
         break
       cursor = String(rows[rows.length - 1]!.query)
     }
 
-    // Final per-canonical format (in JS over the merged variants): rank by clicks
-    // desc with a `query` tiebreak for deterministic output across rebuilds, then
-    // pack the top-10 as `query:::clicks:::impressions:::position` joined by `||`,
-    // identical to the old GROUP_CONCAT. `variantCount` counts ALL variants;
-    // `canonicalName` is the top variant; a 0-impression variant is dropped from
-    // the string (matching the old NULL-position omission) but still counted.
+    // Final per-canonical format (in JS over the merged variants). Each bucket
+    // retained only its ranked top ten while streaming, but `count` still covers
+    // every variant. This bounds memory by canonical count instead of raw query
+    // cardinality and avoids sorting every variant at the end.
     const out: Array<{ joinKey: string, variantCount: bigint, canonicalName: string | null, variants: string | null }> = []
-    for (const [joinKey, variants] of byCanonical) {
-      variants.sort((a, b) => b.clicks - a.clicks || a.query.localeCompare(b.query))
-      const canonicalName = variants[0]?.query ?? null
-      const top = variants.slice(0, 10).filter(v => v.impressions > 0)
+    for (const [joinKey, bucket] of byCanonical) {
+      const canonicalName = bucket.top[0]?.query ?? null
+      const top = bucket.top.filter(v => v.impressions > 0)
       const variantsStr = top.length === 0
         ? null
         : top.map(v => `${v.query}:::${v.clicks}:::${v.impressions}:::${(v.sumPos / v.impressions + 1).toFixed(1)}`).join('||')
-      out.push({ joinKey, variantCount: BigInt(variants.length), canonicalName, variants: variantsStr })
+      out.push({ joinKey, variantCount: BigInt(bucket.count), canonicalName, variants: variantsStr })
     }
     return out
   },
@@ -1644,6 +1682,57 @@ export const sitemapHealthRollup: RollupDef = {
   },
 }
 
+interface RecentSitemapChange {
+  loc: string
+  feedpath: string
+  at: number
+  sequence: number
+}
+
+const RECENT_SITEMAP_CHANGE_LIMIT = 200
+
+function isLessRecent(a: RecentSitemapChange, b: RecentSitemapChange): boolean {
+  return a.at < b.at || (a.at === b.at && a.sequence > b.sequence)
+}
+
+/** Keep the newest changes in a worst-first min-heap, preserving stable ties. */
+function retainRecentSitemapChange(heap: RecentSitemapChange[], change: RecentSitemapChange): void {
+  if (heap.length < RECENT_SITEMAP_CHANGE_LIMIT) {
+    heap.push(change)
+    let index = heap.length - 1
+    while (index > 0) {
+      const parent = (index - 1) >> 1
+      if (!isLessRecent(heap[index]!, heap[parent]!))
+        break
+      const parentValue = heap[parent]!
+      heap[parent] = heap[index]!
+      heap[index] = parentValue
+      index = parent
+    }
+    return
+  }
+
+  if (!isLessRecent(heap[0]!, change))
+    return
+  heap[0] = change
+  let index = 0
+  for (;;) {
+    const left = index * 2 + 1
+    const right = left + 1
+    let leastRecent = index
+    if (left < heap.length && isLessRecent(heap[left]!, heap[leastRecent]!))
+      leastRecent = left
+    if (right < heap.length && isLessRecent(heap[right]!, heap[leastRecent]!))
+      leastRecent = right
+    if (leastRecent === index)
+      return
+    const childValue = heap[leastRecent]!
+    heap[leastRecent] = heap[index]!
+    heap[index] = childValue
+    index = leastRecent
+  }
+}
+
 /**
  * Trailing-28-day sitemap URL changes: per-day per-feedpath {added, removed}
  * counts plus rolling top-200 added and removed URLs. Streams from
@@ -1664,8 +1753,9 @@ export const sitemapChanges28dRollup: RollupDef = {
       feedpath: string
     }
     const counts = new Map<string, { day: string, feedpath: string, added: number, removed: number }>()
-    const addedTop: Array<{ loc: string, feedpath: string, at: number }> = []
-    const removedTop: Array<{ loc: string, feedpath: string, at: number }> = []
+    const addedTop: RecentSitemapChange[] = []
+    const removedTop: RecentSitemapChange[] = []
+    let sequence = 0
 
     function key(k: DayKey): string {
       return `${k.day}\x00${k.feedpath}`
@@ -1675,13 +1765,14 @@ export const sitemapChanges28dRollup: RollupDef = {
       const day = new Date(d.at).toISOString().slice(0, 10)
       const k = key({ day, feedpath: d.feedpath })
       const cur = counts.get(k) ?? { day, feedpath: d.feedpath, added: 0, removed: 0 }
+      const change = { loc: d.loc, feedpath: d.feedpath, at: d.at, sequence: sequence++ }
       if (d.op === 'added') {
         cur.added += 1
-        addedTop.push({ loc: d.loc, feedpath: d.feedpath, at: d.at })
+        retainRecentSitemapChange(addedTop, change)
       }
       else {
         cur.removed += 1
-        removedTop.push({ loc: d.loc, feedpath: d.feedpath, at: d.at })
+        retainRecentSitemapChange(removedTop, change)
       }
       counts.set(k, cur)
     }
@@ -1691,13 +1782,14 @@ export const sitemapChanges28dRollup: RollupDef = {
         return a.day < b.day ? -1 : 1
       return a.feedpath < b.feedpath ? -1 : 1
     })
-    // Most-recent first, cap at 200.
-    addedTop.sort((a, b) => b.at - a.at)
-    removedTop.sort((a, b) => b.at - a.at)
+    // The heaps are bounded while streaming; only the retained 200 need sorting.
+    const toRecentList = (heap: RecentSitemapChange[]): Array<{ loc: string, feedpath: string, at: number }> => heap
+      .sort((a, b) => b.at - a.at || a.sequence - b.sequence)
+      .map(({ loc, feedpath, at }) => ({ loc, feedpath, at }))
     return {
       days,
-      topAdded: addedTop.slice(0, 200),
-      topRemoved: removedTop.slice(0, 200),
+      topAdded: toRecentList(addedTop),
+      topRemoved: toRecentList(removedTop),
     }
   },
 }

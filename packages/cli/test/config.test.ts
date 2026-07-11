@@ -15,7 +15,7 @@ describe('config module', () => {
   })
 
   afterEach(async () => {
-    await fs.rm(testDir, { recursive: true }).catch(() => {})
+    await fs.rm(testDir, { recursive: true, force: true })
   })
 
   describe('getConfigPath', () => {

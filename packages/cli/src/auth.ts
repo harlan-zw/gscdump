@@ -15,6 +15,7 @@ import { err, ok, unwrapResult } from 'gscdump/result'
 import { ofetch } from 'ofetch'
 import { getConfigDir, loadConfig } from './config'
 import { getAppliedEnvKeys, getLoadedEnvPath } from './env-file'
+import { pickCliEnvironmentValue, resolveCliEnvironment } from './environment'
 import { displayPath, logger } from './utils'
 
 /**
@@ -95,9 +96,7 @@ export async function loadServiceAccount(jsonPath: string): Promise<GoogleJWT> {
  * `config.serviceAccountPath`. Returns null when no source is configured.
  */
 export async function resolveServiceAccount(opts: { path?: string } = {}): Promise<GoogleJWT | null> {
-  let p = opts.path
-    || process.env.GSC_SERVICE_ACCOUNT_JSON
-    || process.env.GOOGLE_APPLICATION_CREDENTIALS
+  let p = opts.path || resolveCliEnvironment().serviceAccountPath
   if (!p) {
     const config = await loadConfig().catch(() => null)
     p = config?.serviceAccountPath
@@ -204,10 +203,11 @@ async function pollDeviceCode(credentials: OAuth2Credentials, init: DeviceCodeRe
  * otherwise null (caller falls back to OAuth2Client/saved tokens flow).
  */
 export function resolveBYOK(opts: BYOKOptions = {}): GscAuth | null {
-  const accessToken = opts.accessToken || process.env.GSC_ACCESS_TOKEN || process.env.GOOGLE_ACCESS_TOKEN
-  const clientId = opts.clientId || process.env.GSC_CLIENT_ID || process.env.GOOGLE_CLIENT_ID
-  const clientSecret = opts.clientSecret || process.env.GSC_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET
-  const refreshToken = opts.refreshToken || process.env.GSC_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN
+  const env = resolveCliEnvironment()
+  const accessToken = opts.accessToken || env.accessToken
+  const clientId = opts.clientId || env.clientId
+  const clientSecret = opts.clientSecret || env.clientSecret
+  const refreshToken = opts.refreshToken || env.refreshToken
 
   if (clientId && clientSecret && refreshToken)
     return createAuth({ clientId, clientSecret, refreshToken })
@@ -240,13 +240,14 @@ export async function saveTokens(tokens: Credentials): Promise<void> {
 }
 
 export async function clearTokens(): Promise<void> {
-  await fs.rm(getTokensPath()).catch(() => {})
+  await fs.rm(getTokensPath(), { force: true })
   logger.success('Logged out, tokens cleared')
 }
 
 export async function getAuthCredentials(interactive: boolean): Promise<OAuth2Credentials> {
-  const envClientId = process.env.GOOGLE_CLIENT_ID
-  const envClientSecret = process.env.GOOGLE_CLIENT_SECRET
+  const env = resolveCliEnvironment()
+  const envClientId = env.clientId
+  const envClientSecret = env.clientSecret
 
   if (envClientId && envClientSecret) {
     if (interactive) {
@@ -392,8 +393,9 @@ export async function authenticate(
 
   // `force` bypasses every shortcut (env tokens, saved tokens) so the user
   // can mint a fresh refresh_token after a scope change.
-  const envAccessToken = !opts.force ? process.env.GOOGLE_ACCESS_TOKEN : undefined
-  const envRefreshToken = !opts.force ? process.env.GOOGLE_REFRESH_TOKEN : undefined
+  const env = resolveCliEnvironment()
+  const envAccessToken = !opts.force ? env.accessToken : undefined
+  const envRefreshToken = !opts.force ? env.refreshToken : undefined
   if (envAccessToken || envRefreshToken) {
     oauth2Client.setCredentials({
       access_token: envAccessToken,
@@ -531,12 +533,7 @@ function envSourceLabel(envVar: string): string {
 }
 
 function pickEnvSource(...envVars: string[]): { envVar: string, value: string } | null {
-  for (const v of envVars) {
-    const value = process.env[v]
-    if (value)
-      return { envVar: v, value }
-  }
-  return null
+  return pickCliEnvironmentValue(envVars)
 }
 
 function redactCred(v: string | null | undefined, keepTail = 6): string {
@@ -562,11 +559,12 @@ export async function describeAuthProvenance(): Promise<{
   const warnings: string[] = []
 
   // service account
-  const saEnvPath = process.env.GSC_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS
+  const env = resolveCliEnvironment()
+  const saEnvPath = env.serviceAccountPath
   const saConfigPath = !saEnvPath ? (await loadConfig().catch(() => null))?.serviceAccountPath : undefined
   const saPath = saEnvPath || saConfigPath
   if (saEnvPath) {
-    const saEnv = process.env.GSC_SERVICE_ACCOUNT_JSON ? 'GSC_SERVICE_ACCOUNT_JSON' : 'GOOGLE_APPLICATION_CREDENTIALS'
+    const saEnv = env.values.GSC_SERVICE_ACCOUNT_JSON ? 'GSC_SERVICE_ACCOUNT_JSON' : 'GOOGLE_APPLICATION_CREDENTIALS'
     rows.push({ field: 'service_account', source: envSourceLabel(saEnv), value: displayPath(saEnvPath) })
   }
   else if (saConfigPath) {

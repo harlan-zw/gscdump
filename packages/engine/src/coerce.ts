@@ -15,7 +15,10 @@ import { coerceBigIntToNumber } from '@gscdump/lakehouse'
 
 export function coerceRow(row: Row): Row {
   let mutated: Row | null = null
-  for (const [k, v] of Object.entries(row)) {
+  for (const k in row) {
+    if (!Object.hasOwn(row, k))
+      continue
+    const v = row[k]
     if (typeof v === 'bigint') {
       if (!mutated)
         mutated = { ...row }

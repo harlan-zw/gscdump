@@ -44,7 +44,7 @@ An `IcebergDataset` handle exposes: `createTable(conn)`, `appendSink(opts)` (buf
 
 ### What moves (from the 2026-07-03 dependency map)
 
-- **Clean moves**: `catalog-cache.ts`, `pyiceberg-runtime.ts`, `partition-prune.ts` (partition spec becomes a parameter), and `catalog.ts`'s connect / ensureNamespace / list / drop / `icebergAppendRetrying` (+ append-id idempotency) / `listIcebergDataFiles` — all already take bare table names.
+- **Clean moves**: `catalog-cache.ts`, `partition-prune.ts` (partition spec becomes a parameter), and `catalog.ts`'s connect / ensureNamespace / list / drop / `icebergAppendRetrying` (+ append-id idempotency) / `listIcebergDataFiles` — all already take bare table names.
 - **Parameterized in the move**: `sink.ts`'s `SinkSlice` generalizes `searchType` to `dims?: Record<string, string | number>`; `append-sink.ts`'s identity injection and `sortByClusterKey` read from the dataset def instead of `ICEBERG_SCHEMAS`/`TABLE_METADATA`; `catalog.ts`'s create-table helpers take a passed `IcebergTableSpec`.
 - **Provisioning** (new to the package, consolidated from both apps): adopt-existing (fetch ref), self-provision (bucket + CORS + catalog enable + credential-set + **maintenance configs: compaction target 128MB + snapshot expiration** — nuxtseo's provisioner was missing the maintenance half), and supplied-catalog (accept external R2 storage details at registration: "provision a gscdump account with the R2 details and it just works"). Plus the **Catalog Site Id allocator** (team-scoped next-int over ALL existing ids including adopted gscdump `int_id`s; supplied ids validated for team-scope uniqueness). One allocator per team, owned here, never hand-rolled by a consumer.
 - **Manifest-walk + presign core** (consolidated from gscdump `file-resolution.ts` and nuxtseo `catalog-sources.ts`): snapshot load, manifest walk with dataset-derived partition filter, SigV4 presign with signed size hint, cache contract (injected unstorage). The reader predicate comes from the dataset def, closing the reader half of the identity bug class.
@@ -54,6 +54,7 @@ An `IcebergDataset` handle exposes: `createTable(conn)`, `appendSink(opts)` (buf
 
 - `engine/src/schema.ts` + `drizzle-schema.ts`: become **GSC's registry instance** (the 9 `gsc.*` dataset defs, `SEARCH_TYPE_INT` as a `dims` declaration), not part of the package.
 - `overwrite-writer.ts`: GSC-private (only GSC has third-party restatement semantics).
+- `pyiceberg-runtime.ts`: stays with the GSC-private overwrite writer behind `@gscdump/engine/sink-node`. Re-exporting it from the Lakehouse root made the otherwise portable entry emit a static `node:process` import for a single consumer.
 - The overlay **writer** half (`recent-overlay.ts` stability-cutoff machinery): gsc-private; crawl/lighthouse snapshots have no volatile tail, so generalizing it is speculative surface.
 - Query dispatchers (seam, archetype server-tail), analyzers, DuckDB-WASM engine: separate concerns, separate packages/apps.
 - **Deleted in the same change**: `local-sink.ts` + `packages/engine/test/local-iceberg-sink.test.ts` (PyIceberg subprocess path; confirmed non-load-bearing in CI — every assertion self-skips without the docker+python stack).
@@ -94,6 +95,7 @@ C1 mechanical move (imports rewritten atomically across engine, gscdump.com, nux
 13. **The "atomic workspace-linked" premise is FALSE for `@gscdump/engine`** — both apps consume published tarballs via catalog pins (only `@gscdump/sdk` is link:-ed). C1 is three publish/bump/deploy cycles. Resolution: **major-bump `@gscdump/engine`** when its `iceberg` subpath is gutted, so caret ranges cannot float onto the breaking version; downstream repos opt in explicitly with their import rewrites. (The "no back-compat re-exports" rule survives — the major bump replaces the need for a compat window.)
 14. `local-sink.ts` deletion must also cover the `sink-node.ts` barrel consumers: `gscdump.com/test/iceberg/{archetypes,backfill-rehearsal}.integration.test.ts` import `createLocalIcebergSink` at module top (collection-time failure even though bodies self-skip). Grep `sink-node`, not just `/iceberg`.
 15. **Port order inverted: nuxtseo's snapshot tables FIRST, `gsc.*` second.** The first production consumer of a never-shipped abstraction must be the lowest-blast-radius one (crawl/lighthouse/dataforseo: simple defs, zero prod rows at port time), not the revenue-bearing `gsc.*` exercising 100% of the surface (dims + ledger + restatement adjacency) on day one. R2-FIXES C2/C5 are resequenced accordingly.
+16. **PyIceberg runtime placement stays GSC-private.** The subprocess runtime has one production consumer (`engine/iceberg/overwrite-writer.ts`) and imports `node:process`/`node:child_process`. It therefore lives behind the existing `@gscdump/engine/sink-node` runtime seam instead of the portable `@gscdump/lakehouse` root. This amends the original “clean moves” inventory above.
 
 ## Consequences
 

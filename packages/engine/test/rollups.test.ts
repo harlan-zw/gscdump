@@ -798,6 +798,31 @@ describe('sitemapChanges28dRollup', () => {
     expect(payload.topAdded[0].loc).toBe('https://x/a/3')
     expect(payload.topRemoved[0].loc).toBe('https://x/a/2')
   })
+
+  it('bounds recent URL lists while preserving complete daily counts', async () => {
+    const { ds } = makeFakeDataSource()
+    const capturedAt = new Date('2026-04-20T00:00:00Z').getTime()
+    const store = createSitemapStore({ dataSource: ds, now: () => capturedAt })
+    const ctx = { userId: 'u1', siteId: 's1' }
+    await store.snapshotUrls(ctx, 'https://x/large.xml', Array.from({ length: 250 }, (_, i) => ({
+      loc: `https://x/page/${i}`,
+    })))
+
+    const payload = (await sitemapChanges28dRollup.build({
+      engine: makeFakeEngine({} as Record<TableName, Row[]>),
+      ctx,
+      dataSource: ds,
+      windowAnchorMs: new Date('2026-04-22T00:00:00Z').getTime(),
+    })) as {
+      days: Array<{ added: number, removed: number }>
+      topAdded: Array<{ loc: string }>
+      topRemoved: Array<{ loc: string }>
+    }
+
+    expect(payload.days).toEqual([expect.objectContaining({ added: 250, removed: 0 })])
+    expect(payload.topAdded).toHaveLength(200)
+    expect(payload.topRemoved).toEqual([])
+  })
 })
 
 // A RollupBucket fake that mirrors the Cloudflare R2 cursor protocol: keys are
@@ -1069,6 +1094,37 @@ describe('rollup output pagination (bounds each runSQL/IPC payload by GROUP card
     const terms = ca.variants!.split('||')
     expect(terms.length).toBe(10) // top-10 only
     expect(terms[0]).toBe(`q0000000:::${total}:::100:::2.0`)
+  })
+
+  it('ranks canonical variants by clicks then query before filtering zero-impression rows', async () => {
+    const dataset: Row[] = Array.from({ length: 12 }, (_, i) => ({
+      joinKey: 'canonical',
+      query: `q${String(i).padStart(2, '0')}`,
+      clicks: 10,
+      impressions: i === 0 ? 0 : 100,
+      sum_pos: 100,
+    }))
+    const { engine } = makeKeysetEngine(dataset)
+    const [result] = await queryCanonicalVariantsRollup.build({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource: makeFakeDataSource().ds,
+      windowAnchorMs: 1_700_000_000_000,
+    }) as Array<{ variantCount: bigint, canonicalName: string | null, variants: string | null }>
+
+    expect(result?.variantCount).toBe(12n)
+    expect(result?.canonicalName).toBe('q00')
+    expect(result?.variants?.split('||').map(value => value.split(':::')[0])).toEqual([
+      'q01',
+      'q02',
+      'q03',
+      'q04',
+      'q05',
+      'q06',
+      'q07',
+      'q08',
+      'q09',
+    ])
   })
 })
 

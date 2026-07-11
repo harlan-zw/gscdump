@@ -50,26 +50,6 @@ export interface ConcentrationResult {
   riskLevel: ConcentrationRiskLevel
 }
 
-function calculateGini(values: number[]): number {
-  if (values.length === 0)
-    return 0
-  const sorted = [...values].sort((a, b) => a - b)
-  const n = sorted.length
-  const sum = sorted.reduce((a, b) => a + b, 0)
-  if (sum === 0)
-    return 0
-
-  let weightedSum = 0
-  for (let i = 0; i < n; i++) {
-    weightedSum += (2 * (i + 1) - n - 1) * sorted[i]!
-  }
-  return weightedSum / (n * sum)
-}
-
-function calculateHHI(shares: number[]): number {
-  return shares.reduce((sum, share) => sum + (share * 100) ** 2, 0)
-}
-
 /**
  * Pure helper: analyze traffic concentration across items (pages or keywords).
  * Re-exported from `@gscdump/analysis` for portable callers.
@@ -93,12 +73,21 @@ export function analyzeConcentration(
   }
 
   const sorted = [...items].sort((a, b) => b.clicks - a.clicks)
-  const totalClicks = sorted.reduce((sum, item) => sum + item.clicks, 0)
-  const clickValues = sorted.map(i => i.clicks)
-  const shares = totalClicks > 0 ? sorted.map(i => i.clicks / totalClicks) : []
+  const n = sorted.length
+  let totalClicks = 0
+  let squaredClicks = 0
+  let weightedSum = 0
+  for (let i = 0; i < n; i++) {
+    const clicks = sorted[i]!.clicks
+    totalClicks += clicks
+    squaredClicks += clicks * clicks
+    // Equivalent to the conventional ascending-order Gini formula, adjusted
+    // for the descending order already needed by topNItems.
+    weightedSum += (n - 2 * i - 1) * clicks
+  }
 
-  const giniCoefficient = calculateGini(clickValues)
-  const hhi = calculateHHI(shares)
+  const giniCoefficient = totalClicks === 0 ? 0 : weightedSum / (n * totalClicks)
+  const hhi = totalClicks > 0 ? squaredClicks / (totalClicks * totalClicks) * 10_000 : 0
 
   const topNItems: ConcentrationItem[] = sorted.slice(0, topN).map(item => ({
     key: item.key,

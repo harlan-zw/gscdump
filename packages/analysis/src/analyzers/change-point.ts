@@ -10,7 +10,7 @@ import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { defaultEndDate } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
-import { daysAgo } from 'gscdump'
+import { daysAgoUtc as daysAgo } from 'gscdump/dates'
 import { rowNumber as num, parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 
 export interface ChangePointSeriesPoint {

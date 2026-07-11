@@ -52,7 +52,7 @@ import type {
 import type { Result } from 'gscdump/result'
 import type { AnalysisSourcesOptions, SearchTypeOptions, SourceRangeOptions } from './hosted-query'
 import type { HostedClientOptions, HostedFetch, HostedFetchOptions, HostedHeaders } from './request'
-import { partnerEndpointSchemas, partnerRoutes } from '@gscdump/contracts/partner'
+import { partnerEndpoints } from '@gscdump/contracts/partner'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { PartnerApiError, partnerErrorToException } from './errors'
 import {
@@ -73,6 +73,8 @@ import { createHostedRequester } from './request'
 export type PartnerFetch = HostedFetch
 export type PartnerHeaders = HostedHeaders
 export type PartnerFetchOptions = HostedFetchOptions
+
+const endpoints = partnerEndpoints
 
 export interface PartnerClientOptions extends HostedClientOptions {
   /**
@@ -130,7 +132,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     const intervalMs = waitOptions.intervalMs ?? 1000
     let latest: GscdumpUserStatus | null = null
     for (let attempt = 0; attempt < attempts; attempt++) {
-      const result = await requestResult<GscdumpUserStatus>(partnerRoutes.users.status(userId))
+      const result = await requestResult<GscdumpUserStatus>(endpoints.getUserStatus.path(userId), { method: endpoints.getUserStatus.method })
       if (!result.ok)
         return result
       latest = result.value
@@ -167,7 +169,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     const intervalMs = waitOptions.intervalMs ?? 1000
     let latest: PartnerLifecycleResponse | null = null
     for (let attempt = 0; attempt < attempts; attempt++) {
-      const result = await requestResult<PartnerLifecycleResponse>(partnerRoutes.users.lifecycle(userId))
+      const result = await requestResult<PartnerLifecycleResponse>(endpoints.getUserLifecycle.path(userId), { method: endpoints.getUserLifecycle.method })
       if (!result.ok)
         return result
       latest = result.value
@@ -208,8 +210,8 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     userId?: string,
   ): Promise<Result<GscdumpSyncStatusResponse, PartnerApiError>> {
     if (!userId)
-      return requestResult<GscdumpSyncStatusResponse>(partnerRoutes.sites.syncStatus(siteId))
-    const lifecycle = await requestResult<PartnerLifecycleResponse>(partnerRoutes.users.lifecycle(userId))
+      return requestResult<GscdumpSyncStatusResponse>(endpoints.getSyncStatus.path(siteId), { method: endpoints.getSyncStatus.method })
+    const lifecycle = await requestResult<PartnerLifecycleResponse>(endpoints.getUserLifecycle.path(userId), { method: endpoints.getUserLifecycle.method })
     if (!lifecycle.ok)
       return lifecycle
     const site = findLifecycleSite(lifecycle.value, siteId)
@@ -226,27 +228,27 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
 
   return {
     registerUser(params: RegisterPartnerUserParams) {
-      const body = shouldValidate('request') ? partnerEndpointSchemas.registerUser.body.parse(params) : params
-      return request<GscdumpUserRegistration>(partnerRoutes.users.register, {
-        method: 'POST',
+      const body = shouldValidate('request') ? endpoints.registerUser.body.parse(params) : params
+      return request<GscdumpUserRegistration>(endpoints.registerUser.path, {
+        method: endpoints.registerUser.method,
         body,
-      }, partnerEndpointSchemas.registerUser.response)
+      }, endpoints.registerUser.response)
     },
 
     updateUserTokens(userId: string, params: UpdatePartnerUserTokensParams) {
-      const body = shouldValidate('request') ? partnerEndpointSchemas.updateUserTokens.body.parse(params) : params
-      return request<GscdumpUserTokenUpdate>(partnerRoutes.users.tokens(userId), {
-        method: 'PATCH',
+      const body = shouldValidate('request') ? endpoints.updateUserTokens.body.parse(params) : params
+      return request<GscdumpUserTokenUpdate>(endpoints.updateUserTokens.path(userId), {
+        method: endpoints.updateUserTokens.method,
         body,
-      }, partnerEndpointSchemas.updateUserTokens.response)
+      }, endpoints.updateUserTokens.response)
     },
 
     getUserStatus(userId: string) {
-      return request<GscdumpUserStatus>(partnerRoutes.users.status(userId), {}, partnerEndpointSchemas.getUserStatus.response)
+      return request<GscdumpUserStatus>(endpoints.getUserStatus.path(userId), { method: endpoints.getUserStatus.method }, endpoints.getUserStatus.response)
     },
 
     getUserLifecycle(userId: string) {
-      return request<PartnerLifecycleResponse>(partnerRoutes.users.lifecycle(userId))
+      return request<PartnerLifecycleResponse>(endpoints.getUserLifecycle.path(userId), { method: endpoints.getUserLifecycle.method }, endpoints.getUserLifecycle.response)
     },
 
     async waitForUserReady(userId: string, waitOptions: { attempts?: number, intervalMs?: number } = {}) {
@@ -268,45 +270,46 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     getUserSites(userId: string) {
-      return request<{ sites: GscdumpUserSite[] }>(partnerRoutes.users.sites(userId), {}, partnerEndpointSchemas.getUserSites.response)
+      return request<{ sites: GscdumpUserSite[] }>(endpoints.getUserSites.path(userId), { method: endpoints.getUserSites.method }, endpoints.getUserSites.response)
     },
 
     getAvailableSites(userId: string) {
-      return request<{ sites: GscdumpAvailableSite[] }>(partnerRoutes.users.availableSites(userId), {}, partnerEndpointSchemas.getAvailableSites.response)
+      return request<{ sites: GscdumpAvailableSite[] }>(endpoints.getAvailableSites.path(userId), { method: endpoints.getAvailableSites.method }, endpoints.getAvailableSites.response)
     },
 
     registerSite(params: RegisterPartnerSiteParams) {
-      const body = shouldValidate('request') ? partnerEndpointSchemas.registerSite.body.parse(params) : params
-      return request<GscdumpSiteRegistration>(partnerRoutes.partner.sites.register, {
-        method: 'POST',
+      const body = shouldValidate('request') ? endpoints.registerSite.body.parse(params) : params
+      return request<GscdumpSiteRegistration>(endpoints.registerSite.path, {
+        method: endpoints.registerSite.method,
         body,
-      }, partnerEndpointSchemas.registerSite.response)
+      }, endpoints.registerSite.response)
     },
 
     bulkRegisterSites(params: BulkRegisterPartnerSitesParams) {
-      const body = shouldValidate('request') ? partnerEndpointSchemas.bulkRegisterSites.body.parse(params) : params
-      return request<BulkRegisterPartnerSitesResponse>(partnerRoutes.partner.sites.bulkRegister, {
-        method: 'POST',
+      const body = shouldValidate('request') ? endpoints.bulkRegisterSites.body.parse(params) : params
+      return request<BulkRegisterPartnerSitesResponse>(endpoints.bulkRegisterSites.path, {
+        method: endpoints.bulkRegisterSites.method,
         body,
-      }, partnerEndpointSchemas.bulkRegisterSites.response)
+      }, endpoints.bulkRegisterSites.response)
     },
 
     deleteUser(userId: string) {
-      return request<DeletePartnerUserResponse>(partnerRoutes.partner.users.byId(userId), {
-        method: 'DELETE',
-      }, partnerEndpointSchemas.deleteUser.response)
+      return request<DeletePartnerUserResponse>(endpoints.deleteUser.path(userId), {
+        method: endpoints.deleteUser.method,
+      }, endpoints.deleteUser.response)
     },
 
     deleteSite(siteId: string) {
-      return request<{ success: boolean }>(partnerRoutes.sites.byId(siteId), {
-        method: 'DELETE',
+      return request<{ success: boolean }>(endpoints.deleteSite.path(siteId), {
+        method: endpoints.deleteSite.method,
       })
     },
 
     getAnalysisSources(siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: SearchTypeOptions & SourceRangeOptions) {
-      return request<GscdumpAnalysisSourcesResponse>(partnerRoutes.sites.analysisSources(siteId), {
+      return request<GscdumpAnalysisSourcesResponse>(endpoints.getAnalysisSources.path(siteId), {
+        method: endpoints.getAnalysisSources.method,
         query: tablesQuery(tables, options),
-      }, partnerEndpointSchemas.getAnalysisSources.response)
+      }, endpoints.getAnalysisSources.response)
     },
 
     // When `userId` is passed, derive sync status from a single lifecycle
@@ -319,233 +322,249 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
 
     getData(siteId: string, state: BuilderState, queryOptions?: DataQueryOptions) {
       if (shouldValidate('request')) {
-        partnerEndpointSchemas.getData.state.parse(state)
-        partnerEndpointSchemas.getData.options.parse(queryOptions)
+        endpoints.getData.state.parse(state)
+        endpoints.getData.options.parse(queryOptions)
       }
-      return request<GscdumpDataResponse>(partnerRoutes.sites.data(siteId), {
+      return request<GscdumpDataResponse>(endpoints.getData.path(siteId), {
+        method: endpoints.getData.method,
         query: dataQuery(state, queryOptions),
-      }, partnerEndpointSchemas.getData.response)
+      }, endpoints.getData.response)
     },
 
     getDataDetail(siteId: string, state: BuilderState, queryOptions?: DataDetailOptions) {
       if (shouldValidate('request')) {
-        partnerEndpointSchemas.getDataDetail.state.parse(state)
-        partnerEndpointSchemas.getDataDetail.options.parse(queryOptions)
+        endpoints.getDataDetail.state.parse(state)
+        endpoints.getDataDetail.options.parse(queryOptions)
       }
-      return request<GscdumpDataDetailResponse>(partnerRoutes.sites.dataDetail(siteId), {
+      return request<GscdumpDataDetailResponse>(endpoints.getDataDetail.path(siteId), {
+        method: endpoints.getDataDetail.method,
         query: dataDetailQuery(state, queryOptions),
-      }, partnerEndpointSchemas.getDataDetail.response)
+      }, endpoints.getDataDetail.response)
     },
 
     getAnalysis(siteId: string, params: GscdumpAnalysisParams) {
       assertAnalysisParams(params)
-      const query = shouldValidate('request') ? partnerEndpointSchemas.getAnalysis.query.parse(params) : params
-      return request<GscdumpAnalysisResponse>(partnerRoutes.sites.analysis(siteId), {
+      const query = shouldValidate('request') ? endpoints.getAnalysis.query.parse(params) : params
+      return request<GscdumpAnalysisResponse>(endpoints.getAnalysis.path(siteId), {
+        method: endpoints.getAnalysis.method,
         query: analysisQuery(query),
-      }, partnerEndpointSchemas.getAnalysis.response)
+      }, endpoints.getAnalysis.response)
     },
 
     getSitemaps(siteId: string) {
-      return request<GscdumpSitemapsResponse>(partnerRoutes.sites.sitemaps(siteId), {}, partnerEndpointSchemas.getSitemaps.response)
+      return request<GscdumpSitemapsResponse>(endpoints.getSitemaps.path(siteId), { method: endpoints.getSitemaps.method }, endpoints.getSitemaps.response)
     },
 
     getSitemapChanges(siteId: string, days = 28) {
-      return request<GscdumpSitemapChangesResponse>(partnerRoutes.sites.sitemapChanges(siteId), {
+      return request<GscdumpSitemapChangesResponse>(endpoints.getSitemapChanges.path(siteId), {
+        method: endpoints.getSitemapChanges.method,
         query: { days },
-      }, partnerEndpointSchemas.getSitemapChanges.response)
+      }, endpoints.getSitemapChanges.response)
     },
 
     submitSitemap(siteId: string, sitemapUrl: string, action: 'submit' | 'delete' = 'submit') {
-      return request<{ success: boolean, action: 'submitted' | 'deleted', sitemapUrl: string }>(partnerRoutes.sites.sitemaps(siteId), {
-        method: 'POST',
+      return request<{ success: boolean, action: 'submitted' | 'deleted', sitemapUrl: string }>(endpoints.submitSitemap.path(siteId), {
+        method: endpoints.submitSitemap.method,
         body: { sitemapUrl, action },
       })
     },
 
     refreshSitemaps(siteId: string) {
-      return request<{ success: boolean, action: 'refreshed', sitemapCount: number, changed: boolean }>(partnerRoutes.sites.sitemaps(siteId), {
-        method: 'POST',
+      return request<{ success: boolean, action: 'refreshed', sitemapCount: number, changed: boolean }>(endpoints.refreshSitemaps.path(siteId), {
+        method: endpoints.refreshSitemaps.method,
         body: { action: 'refresh' },
       })
     },
 
     getIndexing(siteId: string, days = 28) {
-      return request<GscdumpIndexingResponse>(partnerRoutes.sites.indexing(siteId), {
+      return request<GscdumpIndexingResponse>(endpoints.getIndexing.path(siteId), {
+        method: endpoints.getIndexing.method,
         query: { days },
-      }, partnerEndpointSchemas.getIndexing.response)
+      }, endpoints.getIndexing.response)
     },
 
     getIndexingUrls(siteId: string, params: IndexingUrlsParams = {}) {
-      const parsed = shouldValidate('request') ? partnerEndpointSchemas.getIndexingUrls.query.parse(params) : params
-      return request<GscdumpIndexingUrlsResponse>(partnerRoutes.sites.indexingUrls(siteId), {
+      const parsed = shouldValidate('request') ? endpoints.getIndexingUrls.query.parse(params) : params
+      return request<GscdumpIndexingUrlsResponse>(endpoints.getIndexingUrls.path(siteId), {
+        method: endpoints.getIndexingUrls.method,
         query: indexingUrlsQuery(parsed),
-      }, partnerEndpointSchemas.getIndexingUrls.response)
+      }, endpoints.getIndexingUrls.response)
     },
 
     getIndexingDiagnostics(siteId: string, params: IndexingDiagnosticsParams = {}) {
-      const parsed = shouldValidate('request') ? partnerEndpointSchemas.getIndexingDiagnostics.query.parse(params) : params
-      return request<GscdumpIndexingDiagnosticsResponse>(partnerRoutes.sites.indexingDiagnostics(siteId), {
+      const parsed = shouldValidate('request') ? endpoints.getIndexingDiagnostics.query.parse(params) : params
+      return request<GscdumpIndexingDiagnosticsResponse>(endpoints.getIndexingDiagnostics.path(siteId), {
+        method: endpoints.getIndexingDiagnostics.method,
         query: indexingDiagnosticsQuery(parsed),
-      }, partnerEndpointSchemas.getIndexingDiagnostics.response)
+      }, endpoints.getIndexingDiagnostics.response)
     },
 
     requestIndexingInspect(siteId: string, body: IndexingInspectRequest) {
-      const parsed = shouldValidate('request') ? partnerEndpointSchemas.getIndexingInspect.body.parse(body) : body
-      return request<IndexingInspectResponse | IndexingInspectRateLimited>(partnerRoutes.sites.indexingInspect(siteId), {
-        method: 'POST',
+      const parsed = shouldValidate('request') ? endpoints.requestIndexingInspect.body.parse(body) : body
+      return request<IndexingInspectResponse | IndexingInspectRateLimited>(endpoints.requestIndexingInspect.path(siteId), {
+        method: endpoints.requestIndexingInspect.method,
         body: parsed,
-      }, partnerEndpointSchemas.getIndexingInspect.response)
+      }, endpoints.requestIndexingInspect.response)
     },
 
     getUserSettings() {
-      return request<GscdumpUserSettings>(partnerRoutes.settings.user, {}, partnerEndpointSchemas.getUserSettings.response)
+      return request<GscdumpUserSettings>(endpoints.getUserSettings.path, { method: endpoints.getUserSettings.method }, endpoints.getUserSettings.response)
     },
 
     patchUserSettings(body: Partial<GscdumpUserSettings>) {
-      const parsed = shouldValidate('request') ? partnerEndpointSchemas.patchUserSettings.body.parse(body) : body
-      return request<GscdumpUserSettings>(partnerRoutes.settings.user, {
-        method: 'PATCH',
+      const parsed = shouldValidate('request') ? endpoints.patchUserSettings.body.parse(body) : body
+      return request<GscdumpUserSettings>(endpoints.patchUserSettings.path, {
+        method: endpoints.patchUserSettings.method,
         body: parsed,
-      }, partnerEndpointSchemas.patchUserSettings.response)
+      }, endpoints.patchUserSettings.response)
     },
 
     recoverPermission(siteId: string) {
-      return request<GscdumpPermissionRecovery>(partnerRoutes.sites.recoverPermission(siteId), {
-        method: 'POST',
-      }, partnerEndpointSchemas.recoverPermission.response)
+      return request<GscdumpPermissionRecovery>(endpoints.recoverPermission.path(siteId), {
+        method: endpoints.recoverPermission.method,
+      }, endpoints.recoverPermission.response)
     },
 
     getTopAssociation(siteId: string, params: GscdumpTopAssociationParams) {
-      const query = shouldValidate('request') ? partnerEndpointSchemas.getTopAssociation.query.parse(params) : params
-      return request<GscdumpTopAssociationResponse>(partnerRoutes.sites.topAssociation(siteId), {
+      const query = shouldValidate('request') ? endpoints.getTopAssociation.query.parse(params) : params
+      return request<GscdumpTopAssociationResponse>(endpoints.getTopAssociation.path(siteId), {
+        method: endpoints.getTopAssociation.method,
         query: query as unknown as Record<string, unknown>,
-      }, partnerEndpointSchemas.getTopAssociation.response)
+      }, endpoints.getTopAssociation.response)
     },
 
     getKeywordSparklines(siteId: string, params: GscdumpKeywordSparklinesParams) {
       const withSearchType = { ...params, searchType: params.searchType ?? DEFAULT_SEARCH_TYPE }
-      const body = shouldValidate('request') ? partnerEndpointSchemas.getKeywordSparklines.body.parse(withSearchType) : withSearchType
-      return request<GscdumpKeywordSparklinesResponse>(partnerRoutes.sites.keywordSparklines(siteId), {
-        method: 'POST',
+      const body = shouldValidate('request') ? endpoints.getKeywordSparklines.body.parse(withSearchType) : withSearchType
+      return request<GscdumpKeywordSparklinesResponse>(endpoints.getKeywordSparklines.path(siteId), {
+        method: endpoints.getKeywordSparklines.method,
         body,
         dedupe: true,
-      }, partnerEndpointSchemas.getKeywordSparklines.response)
+      }, endpoints.getKeywordSparklines.response)
     },
 
     getQueryTrend(siteId: string, params: GscdumpQueryTrendParams) {
-      const query = shouldValidate('request') ? partnerEndpointSchemas.getQueryTrend.query.parse(params) : params
-      return request<GscdumpQueryTrendResponse>(partnerRoutes.sites.queryTrend(siteId), {
+      const query = shouldValidate('request') ? endpoints.getQueryTrend.query.parse(params) : params
+      return request<GscdumpQueryTrendResponse>(endpoints.getQueryTrend.path(siteId), {
+        method: endpoints.getQueryTrend.method,
         query: queryTrendQuery(query),
-      }, partnerEndpointSchemas.getQueryTrend.response)
+      }, endpoints.getQueryTrend.response)
     },
 
     getPageTrend(siteId: string, params: GscdumpPageTrendParams) {
-      const query = shouldValidate('request') ? partnerEndpointSchemas.getPageTrend.query.parse(params) : params
-      return request<GscdumpPageTrendResponse>(partnerRoutes.sites.pageTrend(siteId), {
+      const query = shouldValidate('request') ? endpoints.getPageTrend.query.parse(params) : params
+      return request<GscdumpPageTrendResponse>(endpoints.getPageTrend.path(siteId), {
+        method: endpoints.getPageTrend.method,
         query: pageTrendQuery(query),
-      }, partnerEndpointSchemas.getPageTrend.response)
+      }, endpoints.getPageTrend.response)
     },
 
     getCanonicalMismatches(siteId: string) {
       return request<GscdumpCanonicalMismatchesResponse>(
-        partnerRoutes.sites.canonicalMismatches(siteId),
-        {},
-        partnerEndpointSchemas.getCanonicalMismatches.response,
+        endpoints.getCanonicalMismatches.path(siteId),
+        { method: endpoints.getCanonicalMismatches.method },
+        endpoints.getCanonicalMismatches.response,
       )
     },
 
     getContentVelocity<T = unknown>(siteId: string, days?: number) {
-      return request<T>(partnerRoutes.sites.contentVelocity(siteId), {
+      return request<T>(endpoints.getContentVelocity.path(siteId), {
+        method: endpoints.getContentVelocity.method,
         query: days == null ? undefined : { days },
       })
     },
 
     getCtrCurve<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const query = shouldValidate('request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
-      return request<T>(partnerRoutes.sites.ctrCurve(siteId), { query: dateRangeQuery(query) })
+      const endpoint = endpoints.getCtrCurve
+      const query = shouldValidate('request') ? endpoint.query.parse(params) : params
+      return request<T>(endpoint.path(siteId), { method: endpoint.method, query: dateRangeQuery(query) })
     },
 
     getDarkTraffic<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const query = shouldValidate('request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
-      return request<T>(partnerRoutes.sites.darkTraffic(siteId), { query: dateRangeQuery(query) })
+      const endpoint = endpoints.getDarkTraffic
+      const query = shouldValidate('request') ? endpoint.query.parse(params) : params
+      return request<T>(endpoint.path(siteId), { method: endpoint.method, query: dateRangeQuery(query) })
     },
 
     getDeviceGap<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const query = shouldValidate('request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
-      return request<T>(partnerRoutes.sites.deviceGap(siteId), { query: dateRangeQuery(query) })
+      const endpoint = endpoints.getDeviceGap
+      const query = shouldValidate('request') ? endpoint.query.parse(params) : params
+      return request<T>(endpoint.path(siteId), { method: endpoint.method, query: dateRangeQuery(query) })
     },
 
     getIndexPercent(siteId: string, params: { invisibleLimit?: number, invisibleOffset?: number, orphanLimit?: number } = {}) {
-      const query = shouldValidate('request') ? partnerEndpointSchemas.getIndexPercent.query.parse(params) : params
+      const query = shouldValidate('request') ? endpoints.getIndexPercent.query.parse(params) : params
       return request<GscdumpIndexPercentResponse>(
-        partnerRoutes.sites.indexPercent(siteId),
-        { query: query as Record<string, unknown> },
-        partnerEndpointSchemas.getIndexPercent.response,
+        endpoints.getIndexPercent.path(siteId),
+        { method: endpoints.getIndexPercent.method, query: query as Record<string, unknown> },
+        endpoints.getIndexPercent.response,
       )
     },
 
     getKeywordBreadth<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const query = shouldValidate('request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
-      return request<T>(partnerRoutes.sites.keywordBreadth(siteId), { query: dateRangeQuery(query) })
+      const endpoint = endpoints.getKeywordBreadth
+      const query = shouldValidate('request') ? endpoint.query.parse(params) : params
+      return request<T>(endpoint.path(siteId), { method: endpoint.method, query: dateRangeQuery(query) })
     },
 
     getPositionDistribution<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const query = shouldValidate('request') ? partnerEndpointSchemas.getDateRangeInsight.query.parse(params) : params
-      return request<T>(partnerRoutes.sites.positionDistribution(siteId), { query: dateRangeQuery(query) })
+      const endpoint = endpoints.getPositionDistribution
+      const query = shouldValidate('request') ? endpoint.query.parse(params) : params
+      return request<T>(endpoint.path(siteId), { method: endpoint.method, query: dateRangeQuery(query) })
     },
 
     createTeam(params: CreatePartnerTeamParams) {
-      const body = shouldValidate('request') ? partnerEndpointSchemas.createTeam.body.parse(params) : params
-      return request(partnerRoutes.teams.create, {
-        method: 'POST',
+      const body = shouldValidate('request') ? endpoints.createTeam.body.parse(params) : params
+      return request(endpoints.createTeam.path, {
+        method: endpoints.createTeam.method,
         body,
-      }, partnerEndpointSchemas.createTeam.response)
+      }, endpoints.createTeam.response)
     },
 
     renameTeam(teamId: string, params: { name: string }) {
-      return request(partnerRoutes.teams.byId(teamId), {
-        method: 'PATCH',
+      return request(endpoints.renameTeam.path(teamId), {
+        method: endpoints.renameTeam.method,
         body: params,
       })
     },
 
     deleteTeam(teamId: string) {
-      return request(partnerRoutes.teams.byId(teamId), {
-        method: 'DELETE',
+      return request(endpoints.deleteTeam.path(teamId), {
+        method: endpoints.deleteTeam.method,
       })
     },
 
     listTeamMembers(teamId: string) {
-      return request(partnerRoutes.teams.members(teamId), {}, partnerEndpointSchemas.listTeamMembers.response)
+      return request(endpoints.listTeamMembers.path(teamId), { method: endpoints.listTeamMembers.method }, endpoints.listTeamMembers.response)
     },
 
     addTeamMember(teamId: string, params: AddPartnerTeamMemberParams) {
-      const body = shouldValidate('request') ? partnerEndpointSchemas.addTeamMember.body.parse(params) : params
-      return request<{ ok: true, role: string, alreadyExisted?: boolean }>(partnerRoutes.teams.members(teamId), {
-        method: 'POST',
+      const body = shouldValidate('request') ? endpoints.addTeamMember.body.parse(params) : params
+      return request<{ ok: true, role: string, alreadyExisted?: boolean }>(endpoints.addTeamMember.path(teamId), {
+        method: endpoints.addTeamMember.method,
         body,
-      }, partnerEndpointSchemas.addTeamMember.response)
+      }, endpoints.addTeamMember.response)
     },
 
     updateTeamMemberRole(teamId: string, userId: string, params: { role: AddPartnerTeamMemberParams['role'] }) {
-      return request(partnerRoutes.teams.member(teamId, userId), {
-        method: 'PATCH',
+      return request(endpoints.updateTeamMemberRole.path(teamId, userId), {
+        method: endpoints.updateTeamMemberRole.method,
         body: params,
       })
     },
 
     removeTeamMember(teamId: string, userId: string) {
-      return request(partnerRoutes.teams.member(teamId, userId), {
-        method: 'DELETE',
+      return request(endpoints.removeTeamMember.path(teamId, userId), {
+        method: endpoints.removeTeamMember.method,
       })
     },
 
     bindSiteToTeam(userId: string, siteId: string, params: BindPartnerSiteTeamParams) {
-      const body = shouldValidate('request') ? partnerEndpointSchemas.bindSiteToTeam.body.parse(params) : params
-      return request(partnerRoutes.partner.users.siteTeam(userId, siteId), {
-        method: 'PATCH',
+      const body = shouldValidate('request') ? endpoints.bindSiteToTeam.body.parse(params) : params
+      return request(endpoints.bindSiteToTeam.path(userId, siteId), {
+        method: endpoints.bindSiteToTeam.method,
         body,
-      }, partnerEndpointSchemas.bindSiteToTeam.response)
+      }, endpoints.bindSiteToTeam.response)
     },
   }
 }
