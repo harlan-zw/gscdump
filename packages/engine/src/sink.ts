@@ -142,6 +142,12 @@ export interface IcebergAppendSinkOptions extends SinkOptions {
   /** R2 Data Catalog connection config (catalog URI, warehouse, namespace, token, S3 creds). */
   catalog: import('./iceberg/catalog').IcebergCatalogConfig
   /**
+   * Options forwarded to the lazy catalog connection. Supply a shared
+   * `CatalogCache` here to serve the REST `/v1/config` probe from durable cache
+   * across short-lived Worker isolates.
+   */
+  connect?: import('./iceberg/catalog').ConnectIcebergOptions
+  /**
    * Retry policy for the per-table `icebergAppend()` commit, applied on R2
    * Data Catalog 429 ("too many commits") rate-limits. Optional — production
    * uses the defaults; tests inject a synchronous `sleep`.

@@ -267,7 +267,9 @@ function toRecords(slice: SinkSlice, rows: readonly Row[], encoding: PartitionKe
  * `emit` buffers; `close()` commits one `icebergAppend()` per table touched.
  * The catalog connection (REST context + signed S3 resolver) is established
  * lazily on the first flush and reused — a sink that is opened and closed
- * with no rows never touches the network.
+ * with no rows never touches the network. `options.connect` is forwarded so
+ * Worker callers can share the `/v1/config` context through a durable cache;
+ * without it every fresh sink/isolate must probe the catalog again.
  */
 export function createIcebergAppendSink(options: IcebergAppendSinkOptions): IcebergAppendSink {
   let connection: Promise<IcebergConnection> | undefined
@@ -276,7 +278,7 @@ export function createIcebergAppendSink(options: IcebergAppendSinkOptions): Iceb
   const buffers = new Map<IcebergTableName, IcebergRecord[]>()
 
   function connect(): Promise<IcebergConnection> {
-    connection ??= connectIcebergCatalog(options.catalog)
+    connection ??= connectIcebergCatalog(options.catalog, options.connect)
     return connection
   }
 

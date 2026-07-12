@@ -71,6 +71,19 @@ describe('icebergAppendSink', () => {
     expect(res).toEqual({ flushed: [], failed: [] })
   })
 
+  it('forwards shared-cache options to the lazy catalog connection', async () => {
+    const cache = { storage: {} as never }
+    const clock = () => 123
+    const sink = makeSink({ connect: { cache, clock } })
+    await sink.emit(slice('pages', 'web', 's1'), [
+      { url: '/', date: '2026-05-01', clicks: 1, impressions: 2, sum_position: 3 },
+    ])
+    await sink.close()
+
+    expect(connectIcebergCatalog).toHaveBeenCalledTimes(1)
+    expect(connectIcebergCatalog).toHaveBeenCalledWith(CATALOG, { cache, clock })
+  })
+
   it('emit buffers per table and commits one icebergAppend per table on close', async () => {
     const sink = makeSink()
     await sink.emit(slice('pages', 'web', 's1'), [{ url: '/', date: '2026-05-01', clicks: 1, impressions: 2, sum_position: 3 }])
