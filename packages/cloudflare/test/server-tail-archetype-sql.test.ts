@@ -151,6 +151,21 @@ describe('buildArchetypeSql', () => {
     expect(plan.params).toHaveLength(4)
   })
 
+  it('entity-daily-sparkline keys rows by `entity` (the contract consumers bucket on — parity with the wasm engine)', () => {
+    const q: EntityDailySparklineQuery = {
+      ...base,
+      archetype: 'entity-daily-sparkline',
+      dimension: 'query',
+      entities: ['nuxt seo'],
+      metric: 'clicks',
+    }
+    expect(buildArchetypeSql(q).sql).toContain('query AS entity')
+
+    const canonical = buildArchetypeSql({ ...q, dimension: 'queryCanonical' })
+    // the canonical column is the query_dim COALESCE subquery, still aliased to `entity`
+    expect(canonical.sql).toMatch(/COALESCE\(.*query_dim.*\) AS entity/)
+  })
+
   it('entity-daily-sparkline rejects an empty entity list', () => {
     const q: EntityDailySparklineQuery = {
       ...base,

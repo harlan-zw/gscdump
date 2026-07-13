@@ -303,10 +303,14 @@ function buildEntityDailySparkline(q: EntityDailySparklineQuery, pruned: boolean
   if (q.entities.length === 0)
     throw new Error('entity-daily-sparkline: empty entities - resolver must pre-resolve the top-N list')
   const inList = q.entities.map(sqlStringLiteral).join(', ')
+  // Rows key on `entity` — the contract consumers bucket on (parity with the
+  // wasm engine's `SELECT ${col} AS entity`). Emitting the bare dimension
+  // column here left cloud rows keyed `query`/`queryCanonical` and consumers
+  // (useProEntitySparklines) dropped every row.
   return {
     table,
     params: w.params,
-    sql: `SELECT date, ${dimSelect(q.dimension)}, ${metricExpr(q.metric)} FROM ${factTableRef()} `
+    sql: `SELECT date, ${col} AS entity, ${metricExpr(q.metric)} FROM ${factTableRef()} `
       + `WHERE ${w.clause} AND ${col} IN (${inList}) GROUP BY date, ${col} ORDER BY date ASC`,
   }
 }

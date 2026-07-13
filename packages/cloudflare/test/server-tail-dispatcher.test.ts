@@ -154,6 +154,46 @@ describe('resolveServerTailEngine', () => {
     expect(resolveServerTailEngine({ ...q, facets: [{ column: 'query', op: 'eq', value: 'nuxt seo' }] })).toBe('r2-sql')
   })
 
+  it('escalates a queryCanonical EQUALITY facet on another dimension to duckdb (facet compiles to a query_dim subquery; R2 SQL throws [40010] iceberg table not found "gsc.query_dim")', () => {
+    const q: TopNBreakdownQuery = {
+      ...base,
+      archetype: 'top-n-breakdown',
+      dimension: 'query',
+      metrics: ['clicks'],
+      orderBy: { metric: 'clicks', dir: 'desc' },
+      limit: 12,
+      facets: [{ column: 'queryCanonical', op: 'eq', value: 'sitemap validator' }],
+    }
+    expect(resolveServerTailEngine(q)).toBe('duckdb')
+  })
+
+  it('escalates an entity-daily-sparkline over queryCanonical to duckdb; plain query stays r2-sql', () => {
+    const q = {
+      ...base,
+      archetype: 'entity-daily-sparkline' as const,
+      dimension: 'queryCanonical' as const,
+      entities: ['sitemap validator'],
+      metric: 'clicks' as const,
+    }
+    expect(resolveServerTailEngine(q)).toBe('duckdb')
+    expect(resolveServerTailEngine({ ...q, dimension: 'query' as const })).toBe('r2-sql')
+  })
+
+  it('escalates single-row-lookup and multi-series-stacked-daily touching queryCanonical to duckdb', () => {
+    expect(resolveServerTailEngine({
+      ...base,
+      archetype: 'single-row-lookup',
+      match: { queryCanonical: 'sitemap validator' },
+      metrics: ['clicks'],
+    })).toBe('duckdb')
+    expect(resolveServerTailEngine({
+      ...base,
+      archetype: 'multi-series-stacked-daily',
+      seriesDimension: 'queryCanonical',
+      metric: 'clicks',
+    })).toBe('duckdb')
+  })
+
   it('rejects a cloud-only archetype', () => {
     expect(() => resolveServerTailEngine({
       archetype: 'aux-cloud-only',

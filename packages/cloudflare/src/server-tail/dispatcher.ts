@@ -70,6 +70,35 @@ function hasRegexFacet(query: ArchetypeQuery): boolean {
 }
 
 /**
+ * Does the compiled SQL for this query reference the `query_dim` sidecar
+ * relation? Any `queryCanonical` touchpoint — the grouped/sparkline dimension,
+ * a facet column (ANY op: even an equality facet compiles to the COALESCE
+ * subquery via `dimColumn`, never a plain `col = ?`), a single-row-lookup
+ * match key, or a stacked-series dimension — emits
+ * `COALESCE((SELECT qd.query_canonical FROM query_dim qd ...), query)`.
+ * `query_dim` is a per-user sidecar parquet, NOT an Iceberg table in the
+ * catalog, so R2 SQL throws `[40010] iceberg table not found "gsc.query_dim"`
+ * on every one of these shapes (confirmed live 2026-07-13: a canonical-faceted
+ * `query` breakdown and a canonical sparkline both 500d while the
+ * canonical-DIMENSIONED breakdown ran fine on DuckDB); only the DuckDB
+ * executor binds the sidecar as a CTE. Mirrors `dimColumn`/`facetPredicate`
+ * in `archetype-sql.ts` — extend BOTH if a new shape learns canonical.
+ */
+function referencesQueryDim(query: ArchetypeQuery): boolean {
+  const q = query as {
+    dimension?: string
+    seriesDimension?: string
+    match?: Record<string, unknown>
+    facets?: readonly ArchetypeFacet[]
+  }
+  if (q.dimension === 'queryCanonical' || q.seriesDimension === 'queryCanonical')
+    return true
+  if (q.match && 'queryCanonical' in q.match)
+    return true
+  return q.facets?.some(f => f.column === 'queryCanonical') ?? false
+}
+
+/**
  * Errors-as-values core for {@link resolveServerTailEngine}: returns a
  * `ServerTailRoutingError` instead of throwing when an archetype is `cloud-only`
  * (the one caller-actionable routing failure — the consumer must route that
@@ -99,16 +128,14 @@ export function resolveServerTailEngineResult(
   // per-team warehouse, including the two combined in one query). No escalation
   // needed; these stay on r2-sql/r2-sql-resolved below.
   //
-  // Escalation: a `queryCanonical` breakdown's dimension column is a
-  // correlated subquery against a `query_dim` sidecar table
-  // (`COALESCE((SELECT qd.query_canonical FROM query_dim qd WHERE qd.query =
-  // fact.query LIMIT 1), fact.query)`). `COUNT(DISTINCT query)` itself is EMPIRICALLY
-  // VERIFIED to work on R2 SQL now, but `query_dim` is NOT an Iceberg table in
-  // the catalog (`[40010] iceberg table not found "gsc.query_dim"` — confirmed
-  // 2026-07-03), so this escalation is NOT about DISTINCT-aggregate support
-  // any more — it stays on DuckDB because the sidecar dimension table itself
-  // is unreachable from R2 SQL, independent of the DISTINCT question.
-  if (query.archetype === 'top-n-breakdown' && query.dimension === 'queryCanonical')
+  // Escalation: ANY `queryCanonical` touchpoint (dimension, facet, match key,
+  // series dimension) compiles to a correlated subquery against the
+  // `query_dim` sidecar, which is unreachable from R2 SQL — see
+  // {@link referencesQueryDim}. Previously only the DIMENSIONED breakdown was
+  // escalated; a canonical FACET on a `query` breakdown and the canonical
+  // sparkline slipped through to R2 SQL and 500d in production, which the pro
+  // proxy's compat fallback then masked as exact-match (variant-less) data.
+  if (referencesQueryDim(query))
     return ok('duckdb')
   // Escalation: regex facets compile to `regexp_matches`, which R2 SQL lacks
   // under that name (`Invalid function 'regexp_matches'. Did you mean
