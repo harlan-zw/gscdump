@@ -88,10 +88,13 @@ function referencesQueryDim(query: ArchetypeQuery): boolean {
   const q = query as {
     dimension?: string
     seriesDimension?: string
+    entity?: { dimension?: string }
     match?: Record<string, unknown>
     facets?: readonly ArchetypeFacet[]
   }
   if (q.dimension === 'queryCanonical' || q.seriesDimension === 'queryCanonical')
+    return true
+  if (q.entity?.dimension === 'queryCanonical')
     return true
   if (q.match && 'queryCanonical' in q.match)
     return true

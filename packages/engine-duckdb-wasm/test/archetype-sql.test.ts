@@ -37,6 +37,22 @@ describe('compileArchetypeSql', () => {
     expect(c.params).toContain('https://x.com/a')
   })
 
+  it('2b — entity-daily-timeseries: a queryCanonical entity resolves through query_dim (the keyword-group daily chart)', () => {
+    const q: ArchetypeQuery = {
+      archetype: 'entity-daily-timeseries',
+      siteId: 's1',
+      searchType: 'web',
+      range,
+      entity: { dimension: 'queryCanonical', value: 'sitemap validator' },
+      metrics: ['clicks', 'impressions', 'ctr', 'position'],
+    }
+    const c = compileArchetypeSql(q)
+    expect(c.table).toBe('queries')
+    expect(c.sql).toMatch(/COALESCE\(.*query_dim.*\) = \?/)
+    expect(c.sql).toContain('GROUP BY date')
+    expect(c.params).toContain('sitemap validator')
+  })
+
   it('3 — entity-daily-sparkline: builds an IN list from resolved entities', () => {
     const q: ArchetypeQuery = {
       archetype: 'entity-daily-sparkline',

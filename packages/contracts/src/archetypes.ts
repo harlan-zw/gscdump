@@ -52,7 +52,7 @@ export interface SiteDailyTimeseriesQuery extends ArchetypeQueryBase {
 
 export interface EntityDailyTimeseriesQuery extends ArchetypeQueryBase {
   archetype: 'entity-daily-timeseries'
-  entity: { dimension: Extract<Dimension, 'page' | 'query'>, value: string }
+  entity: { dimension: Extract<Dimension, 'page' | 'query' | 'queryCanonical'>, value: string }
   metrics: readonly Metric[]
 }
 

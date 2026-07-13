@@ -167,6 +167,17 @@ describe('resolveServerTailEngine', () => {
     expect(resolveServerTailEngine(q)).toBe('duckdb')
   })
 
+  it('escalates an entity-daily-timeseries with a queryCanonical entity to duckdb; page/query entities stay r2-sql', () => {
+    const q = {
+      ...base,
+      archetype: 'entity-daily-timeseries' as const,
+      entity: { dimension: 'queryCanonical' as const, value: 'sitemap validator' },
+      metrics: ['clicks' as const],
+    }
+    expect(resolveServerTailEngine(q)).toBe('duckdb')
+    expect(resolveServerTailEngine({ ...q, entity: { dimension: 'query' as const, value: 'sitemap validator' } })).toBe('r2-sql')
+  })
+
   it('escalates an entity-daily-sparkline over queryCanonical to duckdb; plain query stays r2-sql', () => {
     const q = {
       ...base,

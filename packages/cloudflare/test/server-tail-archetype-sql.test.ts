@@ -151,6 +151,20 @@ describe('buildArchetypeSql', () => {
     expect(plan.params).toHaveLength(4)
   })
 
+  it('entity-daily-timeseries accepts a queryCanonical entity (keyword-group daily chart) via the query_dim COALESCE', () => {
+    const q: EntityDailyTimeseriesQuery = {
+      ...base,
+      archetype: 'entity-daily-timeseries',
+      entity: { dimension: 'queryCanonical', value: 'sitemap validator' },
+      metrics: ['clicks', 'impressions', 'ctr', 'position'],
+    }
+    const plan = buildArchetypeSql(q)
+    expect(plan.table).toBe('queries')
+    expect(plan.sql).toMatch(/COALESCE\(.*query_dim.*\) = \?/)
+    expect(plan.sql).toContain('GROUP BY date ORDER BY date ASC')
+    expect(plan.params).toContain('sitemap validator')
+  })
+
   it('entity-daily-sparkline keys rows by `entity` (the contract consumers bucket on — parity with the wasm engine)', () => {
     const q: EntityDailySparklineQuery = {
       ...base,
