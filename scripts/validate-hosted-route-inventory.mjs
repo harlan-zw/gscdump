@@ -169,15 +169,15 @@ async function buildInventory() {
     scope: {
       description: 'All live Nitro server/api handlers in gscdump.com, plus its legacy user and partner WebSocket handlers. Legacy package descriptors and generated public-v1 operations are matched as ownership evidence; they do not define inventory inclusion.',
       packageRepository: '.',
-      hostRepository: portable(relative(repoRoot, hostRoot)),
+      hostRepository: 'gscdump.com',
       sources: [
         'packages/contracts/src/routes.ts',
         'packages/contracts/src/endpoints.ts',
         'packages/contracts/generated/openapi.analytics.v1.json',
         'packages/contracts/generated/openapi.partner.v1.json',
         'packages/contracts/generated/openapi.realtime.v1.json',
-        `${portable(relative(repoRoot, hostRoot))}/server/api`,
-        `${portable(relative(repoRoot, hostRoot))}/server/routes/ws`,
+        'gscdump.com/server/api',
+        'gscdump.com/server/routes/ws',
       ],
     },
     summary: {
