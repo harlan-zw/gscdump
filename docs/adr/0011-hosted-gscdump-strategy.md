@@ -4,8 +4,9 @@
 
 Accepted — amended 2026-07-14; the lean four-operation implementation is
 released as 0.38.0, the host HTTP/realtime slice is deployed with direct production canaries
-green, and the isolated NuxtSEO consumer slice is verified locally but its production cut is deferred
-while unrelated consumer work completes
+green—including idle-hibernation resume and full 15-minute alarm expiry—and the isolated NuxtSEO
+consumer slice is verified locally but its production cut is deferred while unrelated consumer
+work completes
 
 ## Context
 

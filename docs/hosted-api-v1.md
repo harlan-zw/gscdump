@@ -9,10 +9,11 @@ generated artifacts, SDK, hosted adapters, realtime Worker/outbox, generic
 The contract and SDK packages are released as 0.38.0. The host HTTP and
 realtime slice is deployed, and direct production canaries cover all four HTTP
 operations, single-use tickets, outbox-to-socket delivery, effect-aware cursor
-confirmation, and duplicate-event suppression. The isolated NuxtSEO consumer
-slice is verified locally, but its production cut is deferred while unrelated
-consumer work completes. This status does not claim a legacy cut or public
-launch. The checked-in constants are machine-readable in
+confirmation, duplicate-event suppression, documented idle-hibernation resume,
+and the full 15-minute alarm expiry. The isolated NuxtSEO consumer slice is
+verified locally, but its production cut is deferred while unrelated consumer
+work completes. This status does not claim a legacy cut or public launch. The
+checked-in constants are machine-readable in
 [`hosted-api-v1-constants.json`](./hosted-api-v1-constants.json), and the
 legacy producer evidence is in
 [`hosted-api-inventory.md`](./hosted-api-inventory.md).
@@ -561,7 +562,8 @@ duplicate outbox suppression.
 
 Before public documentation is opened, the deferred NuxtSEO production cut
 must still prove an authenticated browser refresh through its proxy and the
-absence of long-lived gscdump keys from browser payloads. Forced production
-drills for hibernation/alarm recovery, replay expiry, backpressure, ticket-key
-rotation, and the full connection lifetime remain publication evidence even
-though their deterministic contract and Workerd coverage is green.
+absence of long-lived gscdump keys from browser payloads. Protected host run
+`29324725739` closed the idle-hibernation/full-lifetime gate without product
+mutation. Production failure drills for replay expiry, backpressure, and
+ticket-key rotation remain publication evidence even though their deterministic
+contract and Workerd coverage is green.
