@@ -1,0 +1,642 @@
+{
+  "components": {
+    "schemas": {
+      "realtime.stream.head.get.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "rate_limited",
+                  "realtime_unavailable",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/realtime.stream.head.get.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "realtime.stream.head.get.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/realtime.stream.head.get.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/realtime.stream.head.get.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "realtime.tickets.create.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "rate_limited",
+                  "realtime_unavailable",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/realtime.tickets.create.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "realtime.tickets.create.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/realtime.tickets.create.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/realtime.tickets.create.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "securitySchemes": {
+      "partner_key": {
+        "bearerFormat": "gscdump partner key",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "user_key": {
+        "bearerFormat": "gscdump user key",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "license": {
+      "identifier": "MIT",
+      "name": "MIT"
+    },
+    "title": "gscdump realtime API",
+    "version": "1.0"
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/realtime/v1/stream/head": {
+      "get": {
+        "description": "Returns the current durable head for the credential's one exact stream.",
+        "operationId": "realtime.stream.head.get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "head": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "sequence": {
+                              "pattern": "^(0|[1-9]\\d*)$",
+                              "type": "string"
+                            },
+                            "streamId": {
+                              "anyOf": [
+                                {
+                                  "pattern": "^user:u_[\\w-]+$",
+                                  "type": "string"
+                                },
+                                {
+                                  "pattern": "^partner:p_[\\w-]+$",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "streamId",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "head"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "realtime",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/realtime.stream.head.get.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/realtime.stream.head.get.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/realtime.stream.head.get.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Get the inferred stream head",
+        "tags": [
+          "Realtime"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "rate_limited",
+          "realtime_unavailable",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {},
+          "response": {
+            "data": {
+              "head": {
+                "sequence": "142",
+                "streamId": "user:u_01"
+              }
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "realtime",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "1.0.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "principal_stream"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "principal_stream"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": []
+        },
+        "x-gscdump-scopes": [
+          "realtime:connect"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/realtime/v1/tickets": {
+      "post": {
+        "description": "Creates a short-lived single-use ticket for the credential's inferred stream.",
+        "operationId": "realtime.tickets.create",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "origin": {
+                    "format": "uri",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "expiresAt": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "type": "string"
+                        },
+                        "head": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "sequence": {
+                              "pattern": "^(0|[1-9]\\d*)$",
+                              "type": "string"
+                            },
+                            "streamId": {
+                              "anyOf": [
+                                {
+                                  "pattern": "^user:u_[\\w-]+$",
+                                  "type": "string"
+                                },
+                                {
+                                  "pattern": "^partner:p_[\\w-]+$",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "streamId",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "maxConnectionSeconds": {
+                          "const": 900,
+                          "type": "number"
+                        },
+                        "protocol": {
+                          "const": "gscdump.v1",
+                          "type": "string"
+                        },
+                        "protocolVersion": {
+                          "const": 1,
+                          "type": "number"
+                        },
+                        "socketUrl": {
+                          "format": "uri",
+                          "type": "string"
+                        },
+                        "ticket": {
+                          "maxLength": 2048,
+                          "pattern": "^gscdump\\.ticket\\.v1\\.[\\w-]+\\.[\\w-]+$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "socketUrl",
+                        "protocol",
+                        "protocolVersion",
+                        "ticket",
+                        "expiresAt",
+                        "head",
+                        "maxConnectionSeconds"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "realtime",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/realtime.tickets.create.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/realtime.tickets.create.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/realtime.tickets.create.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Create a realtime ticket",
+        "tags": [
+          "Realtime"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "rate_limited",
+          "realtime_unavailable",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {
+              "origin": "https://nuxtseo.com"
+            }
+          },
+          "response": {
+            "data": {
+              "expiresAt": "2026-07-14T08:01:00.000Z",
+              "head": {
+                "sequence": "142",
+                "streamId": "user:u_01"
+              },
+              "maxConnectionSeconds": 900,
+              "protocol": "gscdump.v1",
+              "protocolVersion": 1,
+              "socketUrl": "wss://gscdump.com/ws/v1",
+              "ticket": "gscdump.ticket.v1.cGF5bG9hZA.c2lnbmF0dXJl"
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "realtime",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "1.0.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "principal_stream"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "principal_stream"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": []
+        },
+        "x-gscdump-scopes": [
+          "realtime:connect"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": false,
+          "kind": "mutation",
+          "readConsistency": null,
+          "retry": "never",
+          "sideEffects": "state"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "https://gscdump.com"
+    }
+  ]
+}

@@ -264,3 +264,10 @@
   topLevel: function
   UnresolvableDatasetError: function
   UnsupportedLogicalCapabilityError: function
+./v1:
+  createGscdumpRealtimeV1Client: function
+  createGscdumpV1Client: function
+  GSCDUMP_REALTIME_V1_SDK_VERSION: string
+  GscdumpRealtimeV1Error: function
+  GscdumpV1Error: function
+  isGscdumpV1Error: function

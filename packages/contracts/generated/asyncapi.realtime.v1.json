@@ -1,0 +1,1231 @@
+{
+  "asyncapi": "3.1.0",
+  "channels": {
+    "notifications": {
+      "address": "/",
+      "messages": {
+        "clientFrame": {
+          "$ref": "#/components/messages/clientFrame"
+        },
+        "serverFrame": {
+          "$ref": "#/components/messages/serverFrame"
+        }
+      }
+    }
+  },
+  "components": {
+    "messages": {
+      "clientFrame": {
+        "contentType": "application/json",
+        "name": "clientFrame",
+        "payload": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "protocolVersion": {
+                  "const": 1,
+                  "type": "number"
+                },
+                "resume": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "sequence": {
+                          "pattern": "^(0|[1-9]\\d*)$",
+                          "type": "string"
+                        },
+                        "streamId": {
+                          "anyOf": [
+                            {
+                              "pattern": "^user:u_[\\w-]+$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^partner:p_[\\w-]+$",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "streamId",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sdkVersion": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": {
+                  "const": "hello",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "protocolVersion",
+                "sdkVersion",
+                "resume"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "cursor": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "sequence": {
+                      "pattern": "^(0|[1-9]\\d*)$",
+                      "type": "string"
+                    },
+                    "streamId": {
+                      "anyOf": [
+                        {
+                          "pattern": "^user:u_[\\w-]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^partner:p_[\\w-]+$",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "streamId",
+                    "sequence"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "const": "ack",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "cursor"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "serverFrame": {
+        "contentType": "application/json",
+        "name": "serverFrame",
+        "payload": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "connectionId": {
+                  "pattern": "^conn_[\\w-]+$",
+                  "type": "string"
+                },
+                "expiresAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "type": "string"
+                },
+                "head": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "sequence": {
+                      "pattern": "^(0|[1-9]\\d*)$",
+                      "type": "string"
+                    },
+                    "streamId": {
+                      "anyOf": [
+                        {
+                          "pattern": "^user:u_[\\w-]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^partner:p_[\\w-]+$",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "streamId",
+                    "sequence"
+                  ],
+                  "type": "object"
+                },
+                "heartbeat": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "ping": {
+                      "const": "ping",
+                      "type": "string"
+                    },
+                    "pong": {
+                      "const": "pong",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ping",
+                    "pong"
+                  ],
+                  "type": "object"
+                },
+                "limits": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "maxBatchEvents": {
+                      "exclusiveMinimum": 0,
+                      "maximum": 20,
+                      "type": "integer"
+                    },
+                    "maxUnackedEvents": {
+                      "exclusiveMinimum": 0,
+                      "maximum": 500,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "maxBatchEvents",
+                    "maxUnackedEvents"
+                  ],
+                  "type": "object"
+                },
+                "protocolVersion": {
+                  "const": 1,
+                  "type": "number"
+                },
+                "replayFloor": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "sequence": {
+                      "pattern": "^(0|[1-9]\\d*)$",
+                      "type": "string"
+                    },
+                    "streamId": {
+                      "anyOf": [
+                        {
+                          "pattern": "^user:u_[\\w-]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^partner:p_[\\w-]+$",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "streamId",
+                    "sequence"
+                  ],
+                  "type": "object"
+                },
+                "streamId": {
+                  "anyOf": [
+                    {
+                      "pattern": "^user:u_[\\w-]+$",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^partner:p_[\\w-]+$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "type": {
+                  "const": "ready",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "protocolVersion",
+                "connectionId",
+                "streamId",
+                "replayFloor",
+                "head",
+                "limits",
+                "heartbeat",
+                "expiresAt"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "after": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "sequence": {
+                          "pattern": "^(0|[1-9]\\d*)$",
+                          "type": "string"
+                        },
+                        "streamId": {
+                          "anyOf": [
+                            {
+                              "pattern": "^user:u_[\\w-]+$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^partner:p_[\\w-]+$",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "streamId",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "through": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "sequence": {
+                      "pattern": "^(0|[1-9]\\d*)$",
+                      "type": "string"
+                    },
+                    "streamId": {
+                      "anyOf": [
+                        {
+                          "pattern": "^user:u_[\\w-]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^partner:p_[\\w-]+$",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "streamId",
+                    "sequence"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "const": "replay.begin",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "after",
+                "through"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "through": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "sequence": {
+                      "pattern": "^(0|[1-9]\\d*)$",
+                      "type": "string"
+                    },
+                    "streamId": {
+                      "anyOf": [
+                        {
+                          "pattern": "^user:u_[\\w-]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^partner:p_[\\w-]+$",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "streamId",
+                    "sequence"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "const": "replay.end",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "through"
+              ],
+              "type": "object"
+            },
+            {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "changes": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "pattern": "^[\\w-]+$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "created",
+                              "updated",
+                              "deleted"
+                            ],
+                            "type": "string"
+                          },
+                          "type": {
+                            "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id",
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "cursor": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "sequence": {
+                          "pattern": "^(0|[1-9]\\d*)$",
+                          "type": "string"
+                        },
+                        "streamId": {
+                          "anyOf": [
+                            {
+                              "pattern": "^user:u_[\\w-]+$",
+                              "type": "string"
+                            },
+                            {
+                              "pattern": "^partner:p_[\\w-]+$",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "streamId",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/serverFrame.__schema0"
+                    },
+                    "delivery": {
+                      "const": "durable",
+                      "type": "string"
+                    },
+                    "eventVersion": {
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991,
+                      "type": "integer"
+                    },
+                    "id": {
+                      "pattern": "^evt_[\\w-]+$",
+                      "type": "string"
+                    },
+                    "name": {
+                      "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)+$",
+                      "type": "string"
+                    },
+                    "occurredAt": {
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                      "type": "string"
+                    },
+                    "protocolVersion": {
+                      "const": 1,
+                      "type": "number"
+                    },
+                    "subject": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "pattern": "^p_[\\w-]+$",
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "partner",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "pattern": "^t_[\\w-]+$",
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "team",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "pattern": "^u_[\\w-]+$",
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "user",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "pattern": "^s_[\\w-]+$",
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "site",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "type": {
+                      "const": "event",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "protocolVersion",
+                    "eventVersion",
+                    "id",
+                    "name",
+                    "subject",
+                    "changes",
+                    "occurredAt",
+                    "correlationId",
+                    "data",
+                    "cursor",
+                    "delivery"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "changes": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "pattern": "^[\\w-]+$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "created",
+                              "updated",
+                              "deleted"
+                            ],
+                            "type": "string"
+                          },
+                          "type": {
+                            "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id",
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 0,
+                      "type": "array"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "cursor": {
+                      "type": "null"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/serverFrame.__schema0"
+                    },
+                    "delivery": {
+                      "const": "ephemeral",
+                      "type": "string"
+                    },
+                    "eventVersion": {
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991,
+                      "type": "integer"
+                    },
+                    "id": {
+                      "pattern": "^evt_[\\w-]+$",
+                      "type": "string"
+                    },
+                    "name": {
+                      "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)+$",
+                      "type": "string"
+                    },
+                    "occurredAt": {
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                      "type": "string"
+                    },
+                    "protocolVersion": {
+                      "const": 1,
+                      "type": "number"
+                    },
+                    "subject": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "pattern": "^p_[\\w-]+$",
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "partner",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "pattern": "^t_[\\w-]+$",
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "team",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "pattern": "^u_[\\w-]+$",
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "user",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "pattern": "^s_[\\w-]+$",
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "site",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "type": {
+                      "const": "event",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "protocolVersion",
+                    "eventVersion",
+                    "id",
+                    "name",
+                    "subject",
+                    "changes",
+                    "occurredAt",
+                    "correlationId",
+                    "data",
+                    "cursor",
+                    "delivery"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "events": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "changes": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "pattern": "^[\\w-]+$",
+                              "type": "string"
+                            },
+                            "kind": {
+                              "enum": [
+                                "created",
+                                "updated",
+                                "deleted"
+                              ],
+                              "type": "string"
+                            },
+                            "type": {
+                              "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "kind"
+                          ],
+                          "type": "object"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "correlationId": {
+                        "anyOf": [
+                          {
+                            "pattern": "^req_[\\w-]+$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "cursor": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "sequence": {
+                            "pattern": "^(0|[1-9]\\d*)$",
+                            "type": "string"
+                          },
+                          "streamId": {
+                            "anyOf": [
+                              {
+                                "pattern": "^user:u_[\\w-]+$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^partner:p_[\\w-]+$",
+                                "type": "string"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "streamId",
+                          "sequence"
+                        ],
+                        "type": "object"
+                      },
+                      "data": {
+                        "$ref": "#/components/schemas/serverFrame.__schema0"
+                      },
+                      "delivery": {
+                        "const": "durable",
+                        "type": "string"
+                      },
+                      "eventVersion": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "type": "integer"
+                      },
+                      "id": {
+                        "pattern": "^evt_[\\w-]+$",
+                        "type": "string"
+                      },
+                      "name": {
+                        "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)+$",
+                        "type": "string"
+                      },
+                      "occurredAt": {
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                        "type": "string"
+                      },
+                      "protocolVersion": {
+                        "const": 1,
+                        "type": "number"
+                      },
+                      "subject": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "pattern": "^p_[\\w-]+$",
+                                "type": "string"
+                              },
+                              "type": {
+                                "const": "partner",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "pattern": "^t_[\\w-]+$",
+                                "type": "string"
+                              },
+                              "type": {
+                                "const": "team",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "pattern": "^u_[\\w-]+$",
+                                "type": "string"
+                              },
+                              "type": {
+                                "const": "user",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "pattern": "^s_[\\w-]+$",
+                                "type": "string"
+                              },
+                              "type": {
+                                "const": "site",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "id"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "const": "event",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "protocolVersion",
+                      "eventVersion",
+                      "id",
+                      "name",
+                      "subject",
+                      "changes",
+                      "occurredAt",
+                      "correlationId",
+                      "data",
+                      "cursor",
+                      "delivery"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 20,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "type": {
+                  "const": "batch",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "events"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "reason": {
+                  "enum": [
+                    "cursor_expired",
+                    "retention_gap",
+                    "sequence_gap",
+                    "stream_mismatch"
+                  ],
+                  "type": "string"
+                },
+                "resumeAfter": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "sequence": {
+                      "pattern": "^(0|[1-9]\\d*)$",
+                      "type": "string"
+                    },
+                    "streamId": {
+                      "anyOf": [
+                        {
+                          "pattern": "^user:u_[\\w-]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^partner:p_[\\w-]+$",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "streamId",
+                    "sequence"
+                  ],
+                  "type": "object"
+                },
+                "scope": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "streamId": {
+                      "anyOf": [
+                        {
+                          "pattern": "^user:u_[\\w-]+$",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^partner:p_[\\w-]+$",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "type": {
+                      "const": "stream",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "streamId"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "const": "resync.required",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "reason",
+                "scope",
+                "resumeAfter"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "invalid_frame",
+                        "protocol_mismatch",
+                        "policy_violation",
+                        "overloaded",
+                        "internal_error"
+                      ],
+                      "type": "string"
+                    },
+                    "message": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "retryAfter": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "type": "object"
+                },
+                "type": {
+                  "const": "error",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "error"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    "schemas": {
+      "serverFrame.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/serverFrame.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/serverFrame.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "gscdump realtime API",
+    "version": "1.0"
+  },
+  "operations": {
+    "receiveServerFrame": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/notifications"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/notifications/messages/serverFrame"
+        }
+      ]
+    },
+    "sendClientFrame": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/notifications"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/notifications/messages/clientFrame"
+        }
+      ]
+    }
+  },
+  "servers": {
+    "production": {
+      "host": "gscdump.com",
+      "pathname": "/ws/v1",
+      "protocol": "wss",
+      "x-websocket-subprotocol": "gscdump.v1"
+    }
+  },
+  "x-gscdump-event-semantics": {
+    "site.analytics.ready": {
+      "baseChanges": [
+        "site.analytics",
+        "site.lifecycle"
+      ],
+      "delivery": "durable"
+    },
+    "site.auth.failed": {
+      "baseChanges": [
+        "site.auth",
+        "site.lifecycle"
+      ],
+      "delivery": "durable"
+    },
+    "site.indexing.ready": {
+      "baseChanges": [
+        "site.indexing",
+        "site.lifecycle"
+      ],
+      "delivery": "durable"
+    },
+    "site.lifecycle.changed": {
+      "baseChanges": [
+        "site.lifecycle"
+      ],
+      "delivery": "durable"
+    },
+    "site.lifecycle.failed": {
+      "baseChanges": [
+        "site.lifecycle"
+      ],
+      "delivery": "durable"
+    },
+    "site.lifecycle.progress": {
+      "baseChanges": [],
+      "delivery": "ephemeral"
+    },
+    "site.registration.changed": {
+      "baseChanges": [
+        "site.registration",
+        "user.sites"
+      ],
+      "delivery": "durable"
+    },
+    "site.sitemaps.ready": {
+      "baseChanges": [
+        "site.sitemaps",
+        "site.lifecycle"
+      ],
+      "delivery": "durable"
+    },
+    "user.lifecycle.changed": {
+      "baseChanges": [
+        "partner.user",
+        "user.sites"
+      ],
+      "delivery": "durable"
+    }
+  },
+  "x-heartbeat-text-frames": {
+    "ping": "ping",
+    "pong": "pong"
+  }
+}

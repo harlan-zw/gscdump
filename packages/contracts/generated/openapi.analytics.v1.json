@@ -1,0 +1,726 @@
+{
+  "components": {
+    "schemas": {
+      "analytics.rows.query.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/analytics.rows.query.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "analytics.rows.query.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/analytics.rows.query.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/analytics.rows.query.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "analytics.rows.query.request.body.__schema0": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_filters": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "dimension": {
+                          "enum": [
+                            "page",
+                            "query",
+                            "queryCanonical",
+                            "country",
+                            "device",
+                            "date",
+                            "searchAppearance",
+                            "hour",
+                            "clicks",
+                            "impressions",
+                            "ctr",
+                            "position",
+                            "searchType"
+                          ],
+                          "type": "string"
+                        },
+                        "expression": {
+                          "type": "string"
+                        },
+                        "operator": {
+                          "enum": [
+                            "equals",
+                            "notEquals",
+                            "contains",
+                            "notContains",
+                            "includingRegex",
+                            "excludingRegex",
+                            "gte",
+                            "gt",
+                            "lte",
+                            "lt",
+                            "metricGte",
+                            "metricGt",
+                            "metricLte",
+                            "metricLt",
+                            "topLevel"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "operator",
+                        "expression"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "dimension": {
+                          "enum": [
+                            "page",
+                            "query",
+                            "queryCanonical",
+                            "country",
+                            "device",
+                            "date",
+                            "searchAppearance",
+                            "hour",
+                            "clicks",
+                            "impressions",
+                            "ctr",
+                            "position",
+                            "searchType"
+                          ],
+                          "type": "string"
+                        },
+                        "expression": {
+                          "type": "string"
+                        },
+                        "expression2": {
+                          "type": "string"
+                        },
+                        "operator": {
+                          "enum": [
+                            "between",
+                            "metricBetween"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "operator",
+                        "expression",
+                        "expression2"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "_groupType": {
+                "enum": [
+                  "and",
+                  "or"
+                ],
+                "type": "string"
+              },
+              "_nestedGroups": {
+                "items": {
+                  "$ref": "#/components/schemas/analytics.rows.query.request.body.__schema0"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "_filters"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_filters": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "dimension": {
+                          "enum": [
+                            "page",
+                            "query",
+                            "queryCanonical",
+                            "country",
+                            "device",
+                            "date",
+                            "searchAppearance",
+                            "hour",
+                            "clicks",
+                            "impressions",
+                            "ctr",
+                            "position",
+                            "searchType"
+                          ],
+                          "type": "string"
+                        },
+                        "expression": {
+                          "type": "string"
+                        },
+                        "operator": {
+                          "enum": [
+                            "equals",
+                            "notEquals",
+                            "contains",
+                            "notContains",
+                            "includingRegex",
+                            "excludingRegex",
+                            "gte",
+                            "gt",
+                            "lte",
+                            "lt",
+                            "metricGte",
+                            "metricGt",
+                            "metricLte",
+                            "metricLt",
+                            "topLevel"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "operator",
+                        "expression"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "dimension": {
+                          "enum": [
+                            "page",
+                            "query",
+                            "queryCanonical",
+                            "country",
+                            "device",
+                            "date",
+                            "searchAppearance",
+                            "hour",
+                            "clicks",
+                            "impressions",
+                            "ctr",
+                            "position",
+                            "searchType"
+                          ],
+                          "type": "string"
+                        },
+                        "expression": {
+                          "type": "string"
+                        },
+                        "expression2": {
+                          "type": "string"
+                        },
+                        "operator": {
+                          "enum": [
+                            "between",
+                            "metricBetween"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "operator",
+                        "expression",
+                        "expression2"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "maxItems": 0,
+                "type": "array"
+              },
+              "_groupType": {
+                "enum": [
+                  "and",
+                  "or"
+                ],
+                "type": "string"
+              },
+              "_nestedGroups": {
+                "items": {
+                  "$ref": "#/components/schemas/analytics.rows.query.request.body.__schema0"
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "_filters",
+              "_nestedGroups"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "securitySchemes": {
+      "partner_key": {
+        "bearerFormat": "gscdump partner key",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "user_key": {
+        "bearerFormat": "gscdump user key",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "license": {
+      "identifier": "MIT",
+      "name": "MIT"
+    },
+    "title": "gscdump analytics API",
+    "version": "1.0"
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/analytics/v1/sites/{siteId}/rows": {
+      "post": {
+        "description": "Executes an idempotent primary-consistent analytics row query.",
+        "operationId": "analytics.rows.query",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "aggregationType": {
+                    "enum": [
+                      "auto",
+                      "byPage",
+                      "byProperty",
+                      "byNewsShowcasePanel"
+                    ],
+                    "type": "string"
+                  },
+                  "dataState": {
+                    "enum": [
+                      "final",
+                      "all",
+                      "hourly_all"
+                    ],
+                    "type": "string"
+                  },
+                  "dimensions": {
+                    "items": {
+                      "enum": [
+                        "page",
+                        "query",
+                        "queryCanonical",
+                        "country",
+                        "device",
+                        "date",
+                        "searchAppearance",
+                        "hour"
+                      ],
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "filter": {
+                    "$ref": "#/components/schemas/analytics.rows.query.request.body.__schema0"
+                  },
+                  "metrics": {
+                    "items": {
+                      "enum": [
+                        "clicks",
+                        "impressions",
+                        "ctr",
+                        "position"
+                      ],
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "orderBy": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "column": {
+                        "enum": [
+                          "clicks",
+                          "impressions",
+                          "ctr",
+                          "position",
+                          "date"
+                        ],
+                        "type": "string"
+                      },
+                      "dir": {
+                        "enum": [
+                          "asc",
+                          "desc"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "column",
+                      "dir"
+                    ],
+                    "type": "object"
+                  },
+                  "prefilter": {
+                    "$ref": "#/components/schemas/analytics.rows.query.request.body.__schema0"
+                  },
+                  "rowLimit": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 25000,
+                    "type": "integer"
+                  },
+                  "searchType": {
+                    "enum": [
+                      "web",
+                      "image",
+                      "video",
+                      "news",
+                      "discover",
+                      "googleNews"
+                    ],
+                    "type": "string"
+                  },
+                  "startRow": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "dimensions"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "rows": {
+                          "items": {
+                            "additionalProperties": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "rows"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "queryMs": {
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "sourceKind": {
+                          "enum": [
+                            "row",
+                            "sql"
+                          ],
+                          "type": "string"
+                        },
+                        "sourceName": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "analytics",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version",
+                        "sourceName",
+                        "sourceKind",
+                        "queryMs"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.rows.query.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.rows.query.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.rows.query.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Query analytics rows",
+        "tags": [
+          "Analytics rows"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {
+              "dimensions": [
+                "query"
+              ],
+              "metrics": [
+                "clicks",
+                "impressions"
+              ],
+              "rowLimit": 100
+            },
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "rows": []
+            },
+            "meta": {
+              "queryMs": 12,
+              "requestId": "req_01",
+              "sourceKind": "sql",
+              "sourceName": "primary",
+              "surface": "analytics",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "1.0.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.analytics"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "analytics:execute"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "https://gscdump.com"
+    }
+  ]
+}

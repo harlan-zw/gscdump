@@ -40,6 +40,11 @@
       "types": "./dist/partner.d.mts",
       "import": "./dist/partner.mjs",
       "default": "./dist/partner.mjs"
+    },
+    "./v1": {
+      "types": "./dist/v1/index.d.mts",
+      "import": "./dist/v1/index.mjs",
+      "default": "./dist/v1/index.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -53,6 +58,7 @@
   "scripts": {
     "build": "obuild",
     "dev": "obuild --stub",
+    "generate:v1-contracts": "pnpm run build && node scripts/generate-v1-contracts.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "prepack": "pnpm run build"

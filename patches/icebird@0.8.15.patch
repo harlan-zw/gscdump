@@ -1,5 +1,5 @@
 diff --git a/src/catalog/rest.js b/src/catalog/rest.js
-index 2ae314e..92e9980 100644
+index e10caf1..4bd3e8b 100644
 --- a/src/catalog/rest.js
 +++ b/src/catalog/rest.js
 @@ -1,4 +1,4 @@
@@ -8,7 +8,7 @@ index 2ae314e..92e9980 100644
  
  /**
   * Iceberg REST Catalog client.
-@@ -167,7 +167,7 @@ export async function restCatalogCreateTable(ctx, {
+@@ -173,7 +173,7 @@ export async function restCatalogCreateTable(ctx, {
    const res = await restFetch(ctx, `namespaces/${ns}/tables`, {
      method: 'POST',
      headers: { 'content-type': 'application/json' },
@@ -17,7 +17,7 @@ index 2ae314e..92e9980 100644
    })
    const responseBody = parseIcebergJson(await res.text())
    return {
-@@ -199,7 +199,7 @@ export async function restCatalogRegisterTable(ctx, { namespace, table, metadata
+@@ -205,7 +205,7 @@ export async function restCatalogRegisterTable(ctx, { namespace, table, metadata
    const res = await restFetch(ctx, `namespaces/${ns}/register`, {
      method: 'POST',
      headers: { 'content-type': 'application/json' },
@@ -26,7 +26,7 @@ index 2ae314e..92e9980 100644
    })
    const responseBody = parseIcebergJson(await res.text())
    return {
-@@ -230,7 +230,7 @@ export async function restCatalogUpdateTable(ctx, { namespace, table, requiremen
+@@ -236,7 +236,7 @@ export async function restCatalogUpdateTable(ctx, { namespace, table, requiremen
    const res = await restFetch(ctx, `namespaces/${ns}/tables/${tbl}`, {
      method: 'POST',
      headers: { 'content-type': 'application/json' },
@@ -35,7 +35,7 @@ index 2ae314e..92e9980 100644
    })
    const responseBody = parseIcebergJson(await res.text())
    return {
-@@ -274,7 +274,7 @@ export async function restCatalogCreateNamespace(ctx, { namespace, properties })
+@@ -280,7 +280,7 @@ export async function restCatalogCreateNamespace(ctx, { namespace, properties })
    const res = await restFetch(ctx, 'namespaces', {
      method: 'POST',
      headers: { 'content-type': 'application/json' },
@@ -44,7 +44,7 @@ index 2ae314e..92e9980 100644
    })
    const body = parseIcebergJson(await res.text())
    return {
-@@ -310,7 +310,7 @@ export async function restCatalogRenameTable(ctx, { source, destination }) {
+@@ -316,7 +316,7 @@ export async function restCatalogRenameTable(ctx, { source, destination }) {
    await restFetch(ctx, 'tables/rename', {
      method: 'POST',
      headers: { 'content-type': 'application/json' },
@@ -217,10 +217,10 @@ index ba5a83e..a6018c2 100644
  
  /**
 diff --git a/src/types.d.ts b/src/types.d.ts
-index d457a6a..dc744bf 100644
+index daf4cd3..1a338d4 100644
 --- a/src/types.d.ts
 +++ b/src/types.d.ts
-@@ -175,7 +175,7 @@ interface PartitionStatistics {
+@@ -177,7 +177,7 @@ interface PartitionStatistics {
    'file-size-in-bytes': bigint
  }
  
@@ -266,10 +266,10 @@ index bb0ee43..16606d9 100644
    ]
    if (rowLineage) {
 diff --git a/src/write/stage.js b/src/write/stage.js
-index 35f6f64..df43706 100644
+index 176b3d4..0d64114 100644
 --- a/src/write/stage.js
 +++ b/src/write/stage.js
-@@ -170,7 +170,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
+@@ -171,7 +171,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
   * @param {Resolver} options.resolver
   * @returns {Promise<StagedUpdate>}
   */
@@ -278,7 +278,7 @@ index 35f6f64..df43706 100644
    if (!tableUrl) throw new Error('tableUrl is required')
    if (!resolver?.writer) throw new Error('resolver.writer is required')
    const sequenceNumber = BigInt(metadata['last-sequence-number'] ?? 0) + 1n
-@@ -213,6 +213,11 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
+@@ -214,6 +214,11 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
      'total-delete-files': '0',
      'total-position-deletes': '0',
      'total-equality-deletes': '0',
@@ -291,7 +291,7 @@ index 35f6f64..df43706 100644
    return await buildSnapshotUpdate({
      tableUrl, metadata, resolver,
 diff --git a/src/write/write.js b/src/write/write.js
-index b6be955..614266a 100644
+index 68eeefa..bae4b2f 100644
 --- a/src/write/write.js
 +++ b/src/write/write.js
 @@ -34,7 +34,7 @@ const DEFAULT_RETRY = Object.freeze({
@@ -312,54 +312,55 @@ index b6be955..614266a 100644
    })
  }
 diff --git a/types/manifest.d.ts b/types/manifest.d.ts
-index 9a205ab..437fb39 100644
+index 22ec9a3..94c49dc 100644
 --- a/types/manifest.d.ts
 +++ b/types/manifest.d.ts
-@@ -11,11 +11,17 @@
-  * @param {number | bigint} [options.snapshotId] - Optional snapshot id; defaults to `current-snapshot-id`.
-  * @returns {Promise<ManifestList>}
-  */
--export function icebergManifests({ metadata, resolver, snapshotId }: {
-+export function icebergManifests({ metadata, resolver, snapshotId, partitionFilter }: {
-     metadata: TableMetadata;
-     resolver?: Resolver | undefined;
-     snapshotId?: number | bigint | undefined;
-+    partitionFilter?: ManifestPartitionFilter | undefined;
- }): Promise<ManifestList>;
+@@ -1,8 +1,13 @@
+-import type { Resolver, TableMetadata, ManifestEntry } from '../src/types.js';
++import type { Manifest, Resolver, TableMetadata, ManifestEntry } from '../src/types.js';
+ export type ManifestList = {
+     url: string;
+     entries: ManifestEntry[];
+ }[];
 +/**
 + * Predicate applied to each manifest's manifest-list `partitions` field-summary
 + * array before entry fetch. Return `false` to skip the manifest's entry fetch.
 + */
 +export type ManifestPartitionFilter = (partitions: Manifest['partitions'], partitionSpecId: number, manifest: Manifest) => boolean;
  /**
+  * Returns manifest entries for a snapshot. Defaults to the current snapshot;
+  * pass `snapshotId` to time-travel to a prior snapshot in the metadata's
+@@ -16,10 +21,11 @@ export type ManifestList = {
+  * @param {number | bigint} [options.snapshotId] - Optional snapshot id; defaults to `current-snapshot-id`.
+  * @returns {Promise<ManifestList>}
+  */
+-export declare function icebergManifests({ metadata, resolver, snapshotId }: {
++export declare function icebergManifests({ metadata, resolver, snapshotId, partitionFilter }: {
+     metadata: TableMetadata;
+     resolver?: Resolver;
+     snapshotId?: number | bigint;
++    partitionFilter?: ManifestPartitionFilter;
+ }): Promise<ManifestList>;
+ /**
   * Split manifest entries into data and delete manifests.
-  *
-@@ -37,5 +43,6 @@ export type ManifestList = {
- }[];
- import type { TableMetadata } from '../src/types.js';
- import type { Resolver } from '../src/types.js';
-+import type { Manifest } from '../src/types.js';
- import type { ManifestEntry } from '../src/types.js';
- //# sourceMappingURL=manifest.d.ts.map
-\ No newline at end of file
 diff --git a/types/write/write.d.ts b/types/write/write.d.ts
-index 69ac335..dd30622 100644
+index 024e66e..e7a7cf5 100644
 --- a/types/write/write.d.ts
 +++ b/types/write/write.d.ts
-@@ -12,7 +12,7 @@
+@@ -13,7 +13,7 @@ import type { Catalog, IcebergTransaction, Lister, PartitionSpec, Resolver, Sche
   * @param {number} [options.sortOrderId] - Sort order id to apply; defaults to the table default.
   * @returns {Promise<TableMetadata>}
   */
--export function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId }: {
-+export function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId, snapshotProperties }: {
+-export declare function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId }: {
++export declare function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId, snapshotProperties }: {
      catalog: Catalog;
-     namespace?: string | string[] | undefined;
-     table?: string | undefined;
-@@ -20,6 +20,7 @@ export function icebergAppend({ catalog, namespace, table, tableUrl, resolver, r
-     resolver?: Resolver | undefined;
+     namespace?: string | string[];
+     table?: string;
+@@ -21,6 +21,7 @@ export declare function icebergAppend({ catalog, namespace, table, tableUrl, res
+     resolver?: Resolver;
      records: Record<string, any>[];
-     sortOrderId?: number | undefined;
-+    snapshotProperties?: Record<string, string> | undefined;
+     sortOrderId?: number;
++    snapshotProperties?: Record<string, string>;
  }): Promise<TableMetadata>;
  /**
   * Compact / rewrite a table in one call: load metadata, read every live row

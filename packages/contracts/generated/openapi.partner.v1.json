@@ -1,0 +1,760 @@
+{
+  "components": {
+    "schemas": {
+      "partner.users.lifecycle.get.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "user_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.users.lifecycle.get.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.users.lifecycle.get.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.users.lifecycle.get.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.users.lifecycle.get.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "securitySchemes": {
+      "partner_key": {
+        "bearerFormat": "gscdump partner key",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "user_key": {
+        "bearerFormat": "gscdump user key",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "license": {
+      "identifier": "MIT",
+      "name": "MIT"
+    },
+    "title": "gscdump partner API",
+    "version": "1.0"
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/partner/v1/users/{userId}/lifecycle": {
+      "get": {
+        "description": "Returns the authoritative lifecycle state for one visible user and their sites.",
+        "operationId": "partner.users.lifecycle.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "pattern": "^u_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "account": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "grantedScopes": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "missingScopes": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "nextAction": {
+                              "enum": [
+                                "connect_google",
+                                "reconnect_google",
+                                "wait_for_provisioning",
+                                "none"
+                              ],
+                              "type": "string"
+                            },
+                            "status": {
+                              "enum": [
+                                "disconnected",
+                                "oauth_received",
+                                "scope_missing",
+                                "refresh_missing",
+                                "db_provisioning",
+                                "ready",
+                                "reauth_required"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "grantedScopes",
+                            "missingScopes",
+                            "nextAction"
+                          ],
+                          "type": "object"
+                        },
+                        "currentTeamId": {
+                          "anyOf": [
+                            {
+                              "pattern": "^t_[\\w-]+$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "partnerId": {
+                          "anyOf": [
+                            {
+                              "pattern": "^p_[\\w-]+$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "sites": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "analytics": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "nextAction": {
+                                    "enum": [
+                                      "wait_for_sync",
+                                      "retry_sync",
+                                      "none"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "progress": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "completed": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "failed": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "percent": {
+                                        "maximum": 100,
+                                        "minimum": 0,
+                                        "type": "number"
+                                      },
+                                      "total": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "completed",
+                                      "failed",
+                                      "total",
+                                      "percent"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "queryable": {
+                                    "type": "boolean"
+                                  },
+                                  "sourceMode": {
+                                    "enum": [
+                                      "none",
+                                      "live",
+                                      "d1",
+                                      "r2",
+                                      "mixed"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "not_registered",
+                                      "queued",
+                                      "preparing",
+                                      "syncing",
+                                      "queryable_live",
+                                      "queryable_partial",
+                                      "ready",
+                                      "failed"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "syncedRange": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "newest": {
+                                        "anyOf": [
+                                          {
+                                            "format": "date",
+                                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "oldest": {
+                                        "anyOf": [
+                                          {
+                                            "format": "date",
+                                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "oldest",
+                                      "newest"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "progress",
+                                  "queryable",
+                                  "sourceMode",
+                                  "syncedRange",
+                                  "nextAction"
+                                ],
+                                "type": "object"
+                              },
+                              "externalSiteId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "gscPropertyUrl": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "indexing": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "eligible": {
+                                    "type": "boolean"
+                                  },
+                                  "nextAction": {
+                                    "enum": [
+                                      "reconnect_google",
+                                      "fix_gsc_permission",
+                                      "wait_for_sitemaps",
+                                      "wait_for_indexing",
+                                      "retry_indexing",
+                                      "none"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "progress": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "completed": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "failed": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "percent": {
+                                        "maximum": 100,
+                                        "minimum": 0,
+                                        "type": "number"
+                                      },
+                                      "total": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "completed",
+                                      "failed",
+                                      "total",
+                                      "percent"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "reason": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "not_requested",
+                                      "missing_scope",
+                                      "insufficient_permission",
+                                      "waiting_for_sitemaps",
+                                      "discovering",
+                                      "checking",
+                                      "ready",
+                                      "budget_exhausted",
+                                      "no_urls",
+                                      "failed"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "eligible",
+                                  "reason",
+                                  "progress",
+                                  "nextAction"
+                                ],
+                                "type": "object"
+                              },
+                              "latestError": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "code": {
+                                        "enum": [
+                                          "missing_refresh_token",
+                                          "missing_analytics_scope",
+                                          "missing_indexing_scope",
+                                          "token_refresh_failed",
+                                          "permission_lost",
+                                          "insufficient_gsc_permission",
+                                          "gsc_property_not_found",
+                                          "gsc_property_unverified",
+                                          "user_database_not_provisioned",
+                                          "sync_failed",
+                                          "sitemap_sync_failed",
+                                          "indexing_failed"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "message": {
+                                        "type": "string"
+                                      },
+                                      "retryable": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "code",
+                                      "message",
+                                      "retryable"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "permissionLevel": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "property": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "nextAction": {
+                                    "enum": [
+                                      "create_site",
+                                      "verify_gsc_property",
+                                      "choose_property",
+                                      "register_site",
+                                      "none"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "no_local_site",
+                                      "no_gsc_property",
+                                      "unverified_property",
+                                      "verified_candidate",
+                                      "registered",
+                                      "linked"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "nextAction"
+                                ],
+                                "type": "object"
+                              },
+                              "requestedUrl": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "siteId": {
+                                "pattern": "^s_[\\w-]+$",
+                                "type": "string"
+                              },
+                              "sitemaps": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "discoveredCount": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "nextAction": {
+                                    "enum": [
+                                      "submit_sitemap",
+                                      "wait_for_sitemaps",
+                                      "retry_sitemaps",
+                                      "none"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "unknown",
+                                      "discovering",
+                                      "none_found",
+                                      "auto_submitted",
+                                      "syncing",
+                                      "ready",
+                                      "failed"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "discoveredCount",
+                                  "nextAction"
+                                ],
+                                "type": "object"
+                              },
+                              "updatedAt": {
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "siteId",
+                              "externalSiteId",
+                              "requestedUrl",
+                              "gscPropertyUrl",
+                              "permissionLevel",
+                              "property",
+                              "analytics",
+                              "sitemaps",
+                              "indexing",
+                              "latestError",
+                              "updatedAt"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "userId": {
+                          "pattern": "^u_[\\w-]+$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "userId",
+                        "partnerId",
+                        "currentTeamId",
+                        "account",
+                        "sites"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.lifecycle.get.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.lifecycle.get.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.users.lifecycle.get.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Get user lifecycle",
+        "tags": [
+          "Users"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "user_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "userId": "u_01"
+            }
+          },
+          "response": {
+            "data": {
+              "account": {
+                "grantedScopes": [
+                  "https://www.googleapis.com/auth/webmasters.readonly"
+                ],
+                "missingScopes": [],
+                "nextAction": "none",
+                "status": "ready"
+              },
+              "currentTeamId": null,
+              "partnerId": "p_01",
+              "sites": [],
+              "userId": "u_01"
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "1.0.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "self"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "linked_user"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.userId",
+              "type": "partner.user"
+            },
+            {
+              "idFrom": "params.userId",
+              "type": "user.sites"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "users:read"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "https://gscdump.com"
+    }
+  ]
+}

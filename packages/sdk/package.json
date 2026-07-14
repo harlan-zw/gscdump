@@ -30,6 +30,11 @@
       "types": "./dist/query.d.mts",
       "import": "./dist/query.mjs",
       "default": "./dist/query.mjs"
+    },
+    "./v1": {
+      "types": "./dist/v1/index.d.mts",
+      "import": "./dist/v1/index.mjs",
+      "default": "./dist/v1/index.mjs"
     }
   },
   "main": "./dist/index.mjs",
