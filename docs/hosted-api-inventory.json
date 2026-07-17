@@ -1,0 +1,3771 @@
+{
+  "inventoryVersion": 1,
+  "scope": {
+    "description": "All live Nitro server/api handlers in gscdump.com, plus its legacy user and partner WebSocket handlers. Legacy package descriptors and generated public-v1 operations are matched as ownership evidence; they do not define inventory inclusion.",
+    "packageRepository": ".",
+    "hostRepository": "gscdump.com",
+    "sources": [
+      "packages/contracts/src/routes.ts",
+      "packages/contracts/src/endpoints.ts",
+      "packages/contracts/generated/openapi.analytics.v1.json",
+      "packages/contracts/generated/openapi.partner.v1.json",
+      "packages/contracts/generated/openapi.realtime.v1.json",
+      "gscdump.com/server/api",
+      "gscdump.com/server/routes/ws"
+    ]
+  },
+  "summary": {
+    "apiRouteFileCount": 211,
+    "httpOperationCount": 212,
+    "websocketOperationCount": 2,
+    "operationCount": 214,
+    "descriptorCount": 68,
+    "legacyDescriptorCount": 64,
+    "v1DescriptorCount": 4,
+    "descriptorOwnedOperationCount": 65,
+    "hostOperationsWithoutDescriptorCount": 149,
+    "schemaLessDescriptorCount": 10,
+    "descriptorWithoutHandlerCount": 2,
+    "descriptorCollisionCount": 1,
+    "excludedHelperFileCount": 1,
+    "excludedNonApiServerRouteCount": 3
+  },
+  "findings": {
+    "schemaLessDescriptorIds": [
+      "analytics.analyze",
+      "partner.deleteSite",
+      "partner.deleteTeam",
+      "partner.getContentVelocity",
+      "partner.getSyncStatus",
+      "partner.refreshSitemaps",
+      "partner.removeTeamMember",
+      "partner.renameTeam",
+      "partner.submitSitemap",
+      "partner.updateTeamMemberRole"
+    ],
+    "descriptorIdsWithoutHandler": [
+      "analytics.queryRows",
+      "partner.getAnalysis"
+    ],
+    "descriptorCollisions": [
+      {
+        "method": "POST",
+        "path": "/api/sites/{siteId}/sitemaps",
+        "descriptorIds": [
+          "partner.refreshSitemaps",
+          "partner.submitSitemap"
+        ],
+        "handlerFiles": [
+          "server/api/sites/[siteId]/sitemaps.post.ts"
+        ]
+      }
+    ],
+    "hostOperationsWithoutDescriptor": [
+      {
+        "method": "GET",
+        "path": "/api/__gsc/bulk-sources",
+        "file": "server/api/__gsc/bulk-sources.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/__gsc/diagnostics",
+        "file": "server/api/__gsc/diagnostics.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/__gsc/enrich-keywords",
+        "file": "server/api/__gsc/enrich-keywords.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/__gsc/sites/{siteId}/archetype-query",
+        "file": "server/api/__gsc/sites/[siteId]/archetype-query.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/__gsc/sites/{siteId}/coverage",
+        "file": "server/api/__gsc/sites/[siteId]/coverage.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/__gsc/sites/{siteId}/data/top-association",
+        "file": "server/api/__gsc/sites/[siteId]/data/top-association.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/__gsc/sites/{siteId}/parquet-listing",
+        "file": "server/api/__gsc/sites/[siteId]/parquet-listing.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/__gsc/sites/{siteId}/query-dim-source",
+        "file": "server/api/__gsc/sites/[siteId]/query-dim-source.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/backfill-canonical",
+        "file": "server/api/admin/backfill-canonical.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/backfill/gsc-range",
+        "file": "server/api/admin/backfill/gsc-range.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/backfill/iceberg-gsc",
+        "file": "server/api/admin/backfill/iceberg-gsc.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/backfill/resync-shard",
+        "file": "server/api/admin/backfill/resync-shard.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/backfill/resync-team",
+        "file": "server/api/admin/backfill/resync-team.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/backfill/search-appearance",
+        "file": "server/api/admin/backfill/search-appearance.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/indexing/compact",
+        "file": "server/api/admin/indexing/compact.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/indexing/daily-recompute",
+        "file": "server/api/admin/indexing/daily-recompute.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/indexing/parity",
+        "file": "server/api/admin/indexing/parity.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/indexing/phase",
+        "file": "server/api/admin/indexing/phase.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/indexing/rebuild",
+        "file": "server/api/admin/indexing/rebuild.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/indexing/rebuild-fanout",
+        "file": "server/api/admin/indexing/rebuild-fanout.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/indexing/summary-refresh",
+        "file": "server/api/admin/indexing/summary-refresh.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/lake/sql",
+        "file": "server/api/admin/lake/sql.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/rollups/query-dim-rebuild",
+        "file": "server/api/admin/rollups/query-dim-rebuild.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/rollups/rebuild",
+        "file": "server/api/admin/rollups/rebuild.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/sitemap/compact",
+        "file": "server/api/admin/sitemap/compact.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/sitemap/reconcile",
+        "file": "server/api/admin/sitemap/reconcile.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/sitemap/reconcile-backfill",
+        "file": "server/api/admin/sitemap/reconcile-backfill.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/sites/{publicId}/discover-hourly",
+        "file": "server/api/admin/sites/[publicId]/discover-hourly.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/sites/{publicId}/search-types",
+        "file": "server/api/admin/sites/[publicId]/search-types.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/teams/{teamId}/catalog/provision",
+        "file": "server/api/admin/teams/[teamId]/catalog/provision.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/teams/{teamId}/catalog/reads",
+        "file": "server/api/admin/teams/[teamId]/catalog/reads.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/teams/{teamId}/catalog/reencode",
+        "file": "server/api/admin/teams/[teamId]/catalog/reencode.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/teams/{teamId}/catalog/reset-tables",
+        "file": "server/api/admin/teams/[teamId]/catalog/reset-tables.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/trigger-health-report",
+        "file": "server/api/admin/trigger-health-report.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/trigger-sitemap-sync",
+        "file": "server/api/admin/trigger-sitemap-sync.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/trigger-sync",
+        "file": "server/api/admin/trigger-sync.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/users/{userId}/provision",
+        "file": "server/api/admin/users/[userId]/provision.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/users/encrypt-tokens",
+        "file": "server/api/admin/users/encrypt-tokens.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/admin/waitlist",
+        "file": "server/api/admin/waitlist.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/bulk-sources",
+        "file": "server/api/bulk-sources.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/cli/auth/complete",
+        "file": "server/api/cli/auth/complete.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/cli/auth/init",
+        "file": "server/api/cli/auth/init.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cli/auth/poll",
+        "file": "server/api/cli/auth/poll.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/cli/auth/refresh",
+        "file": "server/api/cli/auth/refresh.post.ts"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/cli/auth/revoke",
+        "file": "server/api/cli/auth/revoke.delete.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/cli/gsc/inspect",
+        "file": "server/api/cli/gsc/inspect.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/cli/gsc/query",
+        "file": "server/api/cli/gsc/query.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cli/gsc/sitemaps",
+        "file": "server/api/cli/gsc/sitemaps.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/cli/gsc/sitemaps",
+        "file": "server/api/cli/gsc/sitemaps.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cli/gsc/sites",
+        "file": "server/api/cli/gsc/sites.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/cli/gsc/sites",
+        "file": "server/api/cli/gsc/sites.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cli/me",
+        "file": "server/api/cli/me.get.ts"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/cli/sites/{siteId}",
+        "file": "server/api/cli/sites/[siteId].delete.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/cli/sites/{siteId}/data",
+        "file": "server/api/cli/sites/[siteId]/data.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/cli/sites/{siteId}/detail",
+        "file": "server/api/cli/sites/[siteId]/detail.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cli/sites/{siteId}/discover/hourly",
+        "file": "server/api/cli/sites/[siteId]/discover/hourly.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cli/sites/{siteId}/indexing/urls",
+        "file": "server/api/cli/sites/[siteId]/indexing/urls.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/cli/sites/{siteId}/inspect",
+        "file": "server/api/cli/sites/[siteId]/inspect.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cli/sites/available",
+        "file": "server/api/cli/sites/available.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/cli/sites/register",
+        "file": "server/api/cli/sites/register.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/enrich/keywords",
+        "file": "server/api/enrich/keywords.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/gsc/inspect",
+        "file": "server/api/gsc/inspect.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/gsc/query",
+        "file": "server/api/gsc/query.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/gsc/sitemaps",
+        "file": "server/api/gsc/sitemaps.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/gsc/sitemaps",
+        "file": "server/api/gsc/sitemaps.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/gsc/sites",
+        "file": "server/api/gsc/sites.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/gsc/sites",
+        "file": "server/api/gsc/sites.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/health",
+        "file": "server/api/health.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/learn/navigation",
+        "file": "server/api/learn/navigation.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/learn/page",
+        "file": "server/api/learn/page.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/learn/surround",
+        "file": "server/api/learn/surround.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/onboarding",
+        "file": "server/api/onboarding.get.ts"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/onboarding",
+        "file": "server/api/onboarding.put.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/partner/sites/{siteId}/cross-source-query",
+        "file": "server/api/partner/sites/[siteId]/cross-source-query.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/partner/sites/add-and-verify",
+        "file": "server/api/partner/sites/add-and-verify.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/partner/sites/verification-token",
+        "file": "server/api/partner/sites/verification-token.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/partner/teams/{teamId}/catalog",
+        "file": "server/api/partner/teams/[teamId]/catalog/index.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/partner/teams/{teamId}/catalog",
+        "file": "server/api/partner/teams/[teamId]/catalog/index.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/partner/users/{userId}/available-sites",
+        "file": "server/api/partner/users/[userId]/available-sites.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/partner/users/{userId}/lifecycle",
+        "file": "server/api/partner/users/[userId]/lifecycle.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/partner/users/{userId}/sites/{siteId}/indexing/inspect",
+        "file": "server/api/partner/users/[userId]/sites/[siteId]/indexing/inspect.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/partner/users/{userId}/sites/crosswalk",
+        "file": "server/api/partner/users/[userId]/sites/crosswalk.get.ts"
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/partner/users/{userId}/tokens",
+        "file": "server/api/partner/users/[userId]/tokens.patch.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/partner/users/register",
+        "file": "server/api/partner/users/register.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/public/demo",
+        "file": "server/api/public/demo.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/public/waitlist",
+        "file": "server/api/public/waitlist.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/public/waitlist/confirm",
+        "file": "server/api/public/waitlist/confirm.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/public/waitlist/confirm",
+        "file": "server/api/public/waitlist/confirm.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/quota",
+        "file": "server/api/quota.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/r2-data/{path+}",
+        "file": "server/api/r2-data/[...path].ts"
+      },
+      {
+        "method": "HEAD",
+        "path": "/api/r2-data/{path+}",
+        "file": "server/api/r2-data/[...path].ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/reports",
+        "file": "server/api/reports/index.get.ts"
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/sites/{siteId}",
+        "file": "server/api/sites/[siteId]/index.patch.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/{siteId}/archetype-query",
+        "file": "server/api/sites/[siteId]/archetype-query.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/{siteId}/backfill",
+        "file": "server/api/sites/[siteId]/backfill.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/{siteId}/data",
+        "file": "server/api/sites/[siteId]/data.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/{siteId}/data/detail",
+        "file": "server/api/sites/[siteId]/data/detail.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sites/{siteId}/discover/hourly",
+        "file": "server/api/sites/[siteId]/discover/hourly.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sites/{siteId}/discover/trending",
+        "file": "server/api/sites/[siteId]/discover/trending.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/{siteId}/index-percent",
+        "file": "server/api/sites/[siteId]/index-percent.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/{siteId}/inspect",
+        "file": "server/api/sites/[siteId]/inspect.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sites/{siteId}/query",
+        "file": "server/api/sites/[siteId]/query.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/{siteId}/query",
+        "file": "server/api/sites/[siteId]/query.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sites/{siteId}/query-dim-source",
+        "file": "server/api/sites/[siteId]/query-dim-source.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sites/{siteId}/reports/{reportId}",
+        "file": "server/api/sites/[siteId]/reports/[reportId].get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/{siteId}/reports/{reportId}/regenerate",
+        "file": "server/api/sites/[siteId]/reports/[reportId]/regenerate.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/{siteId}/sitemaps/membership",
+        "file": "server/api/sites/[siteId]/sitemaps/membership.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/{siteId}/sync",
+        "file": "server/api/sites/[siteId]/sync.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sites/available",
+        "file": "server/api/sites/available.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/bulk-register",
+        "file": "server/api/sites/bulk-register.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sites/groups",
+        "file": "server/api/sites/groups/index.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/groups",
+        "file": "server/api/sites/groups/index.post.ts"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/sites/groups/{groupId}",
+        "file": "server/api/sites/groups/[groupId].delete.ts"
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/sites/groups/{groupId}",
+        "file": "server/api/sites/groups/[groupId].patch.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sites/register",
+        "file": "server/api/sites/register.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/stats",
+        "file": "server/api/stats.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sync-jobs",
+        "file": "server/api/sync-jobs.get.ts"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/sync-jobs/{id}",
+        "file": "server/api/sync-jobs/[id].delete.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sync-jobs/{id}",
+        "file": "server/api/sync-jobs/[id].get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/sync-jobs/{id}/process",
+        "file": "server/api/sync-jobs/[id]/process.post.ts"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/sync-jobs/clear",
+        "file": "server/api/sync-jobs/clear.delete.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sync-jobs/history",
+        "file": "server/api/sync-jobs/history.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sync-progress",
+        "file": "server/api/sync-progress.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teams",
+        "file": "server/api/teams/index.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/teams",
+        "file": "server/api/teams/index.post.ts"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/teams/{teamId}",
+        "file": "server/api/teams/[teamId]/index.delete.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teams/{teamId}",
+        "file": "server/api/teams/[teamId]/index.get.ts"
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/teams/{teamId}",
+        "file": "server/api/teams/[teamId]/index.patch.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teams/{teamId}/invitations",
+        "file": "server/api/teams/[teamId]/invitations/index.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/teams/{teamId}/invitations",
+        "file": "server/api/teams/[teamId]/invitations/index.post.ts"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/teams/{teamId}/invitations/{id}",
+        "file": "server/api/teams/[teamId]/invitations/[id].delete.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teams/{teamId}/members",
+        "file": "server/api/teams/[teamId]/members/index.get.ts"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/teams/{teamId}/members/{userId}",
+        "file": "server/api/teams/[teamId]/members/[userId].delete.ts"
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/teams/{teamId}/members/{userId}",
+        "file": "server/api/teams/[teamId]/members/[userId].patch.ts"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/teams/current",
+        "file": "server/api/teams/current.put.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/teams/invitations/{token}",
+        "file": "server/api/teams/invitations/[token].get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/teams/invitations/accept",
+        "file": "server/api/teams/invitations/accept.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/telemetry/fallback",
+        "file": "server/api/telemetry/fallback.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/user",
+        "file": "server/api/user.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/user/api-key",
+        "file": "server/api/user/api-key.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/user/api-key",
+        "file": "server/api/user/api-key.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/user/lifecycle",
+        "file": "server/api/user/lifecycle.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/user/sessions",
+        "file": "server/api/user/sessions/index.get.ts"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/user/sessions/{sessionId}",
+        "file": "server/api/user/sessions/[sessionId].delete.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/users",
+        "file": "server/api/users/index.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/users/{userId}/sites/crosswalk",
+        "file": "server/api/users/[userId]/sites/crosswalk.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/webhooks/resend",
+        "file": "server/api/webhooks/resend.post.ts"
+      },
+      {
+        "method": "WEBSOCKET",
+        "path": "/ws/partner",
+        "file": "server/routes/ws/partner.ts"
+      },
+      {
+        "method": "WEBSOCKET",
+        "path": "/ws/user",
+        "file": "server/routes/ws/user.ts"
+      }
+    ]
+  },
+  "excluded": {
+    "helperFiles": [
+      "server/api/__gsc/sites/[siteId]/inspections/_d1-to-inspection-record.ts"
+    ],
+    "nonApiServerRoutes": [
+      "server/routes/__test/durable-job.get.ts",
+      "server/routes/auth/google.get.ts",
+      "server/routes/mcp.post.ts"
+    ]
+  },
+  "descriptors": [
+    {
+      "id": "analytics.analyze",
+      "owner": "analytics",
+      "method": "POST",
+      "path": "/api/__gsc/sites/{siteId}/analyze",
+      "routeBuilder": "analytics.site.analyze",
+      "schema": "missing",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/analyze.post.ts"
+      ]
+    },
+    {
+      "id": "analytics.getAnalysisSources",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/analysis-sources",
+      "routeBuilder": "analytics.site.analysisSources",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/analysis-sources.get.ts"
+      ]
+    },
+    {
+      "id": "analytics.getCountries",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/countries",
+      "routeBuilder": "analytics.site.countries",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/countries.get.ts"
+      ]
+    },
+    {
+      "id": "analytics.getIndexingDiagnostics",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/indexing/diagnostics",
+      "routeBuilder": "analytics.site.indexingDiagnostics",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/indexing/diagnostics.get.ts"
+      ]
+    },
+    {
+      "id": "analytics.getIndexingUrls",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/indexing/urls",
+      "routeBuilder": "analytics.site.indexingUrls",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/indexing/urls.get.ts"
+      ]
+    },
+    {
+      "id": "analytics.getInspectionHistory",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/inspections/{hash}",
+      "routeBuilder": "analytics.site.inspectionHistory",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/inspections/[hash].get.ts"
+      ]
+    },
+    {
+      "id": "analytics.getInspections",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/inspections",
+      "routeBuilder": "analytics.site.inspections",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/inspections.get.ts"
+      ]
+    },
+    {
+      "id": "analytics.getRollup",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/rollup/{rollupId}",
+      "routeBuilder": "analytics.site.rollup",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/rollup/[id].get.ts"
+      ]
+    },
+    {
+      "id": "analytics.getSearchAppearance",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/search-appearance",
+      "routeBuilder": "analytics.site.searchAppearance",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/search-appearance.get.ts"
+      ]
+    },
+    {
+      "id": "analytics.getSitemapChanges",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/sitemaps/changes",
+      "routeBuilder": "analytics.site.sitemapChanges",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/sitemaps/changes.get.ts"
+      ]
+    },
+    {
+      "id": "analytics.getSitemapHistory",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/sitemaps/{hash}",
+      "routeBuilder": "analytics.site.sitemapHistory",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/sitemaps/[hash].get.ts"
+      ]
+    },
+    {
+      "id": "analytics.getSitemaps",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/sitemaps",
+      "routeBuilder": "analytics.site.sitemaps",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/sitemaps.get.ts"
+      ]
+    },
+    {
+      "id": "analytics.getSourceInfo",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/source-info",
+      "routeBuilder": "analytics.site.sourceInfo",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/source-info.get.ts"
+      ]
+    },
+    {
+      "id": "analytics.listSites",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites",
+      "routeBuilder": "analytics.sites",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites.get.ts"
+      ]
+    },
+    {
+      "id": "analytics.queryRows",
+      "owner": "analytics",
+      "method": "POST",
+      "path": "/api/__gsc/sites/{siteId}/rows",
+      "routeBuilder": "analytics.site.rows",
+      "schema": "validated",
+      "handlerFiles": []
+    },
+    {
+      "id": "analytics.requestBackfill",
+      "owner": "analytics",
+      "method": "POST",
+      "path": "/api/__gsc/sites/{siteId}/backfill",
+      "routeBuilder": "analytics.site.backfill",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/backfill.post.ts"
+      ]
+    },
+    {
+      "id": "analytics.requestIndexingInspect",
+      "owner": "analytics",
+      "method": "POST",
+      "path": "/api/__gsc/sites/{siteId}/indexing/inspect",
+      "routeBuilder": "analytics.site.indexingInspect",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/indexing/inspect.post.ts"
+      ]
+    },
+    {
+      "id": "analytics.rows.query",
+      "owner": "analytics-v1",
+      "method": "POST",
+      "path": "/api/analytics/v1/sites/{siteId}/rows",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/analytics/v1/sites/[siteId]/rows.post.ts"
+      ]
+    },
+    {
+      "id": "analytics.whoami",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/whoami",
+      "routeBuilder": "analytics.whoami",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/whoami.get.ts"
+      ]
+    },
+    {
+      "id": "partner.addTeamMember",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/partner/teams/{teamId}/members",
+      "routeBuilder": "partner.teams.members",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/teams/[teamId]/members/index.post.ts"
+      ]
+    },
+    {
+      "id": "partner.bindSiteToTeam",
+      "owner": "partner",
+      "method": "PATCH",
+      "path": "/api/partner/users/{userId}/sites/{siteId}",
+      "routeBuilder": "partner.partner.users.siteTeam",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/users/[userId]/sites/[siteId].patch.ts"
+      ]
+    },
+    {
+      "id": "partner.bulkRegisterSites",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/partner/sites/bulk-register",
+      "routeBuilder": "partner.partner.sites.bulkRegister",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/sites/bulk-register.post.ts"
+      ]
+    },
+    {
+      "id": "partner.createTeam",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/partner/teams",
+      "routeBuilder": "partner.teams.create",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/teams/index.post.ts"
+      ]
+    },
+    {
+      "id": "partner.deleteSite",
+      "owner": "partner",
+      "method": "DELETE",
+      "path": "/api/sites/{siteId}",
+      "routeBuilder": "partner.sites.byId",
+      "schema": "missing",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/index.delete.ts"
+      ]
+    },
+    {
+      "id": "partner.deleteTeam",
+      "owner": "partner",
+      "method": "DELETE",
+      "path": "/api/partner/teams/{teamId}",
+      "routeBuilder": "partner.teams.byId",
+      "schema": "missing",
+      "handlerFiles": [
+        "server/api/partner/teams/[teamId]/index.delete.ts"
+      ]
+    },
+    {
+      "id": "partner.deleteUser",
+      "owner": "partner",
+      "method": "DELETE",
+      "path": "/api/partner/users/{userId}",
+      "routeBuilder": "partner.partner.users.byId",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/users/[userId]/index.delete.ts"
+      ]
+    },
+    {
+      "id": "partner.getAnalysis",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/analysis",
+      "routeBuilder": "partner.sites.analysis",
+      "schema": "validated",
+      "handlerFiles": []
+    },
+    {
+      "id": "partner.getAnalysisSources",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/analysis-sources",
+      "routeBuilder": "partner.sites.analysisSources",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/analysis-sources.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getAvailableSites",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/users/{userId}/available-sites",
+      "routeBuilder": "partner.users.availableSites",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/users/[userId]/available-sites.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getCanonicalMismatches",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/canonical-mismatches",
+      "routeBuilder": "partner.sites.canonicalMismatches",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/canonical-mismatches.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getContentVelocity",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/content-velocity",
+      "routeBuilder": "partner.sites.contentVelocity",
+      "schema": "missing",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/content-velocity.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getCtrCurve",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/ctr-curve",
+      "routeBuilder": "partner.sites.ctrCurve",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/ctr-curve.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getDarkTraffic",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/dark-traffic",
+      "routeBuilder": "partner.sites.darkTraffic",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/dark-traffic.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getData",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/data",
+      "routeBuilder": "partner.sites.data",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/data.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getDataDetail",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/data/detail",
+      "routeBuilder": "partner.sites.dataDetail",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/data/detail.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getDeviceGap",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/device-gap",
+      "routeBuilder": "partner.sites.deviceGap",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/device-gap.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getIndexing",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/indexing",
+      "routeBuilder": "partner.sites.indexing",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/indexing.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getIndexingDiagnostics",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/indexing/diagnostics",
+      "routeBuilder": "partner.sites.indexingDiagnostics",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/indexing/diagnostics.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getIndexingUrls",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/indexing/urls",
+      "routeBuilder": "partner.sites.indexingUrls",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/indexing/urls.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getIndexPercent",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/index-percent",
+      "routeBuilder": "partner.sites.indexPercent",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/index-percent.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getKeywordBreadth",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/keyword-breadth",
+      "routeBuilder": "partner.sites.keywordBreadth",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/keyword-breadth.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getKeywordSparklines",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/data/keyword-sparklines",
+      "routeBuilder": "partner.sites.keywordSparklines",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/data/keyword-sparklines.post.ts"
+      ]
+    },
+    {
+      "id": "partner.getPageTrend",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/data/page-trend",
+      "routeBuilder": "partner.sites.pageTrend",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/data/page-trend.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getPositionDistribution",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/position-distribution",
+      "routeBuilder": "partner.sites.positionDistribution",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/position-distribution.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getQueryTrend",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/data/query-trend",
+      "routeBuilder": "partner.sites.queryTrend",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/data/query-trend.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getSitemapChanges",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/sitemaps/changes",
+      "routeBuilder": "partner.sites.sitemapChanges",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/sitemaps/changes.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getSitemaps",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/sitemaps",
+      "routeBuilder": "partner.sites.sitemaps",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/sitemaps.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getSyncStatus",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/sync-status",
+      "routeBuilder": "partner.sites.syncStatus",
+      "schema": "missing",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/sync-status.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getTopAssociation",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/data/top-association",
+      "routeBuilder": "partner.sites.topAssociation",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/data/top-association.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getUserLifecycle",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/users/{userId}/lifecycle",
+      "routeBuilder": "partner.users.lifecycle",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/users/[userId]/lifecycle.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getUserSettings",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/user/settings",
+      "routeBuilder": "partner.settings.user",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/user/settings.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getUserSites",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/users/{userId}/sites",
+      "routeBuilder": "partner.users.sites",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/users/[userId]/sites.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getUserStatus",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/users/{userId}/status",
+      "routeBuilder": "partner.users.status",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/users/[userId]/status.get.ts"
+      ]
+    },
+    {
+      "id": "partner.listTeamMembers",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/partner/teams/{teamId}/members",
+      "routeBuilder": "partner.teams.members",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/teams/[teamId]/members/index.get.ts"
+      ]
+    },
+    {
+      "id": "partner.patchUserSettings",
+      "owner": "partner",
+      "method": "PATCH",
+      "path": "/api/user/settings",
+      "routeBuilder": "partner.settings.user",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/user/settings.patch.ts"
+      ]
+    },
+    {
+      "id": "partner.recoverPermission",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/recover-permission",
+      "routeBuilder": "partner.sites.recoverPermission",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/recover-permission.post.ts"
+      ]
+    },
+    {
+      "id": "partner.refreshSitemaps",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/sitemaps",
+      "routeBuilder": "partner.sites.sitemaps",
+      "schema": "missing",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/sitemaps.post.ts"
+      ]
+    },
+    {
+      "id": "partner.registerSite",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/partner/sites/register",
+      "routeBuilder": "partner.partner.sites.register",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/sites/register.post.ts"
+      ]
+    },
+    {
+      "id": "partner.registerUser",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/users/register",
+      "routeBuilder": "partner.users.register",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/users/register.post.ts"
+      ]
+    },
+    {
+      "id": "partner.removeTeamMember",
+      "owner": "partner",
+      "method": "DELETE",
+      "path": "/api/partner/teams/{teamId}/members/{userId}",
+      "routeBuilder": "partner.teams.member",
+      "schema": "missing",
+      "handlerFiles": [
+        "server/api/partner/teams/[teamId]/members/[userId].delete.ts"
+      ]
+    },
+    {
+      "id": "partner.renameTeam",
+      "owner": "partner",
+      "method": "PATCH",
+      "path": "/api/partner/teams/{teamId}",
+      "routeBuilder": "partner.teams.byId",
+      "schema": "missing",
+      "handlerFiles": [
+        "server/api/partner/teams/[teamId]/index.patch.ts"
+      ]
+    },
+    {
+      "id": "partner.requestIndexingInspect",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/indexing/inspect",
+      "routeBuilder": "partner.sites.indexingInspect",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/indexing/inspect.post.ts"
+      ]
+    },
+    {
+      "id": "partner.submitSitemap",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/sitemaps",
+      "routeBuilder": "partner.sites.sitemaps",
+      "schema": "missing",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/sitemaps.post.ts"
+      ]
+    },
+    {
+      "id": "partner.updateTeamMemberRole",
+      "owner": "partner",
+      "method": "PATCH",
+      "path": "/api/partner/teams/{teamId}/members/{userId}",
+      "routeBuilder": "partner.teams.member",
+      "schema": "missing",
+      "handlerFiles": [
+        "server/api/partner/teams/[teamId]/members/[userId].patch.ts"
+      ]
+    },
+    {
+      "id": "partner.updateUserTokens",
+      "owner": "partner",
+      "method": "PATCH",
+      "path": "/api/users/{userId}/tokens",
+      "routeBuilder": "partner.users.tokens",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/users/[userId]/tokens.patch.ts"
+      ]
+    },
+    {
+      "id": "partner.users.lifecycle.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/users/{userId}/lifecycle",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/users/[userId]/lifecycle.get.ts"
+      ]
+    },
+    {
+      "id": "realtime.stream.head.get",
+      "owner": "realtime-v1",
+      "method": "GET",
+      "path": "/api/realtime/v1/stream/head",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/realtime/v1/stream/head.get.ts"
+      ]
+    },
+    {
+      "id": "realtime.tickets.create",
+      "owner": "realtime-v1",
+      "method": "POST",
+      "path": "/api/realtime/v1/tickets",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/realtime/v1/tickets.post.ts"
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "file": "server/api/__gsc/bulk-sources.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/bulk-sources",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/diagnostics.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/diagnostics",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/enrich-keywords.post.ts",
+      "method": "POST",
+      "path": "/api/__gsc/enrich-keywords",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites",
+      "descriptorOwners": [
+        "analytics.listSites"
+      ],
+      "routeBuilderOwners": [
+        "analytics.sites"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/analysis-sources.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/analysis-sources",
+      "descriptorOwners": [
+        "analytics.getAnalysisSources"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.analysisSources"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/analyze.post.ts",
+      "method": "POST",
+      "path": "/api/__gsc/sites/{siteId}/analyze",
+      "descriptorOwners": [
+        "analytics.analyze"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.analyze"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/archetype-query.post.ts",
+      "method": "POST",
+      "path": "/api/__gsc/sites/{siteId}/archetype-query",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/backfill.post.ts",
+      "method": "POST",
+      "path": "/api/__gsc/sites/{siteId}/backfill",
+      "descriptorOwners": [
+        "analytics.requestBackfill"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.backfill"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/countries.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/countries",
+      "descriptorOwners": [
+        "analytics.getCountries"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.countries"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/coverage.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/coverage",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/data/top-association.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/data/top-association",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [
+        "analytics.site.topAssociation"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/indexing/diagnostics.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/indexing/diagnostics",
+      "descriptorOwners": [
+        "analytics.getIndexingDiagnostics"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.indexingDiagnostics"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/indexing/inspect.post.ts",
+      "method": "POST",
+      "path": "/api/__gsc/sites/{siteId}/indexing/inspect",
+      "descriptorOwners": [
+        "analytics.requestIndexingInspect"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.indexingInspect"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/indexing/urls.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/indexing/urls",
+      "descriptorOwners": [
+        "analytics.getIndexingUrls"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.indexingUrls"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/inspections.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/inspections",
+      "descriptorOwners": [
+        "analytics.getInspections"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.inspections"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/inspections/[hash].get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/inspections/{hash}",
+      "descriptorOwners": [
+        "analytics.getInspectionHistory"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.inspectionHistory"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/parquet-listing.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/parquet-listing",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/query-dim-source.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/query-dim-source",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/rollup/[id].get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/rollup/{id}",
+      "descriptorOwners": [
+        "analytics.getRollup"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.rollup"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/search-appearance.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/search-appearance",
+      "descriptorOwners": [
+        "analytics.getSearchAppearance"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.searchAppearance"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/sitemaps.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/sitemaps",
+      "descriptorOwners": [
+        "analytics.getSitemaps"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.sitemaps"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/sitemaps/[hash].get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/sitemaps/{hash}",
+      "descriptorOwners": [
+        "analytics.getSitemapHistory"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.sitemapHistory"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/sitemaps/changes.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/sitemaps/changes",
+      "descriptorOwners": [
+        "analytics.getSitemapChanges"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.sitemapChanges"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/sites/[siteId]/source-info.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/source-info",
+      "descriptorOwners": [
+        "analytics.getSourceInfo"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.sourceInfo"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/__gsc/whoami.get.ts",
+      "method": "GET",
+      "path": "/api/__gsc/whoami",
+      "descriptorOwners": [
+        "analytics.whoami"
+      ],
+      "routeBuilderOwners": [
+        "analytics.whoami"
+      ],
+      "currentSurface": "legacy-analytics-data",
+      "v1Review": "analytics"
+    },
+    {
+      "file": "server/api/admin/backfill-canonical.post.ts",
+      "method": "POST",
+      "path": "/api/admin/backfill-canonical",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/backfill/gsc-range.post.ts",
+      "method": "POST",
+      "path": "/api/admin/backfill/gsc-range",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/backfill/iceberg-gsc.post.ts",
+      "method": "POST",
+      "path": "/api/admin/backfill/iceberg-gsc",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/backfill/resync-shard.post.ts",
+      "method": "POST",
+      "path": "/api/admin/backfill/resync-shard",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/backfill/resync-team.post.ts",
+      "method": "POST",
+      "path": "/api/admin/backfill/resync-team",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/backfill/search-appearance.post.ts",
+      "method": "POST",
+      "path": "/api/admin/backfill/search-appearance",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/indexing/compact.post.ts",
+      "method": "POST",
+      "path": "/api/admin/indexing/compact",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/indexing/daily-recompute.post.ts",
+      "method": "POST",
+      "path": "/api/admin/indexing/daily-recompute",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/indexing/parity.post.ts",
+      "method": "POST",
+      "path": "/api/admin/indexing/parity",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/indexing/phase.post.ts",
+      "method": "POST",
+      "path": "/api/admin/indexing/phase",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/indexing/rebuild.post.ts",
+      "method": "POST",
+      "path": "/api/admin/indexing/rebuild",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/indexing/rebuild-fanout.post.ts",
+      "method": "POST",
+      "path": "/api/admin/indexing/rebuild-fanout",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/indexing/summary-refresh.post.ts",
+      "method": "POST",
+      "path": "/api/admin/indexing/summary-refresh",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/lake/sql.post.ts",
+      "method": "POST",
+      "path": "/api/admin/lake/sql",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/rollups/query-dim-rebuild.post.ts",
+      "method": "POST",
+      "path": "/api/admin/rollups/query-dim-rebuild",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/rollups/rebuild.post.ts",
+      "method": "POST",
+      "path": "/api/admin/rollups/rebuild",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/sitemap/compact.post.ts",
+      "method": "POST",
+      "path": "/api/admin/sitemap/compact",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/sitemap/reconcile.post.ts",
+      "method": "POST",
+      "path": "/api/admin/sitemap/reconcile",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/sitemap/reconcile-backfill.post.ts",
+      "method": "POST",
+      "path": "/api/admin/sitemap/reconcile-backfill",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/sites/[publicId]/discover-hourly.post.ts",
+      "method": "POST",
+      "path": "/api/admin/sites/{publicId}/discover-hourly",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/sites/[publicId]/search-types.post.ts",
+      "method": "POST",
+      "path": "/api/admin/sites/{publicId}/search-types",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/teams/[teamId]/catalog/provision.post.ts",
+      "method": "POST",
+      "path": "/api/admin/teams/{teamId}/catalog/provision",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/teams/[teamId]/catalog/reads.post.ts",
+      "method": "POST",
+      "path": "/api/admin/teams/{teamId}/catalog/reads",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/teams/[teamId]/catalog/reencode.post.ts",
+      "method": "POST",
+      "path": "/api/admin/teams/{teamId}/catalog/reencode",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/teams/[teamId]/catalog/reset-tables.post.ts",
+      "method": "POST",
+      "path": "/api/admin/teams/{teamId}/catalog/reset-tables",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/trigger-health-report.post.ts",
+      "method": "POST",
+      "path": "/api/admin/trigger-health-report",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/trigger-sitemap-sync.post.ts",
+      "method": "POST",
+      "path": "/api/admin/trigger-sitemap-sync",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/trigger-sync.post.ts",
+      "method": "POST",
+      "path": "/api/admin/trigger-sync",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/users/[userId]/provision.post.ts",
+      "method": "POST",
+      "path": "/api/admin/users/{userId}/provision",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/users/encrypt-tokens.post.ts",
+      "method": "POST",
+      "path": "/api/admin/users/encrypt-tokens",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/waitlist.get.ts",
+      "method": "GET",
+      "path": "/api/admin/waitlist",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/analytics/v1/sites/[siteId]/rows.post.ts",
+      "method": "POST",
+      "path": "/api/analytics/v1/sites/{siteId}/rows",
+      "descriptorOwners": [
+        "analytics.rows.query"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-analytics-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/bulk-sources.get.ts",
+      "method": "GET",
+      "path": "/api/bulk-sources",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/auth/complete.post.ts",
+      "method": "POST",
+      "path": "/api/cli/auth/complete",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/auth/init.post.ts",
+      "method": "POST",
+      "path": "/api/cli/auth/init",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/auth/poll.get.ts",
+      "method": "GET",
+      "path": "/api/cli/auth/poll",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/auth/refresh.post.ts",
+      "method": "POST",
+      "path": "/api/cli/auth/refresh",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/auth/revoke.delete.ts",
+      "method": "DELETE",
+      "path": "/api/cli/auth/revoke",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/gsc/inspect.post.ts",
+      "method": "POST",
+      "path": "/api/cli/gsc/inspect",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/gsc/query.post.ts",
+      "method": "POST",
+      "path": "/api/cli/gsc/query",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/gsc/sitemaps.get.ts",
+      "method": "GET",
+      "path": "/api/cli/gsc/sitemaps",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/gsc/sitemaps.post.ts",
+      "method": "POST",
+      "path": "/api/cli/gsc/sitemaps",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/gsc/sites.get.ts",
+      "method": "GET",
+      "path": "/api/cli/gsc/sites",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/gsc/sites.post.ts",
+      "method": "POST",
+      "path": "/api/cli/gsc/sites",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/me.get.ts",
+      "method": "GET",
+      "path": "/api/cli/me",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/sites/[siteId].delete.ts",
+      "method": "DELETE",
+      "path": "/api/cli/sites/{siteId}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/sites/[siteId]/data.post.ts",
+      "method": "POST",
+      "path": "/api/cli/sites/{siteId}/data",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/sites/[siteId]/detail.post.ts",
+      "method": "POST",
+      "path": "/api/cli/sites/{siteId}/detail",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/sites/[siteId]/discover/hourly.get.ts",
+      "method": "GET",
+      "path": "/api/cli/sites/{siteId}/discover/hourly",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/sites/[siteId]/indexing/urls.get.ts",
+      "method": "GET",
+      "path": "/api/cli/sites/{siteId}/indexing/urls",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/sites/[siteId]/inspect.post.ts",
+      "method": "POST",
+      "path": "/api/cli/sites/{siteId}/inspect",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/sites/available.get.ts",
+      "method": "GET",
+      "path": "/api/cli/sites/available",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/sites/register.post.ts",
+      "method": "POST",
+      "path": "/api/cli/sites/register",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/enrich/keywords.post.ts",
+      "method": "POST",
+      "path": "/api/enrich/keywords",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/gsc/inspect.post.ts",
+      "method": "POST",
+      "path": "/api/gsc/inspect",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/gsc/query.post.ts",
+      "method": "POST",
+      "path": "/api/gsc/query",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/gsc/sitemaps.get.ts",
+      "method": "GET",
+      "path": "/api/gsc/sitemaps",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/gsc/sitemaps.post.ts",
+      "method": "POST",
+      "path": "/api/gsc/sitemaps",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/gsc/sites.get.ts",
+      "method": "GET",
+      "path": "/api/gsc/sites",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/gsc/sites.post.ts",
+      "method": "POST",
+      "path": "/api/gsc/sites",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/health.get.ts",
+      "method": "GET",
+      "path": "/api/health",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/learn/navigation.get.ts",
+      "method": "GET",
+      "path": "/api/learn/navigation",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/learn/page.get.ts",
+      "method": "GET",
+      "path": "/api/learn/page",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/learn/surround.get.ts",
+      "method": "GET",
+      "path": "/api/learn/surround",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/onboarding.get.ts",
+      "method": "GET",
+      "path": "/api/onboarding",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/onboarding.put.ts",
+      "method": "PUT",
+      "path": "/api/onboarding",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/partner/sites/[siteId]/cross-source-query.post.ts",
+      "method": "POST",
+      "path": "/api/partner/sites/{siteId}/cross-source-query",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/sites/add-and-verify.post.ts",
+      "method": "POST",
+      "path": "/api/partner/sites/add-and-verify",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/sites/bulk-register.post.ts",
+      "method": "POST",
+      "path": "/api/partner/sites/bulk-register",
+      "descriptorOwners": [
+        "partner.bulkRegisterSites"
+      ],
+      "routeBuilderOwners": [
+        "partner.partner.sites.bulkRegister"
+      ],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/sites/register.post.ts",
+      "method": "POST",
+      "path": "/api/partner/sites/register",
+      "descriptorOwners": [
+        "partner.registerSite"
+      ],
+      "routeBuilderOwners": [
+        "partner.partner.sites.register"
+      ],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/sites/verification-token.post.ts",
+      "method": "POST",
+      "path": "/api/partner/sites/verification-token",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/teams/index.post.ts",
+      "method": "POST",
+      "path": "/api/partner/teams",
+      "descriptorOwners": [
+        "partner.createTeam"
+      ],
+      "routeBuilderOwners": [
+        "partner.teams.create"
+      ],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/teams/[teamId]/index.delete.ts",
+      "method": "DELETE",
+      "path": "/api/partner/teams/{teamId}",
+      "descriptorOwners": [
+        "partner.deleteTeam"
+      ],
+      "routeBuilderOwners": [
+        "partner.teams.byId"
+      ],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/teams/[teamId]/index.patch.ts",
+      "method": "PATCH",
+      "path": "/api/partner/teams/{teamId}",
+      "descriptorOwners": [
+        "partner.renameTeam"
+      ],
+      "routeBuilderOwners": [
+        "partner.teams.byId"
+      ],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/teams/[teamId]/catalog/index.get.ts",
+      "method": "GET",
+      "path": "/api/partner/teams/{teamId}/catalog",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/teams/[teamId]/catalog/index.post.ts",
+      "method": "POST",
+      "path": "/api/partner/teams/{teamId}/catalog",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/teams/[teamId]/members/index.get.ts",
+      "method": "GET",
+      "path": "/api/partner/teams/{teamId}/members",
+      "descriptorOwners": [
+        "partner.listTeamMembers"
+      ],
+      "routeBuilderOwners": [
+        "partner.teams.members"
+      ],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/teams/[teamId]/members/index.post.ts",
+      "method": "POST",
+      "path": "/api/partner/teams/{teamId}/members",
+      "descriptorOwners": [
+        "partner.addTeamMember"
+      ],
+      "routeBuilderOwners": [
+        "partner.teams.members"
+      ],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/teams/[teamId]/members/[userId].delete.ts",
+      "method": "DELETE",
+      "path": "/api/partner/teams/{teamId}/members/{userId}",
+      "descriptorOwners": [
+        "partner.removeTeamMember"
+      ],
+      "routeBuilderOwners": [
+        "partner.teams.member"
+      ],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/teams/[teamId]/members/[userId].patch.ts",
+      "method": "PATCH",
+      "path": "/api/partner/teams/{teamId}/members/{userId}",
+      "descriptorOwners": [
+        "partner.updateTeamMemberRole"
+      ],
+      "routeBuilderOwners": [
+        "partner.teams.member"
+      ],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/users/[userId]/index.delete.ts",
+      "method": "DELETE",
+      "path": "/api/partner/users/{userId}",
+      "descriptorOwners": [
+        "partner.deleteUser"
+      ],
+      "routeBuilderOwners": [
+        "partner.partner.users.byId"
+      ],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/users/[userId]/available-sites.get.ts",
+      "method": "GET",
+      "path": "/api/partner/users/{userId}/available-sites",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/users/[userId]/lifecycle.get.ts",
+      "method": "GET",
+      "path": "/api/partner/users/{userId}/lifecycle",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [
+        "partner.partner.users.lifecycle"
+      ],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/users/[userId]/sites/[siteId].patch.ts",
+      "method": "PATCH",
+      "path": "/api/partner/users/{userId}/sites/{siteId}",
+      "descriptorOwners": [
+        "partner.bindSiteToTeam"
+      ],
+      "routeBuilderOwners": [
+        "partner.partner.users.siteTeam",
+        "partner.users.siteTeam"
+      ],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/users/[userId]/sites/[siteId]/indexing/inspect.post.ts",
+      "method": "POST",
+      "path": "/api/partner/users/{userId}/sites/{siteId}/indexing/inspect",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/users/[userId]/sites/crosswalk.get.ts",
+      "method": "GET",
+      "path": "/api/partner/users/{userId}/sites/crosswalk",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/users/[userId]/tokens.patch.ts",
+      "method": "PATCH",
+      "path": "/api/partner/users/{userId}/tokens",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/users/register.post.ts",
+      "method": "POST",
+      "path": "/api/partner/users/register",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "partner-control",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/partner/v1/users/[userId]/lifecycle.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/users/{userId}/lifecycle",
+      "descriptorOwners": [
+        "partner.users.lifecycle.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/public/demo.get.ts",
+      "method": "GET",
+      "path": "/api/public/demo",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-host",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/public/waitlist.post.ts",
+      "method": "POST",
+      "path": "/api/public/waitlist",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-host",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/public/waitlist/confirm.get.ts",
+      "method": "GET",
+      "path": "/api/public/waitlist/confirm",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-host",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/public/waitlist/confirm.post.ts",
+      "method": "POST",
+      "path": "/api/public/waitlist/confirm",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-host",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/quota.get.ts",
+      "method": "GET",
+      "path": "/api/quota",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/r2-data/[...path].ts",
+      "method": "GET",
+      "path": "/api/r2-data/{path+}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/r2-data/[...path].ts",
+      "method": "HEAD",
+      "path": "/api/r2-data/{path+}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/realtime/v1/stream/head.get.ts",
+      "method": "GET",
+      "path": "/api/realtime/v1/stream/head",
+      "descriptorOwners": [
+        "realtime.stream.head.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-realtime-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/realtime/v1/tickets.post.ts",
+      "method": "POST",
+      "path": "/api/realtime/v1/tickets",
+      "descriptorOwners": [
+        "realtime.tickets.create"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-realtime-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/reports/index.get.ts",
+      "method": "GET",
+      "path": "/api/reports",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/sites/[siteId]/index.delete.ts",
+      "method": "DELETE",
+      "path": "/api/sites/{siteId}",
+      "descriptorOwners": [
+        "partner.deleteSite"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.byId"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/index.patch.ts",
+      "method": "PATCH",
+      "path": "/api/sites/{siteId}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [
+        "partner.sites.byId"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/analysis-sources.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/analysis-sources",
+      "descriptorOwners": [
+        "partner.getAnalysisSources"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.analysisSources"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/archetype-query.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/archetype-query",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/backfill.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/backfill",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/canonical-mismatches.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/canonical-mismatches",
+      "descriptorOwners": [
+        "partner.getCanonicalMismatches"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.canonicalMismatches"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/content-velocity.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/content-velocity",
+      "descriptorOwners": [
+        "partner.getContentVelocity"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.contentVelocity"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/ctr-curve.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/ctr-curve",
+      "descriptorOwners": [
+        "partner.getCtrCurve"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.ctrCurve"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/dark-traffic.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/dark-traffic",
+      "descriptorOwners": [
+        "partner.getDarkTraffic"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.darkTraffic"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/data.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/data",
+      "descriptorOwners": [
+        "partner.getData"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.data"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/data.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/data",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [
+        "partner.sites.data"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/data/detail.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/data/detail",
+      "descriptorOwners": [
+        "partner.getDataDetail"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.dataDetail"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/data/detail.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/data/detail",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [
+        "partner.sites.dataDetail"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/data/keyword-sparklines.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/data/keyword-sparklines",
+      "descriptorOwners": [
+        "partner.getKeywordSparklines"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.keywordSparklines"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/data/page-trend.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/data/page-trend",
+      "descriptorOwners": [
+        "partner.getPageTrend"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.pageTrend"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/data/query-trend.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/data/query-trend",
+      "descriptorOwners": [
+        "partner.getQueryTrend"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.queryTrend"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/data/top-association.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/data/top-association",
+      "descriptorOwners": [
+        "partner.getTopAssociation"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.topAssociation"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/device-gap.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/device-gap",
+      "descriptorOwners": [
+        "partner.getDeviceGap"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.deviceGap"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/discover/hourly.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/discover/hourly",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/discover/trending.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/discover/trending",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/index-percent.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/index-percent",
+      "descriptorOwners": [
+        "partner.getIndexPercent"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.indexPercent"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/index-percent.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/index-percent",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [
+        "partner.sites.indexPercent"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/indexing.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/indexing",
+      "descriptorOwners": [
+        "partner.getIndexing"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.indexing"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/indexing/diagnostics.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/indexing/diagnostics",
+      "descriptorOwners": [
+        "partner.getIndexingDiagnostics"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.indexingDiagnostics"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/indexing/inspect.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/indexing/inspect",
+      "descriptorOwners": [
+        "partner.requestIndexingInspect"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.indexingInspect"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/indexing/urls.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/indexing/urls",
+      "descriptorOwners": [
+        "partner.getIndexingUrls"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.indexingUrls"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/inspect.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/inspect",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/keyword-breadth.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/keyword-breadth",
+      "descriptorOwners": [
+        "partner.getKeywordBreadth"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.keywordBreadth"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/position-distribution.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/position-distribution",
+      "descriptorOwners": [
+        "partner.getPositionDistribution"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.positionDistribution"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/query.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/query",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/query.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/query",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/query-dim-source.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/query-dim-source",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/recover-permission.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/recover-permission",
+      "descriptorOwners": [
+        "partner.recoverPermission"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.recoverPermission"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/reports/[reportId].get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/reports/{reportId}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/reports/[reportId]/regenerate.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/reports/{reportId}/regenerate",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/sitemaps.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/sitemaps",
+      "descriptorOwners": [
+        "partner.getSitemaps"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.sitemaps"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/sitemaps.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/sitemaps",
+      "descriptorOwners": [
+        "partner.refreshSitemaps",
+        "partner.submitSitemap"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.sitemaps"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/sitemaps/changes.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/sitemaps/changes",
+      "descriptorOwners": [
+        "partner.getSitemapChanges"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.sitemapChanges"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/[siteId]/sitemaps/membership.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/sitemaps/membership",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/sync.post.ts",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/sync",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/[siteId]/sync-status.get.ts",
+      "method": "GET",
+      "path": "/api/sites/{siteId}/sync-status",
+      "descriptorOwners": [
+        "partner.getSyncStatus"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.syncStatus"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/sites/available.get.ts",
+      "method": "GET",
+      "path": "/api/sites/available",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/bulk-register.post.ts",
+      "method": "POST",
+      "path": "/api/sites/bulk-register",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [
+        "partner.sites.bulkRegister"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/groups/index.get.ts",
+      "method": "GET",
+      "path": "/api/sites/groups",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/groups/index.post.ts",
+      "method": "POST",
+      "path": "/api/sites/groups",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/groups/[groupId].delete.ts",
+      "method": "DELETE",
+      "path": "/api/sites/groups/{groupId}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/groups/[groupId].patch.ts",
+      "method": "PATCH",
+      "path": "/api/sites/groups/{groupId}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/sites/register.post.ts",
+      "method": "POST",
+      "path": "/api/sites/register",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [
+        "partner.sites.register"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/stats.get.ts",
+      "method": "GET",
+      "path": "/api/stats",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/sync-jobs.get.ts",
+      "method": "GET",
+      "path": "/api/sync-jobs",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/sync-jobs/[id].delete.ts",
+      "method": "DELETE",
+      "path": "/api/sync-jobs/{id}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/sync-jobs/[id].get.ts",
+      "method": "GET",
+      "path": "/api/sync-jobs/{id}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/sync-jobs/[id]/process.post.ts",
+      "method": "POST",
+      "path": "/api/sync-jobs/{id}/process",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/sync-jobs/clear.delete.ts",
+      "method": "DELETE",
+      "path": "/api/sync-jobs/clear",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/sync-jobs/history.get.ts",
+      "method": "GET",
+      "path": "/api/sync-jobs/history",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/sync-progress.get.ts",
+      "method": "GET",
+      "path": "/api/sync-progress",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [
+        "analytics.syncProgress"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/index.get.ts",
+      "method": "GET",
+      "path": "/api/teams",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/index.post.ts",
+      "method": "POST",
+      "path": "/api/teams",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/[teamId]/index.delete.ts",
+      "method": "DELETE",
+      "path": "/api/teams/{teamId}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/[teamId]/index.get.ts",
+      "method": "GET",
+      "path": "/api/teams/{teamId}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/[teamId]/index.patch.ts",
+      "method": "PATCH",
+      "path": "/api/teams/{teamId}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/[teamId]/invitations/index.get.ts",
+      "method": "GET",
+      "path": "/api/teams/{teamId}/invitations",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/[teamId]/invitations/index.post.ts",
+      "method": "POST",
+      "path": "/api/teams/{teamId}/invitations",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/[teamId]/invitations/[id].delete.ts",
+      "method": "DELETE",
+      "path": "/api/teams/{teamId}/invitations/{id}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/[teamId]/members/index.get.ts",
+      "method": "GET",
+      "path": "/api/teams/{teamId}/members",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/[teamId]/members/[userId].delete.ts",
+      "method": "DELETE",
+      "path": "/api/teams/{teamId}/members/{userId}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/[teamId]/members/[userId].patch.ts",
+      "method": "PATCH",
+      "path": "/api/teams/{teamId}/members/{userId}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/current.put.ts",
+      "method": "PUT",
+      "path": "/api/teams/current",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/invitations/[token].get.ts",
+      "method": "GET",
+      "path": "/api/teams/invitations/{token}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/teams/invitations/accept.post.ts",
+      "method": "POST",
+      "path": "/api/teams/invitations/accept",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/telemetry/fallback.post.ts",
+      "method": "POST",
+      "path": "/api/telemetry/fallback",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/user.get.ts",
+      "method": "GET",
+      "path": "/api/user",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/user/api-key.get.ts",
+      "method": "GET",
+      "path": "/api/user/api-key",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/user/api-key.post.ts",
+      "method": "POST",
+      "path": "/api/user/api-key",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/user/lifecycle.get.ts",
+      "method": "GET",
+      "path": "/api/user/lifecycle",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/user/sessions/index.get.ts",
+      "method": "GET",
+      "path": "/api/user/sessions",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/user/sessions/[sessionId].delete.ts",
+      "method": "DELETE",
+      "path": "/api/user/sessions/{sessionId}",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/user/settings.get.ts",
+      "method": "GET",
+      "path": "/api/user/settings",
+      "descriptorOwners": [
+        "partner.getUserSettings"
+      ],
+      "routeBuilderOwners": [
+        "partner.settings.user"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/user/settings.patch.ts",
+      "method": "PATCH",
+      "path": "/api/user/settings",
+      "descriptorOwners": [
+        "partner.patchUserSettings"
+      ],
+      "routeBuilderOwners": [
+        "partner.settings.user"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/users/index.get.ts",
+      "method": "GET",
+      "path": "/api/users",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/users/[userId]/available-sites.get.ts",
+      "method": "GET",
+      "path": "/api/users/{userId}/available-sites",
+      "descriptorOwners": [
+        "partner.getAvailableSites"
+      ],
+      "routeBuilderOwners": [
+        "partner.users.availableSites"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/users/[userId]/lifecycle.get.ts",
+      "method": "GET",
+      "path": "/api/users/{userId}/lifecycle",
+      "descriptorOwners": [
+        "partner.getUserLifecycle"
+      ],
+      "routeBuilderOwners": [
+        "partner.users.lifecycle"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/users/[userId]/sites.get.ts",
+      "method": "GET",
+      "path": "/api/users/{userId}/sites",
+      "descriptorOwners": [
+        "partner.getUserSites"
+      ],
+      "routeBuilderOwners": [
+        "partner.users.sites"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/users/[userId]/sites/crosswalk.get.ts",
+      "method": "GET",
+      "path": "/api/users/{userId}/sites/crosswalk",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
+      "file": "server/api/users/[userId]/status.get.ts",
+      "method": "GET",
+      "path": "/api/users/{userId}/status",
+      "descriptorOwners": [
+        "partner.getUserStatus"
+      ],
+      "routeBuilderOwners": [
+        "partner.users.status"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/users/[userId]/tokens.patch.ts",
+      "method": "PATCH",
+      "path": "/api/users/{userId}/tokens",
+      "descriptorOwners": [
+        "partner.updateUserTokens"
+      ],
+      "routeBuilderOwners": [
+        "partner.users.tokens"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/users/register.post.ts",
+      "method": "POST",
+      "path": "/api/users/register",
+      "descriptorOwners": [
+        "partner.registerUser"
+      ],
+      "routeBuilderOwners": [
+        "partner.users.register"
+      ],
+      "currentSurface": "shared-hosted",
+      "v1Review": "partner"
+    },
+    {
+      "file": "server/api/webhooks/resend.post.ts",
+      "method": "POST",
+      "path": "/api/webhooks/resend",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/routes/ws/partner.ts",
+      "method": "WEBSOCKET",
+      "path": "/ws/partner",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [
+        "partner.realtime.partner"
+      ],
+      "currentSurface": "legacy-realtime",
+      "v1Review": "replace-realtime"
+    },
+    {
+      "file": "server/routes/ws/user.ts",
+      "method": "WEBSOCKET",
+      "path": "/ws/user",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [
+        "partner.realtime.user"
+      ],
+      "currentSurface": "legacy-realtime",
+      "v1Review": "replace-realtime"
+    }
+  ]
+}

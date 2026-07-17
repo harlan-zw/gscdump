@@ -1,0 +1,269 @@
+{
+  "specVersion": 1,
+  "http": {
+    "wireVersion": "1.0",
+    "surfaces": {
+      "partner": "/api/partner/v1",
+      "analytics": "/api/analytics/v1",
+      "realtime": "/api/realtime/v1",
+      "websocket": "/ws/v1"
+    },
+    "authenticationHeader": "Authorization: Bearer <credential>",
+    "legacyAuthenticationHeader": "x-api-key",
+    "realtimeEndpoints": {
+      "ticket": "POST /api/realtime/v1/tickets",
+      "head": "GET /api/realtime/v1/stream/head"
+    },
+    "queryPolicy": {
+      "user_key": {
+        "readConsistency": "primary",
+        "callerOverride": false
+      }
+    },
+    "responseCompatibility": {
+      "consumerObjectParsing": "additive-tolerant",
+      "producerContractValidation": "strict-current",
+      "enumValues": "closed"
+    },
+    "envelopes": {
+      "successFields": [
+        "data",
+        "meta"
+      ],
+      "successMetaFields": [
+        "requestId",
+        "surface",
+        "version"
+      ],
+      "errorFields": [
+        "code",
+        "message",
+        "requestId",
+        "retryable",
+        "details"
+      ]
+    }
+  },
+  "credentialClasses": {
+    "user_key": {
+      "publicV1": true,
+      "principalWide": true,
+      "realtimeStream": "user:{credential.userPublicId}",
+      "scopes": [
+        "users:read",
+        "users:write",
+        "sites:read",
+        "sites:write",
+        "analytics:read",
+        "analytics:execute",
+        "indexing:read",
+        "indexing:write",
+        "sitemaps:read",
+        "sitemaps:write",
+        "settings:read",
+        "settings:write",
+        "realtime:connect"
+      ]
+    },
+    "partner_key": {
+      "publicV1": true,
+      "principalWide": true,
+      "realtimeStream": "partner:{credential.partnerPublicId}",
+      "scopes": [
+        "users:read",
+        "users:write",
+        "sites:read",
+        "sites:write",
+        "teams:read",
+        "teams:write",
+        "analytics:read",
+        "analytics:execute",
+        "indexing:read",
+        "indexing:write",
+        "sitemaps:read",
+        "sitemaps:write",
+        "settings:read",
+        "settings:write",
+        "realtime:connect"
+      ]
+    }
+  },
+  "ineligibleCredentialClasses": {
+    "scoped_key": {
+      "publicV1": false,
+      "realtimeConnect": false
+    },
+    "team_key": {
+      "publicV1": false,
+      "realtimeConnect": false
+    },
+    "session": {
+      "publicV1": false,
+      "realtimeConnect": false
+    },
+    "cli_token": {
+      "publicV1": false,
+      "realtimeConnect": false
+    }
+  },
+  "realtime": {
+    "subprotocol": "gscdump.v1",
+    "ticket": {
+      "requestFields": [
+        "origin?"
+      ],
+      "responseDataFields": [
+        "socketUrl",
+        "protocol",
+        "protocolVersion",
+        "ticket",
+        "expiresAt",
+        "head",
+        "maxConnectionSeconds"
+      ],
+      "format": "gscdump.ticket.v1.<base64url-payload>.<base64url-signature>",
+      "algorithm": "HMAC-SHA-256",
+      "minimumSigningKeyBytes": 32,
+      "jtiRandomBits": 128,
+      "maxVerificationKeys": 2,
+      "issuer": "https://gscdump.com",
+      "audience": "https://gscdump.com/ws/v1",
+      "timestampUnit": "unix-seconds",
+      "ttlMs": 60000,
+      "futureIssuedAtToleranceMs": 5000,
+      "expiryToleranceMs": 0,
+      "rotationOverlapMs": 90000,
+      "maxBytes": 2048,
+      "singleUse": true,
+      "claims": [
+        "v",
+        "iss",
+        "aud",
+        "kid",
+        "jti",
+        "iat",
+        "exp",
+        "connectionExpiresAt",
+        "principalClass",
+        "principalPublicId",
+        "streamId",
+        "origin"
+      ]
+    },
+    "connection": {
+      "helloDeadlineMs": 10000,
+      "maxLifetimeMs": 900000,
+      "connectionRefreshBeforeExpiryMs": 30000,
+      "heartbeatIntervalMs": 25000,
+      "staleAfterMs": 75000,
+      "pingPayload": "ping",
+      "pongPayload": "pong",
+      "reconnectBaseDelayMs": 1000,
+      "reconnectMaxDelayMs": 30000,
+      "reconnectJitter": "equal"
+    },
+    "replay": {
+      "maxAgeMs": 86400000,
+      "maxEventsPerStream": 10000
+    },
+    "eventEnvelope": {
+      "protocolVersion": 1,
+      "initialEventVersion": 1,
+      "cursorSequenceEncoding": "base10-string",
+      "deliveryClasses": [
+        "durable",
+        "ephemeral"
+      ],
+      "changeKinds": [
+        "created",
+        "updated",
+        "deleted"
+      ],
+      "fields": [
+        "type",
+        "protocolVersion",
+        "eventVersion",
+        "id",
+        "name",
+        "cursor",
+        "subject",
+        "changes",
+        "occurredAt",
+        "correlationId",
+        "delivery",
+        "data"
+      ],
+      "resourceTypes": [
+        "partner.user",
+        "partner.team",
+        "user.sites",
+        "site.registration",
+        "site.lifecycle",
+        "site.analytics",
+        "site.sitemaps",
+        "site.indexing",
+        "site.auth"
+      ],
+      "eventNames": [
+        "user.lifecycle.changed",
+        "site.lifecycle.changed",
+        "site.lifecycle.progress",
+        "site.analytics.ready",
+        "site.sitemaps.ready",
+        "site.indexing.ready",
+        "site.auth.failed",
+        "site.lifecycle.failed",
+        "site.registration.changed"
+      ]
+    },
+    "limits": {
+      "clientFrameMaxBytes": 16384,
+      "durableEventMaxBytes": 65536,
+      "ephemeralEventMaxBytes": 16384,
+      "outboundFrameMaxBytes": 262144,
+      "batchMaxEvents": 20,
+      "batchMaxBytes": 262144,
+      "connectionAttachmentMaxBytes": 2048
+    },
+    "acknowledgement": {
+      "softLagEvents": 100,
+      "softLagBytes": 1048576,
+      "hardLagEvents": 500,
+      "hardLagBytes": 4194304,
+      "hardLagCloseCode": 1013,
+      "effectRetryBeforeUnsafeResync": 3
+    },
+    "closeCodes": {
+      "normal": 1000,
+      "protocolError": 1002,
+      "policyViolation": 1008,
+      "internalError": 1011,
+      "serviceRestart": 1012,
+      "overloadedOrAckLag": 1013,
+      "maximumLifetime": 4001
+    },
+    "resyncReasons": [
+      "cursor_expired",
+      "retention_gap",
+      "sequence_gap",
+      "stream_mismatch"
+    ],
+    "acceptedSocketErrorCodes": [
+      "invalid_frame",
+      "protocol_mismatch",
+      "policy_violation",
+      "overloaded",
+      "internal_error"
+    ],
+    "retryAfterUnit": "seconds",
+    "byteMeasurement": "utf8-serialized"
+  },
+  "internalCompatibility": {
+    "minimumRpcRevision": 1,
+    "currentRpcRevision": 1,
+    "writersEmitCurrentOnly": true,
+    "readersAcceptPreviousDuringRollout": true,
+    "unsupportedRevisionErrorCode": "unsupported_internal_revision",
+    "storageSchemaVersionIsIndependent": true
+  }
+}
