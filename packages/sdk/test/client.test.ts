@@ -28,9 +28,11 @@ describe('createPartnerClient', () => {
     })
 
     await client.getUserSites('u_1')
+    await client.getUserLifecycle('u_1')
 
-    expect(calls).toHaveLength(1)
+    expect(calls).toHaveLength(2)
     expect(calls[0]!.url).toBe('https://origin.example/api/users/u_1/sites')
+    expect(calls[1]!.url).toBe('https://origin.example/api/partner/users/u_1/lifecycle')
     expect(new Headers(calls[0]!.options.headers).get('x-api-key')).toBe('key_1')
     expect(new Headers(calls[0]!.options.headers).get('x-partner')).toBe('nuxtseo')
   })

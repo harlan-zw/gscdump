@@ -41,7 +41,7 @@ export const partnerEndpoints = {
   registerUser: defineEndpoint('POST', partnerRoutes.users.register, partnerControlEndpointSchemas.registerUser),
   updateUserTokens: defineEndpoint('PATCH', partnerRoutes.users.tokens, partnerControlEndpointSchemas.updateUserTokens),
   getUserStatus: defineEndpoint('GET', partnerRoutes.users.status, partnerControlEndpointSchemas.getUserStatus),
-  getUserLifecycle: defineEndpoint('GET', partnerRoutes.users.lifecycle, partnerControlEndpointSchemas.getUserLifecycle),
+  getUserLifecycle: defineEndpoint('GET', partnerRoutes.partner.users.lifecycle, partnerControlEndpointSchemas.getUserLifecycle),
   getSyncStatus: defineEndpoint('GET', partnerRoutes.sites.syncStatus, noSchema),
   getUserSites: defineEndpoint('GET', partnerRoutes.users.sites, partnerControlEndpointSchemas.getUserSites),
   getAvailableSites: defineEndpoint('GET', partnerRoutes.users.availableSites, partnerControlEndpointSchemas.getAvailableSites),
