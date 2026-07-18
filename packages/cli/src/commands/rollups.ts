@@ -10,7 +10,6 @@ import { buildQueryDimRecords, createQueryDimStore } from '@gscdump/engine/entit
 import { CANONICAL_ROLLUPS, DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
-import { allTables } from '../local-store'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 
 // Build the versioned query→canonical(+intent) dimension for a site from its
@@ -72,15 +71,10 @@ const rebuildSubCommand = defineCommand({
       allSiteIds.add(explicitSiteId)
     }
     else {
-      for (const table of allTables()) {
-        const entries = await store.engine.listLive({
-          userId: store.userId,
-          table: table as TableName,
-        })
-        for (const e of entries) {
-          if (e.siteId)
-            allSiteIds.add(e.siteId)
-        }
+      const entries = await store.engine.listLive({ userId: store.userId })
+      for (const e of entries) {
+        if (e.siteId)
+          allSiteIds.add(e.siteId)
       }
     }
 

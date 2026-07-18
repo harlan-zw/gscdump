@@ -53,4 +53,34 @@ describe('classifySearchConsoleStage canonical clamp', () => {
     expect(stage.evidence.find(evidence => evidence.label === 'Clicks 90d')?.value).toBe('-5.0%')
     expect(stage.evidence.find(evidence => evidence.label === 'Impressions 90d')?.value).toBe('+30.0%')
   })
+
+  it('keeps mutable finding-type arrays isolated between classifications', () => {
+    const input = { connected: false }
+    const first = classifySearchConsoleStage(input)
+    const second = classifySearchConsoleStage(input)
+
+    first.sprintFindingTypes.push('local-only')
+
+    expect(second.sprintFindingTypes).toEqual([])
+  })
+
+  it('includes zero-click pages in the low-ranking cohort while counting both in one pass', () => {
+    const stage = classifySearchConsoleStage({
+      connected: true,
+      summary: { totalUrls: 100, indexed: 100, indexedPercent: 100 },
+      issues: [],
+      sitemaps: [{ urlCount: 100 }],
+      impressions28d: 50000,
+      pageInventory: [
+        { impressions: 100, clicks: 0, position: 25 },
+        { impressions: 100, clicks: 2, position: 30 },
+        { impressions: 100, clicks: 2, position: 10 },
+        { impressions: 100, clicks: 2, position: 10 },
+        { impressions: 100, clicks: 2, position: 10 },
+      ],
+    })
+
+    expect(stage.key).toBe('ranking_stalled')
+    expect(stage.evidence).toContainEqual(expect.objectContaining({ label: 'Low-ranking visible pages', value: '2' }))
+  })
 })

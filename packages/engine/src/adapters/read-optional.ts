@@ -51,22 +51,16 @@ export function isMissingKeyError(e: unknown): boolean {
  * (anything `isMissingKeyError` does not recognise) propagates, so callers can
  * no longer silently swallow it.
  *
- * Uses `DataSource.head` as a structural existence probe when the backend
- * exposes one — a `head` returning `undefined` is an unambiguous "absent", with
- * no error-message sniffing involved. The subsequent `read` then surfaces any
- * failure as-is (a race that deletes the object between `head` and `read` is the
- * one case that still falls through to the missing-key branch).
+ * Reads directly and recognizes only the shipped backends' explicit missing-key
+ * errors. A HEAD-before-GET existence probe doubles remote round-trips for the
+ * overwhelmingly common present-object path and still cannot eliminate the
+ * delete race between the two operations.
  */
 export async function readOptional(
   ds: DataSource,
   key: string,
   signal?: AbortSignal,
 ): Promise<Uint8Array | undefined> {
-  if (ds.head) {
-    const meta = await ds.head(key)
-    if (meta === undefined)
-      return undefined
-  }
   return await ds.read(key, undefined, signal).catch((e: unknown) => {
     if (isMissingKeyError(e))
       return undefined

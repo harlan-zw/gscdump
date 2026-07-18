@@ -996,6 +996,7 @@ export const gscdumpAnalysisSourcesResponseSchema = z.object({
   eligibilityCeiling: z.object({
     maxBytes: z.number(),
     maxRows: z.number(),
+    maxFiles: z.number(),
   }),
 }).loose()
 

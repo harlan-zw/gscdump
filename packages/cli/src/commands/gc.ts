@@ -1,7 +1,5 @@
-import type { TableName } from '../local-store'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
-import { allTables } from '../local-store'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 
 const DEFAULT_GRACE_HOURS = 24
@@ -39,22 +37,16 @@ export const gcCommand = defineCommand({
     if (args['dry-run']) {
       const cutoff = Date.now() - graceMs
       const candidates: Array<{ table: string, siteId: string | undefined, partition: string, retiredAt: number, objectKey: string }> = []
-      for (const table of allTables()) {
-        const all = await store.engine.listAll({
-          userId: store.userId,
-          siteId,
-          table: table as TableName,
-        })
-        for (const e of all) {
-          if (e.retiredAt && e.retiredAt < cutoff) {
-            candidates.push({
-              table,
-              siteId: e.siteId,
-              partition: e.partition,
-              retiredAt: e.retiredAt,
-              objectKey: e.objectKey,
-            })
-          }
+      const all = await store.engine.listAll({ userId: store.userId, siteId })
+      for (const e of all) {
+        if (e.retiredAt && e.retiredAt < cutoff) {
+          candidates.push({
+            table: e.table,
+            siteId: e.siteId,
+            partition: e.partition,
+            retiredAt: e.retiredAt,
+            objectKey: e.objectKey,
+          })
         }
       }
       if (json) {

@@ -12,6 +12,8 @@ import { createDucklingsCodec, createDucklingsExecutor, createDucklingsRowCache 
 export interface AnalyticsEngineHooks {
   /** Called once per R2 PUT, with the byte size of the payload. */
   onR2Write?: (byteLength: number) => void
+  /** Override the interactive 22-second DuckDB RPC budget for background work. */
+  duckdbRpcTimeoutMs?: number
 }
 
 // Returns null when R2 isn't bound (e.g. local dev without wrangler.toml R2
@@ -53,7 +55,10 @@ export function createAnalyticsEngineRuntime(): AnalyticsEngineRuntime {
         : baseDataSource
       const manifestStore = createD1ManifestStore(db as unknown as AnalyticsManifestDb)
       const codec = createDucklingsCodec(env)
-      const executor = createDucklingsExecutor(env, { rowCache })
+      const executor = createDucklingsExecutor(env, {
+        rowCache,
+        ...(hooks.duckdbRpcTimeoutMs !== undefined ? { rpcTimeoutMs: hooks.duckdbRpcTimeoutMs } : {}),
+      })
 
       return createStorageEngine({ dataSource, manifestStore, codec, executor })
     },

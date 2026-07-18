@@ -36,6 +36,8 @@ import { SCHEMAS, TABLE_METADATA } from '../schema'
 // default of 100k yields one giant group for most days, which makes the
 // declared `clusterKey` worthless at query time.
 const ROW_GROUP_SIZE = 25000
+const DEFAULT_COMPACTION_READ_CONCURRENCY = 8
+const MAX_COMPACTION_READ_CONCURRENCY = 32
 
 // Non-DATE physical type. DATE is handled out-of-band (see `buildWriteSchema` +
 // `toEpochDays`) because hyparquet-writer has no DATE `BasicType` — a real
@@ -190,7 +192,13 @@ function sortRowsByClusterKey(table: TableName, rows: readonly Row[]): readonly 
 
 function naturalKeyFor(table: TableName, row: Row): string {
   const key = TABLE_METADATA[table].sortKey
-  return key.map(col => `${row[col] ?? ''}`).join('\0')
+  let value = ''
+  for (let index = 0; index < key.length; index++) {
+    if (index > 0)
+      value += '\0'
+    value += `${row[key[index]!] ?? ''}`
+  }
+  return value
 }
 
 // Encode an already-ordered row array to a parquet buffer. Feeds rows through
@@ -370,6 +378,11 @@ export interface HyparquetCodecOptions {
    * hyparquet to avoid WASM linear-memory growth. Defaults to hyparquet.
    */
   readRows?: (ctx: CodecCtx, key: string, dataSource: DataSource) => Promise<Row[]>
+  /**
+   * Maximum input-file reads held in flight during compaction. Defaults to 8;
+   * lower it for unusually large files to trade latency for peak JS memory.
+   */
+  compactionReadConcurrency?: number
 }
 
 export function createHyparquetCodec(options: HyparquetCodecOptions = {}): ParquetCodec {
@@ -377,6 +390,10 @@ export function createHyparquetCodec(options: HyparquetCodecOptions = {}): Parqu
     const bytes = await dataSource.read(key)
     return decodeParquetToRows(bytes)
   })
+  const requestedConcurrency = options.compactionReadConcurrency
+  const compactionReadConcurrency = typeof requestedConcurrency === 'number' && Number.isFinite(requestedConcurrency)
+    ? Math.max(1, Math.min(MAX_COMPACTION_READ_CONCURRENCY, Math.floor(requestedConcurrency)))
+    : DEFAULT_COMPACTION_READ_CONCURRENCY
 
   return {
     async writeRows(ctx: CodecCtx, rows: readonly Row[], key: string, dataSource: DataSource): Promise<WriteResult> {
@@ -399,11 +416,16 @@ export function createHyparquetCodec(options: HyparquetCodecOptions = {}): Parqu
         return { bytes: bytes.byteLength, rowCount: 0 }
       }
       const byNaturalKey = new Map<string, Row>()
-      for (const key of inputKeys) {
-        const input = await dataSource.read(key)
-        const rows = await decodeParquetToRows(input)
-        for (let i = 0; i < rows.length; i++)
-          byNaturalKey.set(naturalKeyFor(ctx.table, rows[i]!), rows[i]!)
+      for (let offset = 0; offset < inputKeys.length; offset += compactionReadConcurrency) {
+        const batch = inputKeys.slice(offset, offset + compactionReadConcurrency)
+        const inputs = await Promise.all(batch.map(key => dataSource.read(key)))
+        // Decode/fold in input order so collision semantics remain unchanged,
+        // while the latency-bound object reads overlap.
+        for (const input of inputs) {
+          const rows = await decodeParquetToRows(input)
+          for (let i = 0; i < rows.length; i++)
+            byNaturalKey.set(naturalKeyFor(ctx.table, rows[i]!), rows[i]!)
+        }
       }
       // Recurrence guard: correct compaction inputs own disjoint natural keys,
       // but a duplicated-row regression must not survive a merge — collapse

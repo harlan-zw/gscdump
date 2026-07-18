@@ -14,8 +14,7 @@ import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { between, date as dateCol, gsc, page as pageCol, query as queryCol } from 'gscdump/query'
-import { paginateClause, paginateInMemory } from '../analyzer/paginate'
-import { createSorter } from '../types'
+import { paginateClause, paginateSortedInMemory } from '../analyzer/paginate'
 
 const DEFAULT_ROW_LIMIT = 25_000
 
@@ -27,11 +26,6 @@ export interface ZeroClickResult {
   ctr: number
   position: number
 }
-
-const sortRowResults = createSorter<ZeroClickResult, 'impressions'>(
-  item => item.impressions,
-  'impressions',
-)
 
 export const zeroClickAnalyzer = defineAnalyzer<AnalysisParams, Row, ZeroClickResult[]>({
   id: 'zero-click',
@@ -133,8 +127,12 @@ export const zeroClickAnalyzer = defineAnalyzer<AnalysisParams, Row, ZeroClickRe
         })
       }
     }
-    const results = sortRowResults(Array.from(queryMap.values()), 'impressions', 'desc')
-    const paged = paginateInMemory(results, { limit: params.limit, offset: params.offset })
+    const results = Array.from(queryMap.values())
+    const paged = paginateSortedInMemory(
+      results,
+      { limit: params.limit, offset: params.offset },
+      (left, right) => right.impressions - left.impressions,
+    )
     return { results: paged, meta: { total: results.length, returned: paged.length } }
   },
 })

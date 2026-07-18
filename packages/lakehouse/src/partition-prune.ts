@@ -53,10 +53,12 @@ function toUint8(bytes: Uint8Array | ArrayBuffer | null | undefined): Uint8Array
   return bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
 }
 
+const UTF8_DECODER = new TextDecoder()
+
 /** identity(<col>) lower/upper bounds are UTF-8 string bytes under `'string'` encoding. */
 function decodeString(bytes: Uint8Array | ArrayBuffer | null | undefined): string | null {
   const u = toUint8(bytes)
-  return u == null ? null : new TextDecoder().decode(u)
+  return u == null ? null : UTF8_DECODER.decode(u)
 }
 
 /** month(date)=<name> bounds are 4-byte little-endian int32 (months since epoch). */
@@ -80,44 +82,52 @@ export function buildManifestPartitionFilter(
 ): ManifestPartitionFilter {
   const fieldIndex = (name: string): number => partitionSpec.findIndex(f => f.name === name || f.sourceColumn === name)
   const monthFieldIndex = partitionSpec.findIndex(f => f.transform === 'month')
+  const stringMatches = matches.flatMap((match) => {
+    if (match.encoding !== 'string')
+      return []
+    const index = fieldIndex(match.field)
+    return index < 0 ? [] : [{ index, value: String(match.value) }]
+  })
+  const wantedMonthValues = wantedMonths
+    ? [...wantedMonths].filter(Number.isFinite).sort((a, b) => a - b)
+    : []
+
+  const hasWantedMonthInRange = (lo: number, hi: number): boolean => {
+    // Lower-bound search turns a scan over every requested month for every
+    // manifest into O(log months), while preserving sparse month sets.
+    let left = 0
+    let right = wantedMonthValues.length
+    while (left < right) {
+      const middle = (left + right) >>> 1
+      if (wantedMonthValues[middle]! < lo)
+        left = middle + 1
+      else
+        right = middle
+    }
+    return left < wantedMonthValues.length && wantedMonthValues[left]! <= hi
+  }
 
   return (partitions): boolean => {
     if (!partitions || partitions.length === 0)
       return true // no summaries — can't prune, keep
 
-    for (const match of matches) {
-      // Only string-encoded identity fields are pruned — see PartitionValueMatch doc.
-      if (match.encoding !== 'string')
-        continue
-      const idx = fieldIndex(match.field)
-      if (idx < 0)
-        continue
-      const summary = partitions[idx]
+    for (const match of stringMatches) {
+      const summary = partitions[match.index]
       if (!summary || (summary.lower_bound == null && summary.upper_bound == null))
         continue
       const lo = decodeString(summary.lower_bound)
       const hi = decodeString(summary.upper_bound)
-      const wantStr = String(match.value)
-      if (lo != null && hi != null && (wantStr < lo || wantStr > hi))
+      if (lo != null && hi != null && (match.value < lo || match.value > hi))
         return false
     }
 
-    if (wantedMonths && wantedMonths.size > 0 && monthFieldIndex >= 0) {
+    if (wantedMonthValues.length > 0 && monthFieldIndex >= 0) {
       const monthSummary = partitions[monthFieldIndex]
       if (monthSummary && (monthSummary.lower_bound != null || monthSummary.upper_bound != null)) {
         const lo = decodeMonthInt(monthSummary.lower_bound)
         const hi = decodeMonthInt(monthSummary.upper_bound)
-        if (lo != null && hi != null) {
-          let anyInRange = false
-          for (const wm of wantedMonths) {
-            if (wm >= lo && wm <= hi) {
-              anyInRange = true
-              break
-            }
-          }
-          if (!anyInRange)
-            return false
-        }
+        if (lo != null && hi != null && !hasWantedMonthInRange(lo, hi))
+          return false
       }
     }
 

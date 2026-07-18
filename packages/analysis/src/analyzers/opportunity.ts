@@ -15,8 +15,7 @@ import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { queriesQueryState } from '../analyzer/adapt-rows'
-import { paginateClause, paginateInMemory } from '../analyzer/paginate'
-import { createMetricSorter } from '../types'
+import { paginateClause, paginateSortedInMemory } from '../analyzer/paginate'
 
 export type OpportunitySortMetric = 'opportunityScore' | 'potentialClicks' | 'impressions' | 'position'
 
@@ -80,13 +79,6 @@ function calculateCtrGapScore(actualCtr: number, position: number): number {
   const gap = expectedCtr - actualCtr
   return Math.min(gap / expectedCtr, 1)
 }
-
-const sortResults = createMetricSorter<OpportunityResult, OpportunitySortMetric>('opportunityScore', {
-  opportunityScore: 'desc',
-  potentialClicks: 'desc',
-  impressions: 'desc',
-  position: 'asc',
-})
 
 export const opportunityAnalyzer = defineAnalyzer<AnalysisParams, Row, OpportunityResult[]>({
   id: 'opportunity',
@@ -252,8 +244,11 @@ export const opportunityAnalyzer = defineAnalyzer<AnalysisParams, Row, Opportuni
       })
     }
 
-    const sorted = sortResults(results, sortBy)
-    const paged = paginateInMemory(sorted, { limit: params.limit, offset: params.offset })
-    return { results: paged, meta: { total: sorted.length, returned: paged.length } }
+    const paged = paginateSortedInMemory(
+      results,
+      { limit: params.limit, offset: params.offset },
+      (left, right) => right[sortBy] - left[sortBy],
+    )
+    return { results: paged, meta: { total: results.length, returned: paged.length } }
   },
 })

@@ -156,6 +156,54 @@ describe('hyparquet codec', () => {
     expect(merged.map(r => r.url).sort()).toEqual(['/x', '/y'])
   })
 
+  it('overlaps compaction reads up to the configured memory bound', async () => {
+    const codec = createHyparquetCodec({ compactionReadConcurrency: 2 })
+    const base = memDataSource()
+    for (let i = 0; i < 3; i++) {
+      base.store.set(`in-${i}.parquet`, encodeRowsToParquet('pages', [
+        { url: `/p-${i}`, date: '2025-01-01', clicks: i, impressions: 1, sum_position: 1 },
+      ]))
+    }
+    let active = 0
+    let maxActive = 0
+    let release!: () => void
+    let reachedLimit!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const atLimit = new Promise<void>((resolve) => {
+      reachedLimit = resolve
+    })
+    const ds: DataSource = {
+      ...base,
+      async read(key) {
+        active++
+        maxActive = Math.max(maxActive, active)
+        if (active === 2)
+          reachedLimit()
+        await gate
+        try {
+          return await base.read(key)
+        }
+        finally {
+          active--
+        }
+      },
+    }
+
+    const pending = codec.compactRows(
+      { table: 'pages' },
+      ['in-0.parquet', 'in-1.parquet', 'in-2.parquet'],
+      'out.parquet',
+      ds,
+    )
+    await atLimit
+    expect(maxActive).toBe(2)
+    release()
+    await expect(pending).resolves.toMatchObject({ rowCount: 3 })
+    expect(maxActive).toBe(2)
+  })
+
   // Regression: the 2026-04 monthly-compaction corruption merged a complete
   // month back onto its own daily inputs, so every (date, dimension) row
   // landed twice. compactRows must collapse natural-key collisions instead of

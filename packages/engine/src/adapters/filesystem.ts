@@ -17,7 +17,7 @@ import type {
 } from '../storage'
 import { Buffer } from 'node:buffer'
 import { randomBytes } from 'node:crypto'
-import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, open, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { lock as lockFile } from 'proper-lockfile'
 import {
@@ -36,6 +36,7 @@ export interface FilesystemDataSourceOptions {
 
 export function createFilesystemDataSource(opts: FilesystemDataSourceOptions): DataSource {
   const root = resolve(opts.rootDir)
+  const readyDirectories = new Map<string, Promise<void>>()
 
   function pathFor(key: string): string {
     const resolved = resolve(root, key)
@@ -44,25 +45,78 @@ export function createFilesystemDataSource(opts: FilesystemDataSourceOptions): D
     return resolved
   }
 
+  async function ensureDirectory(path: string): Promise<void> {
+    let pending = readyDirectories.get(path)
+    if (!pending) {
+      pending = mkdir(path, { recursive: true }).then(() => undefined)
+      readyDirectories.set(path, pending)
+      pending.catch(() => readyDirectories.delete(path))
+    }
+    await pending
+  }
+
   return {
     async read(key, range, signal) {
       const path = pathFor(key)
-      const bytes = await readFile(path, { signal })
-      if (!range)
+      if (!range) {
+        const bytes = await readFile(path, { signal })
         return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-      const sliced = bytes.subarray(range.offset, range.offset + range.length)
-      return new Uint8Array(sliced.buffer, sliced.byteOffset, sliced.byteLength)
+      }
+
+      // Parquet readers issue small footer/page range reads. Loading the whole
+      // file here defeats that contract and makes every local query O(file
+      // size) in bytes read. FileHandle.read clamps naturally at EOF.
+      signal?.throwIfAborted()
+      const handle = await open(path, 'r')
+      try {
+        const bytes = Buffer.allocUnsafe(range.length)
+        let totalRead = 0
+        while (totalRead < range.length) {
+          signal?.throwIfAborted()
+          const { bytesRead } = await handle.read(
+            bytes,
+            totalRead,
+            range.length - totalRead,
+            range.offset + totalRead,
+          )
+          if (bytesRead === 0)
+            break
+          totalRead += bytesRead
+        }
+        return new Uint8Array(bytes.buffer, bytes.byteOffset, totalRead)
+      }
+      finally {
+        await handle.close()
+      }
     },
     async write(key, bytes) {
       const path = pathFor(key)
-      await mkdir(dirname(path), { recursive: true })
-      await writeFile(path, Buffer.from(bytes))
+      const dir = dirname(path)
+      await ensureDirectory(dir)
+      try {
+        await writeFile(path, bytes)
+      }
+      catch (error) {
+        // Recover if an external process removed a directory after it entered
+        // the successful-directory cache.
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
+          throw error
+        readyDirectories.delete(dir)
+        await ensureDirectory(dir)
+        await writeFile(path, bytes)
+      }
     },
     async delete(keys) {
-      await Promise.all(keys.map(async (k) => {
-        const path = pathFor(k)
-        await rm(path, { force: true })
-      }))
+      let next = 0
+      async function worker(): Promise<void> {
+        while (true) {
+          const index = next++
+          if (index >= keys.length)
+            return
+          await rm(pathFor(keys[index]!), { force: true })
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(32, keys.length) }, worker))
     },
     async list(prefix) {
       const full = pathFor(prefix)
@@ -109,17 +163,29 @@ async function* walkStream(dir: string): AsyncIterable<string> {
 }
 
 async function walk(dir: string, out: string[]): Promise<void> {
-  const entries = await readdir(dir, { withFileTypes: true }).catch((err) => {
-    const e = err as NodeJS.ErrnoException
-    if (e.code === 'ENOENT')
-      return [] as Awaited<ReturnType<typeof readdir>>
-    throw err
-  })
-  for (const entry of entries) {
-    const p = join(dir, String(entry.name))
-    if (entry.isDirectory())
-      await walk(p, out)
-    else out.push(p)
+  const pending = [dir]
+  let next = 0
+  while (next < pending.length) {
+    const batch = pending.slice(next, next + 32)
+    next += batch.length
+    const listings = await Promise.all(batch.map(async current => ({
+      current,
+      entries: await readdir(current, { withFileTypes: true }).catch((err) => {
+        const e = err as NodeJS.ErrnoException
+        if (e.code === 'ENOENT')
+          return [] as Awaited<ReturnType<typeof readdir>>
+        throw err
+      }),
+    })))
+    for (const { current, entries } of listings) {
+      for (const entry of entries) {
+        const p = join(current, String(entry.name))
+        if (entry.isDirectory())
+          pending.push(p)
+        else
+          out.push(p)
+      }
+    }
   }
 }
 
@@ -144,6 +210,17 @@ function lockFileFor(locksDir: string, scope: LockScope): string {
 export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptions): ManifestStore {
   const manifestPath = resolve(opts.path)
   const locksDir = join(dirname(manifestPath), 'locks')
+  const readyDirectories = new Map<string, Promise<void>>()
+
+  async function ensureDirectory(path: string): Promise<void> {
+    let pending = readyDirectories.get(path)
+    if (!pending) {
+      pending = mkdir(path, { recursive: true }).then(() => undefined)
+      readyDirectories.set(path, pending)
+      pending.catch(() => readyDirectories.delete(path))
+    }
+    await pending
+  }
 
   async function load(): Promise<ManifestFile> {
     const content = await readFile(manifestPath, 'utf8').catch((err: NodeJS.ErrnoException) => {
@@ -160,9 +237,17 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
   }
 
   async function save(data: ManifestFile): Promise<void> {
-    await mkdir(dirname(manifestPath), { recursive: true })
+    const manifestDir = dirname(manifestPath)
+    await ensureDirectory(manifestDir)
     const tmp = `${manifestPath}.${randomBytes(6).toString('hex')}.tmp`
-    await writeFile(tmp, JSON.stringify(data), 'utf8')
+    const content = JSON.stringify(data)
+    await writeFile(tmp, content, 'utf8').catch(async (error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT')
+        throw error
+      readyDirectories.delete(manifestDir)
+      await ensureDirectory(manifestDir)
+      await writeFile(tmp, content, 'utf8')
+    })
     await rename(tmp, manifestPath).catch(async (err) => {
       try {
         await unlink(tmp)
@@ -264,10 +349,16 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
       })
     },
     async withLock(scope, fn) {
-      await mkdir(locksDir, { recursive: true })
+      await ensureDirectory(locksDir)
       const path = lockFileFor(locksDir, scope)
       // proper-lockfile needs the target to exist. Touch an empty sentinel.
-      await writeFile(path, '', { flag: 'a' })
+      await writeFile(path, '', { flag: 'a' }).catch(async (error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT')
+          throw error
+        readyDirectories.delete(locksDir)
+        await ensureDirectory(locksDir)
+        await writeFile(path, '', { flag: 'a' })
+      })
       const release = await lockFile(path, {
         realpath: false,
         stale: 30_000,
@@ -346,25 +437,20 @@ export async function filesystemStats(rootDir: string): Promise<{ files: number,
   const keys: string[] = []
   await walkForStats(resolve(rootDir), keys)
   let bytes = 0
-  for (const k of keys) {
-    const s = await stat(k)
-    bytes += s.size
+  let next = 0
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = next++
+      if (index >= keys.length)
+        return
+      const s = await stat(keys[index]!)
+      bytes += s.size
+    }
   }
+  await Promise.all(Array.from({ length: Math.min(32, keys.length) }, worker))
   return { files: keys.length, bytes }
 }
 
 async function walkForStats(dir: string, out: string[]): Promise<void> {
-  const entries = await readdir(dir, { withFileTypes: true }).catch((err) => {
-    const e = err as NodeJS.ErrnoException
-    if (e.code === 'ENOENT')
-      return [] as Awaited<ReturnType<typeof readdir>>
-    throw err
-  })
-  for (const entry of entries) {
-    const p = join(dir, String(entry.name))
-    if (entry.isDirectory())
-      await walkForStats(p, out)
-    else
-      out.push(p)
-  }
+  await walk(dir, out)
 }

@@ -2797,14 +2797,6 @@ exports[`analyzer plan snapshots > sql plan: data-detail 1`] = `
   "extraFiles": undefined,
   "extraQueries": [
     {
-      "name": "totals",
-      "params": [
-        "2024-02-01",
-        "2024-02-29",
-      ],
-      "sql": "SELECT CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2",
-    },
-    {
       "name": "prevTotals",
       "params": [
         "2024-01-01",
@@ -2819,7 +2811,7 @@ exports[`analyzer plan snapshots > sql plan: data-detail 1`] = `
     "2024-02-29",
   ],
   "previous": undefined,
-  "sql": "SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", "pages"."date", CAST(SUM("pages"."clicks") AS DOUBLE) as "clicks", CAST(SUM("pages"."impressions") AS DOUBLE) as "impressions", CAST(SUM("pages"."clicks") AS DOUBLE) / NULLIF(SUM("pages"."impressions"), 0) as "ctr", SUM("pages"."sum_position") / NULLIF(SUM("pages"."impressions"), 0) + 1 as "position" FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END, "pages"."date" ORDER BY clicks DESC LIMIT 100",
+  "sql": "WITH aggregated AS (SELECT CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END as "page", "pages"."date", CAST(SUM("pages"."clicks") AS DOUBLE) as clicks, CAST(SUM("pages"."impressions") AS DOUBLE) as impressions, CAST(SUM("pages"."sum_position") AS DOUBLE) as sum_position FROM "pages" WHERE "pages"."date" >= $1 AND "pages"."date" <= $2 GROUP BY CASE WHEN url LIKE 'http%' THEN COALESCE(NULLIF(regexp_replace(url, '^https?://[^/]+', ''), ''), '/') ELSE url END, "pages"."date") SELECT "page", date, clicks, impressions, CAST(clicks AS REAL) / NULLIF(impressions, 0) as ctr, sum_position / NULLIF(impressions, 0) + 1 as position, COUNT(*) OVER() as totalCount, CAST(SUM(clicks) OVER() AS DOUBLE) as totalClicks, CAST(SUM(impressions) OVER() AS DOUBLE) as totalImpressions, CAST(SUM(clicks) OVER() AS REAL) / NULLIF(SUM(impressions) OVER(), 0) as totalCtr, SUM(sum_position) OVER() / NULLIF(SUM(impressions) OVER(), 0) + 1 as totalPosition FROM aggregated ORDER BY clicks DESC LIMIT 100",
 }
 `;
 

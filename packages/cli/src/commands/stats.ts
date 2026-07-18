@@ -1,4 +1,4 @@
-import type { ManifestEntry, TableName, Watermark } from '../local-store'
+import type { ManifestEntry, Watermark } from '../local-store'
 import process from 'node:process'
 import { filesystemStats } from '@gscdump/engine/filesystem'
 import { defineCommand } from 'citty'
@@ -24,9 +24,14 @@ export const statsCommand = defineCommand({
     // surfaces an error instead of silently showing zero.
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
+    const allEntries = await store.engine.listAll({ userId: store.userId })
     let siteId: string | undefined
     if (args.site) {
-      const known = await listKnownSiteIds(store)
+      const known = new Set(
+        allEntries
+          .filter(entry => entry.retiredAt === undefined && entry.siteId !== undefined)
+          .map(entry => entry.siteId!),
+      )
       const candidate = store.siteIdFor(args.site)
       if (!known.has(candidate)) {
         logger.error(`No local data for --site=${args.site}. Known site IDs: ${known.size === 0 ? '(none — run \`gscdump sync\` first)' : Array.from(known).join(', ')}`)
@@ -34,21 +39,20 @@ export const statsCommand = defineCommand({
       }
       siteId = candidate
     }
-    const perTable = await Promise.all(
-      allTables().map(async (table) => {
-        const all = await store.engine.listAll({
-          userId: store.userId,
-          siteId,
-          table: table as TableName,
-        })
-        const live = all.filter(e => e.retiredAt === undefined)
-        const retired = all.filter(e => e.retiredAt !== undefined)
-        return { table, live, retired }
-      }),
-    )
+    const selectedEntries = siteId === undefined
+      ? allEntries
+      : allEntries.filter(entry => entry.siteId === siteId)
+    const perTable = allTables().map((table) => {
+      const all = selectedEntries.filter(entry => entry.table === table)
+      const live = all.filter(e => e.retiredAt === undefined)
+      const retired = all.filter(e => e.retiredAt !== undefined)
+      return { table, live, retired }
+    })
 
-    const watermarks = await store.engine.getWatermarks({ userId: store.userId, siteId })
-    const disk = await filesystemStats(store.dataDir).catch(() => ({ files: 0, bytes: 0 }))
+    const [watermarks, disk] = await Promise.all([
+      store.engine.getWatermarks({ userId: store.userId, siteId }),
+      filesystemStats(store.dataDir).catch(() => ({ files: 0, bytes: 0 })),
+    ])
 
     if (json) {
       const payload = {
@@ -112,18 +116,6 @@ export const statsCommand = defineCommand({
     console.log()
   },
 })
-
-async function listKnownSiteIds(store: { userId: string, engine: { listLive: (f: any) => Promise<ManifestEntry[]> } }): Promise<Set<string>> {
-  const ids = new Set<string>()
-  for (const table of allTables()) {
-    const entries = await store.engine.listLive({ userId: store.userId, table: table as TableName })
-    for (const e of entries) {
-      if (e.siteId)
-        ids.add(e.siteId)
-    }
-  }
-  return ids
-}
 
 function sortWatermarks(ws: Watermark[]): Watermark[] {
   return [...ws].sort((a, b) => {

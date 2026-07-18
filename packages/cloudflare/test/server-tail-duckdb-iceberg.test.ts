@@ -10,10 +10,13 @@ const base = { siteId: 'site-1', searchType: 'web' as const, range }
 
 function fakeSvc(rows: unknown[]) {
   const calls: string[] = []
+  const deadlines: number[] = []
   return {
     calls,
-    runSQL: vi.fn(async ({ sql }: { sql: string }) => {
+    deadlines,
+    runSQL: vi.fn(async ({ sql, deadlineAt }: { sql: string, deadlineAt?: number }) => {
       calls.push(sql)
+      deadlines.push(deadlineAt!)
       return { rows, sql }
     }),
   }
@@ -34,6 +37,7 @@ describe('createDuckDbIcebergExecutor', () => {
     expect(svc.calls[0]).toContain('iceberg_scan(\'wh/gsc/page_queries\')')
     expect(svc.calls[0]).not.toContain('?')
     expect(svc.calls[0]).toContain('\'site-1\'')
+    expect(svc.deadlines[0]).toEqual(expect.any(Number))
   })
 
   it('uses catalog-style table refs when configured', async () => {

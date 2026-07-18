@@ -45,7 +45,11 @@ function makeFakeOpfs(opts: { quotaBytes?: number, writeConflict?: Set<string> }
         let pending: Uint8Array = new Uint8Array()
         return {
           async write(data: ArrayBuffer | Uint8Array) {
-            pending = data instanceof Uint8Array ? data : new Uint8Array(data)
+            const chunk = data instanceof Uint8Array ? data : new Uint8Array(data)
+            const combined = new Uint8Array(pending.byteLength + chunk.byteLength)
+            combined.set(pending)
+            combined.set(chunk, pending.byteLength)
+            pending = combined
           },
           async close() {
             if (used + pending.byteLength > quota) {
@@ -195,6 +199,34 @@ describe('attachOpfsParquetTables', () => {
     expect(opfs.files.size).toBe(1)
     const slug = await expectedSlug('iceberg/abc.parquet')
     expect([...opfs.files.keys()][0]).toBe(`gscdump-snapshot__pages_${slug}.parquet`)
+  })
+
+  it('streams response chunks into OPFS without materialising an ArrayBuffer', async () => {
+    const opfs = makeFakeOpfs()
+    installNavigatorStorage(opfs.root)
+    const { db, conn } = stubDuckDb()
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]))
+        controller.enqueue(new Uint8Array([3, 4, 5]))
+        controller.close()
+      },
+    }), { status: 200 })
+    const arrayBuffer = vi.spyOn(response, 'arrayBuffer')
+    const fetchImpl = vi.fn(async () => response) as unknown as typeof fetch
+
+    await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: fetchImpl,
+      tables: [{
+        table: 'pages',
+        files: [{ url: '/streamed', bytes: 5, contentHash: 'iceberg/streamed.parquet' }],
+      }],
+    })
+
+    expect(arrayBuffer).not.toHaveBeenCalled()
+    expect([...opfs.files.values()][0]).toEqual(new Uint8Array([1, 2, 3, 4, 5]))
   })
 
   it('rejects downloaded files whose byte length does not match the manifest', async () => {
@@ -549,12 +581,10 @@ describe('attachOpfsParquetTables', () => {
     expect(dropFile).toHaveBeenCalledOnce()
   })
 
-  it('overlay view scans the lake parquet ONCE (regression: anti-join re-read lake)', async () => {
+  it('overlay view keeps the served lake scan pushdown-friendly', async () => {
     // The overlay view dedups the recent tail against the lake via an anti-join.
-    // The lake files must be read by exactly ONE read_parquet — once for the
-    // served rows, reused (via a MATERIALIZED CTE) for the anti-join date set.
-    // Pre-fix the lake was read_parquet'd a SECOND time inside the WHERE NOT IN
-    // subquery, doubling the parquet scan on every query of a persistent view.
+    // Keep the served-row read streaming so outer filters/projections reach
+    // Parquet. The second lake read supplies only dates for overlay dedup.
     const opfs = makeFakeOpfs()
     installNavigatorStorage(opfs.root)
     const { db, conn, viewSql } = stubDuckDb()
@@ -575,14 +605,12 @@ describe('attachOpfsParquetTables', () => {
 
     const sql = viewSql.find(s => s.includes('CREATE OR REPLACE VIEW main.pages'))
     expect(sql).toBeDefined()
-    // One read_parquet for the lake set + one for the overlay = 2 total. A third
-    // would mean the lake is scanned twice again.
-    expect((sql!.match(/read_parquet\(/g) ?? []).length).toBe(2)
-    // The single lake scan is reused via a materialised CTE.
-    expect(sql).toMatch(/WITH lake AS MATERIALIZED/i)
+    // Served lake + overlay + date-only anti-join lake scan.
+    expect((sql!.match(/read_parquet\(/g) ?? []).length).toBe(3)
+    expect(sql).not.toMatch(/MATERIALIZED/i)
     // Anti-join dedup is still intact: overlay only fills days the lake lacks.
     expect(sql).toMatch(/UNION ALL BY NAME/i)
-    expect(sql).toMatch(/NOT IN \(SELECT date FROM lake_dates\)/i)
+    expect(sql).toMatch(/NOT IN \(SELECT DISTINCT date FROM/i)
   })
 
   it('withDb wraps only DB mutations — downloads run outside the lock', async () => {

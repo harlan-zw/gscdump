@@ -78,6 +78,24 @@ export interface InspectionHistoryShard {
 }
 
 const YEAR_MONTH_RE = /^(\d{4})-(\d{2})-/
+const ENTITY_IO_CONCURRENCY = 8
+
+async function mapEntityIo<T, R>(items: readonly T[], fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  if (items.length === 0)
+    return []
+  const results = Array.from({ length: items.length }, () => undefined as R | undefined)
+  let next = 0
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = next++
+      if (index >= items.length)
+        return
+      results[index] = await fn(items[index]!, index)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(ENTITY_IO_CONCURRENCY, items.length) }, worker))
+  return results as R[]
+}
 
 export function inspectionIndexKey(ctx: TenantCtx): string {
   return ctx.siteId
@@ -393,7 +411,7 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
           byMonth.set(month, [])
         byMonth.get(month)!.push(r)
       }
-      for (const [yearMonth, batch] of byMonth) {
+      const shards = [...byMonth].map(([yearMonth, batch]) => {
         const shard: InspectionHistoryShard = { version: 1, records: batch }
         const bytes = encodeJsonBigintSafe(shard)
         if (bytes.byteLength > INSPECTION_HISTORY_MAX_BYTES) {
@@ -401,31 +419,30 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
             `inspection history shard exceeds ${INSPECTION_HISTORY_MAX_BYTES} bytes (got ${bytes.byteLength}); split the batch`,
           )
         }
-        await ds.write(inspectionHistoryShardKey(ctx, yearMonth, batchId), bytes)
-      }
+        return { key: inspectionHistoryShardKey(ctx, yearMonth, batchId), bytes }
+      })
+      await mapEntityIo(shards, shard => ds.write(shard.key, shard.bytes))
     },
 
     async loadHistory(ctx, yearMonth) {
       const keys = await ds.list(inspectionHistoryPrefix(ctx, yearMonth))
       if (keys.length === 0)
         return undefined
-      const out: InspectionRecord[] = []
-      for (const key of keys) {
+      const records = await mapEntityIo(keys, async (key): Promise<InspectionRecord[]> => {
         // Absent shard (raced delete between list+read) → skip; a real read
         // failure propagates rather than silently dropping the shard's records.
         const bytes = await readOptional(ds, key)
         if (!bytes)
-          continue
+          return []
         const shard = await Promise.resolve()
           .then(() => JSON.parse(new TextDecoder().decode(bytes)) as InspectionHistoryShard)
           .catch((err: Error) => {
             console.warn('[inspection.loadHistory] failed to decode shard', { key, error: err.message })
             return undefined
           })
-        if (shard?.records)
-          out.push(...shard.records)
-      }
-      return { version: 1, records: out }
+        return shard?.records ?? []
+      })
+      return { version: 1, records: records.flat() }
     },
 
     async materialize(ctx, rowIter) {
@@ -456,17 +473,16 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
         bucket.push(r)
         byMonth.set(month, bucket)
       }
-      const keys: string[] = []
-      for (const [month, batch] of byMonth) {
+      const files = [...byMonth].map(([month, batch]) => {
         const bytes = encodeRowsToParquetFlex(batch as Row[], {
           columns: INSPECTION_EVENT_COLUMNS,
           sortKey: ['urlHash'],
         })
         const key = inspectionEventKey(ctx, month, batchId)
-        await ds.write(key, bytes)
-        keys.push(key)
-      }
-      return { keys, rowCount: rows.length }
+        return { key, bytes }
+      })
+      await mapEntityIo(files, file => ds.write(file.key, file.bytes))
+      return { keys: files.map(file => file.key), rowCount: rows.length }
     },
 
     async compactInspections(ctx) {
@@ -505,12 +521,17 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
 
       let eventsFolded = 0
       const consumed: string[] = []
-      for (const key of eventKeys.sort()) {
+      const eventFiles = await mapEntityIo(eventKeys.sort(), async (key) => {
         const bytes = await readOptional(ds, key)
         if (!bytes)
+          return undefined
+        return { key, rows: await decodeParquetToRows(bytes) }
+      })
+      for (const file of eventFiles) {
+        if (!file)
           continue
+        const { key, rows } = file
         consumed.push(key)
-        const rows = await decodeParquetToRows(bytes)
         for (const row of rows) {
           consider(row)
           eventsFolded++
@@ -889,18 +910,19 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
       const indexKey = sitemapIndexKey(ctx)
       const index = (await readJson<SitemapIndex>(indexKey)) ?? { version: 1, records: {} }
       const stamp = now()
+      const historyDocs = new Map<string, SitemapHistoryDoc>()
       for (const r of records) {
         const h = hash(r.path)
         index.records[h] = r
-        const histKey = sitemapHistoryKey(ctx, h, stamp)
-        const doc: SitemapHistoryDoc = {
+        historyDocs.set(sitemapHistoryKey(ctx, h, stamp), {
           version: 1,
           path: r.path,
           capturedAt: r.capturedAt,
           record: r,
-        }
-        await writeJson(histKey, doc)
+        })
       }
+      await mapEntityIo([...historyDocs], ([key, doc]) => writeJson(key, doc))
+      // Publish the index only after every immutable history document landed.
       await writeJson(indexKey, index)
     },
 
@@ -1001,11 +1023,19 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
       const includeRemoved = opts?.includeRemoved ?? false
       // Per-feedpath index: the whole file is this sitemap's URLs, so the read
       // is bounded by one sitemap's size regardless of how large the site is.
-      const indexBytes = await readOptional(ds, sitemapUrlsIndexKey(ctx, fpHash))
-      const indexRows = indexBytes ? await decodeParquetToRows(indexBytes) : []
+      const [indexRows, listedDeltaKeys] = await Promise.all([
+        readOptional(ds, sitemapUrlsIndexKey(ctx, fpHash))
+          .then(bytes => bytes ? decodeParquetToRows(bytes) : []),
+        ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`),
+      ])
       // Apply any deltas not yet folded into the index. Fold in chronological
       // order (the delta filename embeds an ISO date prefix → lexical sort).
-      const deltaKeys = (await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`)).sort()
+      const deltaKeys = listedDeltaKeys
+        .filter((key) => {
+          const match = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
+          return match?.[2] === fpHash
+        })
+        .sort()
       const live = new Map<string, SitemapUrlRecord>()
       const removedMap = new Map<string, SitemapUrlRecord>()
       for (const row of indexRows) {
@@ -1015,14 +1045,13 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
         else
           live.set(rec.urlHash, rec)
       }
-      for (const key of deltaKeys) {
-        const m = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
-        if (!m || m[2] !== fpHash)
-          continue
+      const deltas = await mapEntityIo(deltaKeys, async (key) => {
         const dBytes = await readOptional(ds, key)
         if (!dBytes)
-          continue
-        const dRows = await decodeParquetToRows(dBytes)
+          return []
+        return decodeParquetToRows(dBytes)
+      })
+      for (const dRows of deltas) {
         for (const r of dRows) {
           const op = String(r.op)
           const urlHash = String(r.url_hash)
@@ -1128,8 +1157,15 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
         // treat it as absent, we'd rewrite the index from deltas alone and drop
         // every URL the index held. `readOptional` keeps a genuinely-absent
         // index as `undefined` (first compaction) but propagates a real failure.
-        const indexBytes = await readOptional(ds, indexKey)
-        const indexRows = indexBytes ? await decodeParquetToRows(indexBytes) : []
+        const [indexRows, deltaFiles] = await Promise.all([
+          readOptional(ds, indexKey).then(bytes => bytes ? decodeParquetToRows(bytes) : []),
+          mapEntityIo(feedDeltaKeys.sort(), async (key) => {
+            const bytes = await readOptional(ds, key)
+            if (!bytes)
+              return undefined
+            return { key, rows: await decodeParquetToRows(bytes) }
+          }),
+        ])
         const live = new Map<string, SitemapUrlRecord>()
         const removed = new Map<string, SitemapUrlRecord>()
         for (const row of indexRows) {
@@ -1141,12 +1177,11 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
         }
         // Fold chronologically — the delta filename embeds an ISO date prefix.
         const consumed: string[] = []
-        for (const key of feedDeltaKeys.sort()) {
-          const bytes = await readOptional(ds, key)
-          if (!bytes)
+        for (const file of deltaFiles) {
+          if (!file)
             continue
+          const { key, rows } = file
           consumed.push(key)
-          const rows = await decodeParquetToRows(bytes)
           for (const r of rows) {
             const urlHash = String(r.url_hash)
             const at = Number(r.at)
@@ -1198,13 +1233,17 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
       // any outstanding (uncompacted) delta files. A feedpath the live set no
       // longer contains is a dropped feed; its live URLs must be removed.
       const present = new Set<string>()
-      for (const key of await ds.list(`${sitemapUrlsIndexPrefix(ctx)}/`)) {
+      const [indexKeys, deltaKeys] = await Promise.all([
+        ds.list(`${sitemapUrlsIndexPrefix(ctx)}/`),
+        ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`),
+      ])
+      for (const key of indexKeys) {
         const m = /\/by-feed\/([0-9a-f]+)\/index\.parquet$/.exec(key)
         if (m)
           present.add(m[1]!)
       }
       const deltasByFeed = new Map<string, string[]>()
-      for (const key of await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`)) {
+      for (const key of deltaKeys) {
         const m = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
         if (!m)
           continue
@@ -1223,8 +1262,15 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
         // state, then transition everything still live to removed. Identical
         // fold to compactUrls but scoped to one (now-dead) feedpath.
         const indexKey = sitemapUrlsIndexKey(ctx, fpHash)
-        const indexBytes = await readOptional(ds, indexKey)
-        const indexRows = indexBytes ? await decodeParquetToRows(indexBytes) : []
+        const [indexRows, deltaFiles] = await Promise.all([
+          readOptional(ds, indexKey).then(bytes => bytes ? decodeParquetToRows(bytes) : []),
+          mapEntityIo((deltasByFeed.get(fpHash) ?? []).sort(), async (key) => {
+            const bytes = await readOptional(ds, key)
+            if (!bytes)
+              return undefined
+            return { key, rows: await decodeParquetToRows(bytes) }
+          }),
+        ])
         const live = new Map<string, SitemapUrlRecord>()
         const removed = new Map<string, SitemapUrlRecord>()
         for (const row of indexRows) {
@@ -1235,12 +1281,11 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
             live.set(r.urlHash, r)
         }
         const consumed: string[] = []
-        for (const key of (deltasByFeed.get(fpHash) ?? []).sort()) {
-          const bytes = await readOptional(ds, key)
-          if (!bytes)
+        for (const file of deltaFiles) {
+          if (!file)
             continue
+          const { key, rows } = file
           consumed.push(key)
-          const rows = await decodeParquetToRows(bytes)
           for (const r of rows) {
             const urlHash = String(r.url_hash)
             const dat = Number(r.at)

@@ -134,14 +134,18 @@ const WHITESPACE_RE = /\s+/g
 const DIACRITICS_RE = /\p{Diacritic}/gu
 
 function tokenize(query: string): { text: string, tokens: string[] } {
-  const text = query
-    .normalize('NFKD')
-    .replace(DIACRITICS_RE, '')
+  let index = 0
+  while (index < query.length && query.charCodeAt(index) <= 0x7F)
+    index++
+  const folded = index === query.length
+    ? query
+    : query.normalize('NFKD').replace(DIACRITICS_RE, '')
+  const text = folded
     .toLowerCase()
     .replace(SEPARATOR_RE, ' ')
     .replace(WHITESPACE_RE, ' ')
     .trim()
-  return { text, tokens: text.split(' ').filter(Boolean) }
+  return { text, tokens: text.length === 0 ? [] : text.split(' ') }
 }
 
 /**

@@ -45,7 +45,7 @@ export type DuckDbIcebergRow = Record<string, string | number | null>
  * satisfies it.
  */
 export interface DuckDbSvc {
-  runSQL: (args: { sql: string }) => Promise<{ rows: unknown[], sql: string }>
+  runSQL: (args: { sql: string, deadlineAt?: number }) => Promise<{ rows: unknown[], sql: string }>
 }
 
 /** Configuration for the DuckDB-over-Iceberg executor. */
@@ -180,7 +180,8 @@ export function createDuckDbIcebergExecutor(
     // A deadline overrun is the retry-able timeout; any other sibling-RPC blow-up
     // is a hard `DuckDbIcebergError`. The underlying RPC error is unmodellable
     // noise, folded into the message.
-    const raced = await withDeadline(config.svc.runSQL({ sql }), timeoutMs)
+    const deadlineAt = Date.now() + timeoutMs
+    const raced = await withDeadline(config.svc.runSQL({ sql, deadlineAt }), timeoutMs)
       .then(value => ok(value))
       .catch((error: unknown): Result<{ rows: unknown[], sql: string }, DuckDbIcebergQueryError> =>
         error instanceof DuckDbIcebergTimeoutError

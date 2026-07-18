@@ -129,13 +129,13 @@ describe('real DuckDB-WASM + real OPFS e2e', () => {
     await expect(conn.query('SELECT * FROM main.dates')).rejects.toThrow()
   }, 60_000)
 
-  it('overlay view: lake serves its days, overlay fills only the gap (anti-join, single materialized scan)', async () => {
+  it('overlay view: lake serves its days, overlay fills only the gap (streaming anti-join)', async () => {
     // Lake covers days 1-3; the recent-window overlay covers days 3-5 with a
     // STALE day-3 (clicks 999) the lake already has. Against the REAL engine the
     // anti-join must: let the lake win day 3 (clicks 30, not 999), serve the
     // overlay ONLY for days 4-5, and never double-count day 3. This is the
-    // end-to-end proof that the MATERIALIZED-CTE rewrite (lake scanned once,
-    // reused for the anti-join date set) preserves the dedup semantics.
+    // end-to-end proof that the streaming, pushdown-friendly rewrite preserves
+    // the same dedup semantics.
     const lake = datesParquet([
       { date: '2026-05-01', clicks: 10 },
       { date: '2026-05-02', clicks: 20 },

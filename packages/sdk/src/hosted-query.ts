@@ -26,6 +26,9 @@ export interface SourceRangeOptions {
 
 export interface AnalysisSourcesOptions extends SearchTypeOptions, SourceRangeOptions {
   tables?: string[] | string
+  maxBytes?: number
+  maxRows?: number
+  maxFiles?: number
 }
 
 type DataQueryOptionsWithSearchType = DataQueryOptions & SearchTypeOptions
@@ -86,7 +89,7 @@ export function sourceInfoQuery(options: SourceInfoOptions | undefined): Record<
 
 export function tablesQuery(
   tablesOrOptions: string[] | string | AnalysisSourcesOptions | undefined,
-  options?: SearchTypeOptions & SourceRangeOptions,
+  options?: AnalysisSourcesOptions,
 ): Record<string, string> {
   const tables = isAnalysisSourcesOptions(tablesOrOptions) ? tablesOrOptions.tables : tablesOrOptions
   const source = isAnalysisSourcesOptions(tablesOrOptions) ? tablesOrOptions : options
@@ -99,6 +102,12 @@ export function tablesQuery(
       ? [...new Set(tables.filter(Boolean))].sort().join(',')
       : [...new Set(tables.split(',').map(t => t.trim()).filter(Boolean))].sort().join(',')
   }
+  if (source?.maxBytes != null)
+    query.maxBytes = String(Math.max(1, Math.floor(source.maxBytes)))
+  if (source?.maxRows != null)
+    query.maxRows = String(Math.max(1, Math.floor(source.maxRows)))
+  if (source?.maxFiles != null)
+    query.maxFiles = String(Math.max(1, Math.floor(source.maxFiles)))
   return query
 }
 

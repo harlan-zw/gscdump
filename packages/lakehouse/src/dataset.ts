@@ -310,6 +310,7 @@ function buildRowProcessor(def: IcebergDatasetDef, tableSpec: IcebergTableSpec):
   const idNames = identityColumnNames(def.identity)
   const idEncodings = identityEncodings(def.identity)
   const dimNames = def.dims ? Object.keys(def.dims) : []
+  const identityColumns = tableSpec.identityColumns
 
   function guard(row: Record<string, unknown>): Record<string, unknown> | null {
     const out: Record<string, unknown> = {}
@@ -342,11 +343,15 @@ function buildRowProcessor(def: IcebergDatasetDef, tableSpec: IcebergTableSpec):
   function dedupe(rows: Record<string, unknown>[]): Record<string, unknown>[] {
     if (rows.length < 2)
       return rows
-    const keyCols = tableSpec.identityColumns
     const seen = new Map<string, Record<string, unknown>>()
     for (const rec of rows) {
-      const k = keyCols.map(c => `${rec[c] ?? ''}`).join('\0')
-      seen.set(k, rec)
+      let identity = ''
+      for (let index = 0; index < identityColumns.length; index++) {
+        if (index > 0)
+          identity += '\0'
+        identity += `${rec[identityColumns[index]!] ?? ''}`
+      }
+      seen.set(identity, rec)
     }
     return seen.size === rows.length ? rows : [...seen.values()]
   }

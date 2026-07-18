@@ -31,7 +31,7 @@ export interface AnalyticsEnv {
    * `runSQL` with only SQL, and finally `dropTables`.
    */
   DUCKDB_SVC?: {
-    runSQL: (args: { sql: string, tables?: Record<string, { ipc: Uint8Array }> }) => Promise<{ rows: unknown[], sql: string }>
+    runSQL: (args: { sql: string, tables?: Record<string, { ipc: Uint8Array }>, deadlineAt?: number }) => Promise<{ rows: unknown[], sql: string }>
     stageArrowTable?: (args: { table: string, ipc: Uint8Array }) => Promise<void>
     dropTables?: (args: { tables: string[] }) => Promise<void>
     ping: () => Promise<string>

@@ -9,7 +9,7 @@ const analysisSourcesResponse = {
   snapshotVersion: 'v1',
   generatedAt: '2026-05-11T00:00:00.000Z',
   tables: [],
-  eligibilityCeiling: { maxBytes: 150_000_000, maxRows: 10_000_000 },
+  eligibilityCeiling: { maxBytes: 150_000_000, maxRows: 10_000_000, maxFiles: 64 },
 }
 
 describe('createPartnerClient', () => {

@@ -291,7 +291,12 @@ async function runWithConcurrency<T>(
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker))
+  const results = await Promise.allSettled(
+    Array.from({ length: Math.min(concurrency, items.length) }, worker),
+  )
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (rejected)
+    throw rejected.reason
 }
 
 function sizeHintFromUrl(url: string): number | null {

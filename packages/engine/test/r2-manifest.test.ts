@@ -598,4 +598,60 @@ describe('createR2ManifestStore — purgeTenant', () => {
     const store = createR2ManifestStore({ bucket, userId: 'u1' })
     await expect(store.purgeTenant({ userId: 'u2' })).rejects.toThrow(/scoped to userId=u1/)
   })
+
+  it('purges independent shards concurrently', async () => {
+    const bucket = makeFakeBucket()
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+    await store.registerVersions(Array.from({ length: 12 }, (_, i) =>
+      makeEntry({
+        siteId: `s${i}`,
+        objectKey: `u_u1/s${i}/pages/daily/2026-04-10__v1.parquet`,
+      })))
+
+    const realGet = bucket.get.bind(bucket)
+    let active = 0
+    let peak = 0
+    bucket.get = async (key) => {
+      if (!key.endsWith('/HEAD'))
+        return realGet(key)
+      active++
+      peak = Math.max(peak, active)
+      try {
+        await delay(5)
+        return await realGet(key)
+      }
+      finally {
+        active--
+      }
+    }
+
+    await store.purgeTenant({ userId: 'u1' })
+    expect(peak).toBeGreaterThan(1)
+    expect(peak).toBeLessThanOrEqual(8)
+    expect(await store.listLive({ userId: 'u1' })).toEqual([])
+  })
+
+  it('chunks large shard purges at the R2 bulk-delete limit', async () => {
+    const bucket = makeFakeBucket()
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+    await store.registerVersion(makeEntry())
+    for (let i = 0; i < 2001; i++) {
+      bucket.store.set(`u_u1/manifest/s1/pages/old-${i}.json`, {
+        bytes: new Uint8Array(),
+        etag: `old-${i}`,
+      })
+    }
+
+    const realDelete = bucket.delete.bind(bucket)
+    const batchSizes: number[] = []
+    bucket.delete = async (keys) => {
+      const batch = typeof keys === 'string' ? [keys] : keys
+      batchSizes.push(batch.length)
+      expect(batch.length).toBeLessThanOrEqual(1000)
+      await realDelete(keys)
+    }
+
+    await store.purgeTenant({ userId: 'u1', siteId: 's1' })
+    expect(batchSizes).toEqual([1000, 1000, 3])
+  })
 })

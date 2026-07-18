@@ -204,6 +204,9 @@ describe('data-detail', () => {
     const meta = out.meta as { totals: { clicks: number, impressions: number } }
     expect(meta.totals.clicks).toBe(30)
     expect(meta.totals.impressions).toBe(300)
+    expect(daily[0]).not.toHaveProperty('totalCount')
+    expect(daily[0]).not.toHaveProperty('totalClicks')
+    expect(daily[0]).not.toHaveProperty('sum_position')
   })
 
   it('prevTotals present when qc supplied', async () => {

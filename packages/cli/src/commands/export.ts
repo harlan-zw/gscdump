@@ -29,17 +29,19 @@ export interface ExportResult {
 
 export async function exportToDuckDB(opts: ExportOptions): Promise<ExportResult> {
   const outPath = path.resolve(opts.outPath)
-  const inputs = []
+  // The local manifest is one JSON document. Read it once and group in memory;
+  // querying once per table rereads and reparses the same file nine times.
+  const entries = await opts.engine.listLive({
+    userId: opts.userId,
+    siteId: opts.siteId,
+  })
+  const inputs: Array<{ table: TableName, filePaths: string[] }> = []
   for (const table of allTables()) {
-    const entries = await opts.engine.listLive({
-      userId: opts.userId,
-      siteId: opts.siteId,
-      table: table as TableName,
-    })
-    if (entries.length > 0) {
+    const tableEntries = entries.filter(entry => entry.table === table)
+    if (tableEntries.length > 0) {
       inputs.push({
         table: table as TableName,
-        filePaths: entries.map(entry => path.join(opts.dataDir, entry.objectKey)),
+        filePaths: tableEntries.map(entry => path.join(opts.dataDir, entry.objectKey)),
       })
     }
   }

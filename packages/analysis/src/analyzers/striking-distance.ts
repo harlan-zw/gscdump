@@ -17,7 +17,7 @@ import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { queriesQueryState } from '../analyzer/adapt-rows'
-import { paginateInMemory } from '../analyzer/paginate'
+import { paginateSortedInMemory } from '../analyzer/paginate'
 
 const DEFAULT_ROW_LIMIT = 25_000
 
@@ -104,8 +104,11 @@ export const strikingDistanceAnalyzer = defineAnalyzer<
   reduce(rows, params) {
     const arr = Array.isArray(rows) ? rows : []
     const results = filterStrikingDistance(arr, params)
-    results.sort((a, b) => b.potentialClicks - a.potentialClicks)
-    const paged = paginateInMemory(results, { limit: params.limit ?? 1000, offset: params.offset })
+    const paged = paginateSortedInMemory(
+      results,
+      { limit: params.limit ?? 1000, offset: params.offset },
+      (left, right) => right.potentialClicks - left.potentialClicks,
+    )
     return { results: paged, meta: { total: results.length, returned: paged.length } }
   },
 

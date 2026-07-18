@@ -18,6 +18,7 @@ import {
   REALTIME_V1_EVENT_NAMES,
   REALTIME_V1_RESOURCE_TYPES,
 } from '@gscdump/contracts/v1'
+import { utf8Size } from '../utf8'
 
 type MaybePromise<T> = T | Promise<T>
 type RealtimeTicketData = RealtimeTicketV1Response['data']
@@ -214,17 +215,18 @@ function defaultRuntime(): GscdumpRealtimeV1Runtime {
   }
 }
 
-function utf8Size(value: string): number {
-  return new TextEncoder().encode(value).byteLength
-}
+const UTF8_DECODER = new TextDecoder()
+const REALTIME_EVENT_NAMES = new Set<string>(REALTIME_V1_EVENT_NAMES)
+const REALTIME_RESOURCE_TYPES = new Set<string>(REALTIME_V1_RESOURCE_TYPES)
+const APPLIED_EVENT_CACHE_MAX = 10_000
 
 async function messageText(raw: unknown): Promise<string> {
   if (typeof raw === 'string')
     return raw
   if (raw instanceof ArrayBuffer)
-    return new TextDecoder().decode(raw)
+    return UTF8_DECODER.decode(raw)
   if (ArrayBuffer.isView(raw))
-    return new TextDecoder().decode(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength))
+    return UTF8_DECODER.decode(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength))
   if (typeof Blob !== 'undefined' && raw instanceof Blob)
     return raw.text()
   throw new TypeError('Realtime frames must be text or UTF-8 binary data.')
@@ -291,6 +293,7 @@ export function createGscdumpRealtimeV1Client(
   const eventFailures = new Map<string, number>()
   const appliedEventIds = new Set<string>()
   const appliedEventOrder: string[] = []
+  let appliedEventCursor = 0
 
   function getSnapshot(): GscdumpRealtimeV1Snapshot {
     return {
@@ -465,11 +468,15 @@ export function createGscdumpRealtimeV1Client(
     if (appliedEventIds.has(key))
       return
     appliedEventIds.add(key)
-    appliedEventOrder.push(key)
-    if (appliedEventOrder.length > 10_000) {
-      const oldest = appliedEventOrder.shift()
+    if (appliedEventOrder.length < APPLIED_EVENT_CACHE_MAX) {
+      appliedEventOrder.push(key)
+    }
+    else {
+      const oldest = appliedEventOrder[appliedEventCursor]
       if (oldest)
         appliedEventIds.delete(oldest)
+      appliedEventOrder[appliedEventCursor] = key
+      appliedEventCursor = (appliedEventCursor + 1) % APPLIED_EVENT_CACHE_MAX
     }
   }
 
@@ -478,18 +485,18 @@ export function createGscdumpRealtimeV1Client(
   }
 
   function eventForRequiredEffect(event: RealtimeV1Event): RealtimeV1Event {
-    const knownEvent = (REALTIME_V1_EVENT_NAMES as readonly string[]).includes(event.name)
+    const knownEvent = REALTIME_EVENT_NAMES.has(event.name)
     return knownEvent && event.eventVersion === 1
       ? event
       : { ...event, data: null }
   }
 
   function eventAdvisories(event: RealtimeV1Event): void {
-    if (!(REALTIME_V1_EVENT_NAMES as readonly string[]).includes(event.name))
+    if (!REALTIME_EVENT_NAMES.has(event.name))
       observe({ type: 'advisory', code: 'unknown_event', event })
     else if (event.eventVersion !== 1)
       observe({ type: 'advisory', code: 'unsupported_event_version', event })
-    if (event.changes.some(change => !(REALTIME_V1_RESOURCE_TYPES as readonly string[]).includes(change.type)))
+    if (event.changes.some(change => !REALTIME_RESOURCE_TYPES.has(change.type)))
       observe({ type: 'advisory', code: 'unknown_resource', event })
   }
 
@@ -994,7 +1001,8 @@ export function createGscdumpRealtimeV1Client(
       context.lastPongAt = runtime.now()
       return
     }
-    if (utf8Size(text) > GSCDUMP_REALTIME_LIMITS.outboundFrameMaxBytes) {
+    const textBytes = utf8Size(text)
+    if (textBytes > GSCDUMP_REALTIME_LIMITS.outboundFrameMaxBytes) {
       throw new GscdumpRealtimeV1Error({
         code: 'protocol_error',
         message: 'A server frame exceeded the v1 outbound frame limit.',
@@ -1030,7 +1038,7 @@ export function createGscdumpRealtimeV1Client(
       const eventLimit = parsed.data.delivery === 'durable'
         ? GSCDUMP_REALTIME_LIMITS.durableEventMaxBytes
         : GSCDUMP_REALTIME_LIMITS.ephemeralEventMaxBytes
-      if (utf8Size(text) > eventLimit) {
+      if (textBytes > eventLimit) {
         throw new GscdumpRealtimeV1Error({
           code: 'protocol_error',
           message: `A ${parsed.data.delivery} event exceeded its v1 size limit.`,

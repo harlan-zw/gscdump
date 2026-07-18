@@ -40,6 +40,16 @@ describe('withDuckDBDeadline', () => {
     ctrl.abort()
     await expect(race).rejects.toBeDefined()
   })
+
+  it('removes the abort listener when a stalled RPC times out', async () => {
+    const stalled = new Promise<string>(() => {})
+    const controller = new AbortController()
+    const remove = vi.spyOn(controller.signal, 'removeEventListener')
+
+    await expect(withDuckDBDeadline(stalled, 20, controller.signal)).rejects.toBeInstanceOf(DuckDBServiceTimeoutError)
+
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function))
+  })
 })
 
 describe('worker read guardrails', () => {
@@ -73,6 +83,33 @@ describe('worker read guardrails', () => {
     expect(maxActive).toBeLessThanOrEqual(2)
   })
 
+  it('drains in-flight work before surfacing a worker failure', async () => {
+    const boom = new Error('read failed')
+    let release!: () => void
+    const slow = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const started: number[] = []
+    let rejected = false
+    const pending = mapLimit([0, 1, 2], 2, async (value) => {
+      started.push(value)
+      if (value === 0)
+        throw boom
+      await slow
+      return value
+    })
+    void pending.catch(() => {
+      rejected = true
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(rejected).toBe(false)
+    expect(started).toEqual([0, 1])
+
+    release()
+    await expect(pending).rejects.toBe(boom)
+  })
+
   it('rejects oversized executor plans before any R2 read or DuckDB RPC', async () => {
     const runSQL = vi.fn()
     const read = vi.fn()
@@ -90,6 +127,11 @@ describe('worker read guardrails', () => {
 
     expect(read).not.toHaveBeenCalled()
     expect(runSQL).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid RPC timeout configuration', () => {
+    expect(() => createDucklingsExecutor({} as any, { rpcTimeoutMs: 0 })).toThrow(/positive finite number/)
+    expect(() => createDucklingsExecutor({} as any, { rpcTimeoutMs: Number.NaN })).toThrow(/positive finite number/)
   })
 
   it('rejects oversized known byte plans before any R2 object GET', async () => {
@@ -150,7 +192,8 @@ describe('createDucklingsExecutor Arrow transport', () => {
     const read = vi.fn(async () => parquet)
     const executor = createDucklingsExecutor({
       DUCKDB_SVC: { runSQL, ping: vi.fn() },
-    } as any)
+    } as any, { rpcTimeoutMs: 120_000 })
+    const earliestDeadline = Date.now() + 120_000
 
     await executor.execute({
       sql: 'SELECT * FROM read_parquet({{FILES}}, union_by_name = true)',
@@ -162,9 +205,11 @@ describe('createDucklingsExecutor Arrow transport', () => {
     })
 
     expect(runSQL).toHaveBeenCalledOnce()
-    const arg = runSQL.mock.calls[0]![0] as { sql: string, tables: Record<string, { ipc: Uint8Array, rows?: unknown }> }
+    const arg = runSQL.mock.calls[0]![0] as { sql: string, tables: Record<string, { ipc: Uint8Array, rows?: unknown }>, deadlineAt?: number }
     // The `{{FILES}}` placeholder is rewritten to the temp table name.
     expect(arg.sql).not.toContain('{{FILES}}')
+    expect(arg.deadlineAt).toEqual(expect.any(Number))
+    expect(arg.deadlineAt).toBeGreaterThanOrEqual(earliestDeadline)
     const specs = Object.values(arg.tables)
     expect(specs).toHaveLength(1)
     // Columnar Arrow IPC crosses the binding — never JS row objects.
@@ -174,6 +219,34 @@ describe('createDucklingsExecutor Arrow transport', () => {
     const table = tableFromIPC(specs[0]!.ipc)
     expect(table.numRows).toBe(2)
     expect(table.toArray().map(r => r.url).sort()).toEqual(['/a', '/b'])
+  })
+
+  it('skips R2 HEAD and GET after an unfiltered file reaches the decoded cache', async () => {
+    const parquet = encodeRowsToParquet('pages', [
+      { url: '/cached', date: '2026-01-01', clicks: 1, impressions: 2, sum_position: 3 },
+    ])
+    const runSQL = vi.fn(async () => ({ rows: [], sql: '' }))
+    const read = vi.fn(async () => parquet)
+    const head = vi.fn(async () => ({ bytes: parquet.byteLength }))
+    const rowCache = createDucklingsRowCache()
+    const executor = createDucklingsExecutor({
+      DUCKDB_SVC: { runSQL, ping: vi.fn() },
+    } as any, { rowCache })
+    const input = {
+      sql: 'SELECT * FROM read_parquet({{FILES}}, union_by_name = true)',
+      params: [],
+      fileKeys: { FILES: ['cached-k0'] },
+      placeholderTables: { FILES: 'pages' as const },
+      dataSource: { read, head },
+      table: 'pages' as const,
+    }
+
+    await executor.execute(input)
+    await executor.execute(input)
+
+    expect(head).toHaveBeenCalledOnce()
+    expect(read).toHaveBeenCalledOnce()
+    expect(runSQL).toHaveBeenCalledTimes(2)
   })
 
   it('chunks large Arrow IPC requests through staged service calls and reassembles the rows', async () => {
@@ -191,8 +264,9 @@ describe('createDucklingsExecutor Arrow transport', () => {
       for (const table of tables)
         delete staged[table]
     })
-    const runSQL = vi.fn(async (args: { sql: string, tables?: unknown }) => {
+    const runSQL = vi.fn(async (args: { sql: string, tables?: unknown, deadlineAt?: number }) => {
       expect(args.tables).toBeUndefined()
+      expect(args.deadlineAt).toEqual(expect.any(Number))
       const tableName = Object.keys(staged)[0]!
       const tableRows = staged[tableName]!
       return {

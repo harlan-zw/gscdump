@@ -51,6 +51,94 @@ export function paginateInMemory<T>(rows: readonly T[], input: PaginateInput): T
 }
 
 /**
+ * Return one sorted page without sorting the entire candidate set when the
+ * requested prefix is small. A bounded max-heap retains only `offset + limit`
+ * rows, then sorts that prefix. Original indexes break comparator ties so the
+ * result stays as stable as modern `Array#sort`.
+ */
+export function paginateSortedInMemory<T>(
+  rows: readonly T[],
+  input: PaginateInput,
+  compare: (left: T, right: T) => number,
+): T[] {
+  const limit = clampLimit(input.limit, rows.length)
+  const offset = clampOffset(input.offset)
+  const selectedCount = Math.min(rows.length, offset + limit)
+  if (limit === 0 || offset >= rows.length || selectedCount === 0)
+    return []
+
+  // Full sorting is faster once most of the input must be retained and keeps
+  // unusual comparator behavior on the native implementation's path.
+  const fullSort = (): T[] => [...rows].sort(compare).slice(offset, offset + limit)
+  if (selectedCount >= rows.length / 2)
+    return fullSort()
+
+  interface IndexedValue { value: T, index: number }
+  let invalidComparison = false
+  const compareStable = (left: IndexedValue, right: IndexedValue): number => {
+    const order = compare(left.value, right.value)
+    if (Number.isNaN(order)) {
+      invalidComparison = true
+      return left.index - right.index
+    }
+    return order || left.index - right.index
+  }
+  const isWorse = (left: IndexedValue, right: IndexedValue): boolean => compareStable(left, right) > 0
+  const heap: IndexedValue[] = []
+
+  const siftUp = (start: number): void => {
+    let index = start
+    while (index > 0) {
+      const parent = (index - 1) >>> 1
+      if (!isWorse(heap[index]!, heap[parent]!))
+        break
+      const swap = heap[parent]!
+      heap[parent] = heap[index]!
+      heap[index] = swap
+      index = parent
+    }
+  }
+
+  const siftDown = (): void => {
+    let index = 0
+    for (;;) {
+      const left = index * 2 + 1
+      if (left >= heap.length)
+        return
+      const right = left + 1
+      let worse = left
+      if (right < heap.length && isWorse(heap[right]!, heap[left]!))
+        worse = right
+      if (!isWorse(heap[worse]!, heap[index]!))
+        return
+      const swap = heap[index]!
+      heap[index] = heap[worse]!
+      heap[worse] = swap
+      index = worse
+    }
+  }
+
+  for (let index = 0; index < rows.length; index++) {
+    const candidate = { value: rows[index]!, index }
+    if (heap.length < selectedCount) {
+      heap.push(candidate)
+      siftUp(heap.length - 1)
+    }
+    else if (compareStable(candidate, heap[0]!) < 0) {
+      heap[0] = candidate
+      siftDown()
+    }
+  }
+
+  if (invalidComparison)
+    return fullSort()
+  heap.sort(compareStable)
+  if (invalidComparison)
+    return fullSort()
+  return heap.slice(offset, offset + limit).map(entry => entry.value)
+}
+
+/**
  * Resolve `sortBy` against an allow-list. Returns a typed key + direction
  * suitable for ORDER BY interpolation or for indexing into a comparator
  * map. Falls back to the analyzer's default when input is missing or

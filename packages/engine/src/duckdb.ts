@@ -40,7 +40,24 @@ export interface DuckDBFactory {
   getDuckDB: () => Promise<DuckDBHandle>
 }
 
-const BUFFER_READ_BATCH_SIZE = 8
+const DEFAULT_BUFFER_READ_CONCURRENCY = 16
+const MAX_BUFFER_READ_CONCURRENCY = 64
+
+export interface DuckDBReadOptions {
+  /**
+   * Maximum non-URI parquet reads held in flight while registering DuckDB
+   * buffers. Defaults to 16; callers handling unusually large files can lower
+   * it to trade latency for peak JS memory.
+   */
+  bufferReadConcurrency?: number
+}
+
+function bufferReadConcurrency(value: number | undefined, fileCount: number): number {
+  const requested = typeof value === 'number' && Number.isFinite(value)
+    ? Math.floor(value)
+    : DEFAULT_BUFFER_READ_CONCURRENCY
+  return Math.max(1, Math.min(fileCount || 1, requested, MAX_BUFFER_READ_CONCURRENCY))
+}
 
 async function registerBufferedFiles(
   db: DuckDBHandle,
@@ -48,10 +65,12 @@ async function registerBufferedFiles(
   dataSource: DataSource,
   registered: string[],
   signal?: AbortSignal,
+  maxConcurrency?: number,
 ): Promise<void> {
-  for (let i = 0; i < files.length; i += BUFFER_READ_BATCH_SIZE) {
+  const batchSize = bufferReadConcurrency(maxConcurrency, files.length)
+  for (let i = 0; i < files.length; i += batchSize) {
     signal?.throwIfAborted()
-    const batch = files.slice(i, i + BUFFER_READ_BATCH_SIZE)
+    const batch = files.slice(i, i + batchSize)
     const buffers = await Promise.all(
       batch.map(file => dataSource.read(file.key, undefined, signal)),
     )
@@ -108,7 +127,7 @@ async function decodeBytes(
   }
 }
 
-export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
+export function createDuckDBCodec(factory: DuckDBFactory, options: DuckDBReadOptions = {}): ParquetCodec {
   return {
     async writeRows(ctx: CodecCtx, rows: Row[], key: string, dataSource: DataSource): Promise<WriteResult> {
       const db = await factory.getDuckDB()
@@ -175,7 +194,7 @@ export function createDuckDBCodec(factory: DuckDBFactory): ParquetCodec {
       })
 
       try {
-        await registerBufferedFiles(db, bufferedInputs, dataSource, registered)
+        await registerBufferedFiles(db, bufferedInputs, dataSource, registered, undefined, options.bufferReadConcurrency)
         const fileList = inNames.map(n => `'${sqlEscape(n)}'`).join(', ')
         // DuckDB streams read_parquet → COPY without materialising all rows in
         // memory. Matches the read path. `union_by_name` lets us merge files
@@ -263,7 +282,7 @@ function rewriteEmptyFileSets(
   return out
 }
 
-export function createDuckDBExecutor(factory: DuckDBFactory): QueryExecutor {
+export function createDuckDBExecutor(factory: DuckDBFactory, options: DuckDBReadOptions = {}): QueryExecutor {
   return {
     async execute({ sql, params, fileKeys, placeholderTables, dataSource, table, signal, profiler }) {
       signal?.throwIfAborted()
@@ -283,9 +302,9 @@ export function createDuckDBExecutor(factory: DuckDBFactory): QueryExecutor {
       // also retain every Uint8Array in JS while DuckDB already owns registered
       // vFS buffers. Mirrors `compactRows` above.
       try {
-        await Promise.all(Object.entries(fileKeys).map(async ([name, keys]) => {
+        const bufferedByName = new Map<string, { key: string, name: string }>()
+        for (const [name, keys] of Object.entries(fileKeys)) {
           const resolved: string[] = []
-          const buffered: Array<{ key: string, name: string }> = []
           for (let i = 0; i < keys.length; i++) {
             const key = keys[i]!
             const uri = dataSource.uri?.(key)
@@ -293,13 +312,28 @@ export function createDuckDBExecutor(factory: DuckDBFactory): QueryExecutor {
               resolved.push(uri)
             }
             else {
-              buffered.push({ key, name: key })
+              // One object can appear in multiple placeholders (for example a
+              // current window and a broader comparison window). Registering
+              // it once is sufficient because every placeholder uses the same
+              // vFS name; avoid duplicate GETs and duplicate registrations.
+              if (!bufferedByName.has(key))
+                bufferedByName.set(key, { key, name: key })
               resolved.push(key)
             }
           }
-          await registerBufferedFiles(db, buffered, dataSource, registered, signal)
           placeholders[name] = resolved
-        }))
+        }
+        // Apply the concurrency ceiling across the whole query, not once per
+        // placeholder. Otherwise a query with four file sets could hold 4x the
+        // documented number of remote reads and buffers in flight.
+        await registerBufferedFiles(
+          db,
+          [...bufferedByName.values()],
+          dataSource,
+          registered,
+          signal,
+          options.bufferReadConcurrency,
+        )
         // `buffered` is the count that took the read+register path (the rest
         // resolved to a native URI for free).
         endRegister?.({ buffered: registered.length })

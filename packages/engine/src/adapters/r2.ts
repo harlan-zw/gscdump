@@ -20,6 +20,8 @@ const BUCKET_NAME_RE = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/
 // escaping layer. Covers letters, digits, `._/-` and `=` (base-encoded
 // site-ids can carry `=`).
 const KEY_RE = /^[\w./=-]+$/
+const DELETE_CHUNK_SIZE = 1000
+const DELETE_CONCURRENCY = 4
 
 function assertKey(key: string): void {
   if (!KEY_RE.test(key))
@@ -101,9 +103,20 @@ export function createR2DataSource(options: R2DataSourceOptions): DataSource {
       if (keys.length === 0)
         return
       // R2 `delete` accepts string | string[]. Chunk at 1000 (R2's batch cap).
-      const CHUNK = 1000
-      for (let i = 0; i < keys.length; i += CHUNK)
-        await bucket.delete(keys.slice(i, i + CHUNK))
+      // Chunks are independent, so keep a small number in flight instead of
+      // paying one network RTT per chunk during tenant purges and GC.
+      let next = 0
+      async function worker(): Promise<void> {
+        while (true) {
+          const offset = next
+          next += DELETE_CHUNK_SIZE
+          if (offset >= keys.length)
+            return
+          await bucket.delete(keys.slice(offset, offset + DELETE_CHUNK_SIZE))
+        }
+      }
+      const chunkCount = Math.ceil(keys.length / DELETE_CHUNK_SIZE)
+      await Promise.all(Array.from({ length: Math.min(DELETE_CONCURRENCY, chunkCount) }, worker))
     },
     async list(prefix) {
       const out: string[] = []

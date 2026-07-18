@@ -353,14 +353,21 @@ async function buildRequestHeaders(
   executeOptions: GscdumpV1ExecuteOptions,
 ): Promise<Headers> {
   try {
-    const headers = new Headers(await resolveBaseHeaders(options.headers))
+    // Header and credential resolvers are independent and may each perform I/O
+    // (session lookup, token refresh, secrets fetch). Start both together so
+    // request setup costs the slower resolver rather than their combined time.
+    const [baseHeaders, credential] = await Promise.all([
+      resolveBaseHeaders(options.headers),
+      resolveCredential(options.credential),
+    ])
+    const headers = new Headers(baseHeaders)
     for (const [key, value] of Object.entries(prepared.headers)) {
       if (value !== undefined)
         headers.set(key, String(value))
     }
     headers.delete('x-api-key')
     headers.set('accept', 'application/json')
-    headers.set('authorization', `Bearer ${await resolveCredential(options.credential)}`)
+    headers.set('authorization', `Bearer ${credential}`)
     if (executeOptions.idempotencyKey)
       headers.set('idempotency-key', executeOptions.idempotencyKey)
     if (prepared.body !== undefined)

@@ -89,6 +89,37 @@ describe('createR2DataSource', () => {
     expect(bucket.store.size).toBe(0)
   })
 
+  it('deletes independent chunks with bounded concurrency', async () => {
+    let active = 0
+    let maxActive = 0
+    let calls = 0
+    let release!: () => void
+    let reachedTwo!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const twoActive = new Promise<void>((resolve) => {
+      reachedTwo = resolve
+    })
+    const bucket = fakeBucket()
+    bucket.delete = async () => {
+      calls++
+      active++
+      maxActive = Math.max(maxActive, active)
+      if (active === 2)
+        reachedTwo()
+      await gate
+      active--
+    }
+    const ds = createR2DataSource({ bucket })
+    const pending = ds.delete(Array.from({ length: 2500 }, (_, i) => `k${i}`))
+    await twoActive
+    expect(maxActive).toBe(3)
+    release()
+    await pending
+    expect(calls).toBe(3)
+  })
+
   it('head returns byte size', async () => {
     const bucket = fakeBucket({ a: new Uint8Array(42) })
     const ds = createR2DataSource({ bucket })

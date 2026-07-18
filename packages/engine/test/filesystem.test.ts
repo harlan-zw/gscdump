@@ -35,6 +35,8 @@ describe('filesystemDataSource', () => {
 
     const slice = await ds.read('u_1/pages/daily/2026-04-10__v1.parquet', { offset: 1, length: 2 })
     expect(Array.from(slice)).toEqual([2, 3])
+    const tail = await ds.read('u_1/pages/daily/2026-04-10__v1.parquet', { offset: 2, length: 8 })
+    expect(Array.from(tail)).toEqual([3, 4])
 
     await ds.delete(['u_1/pages/daily/2026-04-10__v1.parquet'])
     expect(await ds.list('u_1/')).toHaveLength(0)

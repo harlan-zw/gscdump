@@ -183,8 +183,13 @@ function dedupeByIdentity(table: IcebergTableName, records: IcebergRecord[]): Ic
   const key = gscDataset(table, 'int').tableSpec.identityColumns
   const seen = new Map<string, IcebergRecord>()
   for (const rec of records) {
-    const k = key.map(col => `${rec[col] ?? ''}`).join('\0')
-    seen.set(k, rec)
+    let identity = ''
+    for (let index = 0; index < key.length; index++) {
+      if (index > 0)
+        identity += '\0'
+      identity += `${rec[key[index]!] ?? ''}`
+    }
+    seen.set(identity, rec)
   }
   // Fast path: no collisions, return the original array untouched.
   return seen.size === records.length ? records : [...seen.values()]

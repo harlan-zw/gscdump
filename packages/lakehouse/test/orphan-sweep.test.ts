@@ -199,4 +199,46 @@ describe('sweepUncommittedOrphans', () => {
     expect(listSpy).not.toHaveBeenCalled()
     expect(s3.deletedKeys).toEqual([])
   })
+
+  it('overlaps manifest reads up to the configured I/O bound', async () => {
+    restCatalogLoadTable.mockReset().mockResolvedValueOnce({
+      metadata: metadata({
+        table: 'pages',
+        snapshots: [1, 2, 3].map(id => ({ id, files: [] })),
+      }),
+    })
+    let active = 0
+    let maxActive = 0
+    let release!: () => void
+    let reachedTwo!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const twoActive = new Promise<void>((resolve) => {
+      reachedTwo = resolve
+    })
+    icebergManifests.mockReset().mockImplementation(async () => {
+      active++
+      maxActive = Math.max(maxActive, active)
+      if (active === 2)
+        reachedTwo()
+      await gate
+      active--
+      return []
+    })
+    const s3 = fakeS3([])
+    const pending = sweepUncommittedOrphans({
+      conn: CONN,
+      s3,
+      bucket: BUCKET,
+      tables: ['pages'],
+      ioConcurrency: 2,
+      now: () => NOW,
+    })
+    await twoActive
+    expect(maxActive).toBe(2)
+    release()
+    await expect(pending).resolves.toMatchObject({ scannedTables: ['pages'] })
+    expect(maxActive).toBe(2)
+  })
 })

@@ -324,9 +324,10 @@ export function splitOverlappingTiers(
 ): { kept: ManifestEntry[], subsumed: ManifestEntry[] } {
   const rangeStartMs = queryRange ? Date.parse(`${queryRange.start}T00:00:00Z`) : undefined
   const rangeEndMs = queryRange ? Date.parse(`${queryRange.end}T00:00:00Z`) : undefined
-  const spanned: { entry: ManifestEntry, rank: number, days: number[] }[] = []
+  const spanned: { entry: ManifestEntry, rank: number, startMs: number, endMs: number }[] = []
   const kept: ManifestEntry[] = []
   const subsumed: ManifestEntry[] = []
+  const clampToRange = Number.isFinite(rangeStartMs) && Number.isFinite(rangeEndMs)
   for (const entry of entries) {
     const span = partitionSpan(entry.partition)
     if (!span) {
@@ -334,18 +335,14 @@ export function splitOverlappingTiers(
       kept.push(entry)
       continue
     }
-    const days: number[] = []
-    for (let t = span.startMs; t <= span.endMs; t += MS_PER_DAY) {
-      if (rangeStartMs !== undefined && (t < rangeStartMs || t > rangeEndMs!))
-        continue
-      days.push(t)
-    }
+    const startMs = clampToRange ? Math.max(span.startMs, rangeStartMs!) : span.startMs
+    const endMs = clampToRange ? Math.min(span.endMs, rangeEndMs!) : span.endMs
     // Entirely outside the query window — contributes no rows, drop it.
-    if (queryRange && days.length === 0) {
+    if (queryRange && startMs > endMs) {
       subsumed.push(entry)
       continue
     }
-    spanned.push({ entry, rank: span.rank, days })
+    spanned.push({ entry, rank: span.rank, startMs, endMs })
   }
 
   // Finest tier first, then newest-first — so a coarse tier is tested against
@@ -354,20 +351,27 @@ export function splitOverlappingTiers(
   spanned.sort((a, b) => a.rank - b.rank || b.entry.createdAt - a.entry.createdAt)
   // Coverage tracked per searchType — different slices never cancel each other.
   const coveredBySearchType = new Map<string, Set<number>>()
-  for (const { entry, days } of spanned) {
+  for (const { entry, startMs, endMs } of spanned) {
     const slice = inferSearchType(entry)
     let covered = coveredBySearchType.get(slice)
     if (!covered) {
       covered = new Set<number>()
       coveredBySearchType.set(slice, covered)
     }
-    if (days.every(d => covered!.has(d))) {
+    let fullyCovered = true
+    for (let dayMs = startMs; dayMs <= endMs; dayMs += MS_PER_DAY) {
+      if (!covered.has(dayMs)) {
+        fullyCovered = false
+        break
+      }
+    }
+    if (fullyCovered) {
       subsumed.push(entry)
       continue
     }
     kept.push(entry)
-    for (const d of days)
-      covered.add(d)
+    for (let dayMs = startMs; dayMs <= endMs; dayMs += MS_PER_DAY)
+      covered.add(dayMs)
   }
   return { kept, subsumed }
 }

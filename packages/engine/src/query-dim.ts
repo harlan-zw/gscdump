@@ -14,6 +14,7 @@ import type { ColumnDef } from './schema'
 import type { DataSource } from './storage'
 import { encodeJsonBigintSafe } from '@gscdump/lakehouse'
 import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
+import { readOptional } from './adapters/read-optional'
 
 export interface QueryDimRecord {
   query: string
@@ -105,13 +106,6 @@ export interface QueryDimStore {
 }
 
 export function createQueryDimStore({ dataSource }: { dataSource: DataSource }): QueryDimStore {
-  async function exists(key: string, prefix: string): Promise<boolean> {
-    // `read` rejects on a missing key (an absent dimension is an expected
-    // first-build state, not a failure), so probe via prefix LIST instead.
-    const keys = await dataSource.list(prefix)
-    return keys.includes(key)
-  }
-
   return {
     parquetKey: queryDimParquetKey,
 
@@ -132,17 +126,18 @@ export function createQueryDimStore({ dataSource }: { dataSource: DataSource }):
 
     async loadMeta(ctx) {
       const key = queryDimMetaKey(ctx)
-      if (!(await exists(key, `${queryDimPrefix(ctx)}/`)))
+      const bytes = await readOptional(dataSource, key)
+      if (!bytes)
         return null
-      const bytes = await dataSource.read(key)
       return JSON.parse(new TextDecoder().decode(bytes)) as QueryDimMeta
     },
 
     async loadRecords(ctx) {
       const key = queryDimParquetKey(ctx)
-      if (!(await exists(key, `${queryDimPrefix(ctx)}/`)))
+      const bytes = await readOptional(dataSource, key)
+      if (!bytes)
         return []
-      const rows = await decodeParquetToRows(await dataSource.read(key))
+      const rows = await decodeParquetToRows(bytes)
       return rows.map(r => ({
         query: String(r.query),
         query_canonical: String(r.query_canonical),

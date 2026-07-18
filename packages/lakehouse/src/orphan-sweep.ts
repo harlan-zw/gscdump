@@ -75,6 +75,8 @@ export interface SweepUncommittedOrphansOptions {
   dryRun?: boolean
   /** Injectable clock (ms epoch). Defaults to `Date.now`. */
   now?: () => number
+  /** Maximum catalog/object-store reads held in flight. Default 4, max 32. */
+  ioConcurrency?: number
 }
 
 export interface SweepUncommittedOrphansResult {
@@ -97,7 +99,39 @@ export interface SweepUncommittedOrphansResult {
 
 const DEFAULT_GRACE_HOURS = 48
 const DEFAULT_MAX_DELETES = 500
+const DEFAULT_IO_CONCURRENCY = 4
+const MAX_IO_CONCURRENCY = 32
 const HOUR_MS = 60 * 60 * 1000
+
+type IoLimiter = <T>(operation: () => Promise<T>) => Promise<T>
+
+function createIoLimiter(requested: number | undefined): IoLimiter {
+  const concurrency = typeof requested === 'number' && Number.isFinite(requested)
+    ? Math.max(1, Math.min(MAX_IO_CONCURRENCY, Math.floor(requested)))
+    : DEFAULT_IO_CONCURRENCY
+  let active = 0
+  const waiters: Array<() => void> = []
+  return async <T>(operation: () => Promise<T>): Promise<T> => {
+    if (active >= concurrency)
+      await new Promise<void>(resolve => waiters.push(resolve))
+    active++
+    try {
+      return await operation()
+    }
+    finally {
+      active--
+      waiters.shift()?.()
+    }
+  }
+}
+
+async function settleOrThrow<T>(promises: Promise<T>[]): Promise<T[]> {
+  const settled = await Promise.allSettled(promises)
+  const failure = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (failure)
+    throw failure.reason
+  return settled.map(result => (result as PromiseFulfilledResult<T>).value)
+}
 
 function splitBucketKey(filePath: string): { bucket: string, key: string } | null {
   if (!filePath.startsWith('s3://'))
@@ -126,8 +160,9 @@ async function scanTable(
   conn: IcebergConnection,
   table: string,
   bucket: string,
+  io: IoLimiter,
 ): Promise<TableScanResult> {
-  const { metadata } = await restCatalogLoadTable(conn.catalog, { namespace: conn.namespace, table })
+  const { metadata } = await io(() => restCatalogLoadTable(conn.catalog, { namespace: conn.namespace, table }))
   const location = splitBucketKey(String(metadata.location ?? ''))
   if (!location || location.bucket !== bucket)
     return { dataPrefix: null, liveKeys: new Set() }
@@ -135,8 +170,10 @@ async function scanTable(
   const dataPrefix = `${location.key.replace(/\/+$/, '')}/data/`
   const liveKeys = new Set<string>()
   const snapshots = metadata.snapshots ?? []
-  for (const snapshot of snapshots) {
-    const manifests = await icebergManifests({ metadata, resolver: conn.resolver, snapshotId: snapshot['snapshot-id'] })
+  const manifestsBySnapshot = await settleOrThrow(snapshots.map(snapshot =>
+    io(() => icebergManifests({ metadata, resolver: conn.resolver, snapshotId: snapshot['snapshot-id'] })),
+  ))
+  for (const manifests of manifestsBySnapshot) {
     for (const manifest of manifests) {
       for (const entry of manifest.entries) {
         // status 2 = DELETED (removed as of THIS manifest) — not live at this
@@ -159,11 +196,11 @@ async function scanTable(
   return { dataPrefix, liveKeys }
 }
 
-async function listAllUnderPrefix(s3: SweepStorageClient, prefix: string): Promise<SweepListedObject[]> {
+async function listAllUnderPrefix(s3: SweepStorageClient, prefix: string, io: IoLimiter): Promise<SweepListedObject[]> {
   const out: SweepListedObject[] = []
   let cursor: string | undefined
   do {
-    const page = await s3.list({ prefix, cursor })
+    const page = await io(() => s3.list({ prefix, cursor }))
     out.push(...page.objects)
     cursor = page.truncated ? page.cursor : undefined
   } while (cursor)
@@ -200,8 +237,9 @@ export async function sweepUncommittedOrphans(
   const dryRun = opts.dryRun ?? false
   const now = (opts.now ?? Date.now)()
   const graceCutoff = now - graceHours * HOUR_MS
+  const io = createIoLimiter(opts.ioConcurrency)
 
-  const tables = opts.tables ?? (await restCatalogListTables(conn.catalog, { namespace: conn.namespace })).map(t => t.name)
+  const tables = opts.tables ?? (await io(() => restCatalogListTables(conn.catalog, { namespace: conn.namespace }))).map(t => t.name)
 
   if (tables.length === 0) {
     return {
@@ -216,23 +254,15 @@ export async function sweepUncommittedOrphans(
     }
   }
 
-  const scannedTables: string[] = []
-  const skippedTables: string[] = []
-  let liveFileCount = 0
-  const candidates: SweepListedObject[] = []
-
-  for (const table of tables) {
+  const tableResults = await settleOrThrow(tables.map(async (table) => {
     // NOT wrapped in try/catch — a scan failure for any table must abort the
     // whole run (fail closed) rather than proceed on a partial live-set.
-    const { dataPrefix, liveKeys } = await scanTable(conn, table, bucket)
-    if (!dataPrefix) {
-      skippedTables.push(table)
-      continue
-    }
-    scannedTables.push(table)
-    liveFileCount += liveKeys.size
+    const { dataPrefix, liveKeys } = await scanTable(conn, table, bucket, io)
+    if (!dataPrefix)
+      return { table, skipped: true as const, liveFileCount: 0, candidates: [] as SweepListedObject[] }
 
-    const listed = await listAllUnderPrefix(s3, dataPrefix)
+    const listed = await listAllUnderPrefix(s3, dataPrefix, io)
+    const tableCandidates: SweepListedObject[] = []
     for (const obj of listed) {
       if (!obj.key.startsWith(dataPrefix))
         continue
@@ -240,9 +270,15 @@ export async function sweepUncommittedOrphans(
         continue
       if (obj.uploaded.getTime() > graceCutoff)
         continue
-      candidates.push(obj)
+      tableCandidates.push(obj)
     }
-  }
+    return { table, skipped: false as const, liveFileCount: liveKeys.size, candidates: tableCandidates }
+  }))
+
+  const scannedTables = tableResults.filter(result => !result.skipped).map(result => result.table)
+  const skippedTables = tableResults.filter(result => result.skipped).map(result => result.table)
+  const liveFileCount = tableResults.reduce((sum, result) => sum + result.liveFileCount, 0)
+  const candidates = tableResults.flatMap(result => result.candidates)
 
   const candidateCount = candidates.length
   const toDelete = candidates.slice(0, maxDeletes)

@@ -129,6 +129,7 @@ const SHARD_RE = /^u_[^/]+\/manifest\/(?<siteId>[^/]+)\/(?<table>[^/]+)\/HEAD$/
 const CAS_BACKOFF_BASE_MS = 5
 const CAS_BACKOFF_CAP_MS = 250
 const SHARD_IO_CONCURRENCY = 8
+const R2_DELETE_BATCH_SIZE = 1000
 
 async function casBackoff(attempt: number): Promise<void> {
   const ceil = Math.min(CAS_BACKOFF_CAP_MS, CAS_BACKOFF_BASE_MS * 2 ** attempt)
@@ -554,14 +555,8 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
       if (filter.userId !== userId)
         throw new Error(`purgeTenant: store is scoped to userId=${userId}, got ${filter.userId}`)
       const shards = await shardsForFilter({ siteId: filter.siteId })
-      let entriesRemoved = 0
-      let watermarksRemoved = 0
-      let syncStatesRemoved = 0
-      for (const { siteId, table } of shards) {
+      const purged = await mapWithConcurrency(shards, SHARD_IO_CONCURRENCY, async ({ siteId, table }) => {
         const { snapshot } = await readShard(siteId, table)
-        entriesRemoved += snapshot.entries.length
-        watermarksRemoved += snapshot.watermarks.length
-        syncStatesRemoved += snapshot.syncStates.length
         // Drop every object under the shard prefix: HEAD + all immutable
         // snapshot files. Paginate in case historical snapshots accumulated.
         const prefix = shardPrefix(userId, siteId, table)
@@ -572,9 +567,20 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
           for (const obj of res.objects) keys.push(obj.key)
           cursor = res.truncated ? res.cursor : undefined
         } while (cursor)
-        if (keys.length > 0)
-          await bucket.delete(keys)
-      }
+        // R2 bulk delete accepts at most 1,000 keys. Independent shard workers
+        // overlap their batches, while each worker keeps only one delete in
+        // flight so total request concurrency stays at SHARD_IO_CONCURRENCY.
+        for (let offset = 0; offset < keys.length; offset += R2_DELETE_BATCH_SIZE)
+          await bucket.delete(keys.slice(offset, offset + R2_DELETE_BATCH_SIZE))
+        return {
+          entriesRemoved: snapshot.entries.length,
+          watermarksRemoved: snapshot.watermarks.length,
+          syncStatesRemoved: snapshot.syncStates.length,
+        }
+      })
+      const entriesRemoved = purged.reduce((sum, result) => sum + result.entriesRemoved, 0)
+      const watermarksRemoved = purged.reduce((sum, result) => sum + result.watermarksRemoved, 0)
+      const syncStatesRemoved = purged.reduce((sum, result) => sum + result.syncStatesRemoved, 0)
       return { entriesRemoved, watermarksRemoved, syncStatesRemoved }
     },
   }

@@ -48,15 +48,14 @@ export const compactCommand = defineCommand({
       thresholds.d7 = Number(args['d7-days'])
     if (args['d30-days'])
       thresholds.d30 = Number(args['d30-days'])
+    // One broad read is enough to build the (table, site) work list. The
+    // compactor performs its own tier-scoped reads when each job runs.
+    const liveEntries = await store.engine.listLive({ userId: store.userId, siteId })
 
     if (dryRun) {
       const report: Array<{ table: string, siteId: string | undefined, raw: number, d7: number, d30: number, d90: number }> = []
       for (const table of allTables()) {
-        const entries = await store.engine.listLive({
-          userId: store.userId,
-          siteId,
-          table: table as TableName,
-        })
+        const entries = liveEntries.filter(entry => entry.table === table)
         const bySite = groupBySite(entries)
         for (const [s, group] of bySite)
           report.push({ table, siteId: s, ...countByTier(group) })
@@ -76,11 +75,7 @@ export const compactCommand = defineCommand({
 
     const summary: Array<{ table: string, siteId: string | undefined }> = []
     for (const table of allTables()) {
-      const entries = await store.engine.listLive({
-        userId: store.userId,
-        siteId,
-        table: table as TableName,
-      })
+      const entries = liveEntries.filter(entry => entry.table === table)
       const siteIds = new Set<string | undefined>(entries.map(e => e.siteId))
       for (const targetSite of siteIds) {
         logger.info(`Compacting ${table} [${targetSite ?? '-'}] (raw→d7→d30→d90)`)

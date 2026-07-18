@@ -155,6 +155,12 @@ const NO_STRIP_S = new Set([
   'conscious',
 ])
 
+// Query vocabularies repeat heavily even when raw queries are distinct. Keep a
+// small generational cache around the comparatively expensive English
+// inflector; the hard cap prevents unbounded growth in long-lived Workers.
+const DEPLURALIZED_CACHE_MAX = 4096
+const depluralizedCache = new Map<string, string>()
+
 function depluralize(token: string): string {
   // Short tokens and curated tech terms (css, redis, kubernetes, postgres, …)
   // are protected: `pluralize` is English-rule-based and would mangle domain
@@ -166,7 +172,19 @@ function depluralize(token: string): string {
   // (oasis→oasi), so guard the whole ending generically.
   if (token.length <= 3 || NO_STRIP_S.has(token) || token.endsWith('sis'))
     return token
-  return pluralize.singular(token)
+  const last = token.charCodeAt(token.length - 1)
+  // `pluralize` only models English words; numeric and non-Latin tokens pass
+  // through unchanged, so avoid paying its rule-engine cost for them.
+  if (last < 97 || last > 122)
+    return token
+  const cached = depluralizedCache.get(token)
+  if (cached !== undefined)
+    return cached
+  const singular = pluralize.singular(token)
+  if (depluralizedCache.size >= DEPLURALIZED_CACHE_MAX)
+    depluralizedCache.clear()
+  depluralizedCache.set(token, singular)
+  return singular
 }
 
 const SEPARATOR_RE = /[-_/.@#:+]+/g
@@ -190,6 +208,14 @@ export const NORMALIZER_VERSION = 2
  * (`café` → `cafe`), which we then strip. Idempotent on already-ASCII input.
  */
 function foldUnicode(s: string): string {
+  // Search queries are overwhelmingly ASCII. Avoid allocating a normalized
+  // copy and running a Unicode-property replacement when normalization cannot
+  // change the input; non-ASCII text still takes the full NFKD path.
+  let index = 0
+  while (index < s.length && s.charCodeAt(index) <= 0x7F)
+    index++
+  if (index === s.length)
+    return s
   return s.normalize('NFKD').replace(DIACRITICS_RE, '')
 }
 
@@ -242,19 +268,29 @@ function isOrderSensitive(tokens: readonly string[]): boolean {
  * Idempotent: `normalizeQuery(normalizeQuery(q)) === normalizeQuery(q)`.
  */
 export function normalizeQuery(query: string): string {
-  const cleaned = foldUnicode(query)
+  const normalized = foldUnicode(query)
     .toLowerCase()
     .replace(SEPARATOR_RE, ' ')
     .replace(WHITESPACE_RE, ' ')
     .trim()
-    .split(' ')
-    .filter(Boolean)
+  if (normalized.length === 0)
+    return ''
+
+  // Whitespace was collapsed and trimmed above, so split cannot produce an
+  // empty token. Build the synonym/depluralization output in one pass instead
+  // of materializing filter/map/filter/map intermediates for every query.
+  const cleaned = normalized.split(' ')
+  const mapped: string[] = []
   // Synonym map; a few tokens map to '' (noise words: free / online).
-  const mapped = cleaned.map(token => SYNONYMS[token] ?? token).filter(Boolean)
+  for (const token of cleaned) {
+    const synonym = SYNONYMS[token] ?? token
+    if (synonym)
+      mapped.push(depluralize(synonym))
+  }
   // Empty-canonical guard: if stripping noise emptied the query (e.g.
   // "free online"), keep the original tokens. Emitting '' would collapse every
   // noise-only query into one meaningless group and force a downstream fallback.
-  const tokens = (mapped.length > 0 ? mapped : cleaned).map(depluralize)
+  const tokens = mapped.length > 0 ? mapped : cleaned.map(depluralize)
   // Bag-of-words grouping (sort) EXCEPT for `X to Y` conversions, where order is
   // meaning. See ADR-0019.
   return (isOrderSensitive(tokens) ? tokens : tokens.sort()).join(' ')

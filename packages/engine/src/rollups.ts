@@ -525,31 +525,57 @@ export function planRollupWindows(
   if (spans.length === 0)
     return []
 
-  let rangeStartMs = Math.min(...spans.map(s => s.startMs))
-  let rangeEndMs = Math.max(...spans.map(s => s.endMs))
+  let rangeStartMs = Number.POSITIVE_INFINITY
+  let rangeEndMs = Number.NEGATIVE_INFINITY
+  let totalBytes = 0
+  for (const span of spans) {
+    if (span.startMs < rangeStartMs)
+      rangeStartMs = span.startMs
+    if (span.endMs > rangeEndMs)
+      rangeEndMs = span.endMs
+    totalBytes += span.bytes
+  }
   if (clampStartMs !== undefined)
     rangeStartMs = Math.max(rangeStartMs, clampStartMs)
   if (clampEndMs !== undefined)
     rangeEndMs = Math.min(rangeEndMs, clampEndMs)
 
-  const totalBytes = spans.reduce((a, s) => a + s.bytes, 0)
   const spanDays = Math.floor((rangeEndMs - rangeStartMs) / MS_PER_DAY) + 1
   const bytesPerDay = Math.max(1, totalBytes / spanDays)
   const byteWindowDays = clamp(Math.floor(WINDOW_BYTE_BUDGET / bytesPerDay), 7, 400)
   // Apply the output-cardinality cap on top of the byte budget (min wins). Floor
   // at 1 so a tiny cap still makes progress.
   const windowDays = maxWindowDays != null ? Math.max(1, Math.min(byteWindowDays, maxWindowDays)) : byteWindowDays
+  if (!Number.isFinite(windowDays) || !Number.isFinite(rangeStartMs) || !Number.isFinite(rangeEndMs) || rangeEndMs < rangeStartMs)
+    return []
+
+  // Assign spans directly to the windows they intersect. Scanning every span
+  // for every window made this O(spans × windows); this is O(spans + emitted
+  // intersections), the irreducible output size. Input-order traversal also
+  // preserves the existing partition order within every window.
+  const windowWidthMs = windowDays * MS_PER_DAY
+  const windowCount = Math.floor((rangeEndMs - rangeStartMs) / windowWidthMs) + 1
+  const partitionsByWindow: string[][] = Array.from({ length: windowCount }, () => [])
+  for (const span of spans) {
+    const overlapStartMs = Math.max(span.startMs, rangeStartMs)
+    const overlapEndMs = Math.min(span.endMs, rangeEndMs)
+    if (overlapStartMs > overlapEndMs)
+      continue
+    const firstWindow = Math.max(0, Math.ceil(
+      (overlapStartMs - rangeStartMs - (windowDays - 1) * MS_PER_DAY) / windowWidthMs,
+    ))
+    const lastWindow = Math.min(windowCount - 1, Math.floor((overlapEndMs - rangeStartMs) / windowWidthMs))
+    for (let index = firstWindow; index <= lastWindow; index++)
+      partitionsByWindow[index]!.push(span.partition)
+  }
 
   const windows: Array<{ start: string, end: string, partitions: string[] }> = []
-  let cursorMs = rangeStartMs
-  while (cursorMs <= rangeEndMs) {
+  for (let index = 0; index < windowCount; index++) {
+    const cursorMs = rangeStartMs + index * windowWidthMs
     const windowEndMs = Math.min(cursorMs + (windowDays - 1) * MS_PER_DAY, rangeEndMs)
-    const partitions = spans
-      .filter(s => s.endMs >= cursorMs && s.startMs <= windowEndMs)
-      .map(s => s.partition)
+    const partitions = partitionsByWindow[index]!
     if (partitions.length > 0)
       windows.push({ start: isoDate(cursorMs), end: isoDate(windowEndMs), partitions })
-    cursorMs = windowEndMs + MS_PER_DAY
   }
   return windows
 }

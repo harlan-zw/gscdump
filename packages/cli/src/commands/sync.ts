@@ -320,18 +320,16 @@ export const syncCommand = defineCommand({
     // implied; the loop will re-run those dates and overwrite their state.
     if (args['retry-failed']) {
       const failedSet = new Set<string>()
-      for (const table of tables) {
-        for (const type of types) {
-          const states = await store.engine.getSyncStates({
-            userId: store.userId,
-            siteId,
-            table,
-            searchType: type,
-          })
-          for (const s of states) {
-            if (s.state === 'failed' && s.date >= startDate && s.date <= endDate)
-              failedSet.add(s.date)
-          }
+      const selectedTables = new Set<TableName>(tables)
+      const selectedTypes = new Set<SearchType>(types)
+      const states = await store.engine.getSyncStates({ userId: store.userId, siteId })
+      for (const s of states) {
+        if (selectedTables.has(s.table)
+          && selectedTypes.has(s.searchType ?? 'web')
+          && s.state === 'failed'
+          && s.date >= startDate
+          && s.date <= endDate) {
+          failedSet.add(s.date)
         }
       }
       dates = dates.filter(d => failedSet.has(d))

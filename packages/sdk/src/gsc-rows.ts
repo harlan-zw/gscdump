@@ -53,18 +53,26 @@ export function coerceRowMetrics<
 
 /** Sort daily rows by date asc, coerce `sum_position`, reduce totals, derive chartData. */
 export function summarizeDailyRows(raw: readonly RawDailyRow[]): GscDailySummary {
-  const daily: CanonicalDailyRow[] = raw
-    .map(coerceRowMetrics)
-    .map(r => ({ date: r.date, clicks: r.clicks, impressions: r.impressions, sum_position: r.sum_position }))
-    .sort((a, b) => a.date.localeCompare(b.date))
-
+  const daily: CanonicalDailyRow[] = []
+  for (let index = 0; index < raw.length; index++) {
+    const row = raw[index]!
+    const position = row.position ?? 0
+    const sumPosition = row.sum_position ?? (position > 0 ? (position - 1) * row.impressions : 0)
+    daily.push({
+      date: row.date,
+      clicks: row.clicks,
+      impressions: row.impressions,
+      sum_position: sumPosition,
+    })
+  }
+  daily.sort((a, b) => a.date.localeCompare(b.date))
   let clicks = 0
   let impressions = 0
   let weightedPosition = 0
-  for (const d of daily) {
-    clicks += d.clicks
-    impressions += d.impressions
-    weightedPosition += d.sum_position
+  for (const row of daily) {
+    clicks += row.clicks
+    impressions += row.impressions
+    weightedPosition += row.sum_position
   }
   const totals: GscRowTotals = {
     clicks,

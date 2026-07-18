@@ -97,7 +97,12 @@ export function matchesMetricFilter(row: Record<string, unknown>, filter: Intern
 
 export function matchesTopLevelPage(row: Record<string, unknown>): boolean {
   const path = normalizeUrl(dimensionValue(row, 'page'))
-  return (path.match(/\//g)?.length ?? 0) <= 1
+  let slashes = 0
+  for (let index = 0; index < path.length; index++) {
+    if (path.charCodeAt(index) === 47 && ++slashes > 1)
+      return false
+  }
+  return true
 }
 
 export { dimensionValue, metricValue }

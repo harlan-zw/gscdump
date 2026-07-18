@@ -90,6 +90,27 @@ describe('readOptional', () => {
     store.set('boom', json({ ok: true }))
     await expect(readOptional(ds, 'boom')).rejects.toThrow(READ_FAILURE)
   })
+
+  it('does not issue a redundant HEAD before reading an existing object', async () => {
+    let heads = 0
+    let reads = 0
+    const ds: DataSource = {
+      async head() {
+        heads++
+        return { bytes: 1 }
+      },
+      async read() {
+        reads++
+        return new Uint8Array([1])
+      },
+      async write() {},
+      async delete() {},
+      async list() { return [] },
+    }
+    await expect(readOptional(ds, 'present')).resolves.toEqual(new Uint8Array([1]))
+    expect(reads).toBe(1)
+    expect(heads).toBe(0)
+  })
 })
 
 describe('inspection loadHistory: per-shard read', () => {

@@ -145,6 +145,47 @@ describe('createInspectionStore: appendHistory + loadHistory', () => {
     expect(apr?.records).toHaveLength(3)
   })
 
+  it('loads independent history shards concurrently', async () => {
+    const { ds } = makeFakeDataSource()
+    const ctx = { userId: 'u1', siteId: 's1' }
+    const writer = createInspectionStore({ dataSource: ds })
+    for (let i = 0; i < 3; i++)
+      await writer.appendHistory(ctx, [rec(`https://x.com/${i}`)], { batchId: `b${i}` })
+
+    let active = 0
+    let maxActive = 0
+    let release!: () => void
+    let reachedThree!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const threeActive = new Promise<void>((resolve) => {
+      reachedThree = resolve
+    })
+    const reader = createInspectionStore({ dataSource: {
+      ...ds,
+      async read(key) {
+        active++
+        maxActive = Math.max(maxActive, active)
+        if (active === 3)
+          reachedThree()
+        await gate
+        try {
+          return await ds.read(key)
+        }
+        finally {
+          active--
+        }
+      },
+    } })
+
+    const pending = reader.loadHistory(ctx, '2026-04')
+    await threeActive
+    expect(maxActive).toBe(3)
+    release()
+    await expect(pending).resolves.toMatchObject({ records: expect.any(Array) })
+  })
+
   it('loadHistory returns undefined when the month has no shards', async () => {
     const { ds } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })
@@ -296,6 +337,49 @@ describe('createSitemapStore', () => {
     const histKeys = Array.from(raw.keys()).filter(k => k.includes('/history/'))
     expect(histKeys).toHaveLength(2)
     for (const k of histKeys) expect(k).toContain('__1700000000000.json')
+  })
+
+  it('writes independent sitemap history documents concurrently', async () => {
+    const { ds } = makeFakeDataSource()
+    let active = 0
+    let peak = 0
+    let release!: () => void
+    let reachedThree!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const threeActive = new Promise<void>((resolve) => {
+      reachedThree = resolve
+    })
+    const wrapped = {
+      ...ds,
+      async write(key: string, bytes: Uint8Array) {
+        if (!key.includes('/history/'))
+          return ds.write(key, bytes)
+        active++
+        peak = Math.max(peak, active)
+        if (active === 3)
+          reachedThree()
+        await gate
+        try {
+          await ds.write(key, bytes)
+        }
+        finally {
+          active--
+        }
+      },
+    }
+    const sitemaps = createSitemapStore({ dataSource: wrapped, now: () => 1_700_000_000_000 })
+    const pending = sitemaps.writeSnapshot({ userId: 'u1', siteId: 's1' }, [
+      { ...baseRecord, path: 'https://example.com/a.xml' },
+      { ...baseRecord, path: 'https://example.com/b.xml' },
+      { ...baseRecord, path: 'https://example.com/c.xml' },
+    ])
+
+    await threeActive
+    expect(peak).toBe(3)
+    release()
+    await pending
   })
 
   it('loadIndex returns latest record per feedpath', async () => {

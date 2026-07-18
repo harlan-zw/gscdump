@@ -567,27 +567,63 @@ async function materialiseFile(
   const resp = await fetchImpl(file.url, { ...fetchInit, signal: fetchSignal })
   if (!resp.ok)
     throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} failed: ${resp.status}`)
-  const buf = await resp.arrayBuffer()
-  if (buf.byteLength !== file.bytes) {
-    throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} byte length mismatch: expected ${file.bytes}, got ${buf.byteLength}`)
-  }
 
   // ---- write to OPFS ------------------------------------------------------
+  // Stream the response into OPFS instead of materialising the whole parquet
+  // in an ArrayBuffer first. Snapshot files can approach the browser attach
+  // ceiling, so buffering here briefly doubled the live bytes for every
+  // concurrent download. Writable writes provide the backpressure boundary.
   // A `QuotaExceededError` can surface from createWritable / write / close.
   // It is allowed to propagate — `attachOpfsParquetTables` catches it and
   // degrades the affected table.
   handle = await root.getFileHandle(name, { create: true })
-  const writable = await handle.createWritable()
+  let writable: FileSystemWritableFileStream
   try {
-    await writable.write(buf)
+    writable = await handle.createWritable()
+  }
+  catch (err) {
+    await resp.body?.cancel().catch(() => undefined)
+    throw err
+  }
+  let reader: ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>> | undefined
+  let bytesWritten = 0
+  try {
+    if (resp.body) {
+      reader = resp.body.getReader()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done)
+          break
+        bytesWritten += value.byteLength
+        if (bytesWritten > file.bytes) {
+          throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} byte length mismatch: expected ${file.bytes}, got more than ${file.bytes}`)
+        }
+        await writable.write(value)
+      }
+    }
+    else {
+      // Body-less Response implementations are rare but valid. Retain a
+      // compatibility fallback without putting the normal browser path back
+      // on the eager-buffering route.
+      const buf = await resp.arrayBuffer()
+      bytesWritten = buf.byteLength
+      await writable.write(buf)
+    }
+    if (bytesWritten !== file.bytes) {
+      throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} byte length mismatch: expected ${file.bytes}, got ${bytesWritten}`)
+    }
     await writable.close()
   }
   catch (err) {
+    await reader?.cancel().catch(() => undefined)
     if (writable.abort)
       await attemptCleanup(`aborting partial OPFS write ${name}`, () => writable.abort!())
     // The partial / empty file is useless — remove it so a later run re-downloads.
     await attemptCleanup(`removing partial OPFS file ${name}`, () => root.removeEntry(name))
     throw err
+  }
+  finally {
+    reader?.releaseLock()
   }
   return { handle, outcome: 'downloaded' }
 }
@@ -609,7 +645,7 @@ function readParquetViewSql(schema: string, table: string, files: string[]): str
 
 /**
  * View SQL for a table that has a recent-window overlay. The merge body (anti-join
- * dedup, `MATERIALIZED` lake reuse, `UNION ALL BY NAME`) is built by the shared
+ * dedup and `UNION ALL BY NAME`) is built by the shared
  * {@link overlayViewBody}; here we only supply the two date-normalised SELECTs and
  * wrap the result in `CREATE OR REPLACE VIEW`. When `lakeFiles` is empty (the
  * requested range is entirely within the recent tail) the body is the overlay
@@ -620,7 +656,11 @@ function readParquetViewWithOverlaySql(schema: string, table: string, lakeFiles:
   const body = overlayViewBody({
     lakeSelect: lakeFiles.length === 0 ? null : lakeSelect(lakeFiles),
     overlaySelect: overlay,
-    materializeLake: true,
+    // Keep the lake scans streaming so the outer analyzer query can push its
+    // filters and projection into the served-row read. The anti-join's second
+    // scan is date-only; in practice that is cheaper and lower-memory than a
+    // MATERIALIZED SELECT * that blocks Parquet pushdown.
+    materializeLake: false,
   })!
   return `CREATE OR REPLACE VIEW ${schema}.${table} AS ${body}`
 }

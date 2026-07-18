@@ -888,6 +888,12 @@ export interface AnalysisSourcesOptions extends SearchTypeOptions {
   end?: string
   startDate?: string
   endDate?: string
+  /** Client-derived browser attachment byte ceiling. */
+  maxBytes?: number
+  /** Client-derived browser attachment row ceiling. */
+  maxRows?: number
+  /** Client-derived per-table parquet file-count ceiling. */
+  maxFiles?: number
 }
 
 export interface DataQueryOptions {

@@ -200,6 +200,30 @@ describe('@gscdump/sdk/v1 HTTP executor', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('resolves base headers and credentials concurrently', async () => {
+    const order: string[] = []
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => jsonResponse({
+      data: { head: { streamId: 'user:u_test', sequence: '0' } },
+      meta: successMeta,
+    }))
+    const client = createGscdumpV1Client({
+      headers: async () => {
+        order.push('headers:start')
+        await new Promise(resolve => setTimeout(resolve, 0))
+        order.push('headers:end')
+        return { 'x-client': 'test' }
+      },
+      credential: async () => {
+        order.push('credential')
+        return 'current_secret'
+      },
+      fetch,
+    })
+
+    await client.getRealtimeStreamHead()
+    expect(order.indexOf('credential')).toBeLessThan(order.indexOf('headers:end'))
+  })
+
   it('aborts pending credential resolution before fetch and keeps the tagged error shape', async () => {
     let resolveCredential!: (credential: string) => void
     const credential = new Promise<string>((resolve) => {

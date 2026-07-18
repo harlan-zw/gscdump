@@ -9,7 +9,6 @@ import {
   buildTotalsSql,
   mergeExtras,
   resolveComparisonSQL,
-  resolveToSQL,
   resolveToSQLOptimized,
 } from '@gscdump/engine/resolver'
 import { extractDateRange } from 'gscdump/query'
@@ -347,13 +346,14 @@ export function buildDataDetailPlan<TK extends string>(
   if (!state.dimensions.includes('date'))
     throw new Error('data-detail: `date` dimension is required')
 
-  const main = resolveToSQL(state, options)
-  const totals = buildTotalsSql(state, options)
+  // The date rows and their current-period totals come from one scan. The
+  // optimized resolver carries COUNT/SUM window columns on every grouped row;
+  // shapeDataDetailRows strips those private columns after reading the first
+  // row. Comparison still needs one previous-period totals scan.
+  const main = resolveToSQLOptimized(state, options)
   const prev = optionalBuilderState(params.qc, 'data-detail', 'qc')
 
-  const extraQueries: QueryAnalyzerExtraQuery[] = [
-    { name: 'totals', sql: totals.sql, params: totals.params },
-  ]
+  const extraQueries: QueryAnalyzerExtraQuery[] = []
   if (prev) {
     const previousTotals = buildTotalsSql(prev, options)
     extraQueries.push({ name: 'prevTotals', sql: previousTotals.sql, params: previousTotals.params })
@@ -380,19 +380,29 @@ export function shapeDataDetailRows(
 ): { results: Row[], meta: Record<string, unknown> } {
   const state = requireBuilderState(params.q, 'data-detail')
   const { startDate: rangeStart, endDate: rangeEnd } = extractDateRange(state.filter)
-  const coerced = (rows as Array<Record<string, unknown>>).map(coerceNumericCols)
+  const first = rows[0] as Record<string, unknown> | undefined
+  const totals = {
+    clicks: Number(first?.totalClicks ?? 0),
+    impressions: Number(first?.totalImpressions ?? 0),
+    ctr: Number(first?.totalCtr ?? 0),
+    position: Number(first?.totalPosition ?? 0),
+  }
+  const coerced = (rows as Array<Record<string, unknown>>).map((raw) => {
+    const {
+      totalCount: _tc,
+      totalClicks: _tclk,
+      totalImpressions: _timp,
+      totalCtr: _tctr,
+      totalPosition: _tpos,
+      sum_position: _sp,
+      ...rest
+    } = raw
+    return coerceNumericCols(rest)
+  })
   const daily = rangeStart && rangeEnd
     ? padTimeseries(coerced, { startDate: rangeStart, endDate: rangeEnd })
     : coerced
-  const totalsRow = (extras?.totals?.[0] ?? {}) as Record<string, unknown>
-  const meta: Record<string, unknown> = {
-    totals: {
-      clicks: Number(totalsRow.clicks ?? 0),
-      impressions: Number(totalsRow.impressions ?? 0),
-      ctr: Number(totalsRow.ctr ?? 0),
-      position: Number(totalsRow.position ?? 0),
-    },
-  }
+  const meta: Record<string, unknown> = { totals }
   if (extras?.prevTotals) {
     const previousTotalsRow = (extras.prevTotals[0] ?? {}) as Record<string, unknown>
     meta.previousTotals = {

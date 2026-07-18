@@ -40,7 +40,7 @@ const analysisSourcesResponse: FileResolutionResponse = {
     totalBytes: 1234,
     totalRows: 12,
   }],
-  eligibilityCeiling: { maxBytes: 150_000_000, maxRows: 10_000_000 },
+  eligibilityCeiling: { maxBytes: 150_000_000, maxRows: 10_000_000, maxFiles: 64 },
 }
 
 describe('@gscdump/contracts', () => {

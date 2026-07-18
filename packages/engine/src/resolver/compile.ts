@@ -543,55 +543,78 @@ export function mergeExtras(
   if (extrasResults.length === 0)
     return rows
 
-  const lookups: { key: string, map: Map<string, unknown> }[] = []
+  interface CanonicalExtra { variantCount: unknown, variants: unknown, canonicalName: unknown }
+  type LookupPlan
+    = { kind: 'canonical', map: Map<string, CanonicalExtra> }
+      | { kind: 'generic', key: string, map: Map<string, unknown> }
+  const lookups: LookupPlan[] = []
+
+  const parseVariants = (raw: string): Array<{ query: string | undefined, clicks: number, impressions: number, position: number }> => {
+    if (raw.length === 0)
+      return []
+    const encoded = raw.split('||')
+    const variants: Array<{ query: string | undefined, clicks: number, impressions: number, position: number }> = []
+    for (const value of encoded) {
+      if (value.length === 0)
+        continue
+      const parts = value.split(':::')
+      variants.push({
+        query: parts[0],
+        clicks: Number(parts[1] || 0),
+        impressions: Number(parts[2] || 0),
+        position: Number(parts[3] || 0),
+      })
+    }
+    return variants
+  }
 
   for (const { key, results } of extrasResults) {
     if (key === 'canonicalExtras') {
-      const variantCountMap = new Map<string, unknown>()
-      const variantsMap = new Map<string, unknown>()
-      const canonicalNameMap = new Map<string, unknown>()
+      const map = new Map<string, CanonicalExtra>()
       for (const r of results) {
         const jk = String(r.joinKey)
-        variantCountMap.set(jk, r.variantCount)
-        canonicalNameMap.set(jk, r.canonicalName)
         const raw = r.variants
-        variantsMap.set(jk, typeof raw === 'string'
-          ? raw.split('||').filter(Boolean).map((v) => {
-              const parts = v.split(':::')
-              return { query: parts[0], clicks: Number(parts[1] || 0), impressions: Number(parts[2] || 0), position: Number(parts[3] || 0) }
-            })
-          : [])
+        map.set(jk, {
+          variantCount: r.variantCount,
+          variants: typeof raw === 'string' ? parseVariants(raw) : [],
+          canonicalName: r.canonicalName,
+        })
       }
-      lookups.push({ key: 'variantCount', map: variantCountMap })
-      lookups.push({ key: 'variants', map: variantsMap })
-      lookups.push({ key: 'canonicalName', map: canonicalNameMap })
+      lookups.push({ kind: 'canonical', map })
       continue
     }
 
-    const filtered = results.filter((r: any) => r.rn === undefined || r.rn === 1)
     const map = new Map<string, unknown>()
-    for (const r of filtered) {
+    for (const r of results) {
+      if (r.rn !== undefined && r.rn !== 1)
+        continue
       let val = r[key]
-      if (key === 'variants' && typeof val === 'string') {
-        val = val.split('||').filter(Boolean).map((v) => {
-          const parts = v.split(':::')
-          return { query: parts[0], clicks: Number(parts[1] || 0), impressions: Number(parts[2] || 0), position: Number(parts[3] || 0) }
-        })
-      }
+      if (key === 'variants' && typeof val === 'string')
+        val = parseVariants(val)
       map.set(String(r.joinKey), val)
     }
-    lookups.push({ key, map })
+    lookups.push({ kind: 'generic', key, map })
   }
 
   return rows.map((row) => {
     const enriched = { ...row }
-    for (const { key, map } of lookups) {
-      let joinValue: string | undefined
-      if (key === 'variantCount' || key === 'variants' || key === 'canonicalName')
-        joinValue = String(row.queryCanonical ?? row.query_canonical ?? '')
+    for (const lookup of lookups) {
+      if (lookup.kind === 'canonical') {
+        const joinValue = String(row.queryCanonical ?? row.query_canonical ?? '')
+        const extra = joinValue ? lookup.map.get(joinValue) : undefined
+        enriched.variantCount = extra?.variantCount ?? null
+        enriched.variants = extra?.variants ?? []
+        enriched.canonicalName = extra?.canonicalName ?? null
+        if (enriched.canonicalName)
+          enriched.queryCanonical = enriched.canonicalName
+        continue
+      }
 
+      const { key, map } = lookup
+      const joinValue = key === 'variantCount' || key === 'variants' || key === 'canonicalName'
+        ? String(row.queryCanonical ?? row.query_canonical ?? '')
+        : undefined
       enriched[key] = (joinValue && map.get(joinValue)) ?? (key === 'variants' ? [] : null)
-
       if (key === 'canonicalName' && enriched[key])
         enriched.queryCanonical = enriched[key]
     }

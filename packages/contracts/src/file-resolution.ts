@@ -10,8 +10,8 @@
  * Iceberg model (a complete local snapshot has no gaps).
  *
  * The decision is per `(site, table)`: browser-eligible iff the compacted
- * Iceberg data for that pair is under the ceiling (~150 MB / ~10M rows,
- * POC 2026-05-22). Above it → server tail.
+ * Iceberg data for that pair is under the byte, row, and file-count ceilings.
+ * Above any axis → server tail.
  *
  * TYPES ONLY.
  */
@@ -34,6 +34,12 @@ export interface FileResolutionRequest {
    * caller intends determines which tables it needs.
    */
   tables?: FileResolutionTable[]
+  /** Client-derived browser attachment byte ceiling. */
+  maxBytes?: number
+  /** Client-derived browser attachment row ceiling. */
+  maxRows?: number
+  /** Client-derived per-table parquet file-count ceiling. */
+  maxFiles?: number
   /**
    * The archetype the caller will run. Lets the endpoint route the 2
    * window-function archetypes straight to the server tail even when the
@@ -140,5 +146,5 @@ export interface FileResolutionResponse {
    * consumer can show "X is too large for local analysis" UX without
    * hard-coding the threshold.
    */
-  eligibilityCeiling: { maxBytes: number, maxRows: number }
+  eligibilityCeiling: { maxBytes: number, maxRows: number, maxFiles: number }
 }

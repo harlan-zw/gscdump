@@ -146,6 +146,100 @@ describe('executor profiling', () => {
     // All four reads overlap — a serial loop would peak at 1.
     expect(peak).toBe(keys.length)
   })
+
+  it('accepts an explicit concurrency ceiling for large buffer-backed reads', async () => {
+    const handle = createNodeDuckDBHandle()
+    const codec = createDuckDBCodec({ getDuckDB: async () => handle })
+    const backing = createInMemoryDataSource()
+    const keys = Array.from({ length: 20 }, (_, i) => `bounded-${i}.parquet`)
+    for (const key of keys) {
+      await codec.writeRows({ table: 'pages' }, [
+        { url: `/${key}`, date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 50 },
+      ], key, backing)
+    }
+
+    let inFlight = 0
+    let peak = 0
+    const dataSource = {
+      ...backing,
+      async read(key: string, range?: { start: number, end: number }, signal?: AbortSignal) {
+        inFlight++
+        peak = Math.max(peak, inFlight)
+        await new Promise(resolve => setTimeout(resolve, 5))
+        try {
+          return await backing.read(key, range, signal)
+        }
+        finally {
+          inFlight--
+        }
+      },
+      uri: undefined,
+    }
+    const executor = createDuckDBExecutor(
+      { getDuckDB: async () => handle },
+      { bufferReadConcurrency: 4 },
+    )
+
+    await executor.execute({
+      sql: 'SELECT COUNT(*)::BIGINT AS n FROM read_parquet({{FILES}}, union_by_name = true)',
+      params: [],
+      fileKeys: { FILES: keys },
+      dataSource,
+      table: 'pages',
+    })
+
+    expect(peak).toBe(4)
+  })
+
+  it('applies the read ceiling globally and fetches shared placeholder keys once', async () => {
+    const handle = createNodeDuckDBHandle()
+    const codec = createDuckDBCodec({ getDuckDB: async () => handle })
+    const backing = createInMemoryDataSource()
+    const keys = Array.from({ length: 8 }, (_, i) => `global-${i}.parquet`)
+    for (const key of keys) {
+      await codec.writeRows({ table: 'pages' }, [
+        { url: `/${key}`, date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 50 },
+      ], key, backing)
+    }
+
+    let inFlight = 0
+    let peak = 0
+    let reads = 0
+    const dataSource = {
+      ...backing,
+      async read(key: string, range?: { offset: number, length: number }, signal?: AbortSignal) {
+        reads++
+        inFlight++
+        peak = Math.max(peak, inFlight)
+        await new Promise(resolve => setTimeout(resolve, 5))
+        try {
+          return await backing.read(key, range, signal)
+        }
+        finally {
+          inFlight--
+        }
+      },
+      uri: undefined,
+    }
+    const executor = createDuckDBExecutor(
+      { getDuckDB: async () => handle },
+      { bufferReadConcurrency: 3 },
+    )
+
+    await executor.execute({
+      sql: 'SELECT COUNT(*)::BIGINT AS n FROM read_parquet({{FILES}}, union_by_name = true)',
+      params: [],
+      fileKeys: {
+        FILES: keys.slice(0, 5),
+        EXTRA: [keys[0]!, ...keys.slice(5)],
+      },
+      dataSource,
+      table: 'pages',
+    })
+
+    expect(peak).toBe(3)
+    expect(reads).toBe(keys.length)
+  })
 })
 
 describe('engine query profiling', () => {

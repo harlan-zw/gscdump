@@ -1,6 +1,5 @@
 import type { SearchType } from 'gscdump/query'
 import type { LocalStore, ManifestEntry, TableName } from '../local-store'
-import { Buffer } from 'node:buffer'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
@@ -8,7 +7,7 @@ import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
 import { readParquetRows } from '../native-duckdb'
-import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseSearchType, toCSV } from '../utils'
+import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseSearchType, runWithConcurrency, toCSV } from '../utils'
 
 const DEFAULT_OUT = './gscdump-export'
 const FORMATS = ['parquet', 'json', 'ndjson', 'csv'] as const
@@ -73,35 +72,53 @@ export const dumpCommand = defineCommand({
     const store = ctx.store!
     const outDir = path.resolve(String(args.out))
 
-    const targets: string[] = args['all-sites']
-      ? await listSitesWithData(store)
-      : [await ctx.resolveSite(args.site ? String(args.site) : undefined)]
+    let preloadedEntries = args['all-sites']
+      ? await store.engine.listLive({
+          userId: store.userId,
+          ...(searchType !== undefined ? { searchType } : {}),
+        })
+      : undefined
+    const targets: Array<{ site: string, siteId: string }> = args['all-sites']
+      ? [...new Set(preloadedEntries!.flatMap(entry => entry.siteId ? [entry.siteId] : []))]
+          .map(siteId => ({ site: siteId, siteId }))
+      : await ctx.resolveSite(args.site ? String(args.site) : undefined)
+          .then(site => [{ site, siteId: store.siteIdFor(site) }])
     if (targets.length === 0) {
       logger.warn('No sites with local data. Run `gscdump sync` first.')
       process.exit(0)
     }
 
     if (args.compact) {
-      for (const siteUrl of targets)
-        await compactClosedMonths(store, siteUrl, quiet)
+      for (const target of targets)
+        await compactClosedMonths(store, target.siteId, quiet)
+      // Compaction retires the keys in the discovery snapshot and registers
+      // replacements, so refresh once before exporting every site.
+      if (preloadedEntries) {
+        preloadedEntries = await store.engine.listLive({
+          userId: store.userId,
+          ...(searchType !== undefined ? { searchType } : {}),
+        })
+      }
     }
 
     const summary: Array<{ site: string, files: number, rows: number, format: DumpFormat, outPath: string }> = []
-    for (const siteUrl of targets) {
-      const entries = (await listLiveEntries(store, siteUrl, searchType))
+    for (const target of targets) {
+      const entries = (preloadedEntries
+        ? preloadedEntries.filter(entry => entry.siteId === target.siteId)
+        : await listLiveEntries(store, target.siteId, searchType))
         .filter(e => !tablesFilter || tablesFilter.has(e.table))
       if (entries.length === 0) {
         if (!quiet)
-          logger.warn(`No data for ${siteUrl}; skipping`)
+          logger.warn(`No data for ${target.site}; skipping`)
         continue
       }
       if (format === 'parquet') {
         const written = await dumpParquet(store, entries, outDir)
-        summary.push({ site: siteUrl, files: written, rows: 0, format, outPath: outDir })
+        summary.push({ site: target.site, files: written, rows: 0, format, outPath: outDir })
       }
       else {
-        const written = await dumpRowFormat(store, entries, outDir, siteUrl, format)
-        summary.push({ site: siteUrl, files: written.files, rows: written.rows, format, outPath: outDir })
+        const written = await dumpRowFormat(store, entries, outDir, target.site, format)
+        summary.push({ site: target.site, files: written.files, rows: written.rows, format, outPath: outDir })
       }
     }
 
@@ -116,41 +133,34 @@ export const dumpCommand = defineCommand({
   },
 })
 
-async function listSitesWithData(store: LocalStore): Promise<string[]> {
-  const siteIds = new Set<string>()
-  for (const table of allTables()) {
-    const entries = await store.engine.listLive({ userId: store.userId, table: table as TableName })
-    for (const e of entries) {
-      if (e.siteId)
-        siteIds.add(e.siteId)
-    }
-  }
-  return Array.from(siteIds)
-}
-
-async function listLiveEntries(store: LocalStore, siteUrl: string, searchType?: SearchType): Promise<ManifestEntry[]> {
-  const siteId = store.siteIdFor(siteUrl)
-  const perTable = await Promise.all(
-    allTables().map(table => store.engine.listLive({
-      userId: store.userId,
-      siteId,
-      table: table as TableName,
-      ...(searchType !== undefined ? { searchType } : {}),
-    })),
-  )
-  return perTable.flat()
+async function listLiveEntries(store: LocalStore, siteId: string, searchType?: SearchType): Promise<ManifestEntry[]> {
+  return store.engine.listLive({
+    userId: store.userId,
+    siteId,
+    ...(searchType !== undefined ? { searchType } : {}),
+  })
 }
 
 async function dumpParquet(store: LocalStore, entries: ManifestEntry[], outDir: string): Promise<number> {
   await fs.mkdir(outDir, { recursive: true })
+  const readyDirectories = new Map<string, Promise<void>>()
+  async function ensureDirectory(dir: string): Promise<void> {
+    let ready = readyDirectories.get(dir)
+    if (!ready) {
+      ready = fs.mkdir(dir, { recursive: true }).then(() => undefined)
+      readyDirectories.set(dir, ready)
+      ready.catch(() => readyDirectories.delete(dir))
+    }
+    await ready
+  }
   let copied = 0
-  for (const entry of entries) {
+  await runWithConcurrency(entries, 8, async (entry) => {
     const bytes = await store.engine.readObject(entry.objectKey)
     const target = path.join(outDir, entry.objectKey)
-    await fs.mkdir(path.dirname(target), { recursive: true })
-    await fs.writeFile(target, Buffer.from(bytes))
+    await ensureDirectory(path.dirname(target))
+    await fs.writeFile(target, bytes)
     copied++
-  }
+  })
   return copied
 }
 
@@ -194,8 +204,7 @@ async function dumpRowFormat(
   return { files, rows: totalRows }
 }
 
-async function compactClosedMonths(store: LocalStore, siteUrl: string, quiet: unknown): Promise<void> {
-  const siteId = store.siteIdFor(siteUrl)
+async function compactClosedMonths(store: LocalStore, siteId: string, quiet: unknown): Promise<void> {
   for (const table of allTables()) {
     if (!quiet)
       logger.info(`Compacting ${table} (raw→d7→d30→d90)`)

@@ -132,118 +132,126 @@ function signedPct1(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
 }
 
+const SEARCH_CONSOLE_STAGES: Record<SearchConsoleStageKey, Omit<SearchConsoleStage, 'key' | 'evidence'>> = {
+  not_connected: {
+    label: 'Not connected',
+    severity: 'neutral',
+    summary: 'Search Console is not connected for this site yet.',
+    primaryAction: 'Connect Google Search Console so we can read discovery, indexing, and performance data.',
+    nextStage: 'waiting_for_data',
+    sprintFindingTypes: [],
+  },
+  waiting_for_data: {
+    label: 'Waiting for data',
+    severity: 'info',
+    summary: 'Search Console is connected, but there is not enough indexing data to diagnose the site yet.',
+    primaryAction: 'Let the first sync finish, then make sure a sitemap is submitted.',
+    nextStage: 'weak_discovery',
+    sprintFindingTypes: [],
+  },
+  weak_discovery: {
+    label: 'Weak discovery',
+    severity: 'warning',
+    summary: 'Google does not have a clean map of the pages you want indexed.',
+    primaryAction: 'Submit a clean sitemap that contains only canonical, indexable 200 URLs.',
+    nextStage: 'discovery_backlog',
+    sprintFindingTypes: ['search-console-stage', 'sitemap-missing'],
+  },
+  discovery_backlog: {
+    label: 'Discovery backlog',
+    severity: 'warning',
+    summary: 'Google knows these pages exist, but is not crawling them fast enough.',
+    primaryAction: 'Add internal links from indexed pages and remove low-value URLs from the sitemap.',
+    nextStage: 'crawl_blocked',
+    sprintFindingTypes: ['search-console-stage'],
+  },
+  crawl_blocked: {
+    label: 'Crawl blocked',
+    severity: 'error',
+    summary: 'Google is trying to access pages, but technical access problems are blocking progress.',
+    primaryAction: 'Fix robots.txt blocks, server errors, broken URLs, and access failures before content work.',
+    nextStage: 'indexability_blocked',
+    sprintFindingTypes: ['search-console-stage', 'noindex-block'],
+  },
+  indexability_blocked: {
+    label: 'Indexability blocked',
+    severity: 'error',
+    summary: 'Google can reach pages, but index directives or canonical signals are preventing clean indexing.',
+    primaryAction: 'Remove accidental noindex directives and make canonical signals agree.',
+    nextStage: 'index_rejection',
+    sprintFindingTypes: ['search-console-stage', 'noindex-block', 'canonicalisation'],
+  },
+  index_rejection: {
+    label: 'Index rejection',
+    severity: 'warning',
+    summary: 'Google is crawling pages but skipping too many of them from the index.',
+    primaryAction: 'Improve or consolidate crawled-but-not-indexed pages before publishing more.',
+    nextStage: 'partially_indexed',
+    sprintFindingTypes: ['search-console-stage', 'pages-not-indexed'],
+  },
+  partially_indexed: {
+    label: 'Partially indexed',
+    severity: 'warning',
+    summary: 'A meaningful share of the site is indexed, but coverage is still below a healthy level.',
+    primaryAction: 'Work through the largest remaining indexing blocker first.',
+    nextStage: 'indexed_invisible',
+    sprintFindingTypes: ['search-console-stage', 'pages-not-indexed'],
+  },
+  indexed_invisible: {
+    label: 'Indexed but invisible',
+    severity: 'warning',
+    summary: 'Pages are indexed, but too many are not earning impressions in Search.',
+    primaryAction: 'Improve query targeting, titles, headings, internal links, and page depth.',
+    nextStage: 'visible_not_clicked',
+    sprintFindingTypes: ['search-console-stage'],
+  },
+  visible_not_clicked: {
+    label: 'Visible but not clicked',
+    severity: 'warning',
+    summary: 'Google is showing your pages, but searchers are not clicking often enough.',
+    primaryAction: 'Rewrite titles and descriptions for the queries already producing impressions.',
+    nextStage: 'ranking_stalled',
+    sprintFindingTypes: ['search-console-stage', 'ctr-outliers'],
+  },
+  ranking_stalled: {
+    label: 'Ranking but stalled',
+    severity: 'info',
+    summary: 'The site has search visibility, but many pages are not yet ranking in useful positions.',
+    primaryAction: 'Prioritise striking-distance pages, refresh content, and add internal links.',
+    nextStage: 'healthy_growth_ready',
+    sprintFindingTypes: ['striking-distance', 'internal-linking'],
+  },
+  declining_visibility: {
+    label: 'Declining visibility',
+    severity: 'error',
+    summary: 'Search visibility is dropping compared with the previous period.',
+    primaryAction: 'Review affected pages, recent releases, competitors, and SERP changes before expanding.',
+    nextStage: 'healthy_growth_ready',
+    sprintFindingTypes: ['search-console-stage', 'negative-movers'],
+  },
+  healthy_growth_ready: {
+    label: 'Healthy',
+    severity: 'success',
+    summary: 'Google can discover, index, and show your pages.',
+    primaryAction: 'Push striking-distance pages (positions 11 to 20) and close content gaps to grow impressions.',
+    nextStage: null,
+    sprintFindingTypes: ['striking-distance', 'competitor-content-gap'],
+  },
+}
+
 function stage(
   key: SearchConsoleStageKey,
   evidence: SearchConsoleStageEvidence[],
 ): SearchConsoleStage {
-  const stages: Record<SearchConsoleStageKey, Omit<SearchConsoleStage, 'key' | 'evidence'>> = {
-    not_connected: {
-      label: 'Not connected',
-      severity: 'neutral',
-      summary: 'Search Console is not connected for this site yet.',
-      primaryAction: 'Connect Google Search Console so we can read discovery, indexing, and performance data.',
-      nextStage: 'waiting_for_data',
-      sprintFindingTypes: [],
-    },
-    waiting_for_data: {
-      label: 'Waiting for data',
-      severity: 'info',
-      summary: 'Search Console is connected, but there is not enough indexing data to diagnose the site yet.',
-      primaryAction: 'Let the first sync finish, then make sure a sitemap is submitted.',
-      nextStage: 'weak_discovery',
-      sprintFindingTypes: [],
-    },
-    weak_discovery: {
-      label: 'Weak discovery',
-      severity: 'warning',
-      summary: 'Google does not have a clean map of the pages you want indexed.',
-      primaryAction: 'Submit a clean sitemap that contains only canonical, indexable 200 URLs.',
-      nextStage: 'discovery_backlog',
-      sprintFindingTypes: ['search-console-stage', 'sitemap-missing'],
-    },
-    discovery_backlog: {
-      label: 'Discovery backlog',
-      severity: 'warning',
-      summary: 'Google knows these pages exist, but is not crawling them fast enough.',
-      primaryAction: 'Add internal links from indexed pages and remove low-value URLs from the sitemap.',
-      nextStage: 'crawl_blocked',
-      sprintFindingTypes: ['search-console-stage'],
-    },
-    crawl_blocked: {
-      label: 'Crawl blocked',
-      severity: 'error',
-      summary: 'Google is trying to access pages, but technical access problems are blocking progress.',
-      primaryAction: 'Fix robots.txt blocks, server errors, broken URLs, and access failures before content work.',
-      nextStage: 'indexability_blocked',
-      sprintFindingTypes: ['search-console-stage', 'noindex-block'],
-    },
-    indexability_blocked: {
-      label: 'Indexability blocked',
-      severity: 'error',
-      summary: 'Google can reach pages, but index directives or canonical signals are preventing clean indexing.',
-      primaryAction: 'Remove accidental noindex directives and make canonical signals agree.',
-      nextStage: 'index_rejection',
-      sprintFindingTypes: ['search-console-stage', 'noindex-block', 'canonicalisation'],
-    },
-    index_rejection: {
-      label: 'Index rejection',
-      severity: 'warning',
-      summary: 'Google is crawling pages but skipping too many of them from the index.',
-      primaryAction: 'Improve or consolidate crawled-but-not-indexed pages before publishing more.',
-      nextStage: 'partially_indexed',
-      sprintFindingTypes: ['search-console-stage', 'pages-not-indexed'],
-    },
-    partially_indexed: {
-      label: 'Partially indexed',
-      severity: 'warning',
-      summary: 'A meaningful share of the site is indexed, but coverage is still below a healthy level.',
-      primaryAction: 'Work through the largest remaining indexing blocker first.',
-      nextStage: 'indexed_invisible',
-      sprintFindingTypes: ['search-console-stage', 'pages-not-indexed'],
-    },
-    indexed_invisible: {
-      label: 'Indexed but invisible',
-      severity: 'warning',
-      summary: 'Pages are indexed, but too many are not earning impressions in Search.',
-      primaryAction: 'Improve query targeting, titles, headings, internal links, and page depth.',
-      nextStage: 'visible_not_clicked',
-      sprintFindingTypes: ['search-console-stage'],
-    },
-    visible_not_clicked: {
-      label: 'Visible but not clicked',
-      severity: 'warning',
-      summary: 'Google is showing your pages, but searchers are not clicking often enough.',
-      primaryAction: 'Rewrite titles and descriptions for the queries already producing impressions.',
-      nextStage: 'ranking_stalled',
-      sprintFindingTypes: ['search-console-stage', 'ctr-outliers'],
-    },
-    ranking_stalled: {
-      label: 'Ranking but stalled',
-      severity: 'info',
-      summary: 'The site has search visibility, but many pages are not yet ranking in useful positions.',
-      primaryAction: 'Prioritise striking-distance pages, refresh content, and add internal links.',
-      nextStage: 'healthy_growth_ready',
-      sprintFindingTypes: ['striking-distance', 'internal-linking'],
-    },
-    declining_visibility: {
-      label: 'Declining visibility',
-      severity: 'error',
-      summary: 'Search visibility is dropping compared with the previous period.',
-      primaryAction: 'Review affected pages, recent releases, competitors, and SERP changes before expanding.',
-      nextStage: 'healthy_growth_ready',
-      sprintFindingTypes: ['search-console-stage', 'negative-movers'],
-    },
-    healthy_growth_ready: {
-      label: 'Healthy',
-      severity: 'success',
-      summary: 'Google can discover, index, and show your pages.',
-      primaryAction: 'Push striking-distance pages (positions 11 to 20) and close content gaps to grow impressions.',
-      nextStage: null,
-      sprintFindingTypes: ['striking-distance', 'competitor-content-gap'],
-    },
+  const definition = SEARCH_CONSOLE_STAGES[key]
+  return {
+    key,
+    evidence,
+    ...definition,
+    // Preserve the old per-result array ownership while allocating only the
+    // selected definition instead of rebuilding all thirteen stage objects.
+    sprintFindingTypes: [...definition.sprintFindingTypes],
   }
-
-  return { key, evidence, ...stages[key] }
 }
 
 // v2 thresholds, derived from a 12-site live audit (docs/search-console-stage-v2-audit.md).
@@ -308,8 +316,16 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   // (notIndexed = 0), firing `indexability_blocked` on a fully-indexed sample. An
   // unbounded, differently-scoped count must never out-vote the funnel.
   const canonicalMismatches = Math.min(notIndexed, input.canonicalMismatchCount ?? countSearchConsoleIssues(issues, 'canonical_mismatch'))
-  const visibleNoClickPages = (input.pageInventory ?? []).filter(page => page.impressions >= 50 && page.clicks === 0).length
-  const poorPositionPages = (input.pageInventory ?? []).filter(page => page.impressions >= 50 && (page.position ?? 0) > 20).length
+  let visibleNoClickPages = 0
+  let poorPositionPages = 0
+  for (const page of input.pageInventory ?? []) {
+    if (page.impressions < 50)
+      continue
+    if (page.clicks === 0)
+      visibleNoClickPages++
+    if ((page.position ?? 0) > 20)
+      poorPositionPages++
+  }
   const ctrOutlierCount = input.ctrOutlierCount ?? 0
 
   // ── v2 axes ────────────────────────────────────────────────────────────────

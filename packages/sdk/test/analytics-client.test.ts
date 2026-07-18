@@ -8,7 +8,7 @@ const analysisSourcesResponse = {
   snapshotVersion: 'v1',
   generatedAt: '2026-05-11T00:00:00.000Z',
   tables: [],
-  eligibilityCeiling: { maxBytes: 150_000_000, maxRows: 10_000_000 },
+  eligibilityCeiling: { maxBytes: 150_000_000, maxRows: 10_000_000, maxFiles: 64 },
 }
 
 describe('createAnalyticsClient', () => {
@@ -35,7 +35,13 @@ describe('createAnalyticsClient', () => {
     await client.getSourceInfo('s_1', { searchType: 'discover', start: '2026-05-01', end: '2026-05-07' })
     await client.getAnalysisSources('s_1', ['pages', 'keywords'], { start: '2026-05-01', end: '2026-05-07' })
     await client.queryRows('s_1', { dimensions: ['page'], rowLimit: 10 })
-    await client.getAnalysisSources('s_1', { tables: 'pages', searchType: 'discover' })
+    await client.getAnalysisSources('s_1', {
+      tables: 'pages',
+      searchType: 'discover',
+      maxBytes: 64 * 1024 * 1024,
+      maxRows: 4_000_000,
+      maxFiles: 48,
+    })
     await client.analyze('s_1', { type: 'data-query', searchType: 'image' })
 
     expect(calls[0]!.url).toBe('https://origin.example/api/__gsc/sites')
@@ -54,7 +60,15 @@ describe('createAnalyticsClient', () => {
     })
     expect(calls[4]).toMatchObject({
       url: 'https://origin.example/api/__gsc/sites/s_1/analysis-sources',
-      options: { query: { tables: 'pages', searchType: 'discover' } },
+      options: {
+        query: {
+          tables: 'pages',
+          searchType: 'discover',
+          maxBytes: String(64 * 1024 * 1024),
+          maxRows: '4000000',
+          maxFiles: '48',
+        },
+      },
     })
     expect(calls[5]).toMatchObject({
       url: 'https://origin.example/api/__gsc/sites/s_1/analyze',

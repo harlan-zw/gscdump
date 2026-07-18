@@ -30,7 +30,7 @@ interface RunSQLTableSpec {
 }
 
 interface DuckDBServiceRPC {
-  runSQL: (args: { sql: string, tables?: Record<string, RunSQLTableSpec> }) => Promise<{ rows: Row[], sql: string }>
+  runSQL: (args: { sql: string, tables?: Record<string, RunSQLTableSpec>, deadlineAt?: number }) => Promise<{ rows: Row[], sql: string }>
   stageArrowTable?: (args: { table: string, ipc: Uint8Array }) => Promise<void>
   dropTables?: (args: { tables: string[] }) => Promise<void>
   ping: () => Promise<string>
@@ -84,14 +84,50 @@ export function withDuckDBDeadline<T>(
   if (signal?.aborted)
     return Promise.reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new DuckDBServiceTimeoutError(timeoutMs)), timeoutMs)
-    const onAbort = (): void => reject(signal!.reason ?? new DOMException('Aborted', 'AbortError'))
+    let settled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let onAbort: (() => void) | undefined
+    const cleanup = (): void => {
+      if (timer !== undefined)
+        clearTimeout(timer)
+      if (onAbort)
+        signal?.removeEventListener('abort', onAbort)
+    }
+    const settle = <V>(complete: (value: V) => void, value: V): void => {
+      if (settled)
+        return
+      settled = true
+      cleanup()
+      complete(value)
+    }
+    onAbort = () => settle(reject, signal!.reason ?? new DOMException('Aborted', 'AbortError'))
+    timer = setTimeout(
+      () => settle(reject, new DuckDBServiceTimeoutError(timeoutMs)),
+      timeoutMs,
+    )
     signal?.addEventListener('abort', onAbort, { once: true })
-    op.then(resolve, reject).finally(() => {
-      clearTimeout(timer)
-      signal?.removeEventListener('abort', onAbort)
-    })
+    op.then(
+      value => settle(resolve, value),
+      error => settle(reject, error),
+    )
   })
+}
+
+function runSQLWithDeadline(
+  svc: DuckDBServiceRPC,
+  args: { sql: string, tables?: Record<string, RunSQLTableSpec> },
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<{ rows: Row[], sql: string }> {
+  // Carry the same wall deadline into the sibling. If this caller times out,
+  // stale work still waiting in the sibling's serial queue is rejected before
+  // it pays a cold bootstrap or starts DuckDB execution.
+  const deadlineAt = Date.now() + timeoutMs
+  return withDuckDBDeadline(
+    svc.runSQL({ ...args, deadlineAt }),
+    timeoutMs,
+    signal,
+  )
 }
 
 export function createDucklingsCodec(_env: AnalyticsEnv): ParquetCodec {
@@ -119,13 +155,23 @@ export async function mapLimit<T, R>(
   const limit = Math.max(1, Math.floor(concurrency))
   const out = Array.from<R>({ length: items.length })
   let next = 0
+  let failed = false
+  let failure: unknown
   async function worker(): Promise<void> {
-    while (next < items.length) {
+    while (!failed && next < items.length) {
       const index = next++
-      out[index] = await fn(items[index]!, index)
+      try {
+        out[index] = await fn(items[index]!, index)
+      }
+      catch (error) {
+        failed = true
+        failure = error
+      }
     }
   }
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  if (failed)
+    throw failure
   return out
 }
 
@@ -359,24 +405,55 @@ export interface DucklingsExecutorOptions {
   ipcChunkBytes?: number
   ipcDirectCallBytes?: number
   ipcTotalBytes?: number
+  /** Per-RPC wall/queue budget. Interactive default is 22 seconds. */
+  rpcTimeoutMs?: number
   rowCache?: DucklingsRowCache
 }
 
 export function createDucklingsExecutor(env: AnalyticsEnv, opts: DucklingsExecutorOptions = {}): QueryExecutor {
   const rowCache = opts.rowCache ?? createDucklingsRowCache()
+  const rpcTimeoutMs = opts.rpcTimeoutMs ?? DUCKDB_RPC_TIMEOUT_MS
+  if (!Number.isFinite(rpcTimeoutMs) || rpcTimeoutMs <= 0)
+    throw new TypeError('createDucklingsExecutor: rpcTimeoutMs must be a positive finite number')
   return {
     async execute({ sql, params, fileKeys, placeholderTables, pushdownFilters, dataSource, signal, table }) {
       signal?.throwIfAborted()
       const svc = resolveSvc(env)
       assertWorkerReadBudget({ fileKeys })
-      if (dataSource.head) {
-        const uniqueKeys = [...new Set(Object.values(fileKeys).flat())]
+
+      // Resolve decoded-cache hits before the size preflight. Cached rows do
+      // not issue an R2 GET, so HEADing those immutable object keys on every
+      // query defeated the cache's network-I/O benefit. Filtered decodes still
+      // bypass the cache and remain in the preflight plan.
+      const cachedUnfiltered = new Map<string, Row[]>()
+      const scheduledUnfiltered = new Set<string>()
+      const plannedReadKeys: string[] = []
+      for (const [placeholder, keys] of Object.entries(fileKeys)) {
+        const filter = pushdownFilters?.[placeholder]
+        for (const key of keys) {
+          if (filter) {
+            plannedReadKeys.push(key)
+            continue
+          }
+          const cached = cachedUnfiltered.get(key) ?? rowCache.get(key)
+          if (cached !== undefined) {
+            cachedUnfiltered.set(key, cached)
+            continue
+          }
+          if (!scheduledUnfiltered.has(key)) {
+            scheduledUnfiltered.add(key)
+            plannedReadKeys.push(key)
+          }
+        }
+      }
+      if (dataSource.head && plannedReadKeys.length > 0) {
+        const uniqueKeys = [...new Set(plannedReadKeys)]
         const sizes: Record<string, number | undefined> = {}
         await mapLimit(uniqueKeys, WORKER_R2_HEAD_CONCURRENCY, async (key) => {
           signal?.throwIfAborted()
           sizes[key] = (await dataSource.head!(key))?.bytes
         })
-        assertWorkerReadBudget({ fileKeys, sizes })
+        assertWorkerReadBudget({ fileKeys: { READS: plannedReadKeys }, sizes })
       }
 
       // Fetch/decode parquet with a tiny concurrency cap in the main Worker,
@@ -388,6 +465,25 @@ export function createDucklingsExecutor(env: AnalyticsEnv, opts: DucklingsExecut
       const maxChunkBytes = opts.ipcChunkBytes ?? IPC_CHUNK_BUDGET
       const maxDirectCallBytes = opts.ipcDirectCallBytes ?? IPC_DIRECT_CALL_BUDGET
       const maxTotalBytes = opts.ipcTotalBytes ?? IPC_STAGED_TOTAL_BUDGET
+      const unfilteredLoads = new Map<string, Promise<Row[]>>()
+      for (const [key, rows] of cachedUnfiltered)
+        unfilteredLoads.set(key, Promise.resolve(rows))
+
+      const loadUnfiltered = (key: string): Promise<Row[]> => {
+        let loading = unfilteredLoads.get(key)
+        if (!loading) {
+          loading = (async () => {
+            signal?.throwIfAborted()
+            const bytes = await dataSource.read(key, undefined, signal)
+            signal?.throwIfAborted()
+            const rows = await decodeParquetToRows(bytes)
+            rowCache.put(key, rows)
+            return rows
+          })()
+          unfilteredLoads.set(key, loading)
+        }
+        return loading
+      }
 
       for (const [placeholder, keys] of Object.entries(fileKeys)) {
         signal?.throwIfAborted()
@@ -399,17 +495,12 @@ export function createDucklingsExecutor(env: AnalyticsEnv, opts: DucklingsExecut
         // so a superset filter (a dropped AND-conjunct) is still correct.
         const filter = pushdownFilters?.[placeholder]
         const perFile = await mapLimit(keys, WORKER_R2_DECODE_CONCURRENCY, async (key) => {
-          if (!filter) {
-            const cached = rowCache.get(key)
-            if (cached)
-              return cached
-          }
+          if (!filter)
+            return loadUnfiltered(key)
           signal?.throwIfAborted()
           const bytes = await dataSource.read(key, undefined, signal)
           signal?.throwIfAborted()
           const rows = await decodeParquetToRows(bytes, filter ? { filter } : {})
-          if (!filter)
-            rowCache.put(key, rows)
           return rows
         })
         const merged: Row[] = []
@@ -462,11 +553,7 @@ export function createDucklingsExecutor(env: AnalyticsEnv, opts: DucklingsExecut
         const tables: Record<string, RunSQLTableSpec> = {}
         for (const [name, chunks] of Object.entries(tableChunks))
           tables[name] = { ipc: chunks[0]!.ipc }
-        result = await withDuckDBDeadline(
-          svc.runSQL({ sql: finalSql, tables }),
-          DUCKDB_RPC_TIMEOUT_MS,
-          signal,
-        )
+        result = await runSQLWithDeadline(svc, { sql: finalSql, tables }, rpcTimeoutMs, signal)
       }
       else {
         if (!svc.stageArrowTable || !svc.dropTables) {
@@ -486,16 +573,12 @@ export function createDucklingsExecutor(env: AnalyticsEnv, opts: DucklingsExecut
               staged.add(name)
               await withDuckDBDeadline(
                 svc.stageArrowTable({ table: name, ipc: chunk.ipc }),
-                DUCKDB_RPC_TIMEOUT_MS,
+                rpcTimeoutMs,
                 signal,
               )
             }
           }
-          result = await withDuckDBDeadline(
-            svc.runSQL({ sql: finalSql }),
-            DUCKDB_RPC_TIMEOUT_MS,
-            signal,
-          )
+          result = await runSQLWithDeadline(svc, { sql: finalSql }, rpcTimeoutMs, signal)
         }
         catch (error) {
           primaryError = error
@@ -505,7 +588,7 @@ export function createDucklingsExecutor(env: AnalyticsEnv, opts: DucklingsExecut
             try {
               await withDuckDBDeadline(
                 svc.dropTables({ tables: [...staged] }),
-                DUCKDB_RPC_TIMEOUT_MS,
+                rpcTimeoutMs,
               )
             }
             catch (error) {
