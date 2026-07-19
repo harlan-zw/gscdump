@@ -9,8 +9,7 @@ import type { GscdumpSyncStatusResponse, GscdumpUserSite, PartnerLifecycleSite }
  * Keeping the adapters structural lets consumers migrate to v1 without
  * re-introducing legacy-only fields such as `intId` or `lifecycleRevision`.
  */
-export type LifecycleSiteLike = Pick<PartnerLifecycleSite,
-  | 'siteId'
+export type LifecycleSiteLike = Pick<PartnerLifecycleSite, | 'siteId'
   | 'externalSiteId'
   | 'requestedUrl'
   | 'gscPropertyUrl'
@@ -18,8 +17,7 @@ export type LifecycleSiteLike = Pick<PartnerLifecycleSite,
   | 'analytics'
   | 'indexing'
   | 'latestError'
-  | 'updatedAt'
->
+  | 'updatedAt'>
 
 function normalizeLifecycleUrl(url: string | null | undefined): string {
   return (url || '')

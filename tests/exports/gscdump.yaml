@@ -112,6 +112,7 @@
   refreshAccessToken: function
   refreshAccessTokenResult: function
   requestIndexing: function
+  resolveVerificationTarget: function
   rethrowAsGscApiError: function
   rowWithMetricDefaults: function
   runSequentialBatch: function
@@ -188,6 +189,7 @@
   refreshAccessToken: function
   refreshAccessTokenResult: function
   requestIndexing: function
+  resolveVerificationTarget: function
   rethrowAsGscApiError: function
   runSequentialBatch: function
   siteUrlToVerificationSite: function
@@ -201,6 +203,7 @@
   verifySite: function
 ./contracts: {}
 ./dates:
+  addDays: function
   countDays: function
   currentPstDate: function
   DAYS_PER_RANGE: number

@@ -13,6 +13,7 @@
   analyzePageConcentration: function
   AnalyzerCapabilityError: function
   analyzeSeasonality: function
+  analyzeStrikingDistance: function
   analyzeZeroClick: function
   classifyQueryIntent: function
   comparisonOf: function

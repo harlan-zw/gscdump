@@ -17,11 +17,11 @@ import {
 } from '../onboarding'
 import {
   builderStateSchema,
+  gscComparisonFilterSchema,
   gscdumpAnalysisBundleResponseSchema,
   gscdumpAnalysisPresetSchema,
   gscdumpAnalysisResponseSchema,
   gscdumpAvailableSiteSchema,
-  gscComparisonFilterSchema,
   gscdumpDataDetailResponseSchema,
   gscdumpDataResponseSchema,
   gscdumpIndexingDiagnosticsResponseSchema,
@@ -349,7 +349,7 @@ export function createGscdumpV1Protocol() {
   const analyticsReportResponse = defineSuccessResponse(analyticsReportData, analyticsMeta)
   const analyticsReportDetailResponse = defineSuccessResponse(analyticsReportDetailData, analyticsMeta)
 
-  const integerQuery = (number: z.ZodNumber, wirePattern: RegExp) => z.union([
+  const integerQuery = (number: z.ZodNumber, wirePattern: RegExp): z.ZodType<number | string> => z.union([
     number,
     z.string().regex(wirePattern),
   ])

@@ -30,6 +30,10 @@
   GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
   GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
   GSCDUMP_WRITE_ANALYTICS_SCOPE: string
+  gscdumpAnalysisBaseParamsSchema: object
+  gscdumpAnalysisBundleParamsSchema: object
+  gscdumpAnalysisBundleResponseSchema: object
+  gscdumpAnalysisMetaSchema: object
   gscdumpAnalysisParamsSchema: object
   gscdumpAnalysisPresetSchema: object
   gscdumpAnalysisResponseSchema: object

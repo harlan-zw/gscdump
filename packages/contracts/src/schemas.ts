@@ -583,7 +583,7 @@ export const bulkRegisterPartnerSitesResponseSchema = z.object({
     error: z.string().optional(),
     site: unknownRecord.nullable().optional(),
     indexingEligible: z.boolean().optional(),
-  indexingIneligibleReason: z.enum(['free_plan', 'missing_indexing_scope', 'insufficient_gsc_permission']).optional(),
+    indexingIneligibleReason: z.enum(['free_plan', 'missing_indexing_scope', 'insufficient_gsc_permission']).optional(),
     indexingPermissionLevel: z.string().nullable().optional(),
     grantedScopes: z.array(z.string()).optional(),
   }).loose()),
