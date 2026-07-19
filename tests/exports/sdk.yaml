@@ -8,7 +8,9 @@
   analyticsStatuses: object
   analyticsStatusToSyncStatus: function
   andFilter: function
+  arbitrarySql: function
   ARCHETYPE_EXECUTION_CLASS: object
+  auxCloudOnly: function
   backfillRangeSchema: object
   backfillResponseSchema: object
   bindPartnerSiteTeamSchema: object
@@ -32,10 +34,7 @@
   coverageLabel: function
   coverageLabels: object
   createAnalyticsClient: function
-  createGscdumpClient: function
-  createGscdumpRealtimeClient: function
   createPartnerClient: function
-  createPartnerRealtimeClient: function
   createPartnerTeamSchema: object
   CWV_GOOD_CLS: number
   CWV_GOOD_INP: number
@@ -47,10 +46,14 @@
   dataDetailOptionsSchema: object
   dataQueryOptionsSchema: object
   dateFilter: function
+  dateRangeOptionsQuery: function
+  DEFAULT_SEARCH_TYPE: string
   defineGscAnalyzer: function
   derivePeerStanding: function
   deriveSiteBaseline: function
   enrichIssueDetails: function
+  entityDailySparkline: function
+  entityDailyTimeseries: function
   findLifecycleSite: function
   formatPartnerError: function
   getGscUnstableCutoffDate: function
@@ -142,6 +145,7 @@
   lifecycleSiteToSyncStatus: function
   lifecycleSiteToUserSite: function
   lifecycleWebhookEvents: object
+  multiSeriesStackedDaily: function
   normalizeSiteType: function
   nuxtSeoTips: object
   parseCustomPeriod: function
@@ -174,10 +178,13 @@
   scheduleStateSchema: object
   searchAppearanceResponseSchema: object
   searchAppearanceRowSchema: object
+  searchTypeQuery: function
   searchTypeSchema: object
   serializeWebhookPayload: function
   severityOrder: object
+  singleRowLookup: function
   SITE_TYPE_BASELINE: object
+  siteDailyTimeseries: function
   siteListItemSchema: object
   sitemapChangesResponseSchema: object
   sitemapHistoryRecordSchema: object
@@ -187,12 +194,16 @@
   sitemapStatuses: object
   siteTypeBaseline: function
   siteUrlToHostname: function
+  sourceInfoQuery: function
   sourceInfoResponseSchema: object
   splitOpportunityTitle: function
   summarizeDailyRows: function
+  tablesQuery: function
   teamCatalogRefSchema: object
   toPartnerError: function
+  topNBreakdown: function
   truncateQuery: function
+  twoDimensionDetail: function
   updatePartnerUserTokensSchema: object
   VALID_WEBHOOK_EVENTS: object
   verifyWebhookSignature: function
@@ -205,6 +216,7 @@
   webhookEventTypeSchema: object
   weightedAnonPct: function
   whoamiResponseSchema: object
+  withDefaultSearchType: function
 ./query:
   and: function
   between: function

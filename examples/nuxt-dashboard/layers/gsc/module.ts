@@ -13,7 +13,7 @@ export interface GscdumpAnalyticsModuleOptions {
 
 export default defineNuxtModule<GscdumpAnalyticsModuleOptions>({
   meta: {
-    name: '@gscdump/nuxt',
+    name: 'gscdump-analytics-example',
     configKey: 'gscdumpAnalytics',
   },
   defaults: {},

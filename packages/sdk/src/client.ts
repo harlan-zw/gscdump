@@ -568,5 +568,3 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
   }
 }
-
-export const createGscdumpClient = createPartnerClient

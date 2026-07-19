@@ -78,11 +78,6 @@ export interface RunOptimizedQueryOptions {
   /** Overlay tried per extra before the live SQL; absent → today's live path. */
   resolveExtra?: ResolveExtraFn
   /**
-   * Deprecated compatibility flag. Canonical reads now derive from query_dim,
-   * not a nullable fact-table `query_canonical` column.
-   */
-  canonicalFallback?: boolean
-  /**
    * Versioned query dimension backing canonical reads over fact rows. Required
    * whenever a query groups or filters by `queryCanonical`; a canonical rollup
    * source may carry the same metadata/key set via `canonicalSource.queryDim`.
@@ -120,11 +115,6 @@ export interface RunOptimizedQueryOptions {
     coversThrough?: string
     queryDim?: CanonicalQueryDimSource
   }
-  /**
-   * @deprecated Canonical-source misses are recorded on `source.fallbacks`;
-   * raw daily fallback is controlled by `primarySourceFallback: 'raw'`.
-   */
-  canonicalSourceFallback?: 'raw'
   /** Optional version gates for the query dimension backing `canonicalSource`. */
   canonicalRequirements?: {
     normalizerVersion?: number

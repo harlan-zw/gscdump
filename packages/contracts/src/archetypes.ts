@@ -118,6 +118,197 @@ export type ArchetypeQuery
     | ArbitrarySqlQuery
     | AuxCloudOnlyQuery
 
+/** Date window accepted by the portable archetype constructors. */
+export interface WireDateRange {
+  start: string
+  end: string
+}
+
+const ARCHETYPE_METRICS: readonly Metric[] = ['clicks', 'impressions', 'ctr', 'position']
+
+function archetypeRange(range: WireDateRange): DateRange {
+  return { start: range.start, end: range.end }
+}
+
+/** Portable constructors for the canonical hosted/browser archetype wire shapes. */
+export function siteDailyTimeseries(
+  siteId: string,
+  range: WireDateRange,
+  options: { searchType?: GscSearchType, compareRange?: WireDateRange, metrics?: readonly Metric[] } = {},
+): SiteDailyTimeseriesQuery {
+  return {
+    archetype: 'site-daily-timeseries',
+    siteId,
+    searchType: options.searchType ?? 'web',
+    range: archetypeRange(range),
+    ...(options.compareRange ? { compareRange: archetypeRange(options.compareRange) } : {}),
+    metrics: options.metrics ?? ARCHETYPE_METRICS,
+  }
+}
+
+export function entityDailyTimeseries(
+  siteId: string,
+  range: WireDateRange,
+  entity: EntityDailyTimeseriesQuery['entity'],
+  options: { searchType?: GscSearchType, compareRange?: WireDateRange, metrics?: readonly Metric[] } = {},
+): EntityDailyTimeseriesQuery {
+  return {
+    archetype: 'entity-daily-timeseries',
+    siteId,
+    searchType: options.searchType ?? 'web',
+    range: archetypeRange(range),
+    ...(options.compareRange ? { compareRange: archetypeRange(options.compareRange) } : {}),
+    entity,
+    metrics: options.metrics ?? ARCHETYPE_METRICS,
+  }
+}
+
+export function entityDailySparkline(
+  siteId: string,
+  range: WireDateRange,
+  dimension: EntityDailySparklineQuery['dimension'],
+  entities: readonly string[],
+  options: { searchType?: GscSearchType, metric?: Metric } = {},
+): EntityDailySparklineQuery {
+  return {
+    archetype: 'entity-daily-sparkline',
+    siteId,
+    searchType: options.searchType ?? 'web',
+    range: archetypeRange(range),
+    dimension,
+    entities: [...entities],
+    metric: options.metric ?? 'clicks',
+  }
+}
+
+export interface TopNBreakdownOptions {
+  searchType?: GscSearchType
+  compareRange?: WireDateRange
+  metrics?: readonly Metric[]
+  orderBy?: TopNBreakdownQuery['orderBy']
+  limit?: number
+  offset?: number
+  facets?: readonly ArchetypeFacet[]
+  includeTotal?: boolean
+  movers?: NonNullable<TopNBreakdownQuery['movers']>
+}
+
+export function topNBreakdown(
+  siteId: string,
+  range: WireDateRange,
+  dimension: Dimension,
+  options: TopNBreakdownOptions = {},
+): TopNBreakdownQuery {
+  return {
+    archetype: 'top-n-breakdown',
+    siteId,
+    searchType: options.searchType ?? 'web',
+    range: archetypeRange(range),
+    ...(options.compareRange ? { compareRange: archetypeRange(options.compareRange) } : {}),
+    dimension,
+    metrics: options.metrics ?? ARCHETYPE_METRICS,
+    orderBy: options.orderBy ?? { metric: 'clicks', dir: 'desc' },
+    limit: options.limit ?? 50,
+    ...(options.offset ? { offset: options.offset } : {}),
+    ...(options.facets?.length ? { facets: options.facets } : {}),
+    ...(options.includeTotal ? { includeTotal: true } : {}),
+    ...(options.movers ? { movers: options.movers } : {}),
+  }
+}
+
+export function singleRowLookup(
+  siteId: string,
+  range: WireDateRange,
+  match: SingleRowLookupQuery['match'],
+  options: { searchType?: GscSearchType, compareRange?: WireDateRange, metrics?: readonly Metric[] } = {},
+): SingleRowLookupQuery {
+  return {
+    archetype: 'single-row-lookup',
+    siteId,
+    searchType: options.searchType ?? 'web',
+    range: archetypeRange(range),
+    ...(options.compareRange ? { compareRange: archetypeRange(options.compareRange) } : {}),
+    match,
+    metrics: options.metrics ?? ARCHETYPE_METRICS,
+  }
+}
+
+export function multiSeriesStackedDaily(
+  siteId: string,
+  range: WireDateRange,
+  seriesDimension: Dimension,
+  options: { searchType?: GscSearchType, compareRange?: WireDateRange, metric?: Metric } = {},
+): MultiSeriesStackedDailyQuery {
+  return {
+    archetype: 'multi-series-stacked-daily',
+    siteId,
+    searchType: options.searchType ?? 'web',
+    range: archetypeRange(range),
+    ...(options.compareRange ? { compareRange: archetypeRange(options.compareRange) } : {}),
+    seriesDimension,
+    metric: options.metric ?? 'clicks',
+  }
+}
+
+export interface TwoDimensionDetailOptions {
+  searchType?: GscSearchType
+  compareRange?: WireDateRange
+  metrics?: readonly Metric[]
+  filter?: TwoDimensionDetailQuery['filter']
+  orderBy?: TwoDimensionDetailQuery['orderBy']
+  limit?: number
+  facets?: readonly ArchetypeFacet[]
+}
+
+export function twoDimensionDetail(
+  siteId: string,
+  range: WireDateRange,
+  options: TwoDimensionDetailOptions = {},
+): TwoDimensionDetailQuery {
+  return {
+    archetype: 'two-dimension-detail',
+    siteId,
+    searchType: options.searchType ?? 'web',
+    range: archetypeRange(range),
+    ...(options.compareRange ? { compareRange: archetypeRange(options.compareRange) } : {}),
+    metrics: options.metrics ?? ARCHETYPE_METRICS,
+    ...(options.filter ? { filter: options.filter } : {}),
+    ...(options.orderBy ? { orderBy: options.orderBy } : {}),
+    ...(options.limit ? { limit: options.limit } : {}),
+    ...(options.facets?.length ? { facets: options.facets } : {}),
+  }
+}
+
+export function arbitrarySql(
+  siteId: string,
+  range: WireDateRange,
+  sql: string,
+  options: { searchType?: GscSearchType, params?: readonly unknown[], cacheable?: boolean } = {},
+): ArbitrarySqlQuery & { cacheable?: true } {
+  return {
+    archetype: 'arbitrary-sql',
+    siteId,
+    searchType: options.searchType ?? 'web',
+    range: archetypeRange(range),
+    sql,
+    ...(options.params ? { params: options.params } : {}),
+    ...(options.cacheable ? { cacheable: true as const } : {}),
+  }
+}
+
+export function auxCloudOnly(
+  siteId: string,
+  dataset: AuxCloudOnlyQuery['dataset'],
+  params?: Record<string, unknown>,
+): AuxCloudOnlyQuery {
+  return {
+    archetype: 'aux-cloud-only',
+    siteId,
+    dataset,
+    ...(params ? { params } : {}),
+  }
+}
+
 export type ArchetypeResultRow = Record<string, string | number | null>
 
 export type ArchetypeResultSource = 'browser' | 'server-r2-sql' | 'server-duckdb' | 'cloud'

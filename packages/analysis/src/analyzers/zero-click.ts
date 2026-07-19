@@ -27,6 +27,33 @@ export interface ZeroClickResult {
   position: number
 }
 
+export interface ZeroClickOptions {
+  minImpressions?: number
+  maxCtr?: number
+  maxPosition?: number
+}
+
+/** Pure zero-click detector shared by hosted and package analyzer callers. */
+export function analyzeZeroClick(
+  rows: QueryPageRow[],
+  options: ZeroClickOptions = {},
+): ZeroClickResult[] {
+  const minImpressions = options.minImpressions ?? 1000
+  const maxCtr = options.maxCtr ?? 0.03
+  const maxPosition = options.maxPosition ?? 10
+  const queryMap = new Map<string, ZeroClickResult>()
+
+  for (const row of rows) {
+    if (row.impressions < minImpressions || row.position > maxPosition || row.ctr > maxCtr)
+      continue
+    const existing = queryMap.get(row.query)
+    if (!existing || row.position < existing.position)
+      queryMap.set(row.query, { ...row })
+  }
+
+  return [...queryMap.values()].sort((left, right) => right.impressions - left.impressions)
+}
+
 export const zeroClickAnalyzer = defineAnalyzer<AnalysisParams, Row, ZeroClickResult[]>({
   id: 'zero-click',
 
@@ -106,28 +133,7 @@ export const zeroClickAnalyzer = defineAnalyzer<AnalysisParams, Row, ZeroClickRe
     const minImpressions = params.minImpressions ?? 1000
     const maxCtr = params.maxCtr ?? 0.03
     const maxPosition = params.maxPosition ?? 10
-
-    const queryMap = new Map<string, ZeroClickResult>()
-    for (const row of arr) {
-      if (row.impressions < minImpressions)
-        continue
-      if (row.position > maxPosition)
-        continue
-      if (row.ctr > maxCtr)
-        continue
-      const existing = queryMap.get(row.query)
-      if (!existing || row.position < existing.position) {
-        queryMap.set(row.query, {
-          query: row.query,
-          page: row.page,
-          clicks: row.clicks,
-          impressions: row.impressions,
-          ctr: row.ctr,
-          position: row.position,
-        })
-      }
-    }
-    const results = Array.from(queryMap.values())
+    const results = analyzeZeroClick(arr, { minImpressions, maxCtr, maxPosition })
     const paged = paginateSortedInMemory(
       results,
       { limit: params.limit, offset: params.offset },

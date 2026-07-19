@@ -16,8 +16,6 @@
   invalidateSnapshotRef: function
   listIcebergTables: function
   resolveIcebergDataFiles: function
-  resolvePyIcebergPython: function
-  runPyIcebergWriter: function
   stringifyBigintSafe: function
   toIcebergDayCount: function
 ./provisioning:

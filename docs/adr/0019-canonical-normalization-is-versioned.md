@@ -1,6 +1,6 @@
 # 0019. Canonical normalization is versioned; re-canonicalize before generating canonical tables
 
-- Status: accepted (normalizer v2 implemented; re-canonicalization + dimension are follow-ups)
+- Status: accepted (normalizer v2 and versioned Query Dimension implemented)
 - Date: 2026-06-23
 - Follows ADR-0017 / ADR-0018 (canonical as a dimension, fast read path). This
   ADR is about the canonical *values* themselves: the normalization quality and
@@ -58,24 +58,17 @@ Stores that materialize `query_canonical` (fact rows, the canonical dimension,
 the rollups) should record the version that produced them, so staleness is
 detectable and repairable rather than silent.
 
-### 3. Re-canonicalize before generating the canonical tables (required follow-up)
+### 3. Re-canonicalize before generating canonical tables (implemented via Query Dimension)
 
-The rollups read the STORED `query_canonical` (they cannot call the JS
-normalizer from SQL), so they inherit whatever version produced the fact rows.
-Existing stored canonical is v1. Therefore, before mass-generating
-`query_canonical_daily` / `query_canonical_variants` (or the dimension), the
-per-row `query_canonical` must be rebuilt with v2 — via the consumer's existing
-canonical backfill path — else the tables bake in stale v1 keys. Gate the
-backfill / generation on `NORMALIZER_VERSION`.
+Fact rows no longer own `query_canonical`. The consumer rebuilds the distinct
+query dimension with the current `NORMALIZER_VERSION`, and canonical rollups
+join that versioned relation. Read-path requirements reject a mismatched
+normalizer/intent version instead of mixing key spaces silently.
 
-### 4. Defer (flagged, not done)
+### 4. Remaining follow-up
 
-- **Versioned canonical dimension** (ADR-0017 Phase 2): makes re-canonicalization
-  a single cheap rebuild (distinct queries) instead of a full fact re-ingest, and
-  reclaims storage. The proper long-term home for (3).
-- **Consumer R2-vs-D1 read divergence**: Pro/R2 reads currently group raw query
-  while D1 reads group canonical. Consumer-repo scope; in progress (Iceberg
-  sources already pass `canonicalFallback: true`).
+- Monitor dimension/rollup version drift during consumer deployments and keep
+  the rebuild before rollup generation in the operational runbook.
 
 ## Consequences
 

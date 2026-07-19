@@ -8,9 +8,8 @@
  * Catalog.
  *
  * Edge-safe (`icebird` is Workers-first: Web Crypto SigV4, `fetch` I/O, no
- * node builtins). The Node-only writers — `createLocalIcebergSink` and the
- * PyIceberg-backed overwrite writer — statically import `node:*` and live
- * behind `@gscdump/engine/sink-node`, NOT here.
+ * node builtins). The Node-only PyIceberg recovery writer statically imports
+ * `node:*` and lives behind `@gscdump/engine/sink-node`, NOT here.
  *
  * Consumed cross-package by `@gscdump/cloudflare` and `@gscdump/sdk`
  * (currently the `IcebergTableName` table-name union).

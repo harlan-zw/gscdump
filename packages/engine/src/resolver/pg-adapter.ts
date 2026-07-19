@@ -108,12 +108,6 @@ export const pgResolverAdapter: ResolverAdapter<PgTableKey> = createResolverAdap
  */
 export interface ResolverAdapterOptions {
   /**
-   * Deprecated compatibility flag. Fact tables no longer carry
-   * `query_canonical`; canonical reads derive from `query_dim`, or from a
-   * canonical rollup relation when `queryCanonicalSource: 'column'` is set.
-   */
-  canonicalFallback?: boolean
-  /**
    * `queryDim` reads canonical from a joined query dimension. `column` is only
    * for derived canonical rollup relations whose primary relation already
    * carries a null-free `query_canonical` output column.
@@ -134,7 +128,6 @@ export function createParquetResolverAdapter(options: ResolverAdapterOptions = {
   return createResolverAdapter<PgTableKey>({
     ...PG_BASE_CONFIG,
     tableLabel: 'parquet-resolver-adapter',
-    canonicalFallback: options.canonicalFallback ?? false,
     queryCanonicalSource: options.queryCanonicalSource ?? 'queryDim',
     tableRef: tk => sql.raw(`read_parquet({{FILES}}, union_by_name = true) AS "${tk}"`),
     queryDimTableRef: () => sql.raw('read_parquet({{QUERY_DIM}}, union_by_name = true) AS "query_dim"'),
@@ -158,7 +151,6 @@ export function createIcebergResolverAdapter(options: ResolverAdapterOptions = {
     includeSiteId: true,
     includeSearchType: true,
     tableLabel: 'iceberg-resolver-adapter',
-    canonicalFallback: options.canonicalFallback ?? false,
     queryCanonicalSource: options.queryCanonicalSource ?? 'queryDim',
     // `icebergSchema` table entries are plain object spreads of drizzle tables,
     // so they preserve column symbols (for `colRef`) but lose the table-level
@@ -190,7 +182,6 @@ export function createR2SqlResolverAdapter(
     includeSiteId: true,
     includeSearchType: true,
     tableLabel: 'r2-sql-resolver-adapter',
-    canonicalFallback: options.canonicalFallback ?? false,
     queryCanonicalSource: options.queryCanonicalSource ?? 'queryDim',
     capabilities: {
       regex: false,

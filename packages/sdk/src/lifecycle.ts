@@ -2,7 +2,24 @@
 // the user-facing site/sync shapes hosts typically render. These live in the
 // SDK so hosts don't reinvent the mapping per app.
 
-import type { GscdumpSyncStatusResponse, GscdumpUserSite, PartnerLifecycleResponse, PartnerLifecycleSite } from '@gscdump/contracts'
+import type { GscdumpSyncStatusResponse, GscdumpUserSite, PartnerLifecycleSite } from '@gscdump/contracts'
+
+/**
+ * Stable lifecycle fields shared by the legacy partner response and public v1.
+ * Keeping the adapters structural lets consumers migrate to v1 without
+ * re-introducing legacy-only fields such as `intId` or `lifecycleRevision`.
+ */
+export type LifecycleSiteLike = Pick<PartnerLifecycleSite,
+  | 'siteId'
+  | 'externalSiteId'
+  | 'requestedUrl'
+  | 'gscPropertyUrl'
+  | 'permissionLevel'
+  | 'analytics'
+  | 'indexing'
+  | 'latestError'
+  | 'updatedAt'
+>
 
 function normalizeLifecycleUrl(url: string | null | undefined): string {
   return (url || '')
@@ -24,7 +41,7 @@ function normalizeGscPropertyKey(url: string | null | undefined): string {
   return `url:${normalizeLifecycleUrl(value)}`
 }
 
-export function analyticsStatusToSyncStatus(status: PartnerLifecycleSite['analytics']['status']): GscdumpUserSite['syncStatus'] {
+export function analyticsStatusToSyncStatus(status: LifecycleSiteLike['analytics']['status']): GscdumpUserSite['syncStatus'] {
   switch (status) {
     case 'ready':
     case 'queryable_live':
@@ -42,7 +59,7 @@ export function analyticsStatusToSyncStatus(status: PartnerLifecycleSite['analyt
   }
 }
 
-export function lifecycleSiteToUserSite(site: PartnerLifecycleSite): GscdumpUserSite {
+export function lifecycleSiteToUserSite(site: LifecycleSiteLike): GscdumpUserSite {
   const syncStatus = analyticsStatusToSyncStatus(site.analytics.status)
   return {
     siteId: site.siteId,
@@ -62,7 +79,7 @@ export function lifecycleSiteToUserSite(site: PartnerLifecycleSite): GscdumpUser
   }
 }
 
-export function lifecycleSiteToSyncStatus(site: PartnerLifecycleSite): GscdumpSyncStatusResponse {
+export function lifecycleSiteToSyncStatus(site: LifecycleSiteLike): GscdumpSyncStatusResponse {
   const syncStatus = analyticsStatusToSyncStatus(site.analytics.status) as GscdumpSyncStatusResponse['syncStatus']
   const completed = site.analytics.progress.completed
   const failed = site.analytics.progress.failed
@@ -93,7 +110,10 @@ export function lifecycleSiteToSyncStatus(site: PartnerLifecycleSite): GscdumpSy
   }
 }
 
-export function findLifecycleSite(lifecycle: PartnerLifecycleResponse, siteIdOrPropertyUrl: string): PartnerLifecycleSite | null {
+export function findLifecycleSite<TSite extends LifecycleSiteLike>(
+  lifecycle: { sites: readonly TSite[] },
+  siteIdOrPropertyUrl: string,
+): TSite | null {
   const normalized = normalizeLifecycleUrl(siteIdOrPropertyUrl)
   const propertyKey = normalizeGscPropertyKey(siteIdOrPropertyUrl)
   return lifecycle.sites.find(site =>

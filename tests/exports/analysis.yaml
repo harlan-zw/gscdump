@@ -9,9 +9,11 @@
   analyzeInBrowser: function
   analyzeKeywordConcentration: function
   analyzeMovers: function
+  analyzeOpportunity: function
   analyzePageConcentration: function
   AnalyzerCapabilityError: function
   analyzeSeasonality: function
+  analyzeZeroClick: function
   classifyQueryIntent: function
   comparisonOf: function
   createAnalyzerRegistry: function
@@ -40,7 +42,6 @@
   num: function
   padTimeseries: function
   periodOf: function
-  queryComparisonRows: function
   queryRows: function
   REPORTS: object
   resolveWindow: function
@@ -53,9 +54,6 @@
   scorePriorityActions: function
   SEARCH_INTENT_CODE: object
   SQL_ANALYZERS: object
-  typedQuery: function
-  windowToComparisonPeriod: function
-  windowToPeriod: function
 ./analyzer:
   bayesianCtrAnalyzer: object
   bipartitePagerankAnalyzer: object

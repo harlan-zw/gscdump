@@ -19,7 +19,7 @@ export type {
   IngestAccumulatorEngine,
   IngestAccumulatorHooks,
 } from './ingest-accumulator'
-export { createIngestAccumulator, createNoopIngestAccumulator } from './ingest-accumulator'
+export { createIngestAccumulator } from './ingest-accumulator'
 export {
   dayPartition,
   DEFAULT_SEARCH_TYPE,

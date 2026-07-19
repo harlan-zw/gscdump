@@ -423,7 +423,7 @@ export interface GscdumpMeta {
   syncStatus: string
   newestDateSynced: string | null
   oldestDateSynced: string | null
-  dataDelay: string
+  dataDelay?: string
   dataEndDate?: string | null
   warnings?: string[]
   enrichment?: {
@@ -452,6 +452,13 @@ export interface GscdumpDataResponse {
 
 export interface GscdumpDataDetailResponse {
   daily: Array<{
+    date: string
+    clicks: number
+    impressions: number
+    ctr: number
+    position: number
+  }>
+  previousDaily?: Array<{
     date: string
     clicks: number
     impressions: number
@@ -495,7 +502,7 @@ export interface GscdumpAvailableSite {
   siteId?: string
   /** Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize into their own catalog namespaces. Present on registered sites. */
   intId?: number | null
-  syncStatus?: 'pending' | 'syncing' | 'synced' | 'error'
+  syncStatus?: 'pending' | 'syncing' | 'synced' | 'error' | null
   syncProgress?: { completed: number, failed?: number, total: number, percent: number }
   lastSyncAt?: number | null
   newestDateSynced?: string | null
@@ -512,9 +519,10 @@ export interface GscdumpSiteRegistration {
   message?: string
   existing?: boolean
   indexingEligible?: boolean
-  indexingIneligibleReason?: 'missing_indexing_scope' | 'insufficient_gsc_permission'
+  indexingIneligibleReason?: 'free_plan' | 'missing_indexing_scope' | 'insufficient_gsc_permission'
   indexingPermissionLevel?: string | null
   grantedScopes?: string[]
+  site?: PartnerLifecycleSite | null
 }
 
 export interface GscdumpUserSite {
@@ -535,7 +543,7 @@ export interface GscdumpUserSite {
     percent: number
   }
   indexingEligible?: boolean
-  indexingIneligibleReason?: 'missing_indexing_scope' | 'insufficient_gsc_permission'
+  indexingIneligibleReason?: 'free_plan' | 'missing_indexing_scope' | 'insufficient_gsc_permission'
   indexingPermissionLevel?: string | null
   grantedScopes?: string[]
   indexingStatus?: 'not_started' | 'indexing' | 'complete'
@@ -792,8 +800,32 @@ export interface GscdumpAnalysisResponse {
   preset: GscdumpAnalysisPreset
   keywords: Array<Record<string, unknown>>
   totalCount: number
-  summary?: Record<string, unknown>
-  meta: GscdumpMeta
+  summary?: Record<string, unknown> | null
+  meta: {
+    siteUrl: string
+    params: {
+      brandTerms?: string[]
+      startDate?: string
+      endDate?: string
+      prevStartDate?: string
+      prevEndDate?: string
+    }
+    presetDescription?: string
+  }
+}
+
+export interface GscdumpAnalysisBundleParams extends Omit<GscdumpAnalysisParams, 'preset'> {
+  presets: GscdumpAnalysisPreset[]
+}
+
+export interface GscdumpAnalysisBundleResponse {
+  bundle: Record<string, {
+    keywords: Array<Record<string, unknown>>
+    totalCount: number
+    summary?: Record<string, unknown> | null
+    presetDescription: string
+  }>
+  meta: GscdumpAnalysisResponse['meta']
 }
 
 export interface RegisterPartnerUserParams {
@@ -847,7 +879,7 @@ export interface BulkRegisterPartnerSiteResult {
   error?: string
   site?: PartnerLifecycleSite | null
   indexingEligible?: boolean
-  indexingIneligibleReason?: 'missing_indexing_scope' | 'insufficient_gsc_permission'
+  indexingIneligibleReason?: 'free_plan' | 'missing_indexing_scope' | 'insufficient_gsc_permission'
   indexingPermissionLevel?: string | null
   grantedScopes?: string[]
 }
@@ -1287,216 +1319,6 @@ export interface PartnerClient {
   removeTeamMember: (teamId: string, userId: string) => Promise<{ ok: true }>
   bindSiteToTeam: (userId: string, siteId: string, params: BindPartnerSiteTeamParams) => Promise<{ ok: true, teamId: string | null }>
 }
-
-export type PartnerRealtimeEventType
-  = | 'sync.progress'
-    | 'sync.complete'
-    | 'sync.job_complete'
-    | 'sync.site_complete'
-    | 'sync.failed'
-    | 'job.failed'
-    | 'auth.failed'
-    | 'auth.needs_reauth'
-    | 'site.added'
-    | 'site.removed'
-    | 'enrichment.complete'
-    | 'sitemap.progress'
-    | 'sitemap.complete'
-    | 'indexing.progress'
-    | 'indexing.complete'
-
-export interface RealtimeSyncProgressEvent {
-  event: 'sync.progress'
-  siteId: string
-  siteUrl: string
-  table: string
-  date: string
-  progress: number
-}
-
-export interface RealtimeSyncCompleteEvent {
-  event: 'sync.complete'
-  userId: number
-  siteId: string
-  siteUrl: string
-  table: string
-  date: string
-  rowsFetched: number
-  rowsInserted: number
-  timestamp: number
-}
-
-export interface RealtimeSyncJobCompleteEvent {
-  event: 'sync.job_complete'
-  userId: number
-  siteId: string
-  siteUrl: string
-  table: string
-  date: string
-  rowsFetched: number
-  rowsInserted: number
-  syncStatus: string
-  timestamp: number
-}
-
-export interface RealtimeSyncSiteCompleteEvent {
-  event: 'sync.site_complete'
-  userId: number
-  siteId: string
-  siteUrl: string
-  syncStatus: string
-  timestamp: number
-}
-
-export interface RealtimeSyncFailedEvent {
-  event: 'sync.failed'
-  userId: number
-  siteId: string
-  siteUrl: string
-  table: string
-  date: string
-  error: string
-  timestamp: number
-}
-
-export interface RealtimeJobFailedEvent {
-  event: 'job.failed'
-  siteId: string
-  siteUrl: string
-  table: string
-  date: string
-  error: string
-  timestamp: number
-}
-
-export interface RealtimeSiteAddedEvent {
-  event: 'site.added'
-  userId: number
-  siteId: string
-  siteUrl: string
-}
-
-export interface RealtimeSiteRemovedEvent {
-  event: 'site.removed'
-  userId: number
-  siteId: string
-  siteUrl: string
-}
-
-export interface RealtimeAuthFailedEvent {
-  event: 'auth.failed'
-  userId: number
-  siteId: string
-  siteUrl: string
-  error: string
-  timestamp: number
-}
-
-export interface RealtimeNeedsReauthEvent {
-  event: 'auth.needs_reauth'
-  userId: number
-  failureCount: number
-  timestamp: number
-}
-
-export interface RealtimeEnrichmentCompleteEvent {
-  event: 'enrichment.complete'
-  siteId: string
-  userId: number
-  timestamp: number
-}
-
-export interface RealtimeSitemapProgressEvent {
-  event: 'sitemap.progress'
-  userId: number
-  siteId: string
-  siteUrl: string
-  discovered: number
-  total: number
-  progress: number
-}
-
-export interface RealtimeSitemapCompleteEvent {
-  event: 'sitemap.complete'
-  userId: number
-  siteId: string
-  siteUrl: string
-  discoveredCount: number
-  timestamp: number
-}
-
-export interface RealtimeIndexingProgressEvent {
-  event: 'indexing.progress'
-  userId: number
-  siteId: string
-  siteUrl: string
-  checked: number
-  total: number
-  progress: number
-}
-
-export interface RealtimeIndexingCompleteEvent {
-  event: 'indexing.complete'
-  userId: number
-  siteId: string
-  siteUrl: string
-  totalUrls: number
-  indexedCount: number
-  timestamp: number
-}
-
-export type PartnerRealtimeEvent
-  = | RealtimeSyncProgressEvent
-    | RealtimeSyncCompleteEvent
-    | RealtimeSyncJobCompleteEvent
-    | RealtimeSyncSiteCompleteEvent
-    | RealtimeSyncFailedEvent
-    | RealtimeJobFailedEvent
-    | RealtimeSiteAddedEvent
-    | RealtimeSiteRemovedEvent
-    | RealtimeAuthFailedEvent
-    | RealtimeNeedsReauthEvent
-    | RealtimeEnrichmentCompleteEvent
-    | RealtimeSitemapProgressEvent
-    | RealtimeSitemapCompleteEvent
-    | RealtimeIndexingProgressEvent
-    | RealtimeIndexingCompleteEvent
-
-export interface RealtimeAuthRequiredMessage {
-  event: 'auth.required'
-  message: string
-}
-
-export interface RealtimeConnectedMessage {
-  event: 'connected'
-  partnerId?: string
-  userId?: number
-  message: string
-}
-
-export interface RealtimeSubscribedMessage {
-  type: 'subscribed'
-  siteIds?: string[]
-  partnerIds?: string[]
-}
-
-export interface RealtimePongMessage {
-  type: 'pong'
-  timestamp: number
-}
-
-export interface RealtimeErrorMessage {
-  type: 'error'
-  message: string
-}
-
-export type PartnerRealtimeMessage
-  = | PartnerRealtimeEvent
-    | RealtimeAuthRequiredMessage
-    | RealtimeConnectedMessage
-    | RealtimeSubscribedMessage
-    | RealtimePongMessage
-    | RealtimeErrorMessage
 
 export type CanonicalWebhookEventType
   = | 'user.lifecycle.changed'

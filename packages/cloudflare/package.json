@@ -55,7 +55,6 @@
     "@gscdump/engine": "workspace:*",
     "@gscdump/engine-sqlite": "workspace:*",
     "@uwdata/flechette": "catalog:",
-    "aws4fetch": "catalog:",
     "gscdump": "workspace:*"
   },
   "devDependencies": {

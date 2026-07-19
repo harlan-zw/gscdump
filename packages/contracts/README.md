@@ -2,7 +2,7 @@
 
 Shared protocol contracts for gscdump.com integrations.
 
-> The executable four-operation public-v1 registry is exported from
+> The executable 18-operation public-v1 registry is exported from
 > `@gscdump/contracts/v1`. Existing root route/endpoint exports still describe
 > the legacy host during the release and cutover overlap. See the
 > [v1 contract](../../docs/hosted-api-v1.md) and
@@ -23,7 +23,7 @@ and storage remains in gscdump.com.
 
 ## Public v1 bar
 
-Each of the four initial public operations has one executable descriptor covering its
+Each public operation has one executable descriptor covering its
 surface/version, method/path, query or mutation semantics, credential classes,
 static scopes, ownership policy, request/response schemas, consistency,
 idempotency, and errors. V1 has no schema-less descriptor and no two logical

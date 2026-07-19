@@ -4,7 +4,18 @@ export type { GscAnalyzerAccent, GscAnalyzerCapabilities, GscAnalyzerCapability,
 export { defineGscAnalyzer } from './analyzer-defs'
 export type { DailyAnonInput } from './anonymization'
 export { weightedAnonPct } from './anonymization'
-export { ARCHETYPE_EXECUTION_CLASS } from './archetypes'
+export {
+  arbitrarySql,
+  ARCHETYPE_EXECUTION_CLASS,
+  auxCloudOnly,
+  entityDailySparkline,
+  entityDailyTimeseries,
+  multiSeriesStackedDaily,
+  singleRowLookup,
+  siteDailyTimeseries,
+  topNBreakdown,
+  twoDimensionDetail,
+} from './archetypes'
 export type {
   ArbitrarySqlQuery,
   ArchetypeExecutionClass,
@@ -25,8 +36,9 @@ export type {
   SiteDailyTimeseriesQuery,
   TopNBreakdownQuery,
   TwoDimensionDetailQuery,
+  WireDateRange,
 } from './archetypes'
-export { createGscdumpClient, createPartnerClient } from './client'
+export { createPartnerClient } from './client'
 export type { PartnerClientOptions, PartnerFetch, PartnerFetchOptions, PartnerHeaders } from './client'
 export { COUNTRY_NAMES, countryName } from './country-names'
 export type { CwvBucket } from './cwv-thresholds'
@@ -60,6 +72,15 @@ export {
 } from './gsc-period-presets'
 export type { CanonicalDailyRow, GscDailySummary, GscRowTotals, RawDailyRow } from './gsc-rows'
 export { coerceRowMetrics, positionFor, summarizeDailyRows } from './gsc-rows'
+export type { AnalysisSourcesOptions, SearchTypeOptions, SourceRangeOptions } from './hosted-query'
+export {
+  dateRangeOptionsQuery,
+  DEFAULT_SEARCH_TYPE,
+  searchTypeQuery,
+  sourceInfoQuery,
+  tablesQuery,
+  withDefaultSearchType,
+} from './hosted-query'
 export type { IndexingIssue, IndexingIssueDetail, IssueGroup, IssueSeverity } from './indexing-issues'
 export {
   coverageLabel,
@@ -73,7 +94,8 @@ export {
   severityOrder,
 } from './indexing-issues'
 export { analyticsStatusToSyncStatus, findLifecycleSite, lifecycleSiteToSyncStatus, lifecycleSiteToUserSite } from './lifecycle'
-export type { CalendarPeriod, CompareMode, CustomPeriod, DateRangeResult, Period, RollingPeriod } from './period'
+export type { LifecycleSiteLike } from './lifecycle'
+export type { CalendarPeriod, CompareMode, CustomPeriod, DateRangeResult, Period, PeriodOptions, RollingPeriod } from './period'
 export {
   compareRange,
   getGscUnstableCutoffDate,
@@ -82,16 +104,6 @@ export {
   periodToDateRange,
   periodToDays,
 } from './period'
-export { createGscdumpRealtimeClient, createPartnerRealtimeClient } from './realtime'
-export type {
-  PartnerRealtimeClient,
-  PartnerRealtimeHandler,
-  PartnerRealtimeOptions,
-  PartnerRealtimeScope,
-  PartnerRealtimeStatus,
-  PartnerWebSocketConstructor,
-  PartnerWebSocketLike,
-} from './realtime'
 export type {
   ClassifySearchConsoleStageInput,
   SearchConsoleStage,
@@ -215,27 +227,8 @@ export type {
   PartnerLifecycleAccount,
   PartnerLifecycleResponse,
   PartnerLifecycleSite,
-  PartnerRealtimeEvent,
-  PartnerRealtimeEventType,
-  PartnerRealtimeMessage,
   PartnerWebhookData,
   PartnerWebhookHeaders,
-  RealtimeAuthFailedEvent,
-  RealtimeAuthRequiredMessage,
-  RealtimeConnectedMessage,
-  RealtimeEnrichmentCompleteEvent,
-  RealtimeErrorMessage,
-  RealtimeJobFailedEvent,
-  RealtimeNeedsReauthEvent,
-  RealtimePongMessage,
-  RealtimeSiteAddedEvent,
-  RealtimeSiteRemovedEvent,
-  RealtimeSubscribedMessage,
-  RealtimeSyncCompleteEvent,
-  RealtimeSyncFailedEvent,
-  RealtimeSyncJobCompleteEvent,
-  RealtimeSyncProgressEvent,
-  RealtimeSyncSiteCompleteEvent,
   RegisterPartnerSiteParams,
   RegisterPartnerUserParams,
   RollupEnvelope,

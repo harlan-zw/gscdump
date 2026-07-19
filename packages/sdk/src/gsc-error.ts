@@ -15,7 +15,7 @@ export interface GscClassifiedError {
   code?: number
   /** Best-effort human message: server-supplied `message`, then `data.message`, then the error's own message. */
   message?: string
-  /** Seconds the server suggested waiting (429 with `retryAfter` payload). */
+  /** Seconds the server suggested waiting (429/503 retry payloads). */
   retryAfter?: number
 }
 
@@ -26,10 +26,11 @@ export function classifyGscError(e: unknown): GscClassifiedError {
 
   if (code === 401 || code === 403)
     return { status: 'auth-missing', code, message }
-  if (code === 429) {
-    const retry = (e as { data?: { retryAfter?: number } })?.data?.retryAfter
+  if (code === 429 || code === 503) {
+    const data = (e as { data?: { retryAfter?: number, retryAfterSeconds?: number } })?.data
+    const retry = data?.retryAfter ?? data?.retryAfterSeconds
     return {
-      status: 'rate-limited',
+      status: code === 429 ? 'rate-limited' : 'network',
       code,
       message,
       retryAfter: typeof retry === 'number' ? retry : undefined,

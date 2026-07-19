@@ -1,7 +1,7 @@
 {
   "type": "module",
   "private": true,
-  "packageManager": "pnpm@11.11.0",
+  "packageManager": "pnpm@11.14.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -23,9 +23,7 @@
     "@gscdump/engine": "workspace:*",
     "@gscdump/engine-gsc-api": "workspace:*",
     "@nuxt/test-utils": "catalog:dev-test",
-    "@types/js-yaml": "catalog:",
     "@types/node": "catalog:",
-    "aws4fetch": "catalog:",
     "bumpp": "catalog:dev-build",
     "eslint": "catalog:dev-lint",
     "gscdump": "workspace:*",

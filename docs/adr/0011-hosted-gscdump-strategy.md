@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted — amended 2026-07-14; the lean four-operation implementation is
-released as 0.38.0, the host HTTP/realtime slice is deployed with direct production canaries
-green—including idle-hibernation resume and full 15-minute alarm expiry—and the isolated NuxtSEO
-consumer slice is verified locally but its production cut is deferred while unrelated consumer
-work completes
+Accepted — amended 2026-07-19. The initial four-operation implementation was
+released as 0.38.0 and deployed with direct production canaries green, including idle-hibernation
+resume and full 15-minute alarm expiry. The additive NuxtSEO migration expands the executable
+workspace registry to 18 operations; those additional operations still require package publication,
+host deployment, and the same production evidence before their legacy routes can be removed.
 
 ## Context
 
@@ -29,8 +29,8 @@ and assumed a Nuxt package would own consumer API reads. Before documenting
 and opening the API, the initial producer audit found a much larger and less
 uniform legacy surface: 210 hosted operations versus 64 package descriptors,
 including ten schema-less descriptors, two descriptors without handlers, and
-one method/path collision. The live inventory is now 214 operations because it
-also contains the four accepted v1 routes.
+one method/path collision. The live inventory is now 222 operations because it
+also contains the 18 accepted v1 routes.
 
 Breaking changes are allowed now. This amendment establishes the small,
 versioned target before Worker and SDK implementation.

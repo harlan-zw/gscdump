@@ -1,5 +1,5 @@
-// Wires the @gscdump/nuxt layer's auth state by calling `setGscAuth` with the
-// partner integration response. Must run `pre` so downstream layer plugins —
+// Wires the example layer's auth state by calling `setGscAuth` with the partner
+// integration response. Must run `pre` so downstream layer plugins —
 // which lazily instantiate `$gscFetch` / `$gscAnalyticsClient` — see the auth
 // on first read. Mirrors nuxtseo.com's `pro-gsc/app/plugins/gscdump-auth.client.ts`.
 

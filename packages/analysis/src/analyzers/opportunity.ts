@@ -37,6 +37,19 @@ export interface OpportunityResult {
   factors: OpportunityFactors
 }
 
+export interface OpportunityWeights {
+  position?: number
+  impressions?: number
+  ctrGap?: number
+}
+
+export interface OpportunityOptions {
+  minImpressions?: number
+  weights?: OpportunityWeights
+  sortBy?: OpportunitySortMetric
+  limit?: number
+}
+
 // Expected CTR by position (rough industry averages)
 const EXPECTED_CTR_BY_POSITION: Record<number, number> = {
   1: 0.30,
@@ -78,6 +91,63 @@ function calculateCtrGapScore(actualCtr: number, position: number): number {
     return 0
   const gap = expectedCtr - actualCtr
   return Math.min(gap / expectedCtr, 1)
+}
+
+const SORT_DIR: Record<OpportunitySortMetric, 'asc' | 'desc'> = {
+  opportunityScore: 'desc',
+  potentialClicks: 'desc',
+  impressions: 'desc',
+  position: 'asc',
+}
+
+/** Pure opportunity scorer shared by hosted and package analyzer callers. */
+export function analyzeOpportunity(
+  keywords: QueriesRow[],
+  options: OpportunityOptions = {},
+): OpportunityResult[] {
+  const minImpressions = options.minImpressions ?? 100
+  const positionWeight = options.weights?.position ?? 1
+  const impressionsWeight = options.weights?.impressions ?? 1
+  const ctrGapWeight = options.weights?.ctrGap ?? 1
+  const totalWeight = positionWeight + impressionsWeight + ctrGapWeight
+  const sortBy = options.sortBy ?? 'opportunityScore'
+  const results: OpportunityResult[] = []
+
+  for (const row of keywords) {
+    const impressions = num(row.impressions)
+    if (impressions < minImpressions)
+      continue
+    const position = num(row.position)
+    const ctr = num(row.ctr)
+    const clicks = num(row.clicks)
+    const positionScore = calculatePositionScore(position)
+    const impressionScore = calculateImpressionScore(impressions)
+    const ctrGapScore = calculateCtrGapScore(ctr, position)
+    const weightedProduct
+      = (positionScore ** positionWeight)
+        * (impressionScore ** impressionsWeight)
+        * (ctrGapScore ** ctrGapWeight)
+    const opportunityScore = Math.round(weightedProduct ** (1 / totalWeight) * 100)
+    const potentialClicks = Math.round(impressions * getExpectedCtr(Math.min(3, position)))
+
+    results.push({
+      keyword: row.query,
+      page: row.page ?? null,
+      clicks,
+      impressions,
+      ctr,
+      position,
+      opportunityScore,
+      potentialClicks,
+      factors: { positionScore, impressionScore, ctrGapScore },
+    })
+  }
+
+  const direction = SORT_DIR[sortBy]
+  results.sort((left, right) => direction === 'asc'
+    ? left[sortBy] - right[sortBy]
+    : right[sortBy] - left[sortBy])
+  return options.limit ? results.slice(0, options.limit) : results
 }
 
 export const opportunityAnalyzer = defineAnalyzer<AnalysisParams, Row, OpportunityResult[]>({
@@ -193,61 +263,12 @@ export const opportunityAnalyzer = defineAnalyzer<AnalysisParams, Row, Opportuni
 
   reduceRows(rows, params) {
     const keywords = (Array.isArray(rows) ? (rows as unknown as QueriesRow[]) : []) ?? []
-
-    const minImpressions = params.minImpressions ?? 100
-    const positionWeight = 1
-    const impressionsWeight = 1
-    const ctrGapWeight = 1
-    const sortBy: OpportunitySortMetric = 'opportunityScore'
-
-    const results: OpportunityResult[] = []
-
-    for (const row of keywords) {
-      const impressions = num(row.impressions)
-      const position = num(row.position)
-      const ctr = num(row.ctr)
-      const clicks = num(row.clicks)
-
-      if (impressions < minImpressions)
-        continue
-
-      const positionScore = calculatePositionScore(position)
-      const impressionScore = calculateImpressionScore(impressions)
-      const ctrGapScore = calculateCtrGapScore(ctr, position)
-
-      const weightedProduct
-        = (positionScore ** positionWeight)
-          * (impressionScore ** impressionsWeight)
-          * (ctrGapScore ** ctrGapWeight)
-
-      const totalWeight = positionWeight + impressionsWeight + ctrGapWeight
-      const geometricMean = weightedProduct ** (1 / totalWeight)
-      const opportunityScore = Math.round(geometricMean * 100)
-
-      const targetCtr = getExpectedCtr(Math.min(3, position))
-      const potentialClicks = Math.round(impressions * targetCtr)
-
-      results.push({
-        keyword: row.query,
-        page: row.page ?? null,
-        clicks,
-        impressions,
-        ctr,
-        position,
-        opportunityScore,
-        potentialClicks,
-        factors: {
-          positionScore,
-          impressionScore,
-          ctrGapScore,
-        },
-      })
-    }
+    const results = analyzeOpportunity(keywords, { minImpressions: params.minImpressions })
 
     const paged = paginateSortedInMemory(
       results,
       { limit: params.limit, offset: params.offset },
-      (left, right) => right[sortBy] - left[sortBy],
+      (left, right) => right.opportunityScore - left.opportunityScore,
     )
     return { results: paged, meta: { total: results.length, returned: paged.length } }
   },

@@ -20,6 +20,7 @@ READMEs and the root `CLAUDE.md` carry the operational detail.
 │   ├── contracts/            # @gscdump/contracts: hosted API contracts
 │   ├── sdk/                  # @gscdump/sdk: hosted API HTTP clients
 │   ├── cloudflare/           # @gscdump/cloudflare: Cloudflare Workers / R2 helper primitives
+│   ├── lakehouse/            # @gscdump/lakehouse: dataset-agnostic Iceberg catalog + registry
 │   └── cli/                  # @gscdump/cli: CLI (dump, query, sync, analyze, report) + bundled MCP server
 ├── examples/
 │   └── nuxt-dashboard/       # Example Nuxt dashboard app
@@ -28,17 +29,20 @@ READMEs and the root `CLAUDE.md` carry the operational detail.
 
 ## Package Dependencies
 
-- `gscdump` (no internal deps; base layer)
-- `@gscdump/engine` → `gscdump`
-- `@gscdump/engine-duckdb-wasm` → `@gscdump/engine`
+- `@gscdump/contracts` → `zod`
+- `gscdump` → `@gscdump/contracts`
+- `@gscdump/lakehouse` → no runtime dependencies
+- `@gscdump/engine` → `gscdump`, `@gscdump/contracts`, `@gscdump/lakehouse`
+- `@gscdump/engine-duckdb-wasm` → `gscdump`, `@gscdump/contracts`, `@gscdump/engine`
 - `@gscdump/engine-sqlite` → `@gscdump/engine`
 - `@gscdump/engine-gsc-api` → `gscdump`, `@gscdump/engine`
 - `@gscdump/analysis` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-gsc-api`
-- `@gscdump/cloudflare` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-gsc-api`
+- `@gscdump/cloudflare` → `gscdump`, `@gscdump/contracts`, `@gscdump/engine`, `@gscdump/engine-sqlite`
 - `@gscdump/cli` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-gsc-api`, `@gscdump/analysis`
-- `@gscdump/sdk` → `@gscdump/contracts`
+- `@gscdump/sdk` → `gscdump`, `@gscdump/contracts`, `@gscdump/engine`, `@gscdump/analysis`
 
-`gscdump` is the dependency-free base. Everything else builds on it. No cycles.
+The graph is acyclic. Contracts and Lakehouse are the lowest internal layers;
+runtime adapters build on Engine, while SDK and CLI compose public surfaces.
 
 ## Data Flow
 
@@ -47,8 +51,8 @@ READMEs and the root `CLAUDE.md` carry the operational detail.
 ```
 GSC API → fetchSearchAnalyticsAll (gscdump)
         → transformGscRow / RowAccumulator (@gscdump/engine ingest)
-        → Sink (in-memory | local Iceberg | pipeline)
-        → Parquet files + manifest (filesystem | R2)
+        → Sink (in-memory | Iceberg append)
+        → Iceberg data/catalog (@gscdump/lakehouse)
 ```
 
 ### Query (read path)
@@ -57,7 +61,7 @@ GSC API → fetchSearchAnalyticsAll (gscdump)
 gsc() query builder (gscdump/query)
         → BuilderState → compileLogicalQueryPlan (@gscdump/engine planner)
         → resolveToSQL (@gscdump/engine resolver)
-        → DuckDB (WASM | node) over Parquet
+        → DuckDB (WASM | node), R2 SQL, or SQLite over resolved files/tables
         → typed rows
 ```
 
@@ -75,8 +79,12 @@ rows → analyzer (@gscdump/analysis)
 | `gscdump` | ✅ | ✅ | ✅ |
 | `@gscdump/engine` (core) | ✅ | ✅ | ✅ |
 | `@gscdump/engine/node` | ✅ | ❌ | ❌ |
+| `@gscdump/engine/sink-node` | ✅ | ❌ | ❌ |
 | `@gscdump/engine-duckdb-wasm` | ✅ | ✅ | ⚠️ |
+| `@gscdump/engine-sqlite` | ✅ | ✅ | ✅ |
+| `@gscdump/engine-gsc-api` | ✅ | ✅ | ✅ |
 | `@gscdump/analysis` | ✅ | ✅ | ✅ |
+| `@gscdump/lakehouse` | ✅ | ✅ | ✅ |
 | `@gscdump/sdk` | ✅ | ✅ | ✅ |
 | `@gscdump/cloudflare` | ⚠️ | ❌ | ✅ |
 | `@gscdump/cli` | ✅ | ❌ | ❌ |
@@ -121,6 +129,7 @@ The MCP server lives inside `@gscdump/cli` (`src/mcp/`), exposed through the
 | Analyzers, reports | `@gscdump/analysis` |
 | Hosted API contracts | `@gscdump/contracts` |
 | Hosted API HTTP clients | `@gscdump/sdk` |
+| Iceberg catalog, schema derivation, dataset registry | `@gscdump/lakehouse` |
 | Cloudflare/R2 primitives | `@gscdump/cloudflare` |
 | CLI commands + MCP server | `@gscdump/cli` |
 

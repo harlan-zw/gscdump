@@ -82,9 +82,22 @@ export function pickBestGscProperty<T extends GscPropertyCandidate>(
     return undefined
 
   const isDomain = (p: T): boolean => !!p.siteUrl?.startsWith('sc-domain:')
+  const isHttps = (p: T): boolean => !!p.siteUrl?.startsWith('https://')
+  const pickTier = (pool: readonly T[]): T | undefined => pool.find(isDomain) ?? pool.find(isHttps) ?? pool[0]
   const verified = matches.filter(p => isVerifiedGscPermission(p.permissionLevel))
   const pool = verified.length ? verified : matches
-  return pool.find(isDomain) ?? pool[0]
+
+  // A subdomain's own property outranks a parent sc-domain property that only
+  // matched through domain coverage. Within a host, prefer domain then HTTPS
+  // then HTTP so an API response ordered lexicographically cannot select a
+  // near-empty legacy HTTP prefix over the live HTTPS property.
+  const originHost = stripWww(parseGscSiteUrl(origin).hostname.toLowerCase())
+  const exact = pool.filter((property) => {
+    if (!property.siteUrl)
+      return false
+    return stripWww(parseGscSiteUrl(property.siteUrl).hostname.toLowerCase()) === originHost
+  })
+  return pickTier(exact.length ? exact : pool)
 }
 
 /**

@@ -18,7 +18,6 @@ import {
   subMonths,
 } from 'date-fns'
 import { GSC_STABLE_LATENCY_DAYS } from './gsc-constants'
-import { currentPstDate } from './query'
 
 export type RollingPeriod = '7d' | '28d' | '3m' | '6m' | '12m'
 export type CalendarPeriod = 'this-week' | 'this-month' | 'last-month' | 'this-quarter' | 'this-year'
@@ -41,6 +40,15 @@ export interface DateRangeResult {
   days: number
 }
 
+export interface PeriodOptions {
+  /** Subtract GSC's stable-data latency from `end`. Default `true`. */
+  stableData?: boolean
+  /** IANA timezone used to resolve today's calendar date. Default GSC/Pacific time. */
+  timezone?: string
+  /** Clock used to resolve today's calendar date. Defaults to the current time. */
+  now?: Date
+}
+
 export function isCustomPeriod(p: Period | string): p is CustomPeriod {
   return typeof p === 'string' && p.startsWith('custom:')
 }
@@ -57,8 +65,14 @@ export function parseCustomPeriod(p: Period | string): { start: string, end: str
   return { start, end }
 }
 
-function todayInPST(): Date {
-  return new Date(`${currentPstDate()}T00:00:00`)
+function todayInTimezone(timezone = 'America/Los_Angeles', now = new Date()): Date {
+  const date = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now)
+  return new Date(`${date}T00:00:00`)
 }
 
 const ROLLING_TO_UPSTREAM: Record<string, WindowPreset> = {
@@ -95,7 +109,14 @@ function buildResultFromIso(start: string, end: string): DateRangeResult {
   }
 }
 
-export function periodToDateRange(period: Period | string, stableData = true): DateRangeResult {
+export function periodToDateRange(
+  period: Period | string,
+  stableDataOrOptions: boolean | PeriodOptions = true,
+): DateRangeResult {
+  const options = typeof stableDataOrOptions === 'boolean'
+    ? { stableData: stableDataOrOptions }
+    : stableDataOrOptions
+  const stableData = options.stableData ?? true
   const custom = parseCustomPeriod(period)
   if (custom) {
     const result = buildResultFromIso(custom.start, custom.end)
@@ -111,7 +132,7 @@ export function periodToDateRange(period: Period | string, stableData = true): D
     return result
   }
 
-  const today = todayInPST()
+  const today = todayInTimezone(options.timezone, options.now)
   const end = stableData ? subDays(today, GSC_STABLE_LATENCY_DAYS) : subDays(today, 1)
   const endIso = fmt(end)
 
@@ -140,8 +161,11 @@ export function periodToDateRange(period: Period | string, stableData = true): D
   return buildResultFromIso(fmt(start), endIso)
 }
 
-export function periodToDays(period: Period | string): number {
-  return periodToDateRange(period).days
+export function periodToDays(
+  period: Period | string,
+  stableDataOrOptions: boolean | PeriodOptions = true,
+): number {
+  return periodToDateRange(period, stableDataOrOptions).days
 }
 
 export function compareRange(

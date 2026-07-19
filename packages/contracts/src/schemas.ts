@@ -329,7 +329,9 @@ export const gscdumpMetaSchema = z.object({
   syncStatus: z.string(),
   newestDateSynced: z.string().nullable(),
   oldestDateSynced: z.string().nullable(),
-  dataDelay: z.string(),
+  // Older hosted responses populated this label; the current R2/live report
+  // seam exposes explicit sync watermarks instead.
+  dataDelay: z.string().optional(),
   dataEndDate: z.string().nullable().optional(),
   warnings: z.array(z.string()).optional(),
   enrichment: z.object({
@@ -364,6 +366,13 @@ export const gscdumpDataDetailResponseSchema = z.object({
     ctr: z.number(),
     position: z.number(),
   }).loose()),
+  previousDaily: z.array(z.object({
+    date: z.string(),
+    clicks: z.number(),
+    impressions: z.number(),
+    ctr: z.number(),
+    position: z.number(),
+  }).loose()).optional(),
   totals: gscdumpTotalsSchema,
   previousTotals: gscdumpTotalsSchema.optional(),
   meta: gscdumpMetaSchema,
@@ -521,9 +530,10 @@ export const gscdumpSiteRegistrationSchema = z.object({
   message: z.string().optional(),
   existing: z.boolean().optional(),
   indexingEligible: z.boolean().optional(),
-  indexingIneligibleReason: z.enum(['missing_indexing_scope', 'insufficient_gsc_permission']).optional(),
+  indexingIneligibleReason: z.enum(['free_plan', 'missing_indexing_scope', 'insufficient_gsc_permission']).optional(),
   indexingPermissionLevel: z.string().nullable().optional(),
   grantedScopes: z.array(z.string()).optional(),
+  site: partnerLifecycleSiteSchema.nullable().optional(),
 }).loose()
 
 export const registerPartnerSiteSchema = z.object({
@@ -573,7 +583,7 @@ export const bulkRegisterPartnerSitesResponseSchema = z.object({
     error: z.string().optional(),
     site: unknownRecord.nullable().optional(),
     indexingEligible: z.boolean().optional(),
-    indexingIneligibleReason: z.enum(['missing_indexing_scope', 'insufficient_gsc_permission']).optional(),
+  indexingIneligibleReason: z.enum(['free_plan', 'missing_indexing_scope', 'insufficient_gsc_permission']).optional(),
     indexingPermissionLevel: z.string().nullable().optional(),
     grantedScopes: z.array(z.string()).optional(),
   }).loose()),
@@ -624,8 +634,7 @@ export const gscdumpAnalysisPresetSchema = z.enum([
   'movers-declining',
 ])
 
-export const gscdumpAnalysisParamsSchema = z.object({
-  preset: gscdumpAnalysisPresetSchema,
+export const gscdumpAnalysisBaseParamsSchema = z.object({
   startDate: z.string(),
   endDate: z.string(),
   prevStartDate: z.string().optional(),
@@ -640,6 +649,10 @@ export const gscdumpAnalysisParamsSchema = z.object({
   maxCtr: z.number().optional(),
   /** GSC slice the analysis is scoped to. Undefined = cross-type (web-only default). */
   searchType: searchTypeSchema.optional(),
+})
+
+export const gscdumpAnalysisParamsSchema = gscdumpAnalysisBaseParamsSchema.extend({
+  preset: gscdumpAnalysisPresetSchema,
 }).superRefine((value, ctx) => {
   if ((value.preset === 'brand-only' || value.preset === 'non-brand') && !value.brandTerms?.trim()) {
     ctx.addIssue({
@@ -650,12 +663,54 @@ export const gscdumpAnalysisParamsSchema = z.object({
   }
 })
 
+export const gscdumpAnalysisBundleParamsSchema = gscdumpAnalysisBaseParamsSchema.extend({
+  presets: z.array(gscdumpAnalysisPresetSchema).min(1).max(8),
+}).superRefine((value, ctx) => {
+  if (value.presets.some(preset => preset === 'brand-only' || preset === 'non-brand') && !value.brandTerms?.trim()) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['brandTerms'],
+      message: 'brandTerms is required for brand/non-brand presets',
+    })
+  }
+  if (value.presets.some(preset => preset === 'movers-rising' || preset === 'movers-declining' || preset === 'decay')
+    && (!value.prevStartDate || !value.prevEndDate)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['prevStartDate'],
+      message: 'prevStartDate and prevEndDate are required for comparison presets',
+    })
+  }
+})
+
+export const gscdumpAnalysisMetaSchema = z.object({
+  siteUrl: z.string(),
+  params: z.object({
+    brandTerms: z.array(z.string()).optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    prevStartDate: z.string().optional(),
+    prevEndDate: z.string().optional(),
+  }),
+  presetDescription: z.string().optional(),
+}).loose()
+
 export const gscdumpAnalysisResponseSchema = z.object({
   preset: gscdumpAnalysisPresetSchema,
   keywords: z.array(unknownRecord),
   totalCount: z.number(),
-  summary: unknownRecord.optional(),
-  meta: gscdumpMetaSchema,
+  summary: unknownRecord.nullable().optional(),
+  meta: gscdumpAnalysisMetaSchema,
+}).loose()
+
+export const gscdumpAnalysisBundleResponseSchema = z.object({
+  bundle: z.record(z.string(), z.object({
+    keywords: z.array(unknownRecord),
+    totalCount: z.number(),
+    summary: unknownRecord.nullable().optional(),
+    presetDescription: z.string(),
+  })),
+  meta: gscdumpAnalysisMetaSchema,
 }).loose()
 
 export const gscdumpSitemapsResponseSchema = z.object({
@@ -665,8 +720,11 @@ export const gscdumpSitemapsResponseSchema = z.object({
     errors: z.number(),
     warnings: z.number(),
     isIndex: z.boolean().optional(),
-    lastSubmitted: z.string().nullable().optional(),
+    contentHash: z.string().nullable().optional(),
     lastDownloaded: z.string().nullable().optional(),
+    lastError: z.string().nullable().optional(),
+    isPending: z.boolean().optional(),
+    fetchedAt: z.number().nullable().optional(),
   }).loose()),
   history: z.array(z.object({
     date: z.string(),
@@ -683,6 +741,7 @@ export const gscdumpSitemapsResponseSchema = z.object({
   }).loose())),
   meta: z.object({
     siteUrl: z.string(),
+    gscPropertyUrl: z.string(),
     syncStatus: z.string().nullable(),
   }).loose(),
 }).loose()

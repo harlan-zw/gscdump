@@ -52,6 +52,22 @@ export interface StrikingDistanceFilterOptions {
   maxCtr?: number
 }
 
+export interface StrikingDistanceOptions extends StrikingDistanceFilterOptions {
+  limit?: number
+  offset?: number
+}
+
+function paginateStrikingDistance(
+  results: StrikingDistanceResult[],
+  options: Pick<StrikingDistanceOptions, 'limit' | 'offset'>,
+): StrikingDistanceResult[] {
+  return paginateSortedInMemory(
+    results,
+    { limit: options.limit ?? 1000, offset: options.offset },
+    (left, right) => right.potentialClicks - left.potentialClicks,
+  )
+}
+
 /**
  * Shared kernel: filter rows + derive `potentialClicks`. No sort, no
  * pagination. Both the analyzer's `reduce` and the top-level
@@ -94,6 +110,14 @@ export function filterStrikingDistance(
   return results
 }
 
+/** Pure striking-distance analysis for consumers that already own the rows. */
+export function analyzeStrikingDistance(
+  rows: readonly { query: unknown, page?: unknown, clicks: unknown, impressions: unknown, ctr: unknown, position: unknown }[],
+  options: StrikingDistanceOptions = {},
+): StrikingDistanceResult[] {
+  return paginateStrikingDistance(filterStrikingDistance(rows, options), options)
+}
+
 export const strikingDistanceAnalyzer = defineAnalyzer<
   AnalysisParams,
   StrikingDistanceInputRow,
@@ -104,11 +128,7 @@ export const strikingDistanceAnalyzer = defineAnalyzer<
   reduce(rows, params) {
     const arr = Array.isArray(rows) ? rows : []
     const results = filterStrikingDistance(arr, params)
-    const paged = paginateSortedInMemory(
-      results,
-      { limit: params.limit ?? 1000, offset: params.offset },
-      (left, right) => right.potentialClicks - left.potentialClicks,
-    )
+    const paged = paginateStrikingDistance(results, params)
     return { results: paged, meta: { total: results.length, returned: paged.length } }
   },
 

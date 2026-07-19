@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""LocalIcebergSink writer backend — drives PyIceberg against a local Iceberg
+"""Node recovery writer backend — drives PyIceberg against a local Iceberg
 REST catalog (the POC stack: `apache/iceberg-rest-fixture` + MinIO).
 
-Reproduces the *outcome* of a Cloudflare Pipeline sinking into R2 Data Catalog,
-exactly as the Phase-0 POC loader (`poc/iceberg/scripts/load_iceberg.py`) does.
+Used by overwrite/delete recovery tools and their integration tests.
 
 Protocol: one JSON job per process, read from stdin, result written to stdout.
 

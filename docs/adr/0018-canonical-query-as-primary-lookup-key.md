@@ -1,11 +1,21 @@
 # 0018. Canonical query as the primary lookup key: opt-in totalness now, materialised grain next
 
-- Status: accepted (Gap 1 + Gap 2 implemented; consumer wiring outstanding)
+- Status: accepted; Gap 1 mechanism superseded by the Query Dimension
 - Date: 2026-06-23
 - Builds on ADR-0017 (canonical query is a dimension; variant grouping is a
   rollup). Migration style follows the schema-version precedent
   (`TABLE_METADATA.version`, `hourly_pages` hour→INT v2): legacy behaviour
   preserved, the correctness fix opt-in per call.
+
+## 2026-07-19 amendment
+
+ADR-0019/0020 moved canonical derivation out of fact rows and into the
+versioned `query_dim` relation. Fact-table reads now always derive the key as
+`COALESCE(query_dim.query_canonical, fact.query)`; canonical rollup relations
+read their materialized `query_canonical` column. The temporary
+`canonicalFallback`/`canonicalSourceFallback` options became no-ops and were
+deleted before v1. The flag-based Gap 1 text below is retained as decision
+history, not current integration guidance.
 
 ## Context
 
@@ -43,7 +53,7 @@ Three gaps stop it from being clean *as the primary key*:
 
 ## Decision
 
-### 1. Opt-in `canonicalFallback` makes canonical a total key (Gap 1 — implemented)
+### 1. Opt-in `canonicalFallback` makes canonical a total key (historical; superseded)
 
 A `canonicalFallback` flag threads from `RunOptimizedQueryOptions` /
 `runComparisonQuery` / `createParquetResolverAdapter` /
@@ -86,10 +96,9 @@ host degrades to correct-but-slow, never wrong):
 1. `canonicalRollupCovers` — groups solely by `queryCanonical`/date, filters
    only date/`queryCanonical`, no per-row metric prefilter or top-level page
    filter (the rollup dropped those columns / the raw grain).
-2. `canonicalFallback` is on — the rollup is built with COALESCE (total-key)
-   semantics, so serving it to a legacy caller would change NULL/'' rows from
-   buckets to raw-query keys. The rollup READ itself runs without fallback (it
-   is already null-free and lacks the raw `query` column).
+2. The canonical relation carries the required normalizer/intent versions.
+   Fact reads derive canonical through `query_dim`; the rollup is already
+   null-free and lacks the raw `query` column.
 3. `coversThrough` — the window end is at/before the rollup's newest covered
    date, so the recent tail is never silently undercounted.
 
@@ -122,13 +131,11 @@ denormalised per-row string — is what makes embeddings cheap to add later.
 
 ## Consequences
 
-- Gap 1 is self-contained and shipped: one expression behind a default-off flag,
-  no schema or data migration, legacy reads unchanged. Engine tests cover the
-  legacy pollution, the folded grouping, and the comparison double-count→match.
-- The consumer opts in by (a) passing `canonicalFallback: true` and switching
-  the keyword dimension to `queryCanonical` (safe), (b) building
-  `query_canonical_daily` in its rollup set and passing its keys as
-  `canonicalSource` (fast). Until then behaviour is identical to today.
+- Gap 1's correctness rule remains, but `query_dim` now owns it and callers do
+  not opt in with a compatibility flag.
+- Consumers select `queryCanonical`, provide the versioned query dimension,
+  and may pass `query_canonical_daily` keys as `canonicalSource` for the fast
+  path.
 - Gap 2 reuses the rollup + opt-in seam infrastructure from ADR-0017; the only
   new fact-shaped object is one opt-in parquet rollup, no fact-table migration.
 - Treating canonical as a keyed grain (Gap 2 / ADR-0017 Phase 2) is the decision

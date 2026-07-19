@@ -230,6 +230,20 @@ describe('@gscdump/contracts/v1 HTTP registry', () => {
       dimensions: ['query'],
       arbitrary: true,
     }).success).toBe(false)
+    expect(schemas.analyticsReportRequest.parse({
+      state: { dimensions: ['query'], searchType: 'web' },
+      filter: 'new',
+    })).toMatchObject({ state: { dimensions: ['query'] }, filter: 'new' })
+    expect(schemas.analyticsReportRequest.safeParse({
+      state: { dimensions: ['query'] },
+      arbitrary: true,
+    }).success).toBe(false)
+    expect(schemas.analyticsReportDetailRequest.safeParse({
+      state: { dimensions: ['date'] },
+      filter: 'new',
+    }).success).toBe(false)
+    expect(schemas.analyticsReportRequest.safeParse({ state: { dimensions: ['date'] } }).success).toBe(false)
+    expect(schemas.analyticsReportDetailRequest.safeParse({ state: { dimensions: ['query'] } }).success).toBe(false)
     expect(schemas.ticketRequest.parse({})).toEqual({})
     expect(schemas.ticketRequest.parse({ origin: 'https://nuxtseo.com' })).toEqual({
       origin: 'https://nuxtseo.com',

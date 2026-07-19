@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -22,6 +22,9 @@ for (let index = 0; index < args.length; index++) {
   else if (argument === '--print') {
     mode = 'print'
   }
+  else if (argument === '--write') {
+    mode = 'write'
+  }
   else if (argument === '--check') {
     mode = 'check'
   }
@@ -31,6 +34,7 @@ for (let index = 0; index < args.length; index++) {
 Options:
   --check             Compare the generated inventory with the checked-in snapshot (default)
   --print             Print the generated inventory to stdout
+  --write             Replace the checked-in snapshot with the generated inventory
   --host-root <path>  Path to the gscdump.com checkout
   --help              Show this help`)
     process.exit(0)
@@ -45,6 +49,10 @@ const serialized = `${JSON.stringify(inventory, null, 2)}\n`
 
 if (mode === 'print') {
   process.stdout.write(serialized)
+}
+else if (mode === 'write') {
+  await writeFile(snapshotPath, serialized)
+  console.log(`Wrote hosted route inventory (${inventory.summary.operationCount} operations, ${inventory.summary.descriptorCount} descriptors).`)
 }
 else {
   let checkedIn

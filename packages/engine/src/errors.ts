@@ -163,11 +163,6 @@ export function isEngineError(value: unknown): value is EngineError {
     && typeof (value as { message?: unknown }).message === 'string'
 }
 
-/** The human-readable rendering of an `EngineError`, for logs and string sinks. */
-export function formatEngineError(error: EngineError): string {
-  return error.message
-}
-
 /**
  * Re-raises an `EngineError` value as a generic `Error`, stashing the union under
  * `.engineError` for stack-walking. Used by the throwing wrappers over the

@@ -27,8 +27,3 @@ export function percentDifference(current: number, previous: number): number {
     return current > 0 ? 100 : 0
   return ((current - previous) / previous) * 100
 }
-
-/** Safe ratio: returns 0 when denominator is 0. */
-export function safeRatio(num: number, denom: number): number {
-  return denom === 0 ? 0 : num / denom
-}

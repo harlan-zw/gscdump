@@ -37,21 +37,20 @@ Optional peers (install only what your runtime needs):
 | `@gscdump/engine/scope` | Multi-tenant scope predicates. |
 | `@gscdump/engine/arrow` | Apache Arrow utilities for engine result conversion. |
 | `@gscdump/engine/node` | Node-only DuckDB handle. |
-| `@gscdump/engine/node-harness` | Node test harness for engine integration tests. |
 | `@gscdump/engine/filesystem` | Node-only `DataSource` + `ManifestStore` adapters. |
-| `@gscdump/engine/http` | Read-only HTTP `DataSource` (signed URLs, Range requests). |
 | `@gscdump/engine/hyparquet` | Pure-JS `ParquetCodec`. |
 | `@gscdump/engine/r2` | Cloudflare R2 `DataSource` (structurally typed against `R2Bucket`). |
 | `@gscdump/engine/r2-manifest` | R2-backed `ManifestStore` for hosted deployments. |
-| `@gscdump/engine/inspection-sqlite-node` | Node SQLite adapter for URL-inspection cache. |
-| `@gscdump/engine/inspection-sqlite-browser` | Browser (wa-sqlite) adapter for URL-inspection cache. |
+| `@gscdump/engine/iceberg` | Edge-safe GSC Iceberg schema/catalog/append sink. |
+| `@gscdump/engine/sink-node` | Node-only Iceberg overwrite/delete recovery writer. |
+| `@gscdump/engine/source` | Query-source contracts and factories. |
 
 ## Stability
 
 | Surface | Stability |
 |---|---|
 | `createStorageEngine` and storage contracts (`StorageEngine`, `Row`, `WriteCtx`, ...) | Public |
-| Adapters (`/node`, `/filesystem`, `/http`, `/hyparquet`, `/r2`) | Public |
+| Adapters (`/node`, `/filesystem`, `/hyparquet`, `/r2`, `/r2-manifest`) | Public |
 | Planner (`resolveToSQL`, `enumeratePartitions`) | Public |
 | Schema (`SCHEMAS`, `allTables`, ...) | Public |
 | Internals reached through `@gscdump/engine/<file>` paths not listed above | Private — may break between minors |
@@ -60,7 +59,6 @@ Optional peers (install only what your runtime needs):
 
 - [`gscdump`](../gscdump) — REST client + query builder (edge-safe peer dep).
 - [`@gscdump/analysis`](../analysis) — analyzers; consumes `StorageEngine` via `createEngine` factories.
-- [`@gscdump/engine-duckdb-node`](../engine-duckdb-node) — Node DuckDB analyzer adapter.
 - [`@gscdump/engine-duckdb-wasm`](../engine-duckdb-wasm) — DuckDB-WASM browser adapter.
 - [`@gscdump/engine-sqlite`](../engine-sqlite) — SQLite / D1 adapter.
 - [`@gscdump/cli`](../cli) — CLI wrapping engine + analysis.

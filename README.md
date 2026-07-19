@@ -321,10 +321,14 @@ When BYOK is detected, `gscdump auth status` reports `byok` as the source.
 
 | Package | Description |
 |---------|-------------|
-| [`gscdump`](./packages/gscdump) | Core library: REST client + typed query builder + storage engine |
+| [`gscdump`](./packages/gscdump) | Core library: REST client + typed query builder |
 | [`@gscdump/analysis`](./packages/analysis) | SEO analyzers (row-based + SQL-native) |
-| [`@gscdump/cli`](./packages/cli) | CLI entry (`gscdump`) |
-| [`@gscdump/mcp`](./packages/mcp) | MCP server (`gscdump-mcp` bin, also wrapped by `gscdump mcp`) |
+| [`@gscdump/engine`](./packages/engine) | Storage, resolver, query-source, and Iceberg adapters |
+| [`@gscdump/lakehouse`](./packages/lakehouse) | Dataset-agnostic Iceberg catalog and registry |
+| [`@gscdump/contracts`](./packages/contracts) | Hosted API and v1 wire contracts |
+| [`@gscdump/sdk`](./packages/sdk) | Hosted HTTP and ticketed realtime clients |
+| [`@gscdump/cloudflare`](./packages/cloudflare) | Cloudflare Workers/R2 helpers |
+| [`@gscdump/cli`](./packages/cli) | CLI and MCP server (`gscdump mcp`) |
 
 ## License
 

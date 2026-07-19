@@ -109,9 +109,7 @@
   "dependencies": {
     "@gscdump/contracts": "workspace:*",
     "date-fns": "catalog:deps",
-    "defu": "catalog:deps",
-    "ofetch": "catalog:deps",
-    "ufo": "catalog:deps"
+    "ofetch": "catalog:deps"
   },
   "devDependencies": {
     "@googleapis/indexing": "catalog:deps",

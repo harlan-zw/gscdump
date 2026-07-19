@@ -1,169 +1,48 @@
-# AI Integration
+# AI integration
 
-Let Claude, Cursor, or any MCP-compatible AI query your Search Console data directly.
+`@gscdump/cli` owns the MCP server. Authenticate once with `gscdump init` (or
+provide BYOK environment variables), then start it with `gscdump mcp`.
 
-## Quick Setup
+## MCP client configuration
 
-### Claude Desktop
-
-Add to `~/.claude.json`:
-
-```json
-{
-  "mcpServers": {
-    "gscdump": {
-      "command": "npx",
-      "args": ["@gscdump/mcp"]
-    }
-  }
-}
-```
-
-### Claude Code
-
-Add to `.mcp.json` in your project:
+Use the same command in Claude Desktop, Claude Code, Cursor, or another
+stdio-compatible MCP client:
 
 ```json
 {
   "mcpServers": {
     "gscdump": {
       "command": "npx",
-      "args": ["@gscdump/mcp"]
+      "args": ["-y", "@gscdump/cli", "mcp"]
     }
   }
 }
 ```
 
-### VS Code / Cursor
+The server also accepts the CLI's `GSC_ACCESS_TOKEN`, service-account, and
+OAuth refresh-token configuration. Secrets stay in the local MCP process and
+are not sent to the model.
 
-Add to your MCP settings:
+## Tool groups
 
-```json
-{
-  "mcp.servers": {
-    "gscdump": {
-      "command": "npx",
-      "args": ["@gscdump/mcp"]
-    }
-  }
-}
-```
+The current server exposes:
 
-## Example Prompts
+- Search Console sites and verification (`list-sites`, `add-site`,
+  `verify-site`, and related tools).
+- Sitemaps (`list-sitemaps`, `get-sitemap`, `submit-sitemap`,
+  `delete-sitemap`, `discover-sitemap`).
+- Report discovery and execution (`list-reports`, `run-report`).
+- Typed custom Search Analytics queries (`query`).
+- URL inspection and indexing requests, including batch variants.
+- `diagnostics` for credential/scope checks.
 
-Once configured, ask Claude:
+Run `npx -y @gscdump/cli mcp` through an MCP inspector to see the live input
+schemas. The former `@gscdump/mcp` package and its programmatic server subpath
+were removed; application embedding is not a supported v1 package surface.
 
-### Traffic Analysis
-- "What pages lost the most traffic this week?"
-- "Show me my top 10 keywords by clicks"
-- "Compare this month vs last month"
-- "Which countries drive the most traffic?"
+## Example prompts
 
-### Quick Wins
-- "Find keywords in striking distance (position 4-20)"
-- "What keywords have high impressions but low CTR?"
-- "Show opportunities to improve rankings"
-
-### Content Issues
-- "Which queries have keyword cannibalization?"
-- "Find pages with declining traffic"
-- "What content is decaying?"
-
-### Indexing
-- "Check if /blog/new-post is indexed"
-- "Request indexing for these URLs: ..."
-- "Show pages with indexing issues"
-
-## Available MCP Tools
-
-The MCP server exposes these tools:
-
-| Tool | Description |
-|------|-------------|
-| `list-sites` | List GSC properties |
-| `fetch-pages` | Get page performance data |
-| `fetch-keywords` | Get keyword data with comparison |
-| `fetch-devices` | Device breakdown |
-| `fetch-countries` | Country breakdown |
-| `find-striking-distance` | Quick-win keywords |
-| `detect-cannibalization` | Cannibalization analysis |
-| `analyze-movers-and-shakers` | Rising/declining queries |
-| `detect-content-decay` | Decaying content |
-| `inspect-url` | Check URL index status |
-| `request-indexing` | Request URL indexing |
-| `custom-query` | Execute custom GSC query |
-
-## With Database Backend
-
-For faster responses and historical queries, connect a database:
-
-```json
-{
-  "mcpServers": {
-    "gscdump": {
-      "command": "npx",
-      "args": ["@gscdump/mcp"],
-      "env": {
-        "GSCDUMP_DB": "/path/to/gsc.db"
-      }
-    }
-  }
-}
-```
-
-Benefits:
-- **Faster** - Local DB queries vs API calls
-- **Historical** - Query data older than 16 months
-- **Offline** - Works without internet after sync
-
-## Custom MCP Server
-
-Build your own MCP server with gscdump:
-
-```ts
-import { createGscDb } from '@gscdump/db'
-import { createGscMcpServer } from '@gscdump/mcp/server'
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-
-const db = createGscDb('./gsc.db')
-
-const server = createGscMcpServer({
-  name: 'my-gsc-server',
-  version: '1.0.0',
-  getAuth: () => process.env.GSC_ACCESS_TOKEN,
-  getDb: () => db,
-})
-
-const transport = new StdioServerTransport()
-await server.connect(transport)
-```
-
-## Provider Pattern
-
-Use the unified provider for API/DB abstraction:
-
-```ts
-import { createProvider } from '@gscdump/query'
-
-const provider = await createProvider({
-  auth,
-  db,
-  source: 'auto', // Checks DB first, falls back to API
-  siteUrls: ['sc-domain:example.com'],
-  range,
-})
-
-// Same interface regardless of data source
-const pages = await provider.getPagesWithComparison(siteUrl, range)
-```
-
-## Security Notes
-
-- MCP servers run locally - your data stays on your machine
-- Access tokens are stored in `~/.config/gscdump/`
-- Cloud mode tokens are scoped to GSC read/write only
-
-## Next Steps
-
-- [Historical Database](/docs/guides/historical-database) - Set up DB for faster AI queries
-- [SEO Analysis](/docs/guides/seo-analysis) - Analyses you can ask AI to run
+- “List my Search Console properties.”
+- “Run the priority report for `sc-domain:example.com` over the last 28 days.”
+- “Query clicks and impressions by page for this month.”
+- “Inspect these URLs and summarize indexing failures.”

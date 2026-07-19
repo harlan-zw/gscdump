@@ -56,8 +56,6 @@ export interface GscApiRow {
 }
 
 export interface IngestOptions {
-  /** @deprecated Canonical query data is built through query_dim, not fact rows. */
-  normalizeQuery?: (query: string) => string | null | undefined
   /** Date for one-day `searchAppearance` total queries, whose keys omit date. */
   date?: string
   /** Search appearance filter used for contextual second-step rows. */

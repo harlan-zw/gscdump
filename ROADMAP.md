@@ -1,127 +1,66 @@
-# Roadmap
+# v1 closeout
 
-Last updated: 2026-05-25
+Last updated: 2026-07-19
 
-Only open work lives here. Completed extraction/research plans have been
-removed from the root docs; shipped work belongs in git history, release notes,
-and package tests.
+Working line: **`0.39.x`**. This file lists only work that still gates v1 or
+the deletion of a compatibility surface. Shipped work belongs in tests, ADRs,
+release notes, and git history.
 
-## Completion Bar
-
-For planning purposes, **complete means implemented and covered by passing
-e2e**. The local e2e suite passes, but live Google API coverage still skips
-without BYOK credentials:
-
-```bash
-pnpm test:e2e
-# Last BYOK run: 10 passed | 1 skipped
-```
-
-Before marking live API work complete, run the same command with either
-`GSC_ACCESS_TOKEN` or `GSC_CLIENT_ID` + `GSC_CLIENT_SECRET` +
-`GSC_REFRESH_TOKEN`.
-
-## Current State
-
-Working line: **`0.22.x`**.
-
-Current package set:
+## Package set
 
 - `gscdump`
-- `@gscdump/engine`, `@gscdump/engine-duckdb-wasm`,
-  `@gscdump/engine-sqlite`, `@gscdump/engine-gsc-api`
-- `@gscdump/analysis`
 - `@gscdump/contracts`
-- `@gscdump/sdk`
+- `@gscdump/engine`
+- `@gscdump/engine-duckdb-wasm`
+- `@gscdump/engine-gsc-api`
+- `@gscdump/engine-sqlite`
+- `@gscdump/analysis`
+- `@gscdump/lakehouse`
 - `@gscdump/cloudflare`
-- `@gscdump/nuxt`
-- `@gscdump/cli`
-- `@gscdump/mcp` (frozen)
+- `@gscdump/sdk`
+- `@gscdump/cli` (including `gscdump mcp`)
 
-Local verification already covers:
+`@gscdump/nuxt` and `@gscdump/mcp` were deleted. Nuxt integration is owned by
+consumer layers, and the MCP server is owned by the CLI.
 
-- `@gscdump/contracts` owns `analyticsRoutes` and analytics response schemas.
-- `@gscdump/sdk` exposes `createAnalyticsClient`, `createPartnerClient`,
-  `createGscdumpClient`, and `./query`.
-- `@gscdump/nuxt` uses the SDK analytics client internally.
-- Hourly Discover primitives exist across query builder, GSC API sync slice,
-  engine storage, rollups, GC, and tests.
-- Local e2e renders the Nuxt example in all advertised modes.
+## Open gates
 
-## Open Work
+### Hosted v1 cutover
 
-### P0 — Live API e2e verification — CLOSED
+The descriptor-driven HTTP client and ticketed realtime client ship on
+`@gscdump/sdk/v1`. Keep the legacy partner HTTP routes/client until:
 
-The real Google API e2e suites pass with BYOK credentials:
+1. `nuxtseo.com` is deployed on the v1 operations it can consume;
+2. remaining private operations are either promoted to v1 or documented as
+   host-private exceptions; and
+3. deployed route telemetry shows zero legacy use for the agreed census
+   window.
 
-- `tests/e2e/sites-real.test.ts`
-- `tests/e2e/pipeline-real.test.ts`
+Do not infer this gate from repository references alone. See ADR-0011 and the
+consumer rollout records.
 
-These cover the live site/verification surface and the full
-GSC API -> `runGscSyncSlice` -> parquet write -> DuckDB query round trip.
-Last BYOK run: `3 passed` test files, `10 passed | 1 skipped` tests.
+### Legacy storage decommission (D4)
 
-### P1 — Consumer adoption: `nuxtseo.com`
+Keep bespoke-parquet GC and the Node-only Iceberg overwrite/delete recovery
+surface until the old bucket/catalog data has been migrated or deleted and the
+consumer recovery script no longer imports `@gscdump/engine/sink-node`.
 
-This is external to this repo and is tracked in
-`/home/harlan/sites/nuxtseo.com/docs/gscdump-consumer-adoption.md`.
+### Nuxt reference example
 
-Closes when: the consumer doc's closeout criteria are met, including no stale
-`@gscdump/nuxt-analytics` references, no duplicated hosted API contract types
-for gscdump endpoints, relevant pro dashboard tests passing, and any remaining
-direct engine imports documented as deliberate.
+`examples/nuxt-dashboard` builds, but its local `layers/gsc` is explicitly a
+stub copied from the former package. Before calling it a v1 reference, either
+port the current `nuxtseo.com/layers/pro/gsc` seams or relabel it as a limited
+integration example. Do not delete the layer while the example extends it.
 
-### P2 — Library follow-ups — CLOSED
+### Live Google verification
 
-- **`useGscRowQuery` in consumer mode** — decision recorded in
-  `docs/adr/0010-consumer-row-query-uses-builderstate.md`: keep
-  `BuilderState` as the wire contract and translate it against the host's
-  DuckDB/Iceberg table layer.
-- **Bundle-size audit** — closed by making `@gscdump/nuxt` load
-  `@gscdump/analysis/registry` lazily only when the browser-attached analyzer
-  path runs. Row-only/server consumers no longer get a static full-registry
-  import through `useGscQuery`.
+Run `pnpm test:e2e` with `GSC_ACCESS_TOKEN`, or with
+`GSC_CLIENT_ID` + `GSC_CLIENT_SECRET` + `GSC_REFRESH_TOKEN`, before the v1 tag.
+Credential-free local runs intentionally skip live Google assertions.
 
-Verification: `pnpm --filter @gscdump/nuxt typecheck`, `pnpm test:contracts`,
-and BYOK `pnpm test:e2e` pass.
+## Completion bar
 
-### P3 — Hosted strategy docs — CLOSED
-
-Hosted strategy is documented in
-`docs/adr/0011-hosted-gscdump-strategy.md`.
-
-The ADR covers partner API versus analytics `/api/__gsc/*` API, SDK stability,
-Cloudflare/R2 SQL boundaries, report/example ownership, and which behavior
-belongs in host apps versus `@gscdump/nuxt`.
-
-## Risks To Monitor
-
-- **R2 1-write/sec/key cap on `manifest/HEAD`** — use per-`searchType` sharding
-  if conditional rejections climb. Run the contention harness against a real
-  R2 bucket before production rollout.
-- **`union_by_name = true` masking schema drift** — read path silently fills
-  missing columns with NULL; relies on `schemaVersion` checks.
-- **GSC API quota on free-tier fanout** — 1200 QPM/site shared.
-- **Tier cookie is client-controlled** — production hosts must derive tier
-  from billing or account state.
-- **Inspection store growth** — prune old rows if storage grows too quickly.
-
-## Non-Goals
-
-- **Bloom filters** — hyparquet-writer does not support them.
-- **Opt-in slice tables** (`keywords_country`, `pages_country`) — rollups
-  answer most cross-cuts.
-- **Mega fact-table consolidation** — GSC's per-dimension aggregation lossiness
-  makes a single all-dimensions fact table silently incorrect.
-- **DataForSEO / Lighthouse / CrUX / AI features in the layer** — stay in
-  consumer apps.
-- **Feature-flag scaffolding in the layer** — features ship or do not.
-- **Billing / licensing in the layer** — assumes logged-in identity supplied by
-  the host.
-
-## Next Action
-
-1. Continue consumer-side closeout in
-   `/home/harlan/sites/nuxtseo.com/docs/gscdump-consumer-adoption.md`.
-2. Keep this roadmap open only for new package-level work that has not met the
-   completion bar.
+V1 is ready when package build/typecheck/tests pass, consumer migrations and
+their focused tests pass, live Google e2e has run with credentials, and every
+remaining compatibility surface above has an explicit owner and deletion
+gate. No new 0.x compatibility aliases should be added.

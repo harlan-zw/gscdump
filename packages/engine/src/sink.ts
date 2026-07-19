@@ -5,13 +5,10 @@
  * `engine.writeDay()` call at the ingest accumulator's flush boundary
  * (`server/utils/analytics/write-hook.ts`).
  *
- * Three implementations, all conforming to this interface:
+ * Two implementations, both conforming to this interface:
  * - `IcebergAppendSink` — prod. Appends rows directly to the R2 Data Catalog
  *                      Iceberg table via `icebird` `icebergAppend()`, run
- *                      in-Worker. Append-only. (Replaced `PipelineSink` once
- *                      the icebird ingest-writer spike passed — design v6.)
- * - `LocalIcebergSink` — local tests. Writes to a real Iceberg table via a
- *                      PyIceberg / DuckDB Iceberg writer (the POC stack).
+ *                      in-Worker. Append-only.
  * - `InMemorySink`   — unit tests. Collects emitted rows in memory.
  *
  * Design constraints baked into the shape:
@@ -125,12 +122,6 @@ export interface Sink {
 /** Construction options shared by all sink implementations. */
 export interface SinkOptions {
   now?: () => number
-}
-
-/** `PipelineSink` options — Cloudflare Pipeline stream plus overwrite delegate. */
-export interface PipelineSinkOptions extends SinkOptions {
-  stream: unknown
-  overwriteWriter: SliceOverwriteWriter
 }
 
 /**

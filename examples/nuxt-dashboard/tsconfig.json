@@ -7,8 +7,6 @@
       "#app/*": ["../../node_modules/.pnpm/nuxt@4.4.5_@babel+core@7.29.0_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0__@parc_090556389e23935c06fff18f46fbc0e0/node_modules/nuxt/dist/app/*"],
       "@gscdump/analysis": ["../../packages/analysis/src/index.ts"],
       "@gscdump/engine-duckdb-wasm": ["../../packages/engine-duckdb-wasm/src/index.ts"],
-      "@gscdump/engine-sqlite": ["../../packages/engine-sqlite/src/index.ts"],
-      "@gscdump/engine-duckdb-node": ["../../packages/engine-duckdb-node/src/index.ts"],
       "@gscdump/analysis/analyzer": ["../../packages/analysis/src/analyzer/index.ts"],
       "@gscdump/analysis/query": ["../../packages/analysis/src/query/index.ts"],
       "@gscdump/analysis/semantic": ["../../packages/analysis/src/semantic/index.ts"],
@@ -29,7 +27,6 @@
       "@gscdump/engine/sql": ["../../packages/engine/src/sql-bind.ts"],
       "@gscdump/engine/node": ["../../packages/engine/src/adapters/duckdb-node.ts"],
       "@gscdump/engine/filesystem": ["../../packages/engine/src/adapters/filesystem.ts"],
-      "@gscdump/engine/http": ["../../packages/engine/src/adapters/http.ts"],
       "@gscdump/engine/hyparquet": ["../../packages/engine/src/adapters/hyparquet.ts"],
       "@gscdump/engine/r2": ["../../packages/engine/src/adapters/r2.ts"]
     },

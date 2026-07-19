@@ -131,10 +131,66 @@ export interface GscdumpV1Client {
     input: GscdumpV1OperationInput<'partner.users.lifecycle.get'>,
     options?: GscdumpV1ExecuteOptions,
   ) => Promise<GscdumpV1OperationResponse<'partner.users.lifecycle.get'>>
+  listAvailableSites: (
+    input: GscdumpV1OperationInput<'partner.users.sites.available.list'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.users.sites.available.list'>>
+  createSite: (
+    input: GscdumpV1OperationInput<'partner.users.sites.create'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.users.sites.create'>>
+  createUser: (
+    input: GscdumpV1OperationInput<'partner.users.create'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.users.create'>>
+  updateUserTokens: (
+    input: GscdumpV1OperationInput<'partner.users.tokens.update'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.users.tokens.update'>>
+  getSiteIndexing: (
+    input: GscdumpV1OperationInput<'partner.sites.indexing.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.indexing.get'>>
+  listSiteIndexingUrls: (
+    input: GscdumpV1OperationInput<'partner.sites.indexing.urls.list'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.indexing.urls.list'>>
+  getSiteIndexingDiagnostics: (
+    input: GscdumpV1OperationInput<'partner.sites.indexing.diagnostics.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.indexing.diagnostics.get'>>
+  getSiteSitemaps: (
+    input: GscdumpV1OperationInput<'partner.sites.sitemaps.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.get'>>
+  getSiteSitemapChanges: (
+    input: GscdumpV1OperationInput<'partner.sites.sitemaps.changes.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.changes.get'>>
+  getSiteAnalysis: (
+    input: GscdumpV1OperationInput<'partner.sites.analysis.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.analysis.get'>>
+  getSiteAnalysisBundle: (
+    input: GscdumpV1OperationInput<'partner.sites.analysis.bundle.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.analysis.bundle.get'>>
+  deleteSite: (
+    input: GscdumpV1OperationInput<'partner.sites.delete'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.delete'>>
   queryAnalyticsRows: (
     input: GscdumpV1OperationInput<'analytics.rows.query'>,
     options?: GscdumpV1ExecuteOptions,
   ) => Promise<GscdumpV1OperationResponse<'analytics.rows.query'>>
+  queryAnalyticsReport: (
+    input: GscdumpV1OperationInput<'analytics.reports.query'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'analytics.reports.query'>>
+  queryAnalyticsReportDetail: (
+    input: GscdumpV1OperationInput<'analytics.reports.detail.query'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'analytics.reports.detail.query'>>
   getRealtimeStreamHead: (
     input?: GscdumpV1OperationInput<'realtime.stream.head.get'>,
     options?: GscdumpV1ExecuteOptions,
@@ -677,7 +733,21 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
   return {
     execute,
     getUserLifecycle: (input, executeOptions) => execute('partner.users.lifecycle.get', input, executeOptions),
+    listAvailableSites: (input, executeOptions) => execute('partner.users.sites.available.list', input, executeOptions),
+    createSite: (input, executeOptions) => execute('partner.users.sites.create', input, executeOptions),
+    createUser: (input, executeOptions) => execute('partner.users.create', input, executeOptions),
+    updateUserTokens: (input, executeOptions) => execute('partner.users.tokens.update', input, executeOptions),
+    getSiteIndexing: (input, executeOptions) => execute('partner.sites.indexing.get', input, executeOptions),
+    listSiteIndexingUrls: (input, executeOptions) => execute('partner.sites.indexing.urls.list', input, executeOptions),
+    getSiteIndexingDiagnostics: (input, executeOptions) => execute('partner.sites.indexing.diagnostics.get', input, executeOptions),
+    getSiteSitemaps: (input, executeOptions) => execute('partner.sites.sitemaps.get', input, executeOptions),
+    getSiteSitemapChanges: (input, executeOptions) => execute('partner.sites.sitemaps.changes.get', input, executeOptions),
+    getSiteAnalysis: (input, executeOptions) => execute('partner.sites.analysis.get', input, executeOptions),
+    getSiteAnalysisBundle: (input, executeOptions) => execute('partner.sites.analysis.bundle.get', input, executeOptions),
+    deleteSite: (input, executeOptions) => execute('partner.sites.delete', input, executeOptions),
     queryAnalyticsRows: (input, executeOptions) => execute('analytics.rows.query', input, executeOptions),
+    queryAnalyticsReport: (input, executeOptions) => execute('analytics.reports.query', input, executeOptions),
+    queryAnalyticsReportDetail: (input, executeOptions) => execute('analytics.reports.detail.query', input, executeOptions),
     getRealtimeStreamHead: (input = {}, executeOptions) => execute('realtime.stream.head.get', input, executeOptions),
     createRealtimeTicket: (input, executeOptions) => execute('realtime.tickets.create', input, executeOptions),
   }

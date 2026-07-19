@@ -1,7 +1,7 @@
 /**
  * Generic factory: turns a `(sql, params) → rows` execute function plus a
  * dialect-specific `ResolverAdapter` into an `AnalysisQuerySource` with
- * `executeSql` + the matching capability flag set.
+ * an `executeSql` method and adapter capability metadata.
  *
  * Adapters (`engine-duckdb-wasm`, `engine-sqlite`, future Postgres / BigQuery)
  * reduce to driver glue + one call here. Keeps the typed-builder path,

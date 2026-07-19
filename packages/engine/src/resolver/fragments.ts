@@ -42,8 +42,6 @@ export interface SqlFragmentsConfig<TableKey extends string> {
   queryDimTableRef?: () => SQL
   /** When true, also joins query_dim on site_id (SQLite/D1 dimension table). */
   queryDimSiteScoped?: boolean
-  /** @deprecated Canonical reads now derive from query_dim or canonical rollups. */
-  canonicalFallback?: boolean
 }
 
 export interface SqlFragments<TableKey extends string> {

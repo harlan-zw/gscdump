@@ -49,7 +49,7 @@ export type HttpV1Credential = typeof HTTP_V1_CREDENTIALS[number]
 export type HttpV1Scope = typeof HTTP_V1_SCOPES[number]
 export type HttpV1ErrorCode = typeof HTTP_V1_ERROR_CODES[number]
 export type HttpV1Visibility = 'internal' | 'public'
-export type HttpV1OwnershipRule = 'self' | 'linked_user' | 'authorized_site' | 'principal_stream'
+export type HttpV1OwnershipRule = 'self' | 'linked_user' | 'authorized_site' | 'partner_tenant' | 'principal_stream'
 export type HttpV1ResourceType
   = | 'partner.user'
     | 'partner.team'

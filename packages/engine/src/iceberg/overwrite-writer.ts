@@ -1,11 +1,10 @@
 /**
- * Trailing-window Iceberg overwrite writer — the GSC-revision path (TODO P1.4).
+ * Node-only Iceberg overwrite/delete recovery writer.
  *
  * GSC restates clicks/impressions for weeks after its 3-day finalization lag.
  * The daily sync re-fetches the trailing window; those revised dates must
- * REPLACE the existing rows in the Iceberg table. Cloudflare Pipelines is
- * append-only, so `PipelineSink.overwriteSlice` delegates to this writer,
- * which performs a partition-level Iceberg `overwrite` (DELETE+INSERT of the
+ * REPLACE the existing rows in the Iceberg table. This writer performs a
+ * partition-level Iceberg `overwrite` (DELETE+INSERT of the
  * `site_id` + `search_type` + `date` partition) — one atomic Iceberg snapshot.
  *
  * RUNTIME DECISION — spike 2026-05-22
@@ -22,8 +21,8 @@
  * module is the transport-agnostic client. Two backends ship:
  *
  * - `subprocessBackend` — spawns the PyIceberg writer script
- *   (`scripts/iceberg-writer.py`, shared with `LocalIcebergSink`). Used by
- *   local integration tests and by a Node-side scheduled job box.
+ *   (`scripts/iceberg-writer.py`). Used by local integration tests and by a
+ *   Node-side scheduled job box.
  * - `httpBackend` — POSTs the job to a PyIceberg HTTP service (the Cloudflare
  *   Container in prod). The Worker holds no Python.
  *
@@ -54,9 +53,8 @@ export interface OverwriteWriterCatalogConfig {
 }
 
 /**
- * The JSON job wire-format shared with `scripts/iceberg-writer.py` — identical
- * to the shape `LocalIcebergSink` already emits, so one PyIceberg script backs
- * both the local sink and this writer. `op` is always `overwrite` here.
+ * The JSON job wire-format shared with `scripts/iceberg-writer.py`.
+ * `op` is always `overwrite` here.
  */
 export interface OverwriteJob {
   op: 'overwrite'

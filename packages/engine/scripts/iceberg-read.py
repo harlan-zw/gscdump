@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-back helper for LocalIcebergSink integration tests.
+"""Read-back helper for Iceberg overwrite-writer integration tests.
 
 Queries a local Iceberg table through DuckDB's `iceberg` extension over the
 REST catalog + MinIO — the same path the production server tail (DuckDB over

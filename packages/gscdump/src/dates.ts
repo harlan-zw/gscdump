@@ -4,6 +4,7 @@
  * separate because Google Search Console's reporting day is America/Los_Angeles.
  */
 export {
+  addDays,
   countDays,
   DAYS_PER_RANGE,
   daysAgo as daysAgoUtc,

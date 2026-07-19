@@ -12,7 +12,6 @@
   createIcebergResolverAdapter: function
   createIngestAccumulator: function
   createInMemorySink: function
-  createNoopIngestAccumulator: function
   createParquetResolverAdapter: function
   createQueryProfiler: function
   createR2SqlResolverAdapter: function
@@ -31,7 +30,6 @@
   enumeratePartitions: function
   FILES_PLACEHOLDER: string
   fixedPolicy: function
-  formatEngineError: function
   formatLiteral: function
   getDateWeight: function
   getTablesForTier: function
@@ -116,7 +114,6 @@
 ./errors:
   engineErrors: object
   engineErrorToException: function
-  formatEngineError: function
   isEngineError: function
 ./filesystem:
   createFilesystemDataSource: function
@@ -182,8 +179,6 @@
   padTimeseries: function
   periodOf: function
   resolveWindow: function
-  windowToComparisonPeriod: function
-  windowToPeriod: function
 ./planner:
   compileLogicalQueryPlan: function
   enumeratePartitions: function
@@ -281,7 +276,6 @@
   page_queries: object
   pages: object
   queries: object
-  schemaFor: function
   SCHEMAS: object
   search_appearance: object
   search_appearance_page_queries: object
@@ -305,11 +299,9 @@
   createEngineQuerySource: function
   createSqlQuerySource: function
   ENGINE_QUERY_CAPABILITIES: object
-  queryComparisonRows: function
   queryRows: function
   rewriteForTableSource: function
   runAnalyzerWithEngine: function
-  typedQuery: function
 ./sql:
   bindLiterals: function
   bindLiteralsResult: function

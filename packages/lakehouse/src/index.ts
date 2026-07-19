@@ -68,9 +68,6 @@ export type {
 export { buildManifestPartitionFilter } from './partition-prune'
 export type { IcebergFieldSummary, ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'
 
-export { resolvePyIcebergPython, runPyIcebergWriter } from './pyiceberg-runtime'
-export type { PyIcebergWriterResult, RunPyIcebergWriterOptions } from './pyiceberg-runtime'
-
 export {
   DEFAULT_PARTITION_KEY_ENCODING,
 } from './schema'

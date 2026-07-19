@@ -153,20 +153,6 @@ export function resolveWindow(opts: ResolveWindowOptions): ResolvedWindow {
   return result
 }
 
-/** Convert a ResolvedWindow into the AnalysisPeriod / ComparisonPeriod shape. */
-export function windowToPeriod(w: ResolvedWindow): AnalysisPeriod {
-  return { startDate: w.start, endDate: w.end }
-}
-
-export function windowToComparisonPeriod(w: ResolvedWindow): ComparisonPeriod | undefined {
-  if (!w.comparison)
-    return undefined
-  return {
-    current: { startDate: w.start, endDate: w.end },
-    previous: { startDate: w.comparison.start, endDate: w.comparison.end },
-  }
-}
-
 export interface PadTimeseriesOptions<T> {
   /** ISO date (YYYY-MM-DD), inclusive lower bound. */
   startDate: string

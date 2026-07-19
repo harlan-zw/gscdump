@@ -7,7 +7,7 @@ Real-time Google Search Console querying with an append-only Parquet/DuckDB stor
 ### Storage & data
 
 **Schema**:
-The canonical drizzle pg-core tables in `@gscdump/engine/schema` (`pages`, `keywords`, `countries`, `devices`, `page_keywords`). Single source of truth; the parquet `SCHEMAS` map and the sqlite-core variant are derived from or drift-checked against it.
+The canonical drizzle pg-core tables in `@gscdump/engine/schema` (`pages`, `queries`, `countries`, `dates`, `page_queries`, search-appearance tables, and `hourly_pages`). Single source of truth; the parquet `SCHEMAS` map and the sqlite-core compatibility variant are derived from or drift-checked against it.
 _Avoid_: tables, models, columns-as-source-of-truth.
 
 **Engine**:
@@ -21,8 +21,8 @@ _Avoid_: connection, client (overloaded).
 ### Query plumbing
 
 **Source** (`AnalysisQuerySource`):
-The query abstraction analyzers consume. Single Interface; `queryRows` always present, `executeSql` opt-in via `capabilities.executeSql` (the flag and the method move together — factories set both or neither). Capability flags advertise everything else: planner caps (`regex`, `comparisonJoin`, `windowTotals`, `multiDataset`), storage caps (`attachedTables`, `fileSets`). The `kind` tag (`local | browser | live | in-memory | composite | attached-table`) is telemetry only — never used for routing. The deep seam between analyzers and engines.
-_Avoid_: provider, repository, query service. Don't reintroduce a `RowQuerySource`/`SqlQuerySource` discriminated union — the capability flag is the single source of truth.
+The query abstraction analyzers consume. Single interface; `queryRows` is always present and raw SQL is opt-in through method presence (`typeof source.executeSql === 'function'`). Capability flags advertise planner support (`regex`, `comparisonJoin`, `windowTotals`, `multiDataset`) and storage support (`attachedTables`, `fileSets`, `adapter`). The `kind` tag (`local | browser | live | in-memory | composite | attached-table`) is telemetry only — never used for routing. The deep seam between analyzers and engines.
+_Avoid_: provider, repository, query service. Don't reintroduce a `RowQuerySource`/`SqlQuerySource` discriminated union or an `executeSql` capability flag; see ADR-0003.
 
 **Adapter** (`ResolverAdapter<TableKey>`):
 Dialect-specific translator that compiles `BuilderState` → `{ sql, params }` against a drizzle schema. Two real variants: `pgResolverAdapter` (DuckDB; single-tenant) and `sqliteResolverAdapter` (SQLite/D1; multi-tenant via `site_id`). Built via `createResolverAdapter`.
@@ -68,8 +68,8 @@ _Avoid_: an unqualified `daysAgo` outside the query-builder compatibility surfac
 Opt-in hooks on `runOptimizedQuery` that let the MAIN query read a materialized canonical rollup, and extras read a variant rollup, instead of re-aggregating facts — gated so a miss falls back to live aggregation (correct, never wrong). See ADR-0017/0018.
 _Avoid_: cache, materialized view (it's a fallback-gated source override).
 
-**PyIceberg writer runtime**:
-Private Engine adapter for Python-backed Iceberg append/overwrite jobs. Owns the Python interpreter fallback and subprocess JSON contract; storage writers build jobs and interpret domain results.
+**PyIceberg recovery runtime**:
+Private, Node-only Engine adapter for Python-backed Iceberg overwrite/delete recovery jobs. Owns the Python interpreter fallback and subprocess JSON contract; the edge append path uses `@gscdump/lakehouse`/`icebird` directly.
 _Avoid_: each writer reading PyIceberg env defaults or parsing writer stdout independently.
 
 ### Tenancy & layout

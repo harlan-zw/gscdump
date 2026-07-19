@@ -1,107 +1,40 @@
-# nuxt-dashboard — Phase 3 reference
+# Nuxt dashboard example
 
-A Nuxt 4 dashboard that runs every analyzer both ways:
+A Nuxt 4 integration example for the gscdump query, analyzer, hosted SDK, and
+browser DuckDB-WASM packages.
 
-- **Browser · flag on** — DuckDB-WASM in the browser queries Parquet shards on R2 directly via presigned URLs. First request pays the WASM + manifest + attach cost (~300–600 ms cold); every subsequent tab is just the query (~20–80 ms warm).
-- **Server · flag off** — Nitro server route runs the same analyzer against a Node DuckDB process that reads from R2 over HTTPS. Represents the "current state" before migration.
+The app supports three build-time modes through `GSCDUMP_ANALYTICS_MODE`:
 
-Flip the toggle, click through the seven analyzer tabs, watch the timing strip update. That's it — this is the Phase 3 A/B harness.
+- `local` (default): browser DuckDB-WASM reads the configured data source.
+- `origin`: same-origin Nitro routes host analytics access.
+- `consumer`: requests a remote hosted origin through
+  `GSCDUMP_ANALYTICS_API_BASE`.
 
-## Architecture
+The local `layers/gsc` directory is intentionally a buildable stub, not a
+published `@gscdump/nuxt` package. It keeps the example executable while Nuxt
+integration is owned by consumer applications. Do not treat its public
+composable/component set as a v1 contract.
 
-```
-client                                        server
-──────                                        ──────
-pages/index.vue                               api/manifest.get.ts       ─┐
-  └─ useInsightRunner()                       api/analysis-sources.get.ts│ R2 S3 creds
-       ├─ @gscdump/engine-duckdb-wasm                api/r2-data/[...path].get  ┤ (aws4fetch)
-       │    · bootDuckDBWasm                  api/analysis/[x].get.ts   ─┘
-       │    · attachParquetUrlTables               └─ utils/analysis-engine.ts
-       │    · createBrowserAnalysisRuntime            ├─ @gscdump/engine
-       └─ DuckDB-WASM (worker)                        │    (createStorageEngine,
-                                                      │     createDuckDBCodec,
-                                                      │     createDuckDBExecutor)
-                                                      ├─ @gscdump/engine/http
-                                                      ├─ @gscdump/engine/node
-                                                      └─ @gscdump/analysis
-                                                           · runAnalyzerWithEngine
-                                                           · defaultAnalyzerRegistry
-                ▲
-                └──── $fetch('/api/r2-data/...') (same-origin, server-signed)
+## Run
+
+```sh
+pnpm --filter @gscdump/example-nuxt-dashboard dev:local
 ```
 
-Every piece except the Vue components is a production primitive from this monorepo. The composables are ~120 LoC each; gscdump.com can copy them into its `app/composables/` directory unchanged.
+For hosted partner pages, set:
 
-## Which primitives does this exercise?
-
-| File | Primitive used | Where it lives |
-|---|---|---|
-| `server/api/manifest.get.ts` | `aws4fetch` R2 LIST | local helper |
-| `server/api/analysis-sources.get.ts` | `ManifestEntry` + per-table same-origin URL assembly | `@gscdump/engine` type, local logic |
-| `server/api/r2-data/[...path].get.ts` | SigV4 presigned GET stream-through | `aws4fetch` |
-| `server/utils/r2-client.ts` | R2 LIST + presign | local helper |
-| `server/utils/analysis-engine.ts` | `createStorageEngine` + `createDuckDBCodec` + `createDuckDBExecutor` + `createHttpDataSource` + `createHttpManifestStore` + `createNodeDuckDBHandle` | `@gscdump/engine`, `@gscdump/engine/http`, `@gscdump/engine/node` |
-| `server/api/analysis/[analyzer].get.ts` | `runAnalyzerWithEngine` + `defaultAnalyzerRegistry` | `@gscdump/analysis` |
-| `app/composables/useInsightRunner.ts` | `bootDuckDBWasm` + `attachParquetUrlTables` + `createBrowserAnalysisRuntime` | `@gscdump/engine-duckdb-wasm` |
-| `app/composables/useActionPriority.ts` | `analyzeActionPriority` | `@gscdump/analysis` |
-| `app/composables/useContentGap.ts` | `createBrowserQuerySource` + `analyzeContentGap` | `@gscdump/analysis`, `@gscdump/analysis/semantic` |
-| `app/pages/index.vue` | orchestration only | — |
-
-## Setup
-
-1. Copy `.env.example` → `.env` and fill in R2 credentials:
-
-   ```sh
-   cp .env.example .env
-   $EDITOR .env
-   ```
-
-   You need an R2 S3 API token (not a `wrangler` binding) — the Nitro server calls R2 directly via `aws4fetch`. Generate one in the Cloudflare dashboard under **R2 → Manage R2 API Tokens**.
-
-2. Install + run:
-
-   ```sh
-   pnpm install             # from the repo root
-   pnpm --filter @gscdump/example-nuxt-dashboard dev
-   ```
-
-3. Open `http://localhost:3000`. First tab is the cold path; switch tabs or toggle modes to see warm numbers.
-
-## Reading the timing strip
-
-```
-● browser   boot 420 ms   manifest 81 ms   attach 62 ms   query 28 ms
-● server    server setup 12 ms   server query 145 ms   round-trip 198 ms
+```sh
+GSCDUMP_PARTNER_API_BASE=https://gscdump.com/api
+GSCDUMP_PARTNER_API_KEY=...
+GSCDUMP_PARTNER_USER_ID=...
 ```
 
-- **boot**: one-time DuckDB-WASM init (worker + module instantiate). Cached across tab switches.
-- **manifest**: one-time `/api/manifest` fetch. Cached.
-- **attach**: one-time `CREATE VIEW … FROM read_parquet([…])` per table. Cached.
-- **query**: per-tab insight run. Comparable to server query time, minus round-trip.
-- **server setup**: Node DuckDB lazy-init + engine + manifest cache on the server. Amortises to ~0 after first request.
-- **server query**: SQL execution on the Node process.
-- **round-trip**: end-to-end from the browser's perspective. Includes network.
+Use `dev:origin` or `dev:consumer` for the other modes. See
+`nuxt.config.ts` and `.env.example` for the complete configuration surface.
 
-Cold-boot-plus-first-query on the browser path typically beats the server round-trip after the second tab — because browser DuckDB sits on a warm connection while server DuckDB re-initialises per isolate on deploys.
+## V1 status
 
-## Deploying
-
-Works on anything Nuxt deploys to that supports Node:
-
-- **Node dev / node-server preset** — out of the box.
-- **CF Pages / CF Workers** — the server analysis route needs a DuckDB shape that runs on Workers. Swap `@gscdump/engine/node` for a service-binding-backed executor (see gscdump.com's `workers-duckdb.ts` for the pattern), or swap the whole server path for `@gscdump/engine-sqlite` against a D1 binding.
-- **Static deploys** — skip the server routes, host the manifest JSON as a static file, run browser-only. Same composable, just don't wire the fallback.
-
-## Relation to `browser-http`
-
-- `examples/browser-http` — research harness. Five different attach strategies side by side (snapshot, snapshot-url, hotcold, parquet-views, http), pick-your-own. Vanilla HTML, no Nuxt.
-- `examples/nuxt-dashboard` (this) — product shape. One strategy (parquet-views), one UI, one A/B flag. What you'd actually ship.
-
-## What this doesn't cover
-
-- Per-user auth on the sign-url route — `.env.GSCDUMP_USER_ID` is pinned for the demo. In gscdump.com you'd read the session here.
-- Rate limiting or signed-URL TTL rotation — skip for a demo.
-- Error reporting beyond an on-screen `{{ error.message }}` — no Sentry, no logs.
-- The D1 manifest path — here the server builds the manifest from an R2 LIST. gscdump.com reads it from D1's `r2_manifest` table.
-
-The dashboard is a minimum viable Phase 3 proof: all seven analyzers, both modes, honest numbers.
+The example builds as a regression fixture, but its stub layer still has TODO
+ports from `nuxtseo.com/layers/pro/gsc`. Before presenting it as the canonical
+v1 dashboard, either port those current seams or narrow the example to the
+hosted SDK flows it actually demonstrates.

@@ -95,6 +95,84 @@ describe('@gscdump/sdk/v1 HTTP executor', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('executes the response-compatible report family through registered v1 paths', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (request, init) => {
+      if (request === '/api/_gscdump/analytics/v1/sites/s_site/reports') {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          state: { dimensions: ['query'], searchType: 'web' },
+          comparison: { dimensions: ['query'], searchType: 'image' },
+          filter: 'new',
+        })
+        return jsonResponse({
+          data: {
+            rows: [],
+            totalCount: 0,
+            totals: { clicks: 0, impressions: 0, ctr: 0, position: 0 },
+            meta: {
+              siteUrl: 'sc-domain:example.com',
+              syncStatus: 'synced',
+              newestDateSynced: null,
+              oldestDateSynced: null,
+            },
+          },
+          meta: {
+            requestId: 'req_report_list',
+            surface: 'analytics',
+            version: '1.0',
+            sourceName: 'hosted-report',
+            sourceKind: 'sql',
+            queryMs: 1,
+          },
+        })
+      }
+      expect(request).toBe('/api/_gscdump/analytics/v1/sites/s_site/reports/detail')
+      expect(JSON.parse(String(init?.body))).toEqual({
+        state: { dimensions: ['date'], searchType: 'web' },
+      })
+      return jsonResponse({
+        data: {
+          daily: [],
+          totals: { clicks: 0, impressions: 0, ctr: 0, position: 0 },
+          meta: {
+            siteUrl: 'sc-domain:example.com',
+            syncStatus: 'synced',
+            newestDateSynced: null,
+            oldestDateSynced: null,
+            dataDelay: '0 days',
+          },
+        },
+        meta: {
+          requestId: 'req_report',
+          surface: 'analytics',
+          version: '1.0',
+          sourceName: 'hosted-report',
+          sourceKind: 'sql',
+          queryMs: 1,
+        },
+      })
+    })
+    const client = createGscdumpV1Client({
+      apiRoot: '/api/_gscdump',
+      credential: 'user_secret',
+      fetch,
+    })
+
+    await expect(client.queryAnalyticsReport({
+      params: { siteId: 's_site' },
+      body: {
+        state: { dimensions: ['query'], searchType: 'web' },
+        comparison: { dimensions: ['query'], searchType: 'image' },
+        filter: 'new',
+      },
+    })).resolves.toMatchObject({ data: { rows: [], totalCount: 0 } })
+
+    await expect(client.queryAnalyticsReportDetail({
+      params: { siteId: 's_site' },
+      body: { state: { dimensions: ['date'], searchType: 'web' } },
+    })).resolves.toMatchObject({ data: { daily: [], totals: { clicks: 0 } } })
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
   it('parses the stable error envelope into one tagged error', async () => {
     const client = createGscdumpV1Client({
       credential: 'partner_secret',

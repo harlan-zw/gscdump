@@ -1,6 +1,176 @@
 {
   "components": {
     "schemas": {
+      "analytics.reports.detail.query.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/analytics.reports.detail.query.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "analytics.reports.detail.query.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/analytics.reports.detail.query.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/analytics.reports.detail.query.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "analytics.reports.query.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/analytics.reports.query.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "analytics.reports.query.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/analytics.reports.query.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/analytics.reports.query.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
       "analytics.rows.query.error": {
         "additionalProperties": false,
         "properties": {
@@ -367,6 +537,981 @@
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "openapi": "3.1.0",
   "paths": {
+    "/api/analytics/v1/sites/{siteId}/reports": {
+      "post": {
+        "description": "Returns the hosted analytics list report with totals, comparison fields, and sync metadata.",
+        "operationId": "analytics.reports.query",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "comparison": {
+                    "additionalProperties": {},
+                    "properties": {
+                      "dimensions": {
+                        "items": {
+                          "enum": [
+                            "page",
+                            "query",
+                            "queryCanonical",
+                            "country",
+                            "device",
+                            "date",
+                            "searchAppearance",
+                            "hour"
+                          ],
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "searchType": {
+                        "enum": [
+                          "web",
+                          "image",
+                          "video",
+                          "news",
+                          "discover",
+                          "googleNews"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "dimensions"
+                    ],
+                    "type": "object"
+                  },
+                  "filter": {
+                    "enum": [
+                      "new",
+                      "lost",
+                      "improving",
+                      "declining"
+                    ],
+                    "type": "string"
+                  },
+                  "state": {
+                    "additionalProperties": {},
+                    "properties": {
+                      "dimensions": {
+                        "items": {
+                          "enum": [
+                            "page",
+                            "query",
+                            "queryCanonical",
+                            "country",
+                            "device",
+                            "date",
+                            "searchAppearance",
+                            "hour"
+                          ],
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "searchType": {
+                        "enum": [
+                          "web",
+                          "image",
+                          "video",
+                          "news",
+                          "discover",
+                          "googleNews"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "dimensions"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "state"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "meta": {
+                          "additionalProperties": {},
+                          "properties": {
+                            "backfill": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "daysRemaining": {
+                                  "type": "number"
+                                },
+                                "percent": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "percent"
+                              ],
+                              "type": "object"
+                            },
+                            "dataDelay": {
+                              "type": "string"
+                            },
+                            "dataEndDate": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "enrichment": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "isDue": {
+                                  "type": "boolean"
+                                },
+                                "lastEnriched": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "lastEnriched",
+                                "isDue"
+                              ],
+                              "type": "object"
+                            },
+                            "newestDateSynced": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "oldestDateSynced": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "siteUrl": {
+                              "type": "string"
+                            },
+                            "syncStatus": {
+                              "type": "string"
+                            },
+                            "warnings": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "siteUrl",
+                            "syncStatus",
+                            "newestDateSynced",
+                            "oldestDateSynced"
+                          ],
+                          "type": "object"
+                        },
+                        "rows": {
+                          "items": {
+                            "additionalProperties": {},
+                            "properties": {
+                              "clicks": {
+                                "type": "number"
+                              },
+                              "ctr": {
+                                "type": "number"
+                              },
+                              "impressions": {
+                                "type": "number"
+                              },
+                              "position": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "clicks",
+                              "impressions",
+                              "ctr",
+                              "position"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "totalCount": {
+                          "type": "number"
+                        },
+                        "totals": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "clicks": {
+                              "type": "number"
+                            },
+                            "ctr": {
+                              "type": "number"
+                            },
+                            "impressions": {
+                              "type": "number"
+                            },
+                            "position": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "clicks",
+                            "impressions",
+                            "ctr",
+                            "position"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "rows",
+                        "totalCount",
+                        "totals",
+                        "meta"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "queryMs": {
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "sourceKind": {
+                          "enum": [
+                            "row",
+                            "sql"
+                          ],
+                          "type": "string"
+                        },
+                        "sourceName": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "analytics",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version",
+                        "sourceName",
+                        "sourceKind",
+                        "queryMs"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.reports.query.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.reports.query.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.reports.query.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Query an analytics report",
+        "tags": [
+          "Analytics reports"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {
+              "state": {
+                "dimensions": [
+                  "query"
+                ],
+                "searchType": "web"
+              }
+            },
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "meta": {
+                "dataDelay": "0 days",
+                "newestDateSynced": null,
+                "oldestDateSynced": null,
+                "siteUrl": "sc-domain:example.com",
+                "syncStatus": "synced"
+              },
+              "rows": [],
+              "totalCount": 0,
+              "totals": {
+                "clicks": 0,
+                "ctr": 0,
+                "impressions": 0,
+                "position": 0
+              }
+            },
+            "meta": {
+              "queryMs": 12,
+              "requestId": "req_01",
+              "sourceKind": "sql",
+              "sourceName": "hosted-report",
+              "surface": "analytics",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "1.0.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.analytics"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "analytics:execute"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/analytics/v1/sites/{siteId}/reports/detail": {
+      "post": {
+        "description": "Returns the hosted analytics timeseries report with current and comparison totals.",
+        "operationId": "analytics.reports.detail.query",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "comparison": {
+                    "additionalProperties": {},
+                    "properties": {
+                      "dimensions": {
+                        "items": {
+                          "enum": [
+                            "page",
+                            "query",
+                            "queryCanonical",
+                            "country",
+                            "device",
+                            "date",
+                            "searchAppearance",
+                            "hour"
+                          ],
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "searchType": {
+                        "enum": [
+                          "web",
+                          "image",
+                          "video",
+                          "news",
+                          "discover",
+                          "googleNews"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "dimensions"
+                    ],
+                    "type": "object"
+                  },
+                  "state": {
+                    "additionalProperties": {},
+                    "properties": {
+                      "dimensions": {
+                        "items": {
+                          "enum": [
+                            "page",
+                            "query",
+                            "queryCanonical",
+                            "country",
+                            "device",
+                            "date",
+                            "searchAppearance",
+                            "hour"
+                          ],
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "searchType": {
+                        "enum": [
+                          "web",
+                          "image",
+                          "video",
+                          "news",
+                          "discover",
+                          "googleNews"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "dimensions"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "state"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "daily": {
+                          "items": {
+                            "additionalProperties": {},
+                            "properties": {
+                              "clicks": {
+                                "type": "number"
+                              },
+                              "ctr": {
+                                "type": "number"
+                              },
+                              "date": {
+                                "type": "string"
+                              },
+                              "impressions": {
+                                "type": "number"
+                              },
+                              "position": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "date",
+                              "clicks",
+                              "impressions",
+                              "ctr",
+                              "position"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "meta": {
+                          "additionalProperties": {},
+                          "properties": {
+                            "backfill": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "daysRemaining": {
+                                  "type": "number"
+                                },
+                                "percent": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "percent"
+                              ],
+                              "type": "object"
+                            },
+                            "dataDelay": {
+                              "type": "string"
+                            },
+                            "dataEndDate": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "enrichment": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "isDue": {
+                                  "type": "boolean"
+                                },
+                                "lastEnriched": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "lastEnriched",
+                                "isDue"
+                              ],
+                              "type": "object"
+                            },
+                            "newestDateSynced": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "oldestDateSynced": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "siteUrl": {
+                              "type": "string"
+                            },
+                            "syncStatus": {
+                              "type": "string"
+                            },
+                            "warnings": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "siteUrl",
+                            "syncStatus",
+                            "newestDateSynced",
+                            "oldestDateSynced"
+                          ],
+                          "type": "object"
+                        },
+                        "previousDaily": {
+                          "items": {
+                            "additionalProperties": {},
+                            "properties": {
+                              "clicks": {
+                                "type": "number"
+                              },
+                              "ctr": {
+                                "type": "number"
+                              },
+                              "date": {
+                                "type": "string"
+                              },
+                              "impressions": {
+                                "type": "number"
+                              },
+                              "position": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "date",
+                              "clicks",
+                              "impressions",
+                              "ctr",
+                              "position"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "previousTotals": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "clicks": {
+                              "type": "number"
+                            },
+                            "ctr": {
+                              "type": "number"
+                            },
+                            "impressions": {
+                              "type": "number"
+                            },
+                            "position": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "clicks",
+                            "impressions",
+                            "ctr",
+                            "position"
+                          ],
+                          "type": "object"
+                        },
+                        "totals": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "clicks": {
+                              "type": "number"
+                            },
+                            "ctr": {
+                              "type": "number"
+                            },
+                            "impressions": {
+                              "type": "number"
+                            },
+                            "position": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "clicks",
+                            "impressions",
+                            "ctr",
+                            "position"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "daily",
+                        "totals",
+                        "meta"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "queryMs": {
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "sourceKind": {
+                          "enum": [
+                            "row",
+                            "sql"
+                          ],
+                          "type": "string"
+                        },
+                        "sourceName": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "analytics",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version",
+                        "sourceName",
+                        "sourceKind",
+                        "queryMs"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.reports.detail.query.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.reports.detail.query.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/analytics.reports.detail.query.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Query analytics report detail",
+        "tags": [
+          "Analytics reports"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "body": {
+              "state": {
+                "dimensions": [
+                  "date"
+                ],
+                "searchType": "web"
+              }
+            },
+            "params": {
+              "siteId": "s_01"
+            }
+          },
+          "response": {
+            "data": {
+              "daily": [],
+              "meta": {
+                "dataDelay": "0 days",
+                "newestDateSynced": null,
+                "oldestDateSynced": null,
+                "siteUrl": "sc-domain:example.com",
+                "syncStatus": "synced"
+              },
+              "totals": {
+                "clicks": 0,
+                "ctr": 0,
+                "impressions": 0,
+                "position": 0
+              }
+            },
+            "meta": {
+              "queryMs": 12,
+              "requestId": "req_01",
+              "sourceKind": "sql",
+              "sourceName": "hosted-report",
+              "surface": "analytics",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "1.0.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.analytics"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "analytics:execute"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
     "/api/analytics/v1/sites/{siteId}/rows": {
       "post": {
         "description": "Executes an idempotent primary-consistent analytics row query.",

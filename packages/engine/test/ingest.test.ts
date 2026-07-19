@@ -28,17 +28,13 @@ describe('transformGscRow', () => {
   })
 
   it('maps keywords without writing a canonical fact column', () => {
-    const out = transformGscRow(
-      'queries',
-      { keys: ['Foo Bar', '2026-04-10'], clicks: 1, impressions: 2, position: 10 },
-      { normalizeQuery: q => q.toLowerCase() },
-    )
+    const out = transformGscRow('queries', {
+      keys: ['Foo Bar', '2026-04-10'],
+      clicks: 1,
+      impressions: 2,
+      position: 10,
+    })
     expect(out?.row).toEqual({ query: 'Foo Bar', date: '2026-04-10', clicks: 1, impressions: 2, sum_position: 18 })
-    expect(out?.row).not.toHaveProperty('query_canonical')
-  })
-
-  it('keywords without normalizeQuery omit query_canonical', () => {
-    const out = transformGscRow('queries', { keys: ['foo', '2026-04-10'], clicks: 0, impressions: 0, position: 0 })
     expect(out?.row).not.toHaveProperty('query_canonical')
   })
 
@@ -64,7 +60,6 @@ describe('transformGscRow', () => {
       { keys: ['https://example.com/foo', 'Blue Widgets', '2026-04-10'], clicks: 2, impressions: 20, position: 5 },
       {
         searchAppearance: 'AMP_TOP_STORIES',
-        normalizeQuery: q => q.toLowerCase(),
       },
     )
     expect(out?.row).toEqual({
@@ -145,7 +140,6 @@ describe('assembleDatesRow', () => {
     const out = transformGscRow(
       'page_queries',
       { keys: ['https://example.com/foo', 'bar', '2026-04-10'], clicks: 2, impressions: 20, position: 4 },
-      { normalizeQuery: q => q },
     )
     expect(out).toEqual({
       date: '2026-04-10',

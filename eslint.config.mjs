@@ -2,13 +2,12 @@ import antfu from '@antfu/eslint-config'
 
 // Layer lint — encodes the package DAG declared in ARCHITECTURE.md.
 // Edges allowed between sibling packages:
-//   gscdump             → contracts (dependency-free leaf only; edge-compatible surface must stay node-free)
-//   engine              → gscdump
-//   analysis            → gscdump, engine, engine-wasm, engine-sqlite, engine-duckdb-node
-//   engine-duckdb-node  → gscdump, engine, analysis (analyzer/query/source subpaths)
-//   cloud               → gscdump, analysis (type-only — `AnalysisParams`, `AnalysisResult`)
-//   mcp                 → gscdump, engine, engine-gsc-api, analysis
-//   cli                 → gscdump, engine, engine-duckdb-node, analysis, mcp
+//   gscdump             → contracts (edge-compatible surface must stay node-free)
+//   lakehouse           → no runtime siblings
+//   engine              → gscdump, contracts, lakehouse
+//   analysis            → gscdump, engine, engine-gsc-api
+//   cloudflare          → gscdump, contracts, engine, engine-sqlite
+//   cli                 → gscdump, engine, engine-gsc-api, analysis
 function forbidSiblings(...siblings) {
   return {
     patterns: siblings.map(name => ({
@@ -23,14 +22,12 @@ function forbidSiblings(...siblings) {
 const coreForbiddenSiblings = [
   'analysis',
   'cli',
-  'cloud',
   'cloudflare',
   'engine',
   'engine-duckdb-wasm',
   'engine-gsc-api',
   'engine-sqlite',
-  'mcp',
-  'nuxt',
+  'lakehouse',
   'sdk',
 ]
 
@@ -139,7 +136,7 @@ export default antfu({
     'no-restricted-imports': ['error', {
       paths: preferGranularCoreSubpaths.paths,
       patterns: [
-        ...forbidSiblings('cli', 'mcp', 'cloud', 'analysis', 'engine-wasm', 'engine-sqlite', 'engine-duckdb-node').patterns,
+        ...forbidSiblings('cli', 'cloudflare', 'analysis', 'engine-duckdb-wasm', 'engine-gsc-api', 'engine-sqlite', 'sdk').patterns,
         ...preferGranularCoreSubpaths.patterns,
       ],
     }],
@@ -150,29 +147,7 @@ export default antfu({
     'no-restricted-imports': ['error', {
       paths: preferGranularCoreSubpaths.paths,
       patterns: [
-        ...forbidSiblings('cli', 'mcp', 'cloud').patterns,
-        ...preferGranularCoreSubpaths.patterns,
-      ],
-    }],
-  },
-}, {
-  files: ['packages/engine-duckdb-node/src/**/*.ts'],
-  rules: {
-    'no-restricted-imports': ['error', {
-      paths: preferGranularCoreSubpaths.paths,
-      patterns: [
-        ...forbidSiblings('cli', 'mcp', 'cloud').patterns,
-        ...preferGranularCoreSubpaths.patterns,
-      ],
-    }],
-  },
-}, {
-  files: ['packages/mcp/src/**/*.ts'],
-  rules: {
-    'no-restricted-imports': ['error', {
-      paths: preferGranularCoreSubpaths.paths,
-      patterns: [
-        ...forbidSiblings('cli', 'cloud', 'engine-wasm', 'engine-sqlite', 'engine-duckdb-node').patterns,
+        ...forbidSiblings('cli', 'cloudflare', 'sdk').patterns,
         ...preferGranularCoreSubpaths.patterns,
       ],
     }],

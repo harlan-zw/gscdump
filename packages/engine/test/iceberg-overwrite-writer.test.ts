@@ -4,8 +4,7 @@
  * (`poc/iceberg/docker-compose.iceberg.yml` — Apache Iceberg REST catalog +
  * MinIO).
  *
- * The writer is the production `SliceOverwriteWriter` that `PipelineSink`
- * delegates `overwriteSlice` to (Pipelines is append-only). It runs PyIceberg
+ * The writer is the Node-only `SliceOverwriteWriter` used by recovery jobs. It runs PyIceberg
  * `table.overwrite(df, overwrite_filter=…)` — the spike-proven partition
  * overwrite — through a backend transport. This suite exercises the
  * `subprocessBackend` (the local-test / Node-job-box transport); the prod
@@ -16,7 +15,6 @@
  * - reads return ONLY the revised rows — no duplicates, no stale rows;
  * - overwrite scopes to the exact `(site, searchType, date)` partition;
  * - a daily re-sync of the trailing window converges restated GSC metrics;
- * - `PipelineSink.overwriteSlice` routes through the writer correctly.
  *
  * Requires the docker stack up + a Python env with `pyiceberg`/`pyarrow`/
  * `duckdb`. SKIPS (does not fail) when either is unreachable. Point
@@ -31,7 +29,6 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createIcebergOverwriteWriter, subprocessBackend } from '../src/iceberg/overwrite-writer'
-import { createPipelineSink } from '../src/sinks/pipeline-sink'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const READ_SCRIPT = join(HERE, '..', 'scripts', 'iceberg-read.py')
@@ -195,29 +192,6 @@ describe('icebergOverwriteWriter — trailing-window partition overwrite (P1.4)'
 
     const rows = await runReader(`SELECT url FROM gsc.${NAMESPACE}.pages WHERE site_id = 'site-empty'`)
     expect(rows).toEqual([])
-  }, 60_000)
-
-  it('pipelineSink.overwriteSlice routes through the writer (append-only delegation)', async () => {
-    if (!available)
-      return
-    // a fake append-only Pipeline Stream — emit goes here, overwrite must NOT
-    const streamed: unknown[] = []
-    const sink = createPipelineSink({
-      stream: { send: async (records: readonly unknown[]) => { streamed.push(...records) } },
-      overwriteWriter: writer,
-    })
-    expect(sink.capabilities).toEqual({ canOverwrite: false, appendOnly: true })
-
-    const slice = { ctx: ctx('site-pipe'), table: 'pages' as const, searchType: 'web' as const, date: '2026-09-01' }
-    // revision path: PipelineSink delegates to the Iceberg overwrite writer
-    const res = await sink.overwriteSlice(slice, [pageRow('/', '2026-09-01', 77)])
-    expect(res.rowCount).toBe(1)
-    expect(streamed).toHaveLength(0) // overwrite never touches the stream
-
-    const rows = await runReader(`SELECT url, clicks FROM gsc.${NAMESPACE}.pages WHERE site_id = 'site-pipe'`)
-    expect(rows).toEqual([{ url: '/', clicks: 77 }])
-
-    await sink.close()
   }, 60_000)
 
   it('surfaces a backend failure as a thrown error', async () => {

@@ -200,7 +200,6 @@ gscdump auth login --no-browser
 - [`gscdump`](../gscdump) — Core library: GSC API client + query builder + analytics pipeline.
 - [`@gscdump/engine`](../engine) — Storage engine the CLI syncs into.
 - [`@gscdump/analysis`](../analysis) — SEO analyzers (row-based + DuckDB-native).
-- [`@gscdump/nuxt`](../nuxt) — Nuxt layer for embedding analytics dashboards.
 
 ## License
 

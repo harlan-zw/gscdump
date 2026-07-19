@@ -80,8 +80,6 @@ export interface IngestAccumulator {
   finalize: (opts: FinalizeOptions) => Promise<FinalizeResult>
 }
 
-const NOOP_RESULT: FinalizeResult = { flushed: 0, recovered: 0, failed: 0, rowsWritten: 0 }
-
 export interface CreateIngestAccumulatorOptions extends RowAccumulatorOptions {
   engine: IngestAccumulatorEngine
   ctx: IngestAccumulatorCtx
@@ -95,17 +93,6 @@ function scopeOf(ctx: IngestAccumulatorCtx, table: TableName, date: string): Ten
     table,
     date,
     ...(ctx.searchType !== undefined ? { searchType: ctx.searchType } : {}),
-  }
-}
-
-export function createNoopIngestAccumulator(): IngestAccumulator {
-  return {
-    push() {
-      return false
-    },
-    async finalize() {
-      return NOOP_RESULT
-    },
   }
 }
 

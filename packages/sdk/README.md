@@ -3,10 +3,9 @@
 Consumer SDK for hosted gscdump.com integrations.
 
 > The descriptor-driven HTTP client and ticketed realtime state machine are
-> exported from `@gscdump/sdk/v1`. Existing root HTTP/realtime clients remain
-> legacy compatibility surfaces during the release and cutover overlap; the
-> legacy socket client still sends a long-lived key in its first frame and must
-> not be used for a v1 browser integration. See the
+> exported from `@gscdump/sdk/v1`. The root HTTP client remains a temporary
+> compatibility surface during the release and cutover overlap; the unsafe
+> long-lived-key realtime client was removed before v1. See the
 > [v1 contract](../../docs/hosted-api-v1.md).
 
 This package is for partner applications that consume gscdump.com APIs,
@@ -14,9 +13,9 @@ webhooks, and realtime events. Callers inject the HTTP transport and auth they
 want to use; route construction stays inside the hosted adapter.
 
 ```ts
-import { createGscdumpClient } from '@gscdump/sdk'
+import { createPartnerClient } from '@gscdump/sdk'
 
-const gscdump = createGscdumpClient({
+const gscdump = createPartnerClient({
   apiBase: 'https://example.com/api',
   apiKey: process.env.GSCDUMP_API_KEY,
   fetch: $fetch,

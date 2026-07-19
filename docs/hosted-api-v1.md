@@ -2,17 +2,20 @@
 
 ## Status and intent
 
-This is the normative contract for the first public gscdump.com API. The lean
-four-operation slice is implemented in the workspace across contracts,
-generated artifacts, SDK, hosted adapters, realtime Worker/outbox, generic
-`nuxt-use-query` effects, and the app-local NuxtSEO reference integration.
-The contract and SDK packages are released as 0.38.0. The host HTTP and
-realtime slice is deployed, and direct production canaries cover all four HTTP
-operations, single-use tickets, outbox-to-socket delivery, effect-aware cursor
-confirmation, duplicate-event suppression, documented idle-hibernation resume,
-and the full 15-minute alarm expiry. The isolated NuxtSEO consumer slice is
-verified locally, but its production cut is deferred while unrelated consumer
-work completes. This status does not claim a legacy cut or public launch. The
+This is the normative contract for the first public gscdump.com API. The
+initial four-operation slice is released and deployed. The coordinated
+NuxtSEO migration expands the current workspace registry to 18 operations
+across contracts, generated artifacts, SDK, host routes, and consumer
+adapters. The additive 14-operation expansion is locally verified but still
+requires the normal package publication, host deployment, and production
+evidence gates before its legacy compatibility routes may be removed.
+
+The initial host HTTP and realtime slice has direct production canaries for
+all four original HTTP operations, single-use tickets, outbox-to-socket
+delivery, effect-aware cursor confirmation, duplicate-event suppression,
+documented idle-hibernation resume, and the full 15-minute alarm expiry. This
+status does not claim that the expansion is deployed, that legacy routes have
+been cut, or that the API has launched publicly. The
 checked-in constants are machine-readable in
 [`hosted-api-v1-constants.json`](./hosted-api-v1-constants.json), and the
 legacy producer evidence is in
@@ -43,10 +46,24 @@ unrelated app routes such as `/api/pro/...` is not the public integration
 seam. This keeps auth, telemetry, caching, and future cutovers attributable to
 the actual upstream contract.
 
-The first public implementation freezes exactly these HTTP operations:
+The current v1 workspace registry contains these HTTP operations:
 
 - `GET /api/partner/v1/users/{userId}/lifecycle`
+- `GET /api/partner/v1/users/{userId}/available-sites`
+- `POST /api/partner/v1/users/{userId}/sites`
+- `POST /api/partner/v1/users`
+- `PATCH /api/partner/v1/users/{userId}/tokens`
+- `GET /api/partner/v1/sites/{siteId}/indexing`
+- `GET /api/partner/v1/sites/{siteId}/indexing/urls`
+- `GET /api/partner/v1/sites/{siteId}/indexing/diagnostics`
+- `GET /api/partner/v1/sites/{siteId}/sitemaps`
+- `GET /api/partner/v1/sites/{siteId}/sitemaps/changes`
+- `GET /api/partner/v1/sites/{siteId}/analysis`
+- `GET /api/partner/v1/sites/{siteId}/analysis/bundle`
+- `DELETE /api/partner/v1/sites/{siteId}`
 - `POST /api/analytics/v1/sites/{siteId}/rows`
+- `POST /api/analytics/v1/sites/{siteId}/reports`
+- `POST /api/analytics/v1/sites/{siteId}/reports/detail`
 - `POST /api/realtime/v1/tickets`
 - `GET /api/realtime/v1/stream/head`
 
@@ -73,13 +90,13 @@ one method/path descriptor and rely on an untyped body switch. Producer route,
 contract descriptor, SDK method, documentation, and contract test are one
 change.
 
-The four accepted v1 descriptors have complete schemas and live hosted routes.
-The legacy inventory still records ten schema-less descriptors, two
-descriptors with no producer handler, and one collision. Those findings block
-promotion of the affected legacy operations; they do not silently expand or
-invalidate this four-operation slice. Host-only, session-only, CLI,
-public-site, and admin operations should remain out of protocol rather than
-receiving accidental contracts.
+All 18 accepted v1 descriptors have complete schemas and matching workspace
+host routes. The original four are released and deployed; the additive 14 are
+not considered production-ready until their publication, deployment, and
+canary evidence is recorded. Legacy inventory findings continue to block
+promotion of affected operations; they do not silently expand this registry.
+Host-only, session-only, CLI, public-site, and admin operations should remain
+out of protocol rather than receiving accidental contracts.
 
 ## Authentication and static scopes
 
@@ -172,7 +189,21 @@ principal and operation:
 | Operation | Requests per 60 seconds |
 | --- | ---: |
 | `partner.users.lifecycle.get` | 120 |
+| `partner.users.sites.available.list` | 30 |
+| `partner.users.sites.create` | 20 |
+| `partner.users.create` | 20 |
+| `partner.users.tokens.update` | 20 |
+| `partner.sites.indexing.get` | 60 |
+| `partner.sites.indexing.urls.list` | 60 |
+| `partner.sites.indexing.diagnostics.get` | 60 |
+| `partner.sites.sitemaps.get` | 60 |
+| `partner.sites.sitemaps.changes.get` | 60 |
+| `partner.sites.analysis.get` | 30 |
+| `partner.sites.analysis.bundle.get` | 20 |
+| `partner.sites.delete` | 20 |
 | `analytics.rows.query` | 60 |
+| `analytics.reports.query` | 60 |
+| `analytics.reports.detail.query` | 60 |
 | `realtime.stream.head.get` | 120 |
 | `realtime.tickets.create` | 30 |
 
@@ -189,11 +220,13 @@ HTTPAPI Internet-Draft structured-field form. A rejected attempt returns
 `GSCdump-API-Version: 1.0`, `Cache-Control: private, no-store`, and
 `Vary: Authorization`.
 
-The four initial operations are not deprecated and emit no `Deprecation` or
-`Sunset`. A future deprecation must update executable lifecycle metadata,
-generated artifacts, and its migration guide first. Runtime signaling then uses
-the RFC 9745 `Deprecation: @<unix-seconds>` date form, a `rel="deprecation"`
-documentation link, and an RFC 8594 `Sunset` only when removal is committed.
+The 18 v1 operations are not deprecated and emit no `Deprecation` or `Sunset`.
+Their predecessor compatibility routes have independent, route-specific
+deprecation dates and usage telemetry. A future v1 deprecation must update
+executable lifecycle metadata, generated artifacts, and its migration guide
+first. Runtime signaling then uses the RFC 9745
+`Deprecation: @<unix-seconds>` date form, a `rel="deprecation"` documentation
+link, and an RFC 8594 `Sunset` only when removal is committed.
 
 ## Realtime identity and ticket exchange
 
@@ -554,11 +587,15 @@ WebSocket filters, team/scoped credentials, arbitrary stream selection, or a
 generic public operation passthrough. Any of these requires a new evidence-led
 design; none should be pre-scaffolded into the first implementation.
 
-The released package and deployed host agree on the four-operation registry.
-Contract, Workerd, and production canaries cover the host and transport gates;
-the production canaries include credentialed primary reads, single-use
-tickets, queue-to-socket delivery, effect-aware ACK cursor confirmation, and
-duplicate outbox suppression.
+The released package and deployed host agree on the original four-operation
+registry. The current workspace package, host, SDK, and NuxtSEO adapters agree
+on the expanded 18-operation registry. The additive 14 operations must pass
+publication, deployment, and production canary gates before their predecessor
+compatibility routes are eligible for removal. Contract, Workerd, and existing
+production canaries cover the original host and transport gates; those
+canaries include credentialed primary reads, single-use tickets,
+queue-to-socket delivery, effect-aware ACK cursor confirmation, and duplicate
+outbox suppression.
 
 Before public documentation is opened, the deferred NuxtSEO production cut
 must still prove an authenticated browser refresh through its proxy and the

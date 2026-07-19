@@ -12,6 +12,7 @@ the adjacent package and host checkouts with:
 ```bash
 node scripts/validate-hosted-route-inventory.mjs --check
 node scripts/validate-hosted-route-inventory.mjs --print
+node scripts/validate-hosted-route-inventory.mjs --write
 
 # If gscdump.com is elsewhere:
 node scripts/validate-hosted-route-inventory.mjs --check \
@@ -20,39 +21,37 @@ node scripts/validate-hosted-route-inventory.mjs --check \
 
 `--check` is the default. It rebuilds the inventory in memory and requires a
 byte-for-byte match with the checked-in JSON. `--print` emits the deterministic
-replacement for deliberate review; it does not edit files.
+replacement for deliberate review; `--write` updates the checked-in snapshot.
 
 ## Snapshot summary
 
 | Evidence | Count |
 | --- | ---: |
-| Live `server/api` route files | 211 |
-| HTTP method/path operations | 212 |
+| Live `server/api` route files | 220 |
+| HTTP method/path operations | 220 |
 | Legacy WebSocket operations | 2 |
-| Total hosted operations | 214 |
+| Total hosted operations | 222 |
 | Legacy package endpoint descriptors | 64 |
-| Generated public-v1 operation descriptors | 4 |
-| Distinct hosted operations owned by a descriptor | 65 |
-| Hosted operations without a descriptor | 149 |
+| Generated public-v1 operation descriptors | 18 |
+| Distinct hosted operations owned by a descriptor | 79 |
+| Hosted operations without a descriptor | 143 |
 | Schema-less legacy descriptors | 10 |
 | Legacy descriptors with no producer handler | 2 |
 | Legacy descriptor method/path collisions | 1 |
 
-The 212 HTTP operations exceed the 211 live files because
-`server/api/r2-data/[...path].ts` deliberately handles both `GET` and `HEAD`.
 The inventory also includes `server/routes/ws/user.ts` and
 `server/routes/ws/partner.ts` as the two legacy WebSocket operations.
 
-The 149 unowned operations are not all public-contract gaps. The v1 review
+The 143 unowned operations are not all public-contract gaps. The v1 review
 classification is:
 
 | Review outcome | Operations | Meaning |
 | --- | ---: | --- |
-| Accepted v1 slice | 4 | Executable descriptor, generated contract, SDK, and hosted route exist |
+| Accepted v1 slice | 18 | Executable descriptor, generated contract, SDK, and hosted route exist |
 | Analytics candidate | 25 | Review for `/api/analytics/v1` |
-| Partner candidate | 55 | Review for `/api/partner/v1` |
+| Partner candidate | 54 | Review for `/api/partner/v1` |
 | Decision required | 46 | Shared user/site/team routes that need an explicit boundary decision |
-| Outside public protocol | 82 | Admin, CLI, public-host, session, webhook, and other host concerns |
+| Outside public protocol | 77 | Admin, CLI, public-host, session, webhook, and other host concerns |
 | Replace realtime | 2 | Replace both legacy sockets with `/ws/v1` |
 
 An operation marked as a candidate is still not accepted into v1 until it has
@@ -61,16 +60,30 @@ SDK coverage, and producer contract tests. An operation outside protocol
 should remain host-owned rather than receive a package descriptor merely to
 make the count reach zero.
 
-The accepted slice is intentionally only:
+The accepted slice is intentionally limited to:
 
 - `GET /api/partner/v1/users/{userId}/lifecycle`;
+- `GET /api/partner/v1/users/{userId}/available-sites`;
+- `POST /api/partner/v1/users/{userId}/sites`;
+- `POST /api/partner/v1/users`;
+- `PATCH /api/partner/v1/users/{userId}/tokens`;
+- `GET /api/partner/v1/sites/{siteId}/indexing`;
+- `GET /api/partner/v1/sites/{siteId}/indexing/urls`;
+- `GET /api/partner/v1/sites/{siteId}/indexing/diagnostics`;
+- `GET /api/partner/v1/sites/{siteId}/sitemaps`;
+- `GET /api/partner/v1/sites/{siteId}/sitemaps/changes`;
+- `GET /api/partner/v1/sites/{siteId}/analysis`;
+- `GET /api/partner/v1/sites/{siteId}/analysis/bundle`;
+- `DELETE /api/partner/v1/sites/{siteId}`;
 - `POST /api/analytics/v1/sites/{siteId}/rows`;
+- `POST /api/analytics/v1/sites/{siteId}/reports`;
+- `POST /api/analytics/v1/sites/{siteId}/reports/detail`;
 - `GET /api/realtime/v1/stream/head`;
 - `POST /api/realtime/v1/tickets`.
 
 The 64 legacy descriptors and their findings remain migration evidence. Their
 ten `noSchema` entries, two missing handlers, and one collision are not defects
-in these four v1 descriptors; they prevent those legacy operations from being
+in these v1 descriptors; they prevent those legacy operations from being
 promoted until each is resolved deliberately.
 
 ## Concrete contract findings

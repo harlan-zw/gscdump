@@ -83,7 +83,6 @@
   "dependencies": {
     "@gscdump/engine": "workspace:*",
     "@gscdump/engine-gsc-api": "workspace:*",
-    "drizzle-orm": "catalog:",
     "gscdump": "workspace:*",
     "pluralize": "catalog:"
   },

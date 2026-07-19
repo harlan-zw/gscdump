@@ -2,8 +2,8 @@
  * `IcebergAppendSink` — prod `Sink`. Appends GSC fact rows directly to the
  * R2 Data Catalog Iceberg tables via `icebird` `icebergAppend()`.
  *
- * Replaced `PipelineSink` after the 2026-05-22 icebird ingest-writer spike
- * passed GO (design v6): the sync Worker commits Iceberg metadata itself —
+ * The 2026-05-22 icebird ingest-writer spike replaced the superseded
+ * Cloudflare Pipelines design: the sync Worker commits Iceberg metadata itself —
  * no Cloudflare Pipelines, no Container, no PyIceberg. icebird is Workers-
  * first (Web Crypto SigV4, `fetch` I/O, no node builtins); the one WASM
  * blocker (`hyparquet-compressors`' eager snappy module) is removed by the

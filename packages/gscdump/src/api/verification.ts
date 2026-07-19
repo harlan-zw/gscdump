@@ -8,6 +8,27 @@ import type {
 
 const SC_DOMAIN_PREFIX = 'sc-domain:'
 
+function bareDomain(siteUrl: string): string {
+  if (siteUrl.startsWith(SC_DOMAIN_PREFIX))
+    return siteUrl.slice(SC_DOMAIN_PREFIX.length)
+  try {
+    return new URL(siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`).host
+  }
+  catch {
+    return siteUrl
+  }
+}
+
+function urlPrefix(siteUrl: string): string {
+  try {
+    const url = new URL(siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`)
+    return `${url.protocol}//${url.host}/`
+  }
+  catch {
+    return siteUrl
+  }
+}
+
 /**
  * Resolve a Search Console site URL (`https://example.com/` or
  * `sc-domain:example.com`) to the Site Verification API's site shape.
@@ -16,6 +37,21 @@ export function siteUrlToVerificationSite(siteUrl: string): VerificationSite {
   if (siteUrl.startsWith(SC_DOMAIN_PREFIX))
     return { type: 'INET_DOMAIN', identifier: siteUrl.slice(SC_DOMAIN_PREFIX.length) }
   return { type: 'SITE', identifier: siteUrl }
+}
+
+/** Resolve a Search Console property and method to Google's verification target. */
+export function resolveVerificationTarget(
+  siteUrl: string,
+  method?: VerificationMethod,
+): { site: VerificationSite, method: VerificationMethod } {
+  const isDomainProperty = siteUrl.startsWith(SC_DOMAIN_PREFIX)
+  const chosen = method ?? (isDomainProperty ? 'DNS_TXT' : 'META')
+  const isDns = chosen === 'DNS_TXT' || chosen === 'DNS_CNAME'
+  if (isDomainProperty && !isDns)
+    return { site: { type: 'INET_DOMAIN', identifier: bareDomain(siteUrl) }, method: 'DNS_TXT' }
+  if (isDns)
+    return { site: { type: 'INET_DOMAIN', identifier: bareDomain(siteUrl) }, method: chosen }
+  return { site: { type: 'SITE', identifier: urlPrefix(siteUrl) }, method: chosen }
 }
 
 /**
@@ -36,8 +72,8 @@ export async function getVerificationToken(
   siteUrl: string,
   method: VerificationMethod,
 ): Promise<VerificationToken & { site: VerificationSite }> {
-  const site = siteUrlToVerificationSite(siteUrl)
-  const res = await client.verification.getToken({ site, verificationMethod: method })
+  const { site, method: verificationMethod } = resolveVerificationTarget(siteUrl, method)
+  const res = await client.verification.getToken({ site, verificationMethod })
   return { ...res, site }
 }
 
@@ -50,8 +86,8 @@ export async function verifySite(
   siteUrl: string,
   method: VerificationMethod,
 ): Promise<VerificationWebResource> {
-  const site = siteUrlToVerificationSite(siteUrl)
-  return client.verification.insert({ site, verificationMethod: method })
+  const { site, method: verificationMethod } = resolveVerificationTarget(siteUrl, method)
+  return client.verification.insert({ site, verificationMethod })
 }
 
 /**

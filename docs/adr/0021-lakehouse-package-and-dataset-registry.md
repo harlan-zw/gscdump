@@ -93,7 +93,11 @@ C1 mechanical move (imports rewritten atomically across engine, gscdump.com, nux
 
 **Migration (lens: migration-cost):**
 13. **The "atomic workspace-linked" premise is FALSE for `@gscdump/engine`** — both apps consume published tarballs via catalog pins (only `@gscdump/sdk` is link:-ed). C1 is three publish/bump/deploy cycles. Resolution: **major-bump `@gscdump/engine`** when its `iceberg` subpath is gutted, so caret ranges cannot float onto the breaking version; downstream repos opt in explicitly with their import rewrites. (The "no back-compat re-exports" rule survives — the major bump replaces the need for a compat window.)
-14. `local-sink.ts` deletion must also cover the `sink-node.ts` barrel consumers: `gscdump.com/test/iceberg/{archetypes,backfill-rehearsal}.integration.test.ts` import `createLocalIcebergSink` at module top (collection-time failure even though bodies self-skip). Grep `sink-node`, not just `/iceberg`.
+14. `local-sink.ts` deletion also covered its `sink-node.ts` barrel consumers:
+    `gscdump.com/test/iceberg/{archetypes,backfill-rehearsal}.integration.test.ts`
+    were deleted because they imported `createLocalIcebergSink` at module top
+    (collection-time failure even though their bodies self-skipped). Future
+    audits must grep `sink-node`, not just `/iceberg`.
 15. **Port order inverted: nuxtseo's snapshot tables FIRST, `gsc.*` second.** The first production consumer of a never-shipped abstraction must be the lowest-blast-radius one (crawl/lighthouse/dataforseo: simple defs, zero prod rows at port time), not the revenue-bearing `gsc.*` exercising 100% of the surface (dims + ledger + restatement adjacency) on day one. R2-FIXES C2/C5 are resequenced accordingly.
 16. **PyIceberg runtime placement stays GSC-private.** The subprocess runtime has one production consumer (`engine/iceberg/overwrite-writer.ts`) and imports `node:process`/`node:child_process`. It therefore lives behind the existing `@gscdump/engine/sink-node` runtime seam instead of the portable `@gscdump/lakehouse` root. This amends the original “clean moves” inventory above.
 

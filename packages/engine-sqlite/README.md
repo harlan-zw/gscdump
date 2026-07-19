@@ -82,7 +82,7 @@ Iceberg/R2 SQL path.
 
 - [`@gscdump/engine`](../engine) — Storage contracts + dialect-neutral resolver.
 - [`@gscdump/analysis`](../analysis) — Analyzer registry + dispatcher.
-- [`@gscdump/engine-duckdb-node`](../engine-duckdb-node) — Node DuckDB counterpart.
+- [`@gscdump/engine/node`](../engine) — Node DuckDB counterpart.
 - [`@gscdump/engine-duckdb-wasm`](../engine-duckdb-wasm) — Browser DuckDB-WASM counterpart.
 
 ## License

@@ -19,7 +19,7 @@ export {
 
 export { ROW_ANALYZERS } from './analyzer/row-analyzers'
 // Pure analysis functions
-export type { BrandSegmentationOptions, BrandSegmentationResult, BrandSummary } from './analyzers/brand'
+export type { BrandSegmentationOptions, BrandSegmentationResult, BrandSegmentationRow, BrandSummary } from './analyzers/brand'
 export { analyzeBrandSegmentation } from './analyzers/brand'
 
 export type {
@@ -50,11 +50,14 @@ export { analyzeDecay } from './analyzers/decay'
 export type { MoverData, MoversInput, MoversOptions, MoversResult, MoversSortMetric } from './analyzers/movers'
 
 export { analyzeMovers } from './analyzers/movers'
-export type { OpportunityResult } from './analyzers/opportunity'
+export type { OpportunityFactors, OpportunityOptions, OpportunityResult, OpportunitySortMetric, OpportunityWeights } from './analyzers/opportunity'
+export { analyzeOpportunity } from './analyzers/opportunity'
 export type { MonthlyData, SeasonalityMetric, SeasonalityOptions, SeasonalityResult } from './analyzers/seasonality'
 export { analyzeSeasonality } from './analyzers/seasonality'
-export type { StrikingDistanceInputRow, StrikingDistanceResult } from './analyzers/striking-distance'
-export type { ZeroClickResult } from './analyzers/zero-click'
+export type { StrikingDistanceInputRow, StrikingDistanceOptions, StrikingDistanceResult } from './analyzers/striking-distance'
+export { analyzeStrikingDistance } from './analyzers/striking-distance'
+export type { ZeroClickOptions, ZeroClickResult } from './analyzers/zero-click'
+export { analyzeZeroClick } from './analyzers/zero-click'
 export { analyzeInBrowser, rewriteForTableSource } from './browser'
 
 export type { AnalyzerRunner, BrowserAnalyzeOptions } from './browser'
@@ -176,8 +179,6 @@ export {
   padTimeseries,
   periodOf,
   resolveWindow,
-  windowToComparisonPeriod,
-  windowToPeriod,
 } from '@gscdump/engine/period'
 
 export type {
@@ -199,13 +200,10 @@ export type {
   FileSet,
   QueryRow,
   SourceCapabilities,
-  TypedQuery,
 } from '@gscdump/engine/source'
 export {
   createEngineQuerySource,
   ENGINE_QUERY_CAPABILITIES,
-  queryComparisonRows,
   queryRows,
   runAnalyzerWithEngine,
-  typedQuery,
 } from '@gscdump/engine/source'

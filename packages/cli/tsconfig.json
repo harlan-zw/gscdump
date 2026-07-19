@@ -4,6 +4,5 @@
     "rootDir": "./src",
     "outDir": "./dist"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/commands/compare.ts", "src/commands/dump.ts", "src/commands/indexing.ts", "src/commands/analyze.ts"]
+  "include": ["src/**/*.ts"]
 }

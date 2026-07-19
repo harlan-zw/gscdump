@@ -89,7 +89,9 @@ const registry = createAnalyzerRegistry({ rows: ROW_ANALYZERS, sql: SQL_ANALYZER
 const result = await runAnalyzerFromSource(source, { type: 'striking-distance', minImpressions: 100 }, registry)
 ```
 
-`attachParquetIndex` and `attachSnapshotIndex` from `@gscdump/engine-duckdb-node` wire parquet files (per-day, per-month, or pre-baked `.duckdb` snapshots) into a DuckDB session. Pair with `analyzeInBrowser` from `@gscdump/analysis` for the attached-table dispatch path.
+`attachParquetIndex` and `attachSnapshotIndex` from `@gscdump/engine/node`
+wire parquet files (per-day, per-month, or pre-baked `.duckdb` snapshots) into
+a Node DuckDB session.
 
 ## Browser (DuckDB-WASM)
 
@@ -98,7 +100,6 @@ import { analyzeInBrowser } from '@gscdump/analysis'
 // Compose your own narrow registry instead of pulling the kitchen-sink default
 // (which statically imports every SQL analyzer). For demo only:
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
-import { createEngine } from '@gscdump/engine-duckdb-wasm'
 
 const result = await analyzeInBrowser(
   runner,
@@ -110,7 +111,10 @@ const result = await analyzeInBrowser(
 
 `analyzeInBrowser` wraps any runner with `query(sql, params, signal?)` in an `AnalysisQuerySource` with the `attachedTables` capability and dispatches via `runAnalyzerFromSource`.
 
-For typed drizzle-style access, `@gscdump/engine-duckdb-wasm` exports `createEngine` (a `SqlQuerySource`) plus `bootDuckDBWasm`, `attachParquetUrlTables`, `createBrowserAnalysisRuntime`, and `resolveWindow` (re-export from `@gscdump/engine/period`).
+`@gscdump/engine-duckdb-wasm` exports `bootDuckDBWasm`,
+`attachParquetUrlTables`, `createBrowserAnalysisRuntime`, and `resolveWindow`
+(re-exported from `@gscdump/engine/period`). Browser analysis uses attached
+tables rather than a canonical-schema `createEngine`; see ADR-0001.
 
 ## SQLite (D1 / Cloudflare Workers)
 
@@ -148,7 +152,7 @@ Available source factories:
 - `createCompositeSource({ engine, gsc })` — `@gscdump/analysis/source`; engine first, GSC fallback
 - `createInMemoryQuerySource({ queryRows })` — `@gscdump/analysis/source`
 - `createEngineQuerySource({ engine, ctx })` — `@gscdump/engine/source`
-- `createEngine({ ... })` — `@gscdump/engine-duckdb-wasm`, `@gscdump/engine-sqlite`, `@gscdump/engine-duckdb-node`
+- `createEngine({ ... })` — `@gscdump/engine-sqlite`
 
 Portable analyzers currently cover the row-based tools:
 `striking-distance`, `opportunity`, `brand`, `clustering`, `concentration`,
@@ -192,7 +196,7 @@ Presets: `last-7d`, `last-28d`, `last-30d`, `last-90d`, `last-180d`, `last-365d`
 
 - [`gscdump`](../gscdump) — REST client + query builder (edge-safe).
 - [`@gscdump/engine`](../engine) — Parquet/DuckDB storage engine + analyzer/source/period contracts.
-- [`@gscdump/engine-duckdb-node`](../engine-duckdb-node) — Node DuckDB engine factory + parquet/snapshot attach helpers.
+- [`@gscdump/engine/node`](../engine) — Node DuckDB handle + parquet/snapshot attach helpers.
 - [`@gscdump/engine-duckdb-wasm`](../engine-duckdb-wasm) — DuckDB-WASM browser runtime + drizzle adapter.
 - [`@gscdump/engine-sqlite`](../engine-sqlite) — SQLite / D1 dialect adapter.
 - [`@gscdump/engine-gsc-api`](../engine-gsc-api) — GSC live-API engine adapter.

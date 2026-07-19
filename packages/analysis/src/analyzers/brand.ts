@@ -28,6 +28,14 @@ export interface BrandSegmentationOptions {
   minImpressions?: number
 }
 
+export interface BrandSegmentationRow {
+  query?: string
+  keyword?: string
+  variants?: readonly string[]
+  clicks?: number | null
+  impressions?: number | null
+}
+
 export interface BrandSummary {
   brandClicks: number
   nonBrandClicks: number
@@ -36,9 +44,9 @@ export interface BrandSummary {
   nonBrandImpressions: number
 }
 
-export interface BrandSegmentationResult {
-  brand: QueriesRow[]
-  nonBrand: QueriesRow[]
+export interface BrandSegmentationResult<T extends BrandSegmentationRow = QueriesRow> {
+  brand: T[]
+  nonBrand: T[]
   summary: BrandSummary
 }
 
@@ -82,13 +90,21 @@ function requireBrandTerms(brandTerms: string[] | undefined): string[] {
 export function analyzeBrandSegmentation(
   keywords: QueriesRow[],
   options: BrandSegmentationOptions,
-): BrandSegmentationResult {
+): BrandSegmentationResult<QueriesRow>
+export function analyzeBrandSegmentation<T extends BrandSegmentationRow>(
+  keywords: T[],
+  options: BrandSegmentationOptions,
+): BrandSegmentationResult<T>
+export function analyzeBrandSegmentation<T extends BrandSegmentationRow>(
+  keywords: T[],
+  options: BrandSegmentationOptions,
+): BrandSegmentationResult<T> {
   const { brandTerms, minImpressions = 10 } = options
 
   const lowerBrandTerms = brandTerms.map(t => t.toLowerCase())
 
-  const brand: QueriesRow[] = []
-  const nonBrand: QueriesRow[] = []
+  const brand: T[] = []
+  const nonBrand: T[] = []
   let brandClicks = 0
   let nonBrandClicks = 0
   let brandImpressions = 0
@@ -100,9 +116,11 @@ export function analyzeBrandSegmentation(
       continue
 
     const clicks = num(row.clicks)
-    const query = row.query.toLowerCase()
-    const isBrand = lowerBrandTerms.some(term =>
-      query.includes(term),
+    const terms = row.variants?.length
+      ? row.variants
+      : [row.query ?? row.keyword ?? '']
+    const isBrand = terms.some(query =>
+      lowerBrandTerms.some(term => query.toLowerCase().includes(term)),
     )
 
     if (isBrand) {

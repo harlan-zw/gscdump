@@ -27,7 +27,7 @@ and covered by their tests.
   realtime, lifecycle contracts.
 - `@gscdump/sdk`: hosted partner and analytics HTTP clients.
 - `@gscdump/cloudflare`: Cloudflare/R2 helper primitives.
-- `@gscdump/nuxt`: Nuxt layer and dashboard composables/components.
+- `@gscdump/lakehouse`: dataset-agnostic Iceberg catalog and dataset registry.
 - `@gscdump/cli`: CLI plus the bundled MCP server (`gscdump mcp`).
 
 ## Commands
@@ -49,8 +49,8 @@ after e2e passes with either `GSC_ACCESS_TOKEN` or
 - Prefer existing package boundaries and subpath exports over new barrels.
 - Keep `gscdump` edge-safe: no `node:*`, DuckDB, or storage dependencies in
   the core package.
-- Keep `@gscdump/sdk` framework-agnostic. Nuxt behavior belongs in
-  `@gscdump/nuxt`.
+- Keep `@gscdump/sdk` framework-agnostic. Nuxt behavior belongs in consumer
+  layers, currently `nuxtseo.com/layers/pro/gsc`.
 - Keep host-app concerns out of packages unless there is a second consumer or
   a clear stable protocol contract.
 - Use `@gscdump/contracts` for hosted API wire shapes and routes.

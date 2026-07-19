@@ -1,10 +1,8 @@
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  // Treat tests as if they're running in a Nuxt client bundle. The
-  // `@gscdump/nuxt` package gates its auth-pending defer + dev assertions on
-  // these. Server-side codepaths aren't covered here anyway — they're tested
-  // in `@gscdump/engine` / `@gscdump/analysis` instead.
+  // Treat browser-oriented tests as if they're running in a client bundle.
+  // Server-side codepaths are covered in their package suites.
   define: {
     'import.meta.client': 'true',
     'import.meta.dev': 'true',

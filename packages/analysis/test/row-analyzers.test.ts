@@ -4,8 +4,21 @@ import { analyzeBrandSegmentation } from '../src/analyzers/brand'
 import { analyzeCannibalization } from '../src/analyzers/cannibalization'
 import { analyzeClustering } from '../src/analyzers/clustering'
 import { longTailAnalyzer } from '../src/analyzers/long-tail'
+import { analyzeStrikingDistance } from '../src/analyzers/striking-distance'
+import { analyzeZeroClick } from '../src/analyzers/zero-click'
 
 describe('row analyzer reductions', () => {
+  it('exposes a sorted pure striking-distance reduction', () => {
+    expect(analyzeStrikingDistance([
+      { query: 'first', page: '/first', clicks: 2, impressions: 200, ctr: 0.01, position: 10 },
+      { query: 'second', page: '/second', clicks: 4, impressions: 100, ctr: 0.04, position: 8 },
+      { query: 'excluded', page: '/excluded', clicks: 20, impressions: 500, ctr: 0.2, position: 2 },
+    ])).toEqual([
+      expect.objectContaining({ keyword: 'first', potentialClicks: 30 }),
+      expect.objectContaining({ keyword: 'second', potentialClicks: 15 }),
+    ])
+  })
+
   it('accumulates brand summary metrics while partitioning rows', () => {
     const rows: QueriesRow[] = [
       { query: 'Acme pricing', clicks: 8, impressions: 80, ctr: 0.1, position: 2 },
@@ -23,6 +36,17 @@ describe('row analyzer reductions', () => {
       brandImpressions: 80,
       nonBrandImpressions: 20,
     })
+  })
+
+  it('uses raw query variants when segmenting a canonical keyword', () => {
+    const rows = [{
+      keyword: 'pricing',
+      variants: ['Acme pricing', 'pricing'],
+      clicks: 5,
+      impressions: 50,
+    }]
+    const result = analyzeBrandSegmentation(rows, { brandTerms: ['acme'] })
+    expect(result.brand).toEqual(rows)
   })
 
   it('aggregates clustering metrics in one pass with weighted position', () => {
@@ -61,6 +85,14 @@ describe('row analyzer reductions', () => {
       positionSpread: 3,
     })
     expect(result[0]?.pages.map(page => page.page)).toEqual(['/b', '/a'])
+  })
+
+  it('keeps the best-positioned page for each zero-click query', () => {
+    const rows: QueryPageRow[] = [
+      { query: 'answer', page: '/weak', clicks: 1, impressions: 1200, ctr: 0.001, position: 8 },
+      { query: 'answer', page: '/best', clicks: 2, impressions: 1100, ctr: 0.002, position: 3 },
+    ]
+    expect(analyzeZeroClick(rows)).toEqual([rows[1]])
   })
 
   it('downsamples long-tail points without changing the log-rank selection', () => {
