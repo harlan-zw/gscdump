@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/engine-sqlite",
   "type": "module",
-  "version": "0.40.2",
+  "version": "1.0.0",
   "description": "SQLite / D1 engine adapter for @gscdump/analysis — typed analytics over sqlite-proxy executors (Cloudflare D1, libsql).",
   "author": {
     "name": "Harlan Wilton",
