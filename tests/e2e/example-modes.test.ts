@@ -23,7 +23,7 @@ vi.stubGlobal('defineNuxtConfig', <T>(input: T) => input)
 
 async function loadConfig(): Promise<NuxtConfigShape> {
   vi.resetModules()
-  const mod = await import('../examples/nuxt-dashboard/nuxt.config.ts') as { default: NuxtConfigShape }
+  const mod = await import('../../examples/nuxt-dashboard/nuxt.config.ts') as { default: NuxtConfigShape }
   return mod.default
 }
 
