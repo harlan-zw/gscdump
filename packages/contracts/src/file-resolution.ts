@@ -148,3 +148,29 @@ export interface FileResolutionResponse {
    */
   eligibilityCeiling: { maxBytes: number, maxRows: number, maxFiles: number }
 }
+
+/** One canonical query-dimension sidecar object for browser attachment. */
+export interface QueryDimSourceFile {
+  url: string
+  bytes: number
+  contentHash: string
+}
+
+/** Response from the versioned query-dimension sidecar resolver. */
+export interface QueryDimSourceResponse {
+  file: QueryDimSourceFile | null
+}
+
+/** Multi-site file-resolution response. Inaccessible sites are omitted. */
+export interface BulkFileResolutionResponse {
+  generatedAt: string
+  siteCount: number
+  maxSites: number
+  results: Record<string, FileResolutionResponse>
+}
+
+/** Request query for the multi-site file resolver. */
+export interface BulkFileResolutionRequest extends FileResolutionRequest {
+  /** Public site ids to resolve. Partner callers must supply this list. */
+  siteIds?: string[]
+}

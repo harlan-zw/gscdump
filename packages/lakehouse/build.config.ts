@@ -17,9 +17,9 @@ export default defineBuildConfig({
       type: 'bundle',
       input: [
         './src/index.ts',
+        './src/maintenance.ts',
         './src/unsafe-raw.ts',
         './src/provisioning/index.ts',
-        './src/vendor/hysnappy-purejs.ts',
       ],
       rolldown: {
         resolve: {

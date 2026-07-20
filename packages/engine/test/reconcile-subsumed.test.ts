@@ -1,6 +1,5 @@
 import type { ManifestEntry, SearchType } from '../src/storage'
 import { describe, expect, it } from 'vitest'
-import { isRawDailyCompactionDue } from '../src/compaction-public'
 import { createStorageEngine } from '../src/engine'
 import { createInMemoryDataSource, createInMemoryManifestStore, createJsonCodec, createUnionExecutor } from './helpers/in-memory'
 
@@ -91,19 +90,5 @@ describe('reconcileSubsumed', () => {
     expect(result.retired).toBe(1)
     const live = await manifestStore.listLive({ userId: '1', siteId: 's', table: 'pages', searchType: 'discover' })
     expect(live.map(e => e.partition)).toEqual(['monthly/2026-04'])
-  })
-})
-
-describe('isRawDailyCompactionDue', () => {
-  it('flips at the raw-daily threshold boundary', () => {
-    const dailies = (n: number) => Array.from({ length: n }, (_, i) => ({ tier: 'raw', partition: `daily/2026-05-${String(i + 1).padStart(2, '0')}` }))
-    // Threshold is 7 — strictly greater triggers.
-    expect(isRawDailyCompactionDue(dailies(7))).toBe(false)
-    expect(isRawDailyCompactionDue(dailies(8))).toBe(true)
-  })
-
-  it('ignores compacted tiers — only raw dailies count', () => {
-    const compacted = Array.from({ length: 10 }, (_, i) => ({ tier: 'd7', partition: `weekly/2026-0${i}` }))
-    expect(isRawDailyCompactionDue(compacted)).toBe(false)
   })
 })

@@ -16,7 +16,7 @@ vi.mock('gscdump', async (importOriginal) => {
     ...actual,
     googleSearchConsole: vi.fn(() => ({
       sites: vi.fn().mockResolvedValue([{ siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' }]),
-      _rawQuery: mocks.rawQuery,
+      searchAnalytics: { query: mocks.rawQuery },
     })),
   }
 })
@@ -38,7 +38,7 @@ vi.mock('../../src/context', () => ({
     auth: {},
     client: {
       sites: vi.fn().mockResolvedValue([{ siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' }]),
-      _rawQuery: mocks.rawQuery,
+      searchAnalytics: { query: mocks.rawQuery },
     },
     store: {
       userId: 'u',

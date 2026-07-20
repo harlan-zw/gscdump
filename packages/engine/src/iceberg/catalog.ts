@@ -3,10 +3,9 @@
  * the frozen `icebergSchemaFor`/`icebergPartitionSpecFor`/`icebergSortOrderFor`
  * derivation. The dataset-agnostic mechanics (connect, ensureNamespace, list,
  * `icebergAppendRetrying`, the data-file resolver) MOVED to
- * `@gscdump/lakehouse` (ADR-0021 "clean moves") — this module re-exports them
- * (or thinly wraps them, where the ORIGINAL return shape must be preserved)
- * so `@gscdump/engine/iceberg` consumers see NO CHANGE to their import
- * surface (non-breaking for this pass; the major-bump gut is a later release).
+ * `@gscdump/lakehouse` (ADR-0021 "clean moves"). This internal module imports
+ * the generic primitives to implement GSC-specific wrappers; v1 deliberately
+ * does not re-export them from `@gscdump/engine/iceberg`.
  */
 
 import type { IcebergConnection, IcebergListedDataFile, QueryProfiler } from '@gscdump/lakehouse'
@@ -32,10 +31,8 @@ import {
 } from './schema'
 
 // ---------------------------------------------------------------------------
-// Dataset-agnostic primitives — thin re-exports from `@gscdump/lakehouse`.
-// Shapes are IDENTICAL to the engine's original bespoke interfaces (this
-// module used to define them locally), so re-exporting as TYPE ALIASES is
-// non-breaking for every existing `@gscdump/engine/iceberg` consumer.
+// Dataset-agnostic primitives used inside this package. These aliases keep
+// the implementation cohesive but are not re-exported by `./iceberg/index`.
 // ---------------------------------------------------------------------------
 
 export { catalogCacheScope, connectIcebergCatalog, ensureIcebergNamespace, invalidateSnapshotRef, listIcebergTables } from '@gscdump/lakehouse'
@@ -54,7 +51,8 @@ export type {
   IcebergSortOrder,
   IcebergSortOrderField,
 } from '@gscdump/lakehouse'
-export { icebergAppendRetrying, isCommitRateLimited } from '@gscdump/lakehouse/unsafe-raw'
+export { isCommitRateLimited } from '@gscdump/lakehouse/maintenance'
+export { icebergAppendRetrying } from '@gscdump/lakehouse/unsafe-raw'
 
 // ---------------------------------------------------------------------------
 // GSC-specific schema/partition/sort-order derivation (frozen, Wave-1).

@@ -4,9 +4,40 @@ import type { QueryError } from 'gscdump/query'
 import process from 'node:process'
 import { isAnalysisError } from '@gscdump/analysis/errors'
 import { isEngineError } from '@gscdump/engine/errors'
-import { formatErrorForCli } from 'gscdump/api'
+import { classifyError } from 'gscdump'
 import { isQueryError } from 'gscdump/query'
 import { formatAuthProvenance, isAuthError } from './auth'
+
+const QUOTA_MESSAGE_RE = /quota|rate\s*limit/i
+
+/** CLI-owned rendering for the package's structured Google API errors. */
+function formatErrorForCli(cause: unknown): string {
+  const error = classifyError(cause)
+  const lines = [`\x1B[31m${error.message}\x1B[0m`]
+  let suggestion = ''
+
+  switch (error.kind) {
+    case 'auth-expired':
+      suggestion = 'Run `gscdump auth` to re-authenticate.'
+      break
+    case 'rate-limited': {
+      const retryIn = error.retryAfter ? `${error.retryAfter}s` : 'a few minutes'
+      if (QUOTA_MESSAGE_RE.test(error.message)) {
+        suggestion = error.message.includes('Indexing API')
+          ? 'Indexing API quota exhausted (~200/day). Try again tomorrow.'
+          : `Quota or rate limit hit (Search Analytics ~25000/day). Try again in ${retryIn}.`
+      }
+      else {
+        suggestion = `Rate limited. Slow down requests. Try again in ${retryIn}.`
+      }
+      break
+    }
+  }
+
+  if (suggestion)
+    lines.push('', suggestion)
+  return lines.join('\n')
+}
 
 /**
  * The errors-as-values refactor in `gscdump`/`@gscdump/engine`/`@gscdump/analysis`

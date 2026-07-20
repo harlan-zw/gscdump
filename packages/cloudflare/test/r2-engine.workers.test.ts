@@ -11,8 +11,8 @@
  */
 
 import type { ManifestEntry } from '@gscdump/engine/contracts'
+import { createR2ManifestStore } from '@gscdump/engine'
 import { createR2DataSource } from '@gscdump/engine/r2'
-import { createR2ManifestStore } from '@gscdump/engine/r2-manifest'
 
 import { env } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'

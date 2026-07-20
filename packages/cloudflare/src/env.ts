@@ -6,14 +6,11 @@
 // covers auth, billing, sync jobs — things the layer has no business knowing.
 //
 // Instead of importing the host's env type, the layer defines its own
-// minimal interface and a `useAnalyticsEnv(event)` resolver. Hosts populate
-// it via a Nitro plugin (CF adapter wiring on gscdump.com; a thin
-// `event.context.analyticsEnv = { ... }` stub on non-CF consumers).
+// minimal interface. Hosts populate it via a Nitro plugin (CF adapter wiring
+// on gscdump.com; a thin `event.context.analyticsEnv = { ... }` stub on
+// non-CF consumers).
 
 /// <reference types="@cloudflare/workers-types" />
-
-import type { H3Event } from 'h3'
-import { createError } from 'h3'
 
 export interface AnalyticsEnv {
   /** R2 bucket holding parquet + rollup + entity data. Required in origin mode. */
@@ -45,30 +42,4 @@ export interface AnalyticsEnv {
   R2_ACCESS_KEY_ID?: string
   R2_SECRET_ACCESS_KEY?: string
   CLOUDFLARE_ACCOUNT_ID?: string
-
-  /** Secret used by size-hint-sig.ts to HMAC-sign size hints. Rotating it invalidates cached hints. */
-  TOKEN_ENCRYPTION_SECRET?: string
-}
-
-/**
- * Resolve the AnalyticsEnv for the current request.
- *
- * Looks for, in order:
- *  1. `event.context.analyticsEnv` — host plugin sets this explicitly.
- *  2. `event.context.cloudflare?.env` — Cloudflare adapter convention.
- *  3. Throws. The layer has no way to fabricate an env; the host must wire it.
- */
-export function useAnalyticsEnv(event: H3Event): AnalyticsEnv {
-  const fromCtx = (event.context as { analyticsEnv?: AnalyticsEnv }).analyticsEnv
-  if (fromCtx)
-    return fromCtx
-
-  const fromCf = (event.context as { cloudflare?: { env?: AnalyticsEnv } }).cloudflare?.env
-  if (fromCf)
-    return fromCf
-
-  throw createError({
-    statusCode: 500,
-    statusMessage: 'AnalyticsEnv not available — host must populate event.context.analyticsEnv or use the Cloudflare adapter',
-  })
 }

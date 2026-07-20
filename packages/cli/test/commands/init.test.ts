@@ -55,8 +55,8 @@ vi.mock('node:fs/promises', () => ({
   stat: vi.fn().mockRejectedValue(new Error('ENOENT')),
 }))
 
-vi.mock('gscdump/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump/api')>()
+vi.mock('gscdump', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump')>()
   return {
     ...actual,
     googleSearchConsole: mocks.googleSearchConsole,

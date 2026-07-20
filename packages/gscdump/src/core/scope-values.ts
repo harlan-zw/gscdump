@@ -5,7 +5,7 @@ export const GSC_WRITE_SCOPE = 'https://www.googleapis.com/auth/webmasters' as c
 export const GSC_INDEXING_SCOPE = 'https://www.googleapis.com/auth/indexing' as const
 export const GSC_SITE_VERIFICATION_SCOPE = 'https://www.googleapis.com/auth/siteverification' as const
 
-export function parseGoogleScopes(scopes: GoogleScopesInput): string[] {
+function parseGoogleScopes(scopes: GoogleScopesInput): string[] {
   if (!scopes)
     return []
   if (typeof scopes === 'string')

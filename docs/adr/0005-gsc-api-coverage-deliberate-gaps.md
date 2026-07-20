@@ -58,7 +58,7 @@ projection for SQL-row storage. Structured sub-results (`mobileIssues`,
 `richResultsItems`, `ampIssues`, `sitemaps`, `referringUrls`) are
 stringified by design so the result maps to a single row. Callers needing
 typed access use `client.inspect()` directly and consume
-`InspectUrlIndexResponse` (`@googleapis/searchconsole` schema).
+the package-owned `InspectUrlIndexResponse` structural wire contract.
 
 ### 6. Rate-limit headers other than `Retry-After` are not exposed
 
@@ -69,8 +69,8 @@ asked for it.
 
 ### 7. `Site.siteUrl` typed as required string
 
-Upstream `Schema$WmxSite.siteUrl` is `string | null | undefined`. Our
-`ApiSite.siteUrl` narrows to `string`. The narrowing is sound at runtime
+Google's wire-level `siteUrl` is `string | null | undefined`. Our normalized
+`Site.siteUrl` narrows to `string`. The narrowing is sound at runtime
 because every code path that produces an `ApiSite` populates `siteUrl`
 (from `sites.list` response entries, which always carry the field).
 Widening would force null-checks on every consumer for a case that doesn't

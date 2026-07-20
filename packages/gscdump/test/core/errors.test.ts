@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyError, formatErrorForCli, storageError } from '../../src/core/errors'
+import { classifyError, formatErrorForCli } from '../../src/core/errors'
 
 function ofetchLike(statusCode: number, message: string, extras: Record<string, unknown> = {}): Error {
   const err = Object.assign(new Error(message), { statusCode, ...extras })
@@ -123,16 +123,6 @@ describe('classifyError', () => {
     const original = ofetchLike(429, 'slow down')
     const e = classifyError(original)
     expect(e.cause).toBe(original)
-  })
-})
-
-describe('storageError', () => {
-  it('tags with kind=storage and carries the cause', () => {
-    const cause = new Error('ENOENT')
-    const e = storageError('manifest missing', cause)
-    expect(e.kind).toBe('storage')
-    expect(e.message).toBe('manifest missing')
-    expect(e.cause).toBe(cause)
   })
 })
 

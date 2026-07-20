@@ -9,9 +9,8 @@ import {
   createSitemapStore,
 } from '@gscdump/engine/entities'
 import { defineCommand } from 'citty'
-import { progressBar } from 'gscdump'
 import { createCommandContext } from '../context'
-import { applyOutputMode, logger, OUTPUT_ARGS, runWithConcurrency } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS, progressBar, runWithConcurrency } from '../utils'
 
 const INSPECTION_QPD_PER_PROPERTY = 2000
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i

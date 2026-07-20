@@ -1,4 +1,4 @@
-import type { Auth, VerificationMethod } from 'gscdump/api'
+import type { Auth, VerificationMethod } from 'gscdump'
 import type { HandlerContext } from '../types'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
@@ -13,7 +13,7 @@ import {
   runSequentialBatch,
   unverifySite,
   verifySite,
-} from 'gscdump/api'
+} from 'gscdump'
 import { z } from 'zod'
 import * as handlers from '../handlers'
 import {
@@ -50,10 +50,10 @@ interface QueryToolArgs {
   }>
 }
 
-type RawQueryClient = Pick<ReturnType<typeof googleSearchConsole>, '_rawQuery'>
+type SearchAnalyticsClient = Pick<ReturnType<typeof googleSearchConsole>, 'searchAnalytics'>
 
 export async function runMcpSearchAnalyticsQuery(
-  client: RawQueryClient,
+  client: SearchAnalyticsClient,
   args: QueryToolArgs,
 ): Promise<{ siteUrl: string, rowCount: number, rows: Record<string, unknown>[] }> {
   const totalLimit = Math.max(0, args.rowLimit ?? 25000)
@@ -67,7 +67,7 @@ export async function runMcpSearchAnalyticsQuery(
     if (currentLimit <= 0)
       break
 
-    const response = await client._rawQuery(args.siteUrl, {
+    const response = await client.searchAnalytics.query(args.siteUrl, {
       startDate: args.startDate,
       endDate: args.endDate,
       dimensions: args.dimensions,

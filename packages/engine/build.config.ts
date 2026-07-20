@@ -22,9 +22,7 @@ export default defineBuildConfig({
         './src/index.ts',
         './src/errors.ts',
         './src/contracts.ts',
-        './src/snapshot.ts',
         './src/planner.ts',
-        './src/compaction-public.ts',
         './src/schema.ts',
         './src/ingest.ts',
         './src/sink-node.ts',
@@ -48,7 +46,6 @@ export default defineBuildConfig({
         './src/adapters/filesystem.ts',
         './src/adapters/hyparquet.ts',
         './src/adapters/r2.ts',
-        './src/adapters/r2-manifest.ts',
       ],
       rolldown: {
         resolve: {

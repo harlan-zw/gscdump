@@ -6,6 +6,7 @@
   analyticsNextActions: object
   analyticsStatuses: object
   batchInspectUrls: function
+  batchInspectUrlsFlatSettled: function
   batchRequestIndexing: function
   canUseUrlInspection: function
   classifyError: function
@@ -13,14 +14,13 @@
   createAuth: function
   createFetch: function
   DAYS_PER_RANGE: number
-  daysAgo: function
   decodeSiteId: function
+  DEFAULT_GSC_REQUEST_TIMEOUT_MS: number
   deleteSite: function
   deleteSitemap: function
   discoverSitemap: function
   encodeSiteId: function
   err: function
-  exchangeAuthCode: function
   exchangeAuthCodeResult: function
   fetchSitemap: function
   fetchSitemaps: function
@@ -29,7 +29,6 @@
   fetchSitesWithSitemaps: function
   findBestGscProperty: function
   findExactGscProperty: function
-  formatErrorForCli: function
   formatGscPropertyCandidates: function
   generateGscDateRange: function
   getBackfillProgress: function
@@ -48,12 +47,10 @@
   getVerificationToken: function
   getVerifiedSite: function
   googleSearchConsole: function
-  grantedScopeList: function
   groupIntoRanges: function
   GSC_FINALIZED_LAG_DAYS: number
   GSC_FRESHEST_LAG_DAYS: number
   GSC_INDEXING_SCOPE: string
-  GSC_QUOTAS: object
   GSC_READ_SCOPE: string
   GSC_RETENTION_MONTHS: number
   GSC_SITE_VERIFICATION_SCOPE: string
@@ -63,7 +60,6 @@
   GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
   GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
   GSCDUMP_WRITE_ANALYTICS_SCOPE: string
-  gscdumpApi: function
   gscErrorToException: function
   gscPropertyMatchesTarget: function
   hasGoogleScope: function
@@ -79,6 +75,8 @@
   indexingStatuses: object
   inspectUrl: function
   inspectUrlFlat: function
+  introspectAccessToken: function
+  introspectAccessTokenResult: function
   isErr: function
   isOk: function
   isPermissionDeniedError: function
@@ -88,12 +86,9 @@
   KNOWN_COVERAGE_STATES: object
   KNOWN_PAGE_FETCH_STATES: object
   lifecycleErrorCodes: object
-  lifecycleWebhookEvents: object
   listVerifiedSites: function
-  mapErr: function
-  mapResult: function
   matchGscSite: function
-  matchResult: function
+  MAX_FLAT_INSPECTION_BATCH_CONCURRENCY: number
   MS_PER_DAY: number
   normalizeGscSiteUrl: function
   normalizeRegistrationTarget: function
@@ -101,102 +96,27 @@
   normalizeUrl: function
   ok: function
   parseGoogleError: function
-  parseGoogleScopes: function
   parseGrantedScopes: function
   parseGscSiteUrl: function
   pickBestGscProperty: function
-  progressBar: function
   propertyNextActions: object
   propertyStatuses: object
   querySourceModes: object
   refreshAccessToken: function
-  refreshAccessTokenResult: function
   requestIndexing: function
   resolveVerificationTarget: function
   rethrowAsGscApiError: function
-  rowWithMetricDefaults: function
+  revokeOAuthToken: function
+  revokeOAuthTokenResult: function
   runSequentialBatch: function
   sitemapNextActions: object
   sitemapStatuses: object
   siteUrlToVerificationSite: function
-  storageError: function
   submitSitemap: function
   toIsoDate: function
   unmappedInspectionReasons: function
   unverifySite: function
   unwrapResult: function
-  URL_INSPECTION_DAILY_LIMIT: number
-  URL_INSPECTION_EFFECTIVE_LIMIT: number
-  urlMatchKey: function
-  verificationMethodsFor: function
-  verifySite: function
-./api:
-  addSite: function
-  batchInspectUrls: function
-  batchRequestIndexing: function
-  canUseUrlInspection: function
-  classifyError: function
-  createAuth: function
-  createFetch: function
-  deleteSite: function
-  deleteSitemap: function
-  discoverSitemap: function
-  exchangeAuthCode: function
-  exchangeAuthCodeResult: function
-  fetchSitemap: function
-  fetchSitemaps: function
-  fetchSitemapUrls: function
-  fetchSites: function
-  fetchSitesWithSitemaps: function
-  findBestGscProperty: function
-  findExactGscProperty: function
-  formatErrorForCli: function
-  formatGscPropertyCandidates: function
-  getIndexingEligibility: function
-  getIndexingMetadata: function
-  getNextCheckAfter: function
-  getNextCheckPriority: function
-  getVerificationToken: function
-  getVerifiedSite: function
-  googleSearchConsole: function
-  grantedScopeList: function
-  GSC_INDEXING_SCOPE: string
-  GSC_QUOTAS: object
-  GSC_READ_SCOPE: string
-  GSC_SITE_VERIFICATION_SCOPE: string
-  GSC_WRITE_SCOPE: string
-  GscApiError: function
-  gscdumpApi: function
-  gscErrorToException: function
-  gscPropertyMatchesTarget: function
-  hasGoogleScope: function
-  hasGscReadScope: function
-  hasGscWriteScope: function
-  hasIndexingScope: function
-  inspectUrl: function
-  inspectUrlFlat: function
-  isPermissionDeniedError: function
-  isVerifiedGscPermission: function
-  isVerifiedGscProperty: function
-  listVerifiedSites: function
-  matchGscSite: function
-  normalizeGscSiteUrl: function
-  normalizeRegistrationTarget: function
-  parseGoogleError: function
-  parseGoogleScopes: function
-  parseGscSiteUrl: function
-  pickBestGscProperty: function
-  refreshAccessToken: function
-  refreshAccessTokenResult: function
-  requestIndexing: function
-  resolveVerificationTarget: function
-  rethrowAsGscApiError: function
-  runSequentialBatch: function
-  siteUrlToVerificationSite: function
-  storageError: function
-  submitSitemap: function
-  unverifySite: function
-  URL_INSPECTION_DAILY_LIMIT: number
   URL_INSPECTION_EFFECTIVE_LIMIT: number
   urlMatchKey: function
   verificationMethodsFor: function
@@ -248,14 +168,12 @@
   extractMetricFilters: function
   extractSearchType: function
   extractSpecialOperatorFilters: function
-  formatQueryError: function
   gsc: object
   gt: function
   gte: function
   hour: object
   impressions: object
   inArray: function
-  isJsonFilter: function
   isQueryError: function
   like: function
   lt: function
@@ -268,7 +186,6 @@
   notRegex: function
   or: function
   page: object
-  parseJsonFilter: function
   position: object
   query: object
   queryCanonical: object
@@ -298,9 +215,6 @@
   err: function
   isErr: function
   isOk: function
-  mapErr: function
-  mapResult: function
-  matchResult: function
   ok: function
   unwrapResult: function
 ./tenant:

@@ -106,15 +106,6 @@ export const indexingNextActions = [
   'none',
 ] as const
 
-export const lifecycleWebhookEvents = [
-  'user.lifecycle.changed',
-  'site.lifecycle.changed',
-  'site.analytics.ready',
-  'site.indexing.ready',
-  'site.auth.failed',
-  'job.failed',
-] as const
-
 export const lifecycleErrorCodes = [
   'missing_refresh_token',
   'missing_analytics_scope',
@@ -141,7 +132,13 @@ export type SitemapStatus = typeof sitemapStatuses[number]
 export type SitemapNextAction = typeof sitemapNextActions[number]
 export type IndexingStatus = typeof indexingStatuses[number]
 export type IndexingNextAction = typeof indexingNextActions[number]
-export type LifecycleWebhookEvent = typeof lifecycleWebhookEvents[number]
+export type LifecycleWebhookEvent
+  = | 'user.lifecycle.changed'
+    | 'site.lifecycle.changed'
+    | 'site.analytics.ready'
+    | 'site.indexing.ready'
+    | 'site.auth.failed'
+    | 'job.failed'
 export type LifecycleErrorCode = typeof lifecycleErrorCodes[number]
 
 export interface LifecycleProgress {

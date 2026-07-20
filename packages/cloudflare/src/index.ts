@@ -2,8 +2,8 @@
  * @gscdump/cloudflare — Cloudflare-Workers-flavored helpers for the gscdump
  * analytics stack.
  *
- * Owns the `AnalyticsEnv` binding contract, the size-hint HMAC scheme, the
- * DuckDB Workers shims, and the analytics engine factory. Host apps wire their
+ * Owns the `AnalyticsEnv` binding contract, the DuckDB Workers shims, and the
+ * analytics engine factory. Host apps wire their
  * Nitro server handlers using these primitives plus the D1 manifest store from
  * `@gscdump/engine-sqlite`.
  *
@@ -14,13 +14,11 @@
  */
 
 export type { AnalyticsEngineHooks, AnalyticsEngineRuntime } from './engine'
-export { createAnalyticsEngineRuntime, getAnalyticsEngine } from './engine'
+export { getAnalyticsEngine } from './engine'
 
 export type { AnalyticsEnv } from './env'
 
-export { useAnalyticsEnv } from './env'
 export type { HostedR2QueryKeyInput, InflightDedupe } from './inflight-dedupe'
 export { createInflightDedupe, getHostedR2QueryKey } from './inflight-dedupe'
-export { signSizeHint, verifySizeHint } from './size-hint-sig'
 export type { DucklingsRowCache } from './workers-duckdb'
 export { createDucklingsCodec, createDucklingsExecutor, createDucklingsRowCache } from './workers-duckdb'

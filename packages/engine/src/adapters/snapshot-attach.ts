@@ -87,7 +87,7 @@ function snapshotAttachErrorToException(error: EngineError): Error {
  * `runner` IO failures stay defects and propagate. `attachSnapshotIndex` is the
  * throwing wrapper.
  */
-export async function attachSnapshotIndexResult(
+async function attachSnapshotIndexResult(
   runner: SnapshotQueryRunner,
   opts: AttachSnapshotOptions,
 ): Promise<Result<AttachSnapshotResult, EngineError>> {

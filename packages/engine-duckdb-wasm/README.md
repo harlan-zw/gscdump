@@ -23,19 +23,14 @@ import {
   attachParquetUrlTables,
   bootDuckDBWasm,
   createInsightRunner,
-  resolveWindow,
-  scopeFor,
-  strikingMomentum,
 } from '@gscdump/engine-duckdb-wasm'
 
 const { db, conn } = await bootDuckDBWasm()
 await attachParquetUrlTables(conn, { tables: [{ name: 'queries', url: '/r2/queries.parquet' }] })
 
-const runner = createInsightRunner({ db, conn })
-const window = resolveWindow({ preset: 'last-30d', comparison: 'prev-period' })
-const scope = scopeFor('queries', { siteId, window })
-
-const rows = await strikingMomentum(runner, { ...scope, limit: 50 })
+const runner = await createInsightRunner({ db, conn })
+const client = await runner.client
+const rows = await client.query('SELECT query, clicks, impressions FROM queries LIMIT 50')
 ```
 
 ## Browser Parquet Attachment Strategy
@@ -73,7 +68,6 @@ instead.
 - `createInsightRunner({ db, conn })` — drizzle-orm handle for typed `.select()` / window functions, with `sql\`...\`` raw escape hatch.
 - `bootDuckDBWasm()` / `attachParquetTables()` / `attachParquetUrlTables()` / `attachSingleTable()` / `createBrowserAnalysisRuntime()` / `createDuckDBBundlesFromBase()` / `listAttachedTables()` — browser runtime primitives.
 - `attachOpfsParquetTables()` / `readOpfsSnapshotFile()` / `estimateOpfsStorage()` / `requestPersistentStorage()` / `clearOpfsSnapshotCache()` — OPFS-backed parquet cache.
-- `strikingMomentum(runner, options)` — first-class browser insight.
 - `scopeFor(table, { siteId, window })` / `mergeScope()` — tenant scope predicates.
 - `pages` / `queries` / `page_queries` / `countries` / `dates` / `hourly_pages` / `schema` — drizzle schema mirroring `gscdump/analytics` `SCHEMAS`. Drift fails loudly at module load.
 - `compileArchetypeSql()` / `tableForArchetype()` — archetype query compilation.
@@ -83,7 +77,7 @@ instead.
 ## Related
 
 - [`@gscdump/engine`](../engine) — Storage contracts + dialect-neutral resolver.
-- [`@gscdump/analysis`](../analysis) — Analyzer registry + `analyzeContentGap` (browser semantic).
+- [`@gscdump/analysis`](../analysis) — Portable analyzer registry and browser dispatch.
 - [`@gscdump/engine-sqlite`](../engine-sqlite) — SQLite / D1 counterpart.
 
 ## License

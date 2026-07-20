@@ -2,16 +2,27 @@ name: Test
 
 on:
   push:
+    # A branch filter prevents release tags from running this workflow again.
+    # The commit was already tested by its branch push, while the tag has its
+    # own release workflow.
+    branches:
+      - '**'
     paths-ignore:
-      - '**/README.md'
+      - '**/*.md'
       - 'docs/**'
+      - LICENSE
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
 
@@ -22,7 +33,9 @@ jobs:
           node-version: lts/*
           cache: pnpm
 
-      - run: pnpm i --trust-lockfile
+      # Install the workspace root and publishable packages only. The Nuxt
+      # example has its own dependency tree and postinstall preparation.
+      - run: pnpm i --filter . --filter "./packages/*" --frozen-lockfile --trust-lockfile
         env:
           PNPM_MINIMUM_RELEASE_AGE: 0
 
@@ -30,7 +43,16 @@ jobs:
         run: pnpm lint
 
       - name: Build
-        run: pnpm build
+        # The private Nuxt dashboard example is not published and added about
+        # 55 seconds to every package CI run. Its focused e2e suite remains
+        # available via `pnpm test:e2e`.
+        run: pnpm --filter "./packages/*" run build
+
+      # Export snapshots and hosted contracts were the recurring late failures
+      # in the usage-report window. Run this cheap subset first so contract
+      # drift fails before the four-minute full suite.
+      - name: Fast contract checks
+        run: pnpm exec vitest run tests/exports.test.ts packages/contracts/test/contracts.test.ts
 
       - name: Typecheck
         run: pnpm typecheck

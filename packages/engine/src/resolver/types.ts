@@ -49,6 +49,14 @@ export interface ResolverOptions<TableKey extends string = string> {
    * int partition prunes; `string` for the default string-encoded catalogs.
    */
   searchType?: string | number
+  /**
+   * Optional non-comparison scan guard. When set, direct row/totals queries
+   * add `impressions >= value` before aggregation. This can materially reduce
+   * stored-row reads because zero-impression long-tail rows contribute
+   * nothing to metric aggregates. Comparison SQL deliberately ignores it so
+   * `lost`/`declining` rows remain observable.
+   */
+  minimumImpressions?: number
 }
 
 export interface ResolvedSQL {

@@ -33,7 +33,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "build": "obuild",
@@ -43,8 +43,8 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
-    "@gscdump/engine": "workspace:*",
-    "gscdump": "workspace:*"
+    "@gscdump/engine": "workspace:^",
+    "gscdump": "workspace:^"
   },
   "devDependencies": {
     "vitest": "catalog:dev-test"

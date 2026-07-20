@@ -1,7 +1,7 @@
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { hasGscWriteScope, hasIndexingScope } from 'gscdump/api'
+import { hasGscWriteScope, hasIndexingScope } from 'gscdump'
 import { ofetch } from 'ofetch'
 import { authenticate, clearTokens, formatAuthProvenance, getAuth, getAuthCredentials, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { loadConfig, saveConfig } from '../config'

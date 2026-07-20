@@ -36,20 +36,10 @@
       "import": "./dist/errors.mjs",
       "default": "./dist/errors.mjs"
     },
-    "./snapshot": {
-      "types": "./dist/snapshot.d.mts",
-      "import": "./dist/snapshot.mjs",
-      "default": "./dist/snapshot.mjs"
-    },
     "./planner": {
       "types": "./dist/planner.d.mts",
       "import": "./dist/planner.mjs",
       "default": "./dist/planner.mjs"
-    },
-    "./compaction": {
-      "types": "./dist/compaction-public.d.mts",
-      "import": "./dist/compaction-public.mjs",
-      "default": "./dist/compaction-public.mjs"
     },
     "./schema": {
       "types": "./dist/schema.d.mts",
@@ -111,11 +101,6 @@
       "import": "./dist/adapters/r2.mjs",
       "default": "./dist/adapters/r2.mjs"
     },
-    "./r2-manifest": {
-      "types": "./dist/adapters/r2-manifest.d.mts",
-      "import": "./dist/adapters/r2-manifest.mjs",
-      "default": "./dist/adapters/r2-manifest.mjs"
-    },
     "./resolver": {
       "types": "./dist/resolver/index.d.mts",
       "import": "./dist/resolver/index.mjs",
@@ -168,7 +153,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "obuild --stub",
@@ -181,7 +166,7 @@
     "prepack": "pnpm run build"
   },
   "peerDependencies": {
-    "@duckdb/duckdb-wasm": "catalog:"
+    "@duckdb/duckdb-wasm": "^1.33.1-dev57.0"
   },
   "peerDependenciesMeta": {
     "@duckdb/duckdb-wasm": {
@@ -189,10 +174,10 @@
     }
   },
   "dependencies": {
-    "@gscdump/contracts": "workspace:*",
-    "@gscdump/lakehouse": "workspace:*",
+    "@gscdump/contracts": "workspace:^",
+    "@gscdump/lakehouse": "workspace:^",
     "drizzle-orm": "catalog:",
-    "gscdump": "workspace:*",
+    "gscdump": "workspace:^",
     "proper-lockfile": "catalog:deps"
   },
   "devDependencies": {

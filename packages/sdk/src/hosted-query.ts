@@ -1,9 +1,7 @@
 import type {
-  BuilderState,
+  BuilderStateWire,
   DataDetailOptions,
   DataQueryOptions,
-  GscdumpAnalysisParams,
-  GscdumpDateRangeParams,
   GscdumpPageTrendParams,
   GscdumpQueryTrendParams,
   IndexingDiagnosticsParams,
@@ -33,7 +31,6 @@ export interface AnalysisSourcesOptions extends SearchTypeOptions, SourceRangeOp
 
 type DataQueryOptionsWithSearchType = DataQueryOptions & SearchTypeOptions
 type DataDetailOptionsWithSearchType = DataDetailOptions & SearchTypeOptions
-type AnalysisParamsWithSearchType = GscdumpAnalysisParams & SearchTypeOptions
 
 export const DEFAULT_SEARCH_TYPE: GscSearchType = 'web'
 
@@ -41,7 +38,7 @@ function isAnalysisSourcesOptions(value: unknown): value is AnalysisSourcesOptio
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-export function withDefaultSearchType<T extends object>(value: T, searchType?: GscSearchType): T & SearchTypeOptions
+export function withDefaultSearchType<T extends object>(value: T, searchType?: GscSearchType): T & SearchTypeOptions & Record<string, unknown>
 export function withDefaultSearchType<T>(value: T, searchType?: GscSearchType): T
 export function withDefaultSearchType<T>(value: T, searchType?: GscSearchType): T {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -111,7 +108,7 @@ export function tablesQuery(
   return query
 }
 
-export function dataQuery(state: BuilderState, options?: DataQueryOptions): Record<string, string> {
+export function dataQuery(state: BuilderStateWire, options?: DataQueryOptions): Record<string, string> {
   const opts = options as DataQueryOptionsWithSearchType | undefined
   const scoped = withDefaultSearchType(state, opts?.searchType)
   const query: Record<string, string> = {
@@ -125,7 +122,7 @@ export function dataQuery(state: BuilderState, options?: DataQueryOptions): Reco
   return query
 }
 
-export function dataDetailQuery(state: BuilderState, options?: DataDetailOptions): Record<string, string> {
+export function dataDetailQuery(state: BuilderStateWire, options?: DataDetailOptions): Record<string, string> {
   const opts = options as DataDetailOptionsWithSearchType | undefined
   const scoped = withDefaultSearchType(state, opts?.searchType)
   const query: Record<string, string> = {
@@ -134,36 +131,6 @@ export function dataDetailQuery(state: BuilderState, options?: DataDetailOptions
   }
   if (opts?.comparison)
     query.qc = stableJson(withDefaultSearchType(opts.comparison, scoped.searchType))
-  return query
-}
-
-export function analysisQuery(params: GscdumpAnalysisParams): Record<string, string | number> {
-  const query: Record<string, string | number> = {
-    preset: params.preset,
-    startDate: params.startDate,
-    endDate: params.endDate,
-  }
-  if (params.prevStartDate)
-    query.prevStartDate = params.prevStartDate
-  if (params.prevEndDate)
-    query.prevEndDate = params.prevEndDate
-  if (params.brandTerms)
-    query.brandTerms = params.brandTerms
-  if (params.limit != null)
-    query.limit = params.limit
-  if (params.offset != null)
-    query.offset = params.offset
-  if (params.search)
-    query.search = params.search
-  if (params.minImpressions != null)
-    query.minImpressions = params.minImpressions
-  if (params.minPosition != null)
-    query.minPosition = params.minPosition
-  if (params.maxPosition != null)
-    query.maxPosition = params.maxPosition
-  if (params.maxCtr != null)
-    query.maxCtr = params.maxCtr
-  query.searchType = (params as AnalysisParamsWithSearchType).searchType ?? DEFAULT_SEARCH_TYPE
   return query
 }
 
@@ -196,10 +163,6 @@ export function indexingDiagnosticsQuery(params: IndexingDiagnosticsParams = {})
   if (params.sampleLimit != null)
     query.sampleLimit = params.sampleLimit
   return query
-}
-
-export function dateRangeQuery(params: GscdumpDateRangeParams): Record<string, string> {
-  return { startDate: params.startDate, endDate: params.endDate }
 }
 
 export function queryTrendQuery(params: GscdumpQueryTrendParams): Record<string, string> {

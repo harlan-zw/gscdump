@@ -1,5 +1,5 @@
 import type { QuerySpan } from '@gscdump/engine'
-import type { googleSearchConsole } from 'gscdump/api'
+import type { googleSearchConsole } from 'gscdump'
 import type { BuilderState, Column, Dimension, Filter, SearchType } from 'gscdump/query'
 import type { LocalStore, TableName } from '../local-store'
 import fs from 'node:fs/promises'
@@ -115,7 +115,7 @@ async function runLiveQuery(
     const rowLimit = Math.min(pageSize, remaining)
     if (rowLimit <= 0)
       break
-    const response = await client._rawQuery(siteUrl, { ...baseBody, rowLimit, startRow } as any)
+    const response = await client.searchAnalytics.query(siteUrl, { ...baseBody, rowLimit, startRow } as any)
     const rows = (response.rows || []).map((row) => {
       const result: Record<string, unknown> = {
         clicks: row.clicks ?? 0,

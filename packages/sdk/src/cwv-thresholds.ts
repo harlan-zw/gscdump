@@ -34,14 +34,3 @@ export function siteUrlToHostname(url: string | undefined | null): string | unde
     return undefined
   }
 }
-
-/**
- * Split a title with `"quoted"` segments into highlight runs for inline
- * emphasis (e.g. opportunity cards rendering keywords in a stronger weight).
- */
-export function splitOpportunityTitle(title: string): Array<{ text: string, highlight: boolean }> {
-  return title.split(/("[^"]+")/g).filter(Boolean).map(part => ({
-    text: part.startsWith('"') && part.endsWith('"') ? part.slice(1, -1) : part,
-    highlight: part.startsWith('"') && part.endsWith('"'),
-  }))
-}

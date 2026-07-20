@@ -12,12 +12,16 @@ import type {
   UrlNotificationMetadata,
 } from './types'
 import { ofetch } from 'ofetch'
+import { refreshAccessToken } from '../api/oauth'
 import { resolveToBody } from '../query/resolver'
 import { rowWithMetricDefaults } from './cli-format'
 
 const GSC_API = 'https://searchconsole.googleapis.com'
 const INDEXING_API = 'https://indexing.googleapis.com'
 const SITE_VERIFICATION_API = 'https://www.googleapis.com/siteVerification/v1'
+
+/** Default deadline for each direct Google API request. */
+export const DEFAULT_GSC_REQUEST_TIMEOUT_MS = 30_000
 
 /**
  * Encode a GSC `siteUrl` for use in a path segment. Preserves the literal
@@ -80,6 +84,8 @@ export interface AuthOptions {
   refreshToken: string
 }
 
+const OAUTH_EXPIRY_SKEW_MS = 60_000
+
 export function createAuth(options: AuthOptions): AuthClient {
   let credentials: AuthClient['credentials'] = {
     refresh_token: options.refreshToken,
@@ -91,25 +97,21 @@ export function createAuth(options: AuthOptions): AuthClient {
       return credentials
     },
     async getAccessToken() {
-      if (credentials?.access_token && credentials.expiry_date && credentials.expiry_date > Date.now()) {
+      if (credentials?.access_token && credentials.expiry_date && credentials.expiry_date > Date.now() + OAUTH_EXPIRY_SKEW_MS) {
         return { token: credentials.access_token }
       }
 
-      refreshPromise ??= ofetch<{ access_token: string, expires_in: number }>('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        body: new URLSearchParams({
-          client_id: options.clientId,
-          client_secret: options.clientSecret,
-          refresh_token: options.refreshToken,
-          grant_type: 'refresh_token',
-        }),
-      }).then((response) => {
+      refreshPromise ??= refreshAccessToken(
+        options.refreshToken,
+        options.clientId,
+        options.clientSecret,
+      ).then((response) => {
         credentials = {
           ...credentials,
-          access_token: response.access_token,
-          expiry_date: Date.now() + response.expires_in * 1000,
+          access_token: response.accessToken,
+          expiry_date: response.expiresAt * 1000,
         }
-        return response.access_token
+        return response.accessToken
       }).finally(() => {
         refreshPromise = null
       })
@@ -144,6 +146,7 @@ export function createFetch(auth: Auth, options?: FetchOptions): $Fetch {
 
   return ofetch.create({
     ...options,
+    timeout: options?.timeout ?? DEFAULT_GSC_REQUEST_TIMEOUT_MS,
     retry: 3,
     // Honour `Retry-After` on 429/503 (RFC 7231): seconds or HTTP-date.
     // Fall back to 1s for other retryable codes.
@@ -254,8 +257,10 @@ export interface GoogleSearchConsoleClient {
     getMetadata: (url: string, opts?: CallOptions) => Promise<UrlNotificationMetadata>
   }
 
-  /** @internal */
-  _rawQuery: (siteUrl: string, body: SearchAnalyticsQuery, opts?: CallOptions) => Promise<SearchAnalyticsResponse>
+  /** Direct Search Analytics API operations for callers that already have a request body. */
+  searchAnalytics: {
+    query: (siteUrl: string, body: SearchAnalyticsQuery, opts?: CallOptions) => Promise<SearchAnalyticsResponse>
+  }
 }
 
 export interface GoogleSearchConsoleClientOptions {
@@ -276,7 +281,7 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
     fetch = options.fetch
   }
   else {
-    const fetchOptions = options.fetchOptions || {}
+    const fetchOptions: FetchOptions = { ...options.fetchOptions }
     if (options.onRateLimited) {
       const originalOnError = fetchOptions.onResponseError
       fetchOptions.onResponseError = async (ctx) => {
@@ -298,7 +303,7 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
     fetch = createFetch(authState, fetchOptions)
   }
 
-  const rawQuery = (siteUrl: string, body: SearchAnalyticsQuery, opts?: CallOptions): Promise<SearchAnalyticsResponse> =>
+  const querySearchAnalytics = (siteUrl: string, body: SearchAnalyticsQuery, opts?: CallOptions): Promise<SearchAnalyticsResponse> =>
     fetch<SearchAnalyticsResponse>(`${GSC_API}/webmasters/v3/sites/${encodeSiteUrl(siteUrl)}/searchAnalytics/query`, {
       method: 'POST',
       body,
@@ -324,7 +329,7 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
         if (remaining <= 0)
           break
         const rowLimit = Math.min(pageSize, remaining)
-        const response = await rawQuery(siteUrl, { ...body, startRow, rowLimit }, opts)
+        const response = await querySearchAnalytics(siteUrl, { ...body, startRow, rowLimit }, opts)
         if (response.metadata)
           metadata = response.metadata as GscSearchAnalyticsMetadata
         if (response.responseAggregationType)
@@ -448,6 +453,8 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
         }),
     },
 
-    _rawQuery: rawQuery,
+    searchAnalytics: {
+      query: querySearchAnalytics,
+    },
   }
 }

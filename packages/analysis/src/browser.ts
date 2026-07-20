@@ -18,7 +18,6 @@ import { createAttachedTableSource } from '@gscdump/engine/source'
 
 export type { AnalyzerRegistry } from '@gscdump/engine/analyzer'
 export type { AttachedTableRunner as AnalyzerRunner, AttachedTableSourceOptions as BrowserAnalyzeOptions } from '@gscdump/engine/source'
-export { rewriteForTableSource } from '@gscdump/engine/source'
 
 export async function analyzeInBrowser(
   runner: AttachedTableRunner,

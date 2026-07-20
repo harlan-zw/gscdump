@@ -55,7 +55,8 @@ after e2e passes with either `GSC_ACCESS_TOKEN` or
   a clear stable protocol contract.
 - Use `@gscdump/contracts` for hosted API wire shapes and routes.
 - Use `@gscdump/sdk` clients for hosted API transport.
-- Use `gscdump/query` or `@gscdump/sdk/query` for query builder types.
+- Use `gscdump/query` for strict query-builder types. Hosted wire shapes come
+  from `@gscdump/contracts`; the SDK does not duplicate either surface.
 - The MCP server lives in `@gscdump/cli` (`src/mcp/`); there is no separate
   MCP package. Edit it through the CLI surface.
 

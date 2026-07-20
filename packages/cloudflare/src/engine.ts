@@ -36,7 +36,7 @@ export interface AnalyticsEngineRuntime {
   getEngine: (env: AnalyticsEnv, db: any, hooks?: AnalyticsEngineHooks) => ReturnType<typeof createStorageEngine> | null
 }
 
-export function createAnalyticsEngineRuntime(): AnalyticsEngineRuntime {
+function createAnalyticsEngineRuntime(): AnalyticsEngineRuntime {
   const rowCache = createDucklingsRowCache()
   return {
     getEngine(env, db, hooks = {}) {

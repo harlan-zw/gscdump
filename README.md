@@ -18,8 +18,8 @@
 
 ## Features
 
-- 🤖 **Agent-native** - 9 intent-keyed reports + 28 raw analyzers, deterministic JSON, bounded findings. Agents drive the CLI (`gscdump report ...`) or the slim MCP shell (`list-reports` + `run-report`).
-- 🔍 **28 SEO analyzers** - striking distance, cannibalization, decay, movers, intent atlas, CTR anomaly, survival, change-point, and more. Each one is an agent tool.
+- 🤖 **Agent-native** - 9 intent-keyed reports + 29 raw analyzers, deterministic JSON, bounded findings. Agents drive the CLI (`gscdump report ...`) or the slim MCP shell (`list-reports` + `run-report`).
+- 🔍 **29 SEO analyzers** - striking distance, cannibalization, decay, movers, intent atlas, CTR anomaly, survival, change-point, and more. Each one is an agent tool.
 - 📋 **Reports** - composed analyses: `health`, `movers`, `opportunities`, `risks`, `priority`, `growth`, `brand`, `triage <page|query>`, `pre-publish <topic>`. One question per report.
 - 💾 **Own your data** - sync GSC into a local DuckDB/Parquet store. No BigQuery, no 16-month expiry, no row caps.
 - ⚡ **Indexing + sitemaps** - URL inspection, batch indexing, sitemap CRUD.
@@ -30,7 +30,7 @@
 
 gscdump is the search-data substrate for AI agents. Google Search Console is the first engine; the surface area is everything an agent needs to reason about how a site shows up in search, classical and AI.
 
-The Google APIs were built for dashboards: the UI caps at 1,000 rows, the API at 25k per request, BigQuery export is the only escape, and data evaporates after 16 months. None of that fits an agent loop. gscdump gives you a typed client, a streaming store you control, 28 analyzers, and an MCP server that exposes them as discrete tools and resources.
+The Google APIs were built for dashboards: the UI caps at 1,000 rows, the API at 25k per request, BigQuery export is the only escape, and data evaporates after 16 months. None of that fits an agent loop. gscdump gives you a typed client, a streaming store you control, 29 analyzers, and an MCP server that exposes them as discrete tools and resources.
 
 ## Get Started
 
@@ -230,7 +230,7 @@ The MCP shell is intentionally slim: agents drive the report layer for analysis 
 ## API Usage
 
 ```ts
-import { googleSearchConsole } from 'gscdump/api'
+import { googleSearchConsole } from 'gscdump'
 import { between, date, gsc, page, query } from 'gscdump/query'
 
 // Create client with auth

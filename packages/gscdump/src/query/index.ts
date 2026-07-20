@@ -51,7 +51,7 @@ export type {
   PlannerCapabilities,
 } from './plan'
 // Resolver
-export { extractDateRange, extractMetricFilters, extractSearchType, extractSpecialOperatorFilters, isJsonFilter, normalizeBuilderState, normalizeBuilderStateResult, normalizeFilter, parseJsonFilter, resolveToBody, resolveToBodyResult } from './resolver'
+export { extractDateRange, extractMetricFilters, extractSearchType, extractSpecialOperatorFilters, normalizeBuilderState, normalizeBuilderStateResult, normalizeFilter, resolveToBody, resolveToBodyResult } from './resolver'
 
 // Types
 export type { BuilderState, Column, Dimension, DimensionValueMap, Filter, FilterInput, GSCResult, GSCRow, InternalFilter, JsonFilter, JsonInternalFilter, Metric, MetricColumn, QueryParam, QueryParamName, QueryParamValueMap } from './types'

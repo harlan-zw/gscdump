@@ -1,14 +1,10 @@
 .:
-  createAnalyticsEngineRuntime: function
   createDucklingsCodec: function
   createDucklingsExecutor: function
   createDucklingsRowCache: function
   createInflightDedupe: function
   getAnalyticsEngine: function
   getHostedR2QueryKey: function
-  signSizeHint: function
-  useAnalyticsEnv: function
-  verifySizeHint: function
 ./server-tail:
   buildArchetypeSql: function
   createDuckDbIcebergExecutor: function

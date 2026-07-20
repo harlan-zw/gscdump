@@ -82,17 +82,6 @@ export function toPartnerError(error: unknown): PartnerApiError {
   })
 }
 
-/** Narrow an unknown error to the modelled `PartnerApiError`. */
-export function isPartnerError(error: unknown): error is PartnerApiError {
-  return error instanceof PartnerApiError
-}
-
-/** Human-readable, log-friendly rendering of a modelled partner failure. */
-export function formatPartnerError(error: PartnerApiError): string {
-  const status = error.statusCode != null ? ` (${error.statusCode})` : ''
-  return `[${error.kind}]${status} ${error.message}`
-}
-
 /**
  * Re-raise a modelled `PartnerApiError` as itself. The error variant of every
  * `*Result` core already IS the throwable `PartnerApiError`, so the throwing

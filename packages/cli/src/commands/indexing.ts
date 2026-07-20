@@ -1,6 +1,6 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { batchRequestIndexing, fetchSitemapUrls, getIndexingMetadata, requestIndexing, runSequentialBatch } from 'gscdump/api'
+import { batchRequestIndexing, fetchSitemapUrls, getIndexingMetadata, requestIndexing, runSequentialBatch } from 'gscdump'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { applyOutputMode, logger, OUTPUT_ARGS, readUrlList } from '../utils'

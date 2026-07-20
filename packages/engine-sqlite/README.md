@@ -46,9 +46,9 @@ const rows = await executor(compiledSql, params) // queryUserD1, libsql, ...
 ### Engine source for analyzer dispatch
 
 ```ts
-import { createEngine } from '@gscdump/engine-sqlite'
+import { createSqliteQuerySource } from '@gscdump/engine-sqlite'
 
-const source = createEngine({
+const source = createSqliteQuerySource({
   executor, // (sql, params, mode) => { rows }
   siteId,
   regex: true, // hosts that expose REGEXP (D1, libsql, sqlite3+regexp)
@@ -59,7 +59,7 @@ Always import `sql` from `@gscdump/engine-sqlite` — not `drizzle-orm` directly
 
 ## Exports
 
-- `createEngine({ executor, siteId, regex? })` — builds a `SqlQuerySource`.
+- `createSqliteQuerySource({ executor, siteId, regex? })` — builds an `AnalysisQuerySource`.
 - `createSqliteInsightRunner({ executor })` — sqlite-proxy drizzle adapter.
 - `compileSqlite(sql)` — compile to `{ sql, params }` for any HTTP executor.
 - `aggClicks` / `aggImpressions` / `aggCtr` / `aggPosition` — aggregate helpers.

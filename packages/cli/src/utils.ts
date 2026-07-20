@@ -170,6 +170,14 @@ export function cyan(s: string | number): string {
   return color('cyan', s)
 }
 
+/** CLI-owned terminal progress rendering; not part of the Google client API. */
+export function progressBar(current: number, total: number, label: string, width = 30): string {
+  const percent = total > 0 ? Math.min(current / total, 1) : 0
+  const filled = Math.round(width * percent)
+  const bar = `${cyan('█'.repeat(filled))}${dim('░'.repeat(width - filled))}`
+  return `  ${bar} ${dim(`${current}/${total}`)} ${label}`
+}
+
 // Gradient colors for splash (green -> cyan -> blue)
 const gradientColors = [
   (s: string) => `\x1B[38;2;52;211;153m${s}\x1B[0m`, // emerald

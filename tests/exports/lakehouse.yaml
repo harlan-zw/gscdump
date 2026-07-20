@@ -18,6 +18,9 @@
   resolveIcebergDataFiles: function
   stringifyBigintSafe: function
   toIcebergDayCount: function
+./maintenance:
+  isCommitRateLimited: function
+  sweepUncommittedOrphans: function
 ./provisioning:
   adoptCatalog: function
   allocateCatalogSiteId: function
@@ -31,10 +34,8 @@
   icebergCreateTable: function
   icebergDropTable: function
   icebergManifests: function
-  isCommitRateLimited: function
   restCatalogConnect: function
   restCatalogCreateNamespace: function
   restCatalogListTables: function
   restCatalogLoadTable: function
   s3SignedResolver: function
-  sweepUncommittedOrphans: function

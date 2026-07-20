@@ -40,24 +40,6 @@ export function isErr<A, E>(result: Result<A, E>): result is Err<E> {
   return !result.ok
 }
 
-/** Maps the success channel, leaving an `Err` untouched. */
-export function mapResult<A, B, E>(result: Result<A, E>, f: (value: A) => B): Result<B, E> {
-  return result.ok ? ok(f(result.value)) : result
-}
-
-/** Maps the error channel, leaving an `Ok` untouched. */
-export function mapErr<A, E, F>(result: Result<A, E>, f: (error: E) => F): Result<A, F> {
-  return result.ok ? result : err(f(result.error))
-}
-
-/** Folds both channels into a single value. */
-export function matchResult<A, E, R>(
-  result: Result<A, E>,
-  handlers: { onOk: (value: A) => R, onErr: (error: E) => R },
-): R {
-  return result.ok ? handlers.onOk(result.value) : handlers.onErr(result.error)
-}
-
 /**
  * Collapses a `Result` back into the throwing world: returns the value or throws
  * via `toError`. Used by the throwing wrappers that sit over the `Result` core so

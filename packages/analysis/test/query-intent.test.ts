@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyQueryIntent, decodeIntent, encodeIntent, INTENT_CLASSIFIER_VERSION, SEARCH_INTENT_CODE } from '../src/query/intent'
+import { classifyQueryIntent, encodeIntent, INTENT_CLASSIFIER_VERSION, SEARCH_INTENT_CODE } from '../src/query/intent'
 
 describe('classifyQueryIntent', () => {
   it('informational: question words + info nouns', () => {
@@ -52,13 +52,12 @@ describe('classifyQueryIntent', () => {
     expect(INTENT_CLASSIFIER_VERSION).toBe(1)
   })
 
-  it('encodes to a cheap int and round-trips', () => {
+  it('encodes to a cheap int', () => {
     for (const q of ['nuxt seo', 'what is seo', 'nuxt vs next', 'buy domain', 'how to buy a domain']) {
       const c = classifyQueryIntent(q)
       const code = encodeIntent(c)
       expect(code).toBeGreaterThanOrEqual(0)
       expect(code).toBeLessThanOrEqual(0b111)
-      expect(decodeIntent(code)).toEqual({ intent: c.intent, howTo: c.howTo })
     }
     // packing: intent in low 2 bits, howTo in bit 2.
     expect(encodeIntent({ intent: 'unknown', howTo: false })).toBe(0)

@@ -6,16 +6,14 @@
  * sqlite surface accessible via an async executor (`sql, params) => rows`).
  */
 
-export type { CachedManifestStore, CachedManifestStoreOptions } from './cached-manifest-store'
-export { createCachedManifestStore } from './cached-manifest-store'
-export { createEngine } from './engine'
-export type { EngineConfig, SqliteQueryExecutor } from './engine'
 export {
   aggClicks,
   aggCtr,
   aggImpressions,
   aggPosition,
 } from './metrics'
+export { createSqliteQuerySource } from './query-source'
+export type { SqliteQueryExecutor, SqliteQuerySourceOptions } from './query-source'
 // R2 manifest mirror tables + D1-backed ManifestStore implementation.
 // Imported directly by host apps for drizzle-kit migration discovery.
 export {

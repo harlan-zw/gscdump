@@ -33,7 +33,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "build": "obuild",
@@ -44,7 +44,7 @@
     "prepack": "pnpm run build"
   },
   "peerDependencies": {
-    "@duckdb/duckdb-wasm": "catalog:"
+    "@duckdb/duckdb-wasm": "^1.33.1-dev57.0"
   },
   "peerDependenciesMeta": {
     "@duckdb/duckdb-wasm": {
@@ -52,10 +52,10 @@
     }
   },
   "dependencies": {
-    "@gscdump/contracts": "workspace:*",
-    "@gscdump/engine": "workspace:*",
+    "@gscdump/contracts": "workspace:^",
+    "@gscdump/engine": "workspace:^",
     "drizzle-orm": "catalog:",
-    "gscdump": "workspace:*"
+    "gscdump": "workspace:^"
   },
   "devDependencies": {
     "@duckdb/duckdb-wasm": "catalog:",

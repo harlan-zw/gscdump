@@ -25,11 +25,6 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
-    },
-    "./r2-manifest-schema": {
-      "types": "./dist/r2-manifest-schema.d.mts",
-      "import": "./dist/r2-manifest-schema.mjs",
-      "default": "./dist/r2-manifest-schema.mjs"
     }
   },
   "main": "./dist/index.mjs",
@@ -38,7 +33,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "build": "obuild",
@@ -51,7 +46,7 @@
     "drizzle-orm": "catalog:"
   },
   "dependencies": {
-    "@gscdump/engine": "workspace:*"
+    "@gscdump/engine": "workspace:^"
   },
   "devDependencies": {
     "drizzle-orm": "catalog:",

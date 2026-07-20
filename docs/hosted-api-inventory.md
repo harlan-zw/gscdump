@@ -31,26 +31,26 @@ replacement for deliberate review; `--write` updates the checked-in snapshot.
 | HTTP method/path operations | 220 |
 | Legacy WebSocket operations | 2 |
 | Total hosted operations | 222 |
-| Legacy package endpoint descriptors | 64 |
+| Legacy package endpoint descriptors | 63 |
 | Generated public-v1 operation descriptors | 18 |
-| Distinct hosted operations owned by a descriptor | 79 |
-| Hosted operations without a descriptor | 143 |
-| Schema-less legacy descriptors | 10 |
-| Legacy descriptors with no producer handler | 2 |
-| Legacy descriptor method/path collisions | 1 |
+| Distinct hosted operations owned by a descriptor | 81 |
+| Hosted operations without a descriptor | 141 |
+| Schema-less legacy descriptors | 3 |
+| Legacy descriptors with no producer handler | 0 |
+| Legacy descriptor method/path collisions | 0 |
 
 The inventory also includes `server/routes/ws/user.ts` and
 `server/routes/ws/partner.ts` as the two legacy WebSocket operations.
 
-The 143 unowned operations are not all public-contract gaps. The v1 review
+The 141 unowned operations are not all public-contract gaps. The v1 review
 classification is:
 
 | Review outcome | Operations | Meaning |
 | --- | ---: | --- |
 | Accepted v1 slice | 18 | Executable descriptor, generated contract, SDK, and hosted route exist |
 | Analytics candidate | 25 | Review for `/api/analytics/v1` |
-| Partner candidate | 54 | Review for `/api/partner/v1` |
-| Decision required | 46 | Shared user/site/team routes that need an explicit boundary decision |
+| Partner candidate | 49 | Review for `/api/partner/v1` |
+| Decision required | 51 | Shared user/site/team routes that need an explicit boundary decision |
 | Outside public protocol | 77 | Admin, CLI, public-host, session, webhook, and other host concerns |
 | Replace realtime | 2 | Replace both legacy sockets with `/ws/v1` |
 
@@ -81,43 +81,29 @@ The accepted slice is intentionally limited to:
 - `GET /api/realtime/v1/stream/head`;
 - `POST /api/realtime/v1/tickets`.
 
-The 64 legacy descriptors and their findings remain migration evidence. Their
-ten `noSchema` entries, two missing handlers, and one collision are not defects
-in these v1 descriptors; they prevent those legacy operations from being
-promoted until each is resolved deliberately.
+The 63 legacy descriptors and their findings remain migration evidence. Their
+three `noSchema` entries are not defects in the public HTTP-v1 descriptors;
+they identify the remaining deployed-wire operations that cannot yet be treated
+as fully typed package APIs.
 
 ## Concrete contract findings
 
-Ten current legacy descriptors use `noSchema`:
+Three current legacy descriptors use `noSchema`:
 
 - `analytics.analyze`
 - `partner.deleteSite`
-- `partner.deleteTeam`
-- `partner.getContentVelocity`
 - `partner.getSyncStatus`
-- `partner.refreshSitemaps`
-- `partner.removeTeamMember`
-- `partner.renameTeam`
-- `partner.submitSitemap`
-- `partner.updateTeamMemberRole`
 
 V1 permits no schema-less descriptor. Each accepted operation needs request
 and response schemas; removed operations should be deleted from the v1
 registry rather than carried as placeholders.
 
-Two descriptors have no matching hosted method/path handler:
-
-- `analytics.queryRows` → `POST /api/__gsc/sites/{siteId}/rows`
-- `partner.getAnalysis` → `GET /api/sites/{siteId}/analysis`
-
-One method/path is claimed by two logical descriptors:
-
-- `POST /api/sites/{siteId}/sitemaps` → `partner.submitSitemap` and
-  `partner.refreshSitemaps`
-
-The producer currently multiplexes sitemap actions through one route. V1 must
-either model one typed operation with a closed action contract or split it
-into distinct paths. It cannot publish two indistinguishable descriptors.
+All legacy descriptors now match a deployed producer method/path and no two
+logical descriptors claim the same method/path. The producer's multiplexed
+`POST /api/sites/{siteId}/sitemaps` route is represented by one typed
+`partner.postSitemaps` descriptor with a closed action union; SDK convenience
+methods delegate to that single wire operation. Sitemap membership lookup is
+represented separately by the typed `partner.getSitemapMembership` descriptor.
 
 ## Scope and exclusions
 

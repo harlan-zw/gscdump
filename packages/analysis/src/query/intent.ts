@@ -33,17 +33,11 @@ export const SEARCH_INTENT_CODE: Record<SearchIntent, number> = {
   commercial: 2,
   transactional: 3,
 }
-const INTENT_BY_CODE: readonly SearchIntent[] = ['unknown', 'informational', 'commercial', 'transactional']
 const HOWTO_BIT = 0b100
 
 /** Pack a classification into one small int for cheap dimension storage. */
 export function encodeIntent(c: Pick<IntentClassification, 'intent' | 'howTo'>): number {
   return SEARCH_INTENT_CODE[c.intent] | (c.howTo ? HOWTO_BIT : 0)
-}
-
-/** Inverse of {@link encodeIntent}. */
-export function decodeIntent(code: number): { intent: SearchIntent, howTo: boolean } {
-  return { intent: INTENT_BY_CODE[code & 0b011] ?? 'unknown', howTo: (code & HOWTO_BIT) !== 0 }
 }
 
 // Knowledge-seeking cues (interrogatives + info nouns).

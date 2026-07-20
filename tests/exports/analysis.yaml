@@ -22,7 +22,6 @@
   createEngineQuerySource: function
   createInMemoryQuerySource: function
   createSorter: function
-  decodeIntent: function
   DEFAULT_PRIORITY_SOURCES: object
   defaultAnalyzerRegistry: object
   defaultReportRegistry: object
@@ -46,7 +45,6 @@
   queryRows: function
   REPORTS: object
   resolveWindow: function
-  rewriteForTableSource: function
   ROW_ANALYZERS: object
   runAnalyzerFromSource: function
   runAnalyzerWithEngine: function
@@ -55,44 +53,6 @@
   scorePriorityActions: function
   SEARCH_INTENT_CODE: object
   SQL_ANALYZERS: object
-./analyzer:
-  bayesianCtrAnalyzer: object
-  bipartitePagerankAnalyzer: object
-  brandAnalyzer: object
-  cannibalizationAnalyzer: object
-  changePointAnalyzer: object
-  clampLimit: function
-  clampOffset: function
-  clusteringAnalyzer: object
-  concentrationAnalyzer: object
-  contentVelocityAnalyzer: object
-  ctrAnomalyAnalyzer: object
-  ctrCurveAnalyzer: object
-  darkTrafficAnalyzer: object
-  dataDetailAnalyzer: object
-  dataQueryAnalyzer: object
-  datesQueryState: function
-  decayAnalyzer: object
-  deviceGapAnalyzer: object
-  intentAtlasAnalyzer: object
-  keywordBreadthAnalyzer: object
-  longTailAnalyzer: object
-  moversAnalyzer: object
-  opportunityAnalyzer: object
-  pagesQueryState: function
-  paginateClause: function
-  paginateInMemory: function
-  positionDistributionAnalyzer: object
-  positionVolatilityAnalyzer: object
-  queriesQueryState: function
-  queryMigrationAnalyzer: object
-  resolveSort: function
-  seasonalityAnalyzer: object
-  stlDecomposeAnalyzer: object
-  strikingDistanceAnalyzer: object
-  survivalAnalyzer: object
-  trendsAnalyzer: object
-  zeroClickAnalyzer: object
 ./errors:
   analysisErrors: object
   analysisErrorToException: function
@@ -108,16 +68,3 @@
   resolveTarget: function
   runReport: function
   runReportResult: function
-./semantic:
-  analyzeContentGap: function
-  ContentGapSourceUnsupportedError: function
-  cosineNormalized: function
-  createContentGapAnalyzer: function
-  createMemoryContentGapCache: function
-  deriveUrlText: function
-  normalizeUrl: function
-  rankContentGaps: function
-./source:
-  createCompositeSource: function
-  createInMemoryQuerySource: function
-  IN_MEMORY_DEFAULT_CAPABILITIES: object

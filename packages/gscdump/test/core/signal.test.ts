@@ -43,4 +43,20 @@ describe('abortSignal threading', () => {
     await client.inspect('sc-domain:example.com', 'https://example.com/', { signal: controller.signal })
     expect(captured).toBe(controller.signal)
   })
+
+  it('passes signal to the direct Search Analytics operation', async () => {
+    let captured: AbortSignal | undefined
+    const fetch = makeStubFetch((_url, init) => {
+      captured = init.signal
+      return { rows: [] }
+    })
+    const controller = new AbortController()
+    const client = googleSearchConsole('tok', { fetch })
+    await client.searchAnalytics.query(
+      'sc-domain:example.com',
+      { startDate: '2026-07-01', endDate: '2026-07-02' },
+      { signal: controller.signal },
+    )
+    expect(captured).toBe(controller.signal)
+  })
 })

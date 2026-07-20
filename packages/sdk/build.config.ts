@@ -4,7 +4,7 @@ export default defineBuildConfig({
   entries: [
     {
       type: 'bundle',
-      input: ['./src/index.ts', './src/query.ts', './src/v1/index.ts'],
+      input: ['./src/index.ts', './src/v1/index.ts'],
     },
   ],
 })

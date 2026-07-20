@@ -56,19 +56,9 @@ import type { SearchType } from '../storage'
 import { DEFAULT_PARTITION_KEY_ENCODING, defineIcebergDataset } from '@gscdump/lakehouse'
 import { SCHEMAS, TABLE_METADATA } from '../schema'
 
-function mapColumnType(t: ColumnType): IcebergColumnType {
-  switch (t) {
-    case 'VARCHAR': return 'STRING'
-    case 'INTEGER': return 'INT'
-    case 'BIGINT': return 'LONG'
-    case 'DOUBLE': return 'DOUBLE'
-    case 'DATE': return 'DATE'
-  }
-}
-
-// Generic shapes now live in `@gscdump/lakehouse` (ADR-0021 amendment 8) —
-// re-exported here so existing `@gscdump/engine/iceberg` consumers see no
-// change to their import surface.
+// Package-internal aliases used by the GSC dataset implementation. They are
+// deliberately not re-exported from `@gscdump/engine/iceberg`; application
+// code imports these generic shapes from `@gscdump/lakehouse`.
 export { DEFAULT_PARTITION_KEY_ENCODING } from '@gscdump/lakehouse'
 export type {
   IcebergColumn,
@@ -79,6 +69,16 @@ export type {
   IcebergTableSpec,
   PartitionKeyEncoding,
 } from '@gscdump/lakehouse'
+
+function mapColumnType(t: ColumnType): IcebergColumnType {
+  switch (t) {
+    case 'VARCHAR': return 'STRING'
+    case 'INTEGER': return 'INT'
+    case 'BIGINT': return 'LONG'
+    case 'DOUBLE': return 'DOUBLE'
+    case 'DATE': return 'DATE'
+  }
+}
 
 /** The 9 fact tables that exist as global Iceberg tables. */
 export type IcebergTableName = Extract<
@@ -229,8 +229,8 @@ export function gscDataset(table: IcebergTableName, encoding: PartitionKeyEncodi
 /**
  * Derive the full Iceberg table spec for a table + encoding. Thin wrapper
  * over {@link gscDataset}'s `tableSpec` (ADR-0021 R2-FIXES C5) — kept as a
- * named export so existing `@gscdump/engine/iceberg` consumers see no change
- * to their import surface.
+ * named GSC-specific export. Generic schema authoring types are owned by
+ * `@gscdump/lakehouse`.
  *
  * CONTRACT NOTE: implementation agents must treat the RETURNED VALUE as the
  * source of truth — do not hand-list columns elsewhere.

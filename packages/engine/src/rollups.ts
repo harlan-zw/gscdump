@@ -436,7 +436,7 @@ export const ROLLUP_PAGE_ROWS_DAILY = 70_000
 // `(query_canonical × date)` output under one page on a high-cardinality site so
 // the build is single-pass (no OFFSET re-aggregation). The per-window pager is the
 // safety net for any window that still over-produces.
-export const DAILY_MAX_WINDOW_DAYS = 7
+const DAILY_MAX_WINDOW_DAYS = 7
 
 const DAY_RE = /^daily\/(\d{4})-(\d{2})-(\d{2})$/
 const WEEK_RE = /^weekly\/(\d{4})-(\d{2})-(\d{2})$/
@@ -456,7 +456,7 @@ function isoDate(ms: number): string {
  * `hourly/` partitions and anything unrecognised — those are excluded from
  * windowed planning.
  */
-export function partitionDaySpan(partition: string): { startMs: number, endMs: number } | null {
+function partitionDaySpan(partition: string): { startMs: number, endMs: number } | null {
   const day = DAY_RE.exec(partition)
   if (day) {
     const ms = Date.UTC(Number(day[1]), Number(day[2]) - 1, Number(day[3]))
@@ -581,7 +581,7 @@ export function planRollupWindows(
 }
 
 /** Partition strings whose span intersects the inclusive [start, end] date range. */
-export function partitionsInRange(
+function partitionsInRange(
   parts: Array<{ partition: string, bytes: number }>,
   start: string,
   end: string,
@@ -914,7 +914,7 @@ export const topCountries28dRollup: RollupDef = {
 }
 
 /** Top 1000 keywords by clicks over the trailing 28-day window. */
-export const topKeywords28dRollup: RollupDef = {
+const topKeywords28dRollup: RollupDef = {
   id: 'top_keywords_28d',
   windowDays: 28,
   async build({ engine, ctx, windowAnchorMs, searchType }) {

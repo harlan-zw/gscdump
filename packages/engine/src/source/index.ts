@@ -21,7 +21,7 @@ import { DEFAULT_SEARCH_TYPE } from '../layout'
 import { assertDimensionsSupported, getFilterDimensions, pgResolverAdapter } from '../resolver'
 
 export type { AttachedTableRunner, AttachedTableSourceOptions } from './attached-table'
-export { AttachedTableMissingError, createAttachedTableSource, rewriteForTableSource } from './attached-table'
+export { AttachedTableMissingError, createAttachedTableSource } from './attached-table'
 export { createSqlQuerySource } from './create-sql-query-source'
 export type { CreateSqlQuerySourceOptions } from './create-sql-query-source'
 export type {

@@ -1,3 +1,4 @@
+import type { GscSearchType } from './types'
 import { z } from 'zod'
 import {
   accountNextActions,
@@ -28,6 +29,37 @@ const unknownRecord = z.record(z.string(), z.unknown())
  * video) to validate untrusted input before threading it to the engine.
  */
 export const searchTypeSchema = z.enum(['web', 'image', 'video', 'news', 'discover', 'googleNews'])
+
+/**
+ * Per-slice capability facts, wire-schema-adjacent to {@link searchTypeSchema}.
+ * Discover and Google News are surfaced from GSC without the query/position
+ * dimensions Web exposes — Discover has no `query`/`position`/`device`/`country`
+ * breakdown at all, and Google News only reports clicks/impressions.
+ *
+ * - `queries`: the slice exposes per-query rows (query/position breakdowns).
+ * - `dimensions`: the slice exposes country/device facets (Web-family only).
+ *
+ * Consumers use this to hide inapplicable metric columns and dimension filters
+ * per type instead of re-encoding these domain facts locally.
+ */
+export const SEARCH_TYPE_CAPABILITIES: Record<GscSearchType, { queries: boolean, dimensions: boolean }> = {
+  web: { queries: true, dimensions: true },
+  image: { queries: true, dimensions: true },
+  video: { queries: true, dimensions: true },
+  news: { queries: true, dimensions: true },
+  discover: { queries: false, dimensions: false },
+  googleNews: { queries: false, dimensions: false },
+}
+
+/** Whether the slice exposes per-query rows (query/position breakdowns). */
+export function searchTypeSupportsQueries(searchType: GscSearchType): boolean {
+  return SEARCH_TYPE_CAPABILITIES[searchType].queries
+}
+
+/** Whether the slice exposes country/device facets (Web-family slices only). */
+export function searchTypeSupportsDimensions(searchType: GscSearchType): boolean {
+  return SEARCH_TYPE_CAPABILITIES[searchType].dimensions
+}
 
 export const builderStateSchema = z.object({
   searchType: searchTypeSchema.optional(),
@@ -159,8 +191,6 @@ export const gscRowQueryResponseSchema = z.object({
   rows: z.array(unknownRecord),
   meta: gscRowQueryMetaSchema,
 }).loose()
-
-export const indexingUrlStatusSchema = z.enum(['indexed', 'not_indexed', 'pending'])
 
 export const indexingUrlRowSchema = z.object({
   url: z.string(),
@@ -612,6 +642,31 @@ export const teamCatalogRefSchema = z.object({
   readsEnabled: z.boolean(),
 }).loose()
 
+export const bindPartnerTeamCatalogSchema = z.object({
+  catalogUri: z.string().min(1),
+  warehouse: z.string().min(1),
+  namespace: z.string().min(1).optional(),
+  bucket: z.string().min(1).optional(),
+})
+
+export const bindPartnerTeamCatalogResponseSchema = z.object({
+  teamId: z.string(),
+  status: z.literal('ready'),
+  catalogUri: z.string().min(1),
+  warehouse: z.string().min(1),
+  bucket: z.string().min(1),
+  namespace: z.string().min(1),
+}).loose()
+
+export const siteIntIdCrosswalkResponseSchema = z.object({
+  crosswalk: z.record(z.string(), z.number().int().positive()),
+  sites: z.array(z.object({
+    siteId: z.string(),
+    intId: z.number().int().positive(),
+    siteUrl: z.string(),
+  }).loose()),
+}).loose()
+
 export const dataQueryOptionsSchema = z.object({
   comparison: builderStateSchema.optional(),
   filter: gscComparisonFilterSchema.optional(),
@@ -659,26 +714,6 @@ export const gscdumpAnalysisParamsSchema = gscdumpAnalysisBaseParamsSchema.exten
       code: 'custom',
       path: ['brandTerms'],
       message: 'brandTerms is required for brand/non-brand presets',
-    })
-  }
-})
-
-export const gscdumpAnalysisBundleParamsSchema = gscdumpAnalysisBaseParamsSchema.extend({
-  presets: z.array(gscdumpAnalysisPresetSchema).min(1).max(8),
-}).superRefine((value, ctx) => {
-  if (value.presets.some(preset => preset === 'brand-only' || preset === 'non-brand') && !value.brandTerms?.trim()) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['brandTerms'],
-      message: 'brandTerms is required for brand/non-brand presets',
-    })
-  }
-  if (value.presets.some(preset => preset === 'movers-rising' || preset === 'movers-declining' || preset === 'decay')
-    && (!value.prevStartDate || !value.prevEndDate)) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['prevStartDate'],
-      message: 'prevStartDate and prevEndDate are required for comparison presets',
     })
   }
 })
@@ -1059,6 +1094,21 @@ export const gscdumpAnalysisSourcesResponseSchema = z.object({
   }),
 }).loose()
 
+export const queryDimSourceResponseSchema = z.object({
+  file: z.object({
+    url: z.string(),
+    bytes: z.number(),
+    contentHash: z.string(),
+  }).loose().nullable(),
+}).loose()
+
+export const bulkFileResolutionResponseSchema = z.object({
+  generatedAt: z.string(),
+  siteCount: z.number(),
+  maxSites: z.number(),
+  results: z.record(z.string(), gscdumpAnalysisSourcesResponseSchema),
+}).loose()
+
 export const gscdumpKeywordSparklinesParamsSchema = z.object({
   keywords: z.array(z.string()).min(1).max(20),
   startDate: z.string(),
@@ -1099,11 +1149,6 @@ export const gscdumpPageTrendResponseSchema = z.object({
   previousTotal: z.number().optional(),
   meta: z.object({ siteUrl: z.string(), syncStatus: z.string().nullable() }).loose(),
 }).loose()
-
-export const gscdumpDateRangeParamsSchema = z.object({
-  startDate: z.string(),
-  endDate: z.string(),
-})
 
 export const gscdumpIndexPercentParamsSchema = z.object({
   invisibleLimit: z.number().optional(),
@@ -1211,6 +1256,10 @@ export const createPartnerTeamSchema = z.object({
   personalTeam: z.boolean().optional(),
 })
 
+export const renamePartnerTeamSchema = z.object({
+  name: z.string().min(2).max(60),
+})
+
 export const addPartnerTeamMemberSchema = z.object({
   userId: z.string(),
   role: gscdumpTeamRoleSchema,
@@ -1219,6 +1268,50 @@ export const addPartnerTeamMemberSchema = z.object({
 export const bindPartnerSiteTeamSchema = z.object({
   teamId: z.string().nullable(),
 })
+
+export const partnerTeamCreatedResponseSchema = z.object({ team: gscdumpTeamRowSchema }).loose()
+export const partnerTeamRenamedResponseSchema = z.object({ ok: z.literal(true), name: z.string() }).loose()
+export const partnerTeamDeletedResponseSchema = z.object({ ok: z.literal(true) }).loose()
+export const partnerTeamMembersResponseSchema = z.object({ members: z.array(gscdumpTeamMemberRowSchema) }).loose()
+export const partnerTeamMemberAddedResponseSchema = z.object({
+  ok: z.literal(true),
+  role: gscdumpTeamRoleSchema,
+  alreadyExisted: z.boolean().optional(),
+}).loose()
+export const partnerTeamMemberRoleResponseSchema = z.object({ ok: z.literal(true), role: gscdumpTeamRoleSchema }).loose()
+export const partnerTeamMemberRemovedResponseSchema = z.object({ ok: z.literal(true) }).loose()
+export const partnerSiteTeamBindingResponseSchema = z.object({ ok: z.literal(true), teamId: z.string().nullable() }).loose()
+
+export const gscVerificationMethodSchema = z.enum(['META', 'FILE', 'DNS_TXT', 'DNS_CNAME', 'ANALYTICS', 'TAG_MANAGER'])
+export const gscVerificationSiteSchema = z.object({
+  type: z.enum(['SITE', 'INET_DOMAIN']),
+  identifier: z.string().min(1),
+})
+export const gscVerificationDnsRecordSchema = z.object({
+  type: z.enum(['TXT', 'CNAME']),
+  host: z.string().min(1),
+  value: z.string().min(1),
+})
+export const gscVerificationRequestSchema = z.object({
+  userId: z.string().optional(),
+  siteUrl: z.string().min(1),
+  method: gscVerificationMethodSchema.optional(),
+})
+export const gscVerificationTokenResponseSchema = z.object({
+  siteUrl: z.string().min(1),
+  site: gscVerificationSiteSchema,
+  method: gscVerificationMethodSchema,
+  token: z.string(),
+  metaContent: z.string().nullable(),
+  dnsRecord: gscVerificationDnsRecordSchema.nullable(),
+}).loose()
+export const gscAddAndVerifyResponseSchema = z.object({
+  siteUrl: z.string().min(1),
+  site: gscVerificationSiteSchema,
+  method: gscVerificationMethodSchema,
+  verified: z.literal(true),
+  owners: z.array(z.string()),
+}).loose()
 
 export const partnerRealtimeEventSchema = z.discriminatedUnion('event', [
   z.object({ event: z.literal('sync.progress'), siteId: z.string(), siteUrl: z.string(), table: z.string(), date: z.string(), progress: z.number() }).loose(),
@@ -1239,17 +1332,6 @@ export const partnerRealtimeEventSchema = z.discriminatedUnion('event', [
 ])
 
 export const canonicalWebhookEventTypeSchema = z.enum(CANONICAL_WEBHOOK_EVENTS)
-export const webhookEventTypeSchema = canonicalWebhookEventTypeSchema
-
-export const jobFailedWebhookPayloadSchema = z.object({
-  event: z.literal('job.failed'),
-  siteId: z.string(),
-  siteUrl: z.string(),
-  table: z.string(),
-  date: z.string(),
-  error: z.string(),
-  timestamp: z.number(),
-}).loose()
 
 export const partnerWebhookDataSchema = unknownRecord
 
@@ -1276,7 +1358,6 @@ export const analyticsEndpointSchemas = {
   analyticsSitemaps: { response: sitemapIndexSchema },
   analyticsInspectionHistory: { response: inspectionHistoryResponseSchema },
   analyticsInspections: { response: inspectionIndexSchema },
-  analyticsRows: { response: gscRowQueryResponseSchema },
   analyticsRollup: { response: rollupEnvelopeSchema },
   analyticsBackfill: { body: backfillRangeSchema, response: backfillResponseSchema },
   analyticsIndexingUrls: { response: indexingUrlsResponseSchema },
@@ -1284,8 +1365,71 @@ export const analyticsEndpointSchemas = {
   analyticsIndexingInspect: { body: indexingInspectRequestSchema, response: indexingInspectAnyResponseSchema },
   analyticsSitemapChanges: { response: sitemapChangesResponseSchema },
   analyticsAnalysisSources: { response: gscdumpAnalysisSourcesResponseSchema },
+  analyticsQueryDimSource: { response: queryDimSourceResponseSchema },
+  analyticsBulkSources: { response: bulkFileResolutionResponseSchema },
   analyticsSourceInfo: { response: sourceInfoResponseSchema },
 } as const
+
+/**
+ * Body for `POST /sites/:siteId/sitemaps`. One wire endpoint, three actions:
+ * `submit`/`delete` operate on a specific sitemap URL (feedpath required),
+ * `refresh` re-fetches the GSC sitemap index and records health.
+ */
+export const partnerSitemapActionSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('submit'), sitemapUrl: z.string().min(1) }),
+  z.object({ action: z.literal('delete'), sitemapUrl: z.string().min(1) }),
+  z.object({ action: z.literal('refresh') }),
+  z.object({ action: z.literal('auto-discover') }),
+])
+
+export const partnerSitemapActionResponseSchema = z.discriminatedUnion('action', [
+  z.object({
+    success: z.boolean(),
+    action: z.enum(['submitted', 'deleted']),
+    sitemapUrl: z.string().min(1),
+    sitemapCount: z.number().int().nonnegative(),
+  }).loose(),
+  z.object({
+    success: z.literal(true),
+    action: z.literal('refreshed'),
+    sitemapCount: z.number().int().nonnegative(),
+    changed: z.boolean(),
+  }).loose(),
+  z.object({
+    success: z.boolean(),
+    action: z.literal('auto-discover'),
+    discovered: z.string().nullable(),
+    submitError: z.string().nullable().optional(),
+    sitemapCount: z.number().int().nonnegative(),
+  }).loose(),
+])
+
+export const gscdumpSitemapMembershipParamsSchema = z.object({
+  urls: z.array(z.string().min(1).max(2048)).max(500),
+  maxAgeDays: z.number().int().positive().max(365).optional(),
+})
+
+export const gscdumpSitemapMembershipUrlSchema = z.object({
+  url: z.string(),
+  normalized: z.string(),
+  inSitemap: z.boolean(),
+  sitemapUrl: z.string().nullable().optional(),
+  lastSeenAt: z.string().nullable().optional(),
+  lastmod: z.string().nullable().optional(),
+  sitemapFetchedAt: z.string().nullable().optional(),
+}).loose()
+
+export const gscdumpSitemapMembershipResponseSchema = z.object({
+  urls: z.array(gscdumpSitemapMembershipUrlSchema),
+  meta: z.object({
+    available: z.boolean(),
+    reason: z.enum(['empty', 'site_url_cap_exceeded', 'stale_sitemaps']).nullable(),
+    requested: z.number().int().nonnegative(),
+    checked: z.number().int().nonnegative(),
+    matched: z.number().int().nonnegative(),
+    newestFetchedAt: z.string().nullable(),
+  }).loose(),
+}).loose()
 
 export const partnerControlEndpointSchemas = {
   appUser: { response: gscdumpUserMeResponseSchema },
@@ -1304,13 +1448,14 @@ export const partnerControlEndpointSchemas = {
   getAnalysisSources: { response: gscdumpAnalysisSourcesResponseSchema },
   getData: { state: builderStateSchema, options: dataQueryOptionsSchema, response: gscdumpDataResponseSchema },
   getDataDetail: { state: builderStateSchema, options: dataDetailOptionsSchema, response: gscdumpDataDetailResponseSchema },
-  getAnalysis: { query: gscdumpAnalysisParamsSchema, response: gscdumpAnalysisResponseSchema },
   getSitemaps: { response: gscdumpSitemapsResponseSchema },
   getSitemapChanges: { response: gscdumpSitemapChangesResponseSchema },
+  postSitemaps: { body: partnerSitemapActionSchema, response: partnerSitemapActionResponseSchema },
+  getSitemapMembership: { body: gscdumpSitemapMembershipParamsSchema, response: gscdumpSitemapMembershipResponseSchema },
   getIndexing: { response: gscdumpIndexingResponseSchema },
   getIndexingUrls: { query: indexingUrlsParamsSchema, response: gscdumpIndexingUrlsResponseSchema },
   getIndexingDiagnostics: { query: indexingDiagnosticsParamsSchema, response: gscdumpIndexingDiagnosticsResponseSchema },
-  getIndexingInspect: { body: indexingInspectRequestSchema, response: indexingInspectAnyResponseSchema },
+  requestIndexingInspect: { body: indexingInspectRequestSchema, response: indexingInspectAnyResponseSchema },
   getUserSettings: { response: gscdumpUserSettingsSchema },
   patchUserSettings: { body: gscdumpUserSettingsSchema.partial(), response: gscdumpUserSettingsSchema },
   recoverPermission: { response: gscdumpPermissionRecoverySchema },
@@ -1318,14 +1463,22 @@ export const partnerControlEndpointSchemas = {
   getKeywordSparklines: { body: gscdumpKeywordSparklinesParamsSchema, response: gscdumpKeywordSparklinesResponseSchema },
   getQueryTrend: { query: gscdumpQueryTrendParamsSchema, response: gscdumpQueryTrendResponseSchema },
   getPageTrend: { query: gscdumpPageTrendParamsSchema, response: gscdumpPageTrendResponseSchema },
-  getDateRangeInsight: { query: gscdumpDateRangeParamsSchema, response: unknownRecord },
   getCanonicalMismatches: { response: gscdumpCanonicalMismatchesResponseSchema },
   getIndexPercent: { query: gscdumpIndexPercentParamsSchema, response: gscdumpIndexPercentResponseSchema },
   getSiteReport: { response: gscdumpSiteReportResponseSchema },
-  createTeam: { body: createPartnerTeamSchema, response: z.object({ team: gscdumpTeamRowSchema }).loose() },
-  listTeamMembers: { response: z.object({ members: z.array(gscdumpTeamMemberRowSchema) }).loose() },
-  addTeamMember: { body: addPartnerTeamMemberSchema, response: unknownRecord },
-  bindSiteToTeam: { body: bindPartnerSiteTeamSchema, response: z.object({ ok: z.literal(true), teamId: z.string().nullable() }).loose() },
+  createTeam: { body: createPartnerTeamSchema, response: partnerTeamCreatedResponseSchema },
+  renameTeam: { body: renamePartnerTeamSchema, response: partnerTeamRenamedResponseSchema },
+  deleteTeam: { response: partnerTeamDeletedResponseSchema },
+  listTeamMembers: { response: partnerTeamMembersResponseSchema },
+  addTeamMember: { body: addPartnerTeamMemberSchema, response: partnerTeamMemberAddedResponseSchema },
+  updateTeamMemberRole: { body: z.object({ role: gscdumpTeamRoleSchema }), response: partnerTeamMemberRoleResponseSchema },
+  removeTeamMember: { response: partnerTeamMemberRemovedResponseSchema },
+  bindSiteToTeam: { body: bindPartnerSiteTeamSchema, response: partnerSiteTeamBindingResponseSchema },
+  getTeamCatalog: { response: teamCatalogRefSchema },
+  bindTeamCatalog: { body: bindPartnerTeamCatalogSchema, response: bindPartnerTeamCatalogResponseSchema },
+  getUserSiteIntIdCrosswalk: { response: siteIntIdCrosswalkResponseSchema },
+  requestSiteVerificationToken: { body: gscVerificationRequestSchema, response: gscVerificationTokenResponseSchema },
+  addAndVerifySite: { body: gscVerificationRequestSchema, response: gscAddAndVerifyResponseSchema },
   realtimeEvent: { message: partnerRealtimeEventSchema },
   webhook: { message: partnerWebhookEnvelopeSchema },
 } as const

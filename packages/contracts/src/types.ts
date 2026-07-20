@@ -1,5 +1,5 @@
 import type { FileResolutionResponse } from './file-resolution'
-import type { AccountNextAction, AccountStatus, PartnerLifecycleResponse, PartnerLifecycleSite } from './onboarding'
+import type { AccountNextAction, AccountStatus, PartnerLifecycleSite } from './onboarding'
 
 export type {
   PartnerLifecycleAccount,
@@ -48,7 +48,7 @@ export type Filter = unknown
 // Wire shape of an analytics query. Matches the gscdump.com server normalizer
 // (`normalizeBuilderState` in gscdump.com `server/utils/normalize-filter.ts`)
 // and the builder output of `gsc(...).getState()` from `gscdump/query`.
-export interface BuilderState {
+export interface BuilderStateWire {
   dimensions: Dimension[]
   metrics?: Metric[]
   filter?: Filter
@@ -364,27 +364,6 @@ export interface BackfillResponse {
   [key: string]: unknown
 }
 
-export interface AnalyticsClient {
-  whoami: () => Promise<WhoamiResponse>
-  listSites: () => Promise<SiteListItem[]>
-  getSourceInfo: (siteId: string, options?: SourceInfoOptions) => Promise<SourceInfoResponse>
-  getAnalysisSources: (siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: SearchTypeOptions | SourceInfoOptions) => Promise<AnalysisSourcesResponse>
-  analyze: <T = unknown>(siteId: string, params: unknown) => Promise<T>
-  queryRows: <T = Record<string, unknown>>(siteId: string, state: unknown) => Promise<GscRowQueryResponse<T>>
-  getRollup: <T = unknown>(siteId: string, rollupId: string, params?: { start?: string, end?: string }) => Promise<RollupEnvelope<T>>
-  requestBackfill: (siteId: string, range: BackfillRange) => Promise<BackfillResponse>
-  getSitemaps: (siteId: string) => Promise<SitemapIndex>
-  getSitemapHistory: (siteId: string, hash: string) => Promise<SitemapHistoryResponse>
-  getSitemapChanges: (siteId: string, params?: { days?: number }) => Promise<SitemapChangesResponse>
-  getInspections: (siteId: string) => Promise<InspectionIndex>
-  getInspectionHistory: (siteId: string, hash: string) => Promise<InspectionHistoryResponse>
-  getIndexingUrls: (siteId: string, params?: { limit?: number, offset?: number, status?: IndexingUrlStatus, issue?: string, search?: string }) => Promise<IndexingUrlsResponse>
-  getIndexingDiagnostics: (siteId: string, params?: IndexingDiagnosticsParams) => Promise<IndexingDiagnostics>
-  requestIndexingInspect: (siteId: string, body: IndexingInspectRequest) => Promise<IndexingInspectResponse | IndexingInspectRateLimited>
-  getCountries: (siteId: string, range: { start: string, end: string }) => Promise<CountriesResponse>
-  getSearchAppearance: (siteId: string, range: { start: string, end: string }) => Promise<SearchAppearanceResponse>
-}
-
 // GSC Search Analytics wire types (request/response shapes for the live
 // google.com/webmasters API) are owned by the `gscdump` package — see
 // `gscdump/contracts`. They are deliberately not duplicated here; nothing
@@ -509,6 +488,17 @@ export interface GscdumpAvailableSite {
   oldestDateSynced?: string | null
 }
 
+export interface GscdumpSiteIntIdCrosswalkEntry {
+  siteId: string
+  intId: number
+  siteUrl: string
+}
+
+export interface GscdumpSiteIntIdCrosswalkResponse {
+  crosswalk: Record<string, number>
+  sites: GscdumpSiteIntIdCrosswalkEntry[]
+}
+
 export interface GscdumpSiteRegistration {
   siteId: string
   /** Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize into their own catalog namespaces. */
@@ -523,6 +513,42 @@ export interface GscdumpSiteRegistration {
   indexingPermissionLevel?: string | null
   grantedScopes?: string[]
   site?: PartnerLifecycleSite | null
+}
+
+export type GscVerificationMethod = 'META' | 'FILE' | 'DNS_TXT' | 'DNS_CNAME' | 'ANALYTICS' | 'TAG_MANAGER'
+
+export interface GscVerificationSite {
+  type: 'SITE' | 'INET_DOMAIN'
+  identifier: string
+}
+
+export interface GscVerificationDnsRecord {
+  type: 'TXT' | 'CNAME'
+  host: string
+  value: string
+}
+
+export interface GscVerificationRequest {
+  userId?: string
+  siteUrl: string
+  method?: GscVerificationMethod
+}
+
+export interface GscVerificationTokenResponse {
+  siteUrl: string
+  site: GscVerificationSite
+  method: GscVerificationMethod
+  token: string
+  metaContent: string | null
+  dnsRecord: GscVerificationDnsRecord | null
+}
+
+export interface GscAddAndVerifyResponse {
+  siteUrl: string
+  site: GscVerificationSite
+  method: GscVerificationMethod
+  verified: true
+  owners: string[]
 }
 
 export interface GscdumpUserSite {
@@ -646,6 +672,47 @@ export interface GscdumpSitemapChangesResponse {
   added: { url: string, sitemap: string, firstSeenAt: number }[]
   removed: { url: string, sitemap: string, removedAt: number }[]
   summary?: { totalAdded: number, totalRemoved: number, period: { days: number } }
+}
+
+export type PartnerSitemapAction
+  = | { action: 'submit' | 'delete', sitemapUrl: string }
+    | { action: 'refresh' | 'auto-discover' }
+
+export type PartnerSitemapActionResponse
+  = | { success: boolean, action: 'submitted' | 'deleted', sitemapUrl: string, sitemapCount: number }
+    | { success: true, action: 'refreshed', sitemapCount: number, changed: boolean, deltas?: unknown }
+    | { success: boolean, action: 'auto-discover', discovered: string | null, submitError?: string | null, sitemapCount: number }
+
+export interface GscdumpSitemapMembershipParams {
+  urls: string[]
+  maxAgeDays?: number
+}
+
+export type GscdumpSitemapMembershipUnavailableReason
+  = | 'empty'
+    | 'site_url_cap_exceeded'
+    | 'stale_sitemaps'
+
+export interface GscdumpSitemapMembershipUrl {
+  url: string
+  normalized: string
+  inSitemap: boolean
+  sitemapUrl?: string | null
+  lastSeenAt?: string | null
+  lastmod?: string | null
+  sitemapFetchedAt?: string | null
+}
+
+export interface GscdumpSitemapMembershipResponse {
+  urls: GscdumpSitemapMembershipUrl[]
+  meta: {
+    available: boolean
+    reason: GscdumpSitemapMembershipUnavailableReason | null
+    requested: number
+    checked: number
+    matched: number
+    newestFetchedAt: string | null
+  }
 }
 
 export interface GscdumpIndexingTrendPoint {
@@ -929,13 +996,13 @@ export interface AnalysisSourcesOptions extends SearchTypeOptions {
 }
 
 export interface DataQueryOptions {
-  comparison?: BuilderState
+  comparison?: BuilderStateWire
   filter?: GscComparisonFilter
   searchType?: GscSearchType
 }
 
 export interface DataDetailOptions {
-  comparison?: BuilderState
+  comparison?: BuilderStateWire
   searchType?: GscSearchType
 }
 
@@ -1015,11 +1082,6 @@ export interface GscdumpPageTrendResponse {
   total: number
   previousTotal?: number
   meta: { siteUrl: string, syncStatus: string | null }
-}
-
-export interface GscdumpDateRangeParams {
-  startDate: string
-  endDate: string
 }
 
 export interface GscdumpCanonicalMismatchRow {
@@ -1269,55 +1331,32 @@ export interface BindPartnerSiteTeamParams {
   teamId: string | null
 }
 
-export interface PartnerClient {
-  registerUser: (params: RegisterPartnerUserParams) => Promise<GscdumpUserRegistration>
-  updateUserTokens: (userId: string, params: UpdatePartnerUserTokensParams) => Promise<GscdumpUserTokenUpdate>
-  getUserStatus: (userId: string) => Promise<GscdumpUserStatus>
-  getUserLifecycle: (userId: string) => Promise<PartnerLifecycleResponse>
-  waitForUserReady: (userId: string, options?: { attempts?: number, intervalMs?: number }) => Promise<GscdumpUserStatus>
-  waitForUserLifecycleReady: (userId: string, options?: { attempts?: number, intervalMs?: number }) => Promise<PartnerLifecycleResponse>
-  getUserSites: (userId: string) => Promise<{ sites: GscdumpUserSite[] }>
-  getAvailableSites: (userId: string) => Promise<{ sites: GscdumpAvailableSite[] }>
-  registerSite: (params: RegisterPartnerSiteParams) => Promise<GscdumpSiteRegistration>
-  bulkRegisterSites: (params: BulkRegisterPartnerSitesParams) => Promise<BulkRegisterPartnerSitesResponse>
-  deleteUser: (userId: string) => Promise<DeletePartnerUserResponse>
-  deleteSite: (siteId: string) => Promise<{ success: boolean }>
-  getAnalysisSources: (siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: SearchTypeOptions | SourceInfoOptions) => Promise<GscdumpAnalysisSourcesResponse>
-  getSiteSyncStatus: (siteId: string, userId?: string) => Promise<GscdumpSyncStatusResponse>
-  getData: (siteId: string, state: BuilderState, options?: DataQueryOptions) => Promise<GscdumpDataResponse>
-  getDataDetail: (siteId: string, state: BuilderState, options?: DataDetailOptions) => Promise<GscdumpDataDetailResponse>
-  getAnalysis: (siteId: string, params: GscdumpAnalysisParams) => Promise<GscdumpAnalysisResponse>
-  getSitemaps: (siteId: string) => Promise<GscdumpSitemapsResponse>
-  getSitemapChanges: (siteId: string, days?: number) => Promise<GscdumpSitemapChangesResponse>
-  submitSitemap: (siteId: string, sitemapUrl: string, action?: 'submit' | 'delete') => Promise<{ success: boolean, action: 'submitted' | 'deleted', sitemapUrl: string }>
-  refreshSitemaps: (siteId: string) => Promise<{ success: boolean, action: 'refreshed', sitemapCount: number, changed: boolean }>
-  getIndexing: (siteId: string, days?: number) => Promise<GscdumpIndexingResponse>
-  getIndexingUrls: (siteId: string, params?: IndexingUrlsParams) => Promise<GscdumpIndexingUrlsResponse>
-  getIndexingDiagnostics: (siteId: string, params?: IndexingDiagnosticsParams) => Promise<GscdumpIndexingDiagnosticsResponse>
-  requestIndexingInspect: (siteId: string, body: IndexingInspectRequest) => Promise<IndexingInspectResponse | IndexingInspectRateLimited>
-  getUserSettings: () => Promise<GscdumpUserSettings>
-  patchUserSettings: (body: Partial<GscdumpUserSettings>) => Promise<GscdumpUserSettings>
-  recoverPermission: (siteId: string) => Promise<GscdumpPermissionRecovery>
-  getTopAssociation: (siteId: string, params: GscdumpTopAssociationParams) => Promise<GscdumpTopAssociationResponse>
-  getKeywordSparklines: (siteId: string, params: GscdumpKeywordSparklinesParams) => Promise<GscdumpKeywordSparklinesResponse>
-  getQueryTrend: (siteId: string, params: GscdumpQueryTrendParams) => Promise<GscdumpQueryTrendResponse>
-  getPageTrend: (siteId: string, params: GscdumpPageTrendParams) => Promise<GscdumpPageTrendResponse>
-  getCanonicalMismatches: (siteId: string) => Promise<GscdumpCanonicalMismatchesResponse>
-  getContentVelocity: <T = unknown>(siteId: string, days?: number) => Promise<T>
-  getCtrCurve: <T = unknown>(siteId: string, params: GscdumpDateRangeParams) => Promise<T>
-  getDarkTraffic: <T = unknown>(siteId: string, params: GscdumpDateRangeParams) => Promise<T>
-  getDeviceGap: <T = unknown>(siteId: string, params: GscdumpDateRangeParams) => Promise<T>
-  getIndexPercent: (siteId: string, params?: { invisibleLimit?: number, invisibleOffset?: number, orphanLimit?: number }) => Promise<GscdumpIndexPercentResponse>
-  getKeywordBreadth: <T = unknown>(siteId: string, params: GscdumpDateRangeParams) => Promise<T>
-  getPositionDistribution: <T = unknown>(siteId: string, params: GscdumpDateRangeParams) => Promise<T>
-  createTeam: (params: CreatePartnerTeamParams) => Promise<{ team: GscdumpTeamRow }>
-  renameTeam: (teamId: string, params: { name: string }) => Promise<{ ok: true, name: string }>
-  deleteTeam: (teamId: string) => Promise<{ ok: true }>
-  listTeamMembers: (teamId: string) => Promise<{ members: GscdumpTeamMemberRow[] }>
-  addTeamMember: (teamId: string, params: AddPartnerTeamMemberParams) => Promise<{ ok: true, role: string, alreadyExisted?: boolean }>
-  updateTeamMemberRole: (teamId: string, userId: string, params: { role: GscdumpTeamMemberRow['role'] }) => Promise<{ ok: true, role: string }>
-  removeTeamMember: (teamId: string, userId: string) => Promise<{ ok: true }>
-  bindSiteToTeam: (userId: string, siteId: string, params: BindPartnerSiteTeamParams) => Promise<{ ok: true, teamId: string | null }>
+export interface GscdumpTeamCatalogRef {
+  teamId: string
+  catalogUri: string | null
+  warehouse: string | null
+  bucket: string | null
+  namespace: string | null
+  provisioningState: string | null
+  keyEncoding: string | null
+  catalogTablesReady: boolean
+  readsEnabled: boolean
+}
+
+export interface BindPartnerTeamCatalogParams {
+  catalogUri: string
+  warehouse: string
+  namespace?: string
+  bucket?: string
+}
+
+export interface BindPartnerTeamCatalogResponse {
+  teamId: string
+  status: 'ready'
+  catalogUri: string
+  warehouse: string
+  bucket: string
+  namespace: string
 }
 
 export type CanonicalWebhookEventType

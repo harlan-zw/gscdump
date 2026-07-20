@@ -12,10 +12,8 @@
 // analyzer id, and a required report step that failed (the step's underlying
 // error — often an `EngineError` — rides along as `cause`).
 //
-// What is NOT modelled — defects — keep propagating as exceptions: a
-// `defineReport` invariant violation, transformer/IndexedDB/WebGPU IO blowing
-// up, a programmer handing `analyzeContentGap` a source without `executeSql`
-// (already its own named `ContentGapSourceUnsupportedError`).
+// What is NOT modelled — defects — keep propagating as exceptions, including
+// a `defineReport` invariant violation.
 //
 // Leaf module: imports nothing, so no report/analyzer module that depends on it
 // can form an import cycle.

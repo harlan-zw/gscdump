@@ -7,7 +7,7 @@ import type { SearchType } from '@gscdump/engine'
 import type {
   GoogleSearchConsoleClient,
   SearchAnalyticsQuery,
-} from 'gscdump/api'
+} from 'gscdump'
 import type {
   GscDataState,
   GscSearchAnalyticsMetadata,
@@ -242,7 +242,7 @@ export async function runGscSyncSlice(
       ...(dimensionFilterGroups ? { dimensionFilterGroups } : {}),
     }
     try {
-      const response = await opts.client._rawQuery(opts.siteUrl, query)
+      const response = await opts.client.searchAnalytics.query(opts.siteUrl, query)
       return {
         kind: 'ok',
         startRow: row,
@@ -312,7 +312,7 @@ export async function runGscSyncSlice(
       // persisted. Return retry state at THIS page's cursor so the continuation
       // re-processes it rather than advancing past it (a silent gap). The
       // in-flight `prefetch` is dropped (it never rejects); the continuation
-      // re-fetches that page. Mirrors the `_rawQuery` timeout path.
+      // re-fetches that page. Mirrors the Search Analytics timeout path.
       if (batchTimedOut)
         return { totalRows: totalRows - rows.length, hasMore: true, nextStartRow: page.startRow, metadata }
     }

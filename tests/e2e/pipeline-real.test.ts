@@ -30,7 +30,7 @@ import { createDuckDBCodec, createDuckDBExecutor, createStorageEngine } from '@g
 import { runGscSyncSlice } from '@gscdump/engine-gsc-api'
 import { createFilesystemDataSource, createFilesystemManifestStore } from '@gscdump/engine/filesystem'
 import { createNodeDuckDBHandle, resetNodeDuckDB } from '@gscdump/engine/node'
-import { createAuth, googleSearchConsole } from 'gscdump/api'
+import { createAuth, googleSearchConsole } from 'gscdump'
 import { afterAll, describe, expect, it } from 'vitest'
 
 function resolveAuth() {

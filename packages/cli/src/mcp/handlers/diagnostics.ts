@@ -1,6 +1,6 @@
 import type { z } from 'zod'
 import type { HandlerContext, listSitesInput } from '../types'
-import { hasGscWriteScope, hasIndexingScope } from 'gscdump/api'
+import { hasGscWriteScope, hasIndexingScope } from 'gscdump'
 import { ofetch } from 'ofetch'
 
 const REQUIRED_SCOPES = [

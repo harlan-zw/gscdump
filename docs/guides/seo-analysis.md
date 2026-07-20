@@ -173,7 +173,6 @@ const keywordConcentration = analyzeKeywordConcentration(keywords)
 Run multiple analyses for a complete audit:
 
 ```ts
-import { daysAgo, today } from '@gscdump/query'
 import {
   analyzeCannibalization,
   analyzeDecay,
@@ -182,6 +181,7 @@ import {
   fetchKeywordsWithComparison,
   fetchPagesWithComparison,
 } from 'gscdump'
+import { daysAgo, today } from 'gscdump/query'
 
 const range = { period: { start: daysAgo(90), end: today() } }
 

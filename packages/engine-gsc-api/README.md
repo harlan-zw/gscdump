@@ -21,7 +21,7 @@ npm install @gscdump/engine-gsc-api @gscdump/engine gscdump
 ```ts
 import { analyzeMoversFromSource } from '@gscdump/analysis'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
-import { googleSearchConsole } from 'gscdump/api'
+import { googleSearchConsole } from 'gscdump'
 
 const client = googleSearchConsole(auth)
 const source = createGscApiQuerySource({ client, siteUrl: 'sc-domain:example.com' })
@@ -56,7 +56,7 @@ const source = createLiveGscSource({
 
 ## Capabilities
 
-GSC supports regex pushdown via `INCLUDING_REGEX` / `EXCLUDING_REGEX` filters but has no SQL surface, no comparison joins, no cross-dataset queries, and no engine-derived dimensions (`queryCanonical`, `page_keywords`). Pair with `createCompositeSource({ engine, gsc })` from `@gscdump/analysis/source` to route SQL-shaped queries to the engine and date-out-of-range queries to GSC.
+GSC supports regex pushdown via `INCLUDING_REGEX` / `EXCLUDING_REGEX` filters but has no SQL surface, no comparison joins, no cross-dataset queries, and no engine-derived dimensions (`queryCanonical`, `page_keywords`). Pair with `createCompositeSource({ engine, gsc })` from `@gscdump/analysis` to route SQL-shaped queries to the engine and date-out-of-range queries to GSC.
 
 ## Related
 

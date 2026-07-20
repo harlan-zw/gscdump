@@ -31,7 +31,7 @@ export function sqlEscape(s: string): string {
  * Errors-as-values core for {@link formatLiteral}: returns a typed
  * `invalid-sql-literal` `EngineError` for values that can't be safely inlined.
  */
-export function formatLiteralResult(value: unknown): Result<string, EngineError> {
+function formatLiteralResult(value: unknown): Result<string, EngineError> {
   if (value == null)
     return ok('NULL')
   if (typeof value === 'number') {
@@ -77,7 +77,7 @@ export function formatLiteral(value: unknown): string {
  * throwing, so the edge RPC / proxy callers that build SQL from untrusted params
  * can branch on the failure.
  */
-export function bindLiteralsResult(sql: string, params: readonly unknown[]): Result<string, EngineError> {
+function bindLiteralsResult(sql: string, params: readonly unknown[]): Result<string, EngineError> {
   if (params.length === 0)
     return ok(sql)
   let out = ''

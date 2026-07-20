@@ -1,5 +1,5 @@
 import type { Row, TableName } from '@gscdump/engine/contracts'
-import type { GoogleSearchConsoleClient } from 'gscdump/api'
+import type { GoogleSearchConsoleClient } from 'gscdump'
 import type { BuilderState, GSCQueryBuilder } from 'gscdump/query'
 
 import { mkdtemp, rm } from 'node:fs/promises'

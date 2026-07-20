@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createFetch, googleSearchConsole } from '../src'
+import { createFetch, DEFAULT_GSC_REQUEST_TIMEOUT_MS, googleSearchConsole } from '../src'
 
 // Mock ofetch
 const { mockFetch: _mockFetch, createSpy, ofetchSpy } = vi.hoisted(() => {
@@ -14,7 +14,27 @@ vi.mock('ofetch', () => ({
   ofetch: ofetchSpy,
 }))
 
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
 describe('createGscFetch', () => {
+  it('uses the exported default request timeout', () => {
+    createFetch('test-token')
+    const options = createSpy.mock.calls[createSpy.mock.calls.length - 1][0] as any
+    expect(options.timeout).toBe(DEFAULT_GSC_REQUEST_TIMEOUT_MS)
+    expect(DEFAULT_GSC_REQUEST_TIMEOUT_MS).toBe(30_000)
+  })
+
+  it('allows an explicit request timeout override', () => {
+    createFetch('test-token', { timeout: 12_345 })
+    const options = createSpy.mock.calls[createSpy.mock.calls.length - 1][0] as any
+    expect(options.timeout).toBe(12_345)
+  })
+
   it('should create a fetcher with authorization header logic', async () => {
     createFetch('test-token')
     const options = createSpy.mock.calls[createSpy.mock.calls.length - 1][0] as any
@@ -102,6 +122,27 @@ describe('googleSearchConsole', () => {
     const client = googleSearchConsole('test-token')
     expect(client.sites).toBeDefined()
     expect(client.query).toBeDefined()
+    expect(client.searchAnalytics.query).toBeTypeOf('function')
+    expect(client).not.toHaveProperty('_rawQuery')
+  })
+
+  it('passes an explicit fetchOptions timeout through to createFetch', () => {
+    googleSearchConsole('test-token', { fetchOptions: { timeout: 4_321 } })
+    const options = createSpy.mock.calls[createSpy.mock.calls.length - 1][0] as any
+    expect(options.timeout).toBe(4_321)
+  })
+
+  it('exposes the direct Search Analytics query operation', async () => {
+    const response = { rows: [{ keys: ['example'], clicks: 1, impressions: 2, ctr: 0.5, position: 3 }] }
+    const customFetch = vi.fn().mockResolvedValue(response)
+    const client = googleSearchConsole('dummy', { fetch: customFetch as any })
+    const body = { startDate: '2026-07-01', endDate: '2026-07-02', dimensions: ['query'] as const }
+
+    await expect(client.searchAnalytics.query('sc-domain:example.com', body)).resolves.toBe(response)
+    expect(customFetch).toHaveBeenCalledWith(
+      'https://searchconsole.googleapis.com/webmasters/v3/sites/sc-domain:example.com/searchAnalytics/query',
+      { method: 'POST', body, signal: undefined },
+    )
   })
 
   // Removed 'create client without auth' test
@@ -200,6 +241,7 @@ describe('createGscAuth', () => {
   })
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
 
   it('should create an auth client with credentials', async () => {
@@ -221,17 +263,17 @@ describe('createGscAuth', () => {
       refreshToken: 'rtoken',
     })
 
-    const mockTokenResponse = { access_token: 'new-access-token', expires_in: 3600 }
-    ofetchSpy.mockResolvedValue(mockTokenResponse)
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ access_token: 'new-access-token', expires_in: 3600 }))
+    vi.stubGlobal('fetch', fetchMock)
 
     // First call - no token, should refresh
     const r1 = await auth.getAccessToken()
     expect(r1.token).toBe('new-access-token')
-    expect(ofetchSpy).toHaveBeenCalledWith('https://oauth2.googleapis.com/token', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('https://oauth2.googleapis.com/token', expect.objectContaining({
       method: 'POST',
       body: expect.any(URLSearchParams),
     }))
-    const body = (ofetchSpy.mock.calls[0]![1] as { body: URLSearchParams }).body
+    const body = (fetchMock.mock.calls[0]![1] as { body: URLSearchParams }).body
     expect(body.get('client_id')).toBe('cid')
     expect(body.get('client_secret')).toBe('csec')
     expect(body.get('refresh_token')).toBe('rtoken')
@@ -243,29 +285,29 @@ describe('createGscAuth', () => {
     expect(auth.credentials?.expiry_date).toBe(mockDate + 3600 * 1000)
 
     // Second call - valid token, no refresh
-    ofetchSpy.mockClear()
+    fetchMock.mockClear()
     const r2 = await auth.getAccessToken()
     expect(r2.token).toBe('new-access-token')
-    expect(ofetchSpy).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
 
     // Advance time to expire token
     vi.setSystemTime(mockDate + 3600 * 1000 + 1)
-    ofetchSpy.mockResolvedValue({ access_token: 'refreshed-again', expires_in: 3600 })
+    fetchMock.mockResolvedValue(jsonResponse({ access_token: 'refreshed-again', expires_in: 3600 }))
 
     const r3 = await auth.getAccessToken()
     expect(r3.token).toBe('refreshed-again')
-    expect(ofetchSpy).toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalled()
   })
 
   it('coalesces concurrent token refreshes', async () => {
     const { createAuth } = await import('../src')
-    ofetchSpy.mockClear()
     const auth = createAuth({
       clientId: 'cid',
       clientSecret: 'csec',
       refreshToken: 'rtoken',
     })
-    ofetchSpy.mockResolvedValue({ access_token: 'shared-token', expires_in: 3600 })
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ access_token: 'shared-token', expires_in: 3600 }))
+    vi.stubGlobal('fetch', fetchMock)
 
     const [a, b, c] = await Promise.all([
       auth.getAccessToken(),
@@ -276,7 +318,7 @@ describe('createGscAuth', () => {
     expect(a.token).toBe('shared-token')
     expect(b.token).toBe('shared-token')
     expect(c.token).toBe('shared-token')
-    expect(ofetchSpy).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -304,7 +346,8 @@ describe('createGscFetch integration', () => {
     // onRequest calls resolveToken -> auth.getAccessToken() -> fetches.
 
     // So we mock the token endpoint response
-    ofetchSpy.mockResolvedValue({ access_token: 'auto-wrapped-token', expires_in: 3600 })
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ access_token: 'auto-wrapped-token', expires_in: 3600 }))
+    vi.stubGlobal('fetch', fetchMock)
 
     createFetch(optionsAuth)
     const options = createSpy.mock.calls[createSpy.mock.calls.length - 1][0] as any

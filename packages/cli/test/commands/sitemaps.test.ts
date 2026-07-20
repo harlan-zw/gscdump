@@ -6,8 +6,8 @@ const getMock = vi.fn()
 const submitMock = vi.fn()
 const deleteMock = vi.fn()
 
-vi.mock('gscdump/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump/api')>()
+vi.mock('gscdump', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump')>()
   return {
     ...actual,
     googleSearchConsole: vi.fn(() => ({

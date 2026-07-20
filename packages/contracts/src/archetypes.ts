@@ -1,4 +1,4 @@
-import type { BuilderState, Dimension, GscSearchType, Metric } from './types'
+import type { BuilderStateWire, Dimension, GscSearchType, Metric } from './types'
 
 export type QueryArchetype
   = | 'site-daily-timeseries'
@@ -296,19 +296,6 @@ export function arbitrarySql(
   }
 }
 
-export function auxCloudOnly(
-  siteId: string,
-  dataset: AuxCloudOnlyQuery['dataset'],
-  params?: Record<string, unknown>,
-): AuxCloudOnlyQuery {
-  return {
-    archetype: 'aux-cloud-only',
-    siteId,
-    dataset,
-    ...(params ? { params } : {}),
-  }
-}
-
 export type ArchetypeResultRow = Record<string, string | number | null>
 
 export type ArchetypeResultSource = 'browser' | 'server-r2-sql' | 'server-duckdb' | 'cloud'
@@ -328,6 +315,6 @@ export interface ArchetypeResult<R extends ArchetypeResultRow = ArchetypeResultR
 
 export interface ResolvedArchetypeQuery {
   query: ArchetypeQuery
-  builder?: BuilderState
+  builder?: BuilderStateWire
   executionClass: ArchetypeExecutionClass
 }

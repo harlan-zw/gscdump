@@ -17,7 +17,6 @@ import {
   queries,
   resolveWindow,
   scopeFor,
-  strikingMomentum,
 } from '../src'
 import { createClient } from '../src/drizzle-adapter/client'
 
@@ -174,39 +173,6 @@ describe('@gscdump/engine-duckdb-wasm', () => {
     // No OR introduced when the user only used AND
     const wherePart = resolved.sql.split(/group by/i)[0]!
     expect(wherePart).not.toMatch(/\bOR\b/i)
-  })
-
-  it('strikingMomentum compiles to DuckDB-flavored SQL', async () => {
-    const captured: Captured[] = []
-    const runner = await createInsightRunner({
-      db: stubDb(),
-      conn: stubConn(captured),
-    })
-
-    await strikingMomentum(runner, {
-      anchor: '2026-04-11',
-      windowDays: 90,
-      limit: 5,
-    })
-
-    expect(captured).toHaveLength(1)
-    const { sql } = captured[0]
-    // Core CTE structure
-    expect(sql).toMatch(/with\s+pk\s+as/i)
-    expect(sql).toMatch(/agg\s+as/i)
-    expect(sql).toMatch(/paired\s+as/i)
-    expect(sql).toMatch(/best\s+as/i)
-    // DuckDB date interval math
-    expect(sql).toContain('INTERVAL 90 DAY')
-    expect(sql).toContain('INTERVAL 180 DAY')
-    // Striking-distance band multiplier
-    expect(sql).toContain('BETWEEN 8 AND 20')
-    // Row-per-query dedup
-    expect(sql).toMatch(/row_number\(\)\s+over\s*\(partition\s+by/i)
-    // Impression-weighted position with +1 offset (GSC 0-indexed convention)
-    expect(sql).toMatch(/sum\(sum_position\)\s*\/\s*nullif/i)
-    // Tables referenced
-    expect(sql).toMatch(/from\s+"page_queries"/i)
   })
 
   it('createClient.query awaits stmt.close() before resolving (regression: floating close promise)', async () => {

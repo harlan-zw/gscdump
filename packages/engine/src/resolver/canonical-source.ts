@@ -18,7 +18,7 @@ const ALLOWED_FILTER_DIMS = new Set(['date', 'queryCanonical'])
  * dropped column or the raw row grain disqualifies the query. Callers decide
  * whether that miss is a typed raw fallback or a hard coverage error.
  */
-export function planCoveredByCanonicalRollup(plan: LogicalQueryPlan): boolean {
+function planCoveredByCanonicalRollup(plan: LogicalQueryPlan): boolean {
   // Rollup is built from the `queries` table only.
   if (plan.dataset !== 'queries')
     return false

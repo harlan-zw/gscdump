@@ -11,7 +11,7 @@ describe('runMcpSearchAnalyticsQuery', () => {
       .mockResolvedValueOnce({ rows: [row('a')] })
       .mockResolvedValueOnce({ rows: [row('b')] })
 
-    const result = await runMcpSearchAnalyticsQuery({ _rawQuery: rawQuery } as any, {
+    const result = await runMcpSearchAnalyticsQuery({ searchAnalytics: { query: rawQuery } }, {
       siteUrl: 'sc-domain:example.com',
       startDate: '2026-05-01',
       endDate: '2026-05-07',
@@ -31,7 +31,7 @@ describe('runMcpSearchAnalyticsQuery', () => {
       .mockResolvedValueOnce({ rows: [row('a')] })
       .mockResolvedValueOnce({ rows: [] })
 
-    const result = await runMcpSearchAnalyticsQuery({ _rawQuery: rawQuery } as any, {
+    const result = await runMcpSearchAnalyticsQuery({ searchAnalytics: { query: rawQuery } }, {
       siteUrl: 'sc-domain:example.com',
       startDate: '2026-05-01',
       endDate: '2026-05-07',

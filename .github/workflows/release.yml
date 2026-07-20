@@ -11,7 +11,8 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
         with:
@@ -29,7 +30,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
-      - run: pnpm i --trust-lockfile
+      - run: pnpm i --filter . --filter "./packages/*" --frozen-lockfile --trust-lockfile
         env:
           PNPM_MINIMUM_RELEASE_AGE: 0
 
@@ -43,9 +44,9 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 
-      # Each package's `prepack` re-runs `pnpm run build`, which OOMs at
-      # the default 2 GB heap (same root cause as the build step above).
-      - run: pnpm publish -r --access public --no-git-checks
+      # Packages are already built above. Skip publish lifecycle scripts so
+      # each package's `prepack` does not build the entire release a second
+      # time.
+      - run: pnpm publish -r --access public --no-git-checks --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
-          NODE_OPTIONS: --max-old-space-size=6144

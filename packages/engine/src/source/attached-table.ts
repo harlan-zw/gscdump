@@ -76,7 +76,7 @@ const ATTACHED_TABLE_CAPABILITIES_WITH_ADAPTER: SourceCapabilities = {
  * Swap `read_parquet({{KEY}}, union_by_name = true)` for `<schema>.<table>`.
  * Tolerates whitespace variation. Preserves the rest of the SQL verbatim.
  */
-export function rewriteForTableSource(
+function rewriteForTableSource(
   sql: string,
   schema: string,
   fileSets: Record<string, FileSet>,

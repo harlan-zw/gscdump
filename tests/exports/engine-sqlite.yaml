@@ -5,10 +5,9 @@
   aggPosition: function
   and: function
   compileSqlite: function
-  createCachedManifestStore: function
   createD1ManifestStore: function
-  createEngine: function
   createSqliteInsightRunner: function
+  createSqliteQuerySource: function
   createSqliteResolverAdapter: function
   createSqliteResolverAdapterFromExecutor: function
   eq: function
@@ -33,10 +32,3 @@
   scopeFor: function
   sql: function
   sqliteResolverAdapter: object
-./r2-manifest-schema:
-  r2Locks: object
-  r2Manifest: object
-  r2ShadowDiffs: object
-  r2SyncStates: object
-  r2Watermarks: object
-  r2WriteErrors: object

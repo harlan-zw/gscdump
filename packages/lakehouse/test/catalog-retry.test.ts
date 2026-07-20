@@ -20,7 +20,8 @@ vi.mock('icebird', () => ({
   s3SignedResolver: vi.fn(),
 }))
 
-const { icebergAppendRetrying, isCommitRateLimited } = await import('../src/catalog')
+const { icebergAppendRetrying } = await import('../src/catalog')
+const { isCommitRateLimited } = await import('../src/maintenance')
 
 const APPEND_ARGS = {
   catalog: { type: 'rest' } as never,

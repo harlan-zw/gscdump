@@ -8,11 +8,13 @@
   analyticsStatuses: object
   arbitrarySql: function
   ARCHETYPE_EXECUTION_CLASS: object
-  auxCloudOnly: function
   backfillRangeSchema: object
   backfillResponseSchema: object
   bindPartnerSiteTeamSchema: object
+  bindPartnerTeamCatalogResponseSchema: object
+  bindPartnerTeamCatalogSchema: object
   builderStateSchema: object
+  bulkFileResolutionResponseSchema: object
   bulkRegisterPartnerSitesResponseSchema: object
   bulkRegisterPartnerSitesSchema: object
   CANONICAL_WEBHOOK_EVENTS: object
@@ -24,6 +26,7 @@
   dataQueryOptionsSchema: object
   entityDailySparkline: function
   entityDailyTimeseries: function
+  gscAddAndVerifyResponseSchema: object
   gscApiRangeSchema: object
   gscComparisonFilterSchema: object
   GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
@@ -31,7 +34,6 @@
   GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
   GSCDUMP_WRITE_ANALYTICS_SCOPE: string
   gscdumpAnalysisBaseParamsSchema: object
-  gscdumpAnalysisBundleParamsSchema: object
   gscdumpAnalysisBundleResponseSchema: object
   gscdumpAnalysisMetaSchema: object
   gscdumpAnalysisParamsSchema: object
@@ -43,7 +45,6 @@
   gscdumpDataDetailResponseSchema: object
   gscdumpDataResponseSchema: object
   gscdumpDataRowSchema: object
-  gscdumpDateRangeParamsSchema: object
   gscdumpDeletePartnerUserResponseSchema: object
   gscdumpHealthResponseSchema: object
   gscdumpIndexingDiagnosticsResponseSchema: object
@@ -60,6 +61,9 @@
   gscdumpQueryTrendParamsSchema: object
   gscdumpQueryTrendResponseSchema: object
   gscdumpSitemapChangesResponseSchema: object
+  gscdumpSitemapMembershipParamsSchema: object
+  gscdumpSitemapMembershipResponseSchema: object
+  gscdumpSitemapMembershipUrlSchema: object
   gscdumpSitemapsResponseSchema: object
   gscdumpSiteRegistrationSchema: object
   gscdumpSiteReportResponseSchema: object
@@ -78,6 +82,11 @@
   gscdumpUserStatusSchema: object
   gscRowQueryMetaSchema: object
   gscRowQueryResponseSchema: object
+  gscVerificationDnsRecordSchema: object
+  gscVerificationMethodSchema: object
+  gscVerificationRequestSchema: object
+  gscVerificationSiteSchema: object
+  gscVerificationTokenResponseSchema: object
   hasOptionalIndexingScope: function
   hasRequiredAnalyticsScope: function
   indexingDiagnosticsParamsSchema: object
@@ -93,16 +102,13 @@
   indexingUrlRowSchema: object
   indexingUrlsParamsSchema: object
   indexingUrlsResponseSchema: object
-  indexingUrlStatusSchema: object
   inspectionHistoryRecordSchema: object
   inspectionHistoryResponseSchema: object
   inspectionIndexSchema: object
   inspectionRecordRawSchema: object
-  jobFailedWebhookPayloadSchema: object
   lifecycleErrorCodes: object
   lifecycleErrorSchema: object
   lifecycleProgressSchema: object
-  lifecycleWebhookEvents: object
   multiSeriesStackedDaily: function
   parseGrantedScopes: function
   partnerControlEndpointSchemas: object
@@ -112,20 +118,36 @@
   partnerLifecycleSiteSchema: object
   partnerRealtimeEventSchema: object
   partnerRoutes: object
+  partnerSitemapActionResponseSchema: object
+  partnerSitemapActionSchema: object
+  partnerSiteTeamBindingResponseSchema: object
+  partnerTeamCreatedResponseSchema: object
+  partnerTeamDeletedResponseSchema: object
+  partnerTeamMemberAddedResponseSchema: object
+  partnerTeamMemberRemovedResponseSchema: object
+  partnerTeamMemberRoleResponseSchema: object
+  partnerTeamMembersResponseSchema: object
+  partnerTeamRenamedResponseSchema: object
   partnerWebhookDataSchema: object
   partnerWebhookEnvelopeSchema: object
   propertyNextActions: object
   propertyStatuses: object
+  queryDimSourceResponseSchema: object
   querySourceModes: object
   registerPartnerSiteSchema: object
   registerPartnerUserSchema: object
+  renamePartnerTeamSchema: object
   rollupEnvelopeSchema: object
   scheduleStateSchema: object
+  SEARCH_TYPE_CAPABILITIES: object
   searchAppearanceResponseSchema: object
   searchAppearanceRowSchema: object
   searchTypeSchema: object
+  searchTypeSupportsDimensions: function
+  searchTypeSupportsQueries: function
   singleRowLookup: function
   siteDailyTimeseries: function
+  siteIntIdCrosswalkResponseSchema: object
   siteListItemSchema: object
   sitemapChangesResponseSchema: object
   sitemapHistoryRecordSchema: object
@@ -145,7 +167,6 @@
   WEBHOOK_EVENT_HEADER: string
   WEBHOOK_SIGNATURE_HEADER: string
   WEBHOOK_TIMESTAMP_HEADER: string
-  webhookEventTypeSchema: object
   whoamiResponseSchema: object
 ./analytics:
   analyticsEndpoints: object
@@ -154,7 +175,6 @@
 ./archetypes:
   arbitrarySql: function
   ARCHETYPE_EXECUTION_CLASS: object
-  auxCloudOnly: function
   entityDailySparkline: function
   entityDailyTimeseries: function
   multiSeriesStackedDaily: function
@@ -177,7 +197,6 @@
   indexingNextActions: object
   indexingStatuses: object
   lifecycleErrorCodes: object
-  lifecycleWebhookEvents: object
   parseGrantedScopes: function
   partnerControlEndpointSchemas: object
   partnerEndpoints: object

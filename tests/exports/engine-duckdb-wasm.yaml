@@ -29,5 +29,4 @@
   resolveWindow: function
   schema: object
   scopeFor: function
-  strikingMomentum: function
   tableForArchetype: function

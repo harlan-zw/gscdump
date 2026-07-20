@@ -6,13 +6,15 @@ import {
   partnerEndpointSchemas,
   partnerRoutes,
   partnerWebhookEnvelopeSchema,
+  SEARCH_TYPE_CAPABILITIES,
   searchTypeSchema,
+  searchTypeSupportsDimensions,
+  searchTypeSupportsQueries,
   VALID_WEBHOOK_EVENTS,
   WEBHOOK_CONTRACT_VERSION,
   WEBHOOK_TIMESTAMP_HEADER,
 } from '../src'
 import {
-  analyticsEndpoints,
   analyticsRoutes as analyticsSurfaceRoutes,
   analyticsEndpointSchemas as analyticsSurfaceSchemas,
 } from '../src/analytics'
@@ -52,7 +54,9 @@ describe('@gscdump/contracts', () => {
     expect(partnerRoutes.sites.data('site_1')).toBe('/sites/site_1/data')
     expect(partnerRoutes.sites.analysisSources('site_1')).toBe('/sites/site_1/analysis-sources')
     expect(analyticsRoutes.sites).toBe('/api/__gsc/sites')
+    expect(analyticsRoutes.bulkSources).toBe('/api/__gsc/bulk-sources')
     expect(analyticsRoutes.site.analysisSources('site_1')).toBe('/api/__gsc/sites/site_1/analysis-sources')
+    expect(analyticsRoutes.site.queryDimSource('site_1')).toBe('/api/__gsc/sites/site_1/query-dim-source')
     expect(analyticsRoutes.site.rollup('site_1', 'top-pages')).toBe('/api/__gsc/sites/site_1/rollup/top-pages')
     expect(partnerEndpointSchemas.registerSite.body.parse({
       userId: 'user_1',
@@ -74,19 +78,30 @@ describe('@gscdump/contracts', () => {
       snapshotVersion: 'snapshot_1',
       tables: [{ table: 'pages', mode: 'browser' }],
     })
-    expect(partnerEndpointSchemas.analyticsRows.response.parse({
-      rows: [],
-      meta: { sourceName: 'r2', sourceKind: 'sql', queryMs: 12 },
-    })).toMatchObject({ rows: [] })
+    expect(analyticsSurfaceSchemas.analyticsBulkSources.response.parse({
+      generatedAt: '2026-05-11T00:00:00.000Z',
+      siteCount: 1,
+      maxSites: 20,
+      results: { site_1: analysisSourcesResponse },
+    })).toMatchObject({ siteCount: 1, results: { site_1: { snapshotVersion: 'snapshot_1' } } })
+    expect(analyticsSurfaceSchemas.analyticsQueryDimSource.response.parse({
+      file: { url: '/query-dim.parquet', bytes: 123, contentHash: 'query-dim-1' },
+    })).toMatchObject({ file: { contentHash: 'query-dim-1' } })
+    expect(partnerEndpointSchemas.postSitemaps.body.parse({
+      action: 'submit',
+      sitemapUrl: 'https://example.com/sitemap.xml',
+    })).toMatchObject({ action: 'submit' })
+    expect(partnerEndpointSchemas.postSitemaps.body.parse({ action: 'refresh' })).toEqual({ action: 'refresh' })
+    expect(() => partnerEndpointSchemas.postSitemaps.body.parse({ action: 'submit' })).toThrow()
   })
 
   it('exposes focused hosted contract subpaths', () => {
     expect(partnerSurfaceRoutes.users.register).toBe(partnerRoutes.users.register)
     expect(partnerSurfaceSchemas.registerSite).toBe(partnerEndpointSchemas.registerSite)
-    expect('analyticsRows' in partnerSurfaceSchemas).toBe(false)
+    expect('analyticsWhoami' in partnerSurfaceSchemas).toBe(false)
 
     expect(analyticsSurfaceRoutes.sites).toBe(analyticsRoutes.sites)
-    expect(analyticsSurfaceSchemas.analyticsRows).toBe(partnerEndpointSchemas.analyticsRows)
+    expect(analyticsSurfaceSchemas.analyticsRollup).toBe(partnerEndpointSchemas.analyticsRollup)
   })
 
   it('keeps endpoint method, path, and validation metadata together', () => {
@@ -95,9 +110,9 @@ describe('@gscdump/contracts', () => {
     expect(partnerEndpoints.updateUserTokens.body).toBe(partnerSurfaceSchemas.updateUserTokens.body)
     expect(partnerEndpoints.deleteSite).toMatchObject({ method: 'DELETE' })
 
-    expect(analyticsEndpoints.queryRows).toMatchObject({ method: 'POST' })
-    expect(analyticsEndpoints.queryRows.path('site 1')).toBe('/api/__gsc/sites/site%201/rows')
-    expect(analyticsEndpoints.queryRows.response).toBe(analyticsSurfaceSchemas.analyticsRows.response)
+    expect(partnerEndpoints.postSitemaps).toMatchObject({ method: 'POST' })
+    expect(partnerEndpoints.postSitemaps.path('site 1')).toBe('/sites/site%201/sitemaps')
+    expect(partnerEndpoints.postSitemaps.body).toBe(partnerSurfaceSchemas.postSitemaps.body)
   })
 
   it('validates the current webhook envelope contract', () => {
@@ -142,6 +157,22 @@ describe('@gscdump/contracts', () => {
     expect(searchTypeSchema.safeParse('blogs').success).toBe(false)
     expect(searchTypeSchema.safeParse(undefined).success).toBe(false)
     expect(searchTypeSchema.safeParse(null).success).toBe(false)
+  })
+
+  it('sEARCH_TYPE_CAPABILITIES covers every slice and encodes the Discover/Google News limitations', () => {
+    // One capability row per schema slice, no extras.
+    expect(Object.keys(SEARCH_TYPE_CAPABILITIES).sort()).toEqual([...searchTypeSchema.options].sort())
+
+    // Discover has no query/position/device/country breakdown; Google News
+    // only reports clicks/impressions.
+    for (const slice of ['discover', 'googleNews'] as const) {
+      expect(searchTypeSupportsQueries(slice)).toBe(false)
+      expect(searchTypeSupportsDimensions(slice)).toBe(false)
+    }
+    for (const slice of ['web', 'image', 'video', 'news'] as const) {
+      expect(searchTypeSupportsQueries(slice)).toBe(true)
+      expect(searchTypeSupportsDimensions(slice)).toBe(true)
+    }
   })
 
   it('builderState contract preserves valid optional searchType', () => {

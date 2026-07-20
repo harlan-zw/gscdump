@@ -107,6 +107,16 @@ describe('pgResolverAdapter url-to-path dialect', () => {
     expect(r.sql).not.toContain('INSTR')
   })
 
+  it('applies the explicit minimum-impressions prefilter to direct queries', () => {
+    const r = resolverResolveToSQL(state({}), {
+      adapter: pgResolverAdapter,
+      minimumImpressions: 1,
+    })
+    const where = r.sql.slice(r.sql.indexOf(' WHERE '), r.sql.indexOf(' GROUP BY '))
+    expect(where).toContain('"impressions" >= $3')
+    expect(r.params).toContain(1)
+  })
+
   it('emits regexp_replace for page-equals predicates (path normalization)', () => {
     const r = resolverResolveToSQL(state({
       dimensions: [],

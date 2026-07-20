@@ -2,7 +2,6 @@
   allTables: function
   assembleDatesRow: function
   bindLiterals: function
-  canonicalEmptyParquetSchema: function
   coerceRow: function
   coerceRows: function
   collectSpans: function
@@ -14,6 +13,7 @@
   createInMemorySink: function
   createParquetResolverAdapter: function
   createQueryProfiler: function
+  createR2ManifestStore: function
   createR2SqlResolverAdapter: function
   createRowAccumulator: function
   createSqlQuerySource: function
@@ -79,10 +79,6 @@
   runAnalyzerFromSource: function
 ./arrow:
   arrowToRows: function
-./compaction:
-  dedupeOverlappingTiers: function
-  isRawDailyCompactionDue: function
-  splitOverlappingTiers: function
 ./contracts: {}
 ./entities:
   buildQueryDimRecords: function
@@ -95,7 +91,6 @@
   hashUrl: function
   hashUrlList: function
   indexingMetadataIndexKey: function
-  INSPECTION_EVENT_COLUMNS: object
   INSPECTION_HISTORY_MAX_BYTES: number
   inspectionBaseKey: function
   inspectionEventKey: function
@@ -126,13 +121,9 @@
   encodeRowsToParquetFlex: function
 ./iceberg:
   assertIcebergTable: function
-  catalogCacheScope: function
-  connectIcebergCatalog: function
   createIcebergAppendSink: function
   createIcebergTables: function
-  DEFAULT_PARTITION_KEY_ENCODING: string
   dropIcebergTables: function
-  ensureIcebergNamespace: function
   ICEBERG_FIELD_ID_BASE: number
   ICEBERG_PARTITION_COLUMNS: object
   ICEBERG_PARTITION_SPEC: object
@@ -140,9 +131,6 @@
   ICEBERG_SCHEMAS_INT: object
   ICEBERG_SCHEMAS_STRING: object
   ICEBERG_TABLES: object
-  icebergAppendRetrying: function
-  icebergCreateTable: function
-  icebergManifests: function
   icebergPartitionColumns: function
   icebergPartitionSpecFor: function
   icebergSchemaFor: function
@@ -150,12 +138,8 @@
   icebergSortOrderFor: function
   icebergTableSpec: function
   INT_SEARCH_TYPE: object
-  invalidateSnapshotRef: function
-  isCommitRateLimited: function
   isIcebergTable: function
   listIcebergDataFiles: function
-  listIcebergTables: function
-  restCatalogLoadTable: function
   SEARCH_TYPE_INT: object
 ./ingest:
   assembleDatesRow: function
@@ -167,7 +151,6 @@
 ./node:
   attachParquetIndex: function
   attachSnapshotIndex: function
-  attachSnapshotIndexResult: function
   createNodeDuckDBHandle: function
   createNodeHarness: function
   resetNodeDuckDB: function
@@ -175,7 +158,6 @@
 ./period:
   comparisonOf: function
   defaultEndDate: function
-  defaultStartDate: function
   padTimeseries: function
   periodOf: function
   resolveWindow: function
@@ -187,8 +169,6 @@
   substituteNamedFiles: function
 ./r2:
   createR2DataSource: function
-./r2-manifest:
-  createR2ManifestStore: function
 ./report:
   canonicalize: function
   computeInputHash: function
@@ -221,7 +201,6 @@
   mergeExtras: function
   metricValue: function
   pgResolverAdapter: object
-  planCoveredByCanonicalRollup: function
   QuerySourceCoverageError: function
   resolveComparisonSQL: function
   resolveToSQL: function
@@ -232,14 +211,11 @@
   UnresolvableDatasetError: function
 ./rollups:
   CANONICAL_ROLLUPS: object
-  DAILY_MAX_WINDOW_DAYS: number
   dailyTotalsRollup: object
   DEFAULT_ROLLUPS: object
   indexingHealthRollup: object
   indexingMetadataRollup: object
   indexPercentRollup: object
-  partitionDaySpan: function
-  partitionsInRange: function
   planRollupWindows: function
   queryCanonicalDailyRollup: object
   queryCanonicalVariantsRollup: object
@@ -257,7 +233,6 @@
   sitemapHealthRollup: object
   topCountries28dRollup: object
   topKeywords28dParquetRollup: object
-  topKeywords28dRollup: object
   topPages28dRollup: object
   weeklyTotalsRollup: object
   WINDOW_BYTE_BUDGET: number
@@ -283,7 +258,6 @@
   search_appearance_queries: object
   TABLE_METADATA: object
 ./scope:
-  buildTableScope: function
   createScopedHelpers: function
   mergeScope: function
 ./sink-node:
@@ -292,7 +266,6 @@
   httpBackend: function
   overwriteWriterAsSink: function
   subprocessBackend: function
-./snapshot: {}
 ./source:
   AttachedTableMissingError: function
   createAttachedTableSource: function
@@ -300,13 +273,10 @@
   createSqlQuerySource: function
   ENGINE_QUERY_CAPABILITIES: object
   queryRows: function
-  rewriteForTableSource: function
   runAnalyzerWithEngine: function
 ./sql:
   bindLiterals: function
-  bindLiteralsResult: function
   formatLiteral: function
-  formatLiteralResult: function
   sqlEscape: function
 ./sql-fragments:
   dateReplaceClause: function

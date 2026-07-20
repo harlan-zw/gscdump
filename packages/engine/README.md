@@ -27,7 +27,6 @@ Optional peers (install only what your runtime needs):
 | `@gscdump/engine/contracts` | `StorageEngine`, `Row`, `TableName`, `WriteCtx`, `ManifestEntry`, ... |
 | `@gscdump/engine/schema` | `SCHEMAS`, `allTables`, `inferTable`, column metadata. |
 | `@gscdump/engine/planner` | `resolveToSQL`, `enumeratePartitions`, partition planning. |
-| `@gscdump/engine/snapshot` | `SnapshotIndex` contract for hot/cold snapshot files. |
 | `@gscdump/engine/ingest` | GSC row → storage row helpers (`createRowAccumulator`, `transformGscRow`). |
 | `@gscdump/engine/sql` | SQL literal binding helpers (`bindLiterals`, `formatLiteral`). |
 | `@gscdump/engine/sql-fragments` | Reusable SQL fragments shared across analyzers. |
@@ -40,8 +39,7 @@ Optional peers (install only what your runtime needs):
 | `@gscdump/engine/filesystem` | Node-only `DataSource` + `ManifestStore` adapters. |
 | `@gscdump/engine/hyparquet` | Pure-JS `ParquetCodec`. |
 | `@gscdump/engine/r2` | Cloudflare R2 `DataSource` (structurally typed against `R2Bucket`). |
-| `@gscdump/engine/r2-manifest` | R2-backed `ManifestStore` for hosted deployments. |
-| `@gscdump/engine/iceberg` | Edge-safe GSC Iceberg schema/catalog/append sink. |
+| `@gscdump/engine/iceberg` | Edge-safe GSC dataset schemas, catalog wrappers, and append sink. Generic Iceberg APIs live in `@gscdump/lakehouse`. |
 | `@gscdump/engine/sink-node` | Node-only Iceberg overwrite/delete recovery writer. |
 | `@gscdump/engine/source` | Query-source contracts and factories. |
 
@@ -58,9 +56,11 @@ Optional peers (install only what your runtime needs):
 ## Related
 
 - [`gscdump`](../gscdump) — REST client + query builder (edge-safe peer dep).
-- [`@gscdump/analysis`](../analysis) — analyzers; consumes `StorageEngine` via `createEngine` factories.
+- [`@gscdump/analysis`](../analysis) — analyzers; consumes storage through `AnalysisQuerySource` adapters.
 - [`@gscdump/engine-duckdb-wasm`](../engine-duckdb-wasm) — DuckDB-WASM browser adapter.
 - [`@gscdump/engine-sqlite`](../engine-sqlite) — SQLite / D1 adapter.
+- [`@gscdump/lakehouse`](../lakehouse) — dataset-agnostic Iceberg catalog and
+  dataset registry APIs.
 - [`@gscdump/cli`](../cli) — CLI wrapping engine + analysis.
 
 ## License

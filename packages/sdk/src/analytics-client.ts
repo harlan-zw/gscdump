@@ -1,18 +1,20 @@
 import type {
   AnalysisSourcesResponse,
-  AnalyticsClient,
   BackfillRange,
   BackfillResponse,
+  BulkFileResolutionRequest,
+  BulkFileResolutionResponse,
   CountriesResponse,
-  GscRowQueryResponse,
   IndexingDiagnostics,
   IndexingDiagnosticsParams,
   IndexingInspectRateLimited,
   IndexingInspectRequest,
   IndexingInspectResponse,
   IndexingUrlsResponse,
+  IndexingUrlStatus,
   InspectionHistoryResponse,
   InspectionIndex,
+  QueryDimSourceResponse,
   RollupEnvelope,
   SearchAppearanceResponse,
   SiteListItem,
@@ -46,6 +48,29 @@ export interface AnalyticsClientOptions extends HostedClientOptions {
   validate?: boolean | 'request' | 'response'
 }
 
+/** Hosted analytics transport exposed by `@gscdump/sdk`. */
+export interface AnalyticsClient {
+  whoami: () => Promise<WhoamiResponse>
+  listSites: () => Promise<SiteListItem[]>
+  getBulkSources: (params: BulkFileResolutionRequest) => Promise<BulkFileResolutionResponse>
+  getSourceInfo: (siteId: string, options?: SourceInfoOptions) => Promise<SourceInfoResponse>
+  getAnalysisSources: (siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: SearchTypeOptions & SourceRangeOptions) => Promise<AnalysisSourcesResponse>
+  getQueryDimSource: (siteId: string) => Promise<QueryDimSourceResponse>
+  analyze: <T = unknown>(siteId: string, params: unknown) => Promise<T>
+  getRollup: <T = unknown>(siteId: string, rollupId: string, params?: { start?: string, end?: string }) => Promise<RollupEnvelope<T>>
+  requestBackfill: (siteId: string, range: BackfillRange) => Promise<BackfillResponse>
+  getSitemaps: (siteId: string) => Promise<SitemapIndex>
+  getSitemapHistory: (siteId: string, hash: string) => Promise<SitemapHistoryResponse>
+  getSitemapChanges: (siteId: string, params?: { days?: number }) => Promise<SitemapChangesResponse>
+  getInspections: (siteId: string) => Promise<InspectionIndex>
+  getInspectionHistory: (siteId: string, hash: string) => Promise<InspectionHistoryResponse>
+  getIndexingUrls: (siteId: string, params?: { limit?: number, offset?: number, status?: IndexingUrlStatus, issue?: string, search?: string }) => Promise<IndexingUrlsResponse>
+  getIndexingDiagnostics: (siteId: string, params?: IndexingDiagnosticsParams) => Promise<IndexingDiagnostics>
+  requestIndexingInspect: (siteId: string, body: IndexingInspectRequest) => Promise<IndexingInspectResponse | IndexingInspectRateLimited>
+  getCountries: (siteId: string, range: { start: string, end: string }) => Promise<CountriesResponse>
+  getSearchAppearance: (siteId: string, range: { start: string, end: string }) => Promise<SearchAppearanceResponse>
+}
+
 export function createAnalyticsClient(options: AnalyticsClientOptions = {}): AnalyticsClient {
   const { request, shouldValidate } = createHostedRequester(options, { apiBase: '' })
 
@@ -58,6 +83,14 @@ export function createAnalyticsClient(options: AnalyticsClientOptions = {}): Ana
       const endpoint = analyticsEndpoints.listSites
       return request<SiteListItem[]>(endpoint.path, { method: endpoint.method }, endpoint.response)
     },
+    getBulkSources(params: BulkFileResolutionRequest) {
+      const endpoint = analyticsEndpoints.getBulkSources
+      const { siteIds, tables, ...options } = params
+      const query = tablesQuery(tables, options)
+      if (siteIds?.length)
+        query.siteIds = [...new Set(siteIds.filter(Boolean))].join(',')
+      return request<BulkFileResolutionResponse>(endpoint.path, { method: endpoint.method, query }, endpoint.response)
+    },
     getSourceInfo(siteId: string, options?: SourceInfoOptions) {
       const endpoint = analyticsEndpoints.getSourceInfo
       return request<SourceInfoResponse>(endpoint.path(siteId), { method: endpoint.method, query: sourceInfoQuery(options) }, endpoint.response)
@@ -66,13 +99,13 @@ export function createAnalyticsClient(options: AnalyticsClientOptions = {}): Ana
       const endpoint = analyticsEndpoints.getAnalysisSources
       return request<AnalysisSourcesResponse>(endpoint.path(siteId), { method: endpoint.method, query: tablesQuery(tables, options) }, endpoint.response)
     },
+    getQueryDimSource(siteId: string) {
+      const endpoint = analyticsEndpoints.getQueryDimSource
+      return request<QueryDimSourceResponse>(endpoint.path(siteId), { method: endpoint.method }, endpoint.response)
+    },
     analyze<T = unknown>(siteId: string, params: unknown) {
       const endpoint = analyticsEndpoints.analyze
       return request<T>(endpoint.path(siteId), { method: endpoint.method, body: withDefaultSearchType(params), dedupe: true })
-    },
-    queryRows<T = Record<string, unknown>>(siteId: string, state: unknown) {
-      const endpoint = analyticsEndpoints.queryRows
-      return request<GscRowQueryResponse<T>>(endpoint.path(siteId), { method: endpoint.method, body: withDefaultSearchType(state), dedupe: true }, endpoint.response)
     },
     getRollup<T = unknown>(siteId: string, rollupId: string, params?: { start?: string, end?: string }) {
       const endpoint = analyticsEndpoints.getRollup

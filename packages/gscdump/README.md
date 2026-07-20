@@ -4,15 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/gscdump?color=yellow)](https://npm.chart.dev/gscdump)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-> Google Search Console API wrapper with typed query builder, streaming pagination, and SEO analysis functions.
-
-## Features
-
-- **Typed Query Builder** - Drizzle-style API with filter constraints narrowing result types
-- **Streaming Pagination** - Memory-efficient iteration over large datasets (>25k rows)
-- **SEO Analysis** - Pure functions for cannibalization, striking distance, movers & shakers, decay detection
-- **Edge-Compatible** - Works in Cloudflare Workers, Deno, and other edge runtimes
-- **Full API Coverage** - Sites, sitemaps, indexing, and analytics
+Direct Google Search Console client with a typed query builder, streaming pagination, URL inspection, sitemap, verification, and Indexing API helpers.
 
 ## Install
 
@@ -20,146 +12,78 @@
 npm install gscdump
 ```
 
-This package is the edge-safe surface: REST client + query builder + cross-package contracts. For the storage engine (Parquet/DuckDB, planner, adapters), install [`@gscdump/engine`](../engine). For analyzers, install [`@gscdump/analysis`](../analysis).
+`gscdump` requires Node 22 or newer. It talks to Google over `fetch`; it does not require the Google API client packages.
 
-## Usage
+## Query Search Analytics
+
+Create a client with an access token, an OAuth-like client, or refresh-token credentials:
 
 ```ts
-import { fetchKeywordsWithComparison, fetchPagesWithComparison } from 'gscdump'
-import { daysAgo, today } from 'gscdump/query'
+import { googleSearchConsole } from 'gscdump'
 
-// Auth accepts token string or object
-const auth = 'ya29.xxx...'
-// or: { accessToken: 'ya29.xxx...' }
-
-const range = {
-  period: { start: daysAgo(28), end: today() },
-}
-
-// Pages with top keyword per page
-const pages = await fetchPagesWithComparison(auth, site, range)
-
-// Keywords with change percentages
-const keywords = await fetchKeywordsWithComparison(auth, site, range)
+const client = googleSearchConsole({ accessToken: 'ya29.xxx' })
+const sites = await client.sites()
 ```
 
-### Streaming Large Datasets
-
-For memory-efficient pagination of large datasets (>25k rows):
+Use `gscdump/query` to build a request. `client.query()` paginates through Google's 25,000-row pages and yields each non-empty batch.
 
 ```ts
-import { queryRecursiveStream } from 'gscdump'
+import { googleSearchConsole } from 'gscdump'
+import { and, between, date, daysAgo, gsc, page, query, today } from 'gscdump/query'
 
-// Stream keyword+page combinations - yields batches as they're fetched
-for await (const batch of queryRecursiveStream(client, site, {
-  dimensions: ['query', 'page'] as const, // as const required for type inference
-  startDate: '2024-01-01',
-  endDate: '2024-01-31',
-})) {
-  // batch: { keyword: string, page: string, clicks, impressions, ctr, position }[]
-  await db.insert(batch)
-}
-```
+const client = googleSearchConsole('ya29.xxx')
+const siteUrl = 'sc-domain:example.com'
 
-### Typed Query Builder
-
-Drizzle-style query builder with full type safety. Filter constraints flow through to result types.
-
-```ts
-import { and, between, contains, country, Country, date, device, Device, eq, gsc, inArray, page } from 'gscdump/query'
-
-const body = gsc
-  .select('page', 'query', 'device', 'country')
-  .where(and(
-    eq(device, Device.MOBILE),
-    inArray(country, [Country.USA, Country.GBR]),
-    contains(page, '/blog/'),
-    between(date, '2024-01-01', '2024-01-31')
-  ))
-  .toBody()
-
-// Use with client.searchAnalytics.query(siteUrl, body)
-```
-
-**With date helpers:**
-
-```ts
-import { and, between, date, daysAgo, gsc, query, regex, today } from 'gscdump/query'
-
-const q = gsc
-  .select('query', 'page')
+const request = gsc
+  .select(page, query)
   .where(and(
     between(date, daysAgo(28), today()),
-    regex(query, /how to/)
   ))
-  .limit(100)
+
+for await (const rows of client.query(siteUrl, request)) {
+  for (const row of rows)
+    console.log(row.page, row.query, row.clicks)
+}
 ```
 
-**Operators:**
-
-| Operator | Narrows Type? | Description |
-|----------|---------------|-------------|
-| `eq(col, val)` | ✓ | Exact match |
-| `ne(col, val)` | ✗ | Not equal |
-| `inArray(col, [a, b])` | ✓ | Value in array (becomes `a \| b`) |
-| `contains(col, str)` | ✗ | String contains |
-| `like(col, '%pattern%')` | ✗ | SQL LIKE pattern |
-| `regex(col, /pattern/)` | ✗ | Regex match |
-| `notRegex(col, /pattern/)` | ✗ | Regex exclusion |
-| `between(col, start, end)` | ✗ | Inclusive range (primarily for date) |
-| `gte(col, val)` | ✗ | Greater than or equal |
-| `lte(col, val)` | ✗ | Less than or equal |
-| `gt(col, val)` | ✗ | Greater than |
-| `lt(col, val)` | ✗ | Less than |
-| `and(...filters)` | ✓ | Merge constraints |
-| `or(...filters)` | ✗ | Any match |
-| `not(filter)` | ✗ | Invert filter |
-
-### Analysis Functions
-
-Analysis functions are pure - they operate on typed data arrays and return typed results.
+If you already have a Search Analytics request body, call the direct operation:
 
 ```ts
-import {
-  analyzeCannibalization,
-  analyzeDecay,
-  analyzeMovers,
-} from '@gscdump/analysis'
-import { fetchKeywordsWithComparison } from 'gscdump'
-
-// Fetch data first
-const { current, previous } = await fetchKeywordsWithComparison(auth, site, range)
-
-// Run pure analysis on the data
-const movers = analyzeMovers(current, previous)
-const decay = analyzeDecay(current, previous)
-const cannibalization = analyzeCannibalization(keywordPageData)
+const response = await client.searchAnalytics.query(siteUrl, {
+  startDate: '2026-06-01',
+  endDate: '2026-06-30',
+  dimensions: ['page'],
+  rowLimit: 1000,
+})
 ```
 
-## Exports
+## Other Google resources
 
-**Sites:** `fetchSites`, `fetchSitesWithSitemaps`, `fetchSitemaps`, `getSitemap`, `submitSitemap`, `deleteSitemap`, `inspectUrl`, `batchInspectUrls`
+The same client exposes the Google resources owned by this package:
 
-**Indexing:** `requestIndexing`, `getIndexingMetadata`, `batchRequestIndexing`
+```ts
+const sitemapList = await client.sitemaps.list(siteUrl)
+const inspection = await client.inspect(siteUrl, 'https://example.com/docs')
 
-**Analytics:** `fetchAnalyticsWithComparison`, `fetchPagesWithComparison`, `fetchKeywordsWithComparison`, `fetchDevicesWithComparison`, `fetchCountriesWithComparison`, `fetchSearchAppearanceWithComparison`, `fetchDates`, `fetchDatesWithComparison`, `fetchPages`, `fetchPage`, `fetchKeyword`
+await client.indexing.publish(
+  'https://example.com/jobs/frontend-engineer',
+  'URL_UPDATED',
+)
+```
 
-**Analysis (Pure)** — these live in `@gscdump/analysis`: `analyzeOpportunity`, `analyzeBrandSegmentation`, `analyzeConcentration`, `analyzeDecay`, `analyzeMovers`, `analyzeCannibalization`, `analyzeZeroClick`, `analyzeSeasonality`, `analyzeClustering`
+The package root also exports batch and projection helpers such as `fetchSitesWithSitemaps`, `batchInspectUrlsFlatSettled`, `inspectUrlFlat`, and `batchRequestIndexing`.
 
-**Low-level:** `gscClient`, `queryRecursive`, `queryRecursiveStream`, `createQueryBody`, `withPropertyAggregation`, `withSearchAppearance`, `withDataType`, `withFreshData`, `withFinalData`
+## Public subpaths
 
-**Query Builder (`gscdump/query`):** `gsc`, `eq`, `ne`, `and`, `or`, `inArray`, `contains`, `like`, `regex`, `notRegex`, `not`, `between`, `gte`, `gt`, `lte`, `lt`, `page`, `query`, `device`, `country`, `date`, `searchAppearance`, `Device`, `Country`, `today`, `daysAgo`
+- `gscdump/query`: query builder, columns, operators, Pacific date helpers, and logical query plans
+- `gscdump/query/plan`: logical query planning only
+- `gscdump/dates`: explicit UTC and Pacific Search Console date helpers
+- `gscdump/contracts`: Search Analytics request and response contracts
+- `gscdump/result`: `Result` helpers
+- `gscdump/normalize`: URL normalization
+- `gscdump/tenant`: site ID encoding and normalization
 
-**Error Utilities:** `isQuotaError`, `isRateLimitError`, `isAuthError`, `getErrorCode`, `getErrorMessage`, `getRetryAfter`, `analyzeGscError`, `formatGscErrorForCli`
-
-**Utils:** `formatDateGsc`, `percentDifference`
-
-## Related
-
-- [`@gscdump/cli`](../cli) — CLI: `sync`, `query`, `dump`, `analyze`, `mcp`, `store` admin.
-- [`@gscdump/engine`](../engine) — Append-only Parquet/DuckDB storage engine.
-- [`@gscdump/analysis`](../analysis) — SEO analyzers (row-based + DuckDB-native + D1-ready).
-- [`@gscdump/sdk`](../sdk) — Hosted API and ticketed realtime clients.
+Hosted gscdump.com clients live in [`@gscdump/sdk`](../sdk). Storage engines and analyzers live in [`@gscdump/engine`](../engine) and [`@gscdump/analysis`](../analysis).
 
 ## License
 

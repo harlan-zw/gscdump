@@ -8,27 +8,12 @@ export default defineBuildConfig({
     },
     {
       type: 'bundle',
-      input: ['./src/analyzer/index.ts'],
-      outDir: './dist',
-    },
-    {
-      type: 'bundle',
       input: ['./src/default-registry.ts'],
       outDir: './dist',
     },
     {
       type: 'bundle',
-      input: ['./src/source/index.ts'],
-      outDir: './dist',
-    },
-    {
-      type: 'bundle',
       input: ['./src/errors.ts'],
-      outDir: './dist',
-    },
-    {
-      type: 'bundle',
-      input: ['./src/semantic/index.ts'],
       outDir: './dist',
     },
     {

@@ -27,9 +27,9 @@ const activeSupported = computed(() => {
   return tab ? supports(tab.id).value : false
 })
 
-// Provide the runner to pipeline panels (actions, content-gap). Pipeline
-// composables (`useActionPriority`, `useContentGap`) hold their own state
-// via `useState`, so panels can call them directly inside their setup().
+// Provide the runner to lifecycle-owning panels. Pipeline composables such as
+// `useActionPriority` hold their own state via `useState`, so panels can call
+// them directly inside their setup().
 provide(gscPanelRunnerKey, { runner: { query: runQuery, analyze }, ready: isReady })
 const { data: dailyPayload } = useGscRollup<{ impressions: number, anonymizedImpressionsPct: number }[]>(siteId, 'daily_totals')
 const anonymizationPct = computed(() => weightedAnonPct(dailyPayload.value))

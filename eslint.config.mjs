@@ -40,11 +40,6 @@ const preferGranularCoreSubpaths = {
     },
     {
       name: '@gscdump/engine',
-      importNames: ['SnapshotIndex'],
-      message: 'Import snapshot contracts from @gscdump/engine/snapshot.',
-    },
-    {
-      name: '@gscdump/engine',
       importNames: ['SCHEMAS', 'allTables', 'currentSchemaVersion', 'dimensionToColumn', 'inferTable'],
       message: 'Import schema primitives from @gscdump/engine/schema.',
     },

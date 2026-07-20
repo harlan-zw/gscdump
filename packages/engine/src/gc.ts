@@ -5,7 +5,7 @@
  * (global-bucket decommission session, D4); this file stays only until that
  * session finishes and the bucket is gone. For the current Iceberg / R2 Data
  * Catalog path, the equivalent never-committed-orphan sweep is
- * `sweepUncommittedOrphans` in `@gscdump/lakehouse/unsafe-raw`
+ * `sweepUncommittedOrphans` in `@gscdump/lakehouse/maintenance`
  * (`packages/lakehouse/src/orphan-sweep.ts`, R2-FIXES F2) — it covers the one
  * class of file Cloudflare's own snapshot-expiration GC doesn't reclaim
  * (a data file that never landed in any snapshot's manifest). Do not extend

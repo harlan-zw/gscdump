@@ -26,30 +26,15 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     },
-    "./analyzer": {
-      "types": "./dist/analyzer/index.d.mts",
-      "import": "./dist/analyzer/index.mjs",
-      "default": "./dist/analyzer/index.mjs"
-    },
     "./registry": {
       "types": "./dist/default-registry.d.mts",
       "import": "./dist/default-registry.mjs",
       "default": "./dist/default-registry.mjs"
     },
-    "./source": {
-      "types": "./dist/source/index.d.mts",
-      "import": "./dist/source/index.mjs",
-      "default": "./dist/source/index.mjs"
-    },
     "./errors": {
       "types": "./dist/errors.d.mts",
       "import": "./dist/errors.mjs",
       "default": "./dist/errors.mjs"
-    },
-    "./semantic": {
-      "types": "./dist/semantic/index.d.mts",
-      "import": "./dist/semantic/index.mjs",
-      "default": "./dist/semantic/index.mjs"
     },
     "./report": {
       "types": "./dist/report/index.d.mts",
@@ -63,7 +48,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "build": "obuild",
@@ -72,18 +57,10 @@
     "test": "vitest",
     "prepack": "pnpm run build"
   },
-  "peerDependencies": {
-    "@huggingface/transformers": "catalog:"
-  },
-  "peerDependenciesMeta": {
-    "@huggingface/transformers": {
-      "optional": true
-    }
-  },
   "dependencies": {
-    "@gscdump/engine": "workspace:*",
-    "@gscdump/engine-gsc-api": "workspace:*",
-    "gscdump": "workspace:*",
+    "@gscdump/engine": "workspace:^",
+    "@gscdump/engine-gsc-api": "workspace:^",
+    "gscdump": "workspace:^",
     "pluralize": "catalog:"
   },
   "devDependencies": {

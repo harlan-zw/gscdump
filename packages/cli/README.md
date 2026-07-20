@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/@gscdump/cli?color=yellow)](https://npm.chart.dev/@gscdump/cli)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-> CLI for Google Search Console — sync to a local DuckDB/Parquet store, run typed queries, execute 21 SEO analyzers, and serve an MCP endpoint for AI assistants.
+> CLI for Google Search Console — sync to a local DuckDB/Parquet store, run typed queries, execute 29 SEO analyzers, and serve an MCP endpoint for AI assistants.
 
 ## Install
 

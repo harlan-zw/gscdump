@@ -1,4 +1,4 @@
-import type { GoogleSearchConsoleClient, SearchAnalyticsQuery, SearchAnalyticsResponse } from 'gscdump/api'
+import type { GoogleSearchConsoleClient, SearchAnalyticsQuery, SearchAnalyticsResponse } from 'gscdump'
 import type { GscApiRow } from '../src/sync-slice'
 import { describe, expect, it } from 'vitest'
 import { runGscSearchAppearanceContextSlice, runGscSyncSlice } from '../src/sync-slice'
@@ -9,11 +9,13 @@ function makeClient(
 ): GoogleSearchConsoleClient {
   let i = 0
   return {
-    _rawQuery: async (_siteUrl: string, body: SearchAnalyticsQuery) => {
-      capturedQueries.push(body)
-      const r = responses[i] ?? { rows: [] }
-      i++
-      return r
+    searchAnalytics: {
+      query: async (_siteUrl: string, body: SearchAnalyticsQuery) => {
+        capturedQueries.push(body)
+        const r = responses[i] ?? { rows: [] }
+        i++
+        return r
+      },
     },
   } as unknown as GoogleSearchConsoleClient
 }
@@ -247,9 +249,11 @@ describe('runGscSyncSlice', () => {
   it('returns retry state without advancing the cursor when a GSC fetch times out', async () => {
     const captured: SearchAnalyticsQuery[] = []
     const client = {
-      _rawQuery: async (_siteUrl: string, body: SearchAnalyticsQuery) => {
-        captured.push(body)
-        throw Object.assign(new Error('socket aborted'), { name: 'AbortError' })
+      searchAnalytics: {
+        query: async (_siteUrl: string, body: SearchAnalyticsQuery) => {
+          captured.push(body)
+          throw Object.assign(new Error('socket aborted'), { name: 'AbortError' })
+        },
       },
     } as unknown as GoogleSearchConsoleClient
 

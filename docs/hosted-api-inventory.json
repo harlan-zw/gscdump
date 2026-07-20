@@ -19,14 +19,14 @@
     "httpOperationCount": 220,
     "websocketOperationCount": 2,
     "operationCount": 222,
-    "descriptorCount": 82,
-    "legacyDescriptorCount": 64,
+    "descriptorCount": 81,
+    "legacyDescriptorCount": 63,
     "v1DescriptorCount": 18,
-    "descriptorOwnedOperationCount": 79,
-    "hostOperationsWithoutDescriptorCount": 143,
-    "schemaLessDescriptorCount": 10,
-    "descriptorWithoutHandlerCount": 2,
-    "descriptorCollisionCount": 1,
+    "descriptorOwnedOperationCount": 81,
+    "hostOperationsWithoutDescriptorCount": 141,
+    "schemaLessDescriptorCount": 3,
+    "descriptorWithoutHandlerCount": 0,
+    "descriptorCollisionCount": 0,
     "excludedHelperFileCount": 1,
     "excludedNonApiServerRouteCount": 3
   },
@@ -34,38 +34,11 @@
     "schemaLessDescriptorIds": [
       "analytics.analyze",
       "partner.deleteSite",
-      "partner.deleteTeam",
-      "partner.getContentVelocity",
-      "partner.getSyncStatus",
-      "partner.refreshSitemaps",
-      "partner.removeTeamMember",
-      "partner.renameTeam",
-      "partner.submitSitemap",
-      "partner.updateTeamMemberRole"
+      "partner.getSyncStatus"
     ],
-    "descriptorIdsWithoutHandler": [
-      "analytics.queryRows",
-      "partner.getAnalysis"
-    ],
-    "descriptorCollisions": [
-      {
-        "method": "POST",
-        "path": "/api/sites/{siteId}/sitemaps",
-        "descriptorIds": [
-          "partner.refreshSitemaps",
-          "partner.submitSitemap"
-        ],
-        "handlerFiles": [
-          "server/api/sites/[siteId]/sitemaps.post.ts"
-        ]
-      }
-    ],
+    "descriptorIdsWithoutHandler": [],
+    "descriptorCollisions": [],
     "hostOperationsWithoutDescriptor": [
-      {
-        "method": "GET",
-        "path": "/api/__gsc/bulk-sources",
-        "file": "server/api/__gsc/bulk-sources.get.ts"
-      },
       {
         "method": "GET",
         "path": "/api/__gsc/diagnostics",
@@ -95,11 +68,6 @@
         "method": "GET",
         "path": "/api/__gsc/sites/{siteId}/parquet-listing",
         "file": "server/api/__gsc/sites/[siteId]/parquet-listing.get.ts"
-      },
-      {
-        "method": "GET",
-        "path": "/api/__gsc/sites/{siteId}/query-dim-source",
-        "file": "server/api/__gsc/sites/[siteId]/query-dim-source.get.ts"
       },
       {
         "method": "POST",
@@ -417,26 +385,6 @@
         "file": "server/api/partner/sites/[siteId]/cross-source-query.post.ts"
       },
       {
-        "method": "POST",
-        "path": "/api/partner/sites/add-and-verify",
-        "file": "server/api/partner/sites/add-and-verify.post.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/partner/sites/verification-token",
-        "file": "server/api/partner/sites/verification-token.post.ts"
-      },
-      {
-        "method": "GET",
-        "path": "/api/partner/teams/{teamId}/catalog",
-        "file": "server/api/partner/teams/[teamId]/catalog/index.get.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/partner/teams/{teamId}/catalog",
-        "file": "server/api/partner/teams/[teamId]/catalog/index.post.ts"
-      },
-      {
         "method": "GET",
         "path": "/api/partner/users/{userId}/available-sites",
         "file": "server/api/partner/users/[userId]/available-sites.get.ts"
@@ -445,11 +393,6 @@
         "method": "POST",
         "path": "/api/partner/users/{userId}/sites/{siteId}/indexing/inspect",
         "file": "server/api/partner/users/[userId]/sites/[siteId]/indexing/inspect.post.ts"
-      },
-      {
-        "method": "GET",
-        "path": "/api/partner/users/{userId}/sites/crosswalk",
-        "file": "server/api/partner/users/[userId]/sites/crosswalk.get.ts"
       },
       {
         "method": "PATCH",
@@ -507,6 +450,21 @@
         "file": "server/api/sites/[siteId]/backfill.post.ts"
       },
       {
+        "method": "GET",
+        "path": "/api/sites/{siteId}/content-velocity",
+        "file": "server/api/sites/[siteId]/content-velocity.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sites/{siteId}/ctr-curve",
+        "file": "server/api/sites/[siteId]/ctr-curve.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sites/{siteId}/dark-traffic",
+        "file": "server/api/sites/[siteId]/dark-traffic.get.ts"
+      },
+      {
         "method": "POST",
         "path": "/api/sites/{siteId}/data",
         "file": "server/api/sites/[siteId]/data.post.ts"
@@ -515,6 +473,11 @@
         "method": "POST",
         "path": "/api/sites/{siteId}/data/detail",
         "file": "server/api/sites/[siteId]/data/detail.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sites/{siteId}/device-gap",
+        "file": "server/api/sites/[siteId]/device-gap.get.ts"
       },
       {
         "method": "GET",
@@ -535,6 +498,16 @@
         "method": "POST",
         "path": "/api/sites/{siteId}/inspect",
         "file": "server/api/sites/[siteId]/inspect.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sites/{siteId}/keyword-breadth",
+        "file": "server/api/sites/[siteId]/keyword-breadth.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sites/{siteId}/position-distribution",
+        "file": "server/api/sites/[siteId]/position-distribution.get.ts"
       },
       {
         "method": "GET",
@@ -560,11 +533,6 @@
         "method": "POST",
         "path": "/api/sites/{siteId}/reports/{reportId}/regenerate",
         "file": "server/api/sites/[siteId]/reports/[reportId]/regenerate.post.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/sites/{siteId}/sitemaps/membership",
-        "file": "server/api/sites/[siteId]/sitemaps/membership.post.ts"
       },
       {
         "method": "POST",
@@ -812,6 +780,17 @@
       ]
     },
     {
+      "id": "analytics.getBulkSources",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/bulk-sources",
+      "routeBuilder": "analytics.bulkSources",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/bulk-sources.get.ts"
+      ]
+    },
+    {
       "id": "analytics.getCountries",
       "owner": "analytics",
       "method": "GET",
@@ -864,6 +843,17 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/__gsc/sites/[siteId]/inspections.get.ts"
+      ]
+    },
+    {
+      "id": "analytics.getQueryDimSource",
+      "owner": "analytics",
+      "method": "GET",
+      "path": "/api/__gsc/sites/{siteId}/query-dim-source",
+      "routeBuilder": "analytics.site.queryDimSource",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/__gsc/sites/[siteId]/query-dim-source.get.ts"
       ]
     },
     {
@@ -944,15 +934,6 @@
       ]
     },
     {
-      "id": "analytics.queryRows",
-      "owner": "analytics",
-      "method": "POST",
-      "path": "/api/__gsc/sites/{siteId}/rows",
-      "routeBuilder": "analytics.site.rows",
-      "schema": "validated",
-      "handlerFiles": []
-    },
-    {
       "id": "analytics.reports.detail.query",
       "owner": "analytics-v1",
       "method": "POST",
@@ -1019,6 +1000,17 @@
       ]
     },
     {
+      "id": "partner.addAndVerifySite",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/partner/sites/add-and-verify",
+      "routeBuilder": "partner.partner.sites.addAndVerify",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/sites/add-and-verify.post.ts"
+      ]
+    },
+    {
       "id": "partner.addTeamMember",
       "owner": "partner",
       "method": "POST",
@@ -1038,6 +1030,17 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/partner/users/[userId]/sites/[siteId].patch.ts"
+      ]
+    },
+    {
+      "id": "partner.bindTeamCatalog",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/partner/teams/{teamId}/catalog",
+      "routeBuilder": "partner.teams.catalog",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/teams/[teamId]/catalog/index.post.ts"
       ]
     },
     {
@@ -1079,7 +1082,7 @@
       "method": "DELETE",
       "path": "/api/partner/teams/{teamId}",
       "routeBuilder": "partner.teams.byId",
-      "schema": "missing",
+      "schema": "validated",
       "handlerFiles": [
         "server/api/partner/teams/[teamId]/index.delete.ts"
       ]
@@ -1094,15 +1097,6 @@
       "handlerFiles": [
         "server/api/partner/users/[userId]/index.delete.ts"
       ]
-    },
-    {
-      "id": "partner.getAnalysis",
-      "owner": "partner",
-      "method": "GET",
-      "path": "/api/sites/{siteId}/analysis",
-      "routeBuilder": "partner.sites.analysis",
-      "schema": "validated",
-      "handlerFiles": []
     },
     {
       "id": "partner.getAnalysisSources",
@@ -1138,39 +1132,6 @@
       ]
     },
     {
-      "id": "partner.getContentVelocity",
-      "owner": "partner",
-      "method": "GET",
-      "path": "/api/sites/{siteId}/content-velocity",
-      "routeBuilder": "partner.sites.contentVelocity",
-      "schema": "missing",
-      "handlerFiles": [
-        "server/api/sites/[siteId]/content-velocity.get.ts"
-      ]
-    },
-    {
-      "id": "partner.getCtrCurve",
-      "owner": "partner",
-      "method": "GET",
-      "path": "/api/sites/{siteId}/ctr-curve",
-      "routeBuilder": "partner.sites.ctrCurve",
-      "schema": "validated",
-      "handlerFiles": [
-        "server/api/sites/[siteId]/ctr-curve.get.ts"
-      ]
-    },
-    {
-      "id": "partner.getDarkTraffic",
-      "owner": "partner",
-      "method": "GET",
-      "path": "/api/sites/{siteId}/dark-traffic",
-      "routeBuilder": "partner.sites.darkTraffic",
-      "schema": "validated",
-      "handlerFiles": [
-        "server/api/sites/[siteId]/dark-traffic.get.ts"
-      ]
-    },
-    {
       "id": "partner.getData",
       "owner": "partner",
       "method": "GET",
@@ -1190,17 +1151,6 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/sites/[siteId]/data/detail.get.ts"
-      ]
-    },
-    {
-      "id": "partner.getDeviceGap",
-      "owner": "partner",
-      "method": "GET",
-      "path": "/api/sites/{siteId}/device-gap",
-      "routeBuilder": "partner.sites.deviceGap",
-      "schema": "validated",
-      "handlerFiles": [
-        "server/api/sites/[siteId]/device-gap.get.ts"
       ]
     },
     {
@@ -1248,17 +1198,6 @@
       ]
     },
     {
-      "id": "partner.getKeywordBreadth",
-      "owner": "partner",
-      "method": "GET",
-      "path": "/api/sites/{siteId}/keyword-breadth",
-      "routeBuilder": "partner.sites.keywordBreadth",
-      "schema": "validated",
-      "handlerFiles": [
-        "server/api/sites/[siteId]/keyword-breadth.get.ts"
-      ]
-    },
-    {
       "id": "partner.getKeywordSparklines",
       "owner": "partner",
       "method": "POST",
@@ -1278,17 +1217,6 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/sites/[siteId]/data/page-trend.get.ts"
-      ]
-    },
-    {
-      "id": "partner.getPositionDistribution",
-      "owner": "partner",
-      "method": "GET",
-      "path": "/api/sites/{siteId}/position-distribution",
-      "routeBuilder": "partner.sites.positionDistribution",
-      "schema": "validated",
-      "handlerFiles": [
-        "server/api/sites/[siteId]/position-distribution.get.ts"
       ]
     },
     {
@@ -1314,6 +1242,17 @@
       ]
     },
     {
+      "id": "partner.getSitemapMembership",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/sitemaps/membership",
+      "routeBuilder": "partner.sites.sitemapMembership",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/sitemaps/membership.post.ts"
+      ]
+    },
+    {
       "id": "partner.getSitemaps",
       "owner": "partner",
       "method": "GET",
@@ -1333,6 +1272,17 @@
       "schema": "missing",
       "handlerFiles": [
         "server/api/sites/[siteId]/sync-status.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getTeamCatalog",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/partner/teams/{teamId}/catalog",
+      "routeBuilder": "partner.teams.catalog",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/teams/[teamId]/catalog/index.get.ts"
       ]
     },
     {
@@ -1366,6 +1316,17 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/user/settings.get.ts"
+      ]
+    },
+    {
+      "id": "partner.getUserSiteIntIdCrosswalk",
+      "owner": "partner",
+      "method": "GET",
+      "path": "/api/partner/users/{userId}/sites/crosswalk",
+      "routeBuilder": "partner.partner.users.siteIntIdCrosswalk",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/users/[userId]/sites/crosswalk.get.ts"
       ]
     },
     {
@@ -1413,6 +1374,17 @@
       ]
     },
     {
+      "id": "partner.postSitemaps",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/sites/{siteId}/sitemaps",
+      "routeBuilder": "partner.sites.sitemaps",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/sites/[siteId]/sitemaps.post.ts"
+      ]
+    },
+    {
       "id": "partner.recoverPermission",
       "owner": "partner",
       "method": "POST",
@@ -1421,17 +1393,6 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/sites/[siteId]/recover-permission.post.ts"
-      ]
-    },
-    {
-      "id": "partner.refreshSitemaps",
-      "owner": "partner",
-      "method": "POST",
-      "path": "/api/sites/{siteId}/sitemaps",
-      "routeBuilder": "partner.sites.sitemaps",
-      "schema": "missing",
-      "handlerFiles": [
-        "server/api/sites/[siteId]/sitemaps.post.ts"
       ]
     },
     {
@@ -1462,7 +1423,7 @@
       "method": "DELETE",
       "path": "/api/partner/teams/{teamId}/members/{userId}",
       "routeBuilder": "partner.teams.member",
-      "schema": "missing",
+      "schema": "validated",
       "handlerFiles": [
         "server/api/partner/teams/[teamId]/members/[userId].delete.ts"
       ]
@@ -1473,7 +1434,7 @@
       "method": "PATCH",
       "path": "/api/partner/teams/{teamId}",
       "routeBuilder": "partner.teams.byId",
-      "schema": "missing",
+      "schema": "validated",
       "handlerFiles": [
         "server/api/partner/teams/[teamId]/index.patch.ts"
       ]
@@ -1487,6 +1448,17 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/sites/[siteId]/indexing/inspect.post.ts"
+      ]
+    },
+    {
+      "id": "partner.requestSiteVerificationToken",
+      "owner": "partner",
+      "method": "POST",
+      "path": "/api/partner/sites/verification-token",
+      "routeBuilder": "partner.partner.sites.verificationToken",
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/sites/verification-token.post.ts"
       ]
     },
     {
@@ -1578,23 +1550,12 @@
       ]
     },
     {
-      "id": "partner.submitSitemap",
-      "owner": "partner",
-      "method": "POST",
-      "path": "/api/sites/{siteId}/sitemaps",
-      "routeBuilder": "partner.sites.sitemaps",
-      "schema": "missing",
-      "handlerFiles": [
-        "server/api/sites/[siteId]/sitemaps.post.ts"
-      ]
-    },
-    {
       "id": "partner.updateTeamMemberRole",
       "owner": "partner",
       "method": "PATCH",
       "path": "/api/partner/teams/{teamId}/members/{userId}",
       "routeBuilder": "partner.teams.member",
-      "schema": "missing",
+      "schema": "validated",
       "handlerFiles": [
         "server/api/partner/teams/[teamId]/members/[userId].patch.ts"
       ]
@@ -1693,8 +1654,12 @@
       "file": "server/api/__gsc/bulk-sources.get.ts",
       "method": "GET",
       "path": "/api/__gsc/bulk-sources",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
+      "descriptorOwners": [
+        "analytics.getBulkSources"
+      ],
+      "routeBuilderOwners": [
+        "analytics.bulkSources"
+      ],
       "currentSurface": "legacy-analytics-data",
       "v1Review": "analytics"
     },
@@ -1888,8 +1853,12 @@
       "file": "server/api/__gsc/sites/[siteId]/query-dim-source.get.ts",
       "method": "GET",
       "path": "/api/__gsc/sites/{siteId}/query-dim-source",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
+      "descriptorOwners": [
+        "analytics.getQueryDimSource"
+      ],
+      "routeBuilderOwners": [
+        "analytics.site.queryDimSource"
+      ],
       "currentSurface": "legacy-analytics-data",
       "v1Review": "analytics"
     },
@@ -2588,8 +2557,12 @@
       "file": "server/api/partner/sites/add-and-verify.post.ts",
       "method": "POST",
       "path": "/api/partner/sites/add-and-verify",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
+      "descriptorOwners": [
+        "partner.addAndVerifySite"
+      ],
+      "routeBuilderOwners": [
+        "partner.partner.sites.addAndVerify"
+      ],
       "currentSurface": "partner-control",
       "v1Review": "partner"
     },
@@ -2623,8 +2596,12 @@
       "file": "server/api/partner/sites/verification-token.post.ts",
       "method": "POST",
       "path": "/api/partner/sites/verification-token",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
+      "descriptorOwners": [
+        "partner.requestSiteVerificationToken"
+      ],
+      "routeBuilderOwners": [
+        "partner.partner.sites.verificationToken"
+      ],
       "currentSurface": "partner-control",
       "v1Review": "partner"
     },
@@ -2671,8 +2648,12 @@
       "file": "server/api/partner/teams/[teamId]/catalog/index.get.ts",
       "method": "GET",
       "path": "/api/partner/teams/{teamId}/catalog",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
+      "descriptorOwners": [
+        "partner.getTeamCatalog"
+      ],
+      "routeBuilderOwners": [
+        "partner.teams.catalog"
+      ],
       "currentSurface": "partner-control",
       "v1Review": "partner"
     },
@@ -2680,8 +2661,12 @@
       "file": "server/api/partner/teams/[teamId]/catalog/index.post.ts",
       "method": "POST",
       "path": "/api/partner/teams/{teamId}/catalog",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
+      "descriptorOwners": [
+        "partner.bindTeamCatalog"
+      ],
+      "routeBuilderOwners": [
+        "partner.teams.catalog"
+      ],
       "currentSurface": "partner-control",
       "v1Review": "partner"
     },
@@ -2799,8 +2784,12 @@
       "file": "server/api/partner/users/[userId]/sites/crosswalk.get.ts",
       "method": "GET",
       "path": "/api/partner/users/{userId}/sites/crosswalk",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
+      "descriptorOwners": [
+        "partner.getUserSiteIntIdCrosswalk"
+      ],
+      "routeBuilderOwners": [
+        "partner.partner.users.siteIntIdCrosswalk"
+      ],
       "currentSurface": "partner-control",
       "v1Review": "partner"
     },
@@ -3113,40 +3102,28 @@
       "file": "server/api/sites/[siteId]/content-velocity.get.ts",
       "method": "GET",
       "path": "/api/sites/{siteId}/content-velocity",
-      "descriptorOwners": [
-        "partner.getContentVelocity"
-      ],
-      "routeBuilderOwners": [
-        "partner.sites.contentVelocity"
-      ],
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
       "currentSurface": "shared-hosted",
-      "v1Review": "partner"
+      "v1Review": "decision-required"
     },
     {
       "file": "server/api/sites/[siteId]/ctr-curve.get.ts",
       "method": "GET",
       "path": "/api/sites/{siteId}/ctr-curve",
-      "descriptorOwners": [
-        "partner.getCtrCurve"
-      ],
-      "routeBuilderOwners": [
-        "partner.sites.ctrCurve"
-      ],
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
       "currentSurface": "shared-hosted",
-      "v1Review": "partner"
+      "v1Review": "decision-required"
     },
     {
       "file": "server/api/sites/[siteId]/dark-traffic.get.ts",
       "method": "GET",
       "path": "/api/sites/{siteId}/dark-traffic",
-      "descriptorOwners": [
-        "partner.getDarkTraffic"
-      ],
-      "routeBuilderOwners": [
-        "partner.sites.darkTraffic"
-      ],
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
       "currentSurface": "shared-hosted",
-      "v1Review": "partner"
+      "v1Review": "decision-required"
     },
     {
       "file": "server/api/sites/[siteId]/data.get.ts",
@@ -3252,14 +3229,10 @@
       "file": "server/api/sites/[siteId]/device-gap.get.ts",
       "method": "GET",
       "path": "/api/sites/{siteId}/device-gap",
-      "descriptorOwners": [
-        "partner.getDeviceGap"
-      ],
-      "routeBuilderOwners": [
-        "partner.sites.deviceGap"
-      ],
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
       "currentSurface": "shared-hosted",
-      "v1Review": "partner"
+      "v1Review": "decision-required"
     },
     {
       "file": "server/api/sites/[siteId]/discover/hourly.get.ts",
@@ -3368,27 +3341,19 @@
       "file": "server/api/sites/[siteId]/keyword-breadth.get.ts",
       "method": "GET",
       "path": "/api/sites/{siteId}/keyword-breadth",
-      "descriptorOwners": [
-        "partner.getKeywordBreadth"
-      ],
-      "routeBuilderOwners": [
-        "partner.sites.keywordBreadth"
-      ],
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
       "currentSurface": "shared-hosted",
-      "v1Review": "partner"
+      "v1Review": "decision-required"
     },
     {
       "file": "server/api/sites/[siteId]/position-distribution.get.ts",
       "method": "GET",
       "path": "/api/sites/{siteId}/position-distribution",
-      "descriptorOwners": [
-        "partner.getPositionDistribution"
-      ],
-      "routeBuilderOwners": [
-        "partner.sites.positionDistribution"
-      ],
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
       "currentSurface": "shared-hosted",
-      "v1Review": "partner"
+      "v1Review": "decision-required"
     },
     {
       "file": "server/api/sites/[siteId]/query.get.ts",
@@ -3466,8 +3431,7 @@
       "method": "POST",
       "path": "/api/sites/{siteId}/sitemaps",
       "descriptorOwners": [
-        "partner.refreshSitemaps",
-        "partner.submitSitemap"
+        "partner.postSitemaps"
       ],
       "routeBuilderOwners": [
         "partner.sites.sitemaps"
@@ -3492,10 +3456,14 @@
       "file": "server/api/sites/[siteId]/sitemaps/membership.post.ts",
       "method": "POST",
       "path": "/api/sites/{siteId}/sitemaps/membership",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
+      "descriptorOwners": [
+        "partner.getSitemapMembership"
+      ],
+      "routeBuilderOwners": [
+        "partner.sites.sitemapMembership"
+      ],
       "currentSurface": "shared-hosted",
-      "v1Review": "decision-required"
+      "v1Review": "partner"
     },
     {
       "file": "server/api/sites/[siteId]/sync.post.ts",

@@ -1,4 +1,4 @@
-import type { GoogleSearchConsoleClient } from '../core/client'
+import type { CallOptions, GoogleSearchConsoleClient } from '../core/client'
 import type { UrlInspectionResult as GscUrlInspectionResult } from '../core/types'
 import { hasIndexingScope } from '../core/scopes'
 import { runSequentialBatch } from './batch'
@@ -86,8 +86,9 @@ export async function inspectUrlFlat(
   client: GoogleSearchConsoleClient,
   siteUrl: string,
   inspectionUrl: string,
+  options?: CallOptions,
 ): Promise<ParsedIndexingResult> {
-  const response = await client.inspect(siteUrl, inspectionUrl)
+  const response = await client.inspect(siteUrl, inspectionUrl, options)
   const inspection = response.inspectionResult
   const index = inspection?.indexStatusResult
   const mobile = inspection?.mobileUsabilityResult
@@ -120,6 +121,56 @@ export async function inspectUrlFlat(
     ampIssues: amp?.issues?.length ? JSON.stringify(amp.issues) : null,
     inspectionResultLink: inspection?.inspectionResultLink ?? null,
   }
+}
+
+/** Maximum parallel URL Inspection requests started by the settled flat batch helper. */
+export const MAX_FLAT_INSPECTION_BATCH_CONCURRENCY = 10
+
+export type InspectUrlFlatSettledResult
+  = | { url: string, status: 'fulfilled', value: ParsedIndexingResult }
+    | { url: string, status: 'rejected', reason: unknown }
+
+export interface BatchInspectUrlsFlatSettledOptions extends CallOptions {
+  /** Delay after each request handled by a worker. Defaults to 200ms. */
+  delayMs?: number
+  /** Number of workers. Defaults to 1 and is capped at {@link MAX_FLAT_INSPECTION_BATCH_CONCURRENCY}. */
+  concurrency?: number
+  onProgress?: (result: InspectUrlFlatSettledResult, index: number, total: number) => void
+}
+
+/**
+ * Inspect URLs into the flat storage shape without failing the whole batch
+ * when one URL fails. Results retain input order and include each URL so
+ * callers can persist successes and classify individual failures safely.
+ */
+export async function batchInspectUrlsFlatSettled(
+  client: GoogleSearchConsoleClient,
+  siteUrl: string,
+  urls: readonly string[],
+  options: BatchInspectUrlsFlatSettledOptions = {},
+): Promise<InspectUrlFlatSettledResult[]> {
+  const requestedConcurrency = Math.trunc(options.concurrency ?? 1)
+  const concurrency = Number.isFinite(requestedConcurrency)
+    ? Math.max(1, Math.min(requestedConcurrency, MAX_FLAT_INSPECTION_BATCH_CONCURRENCY))
+    : 1
+
+  return runSequentialBatch(
+    [...urls],
+    async (url): Promise<InspectUrlFlatSettledResult> => {
+      try {
+        const value = await inspectUrlFlat(client, siteUrl, url, { signal: options.signal })
+        return { url, status: 'fulfilled', value }
+      }
+      catch (reason) {
+        return { url, status: 'rejected', reason }
+      }
+    },
+    {
+      delayMs: options.delayMs ?? 200,
+      concurrency,
+      onProgress: options.onProgress,
+    },
+  )
 }
 
 // --- Re-check scheduling ---------------------------------------------------
@@ -161,7 +212,7 @@ export function canUseUrlInspection(permissionLevel: string | null | undefined):
   return !!permissionLevel && INSPECTION_ALLOWED_PERMISSIONS.has(permissionLevel)
 }
 
-export function grantedScopeList(scopes: string | null | undefined): string[] {
+function grantedScopeList(scopes: string | null | undefined): string[] {
   return scopes?.split(/\s+/).map(s => s.trim()).filter(Boolean) ?? []
 }
 

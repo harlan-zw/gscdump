@@ -10,9 +10,9 @@
 
 import type { SearchType as EngineSearchType } from '@gscdump/engine'
 import type { AnalysisQuerySource } from '@gscdump/engine/source'
-import type { GoogleSearchConsoleClient } from 'gscdump/api'
+import type { GoogleSearchConsoleClient } from 'gscdump'
 import type { BuilderState } from 'gscdump/query'
-import { googleSearchConsole } from 'gscdump/api'
+import { googleSearchConsole } from 'gscdump'
 import { createGscApiQuerySource } from './source'
 
 // Dimensions the GSC API can't produce (engine-derived).

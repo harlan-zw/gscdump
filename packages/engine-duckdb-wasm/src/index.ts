@@ -27,8 +27,6 @@ export { createClient } from './drizzle-adapter'
 export type { DuckDBWasmClient } from './drizzle-adapter'
 export { drizzle, DuckDBWasmDatabase } from './drizzle-adapter'
 export type { DuckDBWasmDrizzleDatabase } from './drizzle-adapter'
-export { strikingMomentum } from './insights/striking-momentum'
-export type { StrikingMomentumOptions, StrikingMomentumRow } from './insights/striking-momentum'
 export {
   attachOpfsParquetTables,
   clearOpfsSnapshotCache,

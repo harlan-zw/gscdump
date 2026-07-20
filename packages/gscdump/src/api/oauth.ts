@@ -9,6 +9,8 @@ import { GscApiError, gscErrorToException, parseGoogleError } from '../core/erro
 import { err, ok, unwrapResult } from '../core/result'
 
 const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+const OAUTH_TOKEN_INFO_URL = 'https://oauth2.googleapis.com/tokeninfo'
+const OAUTH_REVOKE_URL = 'https://oauth2.googleapis.com/revoke'
 
 // Google's OAuth token endpoint typically responds in <1s. A 30s wait on a
 // hung connection burns most of an edge worker's CPU budget on one failed
@@ -24,6 +26,29 @@ export interface OAuthTokens {
   accessToken: string
   /** Unix seconds. */
   expiresAt: number
+  /** Space-delimited scopes Google granted for this token, when returned. */
+  scope?: string
+}
+
+/** Normalized response from Google's access-token introspection endpoint. */
+export interface OAuthTokenInfo {
+  issuedTo?: string
+  audience?: string
+  authorizedParty?: string
+  userId?: string
+  subject?: string
+  scope?: string
+  /** Seconds remaining when Google inspected the token. */
+  expiresIn?: number
+  /** Unix seconds. */
+  expiresAt?: number
+  email?: string
+  emailVerified?: boolean
+  accessType?: string
+}
+
+interface OAuthTokenEndpointTokens extends OAuthTokens {
+  refreshToken?: string
 }
 
 /**
@@ -32,7 +57,7 @@ export interface OAuthTokens {
  * `error.kind` — `auth-expired` (the refresh token is permanently bad, re-auth)
  * vs `transport` (transient, safe to retry later) — rather than string-matching.
  */
-export async function refreshAccessTokenResult(
+async function refreshAccessTokenResult(
   refreshToken: string,
   clientId: string,
   clientSecret: string,
@@ -43,7 +68,14 @@ export async function refreshAccessTokenResult(
     refresh_token: refreshToken,
     grant_type: 'refresh_token',
   })
-  return postOAuthTokenResult(body, 'refresh')
+  const result = await postOAuthTokenResult(body, 'refresh')
+  if (!result.ok)
+    return result
+  return ok({
+    accessToken: result.value.accessToken,
+    expiresAt: result.value.expiresAt,
+    scope: result.value.scope,
+  })
 }
 
 /**
@@ -63,7 +95,8 @@ export async function refreshAccessToken(
 }
 
 /**
- * Errors-as-values core for {@link exchangeAuthCode}: same `auth-expired` vs
+ * Exchange an authorization code (from the OAuth consent redirect) for
+ * access + refresh tokens. Same retry / surface model and `auth-expired` vs
  * `transport` classification as {@link refreshAccessTokenResult}.
  */
 export async function exchangeAuthCodeResult(
@@ -82,25 +115,63 @@ export async function exchangeAuthCodeResult(
   const result = await postOAuthTokenResult(body, 'exchange')
   if (!result.ok)
     return result
-  // refresh_token only present on first consent (or with prompt=consent)
-  const refreshToken = (result.value as OAuthTokens & { refresh_token?: string }).refresh_token
-  return ok({ ...result.value, refreshToken })
+  return result
 }
 
-/**
- * Exchange an authorization code (from the OAuth consent redirect) for
- * access + refresh tokens. Same retry / surface model as `refreshAccessToken`.
- */
-export async function exchangeAuthCode(
-  code: string,
-  clientId: string,
-  clientSecret: string,
-  redirectUri: string,
-): Promise<OAuthTokens & { refreshToken?: string }> {
-  return unwrapResult(
-    await exchangeAuthCodeResult(code, clientId, clientSecret, redirectUri),
-    oauthErrorToException,
+/** Inspect an access token without throwing on expected OAuth failures. */
+export async function introspectAccessTokenResult(
+  accessToken: string,
+): Promise<Result<OAuthTokenInfo, GscError>> {
+  const response = await requestOAuthResult(
+    `${OAUTH_TOKEN_INFO_URL}?access_token=${encodeURIComponent(accessToken)}`,
+    { method: 'GET' },
+    'introspect',
   )
+  if (!response.ok)
+    return response
+
+  const parsed = await readOAuthJsonResult<Record<string, unknown>>(response.value, 'introspect')
+  if (!parsed.ok)
+    return parsed
+
+  const data = parsed.value
+  return ok({
+    issuedTo: optionalString(data.issued_to),
+    audience: optionalString(data.aud),
+    authorizedParty: optionalString(data.azp),
+    userId: optionalString(data.user_id),
+    subject: optionalString(data.sub),
+    scope: optionalString(data.scope),
+    expiresIn: optionalNumber(data.expires_in),
+    expiresAt: optionalNumber(data.exp),
+    email: optionalString(data.email),
+    emailVerified: optionalBoolean(data.email_verified),
+    accessType: optionalString(data.access_type),
+  })
+}
+
+/** Throwing convenience wrapper for {@link introspectAccessTokenResult}. */
+export async function introspectAccessToken(accessToken: string): Promise<OAuthTokenInfo> {
+  return unwrapResult(await introspectAccessTokenResult(accessToken), oauthErrorToException)
+}
+
+/** Revoke an access or refresh token without throwing on expected OAuth failures. */
+export async function revokeOAuthTokenResult(token: string): Promise<Result<void, GscError>> {
+  const response = await requestOAuthResult(
+    OAUTH_REVOKE_URL,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token }),
+    },
+    'revoke',
+  )
+  return response.ok ? ok(undefined) : response
+}
+
+/** Throwing convenience wrapper for {@link revokeOAuthTokenResult}. */
+export async function revokeOAuthToken(token: string): Promise<void> {
+  return unwrapResult(await revokeOAuthTokenResult(token), oauthErrorToException)
 }
 
 /**
@@ -110,10 +181,12 @@ export async function exchangeAuthCode(
  * `transport`. The original `GscApiError` is preserved as `cause` so the throwing
  * wrappers re-raise it unchanged.
  */
-function oauthHttpError(op: 'refresh' | 'exchange', info: GscApiErrorInfo): GscError {
+type OAuthOperation = 'refresh' | 'exchange' | 'introspect' | 'revoke'
+
+function oauthHttpError(op: OAuthOperation, info: GscApiErrorInfo): GscError {
   const message = `Failed to ${op} token: ${info.message}`
   const cause = new GscApiError(message, info)
-  const isAuthFailure = info.reason === 'invalid_grant'
+  const isAuthFailure = info.reason === 'invalid_grant' || info.reason === 'invalid_token'
     || info.code === 400 || info.code === 401 || info.code === 403
   return isAuthFailure
     ? { kind: 'auth-expired', message, cause }
@@ -131,16 +204,49 @@ function oauthErrorToException(error: GscError): unknown {
 async function postOAuthTokenResult(
   body: URLSearchParams,
   op: 'refresh' | 'exchange',
-): Promise<Result<OAuthTokens & Record<string, unknown>, GscError>> {
+): Promise<Result<OAuthTokenEndpointTokens, GscError>> {
+  const response = await requestOAuthResult(
+    OAUTH_TOKEN_URL,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    },
+    op,
+  )
+  if (!response.ok)
+    return response
+
+  const parsed = await readOAuthJsonResult<{
+    access_token: string
+    expires_in: number
+    refresh_token?: string
+    scope?: string
+  }>(response.value, op)
+  if (!parsed.ok)
+    return parsed
+
+  const data = parsed.value
+  return ok({
+    accessToken: data.access_token,
+    expiresAt: Math.floor(Date.now() / 1000) + data.expires_in,
+    refreshToken: data.refresh_token,
+    scope: data.scope,
+  })
+}
+
+async function requestOAuthResult(
+  url: string,
+  init: RequestInit,
+  op: OAuthOperation,
+): Promise<Result<Response, GscError>> {
   let lastError: unknown
   for (let attempt = 0; attempt < OAUTH_MAX_ATTEMPTS; attempt++) {
     if (OAUTH_BACKOFF_MS[attempt])
       await new Promise(r => setTimeout(r, OAUTH_BACKOFF_MS[attempt]))
 
-    const res = await fetch(OAUTH_TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
+    const res = await fetch(url, {
+      ...init,
       signal: AbortSignal.timeout(OAUTH_TIMEOUT_MS),
     }).catch((error: unknown) => {
       lastError = error
@@ -156,12 +262,7 @@ async function postOAuthTokenResult(
       return err(oauthHttpError(op, info))
     }
 
-    const data = await res.json() as { access_token: string, expires_in: number, refresh_token?: string }
-    return ok({
-      accessToken: data.access_token,
-      expiresAt: Math.floor(Date.now() / 1000) + data.expires_in,
-      refresh_token: data.refresh_token,
-    })
+    return ok(res)
   }
 
   // All attempts exhausted on transient network/timeout failures.
@@ -170,4 +271,40 @@ async function postOAuthTokenResult(
     message: lastError instanceof Error ? lastError.message : `OAuth ${op} failed after ${OAUTH_MAX_ATTEMPTS} attempts`,
     cause: lastError,
   })
+}
+
+async function readOAuthJsonResult<T>(
+  response: Response,
+  op: OAuthOperation,
+): Promise<Result<T, GscError>> {
+  try {
+    return ok(await response.json() as T)
+  }
+  catch (cause) {
+    return err({
+      kind: 'transport',
+      message: `Failed to parse ${op} token response`,
+      status: response.status,
+      cause,
+    })
+  }
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean')
+    return value
+  if (value === 'true')
+    return true
+  if (value === 'false')
+    return false
+  return undefined
 }

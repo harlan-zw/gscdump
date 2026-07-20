@@ -178,8 +178,9 @@ remain Google OAuth scope evidence and are unrelated to API authorization.
 - Realtime integration is complete only when reconnect, replay, resync,
   primary reseed, cache invalidation, rejected effects, backpressure, ticket
   rotation, and ownership-change audiences are tested end to end.
-- `BuilderState` remains the row-query wire shape where the accepted analytics
-  operation needs it. See
+- `BuilderStateWire` remains the row-query transport shape where an accepted
+  analytics operation needs it; normalized strict `BuilderState` owns
+  planning and execution. See
   [ADR-0010](./0010-consumer-row-query-uses-builderstate.md).
 - Webhook producers and realtime outbox producers stay in gscdump.com; SDK
   helpers remain consumer-side.

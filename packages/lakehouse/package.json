@@ -26,6 +26,11 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     },
+    "./maintenance": {
+      "types": "./dist/maintenance.d.mts",
+      "import": "./dist/maintenance.mjs",
+      "default": "./dist/maintenance.mjs"
+    },
     "./unsafe-raw": {
       "types": "./dist/unsafe-raw.d.mts",
       "import": "./dist/unsafe-raw.mjs",
@@ -43,7 +48,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "obuild --stub",

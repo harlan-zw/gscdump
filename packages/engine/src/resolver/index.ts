@@ -13,7 +13,7 @@
 
 export { createResolverAdapter } from './adapter'
 export type { CreateResolverAdapterConfig } from './adapter'
-export { canonicalRollupCovers, planCoveredByCanonicalRollup } from './canonical-source'
+export { canonicalRollupCovers } from './canonical-source'
 export {
   buildExtrasQueries,
   buildTotalsSql,

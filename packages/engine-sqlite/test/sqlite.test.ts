@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import {
   compileSqlite,
   createSqliteInsightRunner,
+  createSqliteQuerySource,
   gsc_keywords,
   gsc_pages,
   mergeScope,
@@ -32,6 +33,24 @@ function stubExecutor(captured: Captured[], rows: unknown[] = []) {
 }
 
 describe('@gscdump/engine-sqlite', () => {
+  it('creates a tenant-bound AnalysisQuerySource', async () => {
+    const captured: Captured[] = []
+    const source = createSqliteQuerySource({
+      executor: stubExecutor(captured, [{ clicks: 7n }]),
+      siteId: 'site-123',
+    })
+
+    expect(source.name).toBe('sqlite')
+    expect(source.kind).toBe('local')
+    expect(source.siteId).toBe('site-123')
+    expect(await source.executeSql?.('SELECT clicks FROM gsc_pages', ['site-123'])).toEqual([{ clicks: 7 }])
+    expect(captured).toEqual([{
+      method: 'all',
+      params: ['site-123'],
+      sql: 'SELECT clicks FROM gsc_pages',
+    }])
+  })
+
   it('schema exposes gsc_* tables with site_id + date', () => {
     const cols = Object.keys((gsc_pages as any)[Symbol.for('drizzle:Columns')])
     expect(cols).toContain('site_id')

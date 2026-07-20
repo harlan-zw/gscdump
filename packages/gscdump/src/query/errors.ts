@@ -21,6 +21,7 @@ export type QueryErrorKind
     | 'invalid-data-state'
     | 'invalid-aggregation-type'
     | 'invalid-builder-state'
+    | 'invalid-filter'
     | 'unsupported-capability'
     | 'unresolvable-dataset'
 
@@ -31,6 +32,7 @@ export type QueryError
     | { kind: 'invalid-data-state', message: string }
     | { kind: 'invalid-aggregation-type', message: string }
     | { kind: 'invalid-builder-state', message: string, cause?: unknown }
+    | { kind: 'invalid-filter', message: string }
     | { kind: 'unsupported-capability', capability: string, context: string, message: string }
     | { kind: 'unresolvable-dataset', dimensions: readonly Dimension[], filterDims: readonly Dimension[], message: string }
 
@@ -77,6 +79,9 @@ export const queryErrors = {
   invalidBuilderState(cause?: unknown): QueryError {
     return { kind: 'invalid-builder-state', cause, message: 'Invalid state' }
   },
+  malformedFilterLeaf(): QueryError {
+    return { kind: 'invalid-filter', message: 'Malformed filter: each filter leaf requires a string `dimension` and `operator`' }
+  },
   unsupportedCapability(capability: string, context: string): QueryError {
     return { kind: 'unsupported-capability', capability, context, message: `${context} requires ${capability} capability` }
   },
@@ -101,6 +106,7 @@ const QUERY_ERROR_KINDS = new Set<QueryErrorKind>([
   'invalid-data-state',
   'invalid-aggregation-type',
   'invalid-builder-state',
+  'invalid-filter',
   'unsupported-capability',
   'unresolvable-dataset',
 ])
@@ -110,11 +116,6 @@ export function isQueryError(value: unknown): value is QueryError {
     && value !== null
     && QUERY_ERROR_KINDS.has((value as { kind?: QueryErrorKind }).kind as QueryErrorKind)
     && typeof (value as { message?: unknown }).message === 'string'
-}
-
-/** The human-readable rendering of a `QueryError`, for logs and string sinks. */
-export function formatQueryError(error: QueryError): string {
-  return error.message
 }
 
 /**

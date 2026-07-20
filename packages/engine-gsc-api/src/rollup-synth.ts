@@ -12,7 +12,7 @@
 //  - Metric filter + ordering happens server-side on the GSC API where it
 //    can; everything else trims after row collection.
 
-import type { GoogleSearchConsoleClient } from 'gscdump/api'
+import type { GoogleSearchConsoleClient } from 'gscdump'
 import type { Column, Dimension, GSCQueryBuilder, SearchType } from 'gscdump/query'
 import { between, clicks as clicksCol, date as dateDim, gsc } from 'gscdump/query'
 

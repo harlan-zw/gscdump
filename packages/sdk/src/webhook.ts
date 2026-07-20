@@ -119,10 +119,6 @@ export function createWebhookEnvelope<TData extends Record<string, unknown>>(
   }
 }
 
-export function serializeWebhookPayload(payload: string | object): string {
-  return toPayloadString(payload)
-}
-
 export async function signWebhookPayload(payload: string | object, secret: string): Promise<string> {
   const payloadString = toPayloadString(payload)
   return `sha256=${bytesToHex(await hmacSha256(payloadString, secret))}`

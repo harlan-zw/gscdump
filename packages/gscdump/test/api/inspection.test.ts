@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { canUseUrlInspection, inspectUrlFlat } from '../../src/api/inspection'
+import {
+  batchInspectUrlsFlatSettled,
+  canUseUrlInspection,
+  inspectUrlFlat,
+  MAX_FLAT_INSPECTION_BATCH_CONCURRENCY,
+} from '../../src/api/inspection'
 import { googleSearchConsole } from '../../src/core/client'
 
 describe('inspectUrlFlat', () => {
@@ -40,6 +45,58 @@ describe('inspectUrlFlat', () => {
     expect(result.ampVerdict).toBeNull()
     expect(result.ampUrl).toBeNull()
     expect(result.ampIssues).toBeNull()
+  })
+})
+
+describe('batchInspectUrlsFlatSettled', () => {
+  it('defaults to sequential requests and preserves input order', async () => {
+    let active = 0
+    let maxActive = 0
+    const fetch = vi.fn(async (_url: string, init: { body: { inspectionUrl: string } }) => {
+      active++
+      maxActive = Math.max(maxActive, active)
+      await new Promise(resolve => setTimeout(resolve, init.body.inspectionUrl.endsWith('/first') ? 4 : 1))
+      active--
+      return { inspectionResult: { indexStatusResult: { verdict: 'PASS' } } }
+    })
+    const client = googleSearchConsole('t', { fetch: fetch as any })
+    const urls = ['https://example.com/first', 'https://example.com/second']
+
+    const results = await batchInspectUrlsFlatSettled(client, 'sc-domain:example.com', urls, { delayMs: 0 })
+
+    expect(maxActive).toBe(1)
+    expect(results.map(result => result.url)).toEqual(urls)
+    expect(results.map(result => result.status)).toEqual(['fulfilled', 'fulfilled'])
+  })
+
+  it('caps concurrency and retains each item error without rejecting the batch', async () => {
+    let active = 0
+    let maxActive = 0
+    const failedUrl = 'https://example.com/5'
+    const failure = new Error('inspection failed')
+    const fetch = vi.fn(async (_url: string, init: { body: { inspectionUrl: string } }) => {
+      active++
+      maxActive = Math.max(maxActive, active)
+      await new Promise(resolve => setTimeout(resolve, 2))
+      active--
+      if (init.body.inspectionUrl === failedUrl)
+        throw failure
+      return { inspectionResult: { indexStatusResult: { verdict: 'PASS' } } }
+    })
+    const client = googleSearchConsole('t', { fetch: fetch as any })
+    const urls = Array.from({ length: MAX_FLAT_INSPECTION_BATCH_CONCURRENCY + 2 }, (_, index) => `https://example.com/${index}`)
+
+    const results = await batchInspectUrlsFlatSettled(client, 'sc-domain:example.com', urls, {
+      concurrency: MAX_FLAT_INSPECTION_BATCH_CONCURRENCY + 100,
+      delayMs: 0,
+    })
+
+    expect(maxActive).toBe(MAX_FLAT_INSPECTION_BATCH_CONCURRENCY)
+    expect(results.map(result => result.url)).toEqual(urls)
+    const failed = results[5]
+    expect(failed).toMatchObject({ url: failedUrl, status: 'rejected' })
+    expect(failed?.status === 'rejected' && failed.reason).toBe(failure)
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(urls.length - 1)
   })
 })
 

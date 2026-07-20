@@ -18,9 +18,12 @@ A Node `gscdump` process can load **two** DuckDB runtimes:
    (`packages/cli/src/commands/export.ts`).
 
 At a glance this reads as accidental duplication — two DuckDB dependencies, two
-ways to run `read_parquet`, even a DuckDB *version skew* (`duckdb-wasm ^1.32.0`
-vs `node-api 1.5.1`). A consolidation audit considered collapsing to one runtime
-and rejected it.
+ways to run `read_parquet`, even a DuckDB *version skew* (`duckdb-wasm
+1.33.1-dev57.0` vs `node-api 1.5.1`). A consolidation audit considered
+collapsing to one runtime and rejected it. The WASM version is intentionally
+pinned to the pre-release build exercised by the production consumer; the
+published optional peer uses `^1.33.1-dev57.0` so it accepts that build and the
+eventual compatible stable 1.x releases.
 
 ## Decision
 

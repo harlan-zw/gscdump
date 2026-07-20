@@ -58,7 +58,7 @@ export type { StrikingDistanceInputRow, StrikingDistanceOptions, StrikingDistanc
 export { analyzeStrikingDistance } from './analyzers/striking-distance'
 export type { ZeroClickOptions, ZeroClickResult } from './analyzers/zero-click'
 export { analyzeZeroClick } from './analyzers/zero-click'
-export { analyzeInBrowser, rewriteForTableSource } from './browser'
+export { analyzeInBrowser } from './browser'
 
 export type { AnalyzerRunner, BrowserAnalyzeOptions } from './browser'
 
@@ -74,7 +74,7 @@ export {
   isAnalysisError,
 } from './errors'
 
-export { classifyQueryIntent, decodeIntent, encodeIntent, INTENT_CLASSIFIER_VERSION, SEARCH_INTENT_CODE } from './query/intent'
+export { classifyQueryIntent, encodeIntent, INTENT_CLASSIFIER_VERSION, SEARCH_INTENT_CODE } from './query/intent'
 export type { IntentClassification, SearchIntent } from './query/intent'
 export { normalizeQuery, NORMALIZER_VERSION } from './query/normalize'
 

@@ -21,9 +21,9 @@ vi.mock('icebird', () => ({
   s3SignedResolver: vi.fn(),
 }))
 
-const { sweepUncommittedOrphans } = await import('../src/orphan-sweep')
-type SweepListedObject = import('../src/orphan-sweep').SweepListedObject
-type SweepStorageClient = import('../src/orphan-sweep').SweepStorageClient
+const { sweepUncommittedOrphans } = await import('../src/maintenance')
+type SweepListedObject = import('../src/maintenance').SweepListedObject
+type SweepStorageClient = import('../src/maintenance').SweepStorageClient
 
 const CONN = { catalog: {} as never, resolver: {} as never, namespace: 'crawl' }
 const BUCKET = 'gsc-team-t1-int'

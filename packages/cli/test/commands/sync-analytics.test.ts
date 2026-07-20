@@ -42,13 +42,13 @@ function buildRawResponse(params: { startDate: string, dimensions?: string[] }):
 const rawQuerySpy = vi.fn()
 const clientSitesSpy = vi.fn()
 
-vi.mock('gscdump/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump/api')>()
+vi.mock('gscdump', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump')>()
   return {
     ...actual,
     googleSearchConsole: vi.fn(() => ({
       sites: clientSitesSpy,
-      _rawQuery: rawQuerySpy,
+      searchAnalytics: { query: rawQuerySpy },
     })),
   }
 })

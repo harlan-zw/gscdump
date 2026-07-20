@@ -1,5 +1,5 @@
 import type { AnalysisQuerySource, QueryRow } from '@gscdump/engine/source'
-import type { GoogleSearchConsoleClient } from 'gscdump/api'
+import type { GoogleSearchConsoleClient } from 'gscdump'
 import type { BuilderState, GSCQueryBuilder } from 'gscdump/query'
 
 import type { PlannerCapabilities } from 'gscdump/query/plan'

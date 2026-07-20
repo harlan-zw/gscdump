@@ -369,7 +369,7 @@ const INSPECTION_PARQUET_COLUMNS: readonly ColumnDef[] = [
  * event files and `base.parquet` share this schema so DuckDB
  * `read_parquet([...], union_by_name = true)` merges base + events cleanly.
  */
-export const INSPECTION_EVENT_COLUMNS: readonly ColumnDef[] = [
+const INSPECTION_EVENT_COLUMNS: readonly ColumnDef[] = [
   ...INSPECTION_PARQUET_COLUMNS,
   { name: 'crawlingUserAgent', type: 'VARCHAR', nullable: true },
   { name: 'richResultsItems', type: 'VARCHAR', nullable: true },

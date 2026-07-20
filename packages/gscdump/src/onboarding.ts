@@ -19,7 +19,6 @@ export {
   indexingNextActions,
   indexingStatuses,
   lifecycleErrorCodes,
-  lifecycleWebhookEvents,
   parseGrantedScopes,
   propertyNextActions,
   propertyStatuses,

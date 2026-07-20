@@ -2,7 +2,7 @@
   "name": "gscdump",
   "type": "module",
   "version": "0.40.2",
-  "description": "Google Search Console API wrapper with typed query builder, streaming pagination, and SEO analysis functions",
+  "description": "Direct Google Search Console client with typed queries, streaming pagination, URL inspection, and indexing helpers",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
@@ -36,11 +36,6 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
-    },
-    "./api": {
-      "types": "./dist/api/index.d.mts",
-      "import": "./dist/api/index.mjs",
-      "default": "./dist/api/index.mjs"
     },
     "./query": {
       "types": "./dist/query/index.d.mts",
@@ -84,7 +79,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "obuild --stub",
@@ -94,25 +89,9 @@
     "test:run": "vitest run",
     "prepack": "pnpm run build"
   },
-  "peerDependencies": {
-    "@googleapis/indexing": "catalog:deps",
-    "@googleapis/searchconsole": "catalog:deps"
-  },
-  "peerDependenciesMeta": {
-    "@googleapis/indexing": {
-      "optional": true
-    },
-    "@googleapis/searchconsole": {
-      "optional": true
-    }
-  },
   "dependencies": {
-    "@gscdump/contracts": "workspace:*",
+    "@gscdump/contracts": "workspace:^",
     "date-fns": "catalog:deps",
     "ofetch": "catalog:deps"
-  },
-  "devDependencies": {
-    "@googleapis/indexing": "catalog:deps",
-    "@googleapis/searchconsole": "catalog:deps"
   }
 }

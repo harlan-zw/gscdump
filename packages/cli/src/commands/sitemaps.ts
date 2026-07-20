@@ -1,6 +1,6 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { discoverSitemap, fetchSitemap, fetchSitemapUrls } from 'gscdump/api'
+import { discoverSitemap, fetchSitemap, fetchSitemapUrls } from 'gscdump'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'

@@ -75,9 +75,10 @@ there is no canonical *string*, only a cluster the query is assigned to.
    items, cheaper.
 2. **Embed.** One vector per distinct lexical-canonical, cached in `query_dim`
    (only embed new ones). Candidate model: a small sentence encoder
-   (MiniLM / bge-small) via `@huggingface/transformers` — already an *optional
-   peer dep* of `@gscdump/analysis`, so in-process embeddings need no external
-   API. Record `embeddingModelVersion`.
+   (MiniLM / bge-small). The earlier browser content-gap experiment and its
+   optional `@huggingface/transformers` peer were removed for v1 because
+   neither production consumer used them; a future server-side pipeline must
+   choose and own its runtime explicitly. Record `embeddingModelVersion`.
 3. **Cluster — greedy, traffic-ordered (deterministic).** Process items by
    descending traffic; each joins the nearest existing cluster centroid with
    cosine-sim ≥ `threshold`, else starts a new cluster. The first (highest-

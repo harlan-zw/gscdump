@@ -2,7 +2,7 @@ import type { GscSearchAnalyticsDimension, GscSearchAnalyticsFilterGroup, GscSea
 import type { Result } from '../core/result'
 import type { SearchType } from './constants'
 import type { QueryError } from './errors'
-import type { BuilderState, Filter, FilterInput, InternalFilter, JsonFilter } from './types'
+import type { BuilderState, Filter, FilterInput, InternalFilter } from './types'
 import { addDays } from '../core/gsc-dates'
 import { err, ok, unwrapResult } from '../core/result'
 import { SearchTypes } from './constants'
@@ -10,31 +10,6 @@ import { queryErrors, queryErrorToException } from './errors'
 import { isDateOperator, isMetricOperator, isQueryParam, isSpecialOperator } from './operator-meta'
 
 const KNOWN_SEARCH_TYPES = new Set<string>(Object.values(SearchTypes))
-
-// Check if value is a JSON filter (serialized) vs a real Filter object
-export function isJsonFilter(value: unknown): value is JsonFilter {
-  return (
-    typeof value === 'object'
-    && value !== null
-    && '_filters' in value
-    && Array.isArray((value as JsonFilter)._filters)
-  )
-}
-
-// Convert JSON filter to Filter object
-export function parseJsonFilter(json: JsonFilter): Filter<any> {
-  return {
-    _constraints: {},
-    _filters: json._filters.map(f => ({
-      dimension: f.dimension,
-      operator: f.operator,
-      expression: f.expression,
-      expression2: f.expression2,
-    } as InternalFilter)),
-    _nestedGroups: json._nestedGroups?.map(parseJsonFilter),
-    _groupType: json._groupType,
-  } as Filter<any>
-}
 
 // Wire-format filter shape used by partner clients (e.g. nuxtseo.com pro).
 // Groups are `{ type: 'and' | 'or', filters: [...] }`; leaves are
@@ -123,19 +98,71 @@ export function normalizeFilter(input?: FilterInput): Filter<any> | undefined {
   return undefined
 }
 
+type OrderBy = NonNullable<BuilderState['orderBy']>
+
+// Boundary coercion for `orderBy` (Sentry GSCDUMP-1M). Accepts the canonical
+// `{ column, dir }`, the legacy array-of-specs (`[{ column, desc }]`), and the
+// `{ column, desc: boolean }` shape. Anything without a valid column drops to
+// undefined so the engine falls back to its default ordering, instead of
+// crashing later on `state.orderBy.column.replace(...)`.
+function normalizeOrderBy(orderBy: unknown): OrderBy | undefined {
+  const spec = Array.isArray(orderBy) ? orderBy[0] : orderBy
+  if (!spec || typeof spec !== 'object')
+    return undefined
+  const o = spec as Record<string, unknown>
+  if (typeof o.column !== 'string' || o.column.length === 0)
+    return undefined
+  const dir = typeof o.dir === 'string'
+    ? (o.dir.toLowerCase() === 'asc' ? 'asc' : 'desc')
+    : (o.desc === false ? 'asc' : 'desc')
+  return { column: o.column as OrderBy['column'], dir }
+}
+
+// Per-leaf filter validation (Sentry GSCDUMP-Q). `normalizeFilter` passes an
+// already-internal `{ _filters }` object through untouched, so a hand-built
+// leaf missing its `operator`/`dimension` used to reach the engine, where
+// `f.operator.startsWith('metric')` threw a raw TypeError. Reject those here so
+// genuinely malformed input becomes an honest `invalid-filter` QueryError.
+function hasMalformedFilterLeaf(filter: Filter<any> | undefined): boolean {
+  if (!filter || typeof filter !== 'object')
+    return false
+  if (Array.isArray(filter._filters)) {
+    for (const leaf of filter._filters) {
+      if (!leaf || typeof leaf !== 'object'
+        || typeof (leaf as { operator?: unknown }).operator !== 'string'
+        || typeof (leaf as { dimension?: unknown }).dimension !== 'string') {
+        return true
+      }
+    }
+  }
+  if (Array.isArray(filter._nestedGroups)) {
+    for (const group of filter._nestedGroups) {
+      if (hasMalformedFilterLeaf(group))
+        return true
+    }
+  }
+  return false
+}
+
 // Project an untyped partner-API request body into a typed BuilderState,
 // normalizing the embedded filter from wire format. Use at the receive edge
 // of partner endpoints that accept JSON bodies from SDK consumers.
 /**
  * Errors-as-values core for {@link normalizeBuilderState}: returns an
  * `invalid-builder-state` `QueryError` when the untrusted partner-API body is
- * not an object, instead of throwing. Receive-edge parse, so hosts can map a bad
- * body to a 4xx.
+ * not an object, and an `invalid-filter` `QueryError` when a filter leaf lacks
+ * its string `dimension`/`operator`, instead of throwing. Also coerces
+ * alternative `orderBy` shapes into the canonical `{ column, dir }`.
+ * Receive-edge parse (parse, don't validate), so hosts can map a bad body to a
+ * 4xx and downstream consumers only ever see the canonical shape.
  */
 export function normalizeBuilderStateResult(state: unknown): Result<BuilderState, QueryError> {
   if (!state || typeof state !== 'object')
     return err(queryErrors.invalidBuilderState(state))
   const s = state as Record<string, unknown>
+  const filter = normalizeFilter(s.filter as FilterInput | undefined)
+  if (hasMalformedFilterLeaf(filter))
+    return err(queryErrors.malformedFilterLeaf())
   const normalized: BuilderState = {
     // `dimensions` is iterated and `.includes()`d downstream (host handlers +
     // plan.ts `[...state.dimensions]`). A missing/non-array value from an
@@ -148,8 +175,8 @@ export function normalizeBuilderStateResult(state: unknown): Result<BuilderState
     // impressions` hit an ungrouped column → R2 SQL 40004 on every range-bound
     // page-breakdown query (GSCDUMP-A/C). Leave the undefined sentinel intact.
     metrics: s.metrics as BuilderState['metrics'],
-    filter: normalizeFilter(s.filter as FilterInput | undefined) as BuilderState['filter'],
-    orderBy: s.orderBy as BuilderState['orderBy'],
+    filter: filter as BuilderState['filter'],
+    orderBy: normalizeOrderBy(s.orderBy),
     rowLimit: s.rowLimit as number | undefined,
     startRow: s.startRow as number | undefined,
     dataState: s.dataState as BuilderState['dataState'],

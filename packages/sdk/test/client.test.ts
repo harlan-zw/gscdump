@@ -55,13 +55,6 @@ describe('createPartnerClient', () => {
       { dimensions: ['query'], searchType: 'discover' },
       { comparison: { dimensions: ['query'] } },
     )
-    await client.getAnalysis('s_1', {
-      preset: 'opportunity',
-      startDate: '2026-05-01',
-      endDate: '2026-05-10',
-      searchType: 'image',
-    })
-
     expect(calls[0]!.url).toBe('/api/sites/s_1/data')
     expect(calls[0]!.options.query).toEqual({
       q: JSON.stringify({ dimensions: ['page'], rowLimit: 10, searchType: 'web' }),
@@ -74,17 +67,6 @@ describe('createPartnerClient', () => {
       q: JSON.stringify({ dimensions: ['query'], searchType: 'discover' }),
       qc: JSON.stringify({ dimensions: ['query'], searchType: 'discover' }),
       searchType: 'discover',
-    })
-    expect(calls[2]).toMatchObject({
-      url: '/api/sites/s_1/analysis',
-      options: {
-        query: {
-          preset: 'opportunity',
-          startDate: '2026-05-01',
-          endDate: '2026-05-10',
-          searchType: 'image',
-        },
-      },
     })
   })
 
@@ -101,7 +83,7 @@ describe('createPartnerClient', () => {
     })
   })
 
-  it('posts lifecycle bodies and validates brand analysis params', async () => {
+  it('posts lifecycle bodies', async () => {
     const calls: Array<{ url: string, options: any }> = []
     const fetch = ((url: string, options: any) => {
       calls.push({ url, options })
@@ -120,12 +102,6 @@ describe('createPartnerClient', () => {
     expect(calls[0]!.url).toBe('/api/users/register')
     expect(calls[0]!.options.method).toBe('POST')
     expect(calls[0]!.options.body).toMatchObject({ userGoogleId: 'google_1' })
-
-    expect(() => client.getAnalysis('s_1', {
-      preset: 'brand-only',
-      startDate: '2026-01-01',
-      endDate: '2026-01-31',
-    })).toThrow('brandTerms is required')
   })
 
   it('can validate requests and responses with endpoint schemas', async () => {
@@ -198,12 +174,10 @@ describe('createPartnerClient', () => {
     await client.getAnalysisSources('s_1', ['pages', 'keywords'], { start: '2026-05-01', end: '2026-05-07' })
     await client.getKeywordSparklines('s_1', { keywords: ['test'], startDate: '2026-05-01', endDate: '2026-05-10' })
     await client.getQueryTrend('s_1', { startDate: '2026-05-01', endDate: '2026-05-10', prevStartDate: '2026-04-20' })
-    await client.getCtrCurve('s_1', { startDate: '2026-05-01', endDate: '2026-05-10' })
 
     expect(calls[0]).toMatchObject({ url: '/api/sites/s_1/analysis-sources', options: { query: { tables: 'keywords,pages', searchType: 'web', start: '2026-05-01', end: '2026-05-07' } } })
     expect(calls[1]).toMatchObject({ url: '/api/sites/s_1/data/keyword-sparklines', options: { method: 'POST' } })
     expect(calls[2]).toMatchObject({ url: '/api/sites/s_1/data/query-trend' })
-    expect(calls[3]).toMatchObject({ url: '/api/sites/s_1/ctr-curve' })
   })
 
   it('dedupes concurrent identical GET requests only while in flight', async () => {

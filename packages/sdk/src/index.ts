@@ -1,46 +1,14 @@
 export { createAnalyticsClient } from './analytics-client'
-export type { AnalyticsClientOptions, AnalyticsFetch, AnalyticsFetchOptions, AnalyticsHeaders } from './analytics-client'
+export type { AnalyticsClient, AnalyticsClientOptions, AnalyticsFetch, AnalyticsFetchOptions, AnalyticsHeaders } from './analytics-client'
 export type { GscAnalyzerAccent, GscAnalyzerCapabilities, GscAnalyzerCapability, GscAnalyzerDefinition, GscAnalyzerDefinitionWithCapability, GscAnalyzerInsightCard, GscAnalyzerKind, GscAnalyzerPanelResult, GscAnalyzerPanelSpec, GscAnalyzerStatTile } from './analyzer-defs'
 export { defineGscAnalyzer } from './analyzer-defs'
 export type { DailyAnonInput } from './anonymization'
 export { weightedAnonPct } from './anonymization'
-export {
-  arbitrarySql,
-  ARCHETYPE_EXECUTION_CLASS,
-  auxCloudOnly,
-  entityDailySparkline,
-  entityDailyTimeseries,
-  multiSeriesStackedDaily,
-  singleRowLookup,
-  siteDailyTimeseries,
-  topNBreakdown,
-  twoDimensionDetail,
-} from './archetypes'
-export type {
-  ArbitrarySqlQuery,
-  ArchetypeExecutionClass,
-  ArchetypeFacet,
-  ArchetypeQuery,
-  ArchetypeQueryBase,
-  ArchetypeResult,
-  ArchetypeResultRow,
-  ArchetypeResultSource,
-  AuxCloudOnlyQuery,
-  DateRange,
-  EntityDailySparklineQuery,
-  EntityDailyTimeseriesQuery,
-  MultiSeriesStackedDailyQuery,
-  QueryArchetype,
-  ResolvedArchetypeQuery,
-  SingleRowLookupQuery,
-  SiteDailyTimeseriesQuery,
-  TopNBreakdownQuery,
-  TwoDimensionDetailQuery,
-  WireDateRange,
-} from './archetypes'
+export type { BuilderStateToArchetypeOptions } from './archetype-compile'
+export { archetypeSeamSupportsQuery, builderStateToArchetype, extractWireDateRange } from './archetype-compile'
 export { createPartnerClient } from './client'
-export type { PartnerClientOptions, PartnerFetch, PartnerFetchOptions, PartnerHeaders } from './client'
-export { COUNTRY_NAMES, countryName } from './country-names'
+export type { PartnerClient, PartnerClientOptions, PartnerFetch, PartnerFetchOptions, PartnerHeaders } from './client'
+export { countryName } from './country-names'
 export type { CwvBucket } from './cwv-thresholds'
 export {
   CWV_GOOD_CLS,
@@ -51,17 +19,15 @@ export {
   CWV_POOR_LCP,
   cwvBucket,
   siteUrlToHostname,
-  splitOpportunityTitle,
   truncateQuery,
 } from './cwv-thresholds'
-export { formatPartnerError, isPartnerError, PartnerApiError, partnerErrorToException, toPartnerError } from './errors'
+export { PartnerApiError, partnerErrorToException, toPartnerError } from './errors'
 export type { PartnerErrorInfo, PartnerErrorKind } from './errors'
 export type { GscConsoleUrlOpts } from './gsc-console-url'
 export { gscConsoleUrl } from './gsc-console-url'
 export { GSC_STABLE_LATENCY_DAYS } from './gsc-constants'
 export type { GscClassifiedError, GscErrorStatus } from './gsc-error'
 export { classifyGscError } from './gsc-error'
-export { andFilter, dateFilter } from './gsc-filter-wire'
 export type { GscColumn, GscColumnOption, PeriodPreset } from './gsc-period-presets'
 export {
   COMPARE_OPTIONS,
@@ -83,14 +49,8 @@ export {
 } from './hosted-query'
 export type { IndexingIssue, IndexingIssueDetail, IssueGroup, IssueSeverity } from './indexing-issues'
 export {
-  coverageLabel,
-  coverageLabels,
-  enrichIssueDetails,
-  investigationStatusConfig,
   issueDetails,
   issueGroups,
-  issueTypeToGroup,
-  nuxtSeoTips,
   severityOrder,
 } from './indexing-issues'
 export { analyticsStatusToSyncStatus, findLifecycleSite, lifecycleSiteToSyncStatus, lifecycleSiteToUserSite } from './lifecycle'
@@ -152,7 +112,6 @@ export {
   parseWebhookPayload,
   parseWebhookPayloadResult,
   readWebhookHeaders,
-  serializeWebhookPayload,
   VALID_WEBHOOK_EVENTS,
   verifyWebhookSignature,
   WEBHOOK_CONTRACT_VERSION,
@@ -162,78 +121,3 @@ export {
   WEBHOOK_SIGNATURE_HEADER,
   WEBHOOK_TIMESTAMP_HEADER,
 } from './webhook'
-export * from '@gscdump/contracts'
-export type {
-  AddPartnerTeamMemberParams,
-  AnalyticsClient,
-  BackfillRange,
-  BackfillResponse,
-  BindPartnerSiteTeamParams,
-  BuilderState,
-  BulkRegisterPartnerSiteResult,
-  BulkRegisterPartnerSitesParams,
-  BulkRegisterPartnerSitesResponse,
-  CanonicalWebhookEventType,
-  CreatePartnerTeamParams,
-  CreateWebhookEnvelopeOptions,
-  DataDetailOptions,
-  DataQueryOptions,
-  DeletePartnerUserResponse,
-  GscComparisonFilter,
-  GscdumpAnalysisParams,
-  GscdumpAnalysisPreset,
-  GscdumpAnalysisResponse,
-  GscdumpAnalysisSourcesResponse,
-  GscdumpAvailableSite,
-  GscdumpCanonicalMismatchesResponse,
-  GscdumpDataDetailResponse,
-  GscdumpDataResponse,
-  GscdumpDataRow,
-  GscdumpDateRangeParams,
-  GscdumpIndexingDiagnosticsResponse,
-  GscdumpIndexingResponse,
-  GscdumpIndexingUrlsResponse,
-  GscdumpIndexingUrlStatus,
-  GscdumpIndexPercentResponse,
-  GscdumpKeywordSparklinesParams,
-  GscdumpKeywordSparklinesResponse,
-  GscdumpMeta,
-  GscdumpPageTrendParams,
-  GscdumpPageTrendResponse,
-  GscdumpPermissionRecovery,
-  GscdumpQueryTrendParams,
-  GscdumpQueryTrendResponse,
-  GscdumpSitemap,
-  GscdumpSitemapChangesResponse,
-  GscdumpSitemapHistory,
-  GscdumpSitemapsResponse,
-  GscdumpSiteRegistration,
-  GscdumpSyncStatusResponse,
-  GscdumpTeamMemberRow,
-  GscdumpTeamRow,
-  GscdumpTopAssociationParams,
-  GscdumpTopAssociationResponse,
-  GscdumpTotals,
-  GscdumpUserRegistration,
-  GscdumpUserSettings,
-  GscdumpUserSite,
-  GscdumpUserStatus,
-  GscdumpUserTokenUpdate,
-  IndexingDiagnosticsParams,
-  IndexingUrlsParams,
-  InspectionHistoryResponse,
-  InspectionIndex,
-  PartnerClient,
-  PartnerLifecycleAccount,
-  PartnerLifecycleResponse,
-  PartnerLifecycleSite,
-  PartnerWebhookData,
-  PartnerWebhookHeaders,
-  RegisterPartnerSiteParams,
-  RegisterPartnerUserParams,
-  RollupEnvelope,
-  UpdatePartnerUserTokensParams,
-  WebhookEnvelope,
-  WebhookEventType,
-  WhoamiResponse,
-} from '@gscdump/contracts'

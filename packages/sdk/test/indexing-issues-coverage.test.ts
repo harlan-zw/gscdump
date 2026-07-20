@@ -8,7 +8,7 @@
 // guards the DuckDB half of the same contract.
 import { INDEXING_ISSUE_FILTERS, INDEXING_ISSUE_LABELS, INDEXING_ISSUE_SEVERITY } from 'gscdump'
 import { describe, expect, it } from 'vitest'
-import { issueDetails, issueGroups, issueTypeToGroup } from '../src/indexing-issues'
+import { issueDetails, issueGroups } from '../src/indexing-issues'
 
 const FILTER_KEYS = Object.keys(INDEXING_ISSUE_FILTERS)
 
@@ -39,7 +39,6 @@ describe('sDK indexing-issue catalog covers the core filter map', () => {
   })
 
   it.each(GROUPED_KEYS)('%s belongs to exactly one issue group', (key) => {
-    expect(issueTypeToGroup[key], `${key} has no group`).toBeDefined()
     const owners = issueGroups.filter(g => g.issueTypes.includes(key))
     expect(owners.length, `${key} owned by ${owners.length} groups`).toBe(1)
   })
@@ -47,7 +46,8 @@ describe('sDK indexing-issue catalog covers the core filter map', () => {
   it('the umbrella aggregate is never placed in a group', () => {
     for (const key of UMBRELLA_KEYS) {
       expect(issueDetails[key], `${key} should still be explained`).toBeDefined()
-      expect(issueTypeToGroup[key], `${key} must not be grouped (double-counts)`).toBeUndefined()
+      const owners = issueGroups.filter(g => g.issueTypes.includes(key))
+      expect(owners.length, `${key} must not be grouped (double-counts)`).toBe(0)
     }
   })
 

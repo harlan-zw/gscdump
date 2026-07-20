@@ -1,5 +1,5 @@
+import type { SnapshotIndex } from '@gscdump/engine'
 import type { Row } from '@gscdump/engine/contracts'
-import type { SnapshotIndex } from '@gscdump/engine/snapshot'
 import { mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'

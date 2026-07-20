@@ -2,7 +2,7 @@
   "name": "@gscdump/cloudflare",
   "type": "module",
   "version": "0.40.2",
-  "description": "Cloudflare-Workers-flavored helpers for the gscdump analytics stack: AnalyticsEnv binding contract, R2 SigV4 presigner, size-hint HMAC, DuckDB Workers shims, engine factory.",
+  "description": "Cloudflare-Workers-flavored helpers for the gscdump analytics stack: AnalyticsEnv binding contract, R2 SigV4 presigner, DuckDB Workers shims, engine factory.",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
@@ -38,7 +38,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "build": "obuild",
@@ -47,20 +47,16 @@
     "test:workers": "GSCDUMP_E2E=1 vitest --run --config vitest.workers.config.ts",
     "prepack": "pnpm run build"
   },
-  "peerDependencies": {
-    "h3": "^1.15.0"
-  },
   "dependencies": {
-    "@gscdump/contracts": "workspace:*",
-    "@gscdump/engine": "workspace:*",
-    "@gscdump/engine-sqlite": "workspace:*",
+    "@gscdump/contracts": "workspace:^",
+    "@gscdump/engine": "workspace:^",
+    "@gscdump/engine-sqlite": "workspace:^",
     "@uwdata/flechette": "catalog:",
-    "gscdump": "workspace:*"
+    "gscdump": "workspace:^"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "catalog:",
     "@cloudflare/workers-types": "catalog:",
-    "h3": "catalog:",
     "typescript": "catalog:dev-build",
     "wrangler": "catalog:"
   }

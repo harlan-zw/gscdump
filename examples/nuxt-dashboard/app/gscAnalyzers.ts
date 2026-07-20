@@ -35,7 +35,6 @@ const PageRankAnalyzerPanel = defineAsyncComponent(() => import('./components/pa
 const SurvivalAnalyzerPanel = defineAsyncComponent(() => import('./components/panels/SurvivalAnalyzerPanel.vue'))
 const GenericTableAnalyzerPanel = defineAsyncComponent(() => import('./components/panels/GenericTableAnalyzerPanel.vue'))
 const ActionsPipelinePanel = defineAsyncComponent(() => import('./components/panels/ActionsPipelinePanel.vue'))
-const ContentGapPipelinePanel = defineAsyncComponent(() => import('./components/panels/ContentGapPipelinePanel.vue'))
 const SemanticKeywordRepoPanel = defineAsyncComponent(() => import('./components/panels/SemanticKeywordRepoPanel.vue'))
 
 // Shared spec for analyzers with no bespoke viz — auto-formatted table.
@@ -373,19 +372,6 @@ export const ANALYZERS = [
         component: SemanticKeywordRepoPanel,
         ownsLifecycle: true,
         caption: 'POC: a retriv-shaped keyword vector repo. It indexes query text once, returns keyword IDs by similarity, then rejoins those IDs to site metrics from DuckDB.',
-      },
-    },
-  }),
-  defineGscAnalyzer({
-    id: 'content-gap',
-    label: 'Content gaps ✨',
-    kind: 'semantic',
-    isQueryGrained: true,
-    capabilities: {
-      panel: {
-        component: ContentGapPipelinePanel,
-        ownsLifecycle: true,
-        caption: 'Embeddings: Xenova/bge-base-en-v1.5 (fp32, 768-dim) via @huggingface/transformers, WebGPU if available.',
       },
     },
   }),

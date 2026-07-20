@@ -30,7 +30,7 @@ _Avoid_: compiler, translator, dialect.
 
 **Archetype Query**:
 Typed hosted analytics query contract exported from `@gscdump/contracts/archetypes`. Describes the finite server-tail/browser query shapes (`site-daily-timeseries`, `top-n-breakdown`, `arbitrary-sql`, etc.) and their execution class without owning transport or SQL execution.
-_Avoid_: keeping archetype contracts in `@gscdump/sdk`; SDK may re-export them but does not own them.
+_Avoid_: keeping or re-exporting archetype contracts from `@gscdump/sdk`; import them from their owner.
 
 **Archetype SQL compiler**:
 Server-tail compiler that turns an `ArchetypeQuery` into `{ sql, params, table }` with a `{{TABLE}}` placeholder. Runtime adapters substitute the concrete table reference; browser/WASM keeps its own compiler because attached partition bindings use a different contract.
@@ -72,6 +72,10 @@ _Avoid_: cache, materialized view (it's a fallback-gated source override).
 Private, Node-only Engine adapter for Python-backed Iceberg overwrite/delete recovery jobs. Owns the Python interpreter fallback and subprocess JSON contract; the edge append path uses `@gscdump/lakehouse`/`icebird` directly.
 _Avoid_: each writer reading PyIceberg env defaults or parsing writer stdout independently.
 
+**Lakehouse maintenance seam** (`@gscdump/lakehouse/maintenance`):
+Stable operational interface for package-owned catalog maintenance workflows and failure classifiers. It accepts `IcebergConnection` and narrow storage interfaces; catalog enumeration stays on the root `listIcebergTables(conn)` wrapper. Raw Icebird primitives remain isolated behind `unsafe-raw` for package adapters and diagnostic tools.
+_Avoid_: application code importing `unsafe-raw` for maintenance operations or passing raw Icebird catalog arguments through its own wrappers.
+
 ### Tenancy & layout
 
 **Manifest authority**:
@@ -97,8 +101,8 @@ SDK-private HTTP transport factory for hosted clients. Owns base-path joining, h
 _Avoid_: duplicating request helpers in each hosted SDK client.
 
 **Search Console API surface**:
-The direct Google Search Console / Indexing / Site Verification client surface published as `gscdump/api`. The package root remains a compatibility barrel; API-only consumers should import this subpath.
-_Avoid_: importing the `gscdump` root when only Google API client operations or types are needed.
+The package root is the sole direct Google Search Console / Indexing / Site Verification client surface. Query, date, result, normalization, and tenant concepts use their named subpaths; v1 removes the duplicate `gscdump/api` barrel.
+_Avoid_: recreating an app-local direct Google client or importing the removed `gscdump/api` barrel.
 
 ## Relationships
 

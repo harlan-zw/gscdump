@@ -26,11 +26,6 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     },
-    "./query": {
-      "types": "./dist/query.d.mts",
-      "import": "./dist/query.mjs",
-      "default": "./dist/query.mjs"
-    },
     "./v1": {
       "types": "./dist/v1/index.d.mts",
       "import": "./dist/v1/index.mjs",
@@ -43,7 +38,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "build": "obuild",
@@ -53,11 +48,11 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
-    "@gscdump/analysis": "workspace:*",
-    "@gscdump/contracts": "workspace:*",
-    "@gscdump/engine": "workspace:*",
+    "@gscdump/analysis": "workspace:^",
+    "@gscdump/contracts": "workspace:^",
+    "@gscdump/engine": "workspace:^",
     "date-fns": "catalog:deps",
-    "gscdump": "workspace:*",
+    "gscdump": "workspace:^",
     "ofetch": "catalog:deps",
     "zod": "catalog:"
   },

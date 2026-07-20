@@ -4,7 +4,7 @@ Export your first Google Search Console data in under 5 minutes.
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - Access to at least one Google Search Console property
 
 ## Quick Setup

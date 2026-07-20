@@ -43,7 +43,7 @@ export interface TableScope {
   siteId?: string
 }
 
-export function buildTableScope(
+function buildTableScope(
   table: Record<string, any>,
   opts: ScopedRunnerOptions,
 ): TableScope {

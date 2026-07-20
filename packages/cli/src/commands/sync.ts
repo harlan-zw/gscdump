@@ -1,4 +1,4 @@
-import type { googleSearchConsole } from 'gscdump/api'
+import type { googleSearchConsole } from 'gscdump'
 import type { SearchType } from 'gscdump/query'
 import type { ResolvedGscdumpConfig } from '../config'
 import type { LocalStore, Row, TableName, WriteCtx } from '../local-store'
@@ -6,12 +6,11 @@ import process from 'node:process'
 import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
-import { progressBar } from 'gscdump'
 import { daysAgoUtc as daysAgo, getDateRange } from 'gscdump/dates'
 import { SearchTypes } from 'gscdump/query'
 import { createCommandContext } from '../context'
 import { allTables, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
-import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, runWithConcurrency } from '../utils'
+import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, progressBar, runWithConcurrency } from '../utils'
 
 const DEFAULT_TABLES: TableName[] = ['pages', 'queries', 'countries', 'dates']
 const DEFAULT_TYPES: readonly SearchType[] = ['web']
@@ -127,7 +126,7 @@ async function runOneDate(
   let startRow = 0
 
   while (true) {
-    const response = await client._rawQuery(siteUrl, {
+    const response = await client.searchAnalytics.query(siteUrl, {
       startDate: date,
       endDate: date,
       dimensions: dims,

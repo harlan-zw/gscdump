@@ -1,5 +1,5 @@
-import type { indexing_v3 } from '@googleapis/indexing/build/v3'
 import type { GoogleSearchConsoleClient } from '../core/client'
+import type { UrlNotification } from '../core/types'
 import { runSequentialBatch } from './batch'
 
 export type IndexingNotificationType = 'URL_UPDATED' | 'URL_DELETED'
@@ -12,8 +12,8 @@ export interface IndexingResult {
 
 export interface IndexingMetadata {
   url: string
-  latestUpdate?: indexing_v3.Schema$UrlNotificationMetadata
-  latestRemove?: indexing_v3.Schema$UrlNotificationMetadata
+  latestUpdate?: UrlNotification
+  latestRemove?: UrlNotification
 }
 
 /**

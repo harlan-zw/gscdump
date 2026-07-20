@@ -1,24 +1,8 @@
 .:
-  accountNextActions: object
-  accountStatuses: object
-  addPartnerTeamMemberSchema: object
-  analyticsEndpointSchemas: object
-  analyticsNextActions: object
-  analyticsRoutes: object
-  analyticsStatuses: object
   analyticsStatusToSyncStatus: function
-  andFilter: function
-  arbitrarySql: function
-  ARCHETYPE_EXECUTION_CLASS: object
-  auxCloudOnly: function
-  backfillRangeSchema: object
-  backfillResponseSchema: object
-  bindPartnerSiteTeamSchema: object
-  builderStateSchema: object
-  bulkRegisterPartnerSitesResponseSchema: object
-  bulkRegisterPartnerSitesSchema: object
+  archetypeSeamSupportsQuery: function
+  builderStateToArchetype: function
   CANONICAL_WEBHOOK_EVENTS: object
-  canonicalWebhookEventTypeSchema: object
   classifyGscError: function
   classifyHealthStage: function
   classifyReachStage: function
@@ -27,15 +11,9 @@
   coerceRowMetrics: function
   COMPARE_OPTIONS: object
   compareRange: function
-  countriesResponseSchema: object
-  COUNTRY_NAMES: object
   countryName: function
-  countryRowSchema: object
-  coverageLabel: function
-  coverageLabels: object
   createAnalyticsClient: function
   createPartnerClient: function
-  createPartnerTeamSchema: object
   CWV_GOOD_CLS: number
   CWV_GOOD_INP: number
   CWV_GOOD_LCP: number
@@ -43,172 +21,46 @@
   CWV_POOR_INP: number
   CWV_POOR_LCP: number
   cwvBucket: function
-  dataDetailOptionsSchema: object
-  dataQueryOptionsSchema: object
-  dateFilter: function
   dateRangeOptionsQuery: function
   DEFAULT_SEARCH_TYPE: string
   defineGscAnalyzer: function
   derivePeerStanding: function
   deriveSiteBaseline: function
-  enrichIssueDetails: function
-  entityDailySparkline: function
-  entityDailyTimeseries: function
+  extractWireDateRange: function
   findLifecycleSite: function
-  formatPartnerError: function
   getGscUnstableCutoffDate: function
   GSC_COLUMN_OPTIONS: object
   GSC_PERIOD_OPTIONS: object
   GSC_PERIOD_OPTIONS_LONG: object
   GSC_STABLE_LATENCY_DAYS: number
-  gscApiRangeSchema: object
-  gscComparisonFilterSchema: object
   gscConsoleUrl: function
-  GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
-  GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
-  GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
-  GSCDUMP_WRITE_ANALYTICS_SCOPE: string
-  gscdumpAnalysisBaseParamsSchema: object
-  gscdumpAnalysisBundleParamsSchema: object
-  gscdumpAnalysisBundleResponseSchema: object
-  gscdumpAnalysisMetaSchema: object
-  gscdumpAnalysisParamsSchema: object
-  gscdumpAnalysisPresetSchema: object
-  gscdumpAnalysisResponseSchema: object
-  gscdumpAnalysisSourcesResponseSchema: object
-  gscdumpAvailableSiteSchema: object
-  gscdumpCanonicalMismatchesResponseSchema: object
-  gscdumpDataDetailResponseSchema: object
-  gscdumpDataResponseSchema: object
-  gscdumpDataRowSchema: object
-  gscdumpDateRangeParamsSchema: object
-  gscdumpDeletePartnerUserResponseSchema: object
-  gscdumpHealthResponseSchema: object
-  gscdumpIndexingDiagnosticsResponseSchema: object
-  gscdumpIndexingResponseSchema: object
-  gscdumpIndexingUrlsResponseSchema: object
-  gscdumpIndexPercentParamsSchema: object
-  gscdumpIndexPercentResponseSchema: object
-  gscdumpKeywordSparklinesParamsSchema: object
-  gscdumpKeywordSparklinesResponseSchema: object
-  gscdumpMetaSchema: object
-  gscdumpPageTrendParamsSchema: object
-  gscdumpPageTrendResponseSchema: object
-  gscdumpPermissionRecoverySchema: object
-  gscdumpQueryTrendParamsSchema: object
-  gscdumpQueryTrendResponseSchema: object
-  gscdumpSitemapChangesResponseSchema: object
-  gscdumpSitemapsResponseSchema: object
-  gscdumpSiteRegistrationSchema: object
-  gscdumpSiteReportResponseSchema: object
-  gscdumpSyncJobsResponseSchema: object
-  gscdumpSyncProgressResponseSchema: object
-  gscdumpTeamMemberRowSchema: object
-  gscdumpTeamRoleSchema: object
-  gscdumpTeamRowSchema: object
-  gscdumpTopAssociationParamsSchema: object
-  gscdumpTopAssociationResponseSchema: object
-  gscdumpTotalsSchema: object
-  gscdumpUserMeResponseSchema: object
-  gscdumpUserRegistrationSchema: object
-  gscdumpUserSettingsSchema: object
-  gscdumpUserSiteSchema: object
-  gscdumpUserStatusSchema: object
-  gscRowQueryMetaSchema: object
-  gscRowQueryResponseSchema: object
-  hasOptionalIndexingScope: function
-  hasRequiredAnalyticsScope: function
-  indexingDiagnosticsParamsSchema: object
-  indexingDiagnosticsSchema: object
-  indexingInspectAnyResponseSchema: object
-  indexingInspectRateLimitedSchema: object
-  indexingInspectRequestSchema: object
-  indexingInspectResponseSchema: object
-  indexingInspectResultSchema: object
-  indexingIssueSchema: object
-  indexingNextActions: object
-  indexingStatuses: object
-  indexingUrlRowSchema: object
-  indexingUrlsParamsSchema: object
-  indexingUrlsResponseSchema: object
-  indexingUrlStatusSchema: object
-  inspectionHistoryRecordSchema: object
-  inspectionHistoryResponseSchema: object
-  inspectionIndexSchema: object
-  inspectionRecordRawSchema: object
-  investigationStatusConfig: object
   isCustomPeriod: function
-  isPartnerError: function
   issueDetails: object
   issueGroups: object
-  issueTypeToGroup: object
-  jobFailedWebhookPayloadSchema: object
-  lifecycleErrorCodes: object
-  lifecycleErrorSchema: object
-  lifecycleProgressSchema: object
   lifecycleSiteToSyncStatus: function
   lifecycleSiteToUserSite: function
-  lifecycleWebhookEvents: object
-  multiSeriesStackedDaily: function
   normalizeSiteType: function
-  nuxtSeoTips: object
   parseCustomPeriod: function
-  parseGrantedScopes: function
   parseWebhookPayload: function
   parseWebhookPayloadResult: function
   PartnerApiError: function
-  partnerControlEndpointSchemas: object
-  partnerEndpointSchemas: object
   partnerErrorToException: function
-  partnerLifecycleAccountSchema: object
-  partnerLifecycleResponseSchema: object
-  partnerLifecycleSiteSchema: object
-  partnerRealtimeEventSchema: object
-  partnerRoutes: object
-  partnerWebhookDataSchema: object
-  partnerWebhookEnvelopeSchema: object
   PERIOD_PRESETS: object
   periodToDateRange: function
   periodToDays: function
   positionFor: function
-  propertyNextActions: object
-  propertyStatuses: object
-  querySourceModes: object
   reachLivenessRatio: function
   readWebhookHeaders: function
-  registerPartnerSiteSchema: object
-  registerPartnerUserSchema: object
-  rollupEnvelopeSchema: object
-  scheduleStateSchema: object
-  searchAppearanceResponseSchema: object
-  searchAppearanceRowSchema: object
   searchTypeQuery: function
-  searchTypeSchema: object
-  serializeWebhookPayload: function
   severityOrder: object
-  singleRowLookup: function
   SITE_TYPE_BASELINE: object
-  siteDailyTimeseries: function
-  siteListItemSchema: object
-  sitemapChangesResponseSchema: object
-  sitemapHistoryRecordSchema: object
-  sitemapHistoryResponseSchema: object
-  sitemapIndexSchema: object
-  sitemapNextActions: object
-  sitemapStatuses: object
   siteTypeBaseline: function
   siteUrlToHostname: function
   sourceInfoQuery: function
-  sourceInfoResponseSchema: object
-  splitOpportunityTitle: function
   summarizeDailyRows: function
   tablesQuery: function
-  teamCatalogRefSchema: object
   toPartnerError: function
-  topNBreakdown: function
   truncateQuery: function
-  twoDimensionDetail: function
-  updatePartnerUserTokensSchema: object
   VALID_WEBHOOK_EVENTS: object
   verifyWebhookSignature: function
   WEBHOOK_CONTRACT_VERSION: string
@@ -217,68 +69,8 @@
   WEBHOOK_EVENT_HEADER: string
   WEBHOOK_SIGNATURE_HEADER: string
   WEBHOOK_TIMESTAMP_HEADER: string
-  webhookEventTypeSchema: object
   weightedAnonPct: function
-  whoamiResponseSchema: object
   withDefaultSearchType: function
-./query:
-  and: function
-  between: function
-  buildLogicalComparisonPlan: function
-  buildLogicalComparisonPlanResult: function
-  buildLogicalPlan: function
-  buildLogicalPlanResult: function
-  clicks: object
-  contains: function
-  Countries: object
-  country: object
-  ctr: object
-  currentPstDate: function
-  date: object
-  daysAgo: function
-  device: object
-  Devices: object
-  eq: function
-  extractDateRange: function
-  extractMetricFilters: function
-  extractSearchType: function
-  extractSpecialOperatorFilters: function
-  formatQueryError: function
-  gsc: object
-  gt: function
-  gte: function
-  hour: object
-  impressions: object
-  inArray: function
-  isJsonFilter: function
-  isQueryError: function
-  like: function
-  lt: function
-  lte: function
-  ne: function
-  normalizeBuilderState: function
-  normalizeBuilderStateResult: function
-  normalizeFilter: function
-  not: function
-  notRegex: function
-  or: function
-  page: object
-  parseJsonFilter: function
-  position: object
-  query: object
-  queryCanonical: object
-  queryErrors: object
-  queryErrorToException: function
-  regex: function
-  resolveToBody: function
-  resolveToBodyResult: function
-  searchAppearance: object
-  searchType: object
-  SearchTypes: object
-  today: function
-  topLevel: function
-  UnresolvableDatasetError: function
-  UnsupportedLogicalCapabilityError: function
 ./v1:
   createGscdumpRealtimeV1Client: function
   createGscdumpV1Client: function

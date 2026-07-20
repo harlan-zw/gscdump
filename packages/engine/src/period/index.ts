@@ -55,7 +55,7 @@ export function defaultEndDate(): string {
   return daysAgo(3)
 }
 
-export function defaultStartDate(): string {
+function defaultStartDate(): string {
   return daysAgo(31)
 }
 

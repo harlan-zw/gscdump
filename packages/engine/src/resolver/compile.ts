@@ -29,6 +29,7 @@ import type {
 } from './types'
 
 import { sql } from 'drizzle-orm'
+import { and, gte, impressions } from 'gscdump/query'
 import { buildLogicalComparisonPlan, buildLogicalPlan } from 'gscdump/query/plan'
 
 const COMPARISON_FILTER_SQL: Record<ComparisonFilter, SQL> = {
@@ -51,6 +52,16 @@ function joinComma(parts: SQL[]): SQL {
 }
 
 const ORDER_BY_HELPER_PREFIX = '__order_'
+
+function withMinimumImpressions<TK extends string>(state: BuilderState, options: ResolverOptions<TK>): BuilderState {
+  if (options.minimumImpressions === undefined)
+    return state
+  const minimum = Number(options.minimumImpressions)
+  if (!Number.isFinite(minimum) || minimum < 0)
+    throw new RangeError('minimumImpressions must be a finite non-negative number')
+  const guard = gte(impressions, minimum)
+  return { ...state, prefilter: state.prefilter ? and(state.prefilter, guard) : guard }
+}
 
 // ORDER BY is safe-stripped because `column` / `dir` come from `BuilderState`
 // (typed union) but we still guard against raw strings reaching SQL.
@@ -233,6 +244,7 @@ export function resolveToSQLOptimized<TK extends string>(
   state: BuilderState,
   options: ResolverOptions<TK>,
 ): ResolvedSQLOptimized {
+  state = withMinimumImpressions(state, options)
   const { adapter } = options
   const { tableKey, groupByDims, hasDate, metrics, wherePredicates, having, queryCanonicalUsed } = buildScope(state, options)
   const table = adapter.fromSql(tableKey, { queryCanonical: queryCanonicalUsed })
@@ -324,6 +336,7 @@ export function resolveToSQL<TK extends string>(
   state: BuilderState,
   options: ResolverOptions<TK>,
 ): ResolvedSQL {
+  state = withMinimumImpressions(state, options)
   const { adapter } = options
   const { tableKey, groupByDims, hasDate, metrics, wherePredicates, having, queryCanonicalUsed } = buildScope(state, options)
   const table = adapter.fromSql(tableKey, { queryCanonical: queryCanonicalUsed })
@@ -379,6 +392,7 @@ export function buildTotalsSql<TK extends string>(
   state: BuilderState,
   options: ResolverOptions<TK>,
 ): { sql: string, params: unknown[] } {
+  state = withMinimumImpressions(state, options)
   const { adapter } = options
   const { tableKey, metrics, wherePredicates, queryCanonicalUsed } = buildScope(state, options)
   const table = adapter.fromSql(tableKey, { queryCanonical: queryCanonicalUsed })

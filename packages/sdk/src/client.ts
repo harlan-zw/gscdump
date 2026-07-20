@@ -1,21 +1,21 @@
 import type {
   AddPartnerTeamMemberParams,
   BindPartnerSiteTeamParams,
-  BuilderState,
+  BindPartnerTeamCatalogParams,
+  BindPartnerTeamCatalogResponse,
+  BuilderStateWire,
   BulkRegisterPartnerSitesParams,
   BulkRegisterPartnerSitesResponse,
   CreatePartnerTeamParams,
   DataDetailOptions,
   DataQueryOptions,
   DeletePartnerUserResponse,
-  GscdumpAnalysisParams,
-  GscdumpAnalysisResponse,
+  GscAddAndVerifyResponse,
   GscdumpAnalysisSourcesResponse,
   GscdumpAvailableSite,
   GscdumpCanonicalMismatchesResponse,
   GscdumpDataDetailResponse,
   GscdumpDataResponse,
-  GscdumpDateRangeParams,
   GscdumpIndexingDiagnosticsResponse,
   GscdumpIndexingResponse,
   GscdumpIndexingUrlsResponse,
@@ -27,10 +27,16 @@ import type {
   GscdumpPermissionRecovery,
   GscdumpQueryTrendParams,
   GscdumpQueryTrendResponse,
+  GscdumpSiteIntIdCrosswalkResponse,
   GscdumpSitemapChangesResponse,
+  GscdumpSitemapMembershipParams,
+  GscdumpSitemapMembershipResponse,
   GscdumpSitemapsResponse,
   GscdumpSiteRegistration,
   GscdumpSyncStatusResponse,
+  GscdumpTeamCatalogRef,
+  GscdumpTeamMemberRow,
+  GscdumpTeamRow,
   GscdumpTopAssociationParams,
   GscdumpTopAssociationResponse,
   GscdumpUserRegistration,
@@ -38,13 +44,16 @@ import type {
   GscdumpUserSite,
   GscdumpUserStatus,
   GscdumpUserTokenUpdate,
+  GscVerificationRequest,
+  GscVerificationTokenResponse,
   IndexingDiagnosticsParams,
   IndexingInspectRateLimited,
   IndexingInspectRequest,
   IndexingInspectResponse,
   IndexingUrlsParams,
-  PartnerClient,
   PartnerLifecycleResponse,
+  PartnerSitemapAction,
+  PartnerSitemapActionResponse,
   RegisterPartnerSiteParams,
   RegisterPartnerUserParams,
   UpdatePartnerUserTokensParams,
@@ -56,10 +65,8 @@ import { partnerEndpoints } from '@gscdump/contracts/partner'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { PartnerApiError, partnerErrorToException } from './errors'
 import {
-  analysisQuery,
   dataDetailQuery,
   dataQuery,
-  dateRangeQuery,
   DEFAULT_SEARCH_TYPE,
   indexingDiagnosticsQuery,
   indexingUrlsQuery,
@@ -92,24 +99,57 @@ export interface PartnerClientOptions extends HostedClientOptions {
   validate?: boolean | 'request' | 'response'
 }
 
-/**
- * Errors-as-values core for analysis-param validation: a missing `brandTerms`
- * on a brand/non-brand preset is a caller-actionable `validation` failure, so
- * return it as a modelled `PartnerApiError` rather than only throwing.
- */
-function validateAnalysisParamsResult(params: GscdumpAnalysisParams): Result<GscdumpAnalysisParams, PartnerApiError> {
-  if ((params.preset === 'non-brand' || params.preset === 'brand-only') && !params.brandTerms?.trim()) {
-    return err(new PartnerApiError({
-      kind: 'validation',
-      statusCode: 400,
-      message: 'brandTerms is required for brand/non-brand presets',
-    }))
-  }
-  return ok(params)
-}
-
-function assertAnalysisParams(params: GscdumpAnalysisParams): void {
-  unwrapResult(validateAnalysisParamsResult(params), partnerErrorToException)
+/** Hosted partner transport exposed by `@gscdump/sdk`. */
+export interface PartnerClient {
+  registerUser: (params: RegisterPartnerUserParams) => Promise<GscdumpUserRegistration>
+  updateUserTokens: (userId: string, params: UpdatePartnerUserTokensParams) => Promise<GscdumpUserTokenUpdate>
+  getUserStatus: (userId: string) => Promise<GscdumpUserStatus>
+  getUserLifecycle: (userId: string) => Promise<PartnerLifecycleResponse>
+  waitForUserReady: (userId: string, options?: { attempts?: number, intervalMs?: number }) => Promise<GscdumpUserStatus>
+  waitForUserLifecycleReady: (userId: string, options?: { attempts?: number, intervalMs?: number }) => Promise<PartnerLifecycleResponse>
+  getUserSites: (userId: string) => Promise<{ sites: GscdumpUserSite[] }>
+  getAvailableSites: (userId: string) => Promise<{ sites: GscdumpAvailableSite[] }>
+  getUserSiteIntIdCrosswalk: (userId: string) => Promise<GscdumpSiteIntIdCrosswalkResponse>
+  registerSite: (params: RegisterPartnerSiteParams) => Promise<GscdumpSiteRegistration>
+  bulkRegisterSites: (params: BulkRegisterPartnerSitesParams) => Promise<BulkRegisterPartnerSitesResponse>
+  requestSiteVerificationToken: (params: GscVerificationRequest) => Promise<GscVerificationTokenResponse>
+  addAndVerifySite: (params: GscVerificationRequest) => Promise<GscAddAndVerifyResponse>
+  deleteUser: (userId: string) => Promise<DeletePartnerUserResponse>
+  deleteSite: (siteId: string) => Promise<{ success: boolean }>
+  getAnalysisSources: (siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: SearchTypeOptions & SourceRangeOptions) => Promise<GscdumpAnalysisSourcesResponse>
+  getSiteSyncStatus: (siteId: string, userId?: string) => Promise<GscdumpSyncStatusResponse>
+  getData: (siteId: string, state: BuilderStateWire, options?: DataQueryOptions) => Promise<GscdumpDataResponse>
+  getDataDetail: (siteId: string, state: BuilderStateWire, options?: DataDetailOptions) => Promise<GscdumpDataDetailResponse>
+  getSitemaps: (siteId: string) => Promise<GscdumpSitemapsResponse>
+  getSitemapChanges: (siteId: string, days?: number) => Promise<GscdumpSitemapChangesResponse>
+  getSitemapMembership: (siteId: string, params: GscdumpSitemapMembershipParams) => Promise<GscdumpSitemapMembershipResponse>
+  postSitemapAction: (siteId: string, action: PartnerSitemapAction) => Promise<PartnerSitemapActionResponse>
+  submitSitemap: (siteId: string, sitemapUrl: string, action?: 'submit' | 'delete') => Promise<Extract<PartnerSitemapActionResponse, { action: 'submitted' | 'deleted' }>>
+  refreshSitemaps: (siteId: string) => Promise<Extract<PartnerSitemapActionResponse, { action: 'refreshed' }>>
+  autoDiscoverSitemap: (siteId: string) => Promise<Extract<PartnerSitemapActionResponse, { action: 'auto-discover' }>>
+  getIndexing: (siteId: string, days?: number) => Promise<GscdumpIndexingResponse>
+  getIndexingUrls: (siteId: string, params?: IndexingUrlsParams) => Promise<GscdumpIndexingUrlsResponse>
+  getIndexingDiagnostics: (siteId: string, params?: IndexingDiagnosticsParams) => Promise<GscdumpIndexingDiagnosticsResponse>
+  requestIndexingInspect: (siteId: string, body: IndexingInspectRequest) => Promise<IndexingInspectResponse | IndexingInspectRateLimited>
+  getUserSettings: () => Promise<GscdumpUserSettings>
+  patchUserSettings: (body: Partial<GscdumpUserSettings>) => Promise<GscdumpUserSettings>
+  recoverPermission: (siteId: string) => Promise<GscdumpPermissionRecovery>
+  getTopAssociation: (siteId: string, params: GscdumpTopAssociationParams) => Promise<GscdumpTopAssociationResponse>
+  getKeywordSparklines: (siteId: string, params: GscdumpKeywordSparklinesParams) => Promise<GscdumpKeywordSparklinesResponse>
+  getQueryTrend: (siteId: string, params: GscdumpQueryTrendParams) => Promise<GscdumpQueryTrendResponse>
+  getPageTrend: (siteId: string, params: GscdumpPageTrendParams) => Promise<GscdumpPageTrendResponse>
+  getCanonicalMismatches: (siteId: string) => Promise<GscdumpCanonicalMismatchesResponse>
+  getIndexPercent: (siteId: string, params?: { invisibleLimit?: number, invisibleOffset?: number, orphanLimit?: number }) => Promise<GscdumpIndexPercentResponse>
+  createTeam: (params: CreatePartnerTeamParams) => Promise<{ team: GscdumpTeamRow }>
+  renameTeam: (teamId: string, params: { name: string }) => Promise<{ ok: true, name: string }>
+  deleteTeam: (teamId: string) => Promise<{ ok: true }>
+  listTeamMembers: (teamId: string) => Promise<{ members: GscdumpTeamMemberRow[] }>
+  addTeamMember: (teamId: string, params: AddPartnerTeamMemberParams) => Promise<{ ok: true, role: string, alreadyExisted?: boolean }>
+  updateTeamMemberRole: (teamId: string, userId: string, params: { role: GscdumpTeamMemberRow['role'] }) => Promise<{ ok: true, role: string }>
+  removeTeamMember: (teamId: string, userId: string) => Promise<{ ok: true }>
+  bindSiteToTeam: (userId: string, siteId: string, params: BindPartnerSiteTeamParams) => Promise<{ ok: true, teamId: string | null }>
+  getTeamCatalog: (teamId: string) => Promise<GscdumpTeamCatalogRef>
+  bindTeamCatalog: (teamId: string, params: BindPartnerTeamCatalogParams) => Promise<BindPartnerTeamCatalogResponse>
 }
 
 function sleep(ms: number): Promise<void> {
@@ -226,6 +266,14 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     return ok(lifecycleSiteToSyncStatus(site))
   }
 
+  function postSitemapAction(siteId: string, action: PartnerSitemapAction): Promise<PartnerSitemapActionResponse> {
+    const body = shouldValidate('request') ? endpoints.postSitemaps.body.parse(action) : action
+    return request<PartnerSitemapActionResponse>(endpoints.postSitemaps.path(siteId), {
+      method: endpoints.postSitemaps.method,
+      body,
+    }, endpoints.postSitemaps.response)
+  }
+
   return {
     registerUser(params: RegisterPartnerUserParams) {
       const body = shouldValidate('request') ? endpoints.registerUser.body.parse(params) : params
@@ -277,6 +325,14 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       return request<{ sites: GscdumpAvailableSite[] }>(endpoints.getAvailableSites.path(userId), { method: endpoints.getAvailableSites.method }, endpoints.getAvailableSites.response)
     },
 
+    getUserSiteIntIdCrosswalk(userId: string) {
+      return request<GscdumpSiteIntIdCrosswalkResponse>(
+        endpoints.getUserSiteIntIdCrosswalk.path(userId),
+        { method: endpoints.getUserSiteIntIdCrosswalk.method },
+        endpoints.getUserSiteIntIdCrosswalk.response,
+      )
+    },
+
     registerSite(params: RegisterPartnerSiteParams) {
       const body = shouldValidate('request') ? endpoints.registerSite.body.parse(params) : params
       return request<GscdumpSiteRegistration>(endpoints.registerSite.path, {
@@ -291,6 +347,22 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
         method: endpoints.bulkRegisterSites.method,
         body,
       }, endpoints.bulkRegisterSites.response)
+    },
+
+    requestSiteVerificationToken(params: GscVerificationRequest) {
+      const body = shouldValidate('request') ? endpoints.requestSiteVerificationToken.body.parse(params) : params
+      return request<GscVerificationTokenResponse>(endpoints.requestSiteVerificationToken.path, {
+        method: endpoints.requestSiteVerificationToken.method,
+        body,
+      }, endpoints.requestSiteVerificationToken.response)
+    },
+
+    addAndVerifySite(params: GscVerificationRequest) {
+      const body = shouldValidate('request') ? endpoints.addAndVerifySite.body.parse(params) : params
+      return request<GscAddAndVerifyResponse>(endpoints.addAndVerifySite.path, {
+        method: endpoints.addAndVerifySite.method,
+        body,
+      }, endpoints.addAndVerifySite.response)
     },
 
     deleteUser(userId: string) {
@@ -320,7 +392,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       return unwrapResult(await getSiteSyncStatusResult(siteId, userId), partnerErrorToException)
     },
 
-    getData(siteId: string, state: BuilderState, queryOptions?: DataQueryOptions) {
+    getData(siteId: string, state: BuilderStateWire, queryOptions?: DataQueryOptions) {
       if (shouldValidate('request')) {
         endpoints.getData.state.parse(state)
         endpoints.getData.options.parse(queryOptions)
@@ -331,7 +403,7 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       }, endpoints.getData.response)
     },
 
-    getDataDetail(siteId: string, state: BuilderState, queryOptions?: DataDetailOptions) {
+    getDataDetail(siteId: string, state: BuilderStateWire, queryOptions?: DataDetailOptions) {
       if (shouldValidate('request')) {
         endpoints.getDataDetail.state.parse(state)
         endpoints.getDataDetail.options.parse(queryOptions)
@@ -340,15 +412,6 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
         method: endpoints.getDataDetail.method,
         query: dataDetailQuery(state, queryOptions),
       }, endpoints.getDataDetail.response)
-    },
-
-    getAnalysis(siteId: string, params: GscdumpAnalysisParams) {
-      assertAnalysisParams(params)
-      const query = shouldValidate('request') ? endpoints.getAnalysis.query.parse(params) : params
-      return request<GscdumpAnalysisResponse>(endpoints.getAnalysis.path(siteId), {
-        method: endpoints.getAnalysis.method,
-        query: analysisQuery(query),
-      }, endpoints.getAnalysis.response)
     },
 
     getSitemaps(siteId: string) {
@@ -362,18 +425,37 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       }, endpoints.getSitemapChanges.response)
     },
 
-    submitSitemap(siteId: string, sitemapUrl: string, action: 'submit' | 'delete' = 'submit') {
-      return request<{ success: boolean, action: 'submitted' | 'deleted', sitemapUrl: string }>(endpoints.submitSitemap.path(siteId), {
-        method: endpoints.submitSitemap.method,
-        body: { sitemapUrl, action },
-      })
+    getSitemapMembership(siteId: string, params: GscdumpSitemapMembershipParams) {
+      const body = shouldValidate('request') ? endpoints.getSitemapMembership.body.parse(params) : params
+      return request<GscdumpSitemapMembershipResponse>(endpoints.getSitemapMembership.path(siteId), {
+        method: endpoints.getSitemapMembership.method,
+        body,
+        dedupe: true,
+      }, endpoints.getSitemapMembership.response)
     },
 
-    refreshSitemaps(siteId: string) {
-      return request<{ success: boolean, action: 'refreshed', sitemapCount: number, changed: boolean }>(endpoints.refreshSitemaps.path(siteId), {
-        method: endpoints.refreshSitemaps.method,
-        body: { action: 'refresh' },
-      })
+    postSitemapAction,
+
+    async submitSitemap(siteId: string, sitemapUrl: string, action: 'submit' | 'delete' = 'submit') {
+      const response = await postSitemapAction(siteId, { action, sitemapUrl })
+      const expected = action === 'submit' ? 'submitted' : 'deleted'
+      if (response.action !== expected)
+        throw new TypeError(`Unexpected sitemap action response: expected ${expected}, got ${response.action}`)
+      return response
+    },
+
+    async refreshSitemaps(siteId: string) {
+      const response = await postSitemapAction(siteId, { action: 'refresh' })
+      if (response.action !== 'refreshed')
+        throw new TypeError(`Unexpected sitemap action response: expected refreshed, got ${response.action}`)
+      return response
+    },
+
+    async autoDiscoverSitemap(siteId: string) {
+      const response = await postSitemapAction(siteId, { action: 'auto-discover' })
+      if (response.action !== 'auto-discover')
+        throw new TypeError(`Unexpected sitemap action response: expected auto-discover, got ${response.action}`)
+      return response
     },
 
     getIndexing(siteId: string, days = 28) {
@@ -467,31 +549,6 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       )
     },
 
-    getContentVelocity<T = unknown>(siteId: string, days?: number) {
-      return request<T>(endpoints.getContentVelocity.path(siteId), {
-        method: endpoints.getContentVelocity.method,
-        query: days == null ? undefined : { days },
-      })
-    },
-
-    getCtrCurve<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const endpoint = endpoints.getCtrCurve
-      const query = shouldValidate('request') ? endpoint.query.parse(params) : params
-      return request<T>(endpoint.path(siteId), { method: endpoint.method, query: dateRangeQuery(query) })
-    },
-
-    getDarkTraffic<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const endpoint = endpoints.getDarkTraffic
-      const query = shouldValidate('request') ? endpoint.query.parse(params) : params
-      return request<T>(endpoint.path(siteId), { method: endpoint.method, query: dateRangeQuery(query) })
-    },
-
-    getDeviceGap<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const endpoint = endpoints.getDeviceGap
-      const query = shouldValidate('request') ? endpoint.query.parse(params) : params
-      return request<T>(endpoint.path(siteId), { method: endpoint.method, query: dateRangeQuery(query) })
-    },
-
     getIndexPercent(siteId: string, params: { invisibleLimit?: number, invisibleOffset?: number, orphanLimit?: number } = {}) {
       const query = shouldValidate('request') ? endpoints.getIndexPercent.query.parse(params) : params
       return request<GscdumpIndexPercentResponse>(
@@ -499,18 +556,6 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
         { method: endpoints.getIndexPercent.method, query: query as Record<string, unknown> },
         endpoints.getIndexPercent.response,
       )
-    },
-
-    getKeywordBreadth<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const endpoint = endpoints.getKeywordBreadth
-      const query = shouldValidate('request') ? endpoint.query.parse(params) : params
-      return request<T>(endpoint.path(siteId), { method: endpoint.method, query: dateRangeQuery(query) })
-    },
-
-    getPositionDistribution<T = unknown>(siteId: string, params: GscdumpDateRangeParams) {
-      const endpoint = endpoints.getPositionDistribution
-      const query = shouldValidate('request') ? endpoint.query.parse(params) : params
-      return request<T>(endpoint.path(siteId), { method: endpoint.method, query: dateRangeQuery(query) })
     },
 
     createTeam(params: CreatePartnerTeamParams) {
@@ -522,16 +567,17 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     renameTeam(teamId: string, params: { name: string }) {
-      return request(endpoints.renameTeam.path(teamId), {
+      const body = shouldValidate('request') ? endpoints.renameTeam.body.parse(params) : params
+      return request<{ ok: true, name: string }>(endpoints.renameTeam.path(teamId), {
         method: endpoints.renameTeam.method,
-        body: params,
-      })
+        body,
+      }, endpoints.renameTeam.response)
     },
 
     deleteTeam(teamId: string) {
-      return request(endpoints.deleteTeam.path(teamId), {
+      return request<{ ok: true }>(endpoints.deleteTeam.path(teamId), {
         method: endpoints.deleteTeam.method,
-      })
+      }, endpoints.deleteTeam.response)
     },
 
     listTeamMembers(teamId: string) {
@@ -547,16 +593,17 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
     },
 
     updateTeamMemberRole(teamId: string, userId: string, params: { role: AddPartnerTeamMemberParams['role'] }) {
-      return request(endpoints.updateTeamMemberRole.path(teamId, userId), {
+      const body = shouldValidate('request') ? endpoints.updateTeamMemberRole.body.parse(params) : params
+      return request<{ ok: true, role: AddPartnerTeamMemberParams['role'] }>(endpoints.updateTeamMemberRole.path(teamId, userId), {
         method: endpoints.updateTeamMemberRole.method,
-        body: params,
-      })
+        body,
+      }, endpoints.updateTeamMemberRole.response)
     },
 
     removeTeamMember(teamId: string, userId: string) {
-      return request(endpoints.removeTeamMember.path(teamId, userId), {
+      return request<{ ok: true }>(endpoints.removeTeamMember.path(teamId, userId), {
         method: endpoints.removeTeamMember.method,
-      })
+      }, endpoints.removeTeamMember.response)
     },
 
     bindSiteToTeam(userId: string, siteId: string, params: BindPartnerSiteTeamParams) {
@@ -565,6 +612,20 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
         method: endpoints.bindSiteToTeam.method,
         body,
       }, endpoints.bindSiteToTeam.response)
+    },
+
+    getTeamCatalog(teamId: string) {
+      return request<GscdumpTeamCatalogRef>(endpoints.getTeamCatalog.path(teamId), {
+        method: endpoints.getTeamCatalog.method,
+      }, endpoints.getTeamCatalog.response)
+    },
+
+    bindTeamCatalog(teamId: string, params: BindPartnerTeamCatalogParams) {
+      const body = shouldValidate('request') ? endpoints.bindTeamCatalog.body.parse(params) : params
+      return request<BindPartnerTeamCatalogResponse>(endpoints.bindTeamCatalog.path(teamId), {
+        method: endpoints.bindTeamCatalog.method,
+        body,
+      }, endpoints.bindTeamCatalog.response)
     },
   }
 }

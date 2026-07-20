@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractDateRange, extractMetricFilters, extractSpecialOperatorFilters, normalizeBuilderState, normalizeFilter } from '../../src/query/resolver'
+import { extractDateRange, extractMetricFilters, extractSpecialOperatorFilters, normalizeBuilderState, normalizeBuilderStateResult, normalizeFilter } from '../../src/query/resolver'
 
 // Regression: partner/CLI clients POST untrusted BuilderState bodies. Malformed
 // shapes used to crash the receive edge with opaque TypeErrors (Sentry
@@ -54,5 +54,92 @@ describe('normalizeFilter / extractDateRange — malformed filter (GSCDUMP-9)', 
     } as never)
     expect(startDate).toBe('2026-01-01')
     expect(endDate).toBe('2026-01-31')
+  })
+})
+
+// Boundary hardening promoted from gscdump.com's normalize-builder-state
+// wrapper: clients sent alternative `orderBy` shapes and hand-built `_filters`
+// leaves that reached the engine malformed and surfaced as opaque 500s
+// (Sentry GSCDUMP-1M / GSCDUMP-Q). The package normalizer is now the single
+// parse point, so consumers can drop their local wrappers.
+describe('normalizeBuilderState — orderBy coercion (GSCDUMP-1M)', () => {
+  it('coerces the legacy array-of-specs shape to { column, dir }', () => {
+    // The exact shape from GSCDUMP-1M: `orderBy: [{ column, desc: true }]`.
+    const state = normalizeBuilderState({
+      dimensions: ['page'],
+      orderBy: [{ column: 'impressions', desc: true }],
+    })
+    expect(state.orderBy).toEqual({ column: 'impressions', dir: 'desc' })
+  })
+
+  it('maps { column, desc: false } to ascending', () => {
+    const state = normalizeBuilderState({ dimensions: ['page'], orderBy: { column: 'clicks', desc: false } })
+    expect(state.orderBy).toEqual({ column: 'clicks', dir: 'asc' })
+  })
+
+  it('preserves the canonical { column, dir } shape (case-insensitive dir)', () => {
+    expect(normalizeBuilderState({ dimensions: ['page'], orderBy: { column: 'clicks', dir: 'desc' } }).orderBy)
+      .toEqual({ column: 'clicks', dir: 'desc' })
+    expect(normalizeBuilderState({ dimensions: ['page'], orderBy: { column: 'clicks', dir: 'ASC' } }).orderBy)
+      .toEqual({ column: 'clicks', dir: 'asc' })
+  })
+
+  it('drops orderBy with no valid column so the engine uses its default ordering', () => {
+    expect(normalizeBuilderState({ dimensions: ['page'], orderBy: {} }).orderBy).toBeUndefined()
+    expect(normalizeBuilderState({ dimensions: ['page'], orderBy: [] }).orderBy).toBeUndefined()
+    expect(normalizeBuilderState({ dimensions: ['page'] }).orderBy).toBeUndefined()
+  })
+})
+
+describe('normalizeBuilderState — filter leaf validation (GSCDUMP-Q)', () => {
+  it('returns an invalid-filter error for a leaf missing its operator', () => {
+    // Already-internal `_filters` form is passed through by normalizeFilter
+    // without per-leaf validation; a leaf with no `operator` used to reach the
+    // engine and crash on `f.operator.startsWith`.
+    const result = normalizeBuilderStateResult({
+      dimensions: ['page'],
+      filter: { _filters: [{ dimension: 'page', expression: 'x' }] },
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok)
+      expect(result.error.kind).toBe('invalid-filter')
+  })
+
+  it('returns an invalid-filter error for a leaf missing its dimension', () => {
+    const result = normalizeBuilderStateResult({
+      dimensions: ['page'],
+      filter: { _filters: [{ operator: 'contains', expression: 'x' }] },
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok)
+      expect(result.error.kind).toBe('invalid-filter')
+  })
+
+  it('validates nested groups too', () => {
+    const result = normalizeBuilderStateResult({
+      dimensions: ['page'],
+      filter: {
+        _filters: [{ dimension: 'query', operator: 'contains', expression: 'ok' }],
+        _nestedGroups: [{ _filters: [{ dimension: 'page', expression: 'bad' }] }],
+      },
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok)
+      expect(result.error.kind).toBe('invalid-filter')
+  })
+
+  it('the throwing wrapper carries the typed queryError so hosts can map to a 4xx', () => {
+    expect(() => normalizeBuilderState({
+      dimensions: ['page'],
+      filter: { _filters: [{ dimension: 'page', expression: 'x' }] },
+    })).toThrowError(expect.objectContaining({ queryError: expect.objectContaining({ kind: 'invalid-filter' }) }))
+  })
+
+  it('passes a well-formed filter through unchanged', () => {
+    const state = normalizeBuilderState({
+      dimensions: ['page'],
+      filter: { _filters: [{ dimension: 'query', operator: 'contains', expression: 'seo' }] },
+    })
+    expect(state.filter).toMatchObject({ _filters: [{ dimension: 'query', operator: 'contains', expression: 'seo' }] })
   })
 })

@@ -1,6 +1,8 @@
+export { createR2ManifestStore } from './adapters/r2-manifest'
+export type { CreateR2ManifestStoreOptions, R2ManifestBucketLike, R2ManifestEvent } from './adapters/r2-manifest'
 export { coerceRow, coerceRows } from './coerce'
 export type { CompactionThresholds } from './compaction'
-export { canonicalEmptyParquetSchema, createDuckDBCodec, createDuckDBExecutor } from './duckdb'
+export { createDuckDBCodec, createDuckDBExecutor } from './duckdb'
 export type { DuckDBFactory, DuckDBHandle } from './duckdb'
 export { createStorageEngine, MAX_DAY_BYTES } from './engine'
 // Errors-as-values: typed `EngineError` union + factory + helpers
@@ -66,6 +68,7 @@ export type {
 } from './sink'
 export { createInMemorySink } from './sinks'
 export type { InMemorySink, StoredRow } from './sinks'
+export type { SnapshotIndex } from './snapshot'
 export { createSqlQuerySource, ENGINE_QUERY_CAPABILITIES } from './source'
 export { bindLiterals, formatLiteral } from './sql-bind'
 export type { Grain } from './storage'

@@ -112,65 +112,7 @@ export const issueDetails: Record<string, IndexingIssueDetail> = {
   },
 }
 
-/**
- * Nuxt-SEO-specific fix supplements. Activated by `enrichIssueDetails` when the
- * caller passes a module list that includes the relevant Nuxt module.
- */
-export const nuxtSeoTips: Record<string, { modules: string[], tip: string }> = {
-  blocked_robots: {
-    modules: ['@nuxtjs/robots', '@nuxtjs/seo'],
-    tip: 'Check nuxt.config robots rules and route rules for Disallow:\n\nexport default defineNuxtConfig({\n  robots: { disallow: [\'/admin\'] },\n  routeRules: {\n    \'/secret/**\': { robots: false }\n  }\n})',
-  },
-  noindex: {
-    modules: ['@nuxtjs/seo'],
-    tip: 'Check for noindex in route rules or page meta:\n\n// nuxt.config.ts\nrouteRules: { \'/draft/**\': { index: false } }\n\n// pages/draft.vue\ndefinePageMeta({ robots: \'noindex\' })',
-  },
-  unknown_to_google: {
-    modules: ['@nuxtjs/sitemap', '@nuxtjs/seo'],
-    tip: 'Ensure @nuxtjs/sitemap includes these routes. Dynamic routes need sources:\n\nexport default defineNuxtConfig({\n  sitemap: {\n    sources: [\'/api/__sitemap__/urls\']\n  }\n})\n\nVerify at /sitemap.xml that these URLs appear.',
-  },
-  canonical_mismatch: {
-    modules: ['@nuxtjs/seo'],
-    tip: '@nuxtjs/seo auto-generates canonicals from site.url. Check for conflicts:\n\n// nuxt.config.ts — set your canonical origin\nsite: { url: \'https://example.com\' }\n\n// Override per page if needed\nuseHead({ link: [{ rel: \'canonical\', href: \'https://example.com/preferred\' }] })',
-  },
-  soft_404: {
-    modules: ['@nuxtjs/seo'],
-    tip: 'Ensure pages render content server-side, not just client-side. Check for missing data:\n\n// pages/[slug].vue\nconst { data } = await useAsyncData(() => fetchContent(slug))\nif (!data.value)\n  throw createError({ statusCode: 404 }) // Return real 404, not empty page',
-  },
-}
-
 export const severityOrder: IssueSeverity[] = ['error', 'warning', 'info']
-
-export const investigationStatusConfig: Record<string, { label: string, icon: string, color: 'success' | 'info' | 'warning' | 'neutral' | 'error' }> = {
-  investigated: { label: 'Investigated', icon: 'i-lucide-check-circle', color: 'success' },
-  fixed: { label: 'Fixed', icon: 'i-lucide-wrench', color: 'success' },
-  false_positive: { label: 'False positive', icon: 'i-lucide-shield-check', color: 'info' },
-  wont_fix: { label: 'Won\'t fix', icon: 'i-lucide-ban', color: 'neutral' },
-  monitoring: { label: 'Monitoring', icon: 'i-lucide-eye', color: 'warning' },
-}
-
-export const coverageLabels: Record<string, { short: string, color: string }> = {
-  'Crawled - currently not indexed': { short: 'Crawled, not indexed', color: 'text-error' },
-  'Discovered - currently not indexed': { short: 'Discovered, not indexed', color: 'text-warning' },
-  'Server error (5xx)': { short: 'Server error', color: 'text-error' },
-  'Not found (404)': { short: '404', color: 'text-error' },
-  'Soft 404': { short: 'Soft 404', color: 'text-error' },
-  'URL is unknown to Google': { short: 'Unknown', color: 'text-warning' },
-  'Blocked by robots.txt': { short: 'Robots blocked', color: 'text-warning' },
-  'Blocked due to access forbidden (403)': { short: 'Forbidden (403)', color: 'text-error' },
-  'Blocked due to unauthorized request (401)': { short: 'Unauthorized (401)', color: 'text-error' },
-  'Blocked due to other 4xx issue': { short: 'Blocked (4xx)', color: 'text-error' },
-  'Redirect error': { short: 'Redirect error', color: 'text-error' },
-  'Page with redirect': { short: 'Redirect', color: 'text-muted' },
-  'Alternate page with proper canonical tag': { short: 'Alternate canonical', color: 'text-muted' },
-  'Duplicate without user-selected canonical': { short: 'Duplicate, no canonical', color: 'text-warning' },
-  'Duplicate, Google chose different canonical than user': { short: 'Canonical overridden', color: 'text-warning' },
-  'Blocked by page removal tool': { short: 'Removal tool', color: 'text-muted' },
-}
-
-export function coverageLabel(state: string): { short: string, color: string } {
-  return coverageLabels[state] || { short: state, color: 'text-muted' }
-}
 
 export interface IssueGroup {
   id: string
@@ -229,23 +171,3 @@ export const issueGroups: IssueGroup[] = [
     issueTypes: ['noindex', 'redirect', 'alternate_canonical', 'page_removed', 'fragment_url'],
   },
 ]
-
-/** Map from issue type to its group id */
-export const issueTypeToGroup: Record<string, string> = Object.fromEntries(
-  issueGroups.flatMap(g => g.issueTypes.map(t => [t, g.id])),
-)
-
-export function enrichIssueDetails(modules?: { name: string }[]): Record<string, IndexingIssueDetail> {
-  const moduleNames = new Set(modules?.map(m => m.name) ?? [])
-  const result = { ...issueDetails }
-
-  for (const [issueType, nuxtTip] of Object.entries(nuxtSeoTips)) {
-    if (nuxtTip.modules.some(m => moduleNames.has(m)) && result[issueType]) {
-      result[issueType] = {
-        ...result[issueType],
-        fix: `${result[issueType].fix}\n\nNuxt SEO: ${nuxtTip.tip}`,
-      }
-    }
-  }
-  return result
-}

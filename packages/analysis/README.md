@@ -17,11 +17,7 @@ npm install @gscdump/analysis
 | Subpath | Use when |
 |---|---|
 | `@gscdump/analysis` | Top-level barrel: row analyzers, source-backed analyzers, `SQL_ANALYZERS`, `analyzeInBrowser`, `defaultAnalyzerRegistry`, contract types re-exported from engine. |
-| `@gscdump/analysis/analyzer` | `ROW_ANALYZERS` array + `paginate*` / `adapt-rows` helpers used by analyzer authors. |
 | `@gscdump/analysis/registry` | Pre-built `defaultAnalyzerRegistry` (rows + sql). Convenience for callers who don't care about bundle size. |
-| `@gscdump/analysis/source` | Portable query sources (`createInMemoryQuerySource`, `createCompositeSource`) + source-backed analyzers. |
-| `@gscdump/analysis/semantic` | Browser-only semantic analyzers such as content-gap; optional `@huggingface/transformers` peer. |
-| `@gscdump/analysis/query` | `buildDataQueryPlan` / `buildDataDetailPlan` for the generic query analyzers. |
 
 The contract layer (`Analyzer`, `Plan`, `Capability`, `AnalysisParams`, `AnalysisResult`, `AnalysisQuerySource`, `runAnalyzerFromSource`, `createAnalyzerRegistry`, `defineAnalyzer`, period helpers, `createEngineQuerySource`) lives in `@gscdump/engine` under the `/analyzer`, `/analysis-types`, `/period`, `/source`, and `/resolver` subpaths. Most are re-exported from `@gscdump/analysis` for convenience.
 
@@ -118,7 +114,7 @@ tables rather than a canonical-schema `createEngine`; see ADR-0001.
 
 ## SQLite (D1 / Cloudflare Workers)
 
-Mirror of the DuckDB path, dialect-targeted at sqlite-core. `@gscdump/engine-sqlite` exports `createEngine` (a `SqlQuerySource` over `executor + siteId`), `compileSqlite`, drizzle helpers (`gsc_keywords`, etc.), and `resolveWindow` (re-export from `@gscdump/engine/period`).
+Mirror of the DuckDB path, dialect-targeted at sqlite-core. `@gscdump/engine-sqlite` exports `createSqliteQuerySource` (an `AnalysisQuerySource` over `executor + siteId`), `compileSqlite`, drizzle helpers (`gsc_keywords`, etc.), and `resolveWindow` (re-export from `@gscdump/engine/period`).
 
 ## Query composers (dialect-neutral)
 
@@ -149,27 +145,14 @@ Available source factories:
 
 - `createGscApiQuerySource({ client, siteUrl })` — `@gscdump/engine-gsc-api`
 - `createLiveGscSource({ accessToken, siteUrl })` — `@gscdump/engine-gsc-api`
-- `createCompositeSource({ engine, gsc })` — `@gscdump/analysis/source`; engine first, GSC fallback
-- `createInMemoryQuerySource({ queryRows })` — `@gscdump/analysis/source`
+- `createCompositeSource({ engine, gsc })` — `@gscdump/analysis`; engine first, GSC fallback
+- `createInMemoryQuerySource({ queryRows })` — `@gscdump/analysis`
 - `createEngineQuerySource({ engine, ctx })` — `@gscdump/engine/source`
-- `createEngine({ ... })` — `@gscdump/engine-sqlite`
+- `createSqliteQuerySource({ ... })` — `@gscdump/engine-sqlite`
 
 Portable analyzers currently cover the row-based tools:
 `striking-distance`, `opportunity`, `brand`, `clustering`, `concentration`,
 `seasonality`, `movers`, and `decay`.
-
-## Semantic (browser-only)
-
-```ts
-import { analyzeContentGap } from '@gscdump/analysis/semantic'
-
-const result = await analyzeContentGap(runner, {
-  maxQueries: 1500,
-  minDivergence: 0.12,
-})
-```
-
-Loads a MiniLM/BGE embedding model via `@huggingface/transformers`, caches vectors in IndexedDB, and compares top queries to candidate URLs derived from `page_keywords`.
 
 ## Window resolution
 
@@ -189,7 +172,7 @@ Presets: `last-7d`, `last-28d`, `last-30d`, `last-90d`, `last-180d`, `last-365d`
 | Row analyzers (`analyzeMovers`, `analyzeDecay`, ...) | Public |
 | Source factories + `analyzeFromSource` | Public |
 | `Analyzer<P, R>` contract + `createAnalyzerRegistry` (re-exported from `@gscdump/engine/analyzer`) | Public |
-| `/source`, `/semantic`, `/query` subpaths | Public |
+| Source factories on the package root | Public |
 | Per-analyzer modules under `analysis/src/analyzers/<name>` | Private |
 
 ## Related

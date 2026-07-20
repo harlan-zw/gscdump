@@ -19,7 +19,7 @@ export type GscError
     | { kind: 'transport', message: string, status?: number, cause: unknown }
 
 /** Approximate per-day GSC API quotas, used in CLI messaging. */
-export const GSC_QUOTAS = {
+const GSC_QUOTAS = {
   searchAnalytics: 25_000,
   urlInspection: 2_000,
   indexing: 200,
@@ -184,11 +184,6 @@ export function classifyError(cause: unknown): GscError {
     return { kind: 'validation', message, cause }
 
   return { kind: 'transport', message, status, cause }
-}
-
-/** Construct a storage-kind error from inside the analytics engine / adapters. */
-export function storageError(message: string, cause?: unknown): GscError {
-  return { kind: 'storage', message, cause }
 }
 
 /**

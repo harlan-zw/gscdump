@@ -1,8 +1,9 @@
 /**
  * `@gscdump/lakehouse` — the dataset-agnostic Iceberg layer + dataset
  * registry (ADR-0021). `defineIcebergDataset` is the enforced authoring
- * surface; raw `icebird` primitives live behind `./unsafe-raw` and
- * provisioning behind `./provisioning` (amendments 1 + 11).
+ * surface; stable operational workflows live behind `./maintenance`, raw
+ * `icebird` primitives behind `./unsafe-raw`, and provisioning behind
+ * `./provisioning` (amendments 1 + 11).
  */
 
 export {

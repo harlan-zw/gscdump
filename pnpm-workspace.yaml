@@ -27,6 +27,7 @@ overrides:
   '@nuxt/kit': 4.4.4
   '@nuxt/schema': 4.4.4
   '@types/node>undici-types': ^7.0.0
+  hono: 4.12.31
   tinyexec: 1.1.2
 patchedDependencies:
   hyparquet-writer@0.16.1: patches/hyparquet-writer@0.16.1.patch
@@ -34,9 +35,8 @@ patchedDependencies:
 catalog:
   '@cloudflare/vitest-pool-workers': ^0.18.6
   '@cloudflare/workers-types': ^5.20260718.1
-  '@duckdb/duckdb-wasm': ^1.32.0
+  '@duckdb/duckdb-wasm': 1.33.1-dev57.0
   '@duckdb/node-api': 1.5.1-r.2
-  '@huggingface/transformers': ^4.2.0
   '@modelcontextprotocol/sdk': ^1.29.0
   '@nuxt/kit': 4.4.4
   '@nuxt/schema': 4.4.4
@@ -50,7 +50,6 @@ catalog:
   '@vueuse/core': ^14.3.0
   aws4fetch: ^1.0.20
   drizzle-orm: 1.0.0-rc.3
-  h3: ^1.15.11
   hyparquet: ^1.26.2
   hyparquet-writer: ^0.16.1
   icebird: ^0.8.15
@@ -71,8 +70,6 @@ catalog:
 catalogs:
   deps:
     '@clack/prompts': ^1.7.0
-    '@googleapis/indexing': ^6.0.1
-    '@googleapis/searchconsole': ^6.0.1
     citty: ^0.2.2
     consola: ^3.4.2
     date-fns: ^4.4.0

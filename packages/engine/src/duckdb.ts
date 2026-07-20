@@ -357,16 +357,6 @@ function emptyTableSchema(table: TableName): string {
   return `(FROM (VALUES ${placeholderValues(table)}) t(${columnList(table)}))`
 }
 
-/**
- * Canonical "empty-file" SELECT clause for a table. Codecs that need to
- * emit a schema-correct empty Parquet can wrap this in:
- *   `COPY (SELECT * FROM <clause> WHERE FALSE) TO '<key>' (FORMAT PARQUET, COMPRESSION ZSTD)`
- * to satisfy the ParquetCodec empty-rows invariant.
- */
-export function canonicalEmptyParquetSchema(table: TableName): string {
-  return emptyTableSchema(table)
-}
-
 function dateReplaceClause(table: TableName | undefined): string {
   if (!table)
     return ''
