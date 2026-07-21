@@ -10,22 +10,8 @@ Consumer SDK for hosted gscdump.com integrations.
 
 This package is for partner applications that consume gscdump.com APIs,
 webhooks, and realtime events. Callers inject the HTTP transport and auth they
-want to use; route construction stays inside the hosted adapter.
-
-```ts
-import { createPartnerClient } from '@gscdump/sdk'
-
-const gscdump = createPartnerClient({
-  apiBase: 'https://example.com/api',
-  apiKey: process.env.GSCDUMP_API_KEY,
-  fetch: $fetch,
-})
-
-const { sites } = await gscdump.getUserSites(userId)
-```
-
-The initial v1 slice uses a server-held Bearer credential and exposes both a
-generic operation executor and four convenience methods:
+want to use; route construction stays inside the hosted adapter. New hosted
+HTTP integrations should import the stable v1 client:
 
 ```ts
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
@@ -37,6 +23,23 @@ const gscdump = createGscdumpV1Client({
 
 const lifecycle = await gscdump.getUserLifecycle({
   params: { userId: 'u_01' },
+})
+```
+
+The v1 surface uses a server-held Bearer credential and exposes a generic
+operation executor plus typed convenience methods for all 18 registered HTTP
+operations across partner, analytics, and realtime.
+
+The root `createPartnerClient` export remains only for operations still in the
+compatibility inventory. Do not use it for an operation already available from
+`@gscdump/sdk/v1`.
+
+For example, a typed hosted report query is:
+
+```ts
+const report = await gscdump.queryAnalyticsReport({
+  params: { siteId: 's_01' },
+  body: { state: { dimensions: ['query'], searchType: 'web' } },
 })
 ```
 

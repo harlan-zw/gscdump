@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted — amended 2026-07-19. The initial four-operation implementation was
-released as 0.38.0 and deployed with direct production canaries green, including idle-hibernation
-resume and full 15-minute alarm expiry. The additive NuxtSEO migration expands the executable
-workspace registry to 18 operations; those additional operations still require package publication,
-host deployment, and the same production evidence before their legacy routes can be removed.
+Accepted — amended 2026-07-21. The 18-operation registry is published in the
+1.0.0 package line and deployed by the hosted producer. The original four-operation slice has full
+direct production canary evidence, including idle-hibernation resume and full 15-minute alarm expiry.
+Expanded-operation canaries, the coordinated NuxtSEO production handoff, and per-route zero-use
+evidence remain required before any predecessor compatibility route can be removed.
 
 ## Context
 
@@ -164,11 +164,11 @@ remain Google OAuth scope evidence and are unrelated to API authorization.
 
 ## Consequences
 
-- The original ADR's `/api/__gsc` analytics path and two legacy socket paths
-  are superseded by the four v1 surfaces above.
+- The original ADR's `/api/__gsc` analytics paths and two legacy socket paths
+  are superseded operation by operation as each v1 route completes its rollout gate.
 - Current root `partnerRoutes`, `analyticsRoutes`, endpoint descriptors, and
   SDK clients remain legacy migration inputs. The separate
-  `@gscdump/contracts/v1` and `@gscdump/sdk/v1` exports own the accepted slice.
+  `@gscdump/contracts/v1` and `@gscdump/sdk/v1` exports own the accepted surface.
 - Public API work starts by resolving the inventory, not by wrapping every
   producer file.
 - The only consumer can migrate with breaking changes before v1 is opened.

@@ -520,7 +520,7 @@ describe('@gscdump/contracts/v1 realtime protocol', () => {
     expect(schemas.clientFrame.parse({
       type: 'hello',
       protocolVersion: 1,
-      sdkVersion: '0.38.0',
+      sdkVersion: '1.0.0',
       resume: cursor,
     })).toMatchObject({ type: 'hello', resume: cursor })
     expect(schemas.clientFrame.parse({ type: 'ack', cursor })).toMatchObject({ type: 'ack' })

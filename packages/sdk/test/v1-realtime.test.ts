@@ -10,6 +10,7 @@ import {
   GSCDUMP_REALTIME_V1_SDK_VERSION,
 } from '@gscdump/sdk/v1'
 import { describe, expect, it, vi } from 'vitest'
+import sdkPackage from '../package.json'
 
 const STREAM = 'user:u_test' as const
 const SECOND_STREAM = 'user:u_other' as const
@@ -229,6 +230,10 @@ function ackSequences(socket: FakeSocket): string[] {
 }
 
 describe('@gscdump/sdk/v1 realtime state machine', () => {
+  it('advertises the published SDK version in its default hello frame', () => {
+    expect(GSCDUMP_REALTIME_V1_SDK_VERSION).toBe(sdkPackage.version)
+  })
+
   it('gets a fresh ticket per attempt and opens with only the v1 protocol plus ticket', async () => {
     const runtime = new FakeRuntime()
     const store = new MemoryCursorStore({ streamId: STREAM, sequence: '0' })

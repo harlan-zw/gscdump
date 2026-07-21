@@ -2,20 +2,19 @@
 
 ## Status and intent
 
-This is the normative contract for the first public gscdump.com API. The
-initial four-operation slice is released and deployed. The coordinated
-NuxtSEO migration expands the current workspace registry to 18 operations
-across contracts, generated artifacts, SDK, host routes, and consumer
-adapters. The additive 14-operation expansion is locally verified but still
-requires the normal package publication, host deployment, and production
-evidence gates before its legacy compatibility routes may be removed.
+This is the normative contract for the first public gscdump.com API. All 18
+operations are published in the 1.0.0 package line and deployed on the hosted
+producer. Contracts, generated artifacts, SDK, host routes, and the current
+consumer adapters agree on that registry. Expanded-operation production canaries,
+the coordinated NuxtSEO production handoff, and per-route zero-use evidence remain
+required before legacy compatibility routes may be removed.
 
 The initial host HTTP and realtime slice has direct production canaries for
 all four original HTTP operations, single-use tickets, outbox-to-socket
 delivery, effect-aware cursor confirmation, duplicate-event suppression,
 documented idle-hibernation resume, and the full 15-minute alarm expiry. This
-status does not claim that the expansion is deployed, that legacy routes have
-been cut, or that the API has launched publicly. The
+status does not claim that every expanded operation is canaried, that legacy routes
+have been cut, or that the API has launched publicly. The
 checked-in constants are machine-readable in
 [`hosted-api-v1-constants.json`](./hosted-api-v1-constants.json), and the
 legacy producer evidence is in
@@ -90,10 +89,10 @@ one method/path descriptor and rely on an untyped body switch. Producer route,
 contract descriptor, SDK method, documentation, and contract test are one
 change.
 
-All 18 accepted v1 descriptors have complete schemas and matching workspace
-host routes. The original four are released and deployed; the additive 14 are
-not considered production-ready until their publication, deployment, and
-canary evidence is recorded. Legacy inventory findings continue to block
+All 18 accepted v1 descriptors have complete schemas and matching deployed
+host routes in the 1.0.0 release line. Expanded operations are not considered
+fully rolled out until their canary and consumer-handoff evidence is recorded.
+Legacy inventory findings continue to block
 promotion of affected operations; they do not silently expand this registry.
 Host-only, session-only, CLI, public-site, and admin operations should remain
 out of protocol rather than receiving accidental contracts.
@@ -587,10 +586,9 @@ WebSocket filters, team/scoped credentials, arbitrary stream selection, or a
 generic public operation passthrough. Any of these requires a new evidence-led
 design; none should be pre-scaffolded into the first implementation.
 
-The released package and deployed host agree on the original four-operation
-registry. The current workspace package, host, SDK, and NuxtSEO adapters agree
-on the expanded 18-operation registry. The additive 14 operations must pass
-publication, deployment, and production canary gates before their predecessor
+The released package, deployed host, SDK, and NuxtSEO adapters agree on the
+expanded 18-operation registry. The additive operations must pass their
+production canary, consumer-handoff, and zero-use gates before predecessor
 compatibility routes are eligible for removal. Contract, Workerd, and existing
 production canaries cover the original host and transport gates; those
 canaries include credentialed primary reads, single-use tickets,
