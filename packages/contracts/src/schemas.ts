@@ -968,7 +968,7 @@ export const gscdumpSyncProgressResponseSchema = z.object({
   sites: z.array(z.object({
     id: z.string(),
     userId: z.number(),
-    partnerId: z.number().nullable(),
+    partnerId: z.string().nullable(),
     siteUrl: z.string(),
     syncStatus: z.string().nullable(),
     lastError: z.string().nullable(),

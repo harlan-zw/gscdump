@@ -1206,7 +1206,7 @@ export interface GscdumpSyncProgressPhaseCounts {
 export interface GscdumpSyncProgressSite {
   id: string
   userId: number
-  partnerId: number | null
+  partnerId: string | null
   siteUrl: string
   syncStatus: string | null
   lastError: string | null

@@ -2,6 +2,7 @@ import type { FileResolutionResponse, RegisterPartnerSiteParams } from '../src'
 import {
   analyticsRoutes,
   builderStateSchema,
+  gscdumpSyncProgressResponseSchema,
   GSCDUMP_ONBOARDING_CONTRACT_VERSION,
   partnerEndpointSchemas,
   partnerRoutes,
@@ -46,6 +47,12 @@ const analysisSourcesResponse: FileResolutionResponse = {
 }
 
 describe('@gscdump/contracts', () => {
+  it('models sync-progress partner IDs using the producer UUID/text shape', () => {
+    const partnerIdSchema = gscdumpSyncProgressResponseSchema.shape.sites.element.shape.partnerId
+    expect(partnerIdSchema.safeParse('partner-uuid').success).toBe(true)
+    expect(partnerIdSchema.safeParse(42).success).toBe(false)
+  })
+
   it('exports hosted route metadata and endpoint schemas', () => {
     expect(partnerRoutes.users.register).toBe('/users/register')
     expect(partnerRoutes.partner.sites.register).toBe('/partner/sites/register')
