@@ -3,7 +3,7 @@
 ## Status
 
 Accepted — amended 2026-07-21. The 18-operation registry is published in the
-1.0.0 package line and deployed by the hosted producer. The original four-operation slice has full
+1.0.x package line and deployed by the hosted producer. The original four-operation slice has full
 direct production canary evidence, including idle-hibernation resume and full 15-minute alarm expiry.
 Expanded-operation canaries, the coordinated NuxtSEO production handoff, and per-route zero-use
 evidence remain required before any predecessor compatibility route can be removed.

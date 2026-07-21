@@ -3,7 +3,7 @@
 ## Status and intent
 
 This is the normative contract for the first public gscdump.com API. All 18
-operations are published in the 1.0.0 package line and deployed on the hosted
+operations are published in the 1.0.x package line and deployed on the hosted
 producer. Contracts, generated artifacts, SDK, host routes, and the current
 consumer adapters agree on that registry. Expanded-operation production canaries,
 the coordinated NuxtSEO production handoff, and per-route zero-use evidence remain
@@ -90,7 +90,7 @@ contract descriptor, SDK method, documentation, and contract test are one
 change.
 
 All 18 accepted v1 descriptors have complete schemas and matching deployed
-host routes in the 1.0.0 release line. Expanded operations are not considered
+host routes in the 1.0.x release line. Expanded operations are not considered
 fully rolled out until their canary and consumer-handoff evidence is recorded.
 Legacy inventory findings continue to block
 promotion of affected operations; they do not silently expand this registry.
