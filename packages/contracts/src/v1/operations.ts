@@ -16,7 +16,12 @@ import {
   sitemapStatuses,
 } from '../onboarding'
 import {
+  addPartnerTeamMemberSchema,
+  bindPartnerSiteTeamSchema,
+  bindPartnerTeamCatalogResponseSchema,
+  bindPartnerTeamCatalogSchema,
   builderStateSchema,
+  createPartnerTeamSchema,
   gscComparisonFilterSchema,
   gscdumpAnalysisBundleResponseSchema,
   gscdumpAnalysisPresetSchema,
@@ -25,6 +30,7 @@ import {
   gscdumpCanonicalMismatchesResponseSchema,
   gscdumpDataDetailResponseSchema,
   gscdumpDataResponseSchema,
+  gscdumpDeletePartnerUserResponseSchema,
   gscdumpIndexingDiagnosticsResponseSchema,
   gscdumpIndexingResponseSchema,
   gscdumpIndexPercentResponseSchema,
@@ -32,14 +38,30 @@ import {
   gscdumpPageTrendResponseSchema,
   gscdumpQueryTrendResponseSchema,
   gscdumpSitemapChangesResponseSchema,
+  gscdumpSitemapMembershipParamsSchema,
+  gscdumpSitemapMembershipResponseSchema,
   gscdumpSitemapsResponseSchema,
   gscdumpSiteRegistrationSchema,
+  gscdumpTeamRoleSchema,
   gscdumpTopAssociationResponseSchema,
   gscdumpUserRegistrationSchema,
   indexingUrlsResponseSchema,
+  partnerSitemapActionResponseSchema,
+  partnerSitemapActionSchema,
+  partnerSiteTeamBindingResponseSchema,
+  partnerTeamCreatedResponseSchema,
+  partnerTeamDeletedResponseSchema,
+  partnerTeamMemberAddedResponseSchema,
+  partnerTeamMemberRemovedResponseSchema,
+  partnerTeamMemberRoleResponseSchema,
+  partnerTeamMembersResponseSchema,
+  partnerTeamRenamedResponseSchema,
   registerPartnerSiteSchema,
   registerPartnerUserSchema,
+  renamePartnerTeamSchema,
   searchTypeSchema,
+  siteIntIdCrosswalkResponseSchema,
+  teamCatalogRefSchema,
   updatePartnerUserTokensSchema,
 } from '../schemas'
 import {
@@ -665,6 +687,97 @@ export function createGscdumpV1Protocol() {
   const contentVelocityQuery = z.strictObject({
     days: z.coerce.number().int().min(1).max(365).optional(),
   })
+
+  // ── 1.3.0 promotions (2026-07-22 full train, tranches C+D) ──────────────────
+  // Tranche C (sitemap actions + membership) reuses the wire schemas the
+  // private handlers already self-validate against. Tranche D (partner team +
+  // user plumbing) does the same wherever a named schema exists; the
+  // verification-token/add-and-verify/cross-source/keyword-enrich shapes have
+  // no schemas.ts counterpart so they're authored fresh here, matching the
+  // decided FINAL spec exactly.
+  const sitemapActionRequest = partnerSitemapActionSchema
+  const sitemapActionResponse = defineSuccessResponse(
+    { producer: partnerSitemapActionResponseSchema, client: partnerSitemapActionResponseSchema },
+    partnerResponseMeta,
+  )
+  const sitemapMembershipRequest = gscdumpSitemapMembershipParamsSchema.strict()
+  const sitemapMembershipResponse = defineSuccessResponse(defineResponseObject(gscdumpSitemapMembershipResponseSchema.shape), partnerResponseMeta)
+
+  const createTeamRequest = createPartnerTeamSchema.strict()
+  const teamCreatedResponse = defineSuccessResponse(defineResponseObject(partnerTeamCreatedResponseSchema.shape), partnerResponseMeta)
+  const renameTeamRequest = renamePartnerTeamSchema.strict()
+  const teamRenamedResponse = defineSuccessResponse(defineResponseObject(partnerTeamRenamedResponseSchema.shape), partnerResponseMeta)
+  const teamDeletedResponse = defineSuccessResponse(defineResponseObject(partnerTeamDeletedResponseSchema.shape), partnerResponseMeta)
+  const teamMembersResponse = defineSuccessResponse(defineResponseObject(partnerTeamMembersResponseSchema.shape), partnerResponseMeta)
+  const addTeamMemberRequest = addPartnerTeamMemberSchema.strict()
+  const teamMemberAddedResponse = defineSuccessResponse(defineResponseObject(partnerTeamMemberAddedResponseSchema.shape), partnerResponseMeta)
+  const updateTeamMemberRoleRequest = z.strictObject({ role: gscdumpTeamRoleSchema })
+  const teamMemberRoleResponse = defineSuccessResponse(defineResponseObject(partnerTeamMemberRoleResponseSchema.shape), partnerResponseMeta)
+  const teamMemberRemovedResponse = defineSuccessResponse(defineResponseObject(partnerTeamMemberRemovedResponseSchema.shape), partnerResponseMeta)
+  const bindSiteTeamRequest = bindPartnerSiteTeamSchema.strict()
+  const siteTeamBindingResponse = defineSuccessResponse(defineResponseObject(partnerSiteTeamBindingResponseSchema.shape), partnerResponseMeta)
+  const teamCatalogResponse = defineSuccessResponse(defineResponseObject(teamCatalogRefSchema.shape), partnerResponseMeta)
+  const bindTeamCatalogRequest = bindPartnerTeamCatalogSchema.strict()
+  const teamCatalogBindResponse = defineSuccessResponse(defineResponseObject(bindPartnerTeamCatalogResponseSchema.shape), partnerResponseMeta)
+  const siteIntIdCrosswalkResponse = defineSuccessResponse(defineResponseObject(siteIntIdCrosswalkResponseSchema.shape), partnerResponseMeta)
+  const deletePartnerUserResponse = defineSuccessResponse(defineResponseObject(gscdumpDeletePartnerUserResponseSchema.shape), partnerResponseMeta)
+
+  // No schemas.ts equivalent yet — token minting/verification and the
+  // cross-source/keyword-enrich shapes are authored fresh from the FINAL spec.
+  const verificationMethodSchema = z.enum(['META', 'FILE', 'DNS_TXT', 'DNS_CNAME', 'ANALYTICS', 'TAG_MANAGER'])
+  const verificationTokenRequest = z.strictObject({
+    siteUrl: z.string().min(1),
+    method: verificationMethodSchema.optional(),
+  })
+  const verificationSiteShape = z.object({ type: z.string(), identifier: z.string() }).loose()
+  const verificationTokenResponse = defineSuccessResponse(defineResponseObject({
+    siteUrl: z.string(),
+    site: verificationSiteShape,
+    method: z.string(),
+    token: z.string(),
+    metaContent: z.string().nullable(),
+    dnsRecord: z.object({
+      type: z.enum(['TXT', 'CNAME']),
+      host: z.string(),
+      value: z.string(),
+    }).nullable(),
+  }), partnerResponseMeta)
+  const addAndVerifySiteRequest = verificationTokenRequest
+  const addAndVerifySiteResponse = defineSuccessResponse(defineResponseObject({
+    siteUrl: z.string(),
+    site: verificationSiteShape,
+    method: z.string(),
+    verified: z.literal(true),
+    owners: z.array(z.string()).optional(),
+  }), partnerResponseMeta)
+
+  const crossSourceQueryKeys = [
+    'crawl-error-losing-impressions',
+    'declining-clicks-poor-lcp',
+    'striking-distance-slow-pages',
+    'top-impressions-low-performance',
+  ] as const
+  const crossSourceRequest = z.strictObject({
+    queryKey: z.enum(crossSourceQueryKeys),
+    rangeDays: z.number().int().positive().max(180).optional(),
+    limit: z.number().int().positive().max(500).optional(),
+  })
+  const crossSourceResponse = defineSuccessResponse(defineResponseObject({
+    reason: z.string().optional(),
+    sources: z.array(z.string()),
+    rows: z.array(z.record(z.string(), z.json())),
+  }), partnerResponseMeta)
+
+  const enrichKeywordsRequest = z.strictObject({
+    keywords: z.array(z.string().min(1)).min(1).max(500),
+  })
+  const enrichKeywordsResponse = defineSuccessResponse(defineResponseObject({
+    metrics: z.record(z.string(), z.object({
+      difficulty: z.number().nullable(),
+      searchVolume: z.number().nullable(),
+      cpc: z.number().nullable(),
+    }).loose()),
+  }), partnerResponseMeta)
 
   const responseStreamHead = defineResponseObject({
     streamId: realtimeSchemas.streamId,
@@ -1846,6 +1959,674 @@ export function createGscdumpV1Protocol() {
             request: { params: { siteId: 's_01' }, query: { invisibleLimit: 100 } },
             response: {
               data: { trend: [], invisibleUrls: [], invisibleCount: 0, orphanPages: [], orphanCount: 0, sitemaps: [], summary: { currentPercent: 0, totalSitemapUrls: 0, visibleUrls: 0, change7d: null, change28d: null, dataDate: '2026-06-28' }, meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced', newestDateSynced: null } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      createSitemapAction: defineHttpOperation({
+        id: 'partner.sites.sitemaps.action.create',
+        method: 'POST',
+        path: '/sites/{siteId}/sitemaps/actions',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: false, retry: 'never', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sitemaps:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: sitemapActionRequest,
+        },
+        responses: { 200: sitemapActionResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'site.sitemaps', idFrom: 'params.siteId' }],
+          changes: [{ type: 'site.sitemaps', idFrom: 'params.siteId' }],
+        },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Run a sitemap action',
+          description: 'Submits, deletes, refreshes, or auto-discovers a site\'s sitemap; the response shape depends on the requested action.',
+          tags: ['Sitemaps'],
+          examples: {
+            request: { params: { siteId: 's_01' }, body: { action: 'refresh' } },
+            response: {
+              data: { success: true, action: 'refreshed', sitemapCount: 0, changed: false },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      querySitemapMembership: defineHttpOperation({
+        id: 'partner.sites.sitemaps.membership.query',
+        method: 'POST',
+        path: '/sites/{siteId}/sitemaps/membership',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sitemaps:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: sitemapMembershipRequest,
+        },
+        responses: { 200: sitemapMembershipResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.sitemaps', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Query sitemap membership',
+          description: 'Checks whether each requested URL is present in the site\'s known sitemaps, subject to a freshness cap.',
+          tags: ['Sitemaps'],
+          examples: {
+            request: { params: { siteId: 's_01' }, body: { urls: ['https://example.com/'], maxAgeDays: 30 } },
+            response: {
+              data: { urls: [], meta: { available: true, reason: null, requested: 1, checked: 1, matched: 0, newestFetchedAt: null } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      createTeam: defineHttpOperation({
+        id: 'partner.teams.create',
+        method: 'POST',
+        path: '/teams',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: false, retry: 'never', readConsistency: null },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['teams:write'],
+          ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
+        },
+        request: { params: null, query: null, headers: requestHeaders, body: createTeamRequest },
+        responses: { 200: teamCreatedResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [], changes: [{ type: 'partner.team', idFrom: 'principal.id' }] },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Create a team',
+          description: 'Creates a team owned by a user linked to the authenticated partner tenant.',
+          tags: ['Teams'],
+          examples: {
+            request: { body: { ownerUserId: 'u_01', name: 'Acme Team' } },
+            response: {
+              data: { team: { id: 't_01', ownerId: 1, name: 'Acme Team', personalTeam: false, createdAt: 0, updatedAt: 0 } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      renameTeam: defineHttpOperation({
+        id: 'partner.teams.rename',
+        method: 'PATCH',
+        path: '/teams/{teamId}',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['teams:write'],
+          ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
+        },
+        request: {
+          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId }),
+          query: null,
+          headers: requestHeaders,
+          body: renameTeamRequest,
+        },
+        responses: { 200: teamRenamedResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'partner.team', idFrom: 'params.teamId' }],
+          changes: [{ type: 'partner.team', idFrom: 'params.teamId' }],
+        },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Rename a team',
+          description: 'Renames a team owned by the authenticated partner tenant.',
+          tags: ['Teams'],
+          examples: {
+            request: { params: { teamId: 't_01' }, body: { name: 'New name' } },
+            response: { data: { ok: true, name: 'New name' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      deleteTeam: defineHttpOperation({
+        id: 'partner.teams.delete',
+        method: 'DELETE',
+        path: '/teams/{teamId}',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['teams:write'],
+          ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
+        },
+        request: {
+          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: teamDeletedResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'partner.team', idFrom: 'params.teamId' }],
+          changes: [{ type: 'partner.team', idFrom: 'params.teamId' }],
+        },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Delete a team',
+          description: 'Deletes a team owned by the authenticated partner tenant.',
+          tags: ['Teams'],
+          examples: {
+            request: { params: { teamId: 't_01' } },
+            response: { data: { ok: true }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      listTeamMembers: defineHttpOperation({
+        id: 'partner.teams.members.list',
+        method: 'GET',
+        path: '/teams/{teamId}/members',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['teams:read'],
+          ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
+        },
+        request: {
+          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: teamMembersResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'partner.team', idFrom: 'params.teamId' }], changes: [] },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'List team members',
+          description: 'Lists the members of a team owned by the authenticated partner tenant.',
+          tags: ['Teams'],
+          examples: {
+            request: { params: { teamId: 't_01' } },
+            response: { data: { members: [] }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      addTeamMember: defineHttpOperation({
+        id: 'partner.teams.members.add',
+        method: 'POST',
+        path: '/teams/{teamId}/members',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['teams:write'],
+          ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
+        },
+        request: {
+          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId }),
+          query: null,
+          headers: requestHeaders,
+          body: addTeamMemberRequest,
+        },
+        responses: { 200: teamMemberAddedResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'partner.team', idFrom: 'params.teamId' }],
+          changes: [{ type: 'partner.team', idFrom: 'params.teamId' }],
+        },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Add a team member',
+          description: 'Adds a user to a team owned by the authenticated partner tenant, or reports it was already a member.',
+          tags: ['Teams'],
+          examples: {
+            request: { params: { teamId: 't_01' }, body: { userId: 'u_02', role: 'editor' } },
+            response: { data: { ok: true, role: 'editor' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      updateTeamMemberRole: defineHttpOperation({
+        id: 'partner.teams.members.role.update',
+        method: 'PATCH',
+        path: '/teams/{teamId}/members/{userId}',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['teams:write'],
+          ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
+        },
+        request: {
+          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId, userId: realtimeSchemas.publicUserId }),
+          query: null,
+          headers: requestHeaders,
+          body: updateTeamMemberRoleRequest,
+        },
+        responses: { 200: teamMemberRoleResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [
+            { type: 'partner.team', idFrom: 'params.teamId' },
+            { type: 'partner.user', idFrom: 'params.userId' },
+          ],
+          changes: [
+            { type: 'partner.team', idFrom: 'params.teamId' },
+            { type: 'partner.user', idFrom: 'params.userId' },
+          ],
+        },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Update a team member role',
+          description: 'Updates the role of an existing member of a team owned by the authenticated partner tenant.',
+          tags: ['Teams'],
+          examples: {
+            request: { params: { teamId: 't_01', userId: 'u_02' }, body: { role: 'admin' } },
+            response: { data: { ok: true, role: 'admin' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      removeTeamMember: defineHttpOperation({
+        id: 'partner.teams.members.remove',
+        method: 'DELETE',
+        path: '/teams/{teamId}/members/{userId}',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['teams:write'],
+          ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
+        },
+        request: {
+          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId, userId: realtimeSchemas.publicUserId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: teamMemberRemovedResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [
+            { type: 'partner.team', idFrom: 'params.teamId' },
+            { type: 'partner.user', idFrom: 'params.userId' },
+          ],
+          changes: [
+            { type: 'partner.team', idFrom: 'params.teamId' },
+            { type: 'partner.user', idFrom: 'params.userId' },
+          ],
+        },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Remove a team member',
+          description: 'Removes a member from a team owned by the authenticated partner tenant.',
+          tags: ['Teams'],
+          examples: {
+            request: { params: { teamId: 't_01', userId: 'u_02' } },
+            response: { data: { ok: true }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      updateSiteTeam: defineHttpOperation({
+        id: 'partner.sites.team.update',
+        method: 'PATCH',
+        path: '/sites/{siteId}/team',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['sites:write'],
+          ownership: [{ credential: 'partner_key', rule: 'authorized_site' }],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: bindSiteTeamRequest,
+        },
+        responses: { 200: siteTeamBindingResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'site.registration', idFrom: 'params.siteId' }],
+          changes: [{ type: 'site.registration', idFrom: 'params.siteId' }],
+        },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Bind a site to a team',
+          description: 'Binds or unbinds (teamId: null) a partner-owned site to a partner-owned team.',
+          tags: ['Teams'],
+          examples: {
+            request: { params: { siteId: 's_01' }, body: { teamId: 't_01' } },
+            response: { data: { ok: true, teamId: 't_01' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      getTeamCatalog: defineHttpOperation({
+        id: 'partner.teams.catalog.get',
+        method: 'GET',
+        path: '/teams/{teamId}/catalog',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['teams:read'],
+          ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
+        },
+        request: {
+          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: teamCatalogResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'partner.team', idFrom: 'params.teamId' }], changes: [] },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Get a team catalog',
+          description: 'Returns the Iceberg catalog reference bound to a partner-owned team, if any.',
+          tags: ['Teams'],
+          examples: {
+            request: { params: { teamId: 't_01' } },
+            response: {
+              data: { teamId: 't_01', catalogUri: null, warehouse: null, bucket: null, namespace: null, provisioningState: null, keyEncoding: null, catalogTablesReady: false, readsEnabled: false },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      bindTeamCatalog: defineHttpOperation({
+        id: 'partner.teams.catalog.bind',
+        method: 'POST',
+        path: '/teams/{teamId}/catalog',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['teams:write'],
+          ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
+        },
+        request: {
+          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId }),
+          query: null,
+          headers: requestHeaders,
+          body: bindTeamCatalogRequest,
+        },
+        responses: { 200: teamCatalogBindResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'partner.team', idFrom: 'params.teamId' }],
+          changes: [{ type: 'partner.team', idFrom: 'params.teamId' }],
+        },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Bind a team catalog',
+          description: 'Binds an Iceberg catalog (URI, warehouse, and optional bucket/namespace) to a partner-owned team.',
+          tags: ['Teams'],
+          examples: {
+            request: { params: { teamId: 't_01' }, body: { catalogUri: 'gs://bucket/catalog', warehouse: 'primary', namespace: 'ns1', bucket: 'bucket1' } },
+            response: {
+              data: { teamId: 't_01', status: 'ready', catalogUri: 'gs://bucket/catalog', warehouse: 'primary', bucket: 'bucket1', namespace: 'ns1' },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getSiteIntIdCrosswalk: defineHttpOperation({
+        id: 'partner.users.sites.crosswalk.get',
+        method: 'GET',
+        path: '/users/{userId}/sites/crosswalk',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sites:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'self' },
+            { credential: 'partner_key', rule: 'linked_user' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ userId: realtimeSchemas.publicUserId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: siteIntIdCrosswalkResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [
+            { type: 'partner.user', idFrom: 'params.userId' },
+            { type: 'user.sites', idFrom: 'params.userId' },
+          ],
+          changes: [],
+        },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Get the site int-id crosswalk',
+          description: 'Maps a user\'s public site IDs to their internal integer IDs, for partners that need the legacy numeric identifier.',
+          tags: ['Sites'],
+          examples: {
+            request: { params: { userId: 'u_01' } },
+            response: { data: { crosswalk: {}, sites: [] }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      deleteUser: defineHttpOperation({
+        id: 'partner.users.delete',
+        method: 'DELETE',
+        path: '/users/{userId}',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['users:write'],
+          ownership: [{ credential: 'partner_key', rule: 'linked_user' }],
+        },
+        request: {
+          params: z.strictObject({ userId: realtimeSchemas.publicUserId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: deletePartnerUserResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'partner.user', idFrom: 'params.userId' }],
+          changes: [
+            { type: 'partner.user', idFrom: 'params.userId' },
+            { type: 'user.sites', idFrom: 'params.userId' },
+          ],
+        },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Delete a partner user',
+          description: 'Queues cascade deletion of a partner-linked user and their sites.',
+          tags: ['Users'],
+          examples: {
+            request: { params: { userId: 'u_01' } },
+            response: { data: { ok: true, queued: true, userId: 1, publicId: 'u_01' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      createVerificationToken: defineHttpOperation({
+        id: 'partner.users.verification.token.create',
+        method: 'POST',
+        path: '/users/{userId}/verification-token',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sites:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'self' },
+            { credential: 'partner_key', rule: 'linked_user' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ userId: realtimeSchemas.publicUserId }),
+          query: null,
+          headers: requestHeaders,
+          body: verificationTokenRequest,
+        },
+        responses: { 200: verificationTokenResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [
+            { type: 'partner.user', idFrom: 'params.userId' },
+            { type: 'user.sites', idFrom: 'params.userId' },
+          ],
+          changes: [],
+        },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Create a site verification token',
+          description: 'Mints a Search Console site-ownership verification token (meta tag or DNS record) for a not-yet-registered site.',
+          tags: ['Sites'],
+          examples: {
+            request: { params: { userId: 'u_01' }, body: { siteUrl: 'https://example.com', method: 'DNS_TXT' } },
+            response: {
+              data: { siteUrl: 'https://example.com', site: { type: 'INET_DOMAIN', identifier: 'example.com' }, method: 'DNS_TXT', token: 'abc123', metaContent: null, dnsRecord: { type: 'TXT', host: '_gsc.example.com', value: 'abc123' } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      addAndVerifySite: defineHttpOperation({
+        id: 'partner.users.sites.verify.create',
+        method: 'POST',
+        path: '/users/{userId}/sites/verify',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sites:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'self' },
+            { credential: 'partner_key', rule: 'linked_user' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ userId: realtimeSchemas.publicUserId }),
+          query: null,
+          headers: requestHeaders,
+          body: addAndVerifySiteRequest,
+        },
+        responses: { 200: addAndVerifySiteResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'partner.user', idFrom: 'params.userId' }],
+          changes: [{ type: 'user.sites', idFrom: 'params.userId' }],
+        },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Add and verify a site',
+          description: 'Verifies Search Console ownership of a site for a user via the given method and records the verified ownership.',
+          tags: ['Sites'],
+          examples: {
+            request: { params: { userId: 'u_01' }, body: { siteUrl: 'https://example.com', method: 'DNS_TXT' } },
+            response: {
+              data: { siteUrl: 'https://example.com', site: { type: 'INET_DOMAIN', identifier: 'example.com' }, method: 'DNS_TXT', verified: true, owners: ['owner@example.com'] },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      queryCrossSource: defineHttpOperation({
+        id: 'partner.sites.cross.source.query',
+        method: 'POST',
+        path: '/sites/{siteId}/cross-source',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [{ credential: 'partner_key', rule: 'authorized_site' }],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: crossSourceRequest,
+        },
+        responses: { 200: crossSourceResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Query cross-source analysis',
+          description: 'Runs one predefined cross-source query joining crawl, CWV, and GSC signals for a site.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, body: { queryKey: 'crawl-error-losing-impressions', rangeDays: 28, limit: 50 } },
+            response: {
+              data: { sources: ['crawl', 'gsc'], rows: [] },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      enrichKeywords: defineHttpOperation({
+        id: 'partner.keywords.enrich.query',
+        method: 'POST',
+        path: '/keywords/enrich',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'self' },
+            { credential: 'partner_key', rule: 'partner_tenant' },
+          ],
+        },
+        request: { params: null, query: null, headers: requestHeaders, body: enrichKeywordsRequest },
+        responses: { 200: enrichKeywordsResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [], changes: [] },
+        lifecycle: { introduced: '1.3.0' },
+        docs: {
+          summary: 'Enrich keywords with metrics',
+          description: 'Returns difficulty, search volume, and CPC estimates for up to 500 keywords.',
+          tags: ['Analytics'],
+          examples: {
+            request: { body: { keywords: ['nuxt seo'] } },
+            response: {
+              data: { metrics: { 'nuxt seo': { difficulty: 40, searchVolume: 100, cpc: 1.2 } } },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
           },

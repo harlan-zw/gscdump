@@ -238,6 +238,78 @@ export interface GscdumpV1Client {
     input: GscdumpV1OperationInput<'partner.sites.index.percent.get'>,
     options?: GscdumpV1ExecuteOptions,
   ) => Promise<GscdumpV1OperationResponse<'partner.sites.index.percent.get'>>
+  createSitemapAction: (
+    input: GscdumpV1OperationInput<'partner.sites.sitemaps.action.create'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.action.create'>>
+  querySitemapMembership: (
+    input: GscdumpV1OperationInput<'partner.sites.sitemaps.membership.query'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.membership.query'>>
+  createTeam: (
+    input: GscdumpV1OperationInput<'partner.teams.create'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.teams.create'>>
+  renameTeam: (
+    input: GscdumpV1OperationInput<'partner.teams.rename'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.teams.rename'>>
+  deleteTeam: (
+    input: GscdumpV1OperationInput<'partner.teams.delete'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.teams.delete'>>
+  listTeamMembers: (
+    input: GscdumpV1OperationInput<'partner.teams.members.list'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.teams.members.list'>>
+  addTeamMember: (
+    input: GscdumpV1OperationInput<'partner.teams.members.add'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.teams.members.add'>>
+  updateTeamMemberRole: (
+    input: GscdumpV1OperationInput<'partner.teams.members.role.update'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.teams.members.role.update'>>
+  removeTeamMember: (
+    input: GscdumpV1OperationInput<'partner.teams.members.remove'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.teams.members.remove'>>
+  updateSiteTeam: (
+    input: GscdumpV1OperationInput<'partner.sites.team.update'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.team.update'>>
+  getTeamCatalog: (
+    input: GscdumpV1OperationInput<'partner.teams.catalog.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.teams.catalog.get'>>
+  bindTeamCatalog: (
+    input: GscdumpV1OperationInput<'partner.teams.catalog.bind'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.teams.catalog.bind'>>
+  getSiteIntIdCrosswalk: (
+    input: GscdumpV1OperationInput<'partner.users.sites.crosswalk.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.users.sites.crosswalk.get'>>
+  deleteUser: (
+    input: GscdumpV1OperationInput<'partner.users.delete'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.users.delete'>>
+  createVerificationToken: (
+    input: GscdumpV1OperationInput<'partner.users.verification.token.create'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.users.verification.token.create'>>
+  addAndVerifySite: (
+    input: GscdumpV1OperationInput<'partner.users.sites.verify.create'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.users.sites.verify.create'>>
+  queryCrossSource: (
+    input: GscdumpV1OperationInput<'partner.sites.cross.source.query'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.cross.source.query'>>
+  enrichKeywords: (
+    input: GscdumpV1OperationInput<'partner.keywords.enrich.query'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.keywords.enrich.query'>>
   queryAnalyticsRows: (
     input: GscdumpV1OperationInput<'analytics.rows.query'>,
     options?: GscdumpV1ExecuteOptions,
@@ -825,6 +897,24 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     getPositionDistribution: (input, executeOptions) => execute('partner.sites.position.distribution.get', input, executeOptions),
     getTopAssociation: (input, executeOptions) => execute('partner.sites.top.association.get', input, executeOptions),
     getIndexPercent: (input, executeOptions) => execute('partner.sites.index.percent.get', input, executeOptions),
+    createSitemapAction: (input, executeOptions) => execute('partner.sites.sitemaps.action.create', input, executeOptions),
+    querySitemapMembership: (input, executeOptions) => execute('partner.sites.sitemaps.membership.query', input, executeOptions),
+    createTeam: (input, executeOptions) => execute('partner.teams.create', input, executeOptions),
+    renameTeam: (input, executeOptions) => execute('partner.teams.rename', input, executeOptions),
+    deleteTeam: (input, executeOptions) => execute('partner.teams.delete', input, executeOptions),
+    listTeamMembers: (input, executeOptions) => execute('partner.teams.members.list', input, executeOptions),
+    addTeamMember: (input, executeOptions) => execute('partner.teams.members.add', input, executeOptions),
+    updateTeamMemberRole: (input, executeOptions) => execute('partner.teams.members.role.update', input, executeOptions),
+    removeTeamMember: (input, executeOptions) => execute('partner.teams.members.remove', input, executeOptions),
+    updateSiteTeam: (input, executeOptions) => execute('partner.sites.team.update', input, executeOptions),
+    getTeamCatalog: (input, executeOptions) => execute('partner.teams.catalog.get', input, executeOptions),
+    bindTeamCatalog: (input, executeOptions) => execute('partner.teams.catalog.bind', input, executeOptions),
+    getSiteIntIdCrosswalk: (input, executeOptions) => execute('partner.users.sites.crosswalk.get', input, executeOptions),
+    deleteUser: (input, executeOptions) => execute('partner.users.delete', input, executeOptions),
+    createVerificationToken: (input, executeOptions) => execute('partner.users.verification.token.create', input, executeOptions),
+    addAndVerifySite: (input, executeOptions) => execute('partner.users.sites.verify.create', input, executeOptions),
+    queryCrossSource: (input, executeOptions) => execute('partner.sites.cross.source.query', input, executeOptions),
+    enrichKeywords: (input, executeOptions) => execute('partner.keywords.enrich.query', input, executeOptions),
     queryAnalyticsRows: (input, executeOptions) => execute('analytics.rows.query', input, executeOptions),
     queryAnalyticsReport: (input, executeOptions) => execute('analytics.reports.query', input, executeOptions),
     queryAnalyticsReportDetail: (input, executeOptions) => execute('analytics.reports.detail.query', input, executeOptions),

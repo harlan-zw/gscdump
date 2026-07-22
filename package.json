@@ -16,7 +16,7 @@
     "test": "vitest --run",
     "test:contracts": "pnpm --filter @gscdump/sdk... build && pnpm --filter gscdump exec vitest run test/core/contracts.test.ts test/query/builder.test.ts test/query/metrics.test.ts test/query/plan.test.ts && pnpm --filter @gscdump/contracts exec vitest run test/contracts.test.ts test/v1.test.ts && pnpm --filter @gscdump/contracts typecheck && pnpm --filter @gscdump/sdk exec vitest run test/v1-http.test.ts test/v1-realtime.test.ts && pnpm --filter @gscdump/sdk typecheck",
     "test:e2e": "vitest --run --config tests/e2e/vitest.config.ts",
-    "release": "pnpm build && bumpp --output=CHANGELOG.md packages/*/package.json"
+    "release": "pnpm build && bumpp --output=CHANGELOG.md packages/*/package.json packages/sdk/src/v1/realtime.ts"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev-lint",
