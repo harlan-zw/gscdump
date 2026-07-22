@@ -23,7 +23,7 @@ import { utf8Size } from '../utf8'
 type MaybePromise<T> = T | Promise<T>
 type RealtimeTicketData = RealtimeTicketV1Response['data']
 
-export const GSCDUMP_REALTIME_V1_SDK_VERSION = '1.0.0' as const
+export const GSCDUMP_REALTIME_V1_SDK_VERSION = '1.0.2' as const
 
 export type GscdumpRealtimeV1TransportState
   = | 'idle'

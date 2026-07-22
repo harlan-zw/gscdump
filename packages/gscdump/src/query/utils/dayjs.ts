@@ -1,4 +1,7 @@
-import { format, subDays } from 'date-fns'
+// Subpath imports: the `date-fns` barrel loads ~300 modules (~500ms cold),
+// which every consumer pays at import time (vitest workers, CLI startup).
+import { format } from 'date-fns/format'
+import { subDays } from 'date-fns/subDays'
 
 const PST_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Los_Angeles',

@@ -8,15 +8,15 @@
 
 import type { WindowPreset } from '@gscdump/engine/period'
 import { resolveWindow } from '@gscdump/engine/period'
-import {
-  startOfWeek as dfnsStartOfWeek,
-  endOfMonth,
-  format,
-  startOfMonth,
-  startOfQuarter,
-  subDays,
-  subMonths,
-} from 'date-fns'
+// Subpath imports: the `date-fns` barrel loads ~300 modules (~500ms cold),
+// which every consumer pays at import time (vitest workers, CLI startup).
+import { endOfMonth } from 'date-fns/endOfMonth'
+import { format } from 'date-fns/format'
+import { startOfMonth } from 'date-fns/startOfMonth'
+import { startOfQuarter } from 'date-fns/startOfQuarter'
+import { startOfWeek as dfnsStartOfWeek } from 'date-fns/startOfWeek'
+import { subDays } from 'date-fns/subDays'
+import { subMonths } from 'date-fns/subMonths'
 import { GSC_STABLE_LATENCY_DAYS } from './gsc-constants'
 
 export type RollingPeriod = '7d' | '28d' | '3m' | '6m' | '12m'
