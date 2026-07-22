@@ -15,7 +15,6 @@ changed and why for the v1 release notes.
 | `@gscdump/engine/compaction` | none (zero consumers; the public-only wrapper was deleted while engine compaction remains internal) |
 | `@gscdump/engine-sqlite/r2-manifest-schema` | tables remain on `@gscdump/engine-sqlite` root |
 | `@gscdump/analysis/analyzer` | analyzers via `@gscdump/analysis` root or `/registry` |
-| `@gscdump/analysis/source` | `createCompositeSource`, `createInMemoryQuerySource` on `@gscdump/analysis` root |
 | `@gscdump/analysis/semantic` | none (the Transformers-backed content-gap experiment had no production consumer) |
 
 `@gscdump/engine/vendor/hysnappy` is intentionally kept: `gscdump.com`
@@ -30,6 +29,19 @@ package's emitted `dist` layout (ADR-0012).
 | `@gscdump/engine-sqlite` `EngineConfig` | `SqliteQuerySourceOptions` |
 | `@gscdump/lakehouse/unsafe-raw` `sweepUncommittedOrphans` and sweep types | `@gscdump/lakehouse/maintenance` |
 | `@gscdump/lakehouse/unsafe-raw` `isCommitRateLimited` | `@gscdump/lakehouse/maintenance` |
+| `@gscdump/engine` schema exports | `@gscdump/engine/schema` |
+| `@gscdump/engine` ingest exports | `@gscdump/engine/ingest` |
+| `@gscdump/engine` ingest accumulator exports | `@gscdump/engine/ingest-accumulator` |
+| `@gscdump/engine` planner exports | `@gscdump/engine/planner` |
+| `@gscdump/engine` resolver exports | `@gscdump/engine/resolver` |
+| `@gscdump/engine` rollup exports | `@gscdump/engine/rollups` |
+| `@gscdump/engine` source exports | `@gscdump/engine/source` |
+| `@gscdump/engine` SQL binding exports | `@gscdump/engine/sql` |
+
+Focused utility imports are now available at `@gscdump/engine/entity-keys`,
+`@gscdump/lakehouse/bigint`, `@gscdump/lakehouse/schema`, and
+`@gscdump/analysis/source`. The SDK root remains a compatibility aggregate;
+new code should use its documented domain subpaths.
 
 The SQLite names are a hard rename without deprecated aliases: the factory
 creates an `AnalysisQuerySource`, not a storage engine. The lakehouse move

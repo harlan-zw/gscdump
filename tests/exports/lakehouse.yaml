@@ -18,6 +18,11 @@
   resolveIcebergDataFiles: function
   stringifyBigintSafe: function
   toIcebergDayCount: function
+./bigint:
+  bigintJsonReplacer: function
+  coerceBigIntToNumber: function
+  encodeJsonBigintSafe: function
+  stringifyBigintSafe: function
 ./maintenance:
   isCommitRateLimited: function
   sweepUncommittedOrphans: function
@@ -28,6 +33,8 @@
   enableCatalogMaintenance: function
   selfProvisionCatalog: function
   suppliedCatalog: function
+./schema:
+  DEFAULT_PARTITION_KEY_ENCODING: string
 ./unsafe-raw:
   icebergAppend: function
   icebergAppendRetrying: function

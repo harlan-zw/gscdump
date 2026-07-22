@@ -3,15 +3,20 @@
 import { format } from 'date-fns/format'
 import { subDays } from 'date-fns/subDays'
 
-const PST_FORMATTER = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'America/Los_Angeles',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-})
+let pstFormatter: Intl.DateTimeFormat | undefined
+
+function getPstFormatter(): Intl.DateTimeFormat {
+  pstFormatter ??= new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  return pstFormatter
+}
 
 function pstDateParts(d: Date = new Date()): { year: number, month: number, day: number } {
-  const parts = PST_FORMATTER.formatToParts(d)
+  const parts = getPstFormatter().formatToParts(d)
   const get = (t: string): number => Number(parts.find(p => p.type === t)!.value)
   return { year: get('year'), month: get('month'), day: get('day') }
 }

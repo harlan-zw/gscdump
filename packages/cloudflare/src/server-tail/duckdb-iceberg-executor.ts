@@ -32,7 +32,7 @@
 import type { ArchetypeQuery } from '@gscdump/contracts/archetypes'
 import type { Result } from 'gscdump/result'
 import type { ArchetypeSqlPlan } from './archetype-sql'
-import { bindLiterals } from '@gscdump/engine'
+import { bindLiterals } from '@gscdump/engine/sql'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { buildArchetypeSql, TABLE_PLACEHOLDER } from './archetype-sql'
 

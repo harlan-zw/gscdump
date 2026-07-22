@@ -60,6 +60,8 @@
   isAnalysisError: function
 ./registry:
   defaultAnalyzerRegistry: object
+  ROW_ANALYZERS: object
+  SQL_ANALYZERS: object
 ./report:
   defaultReportRegistry: object
   dryRunReport: function
@@ -68,3 +70,7 @@
   resolveTarget: function
   runReport: function
   runReportResult: function
+./source:
+  createCompositeSource: function
+  createInMemoryQuerySource: function
+  IN_MEMORY_DEFAULT_CAPABILITIES: object

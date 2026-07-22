@@ -17,6 +17,8 @@ export default defineBuildConfig({
       type: 'bundle',
       input: [
         './src/index.ts',
+        './src/bigint.ts',
+        './src/schema.ts',
         './src/maintenance.ts',
         './src/unsafe-raw.ts',
         './src/provisioning/index.ts',

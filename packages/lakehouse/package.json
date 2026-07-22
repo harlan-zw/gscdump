@@ -26,6 +26,16 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     },
+    "./bigint": {
+      "types": "./dist/bigint.d.mts",
+      "import": "./dist/bigint.mjs",
+      "default": "./dist/bigint.mjs"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.mts",
+      "import": "./dist/schema.mjs",
+      "default": "./dist/schema.mjs"
+    },
     "./maintenance": {
       "types": "./dist/maintenance.d.mts",
       "import": "./dist/maintenance.mjs",

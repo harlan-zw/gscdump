@@ -3,7 +3,7 @@
 // per-content-type counts. Backed by the sitemap entity store written by
 // `gscdump entities sitemaps snapshot`.
 
-import { hashUrl } from '@gscdump/engine/entities'
+import { hashUrl } from '@gscdump/engine/entity-keys'
 
 definePageMeta({ key: route => `site-sitemaps:${route.params.id}` })
 

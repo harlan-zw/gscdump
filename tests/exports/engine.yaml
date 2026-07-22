@@ -1,46 +1,23 @@
 .:
-  allTables: function
-  assembleDatesRow: function
-  bindLiterals: function
   coerceRow: function
   coerceRows: function
   collectSpans: function
-  countries: object
   createDuckDBCodec: function
   createDuckDBExecutor: function
-  createIcebergResolverAdapter: function
-  createIngestAccumulator: function
   createInMemorySink: function
-  createParquetResolverAdapter: function
   createQueryProfiler: function
   createR2ManifestStore: function
-  createR2SqlResolverAdapter: function
-  createRowAccumulator: function
-  createSqlQuerySource: function
   createStorageEngine: function
-  currentSchemaVersion: function
-  dates: object
   dayPartition: function
   DEFAULT_SEARCH_TYPE: string
-  dimensionToColumn: function
-  drizzleSchema: object
-  ENGINE_QUERY_CAPABILITIES: object
-  engineErrors: object
-  engineErrorToException: function
-  enumeratePartitions: function
-  FILES_PLACEHOLDER: string
   fixedPolicy: function
-  formatLiteral: function
   getDateWeight: function
   getTablesForTier: function
   getTableTier: function
-  hourly_pages: object
   hourPartition: function
   inferLegacyTier: function
   inferSearchType: function
-  inferTable: function
   inspectionPolicy: function
-  isEngineError: function
   MAX_DAY_BYTES: number
   MAX_GSC_PAGES_R2: number
   MAX_SITEMAP_URLS_PER_SITE: number
@@ -48,24 +25,12 @@
   MIN_COUNTRY_IMPRESSIONS: number
   MIN_SYNC_IMPRESSIONS: number
   objectKey: function
-  page_queries: object
-  pages: object
   parseEnabledSearchTypes: function
-  pgResolverAdapter: object
-  queries: object
-  rebuildDailyFromHourly: function
-  resolveParquetSQL: function
   ROW_LIMIT_R2: number
-  SCHEMAS: object
   sitemapPolicy: object
-  substituteNamedFiles: function
-  TABLE_METADATA: object
   TABLE_TIERS: object
   TABLES_BY_SEARCH_TYPE: object
   TIER_PRIORITY: object
-  toPath: function
-  toSumPosition: function
-  transformGscRow: function
   validateEnabledSearchTypes: function
   validateEnabledSearchTypesResult: function
   WEIGHT_PRIORITY: object
@@ -88,6 +53,7 @@
   createQueryDimStore: function
   createSitemapStore: function
   emptyTypesKey: function
+  hashSortedUrlList: function
   hashUrl: function
   hashUrlList: function
   indexingMetadataIndexKey: function
@@ -106,6 +72,28 @@
   sitemapUrlsDeltaKey: function
   sitemapUrlsIndexKey: function
   sitemapUrlsIndexPrefix: function
+  sitemapUrlsPrefix: function
+./entity-keys:
+  emptyTypesKey: function
+  hashSortedUrlList: function
+  hashUrl: function
+  hashUrlList: function
+  indexingMetadataIndexKey: function
+  inspectionBaseKey: function
+  inspectionEventKey: function
+  inspectionEventsPrefix: function
+  inspectionHistoryPrefix: function
+  inspectionHistoryShardKey: function
+  inspectionIndexKey: function
+  inspectionParquetKey: function
+  queryDimMetaKey: function
+  queryDimParquetKey: function
+  sitemapHistoryKey: function
+  sitemapIndexKey: function
+  sitemapUrlsDeltaKey: function
+  sitemapUrlsIndexKey: function
+  sitemapUrlsIndexPrefix: function
+  sitemapUrlsPrefix: function
 ./errors:
   engineErrors: object
   engineErrorToException: function
@@ -148,6 +136,8 @@
   toPath: function
   toSumPosition: function
   transformGscRow: function
+./ingest-accumulator:
+  createIngestAccumulator: function
 ./node:
   attachParquetIndex: function
   attachSnapshotIndex: function

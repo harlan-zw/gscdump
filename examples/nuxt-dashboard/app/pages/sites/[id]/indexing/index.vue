@@ -4,7 +4,7 @@
 // Both come from entity-store JSON — no DuckDB boot needed.
 
 import type { InspectionRecord } from '@gscdump/engine/entities'
-import { hashUrl } from '@gscdump/engine/entities'
+import { hashUrl } from '@gscdump/engine/entity-keys'
 import { refDebounced } from '@vueuse/core'
 
 definePageMeta({ key: route => `site-indexing:${route.params.id}` })

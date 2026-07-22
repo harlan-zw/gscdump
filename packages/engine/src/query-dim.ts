@@ -12,9 +12,12 @@ import type { TenantCtx } from '@gscdump/contracts'
 import type { Row } from './contracts'
 import type { ColumnDef } from './schema'
 import type { DataSource } from './storage'
-import { encodeJsonBigintSafe } from '@gscdump/lakehouse'
+import { encodeJsonBigintSafe } from '@gscdump/lakehouse/bigint'
 import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { readOptional } from './adapters/read-optional'
+import { queryDimMetaKey, queryDimParquetKey } from './entity-keys'
+
+export { queryDimMetaKey, queryDimParquetKey } from './entity-keys'
 
 export interface QueryDimRecord {
   query: string
@@ -42,20 +45,6 @@ const QUERY_DIM_COLUMNS: readonly ColumnDef[] = [
   { name: 'normalizer_version', type: 'INTEGER', nullable: false },
   { name: 'intent_version', type: 'INTEGER', nullable: false },
 ]
-
-function queryDimPrefix(ctx: TenantCtx): string {
-  return ctx.siteId
-    ? `u_${ctx.userId}/${ctx.siteId}/entities/query_dim`
-    : `u_${ctx.userId}/entities/query_dim`
-}
-
-export function queryDimParquetKey(ctx: TenantCtx): string {
-  return `${queryDimPrefix(ctx)}/index.parquet`
-}
-
-export function queryDimMetaKey(ctx: TenantCtx): string {
-  return `${queryDimPrefix(ctx)}/index.json`
-}
 
 /**
  * Injected derivation. `engine` never imports `@gscdump/analysis`; the host

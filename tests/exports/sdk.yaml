@@ -71,6 +71,92 @@
   WEBHOOK_TIMESTAMP_HEADER: string
   weightedAnonPct: function
   withDefaultSearchType: function
+./analytics:
+  createAnalyticsClient: function
+./analyzers:
+  defineGscAnalyzer: function
+./anonymization:
+  weightedAnonPct: function
+./archetype:
+  archetypeSeamSupportsQuery: function
+  builderStateToArchetype: function
+  extractWireDateRange: function
+./country:
+  countryName: function
+./cwv:
+  CWV_GOOD_CLS: number
+  CWV_GOOD_INP: number
+  CWV_GOOD_LCP: number
+  CWV_POOR_CLS: number
+  CWV_POOR_INP: number
+  CWV_POOR_LCP: number
+  cwvBucket: function
+  siteUrlToHostname: function
+  truncateQuery: function
+./gsc-console-url:
+  gscConsoleUrl: function
+./gsc-constants:
+  GSC_STABLE_LATENCY_DAYS: number
+./gsc-error:
+  classifyGscError: function
+./hosted-query:
+  dataDetailQuery: function
+  dataQuery: function
+  dateRangeOptionsQuery: function
+  DEFAULT_SEARCH_TYPE: string
+  indexingDiagnosticsQuery: function
+  indexingUrlsQuery: function
+  pageTrendQuery: function
+  queryTrendQuery: function
+  searchTypeQuery: function
+  sourceInfoQuery: function
+  tablesQuery: function
+  withDefaultSearchType: function
+./indexing-issues:
+  issueDetails: object
+  issueGroups: object
+  severityOrder: object
+./lifecycle:
+  analyticsStatusToSyncStatus: function
+  findLifecycleSite: function
+  lifecycleSiteToSyncStatus: function
+  lifecycleSiteToUserSite: function
+./partner:
+  createPartnerClient: function
+./partner-errors:
+  PartnerApiError: function
+  partnerErrorToException: function
+  toPartnerError: function
+./period:
+  compareRange: function
+  getGscUnstableCutoffDate: function
+  isCustomPeriod: function
+  parseCustomPeriod: function
+  periodToDateRange: function
+  periodToDays: function
+./period-presets:
+  COMPARE_OPTIONS: object
+  GSC_COLUMN_OPTIONS: object
+  GSC_PERIOD_OPTIONS: object
+  GSC_PERIOD_OPTIONS_LONG: object
+  PERIOD_PRESETS: object
+./rows:
+  coerceRowMetrics: function
+  positionFor: function
+  summarizeDailyRows: function
+./search-console-stage:
+  classifySearchConsoleStage: function
+./site-baseline:
+  derivePeerStanding: function
+  deriveSiteBaseline: function
+  normalizeSiteType: function
+  SITE_TYPE_BASELINE: object
+  siteTypeBaseline: function
+./site-triage:
+  classifyHealthStage: function
+  classifyReachStage: function
+  classifySiteTriage: function
+  reachLivenessRatio: function
 ./v1:
   createGscdumpRealtimeV1Client: function
   createGscdumpV1Client: function
@@ -78,3 +164,21 @@
   GscdumpRealtimeV1Error: function
   GscdumpV1Error: function
   isGscdumpV1Error: function
+./webhook:
+  CANONICAL_WEBHOOK_EVENTS: object
+  createWebhookEnvelope: function
+  generateWebhookDeliveryId: function
+  generateWebhookSecret: function
+  parseWebhookPayload: function
+  parseWebhookPayloadResult: function
+  readWebhookHeaders: function
+  shouldQueueWebhook: function
+  signWebhookPayload: function
+  VALID_WEBHOOK_EVENTS: object
+  verifyWebhookSignature: function
+  WEBHOOK_CONTRACT_VERSION: string
+  WEBHOOK_CONTRACT_VERSION_HEADER: string
+  WEBHOOK_DELIVERY_HEADER: string
+  WEBHOOK_EVENT_HEADER: string
+  WEBHOOK_SIGNATURE_HEADER: string
+  WEBHOOK_TIMESTAMP_HEADER: string

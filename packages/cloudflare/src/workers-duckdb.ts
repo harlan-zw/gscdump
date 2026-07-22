@@ -13,15 +13,13 @@
 //         — not JS row objects — crosses the service binding: columnar, compact,
 //         and ingested by the sibling without a row→column rebuild.
 
-import type {
-  ColumnDef,
-  ParquetCodec,
-  QueryExecutor,
-  Row,
-} from '@gscdump/engine'
+import type { ParquetCodec, QueryExecutor, Row } from '@gscdump/engine'
+import type { ColumnDef } from '@gscdump/engine/schema'
 import type { AnalyticsEnv } from './env'
-import { bindLiterals, coerceRow, SCHEMAS } from '@gscdump/engine'
+import { coerceRow } from '@gscdump/engine'
 import { createHyparquetCodec, decodeParquetToRows } from '@gscdump/engine/hyparquet'
+import { SCHEMAS } from '@gscdump/engine/schema'
+import { bindLiterals } from '@gscdump/engine/sql'
 import { rowsToArrowIPC } from './arrow'
 
 interface RunSQLTableSpec {

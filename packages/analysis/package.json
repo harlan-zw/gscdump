@@ -40,6 +40,11 @@
       "types": "./dist/report/index.d.mts",
       "import": "./dist/report/index.mjs",
       "default": "./dist/report/index.mjs"
+    },
+    "./source": {
+      "types": "./dist/source/index.d.mts",
+      "import": "./dist/source/index.mjs",
+      "default": "./dist/source/index.mjs"
     }
   },
   "main": "./dist/index.mjs",

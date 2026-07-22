@@ -37,8 +37,11 @@ export function stringifyBigintSafe(value: unknown, space?: string | number): st
 }
 
 /** UTF-8 JSON bytes, BigInt-safe — the payload shape for `DataSource.write`. */
+let jsonEncoder: TextEncoder | undefined
+
 export function encodeJsonBigintSafe(value: unknown): Uint8Array {
-  return new TextEncoder().encode(stringifyBigintSafe(value))
+  jsonEncoder ??= new TextEncoder()
+  return jsonEncoder.encode(stringifyBigintSafe(value))
 }
 
 /**

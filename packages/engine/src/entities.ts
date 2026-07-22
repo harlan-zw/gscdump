@@ -10,9 +10,30 @@
 import type { ColumnDef, Row, TenantCtx } from '@gscdump/contracts'
 import type { ScheduleState } from './schedule'
 import type { DataSource } from './storage'
-import { encodeJsonBigintSafe } from '@gscdump/lakehouse'
+import { encodeJsonBigintSafe } from '@gscdump/lakehouse/bigint'
 import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { readOptional } from './adapters/read-optional'
+import {
+  emptyTypesKey,
+  hashSortedUrlList,
+  hashUrl,
+  hashUrlList,
+  indexingMetadataIndexKey,
+  inspectionBaseKey,
+  inspectionEventKey,
+  inspectionEventsPrefix,
+  inspectionHistoryPrefix,
+  inspectionHistoryShardKey,
+  inspectionParquetKey,
+  sitemapHistoryKey,
+  sitemapIndexKey,
+  sitemapUrlsDeltaKey,
+  sitemapUrlsIndexKey,
+  sitemapUrlsIndexPrefix,
+  sitemapUrlsPrefix,
+} from './entity-keys'
+
+export * from './entity-keys'
 
 // The versioned query→canonical(+intent) dimension is an entity store; surface
 // it on the same `@gscdump/engine/entities` subpath.
@@ -97,24 +118,6 @@ async function mapEntityIo<T, R>(items: readonly T[], fn: (item: T, index: numbe
   return results as R[]
 }
 
-export function inspectionIndexKey(ctx: TenantCtx): string {
-  return ctx.siteId
-    ? `u_${ctx.userId}/${ctx.siteId}/entities/inspections/index.json`
-    : `u_${ctx.userId}/entities/inspections/index.json`
-}
-
-export function emptyTypesKey(ctx: TenantCtx): string {
-  return ctx.siteId
-    ? `u_${ctx.userId}/${ctx.siteId}/entities/empty-types.json`
-    : `u_${ctx.userId}/entities/empty-types.json`
-}
-
-export function inspectionParquetKey(ctx: TenantCtx): string {
-  return ctx.siteId
-    ? `u_${ctx.userId}/${ctx.siteId}/entities/inspections/index.parquet`
-    : `u_${ctx.userId}/entities/inspections/index.parquet`
-}
-
 // --- Append-only inspection-event store (the source-of-truth replacing the
 // D1-fed `materialize` sidecar). Writes are immutable per-batch parquet under
 // `events/<YYYY-MM>/<batchId>.parquet` carrying the FULL fidelity column set;
@@ -123,29 +126,6 @@ export function inspectionParquetKey(ctx: TenantCtx): string {
 // dedup newest-wins at query time — mirrors the sitemap-urls delta/compaction
 // shape, just keyed by `urlHash` instead of feedpath. ---
 
-/** Directory prefix holding a tenant's immutable inspection-event parquets. */
-export function inspectionEventsPrefix(ctx: TenantCtx): string {
-  return ctx.siteId
-    ? `u_${ctx.userId}/${ctx.siteId}/entities/inspections/events`
-    : `u_${ctx.userId}/entities/inspections/events`
-}
-
-/**
- * Object key for one immutable inspection-event batch, partitioned by the
- * `YYYY-MM` of the records' `inspectedAt`. The `batchId` is caller-supplied so
- * a job retry re-writes the SAME key (idempotent whole-file overwrite).
- */
-export function inspectionEventKey(ctx: TenantCtx, yearMonth: string, batchId: string): string {
-  return `${inspectionEventsPrefix(ctx)}/${yearMonth}/${batchId}.parquet`
-}
-
-/** Compacted latest-per-url base produced by `compactInspections`. */
-export function inspectionBaseKey(ctx: TenantCtx): string {
-  return ctx.siteId
-    ? `u_${ctx.userId}/${ctx.siteId}/entities/inspections/base.parquet`
-    : `u_${ctx.userId}/entities/inspections/base.parquet`
-}
-
 const INSPECTION_EVENT_KEY_RE = /\/inspections\/events\/\d{4}-\d{2}\/[^/]+\.parquet$/
 
 /**
@@ -153,39 +133,6 @@ const INSPECTION_EVENT_KEY_RE = /\/inspections\/events\/\d{4}-\d{2}\/[^/]+\.parq
  * blob under this prefix; `appendHistory` writes one per call, `loadHistory`
  * lists + concatenates.
  */
-export function inspectionHistoryPrefix(ctx: TenantCtx, yearMonth: string): string {
-  return ctx.siteId
-    ? `u_${ctx.userId}/${ctx.siteId}/entities/inspections/history/${yearMonth}`
-    : `u_${ctx.userId}/entities/inspections/history/${yearMonth}`
-}
-
-export function inspectionHistoryShardKey(ctx: TenantCtx, yearMonth: string, batchId: string): string {
-  return `${inspectionHistoryPrefix(ctx, yearMonth)}/${batchId}.json`
-}
-
-/**
- * Stable URL hash used as the index key. Short, URL-safe, deterministic.
- * Uses a 64-bit FNV-1a; collisions vanishingly unlikely at the scales we
- * care about (≤100k URLs/site).
- */
-export function hashUrl(url: string): string {
-  // FNV-1a 64-bit. We compute via two 32-bit halves to stay portable across
-  // JS runtimes that don't expose BigInt fast paths.
-  let hi = 0x811C9DC5 // initial offset basis (low 32 bits of standard 64-bit)
-  let lo = 0xCBF29CE4 // (canonical 64-bit basis = 0xCBF29CE484222325)
-  for (let i = 0; i < url.length; i++) {
-    const c = url.charCodeAt(i)
-    lo ^= c
-    // Multiply (hi:lo) by 0x100000001b3 — implemented as 32-bit additions.
-    const loMul = Math.imul(lo, 0x000001B3) >>> 0
-    const carry = Math.floor((lo * 0x000001B3) / 0x100000000)
-    const hiMul = (Math.imul(hi, 0x000001B3) + Math.imul(lo, 0x00000001) + carry) >>> 0
-    lo = loMul
-    hi = hiMul
-  }
-  return ((hi >>> 0).toString(16).padStart(8, '0') + (lo >>> 0).toString(16).padStart(8, '0'))
-}
-
 /**
  * Row shape for the inspections parquet sidecar. Caller-side schema for
  * `materialize` — D1 is the source of truth in the 2026-05-19 redesign, so
@@ -615,46 +562,12 @@ export interface SitemapHistoryDoc {
   record: SitemapRecord
 }
 
-export function sitemapIndexKey(ctx: TenantCtx): string {
-  return ctx.siteId
-    ? `u_${ctx.userId}/${ctx.siteId}/entities/sitemaps/index.json`
-    : `u_${ctx.userId}/entities/sitemaps/index.json`
-}
-
-export function sitemapHistoryKey(ctx: TenantCtx, feedpathHash: string, capturedAtMs: number): string {
-  return ctx.siteId
-    ? `u_${ctx.userId}/${ctx.siteId}/entities/sitemaps/history/${feedpathHash}__${capturedAtMs}.json`
-    : `u_${ctx.userId}/entities/sitemaps/history/${feedpathHash}__${capturedAtMs}.json`
-}
-
-function sitemapUrlsPrefix(ctx: TenantCtx): string {
-  return ctx.siteId
-    ? `u_${ctx.userId}/${ctx.siteId}/entities/sitemaps/urls`
-    : `u_${ctx.userId}/entities/sitemaps/urls`
-}
-
 // Compacted URL state is partitioned by feedpath: one small `index.parquet`
 // per sitemap, not one tenant-wide blob. Every sitemap operation (sync, diff,
 // compaction) is scoped to a single feedpath, so storage is keyed the same
 // way — peak memory is bounded by one sitemap's URL count, never the whole
 // site's. The change history lives in the per-feedpath `deltas/` files, which
 // this layout leaves untouched.
-export function sitemapUrlsIndexPrefix(ctx: TenantCtx): string {
-  return `${sitemapUrlsPrefix(ctx)}/by-feed`
-}
-
-export function sitemapUrlsIndexKey(ctx: TenantCtx, feedpathHash: string): string {
-  return `${sitemapUrlsIndexPrefix(ctx)}/${feedpathHash}/index.parquet`
-}
-
-export function sitemapUrlsDeltaKey(
-  ctx: TenantCtx,
-  feedpathHash: string,
-  date: string,
-): string {
-  return `${sitemapUrlsPrefix(ctx)}/deltas/${date}__${feedpathHash}.parquet`
-}
-
 const SITEMAP_URLS_DELTA_PREFIX_RE = /\/urls\/deltas\/(\d{4}-\d{2}-\d{2})__([0-9a-f]+)\.parquet$/
 
 /** Parsed URL entry from a sitemap XML. */
@@ -788,35 +701,6 @@ function urlRecordToRow(r: SitemapUrlRecord): Row {
 
 function isoDate(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10)
-}
-
-/**
- * Hash a URL list for change detection. Sorts then folds via FNV-1a so it's
- * deterministic, locale-free, and cheap on Workers.
- */
-export function hashUrlList(urls: readonly ParsedUrl[]): string {
-  const locs = urls.map(u => u.loc).sort()
-  return hashSortedUrlList(locs)
-}
-
-/** Hash sorted URL strings as though joined by `\n`, without allocating the join. */
-function hashSortedUrlList(locs: readonly string[]): string {
-  let hi = 0x811C9DC5
-  let lo = 0xCBF29CE4
-  for (let locIndex = 0; locIndex < locs.length; locIndex++) {
-    const loc = locs[locIndex]!
-    const length = loc.length + (locIndex < locs.length - 1 ? 1 : 0)
-    for (let i = 0; i < length; i++) {
-      const c = i < loc.length ? loc.charCodeAt(i) : 10
-      lo ^= c
-      const loMul = Math.imul(lo, 0x000001B3) >>> 0
-      const carry = Math.floor((lo * 0x000001B3) / 0x100000000)
-      const hiMul = (Math.imul(hi, 0x000001B3) + Math.imul(lo, 0x00000001) + carry) >>> 0
-      lo = loMul
-      hi = hiMul
-    }
-  }
-  return ((hi >>> 0).toString(16).padStart(8, '0') + (lo >>> 0).toString(16).padStart(8, '0'))
 }
 
 export interface SitemapStore {
@@ -1358,12 +1242,6 @@ export interface IndexingMetadataRecord {
 export interface IndexingMetadataIndex {
   version: 1
   records: Record<string, IndexingMetadataRecord>
-}
-
-export function indexingMetadataIndexKey(ctx: TenantCtx): string {
-  return ctx.siteId
-    ? `u_${ctx.userId}/${ctx.siteId}/entities/indexing/index.json`
-    : `u_${ctx.userId}/entities/indexing/index.json`
 }
 
 export interface IndexingMetadataStore {

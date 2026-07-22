@@ -4,7 +4,7 @@
  *
  * Callers compose their own registry from exported analyzer arrays:
  *
- *   import { ROW_ANALYZERS, SQL_ANALYZERS } from '@gscdump/analysis'
+ *   import { ROW_ANALYZERS, SQL_ANALYZERS } from '@gscdump/analysis/registry'
  *   import { createAnalyzerRegistry } from '@gscdump/engine/analyzer'
  *   const registry = createAnalyzerRegistry({
  *     rows: ROW_ANALYZERS,

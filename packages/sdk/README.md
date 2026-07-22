@@ -34,6 +34,12 @@ The root `createPartnerClient` export remains only for operations still in the
 compatibility inventory. Do not use it for an operation already available from
 `@gscdump/sdk/v1`.
 
+The root is also a compatibility aggregate for the pure helper modules. New
+code should use the focused subpaths, including `period`, `period-presets`,
+`site-triage`, `site-baseline`, `search-console-stage`, `indexing-issues`,
+`analytics`, `partner`, `partner-errors`, `lifecycle`, `webhook`, and
+`gsc-console-url`.
+
 For example, a typed hosted report query is:
 
 ```ts
@@ -97,7 +103,7 @@ signature, and normalize event names. gscdump.com owns webhook production and
 delivery.
 
 ```ts
-import { parseWebhookPayload } from '@gscdump/sdk'
+import { parseWebhookPayload } from '@gscdump/sdk/webhook'
 
 const envelope = await parseWebhookPayload(rawJson, {
   secret: webhookSecret,

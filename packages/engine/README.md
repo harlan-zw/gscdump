@@ -23,15 +23,17 @@ Optional peers (install only what your runtime needs):
 
 | Subpath | Purpose |
 |---|---|
-| `@gscdump/engine` | Barrel: `createStorageEngine`, codec/executor factories, all storage contracts. |
+| `@gscdump/engine` | Storage runtime: `createStorageEngine`, codec/executor factories, storage contracts. |
 | `@gscdump/engine/contracts` | `StorageEngine`, `Row`, `TableName`, `WriteCtx`, `ManifestEntry`, ... |
 | `@gscdump/engine/schema` | `SCHEMAS`, `allTables`, `inferTable`, column metadata. |
 | `@gscdump/engine/planner` | `resolveToSQL`, `enumeratePartitions`, partition planning. |
 | `@gscdump/engine/ingest` | GSC row → storage row helpers (`createRowAccumulator`, `transformGscRow`). |
+| `@gscdump/engine/ingest-accumulator` | Stateful ingest flushing behind injected storage and recovery hooks. |
 | `@gscdump/engine/sql` | SQL literal binding helpers (`bindLiterals`, `formatLiteral`). |
 | `@gscdump/engine/sql-fragments` | Reusable SQL fragments shared across analyzers. |
 | `@gscdump/engine/rollups` | Pre-aggregated rollup contracts + helpers. |
-| `@gscdump/engine/entities` | Entity helpers (sites, tenants, scope keys). |
+| `@gscdump/engine/entities` | Parquet-backed entity stores and their record contracts. |
+| `@gscdump/engine/entity-keys` | Pure entity object-key and URL-hash helpers, with no Parquet runtime. |
 | `@gscdump/engine/resolver` | Dialect-neutral SQL composition: `ResolverAdapter`, `pgResolverAdapter`, `resolveToSQL`. |
 | `@gscdump/engine/scope` | Multi-tenant scope predicates. |
 | `@gscdump/engine/arrow` | Apache Arrow utilities for engine result conversion. |

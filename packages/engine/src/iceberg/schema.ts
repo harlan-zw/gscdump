@@ -43,23 +43,26 @@
 
 import type { ColumnType, TableName } from '@gscdump/contracts'
 import type {
-  IcebergColumn,
-  IcebergColumnType,
   IcebergDataset,
   IcebergDatasetColumnDef,
   IcebergDatasetDef,
+} from '@gscdump/lakehouse'
+import type {
+  IcebergColumn,
+  IcebergColumnType,
   IcebergPartitionField,
   IcebergTableSpec,
   PartitionKeyEncoding,
-} from '@gscdump/lakehouse'
+} from '@gscdump/lakehouse/schema'
 import type { SearchType } from '../storage'
-import { DEFAULT_PARTITION_KEY_ENCODING, defineIcebergDataset } from '@gscdump/lakehouse'
+import { defineIcebergDataset } from '@gscdump/lakehouse'
+import { DEFAULT_PARTITION_KEY_ENCODING } from '@gscdump/lakehouse/schema'
 import { SCHEMAS, TABLE_METADATA } from '../schema'
 
 // Package-internal aliases used by the GSC dataset implementation. They are
 // deliberately not re-exported from `@gscdump/engine/iceberg`; application
 // code imports these generic shapes from `@gscdump/lakehouse`.
-export { DEFAULT_PARTITION_KEY_ENCODING } from '@gscdump/lakehouse'
+export { DEFAULT_PARTITION_KEY_ENCODING } from '@gscdump/lakehouse/schema'
 export type {
   IcebergColumn,
   IcebergColumnType,
@@ -68,7 +71,7 @@ export type {
   IcebergS3Config,
   IcebergTableSpec,
   PartitionKeyEncoding,
-} from '@gscdump/lakehouse'
+} from '@gscdump/lakehouse/schema'
 
 function mapColumnType(t: ColumnType): IcebergColumnType {
   switch (t) {

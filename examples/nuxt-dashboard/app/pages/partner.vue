@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { GscdumpUserSite } from '@gscdump/sdk'
+import type { GscdumpUserSite } from '@gscdump/contracts'
 
 interface PartnerSitesResponse {
   configured: boolean

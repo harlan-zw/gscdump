@@ -1,5 +1,6 @@
-import type { GscdumpUserSite, PartnerFetch } from '@gscdump/sdk'
-import { createPartnerClient } from '@gscdump/sdk'
+import type { GscdumpUserSite } from '@gscdump/contracts'
+import type { PartnerFetch } from '@gscdump/sdk/partner'
+import { createPartnerClient } from '@gscdump/sdk/partner'
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)

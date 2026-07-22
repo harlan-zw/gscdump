@@ -1,6 +1,6 @@
 import type { BuilderState } from 'gscdump/query'
 import { describe, expect, it } from 'vitest'
-import { FILES_PLACEHOLDER, resolveParquetSQL, substituteNamedFiles } from '../src/index'
+import { FILES_PLACEHOLDER, resolveParquetSQL, substituteNamedFiles } from '../src/planner'
 import { resolveToSQL as resolverResolveToSQL, resolveToSQLOptimized } from '../src/resolver/compile'
 import {
   createIcebergResolverAdapter,

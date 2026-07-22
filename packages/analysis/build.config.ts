@@ -4,22 +4,13 @@ export default defineBuildConfig({
   entries: [
     {
       type: 'bundle',
-      input: ['./src/index.ts'],
-    },
-    {
-      type: 'bundle',
-      input: ['./src/default-registry.ts'],
-      outDir: './dist',
-    },
-    {
-      type: 'bundle',
-      input: ['./src/errors.ts'],
-      outDir: './dist',
-    },
-    {
-      type: 'bundle',
-      input: ['./src/report/index.ts'],
-      outDir: './dist',
+      input: [
+        './src/index.ts',
+        './src/default-registry.ts',
+        './src/errors.ts',
+        './src/report/index.ts',
+        './src/source/index.ts',
+      ],
     },
   ],
 })

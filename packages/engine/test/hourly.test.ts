@@ -1,7 +1,8 @@
 import type { Row, WriteCtx } from '../src/index'
 import { describe, expect, it } from 'vitest'
 import { gcOrphansImpl } from '../src/gc'
-import { createStorageEngine, hourPartition, rebuildDailyFromHourly } from '../src/index'
+import { createStorageEngine, hourPartition } from '../src/index'
+import { rebuildDailyFromHourly } from '../src/rollups'
 import {
   createInMemoryDataSource,
   createInMemoryManifestStore,

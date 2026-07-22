@@ -16,7 +16,7 @@ import type {
   TableName,
   WriteResult,
 } from './storage'
-import { encodeJsonBigintSafe } from '@gscdump/lakehouse'
+import { encodeJsonBigintSafe } from '@gscdump/lakehouse/bigint'
 import { coerceRows } from './coerce'
 import { substituteNamedFiles } from './parquet-plan'
 import { dateColumnsFor, SCHEMAS, TABLE_METADATA } from './schema'

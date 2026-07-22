@@ -5,23 +5,9 @@ export type { CompactionThresholds } from './compaction'
 export { createDuckDBCodec, createDuckDBExecutor } from './duckdb'
 export type { DuckDBFactory, DuckDBHandle } from './duckdb'
 export { createStorageEngine, MAX_DAY_BYTES } from './engine'
-// Errors-as-values: typed `EngineError` union + factory + helpers
-export * from './errors'
 // Iceberg backend (schema + catalog + append-sink) lives behind the
 // `@gscdump/engine/iceberg` subpath. Node-only Iceberg writers are on
 // `@gscdump/engine/sink-node`.
-export type { GscApiRow, IngestOptions, RowAccumulator, RowAccumulatorOptions } from './ingest'
-export { assembleDatesRow, createRowAccumulator, toPath, toSumPosition, transformGscRow } from './ingest'
-export type {
-  CreateIngestAccumulatorOptions,
-  FinalizeOptions,
-  FinalizeResult,
-  IngestAccumulator,
-  IngestAccumulatorCtx,
-  IngestAccumulatorEngine,
-  IngestAccumulatorHooks,
-} from './ingest-accumulator'
-export { createIngestAccumulator } from './ingest-accumulator'
 export {
   dayPartition,
   DEFAULT_SEARCH_TYPE,
@@ -30,34 +16,9 @@ export {
   inferSearchType,
   objectKey,
 } from './layout'
-export { enumeratePartitions, FILES_PLACEHOLDER, resolveParquetSQL, substituteNamedFiles } from './planner'
-export type { ResolvedQuery } from './planner'
 export { collectSpans, createQueryProfiler } from './profile'
-export {
-  createIcebergResolverAdapter,
-  createParquetResolverAdapter,
-  createR2SqlResolverAdapter,
-  pgResolverAdapter,
-} from './resolver/pg-adapter'
-export { rebuildDailyFromHourly } from './rollups'
 export type { InspectionVerdict, SchedulePolicy, ScheduleState } from './schedule'
 export { fixedPolicy, inspectionPolicy, sitemapPolicy } from './schedule'
-export {
-  allTables,
-  countries,
-  currentSchemaVersion,
-  dates,
-  dimensionToColumn,
-  drizzleSchema,
-  hourly_pages,
-  inferTable,
-  page_queries,
-  pages,
-  queries,
-  SCHEMAS,
-  TABLE_METADATA,
-} from './schema'
-export type { ColumnDef, ColumnType, DrizzleSchema, TableSchema } from './schema'
 export type {
   Sink,
   SinkCapabilities,
@@ -69,8 +30,6 @@ export type {
 export { createInMemorySink } from './sinks'
 export type { InMemorySink, StoredRow } from './sinks'
 export type { SnapshotIndex } from './snapshot'
-export { createSqlQuerySource, ENGINE_QUERY_CAPABILITIES } from './source'
-export { bindLiterals, formatLiteral } from './sql-bind'
 export type { Grain } from './storage'
 export type {
   CodecCtx,

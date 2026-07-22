@@ -15,6 +15,9 @@ Node.js 22 or newer is required.
 
 - `@gscdump/lakehouse` — connect to a catalog, define datasets, derive table
   specifications, resolve data files, and use bigint-safe serialization.
+- `@gscdump/lakehouse/bigint`: bigint-safe JSON helpers without catalog or
+  Node dependencies.
+- `@gscdump/lakehouse/schema`: lightweight shared schema constants.
 - `@gscdump/lakehouse/maintenance` — stable commit classification and orphan
   cleanup workflows.
 - `@gscdump/lakehouse/provisioning` — adopt, allocate, or provision R2 Data
@@ -25,6 +28,7 @@ Node.js 22 or newer is required.
 
 ```ts
 import { connectIcebergCatalog, listIcebergTables } from '@gscdump/lakehouse'
+import { encodeJsonBigintSafe } from '@gscdump/lakehouse/bigint'
 import { isCommitRateLimited } from '@gscdump/lakehouse/maintenance'
 
 const connection = await connectIcebergCatalog(config)

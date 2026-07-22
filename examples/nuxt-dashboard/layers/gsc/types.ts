@@ -4,7 +4,7 @@
 // TODO: port from nuxtseo.com
 
 import type { ActionSource } from '@gscdump/analysis'
-import type { AnalyticsClient } from '@gscdump/sdk'
+import type { AnalyticsClient } from '@gscdump/sdk/analytics'
 import type { $Fetch } from 'ofetch'
 import type { Component } from 'vue'
 

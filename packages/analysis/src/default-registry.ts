@@ -8,6 +8,9 @@
 import { createAnalyzerRegistry } from '@gscdump/engine/analyzer'
 import { ALL_ANALYZERS } from './analyzer/all'
 
+export { ROW_ANALYZERS } from './analyzer/row-analyzers'
+export { SQL_ANALYZERS } from './sql-analyzers'
+
 export const defaultAnalyzerRegistry = createAnalyzerRegistry({
   defined: ALL_ANALYZERS,
 })

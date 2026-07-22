@@ -8,10 +8,10 @@
 import type { TableName } from '@gscdump/contracts'
 import type { SQL } from 'drizzle-orm'
 import type { ResolverAdapter } from './types'
+import { DEFAULT_PARTITION_KEY_ENCODING } from '@gscdump/lakehouse/schema'
 import { sql } from 'drizzle-orm'
 import { PgDialect, pgTable, varchar } from 'drizzle-orm/pg-core'
 import { drizzleSchema } from '../drizzle-schema'
-import { DEFAULT_PARTITION_KEY_ENCODING } from '../iceberg/schema'
 import { createResolverAdapter } from './adapter'
 
 export type PgTableKey = TableName

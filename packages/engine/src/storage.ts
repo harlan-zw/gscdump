@@ -1,7 +1,7 @@
 import type { Grain, Row, TableName, TenantCtx } from '@gscdump/contracts'
 import type { BuilderState, SearchType } from 'gscdump/query'
 import type { ParquetQueryFilter } from 'hyparquet'
-import { encodeJsonBigintSafe } from '@gscdump/lakehouse'
+import { encodeJsonBigintSafe } from '@gscdump/lakehouse/bigint'
 
 export type { Grain, Row, TableName, TenantCtx } from '@gscdump/contracts'
 export type { SearchType } from 'gscdump/query'

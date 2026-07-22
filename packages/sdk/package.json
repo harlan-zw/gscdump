@@ -26,6 +26,111 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     },
+    "./analytics": {
+      "types": "./dist/analytics-client.d.mts",
+      "import": "./dist/analytics-client.mjs",
+      "default": "./dist/analytics-client.mjs"
+    },
+    "./analyzers": {
+      "types": "./dist/analyzer-defs.d.mts",
+      "import": "./dist/analyzer-defs.mjs",
+      "default": "./dist/analyzer-defs.mjs"
+    },
+    "./anonymization": {
+      "types": "./dist/anonymization.d.mts",
+      "import": "./dist/anonymization.mjs",
+      "default": "./dist/anonymization.mjs"
+    },
+    "./archetype": {
+      "types": "./dist/archetype-compile.d.mts",
+      "import": "./dist/archetype-compile.mjs",
+      "default": "./dist/archetype-compile.mjs"
+    },
+    "./partner": {
+      "types": "./dist/client.d.mts",
+      "import": "./dist/client.mjs",
+      "default": "./dist/client.mjs"
+    },
+    "./country": {
+      "types": "./dist/country-names.d.mts",
+      "import": "./dist/country-names.mjs",
+      "default": "./dist/country-names.mjs"
+    },
+    "./cwv": {
+      "types": "./dist/cwv-thresholds.d.mts",
+      "import": "./dist/cwv-thresholds.mjs",
+      "default": "./dist/cwv-thresholds.mjs"
+    },
+    "./partner-errors": {
+      "types": "./dist/errors.d.mts",
+      "import": "./dist/errors.mjs",
+      "default": "./dist/errors.mjs"
+    },
+    "./gsc-console-url": {
+      "types": "./dist/gsc-console-url.d.mts",
+      "import": "./dist/gsc-console-url.mjs",
+      "default": "./dist/gsc-console-url.mjs"
+    },
+    "./gsc-constants": {
+      "types": "./dist/gsc-constants.d.mts",
+      "import": "./dist/gsc-constants.mjs",
+      "default": "./dist/gsc-constants.mjs"
+    },
+    "./gsc-error": {
+      "types": "./dist/gsc-error.d.mts",
+      "import": "./dist/gsc-error.mjs",
+      "default": "./dist/gsc-error.mjs"
+    },
+    "./period-presets": {
+      "types": "./dist/gsc-period-presets.d.mts",
+      "import": "./dist/gsc-period-presets.mjs",
+      "default": "./dist/gsc-period-presets.mjs"
+    },
+    "./rows": {
+      "types": "./dist/gsc-rows.d.mts",
+      "import": "./dist/gsc-rows.mjs",
+      "default": "./dist/gsc-rows.mjs"
+    },
+    "./hosted-query": {
+      "types": "./dist/hosted-query.d.mts",
+      "import": "./dist/hosted-query.mjs",
+      "default": "./dist/hosted-query.mjs"
+    },
+    "./indexing-issues": {
+      "types": "./dist/indexing-issues.d.mts",
+      "import": "./dist/indexing-issues.mjs",
+      "default": "./dist/indexing-issues.mjs"
+    },
+    "./lifecycle": {
+      "types": "./dist/lifecycle.d.mts",
+      "import": "./dist/lifecycle.mjs",
+      "default": "./dist/lifecycle.mjs"
+    },
+    "./period": {
+      "types": "./dist/period.d.mts",
+      "import": "./dist/period.mjs",
+      "default": "./dist/period.mjs"
+    },
+    "./search-console-stage": {
+      "types": "./dist/search-console-stage.d.mts",
+      "import": "./dist/search-console-stage.mjs",
+      "default": "./dist/search-console-stage.mjs"
+    },
+    "./site-baseline": {
+      "types": "./dist/site-baseline.d.mts",
+      "import": "./dist/site-baseline.mjs",
+      "default": "./dist/site-baseline.mjs"
+    },
+    "./site-triage": {
+      "types": "./dist/site-triage.d.mts",
+      "import": "./dist/site-triage.mjs",
+      "default": "./dist/site-triage.mjs"
+    },
+    "./webhook": {
+      "types": "./dist/webhook.d.mts",
+      "import": "./dist/webhook.mjs",
+      "default": "./dist/webhook.mjs"
+    },
     "./v1": {
       "types": "./dist/v1/index.d.mts",
       "import": "./dist/v1/index.mjs",

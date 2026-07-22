@@ -14,8 +14,7 @@ import {
   encodeRowsToParquet,
   encodeRowsToParquetFlex,
 } from '../src/adapters/hyparquet'
-import { allTables } from '../src/index'
-import { naturalKeyColumns } from '../src/schema'
+import { allTables, naturalKeyColumns } from '../src/schema'
 
 // The codec writes rows in `clusterKey` (dimension-first) order, not input
 // order — so round-trip comparisons must be order-agnostic. Sort both sides

@@ -51,6 +51,11 @@
       "import": "./dist/ingest.mjs",
       "default": "./dist/ingest.mjs"
     },
+    "./ingest-accumulator": {
+      "types": "./dist/ingest-accumulator.d.mts",
+      "import": "./dist/ingest-accumulator.mjs",
+      "default": "./dist/ingest-accumulator.mjs"
+    },
     "./sink-node": {
       "types": "./dist/sink-node.d.mts",
       "import": "./dist/sink-node.mjs",
@@ -70,6 +75,11 @@
       "types": "./dist/entities.d.mts",
       "import": "./dist/entities.mjs",
       "default": "./dist/entities.mjs"
+    },
+    "./entity-keys": {
+      "types": "./dist/entity-keys.d.mts",
+      "import": "./dist/entity-keys.mjs",
+      "default": "./dist/entity-keys.mjs"
     },
     "./rollups": {
       "types": "./dist/rollups.d.mts",

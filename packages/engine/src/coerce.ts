@@ -11,7 +11,7 @@
  */
 
 import type { Row } from '@gscdump/contracts'
-import { coerceBigIntToNumber } from '@gscdump/lakehouse'
+import { coerceBigIntToNumber } from '@gscdump/lakehouse/bigint'
 
 export function coerceRow(row: Row): Row {
   let mutated: Row | null = null

@@ -15,7 +15,8 @@
 //    `nullType()`, which lands as a DuckDB NULL-typed column and breaks every
 //    downstream CAST/comparison the query SQL performs.
 
-import type { ColumnDef, Row } from '@gscdump/engine'
+import type { Row } from '@gscdump/engine'
+import type { ColumnDef } from '@gscdump/engine/schema'
 import { float64, int32, int64, tableFromArrays, tableToIPC, utf8 } from '@uwdata/flechette'
 
 type ArrowType = ReturnType<typeof utf8 | typeof int32 | typeof int64 | typeof float64>
