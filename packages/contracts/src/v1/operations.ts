@@ -22,10 +22,14 @@ import {
   gscdumpAnalysisPresetSchema,
   gscdumpAnalysisResponseSchema,
   gscdumpAvailableSiteSchema,
+  gscdumpCanonicalMismatchesResponseSchema,
   gscdumpDataDetailResponseSchema,
   gscdumpDataResponseSchema,
   gscdumpIndexingDiagnosticsResponseSchema,
   gscdumpIndexingResponseSchema,
+  gscdumpKeywordSparklinesResponseSchema,
+  gscdumpPageTrendResponseSchema,
+  gscdumpQueryTrendResponseSchema,
   gscdumpSitemapChangesResponseSchema,
   gscdumpSitemapsResponseSchema,
   gscdumpSiteRegistrationSchema,
@@ -455,6 +459,77 @@ export function createGscdumpV1Protocol() {
     userId: realtimeSchemas.publicUserId,
     updated: z.boolean(),
     sites: z.array(gscdumpAvailableSiteSchema),
+  }), partnerResponseMeta)
+
+  // ── 1.1.0 promotions (2026-07-22 full train, tranche A) ────────────────────
+  // Response shapes wrap the SAME shared schemas the private handlers already
+  // self-validate against, so promotion cannot drift from the serializers.
+  const calendarDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD')
+  const trendQuery = z.strictObject({
+    startDate: calendarDate,
+    endDate: calendarDate,
+    searchType: searchTypeSchema.optional(),
+    prevStartDate: calendarDate.optional(),
+    prevEndDate: calendarDate.optional(),
+  })
+  const keywordSparklinesRequest = z.strictObject({
+    keywords: z.array(z.string().trim().min(1)).min(1).max(20),
+    startDate: calendarDate,
+    endDate: calendarDate,
+    searchType: searchTypeSchema.optional(),
+  })
+  const indexingInspectRequest = z.strictObject({
+    urls: z.array(z.string().url()).min(1).max(10),
+  })
+  const canonicalMismatchesResponse = defineSuccessResponse(defineResponseObject(gscdumpCanonicalMismatchesResponseSchema.shape), partnerResponseMeta)
+  const keywordSparklinesResponse = defineSuccessResponse(defineResponseObject(gscdumpKeywordSparklinesResponseSchema.shape), partnerResponseMeta)
+  const queryTrendResponse = defineSuccessResponse(defineResponseObject(gscdumpQueryTrendResponseSchema.shape), partnerResponseMeta)
+  const pageTrendResponse = defineSuccessResponse(defineResponseObject(gscdumpPageTrendResponseSchema.shape), partnerResponseMeta)
+  const permissionRecoveryResponse = defineSuccessResponse(defineResponseObject({
+    success: z.boolean(),
+    permissionLevel: z.string().nullable(),
+    jobsQueued: z.number().int().nonnegative(),
+    message: z.string().min(1),
+  }), partnerResponseMeta)
+  // `ParsedIndexingResult` (gscdump/api/inspection.ts): url + nullable-string facts.
+  const inspectionFact = z.string().nullable()
+  const inspectionResult = z.object({
+    url: z.string(),
+    verdict: inspectionFact,
+    coverageState: inspectionFact,
+    indexingState: inspectionFact,
+    robotsTxtState: inspectionFact,
+    pageFetchState: inspectionFact,
+    lastCrawlTime: inspectionFact,
+    crawlingUserAgent: inspectionFact,
+    userCanonical: inspectionFact,
+    googleCanonical: inspectionFact,
+    sitemaps: inspectionFact,
+    referringUrls: inspectionFact,
+    mobileVerdict: inspectionFact,
+    mobileIssues: inspectionFact,
+    richResultsVerdict: inspectionFact,
+    richResultsItems: inspectionFact,
+    ampVerdict: inspectionFact,
+    ampUrl: inspectionFact,
+    ampIndexingState: inspectionFact,
+    ampIndexStatusVerdict: inspectionFact,
+    ampRobotsTxtState: inspectionFact,
+    ampPageFetchState: inspectionFact,
+    ampLastCrawlTime: inspectionFact,
+    ampIssues: inspectionFact,
+    inspectionResultLink: inspectionFact,
+  })
+  const indexingInspectionResponse = defineSuccessResponse(defineResponseObject({
+    siteId: realtimeSchemas.publicSiteId,
+    rateLimit: z.strictObject({
+      reserved: z.number().int().nonnegative(),
+      remaining: z.number().int().nonnegative(),
+      limit: z.number().int().positive(),
+    }),
+    results: z.array(inspectionResult),
+    errors: z.array(z.strictObject({ url: z.string(), error: z.string() })),
+    skipped: z.array(z.strictObject({ url: z.string(), reason: z.enum(['domain_mismatch', 'rate_limited']) })),
   }), partnerResponseMeta)
 
   const responseStreamHead = defineResponseObject({
@@ -1092,6 +1167,243 @@ export function createGscdumpV1Protocol() {
           examples: {
             request: { params: { siteId: 's_01' } },
             response: { data: { deleted: true, siteId: 's_01', siteUrl: 'example.com' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+          },
+        },
+      }),
+      getCanonicalMismatches: defineHttpOperation({
+        id: 'partner.sites.canonical.mismatches.get',
+        method: 'GET',
+        path: '/sites/{siteId}/canonical-mismatches',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: canonicalMismatchesResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.1.0' },
+        docs: {
+          summary: 'List canonical mismatches',
+          description: 'Returns sitemap-scoped URLs whose Google-chosen canonical diverges from the declared canonical, with consolidation targets and trend.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { siteId: 's_01' } },
+            response: {
+              data: { mismatches: [], totalCount: 0, consolidationTargets: [], trend: [], meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      inspectSiteUrls: defineHttpOperation({
+        id: 'partner.sites.indexing.inspect.create',
+        method: 'POST',
+        path: '/sites/{siteId}/indexing/inspect',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: false, retry: 'never', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: indexingInspectRequest,
+        },
+        responses: { 200: indexingInspectionResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }],
+          changes: [{ type: 'site.indexing', idFrom: 'params.siteId' }],
+        },
+        lifecycle: { introduced: '1.1.0' },
+        docs: {
+          summary: 'Inspect URLs on demand',
+          description: 'Runs live URL inspections against the daily per-site quota; URLs outside the site domain and over-quota URLs are reported as skipped. Exhausted quota fails with rate_limited.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { siteId: 's_01' }, body: { urls: ['https://example.com/'] } },
+            response: {
+              data: { siteId: 's_01', rateLimit: { reserved: 1, remaining: 199, limit: 200 }, results: [], errors: [], skipped: [] },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      recoverSitePermission: defineHttpOperation({
+        id: 'partner.sites.permission.recover',
+        method: 'POST',
+        path: '/sites/{siteId}/permission/recover',
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sites:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: permissionRecoveryResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'site.auth', idFrom: 'params.siteId' }],
+          changes: [
+            { type: 'site.auth', idFrom: 'params.siteId' },
+            { type: 'site.lifecycle', idFrom: 'params.siteId' },
+          ],
+        },
+        lifecycle: { introduced: '1.1.0' },
+        docs: {
+          summary: 'Re-check and recover site permission',
+          description: 'Force-rechecks Google Search Console access for a permission-lost site; on recovery resets sync state and queues fresh sync jobs.',
+          tags: ['Sites'],
+          examples: {
+            request: { params: { siteId: 's_01' } },
+            response: {
+              data: { success: true, permissionLevel: 'siteFullUser', jobsQueued: 3, message: 'Permission restored (siteFullUser). Queued 3 sync jobs.' },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      queryKeywordSparklines: defineHttpOperation({
+        id: 'partner.sites.keyword.sparklines.query',
+        method: 'POST',
+        path: '/sites/{siteId}/keyword-sparklines',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: keywordSparklinesRequest,
+        },
+        responses: { 200: keywordSparklinesResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.1.0' },
+        docs: {
+          summary: 'Query keyword sparklines',
+          description: 'Returns per-keyword daily click series for up to 20 keywords over the requested window.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, body: { keywords: ['nuxt seo'], startDate: '2026-06-01', endDate: '2026-06-28' } },
+            response: {
+              data: { sparklines: { 'nuxt seo': [0, 1, 2] } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getQueryTrend: defineHttpOperation({
+        id: 'partner.sites.query.trend.get',
+        method: 'GET',
+        path: '/sites/{siteId}/query-trend',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: trendQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: queryTrendResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.1.0' },
+        docs: {
+          summary: 'Get unique-query trend',
+          description: 'Returns the daily unique-query count series for a window, with an optional previous-period total for comparison.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { startDate: '2026-06-01', endDate: '2026-06-28' } },
+            response: {
+              data: { daily: [], total: 0, meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getPageTrend: defineHttpOperation({
+        id: 'partner.sites.page.trend.get',
+        method: 'GET',
+        path: '/sites/{siteId}/page-trend',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: trendQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: pageTrendResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.1.0' },
+        docs: {
+          summary: 'Get unique-page trend',
+          description: 'Returns the daily unique-page count series for a window, with an optional previous-period total for comparison.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { startDate: '2026-06-01', endDate: '2026-06-28' } },
+            response: {
+              data: { daily: [], total: 0, meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
           },
         },
       }),

@@ -179,6 +179,30 @@ export interface GscdumpV1Client {
     input: GscdumpV1OperationInput<'partner.sites.delete'>,
     options?: GscdumpV1ExecuteOptions,
   ) => Promise<GscdumpV1OperationResponse<'partner.sites.delete'>>
+  getCanonicalMismatches: (
+    input: GscdumpV1OperationInput<'partner.sites.canonical.mismatches.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.canonical.mismatches.get'>>
+  inspectSiteUrls: (
+    input: GscdumpV1OperationInput<'partner.sites.indexing.inspect.create'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.indexing.inspect.create'>>
+  recoverSitePermission: (
+    input: GscdumpV1OperationInput<'partner.sites.permission.recover'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.permission.recover'>>
+  queryKeywordSparklines: (
+    input: GscdumpV1OperationInput<'partner.sites.keyword.sparklines.query'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.keyword.sparklines.query'>>
+  getQueryTrend: (
+    input: GscdumpV1OperationInput<'partner.sites.query.trend.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.query.trend.get'>>
+  getPageTrend: (
+    input: GscdumpV1OperationInput<'partner.sites.page.trend.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.page.trend.get'>>
   queryAnalyticsRows: (
     input: GscdumpV1OperationInput<'analytics.rows.query'>,
     options?: GscdumpV1ExecuteOptions,
@@ -745,6 +769,12 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     getSiteAnalysis: (input, executeOptions) => execute('partner.sites.analysis.get', input, executeOptions),
     getSiteAnalysisBundle: (input, executeOptions) => execute('partner.sites.analysis.bundle.get', input, executeOptions),
     deleteSite: (input, executeOptions) => execute('partner.sites.delete', input, executeOptions),
+    getCanonicalMismatches: (input, executeOptions) => execute('partner.sites.canonical.mismatches.get', input, executeOptions),
+    inspectSiteUrls: (input, executeOptions) => execute('partner.sites.indexing.inspect.create', input, executeOptions),
+    recoverSitePermission: (input, executeOptions) => execute('partner.sites.permission.recover', input, executeOptions),
+    queryKeywordSparklines: (input, executeOptions) => execute('partner.sites.keyword.sparklines.query', input, executeOptions),
+    getQueryTrend: (input, executeOptions) => execute('partner.sites.query.trend.get', input, executeOptions),
+    getPageTrend: (input, executeOptions) => execute('partner.sites.page.trend.get', input, executeOptions),
     queryAnalyticsRows: (input, executeOptions) => execute('analytics.rows.query', input, executeOptions),
     queryAnalyticsReport: (input, executeOptions) => execute('analytics.reports.query', input, executeOptions),
     queryAnalyticsReportDetail: (input, executeOptions) => execute('analytics.reports.detail.query', input, executeOptions),
