@@ -27,12 +27,14 @@ import {
   gscdumpDataResponseSchema,
   gscdumpIndexingDiagnosticsResponseSchema,
   gscdumpIndexingResponseSchema,
+  gscdumpIndexPercentResponseSchema,
   gscdumpKeywordSparklinesResponseSchema,
   gscdumpPageTrendResponseSchema,
   gscdumpQueryTrendResponseSchema,
   gscdumpSitemapChangesResponseSchema,
   gscdumpSitemapsResponseSchema,
   gscdumpSiteRegistrationSchema,
+  gscdumpTopAssociationResponseSchema,
   gscdumpUserRegistrationSchema,
   indexingUrlsResponseSchema,
   registerPartnerSiteSchema,
@@ -531,6 +533,138 @@ export function createGscdumpV1Protocol() {
     errors: z.array(z.strictObject({ url: z.string(), error: z.string() })),
     skipped: z.array(z.strictObject({ url: z.string(), reason: z.enum(['domain_mismatch', 'rate_limited']) })),
   }), partnerResponseMeta)
+
+  // ── 1.2.0 promotions (2026-07-22 full train, tranche B: analysis endpoints) ──
+  // Shapes authored from the private handlers' return statements (the routes'
+  // own zod schemas where they exist: top-association, index-percent).
+  const dateRangeQuery = z.strictObject({
+    startDate: calendarDate,
+    endDate: calendarDate,
+  })
+  const siteDataMeta = z.object({
+    siteUrl: z.string().nullable(),
+    syncStatus: z.string().nullable(),
+  })
+  const contentVelocityResponse = defineSuccessResponse(defineResponseObject({
+    weekly: z.array(z.strictObject({
+      week: z.string(),
+      newKeywords: z.number().int().nonnegative(),
+      totalKeywords: z.number().int().nonnegative(),
+    })),
+    summary: z.strictObject({
+      totalNewKeywords: z.number().int().nonnegative(),
+      avgPerWeek: z.number().nonnegative(),
+      trend: z.enum(['stable', 'accelerating', 'decelerating']),
+    }),
+    meta: siteDataMeta,
+  }), partnerResponseMeta)
+  const ctrOutlier = z.strictObject({
+    query: z.string(),
+    clicks: z.number(),
+    impressions: z.number(),
+    ctr: z.number(),
+    position: z.number(),
+    expectedCtr: z.number(),
+    ctrDiff: z.number(),
+  })
+  const ctrCurveResponse = defineSuccessResponse(defineResponseObject({
+    curve: z.array(z.strictObject({
+      bucket: z.string(),
+      avgCtr: z.number(),
+      medianPosition: z.number(),
+      keywordCount: z.number(),
+      totalClicks: z.number(),
+      totalImpressions: z.number(),
+    })),
+    overperforming: z.array(ctrOutlier),
+    underperforming: z.array(ctrOutlier),
+    meta: siteDataMeta,
+  }), partnerResponseMeta)
+  const darkTrafficResponse = defineSuccessResponse(defineResponseObject({
+    summary: z.strictObject({
+      totalClicks: z.number(),
+      attributedClicks: z.number(),
+      darkClicks: z.number(),
+      darkPercent: z.number(),
+      totalImpressions: z.number(),
+      attributedImpressions: z.number(),
+    }),
+    pages: z.array(z.strictObject({
+      url: z.string(),
+      totalClicks: z.number(),
+      attributedClicks: z.number(),
+      darkClicks: z.number(),
+      darkPercent: z.number(),
+      keywordCount: z.number(),
+    })),
+    meta: siteDataMeta,
+  }), partnerResponseMeta)
+  const deviceGapMetrics = z.strictObject({
+    clicks: z.number(),
+    impressions: z.number(),
+    ctr: z.number(),
+    position: z.number(),
+  })
+  const deviceGapResponse = defineSuccessResponse(defineResponseObject({
+    daily: z.array(z.strictObject({
+      date: z.string(),
+      desktop: deviceGapMetrics,
+      mobile: deviceGapMetrics,
+      gaps: z.strictObject({ ctrGap: z.number(), positionGap: z.number() }),
+    })),
+    summary: z.strictObject({
+      avgCtrGap: z.number(),
+      avgPositionGap: z.number(),
+      ctrGapTrend: z.enum(['stable', 'improving', 'worsening']),
+      positionGapTrend: z.enum(['stable', 'improving', 'worsening']),
+    }).nullable(),
+    meta: siteDataMeta,
+  }), partnerResponseMeta)
+  const keywordBreadthPage = z.strictObject({
+    url: z.string(),
+    keywordCount: z.number(),
+    clicks: z.number(),
+    impressions: z.number(),
+  })
+  const keywordBreadthResponse = defineSuccessResponse(defineResponseObject({
+    distribution: z.array(z.strictObject({ bucket: z.string(), pageCount: z.number() })),
+    fragilePages: z.array(keywordBreadthPage),
+    authorityPages: z.array(keywordBreadthPage),
+    summary: z.strictObject({
+      totalPages: z.number(),
+      avgKeywordsPerPage: z.number(),
+      fragileCount: z.number(),
+      authorityCount: z.number(),
+    }),
+    meta: siteDataMeta,
+  }), partnerResponseMeta)
+  const positionDistributionResponse = defineSuccessResponse(defineResponseObject({
+    distribution: z.array(z.strictObject({
+      date: z.string(),
+      pos_1_3: z.number(),
+      pos_4_10: z.number(),
+      pos_11_20: z.number(),
+      pos_20_plus: z.number(),
+      total: z.number(),
+    })),
+    meta: siteDataMeta,
+  }), partnerResponseMeta)
+  const topAssociationQuery = z.strictObject({
+    type: z.enum(['topPage', 'topKeyword']),
+    identifier: z.string().min(1),
+    startDate: calendarDate,
+    endDate: calendarDate,
+  })
+  const topAssociationResponse = defineSuccessResponse(defineResponseObject(gscdumpTopAssociationResponseSchema.shape), partnerResponseMeta)
+  const indexPercentQuery = z.strictObject({
+    invisibleLimit: z.coerce.number().int().min(1).max(500).optional(),
+    invisibleOffset: z.coerce.number().int().min(0).max(1_000_000).optional(),
+    orphanLimit: z.coerce.number().int().min(1).max(500).optional(),
+  })
+  const indexPercentResponse = defineSuccessResponse(defineResponseObject(gscdumpIndexPercentResponseSchema.shape), partnerResponseMeta)
+  const contentVelocityQuery = z.strictObject({
+    days: z.coerce.number().int().min(1).max(365).optional(),
+  })
 
   const responseStreamHead = defineResponseObject({
     streamId: realtimeSchemas.streamId,
@@ -1402,6 +1536,316 @@ export function createGscdumpV1Protocol() {
             request: { params: { siteId: 's_01' }, query: { startDate: '2026-06-01', endDate: '2026-06-28' } },
             response: {
               data: { daily: [], total: 0, meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getContentVelocity: defineHttpOperation({
+        id: 'partner.sites.content.velocity.get',
+        method: 'GET',
+        path: '/sites/{siteId}/content-velocity',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: contentVelocityQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: contentVelocityResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.2.0' },
+        docs: {
+          summary: 'Get content velocity',
+          description: 'Returns the weekly new-keyword series over the requested window with a summary trend.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { days: 90 } },
+            response: {
+              data: { weekly: [], summary: { totalNewKeywords: 0, avgPerWeek: 0, trend: 'stable' }, meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getCtrCurve: defineHttpOperation({
+        id: 'partner.sites.ctr.curve.get',
+        method: 'GET',
+        path: '/sites/{siteId}/ctr-curve',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: dateRangeQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: ctrCurveResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.2.0' },
+        docs: {
+          summary: 'Get CTR curve and outliers',
+          description: 'Returns the position-bucketed CTR curve plus over/under-performing query outliers for the window.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { startDate: '2026-06-01', endDate: '2026-06-28' } },
+            response: {
+              data: { curve: [], overperforming: [], underperforming: [], meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getDarkTraffic: defineHttpOperation({
+        id: 'partner.sites.dark.traffic.get',
+        method: 'GET',
+        path: '/sites/{siteId}/dark-traffic',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: dateRangeQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: darkTrafficResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.2.0' },
+        docs: {
+          summary: 'Get dark traffic breakdown',
+          description: 'Returns clicks not attributable to any tracked keyword, in total and per page, for the window.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { startDate: '2026-06-01', endDate: '2026-06-28' } },
+            response: {
+              data: { summary: { totalClicks: 0, attributedClicks: 0, darkClicks: 0, darkPercent: 0, totalImpressions: 0, attributedImpressions: 0 }, pages: [], meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getDeviceGap: defineHttpOperation({
+        id: 'partner.sites.device.gap.get',
+        method: 'GET',
+        path: '/sites/{siteId}/device-gap',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: dateRangeQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: deviceGapResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.2.0' },
+        docs: {
+          summary: 'Get desktop/mobile gap',
+          description: 'Returns per-day desktop vs mobile CTR/position metrics with gap trends for the window.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { startDate: '2026-06-01', endDate: '2026-06-28' } },
+            response: {
+              data: { daily: [], summary: null, meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getKeywordBreadth: defineHttpOperation({
+        id: 'partner.sites.keyword.breadth.get',
+        method: 'GET',
+        path: '/sites/{siteId}/keyword-breadth',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: dateRangeQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: keywordBreadthResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.2.0' },
+        docs: {
+          summary: 'Get keyword breadth',
+          description: 'Returns the pages-per-keyword-count distribution with fragile and authority page lists for the window.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { startDate: '2026-06-01', endDate: '2026-06-28' } },
+            response: {
+              data: { distribution: [], fragilePages: [], authorityPages: [], summary: { totalPages: 0, avgKeywordsPerPage: 0, fragileCount: 0, authorityCount: 0 }, meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getPositionDistribution: defineHttpOperation({
+        id: 'partner.sites.position.distribution.get',
+        method: 'GET',
+        path: '/sites/{siteId}/position-distribution',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: dateRangeQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: positionDistributionResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.2.0' },
+        docs: {
+          summary: 'Get position distribution',
+          description: 'Returns the per-day keyword counts bucketed by average position for the window.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { startDate: '2026-06-01', endDate: '2026-06-28' } },
+            response: {
+              data: { distribution: [], meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getTopAssociation: defineHttpOperation({
+        id: 'partner.sites.top.association.get',
+        method: 'GET',
+        path: '/sites/{siteId}/top-association',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: topAssociationQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: topAssociationResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.2.0' },
+        docs: {
+          summary: 'Get top association',
+          description: 'Returns the single best-performing page for a keyword, or keyword for a page, over the window.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { type: 'topKeyword', identifier: '/docs', startDate: '2026-06-01', endDate: '2026-06-28' } },
+            response: {
+              data: { value: null },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getIndexPercent: defineHttpOperation({
+        id: 'partner.sites.index.percent.get',
+        method: 'GET',
+        path: '/sites/{siteId}/index-percent',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: indexPercentQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: indexPercentResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [
+            { type: 'site.indexing', idFrom: 'params.siteId' },
+            { type: 'site.sitemaps', idFrom: 'params.siteId' },
+          ],
+          changes: [],
+        },
+        lifecycle: { introduced: '1.2.0' },
+        docs: {
+          summary: 'Get sitemap index-percent',
+          description: 'Returns the sitemap visibility trend, invisible URLs, orphan pages, and per-sitemap counts.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { invisibleLimit: 100 } },
+            response: {
+              data: { trend: [], invisibleUrls: [], invisibleCount: 0, orphanPages: [], orphanCount: 0, sitemaps: [], summary: { currentPercent: 0, totalSitemapUrls: 0, visibleUrls: 0, change7d: null, change28d: null, dataDate: '2026-06-28' }, meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced', newestDateSynced: null } },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
           },

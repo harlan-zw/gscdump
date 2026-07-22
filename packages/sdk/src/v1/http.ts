@@ -122,9 +122,12 @@ export function isGscdumpV1Error(error: unknown): error is GscdumpV1Error {
 }
 
 export interface GscdumpV1Client {
+  // `NoInfer` keeps TId inference on the operation id alone — inferring it by
+  // reverse-mapping the input against the full operation union trips TS2590
+  // once the registry grows past ~30 operations.
   execute: <TId extends GscdumpV1OperationId>(
     operation: TId,
-    input: GscdumpV1OperationInput<TId>,
+    input: NoInfer<GscdumpV1OperationInput<TId>>,
     options?: GscdumpV1ExecuteOptions,
   ) => Promise<GscdumpV1OperationResponse<TId>>
   getUserLifecycle: (
@@ -203,6 +206,38 @@ export interface GscdumpV1Client {
     input: GscdumpV1OperationInput<'partner.sites.page.trend.get'>,
     options?: GscdumpV1ExecuteOptions,
   ) => Promise<GscdumpV1OperationResponse<'partner.sites.page.trend.get'>>
+  getContentVelocity: (
+    input: GscdumpV1OperationInput<'partner.sites.content.velocity.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.content.velocity.get'>>
+  getCtrCurve: (
+    input: GscdumpV1OperationInput<'partner.sites.ctr.curve.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.ctr.curve.get'>>
+  getDarkTraffic: (
+    input: GscdumpV1OperationInput<'partner.sites.dark.traffic.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.dark.traffic.get'>>
+  getDeviceGap: (
+    input: GscdumpV1OperationInput<'partner.sites.device.gap.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.device.gap.get'>>
+  getKeywordBreadth: (
+    input: GscdumpV1OperationInput<'partner.sites.keyword.breadth.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.keyword.breadth.get'>>
+  getPositionDistribution: (
+    input: GscdumpV1OperationInput<'partner.sites.position.distribution.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.position.distribution.get'>>
+  getTopAssociation: (
+    input: GscdumpV1OperationInput<'partner.sites.top.association.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.top.association.get'>>
+  getIndexPercent: (
+    input: GscdumpV1OperationInput<'partner.sites.index.percent.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.index.percent.get'>>
   queryAnalyticsRows: (
     input: GscdumpV1OperationInput<'analytics.rows.query'>,
     options?: GscdumpV1ExecuteOptions,
@@ -603,11 +638,18 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
   if (typeof fetchImpl !== 'function')
     throw new TypeError('createGscdumpV1Client requires a fetch implementation in this runtime.')
 
-  async function execute<TId extends GscdumpV1OperationId>(
-    operationId: TId,
-    input: GscdumpV1OperationInput<TId>,
+  // Typed facade over an untyped body: the body only needs the operation
+  // descriptor, and keeping the 30+-operation input/response unions out of its
+  // expressions avoids TS2590 (union too complex), which grows with every
+  // promoted operation. The cast is the only place the generic signature and
+  // the erased implementation meet.
+  const execute = (executeUntyped as unknown) as GscdumpV1Client['execute']
+
+  async function executeUntyped(
+    operationId: GscdumpV1OperationId,
+    input: unknown,
     executeOptions: GscdumpV1ExecuteOptions = {},
-  ): Promise<GscdumpV1OperationResponse<TId>> {
+  ): Promise<unknown> {
     const entry = operations.get(operationId)
     if (!entry) {
       throw new GscdumpV1Error({
@@ -691,7 +733,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
       const responseContract = (operation.responses as HttpV1OperationDefinition['responses'])[response.status]
       if (responseContract) {
         try {
-          return responseContract.client.parse(payload) as GscdumpV1OperationResponse<TId>
+          return responseContract.client.parse(payload)
         }
         catch (cause) {
           throw responseValidationError(operation.id, response.status, requestId, cause)
@@ -775,6 +817,14 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     queryKeywordSparklines: (input, executeOptions) => execute('partner.sites.keyword.sparklines.query', input, executeOptions),
     getQueryTrend: (input, executeOptions) => execute('partner.sites.query.trend.get', input, executeOptions),
     getPageTrend: (input, executeOptions) => execute('partner.sites.page.trend.get', input, executeOptions),
+    getContentVelocity: (input, executeOptions) => execute('partner.sites.content.velocity.get', input, executeOptions),
+    getCtrCurve: (input, executeOptions) => execute('partner.sites.ctr.curve.get', input, executeOptions),
+    getDarkTraffic: (input, executeOptions) => execute('partner.sites.dark.traffic.get', input, executeOptions),
+    getDeviceGap: (input, executeOptions) => execute('partner.sites.device.gap.get', input, executeOptions),
+    getKeywordBreadth: (input, executeOptions) => execute('partner.sites.keyword.breadth.get', input, executeOptions),
+    getPositionDistribution: (input, executeOptions) => execute('partner.sites.position.distribution.get', input, executeOptions),
+    getTopAssociation: (input, executeOptions) => execute('partner.sites.top.association.get', input, executeOptions),
+    getIndexPercent: (input, executeOptions) => execute('partner.sites.index.percent.get', input, executeOptions),
     queryAnalyticsRows: (input, executeOptions) => execute('analytics.rows.query', input, executeOptions),
     queryAnalyticsReport: (input, executeOptions) => execute('analytics.reports.query', input, executeOptions),
     queryAnalyticsReportDetail: (input, executeOptions) => execute('analytics.reports.detail.query', input, executeOptions),
