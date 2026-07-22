@@ -2,8 +2,8 @@ import type { FileResolutionResponse, RegisterPartnerSiteParams } from '../src'
 import {
   analyticsRoutes,
   builderStateSchema,
-  gscdumpSyncProgressResponseSchema,
   GSCDUMP_ONBOARDING_CONTRACT_VERSION,
+  gscdumpSyncProgressResponseSchema,
   partnerEndpointSchemas,
   partnerRoutes,
   partnerWebhookEnvelopeSchema,
