@@ -115,6 +115,34 @@ describe('icebergDataset.appendRows', () => {
     expect(call.records[0].word_count).toBe(10)
     expect(typeof call.records[0].word_count).toBe('number')
   })
+
+  // A LONG (int64) column must reach the parquet writer as a bigint — writePlainInt64
+  // throws on a plain number. Guard must NOT down-coerce LONG like INT32/DATE, and
+  // must up-coerce a plain number so number-passing callers work.
+  it('keeps LONG columns as bigint while other numerics stay numbers', async () => {
+    const longDs = defineIcebergDataset({
+      ...DEF,
+      table: 'pages_long',
+      columns: [
+        { name: 'date', type: 'DATE' as const, required: true },
+        { name: 'url', type: 'STRING' as const, required: true },
+        { name: 'word_count', type: 'INT' as const, required: false },
+        { name: 'built_at', type: 'LONG' as const, required: true },
+      ],
+    })
+    await longDs.appendRows(FAKE_CONN as never, [
+      { site_id: 1, date: 100, url: '/', word_count: 10, built_at: 1784730000000 }, // number in
+      { site_id: 1, date: 100, url: '/x', word_count: 20n as unknown as number, built_at: 1784730000001n }, // bigint in
+    ])
+    const call = icebergAppendRetrying.mock.calls[0][0] as { records: Record<string, unknown>[] }
+    for (const rec of call.records) {
+      expect(typeof rec.built_at).toBe('bigint')
+      expect(typeof rec.word_count).toBe('number')
+      expect(typeof rec.date).toBe('number')
+    }
+    expect(call.records.find(r => r.url === '/')!.built_at).toBe(1784730000000n)
+    expect(call.records.find(r => r.url === '/x')!.built_at).toBe(1784730000001n)
+  })
 })
 
 describe('icebergDataset.appendSink — ledger-after-flush ordering', () => {

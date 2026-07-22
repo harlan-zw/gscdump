@@ -333,9 +333,17 @@ function buildRowProcessor(def: IcebergDatasetDef, tableSpec: IcebergTableSpec):
       out[name] = def.dims![name].toPartitionValue(String(row[name]))
     }
     for (const col of def.columns) {
-      // D1 large INTEGER columns arrive as BigInt and fail JSON.stringify inside
-      // icebird's commit path — coerce to number before the row is serialized.
-      out[col.name] = coerceBigIntToNumber(row[col.name])
+      const value = row[col.name]
+      // Schema-type-aware numeric coercion. A LONG (int64) column MUST reach
+      // hyparquet-writer's `writePlainInt64` as a bigint — it throws on a plain
+      // number ("parquet expected bigint value"). D1 delivers int64 as bigint
+      // already; coerce a plain number up so callers passing numbers also work.
+      // Every other column (INT32/DATE day-count, DOUBLE, STRING, BOOLEAN) is
+      // written as a JS number/primitive, and D1's large INTEGER BigInts fail
+      // JSON.stringify in icebird's commit path, so coerce those DOWN.
+      out[col.name] = col.type === 'LONG'
+        ? (typeof value === 'number' ? BigInt(value) : value)
+        : coerceBigIntToNumber(value)
     }
     return out
   }
