@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { defineBuildConfig } from 'obuild/config'
+import { defineBuildConfig } from '../../scripts/build-config'
 
 // Pure-JS `hysnappy` shim. `icebird`'s metadata path pulls in
 // `hyparquet-compressors`, which instantiates a WASM snappy module at import

@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { defineBuildConfig } from 'obuild/config'
+import { defineBuildConfig } from '../../scripts/build-config'
 
 // Pure-JS `hysnappy` shim — see `@gscdump/engine`'s build.config.ts for the
 // full rationale (copied verbatim: `icebird`'s metadata path pulls in

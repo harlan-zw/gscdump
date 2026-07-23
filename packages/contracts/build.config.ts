@@ -1,4 +1,4 @@
-import { defineBuildConfig } from 'obuild/config'
+import { defineBuildConfig } from '../../scripts/build-config'
 
 export default defineBuildConfig({
   entries: [

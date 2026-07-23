@@ -190,9 +190,12 @@ const GSC_TABLE_TO_LOGICAL: Record<keyof typeof schema, TableName | null> = {
 const driftSchema = Object.fromEntries(
   Object.entries(schema).filter(([k]) => GSC_TABLE_TO_LOGICAL[k as keyof typeof schema] !== null),
 )
-assertSchemaInSync({
-  label: 'sqlite',
-  schema: driftSchema,
-  tableKeyToName: key => GSC_TABLE_TO_LOGICAL[key as keyof typeof schema] as TableName,
-  mode: 'superset',
-})
+
+export function assertSqliteSchemaInSync(): void {
+  assertSchemaInSync({
+    label: 'sqlite',
+    schema: driftSchema,
+    tableKeyToName: key => GSC_TABLE_TO_LOGICAL[key as keyof typeof schema] as TableName,
+    mode: 'superset',
+  })
+}

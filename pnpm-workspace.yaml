@@ -79,6 +79,7 @@ catalogs:
   dev-build:
     bumpp: ^12.0.0
     obuild: ^0.4.38
+    rolldown: ^1.1.5
     typescript: ^7.0.2
   dev-lint:
     '@antfu/eslint-config': ^9.1.0

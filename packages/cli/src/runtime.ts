@@ -25,8 +25,13 @@ export interface CreateCliRuntimeOptions {
   stderr?: NodeJS.WriteStream
 }
 
-const runtimeStorage = new AsyncLocalStorage<CliRuntime>()
+let runtimeStorage: AsyncLocalStorage<CliRuntime> | undefined
 let fallbackRuntime: CliRuntime | undefined
+
+function getRuntimeStorage(): AsyncLocalStorage<CliRuntime> {
+  runtimeStorage ??= new AsyncLocalStorage<CliRuntime>()
+  return runtimeStorage
+}
 
 export function createCliRuntime(opts: CreateCliRuntimeOptions = {}): CliRuntime {
   const stderr = opts.stderr ?? process.stderr
@@ -44,7 +49,7 @@ export function createCliRuntime(opts: CreateCliRuntimeOptions = {}): CliRuntime
 }
 
 export function useCliRuntime(): CliRuntime {
-  const active = runtimeStorage.getStore()
+  const active = getRuntimeStorage().getStore()
   if (active)
     return active
   fallbackRuntime ??= createCliRuntime()
@@ -52,5 +57,5 @@ export function useCliRuntime(): CliRuntime {
 }
 
 export function runWithCliRuntime<T>(runtime: CliRuntime, run: () => T): T {
-  return runtimeStorage.run(runtime, run)
+  return getRuntimeStorage().run(runtime, run)
 }

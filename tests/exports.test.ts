@@ -24,8 +24,7 @@ describe('exports-snapshot', async () => {
   )
 
   for (const pkg of packages.filter(pkg => pkg !== null)) {
-    // skip private packages and CLI (bin-only, calls process.exit on import)
-    if (pkg.private || pkg.name === '@gscdump/cli')
+    if (pkg.private)
       continue
     const hasDist = existsSync(join(pkg.path, 'dist', 'index.mjs'))
     it.skipIf(!hasDist)(`${pkg.name}`, async () => {

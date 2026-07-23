@@ -29,6 +29,7 @@
     "gscdump": "workspace:*",
     "js-yaml": "catalog:",
     "obuild": "catalog:dev-build",
+    "rolldown": "catalog:dev-build",
     "typescript": "catalog:dev-build",
     "vitest": "catalog:dev-test",
     "vitest-package-exports": "catalog:"

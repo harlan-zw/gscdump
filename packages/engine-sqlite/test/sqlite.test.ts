@@ -18,6 +18,7 @@ import {
   schema,
   scopeFor,
 } from '../src'
+import { assertSqliteSchemaInSync } from '../src/schema'
 
 interface Captured {
   sql: string
@@ -33,6 +34,10 @@ function stubExecutor(captured: Captured[], rows: unknown[] = []) {
 }
 
 describe('@gscdump/engine-sqlite', () => {
+  it('keeps the SQLite schema aligned without import-time execution', () => {
+    expect(() => assertSqliteSchemaInSync()).not.toThrow()
+  })
+
   it('creates a tenant-bound AnalysisQuerySource', async () => {
     const captured: Captured[] = []
     const source = createSqliteQuerySource({
