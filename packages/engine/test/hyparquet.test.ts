@@ -383,4 +383,10 @@ describe('decodeParquetToRows — pushed-down filter', () => {
     expect(got.map(r => r.loc).sort()).toEqual(['https://x/1', 'https://x/3'])
     for (const r of got) expect(Object.keys(r)).toEqual(['loc'])
   })
+
+  it('decodes a bounded row slice without materialising the complete file', async () => {
+    const bytes = encodeRowsToParquetFlex(rows, { columns: [...columns] })
+    const got = await decodeParquetToRows(bytes, { rowStart: 1, rowEnd: 3 })
+    expect(got).toEqual(rows.slice(1, 3))
+  })
 })

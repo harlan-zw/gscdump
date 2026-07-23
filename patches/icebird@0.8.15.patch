@@ -1,5 +1,5 @@
 diff --git a/src/catalog/rest.js b/src/catalog/rest.js
-index e10caf1..4bd3e8b 100644
+index e10caf14fa830a1e92ccec1710f41fb71d88c979..4bd3e8bf25f7da11a732b8493b89ae9e5606b6de 100644
 --- a/src/catalog/rest.js
 +++ b/src/catalog/rest.js
 @@ -1,4 +1,4 @@
@@ -53,8 +53,18 @@ index e10caf1..4bd3e8b 100644
    })
  }
  
+diff --git a/src/index.js b/src/index.js
+index 2bac90d09cfa5a05243b3cf8d450df2f9e4f3c3a..a177d71fca3a3dc840b8fadfaa3ca3d7dfe8eac6 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,4 +1,4 @@
+-export { IcebergTransactionConflictError, icebergAppend, icebergCreateTable, icebergDelete, icebergDropTable, icebergExpireSnapshots, icebergRewrite, icebergSetRef, icebergTransaction, icebergUpdateSchema } from './write/write.js'
++export { IcebergTransactionConflictError, icebergAppend, icebergAppendBatches, icebergCreateTable, icebergDelete, icebergDropTable, icebergExpireSnapshots, icebergRewrite, icebergSetRef, icebergTransaction, icebergUpdateSchema } from './write/write.js'
+ export { icebergCreate } from './create.js'
+ export { fileCatalog } from './catalog/file.js'
+ export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js'
 diff --git a/src/manifest.js b/src/manifest.js
-index ba5a83e..a6018c2 100644
+index ba5a83e72ab90761f17bdfa1c3e876014f7b77c5..a6018c2d4b64c47c6fb9a597b7148f20fcf84574 100644
 --- a/src/manifest.js
 +++ b/src/manifest.js
 @@ -7,13 +7,21 @@ import { fetchAvroRecords, urlResolver } from './fetch.js'
@@ -217,7 +227,7 @@ index ba5a83e..a6018c2 100644
  
  /**
 diff --git a/src/types.d.ts b/src/types.d.ts
-index daf4cd3..1a338d4 100644
+index daf4cd3b829d2110545c977fa8c347b42a712722..1a338d40c55681960092857dd0c07166f999c167 100644
 --- a/src/types.d.ts
 +++ b/src/types.d.ts
 @@ -177,7 +177,7 @@ interface PartitionStatistics {
@@ -230,7 +240,7 @@ index daf4cd3..1a338d4 100644
    'fields': SortField[]
  }
 diff --git a/src/write/snapshot.js b/src/write/snapshot.js
-index bb0ee43..16606d9 100644
+index bb0ee43057aa18a1764fd7ec0293d8e6c92afa2e..16606d9a6477a9da0640e57def0e8955126e06e5 100644
 --- a/src/write/snapshot.js
 +++ b/src/write/snapshot.js
 @@ -87,8 +87,20 @@ export async function buildSnapshotUpdate({
@@ -266,10 +276,50 @@ index bb0ee43..16606d9 100644
    ]
    if (rowLineage) {
 diff --git a/src/write/stage.js b/src/write/stage.js
-index 176b3d4..0d64114 100644
+index 176b3d40073bdd5ec71714de80f1051e6fb448df..2b7cbb2e395b8c3a27594d6a2b90e54818777bff 100644
 --- a/src/write/stage.js
 +++ b/src/write/stage.js
-@@ -171,7 +171,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
+@@ -51,9 +51,11 @@ import { computeColumnStats } from './stats.js'
+  * @param {Resolver} options.resolver - Resolver with a writer method.
+  * @param {number} [options.sortOrderId] - Sort order id to apply; defaults to
+  *   the table's `default-sort-order-id`.
++ * @param {bigint} [options.snapshotId] - Shared snapshot id for a multi-batch
++ *   append. Omit for the normal one-shot append.
+  * @returns {Promise<PreparedAppend>}
+  */
+-export async function prepareAppend({ tableUrl, metadata, records, resolver, sortOrderId }) {
++export async function prepareAppend({ tableUrl, metadata, records, resolver, sortOrderId, snapshotId }) {
+   if (!tableUrl) throw new Error('tableUrl is required')
+   if (!resolver?.writer) throw new Error('resolver.writer is required')
+   const writerFn = resolver.writer
+@@ -72,7 +74,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
+   // commit, so reusing the id across attempts cannot corrupt anything. The
+   // duplicate-snapshot-id check in applyUpdates (`commit.js`) guards against
+   // colliding with a snapshot that was already committed by some other writer.
+-  const snapshotId = newSnapshotId(metadata)
++  const appendSnapshotId = snapshotId ?? newSnapshotId(metadata)
+   const manifestUuid = uuid4()
+   checkWriteFormat(metadata.properties?.['write.format.default'])
+   const codec = resolveParquetCodec(metadata.properties?.['write.parquet.compression-codec'])
+@@ -125,7 +127,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
+     writer: manifestWriter,
+     schema,
+     partitionSpec,
+-    snapshotId,
++    snapshotId: appendSnapshotId,
+     dataFiles: writtenDataFiles.map(f => f.dataFile),
+     formatVersion,
+   })
+@@ -139,7 +141,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
+   )
+ 
+   return {
+-    snapshotId,
++    snapshotId: appendSnapshotId,
+     manifestUuid,
+     formatVersion,
+     manifestPath,
+@@ -171,7 +173,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
   * @param {Resolver} options.resolver
   * @returns {Promise<StagedUpdate>}
   */
@@ -278,7 +328,7 @@ index 176b3d4..0d64114 100644
    if (!tableUrl) throw new Error('tableUrl is required')
    if (!resolver?.writer) throw new Error('resolver.writer is required')
    const sequenceNumber = BigInt(metadata['last-sequence-number'] ?? 0) + 1n
-@@ -214,6 +214,11 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
+@@ -214,6 +216,11 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
      'total-delete-files': '0',
      'total-position-deletes': '0',
      'total-equality-deletes': '0',
@@ -290,10 +340,108 @@ index 176b3d4..0d64114 100644
    }
    return await buildSnapshotUpdate({
      tableUrl, metadata, resolver,
+@@ -230,6 +237,88 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
+   })
+ }
+ 
++/**
++ * Build one append snapshot from several independently prepared row batches.
++ * Each batch writes its parquet data and data manifest before this call, while
++ * all manifests share one snapshot id. The catalog sees one metadata commit.
++ *
++ * @param {object} options
++ * @param {string} options.tableUrl
++ * @param {TableMetadata} options.metadata
++ * @param {PreparedAppend[]} options.prepared
++ * @param {Resolver} options.resolver
++ * @param {Record<string, string>} [options.snapshotProperties]
++ * @returns {Promise<StagedUpdate>}
++ */
++export async function stageSnapshotForAppendBatches({ tableUrl, metadata, prepared, resolver, snapshotProperties }) {
++  if (!tableUrl) throw new Error('tableUrl is required')
++  if (!resolver?.writer) throw new Error('resolver.writer is required')
++  if (prepared.length === 0) throw new Error('prepared batches must not be empty')
++
++  const first = prepared[0]
++  for (const batch of prepared) {
++    if (batch.snapshotId !== first.snapshotId) throw new Error('prepared batches must share one snapshot id')
++    if (batch.formatVersion !== first.formatVersion) throw new Error('prepared batches must share one format version')
++  }
++
++  const sequenceNumber = BigInt(metadata['last-sequence-number'] ?? 0) + 1n
++  const timestampMs = Date.now()
++  const newManifests = prepared.map(batch => ({
++    manifest_path: batch.manifestPath,
++    manifest_length: batch.manifestLength,
++    partition_spec_id: batch.partitionSpecId,
++    content: /** @type {0} */ (0),
++    sequence_number: sequenceNumber,
++    min_sequence_number: sequenceNumber,
++    added_snapshot_id: first.snapshotId,
++    added_files_count: batch.addedDataFilesCount,
++    existing_files_count: 0,
++    deleted_files_count: 0,
++    added_rows_count: batch.addedRowCount,
++    existing_rows_count: 0n,
++    deleted_rows_count: 0n,
++    partitions: batch.partitions,
++  }))
++
++  const addedDataFilesCount = prepared.reduce((sum, batch) => sum + batch.addedDataFilesCount, 0)
++  const recordsCount = prepared.reduce((sum, batch) => sum + batch.recordsCount, 0)
++  const addedFilesSize = prepared.reduce((sum, batch) => sum + batch.addedFilesSize, 0n)
++  const prevSummary = currentSnapshot(metadata)?.summary
++  const prevTotals = {
++    records: BigInt(prevSummary?.['total-records'] ?? '0'),
++    size: BigInt(prevSummary?.['total-files-size'] ?? '0'),
++    files: BigInt(prevSummary?.['total-data-files'] ?? '0'),
++  }
++  const summary = {
++    operation: 'append',
++    'added-data-files': String(addedDataFilesCount),
++    'added-records': String(recordsCount),
++    'added-files-size': String(addedFilesSize),
++    'changed-partition-count': String(addedDataFilesCount),
++    'total-records': String(prevTotals.records + BigInt(recordsCount)),
++    'total-files-size': String(prevTotals.size + addedFilesSize),
++    'total-data-files': String(prevTotals.files + BigInt(addedDataFilesCount)),
++    'total-delete-files': '0',
++    'total-position-deletes': '0',
++    'total-equality-deletes': '0',
++    ...(snapshotProperties ?? {}),
++  }
++
++  return await buildSnapshotUpdate({
++    tableUrl,
++    metadata,
++    resolver,
++    snapshotId: first.snapshotId,
++    sequenceNumber,
++    manifestUuid: first.manifestUuid,
++    timestampMs,
++    formatVersion: first.formatVersion,
++    newManifests,
++    summary,
++    writtenFiles: [],
++  })
++}
++
+ /**
+  * Bundled prepare + stage. Equivalent to the prior single-call API; left in
+  * place so callers that don't run inside a retry loop (e.g. `icebergTransaction`)
 diff --git a/src/write/write.js b/src/write/write.js
-index 68eeefa..bae4b2f 100644
+index 68eeefa2e65dfd4bfd6493a6a059805ec6b396ec..c9790d480898b167a9154cd9cdf0eb819c631fd1 100644
 --- a/src/write/write.js
 +++ b/src/write/write.js
+@@ -5,7 +5,7 @@ import { loadLatestFileCatalogMetadata } from '../metadata.js'
+ import { applyUpdates, fileCatalogCommit } from './commit.js'
+ import { icebergStageDeletionVector } from './stage-deletion-vector.js'
+ import { icebergStagePositionDelete } from './stage-position-delete.js'
+-import { icebergStageAppend, icebergStageExpireSnapshots, icebergStageSetRef, icebergStageUpdateSchema, prepareAppend, stageSnapshotForAppend } from './stage.js'
++import { icebergStageAppend, icebergStageExpireSnapshots, icebergStageSetRef, icebergStageUpdateSchema, prepareAppend, stageSnapshotForAppend, stageSnapshotForAppendBatches } from './stage.js'
+ import { icebergStageRewrite } from './rewrite.js'
+ 
+ /**
 @@ -34,7 +34,7 @@ const DEFAULT_RETRY = Object.freeze({
   * @param {number} [options.sortOrderId] - Sort order id to apply; defaults to the table default.
   * @returns {Promise<TableMetadata>}
@@ -303,16 +451,75 @@ index 68eeefa..bae4b2f 100644
    const ctx = await loadTable({ catalog, namespace, table, tableUrl, resolver })
    // Spec v3 §"Manifest Inheritance": data and manifest files do NOT need to
    // be rewritten on optimistic-commit retry. Prepare them once outside the
-@@ -55,6 +55,7 @@ export async function icebergAppend({ catalog, namespace, table, tableUrl, resol
+@@ -55,6 +55,56 @@ export async function icebergAppend({ catalog, namespace, table, tableUrl, resol
        metadata: workingCtx.metadata,
        prepared,
        resolver: requireResolver(workingCtx.resolver, 'icebergAppend'),
 +      snapshotProperties,
++    }),
++  })
++}
++
++/**
++ * Append a lazy sequence of bounded row batches as one Iceberg snapshot and
++ * one catalog commit. Data files and manifests are prepared sequentially, so
++ * the caller can release each decoded source chunk before yielding the next.
++ * Optimistic commit retries reuse the prepared files.
++ *
++ * @param {object} options
++ * @param {Catalog} options.catalog
++ * @param {string | string[]} [options.namespace]
++ * @param {string} [options.table]
++ * @param {string} [options.tableUrl]
++ * @param {Resolver} [options.resolver]
++ * @param {Iterable<Record<string, any>[]> | AsyncIterable<Record<string, any>[]>} options.batches
++ * @param {number} [options.sortOrderId]
++ * @param {Record<string, string>} [options.snapshotProperties]
++ * @returns {Promise<TableMetadata>}
++ */
++export async function icebergAppendBatches({ catalog, namespace, table, tableUrl, resolver, batches, sortOrderId, snapshotProperties }) {
++  const ctx = await loadTable({ catalog, namespace, table, tableUrl, resolver })
++  const writer = requireResolver(ctx.resolver, 'icebergAppendBatches')
++  const prepared = []
++  let snapshotId
++  for await (const records of batches) {
++    if (records.length === 0) continue
++    const batch = await prepareAppend({
++      tableUrl: ctx.tableUrl,
++      metadata: ctx.metadata,
++      records,
++      resolver: writer,
++      sortOrderId,
++      snapshotId,
++    })
++    snapshotId ??= batch.snapshotId
++    prepared.push(batch)
++  }
++  if (prepared.length === 0) return ctx.metadata
++
++  return await commitWithRetry({
++    catalog, target: { namespace, table }, ctx,
++    stage: workingCtx => stageSnapshotForAppendBatches({
++      tableUrl: workingCtx.tableUrl,
++      metadata: workingCtx.metadata,
++      prepared,
++      resolver: requireResolver(workingCtx.resolver, 'icebergAppendBatches'),
++      snapshotProperties,
      }),
    })
  }
+diff --git a/types/index.d.ts b/types/index.d.ts
+index 7cfd5378c18f0cef88a1cee7f397095dd75cce76..ff2cb299f03a2dd27a64be65969e447b5c4b893b 100644
+--- a/types/index.d.ts
++++ b/types/index.d.ts
+@@ -1,4 +1,4 @@
+-export { IcebergTransactionConflictError, icebergAppend, icebergCreateTable, icebergDelete, icebergDropTable, icebergExpireSnapshots, icebergRewrite, icebergSetRef, icebergTransaction, icebergUpdateSchema } from './write/write.js';
++export { IcebergTransactionConflictError, icebergAppend, icebergAppendBatches, icebergCreateTable, icebergDelete, icebergDropTable, icebergExpireSnapshots, icebergRewrite, icebergSetRef, icebergTransaction, icebergUpdateSchema } from './write/write.js';
+ export { icebergCreate } from './create.js';
+ export { fileCatalog } from './catalog/file.js';
+ export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js';
 diff --git a/types/manifest.d.ts b/types/manifest.d.ts
-index 22ec9a3..94c49dc 100644
+index 22ec9a36ff4df1f2d60c4ac7e9b4158bdf52df99..94c49dc420b70f09d742afb25524298d51f18cd3 100644
 --- a/types/manifest.d.ts
 +++ b/types/manifest.d.ts
 @@ -1,8 +1,13 @@
@@ -343,8 +550,48 @@ index 22ec9a3..94c49dc 100644
  }): Promise<ManifestList>;
  /**
   * Split manifest entries into data and delete manifests.
+diff --git a/types/write/stage.d.ts b/types/write/stage.d.ts
+index 3f29f9f3c0ab8cc742c4a57c8cc689fdc05d2dd4..b117bb7713ac635b3f54d4773bd480b062123c3a 100644
+--- a/types/write/stage.d.ts
++++ b/types/write/stage.d.ts
+@@ -40,12 +40,13 @@ import type { PreparedAppend, Resolver, Schema, StagedCommit, StagedUpdate, Tabl
+  *   the table's `default-sort-order-id`.
+  * @returns {Promise<PreparedAppend>}
+  */
+-export declare function prepareAppend({ tableUrl, metadata, records, resolver, sortOrderId }: {
++export declare function prepareAppend({ tableUrl, metadata, records, resolver, sortOrderId, snapshotId }: {
+     tableUrl: string;
+     metadata: TableMetadata;
+     records: Record<string, any>[];
+     resolver: Resolver;
+     sortOrderId?: number;
++    snapshotId?: bigint;
+ }): Promise<PreparedAppend>;
+ /**
+  * Build the snapshot, manifest list, and `StagedUpdate` for a previously
+@@ -64,11 +65,19 @@ export declare function prepareAppend({ tableUrl, metadata, records, resolver, s
+  * @param {Resolver} options.resolver
+  * @returns {Promise<StagedUpdate>}
+  */
+-export declare function stageSnapshotForAppend({ tableUrl, metadata, prepared, resolver }: {
++export declare function stageSnapshotForAppend({ tableUrl, metadata, prepared, resolver, snapshotProperties }: {
+     tableUrl: string;
+     metadata: TableMetadata;
+     prepared: PreparedAppend;
+     resolver: Resolver;
++    snapshotProperties?: Record<string, string>;
++}): Promise<StagedUpdate>;
++export declare function stageSnapshotForAppendBatches({ tableUrl, metadata, prepared, resolver, snapshotProperties }: {
++    tableUrl: string;
++    metadata: TableMetadata;
++    prepared: PreparedAppend[];
++    resolver: Resolver;
++    snapshotProperties?: Record<string, string>;
+ }): Promise<StagedUpdate>;
+ /**
+  * Bundled prepare + stage. Equivalent to the prior single-call API; left in
 diff --git a/types/write/write.d.ts b/types/write/write.d.ts
-index 024e66e..e7a7cf5 100644
+index 024e66eaf16e283889afaa4d1ebf9cd5919ec4d5..f3d012c4518f97fefd105ae5a75bd2bbeb3a4ef5 100644
 --- a/types/write/write.d.ts
 +++ b/types/write/write.d.ts
 @@ -13,7 +13,7 @@ import type { Catalog, IcebergTransaction, Lister, PartitionSpec, Resolver, Sche
@@ -356,10 +603,21 @@ index 024e66e..e7a7cf5 100644
      catalog: Catalog;
      namespace?: string | string[];
      table?: string;
-@@ -21,6 +21,7 @@ export declare function icebergAppend({ catalog, namespace, table, tableUrl, res
+@@ -21,6 +21,18 @@ export declare function icebergAppend({ catalog, namespace, table, tableUrl, res
      resolver?: Resolver;
      records: Record<string, any>[];
      sortOrderId?: number;
++    snapshotProperties?: Record<string, string>;
++}): Promise<TableMetadata>;
++/** Append lazy row batches as one snapshot and one catalog commit. */
++export declare function icebergAppendBatches({ catalog, namespace, table, tableUrl, resolver, batches, sortOrderId, snapshotProperties }: {
++    catalog: Catalog;
++    namespace?: string | string[];
++    table?: string;
++    tableUrl?: string;
++    resolver?: Resolver;
++    batches: Iterable<Record<string, any>[]> | AsyncIterable<Record<string, any>[]>;
++    sortOrderId?: number;
 +    snapshotProperties?: Record<string, string>;
  }): Promise<TableMetadata>;
  /**

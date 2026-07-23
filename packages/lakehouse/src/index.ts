@@ -52,6 +52,9 @@ export {
 } from './dataset'
 
 export type {
+  AppendBatchesOptions,
+  AppendBatchesResult,
+  AppendBatchSource,
   AppendCommitOptions,
   AppendResult,
   AppendSink,

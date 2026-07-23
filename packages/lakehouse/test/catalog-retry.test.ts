@@ -8,9 +8,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const icebergAppend = vi.fn(async () => ({}))
+const icebergAppendBatches = vi.fn(async () => ({}))
 const restCatalogLoadTable = vi.fn(async () => ({ metadata: { snapshots: [] as Array<{ summary?: Record<string, string> }> } }))
 vi.mock('icebird', () => ({
   icebergAppend,
+  icebergAppendBatches,
   restCatalogLoadTable,
   icebergCreateTable: vi.fn(),
   icebergDropTable: vi.fn(),
@@ -20,7 +22,7 @@ vi.mock('icebird', () => ({
   s3SignedResolver: vi.fn(),
 }))
 
-const { icebergAppendRetrying } = await import('../src/catalog')
+const { icebergAppendBatchesRetrying, icebergAppendRetrying } = await import('../src/catalog')
 const { isCommitRateLimited } = await import('../src/maintenance')
 
 const APPEND_ARGS = {
@@ -137,5 +139,42 @@ describe('icebergAppendRetrying', () => {
       maxDelayMs: 10_000,
     })
     expect(delays).toEqual([100, 200])
+  })
+})
+
+describe('icebergAppendBatchesRetrying', () => {
+  const batchFactory = vi.fn(() => [[{ url: '/', site_id: 1 }]])
+  const args = {
+    catalog: { type: 'rest' } as never,
+    namespace: 'crawl',
+    table: 'pages',
+    resolver: {} as never,
+    batchFactory,
+  }
+
+  beforeEach(() => {
+    batchFactory.mockClear()
+    icebergAppendBatches.mockReset().mockResolvedValue({})
+    restCatalogLoadTable.mockReset().mockResolvedValue({ metadata: { snapshots: [] } })
+  })
+
+  it('creates a fresh lazy batch source for each 429 retry', async () => {
+    icebergAppendBatches
+      .mockRejectedValueOnce(new Error('429 too many commits to this table'))
+      .mockResolvedValueOnce({})
+    await icebergAppendBatchesRetrying(args, { ...FAST, appendId: 'batch-1' })
+    expect(batchFactory).toHaveBeenCalledTimes(2)
+    expect(icebergAppendBatches).toHaveBeenCalledTimes(2)
+    expect(icebergAppendBatches.mock.calls[0][0].snapshotProperties).toEqual({ 'lakehouse.append-id': 'batch-1' })
+  })
+
+  it('does not replay a batch transaction already recorded in snapshot metadata', async () => {
+    restCatalogLoadTable.mockResolvedValue({
+      metadata: { snapshots: [{ summary: { 'lakehouse.append-id': 'batch-landed' } }] },
+    })
+    const committed = await icebergAppendBatchesRetrying(args, { ...FAST, appendId: 'batch-landed' })
+    expect(committed).toBe(false)
+    expect(batchFactory).not.toHaveBeenCalled()
+    expect(icebergAppendBatches).not.toHaveBeenCalled()
   })
 })

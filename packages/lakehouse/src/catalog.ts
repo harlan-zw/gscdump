@@ -16,6 +16,7 @@ import type { IcebergColumnType, IcebergS3Config } from './schema'
 import {
   cachingResolver,
   icebergAppend,
+  icebergAppendBatches,
   icebergDropTable,
   icebergManifests,
   restCatalogConnect,
@@ -345,6 +346,12 @@ export interface CommitRetryOptions {
   appendId?: string
 }
 
+export type AppendBatchFactory = () => Iterable<Record<string, unknown>[]> | AsyncIterable<Record<string, unknown>[]>
+
+export type IcebergAppendBatchesArgs
+  = Omit<Parameters<typeof icebergAppendBatches>[0], 'batches' | 'snapshotProperties'>
+    & { batchFactory: AppendBatchFactory, snapshotProperties?: Record<string, string> }
+
 const APPEND_ID_SUMMARY_KEY = 'lakehouse.append-id'
 const APPEND_LANDED_SCAN_DEPTH = 25
 
@@ -402,6 +409,50 @@ export async function icebergAppendRetrying(
   }
 }
 
+/**
+ * Lazy multi-file append with the same 429 landed-check contract as
+ * {@link icebergAppendRetrying}. The factory is invoked once per real attempt,
+ * so a retry can re-open bounded source chunks without retaining prior rows.
+ * Returns false when an earlier attempt already committed this append id.
+ */
+export async function icebergAppendBatchesRetrying(
+  args: IcebergAppendBatchesArgs,
+  options: CommitRetryOptions & { appendId: string },
+): Promise<boolean> {
+  const maxAttempts = options.maxAttempts ?? 6
+  const baseDelayMs = options.baseDelayMs ?? 1000
+  const maxDelayMs = options.maxDelayMs ?? 20_000
+  const sleep = options.sleep ?? defaultCommitSleep
+  const random = options.random ?? Math.random
+  const appendId = options.appendId
+  const { batchFactory, ...appendArgs } = args
+  const stampedArgs = {
+    ...appendArgs,
+    snapshotProperties: { ...appendArgs.snapshotProperties, [APPEND_ID_SUMMARY_KEY]: appendId },
+  }
+
+  if (await appendAlreadyLanded(args, appendId))
+    return false
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const err = await icebergAppendBatches({
+      ...stampedArgs,
+      batches: batchFactory(),
+    }).then(() => undefined, (e: unknown) => e)
+    if (err === undefined)
+      return true
+    if (!isCommitRateLimited(err))
+      throw err
+    if (await appendAlreadyLanded(args, appendId))
+      return true
+    if (attempt === maxAttempts - 1)
+      throw err
+    const ceiling = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt)
+    await sleep(Math.floor(random() * ceiling))
+  }
+  return false
+}
+
 /** Content-addressed idempotency token — see `@gscdump/engine`'s original for full rationale. */
 async function deriveAppendId(args: Parameters<typeof icebergAppend>[0]): Promise<string> {
   const records = ((args as { records?: ReadonlyArray<Record<string, unknown>> }).records) ?? []
@@ -416,7 +467,7 @@ async function deriveAppendId(args: Parameters<typeof icebergAppend>[0]): Promis
 
 /** Did the append carrying `appendId` already commit? REST catalogs only. */
 async function appendAlreadyLanded(
-  args: Parameters<typeof icebergAppend>[0],
+  args: { catalog?: { type?: string }, namespace?: string | string[], table?: string },
   appendId: string,
 ): Promise<boolean> {
   const a = args as { catalog?: { type?: string }, namespace?: string | string[], table?: string }

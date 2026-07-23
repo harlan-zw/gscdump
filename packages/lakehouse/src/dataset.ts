@@ -36,6 +36,7 @@ import {
   connectIcebergCatalog,
   ensureIcebergNamespace,
   ICEBERG_TYPE_MAP,
+  icebergAppendBatchesRetrying,
   icebergAppendRetrying,
   resolveIcebergDataFiles,
 } from './catalog'
@@ -249,6 +250,18 @@ export interface AppendResult {
   skipped: number
 }
 
+export type AppendBatchSource = () => Iterable<readonly Record<string, unknown>[]> | AsyncIterable<readonly Record<string, unknown>[]>
+
+export interface AppendBatchesOptions extends AppendCommitOptions {
+  /** Stable across job retries; recorded in snapshot metadata for landed checks. */
+  appendId: string
+}
+
+export interface AppendBatchesResult extends AppendResult {
+  /** False when this append id was already present before the call. */
+  committed: boolean
+}
+
 export interface AppendSinkCloseResult extends AppendResult {
   flushed: boolean
   error?: unknown
@@ -281,6 +294,12 @@ export interface IcebergDataset {
    * date column pre-converted via {@link toIcebergDayCount}.
    */
   appendRows: (conn: IcebergConnection, rows: readonly Record<string, unknown>[], opts?: AppendCommitOptions) => Promise<AppendResult>
+  /**
+   * Lazily process bounded row batches, writing multiple data files into one
+   * append snapshot and one catalog commit. Dedupe keys must be disjoint
+   * across source batches.
+   */
+  appendBatches: (conn: IcebergConnection, source: AppendBatchSource, opts: AppendBatchesOptions) => Promise<AppendBatchesResult>
   /**
    * PURE row processing — the identity INT32 guard, dedupe (identity+dims+
    * naturalKey, last-wins) and cluster pre-sort `appendRows`/`appendSink`
@@ -456,6 +475,34 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     return { accepted: records.length, skipped }
   }
 
+  async function appendBatches(
+    conn: IcebergConnection,
+    source: AppendBatchSource,
+    opts: AppendBatchesOptions,
+  ): Promise<AppendBatchesResult> {
+    let accepted = 0
+    let skipped = 0
+    const batchFactory = async function* (): AsyncGenerator<Record<string, unknown>[]> {
+      accepted = 0
+      skipped = 0
+      for await (const rows of source()) {
+        const prepared = process(rows)
+        accepted += prepared.records.length
+        skipped += prepared.skipped
+        if (prepared.records.length > 0)
+          yield prepared.records
+      }
+    }
+    const committed = await icebergAppendBatchesRetrying({
+      catalog: conn.catalog,
+      namespace: conn.namespace,
+      table: def.table,
+      resolver: conn.resolver,
+      batchFactory,
+    }, { ...opts.commitRetry, appendId: opts.appendId })
+    return { accepted, skipped, committed }
+  }
+
   function appendSink(opts: AppendSinkOptions): AppendSink {
     let buffer: Record<string, unknown>[] = []
     let connection: Promise<IcebergConnection> | undefined
@@ -538,6 +585,7 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     icebergSortOrder: () => sortOrder,
     createTable,
     appendRows,
+    appendBatches,
     prepareRows: process,
     appendSink,
     readerPredicate,

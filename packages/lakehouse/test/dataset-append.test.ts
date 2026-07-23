@@ -12,10 +12,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const connectIcebergCatalog = vi.fn()
 const ensureIcebergNamespace = vi.fn()
 const icebergAppendRetrying = vi.fn()
+const icebergAppendBatchesRetrying = vi.fn()
 
 vi.mock('../src/catalog', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/catalog')>()
-  return { ...actual, connectIcebergCatalog, ensureIcebergNamespace, icebergAppendRetrying }
+  return { ...actual, connectIcebergCatalog, ensureIcebergNamespace, icebergAppendBatchesRetrying, icebergAppendRetrying }
 })
 vi.mock('icebird', () => ({ icebergCreateTable: vi.fn() }))
 
@@ -142,6 +143,44 @@ describe('icebergDataset.appendRows', () => {
     }
     expect(call.records.find(r => r.url === '/')!.built_at).toBe(1784730000000n)
     expect(call.records.find(r => r.url === '/x')!.built_at).toBe(1784730000001n)
+  })
+})
+
+describe('icebergDataset.appendBatches', () => {
+  const ds = defineIcebergDataset(DEF)
+  let consumed: Record<string, unknown>[][]
+
+  beforeEach(() => {
+    consumed = []
+    icebergAppendBatchesRetrying.mockReset().mockImplementation(async (args) => {
+      for await (const batch of args.batchFactory())
+        consumed.push(batch)
+      return true
+    })
+  })
+
+  it('guards each lazy batch and routes them through one catalog commit', async () => {
+    const opened = vi.fn()
+    const source = async function* () {
+      opened()
+      yield [
+        { site_id: 1, date: 100, url: '/b' },
+        { site_id: undefined, date: 100, url: '/bad' },
+      ]
+      yield [{ site_id: 2, date: 100, url: '/a' }]
+    }
+
+    const result = await ds.appendBatches(FAKE_CONN as never, source, { appendId: 'wave-1' })
+    expect(result).toEqual({ accepted: 2, skipped: 1, committed: true })
+    expect(icebergAppendBatchesRetrying).toHaveBeenCalledTimes(1)
+
+    const call = icebergAppendBatchesRetrying.mock.calls[0]!
+    expect(opened).toHaveBeenCalledTimes(1)
+    expect(consumed).toEqual([
+      [{ site_id: 1, date: 100, url: '/b' }],
+      [{ site_id: 2, date: 100, url: '/a' }],
+    ])
+    expect(call[1]).toMatchObject({ appendId: 'wave-1' })
   })
 })
 

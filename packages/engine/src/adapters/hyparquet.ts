@@ -305,6 +305,10 @@ function asyncBufferFromBytes(bytes: Uint8Array): AsyncBuffer {
 }
 
 export interface DecodeParquetOptions {
+  /** First physical row to decode, inclusive. */
+  rowStart?: number
+  /** Last physical row to decode, exclusive. */
+  rowEnd?: number
   /**
    * Row filter pushed down into the parquet reader. hyparquet evaluates this
    * per row group — pruning groups whose column statistics can't match and
@@ -332,6 +336,9 @@ export async function decodeParquetToRows(
     return []
   const rows = await parquetReadObjects({
     file: asyncBufferFromBytes(bytes),
+    ...(opts.rowStart === undefined ? {} : { rowStart: opts.rowStart }),
+    ...(opts.rowEnd === undefined ? {} : { rowEnd: opts.rowEnd }),
+    ...((opts.rowStart !== undefined || opts.rowEnd !== undefined) ? { useOffsetIndex: true } : {}),
     ...(opts.columns ? { columns: [...opts.columns] } : {}),
     // A filter on a high-cardinality `$eq`/`$in` column also benefits from the
     // file's bloom filters (when present): hyparquet skips whole row groups the
