@@ -24,8 +24,8 @@ packages:
   - examples/nuxt-dashboard
 overrides:
   '@eslint/plugin-kit': ^0.7.2
-  '@nuxt/kit': 4.4.4
-  '@nuxt/schema': 4.4.4
+  '@nuxt/kit': 4.5.0
+  '@nuxt/schema': 4.5.0
   '@types/node>undici-types': ^7.0.0
   hono: 4.12.31
   tinyexec: 1.1.2
@@ -38,8 +38,8 @@ catalog:
   '@duckdb/duckdb-wasm': 1.33.1-dev57.0
   '@duckdb/node-api': 1.5.1-r.2
   '@modelcontextprotocol/sdk': ^1.29.0
-  '@nuxt/kit': 4.4.4
-  '@nuxt/schema': 4.4.4
+  '@nuxt/kit': 4.5.0
+  '@nuxt/schema': 4.5.0
   '@nuxt/ui': ^4.10.0
   '@types/node': ^26.1.1
   '@types/proper-lockfile': ^4.1.4
