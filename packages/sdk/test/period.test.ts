@@ -36,6 +36,20 @@ describe('period helpers', () => {
     })
   })
 
+  it('preserves calendar presets across a leap-month boundary', () => {
+    const options = {
+      stableData: false,
+      timezone: 'America/Los_Angeles',
+      now: new Date('2024-03-01T12:00:00Z'),
+    } as const
+
+    expect(periodToDateRange('this-week', options)).toMatchObject({ start: '2024-02-26', end: '2024-02-29' })
+    expect(periodToDateRange('this-month', options)).toMatchObject({ start: '2024-02-01', end: '2024-02-29' })
+    expect(periodToDateRange('last-month', options)).toMatchObject({ start: '2024-01-01', end: '2024-01-31' })
+    expect(periodToDateRange('this-quarter', options)).toMatchObject({ start: '2024-01-01', end: '2024-02-29' })
+    expect(periodToDateRange('this-year', options)).toMatchObject({ start: '2024-01-01', end: '2024-02-29' })
+  })
+
   it('exposes the GSC/Pacific unstable-data cutoff', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-07-19T12:00:00Z'))

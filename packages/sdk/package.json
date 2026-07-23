@@ -156,7 +156,6 @@
     "@gscdump/analysis": "workspace:^",
     "@gscdump/contracts": "workspace:^",
     "@gscdump/engine": "workspace:^",
-    "date-fns": "catalog:deps",
     "gscdump": "workspace:^",
     "ofetch": "catalog:deps",
     "zod": "catalog:"

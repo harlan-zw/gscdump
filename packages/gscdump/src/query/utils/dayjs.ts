@@ -1,7 +1,4 @@
-// Subpath imports: the `date-fns` barrel loads ~300 modules (~500ms cold),
-// which every consumer pays at import time (vitest workers, CLI startup).
-import { format } from 'date-fns/format'
-import { subDays } from 'date-fns/subDays'
+import { addDays } from '../../core/gsc-dates'
 
 let pstFormatter: Intl.DateTimeFormat | undefined
 
@@ -27,6 +24,5 @@ export function currentPstDate(): string {
 }
 
 export function daysAgoPst(n: number): string {
-  const { year, month, day } = pstDateParts()
-  return format(subDays(new Date(year, month - 1, day, 12), n), 'yyyy-MM-dd')
+  return addDays(currentPstDate(), -n)
 }

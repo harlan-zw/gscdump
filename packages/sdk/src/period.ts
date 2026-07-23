@@ -8,15 +8,7 @@
 
 import type { WindowPreset } from '@gscdump/engine/period'
 import { resolveWindow } from '@gscdump/engine/period'
-// Subpath imports: the `date-fns` barrel loads ~300 modules (~500ms cold),
-// which every consumer pays at import time (vitest workers, CLI startup).
-import { endOfMonth } from 'date-fns/endOfMonth'
-import { format } from 'date-fns/format'
-import { startOfMonth } from 'date-fns/startOfMonth'
-import { startOfQuarter } from 'date-fns/startOfQuarter'
-import { startOfWeek as dfnsStartOfWeek } from 'date-fns/startOfWeek'
-import { subDays } from 'date-fns/subDays'
-import { subMonths } from 'date-fns/subMonths'
+import { addDays } from 'gscdump/dates'
 import { GSC_STABLE_LATENCY_DAYS } from './gsc-constants'
 
 export type RollingPeriod = '7d' | '28d' | '3m' | '6m' | '12m'
@@ -65,14 +57,15 @@ export function parseCustomPeriod(p: Period | string): { start: string, end: str
   return { start, end }
 }
 
-function todayInTimezone(timezone = 'America/Los_Angeles', now = new Date()): Date {
-  const date = new Intl.DateTimeFormat('en-CA', {
+function todayInTimezone(timezone = 'America/Los_Angeles', now = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(now)
-  return new Date(`${date}T00:00:00`)
+  }).formatToParts(now)
+  const value = (type: Intl.DateTimeFormatPartTypes): string => parts.find(part => part.type === type)!.value
+  return `${value('year')}-${value('month')}-${value('day')}`
 }
 
 const ROLLING_TO_UPSTREAM: Record<string, WindowPreset> = {
@@ -88,8 +81,23 @@ const CALENDAR_TO_UPSTREAM: Record<string, WindowPreset> = {
   'this-year': 'ytd',
 }
 
-function fmt(d: Date): string {
-  return format(d, 'yyyy-MM-dd')
+function startOfMonth(date: string): string {
+  return `${date.slice(0, 7)}-01`
+}
+
+function endOfMonth(date: string): string {
+  return addDays(startOfMonth(addDays(startOfMonth(date), 32)), -1)
+}
+
+function startOfQuarter(date: string): string {
+  const [year, month] = date.split('-').map(Number) as [number, number]
+  const quarterMonth = Math.floor((month - 1) / 3) * 3 + 1
+  return `${year}-${String(quarterMonth).padStart(2, '0')}-01`
+}
+
+function startOfWeek(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`).getUTCDay()
+  return addDays(date, -((day + 6) % 7))
 }
 
 function buildResultFromIso(start: string, end: string): DateRangeResult {
@@ -133,8 +141,7 @@ export function periodToDateRange(
   }
 
   const today = todayInTimezone(options.timezone, options.now)
-  const end = stableData ? subDays(today, GSC_STABLE_LATENCY_DAYS) : subDays(today, 1)
-  const endIso = fmt(end)
+  const endIso = addDays(today, -(stableData ? GSC_STABLE_LATENCY_DAYS : 1))
 
   const upstreamPreset = ROLLING_TO_UPSTREAM[period] ?? CALENDAR_TO_UPSTREAM[period]
   if (upstreamPreset) {
@@ -142,23 +149,23 @@ export function periodToDateRange(
     return buildResultFromIso(win.start, win.end)
   }
 
-  let start: Date
+  let start: string
   switch (period) {
     case 'this-week':
-      start = dfnsStartOfWeek(end, { weekStartsOn: 1 })
+      start = startOfWeek(endIso)
       break
     case 'last-month': {
-      const prevMonth = subMonths(end, 1)
-      return buildResultFromIso(fmt(startOfMonth(prevMonth)), fmt(endOfMonth(prevMonth)))
+      const previousMonth = addDays(startOfMonth(endIso), -1)
+      return buildResultFromIso(startOfMonth(previousMonth), endOfMonth(previousMonth))
     }
     case 'this-quarter':
-      start = startOfQuarter(end)
+      start = startOfQuarter(endIso)
       break
     default:
-      start = subDays(end, 27)
+      start = addDays(endIso, -27)
   }
 
-  return buildResultFromIso(fmt(start), endIso)
+  return buildResultFromIso(start, endIso)
 }
 
 export function periodToDays(
@@ -187,8 +194,5 @@ export function compareRange(
  * Uses YYYY-MM-DD string math directly to avoid UTC/local timezone shifts.
  */
 export function getGscUnstableCutoffDate(): string {
-  const pstStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
-  const [y, m, d] = pstStr.split('-').map(Number) as [number, number, number]
-  const cutoff = new Date(y, m - 1, d - GSC_STABLE_LATENCY_DAYS)
-  return `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(cutoff.getDate()).padStart(2, '0')}`
+  return addDays(todayInTimezone(), -GSC_STABLE_LATENCY_DAYS)
 }

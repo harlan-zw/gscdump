@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { addDays, generateGscDateRange, getBackfillProgress, getFreshestGscDate, getOldestGscDate } from '../../src/core/gsc-dates'
+import { currentPstDate, daysAgoPst } from '../../src/query/utils/dayjs'
 
 describe('gsc date helpers', () => {
   afterEach(() => {
@@ -26,5 +27,15 @@ describe('gsc date helpers', () => {
 
     expect(progress?.daysSynced).toBe(1)
     expect(progress?.daysAvailable).toBeGreaterThan(1)
+  })
+
+  it('subtracts Pacific calendar days across leap day and daylight saving time', () => {
+    vi.setSystemTime(new Date('2024-03-01T07:30:00Z'))
+    expect(currentPstDate()).toBe('2024-02-29')
+    expect(daysAgoPst(1)).toBe('2024-02-28')
+
+    vi.setSystemTime(new Date('2024-03-11T07:30:00Z'))
+    expect(currentPstDate()).toBe('2024-03-11')
+    expect(daysAgoPst(1)).toBe('2024-03-10')
   })
 })

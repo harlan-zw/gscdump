@@ -33,8 +33,8 @@ patchedDependencies:
   hyparquet-writer@0.16.1: patches/hyparquet-writer@0.16.1.patch
   icebird@0.8.15: patches/icebird@0.8.15.patch
 catalog:
-  '@cloudflare/vitest-pool-workers': ^0.18.6
-  '@cloudflare/workers-types': ^5.20260718.1
+  '@cloudflare/vitest-pool-workers': ^0.18.7
+  '@cloudflare/workers-types': ^5.20260722.1
   '@duckdb/duckdb-wasm': 1.33.1-dev57.0
   '@duckdb/node-api': 1.5.1-r.2
   '@modelcontextprotocol/sdk': ^1.29.0
@@ -54,7 +54,7 @@ catalog:
   hyparquet-writer: ^0.16.1
   icebird: ^0.8.15
   js-yaml: ^5.2.1
-  nuxt: ^4.4.8
+  nuxt: ^4.5.0
   nuxt-use-query: ^1.0.1
   pathe: ^2.0.3
   playwright: ^1.61.1
@@ -65,22 +65,21 @@ catalog:
   unstorage: ^1.17.5
   vitest-package-exports: ^1.2.0
   vue: ^3.5.40
-  wrangler: ^4.112.0
+  wrangler: ^4.113.0
   zod: ^4.4.3
 catalogs:
   deps:
     '@clack/prompts': ^1.7.0
     citty: ^0.2.2
     consola: ^3.4.2
-    date-fns: ^4.4.0
     google-auth-library: ^10.9.0
     ofetch: ^1.5.1
     open: ^11.0.0
     proper-lockfile: ^4.1.2
   dev-build:
-    bumpp: ^11.1.0
+    bumpp: ^12.0.0
     obuild: ^0.4.38
-    typescript: ^6.0.3
+    typescript: ^7.0.2
   dev-lint:
     '@antfu/eslint-config': ^9.1.0
     eslint: ^10.7.0

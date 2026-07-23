@@ -91,7 +91,6 @@
   },
   "dependencies": {
     "@gscdump/contracts": "workspace:^",
-    "date-fns": "catalog:deps",
     "ofetch": "catalog:deps"
   }
 }
