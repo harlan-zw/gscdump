@@ -21,6 +21,18 @@ export interface IcebergS3Config {
 /** Iceberg-native column type. */
 export type IcebergColumnType = 'STRING' | 'INT' | 'LONG' | 'DOUBLE' | 'DATE' | 'BOOLEAN'
 
+/** icebird's lowercase Iceberg primitive types (subset we use). */
+export type IcebergPrimitiveType = 'string' | 'int' | 'long' | 'double' | 'date' | 'boolean'
+
+export const ICEBERG_TYPE_MAP: Record<IcebergColumnType, IcebergPrimitiveType> = {
+  STRING: 'string',
+  INT: 'int',
+  LONG: 'long',
+  DOUBLE: 'double',
+  DATE: 'date',
+  BOOLEAN: 'boolean',
+}
+
 export interface IcebergColumn {
   /** Column name as written into the Iceberg table (snake_case). */
   name: string

@@ -4,7 +4,7 @@ export default defineBuildConfig({
   entries: [
     {
       type: 'bundle',
-      input: ['./src/index.ts', './src/server-tail/index.ts'],
+      input: ['./src/index.ts', './src/inflight-dedupe.ts', './src/server-tail/index.ts'],
     },
   ],
 })

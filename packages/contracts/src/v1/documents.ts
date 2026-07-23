@@ -1,5 +1,5 @@
 import type { ZodTypeAny } from 'zod'
-import type { HttpV1OperationDefinition, HttpV1Surface } from './http'
+import type { HttpV1OperationDefinition, HttpV1Surface } from './http-core'
 import { z } from 'zod'
 import { createGscdumpV1Protocol } from './operations'
 

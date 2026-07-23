@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { GSCDUMP_HTTP_V1_VERSION } from './version'
 
 export const GSCDUMP_REALTIME_PROTOCOL_VERSION = 1 as const
 export const GSCDUMP_REALTIME_SUBPROTOCOL = 'gscdump.v1' as const
@@ -136,6 +137,25 @@ export function createRealtimeV1Schemas() {
   const streamHead = z.strictObject({
     streamId,
     sequence,
+  })
+  const ticketResponseClient = z.looseObject({
+    data: z.looseObject({
+      socketUrl: z.url().refine(value => value.startsWith('wss://'), 'socketUrl must use wss.'),
+      protocol: z.literal(GSCDUMP_REALTIME_SUBPROTOCOL),
+      protocolVersion: z.literal(GSCDUMP_REALTIME_PROTOCOL_VERSION),
+      ticket: z.string().max(GSCDUMP_REALTIME_TICKET_POLICY.maxBytes).regex(/^gscdump\.ticket\.v1\.[\w-]+\.[\w-]+$/),
+      expiresAt: z.iso.datetime(),
+      head: z.looseObject({
+        streamId,
+        sequence,
+      }),
+      maxConnectionSeconds: z.literal(GSCDUMP_REALTIME_MAX_CONNECTION_SECONDS),
+    }),
+    meta: z.looseObject({
+      requestId: publicRequestId,
+      surface: z.literal('realtime'),
+      version: z.literal(GSCDUMP_HTTP_V1_VERSION),
+    }),
   })
 
   const ticketRequest = z.strictObject({
@@ -401,6 +421,7 @@ export function createRealtimeV1Schemas() {
     streamId,
     cursor,
     streamHead,
+    ticketResponseClient,
     ticketRequest,
     ticketClaims,
     knownResourceType,
@@ -434,6 +455,7 @@ export type RealtimeV1Schemas = ReturnType<typeof createRealtimeV1Schemas>
 export type RealtimeV1StreamId = z.infer<RealtimeV1Schemas['streamId']>
 export type RealtimeV1Cursor = z.infer<RealtimeV1Schemas['cursor']>
 export type RealtimeV1StreamHead = z.infer<RealtimeV1Schemas['streamHead']>
+export type RealtimeTicketV1Response = z.infer<RealtimeV1Schemas['ticketResponseClient']>
 export type RealtimeV1TicketRequest = z.infer<RealtimeV1Schemas['ticketRequest']>
 export type RealtimeV1TicketClaims = z.infer<RealtimeV1Schemas['ticketClaims']>
 export type RealtimeV1ResourceChange = z.infer<RealtimeV1Schemas['resourceChange']>

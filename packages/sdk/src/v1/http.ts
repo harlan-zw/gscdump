@@ -1,13 +1,11 @@
 import type {
+  buildHttpOperationPath,
+  createGscdumpV1Protocol,
   GscdumpV1ErrorEnvelope,
   HttpV1OperationDefinition,
   HttpV1Surface,
-} from '@gscdump/contracts/v1'
+} from '@gscdump/contracts/v1/http'
 import type { z, ZodTypeAny } from 'zod'
-import {
-  buildHttpOperationPath,
-  createGscdumpV1Protocol,
-} from '@gscdump/contracts/v1'
 
 type MaybePromise<T> = T | Promise<T>
 type ValueOf<T> = T[keyof T]
@@ -462,6 +460,7 @@ function parseLocation(
 }
 
 function prepareRequest(
+  buildOperationPath: typeof buildHttpOperationPath,
   surface: HttpV1Surface,
   operation: HttpV1OperationDefinition,
   input: Record<string, unknown>,
@@ -470,13 +469,13 @@ function prepareRequest(
   let path: string
   if (operation.request.params === null) {
     assertAbsentLocation(operation.id, 'params', input.params)
-    path = buildHttpOperationPath(surface, operation)
+    path = buildOperationPath(surface, operation)
   }
   else {
     try {
-      // buildHttpOperationPath performs the one strict params parse and then
+      // buildOperationPath performs the one strict params parse and then
       // serializes that parsed output into the template.
-      path = buildHttpOperationPath(surface, operation, input.params)
+      path = buildOperationPath(surface, operation, input.params)
     }
     catch (cause) {
       throw requestValidationError(operation.id, 'params', cause)
@@ -701,14 +700,31 @@ function operationLookup(protocol: GscdumpV1ProtocolShape): Map<GscdumpV1Operati
 
 /** Create one framework-neutral client whose behavior is driven by the v1 registry. */
 export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): GscdumpV1Client {
-  const protocol = createGscdumpV1Protocol()
-  const operations = operationLookup(protocol)
   const retryOptions = resolveRetryOptions(options.retry)
   const apiRoot = options.apiRoot ?? DEFAULT_API_ROOT
   const fetchImpl = options.fetch ?? globalThis.fetch
+  let runtimePromise: Promise<{
+    buildOperationPath: typeof buildHttpOperationPath
+    operations: ReturnType<typeof operationLookup>
+    protocol: GscdumpV1ProtocolShape
+  }> | undefined
 
   if (typeof fetchImpl !== 'function')
     throw new TypeError('createGscdumpV1Client requires a fetch implementation in this runtime.')
+
+  function getRuntime() {
+    return runtimePromise ??= import('@gscdump/contracts/v1/http').then(({
+      buildHttpOperationPath: buildOperationPath,
+      createGscdumpV1Protocol,
+    }) => {
+      const protocol = createGscdumpV1Protocol()
+      return {
+        buildOperationPath,
+        operations: operationLookup(protocol),
+        protocol,
+      }
+    })
+  }
 
   // Typed facade over an untyped body: the body only needs the operation
   // descriptor, and keeping the 30+-operation input/response unions out of its
@@ -722,6 +738,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     input: unknown,
     executeOptions: GscdumpV1ExecuteOptions = {},
   ): Promise<unknown> {
+    const { buildOperationPath, operations, protocol } = await getRuntime()
     const entry = operations.get(operationId)
     if (!entry) {
       throw new GscdumpV1Error({
@@ -735,6 +752,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     if (typeof input !== 'object' || input === null || Array.isArray(input))
       throw requestValidationError(operation.id, 'input', new TypeError('input must be an object.'))
     const prepared = prepareRequest(
+      buildOperationPath,
       surface,
       operation,
       input as Record<string, unknown>,

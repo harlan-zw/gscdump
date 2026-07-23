@@ -12,12 +12,22 @@ import { defineBuildConfig } from '../../scripts/build-config'
 const hysnappyShim = fileURLToPath(new URL('./src/vendor/hysnappy-purejs.ts', import.meta.url))
 
 export default defineBuildConfig({
+  hooks: {
+    rolldownOutput(output) {
+      output.sanitizeFileName = (name) => {
+        const nodeModules = name.indexOf('node_modules/')
+        return nodeModules === -1 ? name : name.slice(nodeModules)
+      }
+    },
+  },
   entries: [
     {
       type: 'bundle',
       input: [
         './src/index.ts',
         './src/bigint.ts',
+        './src/dataset.ts',
+        './src/date.ts',
         './src/schema.ts',
         './src/maintenance.ts',
         './src/unsafe-raw.ts',

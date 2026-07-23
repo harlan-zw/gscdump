@@ -11,17 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const restCatalogLoadTable = vi.fn()
 const icebergManifests = vi.fn()
 
-vi.mock('icebird', () => ({
-  icebergAppend: vi.fn(),
-  icebergCreateTable: vi.fn(),
-  icebergDropTable: vi.fn(),
-  icebergManifests,
-  restCatalogConnect: vi.fn(),
-  restCatalogCreateNamespace: vi.fn(),
-  restCatalogListTables: vi.fn(),
-  restCatalogLoadTable,
-  s3SignedResolver: vi.fn(),
-}))
+vi.mock('icebird/src/catalog/rest.js', () => ({ restCatalogConnect: vi.fn(), restCatalogCreateNamespace: vi.fn(), restCatalogListTables: vi.fn(), restCatalogLoadTable }))
+vi.mock('icebird/src/manifest.js', () => ({ icebergManifests }))
 
 const { resolveIcebergDataFiles } = await import('../src/catalog')
 

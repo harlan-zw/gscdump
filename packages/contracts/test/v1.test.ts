@@ -16,6 +16,7 @@ import {
   REALTIME_V1_EVENT_SEMANTICS,
   serializeContractDocument,
 } from '@gscdump/contracts/v1'
+import { createRealtimeV1Schemas } from '@gscdump/contracts/v1/realtime'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { z } from 'zod'
 
@@ -350,6 +351,7 @@ describe('@gscdump/contracts/v1 HTTP registry', () => {
     }
     expect(protocol.schemas.ticketResponse.producer.safeParse(additiveTicket).success).toBe(false)
     expect(protocol.schemas.ticketResponse.client.parse(additiveTicket)).toMatchObject(additiveTicket)
+    expect(createRealtimeV1Schemas().ticketResponseClient.parse(additiveTicket)).toMatchObject(additiveTicket)
   })
 
   it('uses one strict producer and additive client error envelope', () => {

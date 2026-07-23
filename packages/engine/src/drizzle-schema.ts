@@ -28,7 +28,11 @@
 
 import type { TableName } from '@gscdump/contracts'
 
-import { date, doublePrecision, integer, pgTable, varchar } from 'drizzle-orm/pg-core'
+import { date } from 'drizzle-orm/pg-core/columns/date'
+import { doublePrecision } from 'drizzle-orm/pg-core/columns/double-precision'
+import { integer } from 'drizzle-orm/pg-core/columns/integer'
+import { varchar } from 'drizzle-orm/pg-core/columns/varchar'
+import { pgTable } from 'drizzle-orm/pg-core/table'
 
 function metricCols(): {
   clicks: ReturnType<ReturnType<typeof integer>['notNull']>

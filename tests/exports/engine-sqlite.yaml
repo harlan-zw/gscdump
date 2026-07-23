@@ -32,3 +32,8 @@
   scopeFor: function
   sql: function
   sqliteResolverAdapter: object
+./resolver:
+  createSqliteResolverAdapter: function
+  createSqliteResolverAdapterFromExecutor: function
+  probeSqliteRegex: function
+  sqliteResolverAdapter: object

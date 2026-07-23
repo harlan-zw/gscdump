@@ -45,6 +45,31 @@
       "types": "./dist/v1/index.d.mts",
       "import": "./dist/v1/index.mjs",
       "default": "./dist/v1/index.mjs"
+    },
+    "./v1/browser": {
+      "types": "./dist/v1/browser.d.mts",
+      "import": "./dist/v1/browser.mjs",
+      "default": "./dist/v1/browser.mjs"
+    },
+    "./v1/documents": {
+      "types": "./dist/v1/documents.d.mts",
+      "import": "./dist/v1/documents.mjs",
+      "default": "./dist/v1/documents.mjs"
+    },
+    "./v1/http": {
+      "types": "./dist/v1/http.d.mts",
+      "import": "./dist/v1/http.mjs",
+      "default": "./dist/v1/http.mjs"
+    },
+    "./v1/realtime": {
+      "types": "./dist/v1/realtime.d.mts",
+      "import": "./dist/v1/realtime.mjs",
+      "default": "./dist/v1/realtime.mjs"
+    },
+    "./v1/server": {
+      "types": "./dist/v1/server.d.mts",
+      "import": "./dist/v1/server.mjs",
+      "default": "./dist/v1/server.mjs"
     }
   },
   "main": "./dist/index.mjs",

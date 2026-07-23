@@ -10,6 +10,8 @@ interface TreeShakeCase {
   exportName: string
   maxBytes: number
   allowedImports?: readonly string[]
+  allowedDynamicImports?: readonly string[]
+  expectAsyncChunks?: boolean
 }
 
 const cases: readonly TreeShakeCase[] = [
@@ -59,6 +61,52 @@ const cases: readonly TreeShakeCase[] = [
     maxBytes: 100,
   },
   {
+    entry: 'packages/lakehouse/dist/index.mjs',
+    exportName: 'toIcebergDayCount',
+    maxBytes: 500,
+  },
+  {
+    entry: 'packages/lakehouse/dist/date.mjs',
+    exportName: 'toIcebergDayCount',
+    maxBytes: 500,
+  },
+  {
+    entry: 'packages/lakehouse/dist/dataset.mjs',
+    exportName: 'defineIcebergDataset',
+    maxBytes: 10_000,
+    expectAsyncChunks: true,
+  },
+  {
+    entry: 'packages/contracts/dist/v1/realtime.mjs',
+    exportName: 'createRealtimeV1Schemas',
+    maxBytes: 12_000,
+    allowedImports: ['zod'],
+  },
+  {
+    entry: 'packages/contracts/dist/v1/browser.mjs',
+    exportName: 'createGscdumpV1BrowserSchemas',
+    maxBytes: 25_000,
+    allowedImports: ['zod'],
+  },
+  {
+    entry: 'packages/contracts/dist/v1/http.mjs',
+    exportName: 'createGscdumpV1Protocol',
+    maxBytes: 125_000,
+    allowedImports: ['zod'],
+  },
+  {
+    entry: 'packages/sdk/dist/v1/http.mjs',
+    exportName: 'createGscdumpV1Client',
+    maxBytes: 12_000,
+    allowedDynamicImports: ['@gscdump/contracts/v1/http'],
+  },
+  {
+    entry: 'packages/sdk/dist/v1/realtime.mjs',
+    exportName: 'createGscdumpRealtimeV1Client',
+    maxBytes: 20_000,
+    allowedImports: ['@gscdump/contracts/v1/realtime'],
+  },
+  {
     entry: 'packages/cli/dist/index.mjs',
     exportName: 'createCliRuntime',
     maxBytes: 1_000,
@@ -73,7 +121,9 @@ const cases: readonly TreeShakeCase[] = [
 ]
 
 async function bundleExport(testCase: TreeShakeCase): Promise<{
+  asyncChunks: number
   bytes: number
+  dynamicImports: string[]
   imports: string[]
 }> {
   const entry = resolve(testCase.entry)
@@ -100,15 +150,34 @@ async function bundleExport(testCase: TreeShakeCase): Promise<{
     }],
   })
   const { output } = await bundle.generate({
-    codeSplitting: false,
+    codeSplitting: true,
     minify: true,
   })
   await bundle.close()
 
   const chunks = output.filter((item): item is OutputChunk => item.type === 'chunk')
+  const chunksByFile = new Map(chunks.map(chunk => [chunk.fileName, chunk]))
+  const initialChunks = new Set(chunks.filter(chunk => chunk.isEntry))
+  for (const chunk of initialChunks) {
+    for (const imported of chunk.imports) {
+      const dependency = chunksByFile.get(imported)
+      if (dependency)
+        initialChunks.add(dependency)
+    }
+  }
   return {
-    bytes: chunks.reduce((total, chunk) => total + Buffer.byteLength(chunk.code), 0),
-    imports: [...new Set(chunks.flatMap(chunk => chunk.imports))].sort(),
+    asyncChunks: chunks.length - initialChunks.size,
+    bytes: [...initialChunks].reduce((total, chunk) => total + Buffer.byteLength(chunk.code), 0),
+    dynamicImports: [...new Set(
+      [...initialChunks].flatMap(chunk =>
+        [...chunk.code.matchAll(/\bimport\((['"`])([^'"`]+)\1\)/g)]
+          .map(match => match[2]!)
+          .filter(imported => !imported.startsWith('.')),
+      ),
+    )].sort(),
+    imports: [...new Set(
+      [...initialChunks].flatMap(chunk => chunk.imports.filter(imported => !chunksByFile.has(imported))),
+    )].sort(),
   }
 }
 
@@ -118,6 +187,9 @@ describe('published tree shaking', () => {
       const result = await bundleExport(testCase)
       expect(result.bytes).toBeLessThanOrEqual(testCase.maxBytes)
       expect(result.imports).toEqual([...(testCase.allowedImports ?? [])].sort())
+      expect(result.dynamicImports).toEqual([...(testCase.allowedDynamicImports ?? [])].sort())
+      if (testCase.expectAsyncChunks)
+        expect(result.asyncChunks).toBeGreaterThan(0)
     })
   }
 })

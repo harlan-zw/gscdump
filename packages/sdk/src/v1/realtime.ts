@@ -5,19 +5,20 @@ import type {
   RealtimeV1ServerFrame,
   RealtimeV1StreamHead,
   RealtimeV1StreamId,
-} from '@gscdump/contracts/v1'
+} from '@gscdump/contracts/v1/realtime'
 import {
-  createGscdumpV1Protocol,
+  createRealtimeV1Schemas,
   GSCDUMP_REALTIME_ACK_POLICY,
   GSCDUMP_REALTIME_CLOSE_CODES,
   GSCDUMP_REALTIME_CONNECTION_POLICY,
   GSCDUMP_REALTIME_LIMITS,
   GSCDUMP_REALTIME_PING,
   GSCDUMP_REALTIME_PONG,
+  GSCDUMP_REALTIME_PROTOCOL_VERSION,
   GSCDUMP_REALTIME_SUBPROTOCOL,
   REALTIME_V1_EVENT_NAMES,
   REALTIME_V1_RESOURCE_TYPES,
-} from '@gscdump/contracts/v1'
+} from '@gscdump/contracts/v1/realtime'
 import { utf8Size } from '../utf8'
 
 type MaybePromise<T> = T | Promise<T>
@@ -268,7 +269,7 @@ function safeRandom(random: () => number): number {
 export function createGscdumpRealtimeV1Client(
   options: CreateGscdumpRealtimeV1ClientOptions,
 ): GscdumpRealtimeV1Client {
-  const protocol = createGscdumpV1Protocol()
+  const schemas = createRealtimeV1Schemas()
   const runtime = options.runtime ?? defaultRuntime()
   const cursorStore = options.cursorStore ?? createMemoryCursorStore()
   const sdkVersion = options.sdkVersion ?? GSCDUMP_REALTIME_V1_SDK_VERSION
@@ -455,7 +456,7 @@ export function createGscdumpRealtimeV1Client(
   }
 
   function sendAck(context: ConnectionContext, appliedCursor: RealtimeV1Cursor): void {
-    const frame = protocol.schemas.ackFrame.parse({ type: 'ack', cursor: appliedCursor })
+    const frame = schemas.ackFrame.parse({ type: 'ack', cursor: appliedCursor })
     sendJson(context, frame)
   }
 
@@ -1023,7 +1024,7 @@ export function createGscdumpRealtimeV1Client(
         cause,
       })
     }
-    const parsed = protocol.schemas.serverFrame.safeParse(rawFrame)
+    const parsed = schemas.serverFrame.safeParse(rawFrame)
     if (!parsed.success) {
       throw new GscdumpRealtimeV1Error({
         code: 'protocol_error',
@@ -1098,7 +1099,7 @@ export function createGscdumpRealtimeV1Client(
     }
     if (stored === null)
       return null
-    const parsed = protocol.schemas.cursor.safeParse(stored)
+    const parsed = schemas.cursor.safeParse(stored)
     if (!parsed.success) {
       reportError(new GscdumpRealtimeV1Error({
         code: 'cursor_store_failed',
@@ -1129,7 +1130,7 @@ export function createGscdumpRealtimeV1Client(
         cause,
       })
     }
-    const parsed = protocol.schemas.ticketResponse.client.safeParse(raw)
+    const parsed = schemas.ticketResponseClient.safeParse(raw)
     if (!parsed.success) {
       throw new GscdumpRealtimeV1Error({
         code: 'ticket_invalid',
@@ -1256,9 +1257,9 @@ export function createGscdumpRealtimeV1Client(
       }
       setState('handshaking', cursor ? 'stale' : 'unknown')
       try {
-        const hello = protocol.schemas.helloFrame.parse({
+        const hello = schemas.helloFrame.parse({
           type: 'hello',
-          protocolVersion: protocol.constants.realtimeProtocolVersion,
+          protocolVersion: GSCDUMP_REALTIME_PROTOCOL_VERSION,
           sdkVersion,
           resume: cursor,
         })

@@ -273,6 +273,23 @@
   escapeLike: function
   METRIC_EXPR: object
   topLevelPagePredicateSql: function
+./sync-config:
+  getDateWeight: function
+  getTablesForTier: function
+  getTableTier: function
+  MAX_GSC_PAGES_R2: number
+  MAX_SITEMAP_URLS_PER_SITE: number
+  MAX_TRACKED_URLS_PER_SITE: number
+  MIN_COUNTRY_IMPRESSIONS: number
+  MIN_SYNC_IMPRESSIONS: number
+  parseEnabledSearchTypes: function
+  ROW_LIMIT_R2: number
+  TABLE_TIERS: object
+  TABLES_BY_SEARCH_TYPE: object
+  TIER_PRIORITY: object
+  validateEnabledSearchTypes: function
+  validateEnabledSearchTypesResult: function
+  WEIGHT_PRIORITY: object
 ./vendor/hysnappy:
   snappyUncompress: function
   snappyUncompressor: function

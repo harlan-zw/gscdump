@@ -20,18 +20,9 @@ const restCatalogConnect = vi.fn(async () => ({
 }))
 const s3SignedResolver = vi.fn()
 
-vi.mock('icebird', () => ({
-  cachingResolver,
-  icebergAppend: vi.fn(),
-  icebergCreateTable: vi.fn(),
-  icebergDropTable: vi.fn(),
-  icebergManifests: vi.fn(),
-  restCatalogConnect,
-  restCatalogCreateNamespace: vi.fn(),
-  restCatalogListTables: vi.fn(),
-  restCatalogLoadTable: vi.fn(),
-  s3SignedResolver,
-}))
+vi.mock('icebird/src/catalog/rest.js', () => ({ restCatalogConnect, restCatalogCreateNamespace: vi.fn(), restCatalogListTables: vi.fn(), restCatalogLoadTable: vi.fn() }))
+vi.mock('icebird/src/fetch.js', () => ({ cachingResolver }))
+vi.mock('icebird/src/s3.js', () => ({ s3SignedResolver }))
 
 const { connectIcebergCatalog } = await import('../src/catalog')
 

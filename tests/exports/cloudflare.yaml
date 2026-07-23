@@ -5,6 +5,9 @@
   createInflightDedupe: function
   getAnalyticsEngine: function
   getHostedR2QueryKey: function
+./inflight-dedupe:
+  createInflightDedupe: function
+  getHostedR2QueryKey: function
 ./server-tail:
   buildArchetypeSql: function
   createDuckDbIcebergExecutor: function

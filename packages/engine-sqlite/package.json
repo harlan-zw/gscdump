@@ -25,6 +25,11 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
+    },
+    "./resolver": {
+      "types": "./dist/resolver-adapter.d.mts",
+      "import": "./dist/resolver-adapter.mjs",
+      "default": "./dist/resolver-adapter.mjs"
     }
   },
   "main": "./dist/index.mjs",

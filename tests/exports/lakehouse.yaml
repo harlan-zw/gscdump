@@ -23,6 +23,11 @@
   coerceBigIntToNumber: function
   encodeJsonBigintSafe: function
   stringifyBigintSafe: function
+./dataset:
+  defineIcebergDataset: function
+  deriveTableSpec: function
+./date:
+  toIcebergDayCount: function
 ./maintenance:
   isCommitRateLimited: function
   sweepUncommittedOrphans: function
@@ -35,6 +40,7 @@
   suppliedCatalog: function
 ./schema:
   DEFAULT_PARTITION_KEY_ENCODING: string
+  ICEBERG_TYPE_MAP: object
 ./unsafe-raw:
   icebergAppend: function
   icebergAppendRetrying: function

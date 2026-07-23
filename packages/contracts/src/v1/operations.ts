@@ -1,20 +1,6 @@
-import type { HttpV1ErrorCode } from './http'
+import type { HttpV1ErrorCode } from './http-core'
 import type { RealtimeV1Schemas } from './realtime'
 import { z } from 'zod'
-import {
-  accountNextActions,
-  accountStatuses,
-  analyticsNextActions,
-  analyticsStatuses,
-  indexingNextActions,
-  indexingStatuses,
-  lifecycleErrorCodes,
-  propertyNextActions,
-  propertyStatuses,
-  querySourceModes,
-  sitemapNextActions,
-  sitemapStatuses,
-} from '../onboarding'
 import {
   addPartnerTeamMemberSchema,
   bindPartnerSiteTeamSchema,
@@ -70,7 +56,7 @@ import {
   defineResponseObject,
   defineSuccessResponse,
   HTTP_V1_ERROR_CODES,
-} from './http'
+} from './http-core'
 import {
   createRealtimeV1Schemas,
   GSCDUMP_REALTIME_ACK_POLICY,
@@ -90,19 +76,11 @@ import {
   GSCDUMP_REALTIME_TICKET_TTL_SECONDS,
   REALTIME_V1_EVENT_SEMANTICS,
 } from './realtime'
-
-export const GSCDUMP_HTTP_V1_VERSION = '1.0' as const
-
-interface NormalizedFilterV1 {
-  _filters: Array<{
-    dimension: string
-    operator: string
-    expression: string
-    expression2?: string
-  }>
-  _nestedGroups?: NormalizedFilterV1[]
-  _groupType?: 'and' | 'or'
-}
+import {
+  createGscdumpV1BrowserSchemas,
+  GSCDUMP_V1_ANALYTICS_DIMENSIONS,
+} from './browser'
+import { GSCDUMP_HTTP_V1_VERSION } from './version'
 
 // The inferred enum tuple keeps each operation's error DTO closed to its own codes.
 // eslint-disable-next-line ts/explicit-function-return-type
@@ -128,123 +106,12 @@ function errorEnvelopeSchemas<const TCodes extends readonly [HttpV1ErrorCode, ..
   return defineResponseObject({ error: producer }, { error: client })
 }
 
-// The nested producer/client pair is intentionally inferred from one field definition.
-// eslint-disable-next-line ts/explicit-function-return-type
-function lifecycleResponseSchemas(ids: RealtimeV1Schemas) {
-  const progress = defineResponseObject({
-    completed: z.number().int().nonnegative(),
-    failed: z.number().int().nonnegative(),
-    total: z.number().int().nonnegative(),
-    percent: z.number().min(0).max(100),
-  })
-  const latestError = defineResponseObject({
-    code: z.enum(lifecycleErrorCodes),
-    message: z.string(),
-    retryable: z.boolean(),
-  })
-  const account = defineResponseObject({
-    status: z.enum(accountStatuses),
-    grantedScopes: z.array(z.string()),
-    missingScopes: z.array(z.string()),
-    nextAction: z.enum(accountNextActions),
-  })
-  const property = defineResponseObject({
-    status: z.enum(propertyStatuses),
-    nextAction: z.enum(propertyNextActions),
-  })
-  const syncedRange = defineResponseObject({
-    oldest: z.iso.date().nullable(),
-    newest: z.iso.date().nullable(),
-  })
-  const analytics = defineResponseObject(
-    {
-      status: z.enum(analyticsStatuses),
-      progress: progress.producer,
-      queryable: z.boolean(),
-      sourceMode: z.enum(querySourceModes),
-      syncedRange: syncedRange.producer,
-      nextAction: z.enum(analyticsNextActions),
-    },
-    {
-      status: z.enum(analyticsStatuses),
-      progress: progress.client,
-      queryable: z.boolean(),
-      sourceMode: z.enum(querySourceModes),
-      syncedRange: syncedRange.client,
-      nextAction: z.enum(analyticsNextActions),
-    },
-  )
-  const sitemaps = defineResponseObject({
-    status: z.enum(sitemapStatuses),
-    discoveredCount: z.number().int().nonnegative(),
-    nextAction: z.enum(sitemapNextActions),
-  })
-  const indexing = defineResponseObject(
-    {
-      status: z.enum(indexingStatuses),
-      eligible: z.boolean(),
-      reason: z.string().nullable(),
-      progress: progress.producer,
-      nextAction: z.enum(indexingNextActions),
-    },
-    {
-      status: z.enum(indexingStatuses),
-      eligible: z.boolean(),
-      reason: z.string().nullable(),
-      progress: progress.client,
-      nextAction: z.enum(indexingNextActions),
-    },
-  )
-  const site = defineResponseObject(
-    {
-      siteId: ids.publicSiteId,
-      externalSiteId: z.string().nullable(),
-      requestedUrl: z.string().min(1),
-      gscPropertyUrl: z.string().nullable(),
-      permissionLevel: z.string().nullable(),
-      property: property.producer,
-      analytics: analytics.producer,
-      sitemaps: sitemaps.producer,
-      indexing: indexing.producer,
-      latestError: latestError.producer.nullable(),
-      updatedAt: z.iso.datetime(),
-    },
-    {
-      siteId: ids.publicSiteId,
-      externalSiteId: z.string().nullable(),
-      requestedUrl: z.string().min(1),
-      gscPropertyUrl: z.string().nullable(),
-      permissionLevel: z.string().nullable(),
-      property: property.client,
-      analytics: analytics.client,
-      sitemaps: sitemaps.client,
-      indexing: indexing.client,
-      latestError: latestError.client.nullable(),
-      updatedAt: z.iso.datetime(),
-    },
-  )
-  return defineResponseObject(
-    {
-      userId: ids.publicUserId,
-      partnerId: ids.publicPartnerId.nullable(),
-      currentTeamId: ids.publicTeamId.nullable(),
-      account: account.producer,
-      sites: z.array(site.producer),
-    },
-    {
-      userId: ids.publicUserId,
-      partnerId: ids.publicPartnerId.nullable(),
-      currentTeamId: ids.publicTeamId.nullable(),
-      account: account.client,
-      sites: z.array(site.client),
-    },
-  )
-}
 
 // The exact inferred return is the source for all exported schema-derived DTO types.
 // eslint-disable-next-line ts/explicit-function-return-type
 export function createGscdumpV1Protocol() {
   const realtimeSchemas = createRealtimeV1Schemas()
+  const browserSchemas = createGscdumpV1BrowserSchemas(realtimeSchemas)
   const surfaceSchema = z.enum(['partner', 'analytics', 'realtime'])
   const responseMeta = defineResponseObject({
     requestId: realtimeSchemas.publicRequestId,
@@ -272,72 +139,12 @@ export function createGscdumpV1Protocol() {
 
   const errorEnvelope = errorEnvelopeSchemas(HTTP_V1_ERROR_CODES, realtimeSchemas.publicRequestId)
 
-  const lifecycleData = lifecycleResponseSchemas(realtimeSchemas)
-  const lifecycleResponse = defineSuccessResponse(lifecycleData, partnerResponseMeta)
-
-  const dimensions = ['page', 'query', 'queryCanonical', 'country', 'device', 'date', 'searchAppearance', 'hour'] as const
-  const metrics = ['clicks', 'impressions', 'ctr', 'position'] as const
-  const filterDimension = z.enum([...dimensions, ...metrics, 'searchType'])
-  const singleExpressionFilterOperators = [
-    'equals',
-    'notEquals',
-    'contains',
-    'notContains',
-    'includingRegex',
-    'excludingRegex',
-    'gte',
-    'gt',
-    'lte',
-    'lt',
-    'metricGte',
-    'metricGt',
-    'metricLte',
-    'metricLt',
-    'topLevel',
-  ] as const
-  const normalizedFilterLeaf = z.union([
-    z.strictObject({
-      dimension: filterDimension,
-      operator: z.enum(singleExpressionFilterOperators),
-      expression: z.string(),
-    }),
-    z.strictObject({
-      dimension: filterDimension,
-      operator: z.enum(['between', 'metricBetween']),
-      expression: z.string(),
-      expression2: z.string(),
-    }),
-  ])
-  const normalizedFilter: z.ZodType<NormalizedFilterV1> = z.lazy(() => z.union([
-    z.strictObject({
-      _filters: z.array(normalizedFilterLeaf).min(1),
-      _nestedGroups: z.array(normalizedFilter).optional(),
-      _groupType: z.enum(['and', 'or']).optional(),
-    }),
-    z.strictObject({
-      _filters: z.array(normalizedFilterLeaf).max(0),
-      _nestedGroups: z.array(normalizedFilter).min(1),
-      _groupType: z.enum(['and', 'or']).optional(),
-    }),
-  ]))
-  const analyticsRowsRequest = z.strictObject({
-    dimensions: z.array(z.enum(dimensions)).min(1),
-    metrics: z.array(z.enum(metrics)).optional(),
-    filter: normalizedFilter.optional(),
-    prefilter: normalizedFilter.optional(),
-    orderBy: z.strictObject({
-      column: z.enum([...metrics, 'date']),
-      dir: z.enum(['asc', 'desc']),
-    }).optional(),
-    rowLimit: z.number().int().positive().max(25_000).optional(),
-    startRow: z.number().int().nonnegative().optional(),
-    dataState: z.enum(['final', 'all', 'hourly_all']).optional(),
-    aggregationType: z.enum(['auto', 'byPage', 'byProperty', 'byNewsShowcasePanel']).optional(),
-    searchType: z.enum(['web', 'image', 'video', 'news', 'discover', 'googleNews']).optional(),
-  })
-  const analyticsRowData = defineResponseObject({
-    rows: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))),
-  })
+  const {
+    analyticsRowsRequest,
+    analyticsRowsResponse,
+    lifecycleResponse,
+  } = browserSchemas
+  const dimensions = GSCDUMP_V1_ANALYTICS_DIMENSIONS
   const analyticsMeta = defineResponseObject({
     requestId: realtimeSchemas.publicRequestId,
     surface: z.literal('analytics'),
@@ -346,7 +153,6 @@ export function createGscdumpV1Protocol() {
     sourceKind: z.enum(['row', 'sql']),
     queryMs: z.number().nonnegative(),
   })
-  const analyticsRowsResponse = defineSuccessResponse(analyticsRowData, analyticsMeta)
 
   // Reports preserve the richer hosted read model (totals, comparisons and
   // sync metadata) that cannot be reconstructed from the raw rows operation.
@@ -797,11 +603,13 @@ export function createGscdumpV1Protocol() {
     head: responseStreamHead.producer,
     maxConnectionSeconds: z.literal(GSCDUMP_REALTIME_MAX_CONNECTION_SECONDS),
   }
-  const ticketData = defineResponseObject(
-    ticketDataProducerShape,
-    { ...ticketDataProducerShape, head: responseStreamHead.client },
-  )
-  const ticketResponse = defineSuccessResponse(ticketData, realtimeResponseMeta)
+  const ticketResponse = {
+    producer: z.strictObject({
+      data: z.strictObject(ticketDataProducerShape),
+      meta: realtimeResponseMeta.producer,
+    }),
+    client: realtimeSchemas.ticketResponseClient,
+  }
 
   const partnerUserLifecycleErrors = [
     'invalid_request',
@@ -3026,4 +2834,3 @@ export type PartnerSitemapChangesV1Response = z.infer<GscdumpV1Protocol['schemas
 export type PartnerSiteRegistrationV1Response = z.infer<GscdumpV1Protocol['schemas']['siteRegistrationResponse']['client']>
 export type PartnerSiteDeletionV1Response = z.infer<GscdumpV1Protocol['schemas']['siteDeletionResponse']['client']>
 export type PartnerUserLifecycleV1Response = z.infer<GscdumpV1Protocol['schemas']['lifecycleResponse']['client']>
-export type RealtimeTicketV1Response = z.infer<GscdumpV1Protocol['schemas']['ticketResponse']['client']>

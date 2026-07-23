@@ -8,18 +8,13 @@ const restCatalogListTables = vi.fn()
 const restCatalogCreateNamespace = vi.fn()
 const icebergDropTable = vi.fn()
 
-vi.mock('icebird', () => ({
-  cachingResolver: (r: unknown) => r,
-  icebergAppend: vi.fn(),
-  icebergCreateTable: vi.fn(),
-  icebergDropTable,
-  icebergManifests: vi.fn(),
+vi.mock('icebird/src/catalog/rest.js', () => ({
   restCatalogConnect: vi.fn(),
   restCatalogCreateNamespace,
   restCatalogListTables,
   restCatalogLoadTable: vi.fn(),
-  s3SignedResolver: vi.fn(),
 }))
+vi.mock('icebird/src/write/write.js', () => ({ icebergAppend: vi.fn(), icebergAppendBatches: vi.fn(), icebergDropTable }))
 
 const { listIcebergTables, dropIcebergTables, ensureIcebergNamespace } = await import('../src/catalog')
 

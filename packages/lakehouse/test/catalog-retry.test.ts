@@ -10,17 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const icebergAppend = vi.fn(async () => ({}))
 const icebergAppendBatches = vi.fn(async () => ({}))
 const restCatalogLoadTable = vi.fn(async () => ({ metadata: { snapshots: [] as Array<{ summary?: Record<string, string> }> } }))
-vi.mock('icebird', () => ({
-  icebergAppend,
-  icebergAppendBatches,
-  restCatalogLoadTable,
-  icebergCreateTable: vi.fn(),
-  icebergDropTable: vi.fn(),
-  restCatalogConnect: vi.fn(),
-  restCatalogCreateNamespace: vi.fn(),
-  restCatalogListTables: vi.fn(),
-  s3SignedResolver: vi.fn(),
-}))
+vi.mock('icebird/src/catalog/rest.js', () => ({ restCatalogConnect: vi.fn(), restCatalogCreateNamespace: vi.fn(), restCatalogListTables: vi.fn(), restCatalogLoadTable }))
+vi.mock('icebird/src/write/write.js', () => ({ icebergAppend, icebergAppendBatches, icebergDropTable: vi.fn() }))
 
 const { icebergAppendBatchesRetrying, icebergAppendRetrying } = await import('../src/catalog')
 const { isCommitRateLimited } = await import('../src/maintenance')

@@ -135,6 +135,16 @@
       "types": "./dist/v1/index.d.mts",
       "import": "./dist/v1/index.mjs",
       "default": "./dist/v1/index.mjs"
+    },
+    "./v1/http": {
+      "types": "./dist/v1/http.d.mts",
+      "import": "./dist/v1/http.mjs",
+      "default": "./dist/v1/http.mjs"
+    },
+    "./v1/realtime": {
+      "types": "./dist/v1/realtime.d.mts",
+      "import": "./dist/v1/realtime.mjs",
+      "default": "./dist/v1/realtime.mjs"
     }
   },
   "main": "./dist/index.mjs",

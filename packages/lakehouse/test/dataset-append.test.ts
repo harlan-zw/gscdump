@@ -18,7 +18,7 @@ vi.mock('../src/catalog', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/catalog')>()
   return { ...actual, connectIcebergCatalog, ensureIcebergNamespace, icebergAppendBatchesRetrying, icebergAppendRetrying }
 })
-vi.mock('icebird', () => ({ icebergCreateTable: vi.fn() }))
+vi.mock('icebird/src/write/write.js', () => ({ icebergAppend: vi.fn(), icebergAppendBatches: vi.fn(), icebergCreateTable: vi.fn(), icebergDropTable: vi.fn() }))
 
 const { defineIcebergDataset } = await import('../src/dataset')
 

@@ -46,6 +46,11 @@
       "import": "./dist/schema.mjs",
       "default": "./dist/schema.mjs"
     },
+    "./sync-config": {
+      "types": "./dist/sync-config.d.mts",
+      "import": "./dist/sync-config.mjs",
+      "default": "./dist/sync-config.mjs"
+    },
     "./ingest": {
       "types": "./dist/ingest.d.mts",
       "import": "./dist/ingest.mjs",

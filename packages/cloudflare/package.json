@@ -30,6 +30,11 @@
       "types": "./dist/server-tail/index.d.mts",
       "import": "./dist/server-tail/index.mjs",
       "default": "./dist/server-tail/index.mjs"
+    },
+    "./inflight-dedupe": {
+      "types": "./dist/inflight-dedupe.d.mts",
+      "import": "./dist/inflight-dedupe.mjs",
+      "default": "./dist/inflight-dedupe.mjs"
     }
   },
   "main": "./dist/index.mjs",

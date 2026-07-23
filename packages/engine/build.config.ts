@@ -24,6 +24,7 @@ export default defineBuildConfig({
         './src/contracts.ts',
         './src/planner.ts',
         './src/schema.ts',
+        './src/sync-config.ts',
         './src/ingest.ts',
         './src/ingest-accumulator.ts',
         './src/sink-node.ts',

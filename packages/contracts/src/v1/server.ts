@@ -1,3 +1,2 @@
-export * from './documents'
 export * from './http'
 export * from './realtime'

@@ -12,25 +12,23 @@
 
 import type { CatalogCache } from './catalog-cache'
 import type { PartitionValueMatch } from './partition-prune'
-import type { IcebergColumnType, IcebergS3Config } from './schema'
-import {
-  cachingResolver,
+import type { IcebergPrimitiveType, IcebergS3Config } from './schema'
+import type {
   icebergAppend,
   icebergAppendBatches,
-  icebergDropTable,
-  icebergManifests,
+} from 'icebird/src/write/write.js'
+import {
   restCatalogConnect,
   restCatalogCreateNamespace,
   restCatalogListTables,
   restCatalogLoadTable,
-  s3SignedResolver,
-} from 'icebird'
+} from 'icebird/src/catalog/rest.js'
+import { cachingResolver } from 'icebird/src/fetch.js'
+import { icebergManifests } from 'icebird/src/manifest.js'
+import { s3SignedResolver } from 'icebird/src/s3.js'
 import { stringifyBigintSafe } from './bigint'
 import { cacheGet, cachePut, reportCatalogCacheError } from './catalog-cache'
 import { buildManifestPartitionFilter } from './partition-prune'
-
-/** icebird's lowercase Iceberg primitive types (subset we use). */
-export type IcebergPrimitiveType = 'string' | 'int' | 'long' | 'double' | 'date' | 'boolean'
 
 /** A field in an icebird table `Schema`. */
 export interface IcebergSchemaField {
@@ -108,15 +106,6 @@ export interface IcebergConnection {
   cacheScope?: string
 }
 
-export const ICEBERG_TYPE_MAP: Record<IcebergColumnType, IcebergPrimitiveType> = {
-  STRING: 'string',
-  INT: 'int',
-  LONG: 'long',
-  DOUBLE: 'double',
-  DATE: 'date',
-  BOOLEAN: 'boolean',
-}
-
 /** Options for {@link connectIcebergCatalog}. */
 export interface ConnectIcebergOptions {
   /**
@@ -138,6 +127,14 @@ interface CachedCatalogConfig {
 
 type IcebergResolver = ReturnType<typeof cachingResolver>
 type IcebergWriter = ReturnType<NonNullable<IcebergResolver['writer']>>
+type IcebirdWriteModule = typeof import('icebird/src/write/write.js')
+
+let icebirdWriteModule: Promise<IcebirdWriteModule> | undefined
+
+function useIcebirdWriteModule(): Promise<IcebirdWriteModule> {
+  icebirdWriteModule ??= import('icebird/src/write/write.js')
+  return icebirdWriteModule
+}
 
 /**
  * TTL on the cached `/v1/config` routing config. It is warehouse-static
@@ -307,6 +304,7 @@ export async function dropIcebergTables(
     ?? (await restCatalogListTables(conn.catalog, { namespace: conn.namespace }))
       .map(t => t.name)
   const results: IcebergTableOpResult[] = []
+  const { icebergDropTable } = await useIcebirdWriteModule()
   for (const table of targets) {
     await icebergDropTable({
       catalog: conn.catalog,
@@ -346,6 +344,7 @@ export interface CommitRetryOptions {
   appendId?: string
 }
 
+export type IcebergAppendArgs = Parameters<typeof icebergAppend>[0]
 export type AppendBatchFactory = () => Iterable<Record<string, unknown>[]> | AsyncIterable<Record<string, unknown>[]>
 
 export type IcebergAppendBatchesArgs
@@ -377,9 +376,10 @@ function defaultCommitSleep(ms: number): Promise<void> {
  * (see `deriveAppendId`/`appendAlreadyLanded`).
  */
 export async function icebergAppendRetrying(
-  args: Parameters<typeof icebergAppend>[0],
+  args: IcebergAppendArgs,
   options: CommitRetryOptions = {},
 ): Promise<void> {
+  const { icebergAppend } = await useIcebirdWriteModule()
   const maxAttempts = options.maxAttempts ?? 6
   const baseDelayMs = options.baseDelayMs ?? 1000
   const maxDelayMs = options.maxDelayMs ?? 20_000
@@ -389,7 +389,7 @@ export async function icebergAppendRetrying(
   const stampedArgs = {
     ...args,
     snapshotProperties: { ...(args as { snapshotProperties?: Record<string, string> }).snapshotProperties, [APPEND_ID_SUMMARY_KEY]: appendId },
-  } as Parameters<typeof icebergAppend>[0]
+  } as IcebergAppendArgs
 
   if (await appendAlreadyLanded(args, appendId))
     return
@@ -419,6 +419,7 @@ export async function icebergAppendBatchesRetrying(
   args: IcebergAppendBatchesArgs,
   options: CommitRetryOptions & { appendId: string },
 ): Promise<boolean> {
+  const { icebergAppendBatches } = await useIcebirdWriteModule()
   const maxAttempts = options.maxAttempts ?? 6
   const baseDelayMs = options.baseDelayMs ?? 1000
   const maxDelayMs = options.maxDelayMs ?? 20_000
@@ -454,7 +455,7 @@ export async function icebergAppendBatchesRetrying(
 }
 
 /** Content-addressed idempotency token — see `@gscdump/engine`'s original for full rationale. */
-async function deriveAppendId(args: Parameters<typeof icebergAppend>[0]): Promise<string> {
+async function deriveAppendId(args: IcebergAppendArgs): Promise<string> {
   const records = ((args as { records?: ReadonlyArray<Record<string, unknown>> }).records) ?? []
   if (records.length === 0)
     return globalThis.crypto.randomUUID()

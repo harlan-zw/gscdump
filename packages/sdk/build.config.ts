@@ -28,6 +28,8 @@ export default defineBuildConfig({
         './src/site-triage.ts',
         './src/webhook.ts',
         './src/v1/index.ts',
+        './src/v1/http.ts',
+        './src/v1/realtime.ts',
       ],
     },
   ],

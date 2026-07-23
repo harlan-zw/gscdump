@@ -30,21 +30,12 @@ import type {
   IcebergPartitionField,
   IcebergTableSpec,
 } from './schema'
-import { icebergCreateTable } from 'icebird'
 import { coerceBigIntToNumber } from './bigint'
-import {
-  connectIcebergCatalog,
-  ensureIcebergNamespace,
-  ICEBERG_TYPE_MAP,
-  icebergAppendBatchesRetrying,
-  icebergAppendRetrying,
-  resolveIcebergDataFiles,
-} from './catalog'
 import { buildManifestPartitionFilter } from './partition-prune'
+import { ICEBERG_TYPE_MAP } from './schema'
 
 const INT32_MIN = -2_147_483_648
 const INT32_MAX = 2_147_483_647
-const DAY_MILLIS = 86_400_000
 
 /**
  * Closed identity shapes (ADR-0021 amendments 2 + 4). `'site-int'` is the
@@ -198,28 +189,6 @@ function icebergSortOrderFromSpec(spec: IcebergTableSpec): IcebergSortOrder | un
       'null-order': 'nulls-last' as const,
     })),
   }
-}
-
-/**
- * Convert a `YYYY-MM-DD` string / `Date` / already-numeric day-count to the
- * integer "days since the Unix epoch" the Iceberg `date` type stores.
- * hyparquet-writer mis-encodes Date-valued dictionary columns, so callers
- * should feed this INTO their row before `appendRows`/`appendSink.emit` for
- * any `month`-partitioned date column.
- */
-export function toIcebergDayCount(value: string | Date | number): number {
-  if (typeof value === 'number')
-    return value
-  if (value instanceof Date) {
-    const ms = value.getTime()
-    if (Number.isNaN(ms))
-      throw new TypeError('toIcebergDayCount: invalid Date (NaN)')
-    return Math.floor(ms / DAY_MILLIS)
-  }
-  const ms = Date.parse(`${value}T00:00:00Z`)
-  if (Number.isNaN(ms))
-    throw new TypeError(`toIcebergDayCount: invalid date string '${value}'`)
-  return Math.floor(ms / DAY_MILLIS)
 }
 
 function asInt32(value: unknown): number | null {
@@ -424,22 +393,8 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
   const { guard, dedupe, sort } = buildRowProcessor(def, tableSpec)
 
   async function createTable(conn: IcebergConnection): Promise<IcebergTableOpResult[]> {
-    const results: IcebergTableOpResult[] = []
-    await icebergCreateTable({
-      catalog: conn.catalog,
-      namespace: conn.namespace,
-      table: def.table,
-      schema,
-      partitionSpec: partitionSpecIcebird,
-      // Only pass a sortOrder when the def declares a clusterKey — matches the
-      // ORIGINAL byte-for-byte create-table payload for datasets that never set
-      // one (crawl/lighthouse/dataforseo never did).
-      ...(sortOrder ? { sortOrder } : {}),
-    }).then(
-      () => results.push({ table: def.table, ok: true }),
-      (e: unknown) => results.push({ table: def.table, ok: false, error: e instanceof Error ? e.message : String(e) }),
-    )
-    return results
+    const { createDatasetTable } = await import('./dataset-runtime')
+    return createDatasetTable(conn, def.table, schema, partitionSpecIcebird, sortOrder)
   }
 
   function process(rows: readonly Record<string, unknown>[]): { records: Record<string, unknown>[], skipped: number } {
@@ -465,13 +420,8 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     const { records, skipped } = process(rows)
     if (records.length === 0)
       return { accepted: 0, skipped }
-    await icebergAppendRetrying({
-      catalog: conn.catalog,
-      namespace: conn.namespace,
-      table: def.table,
-      resolver: conn.resolver,
-      records,
-    }, opts.commitRetry)
+    const { appendDatasetRows } = await import('./dataset-runtime')
+    await appendDatasetRows(conn, def.table, records, opts.commitRetry)
     return { accepted: records.length, skipped }
   }
 
@@ -480,39 +430,13 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     source: AppendBatchSource,
     opts: AppendBatchesOptions,
   ): Promise<AppendBatchesResult> {
-    let accepted = 0
-    let skipped = 0
-    const batchFactory = async function* (): AsyncGenerator<Record<string, unknown>[]> {
-      accepted = 0
-      skipped = 0
-      for await (const rows of source()) {
-        const prepared = process(rows)
-        accepted += prepared.records.length
-        skipped += prepared.skipped
-        if (prepared.records.length > 0)
-          yield prepared.records
-      }
-    }
-    const committed = await icebergAppendBatchesRetrying({
-      catalog: conn.catalog,
-      namespace: conn.namespace,
-      table: def.table,
-      resolver: conn.resolver,
-      batchFactory,
-    }, { ...opts.commitRetry, appendId: opts.appendId })
-    return { accepted, skipped, committed }
+    const { appendDatasetBatches } = await import('./dataset-runtime')
+    return appendDatasetBatches(conn, def.table, source, process, opts)
   }
 
   function appendSink(opts: AppendSinkOptions): AppendSink {
     let buffer: Record<string, unknown>[] = []
     let connection: Promise<IcebergConnection> | undefined
-    function connect(): Promise<IcebergConnection> {
-      connection ??= connectIcebergCatalog(opts.catalog, opts.connect).then(async (conn) => {
-        await ensureIcebergNamespace(conn)
-        return conn
-      })
-      return connection
-    }
     return {
       emit(rows) {
         for (const r of rows) buffer.push(r)
@@ -523,8 +447,14 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
         const rows = buffer
         buffer = []
         try {
-          const conn = await connect()
-          const result = await appendRows(conn, rows, { commitRetry: opts.commitRetry })
+          const runtime = await import('./dataset-runtime')
+          connection ??= runtime.connectDatasetCatalog(opts.catalog, opts.connect)
+          const conn = await connection
+          const { records, skipped } = process(rows)
+          if (records.length === 0)
+            return { flushed: false, accepted: 0, skipped }
+          await runtime.appendDatasetRows(conn, def.table, records, opts.commitRetry)
+          const result = { accepted: records.length, skipped }
           if (result.accepted > 0 && opts.ledger)
             await opts.ledger.record()
           return { flushed: result.accepted > 0, ...result }
@@ -565,7 +495,8 @@ export function defineIcebergDataset(def: IcebergDatasetDef): IcebergDataset {
     dims?: Record<string, string>,
     opts: ResolveDataFilesOptions = {},
   ): Promise<IcebergListedDataFile[]> {
-    return resolveIcebergDataFiles(conn, {
+    const { resolveDatasetDataFiles } = await import('./dataset-runtime')
+    return resolveDatasetDataFiles(conn, {
       namespace: def.namespace,
       table: def.table,
       partitionSpec: def.partition,

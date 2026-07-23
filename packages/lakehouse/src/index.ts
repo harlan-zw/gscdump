@@ -18,7 +18,6 @@ export {
   connectIcebergCatalog,
   dropIcebergTables,
   ensureIcebergNamespace,
-  ICEBERG_TYPE_MAP,
   invalidateSnapshotRef,
   listIcebergTables,
   resolveIcebergDataFiles,
@@ -32,7 +31,6 @@ export type {
   IcebergListedDataFile,
   IcebergPartitionSpec,
   IcebergPartitionSpecField,
-  IcebergPrimitiveType,
   IcebergSchema,
   IcebergSchemaField,
   IcebergSortOrder,
@@ -48,8 +46,9 @@ export type { CatalogCache } from './catalog-cache'
 export {
   defineIcebergDataset,
   deriveTableSpec,
-  toIcebergDayCount,
 } from './dataset'
+
+export { toIcebergDayCount } from './date'
 
 export type {
   AppendBatchesOptions,
@@ -74,6 +73,7 @@ export type { IcebergFieldSummary, ManifestPartitionFilter, PartitionValueMatch 
 
 export {
   DEFAULT_PARTITION_KEY_ENCODING,
+  ICEBERG_TYPE_MAP,
 } from './schema'
 
 export type {
@@ -81,6 +81,7 @@ export type {
   IcebergColumnType,
   IcebergPartitionField,
   IcebergPartitionTransform,
+  IcebergPrimitiveType,
   IcebergS3Config,
   IcebergTableSpec,
   PartitionKeyEncoding,

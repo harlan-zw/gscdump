@@ -249,3 +249,76 @@
   REALTIME_V1_EVENT_SEMANTICS: object
   REALTIME_V1_RESOURCE_TYPES: object
   serializeContractDocument: function
+./v1/browser:
+  createGscdumpV1BrowserSchemas: function
+  GSCDUMP_V1_ANALYTICS_DIMENSIONS: object
+./v1/documents:
+  createGscdumpV1Documents: function
+  serializeContractDocument: function
+./v1/http:
+  buildHttpOperationPath: function
+  createGscdumpV1Protocol: function
+  defineHttpOperation: function
+  defineHttpSurface: function
+  defineResponseObject: function
+  defineSuccessResponse: function
+  GSCDUMP_HTTP_V1_VERSION: string
+  HTTP_V1_CREDENTIAL_SCOPES: object
+  HTTP_V1_CREDENTIALS: object
+  HTTP_V1_ERROR_CODES: object
+  HTTP_V1_METHODS: object
+  HTTP_V1_SCOPES: object
+  HTTP_V1_SURFACES: object
+./v1/realtime:
+  createRealtimeV1Schemas: function
+  GSCDUMP_REALTIME_ACK_POLICY: object
+  GSCDUMP_REALTIME_CLOSE_CODES: object
+  GSCDUMP_REALTIME_CONNECTION_POLICY: object
+  GSCDUMP_REALTIME_LIMITS: object
+  GSCDUMP_REALTIME_MAX_CONNECTION_SECONDS: number
+  GSCDUMP_REALTIME_PING: string
+  GSCDUMP_REALTIME_PONG: string
+  GSCDUMP_REALTIME_PROTOCOL_VERSION: number
+  GSCDUMP_REALTIME_REPLAY_POLICY: object
+  GSCDUMP_REALTIME_SUBPROTOCOL: string
+  GSCDUMP_REALTIME_TICKET_AUDIENCE: string
+  GSCDUMP_REALTIME_TICKET_ISSUER: string
+  GSCDUMP_REALTIME_TICKET_POLICY: object
+  GSCDUMP_REALTIME_TICKET_PREFIX: string
+  GSCDUMP_REALTIME_TICKET_TTL_SECONDS: number
+  REALTIME_V1_EVENT_NAMES: object
+  REALTIME_V1_EVENT_SEMANTICS: object
+  REALTIME_V1_RESOURCE_TYPES: object
+./v1/server:
+  buildHttpOperationPath: function
+  createGscdumpV1Protocol: function
+  createRealtimeV1Schemas: function
+  defineHttpOperation: function
+  defineHttpSurface: function
+  defineResponseObject: function
+  defineSuccessResponse: function
+  GSCDUMP_HTTP_V1_VERSION: string
+  GSCDUMP_REALTIME_ACK_POLICY: object
+  GSCDUMP_REALTIME_CLOSE_CODES: object
+  GSCDUMP_REALTIME_CONNECTION_POLICY: object
+  GSCDUMP_REALTIME_LIMITS: object
+  GSCDUMP_REALTIME_MAX_CONNECTION_SECONDS: number
+  GSCDUMP_REALTIME_PING: string
+  GSCDUMP_REALTIME_PONG: string
+  GSCDUMP_REALTIME_PROTOCOL_VERSION: number
+  GSCDUMP_REALTIME_REPLAY_POLICY: object
+  GSCDUMP_REALTIME_SUBPROTOCOL: string
+  GSCDUMP_REALTIME_TICKET_AUDIENCE: string
+  GSCDUMP_REALTIME_TICKET_ISSUER: string
+  GSCDUMP_REALTIME_TICKET_POLICY: object
+  GSCDUMP_REALTIME_TICKET_PREFIX: string
+  GSCDUMP_REALTIME_TICKET_TTL_SECONDS: number
+  HTTP_V1_CREDENTIAL_SCOPES: object
+  HTTP_V1_CREDENTIALS: object
+  HTTP_V1_ERROR_CODES: object
+  HTTP_V1_METHODS: object
+  HTTP_V1_SCOPES: object
+  HTTP_V1_SURFACES: object
+  REALTIME_V1_EVENT_NAMES: object
+  REALTIME_V1_EVENT_SEMANTICS: object
+  REALTIME_V1_RESOURCE_TYPES: object

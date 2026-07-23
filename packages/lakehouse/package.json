@@ -31,6 +31,16 @@
       "import": "./dist/bigint.mjs",
       "default": "./dist/bigint.mjs"
     },
+    "./dataset": {
+      "types": "./dist/dataset.d.mts",
+      "import": "./dist/dataset.mjs",
+      "default": "./dist/dataset.mjs"
+    },
+    "./date": {
+      "types": "./dist/date.d.mts",
+      "import": "./dist/date.mjs",
+      "default": "./dist/date.mjs"
+    },
     "./schema": {
       "types": "./dist/schema.d.mts",
       "import": "./dist/schema.mjs",

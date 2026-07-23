@@ -164,6 +164,14 @@
   GscdumpRealtimeV1Error: function
   GscdumpV1Error: function
   isGscdumpV1Error: function
+./v1/http:
+  createGscdumpV1Client: function
+  GscdumpV1Error: function
+  isGscdumpV1Error: function
+./v1/realtime:
+  createGscdumpRealtimeV1Client: function
+  GSCDUMP_REALTIME_V1_SDK_VERSION: string
+  GscdumpRealtimeV1Error: function
 ./webhook:
   CANONICAL_WEBHOOK_EVENTS: object
   createWebhookEnvelope: function
