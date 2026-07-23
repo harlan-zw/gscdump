@@ -51,6 +51,10 @@ import {
   updatePartnerUserTokensSchema,
 } from '../schemas'
 import {
+  createGscdumpV1BrowserSchemas,
+  GSCDUMP_V1_ANALYTICS_DIMENSIONS,
+} from './browser'
+import {
   defineHttpOperation,
   defineHttpSurface,
   defineResponseObject,
@@ -76,10 +80,6 @@ import {
   GSCDUMP_REALTIME_TICKET_TTL_SECONDS,
   REALTIME_V1_EVENT_SEMANTICS,
 } from './realtime'
-import {
-  createGscdumpV1BrowserSchemas,
-  GSCDUMP_V1_ANALYTICS_DIMENSIONS,
-} from './browser'
 import { GSCDUMP_HTTP_V1_VERSION } from './version'
 
 // The inferred enum tuple keeps each operation's error DTO closed to its own codes.
@@ -105,7 +105,6 @@ function errorEnvelopeSchemas<const TCodes extends readonly [HttpV1ErrorCode, ..
   })
   return defineResponseObject({ error: producer }, { error: client })
 }
-
 
 // The exact inferred return is the source for all exported schema-derived DTO types.
 // eslint-disable-next-line ts/explicit-function-return-type

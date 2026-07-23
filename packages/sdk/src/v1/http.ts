@@ -712,7 +712,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
   if (typeof fetchImpl !== 'function')
     throw new TypeError('createGscdumpV1Client requires a fetch implementation in this runtime.')
 
-  function getRuntime() {
+  function getRuntime(): NonNullable<typeof runtimePromise> {
     return runtimePromise ??= import('@gscdump/contracts/v1/http').then(({
       buildHttpOperationPath: buildOperationPath,
       createGscdumpV1Protocol,

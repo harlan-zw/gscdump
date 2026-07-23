@@ -48,8 +48,6 @@ export {
   deriveTableSpec,
 } from './dataset'
 
-export { toIcebergDayCount } from './date'
-
 export type {
   AppendBatchesOptions,
   AppendBatchesResult,
@@ -67,6 +65,8 @@ export type {
   IcebergDatasetLedger,
   ResolveDataFilesOptions,
 } from './dataset'
+
+export { toIcebergDayCount } from './date'
 
 export { buildManifestPartitionFilter } from './partition-prune'
 export type { IcebergFieldSummary, ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'

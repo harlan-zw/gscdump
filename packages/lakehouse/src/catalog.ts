@@ -10,13 +10,13 @@
  * internally.
  */
 
-import type { CatalogCache } from './catalog-cache'
-import type { PartitionValueMatch } from './partition-prune'
-import type { IcebergPrimitiveType, IcebergS3Config } from './schema'
 import type {
   icebergAppend,
   icebergAppendBatches,
 } from 'icebird/src/write/write.js'
+import type { CatalogCache } from './catalog-cache'
+import type { PartitionValueMatch } from './partition-prune'
+import type { IcebergPrimitiveType, IcebergS3Config } from './schema'
 import {
   restCatalogConnect,
   restCatalogCreateNamespace,

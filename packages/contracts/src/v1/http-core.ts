@@ -1,5 +1,6 @@
 import type { ZodRawShape, ZodTypeAny } from 'zod'
 import { z } from 'zod'
+
 export { GSCDUMP_HTTP_V1_VERSION } from './version'
 
 export const HTTP_V1_SURFACES = ['partner', 'analytics', 'realtime'] as const
