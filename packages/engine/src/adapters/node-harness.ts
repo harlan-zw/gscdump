@@ -6,7 +6,7 @@
 // so the CLI, tests, and any downstream Node consumer don't rewrite the
 // 20-line wiring block.
 
-import type { Row, TableName } from '@gscdump/contracts'
+import type { Row, TableName, TenantCtx } from '@gscdump/contracts'
 import type { SearchType } from 'gscdump/query'
 import type { DataSource, StorageEngine } from '../storage'
 import path from 'node:path'
@@ -34,6 +34,7 @@ export interface NodeHarness {
   dataDir: string
   userId: string
   siteIdFor: (siteUrl: string) => string
+  withSitemapMutation: <T>(ctx: TenantCtx, mutate: () => Promise<T>) => Promise<T>
   runRawSql: (opts: {
     sql: string
     siteUrl: string
@@ -87,6 +88,18 @@ export function createNodeHarness(opts: NodeHarnessOptions): NodeHarness {
     dataDir,
     userId,
     siteIdFor: encodeSiteId,
+    withSitemapMutation(ctx, mutate) {
+      if (ctx.userId !== userId)
+        throw new Error(`Sitemap mutation user scope mismatch: expected ${userId}, got ${ctx.userId}`)
+      if (!ctx.siteId)
+        throw new Error('Sitemap mutation requires a site id')
+      return manifestStore.withLock({
+        userId,
+        siteId: ctx.siteId,
+        table: 'pages',
+        partition: '__sitemap_entities__',
+      }, mutate)
+    },
     runRawSql,
   }
 }

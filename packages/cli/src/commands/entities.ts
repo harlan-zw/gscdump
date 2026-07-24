@@ -6,6 +6,7 @@ import process from 'node:process'
 import {
   createIndexingMetadataStore,
   createInspectionStore,
+  createSitemapReadStore,
   createSitemapStore,
 } from '@gscdump/engine/entities'
 import { defineCommand } from 'citty'
@@ -264,7 +265,10 @@ const sitemapsSnapshotSubCommand = defineCommand({
         raw: s,
       }))
 
-    const sitemaps = createSitemapStore({ dataSource: store.dataSource })
+    const sitemaps = createSitemapStore({
+      dataSource: store.dataSource,
+      withMutation: store.withSitemapMutation,
+    })
     await sitemaps.writeSnapshot(
       { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
       records,
@@ -301,7 +305,7 @@ const sitemapsShowSubCommand = defineCommand({
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const store = ctx.store!
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-    const sitemaps = createSitemapStore({ dataSource: store.dataSource })
+    const sitemaps = createSitemapReadStore({ dataSource: store.dataSource })
     const record = await sitemaps.getLatest(
       { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
       String(args.path),

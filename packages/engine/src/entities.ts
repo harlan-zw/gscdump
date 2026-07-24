@@ -25,15 +25,32 @@ import {
   inspectionHistoryPrefix,
   inspectionHistoryShardKey,
   inspectionParquetKey,
+  parseSitemapUrlsDeltaKey,
   sitemapHistoryKey,
   sitemapIndexKey,
   sitemapUrlsDeltaKey,
+  sitemapUrlsEventKey,
+  sitemapUrlsEventSeedKey,
+  sitemapUrlsEventsPrefix,
+  sitemapUrlsGenerationKey,
   sitemapUrlsIndexKey,
   sitemapUrlsIndexPrefix,
+  sitemapUrlsPendingGenerationKey,
+  sitemapUrlsPendingGenerationsPrefix,
   sitemapUrlsPrefix,
+  sitemapUrlsProjectionManifestKey,
+  sitemapUrlsReconcileGenerationKey,
 } from './entity-keys'
+import {
+  decodeSitemapProjectionManifest,
+  emptySitemapProjectionManifest,
+  selectSitemapProjectionFiles,
+  SITEMAP_PROJECTION_GRACE_MS,
+  withSitemapProjectionFeed,
+} from './sitemap-projection'
 
 export * from './entity-keys'
+export * from './sitemap-projection'
 
 // The versioned query→canonical(+intent) dimension is an entity store; surface
 // it on the same `@gscdump/engine/entities` subpath.
@@ -566,9 +583,10 @@ export interface SitemapHistoryDoc {
 // per sitemap, not one tenant-wide blob. Every sitemap operation (sync, diff,
 // compaction) is scoped to a single feedpath, so storage is keyed the same
 // way — peak memory is bounded by one sitemap's URL count, never the whole
-// site's. The change history lives in the per-feedpath `deltas/` files, which
-// this layout leaves untouched.
-const SITEMAP_URLS_DELTA_PREFIX_RE = /\/urls\/deltas\/(\d{4}-\d{2}-\d{2})__([0-9a-f]+)\.parquet$/
+// site's. Disposable state deltas compact into this index; immutable membership
+// events remain available for historical analytics.
+const SITEMAP_URLS_EVENT_PREFIX_RE = /\/urls\/events\/(\d{4}-\d{2}-\d{2})__[0-9a-f]+__\d+__[0-9a-f]+\.parquet$/
+const SITEMAP_URLS_PENDING_GENERATION_RE = /\/urls\/generations\/pending\/([0-9a-f]+)\.json$/
 
 /** Parsed URL entry from a sitemap XML. */
 export interface ParsedUrl {
@@ -595,8 +613,15 @@ export interface SnapshotUrlsResult {
   removed: number
   kept: number
   contentHash: string
-  /** True when contentHash matched prior; the call performed zero writes. */
+  /** True when current membership did not change. Initial history seeding may write. */
   unchanged: boolean
+}
+
+export interface CompleteSitemapGeneration {
+  _tag: 'complete'
+  id: string
+  /** Unix epoch milliseconds. */
+  observedAt: number
 }
 
 export interface ReconcileResult {
@@ -621,12 +646,12 @@ export interface CompactUrlsOptions {
 }
 
 export interface CompactUrlsResult {
-  /** Feedpaths whose deltas were folded and deleted by this call. */
+  /** Feedpaths whose active deltas were folded and retired by this call. */
   compactedFeedpaths: number
   /**
    * Feedpaths that still hold outstanding deltas. Call `compactUrls` again to
-   * continue — no cursor is needed, because a compacted feedpath's deltas are
-   * deleted, so the next call simply doesn't see it.
+   * continue. No cursor is needed because the projection watermark excludes a
+   * compacted feedpath's grace-retained deltas from the next call.
    */
   remainingFeedpaths: number
 }
@@ -639,6 +664,22 @@ export interface DeltaEntry {
   loc: string
   lastmod?: string
   at: number
+}
+
+export interface SitemapMembershipEvent {
+  feedpath: string
+  feedpathHash: string
+  urlHash: string
+  op: 'added' | 'removed'
+  loc: string
+  lastmod?: string
+  generationId: string
+  /** Unix epoch milliseconds. */
+  observedAt: number
+  /** Stable ordering within one generation. */
+  sequence: number
+  /** Whether this row also mutates the disposable current-state projection. */
+  projectsState: boolean
 }
 
 export interface DateRange {
@@ -671,6 +712,24 @@ const URLS_DELTA_COLUMNS: readonly ColumnDef[] = [
   { name: 'loc', type: 'VARCHAR', nullable: false },
   { name: 'lastmod', type: 'VARCHAR', nullable: true },
   { name: 'at', type: 'BIGINT', nullable: false },
+  { name: 'generation_id', type: 'VARCHAR', nullable: true },
+]
+
+const URLS_EVENT_COLUMNS: readonly ColumnDef[] = [
+  { name: 'feedpath', type: 'VARCHAR', nullable: false },
+  { name: 'feedpath_hash', type: 'VARCHAR', nullable: false },
+  { name: 'url_hash', type: 'VARCHAR', nullable: false },
+  { name: 'op', type: 'VARCHAR', nullable: false },
+  { name: 'loc', type: 'VARCHAR', nullable: false },
+  { name: 'lastmod', type: 'VARCHAR', nullable: true },
+  { name: 'generation_id', type: 'VARCHAR', nullable: false },
+  { name: 'observed_at', type: 'BIGINT', nullable: false },
+  { name: 'sequence', type: 'INTEGER', nullable: false },
+  { name: 'projects_state', type: 'INTEGER', nullable: false },
+  { name: 'seed_generation', type: 'INTEGER', nullable: false },
+  { name: 'generation_kind', type: 'VARCHAR', nullable: false },
+  { name: 'content_hash', type: 'VARCHAR', nullable: true },
+  { name: 'input_count', type: 'INTEGER', nullable: true },
 ]
 
 function rowToUrlRecord(row: Row): SitemapUrlRecord {
@@ -699,31 +758,53 @@ function urlRecordToRow(r: SitemapUrlRecord): Row {
   }
 }
 
-function isoDate(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10)
+interface SitemapEventSeed {
+  version: 1
+  generationId: string
+  observedAt: number
 }
 
-export interface SitemapStore {
-  /**
-   * Persist a snapshot run. Updates the index + writes one immutable
-   * history doc per record under `history/<feedpathHash>__<capturedAtMs>.json`.
-   */
-  writeSnapshot: (ctx: TenantCtx, records: readonly SitemapRecord[]) => Promise<void>
+interface SitemapSnapshotGenerationCheckpoint {
+  _tag: 'snapshot'
+  version: 1
+  generationId: string
+  observedAt: number
+  eventDigest: string
+  result: SnapshotUrlsResult
+}
+
+interface SitemapReconcileGenerationCheckpoint {
+  _tag: 'reconcile'
+  version: 1
+  generationId: string
+  observedAt: number
+  eventDigest: string
+}
+
+type SitemapGenerationCheckpoint
+  = | SitemapSnapshotGenerationCheckpoint
+    | SitemapReconcileGenerationCheckpoint
+
+interface SitemapSiteGenerationCheckpoint {
+  version: 1
+  generationId: string
+  observedAt: number
+  inputDigest: string
+}
+
+interface SitemapPendingGeneration {
+  version: 1
+  generationId: string
+  observedAt: number
+  eventKey: string
+  eventDigest: string
+}
+
+export interface SitemapReadStore {
   /** Load the full site index (latest record per feedpath). */
   loadIndex: (ctx: TenantCtx) => Promise<SitemapIndex>
   /** Fetch the latest snapshot for a feedpath, or undefined. */
   getLatest: (ctx: TenantCtx, path: string) => Promise<SitemapRecord | undefined>
-  /**
-   * Diff incoming URLs against the prior `urls/index.parquet` partition for
-   * `feedpath`; on change, writes a single delta parquet under
-   * `urls/deltas/YYYY-MM-DD__{feedpathHash}.parquet`. Skipped (0 PUTs) when
-   * `contentHash` matches prior.
-   */
-  snapshotUrls: (
-    ctx: TenantCtx,
-    feedpath: string,
-    urls: readonly ParsedUrl[],
-  ) => Promise<SnapshotUrlsResult>
   /** Stream live (and optionally removed) URL rows for a feedpath. */
   loadUrls: (
     ctx: TenantCtx,
@@ -732,6 +813,26 @@ export interface SitemapStore {
   ) => AsyncIterable<SitemapUrlRecord>
   /** Stream all delta entries within `[from, to]` (YYYY-MM-DD inclusive). */
   loadDeltas: (ctx: TenantCtx, dateRange?: DateRange) => AsyncIterable<DeltaEntry>
+  /** Stream immutable membership events within `[from, to]`. */
+  loadEvents: (ctx: TenantCtx, dateRange?: DateRange) => AsyncIterable<SitemapMembershipEvent>
+}
+
+export interface SitemapStore extends SitemapReadStore {
+  /**
+   * Persist a snapshot run. Updates the index + writes one immutable
+   * history doc per record under `history/<feedpathHash>__<capturedAtMs>.json`.
+   */
+  writeSnapshot: (ctx: TenantCtx, records: readonly SitemapRecord[]) => Promise<void>
+  /**
+   * Diff a complete sitemap generation against current state. The immutable
+   * membership event lands before its disposable state delta.
+   */
+  snapshotUrls: (
+    ctx: TenantCtx,
+    generation: CompleteSitemapGeneration,
+    feedpath: string,
+    urls: readonly ParsedUrl[],
+  ) => Promise<SnapshotUrlsResult>
   /**
    * Fold accumulated deltas into the prior index, one feedpath at a time:
    * rewrites each touched feedpath's `by-feed/<hash>/index.parquet` and deletes
@@ -739,9 +840,9 @@ export interface SitemapStore {
    * regardless of total site URL count.
    *
    * Optionally bounded in TIME too (`opts.deadlineMs` / `opts.maxFeedpaths`).
-   * A bounded call is safe to stop mid-way: each feedpath's deltas are deleted
-   * as soon as its index is rewritten, so the remainder is simply what the next
-   * call finds. Callers drive this from `remainingFeedpaths`, not a cursor.
+   * A bounded call is safe to stop mid-way: each rewritten feedpath advances
+   * the projection watermark, so the remainder is simply what the next call
+   * finds. Callers drive this from `remainingFeedpaths`, not a cursor.
    */
   compactUrls: (ctx: TenantCtx, opts?: CompactUrlsOptions) => Promise<CompactUrlsResult>
   /**
@@ -750,66 +851,113 @@ export interface SitemapStore {
    * prune URLs *inside* a feedpath that was re-observed; a whole feed dropped
    * from the sitemap list (no `snapshotUrls` call) leaves its URLs frozen-live
    * forever. This is the sidecar mirror of the D1 generation sweep: it rewrites
-   * each dropped feedpath's `by-feed/<hash>/index.parquet` with `removedAt` set
-   * and deletes its outstanding deltas (write-new-base + delete-deltas,
-   * ADR-0002). Bounded per feedpath, so memory stays flat regardless of site
-   * size. Live feedpaths are never touched.
+   * each dropped feedpath's `by-feed/<hash>/index.parquet` with `removedAt` set,
+   * advances its projection watermark, and grace-retires outstanding deltas.
+   * Bounded per feedpath, so memory stays flat regardless of site size. Live
+   * feedpaths are never touched.
    */
   reconcile: (
     ctx: TenantCtx,
-    opts: { liveFeedpaths: readonly string[], at?: number },
+    generation: CompleteSitemapGeneration,
+    opts: { liveFeedpaths: readonly string[] },
   ) => Promise<ReconcileResult>
 }
 
-export interface CreateSitemapStoreOptions {
+export interface CreateSitemapReadStoreOptions {
   dataSource: DataSource
   /** Override the feedpath hash (test seam). */
   hash?: (path: string) => string
+}
+
+export type SitemapMutation = <T>(ctx: TenantCtx, fn: () => Promise<T>) => Promise<T>
+
+export interface CreateSitemapStoreOptions extends CreateSitemapReadStoreOptions {
+  withMutation: SitemapMutation
   now?: () => number
 }
 
-export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStore {
+interface SitemapUrlState {
+  live: Map<string, SitemapUrlRecord>
+  removed: Map<string, SitemapUrlRecord>
+}
+
+interface SitemapDeltaFile {
+  key: string
+  rows: Row[]
+}
+
+function createSitemapUrlState(indexRows: readonly Row[]): SitemapUrlState {
+  const state: SitemapUrlState = { live: new Map(), removed: new Map() }
+  for (const row of indexRows) {
+    const record = rowToUrlRecord(row)
+    if (record.removedAt == null)
+      state.live.set(record.urlHash, record)
+    else
+      state.removed.set(record.urlHash, record)
+  }
+  return state
+}
+
+function applySitemapDeltaRows(state: SitemapUrlState, rows: readonly Row[]): void {
+  for (const row of rows) {
+    const urlHash = String(row.url_hash)
+    const observedAt = Number(row.at)
+    const op = String(row.op)
+    if (op === 'added') {
+      const previous = state.live.get(urlHash) ?? state.removed.get(urlHash)
+      state.removed.delete(urlHash)
+      state.live.set(urlHash, {
+        feedpath: String(row.feedpath),
+        feedpathHash: String(row.feedpath_hash),
+        urlHash,
+        loc: String(row.loc),
+        lastmod: row.lastmod == null ? undefined : String(row.lastmod),
+        firstSeenAt: previous?.firstSeenAt ?? observedAt,
+        lastSeenAt: observedAt,
+      })
+    }
+    else if (op === 'removed') {
+      const previous = state.live.get(urlHash)
+      state.live.delete(urlHash)
+      if (previous)
+        state.removed.set(urlHash, { ...previous, removedAt: observedAt })
+    }
+  }
+}
+
+function applySitemapDeltaFiles(state: SitemapUrlState, files: readonly SitemapDeltaFile[]): void {
+  for (const file of files)
+    applySitemapDeltaRows(state, file.rows)
+}
+
+function sortSitemapDeltaFiles(files: SitemapDeltaFile[]): SitemapDeltaFile[] {
+  return files.sort((a, b) => a.key.localeCompare(b.key))
+}
+
+async function readSitemapDeltaFiles(ds: DataSource, keys: readonly string[]): Promise<SitemapDeltaFile[]> {
+  const files = await mapEntityIo(keys, async (key) => {
+    const bytes = await readOptional(ds, key)
+    return bytes ? { key, rows: await decodeParquetToRows(bytes) } : undefined
+  })
+  return sortSitemapDeltaFiles(files.filter((file): file is SitemapDeltaFile => file !== undefined))
+}
+
+function dateInRange(date: string, range?: DateRange): boolean {
+  return (!range?.from || date >= range.from) && (!range?.to || date <= range.to)
+}
+
+export function createSitemapReadStore(opts: CreateSitemapReadStoreOptions): SitemapReadStore {
   const ds = opts.dataSource
   const hash = opts.hash ?? hashUrl
-  const now = opts.now ?? (() => Date.now())
 
   async function readJson<T>(key: string): Promise<T | undefined> {
-    // Absent object → undefined (first-run no-op). A real read failure or a
-    // JSON parse error propagates: both are genuine failures the caller must
-    // not mistake for "this key has never been written".
     const bytes = await readOptional(ds, key)
-    if (bytes === undefined)
-      return undefined
-    return JSON.parse(new TextDecoder().decode(bytes)) as T
-  }
-
-  async function writeJson(key: string, value: unknown): Promise<void> {
-    await ds.write(key, encodeJsonBigintSafe(value))
+    return bytes === undefined
+      ? undefined
+      : JSON.parse(new TextDecoder().decode(bytes)) as T
   }
 
   return {
-    async writeSnapshot(ctx, records) {
-      if (records.length === 0)
-        return
-      const indexKey = sitemapIndexKey(ctx)
-      const index = (await readJson<SitemapIndex>(indexKey)) ?? { version: 1, records: {} }
-      const stamp = now()
-      const historyDocs = new Map<string, SitemapHistoryDoc>()
-      for (const r of records) {
-        const h = hash(r.path)
-        index.records[h] = r
-        historyDocs.set(sitemapHistoryKey(ctx, h, stamp), {
-          version: 1,
-          path: r.path,
-          capturedAt: r.capturedAt,
-          record: r,
-        })
-      }
-      await mapEntityIo([...historyDocs], ([key, doc]) => writeJson(key, doc))
-      // Publish the index only after every immutable history document landed.
-      await writeJson(indexKey, index)
-    },
-
     async loadIndex(ctx) {
       return (await readJson<SitemapIndex>(sitemapIndexKey(ctx))) ?? { version: 1, records: {} }
     },
@@ -819,402 +967,797 @@ export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStor
       return index?.records[hash(path)]
     },
 
-    async snapshotUrls(ctx, feedpath, urls) {
-      const fpHash = hash(feedpath)
-      const contentHash = hashUrlList(urls)
-      const at = now()
-      // Load effective prior state for this feedpath: index.parquet + any
-      // outstanding deltas folded in chronologically. Diff is against what the
-      // reader sees today, not the (possibly stale) compacted index alone.
-      const priorByHash = new Map<string, SitemapUrlRecord>()
-      for await (const rec of this.loadUrls(ctx, feedpath, { includeRemoved: true }))
-        priorByHash.set(rec.urlHash, rec)
-      const livePrior = Array.from(priorByHash.values()).filter(r => r.removedAt == null)
-      // Short-circuit on unchanged hash: skip the PUT entirely.
-      // Compare only when the prior set was non-empty; first-run always writes.
-      if (livePrior.length > 0) {
-        const priorLocs = livePrior.map(r => String(r.loc)).sort()
-        const priorContentHash = hashSortedUrlList(priorLocs)
-        if (priorContentHash === contentHash) {
-          return {
-            added: 0,
-            removed: 0,
-            kept: livePrior.length,
-            contentHash,
-            unchanged: true,
-          }
-        }
-      }
-
-      // Diff in CPU.
-      const incomingByHash = new Map<string, ParsedUrl>()
-      for (const u of urls) incomingByHash.set(hash(u.loc), u)
-
-      const deltaRows: Row[] = []
-      let added = 0
-      let removed = 0
-      let kept = 0
-      const date = isoDate(at)
-
-      for (const [urlHash, u] of incomingByHash) {
-        const prev = priorByHash.get(urlHash)
-        if (!prev || prev.removedAt != null) {
-          added++
-          deltaRows.push({
-            feedpath,
-            feedpath_hash: fpHash,
-            url_hash: urlHash,
-            op: 'added',
-            loc: u.loc,
-            lastmod: u.lastmod ?? null,
-            at,
-          })
-        }
-        else {
-          kept++
-        }
-      }
-      for (const [urlHash, prev] of priorByHash) {
-        if (prev.removedAt != null)
-          continue
-        if (!incomingByHash.has(urlHash)) {
-          removed++
-          deltaRows.push({
-            feedpath,
-            feedpath_hash: fpHash,
-            url_hash: urlHash,
-            op: 'removed',
-            loc: prev.loc,
-            lastmod: prev.lastmod ?? null,
-            at,
-          })
-        }
-      }
-
-      if (deltaRows.length > 0) {
-        const bytes = encodeRowsToParquetFlex(deltaRows, {
-          columns: URLS_DELTA_COLUMNS,
-          sortKey: ['url_hash'],
-        })
-        await ds.write(sitemapUrlsDeltaKey(ctx, fpHash, date), bytes)
-      }
-
-      return { added, removed, kept, contentHash, unchanged: false }
-    },
-
-    async* loadUrls(ctx, feedpath, opts) {
-      const fpHash = hash(feedpath)
-      const includeRemoved = opts?.includeRemoved ?? false
-      // Per-feedpath index: the whole file is this sitemap's URLs, so the read
-      // is bounded by one sitemap's size regardless of how large the site is.
-      const [indexRows, listedDeltaKeys] = await Promise.all([
-        readOptional(ds, sitemapUrlsIndexKey(ctx, fpHash))
-          .then(bytes => bytes ? decodeParquetToRows(bytes) : []),
-        ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`),
-      ])
-      // Apply any deltas not yet folded into the index. Fold in chronological
-      // order (the delta filename embeds an ISO date prefix → lexical sort).
-      const deltaKeys = listedDeltaKeys
-        .filter((key) => {
-          const match = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
-          return match?.[2] === fpHash
-        })
-        .sort()
-      const live = new Map<string, SitemapUrlRecord>()
-      const removedMap = new Map<string, SitemapUrlRecord>()
-      for (const row of indexRows) {
-        const rec = rowToUrlRecord(row)
-        if (rec.removedAt != null)
-          removedMap.set(rec.urlHash, rec)
-        else
-          live.set(rec.urlHash, rec)
-      }
-      const deltas = await mapEntityIo(deltaKeys, async (key) => {
-        const dBytes = await readOptional(ds, key)
-        if (!dBytes)
-          return []
-        return decodeParquetToRows(dBytes)
-      })
-      for (const dRows of deltas) {
-        for (const r of dRows) {
-          const op = String(r.op)
-          const urlHash = String(r.url_hash)
-          const at = Number(r.at)
-          if (op === 'added') {
-            const prev = live.get(urlHash) ?? removedMap.get(urlHash)
-            removedMap.delete(urlHash)
-            live.set(urlHash, {
-              feedpath,
-              feedpathHash: fpHash,
-              urlHash,
-              loc: String(r.loc),
-              lastmod: r.lastmod == null ? undefined : String(r.lastmod),
-              firstSeenAt: prev?.firstSeenAt ?? at,
-              lastSeenAt: at,
-            })
-          }
-          else if (op === 'removed') {
-            const prev = live.get(urlHash)
-            live.delete(urlHash)
-            if (prev) {
-              removedMap.set(urlHash, { ...prev, removedAt: at })
-            }
-          }
-        }
-      }
-      for (const rec of live.values()) yield rec
-      if (includeRemoved) {
-        for (const rec of removedMap.values()) yield rec
+    async* loadUrls(ctx, feedpath, loadOpts) {
+      const feedpathHash = hash(feedpath)
+      const listedDeltaKeys = (await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`))
+        .filter(key => parseSitemapUrlsDeltaKey(key)?.feedpathHash === feedpathHash)
+      // Load listed delta bytes before reading the projection watermark. A
+      // compactor may publish a newer base while this read is in flight; the
+      // grace window keeps these bytes available until every pre-publish
+      // reader has finished.
+      const listedDeltaFiles = await readSitemapDeltaFiles(ds, listedDeltaKeys)
+      const manifestBytes = await readOptional(ds, sitemapUrlsProjectionManifestKey(ctx))
+      const manifest = manifestBytes
+        ? decodeSitemapProjectionManifest(new TextDecoder().decode(manifestBytes))
+        : undefined
+      // Base publication precedes the manifest watermark. Reading the base
+      // after the manifest prevents the stale combination of old base plus new
+      // watermark, which would filter the only delta carrying the new state.
+      const indexRows = await readOptional(ds, sitemapUrlsIndexKey(ctx, feedpathHash))
+        .then(bytes => bytes ? decodeParquetToRows(bytes) : [])
+      const currentDeltaKeys = new Set(
+        selectSitemapProjectionFiles([], listedDeltaKeys, manifest).deltaKeys,
+      )
+      const state = createSitemapUrlState(indexRows)
+      applySitemapDeltaFiles(
+        state,
+        listedDeltaFiles.filter(file => currentDeltaKeys.has(file.key)),
+      )
+      for (const record of state.live.values())
+        yield record
+      if (loadOpts?.includeRemoved) {
+        for (const record of state.removed.values())
+          yield record
       }
     },
 
     async* loadDeltas(ctx, dateRange) {
-      const from = dateRange?.from
-      const to = dateRange?.to
-      const keys = (await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`)).sort()
+      const [listedKeys, manifestBytes] = await Promise.all([
+        ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`),
+        readOptional(ds, sitemapUrlsProjectionManifestKey(ctx)),
+      ])
+      const manifest = manifestBytes
+        ? decodeSitemapProjectionManifest(new TextDecoder().decode(manifestBytes))
+        : undefined
+      const keys = selectSitemapProjectionFiles([], listedKeys, manifest).deltaKeys
+        .filter((key) => {
+          const parsed = parseSitemapUrlsDeltaKey(key)
+          return Boolean(parsed && dateInRange(parsed.date, dateRange))
+        })
+      const files = await readSitemapDeltaFiles(ds, keys)
+      for (const file of files) {
+        for (const row of file.rows) {
+          const op = String(row.op)
+          if (op !== 'added' && op !== 'removed')
+            continue
+          yield {
+            feedpath: String(row.feedpath),
+            feedpathHash: String(row.feedpath_hash),
+            urlHash: String(row.url_hash),
+            op,
+            loc: String(row.loc),
+            lastmod: row.lastmod == null ? undefined : String(row.lastmod),
+            at: Number(row.at),
+          }
+        }
+      }
+    },
+
+    async* loadEvents(ctx, dateRange) {
+      // List immutable events before pending descriptors. A concurrent writer
+      // publishes its descriptor first, so any event visible in this listing is
+      // either already committed or will be excluded by the later pending read.
+      const listedEventKeys = await ds.list(`${sitemapUrlsEventsPrefix(ctx)}/`)
+      const pendingKeys = await ds.list(`${sitemapUrlsPendingGenerationsPrefix(ctx)}/`)
+      const pendingEvents = new Set(
+        (await mapEntityIo(pendingKeys, key => readJson<SitemapPendingGeneration>(key)))
+          .filter((pending): pending is SitemapPendingGeneration => pending !== undefined)
+          .map(pending => pending.eventKey),
+      )
+      const keys = listedEventKeys
+        .filter((key) => {
+          const match = SITEMAP_URLS_EVENT_PREFIX_RE.exec(key)
+          return !pendingEvents.has(key)
+            && Boolean(match?.[1] && dateInRange(match[1], dateRange))
+        })
+        .sort()
       for (const key of keys) {
-        const m = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
-        if (!m)
-          continue
-        const date = m[1]
-        if (!date)
-          continue
-        if (from && date < from)
-          continue
-        if (to && date > to)
-          continue
         const bytes = await readOptional(ds, key)
         if (!bytes)
           continue
         const rows = await decodeParquetToRows(bytes)
-        for (const r of rows) {
-          const op = String(r.op)
+        rows.sort((a, b) =>
+          Number(a.observed_at) - Number(b.observed_at)
+          || Number(a.sequence) - Number(b.sequence)
+          || String(a.url_hash).localeCompare(String(b.url_hash)),
+        )
+        for (const row of rows) {
+          const op = String(row.op)
           if (op !== 'added' && op !== 'removed')
             continue
           yield {
-            feedpath: String(r.feedpath),
-            feedpathHash: String(r.feedpath_hash),
-            urlHash: String(r.url_hash),
+            feedpath: String(row.feedpath),
+            feedpathHash: String(row.feedpath_hash),
+            urlHash: String(row.url_hash),
             op,
-            loc: String(r.loc),
-            lastmod: r.lastmod == null ? undefined : String(r.lastmod),
-            at: Number(r.at),
+            loc: String(row.loc),
+            lastmod: row.lastmod == null ? undefined : String(row.lastmod),
+            generationId: String(row.generation_id),
+            observedAt: Number(row.observed_at),
+            sequence: Number(row.sequence),
+            projectsState: Boolean(row.projects_state),
           }
         }
       }
     },
+  }
+}
 
-    async compactUrls(ctx, opts = {}) {
-      const startedAt = now()
-      const deadlineMs = opts.deadlineMs ?? Number.POSITIVE_INFINITY
-      const maxFeedpaths = opts.maxFeedpaths ?? Number.POSITIVE_INFINITY
+export function createSitemapStore(opts: CreateSitemapStoreOptions): SitemapStore {
+  const ds = opts.dataSource
+  const hash = opts.hash ?? hashUrl
+  const now = opts.now ?? (() => Date.now())
+  const withMutation = opts.withMutation
+  const readStore = createSitemapReadStore({ dataSource: ds, hash })
 
-      const deltaKeys = await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`)
-      // Group outstanding deltas by feedpath. Only feedpaths with new deltas
-      // need recompaction; every other per-feedpath index is already current.
-      const deltasByFeed = new Map<string, string[]>()
-      for (const key of deltaKeys) {
-        const m = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
-        if (!m)
-          continue
-        const feedpathHash = m[2]
-        if (!feedpathHash)
-          continue
-        const list = deltasByFeed.get(feedpathHash) ?? []
-        list.push(key)
-        deltasByFeed.set(feedpathHash, list)
+  async function readJson<T>(key: string): Promise<T | undefined> {
+    const bytes = await readOptional(ds, key)
+    return bytes === undefined
+      ? undefined
+      : JSON.parse(new TextDecoder().decode(bytes)) as T
+  }
+
+  function writeJson(key: string, value: unknown): Promise<void> {
+    return ds.write(key, encodeJsonBigintSafe(value))
+  }
+
+  async function readProjectionManifest(ctx: TenantCtx): Promise<ReturnType<typeof emptySitemapProjectionManifest>> {
+    const bytes = await readOptional(ds, sitemapUrlsProjectionManifestKey(ctx))
+    return bytes
+      ? decodeSitemapProjectionManifest(new TextDecoder().decode(bytes))
+      : emptySitemapProjectionManifest()
+  }
+
+  async function deleteExpiredProjectionDeltas(
+    manifest: ReturnType<typeof emptySitemapProjectionManifest>,
+    deltaKeys: readonly string[],
+    currentTime: number,
+  ): Promise<void> {
+    const expired = deltaKeys.filter((key) => {
+      const parsed = parseSitemapUrlsDeltaKey(key)
+      const feed = parsed ? manifest.feeds[parsed.feedpathHash] : undefined
+      return Boolean(
+        feed
+        && key <= feed.compactedThrough
+        && currentTime - feed.publishedAt >= SITEMAP_PROJECTION_GRACE_MS,
+      )
+    })
+    if (expired.length > 0)
+      await ds.delete(expired)
+  }
+
+  async function publishCurrentProjection(
+    ctx: TenantCtx,
+    feedpathHash: string,
+    rows: readonly SitemapUrlRecord[],
+    consumedDeltas: readonly SitemapDeltaFile[],
+    manifest: ReturnType<typeof emptySitemapProjectionManifest>,
+    publishedAt: number,
+  ): Promise<ReturnType<typeof emptySitemapProjectionManifest>> {
+    const bytes = encodeRowsToParquetFlex(rows.map(urlRecordToRow), {
+      columns: URLS_INDEX_COLUMNS,
+      sortKey: ['feedpath_hash', 'url_hash'],
+    })
+    await ds.write(sitemapUrlsIndexKey(ctx, feedpathHash), bytes)
+    const compactedThrough = consumedDeltas.at(-1)?.key
+    if (!compactedThrough)
+      return manifest
+    const next = withSitemapProjectionFeed(manifest, feedpathHash, {
+      compactedThrough,
+      publishedAt,
+    })
+    await writeJson(sitemapUrlsProjectionManifestKey(ctx), next)
+    return next
+  }
+
+  function normalizedEventRows(rows: readonly Row[]): unknown[] {
+    return rows
+      .map(row => ({
+        feedpath: String(row.feedpath),
+        feedpathHash: String(row.feedpath_hash),
+        urlHash: String(row.url_hash),
+        op: String(row.op),
+        loc: String(row.loc),
+        lastmod: row.lastmod == null ? null : String(row.lastmod),
+        generationId: String(row.generation_id),
+        observedAt: Number(row.observed_at),
+        sequence: Number(row.sequence),
+        projectsState: Boolean(row.projects_state),
+        seedGeneration: Boolean(row.seed_generation),
+        generationKind: String(row.generation_kind),
+        contentHash: row.content_hash == null ? null : String(row.content_hash),
+        inputCount: row.input_count == null ? null : Number(row.input_count),
+      }))
+      .sort((a, b) =>
+        a.observedAt - b.observedAt
+        || a.sequence - b.sequence
+        || a.urlHash.localeCompare(b.urlHash)
+        || a.op.localeCompare(b.op),
+      )
+  }
+
+  function eventDigest(rows: readonly Row[]): string {
+    return hashUrl(JSON.stringify(normalizedEventRows(rows)))
+  }
+
+  function assertGenerationAccepted(
+    generation: CompleteSitemapGeneration,
+    checkpoint: { generationId: string, observedAt: number } | undefined,
+    scope: string,
+  ): 'newer' | 'same' {
+    if (!checkpoint)
+      return 'newer'
+    if (generation.id === checkpoint.generationId) {
+      if (generation.observedAt === checkpoint.observedAt)
+        return 'same'
+      throw new Error(`sitemap generation conflict for ${scope}: generation ${generation.id} changed observedAt`)
+    }
+    if (generation.observedAt > checkpoint.observedAt)
+      return 'newer'
+    const reason = generation.observedAt === checkpoint.observedAt ? 'ambiguous timestamp' : 'stale generation'
+    throw new Error(`sitemap generation conflict for ${scope}: ${reason}`)
+  }
+
+  async function ensureEvents(
+    ctx: TenantCtx,
+    feedpathHash: string,
+    generation: CompleteSitemapGeneration,
+    rows: readonly Row[],
+  ): Promise<{ rows: Row[], digest: string }> {
+    const expectedDigest = eventDigest(rows)
+    if (rows.length === 0)
+      return { rows: [], digest: expectedDigest }
+    const key = sitemapUrlsEventKey(ctx, feedpathHash, generation)
+    await writeJson(sitemapUrlsPendingGenerationKey(ctx, feedpathHash), {
+      version: 1,
+      generationId: generation.id,
+      observedAt: generation.observedAt,
+      eventKey: key,
+      eventDigest: expectedDigest,
+    } satisfies SitemapPendingGeneration)
+    const existing = await readOptional(ds, key)
+    if (existing) {
+      const existingRows = await decodeParquetToRows(existing)
+      const existingDigest = eventDigest(existingRows)
+      if (existingDigest !== expectedDigest)
+        throw new Error(`sitemap generation conflict for ${feedpathHash}: immutable event digest changed`)
+      return { rows: existingRows, digest: existingDigest }
+    }
+    const bytes = encodeRowsToParquetFlex(rows, {
+      columns: URLS_EVENT_COLUMNS,
+      sortKey: ['sequence', 'url_hash'],
+    })
+    await ds.write(key, bytes)
+    return { rows: [...rows], digest: expectedDigest }
+  }
+
+  function eventRow(
+    generation: CompleteSitemapGeneration,
+    row: Row,
+    metadata: {
+      sequence: number
+      projectsState: boolean
+      seedGeneration: boolean
+      generationKind: 'snapshot' | 'reconcile'
+      contentHash?: string
+      inputCount?: number
+    },
+  ): Row {
+    return {
+      feedpath: row.feedpath,
+      feedpath_hash: row.feedpath_hash,
+      url_hash: row.url_hash,
+      op: row.op,
+      loc: row.loc,
+      lastmod: row.lastmod,
+      generation_id: generation.id,
+      observed_at: generation.observedAt,
+      sequence: metadata.sequence,
+      projects_state: metadata.projectsState ? 1 : 0,
+      seed_generation: metadata.seedGeneration ? 1 : 0,
+      generation_kind: metadata.generationKind,
+      content_hash: metadata.contentHash ?? null,
+      input_count: metadata.inputCount ?? null,
+    }
+  }
+
+  function stateRowsFromEvents(rows: readonly Row[]): Row[] {
+    return rows
+      .filter(row => Boolean(row.projects_state))
+      .map((row): Row => ({
+        feedpath: row.feedpath,
+        feedpath_hash: row.feedpath_hash,
+        url_hash: row.url_hash,
+        op: row.op,
+        loc: row.loc,
+        lastmod: row.lastmod,
+        at: row.observed_at,
+        generation_id: row.generation_id,
+      }))
+  }
+
+  function checkpointFromEvents(rows: readonly Row[], digest: string): SitemapGenerationCheckpoint {
+    const first = rows[0]
+    if (!first)
+      throw new Error('cannot checkpoint an empty sitemap event file')
+    const generationId = String(first.generation_id)
+    const observedAt = Number(first.observed_at)
+    for (const row of rows) {
+      if (String(row.generation_id) !== generationId || Number(row.observed_at) !== observedAt)
+        throw new Error('sitemap event file contains multiple generations')
+    }
+    if (String(first.generation_kind) === 'snapshot') {
+      const contentHash = String(first.content_hash)
+      const inputCount = Number(first.input_count)
+      const stateRows = stateRowsFromEvents(rows)
+      const added = stateRows.filter(row => String(row.op) === 'added').length
+      const removed = stateRows.filter(row => String(row.op) === 'removed').length
+      return {
+        _tag: 'snapshot',
+        version: 1,
+        generationId,
+        observedAt,
+        eventDigest: digest,
+        result: {
+          added,
+          removed,
+          kept: Math.max(0, inputCount - added),
+          contentHash,
+          unchanged: stateRows.length === 0,
+        },
       }
+    }
+    return {
+      _tag: 'reconcile',
+      version: 1,
+      generationId,
+      observedAt,
+      eventDigest: digest,
+    }
+  }
 
-      const totalFeedpaths = deltasByFeed.size
-      let compactedFeedpaths = 0
+  async function projectEvents(
+    ctx: TenantCtx,
+    feedpathHash: string,
+    rows: readonly Row[],
+    digest: string,
+  ): Promise<SitemapGenerationCheckpoint> {
+    const checkpoint = checkpointFromEvents(rows, digest)
+    const generation = { id: checkpoint.generationId, observedAt: checkpoint.observedAt }
+    const stateRows = stateRowsFromEvents(rows)
+    if (stateRows.length > 0) {
+      const bytes = encodeRowsToParquetFlex(stateRows, {
+        columns: URLS_DELTA_COLUMNS,
+        sortKey: ['url_hash'],
+      })
+      await ds.write(sitemapUrlsDeltaKey(ctx, feedpathHash, generation), bytes)
+    }
+    if (rows.some(row => Boolean(row.seed_generation))) {
+      await writeJson(sitemapUrlsEventSeedKey(ctx, feedpathHash), {
+        version: 1,
+        generationId: checkpoint.generationId,
+        observedAt: checkpoint.observedAt,
+      } satisfies SitemapEventSeed)
+    }
+    await writeJson(sitemapUrlsGenerationKey(ctx, feedpathHash), checkpoint)
+    return checkpoint
+  }
 
-      // Compact one feedpath at a time. Peak memory is bounded by a single
-      // sitemap's URL count plus its deltas — never the whole site's index.
-      for (const [fpHash, feedDeltaKeys] of deltasByFeed) {
-        // Both bounds are gated on having compacted ≥1 feedpath, so a call can
-        // never spin without progress (which would leave `remainingFeedpaths`
-        // unchanged and make the caller's continuation loop non-terminating).
-        if (compactedFeedpaths > 0 && (compactedFeedpaths >= maxFeedpaths || now() - startedAt >= deadlineMs))
-          break
-        const indexKey = sitemapUrlsIndexKey(ctx, fpHash)
-        // Highest-risk swallow: if this prior-index read fails for real and we
-        // treat it as absent, we'd rewrite the index from deltas alone and drop
-        // every URL the index held. `readOptional` keeps a genuinely-absent
-        // index as `undefined` (first compaction) but propagates a real failure.
-        const [indexRows, deltaFiles] = await Promise.all([
-          readOptional(ds, indexKey).then(bytes => bytes ? decodeParquetToRows(bytes) : []),
-          mapEntityIo(feedDeltaKeys.sort(), async (key) => {
-            const bytes = await readOptional(ds, key)
-            if (!bytes)
-              return undefined
-            return { key, rows: await decodeParquetToRows(bytes) }
-          }),
-        ])
-        const live = new Map<string, SitemapUrlRecord>()
-        const removed = new Map<string, SitemapUrlRecord>()
-        for (const row of indexRows) {
-          const rec = rowToUrlRecord(row)
-          if (rec.removedAt != null)
-            removed.set(rec.urlHash, rec)
-          else
-            live.set(rec.urlHash, rec)
+  async function repairFeedProjection(
+    ctx: TenantCtx,
+    feedpathHash: string,
+  ): Promise<SitemapGenerationCheckpoint | undefined> {
+    const pendingKey = sitemapUrlsPendingGenerationKey(ctx, feedpathHash)
+    const [checkpoint, pending] = await Promise.all([
+      readJson<SitemapGenerationCheckpoint>(sitemapUrlsGenerationKey(ctx, feedpathHash)),
+      readJson<SitemapPendingGeneration>(pendingKey),
+    ])
+    if (!pending)
+      return checkpoint
+    const pendingGeneration: CompleteSitemapGeneration = {
+      _tag: 'complete',
+      id: pending.generationId,
+      observedAt: pending.observedAt,
+    }
+    if (checkpoint?.generationId === pending.generationId && checkpoint.observedAt !== pending.observedAt)
+      throw new Error(`sitemap generation conflict for ${feedpathHash}: generation ${pending.generationId} changed observedAt`)
+    if (checkpoint && pending.observedAt < checkpoint.observedAt) {
+      await ds.delete([pendingKey])
+      return checkpoint
+    }
+    const position = assertGenerationAccepted(pendingGeneration, checkpoint, feedpathHash)
+    const eventBytes = await readOptional(ds, pending.eventKey)
+    if (!eventBytes) {
+      await ds.delete([pendingKey])
+      return checkpoint
+    }
+    const rows = await decodeParquetToRows(eventBytes)
+    const digest = eventDigest(rows)
+    if (digest !== pending.eventDigest)
+      throw new Error(`sitemap generation conflict for ${feedpathHash}: pending event digest changed`)
+    if (position === 'same') {
+      if (checkpoint?.eventDigest !== digest)
+        throw new Error(`sitemap generation conflict for ${feedpathHash}: checkpoint digest changed`)
+      await ds.delete([pendingKey])
+      return checkpoint
+    }
+    const repaired = await projectEvents(ctx, feedpathHash, rows, digest)
+    await ds.delete([pendingKey])
+    return repaired
+  }
+
+  return {
+    ...readStore,
+
+    writeSnapshot(ctx, records) {
+      return withMutation(ctx, async () => {
+        if (records.length === 0)
+          return
+        const indexKey = sitemapIndexKey(ctx)
+        const index = (await readJson<SitemapIndex>(indexKey)) ?? { version: 1, records: {} }
+        const stamp = now()
+        const historyDocs = new Map<string, SitemapHistoryDoc>()
+        for (const record of records) {
+          const feedpathHash = hash(record.path)
+          index.records[feedpathHash] = record
+          historyDocs.set(sitemapHistoryKey(ctx, feedpathHash, stamp), {
+            version: 1,
+            path: record.path,
+            capturedAt: record.capturedAt,
+            record,
+          })
         }
-        // Fold chronologically — the delta filename embeds an ISO date prefix.
-        const consumed: string[] = []
-        for (const file of deltaFiles) {
-          if (!file)
-            continue
-          const { key, rows } = file
-          consumed.push(key)
-          for (const r of rows) {
-            const urlHash = String(r.url_hash)
-            const at = Number(r.at)
-            const op = String(r.op)
-            if (op === 'added') {
-              const prev = live.get(urlHash) ?? removed.get(urlHash)
-              removed.delete(urlHash)
-              live.set(urlHash, {
-                feedpath: String(r.feedpath),
-                feedpathHash: fpHash,
-                urlHash,
-                loc: String(r.loc),
-                lastmod: r.lastmod == null ? undefined : String(r.lastmod),
-                firstSeenAt: prev?.firstSeenAt ?? at,
-                lastSeenAt: at,
-              })
-            }
-            else if (op === 'removed') {
-              const prev = live.get(urlHash)
-              live.delete(urlHash)
-              if (prev)
-                removed.set(urlHash, { ...prev, removedAt: at })
-            }
-          }
-        }
-        const merged: SitemapUrlRecord[] = [...live.values(), ...removed.values()]
-        merged.sort((a, b) => (a.urlHash < b.urlHash ? -1 : a.urlHash > b.urlHash ? 1 : 0))
-        const bytes = encodeRowsToParquetFlex(merged.map(urlRecordToRow), {
-          columns: URLS_INDEX_COLUMNS,
-          sortKey: ['feedpath_hash', 'url_hash'],
-        })
-        // Index rewritten, THEN deltas dropped: a crash between the two re-folds
-        // the same deltas next call (idempotent), never loses them. This is also
-        // what makes a bounded call resumable without a cursor.
-        await ds.write(indexKey, bytes)
-        if (consumed.length > 0)
-          await ds.delete(consumed)
-        compactedFeedpaths++
-      }
-
-      return { compactedFeedpaths, remainingFeedpaths: totalFeedpaths - compactedFeedpaths }
+        await mapEntityIo([...historyDocs], ([key, doc]) => writeJson(key, doc))
+        await writeJson(indexKey, index)
+      })
     },
 
-    async reconcile(ctx, { liveFeedpaths, at: atOpt }) {
-      const at = atOpt ?? now()
-      const liveHashes = new Set(liveFeedpaths.map(fp => hash(fp)))
-
-      // Every feedpath with persisted state: compacted by-feed index files +
-      // any outstanding (uncompacted) delta files. A feedpath the live set no
-      // longer contains is a dropped feed; its live URLs must be removed.
-      const present = new Set<string>()
-      const [indexKeys, deltaKeys] = await Promise.all([
-        ds.list(`${sitemapUrlsIndexPrefix(ctx)}/`),
-        ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`),
-      ])
-      for (const key of indexKeys) {
-        const m = /\/by-feed\/([0-9a-f]+)\/index\.parquet$/.exec(key)
-        if (m)
-          present.add(m[1]!)
-      }
-      const deltasByFeed = new Map<string, string[]>()
-      for (const key of deltaKeys) {
-        const m = SITEMAP_URLS_DELTA_PREFIX_RE.exec(key)
-        if (!m)
-          continue
-        present.add(m[2]!)
-        const list = deltasByFeed.get(m[2]!) ?? []
-        list.push(key)
-        deltasByFeed.set(m[2]!, list)
-      }
-
-      let feedpathsPruned = 0
-      let urlsRemoved = 0
-      for (const fpHash of present) {
-        if (liveHashes.has(fpHash))
-          continue
-        // Fold the dropped feed's index + deltas into a final live/removed
-        // state, then transition everything still live to removed. Identical
-        // fold to compactUrls but scoped to one (now-dead) feedpath.
-        const indexKey = sitemapUrlsIndexKey(ctx, fpHash)
-        const [indexRows, deltaFiles] = await Promise.all([
-          readOptional(ds, indexKey).then(bytes => bytes ? decodeParquetToRows(bytes) : []),
-          mapEntityIo((deltasByFeed.get(fpHash) ?? []).sort(), async (key) => {
-            const bytes = await readOptional(ds, key)
-            if (!bytes)
-              return undefined
-            return { key, rows: await decodeParquetToRows(bytes) }
-          }),
-        ])
-        const live = new Map<string, SitemapUrlRecord>()
-        const removed = new Map<string, SitemapUrlRecord>()
-        for (const row of indexRows) {
-          const r = rowToUrlRecord(row)
-          if (r.removedAt != null)
-            removed.set(r.urlHash, r)
-          else
-            live.set(r.urlHash, r)
+    snapshotUrls(ctx, generation, feedpath, urls) {
+      return withMutation(ctx, async () => {
+        const feedpathHash = hash(feedpath)
+        const contentHash = hashUrlList(urls)
+        const checkpoint = await repairFeedProjection(ctx, feedpathHash)
+        const feedPosition = assertGenerationAccepted(generation, checkpoint, feedpathHash)
+        if (feedPosition === 'same') {
+          if (checkpoint?._tag !== 'snapshot' || checkpoint.result.contentHash !== contentHash)
+            throw new Error(`sitemap generation conflict for ${feedpathHash}: snapshot input changed`)
+          return checkpoint.result
         }
-        const consumed: string[] = []
-        for (const file of deltaFiles) {
-          if (!file)
-            continue
-          const { key, rows } = file
-          consumed.push(key)
-          for (const r of rows) {
-            const urlHash = String(r.url_hash)
-            const dat = Number(r.at)
-            if (String(r.op) === 'added') {
-              const prev = live.get(urlHash) ?? removed.get(urlHash)
-              removed.delete(urlHash)
-              live.set(urlHash, {
-                feedpath: String(r.feedpath),
-                feedpathHash: fpHash,
-                urlHash,
-                loc: String(r.loc),
-                lastmod: r.lastmod == null ? undefined : String(r.lastmod),
-                firstSeenAt: prev?.firstSeenAt ?? dat,
-                lastSeenAt: dat,
-              })
-            }
-            else if (String(r.op) === 'removed') {
-              const prev = live.get(urlHash)
-              live.delete(urlHash)
-              if (prev)
-                removed.set(urlHash, { ...prev, removedAt: dat })
-            }
+        const siteCheckpoint = await readJson<SitemapSiteGenerationCheckpoint>(sitemapUrlsReconcileGenerationKey(ctx))
+        const sitePosition = assertGenerationAccepted(generation, siteCheckpoint, 'site reconciliation')
+        if (sitePosition === 'same')
+          throw new Error('sitemap generation conflict: site generation was already reconciled')
+        const priorByHash = new Map<string, SitemapUrlRecord>()
+        for await (const record of readStore.loadUrls(ctx, feedpath, { includeRemoved: true }))
+          priorByHash.set(record.urlHash, record)
+        const livePrior = [...priorByHash.values()].filter(record => record.removedAt == null)
+        const incomingByHash = new Map<string, ParsedUrl>()
+        for (const url of urls)
+          incomingByHash.set(hash(url.loc), url)
+
+        const deltaRows: Row[] = []
+        let added = 0
+        let removed = 0
+        let kept = 0
+        for (const [urlHash, url] of incomingByHash) {
+          const previous = priorByHash.get(urlHash)
+          if (!previous || previous.removedAt != null) {
+            added++
+            deltaRows.push({
+              feedpath,
+              feedpath_hash: feedpathHash,
+              url_hash: urlHash,
+              op: 'added',
+              loc: url.loc,
+              lastmod: url.lastmod ?? null,
+              at: generation.observedAt,
+              generation_id: generation.id,
+            })
+          }
+          else {
+            kept++
+          }
+        }
+        for (const [urlHash, previous] of priorByHash) {
+          if (previous.removedAt == null && !incomingByHash.has(urlHash)) {
+            removed++
+            deltaRows.push({
+              feedpath,
+              feedpath_hash: feedpathHash,
+              url_hash: urlHash,
+              op: 'removed',
+              loc: previous.loc,
+              lastmod: previous.lastmod ?? null,
+              at: generation.observedAt,
+              generation_id: generation.id,
+            })
           }
         }
 
-        const hadLive = live.size > 0
-        if (!hadLive && consumed.length === 0)
-          continue // already fully removed + nothing to compact
-        for (const [urlHash, r] of live) {
-          removed.set(urlHash, { ...r, removedAt: at })
-          urlsRemoved++
+        const seedKey = sitemapUrlsEventSeedKey(ctx, feedpathHash)
+        const seed = await readJson<SitemapEventSeed>(seedKey)
+        const isSeedGeneration = seed === undefined || seed.generationId === generation.id
+        const seedRows: Row[] = isSeedGeneration
+          ? livePrior.map(record => ({
+              feedpath,
+              feedpath_hash: feedpathHash,
+              url_hash: record.urlHash,
+              op: 'added',
+              loc: record.loc,
+              lastmod: record.lastmod ?? null,
+            }))
+          : []
+        const actualSequence = seedRows.length > 0 ? 1 : 0
+        const inputCount = incomingByHash.size
+        const proposedEvents = [
+          ...seedRows.map(row => eventRow(generation, row, {
+            sequence: 0,
+            projectsState: false,
+            seedGeneration: isSeedGeneration,
+            generationKind: 'snapshot',
+            contentHash,
+            inputCount,
+          })),
+          ...deltaRows.map(row => eventRow(generation, row, {
+            sequence: actualSequence,
+            projectsState: true,
+            seedGeneration: isSeedGeneration,
+            generationKind: 'snapshot',
+            contentHash,
+            inputCount,
+          })),
+        ]
+        const persistedEvents = await ensureEvents(ctx, feedpathHash, generation, proposedEvents)
+        const result: SnapshotUrlsResult = {
+          added,
+          removed,
+          kept,
+          contentHash,
+          unchanged: deltaRows.length === 0,
         }
-        const merged = [...removed.values()]
-        merged.sort((a, b) => (a.urlHash < b.urlHash ? -1 : a.urlHash > b.urlHash ? 1 : 0))
-        const bytes = encodeRowsToParquetFlex(merged.map(urlRecordToRow), {
-          columns: URLS_INDEX_COLUMNS,
-          sortKey: ['feedpath_hash', 'url_hash'],
-        })
-        await ds.write(indexKey, bytes)
-        if (consumed.length > 0)
-          await ds.delete(consumed)
-        if (hadLive)
-          feedpathsPruned++
-      }
-      return { feedpathsPruned, urlsRemoved }
+        if (persistedEvents.rows.length > 0) {
+          const projected = await projectEvents(ctx, feedpathHash, persistedEvents.rows, persistedEvents.digest)
+          if (projected._tag !== 'snapshot')
+            throw new Error(`sitemap generation conflict for ${feedpathHash}: expected snapshot event`)
+          await ds.delete([sitemapUrlsPendingGenerationKey(ctx, feedpathHash)])
+        }
+        else {
+          if (isSeedGeneration) {
+            await writeJson(seedKey, {
+              version: 1,
+              generationId: generation.id,
+              observedAt: generation.observedAt,
+            } satisfies SitemapEventSeed)
+          }
+          await writeJson(sitemapUrlsGenerationKey(ctx, feedpathHash), {
+            _tag: 'snapshot',
+            version: 1,
+            generationId: generation.id,
+            observedAt: generation.observedAt,
+            eventDigest: persistedEvents.digest,
+            result,
+          } satisfies SitemapSnapshotGenerationCheckpoint)
+        }
+        return result
+      })
+    },
+
+    compactUrls(ctx, compactOpts = {}) {
+      return withMutation(ctx, async () => {
+        const startedAt = now()
+        const deadlineMs = compactOpts.deadlineMs ?? Number.POSITIVE_INFINITY
+        const maxFeedpaths = compactOpts.maxFeedpaths ?? Number.POSITIVE_INFINITY
+        for (const key of await ds.list(`${sitemapUrlsPendingGenerationsPrefix(ctx)}/`)) {
+          const feedpathHash = SITEMAP_URLS_PENDING_GENERATION_RE.exec(key)?.[1]
+          if (feedpathHash)
+            await repairFeedProjection(ctx, feedpathHash)
+        }
+        const deltaKeys = await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`)
+        let projectionManifest = await readProjectionManifest(ctx)
+        await deleteExpiredProjectionDeltas(projectionManifest, deltaKeys, startedAt)
+        const activeDeltaKeys = selectSitemapProjectionFiles([], deltaKeys, projectionManifest).deltaKeys
+        const deltasByFeed = new Map<string, string[]>()
+        for (const key of activeDeltaKeys) {
+          const feedpathHash = parseSitemapUrlsDeltaKey(key)?.feedpathHash
+          if (!feedpathHash)
+            continue
+          const keys = deltasByFeed.get(feedpathHash) ?? []
+          keys.push(key)
+          deltasByFeed.set(feedpathHash, keys)
+        }
+
+        const totalFeedpaths = deltasByFeed.size
+        let compactedFeedpaths = 0
+        for (const [feedpathHash, feedDeltaKeys] of deltasByFeed) {
+          if (compactedFeedpaths > 0 && (compactedFeedpaths >= maxFeedpaths || now() - startedAt >= deadlineMs))
+            break
+          const [indexRows, deltaFiles] = await Promise.all([
+            readOptional(ds, sitemapUrlsIndexKey(ctx, feedpathHash)).then(bytes => bytes ? decodeParquetToRows(bytes) : []),
+            readSitemapDeltaFiles(ds, feedDeltaKeys),
+          ])
+          const state = createSitemapUrlState(indexRows)
+          applySitemapDeltaFiles(state, deltaFiles)
+          const merged = [...state.live.values(), ...state.removed.values()]
+            .sort((a, b) => a.urlHash.localeCompare(b.urlHash))
+          projectionManifest = await publishCurrentProjection(
+            ctx,
+            feedpathHash,
+            merged,
+            deltaFiles,
+            projectionManifest,
+            now(),
+          )
+          compactedFeedpaths++
+        }
+        return { compactedFeedpaths, remainingFeedpaths: totalFeedpaths - compactedFeedpaths }
+      })
+    },
+
+    reconcile(ctx, generation, { liveFeedpaths }) {
+      return withMutation(ctx, async () => {
+        const liveHashes = new Set(liveFeedpaths.map(feedpath => hash(feedpath)))
+        const inputDigest = hashSortedUrlList([...liveHashes])
+        const siteCheckpoint = await readJson<SitemapSiteGenerationCheckpoint>(sitemapUrlsReconcileGenerationKey(ctx))
+        const sitePosition = assertGenerationAccepted(generation, siteCheckpoint, 'site reconciliation')
+        if (sitePosition === 'same') {
+          if (siteCheckpoint?.inputDigest !== inputDigest)
+            throw new Error('sitemap generation conflict: reconcile input changed')
+          return { feedpathsPruned: 0, urlsRemoved: 0 }
+        }
+
+        const pendingFeedHashes = new Set<string>()
+        for (const key of await ds.list(`${sitemapUrlsPendingGenerationsPrefix(ctx)}/`)) {
+          const feedpathHash = SITEMAP_URLS_PENDING_GENERATION_RE.exec(key)?.[1]
+          if (feedpathHash)
+            pendingFeedHashes.add(feedpathHash)
+        }
+        const repairedCheckpoints = new Map<string, SitemapGenerationCheckpoint | undefined>()
+        for (const feedpathHash of pendingFeedHashes) {
+          repairedCheckpoints.set(
+            feedpathHash,
+            await repairFeedProjection(ctx, feedpathHash),
+          )
+        }
+
+        const present = new Set<string>()
+        const [indexKeys, deltaKeys] = await Promise.all([
+          ds.list(`${sitemapUrlsIndexPrefix(ctx)}/`),
+          ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`),
+        ])
+        let projectionManifest = await readProjectionManifest(ctx)
+        await deleteExpiredProjectionDeltas(projectionManifest, deltaKeys, now())
+        for (const feedpathHash of Object.keys(projectionManifest.feeds))
+          present.add(feedpathHash)
+        for (const key of indexKeys) {
+          const match = /\/by-feed\/([0-9a-f]+)\/index\.parquet$/.exec(key)
+          if (match?.[1])
+            present.add(match[1])
+        }
+        const deltasByFeed = new Map<string, string[]>()
+        const activeDeltaKeys = selectSitemapProjectionFiles([], deltaKeys, projectionManifest).deltaKeys
+        for (const key of activeDeltaKeys) {
+          const feedpathHash = parseSitemapUrlsDeltaKey(key)?.feedpathHash
+          if (!feedpathHash)
+            continue
+          present.add(feedpathHash)
+          const keys = deltasByFeed.get(feedpathHash) ?? []
+          keys.push(key)
+          deltasByFeed.set(feedpathHash, keys)
+        }
+
+        let feedpathsPruned = 0
+        let urlsRemoved = 0
+        for (const feedpathHash of present) {
+          if (liveHashes.has(feedpathHash))
+            continue
+          const checkpoint = repairedCheckpoints.has(feedpathHash)
+            ? repairedCheckpoints.get(feedpathHash)
+            : await repairFeedProjection(ctx, feedpathHash)
+          const feedPosition = assertGenerationAccepted(generation, checkpoint, feedpathHash)
+          if (feedPosition === 'same' && checkpoint?._tag !== 'reconcile')
+            throw new Error(`sitemap generation conflict for ${feedpathHash}: expected reconcile event`)
+          const [indexRows, deltaFiles] = await Promise.all([
+            readOptional(ds, sitemapUrlsIndexKey(ctx, feedpathHash)).then(bytes => bytes ? decodeParquetToRows(bytes) : []),
+            readSitemapDeltaFiles(ds, deltasByFeed.get(feedpathHash) ?? []),
+          ])
+          const state = createSitemapUrlState(indexRows)
+          applySitemapDeltaFiles(state, deltaFiles)
+          const live = [...state.live.values()]
+          const seedKey = sitemapUrlsEventSeedKey(ctx, feedpathHash)
+          const seed = await readJson<SitemapEventSeed>(seedKey)
+          const isSeedGeneration = seed === undefined || seed.generationId === generation.id
+          const seedRows: Row[] = isSeedGeneration
+            ? live.map(record => ({
+                feedpath: record.feedpath,
+                feedpath_hash: feedpathHash,
+                url_hash: record.urlHash,
+                op: 'added',
+                loc: record.loc,
+                lastmod: record.lastmod ?? null,
+              }))
+            : []
+          const removalRows: Row[] = live.map(record => ({
+            feedpath: record.feedpath,
+            feedpath_hash: feedpathHash,
+            url_hash: record.urlHash,
+            op: 'removed',
+            loc: record.loc,
+            lastmod: record.lastmod ?? null,
+          }))
+          const proposedEvents = feedPosition === 'newer'
+            ? [
+                ...seedRows.map(row => eventRow(generation, row, {
+                  sequence: 0,
+                  projectsState: false,
+                  seedGeneration: isSeedGeneration,
+                  generationKind: 'reconcile',
+                })),
+                ...removalRows.map(row => eventRow(generation, row, {
+                  sequence: seedRows.length > 0 ? 1 : 0,
+                  projectsState: true,
+                  seedGeneration: isSeedGeneration,
+                  generationKind: 'reconcile',
+                })),
+              ]
+            : []
+          const persistedEvents = feedPosition === 'newer'
+            ? await ensureEvents(ctx, feedpathHash, generation, proposedEvents)
+            : { rows: [] as Row[], digest: checkpoint!.eventDigest }
+          if (isSeedGeneration && feedPosition === 'newer') {
+            await writeJson(seedKey, {
+              version: 1,
+              generationId: generation.id,
+              observedAt: generation.observedAt,
+            } satisfies SitemapEventSeed)
+          }
+          const removedHashes = new Set(
+            persistedEvents.rows
+              .filter(row => Boolean(row.projects_state) && String(row.op) === 'removed')
+              .map(row => String(row.url_hash)),
+          )
+          const removedBeforeFeed = urlsRemoved
+          for (const record of live.filter(record => removedHashes.has(record.urlHash))) {
+            state.live.delete(record.urlHash)
+            state.removed.set(record.urlHash, { ...record, removedAt: generation.observedAt })
+            urlsRemoved++
+          }
+          if (live.length > 0 || deltaFiles.length > 0) {
+            const merged = [...state.live.values(), ...state.removed.values()]
+              .sort((a, b) => a.urlHash.localeCompare(b.urlHash))
+            projectionManifest = await publishCurrentProjection(
+              ctx,
+              feedpathHash,
+              merged,
+              deltaFiles,
+              projectionManifest,
+              now(),
+            )
+          }
+          if (feedPosition === 'newer') {
+            const feedCheckpoint: SitemapReconcileGenerationCheckpoint = persistedEvents.rows.length > 0
+              ? checkpointFromEvents(persistedEvents.rows, persistedEvents.digest) as SitemapReconcileGenerationCheckpoint
+              : {
+                  _tag: 'reconcile',
+                  version: 1,
+                  generationId: generation.id,
+                  observedAt: generation.observedAt,
+                  eventDigest: persistedEvents.digest,
+                }
+            await writeJson(sitemapUrlsGenerationKey(ctx, feedpathHash), feedCheckpoint)
+            if (persistedEvents.rows.length > 0)
+              await ds.delete([sitemapUrlsPendingGenerationKey(ctx, feedpathHash)])
+          }
+          if (urlsRemoved > removedBeforeFeed)
+            feedpathsPruned++
+        }
+        await writeJson(sitemapUrlsReconcileGenerationKey(ctx), {
+          version: 1,
+          generationId: generation.id,
+          observedAt: generation.observedAt,
+          inputDigest,
+        } satisfies SitemapSiteGenerationCheckpoint)
+        return { feedpathsPruned, urlsRemoved }
+      })
     },
   }
 }

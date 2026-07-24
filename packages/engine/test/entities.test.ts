@@ -1,11 +1,17 @@
-import type { InspectionEventRow, InspectionParquetRow, InspectionRecord } from '../src/entities'
-import type { DataSource } from '../src/storage'
+import type {
+  CreateSitemapStoreOptions,
+  InspectionEventRow,
+  InspectionParquetRow,
+  InspectionRecord,
+  ParsedUrl,
+} from '../src/entities'
+import type { DataSource, TenantCtx } from '../src/storage'
 import { describe, expect, it } from 'vitest'
 import { decodeParquetToRows } from '../src/adapters/hyparquet'
 import {
   createEmptyTypesStore,
   createInspectionStore,
-  createSitemapStore,
+  createSitemapStore as createSitemapStoreImpl,
   emptyTypesKey,
   hashUrl,
   hashUrlList,
@@ -20,6 +26,33 @@ import {
   sitemapHistoryKey,
   sitemapIndexKey,
 } from '../src/entities'
+
+function createSitemapStore(opts: Omit<CreateSitemapStoreOptions, 'withMutation'>) {
+  const store = createSitemapStoreImpl({
+    ...opts,
+    withMutation: (_ctx, fn) => fn(),
+  })
+  let sequence = 0
+  return {
+    ...store,
+    snapshotUrls(ctx: TenantCtx, feedpath: string, urls: readonly ParsedUrl[]) {
+      const observedAt = opts.now?.() ?? Date.now()
+      return store.snapshotUrls(ctx, {
+        _tag: 'complete',
+        id: `test-${observedAt}-${sequence++}`,
+        observedAt,
+      }, feedpath, urls)
+    },
+    reconcile(ctx: TenantCtx, reconcileOpts: { liveFeedpaths: readonly string[], at?: number }) {
+      const observedAt = reconcileOpts.at ?? opts.now?.() ?? Date.now()
+      return store.reconcile(ctx, {
+        _tag: 'complete',
+        id: `test-${observedAt}-${sequence++}`,
+        observedAt,
+      }, { liveFeedpaths: reconcileOpts.liveFeedpaths })
+    },
+  }
+}
 
 function makeFakeDataSource(): {
   ds: DataSource
@@ -559,7 +592,7 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
 
     const deltaKeys = Array.from(store.keys()).filter(k => k.includes('/urls/deltas/'))
     expect(deltaKeys).toHaveLength(1)
-    expect(deltaKeys[0]).toMatch(/u_u1\/s1\/entities\/sitemaps\/urls\/deltas\/2026-05-09__[0-9a-f]+\.parquet$/)
+    expect(deltaKeys[0]).toMatch(/u_u1\/s1\/entities\/sitemaps\/urls\/deltas\/2026-05-09__[0-9a-f]+__\d+__[0-9a-f]+\.parquet$/)
   })
 
   it('unchanged contentHash short-circuits: 0 PUTs on second snapshot', async () => {
@@ -609,7 +642,8 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
     const ops: Array<{ op: string, loc: string }> = []
     for await (const d of sitemaps.loadDeltas(ctx))
       ops.push({ op: d.op, loc: d.loc })
-    // Only the 2026-05-10 delta survives compaction (the 2026-05-09 delta was consumed).
+    // The grace-retained 2026-05-09 delta is hidden by the projection
+    // watermark; only the active 2026-05-10 changes remain.
     expect(ops).toHaveLength(2)
     expect(ops.find(o => o.loc === 'https://e.com/c')?.op).toBe('added')
     expect(ops.find(o => o.loc === 'https://e.com/a')?.op).toBe('removed')
@@ -635,7 +669,7 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
     expect(before).toEqual(['https://e.com/a'])
   })
 
-  it('compactUrls folds deltas + prior index into a fresh index, deletes consumed deltas', async () => {
+  it('compactUrls folds deltas into a fresh index and grace-retires consumed deltas', async () => {
     const { ds, store } = makeFakeDataSource()
     let now = Date.parse('2026-05-09T00:00:00Z')
     const sitemaps = createSitemapStore({ dataSource: ds, now: () => now })
@@ -648,7 +682,7 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
 
     await sitemaps.compactUrls(ctx)
 
-    expect(Array.from(store.keys()).filter(k => k.includes('/urls/deltas/'))).toHaveLength(0)
+    expect(Array.from(store.keys()).filter(k => k.includes('/urls/deltas/'))).toHaveLength(2)
     // Compacted state is partitioned one parquet per feedpath under by-feed/.
     expect(Array.from(store.keys()).some(k => /\/urls\/by-feed\/[0-9a-f]+\/index\.parquet$/.test(k))).toBe(true)
 
@@ -667,8 +701,8 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
   // TIME: a tenant with a large delta backlog ran past its caller's execution
   // budget. gscdump.com's `sitemap/compact` job died on the 300s Cloudflare
   // durable-job lease that way. A bounded call must stop cleanly and leave the
-  // remainder discoverable, with NO cursor — a compacted feedpath's deltas are
-  // deleted, so the next call simply doesn't see it.
+  // remainder discoverable, with NO cursor. The projection watermark excludes
+  // grace-retained deltas, so the next call sees only unfinished feedpaths.
   describe('compactUrls bounding', () => {
     const feeds = [
       'https://example.com/a.xml',
@@ -688,19 +722,27 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
     const deltaCount = (store: Map<string, unknown>) =>
       Array.from(store.keys()).filter(k => k.includes('/urls/deltas/')).length
 
+    async function activeDeltaCount(sitemaps: ReturnType<typeof createSitemapStore>): Promise<number> {
+      let count = 0
+      for await (const _delta of sitemaps.loadDeltas(ctx))
+        count++
+      return count
+    }
+
     it('compacts everything and reports no remainder when unbounded', async () => {
       const { store, sitemaps } = await seedThreeFeeds()
       const r = await sitemaps.compactUrls(ctx)
       expect(r).toEqual({ compactedFeedpaths: 3, remainingFeedpaths: 0 })
-      expect(deltaCount(store)).toBe(0)
+      expect(deltaCount(store)).toBe(3)
+      expect(await activeDeltaCount(sitemaps)).toBe(0)
     })
 
     it('stops at maxFeedpaths and reports the remainder', async () => {
       const { store, sitemaps } = await seedThreeFeeds()
       const r = await sitemaps.compactUrls(ctx, { maxFeedpaths: 2 })
       expect(r).toEqual({ compactedFeedpaths: 2, remainingFeedpaths: 1 })
-      // Only the untouched feedpath's delta survives.
-      expect(deltaCount(store)).toBe(1)
+      expect(deltaCount(store)).toBe(3)
+      expect(await activeDeltaCount(sitemaps)).toBe(1)
     })
 
     it('resumes without a cursor — a second call finishes exactly the remainder', async () => {
@@ -709,7 +751,8 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
       expect(first).toEqual({ compactedFeedpaths: 1, remainingFeedpaths: 2 })
       const second = await sitemaps.compactUrls(ctx)
       expect(second).toEqual({ compactedFeedpaths: 2, remainingFeedpaths: 0 })
-      expect(deltaCount(store)).toBe(0)
+      expect(deltaCount(store)).toBe(3)
+      expect(await activeDeltaCount(sitemaps)).toBe(0)
 
       // Every feed's URLs survived being compacted across two bounded calls.
       for (const [i, f] of feeds.entries()) {
@@ -732,7 +775,8 @@ describe('createSitemapStore: snapshotUrls / loadDeltas / loadUrls / compactUrls
       const r = await sitemaps.compactUrls(ctx, { deadlineMs: 1 })
       expect(r.compactedFeedpaths).toBe(1)
       expect(r.remainingFeedpaths).toBe(2)
-      expect(deltaCount(store)).toBe(2)
+      expect(deltaCount(store)).toBe(3)
+      expect(await activeDeltaCount(sitemaps)).toBe(2)
     })
 
     it('is a no-op with no outstanding deltas', async () => {
@@ -828,8 +872,9 @@ describe('createSitemapStore: reconcile', () => {
     now = Date.parse('2026-06-02T00:00:00Z')
     const res = await sitemaps.reconcile(ctx, { liveFeedpaths: [feedA] })
     expect(res.urlsRemoved).toBe(2)
-    // Deltas consumed, a removed-only base written.
-    expect(Array.from(store.keys()).filter(k => k.includes('/urls/deltas/'))).toHaveLength(0)
+    // Delta retired behind the watermark; a removed-only base is authoritative.
+    expect(Array.from(store.keys()).filter(k => k.includes('/urls/deltas/'))).toHaveLength(1)
+    expect(await Array.fromAsync(sitemaps.loadDeltas(ctx))).toEqual([])
     const bLive: string[] = []
     for await (const r of sitemaps.loadUrls(ctx, feedB)) bLive.push(r.loc)
     expect(bLive).toEqual([])

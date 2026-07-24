@@ -74,8 +74,69 @@ export function sitemapUrlsIndexKey(ctx: TenantCtx, feedpathHash: string): strin
   return `${sitemapUrlsIndexPrefix(ctx)}/${feedpathHash}/index.parquet`
 }
 
-export function sitemapUrlsDeltaKey(ctx: TenantCtx, feedpathHash: string, date: string): string {
-  return `${sitemapUrlsPrefix(ctx)}/deltas/${date}__${feedpathHash}.parquet`
+export function sitemapUrlsProjectionManifestKey(ctx: TenantCtx): string {
+  return `${sitemapUrlsPrefix(ctx)}/projection.json`
+}
+
+export interface SitemapGenerationKey {
+  id: string
+  observedAt: number
+}
+
+function sitemapGenerationDate(generation: SitemapGenerationKey): string {
+  return new Date(generation.observedAt).toISOString().slice(0, 10)
+}
+
+export function sitemapUrlsDeltaKey(
+  ctx: TenantCtx,
+  feedpathHash: string,
+  generation: SitemapGenerationKey,
+): string {
+  return `${sitemapUrlsPrefix(ctx)}/deltas/${sitemapGenerationDate(generation)}__${feedpathHash}__${String(generation.observedAt).padStart(13, '0')}__${hashUrl(generation.id)}.parquet`
+}
+
+const SITEMAP_URLS_DELTA_KEY_RE = /\/urls\/deltas\/(\d{4}-\d{2}-\d{2})__([0-9a-f]+)(?:__\d+__[0-9a-f]+)?\.parquet$/
+
+export function parseSitemapUrlsDeltaKey(key: string): {
+  date: string
+  feedpathHash: string
+} | undefined {
+  const match = SITEMAP_URLS_DELTA_KEY_RE.exec(key)
+  return match?.[1] && match[2]
+    ? { date: match[1], feedpathHash: match[2] }
+    : undefined
+}
+
+export function sitemapUrlsEventsPrefix(ctx: TenantCtx): string {
+  return `${sitemapUrlsPrefix(ctx)}/events`
+}
+
+export function sitemapUrlsEventKey(
+  ctx: TenantCtx,
+  feedpathHash: string,
+  generation: SitemapGenerationKey,
+): string {
+  return `${sitemapUrlsEventsPrefix(ctx)}/${sitemapGenerationDate(generation)}__${feedpathHash}__${String(generation.observedAt).padStart(13, '0')}__${hashUrl(generation.id)}.parquet`
+}
+
+export function sitemapUrlsEventSeedKey(ctx: TenantCtx, feedpathHash: string): string {
+  return `${sitemapUrlsPrefix(ctx)}/event-seeds/${feedpathHash}.json`
+}
+
+export function sitemapUrlsGenerationKey(ctx: TenantCtx, feedpathHash: string): string {
+  return `${sitemapUrlsPrefix(ctx)}/generations/by-feed/${feedpathHash}.json`
+}
+
+export function sitemapUrlsPendingGenerationsPrefix(ctx: TenantCtx): string {
+  return `${sitemapUrlsPrefix(ctx)}/generations/pending`
+}
+
+export function sitemapUrlsPendingGenerationKey(ctx: TenantCtx, feedpathHash: string): string {
+  return `${sitemapUrlsPendingGenerationsPrefix(ctx)}/${feedpathHash}.json`
+}
+
+export function sitemapUrlsReconcileGenerationKey(ctx: TenantCtx): string {
+  return `${sitemapUrlsPrefix(ctx)}/generations/reconcile.json`
 }
 
 /** Hash a URL list for deterministic change detection. */

@@ -7,6 +7,7 @@
 // network blip) and asserts the engine rethrows instead of degrading to an
 // empty/no-op result.
 
+import type { CreateSitemapStoreOptions } from '../src/entities'
 import type { DataSource } from '../src/storage'
 import { describe, expect, it } from 'vitest'
 import { encodeRowsToParquetFlex } from '../src/adapters/hyparquet'
@@ -15,7 +16,7 @@ import {
   createEmptyTypesStore,
   createIndexingMetadataStore,
   createInspectionStore,
-  createSitemapStore,
+  createSitemapStore as createSitemapStoreImpl,
   emptyTypesKey,
   indexingMetadataIndexKey,
   inspectionHistoryShardKey,
@@ -26,6 +27,14 @@ import {
 import { readLatestRollup } from '../src/rollups'
 
 const READ_FAILURE = 'simulated read failure (network blip / corrupt object)'
+const SITEMAP_GENERATION = {
+  id: 'test-generation',
+  observedAt: Date.parse('2026-04-01T00:00:00Z'),
+}
+
+function createSitemapStore(opts: Omit<CreateSitemapStoreOptions, 'withMutation'>) {
+  return createSitemapStoreImpl({ ...opts, withMutation: (_ctx, fn) => fn() })
+}
 
 /**
  * In-memory DataSource whose `read` can be made to throw a real (non-missing)
@@ -193,7 +202,7 @@ describe('sitemap loadUrls / loadDeltas: per-delta + index reads', () => {
   })
 
   it('surfaces a real delta read failure in loadUrls', async () => {
-    const deltaKey = sitemapUrlsDeltaKey(ctx, FP, '2026-04-01')
+    const deltaKey = sitemapUrlsDeltaKey(ctx, FP, SITEMAP_GENERATION)
     const { ds, store } = makeDataSource({ failReadFor: k => k === deltaKey })
     store.set(deltaKey, deltaBytes())
     const sitemap = createSitemapStore({ dataSource: ds, hash })
@@ -204,7 +213,7 @@ describe('sitemap loadUrls / loadDeltas: per-delta + index reads', () => {
   })
 
   it('surfaces a real delta read failure in loadDeltas', async () => {
-    const deltaKey = sitemapUrlsDeltaKey(ctx, FP, '2026-04-01')
+    const deltaKey = sitemapUrlsDeltaKey(ctx, FP, SITEMAP_GENERATION)
     const { ds, store } = makeDataSource({ failReadFor: k => k === deltaKey })
     store.set(deltaKey, deltaBytes())
     const sitemap = createSitemapStore({ dataSource: ds, hash })
@@ -241,7 +250,7 @@ describe('sitemap compactUrls: index + delta reads (highest-risk)', () => {
 
   it('surfaces a real prior-index read failure rather than rebuilding from deltas alone', async () => {
     const indexKey = sitemapUrlsIndexKey(ctx, FP)
-    const deltaKey = sitemapUrlsDeltaKey(ctx, FP, '2026-04-01')
+    const deltaKey = sitemapUrlsDeltaKey(ctx, FP, SITEMAP_GENERATION)
     const { ds, store } = makeDataSource({ failReadFor: k => k === indexKey })
     // A real index exists but its read fails. Swallowing here would drop the
     // index's state and rewrite it from the single delta — exactly the bug.
@@ -256,7 +265,7 @@ describe('sitemap compactUrls: index + delta reads (highest-risk)', () => {
   })
 
   it('surfaces a real delta read failure in compactUrls', async () => {
-    const deltaKey = sitemapUrlsDeltaKey(ctx, FP, '2026-04-01')
+    const deltaKey = sitemapUrlsDeltaKey(ctx, FP, SITEMAP_GENERATION)
     const { ds, store } = makeDataSource({ failReadFor: k => k === deltaKey })
     store.set(deltaKey, deltaBytes('abc1'))
     const sitemap = createSitemapStore({ dataSource: ds, hash })

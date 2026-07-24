@@ -1,6 +1,7 @@
-import type { DataSource, Row, TableName } from '@gscdump/engine/contracts'
+import type { DataSource, Row, TableName, TenantCtx } from '@gscdump/engine/contracts'
+import type { CreateSitemapStoreOptions, ParsedUrl } from '@gscdump/engine/entities'
 import type { RollupBucket, RollupDef, RollupEngine } from '../src/rollups'
-import { createIndexingMetadataStore, createSitemapStore } from '@gscdump/engine/entities'
+import { createIndexingMetadataStore, createSitemapStore as createSitemapStoreImpl } from '@gscdump/engine/entities'
 import { decodeParquetToRows } from '@gscdump/engine/hyparquet'
 import { describe, expect, it } from 'vitest'
 import {
@@ -26,6 +27,22 @@ import {
   topPages28dRollup,
   weeklyTotalsRollup,
 } from '../src/rollups'
+
+function createSitemapStore(opts: Omit<CreateSitemapStoreOptions, 'withMutation'>) {
+  const store = createSitemapStoreImpl({ ...opts, withMutation: (_ctx, fn) => fn() })
+  let sequence = 0
+  return {
+    ...store,
+    snapshotUrls(ctx: TenantCtx, feedpath: string, urls: readonly ParsedUrl[]) {
+      const observedAt = opts.now?.() ?? Date.now()
+      return store.snapshotUrls(ctx, {
+        _tag: 'complete',
+        id: `test-${observedAt}-${sequence++}`,
+        observedAt,
+      }, feedpath, urls)
+    },
+  }
+}
 
 function makeFakeDataSource(): {
   ds: DataSource
@@ -685,6 +702,52 @@ describe('indexPercentRollup', () => {
     expect(denominator).toEqual(expect.objectContaining({ table: 'pages' }))
     expect(denominator).not.toHaveProperty('searchType')
   })
+
+  it('merges active sitemap deltas and excludes retired deltas from the denominator', async () => {
+    const { ds } = makeFakeDataSource()
+    const prefix = 'u_u1/s1/entities/sitemaps/urls'
+    const feedpathHash = 'abc123'
+    const indexKey = `${prefix}/by-feed/${feedpathHash}/index.parquet`
+    const retiredDelta = `${prefix}/deltas/2026-07-24__${feedpathHash}__1753330000000__aaa.parquet`
+    const activeDelta = `${prefix}/deltas/2026-07-24__${feedpathHash}__1753330000001__bbb.parquet`
+    await ds.write(indexKey, new Uint8Array([1]))
+    await ds.write(retiredDelta, new Uint8Array([2]))
+    await ds.write(activeDelta, new Uint8Array([3]))
+    await ds.write(`${prefix}/projection.json`, new TextEncoder().encode(JSON.stringify({
+      version: 1,
+      feeds: {
+        [feedpathHash]: {
+          compactedThrough: retiredDelta,
+          publishedAt: 1_753_330_000_000,
+        },
+      },
+    })))
+    const runCalls: Parameters<RollupEngine['runSQL']>[0][] = []
+    const engine: RollupEngine = {
+      async runSQL(opts) {
+        runCalls.push(opts)
+        return opts.sql.includes('clicked_urls')
+          ? { rows: [] }
+          : { rows: [{ total: 1 }] }
+      },
+      async listPartitions() {
+        return []
+      },
+    }
+
+    await indexPercentRollup.build({
+      engine,
+      ctx: { userId: 'u1', siteId: 's1' },
+      dataSource: ds,
+      windowAnchorMs: 1_753_330_000_000,
+    })
+
+    for (const call of runCalls) {
+      expect(call.fileSets.URLS_INDEX?.keys).toEqual([indexKey])
+      expect(call.fileSets.URLS_DELTA?.keys).toEqual([activeDelta])
+      expect(call.sql).toContain(`op IN ('added', 'removed')`)
+    }
+  })
 })
 
 describe('sitemapHealthRollup', () => {
@@ -778,6 +841,7 @@ describe('sitemapChanges28dRollup', () => {
       { loc: 'https://x/a/1' },
       { loc: 'https://x/a/3' },
     ])
+    await store.compactUrls(ctx)
     const engine = makeFakeEngine({} as Record<TableName, Row[]>)
     const payload = (await sitemapChanges28dRollup.build({
       engine,
@@ -807,6 +871,7 @@ describe('sitemapChanges28dRollup', () => {
     await store.snapshotUrls(ctx, 'https://x/large.xml', Array.from({ length: 250 }, (_, i) => ({
       loc: `https://x/page/${i}`,
     })))
+    await store.compactUrls(ctx)
 
     const payload = (await sitemapChanges28dRollup.build({
       engine: makeFakeEngine({} as Record<TableName, Row[]>),

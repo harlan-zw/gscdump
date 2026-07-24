@@ -20,7 +20,17 @@ import type { ColumnDef } from './schema'
 import { encodeJsonBigintSafe } from '@gscdump/lakehouse/bigint'
 import { MS_PER_DAY } from 'gscdump/dates'
 import { encodeRowsToParquetFlex } from './adapters/hyparquet'
-import { createIndexingMetadataStore, createSitemapStore, inspectionParquetKey, sitemapUrlsIndexPrefix } from './entities'
+import { readOptional } from './adapters/read-optional'
+import {
+  createIndexingMetadataStore,
+  createSitemapReadStore,
+  decodeSitemapProjectionManifest,
+  inspectionParquetKey,
+  selectSitemapProjectionFiles,
+  sitemapUrlsIndexPrefix,
+  sitemapUrlsPrefix,
+  sitemapUrlsProjectionManifestKey,
+} from './entities'
 import { engineErrors } from './errors'
 import { DEFAULT_SEARCH_TYPE } from './layout'
 import { createQueryDimStore } from './query-dim'
@@ -1565,6 +1575,50 @@ export const indexingHealthRollup: RollupDef = {
   },
 }
 
+function currentSitemapProjectionRelation(hasIndexes: boolean, hasDeltas: boolean): string {
+  const sources: string[] = []
+  if (hasIndexes) {
+    sources.push(`
+      SELECT
+        feedpath_hash,
+        url_hash,
+        loc,
+        removed_at,
+        greatest(
+          coalesce(removed_at, 0),
+          coalesce(last_seen_at, 0),
+          coalesce(first_seen_at, 0)
+        )::BIGINT AS observed_at,
+        0::INTEGER AS source_order
+      FROM read_parquet({{URLS_INDEX}}, union_by_name = true)
+    `)
+  }
+  if (hasDeltas) {
+    sources.push(`
+      SELECT
+        feedpath_hash,
+        url_hash,
+        loc,
+        CASE WHEN op = 'removed' THEN "at" ELSE NULL END AS removed_at,
+        "at"::BIGINT AS observed_at,
+        1::INTEGER AS source_order
+      FROM read_parquet({{URLS_DELTA}}, union_by_name = true)
+      WHERE op IN ('added', 'removed')
+    `)
+  }
+  return `(
+    WITH membership_events AS (
+      ${sources.join('\nUNION ALL\n')}
+    )
+    SELECT feedpath_hash, url_hash, loc, removed_at
+    FROM membership_events
+    QUALIFY row_number() OVER (
+      PARTITION BY feedpath_hash, url_hash
+      ORDER BY observed_at DESC, source_order DESC
+    ) = 1
+  )`
+}
+
 /**
  * Per-day index-percent: ratio of (sitemap URLs that received GSC clicks on
  * that date) / (total live sitemap URLs). Uses a DuckDB JOIN between the
@@ -1577,13 +1631,29 @@ export const indexPercentRollup: RollupDef = {
   windowDays: 90,
   sliceOrthogonal: true,
   async build({ engine, ctx, dataSource, windowAnchorMs, searchType }) {
-    // The URLs index is partitioned one parquet per feedpath; list every
-    // per-feedpath file and read them as a set. `read_parquet` over the key
-    // list unions them, and routing via `fileSets.keys` lets DuckDB pre-fetch
-    // bytes — the path that works under the duckdb-worker bypass.
-    const urlsKeys = await dataSource.list(sitemapUrlsIndexPrefix(ctx))
-    if (urlsKeys.length === 0)
+    const [listedIndexKeys, listedDeltaKeys, manifestBytes] = await Promise.all([
+      dataSource.list(sitemapUrlsIndexPrefix(ctx)),
+      dataSource.list(`${sitemapUrlsPrefix(ctx)}/deltas/`),
+      readOptional(dataSource, sitemapUrlsProjectionManifestKey(ctx)),
+    ])
+    const manifest = manifestBytes
+      ? decodeSitemapProjectionManifest(new TextDecoder().decode(manifestBytes))
+      : undefined
+    const projection = selectSitemapProjectionFiles(listedIndexKeys, listedDeltaKeys, manifest)
+    if (projection.indexKeys.length === 0 && projection.deltaKeys.length === 0)
       return { totalSitemapUrls: 0, days: [] }
+    const sitemapFileSets: Record<string, FileSetRef> = {
+      ...(projection.indexKeys.length > 0
+        ? { URLS_INDEX: { table: 'pages', keys: projection.indexKeys } }
+        : {}),
+      ...(projection.deltaKeys.length > 0
+        ? { URLS_DELTA: { table: 'pages', keys: projection.deltaKeys } }
+        : {}),
+    }
+    const currentMembership = currentSitemapProjectionRelation(
+      projection.indexKeys.length > 0,
+      projection.deltaKeys.length > 0,
+    )
     const cutoff = utcDateMinusDays(windowAnchorMs, 90)
     // Numerator: per-day distinct sitemap URLs with clicks>0. This rollup is
     // written at the legacy path, so omitted searchType means the web slice,
@@ -1602,7 +1672,7 @@ export const indexPercentRollup: RollupDef = {
       table: 'pages',
       fileSets: {
         PAGES: { table: 'pages', partitions: pagesPartitions },
-        URLS: { table: 'pages', keys: urlsKeys },
+        ...sitemapFileSets,
       },
       searchType: factSearchType,
       sql: `
@@ -1610,7 +1680,7 @@ export const indexPercentRollup: RollupDef = {
           p.date AS date,
           COUNT(DISTINCT p.url)::BIGINT AS clicked_urls
         FROM read_parquet({{PAGES}}, union_by_name = true) p
-        INNER JOIN read_parquet({{URLS}}, union_by_name = true) s
+        INNER JOIN ${currentMembership} s
           ON s.loc = p.url AND s.removed_at IS NULL
         WHERE p.clicks > 0 AND p.date >= '${cutoff}'
         GROUP BY p.date
@@ -1621,10 +1691,10 @@ export const indexPercentRollup: RollupDef = {
     const denom = await engine.runSQL({
       ctx,
       table: 'pages',
-      fileSets: { URLS: { table: 'pages', keys: urlsKeys } },
+      fileSets: sitemapFileSets,
       sql: `
-        SELECT COUNT(*)::BIGINT AS total
-        FROM read_parquet({{URLS}}, union_by_name = true)
+        SELECT COUNT(DISTINCT loc)::BIGINT AS total
+        FROM ${currentMembership}
         WHERE removed_at IS NULL
       `,
     })
@@ -1656,7 +1726,7 @@ export const sitemapHealthRollup: RollupDef = {
   windowDays: 90,
   sliceOrthogonal: true,
   async build({ dataSource, ctx, windowAnchorMs }) {
-    const store = createSitemapStore({ dataSource })
+    const store = createSitemapReadStore({ dataSource })
     const index = await store.loadIndex(ctx)
     const records = Object.values(index.records)
     const cutoff = utcDateMinusDays(windowAnchorMs, 90)
@@ -1762,15 +1832,15 @@ function retainRecentSitemapChange(heap: RecentSitemapChange[], change: RecentSi
 /**
  * Trailing-28-day sitemap URL changes: per-day per-feedpath {added, removed}
  * counts plus rolling top-200 added and removed URLs. Streams from
- * `SitemapStore.loadDeltas()` so it scales independently of how many feeds
- * exist on the site.
+ * retained `SitemapReadStore.loadEvents()` history. State compaction cannot
+ * erase analytics input; memory scales independently of total site state.
  */
 export const sitemapChanges28dRollup: RollupDef = {
   id: 'sitemap_changes_28d',
   windowDays: 28,
   sliceOrthogonal: true,
   async build({ dataSource, ctx, windowAnchorMs }) {
-    const store = createSitemapStore({ dataSource })
+    const store = createSitemapReadStore({ dataSource })
     const from = utcDateMinusDays(windowAnchorMs, 28)
     const to = utcDateMinusDays(windowAnchorMs, 0)
 
@@ -1787,11 +1857,11 @@ export const sitemapChanges28dRollup: RollupDef = {
       return `${k.day}\x00${k.feedpath}`
     }
 
-    for await (const d of store.loadDeltas(ctx, { from, to })) {
-      const day = new Date(d.at).toISOString().slice(0, 10)
+    for await (const d of store.loadEvents(ctx, { from, to })) {
+      const day = new Date(d.observedAt).toISOString().slice(0, 10)
       const k = key({ day, feedpath: d.feedpath })
       const cur = counts.get(k) ?? { day, feedpath: d.feedpath, added: 0, removed: 0 }
-      const change = { loc: d.loc, feedpath: d.feedpath, at: d.at, sequence: sequence++ }
+      const change = { loc: d.loc, feedpath: d.feedpath, at: d.observedAt, sequence: sequence++ }
       if (d.op === 'added') {
         cur.added += 1
         retainRecentSitemapChange(addedTop, change)
