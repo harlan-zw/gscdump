@@ -1286,6 +1286,34 @@ describe('createInspectionStore: transition capture', () => {
     expect(await transitionsFor(store, '2026-04')).toHaveLength(1)
   })
 
+  it('preserves the prior base and source events when a transition write fails', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-01T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'b1' })
+    await inspector.compactInspections(ctx, { transitions: true })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-20T00:00:00Z', { indexStatus: 'FAIL' })], { batchId: 'b2' })
+
+    const transitionKey = inspectionTransitionsMonthKey(ctx, '2026-04')
+    const failing = createInspectionStore({ dataSource: {
+      ...ds,
+      async write(key, bytes) {
+        if (key === transitionKey)
+          throw new Error('R2 PUT 503: transient transition failure')
+        return ds.write(key, bytes)
+      },
+    } })
+    await expect(failing.compactInspections(ctx, { transitions: true })).rejects.toThrow(/transition failure/)
+
+    const rowsAfterFailure = await decodeParquetToRows(store.get(inspectionBaseKey(ctx))!)
+    expect(rowsAfterFailure[0]?.indexStatus).toBe('PASS')
+    expect(Array.from(store.keys()).some(k => k.includes('/events/2026-04/b2.parquet'))).toBe(true)
+
+    const retry = await inspector.compactInspections(ctx, { transitions: true })
+    expect(retry.transitionsWritten).toBe(1)
+    expect((await transitionsFor(store, '2026-04')).map(r => `${r.fromIndexStatus}->${r.toIndexStatus}`))
+      .toEqual(['PASS->FAIL'])
+  })
+
   it('never deletes the transitions file while folding events', async () => {
     const { ds, store } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })

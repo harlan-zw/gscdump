@@ -660,15 +660,15 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
         columns: INSPECTION_EVENT_COLUMNS,
         sortKey: ['urlHash'],
       })
-      await ds.write(baseKey, bytes)
 
-      // Written BEFORE the event delete: if this throws, the events survive and
-      // the next compaction re-derives the same transitions. Writing after the
-      // delete would lose them permanently on failure — which is precisely how
-      // this data has already been lost three times.
+      // Transitions must be durable before the base advances. If this write
+      // fails, the prior base and source events still recreate the same change
+      // on retry. appendTransitions dedupes partial multi-month writes.
       const transitionsWritten = opts?.transitions
         ? await appendTransitions(ds, ctx, transitions)
         : 0
+
+      await ds.write(baseKey, bytes)
 
       if (consumed.length > 0)
         await ds.delete(consumed)

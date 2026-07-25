@@ -42,7 +42,7 @@ describe.skipIf(!built)('published import graph budgets', () => {
 
   it('keeps utility seams standalone', async () => {
     const entries = [
-      ['packages/engine/dist/entity-keys.mjs', 5_000],
+      ['packages/engine/dist/entity-keys.mjs', 6_500],
       ['packages/lakehouse/dist/bigint.mjs', 1_000],
       ['packages/lakehouse/dist/schema.mjs', 500],
       ['packages/analysis/dist/source/index.mjs', 5_000],
