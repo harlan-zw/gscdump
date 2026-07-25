@@ -51,7 +51,10 @@
   createIndexingMetadataStore: function
   createInspectionStore: function
   createQueryDimStore: function
+  createSitemapReadStore: function
   createSitemapStore: function
+  decodeSitemapProjectionManifest: function
+  emptySitemapProjectionManifest: function
   emptyTypesKey: function
   hashSortedUrlList: function
   hashUrl: function
@@ -65,14 +68,29 @@
   inspectionHistoryShardKey: function
   inspectionIndexKey: function
   inspectionParquetKey: function
+  inspectionTransitionsMonthKey: function
+  inspectionTransitionsPrefix: function
+  parseSitemapProjectionManifest: function
+  parseSitemapUrlsDeltaKey: function
   queryDimMetaKey: function
   queryDimParquetKey: function
+  selectSitemapProjectionFiles: function
+  SITEMAP_PROJECTION_GRACE_MS: number
   sitemapHistoryKey: function
   sitemapIndexKey: function
   sitemapUrlsDeltaKey: function
+  sitemapUrlsEventKey: function
+  sitemapUrlsEventSeedKey: function
+  sitemapUrlsEventsPrefix: function
+  sitemapUrlsGenerationKey: function
   sitemapUrlsIndexKey: function
   sitemapUrlsIndexPrefix: function
+  sitemapUrlsPendingGenerationKey: function
+  sitemapUrlsPendingGenerationsPrefix: function
   sitemapUrlsPrefix: function
+  sitemapUrlsProjectionManifestKey: function
+  sitemapUrlsReconcileGenerationKey: function
+  withSitemapProjectionFeed: function
 ./entity-keys:
   emptyTypesKey: function
   hashSortedUrlList: function
@@ -86,14 +104,25 @@
   inspectionHistoryShardKey: function
   inspectionIndexKey: function
   inspectionParquetKey: function
+  inspectionTransitionsMonthKey: function
+  inspectionTransitionsPrefix: function
+  parseSitemapUrlsDeltaKey: function
   queryDimMetaKey: function
   queryDimParquetKey: function
   sitemapHistoryKey: function
   sitemapIndexKey: function
   sitemapUrlsDeltaKey: function
+  sitemapUrlsEventKey: function
+  sitemapUrlsEventSeedKey: function
+  sitemapUrlsEventsPrefix: function
+  sitemapUrlsGenerationKey: function
   sitemapUrlsIndexKey: function
   sitemapUrlsIndexPrefix: function
+  sitemapUrlsPendingGenerationKey: function
+  sitemapUrlsPendingGenerationsPrefix: function
   sitemapUrlsPrefix: function
+  sitemapUrlsProjectionManifestKey: function
+  sitemapUrlsReconcileGenerationKey: function
 ./errors:
   engineErrors: object
   engineErrorToException: function

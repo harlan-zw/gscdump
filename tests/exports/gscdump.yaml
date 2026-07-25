@@ -9,6 +9,7 @@
   batchInspectUrlsFlatSettled: function
   batchRequestIndexing: function
   canUseUrlInspection: function
+  classifyCanonicalDifference: function
   classifyError: function
   countDays: function
   createAuth: function
@@ -77,7 +78,9 @@
   inspectUrlFlat: function
   introspectAccessToken: function
   introspectAccessTokenResult: function
+  isCanonicalMismatch: function
   isErr: function
+  isFragmentUrl: function
   isOk: function
   isPermissionDeniedError: function
   isValidGscDate: function
