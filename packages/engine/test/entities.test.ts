@@ -1254,6 +1254,22 @@ describe('createInspectionStore: transition capture', () => {
     expect(rows.map(r => `${r.fromIndexStatus}->${r.toIndexStatus}`)).toEqual(['PASS->FAIL', 'FAIL->PASS'])
   })
 
+  it('orders several outstanding observations by inspectedAt, not random batch ID', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-01T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'base' })
+    await inspector.compactInspections(ctx, { transitions: true })
+
+    // Lexical key order is intentionally the reverse of observation order.
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-10T00:00:00Z', { indexStatus: 'FAIL' })], { batchId: 'z-older' })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-20T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'a-newer' })
+    const res = await inspector.compactInspections(ctx, { transitions: true })
+
+    expect(res.transitionsWritten).toBe(2)
+    const rows = await transitionsFor(store, '2026-04')
+    expect(rows.map(r => `${r.fromIndexStatus}->${r.toIndexStatus}`)).toEqual(['PASS->FAIL', 'FAIL->PASS'])
+  })
+
   it('is idempotent — a re-run of the same fold does not duplicate a transition', async () => {
     // Compaction can re-run after a crash between the base write and the
     // delete; a duplicated transition would double-count a regression.

@@ -624,6 +624,7 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
 
       let eventsFolded = 0
       const consumed: string[] = []
+      const eventRows: Row[] = []
       const eventFiles = await mapEntityIo(eventKeys.sort(), async (key) => {
         const bytes = await readOptional(ds, key)
         if (!bytes)
@@ -635,11 +636,18 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
           continue
         const { key, rows } = file
         consumed.push(key)
-        for (const row of rows) {
-          consider(row)
-          eventsFolded++
-        }
+        eventRows.push(...rows)
+        eventsFolded += rows.length
       }
+      // Batch IDs are random, so object-key order says nothing about
+      // observation order. Process each URL's outstanding observations
+      // chronologically or a newer lexical batch can hide intermediate changes.
+      eventRows.sort((a, b) =>
+        String(a.urlHash).localeCompare(String(b.urlHash))
+        || String(a.inspectedAt ?? '').localeCompare(String(b.inspectedAt ?? '')),
+      )
+      for (const row of eventRows)
+        consider(row)
 
       const merged: Row[] = []
       for (const [h, row] of latest) {
