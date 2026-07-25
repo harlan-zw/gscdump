@@ -4,6 +4,7 @@ export * from './api/inspection'
 export * from './api/oauth'
 export * from './api/sites'
 export * from './api/verification'
+export * from './core/canonical'
 export * from './core/client'
 export {
   classifyError,

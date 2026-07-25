@@ -58,6 +58,10 @@ export const INDEXING_ISSUE_FILTERS = {
   // 10/10 such rows have `user_canonical IS NULL`). Without its own key these URLs
   // fall into the generic `not_indexed` bucket and disappear.
   duplicate_no_canonical: `coverage_state = 'Duplicate without user-selected canonical'`,
+  // Google explicitly telling the owner to declare a canonical. It was already
+  // in KNOWN_COVERAGE_STATES and classified non-fault, so it had no filter key,
+  // no label and no surface — a directly actionable signal that was invisible.
+  indexed_consider_canonical: `coverage_state = 'Indexed; consider marking as canonical'`,
   page_removed: `coverage_state = 'Blocked by page removal tool'`,
   fragment_url: `url LIKE '%#%'`,
   mobile_fail: `mobile_verdict IN ('FAIL', 'PARTIAL')`,
@@ -90,6 +94,7 @@ export const INDEXING_ISSUE_LABELS: Record<IndexingIssueType, string> = {
   sitemap_redirect: 'Sitemap URL redirects',
   alternate_canonical: 'Alternate page with canonical',
   duplicate_no_canonical: 'Duplicate, no canonical declared',
+  indexed_consider_canonical: 'Indexed, Google suggests a canonical',
   page_removed: 'Removed via removal tool',
   fragment_url: 'Fragment URL (#)',
   mobile_fail: 'Mobile usability issues',
@@ -123,6 +128,9 @@ export const INDEXING_ISSUE_SEVERITY: Record<IndexingIssueType, 'error' | 'warni
   // Fixable in one line (declare a self-canonical, or consolidate on purpose), so
   // it earns a warning — unlike `alternate_canonical`, where the fold was intended.
   duplicate_no_canonical: 'warning',
+  // The page IS indexed, so nothing is broken — but Google is naming a
+  // one-line improvement it would honour. Actionable, not a fault.
+  indexed_consider_canonical: 'info',
   page_removed: 'info',
   fragment_url: 'warning',
   mobile_fail: 'warning',

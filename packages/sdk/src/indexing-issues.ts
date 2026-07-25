@@ -62,6 +62,10 @@ export const issueDetails: Record<string, IndexingIssueDetail> = {
     description: 'Google decided these pages duplicate another URL and picked the canonical itself, because the page declared no preference. You did not choose which URL ranks — Google did.',
     fix: 'Add a canonical link to every page. Point it at itself for pages that should rank, or at the preferred URL for genuine duplicates. Leaving it unset hands the decision to Google.',
   },
+  indexed_consider_canonical: {
+    description: 'These pages are indexed, and Google is telling you it found duplicates it thinks should point here. Nothing is broken; Google is naming the canonical it would honour if you declared it.',
+    fix: 'Add a self-referencing canonical to each of these pages, and point the duplicate versions at them. This makes explicit the choice Google is already making, so it survives future recrawls instead of being re-decided each time.',
+  },
   page_removed: {
     description: 'These URLs are suppressed by a request in Search Console\'s Removals tool. The block is temporary — roughly six months — and then they become eligible again.',
     fix: 'If the removal was intentional, back it with a real signal: a noindex tag, a 404/410, or authentication. The removal tool alone does not keep a page out of Search permanently.',
@@ -138,7 +142,10 @@ export const issueGroups: IssueGroup[] = [
     effort: 'quick',
     controlLevel: 'full',
     education: 'These issues are caused by your site\'s configuration preventing Google from indexing certain pages. If these pages should be indexed, the fix is usually a one-line config change — remove a robots.txt rule, fix a canonical URL, or drop a redirecting entry from your sitemap. Highest-ROI fixes, zero content work.',
-    issueTypes: ['blocked_robots', 'canonical_mismatch', 'duplicate_no_canonical', 'sitemap_redirect'],
+    // `indexed_consider_canonical` belongs here rather than under Expected
+    // Behavior: the page is fine, but Google has named the exact one-line
+    // change it would honour, which is the definition of a quick win.
+    issueTypes: ['blocked_robots', 'canonical_mismatch', 'duplicate_no_canonical', 'indexed_consider_canonical', 'sitemap_redirect'],
   },
   {
     id: 'technical',
