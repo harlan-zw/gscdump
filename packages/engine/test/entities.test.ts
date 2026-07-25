@@ -23,6 +23,7 @@ import {
   inspectionHistoryShardKey,
   inspectionIndexKey,
   inspectionParquetKey,
+  inspectionTransitionsMonthKey,
   sitemapHistoryKey,
   sitemapIndexKey,
 } from '../src/entities'
@@ -1032,7 +1033,7 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
     const { ds, store } = makeFakeDataSource()
     const inspector = createInspectionStore({ dataSource: ds })
     const res = await inspector.compactInspections(ctx)
-    expect(res).toEqual({ baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0 })
+    expect(res).toEqual({ baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0, transitionsWritten: 0 })
     expect(store.has(inspectionBaseKey(ctx))).toBe(false)
   })
 
@@ -1103,7 +1104,7 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
     // Re-running with no new events leaves the base unchanged.
     const before = store.get(inspectionBaseKey(ctx))!
     const res2 = await inspector.compactInspections(ctx)
-    expect(res2).toEqual({ baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0 })
+    expect(res2).toEqual({ baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0, transitionsWritten: 0 })
     expect(store.get(inspectionBaseKey(ctx))).toBe(before)
   })
 
@@ -1124,5 +1125,162 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
     // Base left intact; events not deleted.
     expect(store.has(baseKey)).toBe(true)
     expect(Array.from(store.keys()).some(k => k.includes('/events/2026-05/'))).toBe(true)
+  })
+})
+
+describe('createInspectionStore: transition capture', () => {
+  const ctx = { userId: 'u1', siteId: 's1' }
+
+  function ev(url: string, inspectedAt: string, extra: Partial<InspectionEventRow> = {}): InspectionEventRow {
+    return {
+      urlHash: hashUrl(url),
+      url,
+      inspectedAt,
+      indexStatus: null,
+      lastCrawlTime: null,
+      googleCanonical: null,
+      userCanonical: null,
+      coverageState: null,
+      robotsTxtState: null,
+      indexingState: null,
+      pageFetchState: null,
+      mobileUsabilityVerdict: null,
+      richResultsVerdict: null,
+      scheduleNextAt: null,
+      scheduleConsecutiveUnchanged: null,
+      schedulePolicyVersion: null,
+      crawlingUserAgent: null,
+      richResultsItems: null,
+      sitemaps: null,
+      referringUrls: null,
+      mobileIssues: null,
+      inspectionResultLink: null,
+      firstCheckedAt: null,
+      checkCount: null,
+      nextCheckAfter: null,
+      nextCheckPriority: null,
+      ...extra,
+    } as InspectionEventRow
+  }
+
+  async function transitionsFor(store: Map<string, Uint8Array>, month: string) {
+    const key = inspectionTransitionsMonthKey(ctx, month)
+    return store.has(key) ? await decodeParquetToRows(store.get(key)!) : []
+  }
+
+  it('writes nothing when the flag is off', async () => {
+    // Default-off so the published minor is inert until a canary opts in.
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-01T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'b1' })
+    await inspector.compactInspections(ctx)
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-20T00:00:00Z', { indexStatus: 'FAIL' })], { batchId: 'b2' })
+    const res = await inspector.compactInspections(ctx)
+    expect(res.transitionsWritten).toBe(0)
+    expect(Array.from(store.keys()).some(k => k.includes('/transitions/'))).toBe(false)
+  })
+
+  it('records a verdict change as an interval, never a point in time', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-01T00:00:00Z', { indexStatus: 'PASS', coverageState: 'Submitted and indexed' })], { batchId: 'b1' })
+    await inspector.compactInspections(ctx, { transitions: true })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-20T00:00:00Z', { indexStatus: 'FAIL', coverageState: 'Crawled - currently not indexed' })], { batchId: 'b2' })
+    const res = await inspector.compactInspections(ctx, { transitions: true })
+
+    expect(res.transitionsWritten).toBe(1)
+    const rows = await transitionsFor(store, '2026-04')
+    expect(rows).toHaveLength(1)
+    const t = rows[0]!
+    expect(t.url).toBe('https://e.com/a')
+    expect(t.fromIndexStatus).toBe('PASS')
+    expect(t.toIndexStatus).toBe('FAIL')
+    expect(t.fromCoverageState).toBe('Submitted and indexed')
+    expect(t.toCoverageState).toBe('Crawled - currently not indexed')
+    // The change happened SOMEWHERE in this half-open interval. Emitting a
+    // `changedAt` would assert a precision the sampler cannot support.
+    expect(t.changedAfter).toBe('2026-04-01T00:00:00Z')
+    expect(t.changedBefore).toBe('2026-04-20T00:00:00Z')
+    expect(Object.keys(t)).not.toContain('changedAt')
+  })
+
+  it('ignores a re-observation that changed nothing', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-01T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'b1' })
+    await inspector.compactInspections(ctx, { transitions: true })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-20T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'b2' })
+    const res = await inspector.compactInspections(ctx, { transitions: true })
+    expect(res.transitionsWritten).toBe(0)
+    expect(await transitionsFor(store, '2026-04')).toHaveLength(0)
+  })
+
+  it('does not treat a lastCrawlTime bump as a transition', async () => {
+    // Google re-crawls far more often than verdicts change; keying on crawl
+    // time would make every observation a transition and destroy the ratio the
+    // storage budget depends on.
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-01T00:00:00Z', { indexStatus: 'PASS', lastCrawlTime: '2026-03-01T00:00:00Z' })], { batchId: 'b1' })
+    await inspector.compactInspections(ctx, { transitions: true })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-20T00:00:00Z', { indexStatus: 'PASS', lastCrawlTime: '2026-04-18T00:00:00Z' })], { batchId: 'b2' })
+    const res = await inspector.compactInspections(ctx, { transitions: true })
+    expect(res.transitionsWritten).toBe(0)
+    // No empty month file either — an existence check must mean "something changed".
+    expect(Array.from(store.keys()).some(k => k.includes('/transitions/'))).toBe(false)
+  })
+
+  it('emits nothing for a first observation — there is no prior to differ from', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/new', '2026-04-01T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'b1' })
+    const res = await inspector.compactInspections(ctx, { transitions: true })
+    expect(res.transitionsWritten).toBe(0)
+    expect(await transitionsFor(store, '2026-04')).toHaveLength(0)
+  })
+
+  it('accumulates into the month file across compactions without losing prior rows', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-01T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'b1' })
+    await inspector.compactInspections(ctx, { transitions: true })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-10T00:00:00Z', { indexStatus: 'FAIL' })], { batchId: 'b2' })
+    await inspector.compactInspections(ctx, { transitions: true })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-20T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'b3' })
+    await inspector.compactInspections(ctx, { transitions: true })
+
+    const rows = await transitionsFor(store, '2026-04')
+    expect(rows).toHaveLength(2)
+    expect(rows.map(r => `${r.fromIndexStatus}->${r.toIndexStatus}`)).toEqual(['PASS->FAIL', 'FAIL->PASS'])
+  })
+
+  it('is idempotent — a re-run of the same fold does not duplicate a transition', async () => {
+    // Compaction can re-run after a crash between the base write and the
+    // delete; a duplicated transition would double-count a regression.
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-01T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'b1' })
+    await inspector.compactInspections(ctx, { transitions: true })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-20T00:00:00Z', { indexStatus: 'FAIL' })], { batchId: 'b2' })
+    await inspector.compactInspections(ctx, { transitions: true })
+    // Same observation arrives again (replayed batch).
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-20T00:00:00Z', { indexStatus: 'FAIL' })], { batchId: 'b2-replay' })
+    await inspector.compactInspections(ctx, { transitions: true })
+
+    expect(await transitionsFor(store, '2026-04')).toHaveLength(1)
+  })
+
+  it('never deletes the transitions file while folding events', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-01T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'b1' })
+    await inspector.compactInspections(ctx, { transitions: true })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/a', '2026-04-20T00:00:00Z', { indexStatus: 'FAIL' })], { batchId: 'b2' })
+    await inspector.compactInspections(ctx, { transitions: true })
+    await inspector.appendInspectionEvents(ctx, [ev('https://e.com/b', '2026-04-21T00:00:00Z', { indexStatus: 'PASS' })], { batchId: 'b3' })
+    await inspector.compactInspections(ctx, { transitions: true })
+    // The whole point: events are disposable, transitions are not.
+    expect(Array.from(store.keys()).filter(k => k.includes('/events/'))).toHaveLength(0)
+    expect(await transitionsFor(store, '2026-04')).toHaveLength(1)
   })
 })

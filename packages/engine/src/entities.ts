@@ -25,6 +25,7 @@ import {
   inspectionHistoryPrefix,
   inspectionHistoryShardKey,
   inspectionParquetKey,
+  inspectionTransitionsMonthKey,
   parseSitemapUrlsDeltaKey,
   sitemapHistoryKey,
   sitemapIndexKey,
@@ -50,11 +51,11 @@ import {
 } from './sitemap-projection'
 
 export * from './entity-keys'
-export * from './sitemap-projection'
-
 // The versioned query→canonical(+intent) dimension is an entity store; surface
 // it on the same `@gscdump/engine/entities` subpath.
 export * from './query-dim'
+
+export * from './sitemap-projection'
 
 /**
  * GSC URL inspection result fields we persist. Mirrors the
@@ -283,7 +284,16 @@ export interface InspectionStore {
    *
    * No-op (no base rewrite) when there are zero outstanding events.
    */
-  compactInspections: (ctx: TenantCtx) => Promise<{ baseRowCount: number, eventsFolded: number, eventFilesDeleted: number }>
+  compactInspections: (
+    ctx: TenantCtx,
+    opts?: {
+      /**
+       * Also record state changes into the durable transitions sidecar.
+       * Default OFF so publishing this is inert until a canary opts in.
+       */
+      transitions?: boolean
+    },
+  ) => Promise<{ baseRowCount: number, eventsFolded: number, eventFilesDeleted: number, transitionsWritten: number }>
   /**
    * DuckDB-resolvable URI for the materialised parquet sidecar, or
    * `undefined` if the underlying `DataSource` has no native URI shape
@@ -346,6 +356,126 @@ const INSPECTION_EVENT_COLUMNS: readonly ColumnDef[] = [
   { name: 'nextCheckAfter', type: 'BIGINT', nullable: true },
   { name: 'nextCheckPriority', type: 'VARCHAR', nullable: true },
 ]
+
+/**
+ * Fields whose change constitutes a TRANSITION.
+ *
+ * `lastCrawlTime` is deliberately absent: Google re-crawls far more often than
+ * it changes its mind, so keying on it would make nearly every observation a
+ * transition and collapse the compaction ratio the storage budget depends on.
+ */
+const TRANSITION_STATE_FIELDS = [
+  'indexStatus',
+  'coverageState',
+  'robotsTxtState',
+  'indexingState',
+  'pageFetchState',
+  'googleCanonical',
+] as const
+
+/**
+ * Columns of the append-only transitions sidecar.
+ *
+ * There is NO `changedAt`, by construction. The change happened somewhere in
+ * `[changedAfter, changedBefore)` — the sampler observes on a 7-120 day
+ * backoff, so a point estimate would assert a precision the data cannot carry.
+ * Making it unrepresentable stops a consumer inventing one.
+ */
+const INSPECTION_TRANSITION_COLUMNS: readonly ColumnDef[] = [
+  { name: 'urlHash', type: 'VARCHAR', nullable: false },
+  { name: 'url', type: 'VARCHAR', nullable: false },
+  /** `inspectedAt` of the last observation still showing the OLD state. */
+  { name: 'changedAfter', type: 'VARCHAR', nullable: false },
+  /** `inspectedAt` of the first observation showing the NEW state. */
+  { name: 'changedBefore', type: 'VARCHAR', nullable: false },
+  ...TRANSITION_STATE_FIELDS.flatMap((field): ColumnDef[] => {
+    const capped = field[0]!.toUpperCase() + field.slice(1)
+    return [
+      { name: `from${capped}`, type: 'VARCHAR', nullable: true },
+      { name: `to${capped}`, type: 'VARCHAR', nullable: true },
+    ]
+  }),
+]
+
+/** True when the two observations differ on any transition-defining field. */
+function isStateTransition(before: Row, after: Row): boolean {
+  return TRANSITION_STATE_FIELDS.some(field => (before[field] ?? null) !== (after[field] ?? null))
+}
+
+function buildTransitionRow(before: Row, after: Row): Row {
+  const row: Row = {
+    urlHash: String(after.urlHash),
+    url: String(after.url ?? before.url ?? ''),
+    changedAfter: String(before.inspectedAt ?? ''),
+    changedBefore: String(after.inspectedAt ?? ''),
+  }
+  for (const field of TRANSITION_STATE_FIELDS) {
+    const capped = field[0]!.toUpperCase() + field.slice(1)
+    row[`from${capped}`] = (before[field] ?? null) as string | null
+    row[`to${capped}`] = (after[field] ?? null) as string | null
+  }
+  return row
+}
+
+/**
+ * Merge new transitions into their month files (read-modify-write).
+ *
+ * Deduped on `(urlHash, changedBefore)`, which is unique per transition: a
+ * replayed batch or a compaction re-run after a crash re-derives the same rows
+ * and converges instead of double-counting a regression.
+ *
+ * Whole-file writes only, per ADR-0002.
+ */
+async function appendTransitions(
+  ds: DataSource,
+  ctx: TenantCtx,
+  rows: readonly Row[],
+): Promise<number> {
+  if (rows.length === 0)
+    return 0
+
+  const byMonth = new Map<string, Row[]>()
+  for (const row of rows) {
+    const month = transitionMonth(row)
+    const bucket = byMonth.get(month)
+    if (bucket)
+      bucket.push(row)
+    else
+      byMonth.set(month, [row])
+  }
+
+  let written = 0
+  for (const [month, monthRows] of byMonth) {
+    const key = inspectionTransitionsMonthKey(ctx, month)
+    const existingBytes = await readOptional(ds, key)
+    const existing = existingBytes ? await decodeParquetToRows(existingBytes) : []
+
+    const seen = new Set(existing.map(r => `${String(r.urlHash)}\u0000${String(r.changedBefore)}`))
+    const fresh = monthRows.filter((r) => {
+      const id = `${String(r.urlHash)}\u0000${String(r.changedBefore)}`
+      if (seen.has(id))
+        return false
+      seen.add(id)
+      return true
+    })
+    if (fresh.length === 0)
+      continue
+
+    const merged = [...existing, ...fresh]
+    await ds.write(key, encodeRowsToParquetFlex(merged, {
+      columns: INSPECTION_TRANSITION_COLUMNS,
+      // Same sort key as the base so a per-URL history lookup prunes row groups.
+      sortKey: ['urlHash'],
+    }))
+    written += fresh.length
+  }
+  return written
+}
+
+/** `YYYY-MM` partition for a transition, taken from when it was OBSERVED. */
+function transitionMonth(row: Row): string {
+  return String(row.changedBefore ?? '').slice(0, 7) || 'unknown'
+}
 
 export function createInspectionStore(opts: CreateInspectionStoreOptions): InspectionStore {
   const ds = opts.dataSource
@@ -449,12 +579,12 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
       return { keys: files.map(file => file.key), rowCount: rows.length }
     },
 
-    async compactInspections(ctx) {
+    async compactInspections(ctx, opts) {
       const eventKeys = (await ds.list(`${inspectionEventsPrefix(ctx)}/`))
         .filter(k => INSPECTION_EVENT_KEY_RE.test(k))
       // Nothing outstanding → leave the base untouched (no needless rewrite).
       if (eventKeys.length === 0)
-        return { baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0 }
+        return { baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0, transitionsWritten: 0 }
 
       const baseKey = inspectionBaseKey(ctx)
       // Highest-risk swallow: a real read failure on an existing base must NOT
@@ -468,11 +598,20 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
       // tracking the earliest firstCheckedAt seen so compaction never loses it.
       const latest = new Map<string, Row>()
       const earliestChecked = new Map<string, string>()
+      // Compaction already holds BOTH rows a transition needs: the prior state
+      // (the base row, which is the previous newest-wins observation) and the
+      // incoming one. Detecting the change here costs one comparison; it does
+      // not need history reconstruction, because the pair is right there.
+      const transitions: Row[] = []
       const consider = (row: Row): void => {
         const h = String(row.urlHash)
         const prev = latest.get(h)
-        if (!prev || String(row.inspectedAt ?? '') > String(prev.inspectedAt ?? ''))
+        const isNewer = !prev || String(row.inspectedAt ?? '') > String(prev.inspectedAt ?? '')
+        if (isNewer) {
+          if (opts?.transitions && prev && isStateTransition(prev, row))
+            transitions.push(buildTransitionRow(prev, row))
           latest.set(h, row)
+        }
         const fc = row.firstCheckedAt
         if (fc != null) {
           const fcStr = String(fc)
@@ -514,9 +653,18 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
         sortKey: ['urlHash'],
       })
       await ds.write(baseKey, bytes)
+
+      // Written BEFORE the event delete: if this throws, the events survive and
+      // the next compaction re-derives the same transitions. Writing after the
+      // delete would lose them permanently on failure — which is precisely how
+      // this data has already been lost three times.
+      const transitionsWritten = opts?.transitions
+        ? await appendTransitions(ds, ctx, transitions)
+        : 0
+
       if (consumed.length > 0)
         await ds.delete(consumed)
-      return { baseRowCount: merged.length, eventsFolded, eventFilesDeleted: consumed.length }
+      return { baseRowCount: merged.length, eventsFolded, eventFilesDeleted: consumed.length, transitionsWritten }
     },
 
     parquetUri(ctx) {
@@ -1009,11 +1157,10 @@ export function createSitemapReadStore(opts: CreateSitemapReadStoreOptions): Sit
       const manifest = manifestBytes
         ? decodeSitemapProjectionManifest(new TextDecoder().decode(manifestBytes))
         : undefined
-      const keys = selectSitemapProjectionFiles([], listedKeys, manifest).deltaKeys
-        .filter((key) => {
-          const parsed = parseSitemapUrlsDeltaKey(key)
-          return Boolean(parsed && dateInRange(parsed.date, dateRange))
-        })
+      const keys = selectSitemapProjectionFiles([], listedKeys, manifest).deltaKeys.filter((key) => {
+        const parsed = parseSitemapUrlsDeltaKey(key)
+        return Boolean(parsed && dateInRange(parsed.date, dateRange))
+      })
       const files = await readSitemapDeltaFiles(ds, keys)
       for (const file of files) {
         for (const row of file.rows) {

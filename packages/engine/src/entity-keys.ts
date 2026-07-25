@@ -30,6 +30,23 @@ export function inspectionBaseKey(ctx: TenantCtx): string {
   return `${tenantEntityPrefix(ctx)}/inspections/base.parquet`
 }
 
+/**
+ * Append-only record of URL-inspection STATE CHANGES, partitioned by month.
+ *
+ * Distinct from `events/`, which compaction deletes. Google exposes no API for
+ * historical index-coverage state, so a verdict change observed once is gone
+ * the moment the event file folds — this is the only durable record that a URL
+ * ever left (or entered) the index.
+ */
+export function inspectionTransitionsPrefix(ctx: TenantCtx): string {
+  return `${tenantEntityPrefix(ctx)}/inspections/transitions`
+}
+
+/** One file per calendar month (`YYYY-MM`), rewritten in place as it fills. */
+export function inspectionTransitionsMonthKey(ctx: TenantCtx, yearMonth: string): string {
+  return `${inspectionTransitionsPrefix(ctx)}/${yearMonth}.parquet`
+}
+
 export function inspectionHistoryPrefix(ctx: TenantCtx, yearMonth: string): string {
   return `${tenantEntityPrefix(ctx)}/inspections/history/${yearMonth}`
 }
