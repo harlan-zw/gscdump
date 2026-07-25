@@ -15,7 +15,13 @@ import type { ComparisonMode, ResolvedWindow, WindowPreset } from '../period'
 /** Status vocabulary mirrors `ActionPrioritySourceStatus`. */
 export type ReportStepStatus = 'pending' | 'running' | 'done' | 'skipped' | 'error'
 
-export type ReportSeverity = 'info' | 'low' | 'medium' | 'high'
+/**
+ * `unknown` is not a rung on the info→high ladder: it means the section's
+ * backing analyzer(s) failed, so no severity could be assessed. The report
+ * runtime is the only writer — a report's `reduce` never returns it. See
+ * `ReportPlanStep.feeds`.
+ */
+export type ReportSeverity = 'info' | 'low' | 'medium' | 'high' | 'unknown'
 
 export type ReportEntityKind = 'page' | 'query'
 
@@ -94,6 +100,23 @@ export interface ReportPlanStep {
   params: Omit<AnalysisParams, 'type'>
   /** Required steps fail the report; optional steps degrade `coverage`. */
   required?: boolean
+  /**
+   * Ids of the `ReportSection`s this step's result feeds. Defaults to
+   * `[key]`, which is the common case (section id === step key).
+   *
+   * This is what lets the runtime tell "the analyzer failed" apart from "the
+   * analyzer returned zero rows": a section whose feeding steps ALL errored
+   * carries no information, and the runtime replaces it with an explicit
+   * `severity: 'unknown'` shape instead of letting `reduce` publish
+   * aggregates computed over an empty array. A section fed by a mix of
+   * failed and successful steps still has real content and is left alone
+   * (its `coverage` stays `partial`).
+   *
+   * Declare it whenever a section id differs from the step key, or a step
+   * feeds several sections. `report-unavailable.test.ts` fails on any
+   * emitted section no step claims.
+   */
+  feeds?: readonly string[]
 }
 
 export interface ReportStepStateMeta {

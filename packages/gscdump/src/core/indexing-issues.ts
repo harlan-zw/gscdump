@@ -8,6 +8,21 @@
 // contract — call it at the ingest boundary so a new Google reason surfaces as a
 // log line rather than silently collapsing into the generic `not_indexed` bucket.
 
+/**
+ * JS twin of the `fragment_url` SQL predicate below.
+ *
+ * Google does not index fragments as distinct entities — a `#anchor` URL always
+ * resolves to its parent document — so inspecting one can never return a useful
+ * verdict, and counting one inflates every per-URL total by a phantom row. Write
+ * paths reject these; read paths exclude them.
+ *
+ * Kept beside {@link INDEXING_ISSUE_FILTERS} so the JS and SQL sides of the rule
+ * cannot drift; call sites must use this rather than re-deriving `includes('#')`.
+ */
+export function isFragmentUrl(url: string): boolean {
+  return typeof url === 'string' && url.includes('#')
+}
+
 export const INDEXING_ISSUE_FILTERS = {
   canonical_mismatch: `user_canonical IS NOT NULL AND google_canonical IS NOT NULL AND user_canonical != google_canonical`,
   stale_crawl: `last_crawl_time < datetime('now', '-30 days')`,

@@ -35,7 +35,7 @@ export const brandReport = defineReport<BrandReportParams>({
     const brandTerms = rawBrandTerms.split(',').map(t => t.trim()).filter(Boolean)
     const dates = { startDate: window.start, endDate: window.end }
     return [
-      { key: 'brand', type: 'brand', params: { ...dates, brandTerms, limit: 200 }, required: true },
+      { key: 'brand', type: 'brand', params: { ...dates, brandTerms, limit: 200 }, required: true, feeds: ['brand-split'] },
       { key: 'concentration', type: 'concentration', params: { ...dates, dimension: 'keywords', limit: 50 } },
     ]
   },

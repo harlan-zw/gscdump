@@ -11,6 +11,7 @@ const SEVERITY_GLYPH: Record<string, string> = {
   low: '·',
   medium: '!',
   high: '!!',
+  unknown: '?',
 }
 
 export interface FormatReportOptions {

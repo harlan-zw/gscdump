@@ -38,9 +38,9 @@ export const moversReport = defineReport<MoversReportParams>({
     const cur = { startDate: window.start, endDate: window.end }
     const prev = { prevStartDate: comparison.start, prevEndDate: comparison.end }
     return [
-      { key: 'movers', type: 'movers', params: { ...cur, ...prev, limit: 200 }, required: true },
-      { key: 'decay', type: 'decay', params: { ...cur, ...prev, limit: 100 } },
-      { key: 'striking', type: 'striking-distance', params: { ...cur, limit: 100 } },
+      { key: 'movers', type: 'movers', params: { ...cur, ...prev, limit: 200 }, required: true, feeds: ['rising', 'decliners'] },
+      { key: 'decay', type: 'decay', params: { ...cur, ...prev, limit: 100 }, feeds: ['decliners'] },
+      { key: 'striking', type: 'striking-distance', params: { ...cur, limit: 100 }, feeds: ['striking-distance'] },
     ]
   },
   reduce: (results, ctx) => {

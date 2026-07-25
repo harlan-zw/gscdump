@@ -28,8 +28,8 @@ export const opportunitiesReport = defineReport<OpportunitiesReportParams>({
   plan: (_params, window) => {
     const dates = { startDate: window.start, endDate: window.end }
     return [
-      { key: 'striking', type: 'striking-distance', params: { ...dates, limit: 100 }, required: true },
-      { key: 'opportunity', type: 'opportunity', params: { ...dates, limit: 100 } },
+      { key: 'striking', type: 'striking-distance', params: { ...dates, limit: 100 }, required: true, feeds: ['striking-distance'] },
+      { key: 'opportunity', type: 'opportunity', params: { ...dates, limit: 100 }, feeds: ['low-ctr'] },
       { key: 'zero-click', type: 'zero-click', params: { ...dates, limit: 100 } },
       { key: 'query-migration', type: 'query-migration', params: { ...dates, limit: 50 } },
     ]

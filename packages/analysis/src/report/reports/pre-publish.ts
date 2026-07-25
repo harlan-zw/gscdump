@@ -36,8 +36,8 @@ export const prePublishReport = defineReport<PrePublishReportParams>({
     requireReportParam('pre-publish', 'topic', params.topic, 'pre-publish report requires --topic <topic-or-url>')
     const dates = { startDate: window.start, endDate: window.end }
     return [
-      { key: 'cannibalization', type: 'cannibalization', params: { ...dates, limit: 200 } },
-      { key: 'striking', type: 'striking-distance', params: { ...dates, limit: 200 } },
+      { key: 'cannibalization', type: 'cannibalization', params: { ...dates, limit: 200 }, feeds: ['cannibalization-risk'] },
+      { key: 'striking', type: 'striking-distance', params: { ...dates, limit: 200 }, feeds: ['striking-peers'] },
     ]
   },
   reduce: (results, ctx) => {

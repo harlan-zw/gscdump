@@ -49,8 +49,10 @@ export const priorityReport = defineReport<PriorityReportParams>({
       params: { ...dates, ...cmp, limit: 100 },
       // None individually required: action-priority's contract has always been
       // "best effort across signals". Section coverage flips to 'partial' if
-      // any analyzer errors.
+      // any analyzer errors; if they ALL error the runtime rewrites the
+      // section to `severity: 'unknown'` rather than "0 actions ranked".
       required: false,
+      feeds: ['priority'],
     }))
   },
   reduce: (results, ctx) => {

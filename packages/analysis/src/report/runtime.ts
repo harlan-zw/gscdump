@@ -5,7 +5,9 @@
  * `ReportPlanStep` is dispatched through `runAnalyzerFromSource` in parallel,
  * results land in a keyed bag, the report's `reduce` shapes that into
  * sections. Required-step failure throws; optional-step failure flips
- * `coverage: 'partial'` and `meta.degraded: true`.
+ * `coverage: 'partial'` and `meta.degraded: true`, and any section fed only
+ * by failed steps is replaced with an explicit `severity: 'unknown'` shape
+ * (see `markUnavailableSections`).
  */
 
 import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
@@ -64,6 +66,73 @@ async function executeStep(
 }
 
 /**
+ * Replace a section that no surviving step feeds. `reduce` reads a bag that
+ * simply omits failed steps, so every "count the rows" expression in it sees
+ * `[]` — indistinguishable from an analyzer that legitimately returned zero
+ * rows. That is how a report whose analyzers all threw came back
+ * `severity: 'info'`, `"0 clusters covering 0 keywords"`, `coverage: 'partial'`
+ * — confident, valid-looking, and false.
+ *
+ * The runtime is the only layer that knows a step errored, so it is the only
+ * layer that can tell those two states apart. Rather than trusting each
+ * report's `reduce` to check (it can't — it never sees the failure), the
+ * fabricated content is stripped here: no findings, no actions, no artifact
+ * to re-run, and a severity outside the info→high ladder.
+ *
+ * `coverage` deliberately stays `partial`: it already means "backing data is
+ * incomplete", consumers key their partial-badge off it, and widening
+ * `ReportCoverage` would silently drop that badge on older consumers.
+ */
+function unavailableSection(section: ReportSection, failedKeys: string[]): ReportSection {
+  return {
+    id: section.id,
+    title: section.title,
+    severity: 'unknown',
+    summary: { magnitudeLabel: `unavailable — ${failedKeys.join(', ')} failed` },
+    findings: [],
+    coverage: 'partial',
+    actions: [],
+  }
+}
+
+/**
+ * A section is unavailable when at least one step declares it via
+ * `ReportPlanStep.feeds` (defaulting to the step key) and EVERY such step
+ * errored. A section fed by a mix still has real content and is untouched.
+ * A section no step claims is untouched too — `report-unavailable.test.ts`
+ * is the guard against that gap going unnoticed.
+ */
+function markUnavailableSections(
+  sections: readonly ReportSection[],
+  steps: readonly ReportPlanStep[],
+  outcomes: readonly StepOutcome[],
+): ReportSection[] {
+  const failedKeys = new Set(
+    outcomes.filter(o => o.state.status === 'error').map(o => o.state.key),
+  )
+  if (failedKeys.size === 0)
+    return [...sections]
+
+  const feedersBySection = new Map<string, string[]>()
+  for (const step of steps) {
+    for (const sectionId of step.feeds ?? [step.key]) {
+      const feeders = feedersBySection.get(sectionId)
+      if (feeders)
+        feeders.push(step.key)
+      else
+        feedersBySection.set(sectionId, [step.key])
+    }
+  }
+
+  return sections.map((section) => {
+    const feeders = feedersBySection.get(section.id)
+    if (!feeders?.length || !feeders.every(k => failedKeys.has(k)))
+      return section
+    return unavailableSection(section, feeders)
+  })
+}
+
+/**
  * `Result`-returning core for {@link runReport}. Models the one
  * caller-actionable failure of a structurally-valid report run: a required
  * step's analyzer threw (`required-step-failed`, with the underlying error as
@@ -73,7 +142,9 @@ async function executeStep(
  * Steps execute in parallel via `Promise.all`. The report's `reduce` is invoked
  * with a results bag that only contains successful steps — sections that
  * depended on a failed step should set their own `coverage: 'partial'` (the
- * runtime additionally marks `meta.degraded` when any step errored).
+ * runtime additionally marks `meta.degraded` when any step errored, and
+ * rewrites sections whose feeding steps ALL failed; see
+ * `markUnavailableSections`).
  *
  * The report's own `plan()` param-validation throws (`--target` etc.) are
  * defects from this core's perspective and still propagate; those are modelled
@@ -122,7 +193,7 @@ export async function runReportResult<P extends ReportParams = ReportParams>(
   }
 
   const reduced = report.reduce(resultsByKey, opts.ctx)
-  const sections: ReportSection[] = reduced.sections
+  const sections: ReportSection[] = markUnavailableSections(reduced.sections, steps, outcomes)
 
   const degraded = errored.length > 0
   const stepStates: ReportStepStateMeta[] = outcomes.map(o => o.state)
