@@ -1,7 +1,7 @@
 {
   "name": "gscdump",
   "type": "module",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "description": "Direct Google Search Console client with typed queries, streaming pagination, URL inspection, and indexing helpers",
   "author": {
     "name": "Harlan Wilton",
