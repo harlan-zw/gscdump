@@ -174,29 +174,75 @@ export async function batchInspectUrlsFlatSettled(
 }
 
 // --- Re-check scheduling ---------------------------------------------------
-// Priority/cadence policy for re-inspecting a URL based on its current
-// verdict. Non-indexed pages are checked more frequently to catch the
-// transition; indexed pages back off to a monthly cadence.
+// Priority/cadence policy for re-inspecting a URL based on its current verdict
+// and, when supplied, its recent search value.
 
-export type InspectionPriority = 'high' | 'medium' | 'low'
+export type LegacyInspectionPriority = 'high' | 'medium' | 'low'
+export type ValueWeightedInspectionPriority = 'critical' | 'high' | 'elevated' | 'normal' | 'dormant'
+export type InspectionPriority = LegacyInspectionPriority | ValueWeightedInspectionPriority
 
-export function getNextCheckPriority(result: Pick<ParsedIndexingResult, 'verdict'>): InspectionPriority {
-  if (!result.verdict || result.verdict === 'VERDICT_UNSPECIFIED')
+/**
+ * Derive the recheck tier.
+ *
+ * Omitting `impressions28d` preserves the verdict-only policy. Consumers own
+ * signal freshness and the 90-day stable-zero guard, and should omit the value
+ * until those conditions make a dormant classification safe.
+ */
+export function getNextCheckPriority(
+  result: Pick<ParsedIndexingResult, 'verdict'>,
+): LegacyInspectionPriority
+export function getNextCheckPriority(
+  result: Pick<ParsedIndexingResult, 'verdict'>,
+  impressions28d: undefined,
+): LegacyInspectionPriority
+export function getNextCheckPriority(
+  result: Pick<ParsedIndexingResult, 'verdict'>,
+  impressions28d: number,
+): ValueWeightedInspectionPriority
+export function getNextCheckPriority(
+  result: Pick<ParsedIndexingResult, 'verdict'>,
+  impressions28d: number | undefined,
+): InspectionPriority
+export function getNextCheckPriority(
+  result: Pick<ParsedIndexingResult, 'verdict'>,
+  impressions28d?: number,
+): InspectionPriority {
+  if (impressions28d === undefined) {
+    if (!result.verdict || result.verdict === 'VERDICT_UNSPECIFIED')
+      return 'medium'
+    if (result.verdict === 'FAIL' || result.verdict === 'PARTIAL' || result.verdict === 'NEUTRAL')
+      return 'high'
+    if (result.verdict === 'PASS')
+      return 'low'
     return 'medium'
-  if (result.verdict === 'FAIL' || result.verdict === 'PARTIAL' || result.verdict === 'NEUTRAL')
+  }
+
+  if (result.verdict !== 'PASS')
     return 'high'
-  if (result.verdict === 'PASS')
-    return 'low'
-  return 'medium'
+  if (impressions28d >= 1000)
+    return 'critical'
+  if (impressions28d >= 100)
+    return 'elevated'
+  if (impressions28d >= 1)
+    return 'normal'
+  return 'dormant'
 }
 
 /** Next-check unix seconds for a given priority. */
 export function getNextCheckAfter(priority: InspectionPriority): number {
   const now = Math.floor(Date.now() / 1000)
   switch (priority) {
-    case 'high': return now + 7 * 86400
-    case 'medium': return now + 14 * 86400
-    case 'low': return now + 30 * 86400
+    case 'critical':
+    case 'high':
+      return now + 7 * 86400
+    case 'elevated':
+    case 'medium':
+      return now + 14 * 86400
+    case 'low':
+    case 'normal':
+      return now + 30 * 86400
+    case 'dormant':
+      return now + 120 * 86400
   }
 }
 

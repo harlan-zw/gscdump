@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   batchInspectUrlsFlatSettled,
   canUseUrlInspection,
+  getNextCheckAfter,
+  getNextCheckPriority,
   inspectUrlFlat,
   MAX_FLAT_INSPECTION_BATCH_CONCURRENCY,
 } from '../../src/api/inspection'
@@ -97,6 +99,55 @@ describe('batchInspectUrlsFlatSettled', () => {
     expect(failed).toMatchObject({ url: failedUrl, status: 'rejected' })
     expect(failed?.status === 'rejected' && failed.reason).toBe(failure)
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(urls.length - 1)
+  })
+})
+
+describe('getNextCheckPriority', () => {
+  it.each([
+    ['PASS', 'low'],
+    ['FAIL', 'high'],
+    ['PARTIAL', 'high'],
+    ['NEUTRAL', 'high'],
+    ['VERDICT_UNSPECIFIED', 'medium'],
+    [null, 'medium'],
+    ['UNKNOWN_FUTURE_VERDICT', 'medium'],
+  ] as const)('preserves legacy priority for verdict %s when impressions are absent', (verdict, expected) => {
+    expect(getNextCheckPriority({ verdict })).toBe(expected)
+    expect(getNextCheckPriority({ verdict }, undefined)).toBe(expected)
+  })
+
+  it.each([
+    ['PASS', 1000, 'critical'],
+    ['PASS', 10_000, 'critical'],
+    ['FAIL', 10_000, 'high'],
+    ['PARTIAL', 500, 'high'],
+    ['NEUTRAL', 0, 'high'],
+    ['PASS', 100, 'elevated'],
+    ['PASS', 999, 'elevated'],
+    ['PASS', 1, 'normal'],
+    ['PASS', 99, 'normal'],
+    ['PASS', 0, 'dormant'],
+  ] as const)('returns %s with %d impressions as %s', (verdict, impressions28d, expected) => {
+    expect(getNextCheckPriority({ verdict }, impressions28d)).toBe(expected)
+  })
+})
+
+describe('getNextCheckAfter', () => {
+  it.each([
+    ['critical', 7],
+    ['high', 7],
+    ['medium', 14],
+    ['elevated', 14],
+    ['normal', 30],
+    ['low', 30],
+    ['dormant', 120],
+  ] as const)('schedules %s after %d days', (priority, days) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-26T00:00:00Z'))
+
+    expect(getNextCheckAfter(priority)).toBe(Date.parse('2026-07-26T00:00:00Z') / 1000 + days * 86400)
+
+    vi.useRealTimers()
   })
 })
 
