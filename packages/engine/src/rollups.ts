@@ -1547,7 +1547,7 @@ export const indexingHealthRollup: RollupDef = {
         SUM(CASE WHEN CAST(pageFetchState AS VARCHAR) = 'NOT_FOUND' THEN 1 ELSE 0 END)::BIGINT AS not_found,
         SUM(CASE WHEN CAST(mobileUsabilityVerdict AS VARCHAR) = 'PASS' THEN 1 ELSE 0 END)::BIGINT AS mobile_passes,
         SUM(CASE WHEN CAST(richResultsVerdict AS VARCHAR) = 'PASS' THEN 1 ELSE 0 END)::BIGINT AS rich_results_passes,
-        SUM(CASE WHEN userCanonical IS NOT NULL AND googleCanonical IS NOT NULL AND CAST(userCanonical AS VARCHAR) <> CAST(googleCanonical AS VARCHAR) THEN 1 ELSE 0 END)::BIGINT AS canonical_mismatches
+        SUM(CASE WHEN canonicalMismatchKind IN ('path', 'cross_domain') THEN 1 ELSE 0 END)::BIGINT AS canonical_mismatches
       FROM read_parquet({{INSPECTIONS}}, union_by_name = true)
       WHERE substr(CAST(inspectedAt AS VARCHAR), 1, 10) >= '${cutoff}'
       GROUP BY 1

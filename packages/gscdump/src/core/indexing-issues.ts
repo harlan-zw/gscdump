@@ -24,7 +24,9 @@ export function isFragmentUrl(url: string): boolean {
 }
 
 export const INDEXING_ISSUE_FILTERS = {
-  canonical_mismatch: `user_canonical IS NOT NULL AND google_canonical IS NOT NULL AND user_canonical != google_canonical`,
+  canonical_mismatch: `canonical_mismatch_kind = 'path'`,
+  canonical_cross_domain: `canonical_mismatch_kind = 'cross_domain'`,
+  canonical_formatting: `canonical_mismatch_kind = 'formatting'`,
   stale_crawl: `last_crawl_time < datetime('now', '-30 days')`,
   very_stale_crawl: `last_crawl_time < datetime('now', '-60 days')`,
   not_indexed: `verdict IN ('FAIL', 'PARTIAL', 'NEUTRAL')`,
@@ -53,10 +55,10 @@ export const INDEXING_ISSUE_FILTERS = {
   // the same line — it mails "pages in a sitemap" separately from "pages".
   sitemap_redirect: `coverage_state = 'Page with redirect' AND sitemaps IS NOT NULL AND sitemaps != '[]'`,
   alternate_canonical: `coverage_state = 'Alternate page with proper canonical tag'`,
-  // NOT reachable via `canonical_mismatch`: that predicate needs BOTH canonicals
-  // non-null, and this state means the page declared none at all (verified on prod:
-  // 10/10 such rows have `user_canonical IS NULL`). Without its own key these URLs
-  // fall into the generic `not_indexed` bucket and disappear.
+  // NOT reachable via any stored canonical difference kind: a missing declared
+  // canonical classifies as `none` (verified on prod: 10/10 such rows have
+  // `user_canonical IS NULL`). Without its own key these URLs fall into the
+  // generic `not_indexed` bucket and disappear.
   duplicate_no_canonical: `coverage_state = 'Duplicate without user-selected canonical'`,
   // Google explicitly telling the owner to declare a canonical. It was already
   // in KNOWN_COVERAGE_STATES and classified non-fault, so it had no filter key,
@@ -74,6 +76,8 @@ export type IndexingIssueType = keyof typeof INDEXING_ISSUE_FILTERS
 
 export const INDEXING_ISSUE_LABELS: Record<IndexingIssueType, string> = {
   canonical_mismatch: 'Canonical mismatch',
+  canonical_cross_domain: 'Cross-domain canonical',
+  canonical_formatting: 'Canonical formatting differs',
   stale_crawl: 'Not crawled in 30+ days',
   very_stale_crawl: 'Not crawled in 60+ days',
   not_indexed: 'Not indexed',
@@ -105,6 +109,8 @@ export const INDEXING_ISSUE_LABELS: Record<IndexingIssueType, string> = {
 
 export const INDEXING_ISSUE_SEVERITY: Record<IndexingIssueType, 'error' | 'warning' | 'info'> = {
   canonical_mismatch: 'warning',
+  canonical_cross_domain: 'error',
+  canonical_formatting: 'info',
   stale_crawl: 'info',
   very_stale_crawl: 'warning',
   not_indexed: 'error',

@@ -68,11 +68,22 @@ describe('iNDEXING_ISSUE_FILTERS', () => {
     expect(fetchStateOnly, 'soft_404 must not depend on page_fetch_state alone').toBe(false)
   })
 
-  // Regression: `canonical_mismatch` requires BOTH canonicals non-null, so it can
-  // never match a page that declared no canonical at all. Prod had 10 such rows,
-  // every one with `user_canonical IS NULL`, silently absorbed by `not_indexed`.
+  it('canonical kinds are mutually exclusive and carry distinct severities', () => {
+    expect(INDEXING_ISSUE_FILTERS.canonical_mismatch)
+      .toBe(`canonical_mismatch_kind = 'path'`)
+    expect(INDEXING_ISSUE_FILTERS.canonical_cross_domain)
+      .toBe(`canonical_mismatch_kind = 'cross_domain'`)
+    expect(INDEXING_ISSUE_FILTERS.canonical_formatting)
+      .toBe(`canonical_mismatch_kind = 'formatting'`)
+    expect(INDEXING_ISSUE_SEVERITY.canonical_mismatch).toBe('warning')
+    expect(INDEXING_ISSUE_SEVERITY.canonical_cross_domain).toBe('error')
+    expect(INDEXING_ISSUE_SEVERITY.canonical_formatting).toBe('info')
+  })
+
+  // Regression: canonical kind `none` covers a missing declaration, so it can
+  // never rescue a page that declared no canonical at all. Prod had 10 such
+  // rows, silently absorbed by `not_indexed`.
   it('duplicate_no_canonical does not rely on canonical_mismatch', () => {
-    expect(INDEXING_ISSUE_FILTERS.canonical_mismatch).toContain('user_canonical IS NOT NULL')
     expect(INDEXING_ISSUE_FILTERS.duplicate_no_canonical)
       .toBe(`coverage_state = 'Duplicate without user-selected canonical'`)
     expect(INDEXING_ISSUE_FILTERS.duplicate_no_canonical).not.toContain('canonical IS NOT NULL')
@@ -115,13 +126,12 @@ describe('unmappedInspectionReasons', () => {
       'Indexed; consider marking as canonical',
     ])
     // Matched by predicate shape rather than by literal string. Everything else
-    // MUST appear verbatim in a filter — a "the generic bucket covers it" excuse
-    // is how `Duplicate without user-selected canonical` hid 10 prod rows behind
-    // `canonical_mismatch`, whose `user_canonical IS NOT NULL` clause it can never
-    // satisfy.
+    // MUST appear verbatim in a filter. `Duplicate without user-selected
+    // canonical` cannot satisfy a stored difference kind because a missing
+    // declaration classifies as `none`.
     const structural = new Set([
       'Excluded by ‘noindex’ tag', // noindex: coverage_state LIKE '%noindex%'
-      'Duplicate, Google chose different canonical than user', // canonical_mismatch: both canonicals set, differing
+      'Duplicate, Google chose different canonical than user', // canonical kind is stored at ingest
       'Blocked by robots.txt', // blocked_robots: robots_txt_state = 'DISALLOWED'
     ])
     const allFilters = Object.values(INDEXING_ISSUE_FILTERS).join(' ')

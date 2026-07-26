@@ -5447,6 +5447,13 @@
                               "googleCanonical": {
                                 "type": "string"
                               },
+                              "kind": {
+                                "enum": [
+                                  "path",
+                                  "cross_domain"
+                                ],
+                                "type": "string"
+                              },
                               "lastCheckedAt": {
                                 "anyOf": [
                                   {
@@ -5491,7 +5498,8 @@
                               "verdict",
                               "coverageState",
                               "lastCrawlTime",
-                              "lastCheckedAt"
+                              "lastCheckedAt",
+                              "kind"
                             ],
                             "type": "object"
                           },
@@ -8376,6 +8384,12 @@
                               "count": {
                                 "type": "number"
                               },
+                              "description": {
+                                "type": "string"
+                              },
+                              "fix": {
+                                "type": "string"
+                              },
                               "label": {
                                 "type": "string"
                               },
@@ -8395,7 +8409,9 @@
                               "type",
                               "label",
                               "severity",
-                              "count"
+                              "count",
+                              "description",
+                              "fix"
                             ],
                             "type": "object"
                           },

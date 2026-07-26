@@ -1,4 +1,7 @@
 import type {
+  ColumnDef,
+} from '@gscdump/contracts'
+import type {
   CreateSitemapStoreOptions,
   InspectionEventRow,
   InspectionParquetRow,
@@ -7,7 +10,7 @@ import type {
 } from '../src/entities'
 import type { DataSource, TenantCtx } from '../src/storage'
 import { describe, expect, it } from 'vitest'
-import { decodeParquetToRows } from '../src/adapters/hyparquet'
+import { decodeParquetToRows, encodeRowsToParquetFlex } from '../src/adapters/hyparquet'
 import {
   createEmptyTypesStore,
   createInspectionStore,
@@ -945,6 +948,7 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
       checkCount: null,
       nextCheckAfter: null,
       nextCheckPriority: null,
+      canonicalMismatchKind: 'none',
       ...partial,
     }
   }
@@ -1035,6 +1039,45 @@ describe('createInspectionStore: appendInspectionEvents + compactInspections', (
     const res = await inspector.compactInspections(ctx)
     expect(res).toEqual({ baseRowCount: 0, eventsFolded: 0, eventFilesDeleted: 0, transitionsWritten: 0 })
     expect(store.has(inspectionBaseKey(ctx))).toBe(false)
+  })
+
+  it('backfills canonical kinds into a legacy base without waiting for reinspection', async () => {
+    const { ds, store } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    const baseKey = inspectionBaseKey(ctx)
+    const legacyColumns: readonly ColumnDef[] = [
+      { name: 'urlHash', type: 'VARCHAR', nullable: false },
+      { name: 'url', type: 'VARCHAR', nullable: false },
+      { name: 'inspectedAt', type: 'VARCHAR', nullable: false },
+      { name: 'userCanonical', type: 'VARCHAR', nullable: true },
+      { name: 'googleCanonical', type: 'VARCHAR', nullable: true },
+    ]
+    store.set(baseKey, encodeRowsToParquetFlex([
+      {
+        urlHash: hashUrl('https://e.com/formatting'),
+        url: 'https://e.com/formatting',
+        inspectedAt: '2026-04-01T00:00:00Z',
+        userCanonical: 'https://www.e.com/formatting/',
+        googleCanonical: 'http://e.com/formatting',
+      },
+      {
+        urlHash: hashUrl('https://e.com/path'),
+        url: 'https://e.com/path',
+        inspectedAt: '2026-04-01T00:00:00Z',
+        userCanonical: 'https://e.com/path',
+        googleCanonical: 'https://e.com/other',
+      },
+    ], { columns: legacyColumns, sortKey: ['urlHash'] }))
+
+    const result = await inspector.backfillCanonicalMismatchKinds(ctx)
+
+    expect(result).toEqual({ baseRowCount: 2, rowsBackfilled: 2, rewritten: true })
+    const rows = await decodeParquetToRows(store.get(baseKey)!)
+    const kinds = Object.fromEntries(rows.map(row => [row.url, row.canonicalMismatchKind]))
+    expect(kinds).toEqual({
+      'https://e.com/formatting': 'formatting',
+      'https://e.com/path': 'path',
+    })
   })
 
   it('folds events into base (newest-wins by inspectedAt) and deletes consumed events', async () => {
@@ -1159,6 +1202,7 @@ describe('createInspectionStore: transition capture', () => {
       checkCount: null,
       nextCheckAfter: null,
       nextCheckPriority: null,
+      canonicalMismatchKind: 'none',
       ...extra,
     } as InspectionEventRow
   }

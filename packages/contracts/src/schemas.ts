@@ -250,6 +250,8 @@ export const indexingIssueSchema = z.object({
   label: z.string(),
   severity: z.enum(['error', 'warning', 'info']),
   count: z.number(),
+  description: z.string(),
+  fix: z.string(),
 }).loose()
 
 export const indexingDiagnosticsSchema = z.object({
@@ -1176,6 +1178,7 @@ export const gscdumpCanonicalMismatchesResponseSchema = z.object({
     coverageState: z.string().nullable(),
     lastCrawlTime: z.string().nullable(),
     lastCheckedAt: z.string().nullable(),
+    kind: z.enum(['path', 'cross_domain']),
   }).loose()),
   totalCount: z.number(),
   consolidationTargets: z.array(z.object({

@@ -315,7 +315,11 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   // fed "31 canonical mismatches" against an 8-URL funnel where all 8 were indexed
   // (notIndexed = 0), firing `indexability_blocked` on a fully-indexed sample. An
   // unbounded, differently-scoped count must never out-vote the funnel.
-  const canonicalMismatches = Math.min(notIndexed, input.canonicalMismatchCount ?? countSearchConsoleIssues(issues, 'canonical_mismatch'))
+  const canonicalMismatches = Math.min(
+    notIndexed,
+    input.canonicalMismatchCount
+    ?? countSearchConsoleIssues(issues, 'canonical_mismatch', 'canonical_cross_domain'),
+  )
   let visibleNoClickPages = 0
   let poorPositionPages = 0
   for (const page of input.pageInventory ?? []) {

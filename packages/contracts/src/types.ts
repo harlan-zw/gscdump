@@ -248,6 +248,8 @@ export interface IndexingIssue {
   label: string
   severity: IndexingIssueSeverity
   count: number
+  description: string
+  fix: string
 }
 
 export interface IndexingDiagnostics {
@@ -819,7 +821,14 @@ export interface GscdumpIndexingUrlsResponse {
 
 export interface GscdumpIndexingDiagnosticsResponse {
   summary: { totalUrls: number, indexed: number, indexedPercent: number }
-  issues: { type: string, label: string, severity: GscdumpIndexingIssueSeverity, count: number }[]
+  issues: Array<{
+    type: string
+    label: string
+    severity: GscdumpIndexingIssueSeverity
+    count: number
+    description: string
+    fix: string
+  }>
   samples?: Record<string, GscdumpIndexingUrl[]>
   meta: {
     siteUrl: string
@@ -1092,6 +1101,7 @@ export interface GscdumpCanonicalMismatchRow {
   coverageState: string | null
   lastCrawlTime: string | null
   lastCheckedAt: string | null
+  kind: 'path' | 'cross_domain'
 }
 
 export interface GscdumpCanonicalMismatchesResponse {

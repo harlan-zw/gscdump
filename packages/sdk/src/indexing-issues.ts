@@ -15,6 +15,8 @@ export interface IndexingIssue {
   label: string
   severity: IssueSeverity
   count: number
+  description: string
+  fix: string
 }
 
 export const issueDetails: Record<string, IndexingIssueDetail> = {
@@ -106,6 +108,14 @@ export const issueDetails: Record<string, IndexingIssueDetail> = {
     description: 'The canonical URL declared on these pages points to a different URL. Google may index the canonical target instead.',
     fix: 'Ensure each page\'s canonical tag points to itself, or intentionally to the preferred version. Fix any unintended canonical tags added by CMS plugins.',
   },
+  canonical_cross_domain: {
+    description: 'The canonical URL declared on these pages and Google\'s selected canonical are on different domains.',
+    fix: 'Confirm the cross-domain canonical is intentional. If it is not, update the declared canonical to the preferred URL on this domain and request another inspection.',
+  },
+  canonical_formatting: {
+    description: 'The declared and Google-selected canonicals identify the same resource but differ in scheme, www prefix, host casing, or trailing slash.',
+    fix: 'Align the canonical spelling with the URL format your site consistently serves. This is low severity because both values identify the same resource.',
+  },
   fragment_url: {
     description: 'These URLs contain fragment identifiers (#). Googlebot typically ignores fragments as they\'re client-side only.',
     fix: 'Avoid using fragment URLs as unique pages. If using client-side routing with hashes, migrate to proper URL paths for better indexability.',
@@ -145,7 +155,7 @@ export const issueGroups: IssueGroup[] = [
     // `indexed_consider_canonical` belongs here rather than under Expected
     // Behavior: the page is fine, but Google has named the exact one-line
     // change it would honour, which is the definition of a quick win.
-    issueTypes: ['blocked_robots', 'canonical_mismatch', 'duplicate_no_canonical', 'indexed_consider_canonical', 'sitemap_redirect'],
+    issueTypes: ['blocked_robots', 'canonical_mismatch', 'canonical_cross_domain', 'duplicate_no_canonical', 'indexed_consider_canonical', 'sitemap_redirect'],
   },
   {
     id: 'technical',
@@ -175,6 +185,6 @@ export const issueGroups: IssueGroup[] = [
     effort: 'quick',
     controlLevel: 'none',
     education: 'These aren\'t really "issues" — they\'re usually intentional. Noindex tags are set deliberately to keep pages out of search. Redirects are normal when you move pages. An alternate page with a proper canonical is consolidation working as designed. Fragment URLs are stripped by Google. Review to make sure nothing unexpected is here.',
-    issueTypes: ['noindex', 'redirect', 'alternate_canonical', 'page_removed', 'fragment_url'],
+    issueTypes: ['noindex', 'redirect', 'alternate_canonical', 'canonical_formatting', 'page_removed', 'fragment_url'],
   },
 ]

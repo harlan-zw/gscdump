@@ -8,10 +8,12 @@
 // monthly history shards live alongside for state-over-time queries.
 
 import type { ColumnDef, Row, TenantCtx } from '@gscdump/contracts'
+import type { CanonicalDifferenceKind } from 'gscdump'
 import type { ScheduleState } from './schedule'
 import type { DataSource } from './storage'
 import { GSCDUMP_INDEXING_TRANSITION_FIELDS } from '@gscdump/contracts'
 import { encodeJsonBigintSafe } from '@gscdump/lakehouse/bigint'
+import { classifyCanonicalDifference } from 'gscdump'
 import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { readOptional } from './adapters/read-optional'
 import {
@@ -196,6 +198,8 @@ export interface InspectionParquetRow {
  * newest-by-`inspectedAt` event.
  */
 export interface InspectionEventRow extends InspectionParquetRow {
+  /** Declared-vs-selected canonical classification, computed at inspection ingest. */
+  canonicalMismatchKind: CanonicalDifferenceKind
   crawlingUserAgent: string | null
   /** JSON-encoded `RichResultsItem[]`. */
   richResultsItems: string | null
@@ -296,6 +300,13 @@ export interface InspectionStore {
     },
   ) => Promise<{ baseRowCount: number, eventsFolded: number, eventFilesDeleted: number, transitionsWritten: number }>
   /**
+   * Rewrite a legacy latest-only base with the canonical kind derived from the
+   * canonical pair it already retains. Outstanding events must be compacted first.
+   */
+  backfillCanonicalMismatchKinds: (
+    ctx: TenantCtx,
+  ) => Promise<{ baseRowCount: number, rowsBackfilled: number, rewritten: boolean }>
+  /**
    * DuckDB-resolvable URI for the materialised parquet sidecar, or
    * `undefined` if the underlying `DataSource` has no native URI shape
    * (in-memory tests). When defined, read paths can `read_parquet(<uri>)`
@@ -346,6 +357,7 @@ const INSPECTION_PARQUET_COLUMNS: readonly ColumnDef[] = [
  */
 const INSPECTION_EVENT_COLUMNS: readonly ColumnDef[] = [
   ...INSPECTION_PARQUET_COLUMNS,
+  { name: 'canonicalMismatchKind', type: 'VARCHAR', nullable: false },
   { name: 'crawlingUserAgent', type: 'VARCHAR', nullable: true },
   { name: 'richResultsItems', type: 'VARCHAR', nullable: true },
   { name: 'sitemaps', type: 'VARCHAR', nullable: true },
@@ -357,6 +369,25 @@ const INSPECTION_EVENT_COLUMNS: readonly ColumnDef[] = [
   { name: 'nextCheckAfter', type: 'BIGINT', nullable: true },
   { name: 'nextCheckPriority', type: 'VARCHAR', nullable: true },
 ]
+
+const CANONICAL_DIFFERENCE_KINDS = new Set<CanonicalDifferenceKind>([
+  'none',
+  'formatting',
+  'path',
+  'cross_domain',
+])
+
+function populateCanonicalMismatchKind(row: Row): boolean {
+  const current = row.canonicalMismatchKind
+  const expected = classifyCanonicalDifference(
+    typeof row.userCanonical === 'string' ? row.userCanonical : null,
+    typeof row.googleCanonical === 'string' ? row.googleCanonical : null,
+  )
+  const missingOrInvalid = typeof current !== 'string'
+    || !CANONICAL_DIFFERENCE_KINDS.has(current as CanonicalDifferenceKind)
+  row.canonicalMismatchKind = expected
+  return missingOrInvalid || current !== expected
+}
 
 /**
  * Fields whose change constitutes a TRANSITION.
@@ -646,6 +677,7 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
         const fc = earliestChecked.get(h)
         if (fc !== undefined)
           row.firstCheckedAt = fc
+        populateCanonicalMismatchKind(row)
         merged.push(row)
       }
       const bytes = encodeRowsToParquetFlex(merged, {
@@ -665,6 +697,28 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
       if (consumed.length > 0)
         await ds.delete(consumed)
       return { baseRowCount: merged.length, eventsFolded, eventFilesDeleted: consumed.length, transitionsWritten }
+    },
+
+    async backfillCanonicalMismatchKinds(ctx) {
+      const baseKey = inspectionBaseKey(ctx)
+      const baseBytes = await readOptional(ds, baseKey)
+      if (!baseBytes)
+        return { baseRowCount: 0, rowsBackfilled: 0, rewritten: false }
+
+      const rows = await decodeParquetToRows(baseBytes)
+      let rowsBackfilled = 0
+      for (const row of rows) {
+        if (populateCanonicalMismatchKind(row))
+          rowsBackfilled++
+      }
+      if (rowsBackfilled === 0)
+        return { baseRowCount: rows.length, rowsBackfilled: 0, rewritten: false }
+
+      await ds.write(baseKey, encodeRowsToParquetFlex(rows, {
+        columns: INSPECTION_EVENT_COLUMNS,
+        sortKey: ['urlHash'],
+      }))
+      return { baseRowCount: rows.length, rowsBackfilled, rewritten: true }
     },
 
     parquetUri(ctx) {
