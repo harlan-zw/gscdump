@@ -234,6 +234,17 @@ export const indexingUrlsResponseSchema = z.object({
   }).loose(),
 }).loose()
 
+export const GSCDUMP_INDEXING_TRANSITION_FIELDS = [
+  'indexStatus',
+  'coverageState',
+  'robotsTxtState',
+  'indexingState',
+  'pageFetchState',
+  'googleCanonical',
+] as const
+
+export const gscdumpIndexingTransitionFieldSchema = z.enum(GSCDUMP_INDEXING_TRANSITION_FIELDS)
+
 export const indexingIssueSchema = z.object({
   type: z.string(),
   label: z.string(),

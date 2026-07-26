@@ -29,6 +29,7 @@
   gscAddAndVerifyResponseSchema: object
   gscApiRangeSchema: object
   gscComparisonFilterSchema: object
+  GSCDUMP_INDEXING_TRANSITION_FIELDS: object
   GSCDUMP_ONBOARDING_CONTRACT_VERSION: string
   GSCDUMP_OPTIONAL_INDEXING_SCOPE: string
   GSCDUMP_REQUIRED_ANALYTICS_SCOPE: string
@@ -49,6 +50,7 @@
   gscdumpHealthResponseSchema: object
   gscdumpIndexingDiagnosticsResponseSchema: object
   gscdumpIndexingResponseSchema: object
+  gscdumpIndexingTransitionFieldSchema: object
   gscdumpIndexingUrlsResponseSchema: object
   gscdumpIndexPercentParamsSchema: object
   gscdumpIndexPercentResponseSchema: object

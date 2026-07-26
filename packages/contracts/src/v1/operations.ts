@@ -19,6 +19,7 @@ import {
   gscdumpDeletePartnerUserResponseSchema,
   gscdumpIndexingDiagnosticsResponseSchema,
   gscdumpIndexingResponseSchema,
+  gscdumpIndexingTransitionFieldSchema,
   gscdumpIndexPercentResponseSchema,
   gscdumpKeywordSparklinesResponseSchema,
   gscdumpPageTrendResponseSchema,
@@ -190,6 +191,7 @@ export function createGscdumpV1Protocol() {
     z.number(),
     z.string().regex(/^-?(?:\d+(?:\.\d+)?|\.\d+)$/),
   ])
+  const calendarDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD')
   const indexingSummaryQuery = z.strictObject({
     days: integerQuery(z.number().int().min(1).max(90), /^(?:[1-9]|[1-8]\d|90)$/).optional(),
   })
@@ -205,6 +207,25 @@ export function createGscdumpV1Protocol() {
       z.literal('0'),
       z.literal('false'),
     ]).optional(),
+  })
+  const indexingTransitionsQuery = z.strictObject({
+    startDate: calendarDate.optional(),
+    endDate: calendarDate.optional(),
+    field: gscdumpIndexingTransitionFieldSchema.optional(),
+    fromValue: z.string().min(1).max(2048).optional(),
+    toValue: z.string().min(1).max(2048).optional(),
+    limit: integerQuery(z.number().int().min(1).max(500), /^(?:[1-9]|[1-9]\d|[1-4]\d{2}|500)$/).optional(),
+    offset: integerQuery(z.number().int().min(0), /^(?:0|[1-9]\d*)$/).optional(),
+  }).superRefine((value, ctx) => {
+    if ((value.startDate === undefined) !== (value.endDate === undefined)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [value.startDate === undefined ? 'startDate' : 'endDate'],
+        message: 'startDate and endDate must be supplied together',
+      })
+    }
+    if (value.startDate && value.endDate && value.startDate > value.endDate)
+      ctx.addIssue({ code: 'custom', path: ['endDate'], message: 'endDate must not precede startDate' })
   })
   const indexingDiagnosticsQuery = z.strictObject({
     sampleIssues: z.union([z.string(), z.array(z.string())]).optional(),
@@ -268,6 +289,56 @@ export function createGscdumpV1Protocol() {
   const registerSiteRequest = registerPartnerSiteSchema.omit({ userId: true, teamId: true }).strict()
   const indexingSummaryResponse = defineSuccessResponse(defineResponseObject(gscdumpIndexingResponseSchema.shape), partnerResponseMeta)
   const indexingUrlsResponse = defineSuccessResponse(defineResponseObject(indexingUrlsResponseSchema.shape), partnerResponseMeta)
+  const indexingTransition = defineResponseObject({
+    url: z.string(),
+    field: gscdumpIndexingTransitionFieldSchema,
+    fromValue: z.string().nullable(),
+    toValue: z.string().nullable(),
+    changedAfter: z.string(),
+    changedBefore: z.string(),
+    detectedAt: z.string(),
+    observationGapDays: z.number().nonnegative(),
+  })
+  const emptyObservationWindow = defineResponseObject({
+    _tag: z.literal('empty'),
+    gapDaysMedian: z.null(),
+    gapDaysP90: z.null(),
+    sampleSize: z.literal(0),
+  })
+  const sampledObservationWindow = defineResponseObject({
+    _tag: z.literal('sampled'),
+    gapDaysMedian: z.number().nonnegative(),
+    gapDaysP90: z.number().nonnegative(),
+    sampleSize: z.number().int().positive(),
+  })
+  const indexingTransitionsPagination = defineResponseObject({
+    total: z.number().int().nonnegative(),
+    limit: z.number().int().positive(),
+    offset: z.number().int().nonnegative(),
+    hasMore: z.boolean(),
+  })
+  const indexingTransitionsMeta = defineResponseObject({
+    siteUrl: z.string(),
+    startDate: calendarDate,
+    endDate: calendarDate,
+  })
+  const indexingTransitionsResponse = defineSuccessResponse(defineResponseObject({
+    transitions: z.array(indexingTransition.producer),
+    observationWindow: z.discriminatedUnion('_tag', [
+      emptyObservationWindow.producer,
+      sampledObservationWindow.producer,
+    ]),
+    pagination: indexingTransitionsPagination.producer,
+    meta: indexingTransitionsMeta.producer,
+  }, {
+    transitions: z.array(indexingTransition.client),
+    observationWindow: z.discriminatedUnion('_tag', [
+      emptyObservationWindow.client,
+      sampledObservationWindow.client,
+    ]),
+    pagination: indexingTransitionsPagination.client,
+    meta: indexingTransitionsMeta.client,
+  }), partnerResponseMeta)
   const indexingDiagnosticsResponse = defineSuccessResponse(defineResponseObject(gscdumpIndexingDiagnosticsResponseSchema.shape), partnerResponseMeta)
   const sitemapsResponse = defineSuccessResponse(defineResponseObject(gscdumpSitemapsResponseSchema.shape), partnerResponseMeta)
   const sitemapChangesResponse = defineSuccessResponse(defineResponseObject({
@@ -293,7 +364,6 @@ export function createGscdumpV1Protocol() {
   // ── 1.1.0 promotions (2026-07-22 full train, tranche A) ────────────────────
   // Response shapes wrap the SAME shared schemas the private handlers already
   // self-validate against, so promotion cannot drift from the serializers.
-  const calendarDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD')
   const trendQuery = z.strictObject({
     startDate: calendarDate,
     endDate: calendarDate,
@@ -973,6 +1043,61 @@ export function createGscdumpV1Protocol() {
                 urls: [],
                 pagination: { total: 0, limit: 100, offset: 0, hasMore: false },
                 meta: { siteUrl: 'sc-domain:example.com', status: 'all', issue: null },
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      listSiteIndexingTransitions: defineHttpOperation({
+        id: 'partner.sites.indexing.transitions.list',
+        method: 'GET',
+        path: '/sites/{siteId}/indexing/transitions',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: indexingTransitionsQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: indexingTransitionsResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.4.8' },
+        docs: {
+          summary: 'List observed indexing transitions',
+          description: 'Returns URL inspection state changes as bounded observation intervals. detectedAt is the first observation showing the new state, not the exact change time.',
+          tags: ['Indexing'],
+          examples: {
+            request: {
+              params: { siteId: 's_01' },
+              query: { startDate: '2026-06-01', endDate: '2026-07-26', field: 'coverageState' },
+            },
+            response: {
+              data: {
+                transitions: [],
+                observationWindow: {
+                  _tag: 'empty',
+                  gapDaysMedian: null,
+                  gapDaysP90: null,
+                  sampleSize: 0,
+                },
+                pagination: { total: 0, limit: 100, offset: 0, hasMore: false },
+                meta: {
+                  siteUrl: 'sc-domain:example.com',
+                  startDate: '2026-06-01',
+                  endDate: '2026-07-26',
+                },
               },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
@@ -2794,6 +2919,8 @@ export function createGscdumpV1Protocol() {
       indexingDiagnosticsResponse,
       indexingSummaryQuery,
       indexingSummaryResponse,
+      indexingTransitionsQuery,
+      indexingTransitionsResponse,
       indexingUrlsQuery,
       indexingUrlsResponse,
       lifecycleResponse,
@@ -2827,6 +2954,7 @@ export type PartnerAnalysisBundleV1Response = z.infer<GscdumpV1Protocol['schemas
 export type PartnerAvailableSitesV1Response = z.infer<GscdumpV1Protocol['schemas']['availableSitesResponse']['client']>
 export type PartnerIndexingV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingSummaryResponse']['client']>
 export type PartnerIndexingUrlsV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingUrlsResponse']['client']>
+export type PartnerIndexingTransitionsV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingTransitionsResponse']['client']>
 export type PartnerIndexingDiagnosticsV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingDiagnosticsResponse']['client']>
 export type PartnerSitemapsV1Response = z.infer<GscdumpV1Protocol['schemas']['sitemapsResponse']['client']>
 export type PartnerSitemapChangesV1Response = z.infer<GscdumpV1Protocol['schemas']['sitemapChangesResponse']['client']>

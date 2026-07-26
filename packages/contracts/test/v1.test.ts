@@ -253,6 +253,44 @@ describe('@gscdump/contracts/v1 HTTP registry', () => {
     expect(schemas.ticketRequest.safeParse({ streamId: 'user:u_01' }).success).toBe(false)
   })
 
+  it('models indexing transitions as bounded observations instead of point timestamps', () => {
+    const operation = createGscdumpV1Protocol().surfaces.partner.operations.listSiteIndexingTransitions
+
+    expect(operation).toMatchObject({
+      id: 'partner.sites.indexing.transitions.list',
+      method: 'GET',
+      path: '/sites/{siteId}/indexing/transitions',
+    })
+    expect(operation.request.query!.parse({
+      startDate: '2026-06-01',
+      endDate: '2026-07-26',
+      field: 'coverageState',
+      fromValue: 'Submitted and indexed',
+      toValue: 'Crawled - currently not indexed',
+      limit: '100',
+      offset: '0',
+    })).toMatchObject({
+      field: 'coverageState',
+      limit: '100',
+    })
+
+    const response = operation.docs.examples.response as Record<string, unknown>
+    expect(operation.responses[200]!.producer.parse(response)).toEqual(response)
+    expect(operation.responses[200]!.producer.safeParse({
+      ...response,
+      data: {
+        ...(response.data as object),
+        observationWindow: {
+          _tag: 'empty',
+          gapDaysMedian: 2,
+          gapDaysP90: null,
+          sampleSize: 0,
+        },
+      },
+    }).success).toBe(false)
+    expect(JSON.stringify(response)).not.toContain('changedAt')
+  })
+
   it('validates the normalized recursive analytics filter grammar without an unknown escape hatch', () => {
     const { analyticsRowsRequest } = createGscdumpV1Protocol().schemas
     const request = {

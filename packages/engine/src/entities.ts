@@ -10,6 +10,7 @@
 import type { ColumnDef, Row, TenantCtx } from '@gscdump/contracts'
 import type { ScheduleState } from './schedule'
 import type { DataSource } from './storage'
+import { GSCDUMP_INDEXING_TRANSITION_FIELDS } from '@gscdump/contracts'
 import { encodeJsonBigintSafe } from '@gscdump/lakehouse/bigint'
 import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
 import { readOptional } from './adapters/read-optional'
@@ -364,15 +365,6 @@ const INSPECTION_EVENT_COLUMNS: readonly ColumnDef[] = [
  * it changes its mind, so keying on it would make nearly every observation a
  * transition and collapse the compaction ratio the storage budget depends on.
  */
-const TRANSITION_STATE_FIELDS = [
-  'indexStatus',
-  'coverageState',
-  'robotsTxtState',
-  'indexingState',
-  'pageFetchState',
-  'googleCanonical',
-] as const
-
 /**
  * Columns of the append-only transitions sidecar.
  *
@@ -388,7 +380,7 @@ const INSPECTION_TRANSITION_COLUMNS: readonly ColumnDef[] = [
   { name: 'changedAfter', type: 'VARCHAR', nullable: false },
   /** `inspectedAt` of the first observation showing the NEW state. */
   { name: 'changedBefore', type: 'VARCHAR', nullable: false },
-  ...TRANSITION_STATE_FIELDS.flatMap((field): ColumnDef[] => {
+  ...GSCDUMP_INDEXING_TRANSITION_FIELDS.flatMap((field): ColumnDef[] => {
     const capped = field[0]!.toUpperCase() + field.slice(1)
     return [
       { name: `from${capped}`, type: 'VARCHAR', nullable: true },
@@ -399,7 +391,7 @@ const INSPECTION_TRANSITION_COLUMNS: readonly ColumnDef[] = [
 
 /** True when the two observations differ on any transition-defining field. */
 function isStateTransition(before: Row, after: Row): boolean {
-  return TRANSITION_STATE_FIELDS.some(field => (before[field] ?? null) !== (after[field] ?? null))
+  return GSCDUMP_INDEXING_TRANSITION_FIELDS.some(field => (before[field] ?? null) !== (after[field] ?? null))
 }
 
 function buildTransitionRow(before: Row, after: Row): Row {
@@ -409,7 +401,7 @@ function buildTransitionRow(before: Row, after: Row): Row {
     changedAfter: String(before.inspectedAt ?? ''),
     changedBefore: String(after.inspectedAt ?? ''),
   }
-  for (const field of TRANSITION_STATE_FIELDS) {
+  for (const field of GSCDUMP_INDEXING_TRANSITION_FIELDS) {
     const capped = field[0]!.toUpperCase() + field.slice(1)
     row[`from${capped}`] = (before[field] ?? null) as string | null
     row[`to${capped}`] = (after[field] ?? null) as string | null

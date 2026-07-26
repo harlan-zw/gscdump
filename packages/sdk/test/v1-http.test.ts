@@ -173,6 +173,55 @@ describe('@gscdump/sdk/v1 HTTP executor', () => {
     expect(fetch).toHaveBeenCalledTimes(2)
   })
 
+  it('lists indexing transitions through the registered partner operation', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (request, init) => {
+      expect(request).toBe('/api/_gscdump/partner/v1/sites/s_site/indexing/transitions?endDate=2026-07-26&field=coverageState&limit=50&startDate=2026-06-01')
+      expect(init?.method).toBe('GET')
+      return jsonResponse({
+        data: {
+          transitions: [],
+          observationWindow: {
+            _tag: 'empty',
+            gapDaysMedian: null,
+            gapDaysP90: null,
+            sampleSize: 0,
+          },
+          pagination: { total: 0, limit: 50, offset: 0, hasMore: false },
+          meta: {
+            siteUrl: 'sc-domain:example.com',
+            startDate: '2026-06-01',
+            endDate: '2026-07-26',
+          },
+        },
+        meta: {
+          requestId: 'req_transitions',
+          surface: 'partner',
+          version: '1.0',
+        },
+      })
+    })
+    const client = createGscdumpV1Client({
+      apiRoot: '/api/_gscdump',
+      credential: 'user_secret',
+      fetch,
+    })
+
+    await expect(client.listSiteIndexingTransitions({
+      params: { siteId: 's_site' },
+      query: {
+        startDate: '2026-06-01',
+        endDate: '2026-07-26',
+        field: 'coverageState',
+        limit: 50,
+      },
+    })).resolves.toMatchObject({
+      data: {
+        transitions: [],
+        observationWindow: { _tag: 'empty', sampleSize: 0 },
+      },
+    })
+  })
+
   it('parses the stable error envelope into one tagged error', async () => {
     const client = createGscdumpV1Client({
       credential: 'partner_secret',
