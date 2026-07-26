@@ -783,6 +783,7 @@ export interface GscdumpIndexingResponse {
 
 export type GscdumpIndexingUrlStatus = 'indexed' | 'not_indexed' | 'pending'
 export type GscdumpIndexingIssueSeverity = 'error' | 'warning' | 'info'
+export type GscdumpCanonicalDifferenceKind = 'none' | 'formatting' | 'path' | 'cross_domain'
 
 export interface GscdumpRichResultItem {
   richResultType: string
@@ -801,6 +802,7 @@ export interface GscdumpIndexingUrl {
   crawlingUserAgent?: string | null
   userCanonical?: string | null
   googleCanonical?: string | null
+  canonicalMismatchKind: GscdumpCanonicalDifferenceKind
   sitemaps?: string[] | null
   referringUrls?: string[] | null
   mobileVerdict?: string | null
@@ -1101,7 +1103,7 @@ export interface GscdumpCanonicalMismatchRow {
   coverageState: string | null
   lastCrawlTime: string | null
   lastCheckedAt: string | null
-  kind: 'path' | 'cross_domain'
+  kind: Extract<GscdumpCanonicalDifferenceKind, 'path' | 'cross_domain'>
 }
 
 export interface GscdumpCanonicalMismatchesResponse {

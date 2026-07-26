@@ -192,6 +192,13 @@ export const gscRowQueryResponseSchema = z.object({
   meta: gscRowQueryMetaSchema,
 }).loose()
 
+export const canonicalDifferenceKindSchema = z.enum([
+  'none',
+  'formatting',
+  'path',
+  'cross_domain',
+])
+
 export const indexingUrlRowSchema = z.object({
   url: z.string(),
   issueType: z.string().nullable().optional(),
@@ -204,6 +211,7 @@ export const indexingUrlRowSchema = z.object({
   crawlingUserAgent: z.string().nullable(),
   userCanonical: z.string().nullable(),
   googleCanonical: z.string().nullable(),
+  canonicalMismatchKind: canonicalDifferenceKindSchema,
   sitemaps: z.array(z.string()).nullable(),
   referringUrls: z.array(z.string()).nullable(),
   mobileVerdict: z.string().nullable(),

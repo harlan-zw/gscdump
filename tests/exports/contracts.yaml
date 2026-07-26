@@ -18,6 +18,7 @@
   bulkRegisterPartnerSitesResponseSchema: object
   bulkRegisterPartnerSitesSchema: object
   CANONICAL_WEBHOOK_EVENTS: object
+  canonicalDifferenceKindSchema: object
   canonicalWebhookEventTypeSchema: object
   countriesResponseSchema: object
   countryRowSchema: object

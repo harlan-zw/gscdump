@@ -8434,6 +8434,15 @@
                             "items": {
                               "additionalProperties": {},
                               "properties": {
+                                "canonicalMismatchKind": {
+                                  "enum": [
+                                    "none",
+                                    "formatting",
+                                    "path",
+                                    "cross_domain"
+                                  ],
+                                  "type": "string"
+                                },
                                 "checkCount": {
                                   "type": "number"
                                 },
@@ -8636,6 +8645,7 @@
                                 "crawlingUserAgent",
                                 "userCanonical",
                                 "googleCanonical",
+                                "canonicalMismatchKind",
                                 "sitemaps",
                                 "referringUrls",
                                 "mobileVerdict",
@@ -10059,6 +10069,15 @@
                           "items": {
                             "additionalProperties": {},
                             "properties": {
+                              "canonicalMismatchKind": {
+                                "enum": [
+                                  "none",
+                                  "formatting",
+                                  "path",
+                                  "cross_domain"
+                                ],
+                                "type": "string"
+                              },
                               "checkCount": {
                                 "type": "number"
                               },
@@ -10261,6 +10280,7 @@
                               "crawlingUserAgent",
                               "userCanonical",
                               "googleCanonical",
+                              "canonicalMismatchKind",
                               "sitemaps",
                               "referringUrls",
                               "mobileVerdict",

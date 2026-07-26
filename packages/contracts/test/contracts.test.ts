@@ -4,6 +4,7 @@ import {
   builderStateSchema,
   GSCDUMP_ONBOARDING_CONTRACT_VERSION,
   gscdumpSyncProgressResponseSchema,
+  indexingUrlRowSchema,
   partnerEndpointSchemas,
   partnerRoutes,
   partnerWebhookEnvelopeSchema,
@@ -47,6 +48,41 @@ const analysisSourcesResponse: FileResolutionResponse = {
 }
 
 describe('@gscdump/contracts', () => {
+  it('requires the stored canonical classifier on indexing URL rows', () => {
+    const row = {
+      url: 'https://example.com/page',
+      issueType: null,
+      verdict: 'PASS',
+      coverageState: 'Indexed',
+      indexingState: 'INDEXING_ALLOWED',
+      robotsTxtState: 'ALLOWED',
+      pageFetchState: 'SUCCESSFUL',
+      lastCrawlTime: '2026-07-25T00:00:00Z',
+      crawlingUserAgent: 'DESKTOP',
+      userCanonical: 'https://example.com/page',
+      googleCanonical: 'https://www.example.com/page/',
+      canonicalMismatchKind: 'formatting',
+      sitemaps: [],
+      referringUrls: [],
+      mobileVerdict: 'PASS',
+      mobileIssues: [],
+      richResultsVerdict: 'PASS',
+      richResultsItems: [],
+      inspectionResultLink: null,
+      firstCheckedAt: '2026-07-24T00:00:00Z',
+      lastCheckedAt: '2026-07-25T00:00:00Z',
+      checkCount: 2,
+    }
+
+    expect(indexingUrlRowSchema.parse(row).canonicalMismatchKind).toBe('formatting')
+    expect(indexingUrlRowSchema.safeParse({
+      ...row,
+      canonicalMismatchKind: 'unknown',
+    }).success).toBe(false)
+    const { canonicalMismatchKind: _omitted, ...withoutKind } = row
+    expect(indexingUrlRowSchema.safeParse(withoutKind).success).toBe(false)
+  })
+
   it('models sync-progress partner IDs using the producer UUID/text shape', () => {
     const partnerIdSchema = gscdumpSyncProgressResponseSchema.shape.sites.element.shape.partnerId
     expect(partnerIdSchema.safeParse('partner-uuid').success).toBe(true)
