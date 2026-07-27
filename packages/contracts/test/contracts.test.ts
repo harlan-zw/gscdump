@@ -96,6 +96,7 @@ describe('@gscdump/contracts', () => {
     expect(partnerRoutes.partner.users.byId('u_1')).toBe('/partner/users/u_1')
     expect(partnerRoutes.sites.data('site_1')).toBe('/sites/site_1/data')
     expect(partnerRoutes.sites.analysisSources('site_1')).toBe('/sites/site_1/analysis-sources')
+    expect(partnerRoutes).not.toHaveProperty('realtime')
     expect(analyticsRoutes.sites).toBe('/api/__gsc/sites')
     expect(analyticsRoutes.bulkSources).toBe('/api/__gsc/bulk-sources')
     expect(analyticsRoutes.site.analysisSources('site_1')).toBe('/api/__gsc/sites/site_1/analysis-sources')

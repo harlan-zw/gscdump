@@ -6,6 +6,7 @@ Consumer SDK for hosted gscdump.com integrations.
 > exported from `@gscdump/sdk/v1`. The root HTTP client remains a temporary
 > compatibility surface during the release and cutover overlap; the unsafe
 > long-lived-key realtime client was removed before v1. See the
+> [integration guide](../../docs/guides/hosted-v1.md) and
 > [v1 contract](../../docs/hosted-api-v1.md).
 
 This package is for partner applications that consume gscdump.com APIs,
@@ -27,8 +28,18 @@ const lifecycle = await gscdump.getUserLifecycle({
 ```
 
 The v1 surface uses a server-held Bearer credential and exposes a generic
-operation executor plus typed convenience methods for all 18 registered HTTP
+operation executor plus typed convenience methods for all 51 registered HTTP
 operations across partner, analytics, and realtime.
+
+Focused guides:
+
+- [Quickstart](../../docs/guides/hosted-v1.md#quickstart)
+- [Authentication](../../docs/guides/hosted-v1.md#authentication)
+- [Errors](../../docs/guides/hosted-v1.md#errors)
+- [Rate limits](../../docs/guides/hosted-v1.md#rate-limits)
+- [Idempotency and retries](../../docs/guides/hosted-v1.md#idempotency-and-retries)
+- [Realtime](../../docs/guides/hosted-v1.md#realtime)
+- [Upgrade guide](../../docs/v1-migration.md)
 
 The root `createPartnerClient` export remains only for operations still in the
 compatibility inventory. Do not use it for an operation already available from

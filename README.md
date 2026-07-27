@@ -317,6 +317,16 @@ GSC_REFRESH_TOKEN=...
 
 When BYOK is detected, `gscdump auth status` reports `byok` as the source.
 
+## Hosted API v1
+
+The hosted gscdump.com API exposes 51 typed HTTP operations across partner,
+analytics, and realtime surfaces. Start with the
+[hosted v1 integration guide](./docs/guides/hosted-v1.md). Exact schemas and
+operation metadata live in the generated
+[OpenAPI and AsyncAPI files](./packages/contracts/generated), while the
+[normative contract](./docs/hosted-api-v1.md) defines shared behavior. Existing
+integrations can use the [v1 upgrade guide](./docs/v1-migration.md).
+
 ## Packages
 
 | Package | Description |

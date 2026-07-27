@@ -81,12 +81,13 @@ keeps stable application maintenance separate from raw Icebird primitives.
 
 ## Removed legacy partner operations (partner surface only)
 
-Deleted from `@gscdump/contracts` (routes, endpoints, schemas) and the legacy
-`PartnerClient` in `@gscdump/sdk`: `contentVelocity`, `ctrCurve`,
-`darkTraffic`, `deviceGap`, `keywordBreadth`, `positionDistribution`, plus
-`gscdumpDateRangeParamsSchema` / `GscdumpDateRangeParams` and sdk
-`dateRangeQuery`. These had zero consumer callers. The equivalent analyses
-remain available on gscdump.com's host-private session routes.
+Deleted from the legacy `@gscdump/contracts` routes and `PartnerClient`:
+`contentVelocity`, `ctrCurve`, `darkTraffic`, `deviceGap`, `keywordBreadth`,
+and `positionDistribution`, plus `gscdumpDateRangeParamsSchema` /
+`GscdumpDateRangeParams` and SDK `dateRangeQuery`. The analysis operations
+later returned as descriptor-driven v1 methods. Import
+`createGscdumpV1Client` from `@gscdump/sdk/v1`; do not restore the legacy
+methods.
 
 ## Promoted APIs (consumer code moved into packages)
 
@@ -96,7 +97,7 @@ remain available on gscdump.com's host-private session routes.
   with new `QueryError` kind `'invalid-filter'`
   (`queryErrors.malformedFilterLeaf()`). Hosts map that error to a 4xx instead
   of maintaining local hardening wrappers.
-- `@gscdump/sdk` `builderStateToArchetype(siteId, state, opts?)` — the single
+- `@gscdump/sdk` `builderStateToArchetype(siteId, state, opts?)`: the single
   fail-closed BuilderState→ArchetypeQuery compiler (returns `null` for
   unrepresentable predicates; previously duplicated in both consumers with
   divergent drop semantics). Also `extractWireDateRange`,
@@ -104,7 +105,7 @@ remain available on gscdump.com's host-private session routes.
 - `gscdump/dates` is the sole owner of `currentPstDate` / `daysAgoPst`; SDK
   re-exports were removed.
 - `@gscdump/contracts` `SEARCH_TYPE_CAPABILITIES` +
-  `searchTypeSupportsQueries` / `searchTypeSupportsDimensions` — search-type
+  `searchTypeSupportsQueries` / `searchTypeSupportsDimensions`: search-type
   capability facts previously mirrored in consumer UI code.
 - Analytics bulk-source and query-dimension source responses now have shared
   contract schemas, endpoint descriptors, and SDK methods instead of loose
@@ -144,11 +145,16 @@ remain available on gscdump.com's host-private session routes.
 
 ## Hosted v1 posture
 
-v1 public surface = the 18 accepted operations on `@gscdump/contracts/v1` /
-`@gscdump/sdk/v1` plus a trimmed legacy remainder (see ROADMAP "Hosted v1
-cutover" status). Legacy `createPartnerClient` / `createAnalyticsClient`
-remain for the enumerated remainder and are deletion-gated on op promotion or
-host-private classification.
+The public v1 surface has 51 accepted operations on `@gscdump/contracts/v1`
+and `@gscdump/sdk/v1`: 46 partner, three analytics, and two realtime HTTP
+operations. The API wire version remains `1.0`; the checked-in package version
+is `1.4.11`. See the [generated OpenAPI files](../packages/contracts/generated)
+for the exact registry and the
+[hosted v1 integration guide](./guides/hosted-v1.md) for consumer setup.
+
+Legacy `createPartnerClient` / `createAnalyticsClient` remain for the
+enumerated compatibility remainder. Deletion stays gated on operation
+promotion or host-private classification.
 
 ## Consumer note
 

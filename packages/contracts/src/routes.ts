@@ -55,10 +55,6 @@ export const partnerRoutes = {
     members: (teamId: string) => `/partner/teams/${encodeURIComponent(teamId)}/members`,
     member: (teamId: string, userId: string) => `/partner/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`,
   },
-  realtime: {
-    partner: '/ws/partner',
-    user: '/ws/user',
-  },
 } as const
 
 export const analyticsRoutes = {

@@ -15,14 +15,14 @@
     ]
   },
   "summary": {
-    "apiRouteFileCount": 220,
-    "httpOperationCount": 220,
-    "websocketOperationCount": 2,
-    "operationCount": 222,
-    "descriptorCount": 81,
+    "apiRouteFileCount": 255,
+    "httpOperationCount": 255,
+    "websocketOperationCount": 0,
+    "operationCount": 255,
+    "descriptorCount": 114,
     "legacyDescriptorCount": 63,
-    "v1DescriptorCount": 18,
-    "descriptorOwnedOperationCount": 81,
+    "v1DescriptorCount": 51,
+    "descriptorOwnedOperationCount": 114,
     "hostOperationsWithoutDescriptorCount": 141,
     "schemaLessDescriptorCount": 3,
     "descriptorWithoutHandlerCount": 0,
@@ -71,6 +71,11 @@
       },
       {
         "method": "POST",
+        "path": "/api/admin/analytics/overlay-catalog-wave",
+        "file": "server/api/admin/analytics/overlay-catalog-wave.post.ts"
+      },
+      {
+        "method": "POST",
         "path": "/api/admin/backfill/gsc-range",
         "file": "server/api/admin/backfill/gsc-range.post.ts"
       },
@@ -96,6 +101,11 @@
       },
       {
         "method": "POST",
+        "path": "/api/admin/indexing/canonical-kind-backfill",
+        "file": "server/api/admin/indexing/canonical-kind-backfill.post.ts"
+      },
+      {
+        "method": "POST",
         "path": "/api/admin/indexing/compact",
         "file": "server/api/admin/indexing/compact.post.ts"
       },
@@ -106,23 +116,8 @@
       },
       {
         "method": "POST",
-        "path": "/api/admin/indexing/parity",
-        "file": "server/api/admin/indexing/parity.post.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/admin/indexing/phase",
-        "file": "server/api/admin/indexing/phase.post.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/admin/indexing/rebuild",
-        "file": "server/api/admin/indexing/rebuild.post.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/admin/indexing/rebuild-fanout",
-        "file": "server/api/admin/indexing/rebuild-fanout.post.ts"
+        "path": "/api/admin/indexing/inspection-value",
+        "file": "server/api/admin/indexing/inspection-value.post.ts"
       },
       {
         "method": "POST",
@@ -143,6 +138,11 @@
         "method": "POST",
         "path": "/api/admin/sitemap/compact",
         "file": "server/api/admin/sitemap/compact.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/sitemap/live-parity",
+        "file": "server/api/admin/sitemap/live-parity.post.ts"
       },
       {
         "method": "POST",
@@ -188,6 +188,11 @@
         "method": "POST",
         "path": "/api/admin/trigger-sitemap-sync",
         "file": "server/api/admin/trigger-sitemap-sync.post.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/admin/trigger-stuck-sites-alert",
+        "file": "server/api/admin/trigger-stuck-sites-alert.post.ts"
       },
       {
         "method": "POST",
@@ -403,6 +408,11 @@
         "method": "POST",
         "path": "/api/partner/users/register",
         "file": "server/api/partner/users/register.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/ping",
+        "file": "server/api/ping.get.ts"
       },
       {
         "method": "GET",
@@ -733,22 +743,12 @@
         "method": "POST",
         "path": "/api/webhooks/resend",
         "file": "server/api/webhooks/resend.post.ts"
-      },
-      {
-        "method": "WEBSOCKET",
-        "path": "/ws/partner",
-        "file": "server/routes/ws/partner.ts"
-      },
-      {
-        "method": "WEBSOCKET",
-        "path": "/ws/user",
-        "file": "server/routes/ws/user.ts"
       }
     ]
   },
   "excluded": {
     "helperFiles": [
-      "server/api/__gsc/sites/[siteId]/inspections/_d1-to-inspection-record.ts"
+      "server/api/__gsc/sites/[siteId]/inspections/_inspection-record.ts"
     ],
     "nonApiServerRoutes": [
       "server/routes/__test/durable-job.get.ts",
@@ -1352,6 +1352,17 @@
       ]
     },
     {
+      "id": "partner.keywords.enrich.query",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/keywords/enrich",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/keywords/enrich.post.ts"
+      ]
+    },
+    {
       "id": "partner.listTeamMembers",
       "owner": "partner",
       "method": "GET",
@@ -1484,6 +1495,61 @@
       ]
     },
     {
+      "id": "partner.sites.canonical.mismatches.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/canonical-mismatches",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/canonical-mismatches.get.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.content.velocity.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/content-velocity",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/content-velocity.get.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.cross.source.query",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/sites/{siteId}/cross-source",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/cross-source.post.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.ctr.curve.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/ctr-curve",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/ctr-curve.get.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.dark.traffic.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/dark-traffic",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/dark-traffic.get.ts"
+      ]
+    },
+    {
       "id": "partner.sites.delete",
       "owner": "partner-v1",
       "method": "DELETE",
@@ -1492,6 +1558,28 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/partner/v1/sites/[siteId].delete.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.device.gap.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/device-gap",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/device-gap.get.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.index.percent.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/index-percent",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/index-percent.get.ts"
       ]
     },
     {
@@ -1517,6 +1605,28 @@
       ]
     },
     {
+      "id": "partner.sites.indexing.inspect.create",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/sites/{siteId}/indexing/inspect",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/indexing/inspect.post.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.indexing.transitions.list",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/indexing/transitions",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/indexing/transitions.get.ts"
+      ]
+    },
+    {
       "id": "partner.sites.indexing.urls.list",
       "owner": "partner-v1",
       "method": "GET",
@@ -1525,6 +1635,83 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/partner/v1/sites/[siteId]/indexing/urls.get.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.keyword.breadth.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/keyword-breadth",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/keyword-breadth.get.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.keyword.sparklines.query",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/sites/{siteId}/keyword-sparklines",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/keyword-sparklines.post.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.page.trend.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/page-trend",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/page-trend.get.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.permission.recover",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/sites/{siteId}/permission/recover",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/permission/recover.post.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.position.distribution.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/position-distribution",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/position-distribution.get.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.query.trend.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/query-trend",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/query-trend.get.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.sitemaps.action.create",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/sites/{siteId}/sitemaps/actions",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/sitemaps/actions.post.ts"
       ]
     },
     {
@@ -1547,6 +1734,138 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/partner/v1/sites/[siteId]/sitemaps.get.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.sitemaps.membership.query",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/sites/{siteId}/sitemaps/membership",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/sitemaps/membership.post.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.team.update",
+      "owner": "partner-v1",
+      "method": "PATCH",
+      "path": "/api/partner/v1/sites/{siteId}/team",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/team.patch.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.top.association.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/top-association",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/top-association.get.ts"
+      ]
+    },
+    {
+      "id": "partner.teams.catalog.bind",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/teams/{teamId}/catalog",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/teams/[teamId]/catalog.post.ts"
+      ]
+    },
+    {
+      "id": "partner.teams.catalog.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/teams/{teamId}/catalog",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/teams/[teamId]/catalog.get.ts"
+      ]
+    },
+    {
+      "id": "partner.teams.create",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/teams",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/teams.post.ts"
+      ]
+    },
+    {
+      "id": "partner.teams.delete",
+      "owner": "partner-v1",
+      "method": "DELETE",
+      "path": "/api/partner/v1/teams/{teamId}",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/teams/[teamId].delete.ts"
+      ]
+    },
+    {
+      "id": "partner.teams.members.add",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/teams/{teamId}/members",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/teams/[teamId]/members.post.ts"
+      ]
+    },
+    {
+      "id": "partner.teams.members.list",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/teams/{teamId}/members",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/teams/[teamId]/members.get.ts"
+      ]
+    },
+    {
+      "id": "partner.teams.members.remove",
+      "owner": "partner-v1",
+      "method": "DELETE",
+      "path": "/api/partner/v1/teams/{teamId}/members/{userId}",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/teams/[teamId]/members/[userId].delete.ts"
+      ]
+    },
+    {
+      "id": "partner.teams.members.role.update",
+      "owner": "partner-v1",
+      "method": "PATCH",
+      "path": "/api/partner/v1/teams/{teamId}/members/{userId}",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/teams/[teamId]/members/[userId].patch.ts"
+      ]
+    },
+    {
+      "id": "partner.teams.rename",
+      "owner": "partner-v1",
+      "method": "PATCH",
+      "path": "/api/partner/v1/teams/{teamId}",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/teams/[teamId].patch.ts"
       ]
     },
     {
@@ -1583,6 +1902,17 @@
       ]
     },
     {
+      "id": "partner.users.delete",
+      "owner": "partner-v1",
+      "method": "DELETE",
+      "path": "/api/partner/v1/users/{userId}",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/users/[userId].delete.ts"
+      ]
+    },
+    {
       "id": "partner.users.lifecycle.get",
       "owner": "partner-v1",
       "method": "GET",
@@ -1616,6 +1946,28 @@
       ]
     },
     {
+      "id": "partner.users.sites.crosswalk.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/users/{userId}/sites/crosswalk",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/users/[userId]/sites/crosswalk.get.ts"
+      ]
+    },
+    {
+      "id": "partner.users.sites.verify.create",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/users/{userId}/sites/verify",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/users/[userId]/sites/verify.post.ts"
+      ]
+    },
+    {
       "id": "partner.users.tokens.update",
       "owner": "partner-v1",
       "method": "PATCH",
@@ -1624,6 +1976,17 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/partner/v1/users/[userId]/tokens.patch.ts"
+      ]
+    },
+    {
+      "id": "partner.users.verification.token.create",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/users/{userId}/verification-token",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/users/[userId]/verification-token.post.ts"
       ]
     },
     {
@@ -1954,6 +2317,15 @@
       "v1Review": "analytics"
     },
     {
+      "file": "server/api/admin/analytics/overlay-catalog-wave.post.ts",
+      "method": "POST",
+      "path": "/api/admin/analytics/overlay-catalog-wave",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
       "file": "server/api/admin/backfill/gsc-range.post.ts",
       "method": "POST",
       "path": "/api/admin/backfill/gsc-range",
@@ -1999,6 +2371,15 @@
       "v1Review": "outside-public-protocol"
     },
     {
+      "file": "server/api/admin/indexing/canonical-kind-backfill.post.ts",
+      "method": "POST",
+      "path": "/api/admin/indexing/canonical-kind-backfill",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
       "file": "server/api/admin/indexing/compact.post.ts",
       "method": "POST",
       "path": "/api/admin/indexing/compact",
@@ -2017,36 +2398,9 @@
       "v1Review": "outside-public-protocol"
     },
     {
-      "file": "server/api/admin/indexing/parity.post.ts",
+      "file": "server/api/admin/indexing/inspection-value.post.ts",
       "method": "POST",
-      "path": "/api/admin/indexing/parity",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "host-admin",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/admin/indexing/phase.post.ts",
-      "method": "POST",
-      "path": "/api/admin/indexing/phase",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "host-admin",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/admin/indexing/rebuild.post.ts",
-      "method": "POST",
-      "path": "/api/admin/indexing/rebuild",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "host-admin",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/admin/indexing/rebuild-fanout.post.ts",
-      "method": "POST",
-      "path": "/api/admin/indexing/rebuild-fanout",
+      "path": "/api/admin/indexing/inspection-value",
       "descriptorOwners": [],
       "routeBuilderOwners": [],
       "currentSurface": "host-admin",
@@ -2083,6 +2437,15 @@
       "file": "server/api/admin/sitemap/compact.post.ts",
       "method": "POST",
       "path": "/api/admin/sitemap/compact",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/sitemap/live-parity.post.ts",
+      "method": "POST",
+      "path": "/api/admin/sitemap/live-parity",
       "descriptorOwners": [],
       "routeBuilderOwners": [],
       "currentSurface": "host-admin",
@@ -2164,6 +2527,15 @@
       "file": "server/api/admin/trigger-sitemap-sync.post.ts",
       "method": "POST",
       "path": "/api/admin/trigger-sitemap-sync",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/admin/trigger-stuck-sites-alert.post.ts",
+      "method": "POST",
+      "path": "/api/admin/trigger-stuck-sites-alert",
       "descriptorOwners": [],
       "routeBuilderOwners": [],
       "currentSurface": "host-admin",
@@ -2812,6 +3184,17 @@
       "v1Review": "partner"
     },
     {
+      "file": "server/api/partner/v1/keywords/enrich.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/keywords/enrich",
+      "descriptorOwners": [
+        "partner.keywords.enrich.query"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
       "file": "server/api/partner/v1/sites/[siteId].delete.ts",
       "method": "DELETE",
       "path": "/api/partner/v1/sites/{siteId}",
@@ -2845,6 +3228,83 @@
       "v1Review": "accepted-v1"
     },
     {
+      "file": "server/api/partner/v1/sites/[siteId]/canonical-mismatches.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/canonical-mismatches",
+      "descriptorOwners": [
+        "partner.sites.canonical.mismatches.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/content-velocity.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/content-velocity",
+      "descriptorOwners": [
+        "partner.sites.content.velocity.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/cross-source.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/sites/{siteId}/cross-source",
+      "descriptorOwners": [
+        "partner.sites.cross.source.query"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/ctr-curve.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/ctr-curve",
+      "descriptorOwners": [
+        "partner.sites.ctr.curve.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/dark-traffic.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/dark-traffic",
+      "descriptorOwners": [
+        "partner.sites.dark.traffic.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/device-gap.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/device-gap",
+      "descriptorOwners": [
+        "partner.sites.device.gap.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/index-percent.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/index-percent",
+      "descriptorOwners": [
+        "partner.sites.index.percent.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
       "file": "server/api/partner/v1/sites/[siteId]/indexing.get.ts",
       "method": "GET",
       "path": "/api/partner/v1/sites/{siteId}/indexing",
@@ -2867,11 +3327,99 @@
       "v1Review": "accepted-v1"
     },
     {
+      "file": "server/api/partner/v1/sites/[siteId]/indexing/inspect.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/sites/{siteId}/indexing/inspect",
+      "descriptorOwners": [
+        "partner.sites.indexing.inspect.create"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/indexing/transitions.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/indexing/transitions",
+      "descriptorOwners": [
+        "partner.sites.indexing.transitions.list"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
       "file": "server/api/partner/v1/sites/[siteId]/indexing/urls.get.ts",
       "method": "GET",
       "path": "/api/partner/v1/sites/{siteId}/indexing/urls",
       "descriptorOwners": [
         "partner.sites.indexing.urls.list"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/keyword-breadth.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/keyword-breadth",
+      "descriptorOwners": [
+        "partner.sites.keyword.breadth.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/keyword-sparklines.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/sites/{siteId}/keyword-sparklines",
+      "descriptorOwners": [
+        "partner.sites.keyword.sparklines.query"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/page-trend.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/page-trend",
+      "descriptorOwners": [
+        "partner.sites.page.trend.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/permission/recover.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/sites/{siteId}/permission/recover",
+      "descriptorOwners": [
+        "partner.sites.permission.recover"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/position-distribution.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/position-distribution",
+      "descriptorOwners": [
+        "partner.sites.position.distribution.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/query-trend.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/query-trend",
+      "descriptorOwners": [
+        "partner.sites.query.trend.get"
       ],
       "routeBuilderOwners": [],
       "currentSurface": "public-partner-v1",
@@ -2889,6 +3437,17 @@
       "v1Review": "accepted-v1"
     },
     {
+      "file": "server/api/partner/v1/sites/[siteId]/sitemaps/actions.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/sites/{siteId}/sitemaps/actions",
+      "descriptorOwners": [
+        "partner.sites.sitemaps.action.create"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
       "file": "server/api/partner/v1/sites/[siteId]/sitemaps/changes.get.ts",
       "method": "GET",
       "path": "/api/partner/v1/sites/{siteId}/sitemaps/changes",
@@ -2900,11 +3459,154 @@
       "v1Review": "accepted-v1"
     },
     {
+      "file": "server/api/partner/v1/sites/[siteId]/sitemaps/membership.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/sites/{siteId}/sitemaps/membership",
+      "descriptorOwners": [
+        "partner.sites.sitemaps.membership.query"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/team.patch.ts",
+      "method": "PATCH",
+      "path": "/api/partner/v1/sites/{siteId}/team",
+      "descriptorOwners": [
+        "partner.sites.team.update"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/top-association.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/top-association",
+      "descriptorOwners": [
+        "partner.sites.top.association.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/teams.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/teams",
+      "descriptorOwners": [
+        "partner.teams.create"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/teams/[teamId].delete.ts",
+      "method": "DELETE",
+      "path": "/api/partner/v1/teams/{teamId}",
+      "descriptorOwners": [
+        "partner.teams.delete"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/teams/[teamId].patch.ts",
+      "method": "PATCH",
+      "path": "/api/partner/v1/teams/{teamId}",
+      "descriptorOwners": [
+        "partner.teams.rename"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/teams/[teamId]/catalog.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/teams/{teamId}/catalog",
+      "descriptorOwners": [
+        "partner.teams.catalog.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/teams/[teamId]/catalog.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/teams/{teamId}/catalog",
+      "descriptorOwners": [
+        "partner.teams.catalog.bind"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/teams/[teamId]/members.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/teams/{teamId}/members",
+      "descriptorOwners": [
+        "partner.teams.members.list"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/teams/[teamId]/members.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/teams/{teamId}/members",
+      "descriptorOwners": [
+        "partner.teams.members.add"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/teams/[teamId]/members/[userId].delete.ts",
+      "method": "DELETE",
+      "path": "/api/partner/v1/teams/{teamId}/members/{userId}",
+      "descriptorOwners": [
+        "partner.teams.members.remove"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/teams/[teamId]/members/[userId].patch.ts",
+      "method": "PATCH",
+      "path": "/api/partner/v1/teams/{teamId}/members/{userId}",
+      "descriptorOwners": [
+        "partner.teams.members.role.update"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
       "file": "server/api/partner/v1/users.post.ts",
       "method": "POST",
       "path": "/api/partner/v1/users",
       "descriptorOwners": [
         "partner.users.create"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/users/[userId].delete.ts",
+      "method": "DELETE",
+      "path": "/api/partner/v1/users/{userId}",
+      "descriptorOwners": [
+        "partner.users.delete"
       ],
       "routeBuilderOwners": [],
       "currentSurface": "public-partner-v1",
@@ -2944,6 +3646,28 @@
       "v1Review": "accepted-v1"
     },
     {
+      "file": "server/api/partner/v1/users/[userId]/sites/crosswalk.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/users/{userId}/sites/crosswalk",
+      "descriptorOwners": [
+        "partner.users.sites.crosswalk.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/users/[userId]/sites/verify.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/users/{userId}/sites/verify",
+      "descriptorOwners": [
+        "partner.users.sites.verify.create"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
       "file": "server/api/partner/v1/users/[userId]/tokens.patch.ts",
       "method": "PATCH",
       "path": "/api/partner/v1/users/{userId}/tokens",
@@ -2953,6 +3677,26 @@
       "routeBuilderOwners": [],
       "currentSurface": "public-partner-v1",
       "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/users/[userId]/verification-token.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/users/{userId}/verification-token",
+      "descriptorOwners": [
+        "partner.users.verification.token.create"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/ping.get.ts",
+      "method": "GET",
+      "path": "/api/ping",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
     },
     {
       "file": "server/api/public/demo.get.ts",
@@ -3934,28 +4678,6 @@
       "routeBuilderOwners": [],
       "currentSurface": "host-internal-or-session",
       "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/routes/ws/partner.ts",
-      "method": "WEBSOCKET",
-      "path": "/ws/partner",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [
-        "partner.realtime.partner"
-      ],
-      "currentSurface": "legacy-realtime",
-      "v1Review": "replace-realtime"
-    },
-    {
-      "file": "server/routes/ws/user.ts",
-      "method": "WEBSOCKET",
-      "path": "/ws/user",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [
-        "partner.realtime.user"
-      ],
-      "currentSurface": "legacy-realtime",
-      "v1Review": "replace-realtime"
     }
   ]
 }

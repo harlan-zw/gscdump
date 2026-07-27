@@ -27,32 +27,32 @@ replacement for deliberate review; `--write` updates the checked-in snapshot.
 
 | Evidence | Count |
 | --- | ---: |
-| Live `server/api` route files | 220 |
-| HTTP method/path operations | 220 |
-| Legacy WebSocket operations | 2 |
-| Total hosted operations | 222 |
+| Live `server/api` route files | 255 |
+| HTTP method/path operations | 255 |
+| Legacy WebSocket operations | 0 |
+| Total hosted operations | 255 |
 | Legacy package endpoint descriptors | 63 |
-| Generated public-v1 operation descriptors | 18 |
-| Distinct hosted operations owned by a descriptor | 81 |
+| Generated public-v1 operation descriptors | 51 |
+| Distinct hosted operations owned by a descriptor | 114 |
 | Hosted operations without a descriptor | 141 |
 | Schema-less legacy descriptors | 3 |
 | Legacy descriptors with no producer handler | 0 |
 | Legacy descriptor method/path collisions | 0 |
 
-The inventory also includes `server/routes/ws/user.ts` and
-`server/routes/ws/partner.ts` as the two legacy WebSocket operations.
+The retired `server/routes/ws/user.ts` and `server/routes/ws/partner.ts`
+handlers are absent. The separately owned admin route under
+`layers/admin/server/routes/ws/admin.ts` is not a public protocol operation.
 
 The 141 unowned operations are not all public-contract gaps. The v1 review
 classification is:
 
 | Review outcome | Operations | Meaning |
 | --- | ---: | --- |
-| Accepted v1 slice | 18 | Executable descriptor, generated contract, SDK, and hosted route exist |
+| Accepted v1 slice | 51 | Executable descriptor, generated contract, SDK, and hosted route exist |
 | Analytics candidate | 25 | Review for `/api/analytics/v1` |
 | Partner candidate | 49 | Review for `/api/partner/v1` |
 | Decision required | 51 | Shared user/site/team routes that need an explicit boundary decision |
-| Outside public protocol | 77 | Admin, CLI, public-host, session, webhook, and other host concerns |
-| Replace realtime | 2 | Replace both legacy sockets with `/ws/v1` |
+| Outside public protocol | 79 | Admin, CLI, public-host, session, webhook, and other host concerns |
 
 An operation marked as a candidate is still not accepted into v1 until it has
 an executable descriptor, schemas, auth/scopes, ownership checks, consistency,
@@ -60,26 +60,9 @@ SDK coverage, and producer contract tests. An operation outside protocol
 should remain host-owned rather than receive a package descriptor merely to
 make the count reach zero.
 
-The accepted slice is intentionally limited to:
-
-- `GET /api/partner/v1/users/{userId}/lifecycle`;
-- `GET /api/partner/v1/users/{userId}/available-sites`;
-- `POST /api/partner/v1/users/{userId}/sites`;
-- `POST /api/partner/v1/users`;
-- `PATCH /api/partner/v1/users/{userId}/tokens`;
-- `GET /api/partner/v1/sites/{siteId}/indexing`;
-- `GET /api/partner/v1/sites/{siteId}/indexing/urls`;
-- `GET /api/partner/v1/sites/{siteId}/indexing/diagnostics`;
-- `GET /api/partner/v1/sites/{siteId}/sitemaps`;
-- `GET /api/partner/v1/sites/{siteId}/sitemaps/changes`;
-- `GET /api/partner/v1/sites/{siteId}/analysis`;
-- `GET /api/partner/v1/sites/{siteId}/analysis/bundle`;
-- `DELETE /api/partner/v1/sites/{siteId}`;
-- `POST /api/analytics/v1/sites/{siteId}/rows`;
-- `POST /api/analytics/v1/sites/{siteId}/reports`;
-- `POST /api/analytics/v1/sites/{siteId}/reports/detail`;
-- `GET /api/realtime/v1/stream/head`;
-- `POST /api/realtime/v1/tickets`.
+The exact accepted set is the 51 `*-v1` descriptor rows in the machine-readable
+snapshot and the three generated OpenAPI artifacts. Keeping that list generated
+avoids a second hand-maintained operation registry in this migration record.
 
 The 63 legacy descriptors and their findings remain migration evidence. Their
 three `noSchema` entries are not defects in the public HTTP-v1 descriptors;
@@ -108,15 +91,15 @@ represented separately by the typed `partner.getSitemapMembership` descriptor.
 ## Scope and exclusions
 
 The scanner includes every method-suffixed TypeScript file below
-`server/api`, the explicitly reviewed generic R2 route, and both files below
-`server/routes/ws`. Nitro `index` segments are removed and dynamic segments
+`server/api`, the explicitly reviewed generic R2 route, and any legacy public
+socket routes below `server/routes/ws`. Nitro `index` segments are removed and dynamic segments
 are normalized (`[siteId]` → `{siteId}`, `[...path]` → `{path+}`). Descriptor
 matching ignores placeholder names but preserves catch-all semantics.
 
 One underscore-prefixed utility beneath `server/api` is excluded because it is
 imported helper code, not a Nitro handler:
 
-- `server/api/__gsc/sites/[siteId]/inspections/_d1-to-inspection-record.ts`
+- `server/api/__gsc/sites/[siteId]/inspections/_inspection-record.ts`
 
 Three non-API `server/routes` files are recorded as out of inventory:
 

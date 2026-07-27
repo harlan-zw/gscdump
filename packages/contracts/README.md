@@ -2,10 +2,11 @@
 
 Shared protocol contracts for gscdump.com integrations.
 
-> The executable 18-operation public-v1 registry is exported from
+> The executable 51-operation public-v1 registry is exported from
 > `@gscdump/contracts/v1`. Existing root route/endpoint exports still describe
 > the legacy host during the release and cutover overlap. See the
-> [v1 contract](../../docs/hosted-api-v1.md) and
+> [integration guide](../../docs/guides/hosted-v1.md),
+> [v1 contract](../../docs/hosted-api-v1.md), and
 > [producer inventory](../../docs/hosted-api-inventory.md).
 
 This package contains types, route metadata, Zod schemas, shared storage/query
@@ -34,6 +35,23 @@ object keys while validating known fields. Producer contract tests remain
 strict against the documented current schema, and enum values remain closed.
 Every `user_key` query declares primary read consistency with no caller
 override.
+
+Generated contract files:
+
+- [Partner OpenAPI](./generated/openapi.partner.v1.json)
+- [Analytics OpenAPI](./generated/openapi.analytics.v1.json)
+- [Realtime HTTP OpenAPI](./generated/openapi.realtime.v1.json)
+- [Realtime AsyncAPI](./generated/asyncapi.realtime.v1.json)
+
+Focused guides:
+
+- [Quickstart](../../docs/guides/hosted-v1.md#quickstart)
+- [Authentication](../../docs/guides/hosted-v1.md#authentication)
+- [Errors](../../docs/guides/hosted-v1.md#errors)
+- [Rate limits](../../docs/guides/hosted-v1.md#rate-limits)
+- [Idempotency and retries](../../docs/guides/hosted-v1.md#idempotency-and-retries)
+- [Realtime](../../docs/guides/hosted-v1.md#realtime)
+- [Upgrade guide](../../docs/v1-migration.md)
 
 Realtime contracts cover credential-inferred streams, tickets, frame bounds,
 replay, cumulative ACKs, and resync. A semantic event owns one cursor and a

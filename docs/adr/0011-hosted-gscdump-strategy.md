@@ -1,12 +1,14 @@
-# ADR-0011 — Hosted gscdump strategy and package boundaries
+# ADR-0011: Hosted gscdump strategy and package boundaries
 
 ## Status
 
-Accepted — amended 2026-07-21. The 18-operation registry is published in the
-1.0.x package line and deployed by the hosted producer. The original four-operation slice has full
-direct production canary evidence, including idle-hibernation resume and full 15-minute alarm expiry.
-Expanded-operation canaries, the coordinated NuxtSEO production handoff, and per-route zero-use
-evidence remain required before any predecessor compatibility route can be removed.
+Accepted, amended 2026-07-21. The registry now has 51 operations in the
+checked-in `1.4.11` packages and is deployed by the hosted producer. The HTTP
+wire version remains `1.0`. The original four-operation slice has full direct
+production canary evidence, including idle-hibernation resume and full
+15-minute alarm expiry. Expanded-operation canaries, the coordinated NuxtSEO
+production handoff, and per-route zero-use evidence remain required before any
+predecessor compatibility route can be removed.
 
 ## Context
 
@@ -29,8 +31,8 @@ and assumed a Nuxt package would own consumer API reads. Before documenting
 and opening the API, the initial producer audit found a much larger and less
 uniform legacy surface: 210 hosted operations versus 64 package descriptors,
 including ten schema-less descriptors, two descriptors without handlers, and
-one method/path collision. The live inventory is now 222 operations because it
-also contains the 18 accepted v1 routes.
+one method/path collision. The live inventory now records 255 operations,
+including the 51 accepted v1 routes.
 
 Breaking changes are allowed now. This amendment establishes the small,
 versioned target before Worker and SDK implementation.
@@ -41,10 +43,10 @@ versioned target before Worker and SDK implementation.
 
 The target public surfaces are:
 
-- `/api/partner/v1` — partner lifecycle/control plane;
-- `/api/analytics/v1` — authorized analytics/data plane;
-- `/api/realtime/v1` — realtime ticket and stream-head HTTP operations;
-- `/ws/v1` — one credential-inferred realtime transport.
+- `/api/partner/v1`: partner lifecycle/control plane;
+- `/api/analytics/v1`: authorized analytics/data plane;
+- `/api/realtime/v1`: realtime ticket and stream-head HTTP operations;
+- `/ws/v1`: one credential-inferred realtime transport.
 
 The partner and analytics domains remain separate, but
 `/api/__gsc`, `/ws/user`, and `/ws/partner` are legacy implementation paths.
