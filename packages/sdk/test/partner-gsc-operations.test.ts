@@ -1,5 +1,5 @@
-import type { PartnerFetch } from '../src'
-import { createPartnerClient } from '../src'
+import type { PartnerFetch } from '../src/client'
+import { createPartnerClient } from '../src/client'
 
 describe('createPartnerClient GSC control operations', () => {
   it('executes typed recovery, inspection, canonical, and sitemap actions', async () => {

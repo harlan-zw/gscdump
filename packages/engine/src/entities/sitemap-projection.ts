@@ -1,4 +1,4 @@
-import { parseSitemapUrlsDeltaKey } from './entity-keys'
+import { parseSitemapUrlsDeltaKey } from '../entity-keys'
 
 export const SITEMAP_PROJECTION_GRACE_MS = 15 * 60 * 1000
 

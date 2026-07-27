@@ -36,6 +36,18 @@ strict against the documented current schema, and enum values remain closed.
 Every `user_key` query declares primary read consistency with no caller
 override.
 
+Framework adapters use the registry mechanics exported from
+`@gscdump/contracts/v1/http`:
+
+- `listHttpOperations(protocol)` produces the canonical surface/operation
+  entries used by SDK indexes and producer parity checks.
+- `resolveHttpOperation(entries, request)` matches an exact method, surface,
+  and surface-relative path; it decodes and parses path parameters through the
+  descriptor, rejects unsafe segments, and returns the canonical path.
+
+Consumer authorization stays app-owned. A browser proxy selects its explicit
+operation-ID allowlist, then passes only those entries to the resolver.
+
 Generated contract files:
 
 - [Partner OpenAPI](./generated/openapi.partner.v1.json)

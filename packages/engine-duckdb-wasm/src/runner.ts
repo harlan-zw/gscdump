@@ -59,4 +59,7 @@ export async function createInsightRunner(opts: InsightRunnerOptions): Promise<I
  * so consumers can add the predicate without an interface change when
  * multi-site snapshots land.
  */
-export const { scopeFor, mergeScope } = createScopedHelpers(schema)
+const scopedHelpers = createScopedHelpers(schema)
+
+export const scopeFor = scopedHelpers.scopeFor
+export const mergeScope = scopedHelpers.mergeScope

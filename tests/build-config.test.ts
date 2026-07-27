@@ -13,6 +13,25 @@ afterEach(async () => {
 })
 
 describe('shared package build config', () => {
+  it('accepts a bin-only package without importable exports', async () => {
+    const packageDir = await mkdtemp(join(tmpdir(), 'gscdump-bin-only-'))
+    temporaryDirectories.push(packageDir)
+
+    const result = await checkPackageTreeShaking({
+      pkg: {
+        name: 'bin-only-fixture',
+        sideEffects: false,
+        exports: {},
+        bin: {
+          fixture: './bin/fixture.mjs',
+        },
+      },
+      pkgDir: packageDir,
+    })
+
+    expect(result._tag).toBe('TreeShakable')
+  })
+
   it('detects import-time effects even when package metadata declares none', async () => {
     const packageDir = await mkdtemp(join(tmpdir(), 'gscdump-tree-shake-'))
     temporaryDirectories.push(packageDir)

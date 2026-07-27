@@ -1,5 +1,5 @@
-import type { AnalyticsFetch } from '../src'
-import { createAnalyticsClient } from '../src'
+import type { AnalyticsFetch } from '../src/analytics-client'
+import { createAnalyticsClient } from '../src/analytics-client'
 
 const analysisSourcesResponse = {
   siteId: 's_1',

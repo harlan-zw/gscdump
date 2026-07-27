@@ -13,7 +13,9 @@ import {
   GSCDUMP_REALTIME_MAX_CONNECTION_SECONDS,
   GSCDUMP_REALTIME_PROTOCOL_VERSION,
   HTTP_V1_CREDENTIAL_SCOPES,
+  listHttpOperations,
   REALTIME_V1_EVENT_SEMANTICS,
+  resolveHttpOperation,
   serializeContractDocument,
 } from '@gscdump/contracts/v1'
 import { createRealtimeV1Schemas } from '@gscdump/contracts/v1/realtime'
@@ -138,6 +140,58 @@ describe('@gscdump/contracts/v1 HTTP registry', () => {
       id: 'analytics.rows.malformed.path',
       path: '/rows/{siteId',
     })).toThrow(/safe literal surface-relative template/)
+  })
+
+  it('lists and resolves exact registry operations through one fail-closed matcher', () => {
+    const protocol = createGscdumpV1Protocol()
+    const entries = listHttpOperations(protocol)
+
+    expect(entries).toHaveLength(51)
+    expect(entries.map(entry => entry.operation.id)).toContain('partner.users.lifecycle.get')
+    expect(resolveHttpOperation(entries, {
+      method: 'GET',
+      surface: 'partner',
+      path: 'users/u_01/lifecycle',
+    })).toMatchObject({
+      operation: { id: 'partner.users.lifecycle.get' },
+      params: { userId: 'u_01' },
+      path: 'users/u_01/lifecycle',
+      surface: { name: 'partner' },
+    })
+    expect(resolveHttpOperation(entries, {
+      method: 'GET',
+      surface: 'partner',
+      path: 'sites/s_01/indexing',
+    })).toMatchObject({
+      operation: { id: 'partner.sites.indexing.get' },
+      params: { siteId: 's_01' },
+    })
+    expect(resolveHttpOperation(entries, {
+      method: 'POST',
+      surface: 'analytics',
+      path: 'sites/s_01/rows',
+    })?.path).toBe('sites/s_01/rows')
+
+    expect(resolveHttpOperation(entries, {
+      method: 'GET',
+      surface: 'analytics',
+      path: 'sites/s_01/rows',
+    })).toBeNull()
+    expect(resolveHttpOperation(entries, {
+      method: 'GET',
+      surface: 'partner',
+      path: 'sites/%2e%2e/indexing',
+    })).toBeNull()
+    expect(resolveHttpOperation(entries, {
+      method: 'GET',
+      surface: 'partner',
+      path: 'sites/s_01%2Findexing',
+    })).toBeNull()
+    expect(resolveHttpOperation(entries, {
+      method: 'GET',
+      surface: 'partner',
+      path: 'sites/s_01/indexing/extra',
+    })).toBeNull()
   })
 
   it('rejects duplicate registry IDs, route collisions, and unsafe user-key consistency', () => {

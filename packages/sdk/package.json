@@ -21,20 +21,10 @@
   },
   "sideEffects": false,
   "exports": {
-    ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs",
-      "default": "./dist/index.mjs"
-    },
     "./analytics": {
       "types": "./dist/analytics-client.d.mts",
       "import": "./dist/analytics-client.mjs",
       "default": "./dist/analytics-client.mjs"
-    },
-    "./analyzers": {
-      "types": "./dist/analyzer-defs.d.mts",
-      "import": "./dist/analyzer-defs.mjs",
-      "default": "./dist/analyzer-defs.mjs"
     },
     "./anonymization": {
       "types": "./dist/anonymization.d.mts",
@@ -147,8 +137,6 @@
       "default": "./dist/v1/realtime.mjs"
     }
   },
-  "main": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
   "files": [
     "dist"
   ],
@@ -163,7 +151,6 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
-    "@gscdump/analysis": "workspace:^",
     "@gscdump/contracts": "workspace:^",
     "@gscdump/engine": "workspace:^",
     "gscdump": "workspace:^",

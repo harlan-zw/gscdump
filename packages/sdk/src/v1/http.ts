@@ -1,22 +1,23 @@
 import type {
   buildHttpOperationPath,
+  GscdumpV1Operation as ContractGscdumpV1Operation,
+  GscdumpV1OperationId as ContractGscdumpV1OperationId,
   createGscdumpV1Protocol,
   GscdumpV1ErrorEnvelope,
   HttpV1OperationDefinition,
   HttpV1Surface,
+  listHttpOperations,
 } from '@gscdump/contracts/v1/http'
 import type { z, ZodTypeAny } from 'zod'
 
 type MaybePromise<T> = T | Promise<T>
 type ValueOf<T> = T[keyof T]
-type ValueOfUnion<T> = T extends unknown ? ValueOf<T> : never
 
 type GscdumpV1ProtocolShape = ReturnType<typeof createGscdumpV1Protocol>
 type GscdumpV1Surface = ValueOf<GscdumpV1ProtocolShape['surfaces']>
-type GscdumpV1OperationRegistry = GscdumpV1Surface['operations']
 
-export type GscdumpV1Operation = ValueOfUnion<GscdumpV1OperationRegistry>
-export type GscdumpV1OperationId = GscdumpV1Operation['id']
+export type GscdumpV1Operation = ContractGscdumpV1Operation
+export type GscdumpV1OperationId = ContractGscdumpV1OperationId
 
 type OperationById<TId extends GscdumpV1OperationId> = Extract<GscdumpV1Operation, { id: TId }>
 type SchemaInput<TSchema> = TSchema extends ZodTypeAny ? z.input<TSchema> : never
@@ -683,7 +684,10 @@ function requestIdFrom(response: Response): string | undefined {
   return response.headers.get('x-request-id') ?? undefined
 }
 
-function operationLookup(protocol: GscdumpV1ProtocolShape): Map<GscdumpV1OperationId, {
+function operationLookup(
+  protocol: GscdumpV1ProtocolShape,
+  listOperations: typeof listHttpOperations,
+): Map<GscdumpV1OperationId, {
   operation: GscdumpV1Operation
   surface: GscdumpV1Surface
 }> {
@@ -691,13 +695,11 @@ function operationLookup(protocol: GscdumpV1ProtocolShape): Map<GscdumpV1Operati
     operation: GscdumpV1Operation
     surface: GscdumpV1Surface
   }>()
-  for (const surface of Object.values(protocol.surfaces)) {
-    for (const operation of Object.values(surface.operations)) {
-      operations.set(operation.id as GscdumpV1OperationId, {
-        operation: operation as GscdumpV1Operation,
-        surface,
-      })
-    }
+  for (const { operation, surface } of listOperations(protocol)) {
+    operations.set(operation.id as GscdumpV1OperationId, {
+      operation: operation as GscdumpV1Operation,
+      surface,
+    })
   }
   return operations
 }
@@ -720,11 +722,12 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     return runtimePromise ??= import('@gscdump/contracts/v1/http').then(({
       buildHttpOperationPath: buildOperationPath,
       createGscdumpV1Protocol,
+      listHttpOperations: listOperations,
     }) => {
       const protocol = createGscdumpV1Protocol()
       return {
         buildOperationPath,
-        operations: operationLookup(protocol),
+        operations: operationLookup(protocol, listOperations),
         protocol,
       }
     })

@@ -5,6 +5,16 @@ import { dump } from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 import { getPackageExportsManifest } from 'vitest-package-exports'
 
+function runtimeExportTarget(value: unknown): string | undefined {
+  if (typeof value === 'string')
+    return value.endsWith('.mjs') ? value : undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return undefined
+  return Object.values(value as Record<string, unknown>)
+    .map(runtimeExportTarget)
+    .find(target => target !== undefined)
+}
+
 describe('exports-snapshot', async () => {
   const packageDirs = await readdir(join(process.cwd(), 'packages'), { withFileTypes: true })
   const packages = await Promise.all(
@@ -19,6 +29,7 @@ describe('exports-snapshot', async () => {
           name: pkg.name as string,
           path,
           private: pkg.private as boolean | undefined,
+          runtimeExport: runtimeExportTarget(pkg.exports),
         }
       }),
   )
@@ -26,8 +37,9 @@ describe('exports-snapshot', async () => {
   for (const pkg of packages.filter(pkg => pkg !== null)) {
     if (pkg.private)
       continue
-    const hasDist = existsSync(join(pkg.path, 'dist', 'index.mjs'))
-    it.skipIf(!hasDist)(`${pkg.name}`, async () => {
+    const hasBuild = pkg.runtimeExport !== undefined
+      && existsSync(join(pkg.path, pkg.runtimeExport))
+    it.skipIf(!hasBuild)(`${pkg.name}`, async () => {
       const manifest = await getPackageExportsManifest({
         importMode: 'dist',
         cwd: pkg.path,
@@ -35,8 +47,8 @@ describe('exports-snapshot', async () => {
       await expect(dump(manifest.exports, { sortKeys: (a, b) => a.localeCompare(b) }))
         .toMatchFileSnapshot(`./exports/${pkg.name.split('/').pop()}.yaml`)
     })
-    if (!hasDist) {
-      console.warn(`[exports-snapshot] skipping ${pkg.name} — no dist/. Run \`pnpm -r run build\` to exercise this test.`)
+    if (!hasBuild) {
+      console.warn(`[exports-snapshot] skipping ${pkg.name} — no built export. Run \`pnpm -r run build\` to exercise this test.`)
     }
   }
 })

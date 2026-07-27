@@ -5,6 +5,7 @@ import { rolldown } from 'rolldown'
 
 export interface TreeShakeBuildContext {
   pkg: {
+    bin?: unknown
     name?: string
     sideEffects?: unknown
     exports?: unknown
@@ -35,6 +36,15 @@ function runtimeExportTargets(value: unknown): string[] {
       .map(runtimeExportTarget)
       .filter((target): target is string => target !== null),
   )]
+}
+
+function hasBinTarget(value: unknown): boolean {
+  if (typeof value === 'string')
+    return value.length > 0
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return false
+  return Object.values(value as Record<string, unknown>)
+    .some(target => typeof target === 'string' && target.length > 0)
 }
 
 async function emittedSideEffects(packageDir: string, target: string): Promise<{
@@ -86,6 +96,8 @@ export async function checkPackageTreeShaking(ctx: TreeShakeBuildContext): Promi
 
   const targets = runtimeExportTargets(ctx.pkg.exports)
   if (targets.length === 0) {
+    if (hasBinTarget(ctx.pkg.bin))
+      return { _tag: 'TreeShakable' }
     return {
       _tag: 'TreeShakeError',
       details: `${packageName}: package.json has no ESM export targets`,

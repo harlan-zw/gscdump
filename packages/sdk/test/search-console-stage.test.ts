@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifySearchConsoleStage } from '../src'
+import { classifySearchConsoleStage } from '../src/search-console-stage'
 
 describe('classifySearchConsoleStage canonical clamp', () => {
   it('canonical mismatches on a fully-indexed sample cannot block indexability (unhead.unjs.io regression)', () => {

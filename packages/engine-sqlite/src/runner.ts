@@ -96,4 +96,7 @@ export function createSqliteInsightRunner<TSchema extends Record<string, unknown
  * (one or both). This lets callers pass unbounded query-string params
  * through without first normalizing them.
  */
-export const { scopeFor, mergeScope } = createScopedHelpers(schema)
+const scopedHelpers = createScopedHelpers(schema)
+
+export const scopeFor = scopedHelpers.scopeFor
+export const mergeScope = scopedHelpers.mergeScope

@@ -1,4 +1,4 @@
-import type { HttpV1ErrorCode } from './http-core'
+import type { HttpV1ErrorCode, HttpV1ProtocolOperation } from './http-core'
 import type { RealtimeV1Schemas } from './realtime'
 import { z } from 'zod'
 import {
@@ -2941,6 +2941,8 @@ export function createGscdumpV1Protocol() {
 }
 
 export type GscdumpV1Protocol = ReturnType<typeof createGscdumpV1Protocol>
+export type GscdumpV1Operation = HttpV1ProtocolOperation<GscdumpV1Protocol>
+export type GscdumpV1OperationId = GscdumpV1Operation['id']
 export type GscdumpV1ErrorEnvelope = z.infer<GscdumpV1Protocol['schemas']['errorEnvelope']['client']>
 export type GscdumpV1RequestMetadata = z.infer<GscdumpV1Protocol['schemas']['requestMetadata']>
 export type AnalyticsRowsV1Request = z.infer<GscdumpV1Protocol['schemas']['analyticsRowsRequest']>

@@ -97,7 +97,7 @@ methods.
   with new `QueryError` kind `'invalid-filter'`
   (`queryErrors.malformedFilterLeaf()`). Hosts map that error to a 4xx instead
   of maintaining local hardening wrappers.
-- `@gscdump/sdk` `builderStateToArchetype(siteId, state, opts?)`: the single
+- `@gscdump/sdk/archetype` `builderStateToArchetype(siteId, state, opts?)`: the single
   fail-closed BuilderState→ArchetypeQuery compiler (returns `null` for
   unrepresentable predicates; previously duplicated in both consumers with
   divergent drop semantics). Also `extractWireDateRange`,

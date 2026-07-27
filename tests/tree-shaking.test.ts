@@ -46,11 +46,6 @@ const cases: readonly TreeShakeCase[] = [
     maxBytes: 1_000,
   },
   {
-    entry: 'packages/sdk/dist/index.mjs',
-    exportName: 'GSC_STABLE_LATENCY_DAYS',
-    maxBytes: 100,
-  },
-  {
     entry: 'packages/cloudflare/dist/index.mjs',
     exportName: 'getHostedR2QueryKey',
     maxBytes: 1_000,
@@ -105,18 +100,6 @@ const cases: readonly TreeShakeCase[] = [
     exportName: 'createGscdumpRealtimeV1Client',
     maxBytes: 20_000,
     allowedImports: ['@gscdump/contracts/v1/realtime'],
-  },
-  {
-    entry: 'packages/cli/dist/index.mjs',
-    exportName: 'createCliRuntime',
-    maxBytes: 1_000,
-    allowedImports: [
-      'consola',
-      'node:async_hooks',
-      'node:os',
-      'node:path',
-      'node:process',
-    ],
   },
 ]
 

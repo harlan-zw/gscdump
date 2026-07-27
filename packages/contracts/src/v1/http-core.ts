@@ -138,8 +138,94 @@ export interface HttpV1Surface<
   operations: TOperations
 }
 
+export interface HttpV1ProtocolLike {
+  surfaces: Readonly<Record<string, HttpV1Surface>>
+}
+
+type HttpV1ProtocolSurface<TProtocol extends HttpV1ProtocolLike>
+  = TProtocol['surfaces'][keyof TProtocol['surfaces']]
+
+type HttpV1SurfaceOperation<TSurface>
+  = TSurface extends HttpV1Surface<infer TOperations>
+    ? TOperations[keyof TOperations]
+    : never
+
+export type HttpV1ProtocolOperation<TProtocol extends HttpV1ProtocolLike>
+  = HttpV1SurfaceOperation<HttpV1ProtocolSurface<TProtocol>>
+
+export type HttpV1OperationEntry<TProtocol extends HttpV1ProtocolLike = HttpV1ProtocolLike>
+  = HttpV1ProtocolSurface<TProtocol> extends infer TSurface
+    ? TSurface extends HttpV1Surface
+      ? {
+          surface: TSurface
+          operation: HttpV1SurfaceOperation<TSurface>
+        }
+      : never
+    : never
+
+export interface HttpV1OperationRequest {
+  method: string
+  surface: string
+  /** Surface-relative path without a leading slash or query string. */
+  path: string
+}
+
+export type ResolvedHttpV1Operation<TEntry extends HttpV1OperationEntry = HttpV1OperationEntry>
+  = TEntry & {
+    params: Record<string, unknown>
+    /** Canonical surface-relative path. */
+    path: string
+  }
+
 function pathParameterNames(path: string): string[] {
   return [...path.matchAll(/\{([^{}]+)\}/g)].map(match => match[1]!)
+}
+
+function matchHttpOperationPathParameters(
+  operation: HttpV1OperationDefinition,
+  path: string,
+): Record<string, unknown> | null {
+  const templateSegments = operation.path.slice(1).split('/')
+  const pathSegments = path.split('/')
+  if (templateSegments.length !== pathSegments.length)
+    return null
+
+  const params: Record<string, string> = {}
+  for (let index = 0; index < templateSegments.length; index++) {
+    const templateSegment = templateSegments[index]!
+    const pathSegment = pathSegments[index]!
+    const parameter = /^\{([^{}]+)\}$/.exec(templateSegment)?.[1]
+    if (!parameter) {
+      if (templateSegment !== pathSegment)
+        return null
+      continue
+    }
+
+    const decoded = (() => {
+      try {
+        return decodeURIComponent(pathSegment)
+      }
+      catch {
+        return null
+      }
+    })()
+    if (decoded === null
+      || decoded.length === 0
+      || decoded === '.'
+      || decoded === '..'
+      || decoded.includes('/')
+      || decoded.includes('\\')) {
+      return null
+    }
+    params[parameter] = decoded
+  }
+
+  if (operation.request.params === null)
+    return Object.keys(params).length === 0 ? {} : null
+  const parsed = operation.request.params.safeParse(params)
+  if (!parsed.success || parsed.data === null || typeof parsed.data !== 'object' || Array.isArray(parsed.data))
+    return null
+  return parsed.data as Record<string, unknown>
 }
 
 function isSafePathTemplate(path: string): boolean {
@@ -278,6 +364,20 @@ export function defineHttpSurface<
   return surface
 }
 
+export function listHttpOperations<const TProtocol extends HttpV1ProtocolLike>(
+  protocol: TProtocol,
+): HttpV1OperationEntry<TProtocol>[] {
+  const entries: Array<{
+    surface: HttpV1Surface
+    operation: HttpV1OperationDefinition
+  }> = []
+  for (const surface of Object.values(protocol.surfaces)) {
+    for (const operation of Object.values(surface.operations))
+      entries.push({ surface, operation })
+  }
+  return entries as HttpV1OperationEntry<TProtocol>[]
+}
+
 export function defineResponseObject<
   const TProducerShape extends ZodRawShape,
   const TClientShape extends ZodRawShape = TProducerShape,
@@ -336,4 +436,27 @@ export function buildHttpOperationPath(
     return encodeURIComponent(serialized)
   })
   return `${surface.prefix}${relativePath}`
+}
+
+export function resolveHttpOperation<
+  const TEntries extends readonly HttpV1OperationEntry[],
+>(
+  entries: TEntries,
+  request: HttpV1OperationRequest,
+): ResolvedHttpV1Operation<TEntries[number]> | null {
+  for (const entry of entries) {
+    const { operation, surface } = entry
+    if (operation.method !== request.method || surface.name !== request.surface)
+      continue
+    const params = matchHttpOperationPathParameters(operation, request.path)
+    if (!params)
+      continue
+    const fullPath = buildHttpOperationPath(surface, operation, params)
+    return {
+      ...entry,
+      params,
+      path: fullPath.slice(surface.prefix.length + 1),
+    } as ResolvedHttpV1Operation<TEntries[number]>
+  }
+  return null
 }

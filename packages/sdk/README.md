@@ -3,9 +3,9 @@
 Consumer SDK for hosted gscdump.com integrations.
 
 > The descriptor-driven HTTP client and ticketed realtime state machine are
-> exported from `@gscdump/sdk/v1`. The root HTTP client remains a temporary
-> compatibility surface during the release and cutover overlap; the unsafe
-> long-lived-key realtime client was removed before v1. See the
+> exported from `@gscdump/sdk/v1`. Focused helper and compatibility clients
+> use explicit subpaths; the package root is intentionally not importable.
+> The unsafe long-lived-key realtime client was removed before v1. See the
 > [integration guide](../../docs/guides/hosted-v1.md) and
 > [v1 contract](../../docs/hosted-api-v1.md).
 
@@ -41,12 +41,11 @@ Focused guides:
 - [Realtime](../../docs/guides/hosted-v1.md#realtime)
 - [Upgrade guide](../../docs/v1-migration.md)
 
-The root `createPartnerClient` export remains only for operations still in the
-compatibility inventory. Do not use it for an operation already available from
-`@gscdump/sdk/v1`.
+`createPartnerClient` remains at `@gscdump/sdk/partner` only for operations
+still in the compatibility inventory. Do not use it for an operation already
+available from `@gscdump/sdk/v1`.
 
-The root is also a compatibility aggregate for the pure helper modules. New
-code should use the focused subpaths, including `period`, `period-presets`,
+Use focused subpaths for pure helpers, including `period`, `period-presets`,
 `site-triage`, `site-baseline`, `search-console-stage`, `indexing-issues`,
 `analytics`, `partner`, `partner-errors`, `lifecycle`, `webhook`, and
 `gsc-console-url`.

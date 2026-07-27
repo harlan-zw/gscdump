@@ -23,12 +23,12 @@ import {
 } from '../src/adapters/filesystem'
 import { decodeParquetToRows } from '../src/adapters/hyparquet'
 import { enumeratePartitions } from '../src/compaction'
+import { buildQueryDimRecords, createQueryDimStore } from '../src/entities'
 import {
   createDuckDBCodec,
   createDuckDBExecutor,
   createStorageEngine,
 } from '../src/index'
-import { buildQueryDimRecords, createQueryDimStore } from '../src/query-dim'
 import { buildExtrasQueries, buildTotalsSql, resolveComparisonSQL } from '../src/resolver/compile'
 import { createParquetResolverAdapter } from '../src/resolver/pg-adapter'
 import { queryCanonicalVariantsRollup, rebuildRollups } from '../src/rollups'

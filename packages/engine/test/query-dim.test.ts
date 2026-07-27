@@ -5,7 +5,7 @@ import {
   createQueryDimStore,
   queryDimMetaKey,
   queryDimParquetKey,
-} from '../src/query-dim'
+} from '../src/entities'
 
 function makeFakeDataSource(): { ds: DataSource, store: Map<string, Uint8Array> } {
   const store = new Map<string, Uint8Array>()

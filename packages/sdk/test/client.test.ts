@@ -1,5 +1,5 @@
-import type { PartnerFetch } from '../src'
-import { createPartnerClient } from '../src'
+import type { PartnerFetch } from '../src/client'
+import { createPartnerClient } from '../src/client'
 import { dataQuery, indexingDiagnosticsQuery } from '../src/hosted-query'
 
 const analysisSourcesResponse = {

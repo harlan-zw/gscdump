@@ -9,15 +9,15 @@
 // normalizeQuery`. Hosts wire the real functions + their version constants.
 
 import type { TenantCtx } from '@gscdump/contracts'
-import type { Row } from './contracts'
-import type { ColumnDef } from './schema'
-import type { DataSource } from './storage'
+import type { Row } from '../contracts'
+import type { ColumnDef } from '../schema'
+import type { DataSource } from '../storage'
 import { encodeJsonBigintSafe } from '@gscdump/lakehouse/bigint'
-import { decodeParquetToRows, encodeRowsToParquetFlex } from './adapters/hyparquet'
-import { readOptional } from './adapters/read-optional'
-import { queryDimMetaKey, queryDimParquetKey } from './entity-keys'
+import { decodeParquetToRows, encodeRowsToParquetFlex } from '../adapters/hyparquet'
+import { readOptional } from '../adapters/read-optional'
+import { queryDimMetaKey, queryDimParquetKey } from '../entity-keys'
 
-export { queryDimMetaKey, queryDimParquetKey } from './entity-keys'
+export { queryDimMetaKey, queryDimParquetKey } from '../entity-keys'
 
 export interface QueryDimRecord {
   query: string

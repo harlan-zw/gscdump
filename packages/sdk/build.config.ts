@@ -5,9 +5,7 @@ export default defineBuildConfig({
     {
       type: 'bundle',
       input: [
-        './src/index.ts',
         './src/analytics-client.ts',
-        './src/analyzer-defs.ts',
         './src/anonymization.ts',
         './src/archetype-compile.ts',
         './src/client.ts',

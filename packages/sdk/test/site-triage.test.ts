@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyReachStage } from '../src'
+import { classifyReachStage } from '../src/site-triage'
 
 describe('classifyReachStage', () => {
   it('renders signed evidence and uses the metric that actually drove growth', () => {
