@@ -34,6 +34,8 @@
   validateEnabledSearchTypes: function
   validateEnabledSearchTypesResult: function
   WEIGHT_PRIORITY: object
+./analysis-range:
+  analysisRequestedRange: function
 ./analysis-types:
   num: function
 ./analyzer:

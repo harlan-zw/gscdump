@@ -12,9 +12,12 @@
   buildArchetypeSql: function
   createDuckDbIcebergExecutor: function
   createR2SqlClient: function
+  createR2SqlTransport: function
   createServerTailDispatcher: function
   DuckDbIcebergError: function
   DuckDbIcebergTimeoutError: function
+  escapeSqlValue: function
+  inlineParams: function
   R2SqlError: function
   R2SqlTimeoutError: function
   resolveServerTailEngine: function

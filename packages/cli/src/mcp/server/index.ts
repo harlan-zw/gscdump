@@ -13,7 +13,7 @@ import {
   unverifySite,
   verifySite,
 } from 'gscdump'
-import { discoverSitemap } from 'gscdump/sitemap'
+import { discoverSitemapResult } from 'gscdump/sitemap'
 import { z } from 'zod'
 import * as handlers from '../handlers'
 import {
@@ -459,7 +459,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
     async ({ domain }) => {
       const cleaned = String(domain).replace(/^https?:\/\//, '').replace(/\/.*$/, '')
-      const discovery = await discoverSitemap(cleaned)
+      const discovery = await discoverSitemapResult(cleaned)
       return {
         content: [{
           type: 'text',

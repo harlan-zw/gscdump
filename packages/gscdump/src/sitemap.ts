@@ -1,4 +1,5 @@
-import sax from 'sax'
+import type { SitemapUrlInput } from '@nuxtjs/sitemap/utils'
+import { parseSitemapStream } from '@nuxtjs/sitemap/utils'
 import { urlMatchKey } from './url'
 
 const DEFAULT_FETCH_TIMEOUT_MS = 10_000
@@ -90,6 +91,11 @@ export interface WalkSitemapsOptions extends SitemapFetchOptions {
   maxUrls?: number
 }
 
+export interface FetchSitemapUrlsOptions extends DiscoverSitemapOptions {
+  maxDepth?: number
+  limit?: number
+}
+
 export interface SitemapWalkFailure {
   url: string
   depth: number
@@ -123,10 +129,6 @@ export interface ScopedSitemapRecords<T extends SitemapEvidenceRecord> {
   duplicateCount: number
 }
 
-function localName(name: string): string {
-  return name.slice(name.lastIndexOf(':') + 1).toLowerCase()
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -140,45 +142,8 @@ function looksLikeHtml(prefix: string): boolean {
   return /^<!doctype\s+html\b|^<html\b/i.test(start)
 }
 
-function saxAttributeValue(value: unknown): string {
-  if (typeof value === 'string')
-    return value
-  if (value && typeof value === 'object' && 'value' in value && typeof value.value === 'string')
-    return value.value
-  return ''
-}
-
 function extractMetaRefreshUrl(html: string): string | undefined {
-  let content: string | undefined
-  const parser = sax.parser(false, { lowercase: true })
-  parser.onerror = () => {
-    // HTML sniffing is best effort; the sitemap parser reports document errors.
-    parser.resume()
-  }
-  parser.onopentag = (node) => {
-    if (
-      node.name === 'meta'
-      && saxAttributeValue(node.attributes['http-equiv']).toLowerCase() === 'refresh'
-    ) {
-      content = saxAttributeValue(node.attributes.content)
-    }
-  }
-  parser.write(html).close()
-  if (!content)
-    return undefined
-
-  const separator = content.indexOf(';')
-  if (separator < 0 || !Number.isFinite(Number(content.slice(0, separator).trim())))
-    return undefined
-  const directive = content.slice(separator + 1).trim()
-  const equals = directive.indexOf('=')
-  if (equals < 0 || directive.slice(0, equals).trim().toLowerCase() !== 'url')
-    return undefined
-  const value = directive.slice(equals + 1).trim()
-  const quote = value[0]
-  if ((quote === '"' || quote === '\'') && value.at(-1) === quote)
-    return value.slice(1, -1)
-  return value || undefined
+  return /content=["']?\d+;\s*url=([^"'\s>]+)/i.exec(html)?.[1]
 }
 
 function isAsyncIterable(value: SitemapBody): value is AsyncIterable<Uint8Array> {
@@ -276,19 +241,146 @@ async function bodyWithDetectedCompression(
   )
 }
 
-function namespaceFromRoot(tag: sax.Tag | sax.QualifiedTag): string | null {
-  for (const [name, raw] of Object.entries(tag.attributes)) {
-    if (name === 'xmlns' || name.startsWith('xmlns:')) {
-      const value = typeof raw === 'string' ? raw : raw.value
-      if (value)
-        return value
+interface SitemapInputStats {
+  bytesRead: number
+  prefix: string
+  hasContent: boolean
+  hasBom: boolean
+}
+
+type PreparedSitemapInput
+  = | { _tag: 'ready', input: AsyncIterable<Uint8Array>, stats: SitemapInputStats }
+    | { _tag: 'empty_body' }
+    | { _tag: 'html', metaRefreshUrl?: string }
+    | { _tag: 'byte_limit', bytesRead: number, maxBytes: number }
+
+interface SitemapInputBoundaryError extends Error {
+  _tag: 'byte_limit'
+  bytesRead: number
+  maxBytes: number
+}
+
+function sitemapInputBoundaryError(bytesRead: number, maxBytes: number): SitemapInputBoundaryError {
+  return Object.assign(
+    new Error(`Sitemap exceeds ${maxBytes} bytes`),
+    { _tag: 'byte_limit' as const, bytesRead, maxBytes },
+  )
+}
+
+function isSitemapInputBoundaryError(error: unknown): error is SitemapInputBoundaryError {
+  return error !== null
+    && typeof error === 'object'
+    && '_tag' in error
+    && error._tag === 'byte_limit'
+}
+
+async function* replaySitemapInput(
+  initial: readonly Uint8Array[],
+  iterator: AsyncIterator<Uint8Array>,
+  stats: SitemapInputStats,
+  maxBytes: number,
+): AsyncGenerator<Uint8Array> {
+  let done = false
+  try {
+    yield* initial
+    while (!done) {
+      const next = await iterator.next()
+      done = Boolean(next.done)
+      if (!next.value)
+        continue
+      const bytesRead = stats.bytesRead + next.value.byteLength
+      if (bytesRead > maxBytes)
+        throw sitemapInputBoundaryError(bytesRead, maxBytes)
+      stats.bytesRead = bytesRead
+      yield next.value
     }
   }
-  return null
+  finally {
+    if (!done)
+      await iterator.return?.(undefined)
+  }
+}
+
+async function prepareSitemapInput(
+  body: SitemapBody,
+  maxBytes: number,
+): Promise<PreparedSitemapInput> {
+  const iterator = bodyChunks(body)[Symbol.asyncIterator]()
+  const decoder = new TextDecoder('utf-8', { ignoreBOM: true })
+  const initial: Uint8Array[] = []
+  const stats: SitemapInputStats = {
+    bytesRead: 0,
+    prefix: '',
+    hasContent: false,
+    hasBom: false,
+  }
+  let done = false
+
+  while (stats.prefix.length < SNIFF_BYTES && !done) {
+    const next = await iterator.next()
+    done = Boolean(next.done)
+    if (!next.value)
+      continue
+    const bytesRead = stats.bytesRead + next.value.byteLength
+    if (bytesRead > maxBytes) {
+      await iterator.return?.(undefined)
+      return { _tag: 'byte_limit', bytesRead, maxBytes }
+    }
+    initial.push(next.value)
+    stats.bytesRead = bytesRead
+    const text = decoder.decode(next.value, { stream: true })
+    stats.prefix += text.slice(0, SNIFF_BYTES - stats.prefix.length)
+  }
+  if (done && stats.prefix.length < SNIFF_BYTES)
+    stats.prefix += decoder.decode()
+
+  stats.hasContent = Boolean(stats.prefix.trim())
+  stats.hasBom = stats.prefix.charCodeAt(0) === 0xFEFF
+  if (!stats.hasContent) {
+    await iterator.return?.(undefined)
+    return { _tag: 'empty_body' }
+  }
+  if (looksLikeHtml(stats.prefix)) {
+    await iterator.return?.(undefined)
+    const metaRefreshUrl = extractMetaRefreshUrl(stats.prefix)
+    return { _tag: 'html', ...(metaRefreshUrl ? { metaRefreshUrl } : {}) }
+  }
+
+  return {
+    _tag: 'ready',
+    input: replaySitemapInput(initial, iterator, stats, maxBytes),
+    stats,
+  }
+}
+
+function normalizeSitemapUrlInput(input: SitemapUrlInput): SitemapUrlEntry | null {
+  if (typeof input === 'string')
+    return { loc: input }
+  if (!input.loc)
+    return null
+  const lastmod = input.lastmod instanceof Date ? input.lastmod.toISOString() : input.lastmod
+  return {
+    loc: input.loc,
+    ...(lastmod ? { lastmod } : {}),
+    ...(input.changefreq ? { changefreq: input.changefreq } : {}),
+    ...(input.priority !== undefined ? { priority: input.priority } : {}),
+  }
+}
+
+function rootMetadata(prefix: string): { root: string | null, namespace: string | null } {
+  const rootMatch = /<(?:[\w.-]+:)?(urlset|sitemapindex)\b([^>]*)>/i.exec(prefix)
+  if (!rootMatch) {
+    const anyRoot = /<(?:[\w.-]+:)?([\w.-]+)\b/.exec(prefix)
+    return { root: anyRoot?.[1]?.toLowerCase() ?? null, namespace: null }
+  }
+  const attributes = rootMatch[2] ?? ''
+  const namespace = /\sxmlns(?::[\w.-]+)?=(["'])(.*?)\1/i.exec(attributes)?.[2] ?? null
+  return { root: rootMatch[1]!.toLowerCase(), namespace }
 }
 
 /**
- * Strict, streaming sitemap parser. Expected failures are tagged values.
+ * Streaming sitemap parser backed by the same utility Nuxt Sitemap consumers
+ * previously used. Expected failures are tagged values.
  * Entry limits produce a useful partial document with `meta.complete = false`;
  * byte limits fail closed because the document boundary was not observed.
  */
@@ -298,156 +390,60 @@ export async function parseSitemapDocument(
 ): Promise<SitemapDocumentResult> {
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES
   const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES
-  const decoder = new TextDecoder()
-  const parser = sax.parser(true, {
-    lowercase: false,
-    normalize: false,
-    trim: false,
-    xmlns: false,
-  })
+  const prepared = await prepareSitemapInput(body, maxBytes)
+  if (prepared._tag !== 'ready')
+    return prepared
 
-  let bytesRead = 0
-  let prefix = ''
-  let hasContent = false
-  let hasBom = false
   let root: string | null = null
-  let namespace: string | null = null
-  let parseError: string | null = null
-  let currentUrl: Partial<SitemapUrlEntry> | null = null
-  let currentSitemap: Partial<SitemapIndexEntry> | null = null
-  let currentField: 'loc' | 'lastmod' | 'changefreq' | 'priority' | null = null
-  let fieldText = ''
   let complete = true
   const urls: SitemapUrlEntry[] = []
   const sitemaps: SitemapIndexEntry[] = []
 
-  const count = (): number => root === 'urlset' ? urls.length : sitemaps.length
-
-  parser.onerror = (error) => {
-    parseError = `Not a valid sitemap: ${error.message}`
-  }
-  parser.onopentag = (tag) => {
-    const name = localName(tag.name)
-    if (!root) {
-      root = name
-      namespace = namespaceFromRoot(tag)
-    }
-    if (name === 'url' && root === 'urlset') {
-      currentUrl = {}
-      return
-    }
-    if (name === 'sitemap' && root === 'sitemapindex') {
-      currentSitemap = {}
-      return
-    }
-    if (
-      (currentUrl || currentSitemap)
-      && (name === 'loc' || name === 'lastmod' || name === 'changefreq' || name === 'priority')
-    ) {
-      currentField = name
-      fieldText = ''
-    }
-  }
-  parser.ontext = (text) => {
-    if (currentField)
-      fieldText += text
-  }
-  parser.oncdata = (text) => {
-    if (currentField)
-      fieldText += text
-  }
-  parser.onclosetag = (rawName) => {
-    const name = localName(rawName)
-    if (currentField === name) {
-      const value = fieldText.trim()
-      const entry = currentUrl ?? currentSitemap
-      if (entry && value) {
-        if (name === 'priority' && currentUrl) {
-          const priority = Number(value)
-          if (Number.isFinite(priority))
-            currentUrl.priority = priority
-        }
-        else if (name === 'changefreq' && currentUrl) {
-          currentUrl.changefreq = value
-        }
-        else if (name === 'loc' || name === 'lastmod') {
-          entry[name] = value
-        }
-      }
-      currentField = null
-      fieldText = ''
-      return
-    }
-    if (name === 'url' && currentUrl) {
-      if (currentUrl.loc) {
-        const entry = currentUrl as SitemapUrlEntry
-        if (options.acceptUrl && !options.acceptUrl(entry)) {
-          currentUrl = null
-          return
-        }
-        if (urls.length < maxEntries)
-          urls.push(entry)
-        else
-          complete = false
-      }
-      currentUrl = null
-      return
-    }
-    if (name === 'sitemap' && currentSitemap) {
-      if (currentSitemap.loc) {
-        if (sitemaps.length < maxEntries)
-          sitemaps.push(currentSitemap as SitemapIndexEntry)
-        else
-          complete = false
-      }
-      currentSitemap = null
-    }
-  }
-
   try {
-    for await (const chunk of bodyChunks(body)) {
-      if (bytesRead + chunk.byteLength > maxBytes)
-        return { _tag: 'byte_limit', bytesRead: bytesRead + chunk.byteLength, maxBytes }
-      bytesRead += chunk.byteLength
-      const text = decoder.decode(chunk, { stream: true })
-      if (!hasContent && text.trim())
-        hasContent = true
-      if (prefix.length < SNIFF_BYTES)
-        prefix += text.slice(0, SNIFF_BYTES - prefix.length)
-      if (bytesRead === chunk.byteLength)
-        hasBom = text.charCodeAt(0) === 0xFEFF
-      if (looksLikeHtml(prefix)) {
-        const metaRefreshUrl = extractMetaRefreshUrl(prefix)
-        return { _tag: 'html', ...(metaRefreshUrl ? { metaRefreshUrl } : {}) }
+    for await (const event of parseSitemapStream(prepared.input)) {
+      if (event._tag === 'kind') {
+        root = event.kind === 'index' ? 'sitemapindex' : 'urlset'
+        continue
       }
-      parser.write(text)
-      if (parseError)
-        return { _tag: 'parse_error', error: parseError }
-      if (!complete && count() >= maxEntries)
+      if (event._tag === 'warning')
+        continue
+      if (event._tag === 'url') {
+        const entry = normalizeSitemapUrlInput(event.url)
+        if (!entry || (options.acceptUrl && !options.acceptUrl(entry)))
+          continue
+        if (urls.length >= maxEntries) {
+          complete = false
+          break
+        }
+        urls.push(entry)
+      }
+      else if (event._tag === 'sitemap') {
+        if (sitemaps.length >= maxEntries) {
+          complete = false
+          break
+        }
+        sitemaps.push(event.sitemap)
+      }
+      if (!complete)
         break
-    }
-    if (complete) {
-      const tail = decoder.decode()
-      if (tail)
-        parser.write(tail)
-      parser.close()
     }
   }
   catch (error) {
+    if (isSitemapInputBoundaryError(error))
+      return error
+    const metadata = rootMetadata(prepared.stats.prefix)
+    if (metadata.root && metadata.root !== 'urlset' && metadata.root !== 'sitemapindex')
+      return { _tag: 'unsupported_document', root: metadata.root }
     return { _tag: 'parse_error', error: `Not a valid sitemap: ${errorMessage(error)}` }
   }
 
-  if (parseError)
-    return { _tag: 'parse_error', error: parseError }
-  if (!hasContent)
-    return { _tag: 'empty_body' }
-
+  const metadata = rootMetadata(prepared.stats.prefix)
   const meta: SitemapDocumentMeta = {
-    bytesRead,
+    bytesRead: prepared.stats.bytesRead,
     complete,
-    hasBom,
-    hasXmlDeclaration: /^\s*<\?xml\b/i.test(prefix),
-    namespace,
+    hasBom: prepared.stats.hasBom,
+    hasXmlDeclaration: /^\s*<\?xml\b/i.test(prepared.stats.prefix),
+    namespace: metadata.namespace,
   }
   if (root === 'urlset')
     return { _tag: 'urlset', entries: urls, meta }
@@ -666,7 +662,7 @@ async function readRobots(
  * Discover a real sitemap document. A 200 HTML shell is rejected, and
  * transport failures remain distinguishable from an authoritative miss.
  */
-export async function discoverSitemap(
+export async function discoverSitemapResult(
   site: string,
   options: DiscoverSitemapOptions = {},
 ): Promise<SitemapDiscoveryResult> {
@@ -703,6 +699,18 @@ export async function discoverSitemap(
   }
 
   return failures.length > 0 ? { _tag: 'incomplete', failures } : { _tag: 'not_found' }
+}
+
+/**
+ * Compatibility surface retained at the package root. New callers that need
+ * explicit incomplete-discovery evidence should use `discoverSitemapResult`.
+ */
+export async function discoverSitemap(
+  site: string,
+  options: DiscoverSitemapOptions = {},
+): Promise<string | null> {
+  const result = await discoverSitemapResult(site, options)
+  return result._tag === 'found' ? result.url : null
 }
 
 function walkFailure(
@@ -796,6 +804,50 @@ export async function walkSitemaps(
   if (!loadedRoot)
     return { _tag: 'error', failures }
   return { _tag: 'ok', entries, documentsRead, complete, failures }
+}
+
+function legacyWalkFailureMessage(failure: SitemapWalkFailure): string {
+  const result = failure.error
+  if (result._tag === 'not_found' || result._tag === 'http_error')
+    return `Fetch ${failure.url} failed: ${result.status}`
+  if (result._tag === 'network_error')
+    return result.error
+  if (result.error._tag === 'parse_error')
+    return result.error.error
+  return `Sitemap ${failure.url} failed: ${result.error._tag}`
+}
+
+/**
+ * Compatibility surface retained at the package root. The shared parser and
+ * traversal own the work while the original string-array contract remains.
+ */
+export async function fetchSitemapUrls(
+  sitemapUrl: string,
+  options: FetchSitemapUrlsOptions = {},
+): Promise<string[]> {
+  const {
+    limit,
+    maxDepth,
+    userAgent,
+    ...fetchOptions
+  } = options
+  const result = await walkSitemaps(sitemapUrl, {
+    ...fetchOptions,
+    headers: {
+      'user-agent': userAgent ?? 'gscdump sitemap fetcher',
+      ...fetchOptions.headers,
+    },
+    maxDepth,
+    maxDocuments: Number.MAX_SAFE_INTEGER,
+    maxUrls: limit ?? Number.MAX_SAFE_INTEGER,
+  })
+  if (result._tag === 'not_found')
+    throw new Error(`Fetch ${sitemapUrl} failed: 404`)
+  if (result._tag === 'error')
+    throw new Error(result.failures[0] ? legacyWalkFailureMessage(result.failures[0]) : 'Sitemap fetch failed')
+  if (result.failures[0])
+    throw new Error(legacyWalkFailureMessage(result.failures[0]))
+  return result.entries.map(entry => entry.loc)
 }
 
 export async function sitemapContentHash(entries: readonly Pick<SitemapUrlEntry, 'loc'>[]): Promise<string> {

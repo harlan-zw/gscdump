@@ -54,14 +54,8 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function parseEnvelope(body: string): R2SqlEnvelope | null {
-  try {
-    const value = JSON.parse(body)
-    return value && typeof value === 'object' ? value as R2SqlEnvelope : null
-  }
-  catch {
-    return null
-  }
+function parseEnvelope(value: unknown): R2SqlEnvelope | null {
+  return value && typeof value === 'object' ? value as R2SqlEnvelope : null
 }
 
 function normalizeRows(result: R2SqlEnvelope['result']): R2SqlTransportRow[] {
@@ -97,83 +91,100 @@ export function createR2SqlTransport(config: R2SqlTransportConfig): R2SqlTranspo
 
   async function query(sql: string): Promise<R2SqlTransportResult> {
     const startedAt = now()
-    const signal = AbortSignal.timeout(timeoutMs)
-    const responseResult = await fetchImpl(endpoint, {
-      method: 'POST',
-      headers: {
-        'authorization': `Bearer ${config.token}`,
-        'content-type': 'application/json',
-        'user-agent': config.userAgent ?? 'gscdump-cloudflare-r2sql/1.0',
-      },
-      body: JSON.stringify({ query: sql }),
-      signal,
-    }).then(
-      response => ({ _tag: 'ok' as const, response }),
-      error => ({ _tag: 'error' as const, error }),
-    )
-    if (responseResult._tag === 'error') {
-      if (signal.aborted || (responseResult.error as { name?: string })?.name === 'AbortError')
-        return { _tag: 'timeout', timeoutMs }
-      return {
-        _tag: 'error',
-        kind: 'network',
-        message: `R2 SQL request failed: ${errorMessage(responseResult.error)}`,
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const responseResult = await fetchImpl(endpoint, {
+        method: 'POST',
+        headers: {
+          'authorization': `Bearer ${config.token}`,
+          'content-type': 'application/json',
+          'user-agent': config.userAgent ?? 'gscdump-cloudflare-r2sql/1.0',
+        },
+        body: JSON.stringify({ query: sql }),
+        signal: controller.signal,
+      }).then(
+        response => ({ _tag: 'ok' as const, response }),
+        error => ({ _tag: 'error' as const, error }),
+      )
+      if (responseResult._tag === 'error') {
+        if (controller.signal.aborted || (responseResult.error as { name?: string })?.name === 'AbortError')
+          return { _tag: 'timeout', timeoutMs }
+        return {
+          _tag: 'error',
+          kind: 'network',
+          message: `R2 SQL request failed: ${errorMessage(responseResult.error)}`,
+        }
       }
-    }
 
-    const { response } = responseResult
-    const bodyResult = await response.text().then(
-      body => ({ _tag: 'ok' as const, body }),
-      error => ({ _tag: 'error' as const, error }),
-    )
-    if (bodyResult._tag === 'error') {
+      const { response } = responseResult
+      if (!response.ok) {
+        const bodyResult = await response.text().then(
+          body => ({ _tag: 'ok' as const, body }),
+          error => ({ _tag: 'error' as const, error }),
+        )
+        if (bodyResult._tag === 'error') {
+          return {
+            _tag: 'error',
+            kind: 'network',
+            message: `R2 SQL response read failed: ${errorMessage(bodyResult.error)}`,
+            status: response.status,
+          }
+        }
+        const retryAfter = retryAfterMs(response, now)
+        return {
+          _tag: 'error',
+          kind: 'http',
+          message: `R2 SQL HTTP ${response.status}: ${bodyResult.body}`,
+          status: response.status,
+          body: bodyResult.body,
+          ...(retryAfter !== undefined
+            ? { retryAfterMs: retryAfter }
+            : {}),
+        }
+      }
+
+      const envelopeResult = await response.json().then(
+        value => ({ _tag: 'ok' as const, value }),
+        error => ({ _tag: 'error' as const, error }),
+      )
+      if (envelopeResult._tag === 'error') {
+        return {
+          _tag: 'error',
+          kind: 'invalid_response',
+          message: `R2 SQL returned invalid JSON: ${errorMessage(envelopeResult.error)}`,
+          status: response.status,
+        }
+      }
+      const envelope = parseEnvelope(envelopeResult.value)
+      if (!envelope) {
+        return {
+          _tag: 'error',
+          kind: 'invalid_response',
+          message: 'R2 SQL returned an invalid response',
+          status: response.status,
+        }
+      }
+      if (!envelope.success) {
+        const detail = envelope.errors?.map(error => error.message).filter(Boolean).join('; ') || 'unknown R2 SQL error'
+        return {
+          _tag: 'error',
+          kind: 'rejected',
+          message: `R2 SQL query rejected: ${detail}`,
+          status: response.status,
+          body: JSON.stringify(envelope),
+        }
+      }
       return {
-        _tag: 'error',
-        kind: 'network',
-        message: `R2 SQL response read failed: ${errorMessage(bodyResult.error)}`,
-        status: response.status,
+        _tag: 'ok',
+        rows: normalizeRows(envelope.result),
+        metrics: envelope.result?.metrics ?? null,
+        sql,
+        queryMs: now() - startedAt,
       }
     }
-    const body = bodyResult.body
-    if (!response.ok) {
-      const retryAfter = retryAfterMs(response, now)
-      return {
-        _tag: 'error',
-        kind: 'http',
-        message: `R2 SQL HTTP ${response.status}: ${body}`,
-        status: response.status,
-        body,
-        ...(retryAfter !== undefined
-          ? { retryAfterMs: retryAfter }
-          : {}),
-      }
-    }
-    const envelope = parseEnvelope(body)
-    if (!envelope) {
-      return {
-        _tag: 'error',
-        kind: 'invalid_response',
-        message: 'R2 SQL returned invalid JSON',
-        status: response.status,
-        body,
-      }
-    }
-    if (!envelope.success) {
-      const detail = envelope.errors?.map(error => error.message).filter(Boolean).join('; ') || 'unknown R2 SQL error'
-      return {
-        _tag: 'error',
-        kind: 'rejected',
-        message: `R2 SQL query rejected: ${detail}`,
-        status: response.status,
-        body,
-      }
-    }
-    return {
-      _tag: 'ok',
-      rows: normalizeRows(envelope.result),
-      metrics: envelope.result?.metrics ?? null,
-      sql,
-      queryMs: now() - startedAt,
+    finally {
+      clearTimeout(timer)
     }
   }
 

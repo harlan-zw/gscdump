@@ -1,0 +1,5 @@
+.:
+  default: function
+  resolveGscdumpAnalyticsRuntimeConfig: function
+./runtime-config:
+  resolveGscdumpAnalyticsRuntimeConfig: function

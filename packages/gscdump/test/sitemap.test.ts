@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   canonicalSitemapIdentity,
   discoverSitemap,
+  discoverSitemapResult,
   fetchSitemapDocument,
+  fetchSitemapUrls,
   parseSitemapDocument,
   sameSitemapIdentity,
   scopeSitemapRecords,
@@ -35,6 +37,23 @@ describe('parseSitemapDocument', () => {
         hasXmlDeclaration: true,
         namespace: 'http://www.sitemaps.org/schemas/sitemap/0.9',
       },
+    })
+  })
+
+  it('keeps extension loc elements scoped to their extension records', async () => {
+    const result = await parseSitemapDocument(`<?xml version="1.0"?>
+      <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+        <url>
+          <loc>https://example.com/page</loc>
+          <image:image>
+            <image:loc>https://example.com/image.jpg</image:loc>
+          </image:image>
+        </url>
+      </urlset>`)
+    expect(result).toMatchObject({
+      _tag: 'urlset',
+      entries: [{ loc: 'https://example.com/page' }],
     })
   })
 
@@ -119,7 +138,7 @@ Sitemap: https://cdn.example.com/real.xml`)
       return response(URLSET)
     })
 
-    await expect(discoverSitemap('example.com', { fetcher })).resolves.toEqual({
+    await expect(discoverSitemapResult('example.com', { fetcher })).resolves.toEqual({
       _tag: 'found',
       url: 'https://cdn.example.com/real.xml',
       source: 'robots',
@@ -133,11 +152,31 @@ Sitemap: https://cdn.example.com/real.xml`)
         throw new Error('DNS failure')
       return new Response('', { status: 404 })
     })
-    const result = await discoverSitemap('example.com', { fetcher })
+    const result = await discoverSitemapResult('example.com', { fetcher })
     expect(result).toMatchObject({
       _tag: 'incomplete',
       failures: [{ kind: 'network', detail: 'DNS failure' }],
     })
+  })
+
+  it('preserves the package-root string-or-null discovery contract', async () => {
+    const fetcher = vi.fn(async (input: string | URL | Request) =>
+      String(input).endsWith('/sitemap.xml')
+        ? response(URLSET)
+        : new Response('', { status: 404 }))
+    await expect(discoverSitemap('example.com', { fetcher }))
+      .resolves
+      .toBe('https://example.com/sitemap.xml')
+  })
+})
+
+describe('fetchSitemapUrls compatibility', () => {
+  it('returns URL strings and observes the legacy limit', async () => {
+    const fetcher = vi.fn(async () => response(URLSET))
+    await expect(fetchSitemapUrls('https://example.com/sitemap.xml', {
+      fetcher,
+      limit: 1,
+    })).resolves.toEqual(['https://example.com/a?x=1&y=2'])
   })
 })
 

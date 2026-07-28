@@ -220,6 +220,18 @@
   isOk: function
   ok: function
   unwrapResult: function
+./sitemap:
+  canonicalSitemapIdentity: function
+  discoverSitemap: function
+  discoverSitemapResult: function
+  fetchSitemapDocument: function
+  fetchSitemapUrls: function
+  parseRobotsSitemapUrls: function
+  parseSitemapDocument: function
+  sameSitemapIdentity: function
+  scopeSitemapRecords: function
+  sitemapContentHash: function
+  walkSitemaps: function
 ./tenant:
   decodeSiteId: function
   encodeSiteId: function

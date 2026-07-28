@@ -12,6 +12,8 @@
   createBrowserAnalysisRuntime: function
   createClient: function
   createInsightRunner: function
+  createObjectAsyncLock: function
+  createSharedAsyncResource: function
   dates: object
   drizzle: function
   DuckDBWasmDatabase: function

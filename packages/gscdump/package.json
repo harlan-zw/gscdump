@@ -96,10 +96,7 @@
   },
   "dependencies": {
     "@gscdump/contracts": "workspace:^",
-    "ofetch": "catalog:deps",
-    "sax": "catalog:"
-  },
-  "devDependencies": {
-    "@types/sax": "catalog:"
+    "@nuxtjs/sitemap": "catalog:",
+    "ofetch": "catalog:deps"
   }
 }

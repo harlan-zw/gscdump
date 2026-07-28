@@ -1,7 +1,7 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
 import { fetchSitemap } from 'gscdump'
-import { discoverSitemap } from 'gscdump/sitemap'
+import { discoverSitemapResult } from 'gscdump/sitemap'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { loadSitemapUrls } from '../sitemap'
@@ -164,7 +164,7 @@ const discoverCommand = defineCommand({
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const domain = String(args.domain).replace(/^https?:\/\//, '').replace(/\/.*$/, '')
-    const discovery = await discoverSitemap(domain)
+    const discovery = await discoverSitemapResult(domain)
     const url = discovery._tag === 'found' ? discovery.url : null
     if (json) {
       console.log(JSON.stringify({ domain, sitemap: url, status: discovery._tag }, null, 2))

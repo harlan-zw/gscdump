@@ -16,6 +16,8 @@
   analyzeStrikingDistance: function
   analyzeZeroClick: function
   classifyQueryIntent: function
+  classifySitemapCollapse: function
+  compareCurrentSitemapScope: function
   comparisonOf: function
   createAnalyzerRegistry: function
   createCompositeSource: function
@@ -52,6 +54,9 @@
   runReportResult: function
   scorePriorityActions: function
   SEARCH_INTENT_CODE: object
+  SITEMAP_SYNC_COLLAPSE_POLICY: object
+  SITEMAP_TRUST_COLLAPSE_POLICY: object
+  sitemapHistoryHasCollapse: function
   SQL_ANALYZERS: object
 ./errors:
   analysisErrors: object
