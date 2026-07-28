@@ -12186,6 +12186,26 @@
                             "siteUrl": {
                               "type": "string"
                             },
+                            "sitemapScope": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "duplicateCount": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "excludedCount": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "excludedCount",
+                                "duplicateCount"
+                              ],
+                              "type": "object"
+                            },
                             "syncStatus": {
                               "anyOf": [
                                 {
@@ -12199,8 +12219,8 @@
                           },
                           "required": [
                             "siteUrl",
-                            "gscPropertyUrl",
-                            "syncStatus"
+                            "syncStatus",
+                            "sitemapScope"
                           ],
                           "type": "object"
                         },
@@ -12417,6 +12437,10 @@
               "meta": {
                 "gscPropertyUrl": "sc-domain:example.com",
                 "siteUrl": "sc-domain:example.com",
+                "sitemapScope": {
+                  "duplicateCount": 0,
+                  "excludedCount": 0
+                },
                 "syncStatus": "synced"
               },
               "perSitemapHistory": {},
@@ -13203,6 +13227,7 @@
                                 {
                                   "enum": [
                                     "empty",
+                                    "endpoint_unavailable",
                                     "site_url_cap_exceeded",
                                     "stale_sitemaps"
                                   ],

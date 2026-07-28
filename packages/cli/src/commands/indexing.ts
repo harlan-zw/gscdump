@@ -1,8 +1,9 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { batchRequestIndexing, fetchSitemapUrls, getIndexingMetadata, requestIndexing, runSequentialBatch } from 'gscdump'
+import { batchRequestIndexing, getIndexingMetadata, requestIndexing, runSequentialBatch } from 'gscdump'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
+import { loadSitemapUrls } from '../sitemap'
 import { applyOutputMode, logger, OUTPUT_ARGS, readUrlList } from '../utils'
 
 const RETRIES_ARG = {
@@ -19,10 +20,14 @@ function parseRetries(v: unknown): number | undefined {
 async function resolveUrlSource(args: { 'urls'?: unknown, 'file'?: unknown, 'from-sitemap'?: unknown }): Promise<string[]> {
   const fromSitemap = args['from-sitemap']
   if (fromSitemap) {
-    return fetchSitemapUrls(String(fromSitemap)).catch((e: Error) => {
-      logger.error(`Sitemap fetch failed: ${e.message}`)
+    const result = await loadSitemapUrls(String(fromSitemap))
+    if (result._tag === 'error') {
+      logger.error(`Sitemap fetch failed: ${result.message}`)
       process.exit(1)
-    })
+    }
+    if (!result.value.complete)
+      logger.warn('Sitemap walk was incomplete; indexing only the URLs that were read')
+    return result.value.urls
   }
   return readUrlList(args)
 }

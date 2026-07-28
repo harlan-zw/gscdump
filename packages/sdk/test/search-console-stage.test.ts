@@ -2,6 +2,38 @@ import { describe, expect, it } from 'vitest'
 import { classifySearchConsoleStage } from '../src/search-console-stage'
 
 describe('classifySearchConsoleStage canonical clamp', () => {
+  it('does not let growth mask a severe indexing coverage failure', () => {
+    const stage = classifySearchConsoleStage({
+      connected: true,
+      summary: { totalUrls: 64, indexed: 1, indexedPercent: 1.56 },
+      issues: [
+        { type: 'unknown_to_google', label: 'Unknown to Google', count: 52 },
+        { type: 'crawled_not_indexed', label: 'Crawled, not indexed', count: 11 },
+      ],
+      sitemaps: [{ urlCount: 60 }],
+      impressions28d: 50_000,
+      trajectory: { clicksPct90d: 25, impressionsPct90d: 30, positionDelta90d: -1, clicksPct28d: 10 },
+    })
+
+    expect(stage.key).toBe('weak_discovery')
+    expect(stage.summary).toContain('does not know')
+    expect(stage.sprintFindingTypes).toContain('pages-not-indexed')
+  })
+
+  it('keeps broad low-coverage failures severe when the narrow reason is unavailable', () => {
+    const stage = classifySearchConsoleStage({
+      connected: true,
+      summary: { totalUrls: 64, indexed: 1, indexedPercent: 1.56 },
+      issues: [{ type: 'not_indexed', label: 'Not indexed', count: 63 }],
+      sitemaps: [{ urlCount: 60 }],
+      impressions28d: 50_000,
+      trajectory: { clicksPct90d: 25, impressionsPct90d: 30, positionDelta90d: -1, clicksPct28d: 10 },
+    })
+
+    expect(stage.key).toBe('index_rejection')
+    expect(stage.summary).toContain('does not expose a narrower reason')
+  })
+
   it('canonical mismatches on a fully-indexed sample cannot block indexability (unhead.unjs.io regression)', () => {
     // The inspected/sitemap-scoped funnel had 8 URLs all indexed (notIndexed = 0),
     // but the canonical-mismatch endpoint (pre-fix, unscoped) returned 31 — an

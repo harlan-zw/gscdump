@@ -10,10 +10,10 @@ The app supports three build-time modes through `GSCDUMP_ANALYTICS_MODE`:
 - `consumer`: requests a remote hosted origin through
   `GSCDUMP_ANALYTICS_API_BASE`.
 
-The local `layers/gsc` directory is intentionally a buildable stub, not a
-published `@gscdump/nuxt` package. It keeps the example executable while Nuxt
-integration is owned by consumer applications. Do not treat its public
-composable/component set as a v1 contract.
+The local `layers/gsc` directory is a buildable UI fixture. Stable Nuxt
+integration, runtime defaults and analyzer registration, comes from
+`@gscdump/nuxt`. Consumer applications continue to own views, authentication,
+routes, and product fallback policy.
 
 ## Run
 
@@ -34,7 +34,5 @@ Use `dev:origin` or `dev:consumer` for the other modes. See
 
 ## V1 status
 
-The example builds as a regression fixture, but its stub layer still has TODO
-ports from `nuxtseo.com/layers/pro/gsc`. Before presenting it as the canonical
-v1 dashboard, either port those current seams or narrow the example to the
-hosted SDK flows it actually demonstrates.
+The example is a regression fixture. Its local components and composables are
+examples, not a shared UI contract.

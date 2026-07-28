@@ -73,6 +73,13 @@ export type {
 } from './runtime'
 export { countries, dates, hourly_pages, page_queries, pages, queries, schema } from './schema'
 export type { Schema } from './schema'
+export { createObjectAsyncLock, createSharedAsyncResource } from './shared-runtime'
+export type {
+  ObjectAsyncLock,
+  SharedAsyncResource,
+  SharedAsyncResourceOptions,
+  SharedAsyncResourceState,
+} from './shared-runtime'
 
 export { resolveWindow } from '@gscdump/engine/period'
 export type { ComparisonMode, ResolvedWindow, ResolveWindowOptions, WindowPreset } from '@gscdump/engine/period'

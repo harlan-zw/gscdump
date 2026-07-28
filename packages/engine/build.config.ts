@@ -38,6 +38,7 @@ export default defineBuildConfig({
         './src/analyzer/index.ts',
         './src/report/index.ts',
         './src/analysis-types.ts',
+        './src/analysis-range.ts',
         './src/period/index.ts',
         './src/source/index.ts',
         './src/scope.ts',

@@ -1,8 +1,10 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { discoverSitemap, fetchSitemap, fetchSitemapUrls } from 'gscdump'
+import { fetchSitemap } from 'gscdump'
+import { discoverSitemap } from 'gscdump/sitemap'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
+import { loadSitemapUrls } from '../sitemap'
 import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
 
 const listCommand = defineCommand({
@@ -162,10 +164,15 @@ const discoverCommand = defineCommand({
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const domain = String(args.domain).replace(/^https?:\/\//, '').replace(/\/.*$/, '')
-    const url = await discoverSitemap(domain).catch(() => null)
+    const discovery = await discoverSitemap(domain)
+    const url = discovery._tag === 'found' ? discovery.url : null
     if (json) {
-      console.log(JSON.stringify({ domain, sitemap: url }, null, 2))
+      console.log(JSON.stringify({ domain, sitemap: url, status: discovery._tag }, null, 2))
       return
+    }
+    if (discovery._tag === 'incomplete') {
+      logger.error(`Sitemap discovery was incomplete: ${discovery.failures[0]?.detail ?? 'unknown failure'}`)
+      process.exit(1)
     }
     if (!url) {
       logger.warn(`No sitemap discovered for ${domain}`)
@@ -190,14 +197,18 @@ const urlsCommand = defineCommand({
     const { json } = applyOutputMode(args)
     const limit = args.limit ? Number.parseInt(String(args.limit), 10) : undefined
     const maxDepth = args['max-depth'] ? Number.parseInt(String(args['max-depth']), 10) : undefined
-    const urls = await fetchSitemapUrls(String(args.url), { limit, maxDepth }).catch((e: Error) => {
-      logger.error(`Sitemap fetch failed: ${e.message}`)
+    const result = await loadSitemapUrls(String(args.url), { maxUrls: limit, maxDepth })
+    if (result._tag === 'error') {
+      logger.error(`Sitemap fetch failed: ${result.message}`)
       process.exit(1)
-    })
+    }
+    const { urls, complete, documentsRead } = result.value
     if (json) {
-      console.log(JSON.stringify({ sitemap: args.url, count: urls.length, urls }, null, 2))
+      console.log(JSON.stringify({ sitemap: args.url, count: urls.length, complete, documentsRead, urls }, null, 2))
       return
     }
+    if (!complete)
+      logger.warn('Sitemap walk was truncated or a child document failed')
     for (const u of urls)
       console.log(u)
   },

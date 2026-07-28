@@ -47,6 +47,16 @@ export type {
 } from './r2-sql-client'
 export {
   createR2SqlClient,
+  escapeSqlValue,
+  inlineParams,
   R2SqlError,
   R2SqlTimeoutError,
 } from './r2-sql-client'
+export type {
+  R2SqlTransport,
+  R2SqlTransportConfig,
+  R2SqlTransportMetrics,
+  R2SqlTransportResult,
+  R2SqlTransportRow,
+} from './r2-sql-transport'
+export { createR2SqlTransport } from './r2-sql-transport'

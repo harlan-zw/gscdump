@@ -52,6 +52,11 @@
       "import": "./dist/core/result.mjs",
       "default": "./dist/core/result.mjs"
     },
+    "./sitemap": {
+      "types": "./dist/sitemap.d.mts",
+      "import": "./dist/sitemap.mjs",
+      "default": "./dist/sitemap.mjs"
+    },
     "./contracts": {
       "types": "./dist/contracts.d.mts",
       "import": "./dist/contracts.mjs",
@@ -91,6 +96,10 @@
   },
   "dependencies": {
     "@gscdump/contracts": "workspace:^",
-    "ofetch": "catalog:deps"
+    "ofetch": "catalog:deps",
+    "sax": "catalog:"
+  },
+  "devDependencies": {
+    "@types/sax": "catalog:"
   }
 }

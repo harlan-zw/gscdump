@@ -1182,7 +1182,12 @@ export function createGscdumpV1Protocol() {
                 sitemaps: [],
                 history: [],
                 perSitemapHistory: {},
-                meta: { siteUrl: 'sc-domain:example.com', gscPropertyUrl: 'sc-domain:example.com', syncStatus: 'synced' },
+                meta: {
+                  siteUrl: 'sc-domain:example.com',
+                  gscPropertyUrl: 'sc-domain:example.com',
+                  syncStatus: 'synced',
+                  sitemapScope: { excludedCount: 0, duplicateCount: 0 },
+                },
               },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },

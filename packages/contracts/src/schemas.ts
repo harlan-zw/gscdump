@@ -797,8 +797,12 @@ export const gscdumpSitemapsResponseSchema = z.object({
   }).loose())),
   meta: z.object({
     siteUrl: z.string(),
-    gscPropertyUrl: z.string(),
+    gscPropertyUrl: z.string().optional(),
     syncStatus: z.string().nullable(),
+    sitemapScope: z.object({
+      excludedCount: z.number().int().nonnegative(),
+      duplicateCount: z.number().int().nonnegative(),
+    }),
   }).loose(),
 }).loose()
 
@@ -1445,7 +1449,7 @@ export const gscdumpSitemapMembershipResponseSchema = z.object({
   urls: z.array(gscdumpSitemapMembershipUrlSchema),
   meta: z.object({
     available: z.boolean(),
-    reason: z.enum(['empty', 'site_url_cap_exceeded', 'stale_sitemaps']).nullable(),
+    reason: z.enum(['empty', 'endpoint_unavailable', 'site_url_cap_exceeded', 'stale_sitemaps']).nullable(),
     requested: z.number().int().nonnegative(),
     checked: z.number().int().nonnegative(),
     matched: z.number().int().nonnegative(),

@@ -4,7 +4,6 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
   addSite,
   deleteSite,
-  discoverSitemap,
   getIndexingMetadata,
   getVerificationToken,
   getVerifiedSite,
@@ -14,6 +13,7 @@ import {
   unverifySite,
   verifySite,
 } from 'gscdump'
+import { discoverSitemap } from 'gscdump/sitemap'
 import { z } from 'zod'
 import * as handlers from '../handlers'
 import {
@@ -459,8 +459,18 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
     async ({ domain }) => {
       const cleaned = String(domain).replace(/^https?:\/\//, '').replace(/\/.*$/, '')
-      const url = await discoverSitemap(cleaned).catch(() => null)
-      return { content: [{ type: 'text', text: JSON.stringify({ domain: cleaned, sitemap: url }, null, 2) }] }
+      const discovery = await discoverSitemap(cleaned)
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            domain: cleaned,
+            sitemap: discovery._tag === 'found' ? discovery.url : null,
+            status: discovery._tag,
+            ...(discovery._tag === 'incomplete' ? { failures: discovery.failures } : {}),
+          }, null, 2),
+        }],
+      }
     },
   )
 

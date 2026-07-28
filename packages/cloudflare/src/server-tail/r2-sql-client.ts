@@ -49,6 +49,7 @@ import type { ArchetypeSqlPlan, PartitionKeyEncoding } from './archetype-sql'
 import { SEARCH_TYPE_INT } from '@gscdump/engine/iceberg'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { buildArchetypeSql, TABLE_PLACEHOLDER } from './archetype-sql'
+import { createR2SqlTransport } from './r2-sql-transport'
 
 /** Iceberg table name → fully-qualified R2 SQL table reference. */
 function r2TableRef(namespace: string, table: string): string {
@@ -137,9 +138,6 @@ function r2SqlErrorToException(error: R2SqlQueryError): R2SqlQueryError {
   return error
 }
 
-const DEFAULT_API_BASE = 'https://api.sql.cloudflarestorage.com/api/v1'
-const DEFAULT_TIMEOUT_MS = 25_000
-
 // Legacy STRING catalogs can return zero rows on literal equality against an
 // identity-partition column unless the column is materialized; wrapping it in
 // `CONCAT(col, '')` forces materialization and the predicate works. Int
@@ -205,37 +203,6 @@ export function inlineParams(sql: string, params: readonly unknown[]): string {
   return out
 }
 
-/** The CF API envelope R2 SQL returns. */
-interface CfEnvelope {
-  success: boolean
-  errors?: { code?: number, message: string }[]
-  result?: {
-    // R2 SQL returns either a `rows` array of objects, or a
-    // columns + data shape. Support both.
-    rows?: R2SqlRow[]
-    columns?: string[]
-    data?: (string | number | null)[][]
-  }
-}
-
-function normalizeRows(result: CfEnvelope['result']): R2SqlRow[] {
-  if (!result)
-    return []
-  if (Array.isArray(result.rows))
-    return result.rows
-  if (Array.isArray(result.columns) && Array.isArray(result.data)) {
-    const cols = result.columns
-    return result.data.map((tuple) => {
-      const row: R2SqlRow = {}
-      cols.forEach((col, idx) => {
-        row[col] = tuple[idx] ?? null
-      })
-      return row
-    })
-  }
-  return []
-}
-
 function coerceIntSiteId(siteId: string, mapper?: (siteId: string) => string | number): number {
   const mapped = mapper ? mapper(siteId) : siteId
   const n = Number(mapped)
@@ -286,57 +253,24 @@ export interface R2SqlClient {
  * production; tests inject `fetchImpl` returning a recorded envelope.
  */
 export function createR2SqlClient(config: R2SqlClientConfig): R2SqlClient {
-  const fetchImpl = config.fetchImpl ?? globalThis.fetch
-  const apiBase = config.apiBase ?? DEFAULT_API_BASE
-  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const timeoutMs = config.timeoutMs ?? 25_000
   const partitionKeyEncoding = config.partitionKeyEncoding ?? 'int'
-  const endpoint = `${apiBase}/accounts/${config.accountId}/r2-sql/query/${config.bucket}`
+  const transport = createR2SqlTransport({
+    accountId: config.accountId,
+    bucket: config.bucket,
+    token: config.token,
+    apiBase: config.apiBase,
+    fetchImpl: config.fetchImpl,
+    timeoutMs,
+  })
 
   async function queryResult(sql: string): Promise<Result<R2SqlResult, R2SqlQueryError>> {
-    const started = Date.now()
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(new R2SqlTimeoutError(timeoutMs)), timeoutMs)
-    let response: Response
-    try {
-      response = await fetchImpl(endpoint, {
-        method: 'POST',
-        headers: {
-          'authorization': `Bearer ${config.token}`,
-          'content-type': 'application/json',
-          'user-agent': 'gscdump-cloudflare-r2sql/1.0',
-        },
-        body: JSON.stringify({ query: sql }),
-        signal: controller.signal,
-      })
-    }
-    catch (error) {
-      // Transport blow-ups are modelled: a deadline abort is the retry-able
-      // timeout, anything else is a hard `R2SqlError`. The underlying network
-      // error is genuinely unmodellable noise, so it is folded into the message.
-      if (error instanceof R2SqlTimeoutError || (error as Error)?.name === 'AbortError')
-        return err(new R2SqlTimeoutError(timeoutMs))
-      return err(new R2SqlError(`R2 SQL request failed: ${(error as Error).message}`))
-    }
-    finally {
-      clearTimeout(timer)
-    }
-
-    if (!response.ok) {
-      // Best-effort error body: a failed `.text()` read on an already-failed
-      // response adds no signal, so fall back to an empty body for the message.
-      const text = await response.text().catch(() => '')
-      return err(new R2SqlError(`R2 SQL HTTP ${response.status}: ${text}`, response.status))
-    }
-    const envelope = (await response.json()) as CfEnvelope
-    if (!envelope.success) {
-      const msg = envelope.errors?.map(e => e.message).join('; ') ?? 'unknown R2 SQL error'
-      return err(new R2SqlError(`R2 SQL query rejected: ${msg}`))
-    }
-    return ok({
-      rows: normalizeRows(envelope.result),
-      sql,
-      queryMs: Date.now() - started,
-    })
+    const result = await transport.query(sql)
+    if (result._tag === 'timeout')
+      return err(new R2SqlTimeoutError(result.timeoutMs))
+    if (result._tag === 'error')
+      return err(new R2SqlError(result.message, result.status))
+    return ok({ rows: result.rows as R2SqlRow[], sql, queryMs: result.queryMs })
   }
 
   async function query(sql: string): Promise<R2SqlResult> {

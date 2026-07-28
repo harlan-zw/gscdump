@@ -44,6 +44,7 @@ catalog:
   '@nuxt/ui': ^4.10.0
   '@types/node': ^26.1.1
   '@types/proper-lockfile': ^4.1.4
+  '@types/sax': ^1.2.7
   '@unovis/ts': ^1.6.7
   '@unovis/vue': ^1.6.7
   '@uwdata/flechette': ^2.5.0
@@ -61,6 +62,7 @@ catalog:
   playwright: ^1.62.0
   pluralize: ^8.0.0
   retriv: ^0.14.7
+  sax: ^1.6.0
   tailwindcss: ^4.3.3
   tsx: ^4.23.1
   unstorage: ^1.17.5

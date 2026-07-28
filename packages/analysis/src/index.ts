@@ -95,13 +95,23 @@ export type {
 } from './report'
 
 export type {
+  CurrentSitemapScope,
+  SitemapCollapsePolicy,
+  SitemapCollapseState,
   SitemapDelta,
   SitemapHealthDiff,
   SitemapHealthInput,
   SitemapHealthRow,
   SitemapHealthTotals,
 } from './sitemap-health'
-export { diffSitemapHealth } from './sitemap-health'
+export {
+  classifySitemapCollapse,
+  compareCurrentSitemapScope,
+  diffSitemapHealth,
+  SITEMAP_SYNC_COLLAPSE_POLICY,
+  SITEMAP_TRUST_COLLAPSE_POLICY,
+  sitemapHistoryHasCollapse,
+} from './sitemap-health'
 // Source factories. The dispatcher is `runAnalyzerFromSource` (re-exported
 // below from `@gscdump/engine/analyzer`).
 export {

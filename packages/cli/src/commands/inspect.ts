@@ -1,9 +1,10 @@
 import type { UrlInspectionResult } from 'gscdump'
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { batchInspectUrls, fetchSitemapUrls } from 'gscdump'
+import { batchInspectUrls } from 'gscdump'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
+import { loadSitemapUrls } from '../sitemap'
 import { applyOutputMode, logger, OUTPUT_ARGS, readUrlList } from '../utils'
 
 function verdictTone(verdict: string | null | undefined): string {
@@ -137,12 +138,20 @@ const batchCommand = defineCommand({
   },
   async run({ args }) {
     const { json, quiet } = applyOutputMode(args)
-    const urls = args['from-sitemap']
-      ? await fetchSitemapUrls(String(args['from-sitemap'])).catch((e: Error) => {
-          logger.error(`Sitemap fetch failed: ${e.message}`)
-          process.exit(1)
-        })
-      : await readUrlList(args)
+    let urls: string[]
+    if (args['from-sitemap']) {
+      const result = await loadSitemapUrls(String(args['from-sitemap']))
+      if (result._tag === 'error') {
+        logger.error(`Sitemap fetch failed: ${result.message}`)
+        process.exit(1)
+      }
+      if (!result.value.complete)
+        logger.warn('Sitemap walk was incomplete; inspecting only the URLs that were read')
+      urls = result.value.urls
+    }
+    else {
+      urls = await readUrlList(args)
+    }
     if (urls.length === 0) {
       logger.error('No URLs provided. Pass URLs as args, --file, --from-sitemap, or stdin.')
       process.exit(1)

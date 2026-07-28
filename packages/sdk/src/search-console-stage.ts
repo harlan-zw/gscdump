@@ -269,6 +269,157 @@ const DECLINE_CLICKS_PCT = -10
 // split real losses (requestindexing 117, largemirage 156) from tiny-traffic
 // noise (harlanzw 8, zhead 22) where a % crash is statistically meaningless.
 const MIN_DECLINE_PRIOR_CLICKS = 50
+const SEVERE_COVERAGE_PERCENT = 20
+const SEVERE_COVERAGE_MIN_URLS = 20
+const SEVERE_NOT_INDEXED_MIN_URLS = 10
+
+type SevereCoverageReason
+  = | 'crawl'
+    | 'indexability'
+    | 'unknown'
+    | 'discovered'
+    | 'crawled'
+    | 'unspecified'
+    | 'mixed'
+
+interface SevereCoverageCounts {
+  unknown: number
+  discovered: number
+  crawled: number
+  hardBlocks: number
+  canonical: number
+  noindex: number
+  generic: number
+}
+
+function severeCoverageReason(
+  counts: SevereCoverageCounts,
+  totalUrls: number,
+): SevereCoverageReason {
+  if (
+    counts.hardBlocks > Math.max(5, totalUrls * 0.05)
+    && counts.hardBlocks >= counts.unknown
+    && counts.hardBlocks >= counts.crawled
+  ) {
+    return 'crawl'
+  }
+  const indexability = Math.max(counts.canonical, counts.noindex)
+  if (
+    indexability > Math.max(5, totalUrls * 0.05)
+    && indexability >= counts.unknown
+    && indexability >= counts.crawled
+  ) {
+    return 'indexability'
+  }
+  if (
+    counts.generic > 0
+    && counts.unknown + counts.discovered + counts.crawled + counts.hardBlocks + counts.canonical + counts.noindex === 0
+  ) {
+    return 'unspecified'
+  }
+  const candidates = [
+    { reason: 'unknown' as const, count: counts.unknown, severe: counts.unknown >= Math.max(10, totalUrls * 0.4) },
+    { reason: 'discovered' as const, count: counts.discovered, severe: counts.discovered >= Math.max(10, totalUrls * 0.15) },
+    { reason: 'crawled' as const, count: counts.crawled, severe: counts.crawled >= Math.max(10, totalUrls * 0.15) },
+  ]
+  const severe = candidates.filter(candidate => candidate.severe)
+  const winner = (severe.length > 0 ? severe : candidates)
+    .sort((left, right) => right.count - left.count)[0]
+  return winner && winner.count > 0 ? winner.reason : 'mixed'
+}
+
+function severeCoverageStage(
+  input: ClassifySearchConsoleStageInput,
+  totalUrls: number,
+  indexed: number,
+): SearchConsoleStage | null {
+  const notIndexed = Math.max(0, totalUrls - indexed)
+  const indexedPercent = totalUrls > 0 ? (indexed / totalUrls) * 100 : 0
+  if (
+    totalUrls < SEVERE_COVERAGE_MIN_URLS
+    || notIndexed < SEVERE_NOT_INDEXED_MIN_URLS
+    || indexedPercent >= SEVERE_COVERAGE_PERCENT
+  ) {
+    return null
+  }
+  const issues = input.issues ?? []
+  const counts: SevereCoverageCounts = {
+    unknown: countSearchConsoleIssues(issues, 'unknown_to_google'),
+    discovered: countSearchConsoleIssues(issues, 'discovered_not_indexed'),
+    crawled: countSearchConsoleIssues(issues, 'crawled_not_indexed'),
+    hardBlocks: countSearchConsoleIssues(
+      issues,
+      'blocked_robots',
+      'server_error',
+      'access_denied',
+      'access_forbidden',
+      'forbidden',
+      'blocked_4xx',
+      'redirect_error',
+      'crawl_error',
+      'not_found',
+      'soft_404',
+    ),
+    canonical: countSearchConsoleIssues(issues, 'canonical_mismatch', 'canonical_cross_domain'),
+    noindex: countSearchConsoleIssues(issues, 'noindex'),
+    generic: countSearchConsoleIssues(issues, 'not_indexed'),
+  }
+  if (Object.values(counts).every(count => count === 0))
+    return null
+
+  const reason = severeCoverageReason(counts, totalUrls)
+  const key: SearchConsoleStageKey = reason === 'crawl'
+    ? 'crawl_blocked'
+    : reason === 'indexability'
+      ? 'indexability_blocked'
+      : reason === 'unknown'
+        ? 'weak_discovery'
+        : reason === 'discovered'
+          ? 'discovery_backlog'
+          : 'index_rejection'
+  const summaries: Record<SevereCoverageReason, { summary: string, primaryAction: string }> = {
+    crawl: {
+      summary: `Google is reporting hard access or fetch faults on ${formatSearchConsoleCount(counts.hardBlocks)} URLs.`,
+      primaryAction: 'Fix fetch, server, robots, and broken-response faults before content work.',
+    },
+    indexability: {
+      summary: 'Google can reach pages, but canonical or indexability signals are preventing clean inclusion.',
+      primaryAction: 'Make canonical and index directives agree on the URLs that should rank.',
+    },
+    unknown: {
+      summary: `Google still does not know about ${formatSearchConsoleCount(counts.unknown)} of the inspected URLs.`,
+      primaryAction: 'Audit sitemap freshness, sitemap membership, and internal links from already-indexed pages.',
+    },
+    discovered: {
+      summary: `Google has discovered ${formatSearchConsoleCount(counts.discovered)} URLs but has not crawled them yet.`,
+      primaryAction: 'Reduce low-value inventory and strengthen internal links to the pages that should be crawled.',
+    },
+    crawled: {
+      summary: `Google crawled ${formatSearchConsoleCount(counts.crawled)} URLs but chose not to keep them in the index.`,
+      primaryAction: 'Rule out blockers, then improve, consolidate, or noindex thin and duplicate page sets.',
+    },
+    unspecified: {
+      summary: `Google reports ${formatSearchConsoleCount(counts.generic || notIndexed)} URLs as not indexed, but the current diagnostic snapshot does not expose a narrower reason bucket.`,
+      primaryAction: 'Refresh URL Inspection diagnostics and join affected URLs to sitemap, internal-link, canonical, fetch, and rendered-content evidence.',
+    },
+    mixed: {
+      summary: `${formatSearchConsoleCount(notIndexed)} URLs are not indexed, with multiple Google coverage reasons present.`,
+      primaryAction: 'Split the affected URLs by Google coverage reason before changing the site.',
+    },
+  }
+  const copy = summaries[reason]
+  return {
+    ...stage(key, [
+      { label: 'Indexed pages', value: `${formatSearchConsoleCount(indexed)} of ${formatSearchConsoleCount(totalUrls)}`, source: 'indexing' },
+      ...(counts.unknown > 0 ? [{ label: 'Unknown URLs', value: formatSearchConsoleCount(counts.unknown), source: 'indexing' as const }] : []),
+      ...(counts.crawled > 0 ? [{ label: 'Crawled, not indexed', value: formatSearchConsoleCount(counts.crawled), source: 'indexing' as const }] : []),
+    ]),
+    severity: reason === 'crawl' || reason === 'indexability' ? 'error' : 'warning',
+    summary: copy.summary,
+    primaryAction: copy.primaryAction,
+    sprintFindingTypes: ['search-console-stage', 'pages-not-indexed'],
+  }
+}
 
 /**
  * v2 classifier. Trajectory and maturity are first-class axes that run BEFORE
@@ -359,6 +510,10 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
       { label: 'Indexed pages', value: `${formatSearchConsoleCount(indexed)} of ${formatSearchConsoleCount(totalUrls)}`, source: 'indexing' },
     ])
   }
+
+  const severeCoverage = isNascent ? null : severeCoverageStage(input, totalUrls, indexed)
+  if (severeCoverage)
+    return severeCoverage
 
   // Decline, on the robust windows only (never the lag-poisoned 7-day signal).
   if (isDeclining) {

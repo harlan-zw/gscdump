@@ -136,6 +136,11 @@
       "import": "./dist/analysis-types.mjs",
       "default": "./dist/analysis-types.mjs"
     },
+    "./analysis-range": {
+      "types": "./dist/analysis-range.d.mts",
+      "import": "./dist/analysis-range.mjs",
+      "default": "./dist/analysis-range.mjs"
+    },
     "./period": {
       "types": "./dist/period/index.d.mts",
       "import": "./dist/period/index.mjs",

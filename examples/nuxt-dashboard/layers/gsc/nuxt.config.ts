@@ -1,7 +1,5 @@
-// Minimal Nuxt layer that backs `examples/nuxt-dashboard`. The real layer
-// now lives at nuxtseo.com; this stub only provides typed composables and
-// placeholder components so the example builds.
-// TODO: port from nuxtseo.com
+// Minimal UI fixture for `examples/nuxt-dashboard`. Nuxt integration belongs
+// to @gscdump/nuxt; this layer only supplies example views and composables.
 
 import { fileURLToPath } from 'node:url'
 import { defineNuxtConfig } from 'nuxt/config'
@@ -10,7 +8,7 @@ import { dirname, resolve as resolvePath } from 'pathe'
 const __here = dirname(fileURLToPath(import.meta.url))
 
 export default defineNuxtConfig({
-  modules: ['@nuxt/ui', 'nuxt-use-query', resolvePath(__here, 'module.ts')],
+  modules: ['@nuxt/ui', 'nuxt-use-query', '@gscdump/nuxt'],
   imports: {
     dirs: [
       resolvePath(__here, 'app/composables'),

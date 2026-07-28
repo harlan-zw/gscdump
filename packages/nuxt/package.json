@@ -1,0 +1,57 @@
+{
+  "name": "@gscdump/nuxt",
+  "type": "module",
+  "version": "1.5.0",
+  "description": "Minimal Nuxt integration for gscdump analytics runtime config and analyzer registries.",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harlan-zw/gscdump.git",
+    "directory": "packages/nuxt"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/module.d.mts",
+      "import": "./dist/module.mjs",
+      "default": "./dist/module.mjs"
+    },
+    "./runtime-config": {
+      "types": "./dist/runtime-config.d.mts",
+      "import": "./dist/runtime-config.mjs",
+      "default": "./dist/runtime-config.mjs"
+    }
+  },
+  "main": "./dist/module.mjs",
+  "types": "./dist/module.d.mts",
+  "files": [
+    "README.md",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "obuild",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest"
+  },
+  "peerDependencies": {
+    "nuxt": "catalog:"
+  },
+  "dependencies": {
+    "@nuxt/kit": "catalog:",
+    "@nuxt/schema": "catalog:"
+  },
+  "devDependencies": {
+    "nuxt": "catalog:",
+    "obuild": "catalog:dev-build",
+    "typescript": "catalog:dev-build",
+    "vitest": "catalog:dev-test"
+  }
+}

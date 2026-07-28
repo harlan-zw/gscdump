@@ -667,6 +667,10 @@ export interface GscdumpSitemapsResponse {
     siteUrl: string
     gscPropertyUrl?: string
     syncStatus: string | null
+    sitemapScope: {
+      excludedCount: number
+      duplicateCount: number
+    }
   }
 }
 
@@ -692,6 +696,7 @@ export interface GscdumpSitemapMembershipParams {
 
 export type GscdumpSitemapMembershipUnavailableReason
   = | 'empty'
+    | 'endpoint_unavailable'
     | 'site_url_cap_exceeded'
     | 'stale_sitemaps'
 
