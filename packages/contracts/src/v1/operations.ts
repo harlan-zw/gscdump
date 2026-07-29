@@ -143,6 +143,8 @@ export function createGscdumpV1Protocol() {
   const {
     analyticsRowsRequest,
     analyticsRowsResponse,
+    keywordEnrichmentRequest,
+    keywordEnrichmentResponse,
     lifecycleResponse,
   } = browserSchemas
   const dimensions = GSCDUMP_V1_ANALYTICS_DIMENSIONS
@@ -670,17 +672,6 @@ export function createGscdumpV1Protocol() {
     reason: z.string().optional(),
     sources: z.array(z.string()),
     rows: z.array(z.record(z.string(), z.json())),
-  }), partnerResponseMeta)
-
-  const enrichKeywordsRequest = z.strictObject({
-    keywords: z.array(z.string().min(1)).min(1).max(500),
-  })
-  const enrichKeywordsResponse = defineSuccessResponse(defineResponseObject({
-    metrics: z.record(z.string(), z.object({
-      difficulty: z.number().nullable(),
-      searchVolume: z.number().nullable(),
-      cpc: z.number().nullable(),
-    }).loose()),
   }), partnerResponseMeta)
 
   const responseStreamHead = defineResponseObject({
@@ -2587,8 +2578,8 @@ export function createGscdumpV1Protocol() {
             { credential: 'partner_key', rule: 'partner_tenant' },
           ],
         },
-        request: { params: null, query: null, headers: requestHeaders, body: enrichKeywordsRequest },
-        responses: { 200: enrichKeywordsResponse },
+        request: { params: null, query: null, headers: requestHeaders, body: keywordEnrichmentRequest },
+        responses: { 200: keywordEnrichmentResponse },
         errors: partnerUserErrors,
         errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
         resources: { reads: [], changes: [] },
@@ -2965,6 +2956,8 @@ export function createGscdumpV1Protocol() {
       indexingTransitionsResponse,
       indexingUrlsQuery,
       indexingUrlsResponse,
+      keywordEnrichmentRequest,
+      keywordEnrichmentResponse,
       lifecycleResponse,
       registerSiteRequest,
       sitemapChangesQuery,

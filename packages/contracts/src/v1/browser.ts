@@ -167,6 +167,16 @@ export function createGscdumpV1BrowserSchemas(
     lifecycleResponseSchemas(realtimeSchemas),
     partnerResponseMeta,
   )
+  const keywordEnrichmentRequest = z.strictObject({
+    keywords: z.array(z.string().min(1)).min(1).max(500),
+  })
+  const keywordEnrichmentResponse = defineSuccessResponse(defineResponseObject({
+    metrics: z.record(z.string(), z.object({
+      difficulty: z.number().nullable(),
+      searchVolume: z.number().nullable(),
+      cpc: z.number().nullable(),
+    }).loose()),
+  }), partnerResponseMeta)
 
   const dimensions = GSCDUMP_V1_ANALYTICS_DIMENSIONS
   const metrics = ['clicks', 'impressions', 'ctr', 'position'] as const
@@ -243,6 +253,8 @@ export function createGscdumpV1BrowserSchemas(
   return {
     analyticsRowsRequest,
     analyticsRowsResponse: defineSuccessResponse(analyticsRowData, analyticsMeta),
+    keywordEnrichmentRequest,
+    keywordEnrichmentResponse,
     lifecycleResponse,
     ticketRequest: realtimeSchemas.ticketRequest,
     ticketResponse: realtimeSchemas.ticketResponseClient,

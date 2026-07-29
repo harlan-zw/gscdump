@@ -18,6 +18,7 @@ import {
   resolveHttpOperation,
   serializeContractDocument,
 } from '@gscdump/contracts/v1'
+import { createGscdumpV1BrowserSchemas } from '@gscdump/contracts/v1/browser'
 import { createRealtimeV1Schemas } from '@gscdump/contracts/v1/realtime'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { z } from 'zod'
@@ -305,6 +306,46 @@ describe('@gscdump/contracts/v1 HTTP registry', () => {
     })
     expect(schemas.ticketRequest.safeParse({ origin: 'https://nuxtseo.com/path' }).success).toBe(false)
     expect(schemas.ticketRequest.safeParse({ streamId: 'user:u_01' }).success).toBe(false)
+  })
+
+  it('exposes browser-safe keyword enrichment schemas from the public operation contract', () => {
+    const browserSchemas = createGscdumpV1BrowserSchemas()
+
+    expect(browserSchemas.keywordEnrichmentRequest.parse({
+      keywords: ['nuxt seo'],
+    })).toEqual({ keywords: ['nuxt seo'] })
+    expect(browserSchemas.keywordEnrichmentRequest.safeParse({
+      keywords: [],
+    }).success).toBe(false)
+    expect(browserSchemas.keywordEnrichmentRequest.safeParse({
+      keywords: ['nuxt seo'],
+      arbitrary: true,
+    }).success).toBe(false)
+    expect(browserSchemas.keywordEnrichmentResponse.client.parse({
+      data: {
+        metrics: {
+          'nuxt seo': {
+            difficulty: 12,
+            searchVolume: 100,
+            cpc: null,
+            futureMetric: true,
+          },
+        },
+        futureData: true,
+      },
+      meta: {
+        requestId: 'req_01',
+        surface: 'partner',
+        version: '1.0',
+        futureMeta: true,
+      },
+      futureEnvelope: true,
+    }).data.metrics['nuxt seo']).toMatchObject({
+      difficulty: 12,
+      searchVolume: 100,
+      cpc: null,
+      futureMetric: true,
+    })
   })
 
   it('models indexing transitions as bounded observations instead of point timestamps', () => {
