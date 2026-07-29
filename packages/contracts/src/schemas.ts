@@ -325,6 +325,29 @@ export const indexingInspectAnyResponseSchema = z.union([
   indexingInspectRateLimitedSchema,
 ])
 
+export const sitemapChangesTruncationReasonSchema = z.enum([
+  'scan_limit',
+  'added_limit',
+  'removed_limit',
+])
+
+export const sitemapChangesCompletenessSchema = z.discriminatedUnion('_tag', [
+  z.object({
+    _tag: z.literal('complete'),
+    scannedUrls: z.number().int().nonnegative(),
+  }).loose(),
+  z.object({
+    _tag: z.literal('truncated'),
+    scannedUrls: z.number().int().nonnegative(),
+    reasons: z.array(sitemapChangesTruncationReasonSchema).min(1),
+    limits: z.object({
+      scannedUrls: z.number().int().positive(),
+      added: z.number().int().positive(),
+      removed: z.number().int().positive(),
+    }).loose(),
+  }).loose(),
+])
+
 export const sitemapChangesResponseSchema = z.object({
   added: z.array(z.object({
     url: z.string(),
@@ -341,6 +364,7 @@ export const sitemapChangesResponseSchema = z.object({
     totalRemoved: z.number(),
     period: z.object({ days: z.number() }),
   }).loose(),
+  completeness: sitemapChangesCompletenessSchema,
 }).loose()
 
 export const sourceInfoResponseSchema = z.object({
@@ -814,6 +838,7 @@ export const gscdumpSitemapChangesResponseSchema = z.object({
     totalRemoved: z.number(),
     period: z.object({ days: z.number() }),
   }).optional(),
+  completeness: sitemapChangesCompletenessSchema,
 }).loose()
 
 export const indexingUrlsParamsSchema = z.object({

@@ -12923,6 +12923,88 @@
                           },
                           "type": "array"
                         },
+                        "completeness": {
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "complete",
+                                  "type": "string"
+                                },
+                                "scannedUrls": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "scannedUrls"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "_tag": {
+                                  "const": "truncated",
+                                  "type": "string"
+                                },
+                                "limits": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "added": {
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991,
+                                      "type": "integer"
+                                    },
+                                    "removed": {
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991,
+                                      "type": "integer"
+                                    },
+                                    "scannedUrls": {
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "scannedUrls",
+                                    "added",
+                                    "removed"
+                                  ],
+                                  "type": "object"
+                                },
+                                "reasons": {
+                                  "items": {
+                                    "enum": [
+                                      "scan_limit",
+                                      "added_limit",
+                                      "removed_limit"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "minItems": 1,
+                                  "type": "array"
+                                },
+                                "scannedUrls": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "_tag",
+                                "scannedUrls",
+                                "reasons",
+                                "limits"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
                         "removed": {
                           "items": {
                             "additionalProperties": {},
@@ -12979,7 +13061,8 @@
                       "required": [
                         "added",
                         "removed",
-                        "summary"
+                        "summary",
+                        "completeness"
                       ],
                       "type": "object"
                     },
@@ -13081,6 +13164,10 @@
           "response": {
             "data": {
               "added": [],
+              "completeness": {
+                "_tag": "complete",
+                "scannedUrls": 0
+              },
               "removed": [],
               "summary": {
                 "period": {

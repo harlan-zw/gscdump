@@ -48,6 +48,7 @@ import {
   renamePartnerTeamSchema,
   searchTypeSchema,
   siteIntIdCrosswalkResponseSchema,
+  sitemapChangesTruncationReasonSchema,
   teamCatalogRefSchema,
   updatePartnerUserTokensSchema,
 } from '../schemas'
@@ -341,9 +342,37 @@ export function createGscdumpV1Protocol() {
   }), partnerResponseMeta)
   const indexingDiagnosticsResponse = defineSuccessResponse(defineResponseObject(gscdumpIndexingDiagnosticsResponseSchema.shape), partnerResponseMeta)
   const sitemapsResponse = defineSuccessResponse(defineResponseObject(gscdumpSitemapsResponseSchema.shape), partnerResponseMeta)
+  const completeSitemapChangesShape = {
+    _tag: z.literal('complete'),
+    scannedUrls: z.number().int().nonnegative(),
+  }
+  const truncatedSitemapChangesShape = {
+    _tag: z.literal('truncated'),
+    scannedUrls: z.number().int().nonnegative(),
+    reasons: z.array(sitemapChangesTruncationReasonSchema).min(1),
+    limits: z.strictObject({
+      scannedUrls: z.number().int().positive(),
+      added: z.number().int().positive(),
+      removed: z.number().int().positive(),
+    }),
+  }
   const sitemapChangesResponse = defineSuccessResponse(defineResponseObject({
     ...gscdumpSitemapChangesResponseSchema.shape,
     summary: gscdumpSitemapChangesResponseSchema.shape.summary.unwrap(),
+    completeness: z.discriminatedUnion('_tag', [
+      z.strictObject(completeSitemapChangesShape),
+      z.strictObject(truncatedSitemapChangesShape),
+    ]),
+  }, {
+    ...gscdumpSitemapChangesResponseSchema.shape,
+    summary: gscdumpSitemapChangesResponseSchema.shape.summary.unwrap(),
+    completeness: z.discriminatedUnion('_tag', [
+      z.looseObject(completeSitemapChangesShape),
+      z.looseObject({
+        ...truncatedSitemapChangesShape,
+        limits: z.looseObject(truncatedSitemapChangesShape.limits.shape),
+      }),
+    ]),
   }), partnerResponseMeta)
   const analysisResponse = defineSuccessResponse(defineResponseObject(gscdumpAnalysisResponseSchema.shape), partnerResponseMeta)
   const analysisBundleResponse = defineSuccessResponse(defineResponseObject(gscdumpAnalysisBundleResponseSchema.shape), partnerResponseMeta)
@@ -1225,7 +1254,15 @@ export function createGscdumpV1Protocol() {
           tags: ['Sitemaps'],
           examples: {
             request: { params: { siteId: 's_01' }, query: { days: 28 } },
-            response: { data: { added: [], removed: [], summary: { totalAdded: 0, totalRemoved: 0, period: { days: 28 } } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
+            response: {
+              data: {
+                added: [],
+                removed: [],
+                summary: { totalAdded: 0, totalRemoved: 0, period: { days: 28 } },
+                completeness: { _tag: 'complete', scannedUrls: 0 },
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
           },
         },
       }),

@@ -332,10 +332,27 @@ export interface SitemapRemovedRow {
   removedAt: number
 }
 
+export type SitemapChangesCompleteness
+  = | {
+    _tag: 'complete'
+    scannedUrls: number
+  }
+  | {
+    _tag: 'truncated'
+    scannedUrls: number
+    reasons: Array<'scan_limit' | 'added_limit' | 'removed_limit'>
+    limits: {
+      scannedUrls: number
+      added: number
+      removed: number
+    }
+  }
+
 export interface SitemapChangesResponse {
   added: SitemapAddedRow[]
   removed: SitemapRemovedRow[]
   summary: { totalAdded: number, totalRemoved: number, period: { days: number } }
+  completeness: SitemapChangesCompleteness
 }
 
 export type AnalysisSourcesResponse = GscdumpAnalysisSourcesResponse
@@ -678,6 +695,7 @@ export interface GscdumpSitemapChangesResponse {
   added: { url: string, sitemap: string, firstSeenAt: number }[]
   removed: { url: string, sitemap: string, removedAt: number }[]
   summary?: { totalAdded: number, totalRemoved: number, period: { days: number } }
+  completeness: SitemapChangesCompleteness
 }
 
 export type PartnerSitemapAction
