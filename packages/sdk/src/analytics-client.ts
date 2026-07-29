@@ -18,9 +18,6 @@ import type {
   RollupEnvelope,
   SearchAppearanceResponse,
   SiteListItem,
-  SitemapChangesResponse,
-  SitemapHistoryResponse,
-  SitemapIndex,
   SourceInfoOptions,
   SourceInfoResponse,
   WhoamiResponse,
@@ -59,9 +56,6 @@ export interface AnalyticsClient {
   analyze: <T = unknown>(siteId: string, params: unknown) => Promise<T>
   getRollup: <T = unknown>(siteId: string, rollupId: string, params?: { start?: string, end?: string }) => Promise<RollupEnvelope<T>>
   requestBackfill: (siteId: string, range: BackfillRange) => Promise<BackfillResponse>
-  getSitemaps: (siteId: string) => Promise<SitemapIndex>
-  getSitemapHistory: (siteId: string, hash: string) => Promise<SitemapHistoryResponse>
-  getSitemapChanges: (siteId: string, params?: { days?: number }) => Promise<SitemapChangesResponse>
   getInspections: (siteId: string) => Promise<InspectionIndex>
   getInspectionHistory: (siteId: string, hash: string) => Promise<InspectionHistoryResponse>
   getIndexingUrls: (siteId: string, params?: { limit?: number, offset?: number, status?: IndexingUrlStatus, issue?: string, search?: string }) => Promise<IndexingUrlsResponse>
@@ -115,18 +109,6 @@ export function createAnalyticsClient(options: AnalyticsClientOptions = {}): Ana
       const endpoint = analyticsEndpoints.requestBackfill
       const body = shouldValidate('request') ? endpoint.body.parse(range) : range
       return request<BackfillResponse>(endpoint.path(siteId), { method: endpoint.method, body }, endpoint.response)
-    },
-    getSitemaps(siteId: string) {
-      const endpoint = analyticsEndpoints.getSitemaps
-      return request<SitemapIndex>(endpoint.path(siteId), { method: endpoint.method }, endpoint.response)
-    },
-    getSitemapHistory(siteId: string, hash: string) {
-      const endpoint = analyticsEndpoints.getSitemapHistory
-      return request<SitemapHistoryResponse>(endpoint.path(siteId, hash), { method: endpoint.method }, endpoint.response)
-    },
-    getSitemapChanges(siteId: string, params: { days?: number } = {}) {
-      const endpoint = analyticsEndpoints.getSitemapChanges
-      return request<SitemapChangesResponse>(endpoint.path(siteId), { method: endpoint.method, query: params }, endpoint.response)
     },
     getInspections(siteId: string) {
       const endpoint = analyticsEndpoints.getInspections

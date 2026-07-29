@@ -36,10 +36,6 @@ export interface LocalStore {
   readonly dataDir: string
   readonly userId: string
   siteIdFor: (siteUrl: string) => string
-  withSitemapMutation: <T>(
-    ctx: import('@gscdump/engine/contracts').TenantCtx,
-    mutate: () => Promise<T>,
-  ) => Promise<T>
   runRawSql: (opts: {
     sql: string
     siteUrl: string

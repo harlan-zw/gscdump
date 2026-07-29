@@ -1,6 +1,5 @@
 import {
   partnerEndpoints,
-  partnerEndpointSchemas,
   partnerRoutes,
 } from '../src/partner'
 
@@ -10,17 +9,14 @@ describe('official partner GSC operations', () => {
     expect(partnerRoutes.partner.sites.verificationToken).toBe('/partner/sites/verification-token')
     expect(partnerRoutes.partner.sites.addAndVerify).toBe('/partner/sites/add-and-verify')
     expect(partnerRoutes.teams.catalog('t 1')).toBe('/partner/teams/t%201/catalog')
-    expect(partnerRoutes.sites.sitemapMembership('s 1')).toBe('/sites/s%201/sitemaps/membership')
-
     expect(partnerEndpoints.getUserSiteIntIdCrosswalk).toMatchObject({ method: 'GET' })
     expect(partnerEndpoints.requestSiteVerificationToken).toMatchObject({ method: 'POST' })
     expect(partnerEndpoints.addAndVerifySite).toMatchObject({ method: 'POST' })
     expect(partnerEndpoints.getTeamCatalog).toMatchObject({ method: 'GET' })
     expect(partnerEndpoints.bindTeamCatalog).toMatchObject({ method: 'POST' })
-    expect(partnerEndpoints.getSitemapMembership).toMatchObject({ method: 'POST' })
   })
 
-  it('fully schemas permission recovery, inspection, canonical mismatches, and sitemap actions', () => {
+  it('fully schemas permission recovery, inspection, and canonical mismatches', () => {
     expect(partnerEndpoints.recoverPermission.response.parse({
       success: true,
       permissionLevel: 'siteOwner',
@@ -46,36 +42,6 @@ describe('official partner GSC operations', () => {
       trend: [],
       meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' },
     })).toMatchObject({ totalCount: 0 })
-
-    expect(partnerEndpointSchemas.postSitemaps.body.parse({ action: 'auto-discover' })).toEqual({ action: 'auto-discover' })
-    expect(partnerEndpoints.postSitemaps.response.parse({
-      success: true,
-      action: 'auto-discover',
-      discovered: 'https://example.com/sitemap.xml',
-      submitError: null,
-      sitemapCount: 1,
-    })).toMatchObject({ action: 'auto-discover', sitemapCount: 1 })
-
-    expect(partnerEndpoints.getSitemapMembership.body.parse({
-      urls: ['https://example.com/page'],
-      maxAgeDays: 30,
-    })).toEqual({ urls: ['https://example.com/page'], maxAgeDays: 30 })
-    expect(partnerEndpoints.getSitemapMembership.response.parse({
-      urls: [{
-        url: 'https://example.com/page',
-        normalized: 'https://example.com/page',
-        inSitemap: true,
-        sitemapUrl: 'https://example.com/sitemap.xml',
-      }],
-      meta: {
-        available: true,
-        reason: null,
-        requested: 1,
-        checked: 1,
-        matched: 1,
-        newestFetchedAt: '2026-07-20T00:00:00.000Z',
-      },
-    })).toMatchObject({ meta: { available: true, matched: 1 } })
   })
 
   it('schemas every team mirror and catalog mutation without noSchema placeholders', () => {

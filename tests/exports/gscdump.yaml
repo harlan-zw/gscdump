@@ -19,13 +19,11 @@
   DEFAULT_GSC_REQUEST_TIMEOUT_MS: number
   deleteSite: function
   deleteSitemap: function
-  discoverSitemap: function
   encodeSiteId: function
   err: function
   exchangeAuthCodeResult: function
   fetchSitemap: function
   fetchSitemaps: function
-  fetchSitemapUrls: function
   fetchSites: function
   fetchSitesWithSitemaps: function
   findBestGscProperty: function
@@ -220,18 +218,11 @@
   isOk: function
   ok: function
   unwrapResult: function
-./sitemap:
+./sitemap-identity:
   canonicalSitemapIdentity: function
-  discoverSitemap: function
-  discoverSitemapResult: function
-  fetchSitemapDocument: function
-  fetchSitemapUrls: function
-  parseRobotsSitemapUrls: function
-  parseSitemapDocument: function
   sameSitemapIdentity: function
   scopeSitemapRecords: function
   sitemapContentHash: function
-  walkSitemaps: function
 ./tenant:
   decodeSiteId: function
   encodeSiteId: function

@@ -9,6 +9,7 @@ minimumReleaseAgeExclude:
   - icebird@0.8.15
   - retriv@0.14.7
   - nuxt-use-query@0.2.7 || 0.3.0 || 0.7.1 || 1.0.0 || 1.0.1
+  - sitemapd@0.1.0
 shellEmulator: true
 
 trustPolicy: no-downgrade
@@ -42,7 +43,6 @@ catalog:
   '@nuxt/kit': 4.5.0
   '@nuxt/schema': 4.5.0
   '@nuxt/ui': ^4.10.0
-  '@nuxtjs/sitemap': 8.3.0
   '@types/node': ^26.1.1
   '@types/proper-lockfile': ^4.1.4
   '@unovis/ts': ^1.6.7

@@ -29,19 +29,28 @@ import {
 } from '../src/rollups'
 
 function createSitemapStore(opts: Omit<CreateSitemapStoreOptions, 'withMutation'>) {
-  const store = createSitemapStoreImpl({ ...opts, withMutation: (_ctx, fn) => fn() })
-  let sequence = 0
-  return {
-    ...store,
-    snapshotUrls(ctx: TenantCtx, feedpath: string, urls: readonly ParsedUrl[]) {
-      const observedAt = opts.now?.() ?? Date.now()
-      return store.snapshotUrls(ctx, {
-        _tag: 'complete',
-        id: `test-${observedAt}-${sequence++}`,
-        observedAt,
-      }, feedpath, urls)
-    },
+  return createSitemapStoreImpl({ ...opts, withMutation: (_ctx, effect) => effect() })
+}
+
+async function publishSitemapGeneration(
+  store: ReturnType<typeof createSitemapStore>,
+  ctx: TenantCtx,
+  input: {
+    id: string
+    observedAt: number
+    feeds: ReadonlyArray<{ feedpath: string, urls: readonly ParsedUrl[] }>
+  },
+): Promise<void> {
+  const generation = { _tag: 'complete' as const, id: input.id, observedAt: input.observedAt }
+  for (const feed of input.feeds) {
+    const staged = await store.stageSitemapGenerationFeed(ctx, generation, feed.feedpath, feed.urls)
+    expect(staged._tag).toBe('staged')
   }
+  const finalized = await store.finalizeSitemapGeneration(ctx, generation, {
+    _tag: 'complete',
+    expectedFeedpaths: input.feeds.map(feed => feed.feedpath),
+  })
+  expect(finalized._tag).toBe('published')
 }
 
 function makeFakeDataSource(): {
@@ -636,8 +645,12 @@ describe('indexPercentRollup', () => {
 
   it('computes per-day ratio from JOIN against pages parquet', async () => {
     const { ds } = makeFakeDataSource()
-    // At least one per-feedpath index file present → the rollup proceeds.
-    await ds.write('u_u1/s1/entities/sitemaps/urls/by-feed/abc123/index.parquet', new Uint8Array([1]))
+    const ctx = { userId: 'u1', siteId: 's1' }
+    await publishSitemapGeneration(createSitemapStore({ dataSource: ds }), ctx, {
+      id: 'index-percent',
+      observedAt: 1_700_000_000_000,
+      feeds: [{ feedpath: 'https://x/sitemap.xml', urls: [{ loc: 'https://x/a' }] }],
+    })
     const engine: RollupEngine = {
       async runSQL(opts) {
         // First call: numerator (per-day clicked URLs); second call: denominator
@@ -657,7 +670,7 @@ describe('indexPercentRollup', () => {
     }
     const payload = (await indexPercentRollup.build({
       engine,
-      ctx: { userId: 'u1', siteId: 's1' },
+      ctx,
       dataSource: ds,
       windowAnchorMs: 1_700_000_000_000,
     })) as {
@@ -672,7 +685,12 @@ describe('indexPercentRollup', () => {
 
   it('defaults omitted page-fact searchType to web instead of cross-type unioning', async () => {
     const { ds } = makeFakeDataSource()
-    await ds.write('u_u1/s1/entities/sitemaps/urls/by-feed/abc123/index.parquet', new Uint8Array([1]))
+    const ctx = { userId: 'u1', siteId: 's1' }
+    await publishSitemapGeneration(createSitemapStore({ dataSource: ds }), ctx, {
+      id: 'search-type',
+      observedAt: 1_700_000_000_000,
+      feeds: [{ feedpath: 'https://x/sitemap.xml', urls: [{ loc: 'https://x/a' }] }],
+    })
     const listCalls: Parameters<RollupEngine['listPartitions']>[0][] = []
     const runCalls: Parameters<RollupEngine['runSQL']>[0][] = []
     const engine: RollupEngine = {
@@ -690,7 +708,7 @@ describe('indexPercentRollup', () => {
 
     await indexPercentRollup.build({
       engine,
-      ctx: { userId: 'u1', siteId: 's1' },
+      ctx,
       dataSource: ds,
       windowAnchorMs: 1_700_000_000_000,
     })
@@ -703,25 +721,21 @@ describe('indexPercentRollup', () => {
     expect(denominator).not.toHaveProperty('searchType')
   })
 
-  it('merges active sitemap deltas and excludes retired deltas from the denominator', async () => {
+  it('reads only immutable bases referenced by the published manifest', async () => {
     const { ds } = makeFakeDataSource()
-    const prefix = 'u_u1/s1/entities/sitemaps/urls'
-    const feedpathHash = 'abc123'
-    const indexKey = `${prefix}/by-feed/${feedpathHash}/index.parquet`
-    const retiredDelta = `${prefix}/deltas/2026-07-24__${feedpathHash}__1753330000000__aaa.parquet`
-    const activeDelta = `${prefix}/deltas/2026-07-24__${feedpathHash}__1753330000001__bbb.parquet`
-    await ds.write(indexKey, new Uint8Array([1]))
-    await ds.write(retiredDelta, new Uint8Array([2]))
-    await ds.write(activeDelta, new Uint8Array([3]))
-    await ds.write(`${prefix}/projection.json`, new TextEncoder().encode(JSON.stringify({
-      version: 1,
-      feeds: {
-        [feedpathHash]: {
-          compactedThrough: retiredDelta,
-          publishedAt: 1_753_330_000_000,
-        },
-      },
-    })))
+    const ctx = { userId: 'u1', siteId: 's1' }
+    const store = createSitemapStore({ dataSource: ds })
+    await publishSitemapGeneration(store, ctx, {
+      id: 'published',
+      observedAt: 1_753_330_000_000,
+      feeds: [{ feedpath: 'https://x/sitemap.xml', urls: [{ loc: 'https://x/a' }] }],
+    })
+    await ds.write('u_u1/s1/entities/sitemaps/urls/bases/orphan.parquet', new Uint8Array([1]))
+    const generation = await store.getSitemapGeneration(ctx)
+    expect(generation._tag).toBe('available')
+    if (generation._tag !== 'available')
+      return
+    const baseKey = Object.values(generation.manifest.feeds)[0]!.baseKey
     const runCalls: Parameters<RollupEngine['runSQL']>[0][] = []
     const engine: RollupEngine = {
       async runSQL(opts) {
@@ -737,15 +751,15 @@ describe('indexPercentRollup', () => {
 
     await indexPercentRollup.build({
       engine,
-      ctx: { userId: 'u1', siteId: 's1' },
+      ctx,
       dataSource: ds,
       windowAnchorMs: 1_753_330_000_000,
     })
 
     for (const call of runCalls) {
-      expect(call.fileSets.URLS_INDEX?.keys).toEqual([indexKey])
-      expect(call.fileSets.URLS_DELTA?.keys).toEqual([activeDelta])
-      expect(call.sql).toContain(`op IN ('added', 'removed')`)
+      expect(call.fileSets.SITEMAP_BASES?.keys).toEqual([baseKey])
+      expect(call.fileSets).not.toHaveProperty('URLS_INDEX')
+      expect(call.fileSets).not.toHaveProperty('URLS_DELTA')
     }
   })
 })
@@ -768,27 +782,34 @@ describe('sitemapHealthRollup', () => {
     const { ds } = makeFakeDataSource()
     const store = createSitemapStore({ dataSource: ds })
     const ctx = { userId: 'u1', siteId: 's1' }
-    // builtAt 2026-04-22; cutoff = 2026-01-22 (90d back). Use recent dates.
     const builtAt = new Date('2026-04-22T00:00:00Z').getTime()
-    await store.writeSnapshot(ctx, [
-      {
-        path: 'https://x/sitemap-1.xml',
-        capturedAt: '2026-04-20T00:00:00Z',
-        urlCount: 100,
-        errors: 1,
-        warnings: 2,
-        contentHash: 'abc',
-        lastDownloaded: '2026-04-20T00:00:00Z',
-      },
-      {
-        path: 'https://x/sitemap-2.xml',
-        capturedAt: '2026-04-20T00:00:00Z',
-        urlCount: 50,
-        errors: 0,
-        warnings: 1,
-        contentHash: 'def',
-      },
-    ])
+    await publishSitemapGeneration(store, ctx, {
+      id: 'health-outside-window',
+      observedAt: new Date('2025-12-01T00:00:00Z').getTime(),
+      feeds: [{ feedpath: 'https://x/old.xml', urls: [{ loc: 'https://x/old' }] }],
+    })
+    await publishSitemapGeneration(store, ctx, {
+      id: 'health-1',
+      observedAt: new Date('2026-04-20T00:00:00Z').getTime(),
+      feeds: [
+        {
+          feedpath: 'https://x/sitemap-1.xml',
+          urls: Array.from({ length: 100 }, (_, index) => ({ loc: `https://x/a/${index}` })),
+        },
+        {
+          feedpath: 'https://x/sitemap-2.xml',
+          urls: Array.from({ length: 50 }, (_, index) => ({ loc: `https://x/b/${index}` })),
+        },
+      ],
+    })
+    await publishSitemapGeneration(store, ctx, {
+      id: 'health-2',
+      observedAt: new Date('2026-04-21T00:00:00Z').getTime(),
+      feeds: [{
+        feedpath: 'https://x/sitemap-1.xml',
+        urls: Array.from({ length: 120 }, (_, index) => ({ loc: `https://x/a/${index}` })),
+      }],
+    })
     const engine = makeFakeEngine({} as Record<TableName, Row[]>)
     const payload = (await sitemapHealthRollup.build({
       engine,
@@ -799,13 +820,14 @@ describe('sitemapHealthRollup', () => {
       days: Array<{ day: string, feeds: number, total_urls: number, errors: number, warnings: number }>
       feeds: Array<{ path: string, urlCount: number }>
     }
-    expect(payload.days).toHaveLength(1)
+    expect(payload.days).toHaveLength(2)
     expect(payload.days[0].day).toBe('2026-04-20')
     expect(payload.days[0].feeds).toBe(2)
     expect(payload.days[0].total_urls).toBe(150)
-    expect(payload.days[0].errors).toBe(1)
-    expect(payload.days[0].warnings).toBe(3)
-    expect(payload.feeds).toHaveLength(2)
+    expect(payload.days[0].errors).toBe(0)
+    expect(payload.days[0].warnings).toBe(0)
+    expect(payload.days[1]).toMatchObject({ day: '2026-04-21', feeds: 1, total_urls: 120 })
+    expect(payload.feeds).toHaveLength(1)
   })
 })
 
@@ -827,21 +849,32 @@ describe('sitemapChanges28dRollup', () => {
   it('aggregates added/removed counts per day per feedpath and emits top lists', async () => {
     const { ds } = makeFakeDataSource()
     const builtAt = new Date('2026-04-22T00:00:00Z').getTime()
-    let nowMs = new Date('2026-04-20T00:00:00Z').getTime()
-    const store = createSitemapStore({ dataSource: ds, now: () => nowMs })
+    const store = createSitemapStore({ dataSource: ds })
     const ctx = { userId: 'u1', siteId: 's1' }
-    // Snapshot 1: feed A with two URLs (both added).
-    await store.snapshotUrls(ctx, 'https://x/a.xml', [
-      { loc: 'https://x/a/1' },
-      { loc: 'https://x/a/2' },
-    ])
-    // Snapshot 2 (next day): drop one URL, add another.
-    nowMs = new Date('2026-04-21T00:00:00Z').getTime()
-    await store.snapshotUrls(ctx, 'https://x/a.xml', [
-      { loc: 'https://x/a/1' },
-      { loc: 'https://x/a/3' },
-    ])
-    await store.compactUrls(ctx)
+    await publishSitemapGeneration(store, ctx, {
+      id: 'changes-1',
+      observedAt: new Date('2026-04-20T00:00:00Z').getTime(),
+      feeds: [{
+        feedpath: 'https://x/a.xml',
+        urls: [{ loc: 'https://x/a/1', lastmod: '2026-04-20' }, { loc: 'https://x/a/2' }],
+      }],
+    })
+    await publishSitemapGeneration(store, ctx, {
+      id: 'changes-2',
+      observedAt: new Date('2026-04-21T00:00:00Z').getTime(),
+      feeds: [{
+        feedpath: 'https://x/a.xml',
+        urls: [{ loc: 'https://x/a/1', lastmod: '2026-04-21' }, { loc: 'https://x/a/3' }],
+      }],
+    })
+    await publishSitemapGeneration(store, ctx, {
+      id: 'changes-3',
+      observedAt: new Date('2026-04-22T00:00:00Z').getTime(),
+      feeds: [{
+        feedpath: 'https://x/a.xml',
+        urls: [{ loc: 'https://x/a/1', lastmod: '2026-04-22' }, { loc: 'https://x/a/3' }],
+      }],
+    })
     const engine = makeFakeEngine({} as Record<TableName, Row[]>)
     const payload = (await sitemapChanges28dRollup.build({
       engine,
@@ -866,12 +899,16 @@ describe('sitemapChanges28dRollup', () => {
   it('bounds recent URL lists while preserving complete daily counts', async () => {
     const { ds } = makeFakeDataSource()
     const capturedAt = new Date('2026-04-20T00:00:00Z').getTime()
-    const store = createSitemapStore({ dataSource: ds, now: () => capturedAt })
+    const store = createSitemapStore({ dataSource: ds })
     const ctx = { userId: 'u1', siteId: 's1' }
-    await store.snapshotUrls(ctx, 'https://x/large.xml', Array.from({ length: 250 }, (_, i) => ({
-      loc: `https://x/page/${i}`,
-    })))
-    await store.compactUrls(ctx)
+    await publishSitemapGeneration(store, ctx, {
+      id: 'changes-large',
+      observedAt: capturedAt,
+      feeds: [{
+        feedpath: 'https://x/large.xml',
+        urls: Array.from({ length: 250 }, (_, i) => ({ loc: `https://x/page/${i}` })),
+      }],
+    })
 
     const payload = (await sitemapChanges28dRollup.build({
       engine: makeFakeEngine({} as Record<TableName, Row[]>),

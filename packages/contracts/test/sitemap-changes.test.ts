@@ -8,9 +8,12 @@ import { createGscdumpV1Protocol } from '../src/v1'
 const baseChanges = {
   added: [],
   removed: [],
+  updated: [],
+  generation: null,
   summary: {
     totalAdded: 0,
     totalRemoved: 0,
+    totalUpdated: 0,
     period: { days: 28 },
   },
 }
@@ -33,6 +36,7 @@ const truncatedChanges = {
       scannedUrls: 250_000,
       added: 200,
       removed: 200,
+      updated: 200,
     },
   },
 } as const
@@ -91,6 +95,29 @@ describe('sitemap changes completeness', () => {
           _tag: 'complete',
           futureField: true,
         },
+      },
+    })
+  })
+
+  it('marks windows before the canonical history floor as unavailable', () => {
+    expect(gscdumpSitemapChangesResponseSchema.parse({
+      ...baseChanges,
+      completeness: {
+        _tag: 'truncated',
+        scannedUrls: 0,
+        reasons: ['history_unavailable'],
+        historyAvailableFrom: 1_753_746_000_000,
+        limits: {
+          scannedUrls: 250_000,
+          added: 200,
+          removed: 200,
+          updated: 200,
+        },
+      },
+    })).toMatchObject({
+      completeness: {
+        reasons: ['history_unavailable'],
+        historyAvailableFrom: 1_753_746_000_000,
       },
     })
   })

@@ -47,14 +47,14 @@ gscdump mcp
 | `sites [--owner-only] [--with-sitemaps]` | List available GSC sites |
 | `sites add <url>` / `sites delete <url> [--yes]` | Register / remove a property in Search Console (add registers in unverified state) |
 | `sites verify-token <url> [--method]` / `sites verify <url> [--method]` | Get a verification token, then trigger ownership verification (META/FILE/DNS_TXT/DNS_CNAME/ANALYTICS/TAG_MANAGER) |
-| `sitemaps` | Sitemap CRUD (`list [--pending] [--errored]`, `get`, `submit`, `delete`) |
+| `sitemaps` | GSC CRUD, explicit live probes, and hosted canonical reads (`current`, `history`, `membership`, `lastmod`, `export`) |
 | `inspect <url>` / `inspect batch [--concurrency]` | URL inspection (single URL or batch from file/stdin); renders index status, rich results, AMP, mobile usability |
 | `indexing` | Notify Google about URL changes (`submit`, `remove`, `status`, `batch [--concurrency] [--yes]`); supports `--retries` |
 | `sync` | Sync GSC data to the local Parquet store; `--retry-failed`, `--dry-run` |
 | `query` | Run a search analytics query (local store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. |
 | `dump` | Export from the store to a directory (`--format parquet\|json\|ndjson\|csv`, `--tables`, `--all-sites`) |
 | `analyze <tool>` | Run an SEO analyzer against the store (`--live` for row-based against fresh API) |
-| `entities` | Snapshot URL inspections / sitemaps / indexing metadata into the local entity store |
+| `entities` | Snapshot URL inspections and indexing metadata into the local entity store |
 | `store stats` | Show row/byte counts per table and on-disk footprint |
 | `store compact` | Roll daily partitions older than N days into monthly files (`--dry-run`) |
 | `store gc` | Delete orphaned objects past the grace window (`--dry-run`) |

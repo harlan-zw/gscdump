@@ -1,140 +1,92 @@
-import type { CreateSitemapReadStoreOptions, SitemapIndex, SitemapPendingGeneration, SitemapReadStore } from './sitemap-shared'
+import type {
+  CreateSitemapReadStoreOptions,
+  DateRange,
+  SitemapMembershipEvent,
+  SitemapReadStore,
+  SitemapSiteGenerationManifest,
+} from './sitemap-shared'
 import { decodeParquetToRows } from '../adapters/hyparquet'
 import { readOptional } from '../adapters/read-optional'
-import { hashUrl, parseSitemapUrlsDeltaKey, sitemapIndexKey, sitemapUrlsEventsPrefix, sitemapUrlsIndexKey, sitemapUrlsPendingGenerationsPrefix, sitemapUrlsPrefix, sitemapUrlsProjectionManifestKey } from '../entity-keys'
-import { mapEntityIo } from './io'
-import { decodeSitemapProjectionManifest, selectSitemapProjectionFiles } from './sitemap-projection'
-import { applySitemapDeltaFiles, createSitemapUrlState, dateInRange, readSitemapDeltaFiles, SITEMAP_URLS_EVENT_PREFIX_RE } from './sitemap-shared'
+import { sitemapSiteManifestKey } from '../entity-keys'
+import { createSitemapGenerationReadMethods } from './sitemap-generation'
+
+function dateInRange(date: string, range: DateRange | undefined): boolean {
+  return (!range?.from || date >= range.from) && (!range?.to || date <= range.to)
+}
+
+function rowToMembershipEvent(row: Record<string, unknown>): SitemapMembershipEvent | undefined {
+  const op = String(row.op)
+  if (op !== 'added' && op !== 'removed' && op !== 'updated')
+    return undefined
+  return {
+    feedpath: String(row.feedpath),
+    feedpathHash: String(row.feedpath_hash),
+    urlHash: String(row.url_hash),
+    op,
+    loc: String(row.loc),
+    lastmod: row.lastmod == null ? undefined : String(row.lastmod),
+    previousLastmod: row.previous_lastmod == null ? undefined : String(row.previous_lastmod),
+    generationId: String(row.generation_id),
+    observedAt: Number(row.observed_at),
+    sequence: Number(row.sequence),
+    projectsState: Boolean(row.projects_state),
+  }
+}
 
 export function createSitemapReadStore(opts: CreateSitemapReadStoreOptions): SitemapReadStore {
   const ds = opts.dataSource
-  const hash = opts.hash ?? hashUrl
+  const generationReads = createSitemapGenerationReadMethods(opts)
 
-  async function readJson<T>(key: string): Promise<T | undefined> {
+  async function readManifest(key: string): Promise<SitemapSiteGenerationManifest | undefined> {
     const bytes = await readOptional(ds, key)
     return bytes === undefined
       ? undefined
-      : JSON.parse(new TextDecoder().decode(bytes)) as T
+      : JSON.parse(new TextDecoder().decode(bytes)) as SitemapSiteGenerationManifest
   }
 
   return {
-    async loadIndex(ctx) {
-      return (await readJson<SitemapIndex>(sitemapIndexKey(ctx))) ?? { version: 1, records: {} }
-    },
-
-    async getLatest(ctx, path) {
-      const index = await readJson<SitemapIndex>(sitemapIndexKey(ctx))
-      return index?.records[hash(path)]
-    },
-
-    async* loadUrls(ctx, feedpath, loadOpts) {
-      const feedpathHash = hash(feedpath)
-      const listedDeltaKeys = (await ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`))
-        .filter(key => parseSitemapUrlsDeltaKey(key)?.feedpathHash === feedpathHash)
-      // Load listed delta bytes before reading the projection watermark. A
-      // compactor may publish a newer base while this read is in flight; the
-      // grace window keeps these bytes available until every pre-publish
-      // reader has finished.
-      const listedDeltaFiles = await readSitemapDeltaFiles(ds, listedDeltaKeys)
-      const manifestBytes = await readOptional(ds, sitemapUrlsProjectionManifestKey(ctx))
-      const manifest = manifestBytes
-        ? decodeSitemapProjectionManifest(new TextDecoder().decode(manifestBytes))
-        : undefined
-      // Base publication precedes the manifest watermark. Reading the base
-      // after the manifest prevents the stale combination of old base plus new
-      // watermark, which would filter the only delta carrying the new state.
-      const indexRows = await readOptional(ds, sitemapUrlsIndexKey(ctx, feedpathHash))
-        .then(bytes => bytes ? decodeParquetToRows(bytes) : [])
-      const currentDeltaKeys = new Set(
-        selectSitemapProjectionFiles([], listedDeltaKeys, manifest).deltaKeys,
-      )
-      const state = createSitemapUrlState(indexRows)
-      applySitemapDeltaFiles(
-        state,
-        listedDeltaFiles.filter(file => currentDeltaKeys.has(file.key)),
-      )
-      for (const record of state.live.values())
-        yield record
-      if (loadOpts?.includeRemoved) {
-        for (const record of state.removed.values())
-          yield record
-      }
-    },
-
-    async* loadDeltas(ctx, dateRange) {
-      const [listedKeys, manifestBytes] = await Promise.all([
-        ds.list(`${sitemapUrlsPrefix(ctx)}/deltas/`),
-        readOptional(ds, sitemapUrlsProjectionManifestKey(ctx)),
-      ])
-      const manifest = manifestBytes
-        ? decodeSitemapProjectionManifest(new TextDecoder().decode(manifestBytes))
-        : undefined
-      const keys = selectSitemapProjectionFiles([], listedKeys, manifest).deltaKeys.filter((key) => {
-        const parsed = parseSitemapUrlsDeltaKey(key)
-        return Boolean(parsed && dateInRange(parsed.date, dateRange))
-      })
-      const files = await readSitemapDeltaFiles(ds, keys)
-      for (const file of files) {
-        for (const row of file.rows) {
-          const op = String(row.op)
-          if (op !== 'added' && op !== 'removed')
-            continue
-          yield {
-            feedpath: String(row.feedpath),
-            feedpathHash: String(row.feedpath_hash),
-            urlHash: String(row.url_hash),
-            op,
-            loc: String(row.loc),
-            lastmod: row.lastmod == null ? undefined : String(row.lastmod),
-            at: Number(row.at),
-          }
-        }
-      }
-    },
-
+    ...generationReads,
     async* loadEvents(ctx, dateRange) {
-      // List immutable events before pending descriptors. A concurrent writer
-      // publishes its descriptor first, so any event visible in this listing is
-      // either already committed or will be excluded by the later pending read.
-      const listedEventKeys = await ds.list(`${sitemapUrlsEventsPrefix(ctx)}/`)
-      const pendingKeys = await ds.list(`${sitemapUrlsPendingGenerationsPrefix(ctx)}/`)
-      const pendingEvents = new Set(
-        (await mapEntityIo(pendingKeys, key => readJson<SitemapPendingGeneration>(key)))
-          .filter((pending): pending is SitemapPendingGeneration => pending !== undefined)
-          .map(pending => pending.eventKey),
-      )
-      const keys = listedEventKeys
-        .filter((key) => {
-          const match = SITEMAP_URLS_EVENT_PREFIX_RE.exec(key)
-          return !pendingEvents.has(key)
-            && Boolean(match?.[1] && dateInRange(match[1], dateRange))
-        })
-        .sort()
-      for (const key of keys) {
-        const bytes = await readOptional(ds, key)
-        if (!bytes)
+      const current = await readManifest(sitemapSiteManifestKey(ctx))
+      if (!current)
+        return
+
+      const ancestry: SitemapSiteGenerationManifest[] = []
+      const seen = new Set<string>()
+      let cursor: SitemapSiteGenerationManifest | undefined = current
+      while (cursor) {
+        const observedDate = new Date(cursor.observedAt).toISOString().slice(0, 10)
+        if (dateRange?.from && observedDate < dateRange.from)
+          break
+        ancestry.push(cursor)
+        if (!cursor.previousManifestKey)
+          break
+        if (seen.has(cursor.previousManifestKey))
+          throw new Error('sitemap generation manifest ancestry cycle')
+        seen.add(cursor.previousManifestKey)
+        const previous = await readManifest(cursor.previousManifestKey)
+        if (!previous || previous.generationId !== cursor.previousGenerationId)
+          throw new Error('sitemap generation manifest ancestry is incomplete')
+        cursor = previous
+      }
+
+      for (const manifest of ancestry.reverse()) {
+        const observedDate = new Date(manifest.observedAt).toISOString().slice(0, 10)
+        if (!dateInRange(observedDate, dateRange))
           continue
-        const rows = await decodeParquetToRows(bytes)
-        rows.sort((a, b) =>
-          Number(a.observed_at) - Number(b.observed_at)
-          || Number(a.sequence) - Number(b.sequence)
-          || String(a.url_hash).localeCompare(String(b.url_hash)),
-        )
-        for (const row of rows) {
-          const op = String(row.op)
-          if (op !== 'added' && op !== 'removed')
-            continue
-          yield {
-            feedpath: String(row.feedpath),
-            feedpathHash: String(row.feedpath_hash),
-            urlHash: String(row.url_hash),
-            op,
-            loc: String(row.loc),
-            lastmod: row.lastmod == null ? undefined : String(row.lastmod),
-            generationId: String(row.generation_id),
-            observedAt: Number(row.observed_at),
-            sequence: Number(row.sequence),
-            projectsState: Boolean(row.projects_state),
+        for (const key of manifest.eventKeys) {
+          const bytes = await readOptional(ds, key)
+          if (!bytes)
+            throw new Error(`published sitemap event missing: ${key}`)
+          const rows = await decodeParquetToRows(bytes)
+          rows.sort((left, right) =>
+            Number(left.sequence) - Number(right.sequence)
+            || String(left.url_hash).localeCompare(String(right.url_hash)),
+          )
+          for (const row of rows) {
+            const event = rowToMembershipEvent(row)
+            if (event)
+              yield event
           }
         }
       }

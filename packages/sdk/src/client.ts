@@ -28,10 +28,6 @@ import type {
   GscdumpQueryTrendParams,
   GscdumpQueryTrendResponse,
   GscdumpSiteIntIdCrosswalkResponse,
-  GscdumpSitemapChangesResponse,
-  GscdumpSitemapMembershipParams,
-  GscdumpSitemapMembershipResponse,
-  GscdumpSitemapsResponse,
   GscdumpSiteRegistration,
   GscdumpSyncStatusResponse,
   GscdumpTeamCatalogRef,
@@ -52,8 +48,6 @@ import type {
   IndexingInspectResponse,
   IndexingUrlsParams,
   PartnerLifecycleResponse,
-  PartnerSitemapAction,
-  PartnerSitemapActionResponse,
   RegisterPartnerSiteParams,
   RegisterPartnerUserParams,
   UpdatePartnerUserTokensParams,
@@ -120,13 +114,6 @@ export interface PartnerClient {
   getSiteSyncStatus: (siteId: string, userId?: string) => Promise<GscdumpSyncStatusResponse>
   getData: (siteId: string, state: BuilderStateWire, options?: DataQueryOptions) => Promise<GscdumpDataResponse>
   getDataDetail: (siteId: string, state: BuilderStateWire, options?: DataDetailOptions) => Promise<GscdumpDataDetailResponse>
-  getSitemaps: (siteId: string) => Promise<GscdumpSitemapsResponse>
-  getSitemapChanges: (siteId: string, days?: number) => Promise<GscdumpSitemapChangesResponse>
-  getSitemapMembership: (siteId: string, params: GscdumpSitemapMembershipParams) => Promise<GscdumpSitemapMembershipResponse>
-  postSitemapAction: (siteId: string, action: PartnerSitemapAction) => Promise<PartnerSitemapActionResponse>
-  submitSitemap: (siteId: string, sitemapUrl: string, action?: 'submit' | 'delete') => Promise<Extract<PartnerSitemapActionResponse, { action: 'submitted' | 'deleted' }>>
-  refreshSitemaps: (siteId: string) => Promise<Extract<PartnerSitemapActionResponse, { action: 'refreshed' }>>
-  autoDiscoverSitemap: (siteId: string) => Promise<Extract<PartnerSitemapActionResponse, { action: 'auto-discover' }>>
   getIndexing: (siteId: string, days?: number) => Promise<GscdumpIndexingResponse>
   getIndexingUrls: (siteId: string, params?: IndexingUrlsParams) => Promise<GscdumpIndexingUrlsResponse>
   getIndexingDiagnostics: (siteId: string, params?: IndexingDiagnosticsParams) => Promise<GscdumpIndexingDiagnosticsResponse>
@@ -264,14 +251,6 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       }))
     }
     return ok(lifecycleSiteToSyncStatus(site))
-  }
-
-  function postSitemapAction(siteId: string, action: PartnerSitemapAction): Promise<PartnerSitemapActionResponse> {
-    const body = shouldValidate('request') ? endpoints.postSitemaps.body.parse(action) : action
-    return request<PartnerSitemapActionResponse>(endpoints.postSitemaps.path(siteId), {
-      method: endpoints.postSitemaps.method,
-      body,
-    }, endpoints.postSitemaps.response)
   }
 
   return {
@@ -412,50 +391,6 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
         method: endpoints.getDataDetail.method,
         query: dataDetailQuery(state, queryOptions),
       }, endpoints.getDataDetail.response)
-    },
-
-    getSitemaps(siteId: string) {
-      return request<GscdumpSitemapsResponse>(endpoints.getSitemaps.path(siteId), { method: endpoints.getSitemaps.method }, endpoints.getSitemaps.response)
-    },
-
-    getSitemapChanges(siteId: string, days = 28) {
-      return request<GscdumpSitemapChangesResponse>(endpoints.getSitemapChanges.path(siteId), {
-        method: endpoints.getSitemapChanges.method,
-        query: { days },
-      }, endpoints.getSitemapChanges.response)
-    },
-
-    getSitemapMembership(siteId: string, params: GscdumpSitemapMembershipParams) {
-      const body = shouldValidate('request') ? endpoints.getSitemapMembership.body.parse(params) : params
-      return request<GscdumpSitemapMembershipResponse>(endpoints.getSitemapMembership.path(siteId), {
-        method: endpoints.getSitemapMembership.method,
-        body,
-        dedupe: true,
-      }, endpoints.getSitemapMembership.response)
-    },
-
-    postSitemapAction,
-
-    async submitSitemap(siteId: string, sitemapUrl: string, action: 'submit' | 'delete' = 'submit') {
-      const response = await postSitemapAction(siteId, { action, sitemapUrl })
-      const expected = action === 'submit' ? 'submitted' : 'deleted'
-      if (response.action !== expected)
-        throw new TypeError(`Unexpected sitemap action response: expected ${expected}, got ${response.action}`)
-      return response
-    },
-
-    async refreshSitemaps(siteId: string) {
-      const response = await postSitemapAction(siteId, { action: 'refresh' })
-      if (response.action !== 'refreshed')
-        throw new TypeError(`Unexpected sitemap action response: expected refreshed, got ${response.action}`)
-      return response
-    },
-
-    async autoDiscoverSitemap(siteId: string) {
-      const response = await postSitemapAction(siteId, { action: 'auto-discover' })
-      if (response.action !== 'auto-discover')
-        throw new TypeError(`Unexpected sitemap action response: expected auto-discover, got ${response.action}`)
-      return response
     },
 
     getIndexing(siteId: string, days = 28) {

@@ -69,11 +69,18 @@ describe('sitemaps command', () => {
     console.log = originalLog
   })
 
-  it('has list/get/submit/delete subcommands', () => {
+  it('separates GSC actions, explicit live probes, and hosted reads', () => {
     expect(sitemapsCommand.subCommands).toHaveProperty('list')
     expect(sitemapsCommand.subCommands).toHaveProperty('get')
     expect(sitemapsCommand.subCommands).toHaveProperty('submit')
     expect(sitemapsCommand.subCommands).toHaveProperty('delete')
+    expect(sitemapsCommand.subCommands).toHaveProperty('discover')
+    expect(sitemapsCommand.subCommands).toHaveProperty('urls')
+    expect(sitemapsCommand.subCommands).toHaveProperty('current')
+    expect(sitemapsCommand.subCommands).toHaveProperty('history')
+    expect(sitemapsCommand.subCommands).toHaveProperty('membership')
+    expect(sitemapsCommand.subCommands).toHaveProperty('lastmod')
+    expect(sitemapsCommand.subCommands).toHaveProperty('export')
   })
 
   it('list emits json when --json', async () => {

@@ -71,28 +71,8 @@ export function hashUrl(url: string): string {
   return ((hi >>> 0).toString(16).padStart(8, '0') + (lo >>> 0).toString(16).padStart(8, '0'))
 }
 
-export function sitemapIndexKey(ctx: TenantCtx): string {
-  return `${tenantEntityPrefix(ctx)}/sitemaps/index.json`
-}
-
-export function sitemapHistoryKey(ctx: TenantCtx, feedpathHash: string, capturedAtMs: number): string {
-  return `${tenantEntityPrefix(ctx)}/sitemaps/history/${feedpathHash}__${capturedAtMs}.json`
-}
-
 export function sitemapUrlsPrefix(ctx: TenantCtx): string {
   return `${tenantEntityPrefix(ctx)}/sitemaps/urls`
-}
-
-export function sitemapUrlsIndexPrefix(ctx: TenantCtx): string {
-  return `${sitemapUrlsPrefix(ctx)}/by-feed`
-}
-
-export function sitemapUrlsIndexKey(ctx: TenantCtx, feedpathHash: string): string {
-  return `${sitemapUrlsIndexPrefix(ctx)}/${feedpathHash}/index.parquet`
-}
-
-export function sitemapUrlsProjectionManifestKey(ctx: TenantCtx): string {
-  return `${sitemapUrlsPrefix(ctx)}/projection.json`
 }
 
 export interface SitemapGenerationKey {
@@ -102,26 +82,6 @@ export interface SitemapGenerationKey {
 
 function sitemapGenerationDate(generation: SitemapGenerationKey): string {
   return new Date(generation.observedAt).toISOString().slice(0, 10)
-}
-
-export function sitemapUrlsDeltaKey(
-  ctx: TenantCtx,
-  feedpathHash: string,
-  generation: SitemapGenerationKey,
-): string {
-  return `${sitemapUrlsPrefix(ctx)}/deltas/${sitemapGenerationDate(generation)}__${feedpathHash}__${String(generation.observedAt).padStart(13, '0')}__${hashUrl(generation.id)}.parquet`
-}
-
-const SITEMAP_URLS_DELTA_KEY_RE = /\/urls\/deltas\/(\d{4}-\d{2}-\d{2})__([0-9a-f]+)(?:__\d+__[0-9a-f]+)?\.parquet$/
-
-export function parseSitemapUrlsDeltaKey(key: string): {
-  date: string
-  feedpathHash: string
-} | undefined {
-  const match = SITEMAP_URLS_DELTA_KEY_RE.exec(key)
-  return match?.[1] && match[2]
-    ? { date: match[1], feedpathHash: match[2] }
-    : undefined
 }
 
 export function sitemapUrlsEventsPrefix(ctx: TenantCtx): string {
@@ -136,34 +96,78 @@ export function sitemapUrlsEventKey(
   return `${sitemapUrlsEventsPrefix(ctx)}/${sitemapGenerationDate(generation)}__${feedpathHash}__${String(generation.observedAt).padStart(13, '0')}__${hashUrl(generation.id)}.parquet`
 }
 
-export function sitemapUrlsEventSeedKey(ctx: TenantCtx, feedpathHash: string): string {
-  return `${sitemapUrlsPrefix(ctx)}/event-seeds/${feedpathHash}.json`
+export function sitemapSiteManifestKey(ctx: TenantCtx): string {
+  return `${sitemapUrlsPrefix(ctx)}/site-manifest.json`
 }
 
-export function sitemapUrlsGenerationKey(ctx: TenantCtx, feedpathHash: string): string {
-  return `${sitemapUrlsPrefix(ctx)}/generations/by-feed/${feedpathHash}.json`
+export function sitemapSiteManifestsPrefix(ctx: TenantCtx): string {
+  return `${sitemapUrlsPrefix(ctx)}/site-manifests`
 }
 
-export function sitemapUrlsPendingGenerationsPrefix(ctx: TenantCtx): string {
-  return `${sitemapUrlsPrefix(ctx)}/generations/pending`
+export function sitemapSiteGenerationManifestKey(ctx: TenantCtx, generation: SitemapGenerationKey): string {
+  return `${sitemapSiteManifestsPrefix(ctx)}/${String(generation.observedAt).padStart(13, '0')}__${hashUrl(generation.id)}.json`
 }
 
-export function sitemapUrlsPendingGenerationKey(ctx: TenantCtx, feedpathHash: string): string {
-  return `${sitemapUrlsPendingGenerationsPrefix(ctx)}/${feedpathHash}.json`
+export function sitemapStagedGenerationPrefix(ctx: TenantCtx, generation: SitemapGenerationKey): string {
+  return `${sitemapUrlsPrefix(ctx)}/staged/${String(generation.observedAt).padStart(13, '0')}__${hashUrl(generation.id)}`
 }
 
-export function sitemapUrlsReconcileGenerationKey(ctx: TenantCtx): string {
-  return `${sitemapUrlsPrefix(ctx)}/generations/reconcile.json`
+export function sitemapStagedFeedKey(
+  ctx: TenantCtx,
+  generation: SitemapGenerationKey,
+  feedpathHash: string,
+): string {
+  return `${sitemapStagedGenerationPrefix(ctx, generation)}/${feedpathHash}.json`
 }
 
-/** Hash a URL list for deterministic change detection. */
-export function hashUrlList(urls: readonly { loc: string }[]): string {
-  const locs = urls.map(url => url.loc).sort()
-  return hashSortedUrlList(locs)
+export function sitemapImmutableBaseKey(
+  ctx: TenantCtx,
+  generation: SitemapGenerationKey,
+  feedpathHash: string,
+): string {
+  return `${sitemapUrlsPrefix(ctx)}/bases/${feedpathHash}/${String(generation.observedAt).padStart(13, '0')}__${hashUrl(generation.id)}.parquet`
+}
+
+export function sitemapLegacyImportKey(ctx: TenantCtx): string {
+  return `${sitemapUrlsPrefix(ctx)}/legacy-import.json`
+}
+
+/** WHATWG-serialized HTTP(S) feed identity with the fragment removed. */
+export type SitemapFeedIdentityResult
+  = | { _tag: 'ok', url: string }
+    | { _tag: 'invalid', reason: 'credentials' | 'empty' | 'invalid_url' | 'unsupported_protocol' }
+
+export function parseSitemapFeedIdentity(input: string): SitemapFeedIdentityResult {
+  if (!input)
+    return { _tag: 'invalid', reason: 'empty' }
+  let parsed: URL
+  try {
+    parsed = new URL(input)
+  }
+  catch {
+    return { _tag: 'invalid', reason: 'invalid_url' }
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
+    return { _tag: 'invalid', reason: 'unsupported_protocol' }
+  if (parsed.username || parsed.password)
+    return { _tag: 'invalid', reason: 'credentials' }
+  parsed.hash = ''
+  return { _tag: 'ok', url: parsed.toString() }
+}
+
+/** Versioned exact payload hash. Lastmod-only changes are intentionally visible. */
+export function sitemapPayloadHashV1(urls: readonly { loc: string, lastmod?: string }[]): string {
+  const byLoc = new Map<string, string | null>()
+  for (const url of urls)
+    byLoc.set(url.loc, url.lastmod ?? null)
+  const records = [...byLoc]
+    .map(([loc, lastmod]) => JSON.stringify([loc, lastmod]))
+    .sort()
+  return `v1:${hashSortedUrlList(records)}`
 }
 
 /** Hash sorted URL strings as though joined by a newline, without allocating the join. */
-export function hashSortedUrlList(locs: readonly string[]): string {
+function hashSortedUrlList(locs: readonly string[]): string {
   let hi = 0x811C9DC5
   let lo = 0xCBF29CE4
   for (let locIndex = 0; locIndex < locs.length; locIndex++) {

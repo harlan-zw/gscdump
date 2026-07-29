@@ -1,15 +1,10 @@
-import type { FileSetRef } from '../contracts'
+import type { SitemapSiteGenerationManifest } from '../entities'
 import type { RollupDef } from './core'
 import { readOptional } from '../adapters/read-optional'
 import {
   createIndexingMetadataStore,
   createSitemapReadStore,
-  decodeSitemapProjectionManifest,
   inspectionParquetKey,
-  selectSitemapProjectionFiles,
-  sitemapUrlsIndexPrefix,
-  sitemapUrlsPrefix,
-  sitemapUrlsProjectionManifestKey,
 } from '../entities'
 import { DEFAULT_SEARCH_TYPE } from '../layout'
 import { utcDateMinusDays } from './dates'
@@ -155,85 +150,29 @@ export const indexingHealthRollup: RollupDef = {
   },
 }
 
-function currentSitemapProjectionRelation(hasIndexes: boolean, hasDeltas: boolean): string {
-  const sources: string[] = []
-  if (hasIndexes) {
-    sources.push(`
-      SELECT
-        feedpath_hash,
-        url_hash,
-        loc,
-        removed_at,
-        greatest(
-          coalesce(removed_at, 0),
-          coalesce(last_seen_at, 0),
-          coalesce(first_seen_at, 0)
-        )::BIGINT AS observed_at,
-        0::INTEGER AS source_order
-      FROM read_parquet({{URLS_INDEX}}, union_by_name = true)
-    `)
-  }
-  if (hasDeltas) {
-    sources.push(`
-      SELECT
-        feedpath_hash,
-        url_hash,
-        loc,
-        CASE WHEN op = 'removed' THEN "at" ELSE NULL END AS removed_at,
-        "at"::BIGINT AS observed_at,
-        1::INTEGER AS source_order
-      FROM read_parquet({{URLS_DELTA}}, union_by_name = true)
-      WHERE op IN ('added', 'removed')
-    `)
-  }
-  return `(
-    WITH membership_events AS (
-      ${sources.join('\nUNION ALL\n')}
-    )
-    SELECT feedpath_hash, url_hash, loc, removed_at
-    FROM membership_events
-    QUALIFY row_number() OVER (
-      PARTITION BY feedpath_hash, url_hash
-      ORDER BY observed_at DESC, source_order DESC
-    ) = 1
-  )`
-}
-
 /**
  * Per-day index-percent: ratio of (sitemap URLs that received GSC clicks on
- * that date) / (total live sitemap URLs). Uses a DuckDB JOIN between the
- * sitemap urls parquet (`SitemapStore.urlsParquetUri`) and the `pages` fact
- * parquet. Total denominator is the count of live URLs in the urls index;
- * numerator is per-day distinct loc count where pages.clicks > 0.
+ * that date) / (total published sitemap URLs). The published generation
+ * manifest supplies the exact immutable feed bases. No storage listing or
+ * derived projection participates in authority.
  */
 export const indexPercentRollup: RollupDef = {
   id: 'index_percent',
   windowDays: 90,
   sliceOrthogonal: true,
   async build({ engine, ctx, dataSource, windowAnchorMs, searchType }) {
-    const [listedIndexKeys, listedDeltaKeys, manifestBytes] = await Promise.all([
-      dataSource.list(sitemapUrlsIndexPrefix(ctx)),
-      dataSource.list(`${sitemapUrlsPrefix(ctx)}/deltas/`),
-      readOptional(dataSource, sitemapUrlsProjectionManifestKey(ctx)),
-    ])
-    const manifest = manifestBytes
-      ? decodeSitemapProjectionManifest(new TextDecoder().decode(manifestBytes))
-      : undefined
-    const projection = selectSitemapProjectionFiles(listedIndexKeys, listedDeltaKeys, manifest)
-    if (projection.indexKeys.length === 0 && projection.deltaKeys.length === 0)
+    const generation = await createSitemapReadStore({ dataSource }).getSitemapGeneration(ctx)
+    if (generation._tag === 'unavailable')
       return { totalSitemapUrls: 0, days: [] }
-    const sitemapFileSets: Record<string, FileSetRef> = {
-      ...(projection.indexKeys.length > 0
-        ? { URLS_INDEX: { table: 'pages', keys: projection.indexKeys } }
-        : {}),
-      ...(projection.deltaKeys.length > 0
-        ? { URLS_DELTA: { table: 'pages', keys: projection.deltaKeys } }
-        : {}),
+    const baseKeys = Object.values(generation.manifest.feeds)
+      .sort((left, right) => left.feedpath.localeCompare(right.feedpath))
+      .map(feed => feed.baseKey)
+    if (baseKeys.length === 0)
+      return { totalSitemapUrls: 0, days: [] }
+    const sitemapFileSets = {
+      SITEMAP_BASES: { table: 'pages' as const, keys: baseKeys },
     }
-    const currentMembership = currentSitemapProjectionRelation(
-      projection.indexKeys.length > 0,
-      projection.deltaKeys.length > 0,
-    )
+    const currentMembership = 'read_parquet({{SITEMAP_BASES}}, union_by_name = true)'
     const cutoff = utcDateMinusDays(windowAnchorMs, 90)
     // Numerator: per-day distinct sitemap URLs with clicks>0. This rollup is
     // written at the legacy path, so omitted searchType means the web slice,
@@ -261,7 +200,7 @@ export const indexPercentRollup: RollupDef = {
           COUNT(DISTINCT p.url)::BIGINT AS clicked_urls
         FROM read_parquet({{PAGES}}, union_by_name = true) p
         INNER JOIN ${currentMembership} s
-          ON s.loc = p.url AND s.removed_at IS NULL
+          ON s.loc = p.url
         WHERE p.clicks > 0 AND p.date >= '${cutoff}'
         GROUP BY p.date
         ORDER BY p.date
@@ -275,7 +214,6 @@ export const indexPercentRollup: RollupDef = {
       sql: `
         SELECT COUNT(DISTINCT loc)::BIGINT AS total
         FROM ${currentMembership}
-        WHERE removed_at IS NULL
       `,
     })
     const total = Number(denom.rows[0]?.total ?? 0)
@@ -294,12 +232,42 @@ export const indexPercentRollup: RollupDef = {
   },
 }
 
+const SITEMAP_HEALTH_GENERATION_LIMIT = 10_000
+
+async function loadSitemapGenerationAncestry(
+  dataSource: Parameters<typeof readOptional>[0],
+  current: SitemapSiteGenerationManifest,
+  cutoff: string,
+): Promise<SitemapSiteGenerationManifest[]> {
+  const ancestry: SitemapSiteGenerationManifest[] = []
+  const seen = new Set<string>()
+  let cursor: SitemapSiteGenerationManifest | undefined = current
+  while (cursor) {
+    const day = new Date(cursor.observedAt).toISOString().slice(0, 10)
+    if (day < cutoff)
+      break
+    if (ancestry.length >= SITEMAP_HEALTH_GENERATION_LIMIT)
+      throw new Error('sitemap health generation ancestry limit exceeded')
+    ancestry.push(cursor)
+    if (!cursor.previousManifestKey)
+      break
+    if (seen.has(cursor.previousManifestKey))
+      throw new Error('sitemap generation manifest ancestry cycle')
+    seen.add(cursor.previousManifestKey)
+    const bytes = await readOptional(dataSource, cursor.previousManifestKey)
+    if (!bytes)
+      throw new Error('sitemap generation manifest ancestry is incomplete')
+    const previous = JSON.parse(new TextDecoder().decode(bytes)) as SitemapSiteGenerationManifest
+    if (previous.generationId !== cursor.previousGenerationId)
+      throw new Error('sitemap generation manifest ancestry is incomplete')
+    cursor = previous
+  }
+  return ancestry
+}
+
 /**
- * Sitemap-health per-day series materialized from the sitemap-store JSON
- * index. Each `SitemapRecord` carries `urlCount`, `errors`, `warnings`,
- * `contentHash`, and `lastDownloaded`. We bucket records by the day of their
- * `capturedAt` (or `lastDownloaded` fallback) and emit per-day aggregates plus
- * a snapshot of per-feed stats at the most recent capture.
+ * Sitemap-health history derives exclusively from published complete
+ * generations. The newest generation observed on each day is retained.
  */
 export const sitemapHealthRollup: RollupDef = {
   id: 'sitemap_health',
@@ -307,53 +275,45 @@ export const sitemapHealthRollup: RollupDef = {
   sliceOrthogonal: true,
   async build({ dataSource, ctx, windowAnchorMs }) {
     const store = createSitemapReadStore({ dataSource })
-    const index = await store.loadIndex(ctx)
-    const records = Object.values(index.records)
+    const generation = await store.getSitemapGeneration(ctx)
+    if (generation._tag === 'unavailable')
+      return { days: [], feeds: [] }
     const cutoff = utcDateMinusDays(windowAnchorMs, 90)
-
-    interface DayBucket {
+    const ancestry = await loadSitemapGenerationAncestry(dataSource, generation.manifest, cutoff)
+    const byDay = new Map<string, {
       day: string
       feeds: number
       total_urls: number
       errors: number
       warnings: number
-    }
-    const byDay = new Map<string, DayBucket>()
-    const feeds: Array<{
-      path: string
-      urlCount: number
-      errors: number
-      warnings: number
-      contentHash: string | null
-      lastDownloaded: string | null
-      capturedAt: string
-    }> = []
-
-    for (const r of records) {
-      const day = (r.capturedAt ?? r.lastDownloaded ?? '').slice(0, 10)
-      if (!day || day < cutoff)
+    }>()
+    for (const manifest of ancestry) {
+      const day = new Date(manifest.observedAt).toISOString().slice(0, 10)
+      if (byDay.has(day))
         continue
-      const errors = Number(r.errors ?? 0)
-      const warnings = Number(r.warnings ?? 0)
-      const urlCount = Number(r.urlCount ?? 0)
-      const bucket = byDay.get(day) ?? { day, feeds: 0, total_urls: 0, errors: 0, warnings: 0 }
-      bucket.feeds += 1
-      bucket.total_urls += urlCount
-      bucket.errors += errors
-      bucket.warnings += warnings
-      byDay.set(day, bucket)
-      feeds.push({
-        path: r.path,
-        urlCount,
-        errors,
-        warnings,
-        contentHash: r.contentHash ?? null,
-        lastDownloaded: r.lastDownloaded ?? null,
-        capturedAt: r.capturedAt,
+      const manifestFeeds = Object.values(manifest.feeds)
+      byDay.set(day, {
+        day,
+        feeds: manifestFeeds.length,
+        total_urls: manifestFeeds.reduce((total, feed) => total + feed.urlCount, 0),
+        errors: 0,
+        warnings: 0,
       })
     }
 
     const days = Array.from(byDay.values()).sort((a, b) => (a.day < b.day ? -1 : 1))
+    const capturedAt = new Date(generation.manifest.observedAt).toISOString()
+    const feeds = Object.values(generation.manifest.feeds)
+      .sort((left, right) => left.feedpath.localeCompare(right.feedpath))
+      .map(feed => ({
+        path: feed.feedpath,
+        urlCount: feed.urlCount,
+        errors: 0,
+        warnings: 0,
+        contentHash: feed.payloadHash,
+        lastDownloaded: null,
+        capturedAt,
+      }))
     return { days, feeds }
   },
 }
@@ -438,6 +398,8 @@ export const sitemapChanges28dRollup: RollupDef = {
     }
 
     for await (const d of store.loadEvents(ctx, { from, to })) {
+      if (d.op === 'updated')
+        continue
       const day = new Date(d.observedAt).toISOString().slice(0, 10)
       const k = key({ day, feedpath: d.feedpath })
       const cur = counts.get(k) ?? { day, feedpath: d.feedpath, added: 0, removed: 0 }

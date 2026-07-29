@@ -1,13 +1,11 @@
 import type { TenantCtx } from '@gscdump/engine/contracts'
-import type { IndexingMetadataRecord, InspectionRecord, InspectionStore, SitemapRecord } from '@gscdump/engine/entities'
+import type { IndexingMetadataRecord, InspectionRecord, InspectionStore } from '@gscdump/engine/entities'
 import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 import process from 'node:process'
 import {
   createIndexingMetadataStore,
   createInspectionStore,
-  createSitemapReadStore,
-  createSitemapStore,
 } from '@gscdump/engine/entities'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
@@ -223,127 +221,6 @@ const showSubCommand = defineCommand({
   },
 })
 
-const sitemapsSnapshotSubCommand = defineCommand({
-  meta: {
-    name: 'snapshot',
-    description: 'Fetch current sitemap state from GSC and persist to the local entity store',
-  },
-  args: {
-    ...OUTPUT_ARGS,
-    site: {
-      type: 'string',
-      alias: 's',
-      description: 'Site URL (e.g., sc-domain:example.com); defaults to config.defaultSite or prompt',
-    },
-  },
-  async run({ args }) {
-    const { json, quiet } = applyOutputMode(args)
-    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
-    const client = ctx.client!
-    const store = ctx.store!
-    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-
-    const apiSitemaps = await client.sitemaps.list(siteUrl)
-    const capturedAt = new Date().toISOString()
-    const records: SitemapRecord[] = apiSitemaps
-      .filter(s => typeof s.path === 'string')
-      .map(s => ({
-        path: s.path as string,
-        capturedAt,
-        lastDownloaded: s.lastDownloaded ?? undefined,
-        lastSubmitted: s.lastSubmitted ?? undefined,
-        type: s.type ?? undefined,
-        isPending: s.isPending ?? undefined,
-        isSitemapsIndex: s.isSitemapsIndex ?? undefined,
-        errors: s.errors ?? undefined,
-        warnings: s.warnings ?? undefined,
-        contents: s.contents?.map(c => ({
-          type: c.type ?? undefined,
-          submitted: c.submitted ?? undefined,
-          indexed: c.indexed ?? undefined,
-        })),
-        raw: s,
-      }))
-
-    const sitemaps = createSitemapStore({
-      dataSource: store.dataSource,
-      withMutation: store.withSitemapMutation,
-    })
-    await sitemaps.writeSnapshot(
-      { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
-      records,
-    )
-
-    if (json) {
-      console.log(JSON.stringify({ site: siteUrl, capturedAt, records }, null, 2))
-      return
-    }
-    if (!quiet) {
-      logger.success(`Captured ${records.length} sitemap(s) for ${siteUrl}`)
-      for (const r of records) {
-        const errors = r.errors && r.errors !== '0' ? ` \x1B[31merr=${r.errors}\x1B[0m` : ''
-        const warnings = r.warnings && r.warnings !== '0' ? ` \x1B[33mwarn=${r.warnings}\x1B[0m` : ''
-        const downloaded = r.lastDownloaded ? ` last=${r.lastDownloaded}` : ''
-        console.log(`  ${r.path}${downloaded}${errors}${warnings}`)
-      }
-    }
-  },
-})
-
-const sitemapsShowSubCommand = defineCommand({
-  meta: {
-    name: 'show',
-    description: 'Print the latest captured sitemap state for a feedpath',
-  },
-  args: {
-    ...OUTPUT_ARGS,
-    site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
-    path: { type: 'positional', required: true, description: 'Sitemap path (feedpath)' },
-  },
-  async run({ args }) {
-    const { json } = applyOutputMode(args)
-    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
-    const store = ctx.store!
-    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-    const sitemaps = createSitemapReadStore({ dataSource: store.dataSource })
-    const record = await sitemaps.getLatest(
-      { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
-      String(args.path),
-    )
-    if (!record) {
-      logger.warn(`No sitemap record for ${args.path}`)
-      process.exit(1)
-    }
-    if (json) {
-      console.log(JSON.stringify(record, null, 2))
-      return
-    }
-    console.log()
-    console.log(`  \x1B[1m${record.path}\x1B[0m`)
-    console.log(`  Captured:     ${record.capturedAt}`)
-    if (record.lastDownloaded)
-      console.log(`  Downloaded:   ${record.lastDownloaded}`)
-    if (record.lastSubmitted)
-      console.log(`  Submitted:    ${record.lastSubmitted}`)
-    if (record.type)
-      console.log(`  Type:         ${record.type}`)
-    if (record.errors)
-      console.log(`  Errors:       ${record.errors}`)
-    if (record.warnings)
-      console.log(`  Warnings:     ${record.warnings}`)
-    if (record.contents?.length) {
-      console.log(`  Contents:`)
-      for (const c of record.contents) {
-        const bits = [c.type, c.submitted && `submitted=${c.submitted}`, c.indexed && `indexed=${c.indexed}`]
-          .filter(Boolean)
-          .join('  ')
-        console.log(`    ${bits}`)
-      }
-    }
-    console.log()
-  },
-})
-
 const indexingSnapshotSubCommand = defineCommand({
   meta: {
     name: 'snapshot',
@@ -447,26 +324,14 @@ const indexingSubCommand = defineCommand({
   },
 })
 
-const sitemapsSubCommand = defineCommand({
-  meta: {
-    name: 'sitemaps',
-    description: 'Snapshot and inspect sitemap state per site',
-  },
-  subCommands: {
-    snapshot: sitemapsSnapshotSubCommand,
-    show: sitemapsShowSubCommand,
-  },
-})
-
 export const entitiesCommand = defineCommand({
   meta: {
     name: 'entities',
-    description: 'Manage local entity snapshots (URL inspections, sitemaps, indexing metadata)',
+    description: 'Manage local entity snapshots (URL inspections and indexing metadata)',
   },
   subCommands: {
     inspect: inspectSubCommand,
     show: showSubCommand,
-    sitemaps: sitemapsSubCommand,
     indexing: indexingSubCommand,
   },
 })

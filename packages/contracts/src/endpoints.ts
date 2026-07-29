@@ -25,9 +25,6 @@ export const analyticsEndpoints = {
   analyze: defineEndpoint('POST', analyticsRoutes.site.analyze, noSchema),
   getRollup: defineEndpoint('GET', analyticsRoutes.site.rollup, analyticsEndpointSchemas.analyticsRollup),
   requestBackfill: defineEndpoint('POST', analyticsRoutes.site.backfill, analyticsEndpointSchemas.analyticsBackfill),
-  getSitemaps: defineEndpoint('GET', analyticsRoutes.site.sitemaps, analyticsEndpointSchemas.analyticsSitemaps),
-  getSitemapHistory: defineEndpoint('GET', analyticsRoutes.site.sitemapHistory, analyticsEndpointSchemas.analyticsSitemapHistory),
-  getSitemapChanges: defineEndpoint('GET', analyticsRoutes.site.sitemapChanges, analyticsEndpointSchemas.analyticsSitemapChanges),
   getInspections: defineEndpoint('GET', analyticsRoutes.site.inspections, analyticsEndpointSchemas.analyticsInspections),
   getInspectionHistory: defineEndpoint('GET', analyticsRoutes.site.inspectionHistory, analyticsEndpointSchemas.analyticsInspectionHistory),
   getIndexingUrls: defineEndpoint('GET', analyticsRoutes.site.indexingUrls, analyticsEndpointSchemas.analyticsIndexingUrls),
@@ -56,13 +53,6 @@ export const partnerEndpoints = {
   getAnalysisSources: defineEndpoint('GET', partnerRoutes.sites.analysisSources, partnerControlEndpointSchemas.getAnalysisSources),
   getData: defineEndpoint('GET', partnerRoutes.sites.data, partnerControlEndpointSchemas.getData),
   getDataDetail: defineEndpoint('GET', partnerRoutes.sites.dataDetail, partnerControlEndpointSchemas.getDataDetail),
-  getSitemaps: defineEndpoint('GET', partnerRoutes.sites.sitemaps, partnerControlEndpointSchemas.getSitemaps),
-  getSitemapChanges: defineEndpoint('GET', partnerRoutes.sites.sitemapChanges, partnerControlEndpointSchemas.getSitemapChanges),
-  // Single POST descriptor for the sitemap action route: `submitSitemap` and
-  // `refreshSitemaps` on the client are conveniences over the same wire endpoint,
-  // discriminated by the request body's `action`.
-  postSitemaps: defineEndpoint('POST', partnerRoutes.sites.sitemaps, partnerControlEndpointSchemas.postSitemaps),
-  getSitemapMembership: defineEndpoint('POST', partnerRoutes.sites.sitemapMembership, partnerControlEndpointSchemas.getSitemapMembership),
   getIndexing: defineEndpoint('GET', partnerRoutes.sites.indexing, partnerControlEndpointSchemas.getIndexing),
   getIndexingUrls: defineEndpoint('GET', partnerRoutes.sites.indexingUrls, partnerControlEndpointSchemas.getIndexingUrls),
   getIndexingDiagnostics: defineEndpoint('GET', partnerRoutes.sites.indexingDiagnostics, partnerControlEndpointSchemas.getIndexingDiagnostics),

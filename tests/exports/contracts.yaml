@@ -64,10 +64,15 @@
   gscdumpQueryTrendParamsSchema: object
   gscdumpQueryTrendResponseSchema: object
   gscdumpSitemapChangesResponseSchema: object
+  gscdumpSitemapExportQuerySchema: object
+  gscdumpSitemapExportResponseSchema: object
+  gscdumpSitemapGenerationSchema: object
+  gscdumpSitemapMembershipEvidenceSchema: object
   gscdumpSitemapMembershipParamsSchema: object
   gscdumpSitemapMembershipResponseSchema: object
-  gscdumpSitemapMembershipUrlSchema: object
   gscdumpSitemapsResponseSchema: object
+  gscdumpSitemapUrlsQuerySchema: object
+  gscdumpSitemapUrlsResponseSchema: object
   gscdumpSiteRegistrationSchema: object
   gscdumpSiteReportResponseSchema: object
   gscdumpSyncJobsResponseSchema: object
@@ -152,10 +157,9 @@
   siteDailyTimeseries: function
   siteIntIdCrosswalkResponseSchema: object
   siteListItemSchema: object
+  sitemapChangesCompletenessSchema: object
   sitemapChangesResponseSchema: object
-  sitemapHistoryRecordSchema: object
-  sitemapHistoryResponseSchema: object
-  sitemapIndexSchema: object
+  sitemapChangesTruncationReasonSchema: object
   sitemapNextActions: object
   sitemapStatuses: object
   sourceInfoResponseSchema: object

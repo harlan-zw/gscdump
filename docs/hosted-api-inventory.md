@@ -27,14 +27,14 @@ replacement for deliberate review; `--write` updates the checked-in snapshot.
 
 | Evidence | Count |
 | --- | ---: |
-| Live `server/api` route files | 255 |
-| HTTP method/path operations | 255 |
+| Live `server/api` route files | 251 |
+| HTTP method/path operations | 251 |
 | Legacy WebSocket operations | 0 |
-| Total hosted operations | 255 |
-| Legacy package endpoint descriptors | 63 |
-| Generated public-v1 operation descriptors | 51 |
-| Distinct hosted operations owned by a descriptor | 114 |
-| Hosted operations without a descriptor | 141 |
+| Total hosted operations | 251 |
+| Legacy package endpoint descriptors | 56 |
+| Generated public-v1 operation descriptors | 53 |
+| Distinct hosted operations owned by a descriptor | 109 |
+| Hosted operations without a descriptor | 142 |
 | Schema-less legacy descriptors | 3 |
 | Legacy descriptors with no producer handler | 0 |
 | Legacy descriptor method/path collisions | 0 |
@@ -43,16 +43,16 @@ The retired `server/routes/ws/user.ts` and `server/routes/ws/partner.ts`
 handlers are absent. The separately owned admin route under
 `layers/admin/server/routes/ws/admin.ts` is not a public protocol operation.
 
-The 141 unowned operations are not all public-contract gaps. The v1 review
+The 142 unowned operations are not all public-contract gaps. The v1 review
 classification is:
 
 | Review outcome | Operations | Meaning |
 | --- | ---: | --- |
-| Accepted v1 slice | 51 | Executable descriptor, generated contract, SDK, and hosted route exist |
-| Analytics candidate | 25 | Review for `/api/analytics/v1` |
-| Partner candidate | 49 | Review for `/api/partner/v1` |
+| Accepted v1 slice | 53 | Executable descriptor, generated contract, SDK, and hosted route exist |
+| Analytics candidate | 22 | Review for `/api/analytics/v1` |
+| Partner candidate | 45 | Review for `/api/partner/v1` |
 | Decision required | 51 | Shared user/site/team routes that need an explicit boundary decision |
-| Outside public protocol | 79 | Admin, CLI, public-host, session, webhook, and other host concerns |
+| Outside public protocol | 80 | Admin, CLI, public-host, session, webhook, and other host concerns |
 
 An operation marked as a candidate is still not accepted into v1 until it has
 an executable descriptor, schemas, auth/scopes, ownership checks, consistency,
@@ -60,11 +60,11 @@ SDK coverage, and producer contract tests. An operation outside protocol
 should remain host-owned rather than receive a package descriptor merely to
 make the count reach zero.
 
-The exact accepted set is the 51 `*-v1` descriptor rows in the machine-readable
+The exact accepted set is the 53 `*-v1` descriptor rows in the machine-readable
 snapshot and the three generated OpenAPI artifacts. Keeping that list generated
 avoids a second hand-maintained operation registry in this migration record.
 
-The 63 legacy descriptors and their findings remain migration evidence. Their
+The 56 legacy descriptors and their findings remain migration evidence. Their
 three `noSchema` entries are not defects in the public HTTP-v1 descriptors;
 they identify the remaining deployed-wire operations that cannot yet be treated
 as fully typed package APIs.
@@ -82,11 +82,11 @@ and response schemas; removed operations should be deleted from the v1
 registry rather than carried as placeholders.
 
 All legacy descriptors now match a deployed producer method/path and no two
-logical descriptors claim the same method/path. The producer's multiplexed
-`POST /api/sites/{siteId}/sitemaps` route is represented by one typed
-`partner.postSitemaps` descriptor with a closed action union; SDK convenience
-methods delegate to that single wire operation. Sitemap membership lookup is
-represented separately by the typed `partner.getSitemapMembership` descriptor.
+logical descriptors claim the same method/path. Sitemap transport exists only
+on public partner v1. Its generation-pinned snapshot, changes, exact membership
+evidence, bounded URL/lastmod pages, bulk export, and action operations are
+separately typed. GSC submitted-sitemap metadata does not establish URL
+membership.
 
 ## Scope and exclusions
 

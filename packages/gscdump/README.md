@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/gscdump?color=yellow)](https://npm.chart.dev/gscdump)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-Direct Google Search Console client with a typed query builder, streaming pagination, URL inspection, sitemap, verification, and Indexing API helpers.
+Direct Google Search Console client with a typed query builder, streaming pagination, URL inspection, sitemap administration, verification, and Indexing API helpers.
 
 ## Install
 
@@ -72,6 +72,10 @@ await client.indexing.publish(
 ```
 
 The package root also exports batch and projection helpers such as `fetchSitesWithSitemaps`, `batchInspectUrlsFlatSettled`, `inspectUrlFlat`, and `batchRequestIndexing`.
+
+Sitemap XML reading and traversal lives in `sitemapd`. Product feed scoping and
+exact membership hashing live in `gscdump/sitemap-identity`. Hosted canonical
+sitemap membership is available through `@gscdump/sdk/v1`.
 
 ## Public subpaths
 

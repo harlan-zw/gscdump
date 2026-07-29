@@ -15,15 +15,15 @@
     ]
   },
   "summary": {
-    "apiRouteFileCount": 255,
-    "httpOperationCount": 255,
+    "apiRouteFileCount": 251,
+    "httpOperationCount": 251,
     "websocketOperationCount": 0,
-    "operationCount": 255,
-    "descriptorCount": 114,
-    "legacyDescriptorCount": 63,
-    "v1DescriptorCount": 51,
-    "descriptorOwnedOperationCount": 114,
-    "hostOperationsWithoutDescriptorCount": 141,
+    "operationCount": 251,
+    "descriptorCount": 109,
+    "legacyDescriptorCount": 56,
+    "v1DescriptorCount": 53,
+    "descriptorOwnedOperationCount": 109,
+    "hostOperationsWithoutDescriptorCount": 142,
     "schemaLessDescriptorCount": 3,
     "descriptorWithoutHandlerCount": 0,
     "descriptorCollisionCount": 0,
@@ -126,6 +126,11 @@
       },
       {
         "method": "POST",
+        "path": "/api/admin/lake/overlay-parity",
+        "file": "server/api/admin/lake/overlay-parity.post.ts"
+      },
+      {
+        "method": "POST",
         "path": "/api/admin/lake/sql",
         "file": "server/api/admin/lake/sql.post.ts"
       },
@@ -133,11 +138,6 @@
         "method": "POST",
         "path": "/api/admin/rollups/query-dim-rebuild",
         "file": "server/api/admin/rollups/query-dim-rebuild.post.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/admin/sitemap/compact",
-        "file": "server/api/admin/sitemap/compact.post.ts"
       },
       {
         "method": "POST",
@@ -443,6 +443,11 @@
         "method": "GET",
         "path": "/api/reports",
         "file": "server/api/reports/index.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sitemap-exports/{token}",
+        "file": "server/api/sitemap-exports/[token].get.ts"
       },
       {
         "method": "PATCH",
@@ -879,39 +884,6 @@
       ]
     },
     {
-      "id": "analytics.getSitemapChanges",
-      "owner": "analytics",
-      "method": "GET",
-      "path": "/api/__gsc/sites/{siteId}/sitemaps/changes",
-      "routeBuilder": "analytics.site.sitemapChanges",
-      "schema": "validated",
-      "handlerFiles": [
-        "server/api/__gsc/sites/[siteId]/sitemaps/changes.get.ts"
-      ]
-    },
-    {
-      "id": "analytics.getSitemapHistory",
-      "owner": "analytics",
-      "method": "GET",
-      "path": "/api/__gsc/sites/{siteId}/sitemaps/{hash}",
-      "routeBuilder": "analytics.site.sitemapHistory",
-      "schema": "validated",
-      "handlerFiles": [
-        "server/api/__gsc/sites/[siteId]/sitemaps/[hash].get.ts"
-      ]
-    },
-    {
-      "id": "analytics.getSitemaps",
-      "owner": "analytics",
-      "method": "GET",
-      "path": "/api/__gsc/sites/{siteId}/sitemaps",
-      "routeBuilder": "analytics.site.sitemaps",
-      "schema": "validated",
-      "handlerFiles": [
-        "server/api/__gsc/sites/[siteId]/sitemaps.get.ts"
-      ]
-    },
-    {
       "id": "analytics.getSourceInfo",
       "owner": "analytics",
       "method": "GET",
@@ -1231,39 +1203,6 @@
       ]
     },
     {
-      "id": "partner.getSitemapChanges",
-      "owner": "partner",
-      "method": "GET",
-      "path": "/api/sites/{siteId}/sitemaps/changes",
-      "routeBuilder": "partner.sites.sitemapChanges",
-      "schema": "validated",
-      "handlerFiles": [
-        "server/api/sites/[siteId]/sitemaps/changes.get.ts"
-      ]
-    },
-    {
-      "id": "partner.getSitemapMembership",
-      "owner": "partner",
-      "method": "POST",
-      "path": "/api/sites/{siteId}/sitemaps/membership",
-      "routeBuilder": "partner.sites.sitemapMembership",
-      "schema": "validated",
-      "handlerFiles": [
-        "server/api/sites/[siteId]/sitemaps/membership.post.ts"
-      ]
-    },
-    {
-      "id": "partner.getSitemaps",
-      "owner": "partner",
-      "method": "GET",
-      "path": "/api/sites/{siteId}/sitemaps",
-      "routeBuilder": "partner.sites.sitemaps",
-      "schema": "validated",
-      "handlerFiles": [
-        "server/api/sites/[siteId]/sitemaps.get.ts"
-      ]
-    },
-    {
       "id": "partner.getSyncStatus",
       "owner": "partner",
       "method": "GET",
@@ -1382,17 +1321,6 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/user/settings.patch.ts"
-      ]
-    },
-    {
-      "id": "partner.postSitemaps",
-      "owner": "partner",
-      "method": "POST",
-      "path": "/api/sites/{siteId}/sitemaps",
-      "routeBuilder": "partner.sites.sitemaps",
-      "schema": "validated",
-      "handlerFiles": [
-        "server/api/sites/[siteId]/sitemaps.post.ts"
       ]
     },
     {
@@ -1726,6 +1654,17 @@
       ]
     },
     {
+      "id": "partner.sites.sitemaps.export.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/sitemaps/export",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/sitemaps/export.get.ts"
+      ]
+    },
+    {
       "id": "partner.sites.sitemaps.get",
       "owner": "partner-v1",
       "method": "GET",
@@ -1745,6 +1684,17 @@
       "schema": "validated",
       "handlerFiles": [
         "server/api/partner/v1/sites/[siteId]/sitemaps/membership.post.ts"
+      ]
+    },
+    {
+      "id": "partner.sites.sitemaps.urls.get",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/sitemaps/urls",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/sites/[siteId]/sitemaps/urls.get.ts"
       ]
     },
     {
@@ -2252,45 +2202,6 @@
       "v1Review": "analytics"
     },
     {
-      "file": "server/api/__gsc/sites/[siteId]/sitemaps.get.ts",
-      "method": "GET",
-      "path": "/api/__gsc/sites/{siteId}/sitemaps",
-      "descriptorOwners": [
-        "analytics.getSitemaps"
-      ],
-      "routeBuilderOwners": [
-        "analytics.site.sitemaps"
-      ],
-      "currentSurface": "legacy-analytics-data",
-      "v1Review": "analytics"
-    },
-    {
-      "file": "server/api/__gsc/sites/[siteId]/sitemaps/[hash].get.ts",
-      "method": "GET",
-      "path": "/api/__gsc/sites/{siteId}/sitemaps/{hash}",
-      "descriptorOwners": [
-        "analytics.getSitemapHistory"
-      ],
-      "routeBuilderOwners": [
-        "analytics.site.sitemapHistory"
-      ],
-      "currentSurface": "legacy-analytics-data",
-      "v1Review": "analytics"
-    },
-    {
-      "file": "server/api/__gsc/sites/[siteId]/sitemaps/changes.get.ts",
-      "method": "GET",
-      "path": "/api/__gsc/sites/{siteId}/sitemaps/changes",
-      "descriptorOwners": [
-        "analytics.getSitemapChanges"
-      ],
-      "routeBuilderOwners": [
-        "analytics.site.sitemapChanges"
-      ],
-      "currentSurface": "legacy-analytics-data",
-      "v1Review": "analytics"
-    },
-    {
       "file": "server/api/__gsc/sites/[siteId]/source-info.get.ts",
       "method": "GET",
       "path": "/api/__gsc/sites/{siteId}/source-info",
@@ -2416,6 +2327,15 @@
       "v1Review": "outside-public-protocol"
     },
     {
+      "file": "server/api/admin/lake/overlay-parity.post.ts",
+      "method": "POST",
+      "path": "/api/admin/lake/overlay-parity",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-admin",
+      "v1Review": "outside-public-protocol"
+    },
+    {
       "file": "server/api/admin/lake/sql.post.ts",
       "method": "POST",
       "path": "/api/admin/lake/sql",
@@ -2428,15 +2348,6 @@
       "file": "server/api/admin/rollups/query-dim-rebuild.post.ts",
       "method": "POST",
       "path": "/api/admin/rollups/query-dim-rebuild",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "host-admin",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/admin/sitemap/compact.post.ts",
-      "method": "POST",
-      "path": "/api/admin/sitemap/compact",
       "descriptorOwners": [],
       "routeBuilderOwners": [],
       "currentSurface": "host-admin",
@@ -3459,11 +3370,33 @@
       "v1Review": "accepted-v1"
     },
     {
+      "file": "server/api/partner/v1/sites/[siteId]/sitemaps/export.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/sitemaps/export",
+      "descriptorOwners": [
+        "partner.sites.sitemaps.export.get"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
       "file": "server/api/partner/v1/sites/[siteId]/sitemaps/membership.post.ts",
       "method": "POST",
       "path": "/api/partner/v1/sites/{siteId}/sitemaps/membership",
       "descriptorOwners": [
         "partner.sites.sitemaps.membership.query"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/sites/[siteId]/sitemaps/urls.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/sites/{siteId}/sitemaps/urls",
+      "descriptorOwners": [
+        "partner.sites.sitemaps.urls.get"
       ],
       "routeBuilderOwners": [],
       "currentSurface": "public-partner-v1",
@@ -3769,6 +3702,15 @@
       "file": "server/api/reports/index.get.ts",
       "method": "GET",
       "path": "/api/reports",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/sitemap-exports/[token].get.ts",
+      "method": "GET",
+      "path": "/api/sitemap-exports/{token}",
       "descriptorOwners": [],
       "routeBuilderOwners": [],
       "currentSurface": "host-internal-or-session",
@@ -4156,58 +4098,6 @@
       "routeBuilderOwners": [],
       "currentSurface": "shared-hosted",
       "v1Review": "decision-required"
-    },
-    {
-      "file": "server/api/sites/[siteId]/sitemaps.get.ts",
-      "method": "GET",
-      "path": "/api/sites/{siteId}/sitemaps",
-      "descriptorOwners": [
-        "partner.getSitemaps"
-      ],
-      "routeBuilderOwners": [
-        "partner.sites.sitemaps"
-      ],
-      "currentSurface": "shared-hosted",
-      "v1Review": "partner"
-    },
-    {
-      "file": "server/api/sites/[siteId]/sitemaps.post.ts",
-      "method": "POST",
-      "path": "/api/sites/{siteId}/sitemaps",
-      "descriptorOwners": [
-        "partner.postSitemaps"
-      ],
-      "routeBuilderOwners": [
-        "partner.sites.sitemaps"
-      ],
-      "currentSurface": "shared-hosted",
-      "v1Review": "partner"
-    },
-    {
-      "file": "server/api/sites/[siteId]/sitemaps/changes.get.ts",
-      "method": "GET",
-      "path": "/api/sites/{siteId}/sitemaps/changes",
-      "descriptorOwners": [
-        "partner.getSitemapChanges"
-      ],
-      "routeBuilderOwners": [
-        "partner.sites.sitemapChanges"
-      ],
-      "currentSurface": "shared-hosted",
-      "v1Review": "partner"
-    },
-    {
-      "file": "server/api/sites/[siteId]/sitemaps/membership.post.ts",
-      "method": "POST",
-      "path": "/api/sites/{siteId}/sitemaps/membership",
-      "descriptorOwners": [
-        "partner.getSitemapMembership"
-      ],
-      "routeBuilderOwners": [
-        "partner.sites.sitemapMembership"
-      ],
-      "currentSurface": "shared-hosted",
-      "v1Review": "partner"
     },
     {
       "file": "server/api/sites/[siteId]/sync.post.ts",

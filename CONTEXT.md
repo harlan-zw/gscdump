@@ -48,6 +48,30 @@ _Avoid_: aggregate, summary, snapshot (collides with **Entity** snapshots).
 Per-site slow-changing state, point-lookup-by-id — URL inspections, sitemap snapshots, indexing-metadata events, the query dimension. Distinct family from time-series facts.
 _Avoid_: record (overloaded), object.
 
+**Sitemap document reader** (`sitemapd`):
+The canonical source-only parser and traversal package. It owns XML/robots parsing, decompression and byte limits, nested-index traversal, redirect handling, and caller-supplied target authorization. It does not persist sitemap state.
+_Avoid_: app-local parser wrappers, importing framework sitemap modules to parse XML.
+
+**Sitemap generation authority**:
+The hosted gscdump.com entity store for one site's exact sitemap membership. A complete traversal stages immutable feed bases and events, then publishes one site manifest as the only visibility point. Readers pin to that manifest and its reachable ancestry.
+_Avoid_: CLI-local sitemap snapshots, prefix scans that discover unreferenced objects, treating GSC's submitted-sitemap metadata as URL membership.
+
+**Sitemap feed identity**:
+The WHATWG-canonical absolute HTTP(S) document URL with its fragment removed. Scheme and host casing plus default ports normalize; path casing, query, and trailing slash remain identity-bearing. Cross-site traversal is explicit authorization at the `sitemapd` load boundary.
+_Avoid_: `urlMatchKey`; it is an analytics grouping key and must never identify feeds or membership records.
+
+**Sitemap product scoping** (`gscdump/sitemap-identity`):
+Parser-free helpers for canonical same-site feed identity, duplicate evidence selection, and exact membership digests. This is a product policy seam distinct from `sitemapd` document authorization.
+_Avoid_: moving XML parsing back into `gscdump` or using analytics URL normalization for identity.
+
+**Sitemap membership hash** / **payload hash**:
+Versioned exact hashes over a feed's effective records. Membership hashes include exact `loc` values. Payload hashes also include `lastmod`, so lastmod-only changes remain observable.
+_Avoid_: normalized URL hashes, unversioned digests, using membership equality to infer payload equality.
+
+**Sitemap generation manifest**:
+An immutable, complete site observation containing feed base references, exact event references, previous-manifest ancestry, completeness, and history-floor evidence. The mutable site manifest points to the current immutable generation. Orphan staged data and crashed immutable manifests are intentionally invisible.
+_Avoid_: listing storage prefixes to infer published generations or events.
+
 **Canonical Query** (`query_canonical`; `normalizeQuery` in `@gscdump/analysis`):
 The grouping key for near-duplicate search queries — unicode-folded, lowercased, singularized, bag-of-words sorted (except asymmetric `X to Y` conversions), versioned by `NORMALIZER_VERSION`. Fact-table reads derive it by joining the **Query Dimension** and falling back to raw `query`; canonical rollups may materialize the derived `query_canonical` output. See ADR-0018/0019.
 _Avoid_: slug, hash. Don't bake brand into it (brand is per-tenant + mutable).
@@ -111,6 +135,8 @@ _Avoid_: recreating an app-local direct Google client or importing the removed `
 - An **Analyzer** consumes a **Source** via `runAnalyzerFromSource`
 - A **Rollup** is written by the sync path; an **Analyzer** is run on demand
 - The **Manifest authority** is the single source of truth for which parquet files belong to a `(siteId, table, searchType)` shard
+- `sitemapd` reads documents; the hosted **Sitemap generation authority** persists and serves their exact membership
+- A **Sitemap generation manifest** is published only after all referenced feed bases and events are durable
 
 ## Flagged ambiguities
 

@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/cli",
   "type": "module",
-  "version": "1.5.4",
+  "version": "2.0.0",
   "description": "CLI for Google Search Console - dump, query, and run MCP server",
   "author": {
     "name": "Harlan Wilton",
@@ -53,6 +53,7 @@
     "@gscdump/analysis": "workspace:^",
     "@gscdump/engine": "workspace:^",
     "@gscdump/engine-gsc-api": "workspace:^",
+    "@gscdump/sdk": "workspace:^",
     "@modelcontextprotocol/sdk": "catalog:",
     "citty": "catalog:deps",
     "consola": "catalog:deps",
@@ -60,6 +61,7 @@
     "gscdump": "workspace:^",
     "ofetch": "catalog:deps",
     "open": "catalog:deps",
+    "sitemapd": "^0.1.0",
     "zod": "catalog:"
   },
   "devDependencies": {

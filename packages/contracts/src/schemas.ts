@@ -108,16 +108,6 @@ export const siteListItemSchema = z.object({
   readBackend: z.enum(['d1', 'r2']).optional(),
 }).loose()
 
-export const sitemapHistoryRecordSchema = z.object({
-  path: z.string(),
-  capturedAt: z.string(),
-}).loose()
-
-export const sitemapHistoryResponseSchema = z.object({
-  path: z.string().nullable(),
-  snapshots: z.array(sitemapHistoryRecordSchema),
-}).loose()
-
 /** Adaptive recheck schedule shape — must match `ScheduleState` in types.ts. */
 export const scheduleStateSchema = z.object({
   nextAt: z.number(),
@@ -161,11 +151,6 @@ export const inspectionHistoryRecordSchema = z.object({
 export const inspectionHistoryResponseSchema = z.object({
   url: z.string().nullable(),
   records: z.array(inspectionHistoryRecordSchema),
-}).loose()
-
-export const sitemapIndexSchema = z.object({
-  version: z.literal(1),
-  records: z.record(z.string(), sitemapHistoryRecordSchema),
 }).loose()
 
 export const inspectionIndexSchema = z.object({
@@ -329,6 +314,8 @@ export const sitemapChangesTruncationReasonSchema = z.enum([
   'scan_limit',
   'added_limit',
   'removed_limit',
+  'updated_limit',
+  'history_unavailable',
 ])
 
 export const sitemapChangesCompletenessSchema = z.discriminatedUnion('_tag', [
@@ -340,10 +327,12 @@ export const sitemapChangesCompletenessSchema = z.discriminatedUnion('_tag', [
     _tag: z.literal('truncated'),
     scannedUrls: z.number().int().nonnegative(),
     reasons: z.array(sitemapChangesTruncationReasonSchema).min(1),
+    historyAvailableFrom: z.number().int().nonnegative().optional(),
     limits: z.object({
       scannedUrls: z.number().int().positive(),
       added: z.number().int().positive(),
       removed: z.number().int().positive(),
+      updated: z.number().int().positive(),
     }).loose(),
   }).loose(),
 ])
@@ -362,6 +351,7 @@ export const sitemapChangesResponseSchema = z.object({
   summary: z.object({
     totalAdded: z.number(),
     totalRemoved: z.number(),
+    totalUpdated: z.number(),
     period: z.object({ days: z.number() }),
   }).loose(),
   completeness: sitemapChangesCompletenessSchema,
@@ -793,6 +783,23 @@ export const gscdumpAnalysisBundleResponseSchema = z.object({
   meta: gscdumpAnalysisMetaSchema,
 }).loose()
 
+export const gscdumpSitemapGenerationSchema = z.object({
+  id: z.string().min(1),
+  observedAt: z.number().int().nonnegative(),
+  publishedAt: z.number().int().nonnegative(),
+  completeness: z.object({ _tag: z.literal('complete') }).strict(),
+  membershipHistoryAvailableFrom: z.number().int().nonnegative().nullable(),
+  legacyImport: z.discriminatedUnion('_tag', [
+    z.object({ _tag: z.literal('none') }).strict(),
+    z.object({
+      _tag: z.literal('metadata_only'),
+      importedAt: z.number().int().nonnegative(),
+      recordCount: z.number().int().nonnegative(),
+      source: z.literal('gsc_sitemaps'),
+    }).strict(),
+  ]),
+}).strict()
+
 export const gscdumpSitemapsResponseSchema = z.object({
   sitemaps: z.array(z.object({
     path: z.string(),
@@ -828,17 +835,27 @@ export const gscdumpSitemapsResponseSchema = z.object({
       duplicateCount: z.number().int().nonnegative(),
     }),
   }).loose(),
+  generation: z.lazy(() => gscdumpSitemapGenerationSchema).nullable(),
 }).loose()
 
 export const gscdumpSitemapChangesResponseSchema = z.object({
   added: z.array(z.object({ url: z.string(), sitemap: z.string(), firstSeenAt: z.number() }).loose()),
   removed: z.array(z.object({ url: z.string(), sitemap: z.string(), removedAt: z.number() }).loose()),
+  updated: z.array(z.object({
+    url: z.string(),
+    sitemap: z.string(),
+    previousLastmod: z.string().nullable(),
+    lastmod: z.string().nullable(),
+    observedAt: z.number(),
+  }).loose()),
   summary: z.object({
     totalAdded: z.number(),
     totalRemoved: z.number(),
+    totalUpdated: z.number(),
     period: z.object({ days: z.number() }),
   }).optional(),
   completeness: sitemapChangesCompletenessSchema,
+  generation: z.lazy(() => gscdumpSitemapGenerationSchema).nullable(),
 }).loose()
 
 export const indexingUrlsParamsSchema = z.object({
@@ -1405,8 +1422,6 @@ export const analyticsEndpointSchemas = {
   analyticsSites: { response: z.array(siteListItemSchema) },
   analyticsCountries: { response: countriesResponseSchema },
   analyticsSearchAppearance: { response: searchAppearanceResponseSchema },
-  analyticsSitemapHistory: { response: sitemapHistoryResponseSchema },
-  analyticsSitemaps: { response: sitemapIndexSchema },
   analyticsInspectionHistory: { response: inspectionHistoryResponseSchema },
   analyticsInspections: { response: inspectionIndexSchema },
   analyticsRollup: { response: rollupEnvelopeSchema },
@@ -1414,7 +1429,6 @@ export const analyticsEndpointSchemas = {
   analyticsIndexingUrls: { response: indexingUrlsResponseSchema },
   analyticsIndexingDiagnostics: { query: indexingDiagnosticsParamsSchema, response: indexingDiagnosticsSchema },
   analyticsIndexingInspect: { body: indexingInspectRequestSchema, response: indexingInspectAnyResponseSchema },
-  analyticsSitemapChanges: { response: sitemapChangesResponseSchema },
   analyticsAnalysisSources: { response: gscdumpAnalysisSourcesResponseSchema },
   analyticsQueryDimSource: { response: queryDimSourceResponseSchema },
   analyticsBulkSources: { response: bulkFileResolutionResponseSchema },
@@ -1422,7 +1436,7 @@ export const analyticsEndpointSchemas = {
 } as const
 
 /**
- * Body for `POST /sites/:siteId/sitemaps`. One wire endpoint, three actions:
+ * Body for the public v1 sitemap action operation. One endpoint, four actions:
  * `submit`/`delete` operate on a specific sitemap URL (feedpath required),
  * `refresh` re-fetches the GSC sitemap index and records health.
  */
@@ -1457,30 +1471,89 @@ export const partnerSitemapActionResponseSchema = z.discriminatedUnion('action',
 
 export const gscdumpSitemapMembershipParamsSchema = z.object({
   urls: z.array(z.string().min(1).max(2048)).max(500),
-  maxAgeDays: z.number().int().positive().max(365).optional(),
-})
+  generationId: z.string().min(1).optional(),
+}).strict()
 
-export const gscdumpSitemapMembershipUrlSchema = z.object({
-  url: z.string(),
-  normalized: z.string(),
-  inSitemap: z.boolean(),
-  sitemapUrl: z.string().nullable().optional(),
-  lastSeenAt: z.string().nullable().optional(),
-  lastmod: z.string().nullable().optional(),
-  sitemapFetchedAt: z.string().nullable().optional(),
-}).loose()
+export const gscdumpSitemapMembershipEvidenceSchema = z.discriminatedUnion('_tag', [
+  z.object({
+    _tag: z.literal('present'),
+    url: z.string(),
+    feedpath: z.string(),
+    lastmod: z.string().nullable(),
+    firstSeenAt: z.number().int().nonnegative(),
+    lastSeenAt: z.number().int().nonnegative(),
+  }).strict(),
+  z.object({
+    _tag: z.literal('absent'),
+    url: z.string(),
+    observedAt: z.number().int().nonnegative(),
+  }).strict(),
+  z.object({
+    _tag: z.literal('unknown'),
+    url: z.string(),
+    reason: z.enum([
+      'no_generation',
+      'generation_not_found',
+      'generation_incomplete',
+      'history_pruned',
+      'invalid_url',
+    ]),
+  }).strict(),
+])
 
 export const gscdumpSitemapMembershipResponseSchema = z.object({
-  urls: z.array(gscdumpSitemapMembershipUrlSchema),
+  generation: gscdumpSitemapGenerationSchema.nullable(),
+  evidence: z.array(gscdumpSitemapMembershipEvidenceSchema),
   meta: z.object({
-    available: z.boolean(),
-    reason: z.enum(['empty', 'endpoint_unavailable', 'site_url_cap_exceeded', 'stale_sitemaps']).nullable(),
     requested: z.number().int().nonnegative(),
     checked: z.number().int().nonnegative(),
     matched: z.number().int().nonnegative(),
-    newestFetchedAt: z.string().nullable(),
-  }).loose(),
-}).loose()
+  }).strict(),
+}).strict()
+
+export const gscdumpSitemapUrlsQuerySchema = z.object({
+  generationId: z.string().min(1).optional(),
+  feedpath: z.string().min(1).optional(),
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(10_000).optional(),
+}).strict()
+
+export const gscdumpSitemapUrlsResponseSchema = z.object({
+  generation: gscdumpSitemapGenerationSchema,
+  items: z.array(z.object({
+    url: z.string(),
+    feedpath: z.string(),
+    lastmod: z.string().nullable(),
+    firstSeenAt: z.number().int().nonnegative(),
+    lastSeenAt: z.number().int().nonnegative(),
+  }).strict()),
+  page: z.object({
+    nextCursor: z.string().nullable(),
+    limit: z.number().int().positive(),
+  }).strict(),
+}).strict()
+
+export const gscdumpSitemapExportQuerySchema = z.object({
+  generationId: z.string().min(1).optional(),
+  feedpath: z.string().min(1).optional(),
+}).strict()
+
+export const gscdumpSitemapExportResponseSchema = z.object({
+  generation: gscdumpSitemapGenerationSchema,
+  export: z.discriminatedUnion('_tag', [
+    z.object({
+      _tag: z.literal('url'),
+      url: z.url(),
+      expiresAt: z.number().int().nonnegative(),
+      contentType: z.literal('application/x-ndjson'),
+      contentEncoding: z.enum(['identity', 'gzip']),
+    }).strict(),
+    z.object({
+      _tag: z.literal('unavailable'),
+      reason: z.enum(['generation_not_found', 'export_unavailable']),
+    }).strict(),
+  ]),
+}).strict()
 
 export const partnerControlEndpointSchemas = {
   appUser: { response: gscdumpUserMeResponseSchema },
@@ -1499,10 +1572,6 @@ export const partnerControlEndpointSchemas = {
   getAnalysisSources: { response: gscdumpAnalysisSourcesResponseSchema },
   getData: { state: builderStateSchema, options: dataQueryOptionsSchema, response: gscdumpDataResponseSchema },
   getDataDetail: { state: builderStateSchema, options: dataDetailOptionsSchema, response: gscdumpDataDetailResponseSchema },
-  getSitemaps: { response: gscdumpSitemapsResponseSchema },
-  getSitemapChanges: { response: gscdumpSitemapChangesResponseSchema },
-  postSitemaps: { body: partnerSitemapActionSchema, response: partnerSitemapActionResponseSchema },
-  getSitemapMembership: { body: gscdumpSitemapMembershipParamsSchema, response: gscdumpSitemapMembershipResponseSchema },
   getIndexing: { response: gscdumpIndexingResponseSchema },
   getIndexingUrls: { query: indexingUrlsParamsSchema, response: gscdumpIndexingUrlsResponseSchema },
   getIndexingDiagnostics: { query: indexingDiagnosticsParamsSchema, response: gscdumpIndexingDiagnosticsResponseSchema },

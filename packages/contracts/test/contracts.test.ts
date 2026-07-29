@@ -131,12 +131,6 @@ describe('@gscdump/contracts', () => {
     expect(analyticsSurfaceSchemas.analyticsQueryDimSource.response.parse({
       file: { url: '/query-dim.parquet', bytes: 123, contentHash: 'query-dim-1' },
     })).toMatchObject({ file: { contentHash: 'query-dim-1' } })
-    expect(partnerEndpointSchemas.postSitemaps.body.parse({
-      action: 'submit',
-      sitemapUrl: 'https://example.com/sitemap.xml',
-    })).toMatchObject({ action: 'submit' })
-    expect(partnerEndpointSchemas.postSitemaps.body.parse({ action: 'refresh' })).toEqual({ action: 'refresh' })
-    expect(() => partnerEndpointSchemas.postSitemaps.body.parse({ action: 'submit' })).toThrow()
   })
 
   it('exposes focused hosted contract subpaths', () => {
@@ -153,10 +147,6 @@ describe('@gscdump/contracts', () => {
     expect(partnerEndpoints.updateUserTokens.path('user 1')).toBe('/users/user%201/tokens')
     expect(partnerEndpoints.updateUserTokens.body).toBe(partnerSurfaceSchemas.updateUserTokens.body)
     expect(partnerEndpoints.deleteSite).toMatchObject({ method: 'DELETE' })
-
-    expect(partnerEndpoints.postSitemaps).toMatchObject({ method: 'POST' })
-    expect(partnerEndpoints.postSitemaps.path('site 1')).toBe('/sites/site%201/sitemaps')
-    expect(partnerEndpoints.postSitemaps.body).toBe(partnerSurfaceSchemas.postSitemaps.body)
   })
 
   it('validates the current webhook envelope contract', () => {

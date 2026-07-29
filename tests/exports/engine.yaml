@@ -55,12 +55,8 @@
   createQueryDimStore: function
   createSitemapReadStore: function
   createSitemapStore: function
-  decodeSitemapProjectionManifest: function
-  emptySitemapProjectionManifest: function
   emptyTypesKey: function
-  hashSortedUrlList: function
   hashUrl: function
-  hashUrlList: function
   indexingMetadataIndexKey: function
   INSPECTION_HISTORY_MAX_BYTES: number
   inspectionBaseKey: function
@@ -72,32 +68,23 @@
   inspectionParquetKey: function
   inspectionTransitionsMonthKey: function
   inspectionTransitionsPrefix: function
-  parseSitemapProjectionManifest: function
-  parseSitemapUrlsDeltaKey: function
+  parseSitemapFeedIdentity: function
   queryDimMetaKey: function
   queryDimParquetKey: function
-  selectSitemapProjectionFiles: function
-  SITEMAP_PROJECTION_GRACE_MS: number
-  sitemapHistoryKey: function
-  sitemapIndexKey: function
-  sitemapUrlsDeltaKey: function
+  sitemapImmutableBaseKey: function
+  sitemapLegacyImportKey: function
+  sitemapPayloadHashV1: function
+  sitemapSiteGenerationManifestKey: function
+  sitemapSiteManifestKey: function
+  sitemapSiteManifestsPrefix: function
+  sitemapStagedFeedKey: function
+  sitemapStagedGenerationPrefix: function
   sitemapUrlsEventKey: function
-  sitemapUrlsEventSeedKey: function
   sitemapUrlsEventsPrefix: function
-  sitemapUrlsGenerationKey: function
-  sitemapUrlsIndexKey: function
-  sitemapUrlsIndexPrefix: function
-  sitemapUrlsPendingGenerationKey: function
-  sitemapUrlsPendingGenerationsPrefix: function
   sitemapUrlsPrefix: function
-  sitemapUrlsProjectionManifestKey: function
-  sitemapUrlsReconcileGenerationKey: function
-  withSitemapProjectionFeed: function
 ./entity-keys:
   emptyTypesKey: function
-  hashSortedUrlList: function
   hashUrl: function
-  hashUrlList: function
   indexingMetadataIndexKey: function
   inspectionBaseKey: function
   inspectionEventKey: function
@@ -108,23 +95,20 @@
   inspectionParquetKey: function
   inspectionTransitionsMonthKey: function
   inspectionTransitionsPrefix: function
-  parseSitemapUrlsDeltaKey: function
+  parseSitemapFeedIdentity: function
   queryDimMetaKey: function
   queryDimParquetKey: function
-  sitemapHistoryKey: function
-  sitemapIndexKey: function
-  sitemapUrlsDeltaKey: function
+  sitemapImmutableBaseKey: function
+  sitemapLegacyImportKey: function
+  sitemapPayloadHashV1: function
+  sitemapSiteGenerationManifestKey: function
+  sitemapSiteManifestKey: function
+  sitemapSiteManifestsPrefix: function
+  sitemapStagedFeedKey: function
+  sitemapStagedGenerationPrefix: function
   sitemapUrlsEventKey: function
-  sitemapUrlsEventSeedKey: function
   sitemapUrlsEventsPrefix: function
-  sitemapUrlsGenerationKey: function
-  sitemapUrlsIndexKey: function
-  sitemapUrlsIndexPrefix: function
-  sitemapUrlsPendingGenerationKey: function
-  sitemapUrlsPendingGenerationsPrefix: function
   sitemapUrlsPrefix: function
-  sitemapUrlsProjectionManifestKey: function
-  sitemapUrlsReconcileGenerationKey: function
 ./errors:
   engineErrors: object
   engineErrorToException: function

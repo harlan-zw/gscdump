@@ -13,8 +13,8 @@ import {
   unverifySite,
   verifySite,
 } from 'gscdump'
-import { discoverSitemapResult } from 'gscdump/sitemap'
 import { z } from 'zod'
+import { discoverLiveSitemap } from '../../sitemap'
 import * as handlers from '../handlers'
 import {
   batchInspectUrlsInput,
@@ -459,7 +459,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
     async ({ domain }) => {
       const cleaned = String(domain).replace(/^https?:\/\//, '').replace(/\/.*$/, '')
-      const discovery = await discoverSitemapResult(cleaned)
+      const discovery = await discoverLiveSitemap(cleaned)
       return {
         content: [{
           type: 'text',

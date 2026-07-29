@@ -14,27 +14,31 @@ export type {
 export * from './entities/inspection'
 export * from './entities/query-dim'
 export { createSitemapReadStore } from './entities/sitemap'
-export * from './entities/sitemap-projection'
 export type {
-  CompactUrlsOptions,
-  CompactUrlsResult,
   CompleteSitemapGeneration,
+  CompleteSitemapTraversal,
   CreateSitemapReadStoreOptions,
   CreateSitemapStoreOptions,
   DateRange,
-  DeltaEntry,
-  LoadUrlsOptions,
+  FinalizeSitemapGenerationResult,
+  IterateSitemapGenerationUrlsOptions,
+  IterateSitemapGenerationUrlsResult,
+  ListSitemapGenerationUrlsOptions,
+  ListSitemapGenerationUrlsResult,
   ParsedUrl,
-  ReconcileResult,
-  SitemapHistoryDoc,
-  SitemapIndex,
+  QuerySitemapGenerationMembershipResult,
+  RecordSitemapLegacyImportResult,
+  SitemapGenerationFeedManifest,
+  SitemapGenerationReadResult,
+  SitemapLegacyImportEvidence,
   SitemapMembershipEvent,
   SitemapMutation,
   SitemapReadStore,
-  SitemapRecord,
+  SitemapSiteGenerationManifest,
+  SitemapStagedFeed,
   SitemapStore,
   SitemapUrlRecord,
-  SnapshotUrlsResult,
+  StageSitemapGenerationFeedResult,
 } from './entities/sitemap-shared'
 export { createSitemapStore } from './entities/sitemap-write'
 export * from './entity-keys'

@@ -1,7 +1,7 @@
 {
   "name": "gscdump",
   "type": "module",
-  "version": "1.5.4",
+  "version": "2.0.0",
   "description": "Direct Google Search Console client with typed queries, streaming pagination, URL inspection, and indexing helpers",
   "author": {
     "name": "Harlan Wilton",
@@ -52,11 +52,6 @@
       "import": "./dist/core/result.mjs",
       "default": "./dist/core/result.mjs"
     },
-    "./sitemap": {
-      "types": "./dist/sitemap.d.mts",
-      "import": "./dist/sitemap.mjs",
-      "default": "./dist/sitemap.mjs"
-    },
     "./contracts": {
       "types": "./dist/contracts.d.mts",
       "import": "./dist/contracts.mjs",
@@ -71,6 +66,11 @@
       "types": "./dist/normalize.d.mts",
       "import": "./dist/normalize.mjs",
       "default": "./dist/normalize.mjs"
+    },
+    "./sitemap-identity": {
+      "types": "./dist/sitemap-identity.d.mts",
+      "import": "./dist/sitemap-identity.mjs",
+      "default": "./dist/sitemap-identity.mjs"
     },
     "./tenant": {
       "types": "./dist/tenant.d.mts",
@@ -96,7 +96,6 @@
   },
   "dependencies": {
     "@gscdump/contracts": "workspace:^",
-    "@nuxtjs/sitemap": "catalog:",
     "ofetch": "catalog:deps"
   }
 }

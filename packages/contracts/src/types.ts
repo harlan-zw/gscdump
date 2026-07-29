@@ -105,28 +105,6 @@ export interface ScheduleState {
   policyVersion: number
 }
 
-export interface SitemapHistoryRecord {
-  path: string
-  capturedAt: string
-  lastDownloaded?: string
-  lastSubmitted?: string
-  type?: string
-  isPending?: boolean
-  isSitemapsIndex?: boolean
-  errors?: string
-  warnings?: string
-  contents?: Array<{ type?: string, submitted?: string, indexed?: string }>
-  raw?: unknown
-  urlCount?: number
-  contentHash?: string
-  schedule?: ScheduleState
-}
-
-export interface SitemapHistoryResponse {
-  path: string | null
-  snapshots: SitemapHistoryRecord[]
-}
-
 /**
  * Wire-format extension carried under `InspectionHistoryRecord.raw`.
  *
@@ -178,11 +156,6 @@ export interface InspectionHistoryRecord {
 export interface InspectionHistoryResponse {
   url: string | null
   records: InspectionHistoryRecord[]
-}
-
-export interface SitemapIndex {
-  version: 1
-  records: Record<string, SitemapHistoryRecord>
 }
 
 export interface InspectionIndex {
@@ -340,18 +313,20 @@ export type SitemapChangesCompleteness
   | {
     _tag: 'truncated'
     scannedUrls: number
-    reasons: Array<'scan_limit' | 'added_limit' | 'removed_limit'>
+    reasons: Array<'scan_limit' | 'added_limit' | 'removed_limit' | 'updated_limit' | 'history_unavailable'>
+    historyAvailableFrom?: number
     limits: {
       scannedUrls: number
       added: number
       removed: number
+      updated: number
     }
   }
 
 export interface SitemapChangesResponse {
   added: SitemapAddedRow[]
   removed: SitemapRemovedRow[]
-  summary: { totalAdded: number, totalRemoved: number, period: { days: number } }
+  summary: { totalAdded: number, totalRemoved: number, totalUpdated: number, period: { days: number } }
   completeness: SitemapChangesCompleteness
 }
 
@@ -689,13 +664,38 @@ export interface GscdumpSitemapsResponse {
       duplicateCount: number
     }
   }
+  generation: GscdumpSitemapGeneration | null
 }
 
 export interface GscdumpSitemapChangesResponse {
   added: { url: string, sitemap: string, firstSeenAt: number }[]
   removed: { url: string, sitemap: string, removedAt: number }[]
-  summary?: { totalAdded: number, totalRemoved: number, period: { days: number } }
+  updated: {
+    url: string
+    sitemap: string
+    previousLastmod: string | null
+    lastmod: string | null
+    observedAt: number
+  }[]
+  summary?: { totalAdded: number, totalRemoved: number, totalUpdated: number, period: { days: number } }
   completeness: SitemapChangesCompleteness
+  generation: GscdumpSitemapGeneration | null
+}
+
+export interface GscdumpSitemapGeneration {
+  id: string
+  observedAt: number
+  publishedAt: number
+  completeness: { _tag: 'complete' }
+  membershipHistoryAvailableFrom: number | null
+  legacyImport:
+    | { _tag: 'none' }
+    | {
+      _tag: 'metadata_only'
+      importedAt: number
+      recordCount: number
+      source: 'gsc_sitemaps'
+    }
 }
 
 export type PartnerSitemapAction
@@ -709,35 +709,58 @@ export type PartnerSitemapActionResponse
 
 export interface GscdumpSitemapMembershipParams {
   urls: string[]
-  maxAgeDays?: number
+  generationId?: string
 }
 
-export type GscdumpSitemapMembershipUnavailableReason
-  = | 'empty'
-    | 'endpoint_unavailable'
-    | 'site_url_cap_exceeded'
-    | 'stale_sitemaps'
-
-export interface GscdumpSitemapMembershipUrl {
-  url: string
-  normalized: string
-  inSitemap: boolean
-  sitemapUrl?: string | null
-  lastSeenAt?: string | null
-  lastmod?: string | null
-  sitemapFetchedAt?: string | null
-}
+export type GscdumpSitemapMembershipEvidence
+  = | {
+    _tag: 'present'
+    url: string
+    feedpath: string
+    lastmod: string | null
+    firstSeenAt: number
+    lastSeenAt: number
+  }
+  | { _tag: 'absent', url: string, observedAt: number }
+  | {
+    _tag: 'unknown'
+    url: string
+    reason: 'no_generation' | 'generation_not_found' | 'generation_incomplete' | 'history_pruned' | 'invalid_url'
+  }
 
 export interface GscdumpSitemapMembershipResponse {
-  urls: GscdumpSitemapMembershipUrl[]
+  generation: GscdumpSitemapGeneration | null
+  evidence: GscdumpSitemapMembershipEvidence[]
   meta: {
-    available: boolean
-    reason: GscdumpSitemapMembershipUnavailableReason | null
     requested: number
     checked: number
     matched: number
-    newestFetchedAt: string | null
   }
+}
+
+export interface GscdumpSitemapUrlsResponse {
+  generation: GscdumpSitemapGeneration
+  items: Array<{
+    url: string
+    feedpath: string
+    lastmod: string | null
+    firstSeenAt: number
+    lastSeenAt: number
+  }>
+  page: { nextCursor: string | null, limit: number }
+}
+
+export interface GscdumpSitemapExportResponse {
+  generation: GscdumpSitemapGeneration
+  export:
+    | {
+      _tag: 'url'
+      url: string
+      expiresAt: number
+      contentType: 'application/x-ndjson'
+      contentEncoding: 'identity' | 'gzip'
+    }
+    | { _tag: 'unavailable', reason: 'generation_not_found' | 'export_unavailable' }
 }
 
 export interface GscdumpIndexingTrendPoint {

@@ -2,7 +2,7 @@ import type { PartnerFetch } from '../src/client'
 import { createPartnerClient } from '../src/client'
 
 describe('createPartnerClient GSC control operations', () => {
-  it('executes typed recovery, inspection, canonical, and sitemap actions', async () => {
+  it('executes typed recovery, inspection, and canonical operations', async () => {
     const calls: Array<{ url: string, options: any }> = []
     const fetch = ((url: string, options: any) => {
       calls.push({ url, options })
@@ -15,40 +15,18 @@ describe('createPartnerClient GSC control operations', () => {
       if (url.endsWith('/canonical-mismatches')) {
         return Promise.resolve({ mismatches: [], totalCount: 0, consolidationTargets: [], trend: [], meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' } })
       }
-      if (url.endsWith('/sitemaps/membership')) {
-        return Promise.resolve({
-          urls: [{ url: 'https://example.com/page', normalized: 'https://example.com/page', inSitemap: true }],
-          meta: { available: true, reason: null, requested: 1, checked: 1, matched: 1, newestFetchedAt: '2026-07-20T00:00:00.000Z' },
-        })
-      }
-      const action = options.body.action
-      if (action === 'refresh')
-        return Promise.resolve({ success: true, action: 'refreshed', sitemapCount: 1, changed: false })
-      if (action === 'auto-discover')
-        return Promise.resolve({ success: true, action: 'auto-discover', discovered: 'https://example.com/sitemap.xml', submitError: null, sitemapCount: 1 })
-      return Promise.resolve({ success: true, action: action === 'delete' ? 'deleted' : 'submitted', sitemapUrl: options.body.sitemapUrl, sitemapCount: 1 })
+      return Promise.resolve({})
     }) as PartnerFetch
     const client = createPartnerClient({ fetch, validate: true })
 
     await client.recoverPermission('s_1')
     await client.requestIndexingInspect('s_1', { urls: ['https://example.com/page'] })
     await client.getCanonicalMismatches('s_1')
-    await client.getSitemapMembership('s_1', { urls: ['https://example.com/page'], maxAgeDays: 30 })
-    await client.submitSitemap('s_1', 'https://example.com/sitemap.xml')
-    await client.refreshSitemaps('s_1')
-    await client.autoDiscoverSitemap('s_1')
-
     expect(calls.map(call => call.url)).toEqual([
       '/api/sites/s_1/recover-permission',
       '/api/sites/s_1/indexing/inspect',
       '/api/sites/s_1/canonical-mismatches',
-      '/api/sites/s_1/sitemaps/membership',
-      '/api/sites/s_1/sitemaps',
-      '/api/sites/s_1/sitemaps',
-      '/api/sites/s_1/sitemaps',
     ])
-    expect(calls.slice(4).map(call => call.options.body.action)).toEqual(['submit', 'refresh', 'auto-discover'])
-    expect(calls[3]!.options).toMatchObject({ method: 'POST', body: { urls: ['https://example.com/page'], maxAgeDays: 30 } })
   })
 
   it('executes fully validated team mirror and catalog operations', async () => {

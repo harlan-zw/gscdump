@@ -25,9 +25,13 @@ import {
   gscdumpPageTrendResponseSchema,
   gscdumpQueryTrendResponseSchema,
   gscdumpSitemapChangesResponseSchema,
+  gscdumpSitemapExportQuerySchema,
+  gscdumpSitemapExportResponseSchema,
   gscdumpSitemapMembershipParamsSchema,
   gscdumpSitemapMembershipResponseSchema,
   gscdumpSitemapsResponseSchema,
+  gscdumpSitemapUrlsQuerySchema,
+  gscdumpSitemapUrlsResponseSchema,
   gscdumpSiteRegistrationSchema,
   gscdumpTeamRoleSchema,
   gscdumpTopAssociationResponseSchema,
@@ -608,6 +612,16 @@ export function createGscdumpV1Protocol() {
   )
   const sitemapMembershipRequest = gscdumpSitemapMembershipParamsSchema.strict()
   const sitemapMembershipResponse = defineSuccessResponse(defineResponseObject(gscdumpSitemapMembershipResponseSchema.shape), partnerResponseMeta)
+  const sitemapUrlsQuery = gscdumpSitemapUrlsQuerySchema
+  const sitemapUrlsResponse = defineSuccessResponse(
+    { producer: gscdumpSitemapUrlsResponseSchema, client: gscdumpSitemapUrlsResponseSchema },
+    partnerResponseMeta,
+  )
+  const sitemapExportQuery = gscdumpSitemapExportQuerySchema
+  const sitemapExportResponse = defineSuccessResponse(
+    { producer: gscdumpSitemapExportResponseSchema, client: gscdumpSitemapExportResponseSchema },
+    partnerResponseMeta,
+  )
 
   const createTeamRequest = createPartnerTeamSchema.strict()
   const teamCreatedResponse = defineSuccessResponse(defineResponseObject(partnerTeamCreatedResponseSchema.shape), partnerResponseMeta)
@@ -1202,6 +1216,7 @@ export function createGscdumpV1Protocol() {
                 sitemaps: [],
                 history: [],
                 perSitemapHistory: {},
+                generation: null,
                 meta: {
                   siteUrl: 'sc-domain:example.com',
                   gscPropertyUrl: 'sc-domain:example.com',
@@ -1249,7 +1264,9 @@ export function createGscdumpV1Protocol() {
               data: {
                 added: [],
                 removed: [],
-                summary: { totalAdded: 0, totalRemoved: 0, period: { days: 28 } },
+                updated: [],
+                generation: null,
+                summary: { totalAdded: 0, totalRemoved: 0, totalUpdated: 0, period: { days: 28 } },
                 completeness: { _tag: 'complete', scannedUrls: 0 },
               },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
@@ -1997,12 +2014,109 @@ export function createGscdumpV1Protocol() {
         lifecycle: { introduced: '1.3.0' },
         docs: {
           summary: 'Query sitemap membership',
-          description: 'Checks whether each requested URL is present in the site\'s known sitemaps, subject to a freshness cap.',
+          description: 'Returns generation-pinned present, absent, or unknown evidence for each exact requested URL.',
           tags: ['Sitemaps'],
           examples: {
-            request: { params: { siteId: 's_01' }, body: { urls: ['https://example.com/'], maxAgeDays: 30 } },
+            request: { params: { siteId: 's_01' }, body: { urls: ['https://example.com/'] } },
             response: {
-              data: { urls: [], meta: { available: true, reason: null, requested: 1, checked: 1, matched: 0, newestFetchedAt: null } },
+              data: { generation: null, evidence: [{ _tag: 'unknown', url: 'https://example.com/', reason: 'no_generation' }], meta: { requested: 1, checked: 0, matched: 0 } },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      listSitemapUrls: defineHttpOperation({
+        id: 'partner.sites.sitemaps.urls.get',
+        method: 'GET',
+        path: '/sites/{siteId}/sitemaps/urls',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sitemaps:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: sitemapUrlsQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: sitemapUrlsResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.sitemaps', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '2.0.0' },
+        docs: {
+          summary: 'List sitemap URLs',
+          description: 'Returns an exact generation-pinned cursor page of sitemap membership and lastmod evidence.',
+          tags: ['Sitemaps'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { limit: 500 } },
+            response: {
+              data: {
+                generation: {
+                  id: 'site-01JZ',
+                  observedAt: 1753746000000,
+                  publishedAt: 1753746000100,
+                  completeness: { _tag: 'complete' },
+                  membershipHistoryAvailableFrom: 1753746000000,
+                  legacyImport: { _tag: 'none' },
+                },
+                items: [],
+                page: { nextCursor: null, limit: 500 },
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getSitemapExport: defineHttpOperation({
+        id: 'partner.sites.sitemaps.export.get',
+        method: 'GET',
+        path: '/sites/{siteId}/sitemaps/export',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sitemaps:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: sitemapExportQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: sitemapExportResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.sitemaps', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '2.0.0' },
+        docs: {
+          summary: 'Get sitemap bulk export',
+          description: 'Returns a generation-pinned expiring URL for the full NDJSON sitemap projection.',
+          tags: ['Sitemaps'],
+          examples: {
+            request: { params: { siteId: 's_01' } },
+            response: {
+              data: {
+                generation: {
+                  id: 'site-01JZ',
+                  observedAt: 1753746000000,
+                  publishedAt: 1753746000100,
+                  completeness: { _tag: 'complete' },
+                  membershipHistoryAvailableFrom: 1753746000000,
+                  legacyImport: { _tag: 'none' },
+                },
+                export: { _tag: 'unavailable', reason: 'export_unavailable' },
+              },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
           },

@@ -173,6 +173,14 @@ export interface GscdumpV1Client {
     input: GscdumpV1OperationInput<'partner.sites.sitemaps.changes.get'>,
     options?: GscdumpV1ExecuteOptions,
   ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.changes.get'>>
+  listSitemapUrls: (
+    input: GscdumpV1OperationInput<'partner.sites.sitemaps.urls.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.urls.get'>>
+  getSitemapExport: (
+    input: GscdumpV1OperationInput<'partner.sites.sitemaps.export.get'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.export.get'>>
   getSiteAnalysis: (
     input: GscdumpV1OperationInput<'partner.sites.analysis.get'>,
     options?: GscdumpV1ExecuteOptions,
@@ -906,6 +914,8 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     getSiteIndexingDiagnostics: (input, executeOptions) => execute('partner.sites.indexing.diagnostics.get', input, executeOptions),
     getSiteSitemaps: (input, executeOptions) => execute('partner.sites.sitemaps.get', input, executeOptions),
     getSiteSitemapChanges: (input, executeOptions) => execute('partner.sites.sitemaps.changes.get', input, executeOptions),
+    listSitemapUrls: (input, executeOptions) => execute('partner.sites.sitemaps.urls.get', input, executeOptions),
+    getSitemapExport: (input, executeOptions) => execute('partner.sites.sitemaps.export.get', input, executeOptions),
     getSiteAnalysis: (input, executeOptions) => execute('partner.sites.analysis.get', input, executeOptions),
     getSiteAnalysisBundle: (input, executeOptions) => execute('partner.sites.analysis.bundle.get', input, executeOptions),
     deleteSite: (input, executeOptions) => execute('partner.sites.delete', input, executeOptions),

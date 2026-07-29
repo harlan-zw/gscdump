@@ -129,9 +129,8 @@ const delta = computed(() => {
     >
       <UIcon name="i-lucide-history" class="size-8 mx-auto text-dimmed mb-3" />
       <p class="text-sm text-muted">
-        No snapshot history yet. Run
-        <UKbd>gscdump entities sitemaps snapshot --site {{ siteId }}</UKbd>
-        at least twice to build a timeline.
+        No hosted sitemap history is available yet. History begins after
+        repeated complete generations.
       </p>
     </div>
 

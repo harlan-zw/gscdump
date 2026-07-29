@@ -1,7 +1,6 @@
 <script setup lang="ts">
-// Sitemaps tab: table of submitted sitemaps with last-download / status /
-// per-content-type counts. Backed by the sitemap entity store written by
-// `gscdump entities sitemaps snapshot`.
+// Sitemaps tab: hosted canonical feed metadata with last-download, status,
+// and per-content-type counts.
 
 import { hashUrl } from '@gscdump/engine/entity-keys'
 
@@ -17,7 +16,9 @@ function fmtDate(iso: string | undefined): string {
   return new Date(iso).toLocaleDateString()
 }
 
-function submittedTotal(record: { contents?: Array<{ submitted?: string }> }): number {
+function submittedTotal(record: { urlCount?: number, contents?: Array<{ submitted?: string }> }): number {
+  if (record.urlCount !== undefined)
+    return record.urlCount
   let sum = 0
   for (const c of record.contents ?? []) sum += Number(c.submitted ?? 0)
   return sum
@@ -139,9 +140,7 @@ const gscLink = computed(() =>
     >
       <UIcon name="i-lucide-map" class="size-8 mx-auto text-dimmed mb-3" />
       <p class="text-sm text-muted">
-        No sitemap snapshot yet. Run
-        <UKbd>gscdump entities sitemaps snapshot --site {{ siteId }}</UKbd>
-        to populate.
+        No hosted sitemap generation is available yet.
       </p>
     </div>
 
