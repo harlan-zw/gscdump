@@ -13230,6 +13230,11 @@
                                   "const": "truncated",
                                   "type": "string"
                                 },
+                                "historyAvailableFrom": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
                                 "limits": {
                                   "additionalProperties": false,
                                   "properties": {
@@ -13247,12 +13252,18 @@
                                       "exclusiveMinimum": 0,
                                       "maximum": 9007199254740991,
                                       "type": "integer"
+                                    },
+                                    "updated": {
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991,
+                                      "type": "integer"
                                     }
                                   },
                                   "required": [
                                     "scannedUrls",
                                     "added",
-                                    "removed"
+                                    "removed",
+                                    "updated"
                                   ],
                                   "type": "object"
                                 },

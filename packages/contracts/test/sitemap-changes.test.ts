@@ -99,6 +99,51 @@ describe('sitemap changes completeness', () => {
     })
   })
 
+  it('accepts the canonical truncated history shape while keeping the producer strict', () => {
+    const protocol = createGscdumpV1Protocol()
+    const response = protocol.surfaces.partner.operations.getSiteSitemapChanges.responses[200]!
+    const envelope = {
+      data: {
+        ...truncatedChanges,
+        completeness: {
+          ...truncatedChanges.completeness,
+          reasons: ['history_unavailable'],
+          historyAvailableFrom: 1_753_746_000_000,
+        },
+      },
+      meta: {
+        requestId: 'req_01',
+        surface: 'partner',
+        version: '1.0',
+      },
+    } as const
+
+    expect(response.producer.parse(envelope)).toEqual(envelope)
+    expect(response.producer.safeParse({
+      ...envelope,
+      data: {
+        ...envelope.data,
+        completeness: {
+          ...envelope.data.completeness,
+          futureField: true,
+        },
+      },
+    }).success).toBe(false)
+    expect(response.producer.safeParse({
+      ...envelope,
+      data: {
+        ...envelope.data,
+        completeness: {
+          ...envelope.data.completeness,
+          limits: {
+            ...envelope.data.completeness.limits,
+            futureField: true,
+          },
+        },
+      },
+    }).success).toBe(false)
+  })
+
   it('marks windows before the canonical history floor as unavailable', () => {
     expect(gscdumpSitemapChangesResponseSchema.parse({
       ...baseChanges,

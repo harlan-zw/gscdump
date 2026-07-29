@@ -356,10 +356,12 @@ export function createGscdumpV1Protocol() {
     _tag: z.literal('truncated'),
     scannedUrls: z.number().int().nonnegative(),
     reasons: z.array(sitemapChangesTruncationReasonSchema).min(1),
+    historyAvailableFrom: z.number().int().nonnegative().optional(),
     limits: z.strictObject({
       scannedUrls: z.number().int().positive(),
       added: z.number().int().positive(),
       removed: z.number().int().positive(),
+      updated: z.number().int().positive(),
     }),
   }
   const sitemapChangesResponse = defineSuccessResponse(defineResponseObject({
