@@ -16,19 +16,23 @@
 import type { ScopedRunnerOptions, TableScope } from '@gscdump/engine/scope'
 
 import type { SQL } from 'drizzle-orm'
+import type { Schema as DrizzleSchema, ExtractTablesWithRelations } from 'drizzle-orm/relations'
 import type { AsyncRemoteCallback, SqliteRemoteDatabase } from 'drizzle-orm/sqlite-proxy'
-import type { Schema } from './schema'
+import type { Schema as AnalyticsSchema } from './schema'
 
 import { createScopedHelpers } from '@gscdump/engine/scope'
 
-import { SQLiteAsyncDialect } from 'drizzle-orm/sqlite-core'
+import { buildRelations } from 'drizzle-orm/relations'
+import { SQLiteDialect } from 'drizzle-orm/sqlite-core'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 
 import { schema } from './schema'
 
 export type { ScopedRunnerOptions, TableScope }
 
-const sqliteDialect = new SQLiteAsyncDialect()
+type SchemaRelations<TSchema extends DrizzleSchema> = ExtractTablesWithRelations<Record<string, never>, TSchema>
+
+const sqliteDialect = new SQLiteDialect()
 
 export function compileSqlite(query: SQL): { sql: string, params: unknown[] } {
   const compiled = sqliteDialect.sqlToQuery(query)
@@ -41,7 +45,7 @@ export type SqliteRowExecutor = (
   method: 'run' | 'all' | 'values' | 'get',
 ) => Promise<{ rows: unknown[] }>
 
-export interface SqliteInsightRunnerOptions<TSchema extends Record<string, unknown> = Schema> {
+export interface SqliteInsightRunnerOptions<TSchema extends DrizzleSchema = AnalyticsSchema> {
   executor: SqliteRowExecutor
   logger?: boolean
   /**
@@ -58,11 +62,11 @@ export interface SqliteInsightRunnerOptions<TSchema extends Record<string, unkno
   schema?: TSchema
 }
 
-export interface SqliteInsightRunner<TSchema extends Record<string, unknown> = Schema> {
-  db: SqliteRemoteDatabase<TSchema>
+export interface SqliteInsightRunner<TSchema extends DrizzleSchema = AnalyticsSchema> {
+  db: SqliteRemoteDatabase<SchemaRelations<TSchema>>
 }
 
-export function createSqliteInsightRunner<TSchema extends Record<string, unknown> = Schema>(
+export function createSqliteInsightRunner<TSchema extends DrizzleSchema = AnalyticsSchema>(
   opts: SqliteInsightRunnerOptions<TSchema>,
 ): SqliteInsightRunner<TSchema> {
   const { executor, logger, rowsAsArrays, schema: schemaOverride } = opts
@@ -83,7 +87,8 @@ export function createSqliteInsightRunner<TSchema extends Record<string, unknown
   }
 
   const finalSchema = (schemaOverride ?? schema) as TSchema
-  const db = drizzle<TSchema>(callback, { schema: finalSchema, logger })
+  const relations = buildRelations(finalSchema, {})
+  const db = drizzle<SchemaRelations<TSchema>>(callback, { relations, logger })
   return { db }
 }
 

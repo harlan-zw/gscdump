@@ -61,7 +61,7 @@
     "gscdump": "workspace:^",
     "ofetch": "catalog:deps",
     "open": "catalog:deps",
-    "sitemapd": "^0.1.0",
+    "sitemapd": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

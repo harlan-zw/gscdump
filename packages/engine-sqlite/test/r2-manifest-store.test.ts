@@ -28,15 +28,15 @@ function createD1Shim(sqlite: DatabaseSync) {
       bind(...params: unknown[]) {
         return makeStmt(sqlText, params)
       },
-      run() {
+      async run() {
         sqlite.prepare(sqlText).run(...(bound as never[]))
         return { results: [], success: true, meta: {} }
       },
-      all() {
+      async all() {
         const rows = sqlite.prepare(sqlText).all(...(bound as never[]))
         return { results: rows, success: true, meta: {} }
       },
-      raw() {
+      async raw() {
         const stmt = sqlite.prepare(sqlText)
         stmt.setReadBigInts(false)
         const rows = stmt.all(...(bound as never[])) as Record<string, unknown>[]
@@ -56,7 +56,7 @@ function createD1Shim(sqlite: DatabaseSync) {
       // node:sqlite has no nested-transaction needs here; run sequentially.
       // A real D1 batch is atomic — a throw mid-batch aborts the rest, which
       // is what the UNIQUE-constraint test below relies on.
-      return stmts.map(s => s.all())
+      return Promise.all(stmts.map(s => s.all()))
     },
     async exec(sqlText: string) {
       sqlite.exec(sqlText)

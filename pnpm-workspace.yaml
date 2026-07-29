@@ -9,7 +9,7 @@ minimumReleaseAgeExclude:
   - icebird@0.8.15
   - retriv@0.14.7
   - nuxt-use-query@0.2.7 || 0.3.0 || 0.7.1 || 1.0.0 || 1.0.1
-  - sitemapd@0.1.0
+  - sitemapd@0.1.0 || 0.2.0
 shellEmulator: true
 
 trustPolicy: no-downgrade
@@ -36,14 +36,14 @@ patchedDependencies:
   icebird@0.8.15: patches/icebird@0.8.15.patch
 catalog:
   '@cloudflare/vitest-pool-workers': ^0.18.8
-  '@cloudflare/workers-types': ^5.20260726.1
+  '@cloudflare/workers-types': ^5.20260728.1
   '@duckdb/duckdb-wasm': 1.33.1-dev57.0
   '@duckdb/node-api': 1.5.1-r.2
-  '@modelcontextprotocol/sdk': ^1.29.0
+  '@modelcontextprotocol/sdk': ^1.30.0
   '@nuxt/kit': 4.5.0
   '@nuxt/schema': 4.5.0
   '@nuxt/ui': ^4.10.0
-  '@types/node': ^26.1.1
+  '@types/node': ^26.1.2
   '@types/proper-lockfile': ^4.1.4
   '@unovis/ts': ^1.6.7
   '@unovis/vue': ^1.6.7
@@ -51,17 +51,18 @@ catalog:
   '@vitest/browser-playwright': ^4.1.10
   '@vueuse/core': ^14.3.0
   aws4fetch: ^1.0.20
-  drizzle-orm: 1.0.0-rc.3
+  drizzle-orm: 1.0.0-rc.4
   hyparquet: ^1.26.2
   hyparquet-writer: ^0.16.1
   icebird: ^0.8.15
   js-yaml: ^5.2.2
-  nuxt: ^4.5.0
+  nuxt: ^4.5.1
   nuxt-use-query: ^1.0.1
   pathe: ^2.0.3
   playwright: ^1.62.0
   pluralize: ^8.0.0
   retriv: ^0.14.7
+  sitemapd: ^0.2.0
   tailwindcss: ^4.3.3
   tsx: ^4.23.1
   unstorage: ^1.17.5
@@ -79,7 +80,7 @@ catalogs:
     open: ^11.0.0
     proper-lockfile: ^4.1.2
   dev-build:
-    bumpp: ^12.0.0
+    bumpp: ^12.1.0
     obuild: ^0.4.38
     rolldown: ^1.2.0
     typescript: ^7.0.2
@@ -87,7 +88,7 @@ catalogs:
     '@antfu/eslint-config': ^9.2.0
     eslint: ^10.8.0
   dev-test:
-    '@nuxt/test-utils': ^4.0.3
+    '@nuxt/test-utils': ^4.1.0
     '@vitest/browser': ^4.1.10
     vitest: ^4.1.10
 allowBuilds:

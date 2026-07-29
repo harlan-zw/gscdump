@@ -17,6 +17,7 @@ import type {
 } from '@gscdump/engine'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
+import type { Schema as DrizzleSchema, ExtractTablesWithRelations } from 'drizzle-orm/relations'
 import { inferSearchType } from '@gscdump/engine'
 import { engineErrors, engineErrorToException } from '@gscdump/engine/errors'
 import { and, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm'
@@ -25,12 +26,16 @@ import { r2Locks, r2Manifest, r2SyncStates, r2Watermarks } from './r2-manifest-s
 // Minimal DB contract — we only need .select / .insert / .update / .delete / .batch
 // over the four tables the store touches. DrizzleD1Database covers all of them
 // plus the batch() method we use for atomic registerVersion flows.
-export type AnalyticsManifestDb = DrizzleD1Database<{
+interface AnalyticsManifestSchema extends DrizzleSchema {
   r2Manifest: typeof r2Manifest
   r2Locks: typeof r2Locks
   r2SyncStates: typeof r2SyncStates
   r2Watermarks: typeof r2Watermarks
-}>
+}
+
+type AnalyticsManifestRelations = ExtractTablesWithRelations<Record<string, never>, AnalyticsManifestSchema>
+
+export type AnalyticsManifestDb = DrizzleD1Database<AnalyticsManifestRelations>
 
 // D1-backed ManifestStore. Atomicity contract:
 // - registerVersion(s) retires `superseding` entries and inserts new entries in one D1 batch.
