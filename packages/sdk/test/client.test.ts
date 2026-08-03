@@ -125,7 +125,7 @@ describe('createPartnerClient', () => {
     })).toThrow()
   })
 
-  it('uses current /api partner aliases for partner-owned mutations', async () => {
+  it('uses current /api partner aliases for site registration', async () => {
     const calls: Array<{ url: string, options: any }> = []
     const fetch = ((url: string, options: any) => {
       calls.push({ url, options })
@@ -135,49 +135,32 @@ describe('createPartnerClient', () => {
           summary: { registered: 0, alreadyExists: 0, notFound: 0, errors: 0 },
         })
       }
-      if (url.endsWith('/u_1'))
-        return Promise.resolve({ ok: true, queued: true, userId: 1, publicId: 'u_1' })
       return Promise.resolve({ siteId: 's_1', status: 'pending' })
     }) as PartnerFetch
     const client = createPartnerClient({ fetch, validate: true })
 
     await client.registerSite({ userId: 'u_1', siteUrl: 'sc-domain:example.com' })
     await client.bulkRegisterSites({ userId: 'u_1', siteUrls: ['sc-domain:example.com'] })
-    await client.deleteUser('u_1')
 
     expect(calls.map(call => call.url)).toEqual([
       '/api/partner/sites/register',
       '/api/partner/sites/bulk-register',
-      '/api/partner/users/u_1',
     ])
   })
 
-  it('covers current analytics helper endpoints', async () => {
+  it('covers the remaining analytics helper endpoint', async () => {
     const calls: Array<{ url: string, options: any }> = []
     const fetch = ((url: string, options: any) => {
       calls.push({ url, options })
       if (url.endsWith('/analysis-sources'))
         return Promise.resolve(analysisSourcesResponse)
-      if (url.endsWith('/keyword-sparklines'))
-        return Promise.resolve({ sparklines: { test: [1, 2] } })
-      if (url.endsWith('/query-trend')) {
-        return Promise.resolve({
-          daily: [{ date: '2026-05-01', queryCount: 10 }],
-          total: 10,
-          meta: { siteUrl: 'sc-domain:example.com', syncStatus: 'synced' },
-        })
-      }
       return Promise.resolve({})
     }) as PartnerFetch
     const client = createPartnerClient({ fetch, validate: true })
 
     await client.getAnalysisSources('s_1', ['pages', 'keywords'], { start: '2026-05-01', end: '2026-05-07' })
-    await client.getKeywordSparklines('s_1', { keywords: ['test'], startDate: '2026-05-01', endDate: '2026-05-10' })
-    await client.getQueryTrend('s_1', { startDate: '2026-05-01', endDate: '2026-05-10', prevStartDate: '2026-04-20' })
 
     expect(calls[0]).toMatchObject({ url: '/api/sites/s_1/analysis-sources', options: { query: { tables: 'keywords,pages', searchType: 'web', start: '2026-05-01', end: '2026-05-07' } } })
-    expect(calls[1]).toMatchObject({ url: '/api/sites/s_1/data/keyword-sparklines', options: { method: 'POST' } })
-    expect(calls[2]).toMatchObject({ url: '/api/sites/s_1/data/query-trend' })
   })
 
   it('dedupes concurrent identical GET requests only while in flight', async () => {
@@ -204,31 +187,5 @@ describe('createPartnerClient', () => {
     expect(calls).toHaveLength(2)
     resolvers.shift()!(analysisSourcesResponse)
     await expect(c).resolves.toEqual(analysisSourcesResponse)
-  })
-
-  it('dedupes opt-in read POST requests while in flight', async () => {
-    const calls: Array<{ url: string, options: any }> = []
-    let resolveFetch!: (value: unknown) => void
-    const fetch = ((url: string, options: any) => {
-      calls.push({ url, options })
-      return new Promise((resolve) => {
-        resolveFetch = resolve
-      })
-    }) as PartnerFetch
-    const client = createPartnerClient({ fetch })
-
-    const params = { keywords: ['nuxt'], startDate: '2026-05-01', endDate: '2026-05-10' }
-    const a = client.getKeywordSparklines('s_1', params)
-    const b = client.getKeywordSparklines('s_1', params)
-
-    await Promise.resolve()
-    expect(calls).toHaveLength(1)
-    expect(calls[0]!.options).toMatchObject({ method: 'POST' })
-    expect('dedupe' in calls[0]!.options).toBe(false)
-    resolveFetch({ sparklines: { nuxt: [1, 2, 3] } })
-    await expect(Promise.all([a, b])).resolves.toEqual([
-      { sparklines: { nuxt: [1, 2, 3] } },
-      { sparklines: { nuxt: [1, 2, 3] } },
-    ])
   })
 })

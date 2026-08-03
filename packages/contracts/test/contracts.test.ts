@@ -93,7 +93,7 @@ describe('@gscdump/contracts', () => {
     expect(partnerRoutes.users.register).toBe('/users/register')
     expect(partnerRoutes.partner.sites.register).toBe('/partner/sites/register')
     expect(partnerRoutes.partner.sites.bulkRegister).toBe('/partner/sites/bulk-register')
-    expect(partnerRoutes.partner.users.byId('u_1')).toBe('/partner/users/u_1')
+    expect(partnerRoutes.partner.users).not.toHaveProperty('byId')
     expect(partnerRoutes.sites.data('site_1')).toBe('/sites/site_1/data')
     expect(partnerRoutes.sites.analysisSources('site_1')).toBe('/sites/site_1/analysis-sources')
     expect(partnerRoutes).not.toHaveProperty('realtime')
