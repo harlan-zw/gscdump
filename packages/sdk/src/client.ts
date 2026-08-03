@@ -1,40 +1,19 @@
 import type {
-  AddPartnerTeamMemberParams,
-  BindPartnerSiteTeamParams,
-  BindPartnerTeamCatalogParams,
-  BindPartnerTeamCatalogResponse,
   BuilderStateWire,
   BulkRegisterPartnerSitesParams,
   BulkRegisterPartnerSitesResponse,
-  CreatePartnerTeamParams,
   DataDetailOptions,
   DataQueryOptions,
-  DeletePartnerUserResponse,
   GscAddAndVerifyResponse,
   GscdumpAnalysisSourcesResponse,
   GscdumpAvailableSite,
-  GscdumpCanonicalMismatchesResponse,
   GscdumpDataDetailResponse,
   GscdumpDataResponse,
   GscdumpIndexingDiagnosticsResponse,
   GscdumpIndexingResponse,
   GscdumpIndexingUrlsResponse,
-  GscdumpIndexPercentResponse,
-  GscdumpKeywordSparklinesParams,
-  GscdumpKeywordSparklinesResponse,
-  GscdumpPageTrendParams,
-  GscdumpPageTrendResponse,
-  GscdumpPermissionRecovery,
-  GscdumpQueryTrendParams,
-  GscdumpQueryTrendResponse,
-  GscdumpSiteIntIdCrosswalkResponse,
   GscdumpSiteRegistration,
   GscdumpSyncStatusResponse,
-  GscdumpTeamCatalogRef,
-  GscdumpTeamMemberRow,
-  GscdumpTeamRow,
-  GscdumpTopAssociationParams,
-  GscdumpTopAssociationResponse,
   GscdumpUserRegistration,
   GscdumpUserSettings,
   GscdumpUserSite,
@@ -43,9 +22,6 @@ import type {
   GscVerificationRequest,
   GscVerificationTokenResponse,
   IndexingDiagnosticsParams,
-  IndexingInspectRateLimited,
-  IndexingInspectRequest,
-  IndexingInspectResponse,
   IndexingUrlsParams,
   PartnerLifecycleResponse,
   RegisterPartnerSiteParams,
@@ -61,11 +37,8 @@ import { PartnerApiError, partnerErrorToException } from './errors'
 import {
   dataDetailQuery,
   dataQuery,
-  DEFAULT_SEARCH_TYPE,
   indexingDiagnosticsQuery,
   indexingUrlsQuery,
-  pageTrendQuery,
-  queryTrendQuery,
   tablesQuery,
 } from './hosted-query'
 import { findLifecycleSite, lifecycleSiteToSyncStatus } from './lifecycle'
@@ -103,12 +76,10 @@ export interface PartnerClient {
   waitForUserLifecycleReady: (userId: string, options?: { attempts?: number, intervalMs?: number }) => Promise<PartnerLifecycleResponse>
   getUserSites: (userId: string) => Promise<{ sites: GscdumpUserSite[] }>
   getAvailableSites: (userId: string) => Promise<{ sites: GscdumpAvailableSite[] }>
-  getUserSiteIntIdCrosswalk: (userId: string) => Promise<GscdumpSiteIntIdCrosswalkResponse>
   registerSite: (params: RegisterPartnerSiteParams) => Promise<GscdumpSiteRegistration>
   bulkRegisterSites: (params: BulkRegisterPartnerSitesParams) => Promise<BulkRegisterPartnerSitesResponse>
   requestSiteVerificationToken: (params: GscVerificationRequest) => Promise<GscVerificationTokenResponse>
   addAndVerifySite: (params: GscVerificationRequest) => Promise<GscAddAndVerifyResponse>
-  deleteUser: (userId: string) => Promise<DeletePartnerUserResponse>
   deleteSite: (siteId: string) => Promise<{ success: boolean }>
   getAnalysisSources: (siteId: string, tables?: string[] | string | AnalysisSourcesOptions, options?: SearchTypeOptions & SourceRangeOptions) => Promise<GscdumpAnalysisSourcesResponse>
   getSiteSyncStatus: (siteId: string, userId?: string) => Promise<GscdumpSyncStatusResponse>
@@ -117,26 +88,8 @@ export interface PartnerClient {
   getIndexing: (siteId: string, days?: number) => Promise<GscdumpIndexingResponse>
   getIndexingUrls: (siteId: string, params?: IndexingUrlsParams) => Promise<GscdumpIndexingUrlsResponse>
   getIndexingDiagnostics: (siteId: string, params?: IndexingDiagnosticsParams) => Promise<GscdumpIndexingDiagnosticsResponse>
-  requestIndexingInspect: (siteId: string, body: IndexingInspectRequest) => Promise<IndexingInspectResponse | IndexingInspectRateLimited>
   getUserSettings: () => Promise<GscdumpUserSettings>
   patchUserSettings: (body: Partial<GscdumpUserSettings>) => Promise<GscdumpUserSettings>
-  recoverPermission: (siteId: string) => Promise<GscdumpPermissionRecovery>
-  getTopAssociation: (siteId: string, params: GscdumpTopAssociationParams) => Promise<GscdumpTopAssociationResponse>
-  getKeywordSparklines: (siteId: string, params: GscdumpKeywordSparklinesParams) => Promise<GscdumpKeywordSparklinesResponse>
-  getQueryTrend: (siteId: string, params: GscdumpQueryTrendParams) => Promise<GscdumpQueryTrendResponse>
-  getPageTrend: (siteId: string, params: GscdumpPageTrendParams) => Promise<GscdumpPageTrendResponse>
-  getCanonicalMismatches: (siteId: string) => Promise<GscdumpCanonicalMismatchesResponse>
-  getIndexPercent: (siteId: string, params?: { invisibleLimit?: number, invisibleOffset?: number, orphanLimit?: number }) => Promise<GscdumpIndexPercentResponse>
-  createTeam: (params: CreatePartnerTeamParams) => Promise<{ team: GscdumpTeamRow }>
-  renameTeam: (teamId: string, params: { name: string }) => Promise<{ ok: true, name: string }>
-  deleteTeam: (teamId: string) => Promise<{ ok: true }>
-  listTeamMembers: (teamId: string) => Promise<{ members: GscdumpTeamMemberRow[] }>
-  addTeamMember: (teamId: string, params: AddPartnerTeamMemberParams) => Promise<{ ok: true, role: string, alreadyExisted?: boolean }>
-  updateTeamMemberRole: (teamId: string, userId: string, params: { role: GscdumpTeamMemberRow['role'] }) => Promise<{ ok: true, role: string }>
-  removeTeamMember: (teamId: string, userId: string) => Promise<{ ok: true }>
-  bindSiteToTeam: (userId: string, siteId: string, params: BindPartnerSiteTeamParams) => Promise<{ ok: true, teamId: string | null }>
-  getTeamCatalog: (teamId: string) => Promise<GscdumpTeamCatalogRef>
-  bindTeamCatalog: (teamId: string, params: BindPartnerTeamCatalogParams) => Promise<BindPartnerTeamCatalogResponse>
 }
 
 function sleep(ms: number): Promise<void> {
@@ -304,14 +257,6 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       return request<{ sites: GscdumpAvailableSite[] }>(endpoints.getAvailableSites.path(userId), { method: endpoints.getAvailableSites.method }, endpoints.getAvailableSites.response)
     },
 
-    getUserSiteIntIdCrosswalk(userId: string) {
-      return request<GscdumpSiteIntIdCrosswalkResponse>(
-        endpoints.getUserSiteIntIdCrosswalk.path(userId),
-        { method: endpoints.getUserSiteIntIdCrosswalk.method },
-        endpoints.getUserSiteIntIdCrosswalk.response,
-      )
-    },
-
     registerSite(params: RegisterPartnerSiteParams) {
       const body = shouldValidate('request') ? endpoints.registerSite.body.parse(params) : params
       return request<GscdumpSiteRegistration>(endpoints.registerSite.path, {
@@ -342,12 +287,6 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
         method: endpoints.addAndVerifySite.method,
         body,
       }, endpoints.addAndVerifySite.response)
-    },
-
-    deleteUser(userId: string) {
-      return request<DeletePartnerUserResponse>(endpoints.deleteUser.path(userId), {
-        method: endpoints.deleteUser.method,
-      }, endpoints.deleteUser.response)
     },
 
     deleteSite(siteId: string) {
@@ -416,14 +355,6 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       }, endpoints.getIndexingDiagnostics.response)
     },
 
-    requestIndexingInspect(siteId: string, body: IndexingInspectRequest) {
-      const parsed = shouldValidate('request') ? endpoints.requestIndexingInspect.body.parse(body) : body
-      return request<IndexingInspectResponse | IndexingInspectRateLimited>(endpoints.requestIndexingInspect.path(siteId), {
-        method: endpoints.requestIndexingInspect.method,
-        body: parsed,
-      }, endpoints.requestIndexingInspect.response)
-    },
-
     getUserSettings() {
       return request<GscdumpUserSettings>(endpoints.getUserSettings.path, { method: endpoints.getUserSettings.method }, endpoints.getUserSettings.response)
     },
@@ -436,131 +367,5 @@ export function createPartnerClient(options: PartnerClientOptions = {}): Partner
       }, endpoints.patchUserSettings.response)
     },
 
-    recoverPermission(siteId: string) {
-      return request<GscdumpPermissionRecovery>(endpoints.recoverPermission.path(siteId), {
-        method: endpoints.recoverPermission.method,
-      }, endpoints.recoverPermission.response)
-    },
-
-    getTopAssociation(siteId: string, params: GscdumpTopAssociationParams) {
-      const query = shouldValidate('request') ? endpoints.getTopAssociation.query.parse(params) : params
-      return request<GscdumpTopAssociationResponse>(endpoints.getTopAssociation.path(siteId), {
-        method: endpoints.getTopAssociation.method,
-        query: query as unknown as Record<string, unknown>,
-      }, endpoints.getTopAssociation.response)
-    },
-
-    getKeywordSparklines(siteId: string, params: GscdumpKeywordSparklinesParams) {
-      const withSearchType = { ...params, searchType: params.searchType ?? DEFAULT_SEARCH_TYPE }
-      const body = shouldValidate('request') ? endpoints.getKeywordSparklines.body.parse(withSearchType) : withSearchType
-      return request<GscdumpKeywordSparklinesResponse>(endpoints.getKeywordSparklines.path(siteId), {
-        method: endpoints.getKeywordSparklines.method,
-        body,
-        dedupe: true,
-      }, endpoints.getKeywordSparklines.response)
-    },
-
-    getQueryTrend(siteId: string, params: GscdumpQueryTrendParams) {
-      const query = shouldValidate('request') ? endpoints.getQueryTrend.query.parse(params) : params
-      return request<GscdumpQueryTrendResponse>(endpoints.getQueryTrend.path(siteId), {
-        method: endpoints.getQueryTrend.method,
-        query: queryTrendQuery(query),
-      }, endpoints.getQueryTrend.response)
-    },
-
-    getPageTrend(siteId: string, params: GscdumpPageTrendParams) {
-      const query = shouldValidate('request') ? endpoints.getPageTrend.query.parse(params) : params
-      return request<GscdumpPageTrendResponse>(endpoints.getPageTrend.path(siteId), {
-        method: endpoints.getPageTrend.method,
-        query: pageTrendQuery(query),
-      }, endpoints.getPageTrend.response)
-    },
-
-    getCanonicalMismatches(siteId: string) {
-      return request<GscdumpCanonicalMismatchesResponse>(
-        endpoints.getCanonicalMismatches.path(siteId),
-        { method: endpoints.getCanonicalMismatches.method },
-        endpoints.getCanonicalMismatches.response,
-      )
-    },
-
-    getIndexPercent(siteId: string, params: { invisibleLimit?: number, invisibleOffset?: number, orphanLimit?: number } = {}) {
-      const query = shouldValidate('request') ? endpoints.getIndexPercent.query.parse(params) : params
-      return request<GscdumpIndexPercentResponse>(
-        endpoints.getIndexPercent.path(siteId),
-        { method: endpoints.getIndexPercent.method, query: query as Record<string, unknown> },
-        endpoints.getIndexPercent.response,
-      )
-    },
-
-    createTeam(params: CreatePartnerTeamParams) {
-      const body = shouldValidate('request') ? endpoints.createTeam.body.parse(params) : params
-      return request(endpoints.createTeam.path, {
-        method: endpoints.createTeam.method,
-        body,
-      }, endpoints.createTeam.response)
-    },
-
-    renameTeam(teamId: string, params: { name: string }) {
-      const body = shouldValidate('request') ? endpoints.renameTeam.body.parse(params) : params
-      return request<{ ok: true, name: string }>(endpoints.renameTeam.path(teamId), {
-        method: endpoints.renameTeam.method,
-        body,
-      }, endpoints.renameTeam.response)
-    },
-
-    deleteTeam(teamId: string) {
-      return request<{ ok: true }>(endpoints.deleteTeam.path(teamId), {
-        method: endpoints.deleteTeam.method,
-      }, endpoints.deleteTeam.response)
-    },
-
-    listTeamMembers(teamId: string) {
-      return request(endpoints.listTeamMembers.path(teamId), { method: endpoints.listTeamMembers.method }, endpoints.listTeamMembers.response)
-    },
-
-    addTeamMember(teamId: string, params: AddPartnerTeamMemberParams) {
-      const body = shouldValidate('request') ? endpoints.addTeamMember.body.parse(params) : params
-      return request<{ ok: true, role: string, alreadyExisted?: boolean }>(endpoints.addTeamMember.path(teamId), {
-        method: endpoints.addTeamMember.method,
-        body,
-      }, endpoints.addTeamMember.response)
-    },
-
-    updateTeamMemberRole(teamId: string, userId: string, params: { role: AddPartnerTeamMemberParams['role'] }) {
-      const body = shouldValidate('request') ? endpoints.updateTeamMemberRole.body.parse(params) : params
-      return request<{ ok: true, role: AddPartnerTeamMemberParams['role'] }>(endpoints.updateTeamMemberRole.path(teamId, userId), {
-        method: endpoints.updateTeamMemberRole.method,
-        body,
-      }, endpoints.updateTeamMemberRole.response)
-    },
-
-    removeTeamMember(teamId: string, userId: string) {
-      return request<{ ok: true }>(endpoints.removeTeamMember.path(teamId, userId), {
-        method: endpoints.removeTeamMember.method,
-      }, endpoints.removeTeamMember.response)
-    },
-
-    bindSiteToTeam(userId: string, siteId: string, params: BindPartnerSiteTeamParams) {
-      const body = shouldValidate('request') ? endpoints.bindSiteToTeam.body.parse(params) : params
-      return request(endpoints.bindSiteToTeam.path(userId, siteId), {
-        method: endpoints.bindSiteToTeam.method,
-        body,
-      }, endpoints.bindSiteToTeam.response)
-    },
-
-    getTeamCatalog(teamId: string) {
-      return request<GscdumpTeamCatalogRef>(endpoints.getTeamCatalog.path(teamId), {
-        method: endpoints.getTeamCatalog.method,
-      }, endpoints.getTeamCatalog.response)
-    },
-
-    bindTeamCatalog(teamId: string, params: BindPartnerTeamCatalogParams) {
-      const body = shouldValidate('request') ? endpoints.bindTeamCatalog.body.parse(params) : params
-      return request<BindPartnerTeamCatalogResponse>(endpoints.bindTeamCatalog.path(teamId), {
-        method: endpoints.bindTeamCatalog.method,
-        body,
-      }, endpoints.bindTeamCatalog.response)
-    },
   }
 }

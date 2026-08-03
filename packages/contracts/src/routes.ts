@@ -1,10 +1,7 @@
 export const partnerRoutes = {
   partner: {
     users: {
-      byId: (userId: string) => `/partner/users/${encodeURIComponent(userId)}`,
       lifecycle: (userId: string) => `/partner/users/${encodeURIComponent(userId)}/lifecycle`,
-      siteTeam: (userId: string, siteId: string) => `/partner/users/${encodeURIComponent(userId)}/sites/${encodeURIComponent(siteId)}`,
-      siteIntIdCrosswalk: (userId: string) => `/partner/users/${encodeURIComponent(userId)}/sites/crosswalk`,
     },
     sites: {
       register: '/partner/sites/register',
@@ -20,7 +17,6 @@ export const partnerRoutes = {
     lifecycle: (userId: string) => `/users/${encodeURIComponent(userId)}/lifecycle`,
     sites: (userId: string) => `/users/${encodeURIComponent(userId)}/sites`,
     availableSites: (userId: string) => `/users/${encodeURIComponent(userId)}/available-sites`,
-    siteTeam: (userId: string, siteId: string) => `/partner/users/${encodeURIComponent(userId)}/sites/${encodeURIComponent(siteId)}`,
   },
   sites: {
     register: '/sites/register',
@@ -33,24 +29,9 @@ export const partnerRoutes = {
     indexing: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/indexing`,
     indexingUrls: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/indexing/urls`,
     indexingDiagnostics: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/indexing/diagnostics`,
-    indexingInspect: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/indexing/inspect`,
-    recoverPermission: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/recover-permission`,
-    canonicalMismatches: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/canonical-mismatches`,
-    topAssociation: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/data/top-association`,
-    keywordSparklines: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/data/keyword-sparklines`,
-    queryTrend: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/data/query-trend`,
-    pageTrend: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/data/page-trend`,
-    indexPercent: (siteId: string) => `/sites/${encodeURIComponent(siteId)}/index-percent`,
   },
   settings: {
     user: '/user/settings',
-  },
-  teams: {
-    create: '/partner/teams',
-    byId: (teamId: string) => `/partner/teams/${encodeURIComponent(teamId)}`,
-    catalog: (teamId: string) => `/partner/teams/${encodeURIComponent(teamId)}/catalog`,
-    members: (teamId: string) => `/partner/teams/${encodeURIComponent(teamId)}/members`,
-    member: (teamId: string, userId: string) => `/partner/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`,
   },
 } as const
 
