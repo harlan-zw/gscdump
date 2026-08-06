@@ -689,12 +689,14 @@ async function loadSnapshotId(
   if (cache) {
     await cachePut(cache, snapshotRefKey(scope, namespace, table), snapshotId, SNAPSHOT_REF_TTL_MS, now)
     if (snapshotId != null) {
-      // metadata carries BigInt snapshot ids (see catalog-cache docstring), so a
-      // plain JSON.stringify throws — stringifyBigintSafe measures the byte size
-      // for the cache gate without crashing on those ids.
+      // Metadata carries BigInt snapshot ids. Cross-isolate stores are JSON
+      // boundaries, so cache the lossless string form rather than handing the
+      // driver raw BigInts and silently losing this cache tier.
       const serialized = stringifyBigintSafe(metadata)
-      if (serialized.length <= MAX_CACHED_METADATA_BYTES)
-        await cachePut(cache, metadataRefKey(scope, namespace, table, snapshotId), metadata, METADATA_TTL_MS, now)
+      if (serialized.length <= MAX_CACHED_METADATA_BYTES) {
+        const cacheableMetadata = JSON.parse(serialized) as LoadedTableMetadata
+        await cachePut(cache, metadataRefKey(scope, namespace, table, snapshotId), cacheableMetadata, METADATA_TTL_MS, now)
+      }
     }
   }
   return { snapshotId, metadata }
