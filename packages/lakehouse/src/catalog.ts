@@ -320,7 +320,15 @@ export async function dropIcebergTables(
 }
 
 // ---------------------------------------------------------------------------
-// 429 commit-retry — R2 Data Catalog rate-limits.
+// Transient commit-retry — R2 Data Catalog rate-limits (429) and R2 server
+// blips (5xx on a data/metadata object PUT).
+//
+// Both classes get the SAME full-jitter exponential schedule. A separate,
+// faster schedule for 5xx would buy almost nothing: full jitter already draws
+// from [0, ceiling), so the first 5xx retry can fire immediately, and the two
+// classes overlap in cause (R2 load-shedding surfaces as either). One schedule
+// also means one budget — `maxAttempts` bounds the whole loop regardless of
+// which class each attempt failed with.
 // ---------------------------------------------------------------------------
 
 /** Tunable retry policy for {@link icebergAppendRetrying}. */
@@ -357,6 +365,10 @@ const APPEND_LANDED_SCAN_DEPTH = 25
 /**
  * True when `err` is an R2 Data Catalog commit rate-limit response
  * (`429 too many commits to this table`).
+ *
+ * Deliberately 429-ONLY. Callers use this to decide whether to decorrelate
+ * concurrent committers (defer the whole unit of work off-slot), which is the
+ * wrong response to a one-off server blip — see {@link isCommitServerError}.
  */
 export function isCommitRateLimited(err: unknown): boolean {
   if (err && typeof err === 'object' && (err as { status?: unknown }).status === 429)
@@ -365,15 +377,64 @@ export function isCommitRateLimited(err: unknown): boolean {
   return msg.includes('429') || msg.includes('too many commits') || msg.includes('rate limit')
 }
 
+/** Transient server-side statuses R2's S3 API and the catalog REST API return. */
+const TRANSIENT_SERVER_STATUSES: ReadonlySet<number> = new Set([500, 502, 503, 504])
+
+/**
+ * A status paired with its canonical reason phrase, which is the shape icebird
+ * throws (`PUT ${path}: ${res.status} ${res.statusText}`). Requiring the phrase
+ * is what makes the message fallback safe: Iceberg data files are named
+ * `00500-0-<uuid>.parquet`, so a bare `includes('500')` would classify a hard
+ * 403 on such a path as retryable and loop on a permanent failure.
+ */
+const TRANSIENT_SERVER_MESSAGE_RE
+  = /\b(?:500 internal server error|502 bad gateway|503 service unavailable|504 gateway time-?out)\b/i
+
+/**
+ * True when `err` is a transient server-side 5xx from R2 — a bare
+ * `500 Internal Server Error` on a data/metadata object PUT, or a 502/503/504
+ * from the catalog REST API.
+ *
+ * These carry no S3 error code and no body; they are single-request blips that
+ * clear on the next call. Distinct from {@link isCommitRateLimited} so a caller
+ * that must decorrelate writers on a 429 does not also do so on a server error.
+ */
+export function isCommitServerError(err: unknown): boolean {
+  const status = err && typeof err === 'object' ? (err as { status?: unknown }).status : undefined
+  if (typeof status === 'number')
+    return TRANSIENT_SERVER_STATUSES.has(status)
+  const msg = err instanceof Error ? err.message : String(err)
+  return TRANSIENT_SERVER_MESSAGE_RE.test(msg)
+}
+
+/**
+ * The retry predicate: is `err` worth another append attempt at all?
+ *
+ * Union of {@link isCommitRateLimited} and {@link isCommitServerError}.
+ * Everything else — 4xx, catalog conflicts icebird already exhausted its own
+ * 412/409 retries on, schema/validation failures — is permanent and must
+ * propagate on the first attempt.
+ */
+export function isCommitTransient(err: unknown): boolean {
+  return isCommitRateLimited(err) || isCommitServerError(err)
+}
+
 function defaultCommitSleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 /**
- * `icebergAppend` wrapped with retry on R2 Data Catalog 429 commit
- * rate-limits, using full-jitter exponential back-off, plus a landed-check
- * idempotency guard so a 429 whose commit actually landed is never re-applied
- * (see `deriveAppendId`/`appendAlreadyLanded`).
+ * `icebergAppend` wrapped with retry on transient commit failures
+ * ({@link isCommitTransient}: 429 rate-limits and R2 5xx blips), using
+ * full-jitter exponential back-off, plus a landed-check idempotency guard so a
+ * failure whose commit actually landed is never re-applied (see
+ * `deriveAppendId`/`appendAlreadyLanded`).
+ *
+ * Retrying is safe because `icebergAppend` writes data + manifest files BEFORE
+ * the atomic catalog pointer swap, so a 5xx during the upload phase aborts
+ * before anything is referenced by a snapshot; the retry writes fresh files and
+ * commits once. A 5xx on the pointer swap itself is covered by the
+ * landed-check.
  */
 export async function icebergAppendRetrying(
   args: IcebergAppendArgs,
@@ -398,7 +459,7 @@ export async function icebergAppendRetrying(
     const err = await icebergAppend(stampedArgs).then(() => undefined, (e: unknown) => e)
     if (err === undefined)
       return
-    if (!isCommitRateLimited(err))
+    if (!isCommitTransient(err))
       throw err
     if (await appendAlreadyLanded(args, appendId))
       return
@@ -410,7 +471,7 @@ export async function icebergAppendRetrying(
 }
 
 /**
- * Lazy multi-file append with the same 429 landed-check contract as
+ * Lazy multi-file append with the same transient-retry landed-check contract as
  * {@link icebergAppendRetrying}. The factory is invoked once per real attempt,
  * so a retry can re-open bounded source chunks without retaining prior rows.
  * Returns false when an earlier attempt already committed this append id.
@@ -442,7 +503,7 @@ export async function icebergAppendBatchesRetrying(
     }).then(() => undefined, (e: unknown) => e)
     if (err === undefined)
       return true
-    if (!isCommitRateLimited(err))
+    if (!isCommitTransient(err))
       throw err
     if (await appendAlreadyLanded(args, appendId))
       return true

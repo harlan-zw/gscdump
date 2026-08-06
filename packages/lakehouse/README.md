@@ -29,7 +29,7 @@ Node.js 22 or newer is required.
 ```ts
 import { connectIcebergCatalog, listIcebergTables } from '@gscdump/lakehouse'
 import { encodeJsonBigintSafe } from '@gscdump/lakehouse/bigint'
-import { isCommitRateLimited } from '@gscdump/lakehouse/maintenance'
+import { isCommitRateLimited, isCommitTransient } from '@gscdump/lakehouse/maintenance'
 
 const connection = await connectIcebergCatalog(config)
 const tables = await listIcebergTables(connection)
@@ -39,10 +39,17 @@ try {
 }
 catch (error) {
   if (isCommitRateLimited(error)) {
-    // Retry using the caller's bounded backoff policy.
+    // 429 specifically: decorrelate concurrent writers (defer off-slot).
+  }
+  else if (isCommitTransient(error)) {
+    // 429 or an R2 5xx blip: worth another attempt at all.
   }
 }
 ```
+
+`isCommitRateLimited` stays 429-only; `isCommitServerError` covers transient
+R2 5xx responses; `isCommitTransient` is the union and is what the package's
+own append-retry loop uses.
 
 The dataset registry is the normal authoring boundary. Raw Icebird table
 creation and append primitives are intentionally excluded from the package

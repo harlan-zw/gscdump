@@ -6,7 +6,7 @@
  * `@gscdump/lakehouse/unsafe-raw` for package adapters and diagnostics.
  */
 
-export { isCommitRateLimited } from './catalog'
+export { isCommitRateLimited, isCommitServerError, isCommitTransient } from './catalog'
 export { sweepUncommittedOrphans } from './orphan-sweep'
 
 export type {
