@@ -30,6 +30,8 @@
   toIcebergDayCount: function
 ./maintenance:
   isCommitRateLimited: function
+  isCommitServerError: function
+  isCommitTransient: function
   sweepUncommittedOrphans: function
 ./provisioning:
   adoptCatalog: function

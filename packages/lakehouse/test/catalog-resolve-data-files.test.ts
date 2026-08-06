@@ -154,7 +154,7 @@ describe('resolveIcebergDataFiles', () => {
     expect(arg.partitionFilter!(aboveRange)).toBe(false)
   })
 
-  it('does not throw when metadata carries BigInt snapshot ids and a cache is supplied', async () => {
+  it('stores BigInt metadata through JSON-backed caches and reuses it on the next range', async () => {
     // Real REST load-table metadata parses int64 fields (current-snapshot-id,
     // per-snapshot snapshot-id/sequence-number) as BigInt. The metadata cache
     // size-gate must not JSON.stringify those raw (throws "serialize a BigInt").
@@ -165,10 +165,22 @@ describe('resolveIcebergDataFiles', () => {
       },
     })
     icebergManifests.mockResolvedValue([{ entries: [dataFile({ site_id: 1, date_month: monthVal('2026-05') })] }])
-    const cache = { storage: createStorage() }
+    const storage = createStorage()
+    const setItem = storage.setItem.bind(storage)
+    storage.setItem = async (key, value, options) => {
+      const jsonValue = JSON.parse(JSON.stringify(value))
+      await setItem(key, jsonValue, options)
+    }
+    const errors: unknown[] = []
+    const cache = { storage, onError: (_operation: string, _key: string, error: unknown) => errors.push(error) }
 
-    const out = await resolveIcebergDataFiles(CONN, opts({ cache }))
-    expect(out).toHaveLength(1)
+    const first = await resolveIcebergDataFiles(CONN, opts({ cache }))
+    const second = await resolveIcebergDataFiles(CONN, opts({ cache, range: { start: '2026-06-01', end: '2026-06-30' } }))
+
+    expect(first).toHaveLength(1)
+    expect(second).toEqual([])
+    expect(errors).toEqual([])
+    expect(restCatalogLoadTable).toHaveBeenCalledTimes(1)
   })
 
   it('caches an empty table without ever walking manifests', async () => {
