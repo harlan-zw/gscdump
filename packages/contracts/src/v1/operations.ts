@@ -118,6 +118,18 @@ export function createGscdumpV1Protocol() {
   const realtimeSchemas = createRealtimeV1Schemas()
   const browserSchemas = createGscdumpV1BrowserSchemas(realtimeSchemas)
   const surfaceSchema = z.enum(['partner', 'analytics', 'realtime'])
+  // `teams` carries two identifiers: `id` (raw uuid primary key) and
+  // `public_id` (the `t_…` form). The partner HTTP handlers resolve teams by
+  // `id`, and `partner.teams.create` returns that uuid as `team.id`, so the id
+  // a partner is handed is the uuid — never the `t_` form. Admitting only
+  // `publicTeamId` here made every `{teamId}` partner operation unreachable:
+  // the SDK validates the request before sending, so callers got
+  // `<op>: invalid request params` with no HTTP status at all.
+  //
+  // Both forms are accepted until the surface is migrated onto public ids
+  // (create returning `publicId`, handlers resolving it, partners backfilled).
+  // The two shapes are disjoint, so accepting both is unambiguous.
+  const partnerTeamPathId = z.union([realtimeSchemas.publicTeamId, z.uuid()])
   const responseMeta = defineResponseObject({
     requestId: realtimeSchemas.publicRequestId,
     surface: surfaceSchema,
@@ -2166,7 +2178,7 @@ export function createGscdumpV1Protocol() {
           ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
         },
         request: {
-          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId }),
+          params: z.strictObject({ teamId: partnerTeamPathId }),
           query: null,
           headers: requestHeaders,
           body: renameTeamRequest,
@@ -2201,7 +2213,7 @@ export function createGscdumpV1Protocol() {
           ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
         },
         request: {
-          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId }),
+          params: z.strictObject({ teamId: partnerTeamPathId }),
           query: null,
           headers: requestHeaders,
           body: null,
@@ -2236,7 +2248,7 @@ export function createGscdumpV1Protocol() {
           ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
         },
         request: {
-          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId }),
+          params: z.strictObject({ teamId: partnerTeamPathId }),
           query: null,
           headers: requestHeaders,
           body: null,
@@ -2268,7 +2280,7 @@ export function createGscdumpV1Protocol() {
           ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
         },
         request: {
-          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId }),
+          params: z.strictObject({ teamId: partnerTeamPathId }),
           query: null,
           headers: requestHeaders,
           body: addTeamMemberRequest,
@@ -2303,7 +2315,7 @@ export function createGscdumpV1Protocol() {
           ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
         },
         request: {
-          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId, userId: realtimeSchemas.publicUserId }),
+          params: z.strictObject({ teamId: partnerTeamPathId, userId: realtimeSchemas.publicUserId }),
           query: null,
           headers: requestHeaders,
           body: updateTeamMemberRoleRequest,
@@ -2344,7 +2356,7 @@ export function createGscdumpV1Protocol() {
           ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
         },
         request: {
-          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId, userId: realtimeSchemas.publicUserId }),
+          params: z.strictObject({ teamId: partnerTeamPathId, userId: realtimeSchemas.publicUserId }),
           query: null,
           headers: requestHeaders,
           body: null,
@@ -2420,7 +2432,7 @@ export function createGscdumpV1Protocol() {
           ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
         },
         request: {
-          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId }),
+          params: z.strictObject({ teamId: partnerTeamPathId }),
           query: null,
           headers: requestHeaders,
           body: null,
@@ -2455,7 +2467,7 @@ export function createGscdumpV1Protocol() {
           ownership: [{ credential: 'partner_key', rule: 'partner_tenant' }],
         },
         request: {
-          params: z.strictObject({ teamId: realtimeSchemas.publicTeamId }),
+          params: z.strictObject({ teamId: partnerTeamPathId }),
           query: null,
           headers: requestHeaders,
           body: bindTeamCatalogRequest,

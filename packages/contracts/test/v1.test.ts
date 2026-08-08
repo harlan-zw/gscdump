@@ -143,6 +143,42 @@ describe('@gscdump/contracts/v1 HTTP registry', () => {
     })).toThrow(/safe literal surface-relative template/)
   })
 
+  it('accepts the team id partner.teams.create actually returns on every {teamId} path param', () => {
+    const protocol = createGscdumpV1Protocol()
+
+    // `teams` carries BOTH `id` (raw uuid, primary key) and `public_id` (`t_…`).
+    // The partner HTTP handlers resolve `eq(teams.id, teamId)` and
+    // `partner.teams.create` hands back that raw uuid, so a param schema that
+    // only admits the `t_` form makes every one of these operations
+    // unreachable through the SDK — it rejects client-side, before any request.
+    // Both forms must parse until the surface is migrated onto public ids.
+    const rawUuid = '700195cb-5dc8-4b3f-9bac-9ab8258da792'
+    const publicId = 't_01H9Z3'
+    const teamPathOperations = [
+      protocol.surfaces.partner.operations.renameTeam,
+      protocol.surfaces.partner.operations.deleteTeam,
+      protocol.surfaces.partner.operations.listTeamMembers,
+      protocol.surfaces.partner.operations.addTeamMember,
+      protocol.surfaces.partner.operations.getTeamCatalog,
+      protocol.surfaces.partner.operations.bindTeamCatalog,
+    ]
+
+    for (const operation of teamPathOperations) {
+      expect(
+        operation.request.params?.safeParse({ teamId: rawUuid }).success,
+        `${operation.id} must accept the uuid partner.teams.create returns`,
+      ).toBe(true)
+      expect(
+        operation.request.params?.safeParse({ teamId: publicId }).success,
+        `${operation.id} must still accept the public team id`,
+      ).toBe(true)
+      expect(
+        operation.request.params?.safeParse({ teamId: 'not a team id' }).success,
+        `${operation.id} must still reject a malformed team id`,
+      ).toBe(false)
+    }
+  })
+
   it('lists and resolves exact registry operations through one fail-closed matcher', () => {
     const protocol = createGscdumpV1Protocol()
     const entries = listHttpOperations(protocol)
