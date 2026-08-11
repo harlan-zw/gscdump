@@ -25,7 +25,7 @@ describe('resolveVerificationTarget', () => {
   })
 })
 
-describe('Site Verification resource updates', () => {
+describe('site Verification resource updates', () => {
   it.each([
     ['patch', 'PATCH'],
     ['update', 'PUT'],

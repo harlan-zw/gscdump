@@ -43,7 +43,7 @@ catalog:
   '@nuxt/kit': 4.5.0
   '@nuxt/schema': 4.5.0
   '@nuxt/ui': ^4.10.0
-  '@types/node': ^26.1.2
+  '@types/node': ^26.2.0
   '@types/proper-lockfile': ^4.1.4
   '@unovis/ts': ^1.6.7
   '@unovis/vue': ^1.6.7
@@ -55,7 +55,7 @@ catalog:
   hyparquet: ^1.26.2
   hyparquet-writer: ^0.16.1
   icebird: ^0.8.15
-  js-yaml: ^5.2.2
+  js-yaml: ^5.2.3
   nuxt: ^4.5.1
   nuxt-use-query: ^1.0.1
   pathe: ^2.0.3
@@ -80,13 +80,13 @@ catalogs:
     open: ^11.0.0
     proper-lockfile: ^4.1.2
   dev-build:
-    bumpp: ^12.1.0
+    bumpp: ^12.2.0
     obuild: ^0.4.38
-    rolldown: ^1.2.0
+    rolldown: ^1.2.3
     typescript: ^7.0.2
   dev-lint:
-    '@antfu/eslint-config': ^9.2.0
-    eslint: ^10.8.0
+    '@antfu/eslint-config': ^9.3.0
+    eslint: ^10.8.1
   dev-test:
     '@nuxt/test-utils': ^4.1.0
     '@vitest/browser': ^4.1.10
