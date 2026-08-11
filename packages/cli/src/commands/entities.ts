@@ -213,8 +213,6 @@ const showSubCommand = defineCommand({
       console.log(`  Canonical:    ${record.googleCanonical}`)
     if (record.coverageState)
       console.log(`  Coverage:     ${record.coverageState}`)
-    if (record.mobileUsabilityVerdict)
-      console.log(`  Mobile:       ${record.mobileUsabilityVerdict}`)
     if (record.richResultsVerdict)
       console.log(`  Rich results: ${record.richResultsVerdict}`)
     console.log()

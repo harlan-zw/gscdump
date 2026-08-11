@@ -90,6 +90,23 @@ describe('inspect command', () => {
     expect(json.isIndexed).toBe(true)
   })
 
+  it('does not present deprecated mobile usability data', async () => {
+    inspectMock.mockResolvedValue({
+      inspectionResult: {
+        indexStatusResult: { verdict: 'PASS' },
+        mobileUsabilityResult: { verdict: 'FAIL', issues: [{ issueType: 'LEGACY' }] },
+      },
+    })
+    await inspectCommand.run!({
+      args: { url: 'https://example.com/x', site: 'https://example.com/', json: false },
+      rawArgs: [],
+      cmd: inspectCommand,
+    })
+
+    expect(consoleOutput.join('\n')).not.toContain('Mobile usability')
+    expect(consoleOutput.join('\n')).not.toContain('LEGACY')
+  })
+
   it('batch invokes batchInspectUrls for each URL', async () => {
     const batch = inspectCommand.subCommands!.batch as any
     await batch.run({

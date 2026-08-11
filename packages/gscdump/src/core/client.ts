@@ -66,6 +66,15 @@ export interface VerificationWebResource {
   owners?: string[]
 }
 
+interface SearchAnalyticsWireResponse extends Omit<SearchAnalyticsResponse, 'metadata'> {
+  metadata?: {
+    first_incomplete_date?: string | null
+    first_incomplete_hour?: string | null
+    firstIncompleteDate?: string | null
+    firstIncompleteHour?: string | null
+  }
+}
+
 /**
  * Compatible interface with OAuth2Client from google-auth-library
  */
@@ -236,6 +245,8 @@ export interface GoogleSearchConsoleClient {
     insert: (params: { site: VerificationSite, verificationMethod: VerificationMethod }, opts?: CallOptions) => Promise<VerificationWebResource>
     list: (opts?: CallOptions) => Promise<VerificationWebResource[]>
     get: (id: string, opts?: CallOptions) => Promise<VerificationWebResource>
+    patch: (id: string, resource: VerificationWebResource, opts?: CallOptions) => Promise<VerificationWebResource>
+    update: (id: string, resource: VerificationWebResource, opts?: CallOptions) => Promise<VerificationWebResource>
     delete: (id: string, opts?: CallOptions) => Promise<void>
   }
 
@@ -303,12 +314,25 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
     fetch = createFetch(authState, fetchOptions)
   }
 
-  const querySearchAnalytics = (siteUrl: string, body: SearchAnalyticsQuery, opts?: CallOptions): Promise<SearchAnalyticsResponse> =>
-    fetch<SearchAnalyticsResponse>(`${GSC_API}/webmasters/v3/sites/${encodeSiteUrl(siteUrl)}/searchAnalytics/query`, {
+  const querySearchAnalytics = async (siteUrl: string, body: SearchAnalyticsQuery, opts?: CallOptions): Promise<SearchAnalyticsResponse> => {
+    const response = await fetch<SearchAnalyticsWireResponse>(`${GSC_API}/webmasters/v3/sites/${encodeSiteUrl(siteUrl)}/searchAnalytics/query`, {
       method: 'POST',
       body,
       signal: opts?.signal,
     })
+    if (!response.metadata)
+      return response as SearchAnalyticsResponse
+
+    const firstIncompleteDate = response.metadata.first_incomplete_date ?? response.metadata.firstIncompleteDate
+    const firstIncompleteHour = response.metadata.first_incomplete_hour ?? response.metadata.firstIncompleteHour
+    return {
+      ...response,
+      metadata: {
+        ...(typeof firstIncompleteDate === 'string' ? { first_incomplete_date: firstIncompleteDate } : {}),
+        ...(typeof firstIncompleteHour === 'string' ? { first_incomplete_hour: firstIncompleteHour } : {}),
+      },
+    }
+  }
 
   return {
     async* query<D extends Dimension[], C>(siteUrl: string, builder: GSCQueryBuilder<D, C>, opts?: CallOptions): AsyncGenerator<GSCRow<D, C>[], QueryReturn> {
@@ -331,7 +355,7 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
         const rowLimit = Math.min(pageSize, remaining)
         const response = await querySearchAnalytics(siteUrl, { ...body, startRow, rowLimit }, opts)
         if (response.metadata)
-          metadata = response.metadata as GscSearchAnalyticsMetadata
+          metadata = response.metadata
         if (response.responseAggregationType)
           responseAggregationType = response.responseAggregationType as GscResponseAggregationType
         const rows = (response.rows || []).map((row) => {
@@ -397,6 +421,18 @@ export function googleSearchConsole(auth: Auth, options: GoogleSearchConsoleClie
       },
       get: (id, opts) =>
         fetch<VerificationWebResource>(`${SITE_VERIFICATION_API}/webResource/${encodeURIComponent(id)}`, { signal: opts?.signal }),
+      patch: (id, resource, opts) =>
+        fetch<VerificationWebResource>(`${SITE_VERIFICATION_API}/webResource/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          body: resource,
+          signal: opts?.signal,
+        }),
+      update: (id, resource, opts) =>
+        fetch<VerificationWebResource>(`${SITE_VERIFICATION_API}/webResource/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          body: resource,
+          signal: opts?.signal,
+        }),
       delete: (id, opts) =>
         fetch<void>(`${SITE_VERIFICATION_API}/webResource/${encodeURIComponent(id)}`, {
           method: 'DELETE',

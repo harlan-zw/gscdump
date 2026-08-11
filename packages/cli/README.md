@@ -48,7 +48,7 @@ gscdump mcp
 | `sites add <url>` / `sites delete <url> [--yes]` | Register / remove a property in Search Console (add registers in unverified state) |
 | `sites verify-token <url> [--method]` / `sites verify <url> [--method]` | Get a verification token, then trigger ownership verification (META/FILE/DNS_TXT/DNS_CNAME/ANALYTICS/TAG_MANAGER) |
 | `sitemaps` | GSC CRUD, explicit live probes, and hosted canonical reads (`current`, `history`, `membership`, `lastmod`, `export`) |
-| `inspect <url>` / `inspect batch [--concurrency]` | URL inspection (single URL or batch from file/stdin); renders index status, rich results, AMP, mobile usability |
+| `inspect <url>` / `inspect batch [--concurrency]` | URL inspection (single URL or batch from file/stdin); renders index status, rich results, and AMP |
 | `indexing` | Notify Google about URL changes (`submit`, `remove`, `status`, `batch [--concurrency] [--yes]`); supports `--retries` |
 | `sync` | Sync GSC data to the local Parquet store; `--retry-failed`, `--dry-run` |
 | `query` | Run a search analytics query (local store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. |

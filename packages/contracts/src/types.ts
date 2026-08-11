@@ -503,7 +503,7 @@ export interface GscdumpSiteRegistration {
   message?: string
   existing?: boolean
   indexingEligible?: boolean
-  indexingIneligibleReason?: 'free_plan' | 'missing_indexing_scope' | 'insufficient_gsc_permission'
+  indexingIneligibleReason?: 'free_plan' | 'missing_gsc_read_scope' | 'insufficient_gsc_permission'
   indexingPermissionLevel?: string | null
   grantedScopes?: string[]
   site?: PartnerLifecycleSite | null
@@ -563,7 +563,7 @@ export interface GscdumpUserSite {
     percent: number
   }
   indexingEligible?: boolean
-  indexingIneligibleReason?: 'free_plan' | 'missing_indexing_scope' | 'insufficient_gsc_permission'
+  indexingIneligibleReason?: 'free_plan' | 'missing_gsc_read_scope' | 'insufficient_gsc_permission'
   indexingPermissionLevel?: string | null
   grantedScopes?: string[]
   indexingStatus?: 'not_started' | 'indexing' | 'complete'
@@ -1003,7 +1003,7 @@ export interface BulkRegisterPartnerSiteResult {
   error?: string
   site?: PartnerLifecycleSite | null
   indexingEligible?: boolean
-  indexingIneligibleReason?: 'free_plan' | 'missing_indexing_scope' | 'insufficient_gsc_permission'
+  indexingIneligibleReason?: 'free_plan' | 'missing_gsc_read_scope' | 'insufficient_gsc_permission'
   indexingPermissionLevel?: string | null
   grantedScopes?: string[]
 }

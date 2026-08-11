@@ -100,6 +100,22 @@ describe('sitemaps command', () => {
     expect(listMock).toHaveBeenCalledWith('https://example.com/')
   })
 
+  it('does not print the deprecated indexed count', async () => {
+    getMock.mockResolvedValue({
+      path: 'https://example.com/sitemap.xml',
+      contents: [{ type: 'web', submitted: 42, indexed: 41 }],
+    })
+    const get = sitemapsCommand.subCommands!.get as any
+    await get.run({
+      args: { site: 'https://example.com/', url: 'https://example.com/sitemap.xml' },
+      rawArgs: [],
+      cmd: get,
+    })
+
+    expect(consoleOutput.join('\n')).toContain('web: 42 submitted')
+    expect(consoleOutput.join('\n')).not.toContain('indexed')
+  })
+
   it('submit calls API with resolved site + url', async () => {
     submitMock.mockResolvedValue(undefined)
     const submit = sitemapsCommand.subCommands!.submit as any

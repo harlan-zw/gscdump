@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   batchInspectUrlsFlatSettled,
   canUseUrlInspection,
+  getIndexingEligibility,
   getNextCheckAfter,
   getNextCheckPriority,
   inspectUrlFlat,
@@ -161,5 +162,20 @@ describe('canUseUrlInspection', () => {
     expect(canUseUrlInspection(null)).toBe(false)
     expect(canUseUrlInspection(undefined)).toBe(false)
     expect(canUseUrlInspection('')).toBe(false)
+  })
+})
+
+describe('getIndexingEligibility', () => {
+  it('uses a Search Console scope for URL Inspection', () => {
+    expect(getIndexingEligibility('https://www.googleapis.com/auth/webmasters.readonly', 'siteOwner')).toMatchObject({
+      indexingEligible: true,
+      indexingPermissionLevel: 'siteOwner',
+    })
+
+    expect(getIndexingEligibility('https://www.googleapis.com/auth/indexing', 'siteOwner')).toMatchObject({
+      indexingEligible: false,
+      indexingIneligibleReason: 'missing_gsc_read_scope',
+      indexingPermissionLevel: 'siteOwner',
+    })
   })
 })

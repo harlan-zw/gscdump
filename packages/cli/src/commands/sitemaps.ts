@@ -113,7 +113,7 @@ const getCommand = defineCommand({
       console.log()
       console.log('  \x1B[1mContents:\x1B[0m')
       for (const c of sitemap.contents) {
-        console.log(`    ${c.type}: ${c.submitted} submitted, ${c.indexed} indexed`)
+        console.log(`    ${c.type}: ${c.submitted} submitted`)
       }
     }
   },

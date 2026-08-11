@@ -109,7 +109,7 @@ export const indexingNextActions = [
 export const lifecycleErrorCodes = [
   'missing_refresh_token',
   'missing_analytics_scope',
-  'missing_indexing_scope',
+  'missing_gsc_read_scope',
   'token_refresh_failed',
   'permission_lost',
   'insufficient_gsc_permission',

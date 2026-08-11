@@ -6,7 +6,7 @@ export interface ApiSite {
 
 /** Per-content-type counts returned with a sitemap. */
 export interface ApiSitemapContent {
-  /** Deprecated by Google, retained because it can still appear on the wire. */
+  /** @deprecated Google can still include this field on the wire. */
   indexed?: string | null
   submitted?: string | null
   type?: string | null
@@ -63,12 +63,8 @@ export interface DataRow {
 
 /** Completeness metadata returned with recent Search Analytics data. */
 export interface SearchAnalyticsMetadata {
-  firstIncompleteDate?: string | null
-  firstIncompleteHour?: string | null
-  /** Field name returned by the direct REST endpoint. */
-  first_incomplete_date?: string | null
-  /** Field name returned by the direct REST endpoint. */
-  first_incomplete_hour?: string | null
+  first_incomplete_date?: string
+  first_incomplete_hour?: string
 }
 
 /** Raw Search Analytics response returned by Google's REST endpoint. */
@@ -144,6 +140,7 @@ export interface UrlInspectionResult {
   ampResult?: AmpInspectionResult
   indexStatusResult?: IndexStatusResult
   inspectionResultLink?: string | null
+  /** @deprecated Google no longer returns this result. */
   mobileUsabilityResult?: MobileUsabilityResult
   richResultsResult?: RichResultsResult
 }

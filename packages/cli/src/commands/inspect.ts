@@ -104,17 +104,6 @@ function printInspection(url: string, inspection: UrlInspectionResult | undefine
     }
   }
 
-  const mobile = inspection?.mobileUsabilityResult
-  if (mobile) {
-    console.log()
-    console.log(`  \x1B[1mMobile usability\x1B[0m`)
-    console.log(`    Verdict:        ${colorVerdict(mobile.verdict)}`)
-    if (mobile.issues?.length) {
-      for (const issue of mobile.issues)
-        console.log(`    \x1B[33m${issue.issueType ?? '?'}\x1B[0m ${issue.message ?? ''}`)
-    }
-  }
-
   if (inspection?.inspectionResultLink) {
     console.log()
     console.log(`  \x1B[90mOpen in Search Console:\x1B[0m \x1B[36m${inspection.inspectionResultLink}\x1B[0m`)

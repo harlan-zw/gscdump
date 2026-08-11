@@ -63,14 +63,14 @@ describe('hourly Discover support', () => {
   })
 
   describe('client.query metadata', () => {
-    it('returns first_incomplete_hour as the generator final value', async () => {
+    it('normalizes generated-client metadata casing for direct and builder queries', async () => {
       const mockFetch = vi.fn()
         .mockResolvedValueOnce({
           rows: [
             { keys: ['2026-05-18T11:00:00-07:00'], clicks: 5, impressions: 100, ctr: 0.05, position: 3.1 },
           ],
           metadata: {
-            first_incomplete_hour: '2026-05-18T11:00:00-07:00',
+            firstIncompleteHour: '2026-05-18T11:00:00-07:00',
           },
         })
         .mockResolvedValue({ rows: [] })
@@ -92,6 +92,22 @@ describe('hourly Discover support', () => {
       expect(batches).toHaveLength(1)
       expect(batches[0][0]).toMatchObject({ hour: '2026-05-18T11:00:00-07:00', clicks: 5 })
       expect(result.value).toEqual({ metadata: { first_incomplete_hour: '2026-05-18T11:00:00-07:00' }, responseAggregationType: undefined })
+
+      mockFetch.mockResolvedValueOnce({
+        metadata: {
+          firstIncompleteDate: '2026-05-18',
+          firstIncompleteHour: '2026-05-18T12:00:00-07:00',
+        },
+      })
+      await expect(client.searchAnalytics.query('https://example.com/', {
+        startDate: '2026-05-17',
+        endDate: '2026-05-18',
+      })).resolves.toMatchObject({
+        metadata: {
+          first_incomplete_date: '2026-05-18',
+          first_incomplete_hour: '2026-05-18T12:00:00-07:00',
+        },
+      })
     })
 
     it('returns undefined metadata when response omits it', async () => {

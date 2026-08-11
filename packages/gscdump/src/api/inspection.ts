@@ -1,6 +1,6 @@
 import type { CallOptions, GoogleSearchConsoleClient } from '../core/client'
 import type { UrlInspectionResult as GscUrlInspectionResult } from '../core/types'
-import { hasIndexingScope } from '../core/scopes'
+import { hasGscReadScope } from '../core/scopes'
 import { runSequentialBatch } from './batch'
 
 export interface InspectUrlResult {
@@ -67,7 +67,9 @@ export interface ParsedIndexingResult {
   googleCanonical: string | null
   sitemaps: string | null
   referringUrls: string | null
+  /** @deprecated Retained for historical storage rows. */
   mobileVerdict: string | null
+  /** @deprecated Retained for historical storage rows. */
   mobileIssues: string | null
   richResultsVerdict: string | null
   richResultsItems: string | null
@@ -248,7 +250,7 @@ export function getNextCheckAfter(priority: InspectionPriority): number {
 
 // --- Eligibility -----------------------------------------------------------
 // "Can this user actually call the URL Inspection API for this property?"
-// Two gates: the OAuth grant must include the indexing scope, AND the user's
+// Two gates: the OAuth grant must include a Search Console scope, AND the user's
 // GSC permission on the property must be one of the inspection-allowed levels.
 
 // Any verified user can call URL inspection; only siteUnverifiedUser is blocked.
@@ -262,7 +264,7 @@ function grantedScopeList(scopes: string | null | undefined): string[] {
   return scopes?.split(/\s+/).map(s => s.trim()).filter(Boolean) ?? []
 }
 
-export type IndexingIneligibleReason = 'missing_indexing_scope' | 'insufficient_gsc_permission'
+export type IndexingIneligibleReason = 'missing_gsc_read_scope' | 'insufficient_gsc_permission'
 
 export interface IndexingEligibility {
   indexingEligible: boolean
@@ -276,10 +278,10 @@ export function getIndexingEligibility(
   permissionLevel: string | null | undefined,
 ): IndexingEligibility {
   const scopes = grantedScopeList(grantedScopes)
-  if (!hasIndexingScope(grantedScopes)) {
+  if (!hasGscReadScope(grantedScopes)) {
     return {
       indexingEligible: false,
-      indexingIneligibleReason: 'missing_indexing_scope',
+      indexingIneligibleReason: 'missing_gsc_read_scope',
       indexingPermissionLevel: permissionLevel ?? null,
       grantedScopes: scopes,
     }
