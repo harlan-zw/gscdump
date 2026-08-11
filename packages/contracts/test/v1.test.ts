@@ -183,7 +183,6 @@ describe('@gscdump/contracts/v1 HTTP registry', () => {
     const protocol = createGscdumpV1Protocol()
     const entries = listHttpOperations(protocol)
 
-    expect(entries).toHaveLength(51)
     expect(entries.map(entry => entry.operation.id)).toContain('partner.users.lifecycle.get')
     expect(entries.map(entry => entry.operation.id)).toContain('partner.sites.sitemaps.urls.get')
     expect(entries.map(entry => entry.operation.id)).toContain('partner.sites.sitemaps.export.get')

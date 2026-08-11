@@ -1,8 +1,8 @@
 {
   "name": "gscdump",
   "type": "module",
-  "version": "2.1.1",
-  "description": "Direct Google Search Console client with typed queries, streaming pagination, URL inspection, and indexing helpers",
+  "version": "2.1.2",
+  "description": "Direct Google Search Console and Bing Webmaster clients with typed queries and Indexing Evidence",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
@@ -21,6 +21,7 @@
   },
   "keywords": [
     "google-search-console",
+    "bing-webmaster-tools",
     "gsc",
     "seo",
     "search-analytics",
@@ -41,6 +42,11 @@
       "types": "./dist/query/index.d.mts",
       "import": "./dist/query/index.mjs",
       "default": "./dist/query/index.mjs"
+    },
+    "./bing": {
+      "types": "./dist/bing/index.d.mts",
+      "import": "./dist/bing/index.mjs",
+      "default": "./dist/bing/index.mjs"
     },
     "./query/plan": {
       "types": "./dist/query/plan.d.mts",

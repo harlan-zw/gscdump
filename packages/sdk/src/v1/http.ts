@@ -157,6 +157,10 @@ export interface GscdumpV1Client {
     input: GscdumpV1OperationInput<'partner.sites.indexing.urls.list'>,
     options?: GscdumpV1ExecuteOptions,
   ) => Promise<GscdumpV1OperationResponse<'partner.sites.indexing.urls.list'>>
+  listSiteBingIndexingEvidence: (
+    input: GscdumpV1OperationInput<'partner.sites.indexing.bing.evidence.list'>,
+    options?: GscdumpV1ExecuteOptions,
+  ) => Promise<GscdumpV1OperationResponse<'partner.sites.indexing.bing.evidence.list'>>
   listSiteIndexingTransitions: (
     input: GscdumpV1OperationInput<'partner.sites.indexing.transitions.list'>,
     options?: GscdumpV1ExecuteOptions,
@@ -902,6 +906,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     updateUserTokens: (input, executeOptions) => execute('partner.users.tokens.update', input, executeOptions),
     getSiteIndexing: (input, executeOptions) => execute('partner.sites.indexing.get', input, executeOptions),
     listSiteIndexingUrls: (input, executeOptions) => execute('partner.sites.indexing.urls.list', input, executeOptions),
+    listSiteBingIndexingEvidence: (input, executeOptions) => execute('partner.sites.indexing.bing.evidence.list', input, executeOptions),
     listSiteIndexingTransitions: (input, executeOptions) => execute('partner.sites.indexing.transitions.list', input, executeOptions),
     getSiteIndexingDiagnostics: (input, executeOptions) => execute('partner.sites.indexing.diagnostics.get', input, executeOptions),
     getSiteSitemaps: (input, executeOptions) => execute('partner.sites.sitemaps.get', input, executeOptions),

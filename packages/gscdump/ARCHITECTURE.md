@@ -1,13 +1,14 @@
 # Architecture — `gscdump` (core)
 
-`gscdump` is the edge-safe base package: GSC REST client, typed query builder,
-and core primitives. No `node:*`, no DuckDB, no storage dependencies — it runs
+`gscdump` is the edge-safe base package: Google and Bing REST clients, typed
+query builder, and core primitives. No `node:*`, no DuckDB, no storage dependencies — it runs
 on Node, browser, and workerd.
 
 ## Subpath exports
 
 - `.` — REST client, auth, sites/sitemaps/indexing/inspection APIs, date
   helpers, scopes, errors, plus the small URL/normalize/sitemap helpers.
+- `./bing` — Bing read calls, boundary parsing, and Indexing Evidence normalization.
 - `./query` — `gsc()` typed query builder, filter operators, `BuilderState`.
 - `./query/plan` — logical plan compilation (`buildLogicalPlan`, dataset
   inference) consumed by `@gscdump/engine`.
