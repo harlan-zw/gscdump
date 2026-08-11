@@ -225,6 +225,10 @@ export function createGscdumpV1Protocol() {
       z.literal('false'),
     ]).optional(),
   })
+  const bingIndexingEvidenceQuery = z.strictObject({
+    limit: integerQuery(z.number().int().min(1).max(500), /^(?:[1-9]|[1-9]\d|[1-4]\d{2}|500)$/).optional(),
+    offset: integerQuery(z.number().int().min(0), /^(?:0|[1-9]\d*)$/).optional(),
+  })
   const indexingTransitionsQuery = z.strictObject({
     startDate: calendarDate.optional(),
     endDate: calendarDate.optional(),
@@ -306,6 +310,68 @@ export function createGscdumpV1Protocol() {
   const registerSiteRequest = registerPartnerSiteSchema.omit({ userId: true, teamId: true }).strict()
   const indexingSummaryResponse = defineSuccessResponse(defineResponseObject(gscdumpIndexingResponseSchema.shape), partnerResponseMeta)
   const indexingUrlsResponse = defineSuccessResponse(defineResponseObject(indexingUrlsResponseSchema.shape), partnerResponseMeta)
+  const observedBingIndexingEvidence = defineResponseObject({
+    _tag: z.literal('observed'),
+    searchEngine: z.literal('bing'),
+    url: z.url(),
+    observedAt: z.iso.datetime(),
+    providerEvidenceAt: z.iso.datetime(),
+    freshness: z.enum(['current', 'stale']),
+    discoveryTime: z.iso.datetime().nullable(),
+    lastCrawlTime: z.iso.datetime().nullable(),
+    originHttpStatus: z.number().int().min(100).max(599).nullable(),
+    documentSize: z.number().int().nonnegative(),
+    anchorCount: z.number().int().nonnegative(),
+    totalChildUrlCount: z.number().int().nonnegative(),
+    uncertaintyReason: z.literal('indexed-verdict-unavailable'),
+  })
+  const unknownBingIndexingEvidence = defineResponseObject({
+    _tag: z.literal('unknown'),
+    searchEngine: z.literal('bing'),
+    url: z.url(),
+    observedAt: z.iso.datetime(),
+    reason: z.enum(['not-discovered', 'not-observed']),
+  })
+  const unavailableBingIndexingEvidence = defineResponseObject({
+    _tag: z.literal('unavailable'),
+    searchEngine: z.literal('bing'),
+    url: z.url(),
+    observedAt: z.iso.datetime(),
+    reason: z.enum([
+      'authentication-required',
+      'permission-denied',
+      'site-unverified',
+      'throttled',
+      'quota-unavailable',
+      'provider-error',
+    ]),
+    retryAt: z.iso.datetime().nullable(),
+  })
+  const bingIndexingEvidencePagination = defineResponseObject({
+    total: z.number().int().nonnegative(),
+    limit: z.number().int().positive(),
+    offset: z.number().int().nonnegative(),
+    hasMore: z.boolean(),
+  })
+  const bingIndexingEvidenceResponse = defineSuccessResponse(defineResponseObject({
+    searchEngine: z.literal('bing'),
+    siteUrl: z.url(),
+    indexingEvidence: z.array(z.discriminatedUnion('_tag', [
+      observedBingIndexingEvidence.producer,
+      unknownBingIndexingEvidence.producer,
+      unavailableBingIndexingEvidence.producer,
+    ])),
+    pagination: bingIndexingEvidencePagination.producer,
+  }, {
+    searchEngine: z.literal('bing'),
+    siteUrl: z.url(),
+    indexingEvidence: z.array(z.discriminatedUnion('_tag', [
+      observedBingIndexingEvidence.client,
+      unknownBingIndexingEvidence.client,
+      unavailableBingIndexingEvidence.client,
+    ])),
+    pagination: bingIndexingEvidencePagination.client,
+  }), partnerResponseMeta)
   const indexingTransition = defineResponseObject({
     url: z.string(),
     field: gscdumpIndexingTransitionFieldSchema,
@@ -1072,6 +1138,49 @@ export function createGscdumpV1Protocol() {
                 urls: [],
                 pagination: { total: 0, limit: 100, offset: 0, hasMore: false },
                 meta: { siteUrl: 'sc-domain:example.com', status: 'all', issue: null },
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      listSiteBingIndexingEvidence: defineHttpOperation({
+        id: 'partner.sites.indexing.bing.evidence.list',
+        method: 'GET',
+        path: '/sites/{siteId}/indexing/bing/evidence',
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: bingIndexingEvidenceQuery,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: bingIndexingEvidenceResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.5.0' },
+        docs: {
+          summary: 'List Bing Indexing Evidence',
+          description: 'Returns dated Bing discovery and crawl observations. It does not return an indexed verdict.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { limit: 100, offset: 0 } },
+            response: {
+              data: {
+                searchEngine: 'bing',
+                siteUrl: 'https://example.com/',
+                indexingEvidence: [],
+                pagination: { total: 0, limit: 100, offset: 0, hasMore: false },
               },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
@@ -2997,6 +3106,8 @@ export function createGscdumpV1Protocol() {
       indexingTransitionsResponse,
       indexingUrlsQuery,
       indexingUrlsResponse,
+      bingIndexingEvidenceQuery,
+      bingIndexingEvidenceResponse,
       lifecycleResponse,
       registerSiteRequest,
       sitemapChangesQuery,
@@ -3030,6 +3141,7 @@ export type PartnerAnalysisBundleV1Response = z.infer<GscdumpV1Protocol['schemas
 export type PartnerAvailableSitesV1Response = z.infer<GscdumpV1Protocol['schemas']['availableSitesResponse']['client']>
 export type PartnerIndexingV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingSummaryResponse']['client']>
 export type PartnerIndexingUrlsV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingUrlsResponse']['client']>
+export type PartnerBingIndexingEvidenceV1Response = z.infer<GscdumpV1Protocol['schemas']['bingIndexingEvidenceResponse']['client']>
 export type PartnerIndexingTransitionsV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingTransitionsResponse']['client']>
 export type PartnerIndexingDiagnosticsV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingDiagnosticsResponse']['client']>
 export type PartnerSitemapsV1Response = z.infer<GscdumpV1Protocol['schemas']['sitemapsResponse']['client']>

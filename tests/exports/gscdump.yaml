@@ -122,6 +122,16 @@
   urlMatchKey: function
   verificationMethodsFor: function
   verifySite: function
+./bing:
+  bingWebmaster: function
+  DEFAULT_BING_CHILD_PAGE_LIMIT: number
+  DEFAULT_BING_WEBMASTER_API_URL: string
+  normalizeBingCrawlIssue: function
+  normalizeBingIndexingEvidence: function
+  normalizeBingPageStats: function
+  normalizeBingSite: function
+  normalizeBingUrlInfo: function
+  normalizeBingUrlTrafficInfo: function
 ./contracts: {}
 ./dates:
   addDays: function

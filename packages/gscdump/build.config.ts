@@ -6,6 +6,7 @@ export default defineBuildConfig({
       type: 'bundle',
       input: [
         './src/index.ts',
+        './src/bing/index.ts',
         './src/query/index.ts',
         './src/query/plan.ts',
         './src/core/result.ts',

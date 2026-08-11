@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/gscdump?color=yellow)](https://npm.chart.dev/gscdump)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-Direct Google Search Console client with a typed query builder, streaming pagination, URL inspection, sitemap administration, verification, and Indexing API helpers.
+Direct Google Search Console and Bing Webmaster clients with typed queries and Indexing Evidence.
 
 ## Install
 
@@ -73,6 +73,24 @@ await client.indexing.publish(
 
 The package root also exports batch and projection helpers such as `fetchSitesWithSitemaps`, `batchInspectUrlsFlatSettled`, `inspectUrlFlat`, and `batchRequestIndexing`.
 
+## Read Bing Indexing Evidence
+
+Use `gscdump/bing` with an OAuth access token. The client returns tagged
+`Result` values and never infers an indexed verdict from crawl evidence.
+
+```ts
+import { bingWebmaster } from 'gscdump/bing'
+
+const client = bingWebmaster({ accessToken: 'access-token' })
+const evidence = await client.getIndexingEvidence(
+  'https://example.com/',
+  'https://example.com/docs',
+)
+
+if (evidence.ok)
+  console.log(evidence.value)
+```
+
 Sitemap XML reading and traversal lives in `sitemapd`. Product feed scoping and
 exact membership hashing live in `gscdump/sitemap-identity`. Hosted canonical
 sitemap membership is available through `@gscdump/sdk/v1`.
@@ -81,6 +99,7 @@ sitemap membership is available through `@gscdump/sdk/v1`.
 
 - `gscdump/query`: query builder, columns, operators, Pacific date helpers, and logical query plans
 - `gscdump/query/plan`: logical query planning only
+- `gscdump/bing`: Bing Site, URL, traffic, and crawl evidence calls
 - `gscdump/dates`: explicit UTC and Pacific Search Console date helpers
 - `gscdump/contracts`: Search Analytics request and response contracts
 - `gscdump/result`: `Result` helpers
