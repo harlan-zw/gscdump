@@ -183,10 +183,15 @@ describe('@gscdump/contracts/v1 HTTP registry', () => {
     const protocol = createGscdumpV1Protocol()
     const entries = listHttpOperations(protocol)
 
-    expect(entries).toHaveLength(53)
+    expect(entries).toHaveLength(51)
     expect(entries.map(entry => entry.operation.id)).toContain('partner.users.lifecycle.get')
     expect(entries.map(entry => entry.operation.id)).toContain('partner.sites.sitemaps.urls.get')
     expect(entries.map(entry => entry.operation.id)).toContain('partner.sites.sitemaps.export.get')
+    // Retired by the 2026-08-04 action-lane boundary decision, after the
+    // zero-use census cleared on 2026-08-11. Both capabilities are
+    // consumer-side now, so the protocol must not offer them.
+    expect(entries.map(entry => entry.operation.id)).not.toContain('partner.sites.cross.source.query')
+    expect(entries.map(entry => entry.operation.id)).not.toContain('partner.keywords.enrich.query')
     expect(resolveHttpOperation(entries, {
       method: 'GET',
       surface: 'partner',

@@ -313,14 +313,6 @@ export interface GscdumpV1Client {
     input: GscdumpV1OperationInput<'partner.users.sites.verify.create'>,
     options?: GscdumpV1ExecuteOptions,
   ) => Promise<GscdumpV1OperationResponse<'partner.users.sites.verify.create'>>
-  queryCrossSource: (
-    input: GscdumpV1OperationInput<'partner.sites.cross.source.query'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.cross.source.query'>>
-  enrichKeywords: (
-    input: GscdumpV1OperationInput<'partner.keywords.enrich.query'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.keywords.enrich.query'>>
   queryAnalyticsRows: (
     input: GscdumpV1OperationInput<'analytics.rows.query'>,
     options?: GscdumpV1ExecuteOptions,
@@ -949,8 +941,6 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     deleteUser: (input, executeOptions) => execute('partner.users.delete', input, executeOptions),
     createVerificationToken: (input, executeOptions) => execute('partner.users.verification.token.create', input, executeOptions),
     addAndVerifySite: (input, executeOptions) => execute('partner.users.sites.verify.create', input, executeOptions),
-    queryCrossSource: (input, executeOptions) => execute('partner.sites.cross.source.query', input, executeOptions),
-    enrichKeywords: (input, executeOptions) => execute('partner.keywords.enrich.query', input, executeOptions),
     queryAnalyticsRows: (input, executeOptions) => execute('analytics.rows.query', input, executeOptions),
     queryAnalyticsReport: (input, executeOptions) => execute('analytics.reports.query', input, executeOptions),
     queryAnalyticsReportDetail: (input, executeOptions) => execute('analytics.reports.detail.query', input, executeOptions),

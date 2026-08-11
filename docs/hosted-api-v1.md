@@ -229,8 +229,6 @@ principal and operation:
 | `partner.users.delete` | 10 |
 | `partner.users.verification.token.create` | 10 |
 | `partner.users.sites.verify.create` | 10 |
-| `partner.sites.cross.source.query` | 30 |
-| `partner.keywords.enrich.query` | 20 |
 
 Valid credentials consume quota after their static scope is accepted, including
 resource-forbidden and failed domain attempts. Malformed requests, invalid keys,

@@ -159,8 +159,6 @@ export function createGscdumpV1Protocol() {
   const {
     analyticsRowsRequest,
     analyticsRowsResponse,
-    keywordEnrichmentRequest,
-    keywordEnrichmentResponse,
     lifecycleResponse,
   } = browserSchemas
   const dimensions = GSCDUMP_V1_ANALYTICS_DIMENSIONS
@@ -683,23 +681,6 @@ export function createGscdumpV1Protocol() {
     method: z.string(),
     verified: z.literal(true),
     owners: z.array(z.string()).optional(),
-  }), partnerResponseMeta)
-
-  const crossSourceQueryKeys = [
-    'crawl-error-losing-impressions',
-    'declining-clicks-poor-lcp',
-    'striking-distance-slow-pages',
-    'top-impressions-low-performance',
-  ] as const
-  const crossSourceRequest = z.strictObject({
-    queryKey: z.enum(crossSourceQueryKeys),
-    rangeDays: z.number().int().positive().max(180).optional(),
-    limit: z.number().int().positive().max(500).optional(),
-  })
-  const crossSourceResponse = defineSuccessResponse(defineResponseObject({
-    reason: z.string().optional(),
-    sources: z.array(z.string()),
-    rows: z.array(z.record(z.string(), z.json())),
   }), partnerResponseMeta)
 
   const responseStreamHead = defineResponseObject({
@@ -2657,74 +2638,6 @@ export function createGscdumpV1Protocol() {
           },
         },
       }),
-      queryCrossSource: defineHttpOperation({
-        id: 'partner.sites.cross.source.query',
-        method: 'POST',
-        path: '/sites/{siteId}/cross-source',
-        visibility: 'public',
-        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
-        auth: {
-          credentials: ['partner_key'],
-          scopes: ['analytics:read'],
-          ownership: [{ credential: 'partner_key', rule: 'authorized_site' }],
-        },
-        request: {
-          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
-          query: null,
-          headers: requestHeaders,
-          body: crossSourceRequest,
-        },
-        responses: { 200: crossSourceResponse },
-        errors: partnerSiteErrors,
-        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
-        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
-        lifecycle: { introduced: '1.3.0' },
-        docs: {
-          summary: 'Query cross-source analysis',
-          description: 'Runs one predefined cross-source query joining crawl, CWV, and GSC signals for a site.',
-          tags: ['Analytics'],
-          examples: {
-            request: { params: { siteId: 's_01' }, body: { queryKey: 'crawl-error-losing-impressions', rangeDays: 28, limit: 50 } },
-            response: {
-              data: { sources: ['crawl', 'gsc'], rows: [] },
-              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
-            },
-          },
-        },
-      }),
-      enrichKeywords: defineHttpOperation({
-        id: 'partner.keywords.enrich.query',
-        method: 'POST',
-        path: '/keywords/enrich',
-        visibility: 'public',
-        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
-        auth: {
-          credentials: ['user_key', 'partner_key'],
-          scopes: ['analytics:read'],
-          ownership: [
-            { credential: 'user_key', rule: 'self' },
-            { credential: 'partner_key', rule: 'partner_tenant' },
-          ],
-        },
-        request: { params: null, query: null, headers: requestHeaders, body: keywordEnrichmentRequest },
-        responses: { 200: keywordEnrichmentResponse },
-        errors: partnerUserErrors,
-        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
-        resources: { reads: [], changes: [] },
-        lifecycle: { introduced: '1.3.0' },
-        docs: {
-          summary: 'Enrich keywords with metrics',
-          description: 'Returns difficulty, search volume, and CPC estimates for up to 500 keywords.',
-          tags: ['Analytics'],
-          examples: {
-            request: { body: { keywords: ['nuxt seo'] } },
-            response: {
-              data: { metrics: { 'nuxt seo': { difficulty: 40, searchVolume: 100, cpc: 1.2 } } },
-              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
-            },
-          },
-        },
-      }),
     },
   })
 
@@ -3084,8 +2997,6 @@ export function createGscdumpV1Protocol() {
       indexingTransitionsResponse,
       indexingUrlsQuery,
       indexingUrlsResponse,
-      keywordEnrichmentRequest,
-      keywordEnrichmentResponse,
       lifecycleResponse,
       registerSiteRequest,
       sitemapChangesQuery,
