@@ -28,6 +28,7 @@ import { icebergManifests } from 'icebird/src/manifest.js'
 import { s3SignedResolver } from 'icebird/src/s3.js'
 import { stringifyBigintSafe } from './bigint'
 import { cacheGet, cachePut, reportCatalogCacheError } from './catalog-cache'
+import { toIcebergDayCount } from './date'
 import { buildManifestPartitionFilter } from './partition-prune'
 
 /** A field in an icebird table `Schema`. */
@@ -554,12 +555,30 @@ async function appendAlreadyLanded(
 // instead of the frozen `site_id`/`search_type` pair).
 // ---------------------------------------------------------------------------
 
+/**
+ * Inclusive per-file bounds of the dataset's date column, decoded from the
+ * manifest entry's `lower_bounds`/`upper_bounds`, in the Iceberg `date`
+ * domain: days since the Unix epoch (see `toIcebergDayCount`).
+ */
+export interface IcebergDataFileDateBounds {
+  /** Smallest date in the file, as a day count. */
+  minDay: number
+  /** Largest date in the file, as a day count. */
+  maxDay: number
+}
+
 /** A data file in the current snapshot's manifest, scoped to one partition. */
 export interface IcebergListedDataFile {
   filePath: string
   objectKey: string
   bytes: number
   rowCount: number
+  /**
+   * Date-column bounds when the manifest carried decodable stats for the file.
+   * ABSENT means "unknown", never "empty": a file without bounds is always
+   * kept by the resolver (see {@link resolveIcebergDataFiles}).
+   */
+  dateBounds?: IcebergDataFileDateBounds
 }
 
 /**
@@ -625,17 +644,25 @@ function metadataRefKey(scope: string, namespace: string, table: string, snapsho
   return `lh-snapmeta\0${scope}\0${namespace}\0${table}\0${snapshotId}`
 }
 
+/**
+ * Key for a resolved file list.
+ *
+ * Keyed on the EXACT range, not the month set: per-file date-bound pruning
+ * makes two ranges inside one month resolve different file lists, so a
+ * month-granular key would serve one range's files for another's query. The
+ * `lh-files2` prefix retires the month-keyed `lh-files` entries written before
+ * date pruning existed rather than reusing (and mis-serving) them.
+ */
 function resolvedFilesKey(
   scope: string,
   namespace: string,
   table: string,
   snapshotId: string,
   matches: readonly PartitionValueMatch[],
-  wantedMonths: ReadonlySet<number>,
+  range: { start: string, end: string },
 ): string {
   const matchKey = [...matches].map(m => `${m.field}=${m.value}`).sort().join(',')
-  const months = [...wantedMonths].sort((a, b) => a - b).join(',')
-  return `lh-files\0${scope}\0${namespace}\0${table}\0${snapshotId}\0${matchKey}\0${months}`
+  return `lh-files2\0${scope}\0${namespace}\0${table}\0${snapshotId}\0${matchKey}\0${range.start}..${range.end}`
 }
 
 function monthsInRange(range: { start: string, end: string }): string[] {
@@ -658,6 +685,105 @@ function monthsInRange(range: { start: string, end: string }): string[] {
 function monthsSinceEpoch(ym: string): number {
   const [y, m] = ym.split('-').map(Number) as [number, number]
   return (y - 1970) * 12 + (m - 1)
+}
+
+// ---------------------------------------------------------------------------
+// Per-file date-bound pruning.
+//
+// The partition tuple only narrows to a MONTH, so a 7-day query over a range
+// that straddles two calendar months resolves every file in both month
+// partitions. The writer already stamps per-file `lower_bounds`/`upper_bounds`
+// (Avro field ids 125-130) for every column, including the date column, so the
+// exact [min, max] date of each file is in hand during the manifest walk at
+// zero extra fetches.
+//
+// EVERY helper below FAILS OPEN — an absent, malformed, wrong-width or
+// wrong-typed bound returns `null`, and a `null` bound KEEPS the file. Dropping
+// a file because its stats were missing would silently return wrong query
+// results, which is far worse than reading a file we did not need.
+// ---------------------------------------------------------------------------
+
+/** Iceberg single-value serialization for `date`: 4-byte little-endian int32 day count. */
+const DATE_BOUND_BYTES = 4
+
+/**
+ * Read one column's bound bytes out of a manifest `lower_bounds`/`upper_bounds`
+ * map. Iceberg encodes these as an Avro array of `{key, value}` records, which
+ * is what the read path decodes them to; hand-built entries may instead be a
+ * plain `Record<fieldId, bytes>`. Both shapes are accepted; anything else
+ * returns `null` (keep the file).
+ */
+function boundBytesForField(map: unknown, fieldId: number): Uint8Array | null {
+  if (map == null)
+    return null
+  const raw = Array.isArray(map)
+    ? (map as { key?: unknown, value?: unknown }[]).find(e => e != null && Number(e.key) === fieldId)?.value
+    : (map as Record<number, unknown>)[fieldId]
+  if (raw instanceof Uint8Array)
+    return raw
+  if (raw instanceof ArrayBuffer)
+    return new Uint8Array(raw)
+  return null
+}
+
+/** Decode a `date` bound to a day count, or `null` when it is not decodable. */
+function decodeDateBound(bytes: Uint8Array | null): number | null {
+  if (bytes == null || bytes.byteLength !== DATE_BOUND_BYTES)
+    return null
+  const day = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getInt32(0, true)
+  return Number.isFinite(day) ? day : null
+}
+
+/**
+ * Decode a data file's date bounds. Requires BOTH bounds — the writer emits
+ * them as a pair, so a half-present pair means something unexpected produced
+ * the manifest and the file is kept unpruned.
+ */
+function readDataFileDateBounds(
+  df: { lower_bounds?: unknown, upper_bounds?: unknown },
+  dateFieldId: number,
+): IcebergDataFileDateBounds | null {
+  const minDay = decodeDateBound(boundBytesForField(df.lower_bounds, dateFieldId))
+  const maxDay = decodeDateBound(boundBytesForField(df.upper_bounds, dateFieldId))
+  if (minDay == null || maxDay == null || minDay > maxDay)
+    return null
+  return { minDay, maxDay }
+}
+
+/**
+ * Resolve the field id of the dataset's date column from the table metadata's
+ * current schema. Returns `null` when the column cannot be identified, or when
+ * it is not an Iceberg `date` (the only physical encoding this decoder handles),
+ * so the caller keeps every file.
+ */
+function dateColumnFieldId(metadata: LoadedTableMetadata | null, columnName: string | undefined): number | null {
+  if (!metadata || !columnName)
+    return null
+  const meta = metadata as unknown as {
+    'schemas'?: { 'schema-id'?: number, 'fields'?: { id?: unknown, name?: unknown, type?: unknown }[] }[]
+    'current-schema-id'?: number
+    'schema'?: { fields?: { id?: unknown, name?: unknown, type?: unknown }[] }
+  }
+  const schema = meta.schemas?.find(s => s['schema-id'] === meta['current-schema-id'])
+    ?? meta.schemas?.[0]
+    ?? meta.schema
+  const field = schema?.fields?.find(f => f.name === columnName)
+  if (!field || field.type !== 'date' || typeof field.id !== 'number')
+    return null
+  return field.id
+}
+
+/** Inclusive day-count window for a query range, or `null` when it is unparseable. */
+function rangeDayWindow(range: { start: string, end: string }): { startDay: number, endDay: number } | null {
+  try {
+    const startDay = toIcebergDayCount(range.start)
+    const endDay = toIcebergDayCount(range.end)
+    return startDay <= endDay ? { startDay, endDay } : null
+  }
+  catch {
+    // Unparseable range — fail open and prune on the month tuple only.
+    return null
+  }
 }
 
 function stripBucket(filePath: string): string {
@@ -724,7 +850,7 @@ export async function resolveIcebergDataFiles(
     return []
 
   const scope = conn.cacheScope ?? ''
-  const filesKey = resolvedFilesKey(scope, namespace, table, snapshotId, opts.matches, wantedMonths)
+  const filesKey = resolvedFilesKey(scope, namespace, table, snapshotId, opts.matches, opts.range)
   if (opts.cache) {
     const endCache = profiler?.start('iceberg.cache')
     const cached = await cacheGet<IcebergListedDataFile[]>(opts.cache, filesKey, now)
@@ -750,7 +876,14 @@ export async function resolveIcebergDataFiles(
   const partitionFilter = buildManifestPartitionFilter(opts.partitionSpec, opts.matches, wantedMonths)
   const manifests = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter })
 
-  const monthFieldName = opts.partitionSpec.find(f => f.transform === 'month')?.name
+  const monthField = opts.partitionSpec.find(f => f.transform === 'month')
+  const monthFieldName = monthField?.name
+  // Per-file date-bound pruning inputs. Either being `null` disables the check
+  // entirely (fail open): unknown date column, non-`date` physical type, or an
+  // unparseable range all fall back to month-tuple pruning alone.
+  const dateFieldId = dateColumnFieldId(metadata, monthField?.sourceColumn)
+  const dayWindow = rangeDayWindow(opts.range)
+  let boundsPruned = 0
   const out: IcebergListedDataFile[] = []
   for (const m of manifests) {
     for (const entry of m.entries) {
@@ -774,18 +907,28 @@ export async function resolveIcebergDataFiles(
         if (typeof month !== 'number' || !wantedMonths.has(month))
           continue
       }
+      // Narrow month → day. `dateBounds` is null whenever the stats are
+      // absent, malformed, or of a type this decoder does not handle, and a
+      // null keeps the file: a false negative here silently returns wrong
+      // rows, so pruning only ever acts on bounds it fully understands.
+      const dateBounds = dateFieldId == null ? null : readDataFileDateBounds(df, dateFieldId)
+      if (dateBounds && dayWindow && (dateBounds.maxDay < dayWindow.startDay || dateBounds.minDay > dayWindow.endDay)) {
+        boundsPruned++
+        continue
+      }
       out.push({
         filePath: df.file_path,
         objectKey: stripBucket(df.file_path),
         bytes: Number(df.file_size_in_bytes),
         rowCount: Number(df.record_count),
+        ...(dateBounds ? { dateBounds } : {}),
       })
     }
   }
-  endWalk?.({ manifests: manifests.length, files: out.length })
+  endWalk?.({ manifests: manifests.length, files: out.length, boundsPruned })
 
   if (opts.cache) {
-    const freshKey = resolvedFilesKey(scope, namespace, table, snapshotId, opts.matches, wantedMonths)
+    const freshKey = resolvedFilesKey(scope, namespace, table, snapshotId, opts.matches, opts.range)
     await cachePut(opts.cache, freshKey, out, RESOLVED_FILES_TTL_MS, now)
   }
   return out
