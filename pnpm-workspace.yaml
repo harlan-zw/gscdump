@@ -25,23 +25,23 @@ packages:
   - examples/nuxt-dashboard
 overrides:
   '@eslint/plugin-kit': ^0.7.2
-  '@nuxt/kit': 4.5.0
-  '@nuxt/schema': 4.5.0
+  '@nuxt/kit': 4.5.2
+  '@nuxt/schema': 4.5.2
   '@types/node>undici-types': ^7.0.0
   hono: 4.12.31
   tinyexec: 1.1.2
   typescript: 6.0.3
 patchedDependencies:
-  hyparquet-writer@0.16.1: patches/hyparquet-writer@0.16.1.patch
-  icebird@0.8.15: patches/icebird@0.8.15.patch
+  hyparquet-writer@0.16.6: patches/hyparquet-writer@0.16.6.patch
+  icebird@0.8.22: patches/icebird@0.8.22.patch
 catalog:
-  '@cloudflare/vitest-pool-workers': ^0.18.8
-  '@cloudflare/workers-types': ^5.20260728.1
+  '@cloudflare/vitest-pool-workers': ^0.21.3
+  '@cloudflare/workers-types': ^5.20260816.1
   '@duckdb/duckdb-wasm': 1.33.1-dev57.0
   '@duckdb/node-api': 1.5.1-r.2
   '@modelcontextprotocol/sdk': ^1.30.0
-  '@nuxt/kit': 4.5.0
-  '@nuxt/schema': 4.5.0
+  '@nuxt/kit': 4.5.2
+  '@nuxt/schema': 4.5.2
   '@nuxt/ui': ^4.10.0
   '@types/node': ^26.2.0
   '@types/proper-lockfile': ^4.1.4
@@ -49,40 +49,40 @@ catalog:
   '@unovis/vue': ^1.6.7
   '@uwdata/flechette': ^2.5.0
   '@vitest/browser-playwright': ^4.1.10
-  '@vueuse/core': ^14.3.0
+  '@vueuse/core': ^14.4.0
   aws4fetch: ^1.0.20
   drizzle-orm: 1.0.0-rc.4
-  hyparquet: ^1.26.2
-  hyparquet-writer: ^0.16.1
-  icebird: ^0.8.15
-  js-yaml: ^5.2.3
-  nuxt: ^4.5.1
+  hyparquet: ^1.28.2
+  hyparquet-writer: ^0.16.6
+  icebird: ^0.8.22
+  js-yaml: ^5.3.0
+  nuxt: ^4.5.2
   nuxt-use-query: ^1.0.1
   pathe: ^2.0.3
-  playwright: ^1.62.0
+  playwright: ^1.62.1
   pluralize: ^8.0.0
-  retriv: ^0.14.7
-  sitemapd: ^0.2.0
+  retriv: ^0.15.0
+  sitemapd: ^0.2.2
   tailwindcss: ^4.3.3
-  tsx: ^4.23.1
+  tsx: ^4.23.12
   unstorage: ^1.17.5
   vitest-package-exports: ^1.2.0
-  vue: ^3.5.40
-  wrangler: ^4.114.0
+  vue: ^3.5.41
+  wrangler: ^4.123.0
   zod: ^4.4.3
 catalogs:
   deps:
     '@clack/prompts': ^1.7.0
     citty: ^0.2.2
     consola: ^3.4.2
-    google-auth-library: ^10.9.1
+    google-auth-library: ^11.0.2
     ofetch: ^1.5.1
-    open: ^11.0.0
+    open: ^11.0.1
     proper-lockfile: ^4.1.2
   dev-build:
-    bumpp: ^12.2.0
+    bumpp: ^12.2.1
     obuild: ^0.4.38
-    rolldown: ^1.2.3
+    rolldown: ^1.2.4
     typescript: ^7.0.2
   dev-lint:
     '@antfu/eslint-config': ^9.3.0

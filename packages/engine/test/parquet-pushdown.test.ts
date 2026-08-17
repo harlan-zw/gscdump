@@ -22,6 +22,7 @@ import {
   queryCanonical,
   searchAppearance,
 } from 'gscdump/query'
+import { parquetMetadata } from 'hyparquet'
 import { describe, expect, it } from 'vitest'
 import { decodeParquetToRows, encodeRowsToParquet } from '../src/adapters/hyparquet'
 import { extractParquetPushdown } from '../src/parquet-pushdown'
@@ -129,3 +130,89 @@ describe('pushdown decode parity (queries table)', () => {
     expect(await decodeParquetToRows(bytes, { filter })).toHaveLength(0)
   })
 })
+
+/**
+ * `decodeParquetToRows` passes `usePageIndex` to hyparquet whenever a filter is
+ * present, so hyparquet may skip individual pages whose ColumnIndex bounds
+ * cannot match. A wrong page skip drops real rows silently, the same failure
+ * the parity block above guards for row groups, one granularity down.
+ *
+ * The fixture is a full row group of realistic `query` values, which is what
+ * makes the `query` chunk exceed the writer's 1MB default page size and split
+ * into pages. A single-page chunk carries no OffsetIndex and would leave the
+ * pruning path unexercised, so the first test asserts the split really happened
+ * — without it the rest of this suite would pass vacuously.
+ */
+describe('page-index pruning parity (multi-page file)', () => {
+  // One full row group's worth (the encoder's internal `ROW_GROUP_SIZE`), so
+  // the fixture matches the shape a real sync writes. Values are long and
+  // mostly distinct because that is what a real `query` column looks like, and
+  // it is what pushes the chunk past the writer's 1MB page split — a low
+  // cardinality column dictionary-encodes small enough to stay one page.
+  const GROUP_ROWS = 25000
+  const valueAt = (n: number): string => `search query variant ${String(n).padStart(5, '0')} with trailing padding text`
+  // Every 5th row repeats a hot value, so `$eq` has a multi-row answer to check
+  // rather than a single row that any pruning bug would be lucky to preserve.
+  const HOT = valueAt(7)
+  const rows: Row[] = Array.from({ length: GROUP_ROWS }, (_, i) => ({
+    query: i % 5 === 0 ? HOT : valueAt(i),
+    date: `2025-01-${String((i % 28) + 1).padStart(2, '0')}`,
+    clicks: i % 97,
+    impressions: (i % 97) * 11,
+    sum_position: (i % 97) / 3,
+  }))
+  const bytes = encodeRowsToParquet('queries', rows)
+
+  it('the query chunk really did split into pages', () => {
+    expect(hasPageIndex(bytes, 'query')).toBe(true)
+  })
+
+  it.each([
+    ['hot value repeated across pages', HOT],
+    ['first value', valueAt(1)],
+    ['middle value', valueAt(Math.floor(GROUP_ROWS / 2) + 1)],
+    ['last value', valueAt(GROUP_ROWS - 1)],
+  ])('eq on the %s returns exactly the unfiltered matches', async (_label, wanted) => {
+    const filter = extractParquetPushdown(state(eq(query, wanted)), 'queries')!
+    const pushed = await decodeParquetToRows(bytes, { filter })
+    const expected = (await decodeParquetToRows(bytes)).filter(r => r.query === wanted)
+    expect(pushed).toEqual(expected)
+    expect(pushed.length).toBeGreaterThan(0)
+  })
+
+  it('inArray spanning distant pages returns exactly the unfiltered matches', async () => {
+    const wanted = [valueAt(1), valueAt(Math.floor(GROUP_ROWS / 2) + 1), valueAt(GROUP_ROWS - 1)]
+    const filter = extractParquetPushdown(state(inArray(query, wanted)), 'queries')!
+    const pushed = await decodeParquetToRows(bytes, { filter })
+    const expected = (await decodeParquetToRows(bytes)).filter(r => wanted.includes(r.query as string))
+    expect(pushed).toEqual(expected)
+  })
+
+  it('a value absent from every page returns zero rows', async () => {
+    const filter = extractParquetPushdown(state(eq(query, 'no such query anywhere in this file')), 'queries')!
+    expect(await decodeParquetToRows(bytes, { filter })).toHaveLength(0)
+  })
+
+  it('a filter combined with a column projection keeps every matching row', async () => {
+    const filter = extractParquetPushdown(state(eq(query, HOT)), 'queries')!
+    const pushed = await decodeParquetToRows(bytes, { filter, columns: ['query', 'clicks'] })
+    const expected = (await decodeParquetToRows(bytes)).filter(r => r.query === HOT)
+    expect(pushed).toHaveLength(expected.length)
+    expect(pushed.every(r => r.query === HOT)).toBe(true)
+  })
+})
+
+/**
+ * True when `column`'s chunk carries both a ColumnIndex and an OffsetIndex, the
+ * pair hyparquet requires before it will prune pages. hyparquet-writer emits an
+ * OffsetIndex only for a chunk with more than one page, so this doubles as the
+ * multi-page check.
+ */
+function hasPageIndex(bytes: Uint8Array, column: string): boolean {
+  const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  return parquetMetadata(ab).row_groups.some(rg => rg.columns.some(c =>
+    c.meta_data?.path_in_schema.join('.') === column
+    && Boolean(c.column_index_offset)
+    && Boolean(c.offset_index_offset),
+  ))
+}

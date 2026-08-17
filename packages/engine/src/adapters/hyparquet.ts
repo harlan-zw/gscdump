@@ -343,7 +343,16 @@ export async function decodeParquetToRows(
     // A filter on a high-cardinality `$eq`/`$in` column also benefits from the
     // file's bloom filters (when present): hyparquet skips whole row groups the
     // bloom proves cannot contain the value, below the min/max-stats granularity.
-    ...(opts.filter ? { filter: opts.filter, useBloomFilters: true } : {}),
+    //
+    // `usePageIndex` adds a third, finer pruning tier: hyparquet reads the
+    // ColumnIndex + OffsetIndex and skips individual pages whose bounds cannot
+    // match, below row-group granularity. It is inert unless the filter
+    // column's chunk carries BOTH indexes, which needs more than one page.
+    // `encodeOrderedRows` passes no `pageSize`, so the writer's 1MB default
+    // applies — a full 25k-row group of `query`/`url` exceeds that uncompressed
+    // and does split, so the high-cardinality string columns we actually filter
+    // on carry indexes. Chunks without them cost no extra fetch.
+    ...(opts.filter ? { filter: opts.filter, useBloomFilters: true, usePageIndex: true } : {}),
   })
   return normalizeDecodedDates(rows as Row[])
 }

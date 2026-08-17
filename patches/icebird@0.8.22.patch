@@ -1,13 +1,7 @@
 diff --git a/src/catalog/rest.js b/src/catalog/rest.js
-index e10caf14fa830a1e92ccec1710f41fb71d88c979..4bd3e8bf25f7da11a732b8493b89ae9e5606b6de 100644
+index 723451f34f95dab280ac699abdfd34c9703bba50..4bd3e8bf25f7da11a732b8493b89ae9e5606b6de 100644
 --- a/src/catalog/rest.js
 +++ b/src/catalog/rest.js
-@@ -1,4 +1,4 @@
--import { parseIcebergJson } from '../json.js'
-+import { parseIcebergJson, stringifyIcebergJson } from '../json.js'
- 
- /**
-  * Iceberg REST Catalog client.
 @@ -173,7 +173,7 @@ export async function restCatalogCreateTable(ctx, {
    const res = await restFetch(ctx, `namespaces/${ns}/tables`, {
      method: 'POST',
@@ -23,15 +17,6 @@ index e10caf14fa830a1e92ccec1710f41fb71d88c979..4bd3e8bf25f7da11a732b8493b89ae9e
      headers: { 'content-type': 'application/json' },
 -    body: JSON.stringify(body),
 +    body: stringifyIcebergJson(body),
-   })
-   const responseBody = parseIcebergJson(await res.text())
-   return {
-@@ -236,7 +236,7 @@ export async function restCatalogUpdateTable(ctx, { namespace, table, requiremen
-   const res = await restFetch(ctx, `namespaces/${ns}/tables/${tbl}`, {
-     method: 'POST',
-     headers: { 'content-type': 'application/json' },
--    body: JSON.stringify({ requirements, updates }),
-+    body: stringifyIcebergJson({ requirements, updates }),
    })
    const responseBody = parseIcebergJson(await res.text())
    return {
@@ -239,47 +224,11 @@ index daf4cd3b829d2110545c977fa8c347b42a712722..1a338d40c55681960092857dd0c07166
    'order-id': number
    'fields': SortField[]
  }
-diff --git a/src/write/snapshot.js b/src/write/snapshot.js
-index bb0ee43057aa18a1764fd7ec0293d8e6c92afa2e..16606d9a6477a9da0640e57def0e8955126e06e5 100644
---- a/src/write/snapshot.js
-+++ b/src/write/snapshot.js
-@@ -87,8 +87,20 @@ export async function buildSnapshotUpdate({
-     snapshot['first-row-id'] = toMetadataLong(firstRowId)
-     snapshot['added-rows'] = toMetadataLong(addedRows)
-   }
--  const parentId = metadata['current-snapshot-id']
--  if (parentId !== undefined) snapshot['parent-snapshot-id'] = parentId
-+  // gscdump patch: the Iceberg spec uses `current-snapshot-id: -1` as the
-+  // sentinel for "table has no current snapshot" (a freshly created empty
-+  // table). icebird's `?? null` only normalised `undefined`/`null`, so a
-+  // first append sent `assert-ref-snapshot-id(main, -1)` and
-+  // `parent-snapshot-id: -1` — which strict REST catalogs (e.g.
-+  // apache/iceberg-rest-fixture) reject with a 409 that icebird then
-+  // misclassifies as a concurrent-commit conflict and retries 50×. Treat -1
-+  // as "no current snapshot" everywhere.
-+  const rawCurrentSnapshotId = metadata['current-snapshot-id']
-+  const currentSnapshotId
-+    = (rawCurrentSnapshotId === undefined || rawCurrentSnapshotId === null || rawCurrentSnapshotId === -1)
-+      ? null
-+      : rawCurrentSnapshotId
-+  if (currentSnapshotId !== null) snapshot['parent-snapshot-id'] = currentSnapshotId
- 
-   /** @type {TableRequirement[]} */
-   const requirements = [
-@@ -96,7 +108,7 @@ export async function buildSnapshotUpdate({
-     {
-       type: 'assert-ref-snapshot-id',
-       ref: 'main',
--      'snapshot-id': metadata['current-snapshot-id'] ?? null,
-+      'snapshot-id': currentSnapshotId,
-     },
-   ]
-   if (rowLineage) {
 diff --git a/src/write/stage.js b/src/write/stage.js
-index 176b3d40073bdd5ec71714de80f1051e6fb448df..2b7cbb2e395b8c3a27594d6a2b90e54818777bff 100644
+index 69491ce64e97d46177a6a4797346778803fe5918..8957cf635fac8242a08bf445600aa2708d6a6144 100644
 --- a/src/write/stage.js
 +++ b/src/write/stage.js
-@@ -51,9 +51,11 @@ import { computeColumnStats } from './stats.js'
+@@ -52,9 +52,11 @@ import { computeColumnStats } from './stats.js'
   * @param {Resolver} options.resolver - Resolver with a writer method.
   * @param {number} [options.sortOrderId] - Sort order id to apply; defaults to
   *   the table's `default-sort-order-id`.
@@ -292,7 +241,7 @@ index 176b3d40073bdd5ec71714de80f1051e6fb448df..2b7cbb2e395b8c3a27594d6a2b90e548
    if (!tableUrl) throw new Error('tableUrl is required')
    if (!resolver?.writer) throw new Error('resolver.writer is required')
    const writerFn = resolver.writer
-@@ -72,7 +74,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
+@@ -73,7 +75,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
    // commit, so reusing the id across attempts cannot corrupt anything. The
    // duplicate-snapshot-id check in applyUpdates (`commit.js`) guards against
    // colliding with a snapshot that was already committed by some other writer.
@@ -301,7 +250,7 @@ index 176b3d40073bdd5ec71714de80f1051e6fb448df..2b7cbb2e395b8c3a27594d6a2b90e548
    const manifestUuid = uuid4()
    checkWriteFormat(metadata.properties?.['write.format.default'])
    const codec = resolveParquetCodec(metadata.properties?.['write.parquet.compression-codec'])
-@@ -125,7 +127,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
+@@ -126,7 +128,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
      writer: manifestWriter,
      schema,
      partitionSpec,
@@ -310,7 +259,7 @@ index 176b3d40073bdd5ec71714de80f1051e6fb448df..2b7cbb2e395b8c3a27594d6a2b90e548
      dataFiles: writtenDataFiles.map(f => f.dataFile),
      formatVersion,
    })
-@@ -139,7 +141,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
+@@ -140,7 +142,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
    )
  
    return {
@@ -319,7 +268,7 @@ index 176b3d40073bdd5ec71714de80f1051e6fb448df..2b7cbb2e395b8c3a27594d6a2b90e548
      manifestUuid,
      formatVersion,
      manifestPath,
-@@ -171,7 +173,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
+@@ -172,7 +174,7 @@ export async function prepareAppend({ tableUrl, metadata, records, resolver, sor
   * @param {Resolver} options.resolver
   * @returns {Promise<StagedUpdate>}
   */
@@ -328,7 +277,7 @@ index 176b3d40073bdd5ec71714de80f1051e6fb448df..2b7cbb2e395b8c3a27594d6a2b90e548
    if (!tableUrl) throw new Error('tableUrl is required')
    if (!resolver?.writer) throw new Error('resolver.writer is required')
    const sequenceNumber = BigInt(metadata['last-sequence-number'] ?? 0) + 1n
-@@ -214,6 +216,11 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
+@@ -215,6 +217,11 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
      'total-delete-files': '0',
      'total-position-deletes': '0',
      'total-equality-deletes': '0',
@@ -340,7 +289,7 @@ index 176b3d40073bdd5ec71714de80f1051e6fb448df..2b7cbb2e395b8c3a27594d6a2b90e548
    }
    return await buildSnapshotUpdate({
      tableUrl, metadata, resolver,
-@@ -230,6 +237,88 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
+@@ -231,6 +238,88 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
    })
  }
  
@@ -430,7 +379,7 @@ index 176b3d40073bdd5ec71714de80f1051e6fb448df..2b7cbb2e395b8c3a27594d6a2b90e548
   * Bundled prepare + stage. Equivalent to the prior single-call API; left in
   * place so callers that don't run inside a retry loop (e.g. `icebergTransaction`)
 diff --git a/src/write/write.js b/src/write/write.js
-index 68eeefa2e65dfd4bfd6493a6a059805ec6b396ec..c9790d480898b167a9154cd9cdf0eb819c631fd1 100644
+index e136626b75d56e92d28baf1d0790686bae4b7d9f..ea0720ef00fe8008042b83e566ee0c90ce433a1a 100644
 --- a/src/write/write.js
 +++ b/src/write/write.js
 @@ -5,7 +5,7 @@ import { loadLatestFileCatalogMetadata } from '../metadata.js'
@@ -509,7 +458,7 @@ index 68eeefa2e65dfd4bfd6493a6a059805ec6b396ec..c9790d480898b167a9154cd9cdf0eb81
    })
  }
 diff --git a/types/index.d.ts b/types/index.d.ts
-index 7cfd5378c18f0cef88a1cee7f397095dd75cce76..ff2cb299f03a2dd27a64be65969e447b5c4b893b 100644
+index 7cfd5378c18f0cef88a1cee7f397095dd75cce76..b1cb9f5da0ed074c5dd9c9b7124fd9448155a371 100644
 --- a/types/index.d.ts
 +++ b/types/index.d.ts
 @@ -1,4 +1,4 @@
@@ -551,7 +500,7 @@ index 22ec9a36ff4df1f2d60c4ac7e9b4158bdf52df99..94c49dc420b70f09d742afb25524298d
  /**
   * Split manifest entries into data and delete manifests.
 diff --git a/types/write/stage.d.ts b/types/write/stage.d.ts
-index 3f29f9f3c0ab8cc742c4a57c8cc689fdc05d2dd4..b117bb7713ac635b3f54d4773bd480b062123c3a 100644
+index 3f29f9f3c0ab8cc742c4a57c8cc689fdc05d2dd4..2f92916a90b9edcbc5681f821beeeac85458cc89 100644
 --- a/types/write/stage.d.ts
 +++ b/types/write/stage.d.ts
 @@ -40,12 +40,13 @@ import type { PreparedAppend, Resolver, Schema, StagedCommit, StagedUpdate, Tabl
@@ -591,7 +540,7 @@ index 3f29f9f3c0ab8cc742c4a57c8cc689fdc05d2dd4..b117bb7713ac635b3f54d4773bd480b0
  /**
   * Bundled prepare + stage. Equivalent to the prior single-call API; left in
 diff --git a/types/write/write.d.ts b/types/write/write.d.ts
-index 024e66eaf16e283889afaa4d1ebf9cd5919ec4d5..f3d012c4518f97fefd105ae5a75bd2bbeb3a4ef5 100644
+index bcaab28249f2e0fdf05d0adacecd76b19f0311d5..f1aeb5af97b25900607fcd27fafe324170473a89 100644
 --- a/types/write/write.d.ts
 +++ b/types/write/write.d.ts
 @@ -13,7 +13,7 @@ import type { Catalog, IcebergTransaction, Lister, PartitionSpec, Resolver, Sche

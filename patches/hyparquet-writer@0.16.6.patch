@@ -1,8 +1,8 @@
 diff --git a/src/unconvert.js b/src/unconvert.js
-index c984fc7c70720708adb5276fc4e0fcb8fcdc4ee7..ab1ad25d50083d18ef33987ababb84510660b516 100644
+index 4f73b4e186a7767b03934dceabbefd3268568941..f71b577100eb3da9cfb9c0a73af0cdde1712ac30 100644
 --- a/src/unconvert.js
 +++ b/src/unconvert.js
-@@ -140,14 +140,27 @@ const STATS_TRUNCATE_LENGTH = 16
+@@ -162,14 +162,27 @@ const STATS_TRUNCATE_LENGTH = 16
   */
  function truncateStatistic(bytes, isMax) {
    if (bytes.length <= STATS_TRUNCATE_LENGTH) return bytes
