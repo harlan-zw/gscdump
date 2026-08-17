@@ -28,6 +28,7 @@ export type {
   ConnectIcebergOptions,
   IcebergCatalogConfig,
   IcebergConnection,
+  IcebergDataFileDateBounds,
   IcebergListedDataFile,
   IcebergPartitionSpec,
   IcebergPartitionSpecField,
