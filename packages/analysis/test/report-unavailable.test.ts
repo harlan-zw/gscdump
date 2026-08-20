@@ -95,7 +95,6 @@ describe('growth report against a source with no executeSql (prod repro)', () =>
       expect(section.summary.magnitudeLabel, `${section.id} magnitudeLabel`)
         .toMatch(/unavailable/i)
       expect(section.findings, `${section.id} findings`).toEqual([])
-      expect(section.actions, `${section.id} actions`).toEqual([])
       // An artifact points at an analyzer the caller could re-run; the one
       // backing this section provably cannot run against this source.
       expect(section.artifact, `${section.id} artifact`).toBeUndefined()
@@ -106,31 +105,6 @@ describe('growth report against a source with no executeSql (prod repro)', () =>
     expect(labels).not.toContain('no data')
     expect(labels).not.toContain('0 clusters covering 0 keywords')
     expect(labels).not.toContain('0 pages analysed; 0 head-heavy')
-  })
-})
-
-describe('priority report with every signal failing', () => {
-  it('marks the composed section unknown rather than "0 actions ranked"', async () => {
-    const analyzers = capabilityAwareRegistry([
-      'striking-distance',
-      'opportunity',
-      'cannibalization',
-      'ctr-anomaly',
-      'change-point',
-    ])
-    const window: ResolvedWindow = {
-      start: '2025-01-01',
-      end: '2025-01-28',
-      days: 28,
-      comparison: { start: '2024-12-04', end: '2024-12-31' },
-    }
-    const ctx: ReportContext = { site: SITE, window, params: {}, registryVersion: 't' }
-    const { priorityReport } = await import('../src/report/reports/priority')
-    const out = await runReport(priorityReport, { source: rowsOnlySource, analyzers, ctx })
-
-    expect(out.meta.degraded).toBe(true)
-    expect(out.sections[0]!.severity).toBe('unknown')
-    expect(out.sections[0]!.summary.magnitudeLabel).not.toBe('0 actions ranked')
   })
 })
 

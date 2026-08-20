@@ -75,7 +75,6 @@ function buildStrikingSection(res: AnalysisResult | undefined, max: number): Rep
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'striking-distance'),
   }
 }
@@ -114,11 +113,6 @@ function buildOpportunitySection(res: AnalysisResult | undefined, max: number): 
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: kept.slice(0, 1).map(r => ({
-      kind: 'fix',
-      target: r.page ? { kind: 'page', value: r.page } : { kind: 'query', value: r.keyword },
-      rationale: 'Rewrite title/description to lift CTR at this position',
-    })),
     artifact: sectionArtifact(res, 'opportunity'),
   }
 }
@@ -149,7 +143,6 @@ function buildZeroClickSection(res: AnalysisResult | undefined, max: number): Re
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'zero-click'),
   }
 }
@@ -178,7 +171,6 @@ function buildMigrationSection(res: AnalysisResult | undefined, max: number): Re
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'query-migration'),
   }
 }

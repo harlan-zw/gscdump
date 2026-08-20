@@ -3,12 +3,11 @@
 // imports directly.
 // TODO: port from nuxtseo.com
 
-import type { ActionSource } from '@gscdump/analysis'
 import type { AnalyticsClient } from '@gscdump/sdk/analytics'
 import type { $Fetch } from 'ofetch'
 import type { Component } from 'vue'
 
-export type GscAnalyzerKind = 'analyzer' | 'semantic' | 'action'
+export type GscAnalyzerKind = 'analyzer' | 'semantic'
 export type GscAnalyzerAccent = 'primary' | 'warning' | 'success' | 'error' | 'neutral'
 
 export interface GscAnalyzerInsightCard {
@@ -39,7 +38,6 @@ export interface GscAnalyzerPanelSpec {
 
 export interface GscAnalyzerCapabilities {
   insightCard?: GscAnalyzerInsightCard
-  actionPriority?: ActionSource
   panel?: GscAnalyzerPanelSpec
 }
 

@@ -114,7 +114,6 @@ function buildMoversSection(
     findings,
     truncated: truncation(total, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'movers'),
   }
 }
@@ -166,13 +165,6 @@ function buildDeclinersSection(
     summary: { delta: -totalLost, direction: totalLost > 0 ? 'down' : 'flat', magnitudeLabel: `${Math.round(totalLost)} clicks lost` },
     findings,
     coverage: decayRes && moversRes ? 'full' : 'partial',
-    actions: lostPages.slice(0, 1).map(r => ({
-      kind: 'analyzer',
-      target: { kind: 'page', value: r.page },
-      params: { type: 'change-point' },
-      rationale: 'Investigate the change-point on the worst-affected page',
-      cliHint: `gscdump analyze change-point --start <date> --end <date>`,
-    })),
   }
 }
 
@@ -210,7 +202,6 @@ function buildStrikingSection(res: AnalysisResult | undefined, max: number): Rep
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'striking-distance'),
   }
 }

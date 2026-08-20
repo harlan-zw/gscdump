@@ -1,22 +1,3 @@
-// `analyzeActionPriority` / `analyzeActionPriorityFromSource` were removed;
-// callers should `runReport({ id: 'priority' })` from `@gscdump/analysis/report`.
-// Domain types + scoring helpers stay public for advanced consumers
-// reimplementing the composition.
-export type {
-  ActionPriorityResult,
-  ActionPrioritySourceState,
-  ActionPrioritySourceStatus,
-  ActionSource,
-  Effort,
-  PriorityAction,
-} from './action-priority'
-export {
-  DEFAULT_PRIORITY_SOURCES,
-  mergePriorityActions,
-  normalizePriorityActions,
-  scorePriorityActions,
-} from './action-priority'
-
 export { ROW_ANALYZERS } from './analyzer/row-analyzers'
 // Pure analysis functions
 export type { BrandSegmentationOptions, BrandSegmentationResult, BrandSegmentationRow, BrandSummary } from './analyzers/brand'
@@ -194,7 +175,6 @@ export {
 export type {
   DefinedReport,
   DefineReportOptions,
-  ReportAction,
   ReportContext,
   ReportFinding,
   ReportPlanStep,

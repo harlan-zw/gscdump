@@ -91,10 +91,6 @@ function buildCannibalizationSection(
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: kept.slice(0, 1).map(() => ({
-      kind: 'fix',
-      rationale: 'Decide before publishing: redirect existing page, target a different angle, or accept overlap.',
-    })),
     artifact: sectionArtifact(res, 'cannibalization'),
   }
 }
@@ -132,7 +128,6 @@ function buildStrikingPeersSection(
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'striking-distance'),
   }
 }

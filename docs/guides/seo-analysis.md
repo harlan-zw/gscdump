@@ -1,6 +1,6 @@
 # SEO Analysis Playbook
 
-gscdump includes built-in analysis functions for common SEO tasks. Each analysis identifies issues and suggests actions.
+gscdump includes built-in analysis functions for common SEO tasks. Each analysis returns deterministic evidence.
 
 ## Available Analyses
 
@@ -23,7 +23,7 @@ npx @gscdump/cli analyze striking-distance -s sc-domain:example.com
 
 **What it finds:** Keywords in positions 4-20 with high impressions but few clicks.
 
-**Action:** Optimize title tags, add internal links, improve content depth.
+**Evidence:** Position, impressions, clicks, and potential clicks by query.
 
 ### Programmatic
 
@@ -50,7 +50,7 @@ npx @gscdump/cli analyze decay -s sc-domain:example.com --period 90d
 
 **What it finds:** Pages with significant traffic drops vs previous period.
 
-**Action:** Update outdated content, refresh statistics, add new sections.
+**Evidence:** Current clicks, prior clicks, and percentage change by Page.
 
 ### Programmatic
 
@@ -76,7 +76,7 @@ npx @gscdump/cli analyze cannibalization -s sc-domain:example.com
 
 **What it finds:** Keywords ranking for 2+ pages, splitting your authority.
 
-**Action:** Consolidate content, add canonical tags, or differentiate intent.
+**Evidence:** Competing Pages, impressions, clicks, and traffic share by query.
 
 ### Programmatic
 
@@ -102,7 +102,7 @@ npx @gscdump/cli analyze movers -s sc-domain:example.com --period 28d
 
 **What it finds:** Keywords/pages with biggest position or traffic changes.
 
-**Action:** Investigate drops (algorithm update? competitor?), double down on gains.
+**Evidence:** Current and prior position, clicks, and impressions by Page and query.
 
 ### Programmatic
 
@@ -128,7 +128,7 @@ npx @gscdump/cli analyze zero-click -s sc-domain:example.com
 
 **What it finds:** High-impression queries with CTR below threshold.
 
-**Action:** Target featured snippets, improve meta descriptions, check SERP features.
+**Evidence:** Impressions, position, and click-through rate for zero-click queries.
 
 ### Programmatic
 

@@ -18,9 +18,9 @@
 
 ## Features
 
-- 🤖 **Agent-native** - 9 intent-keyed reports + 29 raw analyzers, deterministic JSON, bounded findings. Agents drive the CLI (`gscdump report ...`) or the slim MCP shell (`list-reports` + `run-report`).
+- 🤖 **Agent-native** - 8 intent-keyed reports + 29 raw analyzers, deterministic JSON, bounded findings. Agents drive the CLI (`gscdump report ...`) or the slim MCP shell (`list-reports` + `run-report`).
 - 🔍 **29 SEO analyzers** - striking distance, cannibalization, decay, movers, intent atlas, CTR anomaly, survival, change-point, and more. Each one is an agent tool.
-- 📋 **Reports** - composed analyses: `health`, `movers`, `opportunities`, `risks`, `priority`, `growth`, `brand`, `triage <page|query>`, `pre-publish <topic>`. One question per report.
+- 📋 **Reports** - composed analyses: `health`, `movers`, `opportunities`, `risks`, `growth`, `brand`, `triage <page|query>`, `pre-publish <topic>`. One question per report.
 - 💾 **Own your data** - sync GSC into a local DuckDB/Parquet store. No BigQuery, no 16-month expiry, no row caps.
 - ⚡ **Indexing + sitemaps** - URL inspection, batch indexing, sitemap CRUD.
 - 🎯 **Typed query builder** - Drizzle-style API with streaming pagination.
@@ -120,7 +120,6 @@ npx gscdump mcp
 | `movers` | movers, decay, striking-distance | 7d | prev-period |
 | `opportunities` | striking-distance, opportunity, zero-click, query-migration | 28d | none |
 | `risks` | decay, cannibalization, dark-traffic, device-gap | 28d | prev-period |
-| `priority` | striking-distance + opportunity + cannibalization + ctr-anomaly + change-point, ranked | 28d | prev-period |
 | `growth` | content-velocity, keyword-breadth, intent-atlas, long-tail | 90d | yoy |
 | `brand` | brand (`--brand-terms`), concentration | 28d | none |
 | `triage` | change-point + query-migration + position-volatility scoped to `--target` | 90d | none |
@@ -165,7 +164,6 @@ const result = await runReport(report, {
   ctx: { site: siteUrl, window, params: {}, registryVersion: defaultReportRegistry.version },
 })
 // result.sections[*].findings — bounded, sorted, page/query-keyed
-// result.sections[*].actions  — structured next-step hints (kind/target/params)
 // result.meta.degraded         — true if any optional step failed
 ```
 

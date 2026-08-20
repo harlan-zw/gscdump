@@ -24,7 +24,6 @@
   createEngineQuerySource: function
   createInMemoryQuerySource: function
   createSorter: function
-  DEFAULT_PRIORITY_SOURCES: object
   defaultAnalyzerRegistry: object
   defaultReportRegistry: object
   defineAnalyzer: function
@@ -37,8 +36,6 @@
   IN_MEMORY_DEFAULT_CAPABILITIES: object
   INTENT_CLASSIFIER_VERSION: number
   isAnalysisError: function
-  mergePriorityActions: function
-  normalizePriorityActions: function
   normalizeQuery: function
   NORMALIZER_VERSION: number
   num: function
@@ -52,7 +49,6 @@
   runAnalyzerWithEngine: function
   runReport: function
   runReportResult: function
-  scorePriorityActions: function
   SEARCH_INTENT_CODE: object
   SITEMAP_SYNC_COLLAPSE_POLICY: object
   SITEMAP_TRUST_COLLAPSE_POLICY: object

@@ -77,12 +77,6 @@ function buildDecaySection(res: AnalysisResult | undefined, max: number): Report
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: kept.slice(0, 1).map(r => ({
-      kind: 'analyzer',
-      target: { kind: 'page', value: r.page },
-      params: { type: 'change-point' },
-      rationale: 'Investigate change-point on the worst-affected page',
-    })),
     artifact: sectionArtifact(res, 'decay'),
   }
 }
@@ -119,7 +113,6 @@ function buildCannibalizationSection(res: AnalysisResult | undefined, max: numbe
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'cannibalization'),
   }
 }
@@ -149,7 +142,6 @@ function buildDarkTrafficSection(res: AnalysisResult | undefined, max: number): 
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'dark-traffic'),
   }
 }
@@ -183,7 +175,6 @@ function buildDeviceGapSection(res: AnalysisResult | undefined, max: number): Re
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'device-gap'),
   }
 }

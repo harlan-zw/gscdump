@@ -57,12 +57,6 @@ function renderSection(section: ReportSection, cap?: number): string[] {
   if (section.truncated && section.truncated.kept < section.truncated.total)
     lines.push(`   … +${section.truncated.total - section.truncated.kept} more`)
 
-  for (const a of section.actions) {
-    const target = a.target ? ` ${a.target.kind}=${a.target.value}` : ''
-    lines.push(`   → ${a.kind}${target}: ${a.rationale}`)
-    if (a.cliHint)
-      lines.push(`     $ ${a.cliHint}`)
-  }
   lines.push('')
   return lines
 }

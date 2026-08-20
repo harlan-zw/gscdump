@@ -97,7 +97,6 @@ function buildChangePointSection(
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'change-point'),
   }
 }
@@ -135,7 +134,6 @@ function buildMigrationSection(
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'query-migration'),
   }
 }
@@ -170,7 +168,6 @@ function buildVolatilitySection(
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'position-volatility'),
   }
 }

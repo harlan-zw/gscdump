@@ -76,7 +76,7 @@ async function executeStep(
  * The runtime is the only layer that knows a step errored, so it is the only
  * layer that can tell those two states apart. Rather than trusting each
  * report's `reduce` to check (it can't — it never sees the failure), the
- * fabricated content is stripped here: no findings, no actions, no artifact
+ * fabricated content is stripped here: no findings and no artifact
  * to re-run, and a severity outside the info→high ladder.
  *
  * `coverage` deliberately stays `partial`: it already means "backing data is
@@ -91,7 +91,6 @@ function unavailableSection(section: ReportSection, failedKeys: string[]): Repor
     summary: { magnitudeLabel: `unavailable — ${failedKeys.join(', ')} failed` },
     findings: [],
     coverage: 'partial',
-    actions: [],
   }
 }
 

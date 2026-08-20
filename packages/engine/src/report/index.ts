@@ -13,8 +13,6 @@ export type { ReportRegistry, ReportRegistryInit } from './registry'
 export type {
   DefinedReport,
   DefineReportOptions,
-  ReportAction,
-  ReportActionKind,
   ReportArgDef,
   ReportArgsSpec,
   ReportContext,

@@ -1,9 +1,8 @@
 // Single source of truth for analyzer definitions in this dashboard.
 // Consumed by:
-//   - /sites/[id]/analyze — tab list (analyzer/semantic/action kinds) +
+//   - /sites/[id]/analyze — tab list +
 //     unified <GscAnalyzerPanel> dispatch driven by `capabilities.panel`.
 //   - /sites/[id]/insights — defs with `capabilities.insightCard`
-//   - useActionPriority — defs with `capabilities.actionPriority`
 //
 // Add a new analyzer by appending one `defineGscAnalyzer({ ... })` entry. To
 // give it a custom body on /analyze, supply `capabilities.panel` with a body
@@ -34,7 +33,6 @@ const ChangePointAnalyzerPanel = defineAsyncComponent(() => import('./components
 const PageRankAnalyzerPanel = defineAsyncComponent(() => import('./components/panels/PageRankAnalyzerPanel.vue'))
 const SurvivalAnalyzerPanel = defineAsyncComponent(() => import('./components/panels/SurvivalAnalyzerPanel.vue'))
 const GenericTableAnalyzerPanel = defineAsyncComponent(() => import('./components/panels/GenericTableAnalyzerPanel.vue'))
-const ActionsPipelinePanel = defineAsyncComponent(() => import('./components/panels/ActionsPipelinePanel.vue'))
 const SemanticKeywordRepoPanel = defineAsyncComponent(() => import('./components/panels/SemanticKeywordRepoPanel.vue'))
 
 // Shared spec for analyzers with no bespoke viz — auto-formatted table.
@@ -47,7 +45,6 @@ export const ANALYZERS = [
     kind: 'analyzer',
     isQueryGrained: true,
     capabilities: {
-      actionPriority: 'striking-distance',
       panel: genericTablePanel,
       insightCard: {
         icon: 'i-lucide-target',
@@ -66,7 +63,6 @@ export const ANALYZERS = [
     kind: 'analyzer',
     isQueryGrained: true,
     capabilities: {
-      actionPriority: 'opportunity',
       panel: genericTablePanel,
       insightCard: {
         icon: 'i-lucide-zap',
@@ -107,7 +103,6 @@ export const ANALYZERS = [
     kind: 'analyzer',
     isQueryGrained: true,
     capabilities: {
-      actionPriority: 'cannibalization',
       insightCard: {
         icon: 'i-lucide-git-fork',
         accent: 'error',
@@ -138,7 +133,6 @@ export const ANALYZERS = [
     kind: 'analyzer',
     isQueryGrained: true,
     capabilities: {
-      actionPriority: 'ctr-anomaly',
       insightCard: {
         icon: 'i-lucide-alert-octagon',
         accent: 'warning',
@@ -300,7 +294,6 @@ export const ANALYZERS = [
     kind: 'analyzer',
     isQueryGrained: true,
     capabilities: {
-      actionPriority: 'change-point',
       panel: {
         component: ChangePointAnalyzerPanel,
         summarize: ({ results }) => {
@@ -372,18 +365,6 @@ export const ANALYZERS = [
         component: SemanticKeywordRepoPanel,
         ownsLifecycle: true,
         caption: 'POC: a retriv-shaped keyword vector repo. It indexes query text once, returns keyword IDs by similarity, then rejoins those IDs to site metrics from DuckDB.',
-      },
-    },
-  }),
-  defineGscAnalyzer({
-    id: 'actions',
-    label: 'Actions ⚡',
-    kind: 'action',
-    capabilities: {
-      panel: {
-        component: ActionsPipelinePanel,
-        ownsLifecycle: true,
-        caption: 'Actions are deduped across sources — a keyword flagged by both striking-distance and cannibalization surfaces as one action with both source tags.',
       },
     },
   }),
