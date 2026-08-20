@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/cli",
   "type": "module",
-  "version": "2.3.0",
+  "version": "3.0.0",
   "description": "CLI for Google Search Console - dump, query, and run MCP server",
   "author": {
     "name": "Harlan Wilton",
