@@ -87,7 +87,6 @@ function buildCtrAnomalySection(res: AnalysisResult | undefined, max: number): R
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'ctr-anomaly'),
   }
 }
@@ -121,7 +120,6 @@ function buildChangePointSection(res: AnalysisResult | undefined, max: number): 
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'change-point'),
   }
 }
@@ -155,7 +153,6 @@ function buildPositionVolatilitySection(res: AnalysisResult | undefined, max: nu
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'position-volatility'),
   }
 }

@@ -3,8 +3,7 @@
  *
  * A report runs N analyzer steps (`ReportPlanStep`) in parallel and reduces
  * their `AnalysisResult`s into structured `ReportSection`s with bounded
- * findings + agent-actionable next steps. Same registry pattern as analyzers,
- * same status vocab as `ActionPrioritySourceState`.
+ * findings. Same registry pattern as analyzers.
  *
  * Pure types only. Runtime lives in `@gscdump/analysis/report`.
  */
@@ -12,7 +11,6 @@
 import type { AnalysisParams, AnalysisResult } from '../analysis-types'
 import type { ComparisonMode, ResolvedWindow, WindowPreset } from '../period'
 
-/** Status vocabulary mirrors `ActionPrioritySourceStatus`. */
 export type ReportStepStatus = 'pending' | 'running' | 'done' | 'skipped' | 'error'
 
 /**
@@ -24,8 +22,6 @@ export type ReportStepStatus = 'pending' | 'running' | 'done' | 'skipped' | 'err
 export type ReportSeverity = 'info' | 'low' | 'medium' | 'high' | 'unknown'
 
 export type ReportEntityKind = 'page' | 'query'
-
-export type ReportActionKind = 'analyzer' | 'cli' | 'indexing' | 'fix'
 
 export type ReportCoverage = 'full' | 'partial'
 
@@ -64,15 +60,6 @@ export interface ReportSectionSummary {
   magnitudeLabel?: string
 }
 
-export interface ReportAction {
-  kind: ReportActionKind
-  target?: ReportEntity
-  params?: Record<string, unknown>
-  rationale: string
-  /** Human hint, generated; never authoritative. */
-  cliHint?: string
-}
-
 export interface ReportSectionArtifact {
   analyzer: string
   params: AnalysisParams
@@ -87,7 +74,6 @@ export interface ReportSection {
   findings: ReportFinding[]
   truncated?: { kept: number, total: number }
   coverage: ReportCoverage
-  actions: ReportAction[]
   artifact?: ReportSectionArtifact
 }
 

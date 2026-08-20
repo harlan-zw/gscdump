@@ -56,7 +56,6 @@ describe('movers report', () => {
     expect(out.sections.map(s => s.id)).toEqual(['rising', 'decliners', 'striking-distance'])
     expect(out.sections[0]!.findings[0]!.entity.value).toBe('best widgets')
     expect(out.sections[1]!.severity).toBe('high') // 70 + 95 = 165 lost
-    expect(out.sections[1]!.actions[0]!.target!.value).toBe('/c')
     expect(out.sections[2]!.findings[0]!.metrics.potentialClicks).toBe(600)
     expect(out.meta.degraded).toBe(false)
   })
@@ -133,7 +132,6 @@ describe('opportunities report', () => {
     const { opportunitiesReport } = await import('../src/report/reports/opportunities')
     const out = await runReport(opportunitiesReport, { source, analyzers, ctx })
     expect(out.sections.map(s => s.id)).toEqual(['striking-distance', 'low-ctr', 'zero-click', 'query-migration'])
-    expect(out.sections[1]!.actions[0]!.kind).toBe('fix')
     expect(out.meta.degraded).toBe(false)
   })
 })
@@ -166,7 +164,6 @@ describe('risks report', () => {
     const out = await runReport(risksReport, { source, analyzers, ctx })
     expect(out.sections.map(s => s.id)).toEqual(['decay', 'cannibalization', 'dark-traffic', 'device-gap'])
     expect(out.sections[0]!.severity).toBe('high')
-    expect(out.sections[0]!.actions[0]!.target!.value).toBe('/dying')
     expect(out.sections[1]!.findings[0]!.metrics.pages).toBe(2)
   })
 
@@ -181,54 +178,6 @@ describe('risks report', () => {
     ])
     const { risksReport } = await import('../src/report/reports/risks')
     await expect(runReport(risksReport, { source, analyzers, ctx })).rejects.toThrow(/comparison window/)
-  })
-})
-
-describe('priority report', () => {
-  const window: ResolvedWindow = {
-    start: '2025-01-01',
-    end: '2025-01-28',
-    days: 28,
-    comparison: { start: '2024-12-04', end: '2024-12-31' },
-  }
-
-  it('ranks composed signals into a single priority section', async () => {
-    const ctx: ReportContext = { site: SITE, window, params: {}, registryVersion: 't' }
-    const analyzers = stubRegistry([
-      stubAnalyzer('striking-distance', [
-        { keyword: 'kw-strike', page: '/p-strike', clicks: 5, impressions: 1500, ctr: 0.003, position: 8.5, potentialClicks: 200 },
-      ]),
-      stubAnalyzer('opportunity', [
-        { keyword: 'kw-opp', page: '/p-opp', clicks: 10, impressions: 1200, ctr: 0.008, position: 4.2, opportunityScore: 75, potentialClicks: 150, factors: {} },
-      ]),
-      stubAnalyzer('cannibalization', []),
-      stubAnalyzer('ctr-anomaly', []),
-      stubAnalyzer('change-point', []),
-    ])
-    const { priorityReport } = await import('../src/report/reports/priority')
-    const out = await runReport(priorityReport, { source, analyzers, ctx })
-    expect(out.sections).toHaveLength(1)
-    const section = out.sections[0]!
-    expect(section.id).toBe('priority')
-    expect(section.findings.length).toBeGreaterThan(0)
-    expect(section.actions.length).toBeGreaterThan(0)
-    const keywords = section.findings.map(f => f.entity.value)
-    expect(keywords).toContain('kw-strike')
-    expect(keywords).toContain('kw-opp')
-  })
-
-  it('marks coverage partial when a signal is missing from registry', async () => {
-    const ctx: ReportContext = { site: SITE, window, params: {}, registryVersion: 't' }
-    // Only striking-distance present; the other four error out.
-    const analyzers = stubRegistry([
-      stubAnalyzer('striking-distance', [
-        { keyword: 'kw', page: '/p', clicks: 1, impressions: 500, ctr: 0.002, position: 11, potentialClicks: 60 },
-      ]),
-    ])
-    const { priorityReport } = await import('../src/report/reports/priority')
-    const out = await runReport(priorityReport, { source, analyzers, ctx })
-    expect(out.meta.degraded).toBe(true)
-    expect(out.sections[0]!.coverage).toBe('partial')
   })
 })
 

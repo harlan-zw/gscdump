@@ -90,7 +90,6 @@ function buildBrandSplitSection(res: AnalysisResult | undefined, max: number): R
     summary: { magnitudeLabel },
     findings,
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'brand'),
   }
 }
@@ -130,7 +129,6 @@ function buildConcentrationSection(res: AnalysisResult | undefined, max: number)
       : {},
     findings,
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'concentration', { dimension: 'keywords' }),
   }
 }

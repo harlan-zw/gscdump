@@ -70,7 +70,6 @@ function buildContentVelocity(res: AnalysisResult | undefined): ReportSection {
     summary: { magnitudeLabel: `${totalNew} new keywords across ${rows.length} weeks (avg ${avgPerWeek.toFixed(1)}/wk)` },
     findings: [],
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'content-velocity'),
   }
 }
@@ -91,7 +90,6 @@ function buildKeywordBreadth(res: AnalysisResult | undefined): ReportSection {
     summary: { magnitudeLabel: top ? `${totalPages} pages; modal bucket "${top.bucket}" (${top.pageCount} pages)` : 'no data' },
     findings: [],
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'keyword-breadth'),
   }
 }
@@ -116,7 +114,6 @@ function buildIntentAtlas(res: AnalysisResult | undefined): ReportSection {
     summary: { magnitudeLabel: `${totalClusters} clusters covering ${totalKeywords} keywords` },
     findings: [],
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'intent-atlas'),
   }
 }
@@ -157,7 +154,6 @@ function buildLongTail(res: AnalysisResult | undefined, max: number): ReportSect
     findings,
     truncated: truncation(rows.length, kept.length),
     coverage: sectionCoverage(res),
-    actions: [],
     artifact: sectionArtifact(res, 'long-tail'),
   }
 }

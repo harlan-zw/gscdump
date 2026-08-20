@@ -41,7 +41,7 @@ const movers = analyzeMovers(currentRows, previousRows)
 const decay = analyzeDecay(currentRows, previousRows)
 ```
 
-Meta-analyses live in the report layer. Run a composed, ranked priority list via `runReport`:
+Meta-analyses live in the report layer. Run a composed evidence report via `runReport`:
 
 ```ts
 import {
@@ -51,14 +51,14 @@ import {
 } from '@gscdump/analysis'
 import { resolveWindow } from '@gscdump/engine/period'
 
-const report = defaultReportRegistry.getReport('priority')!
-const window = resolveWindow({ preset: 'last-28d', comparison: 'prev-period' })
+const report = defaultReportRegistry.getReport('health')!
+const window = resolveWindow({ preset: 'last-28d', comparison: 'none' })
 const result = await runReport(report, {
   source,
   analyzers: defaultAnalyzerRegistry,
   ctx: { site: siteUrl, window, params: {}, registryVersion: defaultReportRegistry.version },
 })
-// result.sections[0].findings — ranked priority actions, page+query keyed.
+// result.sections[0].findings — bounded evidence, page+query keyed.
 ```
 
 Source adapters compose a GSC client + analyzer in one call:

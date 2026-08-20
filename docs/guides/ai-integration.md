@@ -43,6 +43,6 @@ were removed; application embedding is not a supported v1 package surface.
 ## Example prompts
 
 - “List my Search Console properties.”
-- “Run the priority report for `sc-domain:example.com` over the last 28 days.”
+- “Run the health report for `sc-domain:example.com` over the last 28 days.”
 - “Query clicks and impressions by page for this month.”
 - “Inspect these URLs and summarize indexing failures.”

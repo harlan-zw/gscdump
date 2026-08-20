@@ -4,6 +4,7 @@ import type { ResolvedWindow } from '@gscdump/engine/period'
 import type { ReportContext } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
 import { describe, expect, it } from 'vitest'
+import { defaultReportRegistry } from '../src/report'
 import { dryRunReport, runReport } from '../src/report/runtime'
 import { createInMemoryQuerySource } from '../src/source/in-memory'
 
@@ -58,7 +59,6 @@ const TEST_REPORT = defineReport<{ minSeverity?: string }>({
           summary: {},
           findings,
           coverage: results.maybe ? 'full' : 'partial',
-          actions: [],
         },
       ],
     }
@@ -126,6 +126,12 @@ describe('runReport', () => {
     const b = await runReport(TEST_REPORT, { source, analyzers, ctx: ctx() })
     expect(a.inputHash).toBe(b.inputHash)
     expect(a.inputHash).toMatch(/^[0-9a-f]{64}$/)
+  })
+})
+
+describe('default report registry', () => {
+  it('does not offer the retired priority report', () => {
+    expect(defaultReportRegistry.getReport('priority')).toBeUndefined()
   })
 })
 

@@ -27,9 +27,7 @@ const activeSupported = computed(() => {
   return tab ? supports(tab.id).value : false
 })
 
-// Provide the runner to lifecycle-owning panels. Pipeline composables such as
-// `useActionPriority` hold their own state via `useState`, so panels can call
-// them directly inside their setup().
+// Provide the runner to panels that own their lifecycle.
 provide(gscPanelRunnerKey, { runner: { query: runQuery, analyze }, ready: isReady })
 const { data: dailyPayload } = useGscRollup<{ impressions: number, anonymizedImpressionsPct: number }[]>(siteId, 'daily_totals')
 const anonymizationPct = computed(() => weightedAnonPct(dailyPayload.value))
@@ -192,7 +190,7 @@ const visibleRowCount = computed(() => analyzerRows.value.length)
 
     <!-- Registry-driven analyzer panel: collapses every analyzer tab into one
          dispatch. Bespoke viz panels render their custom body; the rest fall
-         through to GenericTableAnalyzerPanel; pipelines own their lifecycle. -->
+         through to GenericTableAnalyzerPanel. -->
     <GscAnalyzerPanel
       v-if="activeTab && activePanel"
       :def="activeTab"
