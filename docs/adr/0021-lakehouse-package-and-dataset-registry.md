@@ -3,6 +3,31 @@
 Date: 2026-07-03
 Status: Accepted, as amended by the same-day 3-lens adversarial review (see Review Amendments — they override the body where they conflict). Implementation tracked in nuxtseo R2-FIXES Track C.
 
+## D4 closure amendment, 2026-08-25
+
+The planned Gen-2 deletion is closed with no source deletion. The named files
+still serve the local Store, CLI, published adapters, or recovery workflows.
+Deleting them would remove active behaviour.
+
+Four independent interface reviews covered a factory, hooks, subpaths, and a
+ports-and-adapters redesign. The existing deep factory and runtime subpaths
+remain the best boundary:
+
+- `@gscdump/engine` keeps `createStorageEngine`, contracts, and profiling.
+- `gc.ts`, `layout.ts`, and `compaction.ts` stay private behind that factory.
+- In v4, R2 adapter values move from the root to `@gscdump/engine/r2` with no
+  compatibility aliases. This includes `createR2ManifestStore`.
+- `@gscdump/engine/node` keeps the local Store and CLI adapter.
+- `@gscdump/engine/iceberg` keeps only the GSC dataset interface.
+- `@gscdump/engine/sink-node` keeps the Node-only PyIceberg recovery runtime.
+  Its `OverwriteBackend` is already the port. Subprocess, HTTP, and test fakes
+  are adapters. A replacement recovery interface adds no verified capability.
+- Hosted per-Team catalog maintenance stays in
+  `@gscdump/lakehouse/maintenance`.
+
+Version 3 keeps its published surface unchanged. Version 4 may narrow the root
+only after both site consumers migrate. D4 tracks no further mechanical cleanup.
+
 ## Context
 
 Two producers now write Iceberg tables into the same per-team R2 Data Catalogs: gscdump.com (`gsc.*`, 9 tables) and nuxtseo.com (`crawl.*`, `lighthouse.*`, `dataforseo.*`, 4 tables). The engine's Iceberg layer (`packages/engine/src/iceberg/`) is dataset-agnostic in its storage/catalog mechanics but GSC-coupled at every declaration point: table names are string-literal unions, schemas live in frozen constants (`ICEBERG_SCHEMAS`/`TABLE_METADATA`), the `Sink` contract bakes in `searchType`, and the append sink hardcodes `site_id + search_type` identity injection.
