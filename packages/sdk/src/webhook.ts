@@ -1,10 +1,9 @@
 import type {
-  CreateWebhookEnvelopeOptions,
   PartnerWebhookHeaders,
   WebhookEnvelope,
 } from '@gscdump/contracts'
 import type { Result } from 'gscdump/result'
-import { partnerWebhookEnvelopeSchema, WEBHOOK_CONTRACT_VERSION, WEBHOOK_CONTRACT_VERSION_HEADER, WEBHOOK_DELIVERY_HEADER, WEBHOOK_EVENT_HEADER, WEBHOOK_SIGNATURE_HEADER, WEBHOOK_TIMESTAMP_HEADER } from '@gscdump/contracts'
+import { partnerWebhookEnvelopeSchema, WEBHOOK_CONTRACT_VERSION_HEADER, WEBHOOK_DELIVERY_HEADER, WEBHOOK_EVENT_HEADER, WEBHOOK_SIGNATURE_HEADER, WEBHOOK_TIMESTAMP_HEADER } from '@gscdump/contracts'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { PartnerApiError, partnerErrorToException } from './errors'
 
@@ -19,20 +18,7 @@ export {
   WEBHOOK_TIMESTAMP_HEADER,
 } from '@gscdump/contracts'
 
-const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-const SECRET_LENGTH = 32
-
 const encoder = new TextEncoder()
-
-// This package is the partner-side consumer SDK. Producer-only helpers below are
-// kept internal for contract fixtures and must not become webhook delivery APIs.
-function randomString(length: number): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(length))
-  let value = ''
-  for (let i = 0; i < length; i++)
-    value += CHARSET[bytes[i]! % CHARSET.length]
-  return value
-}
 
 function toPayloadString(payload: string | object): string {
   return typeof payload === 'string' ? payload : JSON.stringify(payload)
@@ -78,47 +64,6 @@ async function hmacSha256(payload: string, secret: string): Promise<ArrayBuffer>
   return crypto.subtle.sign('HMAC', key, encoder.encode(payload))
 }
 
-export function generateWebhookSecret(): string {
-  return `whsec_${randomString(SECRET_LENGTH)}`
-}
-
-export function generateWebhookDeliveryId(): string {
-  return `whd_${crypto.randomUUID()}`
-}
-
-export function shouldQueueWebhook(webhookEvents: string | string[] | null | undefined, eventType: string): boolean {
-  if (!webhookEvents)
-    return false
-
-  const events = Array.isArray(webhookEvents)
-    ? webhookEvents
-    : JSON.parse(webhookEvents) as string[]
-
-  return events.includes(eventType)
-}
-
-export function createWebhookEnvelope<TData extends Record<string, unknown>>(
-  options: CreateWebhookEnvelopeOptions<TData>,
-): WebhookEnvelope<TData> {
-  const occurredAt = options.occurredAt instanceof Date
-    ? options.occurredAt.toISOString()
-    : options.occurredAt ?? new Date().toISOString()
-
-  return {
-    contractVersion: options.contractVersion ?? WEBHOOK_CONTRACT_VERSION,
-    deliveryId: options.deliveryId ?? generateWebhookDeliveryId(),
-    event: options.event,
-    partnerId: options.partnerId,
-    userId: options.userId,
-    siteId: options.siteId,
-    externalUserId: options.externalUserId ?? null,
-    externalSiteId: options.externalSiteId ?? null,
-    lifecycleRevision: options.lifecycleRevision,
-    occurredAt,
-    data: options.data,
-  }
-}
-
 export async function signWebhookPayload(payload: string | object, secret: string): Promise<string> {
   const payloadString = toPayloadString(payload)
   return `sha256=${bytesToHex(await hmacSha256(payloadString, secret))}`
@@ -143,7 +88,7 @@ export async function verifyWebhookSignature(payload: string | object, signature
  * it is returned as a modelled `PartnerApiError` rather than only thrown. A
  * malformed envelope (schema parse) is a defect and keeps propagating.
  */
-export async function parseWebhookPayloadResult<TData extends Record<string, unknown> = Record<string, unknown>>(
+async function parseWebhookPayloadResult<TData extends Record<string, unknown> = Record<string, unknown>>(
   payload: string | object,
   options: {
     secret?: string
