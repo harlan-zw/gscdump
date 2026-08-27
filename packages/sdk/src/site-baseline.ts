@@ -45,7 +45,7 @@ export interface SiteTypeBaseline {
   primaryGoal: 'content' | 'authority' | 'conversion' | 'coverage'
 }
 
-export const SITE_TYPE_BASELINE: Record<SiteType, SiteTypeBaseline> = {
+const SITE_TYPE_BASELINE: Record<SiteType, SiteTypeBaseline> = {
   docs: { label: 'Documentation', coverageMatters: false, ctrExpectation: 'low', primaryGoal: 'content' },
   blog: { label: 'Blog / content', coverageMatters: false, ctrExpectation: 'low', primaryGoal: 'content' },
   portfolio: { label: 'Portfolio', coverageMatters: false, ctrExpectation: 'low', primaryGoal: 'content' },

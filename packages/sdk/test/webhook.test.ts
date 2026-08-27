@@ -1,9 +1,6 @@
 import {
-  createWebhookEnvelope,
-  generateWebhookSecret,
   parseWebhookPayload,
   readWebhookHeaders,
-  shouldQueueWebhook,
   signWebhookPayload,
   verifyWebhookSignature,
   WEBHOOK_CONTRACT_VERSION,
@@ -14,51 +11,6 @@ import {
 } from '../src/webhook'
 
 describe('partner webhooks', () => {
-  it('creates canonical envelopes', () => {
-    const envelope = createWebhookEnvelope({
-      event: 'site.analytics.ready',
-      partnerId: 'partner_1',
-      userId: 'usr_1',
-      siteId: 'site_1',
-      externalSiteId: 'ext_site_1',
-      lifecycleRevision: 123,
-      occurredAt: '2026-05-11T00:00:00.000Z',
-      data: { rowsInserted: 100 },
-    })
-
-    expect(envelope).toMatchObject({
-      contractVersion: WEBHOOK_CONTRACT_VERSION,
-      event: 'site.analytics.ready',
-      externalUserId: null,
-      externalSiteId: 'ext_site_1',
-      data: { rowsInserted: 100 },
-    })
-  })
-
-  it('matches current gscdump.com user lifecycle envelopes', () => {
-    const envelope = createWebhookEnvelope({
-      event: 'user.lifecycle.changed',
-      partnerId: 'partner_1',
-      userId: 'usr_1',
-      lifecycleRevision: 789,
-      occurredAt: '2026-05-11T00:00:00.000Z',
-      data: { account: { status: 'ready' } },
-    })
-
-    expect(JSON.parse(JSON.stringify(envelope))).toEqual({
-      contractVersion: WEBHOOK_CONTRACT_VERSION,
-      deliveryId: envelope.deliveryId,
-      event: 'user.lifecycle.changed',
-      partnerId: 'partner_1',
-      userId: 'usr_1',
-      externalUserId: null,
-      externalSiteId: null,
-      lifecycleRevision: 789,
-      occurredAt: '2026-05-11T00:00:00.000Z',
-      data: { account: { status: 'ready' } },
-    })
-  })
-
   it('signs and verifies raw JSON payloads', async () => {
     const secret = 'whsec_test'
     const payload = JSON.stringify({ deliveryId: 'whd_1', event: 'site.analytics.ready' })
@@ -70,15 +22,19 @@ describe('partner webhooks', () => {
   })
 
   it('parses payloads with signature validation and header helpers', async () => {
-    const secret = generateWebhookSecret()
-    const envelope = createWebhookEnvelope({
+    const secret = 'whsec_test'
+    const envelope = {
+      contractVersion: WEBHOOK_CONTRACT_VERSION,
+      deliveryId: 'whd_1',
       event: 'site.indexing.ready',
       partnerId: 'partner_1',
       userId: null,
+      externalUserId: null,
+      externalSiteId: null,
       lifecycleRevision: 456,
       occurredAt: '2026-05-11T00:00:00.000Z',
       data: {},
-    })
+    } as const
     const payload = JSON.stringify(envelope)
     const signature = await signWebhookPayload(payload, secret)
     const headers = new Headers({
@@ -96,10 +52,5 @@ describe('partner webhooks', () => {
     })
     await expect(parseWebhookPayload(payload, { secret, headers })).resolves.toEqual(envelope)
     await expect(parseWebhookPayload(payload, { secret, signature: 'sha256=bad' })).rejects.toThrow('Invalid webhook signature')
-  })
-
-  it('matches webhook subscriptions', () => {
-    expect(shouldQueueWebhook(JSON.stringify(['site.auth.failed']), 'site.auth.failed')).toBe(true)
-    expect(shouldQueueWebhook(['site.indexing.ready'], 'site.analytics.ready')).toBe(false)
   })
 })

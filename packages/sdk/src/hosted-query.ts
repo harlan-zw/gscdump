@@ -2,8 +2,6 @@ import type {
   BuilderStateWire,
   DataDetailOptions,
   DataQueryOptions,
-  GscdumpPageTrendParams,
-  GscdumpQueryTrendParams,
   IndexingDiagnosticsParams,
   IndexingUrlsParams,
   SourceInfoOptions,
@@ -52,11 +50,11 @@ export function withDefaultSearchType<T>(value: T, searchType?: GscSearchType): 
   } as T
 }
 
-export function searchTypeQuery(searchType?: GscSearchType): Record<string, string> {
+function searchTypeQuery(searchType?: GscSearchType): Record<string, string> {
   return { searchType: searchType ?? DEFAULT_SEARCH_TYPE }
 }
 
-export function dateRangeOptionsQuery(options: SourceRangeOptions | undefined): Record<string, string> {
+function dateRangeOptionsQuery(options: SourceRangeOptions | undefined): Record<string, string> {
   const query: Record<string, string> = {}
   const start = options?.start ?? options?.startDate
   const end = options?.end ?? options?.endDate
@@ -152,31 +150,5 @@ export function indexingDiagnosticsQuery(params: IndexingDiagnosticsParams = {})
   }
   if (params.sampleLimit != null)
     query.sampleLimit = params.sampleLimit
-  return query
-}
-
-export function queryTrendQuery(params: GscdumpQueryTrendParams): Record<string, string> {
-  const query: Record<string, string> = {
-    startDate: params.startDate,
-    endDate: params.endDate,
-    searchType: params.searchType ?? DEFAULT_SEARCH_TYPE,
-  }
-  if (params.prevStartDate)
-    query.prevStartDate = params.prevStartDate
-  if (params.prevEndDate)
-    query.prevEndDate = params.prevEndDate
-  return query
-}
-
-export function pageTrendQuery(params: GscdumpPageTrendParams): Record<string, string> {
-  const query: Record<string, string> = {
-    startDate: params.startDate,
-    endDate: params.endDate,
-    searchType: params.searchType ?? DEFAULT_SEARCH_TYPE,
-  }
-  if (params.prevStartDate)
-    query.prevStartDate = params.prevStartDate
-  if (params.prevEndDate)
-    query.prevEndDate = params.prevEndDate
   return query
 }

@@ -27,13 +27,9 @@
 ./hosted-query:
   dataDetailQuery: function
   dataQuery: function
-  dateRangeOptionsQuery: function
   DEFAULT_SEARCH_TYPE: string
   indexingDiagnosticsQuery: function
   indexingUrlsQuery: function
-  pageTrendQuery: function
-  queryTrendQuery: function
-  searchTypeQuery: function
   sourceInfoQuery: function
   tablesQuery: function
   withDefaultSearchType: function
@@ -45,7 +41,6 @@
   analyticsStatusToSyncStatus: function
   findLifecycleSite: function
   lifecycleSiteToSyncStatus: function
-  lifecycleSiteToUserSite: function
 ./partner:
   createPartnerClient: function
 ./partner-errors:
@@ -75,7 +70,6 @@
   derivePeerStanding: function
   deriveSiteBaseline: function
   normalizeSiteType: function
-  SITE_TYPE_BASELINE: object
   siteTypeBaseline: function
 ./site-triage:
   classifyHealthStage: function
@@ -99,13 +93,8 @@
   GscdumpRealtimeV1Error: function
 ./webhook:
   CANONICAL_WEBHOOK_EVENTS: object
-  createWebhookEnvelope: function
-  generateWebhookDeliveryId: function
-  generateWebhookSecret: function
   parseWebhookPayload: function
-  parseWebhookPayloadResult: function
   readWebhookHeaders: function
-  shouldQueueWebhook: function
   signWebhookPayload: function
   VALID_WEBHOOK_EVENTS: object
   verifyWebhookSignature: function

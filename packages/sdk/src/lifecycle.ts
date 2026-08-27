@@ -57,26 +57,6 @@ export function analyticsStatusToSyncStatus(status: LifecycleSiteLike['analytics
   }
 }
 
-export function lifecycleSiteToUserSite(site: LifecycleSiteLike): GscdumpUserSite {
-  const syncStatus = analyticsStatusToSyncStatus(site.analytics.status)
-  return {
-    siteId: site.siteId,
-    siteUrl: site.gscPropertyUrl || site.requestedUrl,
-    analyticsSyncStatus: syncStatus,
-    analyticsSyncProgress: site.analytics.progress,
-    syncStatus,
-    syncProgress: site.analytics.progress,
-    indexingEligible: site.indexing.eligible,
-    indexingIneligibleReason: site.indexing.reason as GscdumpUserSite['indexingIneligibleReason'],
-    indexingPermissionLevel: site.permissionLevel,
-    indexingStatus: site.indexing.status === 'ready' ? 'complete' : site.indexing.status === 'not_requested' ? 'not_started' : 'indexing',
-    indexingProgress: site.indexing.progress,
-    lastSyncAt: site.updatedAt ? Date.parse(site.updatedAt) : null,
-    newestDateSynced: site.analytics.syncedRange.newest,
-    oldestDateSynced: site.analytics.syncedRange.oldest,
-  }
-}
-
 export function lifecycleSiteToSyncStatus(site: LifecycleSiteLike): GscdumpSyncStatusResponse {
   const syncStatus = analyticsStatusToSyncStatus(site.analytics.status) as GscdumpSyncStatusResponse['syncStatus']
   const completed = site.analytics.progress.completed
