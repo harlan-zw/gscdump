@@ -131,4 +131,35 @@ describe('createAnalyticsClient', () => {
       startDate: '2026-05-01',
     } as any)).toThrow()
   })
+
+  it('dedupes bodies with the same canonical JSON value', async () => {
+    const calls: Array<{ url: string, options: any }> = []
+    const resolvers: Array<(value: unknown) => void> = []
+    const fetch = ((url: string, options: any) => {
+      calls.push({ url, options })
+      return new Promise((resolve) => {
+        resolvers.push(resolve)
+      })
+    }) as AnalyticsFetch
+    const client = createAnalyticsClient({ fetch })
+
+    const first = client.analyze('s_1', {
+      z: 1,
+      nested: {
+        omitted: undefined,
+        values: [1, undefined, { b: 2, a: 1 }],
+      },
+    })
+    const second = client.analyze('s_1', {
+      nested: {
+        values: [1, null, { a: 1, b: 2 }],
+      },
+      z: 1,
+    })
+
+    await Promise.resolve()
+    expect(calls).toHaveLength(1)
+    resolvers[0]!({ ok: true })
+    await expect(Promise.all([first, second])).resolves.toEqual([{ ok: true }, { ok: true }])
+  })
 })

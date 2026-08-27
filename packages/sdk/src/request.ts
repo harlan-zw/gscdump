@@ -3,6 +3,7 @@ import type { ZodTypeAny } from 'zod'
 import type { PartnerApiError } from './errors'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { ofetch } from 'ofetch'
+import { canonicalJson } from './canonical-json'
 import { partnerErrorToException, toPartnerError } from './errors'
 
 export type HostedFetch = <T = unknown>(request: string, options?: HostedFetchOptions) => Promise<T>
@@ -78,18 +79,6 @@ function parseWith<T>(schema: ZodTypeAny | undefined, value: T): T {
   return schema ? schema.parse(value) as T : value
 }
 
-function stableJson(value: unknown): string {
-  if (value == null || typeof value !== 'object')
-    return JSON.stringify(value) ?? 'undefined'
-  if (Array.isArray(value))
-    return `[${value.map(item => item === undefined ? 'undefined' : stableJson(item)).join(',')}]`
-  return `{${Object.entries(value as Record<string, unknown>)
-    .filter(([, item]) => item !== undefined)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
-    .join(',')}}`
-}
-
 function headersKey(headers: Headers): string {
   return [...headers.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -122,7 +111,7 @@ export function createHostedRequester(
     const headers = mergeHeaders(await resolveHeaders(options), init.headers)
     const fullPath = buildPath(apiBase, path)
     const dedupeKey = dedupe && isDedupeable(init)
-      ? `${(init.method ?? 'GET').toUpperCase()} ${fullPath}\nq=${stableJson(init.query)}\nb=${stableJson(init.body)}\nh=${headersKey(headers)}`
+      ? `${(init.method ?? 'GET').toUpperCase()} ${fullPath}\nq=${canonicalJson(init.query)}\nb=${canonicalJson(init.body)}\nh=${headersKey(headers)}`
       : null
     if (dedupeKey) {
       const existing = inflight.get(dedupeKey)

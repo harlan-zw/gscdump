@@ -8,6 +8,7 @@ import type {
   IndexingUrlsParams,
   SourceInfoOptions,
 } from '@gscdump/contracts'
+import { canonicalJson } from './canonical-json'
 
 export type GscSearchType = 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews'
 
@@ -52,18 +53,6 @@ export function withDefaultSearchType<T>(value: T, searchType?: GscSearchType): 
 
 export function searchTypeQuery(searchType?: GscSearchType): Record<string, string> {
   return { searchType: searchType ?? DEFAULT_SEARCH_TYPE }
-}
-
-function stableJson(value: unknown): string {
-  if (value == null || typeof value !== 'object')
-    return JSON.stringify(value) ?? 'null'
-  if (Array.isArray(value))
-    return `[${value.map(item => item === undefined ? 'null' : stableJson(item)).join(',')}]`
-  return `{${Object.entries(value as Record<string, unknown>)
-    .filter(([, item]) => item !== undefined)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
-    .join(',')}}`
 }
 
 export function dateRangeOptionsQuery(options: SourceRangeOptions | undefined): Record<string, string> {
@@ -112,11 +101,11 @@ export function dataQuery(state: BuilderStateWire, options?: DataQueryOptions): 
   const opts = options as DataQueryOptionsWithSearchType | undefined
   const scoped = withDefaultSearchType(state, opts?.searchType)
   const query: Record<string, string> = {
-    q: stableJson(scoped),
+    q: canonicalJson(scoped),
     searchType: scoped.searchType ?? DEFAULT_SEARCH_TYPE,
   }
   if (opts?.comparison)
-    query.qc = stableJson(withDefaultSearchType(opts.comparison, scoped.searchType))
+    query.qc = canonicalJson(withDefaultSearchType(opts.comparison, scoped.searchType))
   if (opts?.filter)
     query.filter = opts.filter
   return query
@@ -126,11 +115,11 @@ export function dataDetailQuery(state: BuilderStateWire, options?: DataDetailOpt
   const opts = options as DataDetailOptionsWithSearchType | undefined
   const scoped = withDefaultSearchType(state, opts?.searchType)
   const query: Record<string, string> = {
-    q: stableJson(scoped),
+    q: canonicalJson(scoped),
     searchType: scoped.searchType ?? DEFAULT_SEARCH_TYPE,
   }
   if (opts?.comparison)
-    query.qc = stableJson(withDefaultSearchType(opts.comparison, scoped.searchType))
+    query.qc = canonicalJson(withDefaultSearchType(opts.comparison, scoped.searchType))
   return query
 }
 
