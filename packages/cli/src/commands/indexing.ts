@@ -1,6 +1,7 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
 import { batchRequestIndexing, getIndexingMetadata, requestIndexing, runSequentialBatch } from 'gscdump'
+import { indexingCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { loadSitemapUrls } from '../sitemap'
@@ -259,10 +260,7 @@ const batchStatusCommand = defineCommand({
 })
 
 export const indexingCommand = defineCommand({
-  meta: {
-    name: 'indexing',
-    description: 'Notify Google about URL updates/removals (Indexing API)',
-  },
+  meta: indexingCommandMeta,
   subCommands: {
     'submit': submitCommand,
     'remove': removeCommand,

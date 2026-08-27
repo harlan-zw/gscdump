@@ -9,6 +9,7 @@ import { collectSpans } from '@gscdump/engine/profile'
 import { defineCommand } from 'citty'
 import { daysAgoUtc as daysAgo } from 'gscdump/dates'
 import { and, between, contains, country, date as dateCol, device, eq, gsc, hour, notRegex, page, query as queryCol, regex, searchAppearance } from 'gscdump/query'
+import { queryCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
@@ -153,10 +154,7 @@ function filterToGroups(f: Filter<any>): Array<{ groupType?: string, filters: Ar
 }
 
 export const queryCommand = defineCommand({
-  meta: {
-    name: 'query',
-    description: 'Run a search analytics query (local Parquet by default, --live hits GSC API)',
-  },
+  meta: queryCommandMeta,
   args: {
     'site': {
       type: 'string',

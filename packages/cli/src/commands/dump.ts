@@ -4,6 +4,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
+import { dumpCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
 import { readParquetRows } from '../native-duckdb'
@@ -14,10 +15,7 @@ const FORMATS = ['parquet', 'json', 'ndjson', 'csv'] as const
 type DumpFormat = typeof FORMATS[number]
 
 export const dumpCommand = defineCommand({
-  meta: {
-    name: 'dump',
-    description: 'Export live Parquet files from the local store to a directory',
-  },
+  meta: dumpCommandMeta,
   args: {
     'site': {
       type: 'string',

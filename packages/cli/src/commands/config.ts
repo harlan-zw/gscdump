@@ -1,5 +1,6 @@
 import process from 'node:process'
 import { defineCommand } from 'citty'
+import { configCommandMeta } from '../command-meta'
 import { getConfigPath, loadConfig, saveConfig } from '../config'
 import { applyOutputMode, displayPath, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
 
@@ -211,10 +212,7 @@ const validateCommand = defineCommand({
 })
 
 export const configCommand = defineCommand({
-  meta: {
-    name: 'config',
-    description: 'Manage configuration',
-  },
+  meta: configCommandMeta,
   subCommands: {
     show: showCommand,
     set: setCommand,

@@ -8,6 +8,7 @@ import { resolveWindow } from '@gscdump/engine/period'
 import { defineCommand } from 'citty'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { resolveAnalysisSource } from '../analysis-local'
+import { reportCommandMeta } from '../command-meta'
 import { logger } from '../utils'
 
 /**
@@ -220,10 +221,7 @@ const listCommand = defineCommand({
 })
 
 export const reportCommand = defineCommand({
-  meta: {
-    name: 'report',
-    description: 'Run an intent-keyed report (composes analyzers into bounded sections)',
-  },
+  meta: reportCommandMeta,
   subCommands: {
     list: listCommand,
     ...Object.fromEntries(

@@ -1,6 +1,7 @@
 import type { CliRuntime } from './runtime'
 import process from 'node:process'
 import { defineCommand, runMain } from 'citty'
+import { CLI_SUBCOMMANDS } from './command-registry'
 import { applyProfileFromCli } from './commands/profile'
 import { loadEnvFromCwd } from './env-file'
 import { resolveCliEnvironment } from './environment'
@@ -75,29 +76,7 @@ export const main = defineCommand({
     version: VERSION,
     description: 'Google Search Console Data Extractor',
   },
-  subCommands: {
-    init: () => import('./commands/init').then(m => m.initCommand),
-    dump: () => import('./commands/dump').then(m => m.dumpCommand),
-    query: () => import('./commands/query').then(m => m.queryCommand),
-    sites: () => import('./commands/sites').then(m => m.sitesCommand),
-    sitemaps: () => import('./commands/sitemaps').then(m => m.sitemapsCommand),
-    sync: () => import('./commands/sync').then(m => m.syncCommand),
-    store: () => import('./commands/store').then(m => m.storeCommand),
-    inspect: () => import('./commands/inspect').then(m => m.inspectCommand),
-    indexing: () => import('./commands/indexing').then(m => m.indexingCommand),
-    entities: () => import('./commands/entities').then(m => m.entitiesCommand),
-    analyze: () => import('./commands/analyze').then(m => m.analyzeCommand),
-    report: () => import('./commands/report').then(m => m.reportCommand),
-    auth: () => import('./commands/auth').then(m => m.authCommand),
-    // Aliases: `gscdump login` etc. routed to the same subcommands.
-    login: () => import('./commands/auth').then(m => m.loginCommand),
-    logout: () => import('./commands/auth').then(m => m.logoutCommand),
-    status: () => import('./commands/auth').then(m => m.statusCommand),
-    config: () => import('./commands/config').then(m => m.configCommand),
-    profile: () => import('./commands/profile').then(m => m.profileCommand),
-    doctor: () => import('./commands/doctor').then(m => m.doctorCommand),
-    mcp: () => import('./commands/mcp').then(m => m.mcpCommand),
-  },
+  subCommands: CLI_SUBCOMMANDS,
   setup({ rawArgs }) {
     if (shouldShowSplash(rawArgs))
       showSplash()

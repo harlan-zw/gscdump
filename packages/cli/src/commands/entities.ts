@@ -8,6 +8,7 @@ import {
   createInspectionStore,
 } from '@gscdump/engine/entities'
 import { defineCommand } from 'citty'
+import { entitiesCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { applyOutputMode, logger, OUTPUT_ARGS, progressBar, runWithConcurrency } from '../utils'
 
@@ -323,10 +324,7 @@ const indexingSubCommand = defineCommand({
 })
 
 export const entitiesCommand = defineCommand({
-  meta: {
-    name: 'entities',
-    description: 'Manage local entity snapshots (URL inspections and indexing metadata)',
-  },
+  meta: entitiesCommandMeta,
   subCommands: {
     inspect: inspectSubCommand,
     show: showSubCommand,

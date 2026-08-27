@@ -2,6 +2,7 @@ import process from 'node:process'
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
 import { defineCommand } from 'citty'
 import { fetchSitemap } from 'gscdump'
+import { sitemapsCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { resolveCliEnvironment } from '../environment'
 import { gscErrorHandler } from '../error-handler'
@@ -380,10 +381,7 @@ const exportCommand = defineCommand({
 })
 
 export const sitemapsCommand = defineCommand({
-  meta: {
-    name: 'sitemaps',
-    description: 'Manage sitemaps',
-  },
+  meta: sitemapsCommandMeta,
   subCommands: {
     list: listCommand,
     get: getCommand,

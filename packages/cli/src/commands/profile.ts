@@ -5,6 +5,7 @@ import path from 'node:path'
 import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
+import { profileCommandMeta } from '../command-meta'
 import { getConfigDir, setConfigDir } from '../config'
 import { resolveCliEnvironment } from '../environment'
 import { useCliRuntime } from '../runtime'
@@ -270,10 +271,7 @@ const deleteCmd = defineCommand({
 })
 
 export const profileCommand = defineCommand({
-  meta: {
-    name: 'profile',
-    description: 'Manage gscdump profiles (per-account token + config dirs)',
-  },
+  meta: profileCommandMeta,
   subCommands: {
     list: listCmd,
     path: pathCmd,
