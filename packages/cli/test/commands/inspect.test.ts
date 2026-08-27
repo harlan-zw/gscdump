@@ -3,14 +3,21 @@ import { inspectCommand } from '../../src/commands/inspect'
 
 const inspectMock = vi.fn()
 
-vi.mock('gscdump', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump')>()
+vi.mock('gscdump/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump/client')>()
   return {
     ...actual,
     googleSearchConsole: vi.fn(() => ({
       inspect: inspectMock,
       sites: vi.fn().mockResolvedValue([{ siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' }]),
     })),
+  }
+})
+
+vi.mock('gscdump/indexing', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump/indexing')>()
+  return {
+    ...actual,
     batchInspectUrls: vi.fn(async (_c, _site, urls) => urls.map((url: string) => ({
       url,
       isIndexed: url.includes('indexed'),

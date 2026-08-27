@@ -1,4 +1,4 @@
-import type { googleSearchConsole } from 'gscdump'
+import type { googleSearchConsole } from 'gscdump/client'
 import type { SearchType } from 'gscdump/query'
 import type { ResolvedGscdumpConfig } from '../config'
 import type { LocalStore, Row, TableName, WriteCtx } from '../local-store'

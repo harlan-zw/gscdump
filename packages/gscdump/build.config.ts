@@ -7,6 +7,8 @@ export default defineBuildConfig({
       input: [
         './src/index.ts',
         './src/bing/index.ts',
+        './src/client.ts',
+        './src/indexing.ts',
         './src/query/index.ts',
         './src/query/plan.ts',
         './src/errors.ts',
@@ -15,6 +17,7 @@ export default defineBuildConfig({
         './src/dates.ts',
         './src/normalize.ts',
         './src/sitemap-identity.ts',
+        './src/sites.ts',
         './src/tenant.ts',
       ],
     },

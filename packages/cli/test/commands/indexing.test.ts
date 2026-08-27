@@ -4,13 +4,20 @@ import { indexingCommand } from '../../src/commands/indexing'
 const publishMock = vi.fn()
 const getMetadataMock = vi.fn()
 
-vi.mock('gscdump', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump')>()
+vi.mock('gscdump/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump/client')>()
   return {
     ...actual,
     googleSearchConsole: vi.fn(() => ({
       indexing: { publish: publishMock, getMetadata: getMetadataMock },
     })),
+  }
+})
+
+vi.mock('gscdump/indexing', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump/indexing')>()
+  return {
+    ...actual,
     requestIndexing: vi.fn(async (_c, url, opts) => {
       const r = await publishMock(url, opts?.type ?? 'URL_UPDATED')
       return { url, type: opts?.type ?? 'URL_UPDATED', notifyTime: r?.urlNotificationMetadata?.latestUpdate?.notifyTime }

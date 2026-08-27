@@ -6,14 +6,21 @@ const getMock = vi.fn()
 const submitMock = vi.fn()
 const deleteMock = vi.fn()
 
-vi.mock('gscdump', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump')>()
+vi.mock('gscdump/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump/client')>()
   return {
     ...actual,
     googleSearchConsole: vi.fn(() => ({
       sites: vi.fn().mockResolvedValue([{ siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' }]),
       sitemaps: { list: listMock, get: getMock, submit: submitMock, delete: deleteMock },
     })),
+  }
+})
+
+vi.mock('gscdump/sites', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump/sites')>()
+  return {
+    ...actual,
     fetchSitemap: vi.fn(async (_c, _site, feedpath) => getMock(feedpath)),
   }
 })

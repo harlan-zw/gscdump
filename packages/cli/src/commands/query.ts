@@ -1,5 +1,5 @@
 import type { QuerySpan } from '@gscdump/engine/profile'
-import type { googleSearchConsole } from 'gscdump'
+import type { googleSearchConsole } from 'gscdump/client'
 import type { BuilderState, Column, Dimension, Filter, SearchType } from 'gscdump/query'
 import type { LocalStore, TableName } from '../local-store'
 import fs from 'node:fs/promises'
