@@ -1,5 +1,4 @@
 .:
-  coerceRow: function
   coerceRows: function
   collectSpans: function
   createDuckDBCodec: function
@@ -8,17 +7,12 @@
   createQueryProfiler: function
   createR2ManifestStore: function
   createStorageEngine: function
-  dayPartition: function
   DEFAULT_SEARCH_TYPE: string
   fixedPolicy: function
-  getDateWeight: function
-  getTablesForTier: function
   getTableTier: function
-  hourPartition: function
   inferLegacyTier: function
   inferSearchType: function
   inspectionPolicy: function
-  MAX_DAY_BYTES: number
   MAX_GSC_PAGES_R2: number
   MAX_SITEMAP_URLS_PER_SITE: number
   MAX_TRACKED_URLS_PER_SITE: number
@@ -30,10 +24,7 @@
   sitemapPolicy: object
   TABLE_TIERS: object
   TABLES_BY_SEARCH_TYPE: object
-  TIER_PRIORITY: object
   validateEnabledSearchTypes: function
-  validateEnabledSearchTypesResult: function
-  WEIGHT_PRIORITY: object
 ./analysis-range:
   analysisRequestedRange: function
 ./analysis-types:
