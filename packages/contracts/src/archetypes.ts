@@ -1,4 +1,5 @@
-import type { BuilderStateWire, Dimension, GscSearchType, Metric } from './types'
+import type { GscSearchType } from './search-types'
+import type { BuilderStateWire, Dimension, Metric } from './types'
 
 export type QueryArchetype
   = | 'site-daily-timeseries'

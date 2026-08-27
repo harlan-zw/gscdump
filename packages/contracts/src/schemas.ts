@@ -1,4 +1,4 @@
-import type { GscSearchType } from './types'
+import type { GscSearchType } from './search-types'
 import { z } from 'zod'
 import {
   accountNextActions,
@@ -15,6 +15,7 @@ import {
   sitemapNextActions,
   sitemapStatuses,
 } from './onboarding'
+import { GSC_SEARCH_TYPES } from './search-types'
 import {
   CANONICAL_WEBHOOK_EVENTS,
   WEBHOOK_CONTRACT_VERSION,
@@ -22,13 +23,8 @@ import {
 
 const unknownRecord = z.record(z.string(), z.unknown())
 
-/**
- * GSC search-type slice validator. Mirrors the `GscSearchType` union from
- * `gscdump/contracts` and the `SearchTypes` constants in `gscdump/query`. Used by consumers
- * routing requests across slices (web | discover | news | googleNews | image |
- * video) to validate untrusted input before threading it to the engine.
- */
-export const searchTypeSchema = z.enum(['web', 'image', 'video', 'news', 'discover', 'googleNews'])
+/** Validates untrusted GSC Search Type input before Engine routing. */
+export const searchTypeSchema = z.enum(GSC_SEARCH_TYPES)
 
 /**
  * Per-slice capability facts, wire-schema-adjacent to {@link searchTypeSchema}.

@@ -41,6 +41,11 @@
       "import": "./dist/partner.mjs",
       "default": "./dist/partner.mjs"
     },
+    "./search-types": {
+      "types": "./dist/search-types.d.mts",
+      "import": "./dist/search-types.mjs",
+      "default": "./dist/search-types.mjs"
+    },
     "./v1": {
       "types": "./dist/v1/index.d.mts",
       "import": "./dist/v1/index.mjs",

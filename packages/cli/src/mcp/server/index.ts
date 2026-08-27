@@ -13,6 +13,7 @@ import {
   unverifySite,
   verifySite,
 } from 'gscdump'
+import { SearchTypes } from 'gscdump/query'
 import { z } from 'zod'
 import { discoverLiveSitemap } from '../../sitemap'
 import * as handlers from '../handlers'
@@ -256,7 +257,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
         endDate: z.string().describe('End date (YYYY-MM-DD)'),
         dimensions: z.array(z.enum(['date', 'query', 'page', 'country', 'device', 'searchAppearance'])).describe('Dimensions to group by'),
         rowLimit: z.number().optional().describe('Max rows (default 25000)'),
-        type: z.enum(['web', 'image', 'video', 'news', 'discover', 'googleNews']).optional().describe('Search type'),
+        type: z.enum(SearchTypes).optional().describe('Search type'),
         dataState: z.enum(['final', 'all']).optional().describe('Data state: final (settled) or all (includes fresh)'),
         aggregationType: z.enum(['byPage', 'byProperty']).optional().describe('Aggregation type'),
         dimensionFilterGroups: z.array(filterGroupSchema).optional().describe('Filter groups (each "and"-ed internally; multiple groups are OR-ed)'),

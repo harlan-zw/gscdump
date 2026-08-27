@@ -7,15 +7,8 @@ export const Devices = {
 } as const
 export type Device = typeof Devices[keyof typeof Devices]
 
-export const SearchTypes = {
-  WEB: 'web',
-  IMAGE: 'image',
-  VIDEO: 'video',
-  NEWS: 'news',
-  DISCOVER: 'discover',
-  GOOGLE_NEWS: 'googleNews',
-} as const
-export type SearchType = typeof SearchTypes[keyof typeof SearchTypes]
+export { GSC_SEARCH_TYPES as SearchTypes } from '@gscdump/contracts/search-types'
+export type { GscSearchType as SearchType } from '@gscdump/contracts/search-types'
 
 // Generate Country constant from ISO 3166-1 alpha-3 codes (lowercase for GSC API)
 export const Countries = Object.fromEntries(

@@ -16,7 +16,7 @@
  * TYPES ONLY.
  */
 
-import type { GscSearchType } from './types'
+import type { GscSearchType } from './search-types'
 
 /** The 6 Iceberg fact tables — string-typed here to avoid an engine dep. */
 export type FileResolutionTable

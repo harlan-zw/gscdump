@@ -9,6 +9,7 @@ export default defineBuildConfig({
         './src/analytics.ts',
         './src/partner.ts',
         './src/archetypes.ts',
+        './src/search-types.ts',
         './src/v1/index.ts',
         './src/v1/browser.ts',
         './src/v1/http.ts',
