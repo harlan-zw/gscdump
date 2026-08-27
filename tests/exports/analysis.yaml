@@ -1,6 +1,4 @@
 .:
-  analysisErrors: object
-  analysisErrorToException: function
   analyzeBrandSegmentation: function
   analyzeCannibalization: function
   analyzeClustering: function
@@ -20,40 +18,26 @@
   compareCurrentSitemapScope: function
   comparisonOf: function
   createAnalyzerRegistry: function
-  createCompositeSource: function
   createEngineQuerySource: function
-  createInMemoryQuerySource: function
   createSorter: function
-  defaultAnalyzerRegistry: object
-  defaultReportRegistry: object
   defineAnalyzer: function
   diffSitemapHealth: function
-  dryRunReport: function
   encodeIntent: function
   ENGINE_QUERY_CAPABILITIES: object
-  formatAnalysisError: function
-  formatReport: function
-  IN_MEMORY_DEFAULT_CAPABILITIES: object
   INTENT_CLASSIFIER_VERSION: number
-  isAnalysisError: function
   normalizeQuery: function
   NORMALIZER_VERSION: number
   num: function
   padTimeseries: function
   periodOf: function
   queryRows: function
-  REPORTS: object
   resolveWindow: function
-  ROW_ANALYZERS: object
   runAnalyzerFromSource: function
   runAnalyzerWithEngine: function
-  runReport: function
-  runReportResult: function
   SEARCH_INTENT_CODE: object
   SITEMAP_SYNC_COLLAPSE_POLICY: object
   SITEMAP_TRUST_COLLAPSE_POLICY: object
   sitemapHistoryHasCollapse: function
-  SQL_ANALYZERS: object
 ./errors:
   analysisErrors: object
   analysisErrorToException: function

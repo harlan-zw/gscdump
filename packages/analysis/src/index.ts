@@ -1,4 +1,3 @@
-export { ROW_ANALYZERS } from './analyzer/row-analyzers'
 // Pure analysis functions
 export type { BrandSegmentationOptions, BrandSegmentationResult, BrandSegmentationRow, BrandSummary } from './analyzers/brand'
 export { analyzeBrandSegmentation } from './analyzers/brand'
@@ -43,37 +42,9 @@ export { analyzeInBrowser } from './browser'
 
 export type { AnalyzerRunner, BrowserAnalyzeOptions } from './browser'
 
-export { defaultAnalyzerRegistry } from './default-registry'
-
-// Typed, caller-actionable analysis failures (the `E` channel for the report /
-// analyzer boundary). Pairs with `Result` from `gscdump/result`.
-export type { AnalysisError, AnalysisErrorKind } from './errors'
-export {
-  analysisErrors,
-  analysisErrorToException,
-  formatAnalysisError,
-  isAnalysisError,
-} from './errors'
-
 export { classifyQueryIntent, encodeIntent, INTENT_CLASSIFIER_VERSION, SEARCH_INTENT_CODE } from './query/intent'
 export type { IntentClassification, SearchIntent } from './query/intent'
 export { normalizeQuery, NORMALIZER_VERSION } from './query/normalize'
-
-// Reports — public surface. `defineReport` lives at `@gscdump/engine/report`
-// so the contract is readable without pulling the runtime in.
-export {
-  defaultReportRegistry,
-  dryRunReport,
-  formatReport,
-  REPORTS,
-  runReport,
-  runReportResult,
-} from './report'
-export type {
-  DryRunReportResult,
-  FormatReportOptions,
-  RunReportOptions,
-} from './report'
 
 export type {
   CurrentSitemapScope,
@@ -93,18 +64,6 @@ export {
   SITEMAP_TRUST_COLLAPSE_POLICY,
   sitemapHistoryHasCollapse,
 } from './sitemap-health'
-// Source factories. The dispatcher is `runAnalyzerFromSource` (re-exported
-// below from `@gscdump/engine/analyzer`).
-export {
-  createCompositeSource,
-  createInMemoryQuerySource,
-  IN_MEMORY_DEFAULT_CAPABILITIES,
-} from './source'
-export type {
-  CompositeSourceOptions,
-  InMemoryQuerySourceOptions,
-} from './source'
-export { SQL_ANALYZERS } from './sql-analyzers'
 // Domain row shapes + utilities
 export type {
   BaseMetrics,

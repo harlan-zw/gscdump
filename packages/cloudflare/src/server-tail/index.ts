@@ -47,7 +47,6 @@ export type {
 } from './r2-sql-client'
 export {
   createR2SqlClient,
-  escapeSqlValue,
   inlineParams,
   R2SqlError,
   R2SqlTimeoutError,

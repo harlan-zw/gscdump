@@ -2,11 +2,10 @@ import type { SiteDailyTimeseriesQuery } from '@gscdump/contracts/archetypes'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createR2SqlClient,
-  escapeSqlValue,
   inlineParams,
   R2SqlError,
   R2SqlTimeoutError,
-} from '../src/server-tail/r2-sql-client'
+} from '../src/server-tail'
 
 const range = { start: '2026-01-01', end: '2026-03-31' }
 
@@ -23,26 +22,21 @@ function fakeFetch(envelope: unknown, init?: { ok?: boolean, status?: number }) 
   })
 }
 
-describe('escapeSqlValue', () => {
-  it('escapes strings, passes numbers bare, maps null to NULL', () => {
-    expect(escapeSqlValue('a\'b')).toBe('\'a\'\'b\'')
-    expect(escapeSqlValue(42)).toBe('42')
-    expect(escapeSqlValue(null)).toBe('NULL')
-    expect(escapeSqlValue(undefined)).toBe('NULL')
-  })
-
-  it('rejects non-finite numbers', () => {
-    expect(() => escapeSqlValue(Number.NaN)).toThrow(R2SqlError)
-  })
-})
-
 describe('inlineParams', () => {
   it('substitutes ? placeholders in order', () => {
-    expect(inlineParams('a = ? AND b = ?', ['x', 7])).toBe('a = \'x\' AND b = 7')
+    expect(inlineParams('a = ? AND b = ?', ['a\'b', 7])).toBe('a = \'a\'\'b\' AND b = 7')
   })
 
   it('does not treat a ? inside a string literal as a placeholder', () => {
     expect(inlineParams('x = \'why?\' AND y = ?', [1])).toBe('x = \'why?\' AND y = 1')
+  })
+
+  it('maps nullish params to SQL NULL', () => {
+    expect(inlineParams('a = ? AND b = ?', [null, undefined])).toBe('a = NULL AND b = NULL')
+  })
+
+  it('rejects non-finite numeric params', () => {
+    expect(() => inlineParams('a = ?', [Number.NaN])).toThrow(R2SqlError)
   })
 
   it('throws on placeholder/param count mismatch', () => {
