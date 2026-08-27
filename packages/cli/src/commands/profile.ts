@@ -1,6 +1,4 @@
-import fs from 'node:fs'
 import fsp from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
@@ -10,55 +8,13 @@ import { getConfigDir, setConfigDir } from '../config'
 import { resolveCliEnvironment } from '../environment'
 import { useCliRuntime } from '../runtime'
 import { applyOutputMode, displayPath, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
-
-const ROOT_DIR = path.join(os.homedir(), '.config', 'gscdump')
-const PROFILES_DIR = path.join(ROOT_DIR, 'profiles')
-const ACTIVE_MARKER = path.join(ROOT_DIR, 'active-profile')
-
-export function getProfilesDir(): string {
-  return PROFILES_DIR
-}
-
-export function getProfileDir(name: string): string {
-  return path.join(PROFILES_DIR, name)
-}
-
-function readActiveMarkerSync(): string | null {
-  if (!fs.existsSync(ACTIVE_MARKER))
-    return null
-  const v = fs.readFileSync(ACTIVE_MARKER, 'utf-8').trim()
-  return v || null
-}
+import { ACTIVE_MARKER, getProfileDir, PROFILES_DIR, readActiveMarkerSync, ROOT_DIR } from './profile-selection'
 
 export function resolveActiveProfile(): string | null {
   return useCliRuntime().activeProfileOverride ?? resolveCliEnvironment().profile ?? readActiveMarkerSync()
 }
 
-/**
- * Apply CLI-resolved config-dir / profile to the global config-dir state.
- * Priority: explicit --config-dir > --profile flag > GSCDUMP_PROFILE env > persisted active marker > root dir.
- */
-export function applyProfileFromCli(opts: { configDir?: string | null, profile?: string | null, envProfile?: string | null }): void {
-  if (opts.configDir) {
-    setConfigDir(opts.configDir)
-    useCliRuntime().configDirOverridden = true
-    return
-  }
-  if (opts.profile) {
-    useCliRuntime().activeProfileOverride = opts.profile
-    setConfigDir(getProfileDir(opts.profile))
-    return
-  }
-  const envProfile = opts.envProfile ?? resolveCliEnvironment().profile
-  if (envProfile) {
-    setConfigDir(getProfileDir(envProfile))
-    return
-  }
-  const marker = readActiveMarkerSync()
-  if (marker) {
-    setConfigDir(getProfileDir(marker))
-  }
-}
+export { applyProfileFromCli, getProfileDir, getProfilesDir } from './profile-selection'
 
 export async function setActiveProfile(name: string | null): Promise<void> {
   await fsp.mkdir(ROOT_DIR, { recursive: true, mode: 0o700 })
