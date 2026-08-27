@@ -1,4 +1,4 @@
-import type { Period, ResolvedAnalyticsRange } from 'gscdump'
+import type { Period, ResolvedAnalyticsRange } from 'gscdump/dates'
 import type { Auth, GoogleSearchConsoleClient } from 'gscdump/client'
 import type { Site } from 'gscdump/sites'
 import { MS_PER_DAY, toIsoDate } from 'gscdump/dates'

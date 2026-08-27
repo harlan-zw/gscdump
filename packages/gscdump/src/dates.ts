@@ -33,4 +33,6 @@ export type {
 } from './core/window'
 export { resolveWindow } from './core/window'
 
+export type { Period, ResolvedAnalyticsRange } from './core/types'
+
 export { currentPstDate, daysAgoPst } from './query/utils/dayjs'
