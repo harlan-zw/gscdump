@@ -2,6 +2,7 @@ import process from 'node:process'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { defineCommand } from 'citty'
 import { loadTokens, resolveAuth, resolveBYOK, resolveServiceAccount } from '../auth'
+import { mcpCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createGscMcpServer } from '../mcp/server'
 import { VERSION } from '../utils'
@@ -50,10 +51,7 @@ Then restart your MCP client.`,
 }
 
 export const mcpCommand = defineCommand({
-  meta: {
-    name: 'mcp',
-    description: 'Start MCP server for AI assistants',
-  },
+  meta: mcpCommandMeta,
   async run() {
     const authCheck = await checkAuth()
     if (!authCheck.ok) {

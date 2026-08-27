@@ -6,6 +6,7 @@ import { confirm, isCancel, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { googleSearchConsole } from 'gscdump'
 import { authenticate, getAuthCredentials, loadTokens, resolveBYOK, saveTokens } from '../auth'
+import { initCommandMeta } from '../command-meta'
 import { defaultDataDir, loadConfig, saveConfig } from '../config'
 import { applyCliEnvironment } from '../environment'
 import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
@@ -48,10 +49,7 @@ async function loadEnvFile(): Promise<Record<string, string> | null> {
 }
 
 export const initCommand = defineCommand({
-  meta: {
-    name: 'init',
-    description: 'Set up GSCDump authentication',
-  },
+  meta: initCommandMeta,
   args: {
     'force': {
       type: 'boolean',

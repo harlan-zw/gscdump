@@ -1,4 +1,23 @@
 import type { CommandDef, CommandMeta, Resolvable, SubCommandsDef } from 'citty'
+import {
+  analyzeCommandMeta,
+  authCommandMeta,
+  configCommandMeta,
+  doctorCommandMeta,
+  dumpCommandMeta,
+  entitiesCommandMeta,
+  indexingCommandMeta,
+  initCommandMeta,
+  inspectCommandMeta,
+  mcpCommandMeta,
+  profileCommandMeta,
+  queryCommandMeta,
+  reportCommandMeta,
+  sitemapsCommandMeta,
+  sitesCommandMeta,
+  storeCommandMeta,
+  syncCommandMeta,
+} from './command-meta'
 
 type CommandLoader = () => Promise<CommandDef<any>>
 
@@ -29,83 +48,83 @@ function shallowCommand(meta: CommandMeta, load: CommandLoader): CommandDef<any>
 
 export const CLI_SUBCOMMANDS = {
   init: shallowCommand(
-    { name: 'init', description: 'Set up GSCDump authentication' },
+    initCommandMeta,
     () => import('./commands/init').then(module => module.initCommand),
   ),
   dump: shallowCommand(
-    { name: 'dump', description: 'Export live Parquet files from the local store to a directory' },
+    dumpCommandMeta,
     () => import('./commands/dump').then(module => module.dumpCommand),
   ),
   query: shallowCommand(
-    { name: 'query', description: 'Run a search analytics query (local Parquet by default, --live hits GSC API)' },
+    queryCommandMeta,
     () => import('./commands/query').then(module => module.queryCommand),
   ),
   sites: shallowCommand(
-    { name: 'sites', description: 'List GSC sites; manage properties (add/delete) and verify ownership' },
+    sitesCommandMeta,
     () => import('./commands/sites').then(module => module.sitesCommand),
   ),
   sitemaps: shallowCommand(
-    { name: 'sitemaps', description: 'Manage sitemaps' },
+    sitemapsCommandMeta,
     () => import('./commands/sitemaps').then(module => module.sitemapsCommand),
   ),
   sync: shallowCommand(
-    { name: 'sync', description: 'Sync GSC data to local Parquet store' },
+    syncCommandMeta,
     () => import('./commands/sync').then(module => module.syncCommand),
   ),
   store: shallowCommand(
-    { name: 'store', description: 'Manage the local DuckDB/Parquet store' },
+    storeCommandMeta,
     () => import('./commands/store').then(module => module.storeCommand),
   ),
   inspect: shallowCommand(
-    { name: 'inspect', description: 'Inspect URL indexing status (single URL; use `inspect batch` for many)' },
+    inspectCommandMeta,
     () => import('./commands/inspect').then(module => module.inspectCommand),
   ),
   indexing: shallowCommand(
-    { name: 'indexing', description: 'Notify Google about URL updates/removals (Indexing API)' },
+    indexingCommandMeta,
     () => import('./commands/indexing').then(module => module.indexingCommand),
   ),
   entities: shallowCommand(
-    { name: 'entities', description: 'Manage local entity snapshots (URL inspections and indexing metadata)' },
+    entitiesCommandMeta,
     () => import('./commands/entities').then(module => module.entitiesCommand),
   ),
   analyze: shallowCommand(
-    { name: 'analyze', description: 'SEO analysis tools' },
+    analyzeCommandMeta,
     () => import('./commands/analyze').then(module => module.analyzeCommand),
   ),
   report: shallowCommand(
-    { name: 'report', description: 'Run an intent-keyed report (composes analyzers into bounded sections)' },
+    reportCommandMeta,
     () => import('./commands/report').then(module => module.reportCommand),
   ),
   auth: shallowCommand(
-    { name: 'auth', description: 'Manage authentication' },
+    authCommandMeta.auth,
     () => import('./commands/auth').then(module => module.authCommand),
   ),
   login: shallowCommand(
-    { name: 'login', description: 'Run OAuth flow and persist tokens (skip if BYOK env vars set)' },
+    authCommandMeta.login,
     () => import('./commands/auth').then(module => module.loginCommand),
   ),
   logout: shallowCommand(
-    { name: 'logout', description: 'Clear stored OAuth tokens' },
+    authCommandMeta.logout,
     () => import('./commands/auth').then(module => module.logoutCommand),
   ),
   status: shallowCommand(
-    { name: 'status', description: 'Show current authentication status' },
+    authCommandMeta.status,
     () => import('./commands/auth').then(module => module.statusCommand),
   ),
   config: shallowCommand(
-    { name: 'config', description: 'Manage configuration' },
+    configCommandMeta,
     () => import('./commands/config').then(module => module.configCommand),
   ),
   profile: shallowCommand(
-    { name: 'profile', description: 'Manage gscdump profiles (per-account token + config dirs)' },
+    profileCommandMeta,
     () => import('./commands/profile').then(module => module.profileCommand),
   ),
   doctor: shallowCommand(
-    { name: 'doctor', description: 'Run health checks (env, auth, scopes, time, dataDir, store, GSC reachability + ping, defaultSite)' },
+    doctorCommandMeta,
     () => import('./commands/doctor').then(module => module.doctorCommand),
   ),
   mcp: shallowCommand(
-    { name: 'mcp', description: 'Start MCP server for AI assistants' },
+    mcpCommandMeta,
     () => import('./commands/mcp').then(module => module.mcpCommand),
   ),
 } satisfies SubCommandsDef

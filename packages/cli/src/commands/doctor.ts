@@ -6,6 +6,7 @@ import { googleSearchConsole } from 'gscdump'
 import { ofetch } from 'ofetch'
 import { loadTokens, resolveAuth, resolveBYOK } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
+import { doctorCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createCommandContext } from '../context'
 import { parseEnvFile } from '../env-file'
@@ -282,10 +283,7 @@ async function checkGscSites(): Promise<Check[]> {
 }
 
 export const doctorCommand = defineCommand({
-  meta: {
-    name: 'doctor',
-    description: 'Run health checks (env, auth, scopes, time, dataDir, store, GSC reachability + ping, defaultSite)',
-  },
+  meta: doctorCommandMeta,
   args: {
     ...OUTPUT_ARGS,
   },

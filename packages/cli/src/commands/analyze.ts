@@ -3,6 +3,7 @@ import type { CommandDef } from 'citty'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { defineCommand } from 'citty'
 import { resolveAnalysisSource } from '../analysis-local'
+import { analyzeCommandMeta } from '../command-meta'
 import { gscErrorHandler } from '../error-handler'
 import { logger, toCSV } from '../utils'
 
@@ -367,10 +368,7 @@ const listCommand = defineCommand({
 })
 
 export const analyzeCommand = defineCommand({
-  meta: {
-    name: 'analyze',
-    description: 'SEO analysis tools',
-  },
+  meta: analyzeCommandMeta,
   subCommands: {
     list: listCommand,
     ...Object.fromEntries(

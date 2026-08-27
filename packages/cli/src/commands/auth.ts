@@ -4,6 +4,7 @@ import { defineCommand } from 'citty'
 import { ofetch } from 'ofetch'
 import { authenticate, clearTokens, formatAuthProvenance, getAuth, getAuthCredentials, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
+import { authCommandMeta } from '../command-meta'
 import { loadConfig, saveConfig } from '../config'
 import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
 import { runSmokeTest } from './init'
@@ -135,10 +136,7 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
 }
 
 const statusCommand = defineCommand({
-  meta: {
-    name: 'status',
-    description: 'Show current authentication status',
-  },
+  meta: authCommandMeta.status,
   args: {
     ...OUTPUT_ARGS,
   },
@@ -185,10 +183,7 @@ const refreshCommand = defineCommand({
 })
 
 const loginCommand = defineCommand({
-  meta: {
-    name: 'login',
-    description: 'Run OAuth flow and persist tokens (skip if BYOK env vars set)',
-  },
+  meta: authCommandMeta.login,
   args: {
     ...OUTPUT_ARGS,
     'force': { type: 'boolean', alias: 'f', default: false, description: 'Re-run OAuth even if tokens already exist' },
@@ -262,10 +257,7 @@ const loginCommand = defineCommand({
 })
 
 const logoutCommand = defineCommand({
-  meta: {
-    name: 'logout',
-    description: 'Clear stored OAuth tokens',
-  },
+  meta: authCommandMeta.logout,
   args: {
     ...OUTPUT_ARGS,
   },
@@ -316,10 +308,7 @@ const scopesCommand = defineCommand({
 })
 
 export const authCommand = defineCommand({
-  meta: {
-    name: 'auth',
-    description: 'Manage authentication',
-  },
+  meta: authCommandMeta.auth,
   args: {
     ...OUTPUT_ARGS,
   },

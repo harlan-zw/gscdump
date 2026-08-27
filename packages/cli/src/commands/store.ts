@@ -1,4 +1,5 @@
 import { defineCommand } from 'citty'
+import { storeCommandMeta } from '../command-meta'
 import { noSubcommandSelected } from '../utils'
 import { compactCommand } from './compact'
 import { exportCommand } from './export'
@@ -8,10 +9,7 @@ import { statsCommand } from './stats'
 import { resetCommand, rmSiteCommand } from './store-purge'
 
 export const storeCommand = defineCommand({
-  meta: {
-    name: 'store',
-    description: 'Manage the local DuckDB/Parquet store',
-  },
+  meta: storeCommandMeta,
   subCommands: {
     'stats': statsCommand,
     'compact': compactCommand,

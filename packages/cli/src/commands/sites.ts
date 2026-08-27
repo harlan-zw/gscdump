@@ -3,6 +3,7 @@ import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { addSite, deleteSite, fetchSitesWithSitemaps, getVerificationToken, getVerifiedSite, listVerifiedSites, siteUrlToVerificationSite, unverifySite, verificationMethodsFor, verifySite } from 'gscdump'
+import { sitesCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
@@ -444,10 +445,7 @@ const listCommand = defineCommand({
 })
 
 export const sitesCommand = defineCommand({
-  meta: {
-    name: 'sites',
-    description: 'List GSC sites; manage properties (add/delete) and verify ownership',
-  },
+  meta: sitesCommandMeta,
   args: LIST_ARGS,
   subCommands: {
     'list': listCommand,

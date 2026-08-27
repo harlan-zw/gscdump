@@ -2,6 +2,7 @@ import type { UrlInspectionResult } from 'gscdump'
 import process from 'node:process'
 import { defineCommand } from 'citty'
 import { batchInspectUrls } from 'gscdump'
+import { inspectCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { loadSitemapUrls } from '../sitemap'
@@ -183,10 +184,7 @@ const batchCommand = defineCommand({
 })
 
 export const inspectCommand = defineCommand({
-  meta: {
-    name: 'inspect',
-    description: 'Inspect URL indexing status (single URL; use `inspect batch` for many)',
-  },
+  meta: inspectCommandMeta,
   args: {
     ...OUTPUT_ARGS,
     site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },

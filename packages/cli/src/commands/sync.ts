@@ -8,6 +8,7 @@ import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
 import { daysAgoUtc as daysAgo, getDateRange } from 'gscdump/dates'
 import { SearchTypes } from 'gscdump/query'
+import { syncCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { allTables, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, progressBar, runWithConcurrency } from '../utils'
@@ -165,10 +166,7 @@ async function runOneDate(
 }
 
 export const syncCommand = defineCommand({
-  meta: {
-    name: 'sync',
-    description: 'Sync GSC data to local Parquet store',
-  },
+  meta: syncCommandMeta,
   args: {
     'site': {
       type: 'string',
