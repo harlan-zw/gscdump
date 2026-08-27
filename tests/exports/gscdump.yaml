@@ -158,7 +158,6 @@
   toIsoDate: function
 ./errors:
   classifyError: function
-  formatErrorForCli: function
   GscApiError: function
   gscErrorToException: function
   isPermissionDeniedError: function
