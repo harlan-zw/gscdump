@@ -1,7 +1,7 @@
 import type { Row, WriteCtx } from '../src/index'
 import { describe, expect, it } from 'vitest'
 import { gcOrphansImpl } from '../src/gc'
-import { createStorageEngine, hourPartition } from '../src/index'
+import { createStorageEngine } from '../src/index'
 import { rebuildDailyFromHourly } from '../src/rollups'
 import {
   createInMemoryDataSource,
@@ -43,7 +43,7 @@ describe('storageEngine.writeHour', () => {
     ])
     const live = manifestStore.snapshot()
     expect(live).toHaveLength(1)
-    expect(live[0].partition).toBe(hourPartition('2026-04-10'))
+    expect(live[0].partition).toBe('hourly/2026-04-10')
     expect(live[0].rowCount).toBe(2)
     expect(live[0].searchType).toBe('discover')
   })

@@ -1,14 +1,14 @@
 import type { ParquetCodec } from '../src/index'
 import { describe, expect, it } from 'vitest'
-import { createStorageEngine, MAX_DAY_BYTES } from '../src/index'
+import { createStorageEngine } from '../src/index'
 import {
   createInMemoryDataSource,
   createInMemoryManifestStore,
   createUnionExecutor,
 } from './helpers/in-memory'
 
-describe('engine MAX_DAY_BYTES enforcement', () => {
-  it('throws when codec reports bytes > MAX_DAY_BYTES and leaves no artifacts behind', async () => {
+describe('engine payload limit enforcement', () => {
+  it('throws when codec reports an oversized payload and leaves no artifacts behind', async () => {
     const dataSource = createInMemoryDataSource()
     const manifestStore = createInMemoryManifestStore()
 
@@ -16,7 +16,7 @@ describe('engine MAX_DAY_BYTES enforcement', () => {
       async writeRows(_ctx, rows, key, ds) {
         // Write a tiny sentinel so we can verify it's cleaned up.
         await ds.write(key, new Uint8Array([1]))
-        return { bytes: MAX_DAY_BYTES + 1, rowCount: rows.length }
+        return { bytes: Number.MAX_SAFE_INTEGER, rowCount: rows.length }
       },
       async readRows() {
         return []

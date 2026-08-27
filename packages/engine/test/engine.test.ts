@@ -1,10 +1,7 @@
 import type { BuilderState } from 'gscdump/query'
 import type { Row, WriteCtx } from '../src/index'
 import { describe, expect, it } from 'vitest'
-import {
-  createStorageEngine,
-  dayPartition,
-} from '../src/index'
+import { createStorageEngine } from '../src/index'
 import {
   createInMemoryDataSource,
   createInMemoryManifestStore,
@@ -77,7 +74,7 @@ describe('storageEngine.writeDay', () => {
 
     const live = manifestStore.snapshot()
     expect(live).toHaveLength(1)
-    expect(live[0].partition).toBe(dayPartition('2026-04-10'))
+    expect(live[0].partition).toBe('daily/2026-04-10')
     expect(live[0].rowCount).toBe(2)
     expect(live[0].retiredAt).toBeUndefined()
 
@@ -132,7 +129,7 @@ describe('storageEngine.query', () => {
       userId: 'u1',
       siteId: 's1',
       table: 'pages',
-      partitions: [dayPartition('2026-04-10')],
+      partitions: ['daily/2026-04-10'],
     })
     expect(liveAtReadStart).toHaveLength(1)
     const pinnedKey = liveAtReadStart[0].objectKey
@@ -418,7 +415,7 @@ describe('storageEngine.gcOrphans', () => {
             userId: ctx.userId,
             siteId: ctx.siteId,
             table: ctx.table,
-            partition: dayPartition('2026-04-10'),
+            partition: 'daily/2026-04-10',
             objectKey: lateKey,
             rowCount: 1,
             bytes: 1,
@@ -503,7 +500,7 @@ describe('manifest listLive filtering', () => {
     await engine.writeDay(makeCtx({ userId: 'u2', date: '2026-04-01' }), [pageRow('/', '2026-04-01')])
     await engine.writeDay(makeCtx({ userId: 'u1', table: 'queries', date: '2026-04-01' }), [{ query: 'foo', date: '2026-04-01', clicks: 1, impressions: 10, sum_position: 50 }])
 
-    const u1pages = await manifestStore.listLive({ userId: 'u1', table: 'pages', partitions: [dayPartition('2026-04-01')] })
+    const u1pages = await manifestStore.listLive({ userId: 'u1', table: 'pages', partitions: ['daily/2026-04-01'] })
     expect(u1pages).toHaveLength(1)
     expect(u1pages[0].userId).toBe('u1')
     expect(u1pages[0].table).toBe('pages')

@@ -7,10 +7,7 @@ import {
   createFilesystemManifestStore,
   filesystemStats,
 } from '../src/adapters/filesystem'
-import {
-  createStorageEngine,
-  dayPartition,
-} from '../src/index'
+import { createStorageEngine } from '../src/index'
 import { createJsonCodec, createUnionExecutor } from './helpers/in-memory'
 
 describe('filesystemDataSource', () => {
@@ -70,7 +67,7 @@ describe('filesystemManifestStore', () => {
       userId: 'u1',
       siteId: 's1',
       table: 'pages',
-      partition: dayPartition('2026-04-10'),
+      partition: 'daily/2026-04-10',
       objectKey: 'u_u1/s1/pages/daily/2026-04-10__v1.parquet',
       rowCount: 3,
       bytes: 100,
@@ -86,7 +83,7 @@ describe('filesystemManifestStore', () => {
         userId: 'u1',
         siteId: 's1',
         table: 'pages',
-        partition: dayPartition('2026-04-10'),
+        partition: 'daily/2026-04-10',
         objectKey: 'u_u1/s1/pages/daily/2026-04-10__v2.parquet',
         rowCount: 4,
         bytes: 120,

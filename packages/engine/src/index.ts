@@ -1,17 +1,15 @@
 export { createR2ManifestStore } from './adapters/r2-manifest'
 export type { CreateR2ManifestStoreOptions, R2ManifestBucketLike, R2ManifestEvent } from './adapters/r2-manifest'
-export { coerceRow, coerceRows } from './coerce'
+export { coerceRows } from './coerce'
 export type { CompactionThresholds } from './compaction'
 export { createDuckDBCodec, createDuckDBExecutor } from './duckdb'
 export type { DuckDBFactory, DuckDBHandle } from './duckdb'
-export { createStorageEngine, MAX_DAY_BYTES } from './engine'
+export { createStorageEngine } from './engine'
 // Iceberg backend (schema + catalog + append-sink) lives behind the
 // `@gscdump/engine/iceberg` subpath. Node-only Iceberg writers are on
 // `@gscdump/engine/sink-node`.
 export {
-  dayPartition,
   DEFAULT_SEARCH_TYPE,
-  hourPartition,
   inferLegacyTier,
   inferSearchType,
   objectKey,
@@ -78,8 +76,6 @@ export type {
   TieredTableName,
 } from './sync-config'
 export {
-  getDateWeight,
-  getTablesForTier,
   getTableTier,
   MAX_GSC_PAGES_R2,
   MAX_SITEMAP_URLS_PER_SITE,
@@ -90,8 +86,5 @@ export {
   ROW_LIMIT_R2,
   TABLE_TIERS,
   TABLES_BY_SEARCH_TYPE,
-  TIER_PRIORITY,
   validateEnabledSearchTypes,
-  validateEnabledSearchTypesResult,
-  WEIGHT_PRIORITY,
 } from './sync-config'
