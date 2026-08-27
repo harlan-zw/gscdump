@@ -4,7 +4,7 @@ The contract types/dispatcher (`Analyzer`, `defineAnalyzer`, `runAnalyzerFromSou
 
 We keep the re-exports anyway. Reasons:
 
-1. **Public-API stability for external consumers.** `gscdump.com` and `@gscdump/nuxt` depend on `@gscdump/analysis` and import contracts via the barrel today; deleting the re-exports would force them to add `@gscdump/engine` to their dependency graph and rewrite imports across dozens of files. The barrel is the documented "one-import" surface.
+1. **Public-API stability for external consumers.** `gscdump.com` and `nuxtseo.com` depend on `@gscdump/analysis` and import contracts via the barrel today; deleting the re-exports would force them to add `@gscdump/engine` to their dependency graph and rewrite imports across dozens of files. The barrel is the documented "one-import" surface.
 2. **Single conceptual seam.** Consumers reason about analysis as one package: instances + contracts + dispatcher together. Splitting the imports leaks the engine extraction (an internal layout decision) into every caller.
 3. **No locality cost.** The re-exports add ~100 lines to `analysis/src/index.ts` but no logic; type drift is impossible because the engine is the source of truth.
 

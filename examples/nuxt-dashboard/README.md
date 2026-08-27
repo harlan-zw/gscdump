@@ -10,10 +10,9 @@ The app supports three build-time modes through `GSCDUMP_ANALYTICS_MODE`:
 - `consumer`: requests a remote hosted origin through
   `GSCDUMP_ANALYTICS_API_BASE`.
 
-The local `layers/gsc` directory is a buildable UI fixture. Stable Nuxt
-integration, runtime defaults and analyzer registration, comes from
-`@gscdump/nuxt`. Consumer applications continue to own views, authentication,
-routes, and product fallback policy.
+The local `layers/gsc` directory is a buildable UI fixture. The example owns
+its runtime defaults and analyzer plugin. Consumer applications own their Nuxt
+integration, views, authentication, routes, and product fallback policy.
 
 ## Run
 

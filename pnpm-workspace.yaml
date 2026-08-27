@@ -40,7 +40,6 @@ catalog:
   '@duckdb/duckdb-wasm': 1.33.1-dev57.0
   '@duckdb/node-api': 1.5.1-r.2
   '@modelcontextprotocol/sdk': ^1.30.0
-  '@nuxt/kit': 4.5.2
   '@nuxt/schema': 4.5.2
   '@nuxt/ui': ^4.10.0
   '@types/node': ^26.2.0
