@@ -6,6 +6,21 @@ import {
 } from '@gscdump/sdk/v1'
 import { describe, expect, it, vi } from 'vitest'
 
+const { createProtocolSpy } = vi.hoisted(() => ({
+  createProtocolSpy: vi.fn(),
+}))
+
+vi.mock(import('@gscdump/contracts/v1/http'), async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    createGscdumpV1Protocol() {
+      createProtocolSpy()
+      return actual.createGscdumpV1Protocol()
+    },
+  }
+})
+
 async function settle(turns = 20): Promise<void> {
   for (let index = 0; index < turns; index++)
     await Promise.resolve()
@@ -42,6 +57,32 @@ function errorResponse(
 }
 
 describe('@gscdump/sdk/v1 HTTP executor', () => {
+  it('builds one protocol runtime across clients', async () => {
+    const firstFetch = vi.fn<typeof globalThis.fetch>(async (_request, init) => {
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer first_secret')
+      return jsonResponse({
+        data: { head: { streamId: 'user:u_test', sequence: '0' } },
+        meta: successMeta,
+      })
+    })
+    const secondFetch = vi.fn<typeof globalThis.fetch>(async (_request, init) => {
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer second_secret')
+      return jsonResponse({
+        data: { head: { streamId: 'user:u_test', sequence: '0' } },
+        meta: successMeta,
+      })
+    })
+    const first = createGscdumpV1Client({ credential: 'first_secret', fetch: firstFetch })
+    const second = createGscdumpV1Client({ credential: 'second_secret', fetch: secondFetch })
+
+    await first.getRealtimeStreamHead()
+    await second.getRealtimeStreamHead()
+
+    expect(createProtocolSpy).toHaveBeenCalledTimes(1)
+    expect(firstFetch).toHaveBeenCalledTimes(1)
+    expect(secondFetch).toHaveBeenCalledTimes(1)
+  })
+
   it('validates strict input once and executes the registered path with Bearer auth', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async (request, init) => {
       expect(request).toBe('/api/_gscdump/analytics/v1/sites/s_site/rows')
