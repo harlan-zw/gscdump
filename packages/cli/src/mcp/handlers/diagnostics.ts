@@ -1,13 +1,8 @@
 import type { z } from 'zod'
 import type { HandlerContext, listSitesInput } from '../types'
-import { hasGscWriteScope, hasIndexingScope } from 'gscdump'
 import { ofetch } from 'ofetch'
+import { missingRequiredScopes } from '../../auth-scopes'
 
-const REQUIRED_SCOPES = [
-  'https://www.googleapis.com/auth/webmasters',
-  'https://www.googleapis.com/auth/indexing',
-  'https://www.googleapis.com/auth/siteverification',
-]
 const FETCH_TIMEOUT_MS = 5000
 const TIME_SKEW_WARN_MS = 5 * 60_000
 
@@ -20,21 +15,6 @@ export interface DiagnosticsCheck {
 export interface DiagnosticsResult {
   ok: boolean
   checks: DiagnosticsCheck[]
-}
-
-function hasGoogleScope(scopes: string[], scope: string): boolean {
-  const suffix = scope.replace('https://www.googleapis.com/auth/', '')
-  return scopes.includes(scope) || scopes.includes(suffix)
-}
-
-function missingRequiredScopes(scopes: string[]): string[] {
-  return REQUIRED_SCOPES.filter((scope) => {
-    if (scope.endsWith('/webmasters'))
-      return !hasGscWriteScope(scopes)
-    if (scope.endsWith('/indexing'))
-      return !hasIndexingScope(scopes)
-    return !hasGoogleScope(scopes, scope)
-  })
 }
 
 export async function diagnostics(

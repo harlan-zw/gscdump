@@ -1,9 +1,9 @@
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { hasGscWriteScope, hasIndexingScope } from 'gscdump'
 import { ofetch } from 'ofetch'
 import { authenticate, clearTokens, formatAuthProvenance, getAuth, getAuthCredentials, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
+import { missingRequiredScopes } from '../auth-scopes'
 import { loadConfig, saveConfig } from '../config'
 import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
 import { runSmokeTest } from './init'
@@ -16,27 +16,6 @@ interface TokenInfo {
   expires_in?: number
   email?: string
   audience?: string
-}
-
-const REQUIRED_SCOPES = [
-  'https://www.googleapis.com/auth/webmasters',
-  'https://www.googleapis.com/auth/indexing',
-  'https://www.googleapis.com/auth/siteverification',
-]
-
-function hasGoogleScope(scopes: string[], scope: string): boolean {
-  const suffix = scope.replace('https://www.googleapis.com/auth/', '')
-  return scopes.includes(scope) || scopes.includes(suffix)
-}
-
-function missingRequiredScopes(scopes: string[]): string[] {
-  return REQUIRED_SCOPES.filter((scope) => {
-    if (scope.endsWith('/webmasters'))
-      return !hasGscWriteScope(scopes)
-    if (scope.endsWith('/indexing'))
-      return !hasIndexingScope(scopes)
-    return !hasGoogleScope(scopes, scope)
-  })
 }
 
 async function fetchTokenInfo(accessToken: string): Promise<TokenInfo | null> {

@@ -2,9 +2,10 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { googleSearchConsole, hasGscWriteScope, hasIndexingScope } from 'gscdump'
+import { googleSearchConsole } from 'gscdump'
 import { ofetch } from 'ofetch'
 import { loadTokens, resolveAuth, resolveBYOK } from '../auth'
+import { missingRequiredScopes } from '../auth-scopes'
 import { loadConfig } from '../config'
 import { createCommandContext } from '../context'
 import { parseEnvFile } from '../env-file'
@@ -17,12 +18,6 @@ interface Check {
   status: 'pass' | 'warn' | 'fail' | 'info'
   detail?: string
 }
-
-const REQUIRED_SCOPES = [
-  'https://www.googleapis.com/auth/webmasters',
-  'https://www.googleapis.com/auth/indexing',
-  'https://www.googleapis.com/auth/siteverification',
-]
 
 const FETCH_TIMEOUT_MS = 5000
 const TIME_SKEW_WARN_MS = 5 * 60_000
@@ -47,21 +42,6 @@ function redact(v: string | undefined): string {
   if (v.length <= 6)
     return '***'
   return `***${v.slice(-6)}`
-}
-
-function hasGoogleScope(scopes: string[], scope: string): boolean {
-  const suffix = scope.replace('https://www.googleapis.com/auth/', '')
-  return scopes.includes(scope) || scopes.includes(suffix)
-}
-
-function missingRequiredScopes(scopes: string[]): string[] {
-  return REQUIRED_SCOPES.filter((scope) => {
-    if (scope.endsWith('/webmasters'))
-      return !hasGscWriteScope(scopes)
-    if (scope.endsWith('/indexing'))
-      return !hasIndexingScope(scopes)
-    return !hasGoogleScope(scopes, scope)
-  })
 }
 
 // Inventory only — does NOT validate the credentials. The `auth` check below
