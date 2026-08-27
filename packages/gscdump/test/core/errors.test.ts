@@ -1,5 +1,5 @@
+import { classifyError, formatErrorForCli } from 'gscdump/errors'
 import { describe, expect, it } from 'vitest'
-import { classifyError, formatErrorForCli } from '../../src/core/errors'
 
 function ofetchLike(statusCode: number, message: string, extras: Record<string, unknown> = {}): Error {
   const err = Object.assign(new Error(message), { statusCode, ...extras })

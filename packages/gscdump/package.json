@@ -68,6 +68,11 @@
       "import": "./dist/dates.mjs",
       "default": "./dist/dates.mjs"
     },
+    "./errors": {
+      "types": "./dist/core/errors.d.mts",
+      "import": "./dist/core/errors.mjs",
+      "default": "./dist/core/errors.mjs"
+    },
     "./normalize": {
       "types": "./dist/normalize.d.mts",
       "import": "./dist/normalize.mjs",
