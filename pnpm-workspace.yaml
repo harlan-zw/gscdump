@@ -46,7 +46,6 @@ catalog:
   '@types/proper-lockfile': ^4.1.4
   '@unovis/ts': ^1.6.7
   '@unovis/vue': ^1.6.7
-  '@uwdata/flechette': ^2.5.0
   '@vitest/browser-playwright': ^4.1.10
   '@vueuse/core': ^14.4.0
   aws4fetch: ^1.0.20

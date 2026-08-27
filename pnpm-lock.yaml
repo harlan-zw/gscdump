@@ -36,9 +36,6 @@ catalogs:
     '@unovis/vue':
       specifier: ^1.6.7
       version: 1.6.7
-    '@uwdata/flechette':
-      specifier: ^2.5.0
-      version: 2.5.0
     '@vitest/browser-playwright':
       specifier: ^4.1.10
       version: 4.1.10
@@ -354,12 +351,6 @@ importers:
       '@gscdump/engine':
         specifier: workspace:^
         version: link:../engine
-      '@gscdump/engine-sqlite':
-        specifier: workspace:^
-        version: link:../engine-sqlite
-      '@uwdata/flechette':
-        specifier: 'catalog:'
-        version: 2.5.0
       gscdump:
         specifier: workspace:^
         version: link:../gscdump
@@ -3142,9 +3133,6 @@ packages:
     peerDependencies:
       '@unovis/ts': 1.6.7
       vue: ^3
-
-  '@uwdata/flechette@2.5.0':
-    resolution: {integrity: sha512-NSB9xIPVsxpEcnEvtLfbvH/tEqZWiD4bfdz/yBUAUBEe0Z0C3zmA/Y4GOCsLZe4ChxiHaedFBZzVdUxQ+NVcMA==}
 
   '@valibot/to-json-schema@1.7.1':
     resolution: {integrity: sha512-3qkmU6KXWh8GIThEAW3kuRHPQBMjWkKy+Ppz3WkUucx53DTpOa6siMn4xDGSOhlVyMrDaJTCTMLYPZVAIk1P0A==}
@@ -10912,8 +10900,6 @@ snapshots:
     dependencies:
       '@unovis/ts': 1.6.7(supports-color@10.2.2)
       vue: 3.5.41(typescript@6.0.3)
-
-  '@uwdata/flechette@2.5.0': {}
 
   '@valibot/to-json-schema@1.7.1(valibot@1.4.2(typescript@6.0.3))':
     dependencies:
