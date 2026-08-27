@@ -1,45 +1,18 @@
 /**
- * Period + window primitives for analytics queries.
- *
- * Dialect-agnostic: no database dependency. Single source of truth for:
- * - preset → [start, end] window resolution with comparison ranges
- * - AnalysisPeriod / ComparisonPeriod shapes consumed by source analyzers
- * - padTimeseries for dense daily series
+ * Analyzer period primitives. Core window algebra belongs to `gscdump/dates`.
+ * This subpath re-exports it for analyzer consumers.
  */
 
 import type { AnalysisParams } from '../analysis-types'
 import { daysAgoUtc as daysAgo, MS_PER_DAY, toIsoDate } from 'gscdump/dates'
 
-export type WindowPreset
-  = | 'last-7d'
-    | 'last-28d'
-    | 'last-30d'
-    | 'last-90d'
-    | 'last-180d'
-    | 'last-365d'
-    | 'mtd'
-    | 'ytd'
-    | 'custom'
-
-export type ComparisonMode = 'none' | 'prev-period' | 'yoy'
-
-export interface ResolveWindowOptions {
-  preset: WindowPreset
-  comparison?: ComparisonMode
-  anchor?: string
-  start?: string
-  end?: string
-}
-
-export interface ResolvedWindow {
-  start: string
-  end: string
-  days: number
-  comparison?: {
-    start: string
-    end: string
-  }
-}
+export type {
+  ComparisonMode,
+  ResolvedWindow,
+  ResolveWindowOptions,
+  WindowPreset,
+} from 'gscdump/dates'
+export { resolveWindow } from 'gscdump/dates'
 
 export interface AnalysisPeriod {
   startDate: string
@@ -73,84 +46,6 @@ export function comparisonOf(params: AnalysisParams): ComparisonPeriod {
     current: periodOf(params),
     previous: { startDate: params.prevStartDate, endDate: params.prevEndDate },
   }
-}
-
-function parseIso(s: string): Date {
-  return new Date(`${s}T00:00:00Z`)
-}
-
-function addDays(d: Date, n: number): Date {
-  return new Date(d.getTime() + n * MS_PER_DAY)
-}
-
-function daysBetween(start: string, end: string): number {
-  return Math.round((parseIso(end).getTime() - parseIso(start).getTime()) / MS_PER_DAY) + 1
-}
-
-export function resolveWindow(opts: ResolveWindowOptions): ResolvedWindow {
-  const anchor = opts.anchor ? parseIso(opts.anchor) : new Date()
-  const anchorIso = toIsoDate(anchor)
-
-  let start: string
-  let end: string
-
-  switch (opts.preset) {
-    case 'last-7d':
-      end = anchorIso
-      start = toIsoDate(addDays(anchor, -6))
-      break
-    case 'last-28d':
-      end = anchorIso
-      start = toIsoDate(addDays(anchor, -27))
-      break
-    case 'last-30d':
-      end = anchorIso
-      start = toIsoDate(addDays(anchor, -29))
-      break
-    case 'last-90d':
-      end = anchorIso
-      start = toIsoDate(addDays(anchor, -89))
-      break
-    case 'last-180d':
-      end = anchorIso
-      start = toIsoDate(addDays(anchor, -179))
-      break
-    case 'last-365d':
-      end = anchorIso
-      start = toIsoDate(addDays(anchor, -364))
-      break
-    case 'mtd':
-      end = anchorIso
-      start = toIsoDate(new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1)))
-      break
-    case 'ytd':
-      end = anchorIso
-      start = toIsoDate(new Date(Date.UTC(anchor.getUTCFullYear(), 0, 1)))
-      break
-    case 'custom':
-      if (!opts.start || !opts.end)
-        throw new Error('resolveWindow: preset=custom requires start and end')
-      start = opts.start
-      end = opts.end
-      break
-  }
-
-  const days = daysBetween(start, end)
-  const result: ResolvedWindow = { start, end, days }
-
-  const mode = opts.comparison ?? 'none'
-  if (mode === 'prev-period') {
-    const prevEnd = toIsoDate(addDays(parseIso(start), -1))
-    const prevStart = toIsoDate(addDays(parseIso(prevEnd), -(days - 1)))
-    result.comparison = { start: prevStart, end: prevEnd }
-  }
-  else if (mode === 'yoy') {
-    const prevEnd = toIsoDate(addDays(parseIso(end), -365))
-    const prevStart = toIsoDate(addDays(parseIso(start), -365))
-    result.comparison = { start: prevStart, end: prevEnd }
-  }
-
-  return result
 }
 
 export interface PadTimeseriesOptions<T> {

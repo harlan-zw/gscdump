@@ -154,6 +154,7 @@
   GSC_FRESHEST_LAG_DAYS: number
   GSC_RETENTION_MONTHS: number
   MS_PER_DAY: number
+  resolveWindow: function
   toIsoDate: function
 ./normalize:
   normalizeUrl: function

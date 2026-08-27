@@ -152,7 +152,6 @@
   },
   "dependencies": {
     "@gscdump/contracts": "workspace:^",
-    "@gscdump/engine": "workspace:^",
     "gscdump": "workspace:^",
     "ofetch": "catalog:deps",
     "zod": "catalog:"

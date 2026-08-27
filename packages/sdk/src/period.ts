@@ -6,9 +6,8 @@
 // Custom periods carry their own range and (optionally) an explicit prev range
 // for drag-to-zoom interactions where the user chose both windows.
 
-import type { WindowPreset } from '@gscdump/engine/period'
-import { resolveWindow } from '@gscdump/engine/period'
-import { addDays } from 'gscdump/dates'
+import type { WindowPreset } from 'gscdump/dates'
+import { addDays, resolveWindow } from 'gscdump/dates'
 import { GSC_STABLE_LATENCY_DAYS } from './gsc-constants'
 
 export type RollingPeriod = '7d' | '28d' | '3m' | '6m' | '12m'

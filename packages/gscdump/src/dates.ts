@@ -25,4 +25,12 @@ export {
   toIsoDate,
 } from './core/gsc-dates'
 
+export type {
+  ComparisonMode,
+  ResolvedWindow,
+  ResolveWindowOptions,
+  WindowPreset,
+} from './core/window'
+export { resolveWindow } from './core/window'
+
 export { currentPstDate, daysAgoPst } from './query/utils/dayjs'

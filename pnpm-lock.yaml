@@ -528,9 +528,6 @@ importers:
       '@gscdump/contracts':
         specifier: workspace:^
         version: link:../contracts
-      '@gscdump/engine':
-        specifier: workspace:^
-        version: link:../engine
       gscdump:
         specifier: workspace:^
         version: link:../gscdump
