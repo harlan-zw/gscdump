@@ -35,6 +35,9 @@ Concrete actions taken in this pass:
   (`src/mcp/`), reached through `gscdump mcp`. This **overrides the former
   "MCP package is frozen" rule** — a frozen package with a single internal
   consumer is better absorbed than maintained as a separate publish target.
+- **Deleted `@gscdump/nuxt`** after both production consumers moved Nuxt
+  integration into their own layers. The dashboard example owns its local
+  analyzer plugin and runtime defaults.
 - **Dropped dead subpaths**: `gscdump/driver`, `gscdump/onboarding`,
   `@gscdump/engine/schedule`, `@gscdump/analysis/query`. The underlying modules
   remain where still used internally; only the export keys were removed.

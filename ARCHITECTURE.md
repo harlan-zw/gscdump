@@ -99,8 +99,8 @@ See `docs/adr/` for the full set. Highlights:
   consumers; `@gscdump/analysis` is the public analyzer API.
 - **execute-sql is method presence** (ADR-0003): capability detection by probing
   for the method, not a flag.
-- **Analyzer registration is build-time** (ADR-0004): the default registry is
-  assembled at module load, no runtime plugin scan.
+- **Analyzer registration is consumer-owned** (ADR-0004): Nuxt consumers import
+  their registry statically, with no published Nuxt integration package.
 - **Export surface tracks the two consumers** (ADR-0012): subpaths exist only
   where `gscdump.com` or `nuxtseo.com` import them; internal wiring stays private.
 

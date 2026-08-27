@@ -140,9 +140,9 @@ apply/resync hooks to `nuxt-use-query`. `useNuxtSubscription` may expose
 status and event observations, but an asynchronous queue push is not the
 required applied effect and cannot advance the realtime ACK cursor.
 
-`@gscdump/nuxt` may continue to own Nuxt-specific engine/browser analysis
-features. It does not define or gate the public hosted API and is not required
-for a consumer that uses the SDK with its own query/cache layer.
+Nuxt-specific engine and browser analysis features belong to consumer layers.
+The former `@gscdump/nuxt` package was removed after both production consumers
+moved to app-owned integration.
 
 ### 6. Host and Cloudflare behavior stays behind the protocol
 

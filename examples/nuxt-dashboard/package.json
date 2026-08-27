@@ -9,7 +9,7 @@
     "dev:consumer": "GSCDUMP_ANALYTICS_MODE=consumer nuxt dev",
     "build": "nuxt build",
     "preview": "nuxt preview",
-    "postinstall": "pnpm --filter @gscdump/nuxt build && nuxt prepare"
+    "postinstall": "nuxt prepare"
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "catalog:",
@@ -17,7 +17,6 @@
     "@gscdump/contracts": "workspace:^",
     "@gscdump/engine": "workspace:^",
     "@gscdump/engine-duckdb-wasm": "workspace:^",
-    "@gscdump/nuxt": "workspace:^",
     "@gscdump/sdk": "workspace:^",
     "@nuxt/schema": "catalog:",
     "@nuxt/ui": "catalog:",

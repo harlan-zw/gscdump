@@ -31,9 +31,6 @@ const apiBase = mode === 'consumer'
 export default defineNuxtConfig({
   future: { compatibilityVersion: 4 },
   extends: ['./layers/gsc'],
-  gscdumpAnalytics: {
-    analyzers: '~/gscAnalyzers',
-  },
   runtimeConfig: {
     partner: {
       apiBase: process.env.GSCDUMP_PARTNER_API_BASE ?? (apiBase ? `${apiBase.replace(/\/+$/, '')}/api` : '/api'),

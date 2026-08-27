@@ -1,5 +1,4 @@
-// Minimal UI fixture for `examples/nuxt-dashboard`. Nuxt integration belongs
-// to @gscdump/nuxt; this layer only supplies example views and composables.
+// Minimal UI fixture for `examples/nuxt-dashboard`.
 
 import { fileURLToPath } from 'node:url'
 import { defineNuxtConfig } from 'nuxt/config'
@@ -8,7 +7,7 @@ import { dirname, resolve as resolvePath } from 'pathe'
 const __here = dirname(fileURLToPath(import.meta.url))
 
 export default defineNuxtConfig({
-  modules: ['@nuxt/ui', 'nuxt-use-query', '@gscdump/nuxt'],
+  modules: ['@nuxt/ui', 'nuxt-use-query'],
   imports: {
     dirs: [
       resolvePath(__here, 'app/composables'),
