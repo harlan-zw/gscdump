@@ -31,12 +31,14 @@
  * real PUT operations.
  */
 
+import type { GscSearchType } from '@gscdump/contracts/search-types'
 import type {
   R2ManifestBucketLike,
   R2ManifestEvent,
 } from '../src/adapters/r2-manifest'
 import type { TableName } from '../src/storage'
 import process from 'node:process'
+import { GSC_SEARCH_TYPES } from '@gscdump/contracts/search-types'
 import { AwsClient } from 'aws4fetch'
 import { createR2ManifestStore } from '../src/adapters/r2-manifest'
 
@@ -262,13 +264,13 @@ interface RunResult {
 // ---------- Harness run ----------
 
 const TABLES: TableName[] = ['pages', 'keywords']
-const SEARCH_TYPES = ['web', 'image', 'video', 'news', 'discover', 'googleNews'] as const
+const SEARCH_TYPES = Object.values(GSC_SEARCH_TYPES)
 const SITES = ['harness-site-a', 'harness-site-b']
 
 interface WorkUnit {
   siteId: string
   table: TableName
-  searchType: typeof SEARCH_TYPES[number]
+  searchType: GscSearchType
   date: string
 }
 

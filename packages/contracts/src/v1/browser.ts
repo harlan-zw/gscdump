@@ -14,6 +14,7 @@ import {
   sitemapNextActions,
   sitemapStatuses,
 } from '../onboarding'
+import { GSC_SEARCH_TYPES } from '../search-types'
 import { defineResponseObject, defineSuccessResponse } from './http-core'
 import { createRealtimeV1Schemas } from './realtime'
 import { GSCDUMP_HTTP_V1_VERSION } from './version'
@@ -236,7 +237,7 @@ export function createGscdumpV1BrowserSchemas(
     startRow: z.number().int().nonnegative().optional(),
     dataState: z.enum(['final', 'all', 'hourly_all']).optional(),
     aggregationType: z.enum(['auto', 'byPage', 'byProperty', 'byNewsShowcasePanel']).optional(),
-    searchType: z.enum(['web', 'image', 'video', 'news', 'discover', 'googleNews']).optional(),
+    searchType: z.enum(GSC_SEARCH_TYPES).optional(),
   })
   const analyticsRowData = defineResponseObject({
     rows: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))),

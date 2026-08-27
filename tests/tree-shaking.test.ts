@@ -17,6 +17,12 @@ interface TreeShakeCase {
 const cases: readonly TreeShakeCase[] = [
   { entry: 'packages/gscdump/dist/index.mjs', exportName: 'MS_PER_DAY', maxBytes: 100 },
   {
+    entry: 'packages/gscdump/dist/query/index.mjs',
+    exportName: 'SearchTypes',
+    maxBytes: 200,
+    allowedImports: ['@gscdump/contracts/search-types'],
+  },
+  {
     entry: 'packages/engine/dist/index.mjs',
     exportName: 'DEFAULT_SEARCH_TYPE',
     maxBytes: 100,
@@ -46,9 +52,9 @@ const cases: readonly TreeShakeCase[] = [
     maxBytes: 1_000,
   },
   {
-    entry: 'packages/cloudflare/dist/index.mjs',
-    exportName: 'getHostedR2QueryKey',
-    maxBytes: 1_000,
+    entry: 'packages/contracts/dist/search-types.mjs',
+    exportName: 'GSC_SEARCH_TYPES',
+    maxBytes: 200,
   },
   {
     entry: 'packages/lakehouse/dist/index.mjs',

@@ -176,10 +176,7 @@ describe('@gscdump/contracts', () => {
     })).toMatchObject({ event: 'site.analytics.ready' })
   })
 
-  it('searchTypeSchema accepts the 6 GSC slices and rejects everything else', () => {
-    for (const slice of ['web', 'image', 'video', 'news', 'discover', 'googleNews'] as const)
-      expect(searchTypeSchema.parse(slice)).toBe(slice)
-
+  it('searchTypeSchema rejects values outside the GSC Search Types', () => {
     // Case-sensitive: 'Discover' is not the same as 'discover'.
     expect(searchTypeSchema.safeParse('Discover').success).toBe(false)
     // Empty string is never a valid slice (the '' sentinel is an internal

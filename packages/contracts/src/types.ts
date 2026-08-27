@@ -1,5 +1,6 @@
 import type { FileResolutionResponse } from './file-resolution'
 import type { AccountNextAction, AccountStatus, PartnerLifecycleSite } from './onboarding'
+import type { GscSearchType } from './search-types'
 
 export type {
   PartnerLifecycleAccount,
@@ -38,7 +39,6 @@ export interface TenantCtx {
 
 export type Dimension = 'page' | 'query' | 'queryCanonical' | 'country' | 'device' | 'date' | 'searchAppearance' | 'hour'
 export type Metric = 'clicks' | 'impressions' | 'ctr' | 'position'
-export type GscSearchType = 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews'
 // Wire-format filter — server-side normalizer accepts both the JSON filter form
 // (`{ type, column, value, ... }`) and the branded builder form from
 // `gscdump/query` (`{ __filterBrand, _filters, _groupType, ... }`). Kept

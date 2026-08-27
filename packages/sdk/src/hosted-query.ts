@@ -8,9 +8,10 @@ import type {
   IndexingUrlsParams,
   SourceInfoOptions,
 } from '@gscdump/contracts'
+import type { GscSearchType } from '@gscdump/contracts/search-types'
 import { canonicalJson } from './canonical-json'
 
-export type GscSearchType = 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews'
+export type { GscSearchType } from '@gscdump/contracts/search-types'
 
 export interface SearchTypeOptions {
   searchType?: GscSearchType

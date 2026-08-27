@@ -1,5 +1,6 @@
 import type { Auth, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site } from 'gscdump'
 import { MS_PER_DAY, toIsoDate } from 'gscdump/dates'
+import { SearchTypes } from 'gscdump/query'
 import { z } from 'zod'
 
 export type { Auth, GoogleSearchConsoleClient, Period, ResolvedAnalyticsRange, Site }
@@ -14,7 +15,7 @@ export const periodSchema = z.object({
 export const siteUrlSchema = z.string().describe('GSC property URL (e.g., sc-domain:example.com or https://example.com/)')
 
 export const queryOptionsSchema = z.object({
-  type: z.enum(['web', 'image', 'video', 'news', 'discover', 'googleNews']).optional().describe('Data type'),
+  type: z.enum(SearchTypes).optional().describe('Data type'),
   dataState: z.enum(['final', 'all']).optional().describe('Data state: final (settled) or all (includes fresh)'),
   aggregationType: z.enum(['byPage', 'byProperty']).optional().describe('Aggregation: byPage or byProperty'),
 }).optional()

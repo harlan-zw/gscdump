@@ -27,6 +27,7 @@
   dataQueryOptionsSchema: object
   entityDailySparkline: function
   entityDailyTimeseries: function
+  GSC_SEARCH_TYPES: object
   gscAddAndVerifyResponseSchema: object
   gscApiRangeSchema: object
   gscComparisonFilterSchema: object
@@ -221,6 +222,8 @@
   WEBHOOK_EVENT_HEADER: string
   WEBHOOK_SIGNATURE_HEADER: string
   WEBHOOK_TIMESTAMP_HEADER: string
+./search-types:
+  GSC_SEARCH_TYPES: object
 ./v1:
   buildHttpOperationPath: function
   createGscdumpV1Documents: function
