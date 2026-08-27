@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  dataQuery,
   sourceInfoQuery,
   tablesQuery,
   withDefaultSearchType,
@@ -34,5 +35,17 @@ describe('hosted query serialization', () => {
     const result = withDefaultSearchType(input)
     expect(result).toEqual({ dimensions: ['query'], searchType: 'web' })
     expect(input).toEqual({ dimensions: ['query'] })
+  })
+
+  it('serializes nested data as canonical JSON', () => {
+    const query = dataQuery({
+      z: 1,
+      nested: {
+        omitted: undefined,
+        values: [1, undefined, { b: 2, a: 1 }],
+      },
+    } as any)
+
+    expect(query.q).toBe('{"nested":{"values":[1,null,{"a":1,"b":2}]},"searchType":"web","z":1}')
   })
 })
