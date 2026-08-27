@@ -15,6 +15,26 @@ type ValueOf<T> = T[keyof T]
 
 type GscdumpV1ProtocolShape = ReturnType<typeof createGscdumpV1Protocol>
 type GscdumpV1Surface = ValueOf<GscdumpV1ProtocolShape['surfaces']>
+type GscdumpV1RegistryOperations
+  = GscdumpV1ProtocolShape['surfaces']['partner']['operations']
+    & GscdumpV1ProtocolShape['surfaces']['analytics']['operations']
+    & GscdumpV1ProtocolShape['surfaces']['realtime']['operations']
+type GscdumpV1RegistryMethodName = keyof GscdumpV1RegistryOperations & string
+interface GscdumpV1ClientMethodAliases {
+  queryRows: 'queryAnalyticsRows'
+  queryReport: 'queryAnalyticsReport'
+  queryReportDetail: 'queryAnalyticsReportDetail'
+  getStreamHead: 'getRealtimeStreamHead'
+  createTicket: 'createRealtimeTicket'
+}
+type GscdumpV1ClientMethodFor<TMethod extends GscdumpV1RegistryMethodName>
+  = TMethod extends keyof GscdumpV1ClientMethodAliases
+    ? GscdumpV1ClientMethodAliases[TMethod]
+    : TMethod
+type GscdumpV1NamedOperations = {
+  [TMethod in GscdumpV1RegistryMethodName as GscdumpV1ClientMethodFor<TMethod>]: GscdumpV1RegistryOperations[TMethod]
+}
+type GscdumpV1ClientMethodName = keyof GscdumpV1NamedOperations & string
 
 export type GscdumpV1Operation = ContractGscdumpV1Operation
 export type GscdumpV1OperationId = ContractGscdumpV1OperationId
@@ -120,7 +140,23 @@ export function isGscdumpV1Error(error: unknown): error is GscdumpV1Error {
   return error instanceof GscdumpV1Error
 }
 
-export interface GscdumpV1Client {
+type MethodId<TMethod extends GscdumpV1ClientMethodName>
+  = GscdumpV1NamedOperations[TMethod] extends { id: infer TId extends GscdumpV1OperationId }
+    ? TId
+    : never
+
+type GscdumpV1OperationMethod<TId extends GscdumpV1OperationId>
+  = Record<never, never> extends GscdumpV1OperationInput<TId>
+    ? (
+        input?: GscdumpV1OperationInput<TId>,
+        options?: GscdumpV1ExecuteOptions,
+      ) => Promise<GscdumpV1OperationResponse<TId>>
+    : (
+        input: GscdumpV1OperationInput<TId>,
+        options?: GscdumpV1ExecuteOptions,
+      ) => Promise<GscdumpV1OperationResponse<TId>>
+
+export type GscdumpV1Client = {
   // `NoInfer` keeps TId inference on the operation id alone — inferring it by
   // reverse-mapping the input against the full operation union trips TS2590
   // once the registry grows past ~30 operations.
@@ -129,214 +165,8 @@ export interface GscdumpV1Client {
     input: NoInfer<GscdumpV1OperationInput<TId>>,
     options?: GscdumpV1ExecuteOptions,
   ) => Promise<GscdumpV1OperationResponse<TId>>
-  getUserLifecycle: (
-    input: GscdumpV1OperationInput<'partner.users.lifecycle.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.users.lifecycle.get'>>
-  listAvailableSites: (
-    input: GscdumpV1OperationInput<'partner.users.sites.available.list'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.users.sites.available.list'>>
-  createSite: (
-    input: GscdumpV1OperationInput<'partner.users.sites.create'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.users.sites.create'>>
-  createUser: (
-    input: GscdumpV1OperationInput<'partner.users.create'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.users.create'>>
-  updateUserTokens: (
-    input: GscdumpV1OperationInput<'partner.users.tokens.update'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.users.tokens.update'>>
-  getSiteIndexing: (
-    input: GscdumpV1OperationInput<'partner.sites.indexing.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.indexing.get'>>
-  listSiteIndexingUrls: (
-    input: GscdumpV1OperationInput<'partner.sites.indexing.urls.list'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.indexing.urls.list'>>
-  listSiteBingIndexingEvidence: (
-    input: GscdumpV1OperationInput<'partner.sites.indexing.bing.evidence.list'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.indexing.bing.evidence.list'>>
-  listSiteIndexingTransitions: (
-    input: GscdumpV1OperationInput<'partner.sites.indexing.transitions.list'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.indexing.transitions.list'>>
-  getSiteIndexingDiagnostics: (
-    input: GscdumpV1OperationInput<'partner.sites.indexing.diagnostics.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.indexing.diagnostics.get'>>
-  getSiteSitemaps: (
-    input: GscdumpV1OperationInput<'partner.sites.sitemaps.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.get'>>
-  getSiteSitemapChanges: (
-    input: GscdumpV1OperationInput<'partner.sites.sitemaps.changes.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.changes.get'>>
-  listSitemapUrls: (
-    input: GscdumpV1OperationInput<'partner.sites.sitemaps.urls.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.urls.get'>>
-  getSitemapExport: (
-    input: GscdumpV1OperationInput<'partner.sites.sitemaps.export.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.export.get'>>
-  getSiteAnalysis: (
-    input: GscdumpV1OperationInput<'partner.sites.analysis.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.analysis.get'>>
-  getSiteAnalysisBundle: (
-    input: GscdumpV1OperationInput<'partner.sites.analysis.bundle.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.analysis.bundle.get'>>
-  deleteSite: (
-    input: GscdumpV1OperationInput<'partner.sites.delete'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.delete'>>
-  getCanonicalMismatches: (
-    input: GscdumpV1OperationInput<'partner.sites.canonical.mismatches.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.canonical.mismatches.get'>>
-  inspectSiteUrls: (
-    input: GscdumpV1OperationInput<'partner.sites.indexing.inspect.create'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.indexing.inspect.create'>>
-  recoverSitePermission: (
-    input: GscdumpV1OperationInput<'partner.sites.permission.recover'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.permission.recover'>>
-  queryKeywordSparklines: (
-    input: GscdumpV1OperationInput<'partner.sites.keyword.sparklines.query'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.keyword.sparklines.query'>>
-  getQueryTrend: (
-    input: GscdumpV1OperationInput<'partner.sites.query.trend.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.query.trend.get'>>
-  getPageTrend: (
-    input: GscdumpV1OperationInput<'partner.sites.page.trend.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.page.trend.get'>>
-  getContentVelocity: (
-    input: GscdumpV1OperationInput<'partner.sites.content.velocity.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.content.velocity.get'>>
-  getCtrCurve: (
-    input: GscdumpV1OperationInput<'partner.sites.ctr.curve.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.ctr.curve.get'>>
-  getDarkTraffic: (
-    input: GscdumpV1OperationInput<'partner.sites.dark.traffic.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.dark.traffic.get'>>
-  getDeviceGap: (
-    input: GscdumpV1OperationInput<'partner.sites.device.gap.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.device.gap.get'>>
-  getKeywordBreadth: (
-    input: GscdumpV1OperationInput<'partner.sites.keyword.breadth.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.keyword.breadth.get'>>
-  getPositionDistribution: (
-    input: GscdumpV1OperationInput<'partner.sites.position.distribution.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.position.distribution.get'>>
-  getTopAssociation: (
-    input: GscdumpV1OperationInput<'partner.sites.top.association.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.top.association.get'>>
-  getIndexPercent: (
-    input: GscdumpV1OperationInput<'partner.sites.index.percent.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.index.percent.get'>>
-  createSitemapAction: (
-    input: GscdumpV1OperationInput<'partner.sites.sitemaps.action.create'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.action.create'>>
-  querySitemapMembership: (
-    input: GscdumpV1OperationInput<'partner.sites.sitemaps.membership.query'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.sitemaps.membership.query'>>
-  createTeam: (
-    input: GscdumpV1OperationInput<'partner.teams.create'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.teams.create'>>
-  renameTeam: (
-    input: GscdumpV1OperationInput<'partner.teams.rename'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.teams.rename'>>
-  deleteTeam: (
-    input: GscdumpV1OperationInput<'partner.teams.delete'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.teams.delete'>>
-  listTeamMembers: (
-    input: GscdumpV1OperationInput<'partner.teams.members.list'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.teams.members.list'>>
-  addTeamMember: (
-    input: GscdumpV1OperationInput<'partner.teams.members.add'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.teams.members.add'>>
-  updateTeamMemberRole: (
-    input: GscdumpV1OperationInput<'partner.teams.members.role.update'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.teams.members.role.update'>>
-  removeTeamMember: (
-    input: GscdumpV1OperationInput<'partner.teams.members.remove'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.teams.members.remove'>>
-  updateSiteTeam: (
-    input: GscdumpV1OperationInput<'partner.sites.team.update'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.sites.team.update'>>
-  getTeamCatalog: (
-    input: GscdumpV1OperationInput<'partner.teams.catalog.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.teams.catalog.get'>>
-  bindTeamCatalog: (
-    input: GscdumpV1OperationInput<'partner.teams.catalog.bind'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.teams.catalog.bind'>>
-  getSiteIntIdCrosswalk: (
-    input: GscdumpV1OperationInput<'partner.users.sites.crosswalk.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.users.sites.crosswalk.get'>>
-  deleteUser: (
-    input: GscdumpV1OperationInput<'partner.users.delete'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.users.delete'>>
-  createVerificationToken: (
-    input: GscdumpV1OperationInput<'partner.users.verification.token.create'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.users.verification.token.create'>>
-  addAndVerifySite: (
-    input: GscdumpV1OperationInput<'partner.users.sites.verify.create'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'partner.users.sites.verify.create'>>
-  queryAnalyticsRows: (
-    input: GscdumpV1OperationInput<'analytics.rows.query'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'analytics.rows.query'>>
-  queryAnalyticsReport: (
-    input: GscdumpV1OperationInput<'analytics.reports.query'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'analytics.reports.query'>>
-  queryAnalyticsReportDetail: (
-    input: GscdumpV1OperationInput<'analytics.reports.detail.query'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'analytics.reports.detail.query'>>
-  getRealtimeStreamHead: (
-    input?: GscdumpV1OperationInput<'realtime.stream.head.get'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'realtime.stream.head.get'>>
-  createRealtimeTicket: (
-    input: GscdumpV1OperationInput<'realtime.tickets.create'>,
-    options?: GscdumpV1ExecuteOptions,
-  ) => Promise<GscdumpV1OperationResponse<'realtime.tickets.create'>>
+} & {
+  [TMethod in GscdumpV1ClientMethodName]: GscdumpV1OperationMethod<MethodId<TMethod>>
 }
 
 interface ResolvedRetryOptions {
@@ -900,59 +730,60 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     })
   }
 
-  return {
+  const client: GscdumpV1Client = {
     execute,
-    getUserLifecycle: (input, executeOptions) => execute('partner.users.lifecycle.get', input, executeOptions),
-    listAvailableSites: (input, executeOptions) => execute('partner.users.sites.available.list', input, executeOptions),
-    createSite: (input, executeOptions) => execute('partner.users.sites.create', input, executeOptions),
-    createUser: (input, executeOptions) => execute('partner.users.create', input, executeOptions),
-    updateUserTokens: (input, executeOptions) => execute('partner.users.tokens.update', input, executeOptions),
-    getSiteIndexing: (input, executeOptions) => execute('partner.sites.indexing.get', input, executeOptions),
-    listSiteIndexingUrls: (input, executeOptions) => execute('partner.sites.indexing.urls.list', input, executeOptions),
-    listSiteBingIndexingEvidence: (input, executeOptions) => execute('partner.sites.indexing.bing.evidence.list', input, executeOptions),
-    listSiteIndexingTransitions: (input, executeOptions) => execute('partner.sites.indexing.transitions.list', input, executeOptions),
-    getSiteIndexingDiagnostics: (input, executeOptions) => execute('partner.sites.indexing.diagnostics.get', input, executeOptions),
-    getSiteSitemaps: (input, executeOptions) => execute('partner.sites.sitemaps.get', input, executeOptions),
-    getSiteSitemapChanges: (input, executeOptions) => execute('partner.sites.sitemaps.changes.get', input, executeOptions),
-    listSitemapUrls: (input, executeOptions) => execute('partner.sites.sitemaps.urls.get', input, executeOptions),
-    getSitemapExport: (input, executeOptions) => execute('partner.sites.sitemaps.export.get', input, executeOptions),
-    getSiteAnalysis: (input, executeOptions) => execute('partner.sites.analysis.get', input, executeOptions),
-    getSiteAnalysisBundle: (input, executeOptions) => execute('partner.sites.analysis.bundle.get', input, executeOptions),
-    deleteSite: (input, executeOptions) => execute('partner.sites.delete', input, executeOptions),
-    getCanonicalMismatches: (input, executeOptions) => execute('partner.sites.canonical.mismatches.get', input, executeOptions),
-    inspectSiteUrls: (input, executeOptions) => execute('partner.sites.indexing.inspect.create', input, executeOptions),
-    recoverSitePermission: (input, executeOptions) => execute('partner.sites.permission.recover', input, executeOptions),
-    queryKeywordSparklines: (input, executeOptions) => execute('partner.sites.keyword.sparklines.query', input, executeOptions),
-    getQueryTrend: (input, executeOptions) => execute('partner.sites.query.trend.get', input, executeOptions),
-    getPageTrend: (input, executeOptions) => execute('partner.sites.page.trend.get', input, executeOptions),
-    getContentVelocity: (input, executeOptions) => execute('partner.sites.content.velocity.get', input, executeOptions),
-    getCtrCurve: (input, executeOptions) => execute('partner.sites.ctr.curve.get', input, executeOptions),
-    getDarkTraffic: (input, executeOptions) => execute('partner.sites.dark.traffic.get', input, executeOptions),
-    getDeviceGap: (input, executeOptions) => execute('partner.sites.device.gap.get', input, executeOptions),
-    getKeywordBreadth: (input, executeOptions) => execute('partner.sites.keyword.breadth.get', input, executeOptions),
-    getPositionDistribution: (input, executeOptions) => execute('partner.sites.position.distribution.get', input, executeOptions),
-    getTopAssociation: (input, executeOptions) => execute('partner.sites.top.association.get', input, executeOptions),
-    getIndexPercent: (input, executeOptions) => execute('partner.sites.index.percent.get', input, executeOptions),
-    createSitemapAction: (input, executeOptions) => execute('partner.sites.sitemaps.action.create', input, executeOptions),
-    querySitemapMembership: (input, executeOptions) => execute('partner.sites.sitemaps.membership.query', input, executeOptions),
-    createTeam: (input, executeOptions) => execute('partner.teams.create', input, executeOptions),
-    renameTeam: (input, executeOptions) => execute('partner.teams.rename', input, executeOptions),
-    deleteTeam: (input, executeOptions) => execute('partner.teams.delete', input, executeOptions),
-    listTeamMembers: (input, executeOptions) => execute('partner.teams.members.list', input, executeOptions),
-    addTeamMember: (input, executeOptions) => execute('partner.teams.members.add', input, executeOptions),
-    updateTeamMemberRole: (input, executeOptions) => execute('partner.teams.members.role.update', input, executeOptions),
-    removeTeamMember: (input, executeOptions) => execute('partner.teams.members.remove', input, executeOptions),
-    updateSiteTeam: (input, executeOptions) => execute('partner.sites.team.update', input, executeOptions),
-    getTeamCatalog: (input, executeOptions) => execute('partner.teams.catalog.get', input, executeOptions),
-    bindTeamCatalog: (input, executeOptions) => execute('partner.teams.catalog.bind', input, executeOptions),
-    getSiteIntIdCrosswalk: (input, executeOptions) => execute('partner.users.sites.crosswalk.get', input, executeOptions),
-    deleteUser: (input, executeOptions) => execute('partner.users.delete', input, executeOptions),
-    createVerificationToken: (input, executeOptions) => execute('partner.users.verification.token.create', input, executeOptions),
-    addAndVerifySite: (input, executeOptions) => execute('partner.users.sites.verify.create', input, executeOptions),
-    queryAnalyticsRows: (input, executeOptions) => execute('analytics.rows.query', input, executeOptions),
-    queryAnalyticsReport: (input, executeOptions) => execute('analytics.reports.query', input, executeOptions),
-    queryAnalyticsReportDetail: (input, executeOptions) => execute('analytics.reports.detail.query', input, executeOptions),
-    getRealtimeStreamHead: (input = {}, executeOptions) => execute('realtime.stream.head.get', input, executeOptions),
-    createRealtimeTicket: (input, executeOptions) => execute('realtime.tickets.create', input, executeOptions),
+    getUserLifecycle: (input, executeOptions) => execute('partner.users.lifecycle.get' satisfies MethodId<'getUserLifecycle'>, input, executeOptions),
+    listAvailableSites: (input, executeOptions) => execute('partner.users.sites.available.list' satisfies MethodId<'listAvailableSites'>, input, executeOptions),
+    createSite: (input, executeOptions) => execute('partner.users.sites.create' satisfies MethodId<'createSite'>, input, executeOptions),
+    createUser: (input, executeOptions) => execute('partner.users.create' satisfies MethodId<'createUser'>, input, executeOptions),
+    updateUserTokens: (input, executeOptions) => execute('partner.users.tokens.update' satisfies MethodId<'updateUserTokens'>, input, executeOptions),
+    getSiteIndexing: (input, executeOptions) => execute('partner.sites.indexing.get' satisfies MethodId<'getSiteIndexing'>, input, executeOptions),
+    listSiteIndexingUrls: (input, executeOptions) => execute('partner.sites.indexing.urls.list' satisfies MethodId<'listSiteIndexingUrls'>, input, executeOptions),
+    listSiteBingIndexingEvidence: (input, executeOptions) => execute('partner.sites.indexing.bing.evidence.list' satisfies MethodId<'listSiteBingIndexingEvidence'>, input, executeOptions),
+    listSiteIndexingTransitions: (input, executeOptions) => execute('partner.sites.indexing.transitions.list' satisfies MethodId<'listSiteIndexingTransitions'>, input, executeOptions),
+    getSiteIndexingDiagnostics: (input, executeOptions) => execute('partner.sites.indexing.diagnostics.get' satisfies MethodId<'getSiteIndexingDiagnostics'>, input, executeOptions),
+    getSiteSitemaps: (input, executeOptions) => execute('partner.sites.sitemaps.get' satisfies MethodId<'getSiteSitemaps'>, input, executeOptions),
+    getSiteSitemapChanges: (input, executeOptions) => execute('partner.sites.sitemaps.changes.get' satisfies MethodId<'getSiteSitemapChanges'>, input, executeOptions),
+    listSitemapUrls: (input, executeOptions) => execute('partner.sites.sitemaps.urls.get' satisfies MethodId<'listSitemapUrls'>, input, executeOptions),
+    getSitemapExport: (input, executeOptions) => execute('partner.sites.sitemaps.export.get' satisfies MethodId<'getSitemapExport'>, input, executeOptions),
+    getSiteAnalysis: (input, executeOptions) => execute('partner.sites.analysis.get' satisfies MethodId<'getSiteAnalysis'>, input, executeOptions),
+    getSiteAnalysisBundle: (input, executeOptions) => execute('partner.sites.analysis.bundle.get' satisfies MethodId<'getSiteAnalysisBundle'>, input, executeOptions),
+    deleteSite: (input, executeOptions) => execute('partner.sites.delete' satisfies MethodId<'deleteSite'>, input, executeOptions),
+    getCanonicalMismatches: (input, executeOptions) => execute('partner.sites.canonical.mismatches.get' satisfies MethodId<'getCanonicalMismatches'>, input, executeOptions),
+    inspectSiteUrls: (input, executeOptions) => execute('partner.sites.indexing.inspect.create' satisfies MethodId<'inspectSiteUrls'>, input, executeOptions),
+    recoverSitePermission: (input, executeOptions) => execute('partner.sites.permission.recover' satisfies MethodId<'recoverSitePermission'>, input, executeOptions),
+    queryKeywordSparklines: (input, executeOptions) => execute('partner.sites.keyword.sparklines.query' satisfies MethodId<'queryKeywordSparklines'>, input, executeOptions),
+    getQueryTrend: (input, executeOptions) => execute('partner.sites.query.trend.get' satisfies MethodId<'getQueryTrend'>, input, executeOptions),
+    getPageTrend: (input, executeOptions) => execute('partner.sites.page.trend.get' satisfies MethodId<'getPageTrend'>, input, executeOptions),
+    getContentVelocity: (input, executeOptions) => execute('partner.sites.content.velocity.get' satisfies MethodId<'getContentVelocity'>, input, executeOptions),
+    getCtrCurve: (input, executeOptions) => execute('partner.sites.ctr.curve.get' satisfies MethodId<'getCtrCurve'>, input, executeOptions),
+    getDarkTraffic: (input, executeOptions) => execute('partner.sites.dark.traffic.get' satisfies MethodId<'getDarkTraffic'>, input, executeOptions),
+    getDeviceGap: (input, executeOptions) => execute('partner.sites.device.gap.get' satisfies MethodId<'getDeviceGap'>, input, executeOptions),
+    getKeywordBreadth: (input, executeOptions) => execute('partner.sites.keyword.breadth.get' satisfies MethodId<'getKeywordBreadth'>, input, executeOptions),
+    getPositionDistribution: (input, executeOptions) => execute('partner.sites.position.distribution.get' satisfies MethodId<'getPositionDistribution'>, input, executeOptions),
+    getTopAssociation: (input, executeOptions) => execute('partner.sites.top.association.get' satisfies MethodId<'getTopAssociation'>, input, executeOptions),
+    getIndexPercent: (input, executeOptions) => execute('partner.sites.index.percent.get' satisfies MethodId<'getIndexPercent'>, input, executeOptions),
+    createSitemapAction: (input, executeOptions) => execute('partner.sites.sitemaps.action.create' satisfies MethodId<'createSitemapAction'>, input, executeOptions),
+    querySitemapMembership: (input, executeOptions) => execute('partner.sites.sitemaps.membership.query' satisfies MethodId<'querySitemapMembership'>, input, executeOptions),
+    createTeam: (input, executeOptions) => execute('partner.teams.create' satisfies MethodId<'createTeam'>, input, executeOptions),
+    renameTeam: (input, executeOptions) => execute('partner.teams.rename' satisfies MethodId<'renameTeam'>, input, executeOptions),
+    deleteTeam: (input, executeOptions) => execute('partner.teams.delete' satisfies MethodId<'deleteTeam'>, input, executeOptions),
+    listTeamMembers: (input, executeOptions) => execute('partner.teams.members.list' satisfies MethodId<'listTeamMembers'>, input, executeOptions),
+    addTeamMember: (input, executeOptions) => execute('partner.teams.members.add' satisfies MethodId<'addTeamMember'>, input, executeOptions),
+    updateTeamMemberRole: (input, executeOptions) => execute('partner.teams.members.role.update' satisfies MethodId<'updateTeamMemberRole'>, input, executeOptions),
+    removeTeamMember: (input, executeOptions) => execute('partner.teams.members.remove' satisfies MethodId<'removeTeamMember'>, input, executeOptions),
+    updateSiteTeam: (input, executeOptions) => execute('partner.sites.team.update' satisfies MethodId<'updateSiteTeam'>, input, executeOptions),
+    getTeamCatalog: (input, executeOptions) => execute('partner.teams.catalog.get' satisfies MethodId<'getTeamCatalog'>, input, executeOptions),
+    bindTeamCatalog: (input, executeOptions) => execute('partner.teams.catalog.bind' satisfies MethodId<'bindTeamCatalog'>, input, executeOptions),
+    getSiteIntIdCrosswalk: (input, executeOptions) => execute('partner.users.sites.crosswalk.get' satisfies MethodId<'getSiteIntIdCrosswalk'>, input, executeOptions),
+    deleteUser: (input, executeOptions) => execute('partner.users.delete' satisfies MethodId<'deleteUser'>, input, executeOptions),
+    createVerificationToken: (input, executeOptions) => execute('partner.users.verification.token.create' satisfies MethodId<'createVerificationToken'>, input, executeOptions),
+    addAndVerifySite: (input, executeOptions) => execute('partner.users.sites.verify.create' satisfies MethodId<'addAndVerifySite'>, input, executeOptions),
+    queryAnalyticsRows: (input, executeOptions) => execute('analytics.rows.query' satisfies MethodId<'queryAnalyticsRows'>, input, executeOptions),
+    queryAnalyticsReport: (input, executeOptions) => execute('analytics.reports.query' satisfies MethodId<'queryAnalyticsReport'>, input, executeOptions),
+    queryAnalyticsReportDetail: (input, executeOptions) => execute('analytics.reports.detail.query' satisfies MethodId<'queryAnalyticsReportDetail'>, input, executeOptions),
+    getRealtimeStreamHead: (input = {}, executeOptions) => execute('realtime.stream.head.get' satisfies MethodId<'getRealtimeStreamHead'>, input, executeOptions),
+    createRealtimeTicket: (input, executeOptions) => execute('realtime.tickets.create' satisfies MethodId<'createRealtimeTicket'>, input, executeOptions),
   }
+  return client
 }
