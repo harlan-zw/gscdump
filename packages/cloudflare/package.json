@@ -2,7 +2,7 @@
   "name": "@gscdump/cloudflare",
   "type": "module",
   "version": "3.0.0",
-  "description": "Cloudflare-Workers-flavored helpers for the gscdump analytics stack: AnalyticsEnv binding contract, R2 SigV4 presigner, DuckDB Workers shims, engine factory.",
+  "description": "Cloudflare Workers helpers for server-tail queries and in-flight request deduplication.",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
@@ -21,11 +21,6 @@
   },
   "sideEffects": false,
   "exports": {
-    ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs",
-      "default": "./dist/index.mjs"
-    },
     "./server-tail": {
       "types": "./dist/server-tail/index.d.mts",
       "import": "./dist/server-tail/index.mjs",
@@ -37,8 +32,6 @@
       "default": "./dist/inflight-dedupe.mjs"
     }
   },
-  "main": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
   "files": [
     "dist"
   ],
@@ -55,8 +48,6 @@
   "dependencies": {
     "@gscdump/contracts": "workspace:^",
     "@gscdump/engine": "workspace:^",
-    "@gscdump/engine-sqlite": "workspace:^",
-    "@uwdata/flechette": "catalog:",
     "gscdump": "workspace:^"
   },
   "devDependencies": {

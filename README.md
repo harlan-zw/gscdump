@@ -335,7 +335,7 @@ integrations can use the [v1 upgrade guide](./docs/v1-migration.md).
 | [`@gscdump/lakehouse`](./packages/lakehouse) | Dataset-agnostic Iceberg catalog and registry |
 | [`@gscdump/contracts`](./packages/contracts) | Hosted API and v1 wire contracts |
 | [`@gscdump/sdk`](./packages/sdk) | Hosted HTTP and ticketed realtime clients |
-| [`@gscdump/cloudflare`](./packages/cloudflare) | Cloudflare Workers/R2 helpers |
+| [`@gscdump/cloudflare`](./packages/cloudflare) | Cloudflare server-tail and in-flight dedupe helpers |
 | [`@gscdump/cli`](./packages/cli) | CLI and MCP server (`gscdump mcp`) |
 
 ## License

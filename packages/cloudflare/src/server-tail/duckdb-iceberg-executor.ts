@@ -16,10 +16,8 @@
 // a full SQL engine and reads the SAME compacted Iceberg parquet data files
 // R2 SQL queries.
 //
-// This reuses the `DUCKDB_SVC` service binding from `workers-duckdb.ts`: a
-// sibling Worker that runs DuckDB and exposes `runSQL`. Unlike the bespoke
-// parquet read path (which decodes parquet in the main Worker and ships Arrow
-// IPC across the binding), the Iceberg path hands the sibling a single SQL
+// This uses a `DUCKDB_SVC` service binding to a sibling Worker that runs
+// DuckDB and exposes `runSQL`. The Iceberg path hands the sibling a single SQL
 // statement that scans the Iceberg table directly via DuckDB's `iceberg_scan`.
 // The sibling needs the `iceberg` + `httpfs` extensions and R2 S3 credentials
 // configured; the data files never transit the main Worker.
@@ -40,9 +38,8 @@ import { buildArchetypeSql, TABLE_PLACEHOLDER } from './archetype-sql'
 export type DuckDbIcebergRow = Record<string, string | number | null>
 
 /**
- * The minimal `DUCKDB_SVC` shape this executor needs — a structural subset of
- * the binding in `workers-duckdb.ts` / `env.ts`. Any binding with `runSQL`
- * satisfies it.
+ * The minimal `DUCKDB_SVC` shape this executor needs. Any binding with
+ * `runSQL` satisfies it.
  */
 export interface DuckDbSvc {
   runSQL: (args: { sql: string, deadlineAt?: number }) => Promise<{ rows: unknown[], sql: string }>
@@ -126,7 +123,7 @@ function icebergTableRef(config: DuckDbIcebergExecutorConfig, table: string): st
 /**
  * Race an RPC against a wall-clock deadline. Service-binding RPCs are not
  * abortable, so this bounds *our* latency; the loser promise stops being
- * awaited. Mirrors `withDuckDBDeadline` in `workers-duckdb.ts`.
+ * awaited.
  */
 function withDeadline<T>(op: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
