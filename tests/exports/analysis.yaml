@@ -43,6 +43,13 @@
   analysisErrorToException: function
   formatAnalysisError: function
   isAnalysisError: function
+./query-dimension:
+  classifyQueryIntent: function
+  encodeIntent: function
+  INTENT_CLASSIFIER_VERSION: number
+  normalizeQuery: function
+  NORMALIZER_VERSION: number
+  SEARCH_INTENT_CODE: object
 ./registry:
   defaultAnalyzerRegistry: object
   ROW_ANALYZERS: object

@@ -5,7 +5,7 @@ import {
   INTENT_CLASSIFIER_VERSION,
   normalizeQuery,
   NORMALIZER_VERSION,
-} from '@gscdump/analysis'
+} from '@gscdump/analysis/query-dimension'
 import { buildQueryDimRecords, createQueryDimStore } from '@gscdump/engine/entities'
 import { CANONICAL_ROLLUPS, DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'

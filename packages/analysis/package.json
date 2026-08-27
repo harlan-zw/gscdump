@@ -36,6 +36,11 @@
       "import": "./dist/errors.mjs",
       "default": "./dist/errors.mjs"
     },
+    "./query-dimension": {
+      "types": "./dist/query-dimension.d.mts",
+      "import": "./dist/query-dimension.mjs",
+      "default": "./dist/query-dimension.mjs"
+    },
     "./report": {
       "types": "./dist/report/index.d.mts",
       "import": "./dist/report/index.mjs",
