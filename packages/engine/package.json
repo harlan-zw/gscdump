@@ -41,6 +41,11 @@
       "import": "./dist/planner.mjs",
       "default": "./dist/planner.mjs"
     },
+    "./profile": {
+      "types": "./dist/profile.d.mts",
+      "import": "./dist/profile.mjs",
+      "default": "./dist/profile.mjs"
+    },
     "./schema": {
       "types": "./dist/schema.d.mts",
       "import": "./dist/schema.mjs",

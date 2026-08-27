@@ -172,6 +172,9 @@
   FILES_PLACEHOLDER: string
   resolveParquetSQL: function
   substituteNamedFiles: function
+./profile:
+  collectSpans: function
+  createQueryProfiler: function
 ./r2:
   createR2DataSource: function
 ./report:
