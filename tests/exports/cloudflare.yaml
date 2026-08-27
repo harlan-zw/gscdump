@@ -9,7 +9,6 @@
   createServerTailDispatcher: function
   DuckDbIcebergError: function
   DuckDbIcebergTimeoutError: function
-  escapeSqlValue: function
   inlineParams: function
   R2SqlError: function
   R2SqlTimeoutError: function

@@ -56,12 +56,12 @@ const source = createLiveGscSource({
 
 ## Capabilities
 
-GSC supports regex pushdown via `INCLUDING_REGEX` / `EXCLUDING_REGEX` filters but has no SQL surface, no comparison joins, no cross-dataset queries, and no engine-derived dimensions (`queryCanonical`, `page_keywords`). Pair with `createCompositeSource({ engine, gsc })` from `@gscdump/analysis` to route SQL-shaped queries to the engine and date-out-of-range queries to GSC.
+GSC supports regex pushdown via `INCLUDING_REGEX` / `EXCLUDING_REGEX` filters but has no SQL surface, no comparison joins, no cross-dataset queries, and no engine-derived dimensions (`queryCanonical`, `page_keywords`). Pair with `createCompositeSource({ engine, gsc })` from `@gscdump/analysis/source` to route SQL-shaped queries to the engine and date-out-of-range queries to GSC.
 
 ## Related
 
 - [`@gscdump/engine`](../engine) — Source contracts (`RowQuerySource`, `AnalysisQuerySource`).
-- [`@gscdump/analysis`](../analysis) — Analyzer instances + `createCompositeSource`.
+- [`@gscdump/analysis`](../analysis) — Analyzer instances and portable source factories.
 - [`gscdump`](../gscdump) — REST client + query builder.
 
 ## License

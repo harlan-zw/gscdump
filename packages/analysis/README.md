@@ -16,8 +16,11 @@ npm install @gscdump/analysis
 
 | Subpath | Use when |
 |---|---|
-| `@gscdump/analysis` | Top-level barrel: row analyzers, source-backed analyzers, `SQL_ANALYZERS`, `analyzeInBrowser`, `defaultAnalyzerRegistry`, contract types re-exported from engine. |
+| `@gscdump/analysis` | Pure analyzers, `analyzeInBrowser`, and shared analyzer contracts. |
 | `@gscdump/analysis/registry` | Pre-built `defaultAnalyzerRegistry` (rows + sql). Convenience for callers who don't care about bundle size. |
+| `@gscdump/analysis/errors` | Typed analysis failures and rendering helpers. |
+| `@gscdump/analysis/report` | Report registry and runtime. |
+| `@gscdump/analysis/source` | Portable source factories. |
 
 The contract layer (`Analyzer`, `Plan`, `Capability`, `AnalysisParams`, `AnalysisResult`, `AnalysisQuerySource`, `runAnalyzerFromSource`, `createAnalyzerRegistry`, `defineAnalyzer`, period helpers, `createEngineQuerySource`) lives in `@gscdump/engine` under the `/analyzer`, `/analysis-types`, `/period`, `/source`, and `/resolver` subpaths. Most are re-exported from `@gscdump/analysis` for convenience.
 
@@ -44,11 +47,11 @@ const decay = analyzeDecay(currentRows, previousRows)
 Meta-analyses live in the report layer. Run a composed evidence report via `runReport`:
 
 ```ts
+import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import {
-  defaultAnalyzerRegistry,
   defaultReportRegistry,
   runReport,
-} from '@gscdump/analysis'
+} from '@gscdump/analysis/report'
 import { resolveWindow } from '@gscdump/engine/period'
 
 const report = defaultReportRegistry.getReport('health')!
@@ -76,7 +79,7 @@ const movers = await analyzeMoversFromSource(source, { current, previous })
 SQL-native path. `SQL_ANALYZERS` dispatch through `runAnalyzerFromSource` against an engine-backed source.
 
 ```ts
-import { ROW_ANALYZERS, SQL_ANALYZERS } from '@gscdump/analysis'
+import { ROW_ANALYZERS, SQL_ANALYZERS } from '@gscdump/analysis/registry'
 import { createAnalyzerRegistry, runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import { createEngineQuerySource } from '@gscdump/engine/source'
 
@@ -145,8 +148,8 @@ Available source factories:
 
 - `createGscApiQuerySource({ client, siteUrl })` — `@gscdump/engine-gsc-api`
 - `createLiveGscSource({ accessToken, siteUrl })` — `@gscdump/engine-gsc-api`
-- `createCompositeSource({ engine, gsc })` — `@gscdump/analysis`; engine first, GSC fallback
-- `createInMemoryQuerySource({ queryRows })` — `@gscdump/analysis`
+- `createCompositeSource({ engine, gsc })` — `@gscdump/analysis/source`; engine first, GSC fallback
+- `createInMemoryQuerySource({ queryRows })` — `@gscdump/analysis/source`
 - `createEngineQuerySource({ engine, ctx })` — `@gscdump/engine/source`
 - `createSqliteQuerySource({ ... })` — `@gscdump/engine-sqlite`
 
@@ -172,7 +175,7 @@ Presets: `last-7d`, `last-28d`, `last-30d`, `last-90d`, `last-180d`, `last-365d`
 | Row analyzers (`analyzeMovers`, `analyzeDecay`, ...) | Public |
 | Source factories + `analyzeFromSource` | Public |
 | `Analyzer<P, R>` contract + `createAnalyzerRegistry` (re-exported from `@gscdump/engine/analyzer`) | Public |
-| Source factories on the package root | Public |
+| Source factories under `@gscdump/analysis/source` | Public |
 | Per-analyzer modules under `analysis/src/analyzers/<name>` | Private |
 
 ## Related

@@ -146,11 +146,11 @@ Window flags: `--period {7d|28d|30d|90d|180d|365d|mtd|ytd|custom}`, `--vs {none|
 ### Programmatic use
 
 ```ts
+import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import {
-  defaultAnalyzerRegistry,
   defaultReportRegistry,
   runReport,
-} from '@gscdump/analysis'
+} from '@gscdump/analysis/report'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 import { resolveWindow } from '@gscdump/engine/period'
 
