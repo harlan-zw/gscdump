@@ -25,6 +25,8 @@ export {
   toIsoDate,
 } from './core/gsc-dates'
 
+export type { Period, ResolvedAnalyticsRange } from './core/types'
+
 export type {
   ComparisonMode,
   ResolvedWindow,
@@ -32,7 +34,5 @@ export type {
   WindowPreset,
 } from './core/window'
 export { resolveWindow } from './core/window'
-
-export type { Period, ResolvedAnalyticsRange } from './core/types'
 
 export { currentPstDate, daysAgoPst } from './query/utils/dayjs'
