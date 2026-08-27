@@ -140,7 +140,7 @@ export function isGscdumpV1Error(error: unknown): error is GscdumpV1Error {
   return error instanceof GscdumpV1Error
 }
 
-type GscdumpV1OperationIdForMethod<TMethod extends GscdumpV1ClientMethodName>
+type MethodId<TMethod extends GscdumpV1ClientMethodName>
   = GscdumpV1NamedOperations[TMethod] extends { id: infer TId extends GscdumpV1OperationId }
     ? TId
     : never
@@ -166,7 +166,7 @@ export type GscdumpV1Client = {
     options?: GscdumpV1ExecuteOptions,
   ) => Promise<GscdumpV1OperationResponse<TId>>
 } & {
-  [TMethod in GscdumpV1ClientMethodName]: GscdumpV1OperationMethod<GscdumpV1OperationIdForMethod<TMethod>>
+  [TMethod in GscdumpV1ClientMethodName]: GscdumpV1OperationMethod<MethodId<TMethod>>
 }
 
 interface ResolvedRetryOptions {
@@ -732,318 +732,58 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
 
   const client: GscdumpV1Client = {
     execute,
-    getUserLifecycle: (input, executeOptions) =>
-      execute(
-        'partner.users.lifecycle.get' satisfies GscdumpV1OperationIdForMethod<'getUserLifecycle'>,
-        input,
-        executeOptions,
-      ),
-    listAvailableSites: (input, executeOptions) =>
-      execute(
-        'partner.users.sites.available.list' satisfies GscdumpV1OperationIdForMethod<'listAvailableSites'>,
-        input,
-        executeOptions,
-      ),
-    createSite: (input, executeOptions) =>
-      execute(
-        'partner.users.sites.create' satisfies GscdumpV1OperationIdForMethod<'createSite'>,
-        input,
-        executeOptions,
-      ),
-    createUser: (input, executeOptions) =>
-      execute(
-        'partner.users.create' satisfies GscdumpV1OperationIdForMethod<'createUser'>,
-        input,
-        executeOptions,
-      ),
-    updateUserTokens: (input, executeOptions) =>
-      execute(
-        'partner.users.tokens.update' satisfies GscdumpV1OperationIdForMethod<'updateUserTokens'>,
-        input,
-        executeOptions,
-      ),
-    getSiteIndexing: (input, executeOptions) =>
-      execute(
-        'partner.sites.indexing.get' satisfies GscdumpV1OperationIdForMethod<'getSiteIndexing'>,
-        input,
-        executeOptions,
-      ),
-    listSiteIndexingUrls: (input, executeOptions) =>
-      execute(
-        'partner.sites.indexing.urls.list' satisfies GscdumpV1OperationIdForMethod<'listSiteIndexingUrls'>,
-        input,
-        executeOptions,
-      ),
-    listSiteBingIndexingEvidence: (input, executeOptions) =>
-      execute(
-        'partner.sites.indexing.bing.evidence.list' satisfies GscdumpV1OperationIdForMethod<'listSiteBingIndexingEvidence'>,
-        input,
-        executeOptions,
-      ),
-    listSiteIndexingTransitions: (input, executeOptions) =>
-      execute(
-        'partner.sites.indexing.transitions.list' satisfies GscdumpV1OperationIdForMethod<'listSiteIndexingTransitions'>,
-        input,
-        executeOptions,
-      ),
-    getSiteIndexingDiagnostics: (input, executeOptions) =>
-      execute(
-        'partner.sites.indexing.diagnostics.get' satisfies GscdumpV1OperationIdForMethod<'getSiteIndexingDiagnostics'>,
-        input,
-        executeOptions,
-      ),
-    getSiteSitemaps: (input, executeOptions) =>
-      execute(
-        'partner.sites.sitemaps.get' satisfies GscdumpV1OperationIdForMethod<'getSiteSitemaps'>,
-        input,
-        executeOptions,
-      ),
-    getSiteSitemapChanges: (input, executeOptions) =>
-      execute(
-        'partner.sites.sitemaps.changes.get' satisfies GscdumpV1OperationIdForMethod<'getSiteSitemapChanges'>,
-        input,
-        executeOptions,
-      ),
-    listSitemapUrls: (input, executeOptions) =>
-      execute(
-        'partner.sites.sitemaps.urls.get' satisfies GscdumpV1OperationIdForMethod<'listSitemapUrls'>,
-        input,
-        executeOptions,
-      ),
-    getSitemapExport: (input, executeOptions) =>
-      execute(
-        'partner.sites.sitemaps.export.get' satisfies GscdumpV1OperationIdForMethod<'getSitemapExport'>,
-        input,
-        executeOptions,
-      ),
-    getSiteAnalysis: (input, executeOptions) =>
-      execute(
-        'partner.sites.analysis.get' satisfies GscdumpV1OperationIdForMethod<'getSiteAnalysis'>,
-        input,
-        executeOptions,
-      ),
-    getSiteAnalysisBundle: (input, executeOptions) =>
-      execute(
-        'partner.sites.analysis.bundle.get' satisfies GscdumpV1OperationIdForMethod<'getSiteAnalysisBundle'>,
-        input,
-        executeOptions,
-      ),
-    deleteSite: (input, executeOptions) =>
-      execute(
-        'partner.sites.delete' satisfies GscdumpV1OperationIdForMethod<'deleteSite'>,
-        input,
-        executeOptions,
-      ),
-    getCanonicalMismatches: (input, executeOptions) =>
-      execute(
-        'partner.sites.canonical.mismatches.get' satisfies GscdumpV1OperationIdForMethod<'getCanonicalMismatches'>,
-        input,
-        executeOptions,
-      ),
-    inspectSiteUrls: (input, executeOptions) =>
-      execute(
-        'partner.sites.indexing.inspect.create' satisfies GscdumpV1OperationIdForMethod<'inspectSiteUrls'>,
-        input,
-        executeOptions,
-      ),
-    recoverSitePermission: (input, executeOptions) =>
-      execute(
-        'partner.sites.permission.recover' satisfies GscdumpV1OperationIdForMethod<'recoverSitePermission'>,
-        input,
-        executeOptions,
-      ),
-    queryKeywordSparklines: (input, executeOptions) =>
-      execute(
-        'partner.sites.keyword.sparklines.query' satisfies GscdumpV1OperationIdForMethod<'queryKeywordSparklines'>,
-        input,
-        executeOptions,
-      ),
-    getQueryTrend: (input, executeOptions) =>
-      execute(
-        'partner.sites.query.trend.get' satisfies GscdumpV1OperationIdForMethod<'getQueryTrend'>,
-        input,
-        executeOptions,
-      ),
-    getPageTrend: (input, executeOptions) =>
-      execute(
-        'partner.sites.page.trend.get' satisfies GscdumpV1OperationIdForMethod<'getPageTrend'>,
-        input,
-        executeOptions,
-      ),
-    getContentVelocity: (input, executeOptions) =>
-      execute(
-        'partner.sites.content.velocity.get' satisfies GscdumpV1OperationIdForMethod<'getContentVelocity'>,
-        input,
-        executeOptions,
-      ),
-    getCtrCurve: (input, executeOptions) =>
-      execute(
-        'partner.sites.ctr.curve.get' satisfies GscdumpV1OperationIdForMethod<'getCtrCurve'>,
-        input,
-        executeOptions,
-      ),
-    getDarkTraffic: (input, executeOptions) =>
-      execute(
-        'partner.sites.dark.traffic.get' satisfies GscdumpV1OperationIdForMethod<'getDarkTraffic'>,
-        input,
-        executeOptions,
-      ),
-    getDeviceGap: (input, executeOptions) =>
-      execute(
-        'partner.sites.device.gap.get' satisfies GscdumpV1OperationIdForMethod<'getDeviceGap'>,
-        input,
-        executeOptions,
-      ),
-    getKeywordBreadth: (input, executeOptions) =>
-      execute(
-        'partner.sites.keyword.breadth.get' satisfies GscdumpV1OperationIdForMethod<'getKeywordBreadth'>,
-        input,
-        executeOptions,
-      ),
-    getPositionDistribution: (input, executeOptions) =>
-      execute(
-        'partner.sites.position.distribution.get' satisfies GscdumpV1OperationIdForMethod<'getPositionDistribution'>,
-        input,
-        executeOptions,
-      ),
-    getTopAssociation: (input, executeOptions) =>
-      execute(
-        'partner.sites.top.association.get' satisfies GscdumpV1OperationIdForMethod<'getTopAssociation'>,
-        input,
-        executeOptions,
-      ),
-    getIndexPercent: (input, executeOptions) =>
-      execute(
-        'partner.sites.index.percent.get' satisfies GscdumpV1OperationIdForMethod<'getIndexPercent'>,
-        input,
-        executeOptions,
-      ),
-    createSitemapAction: (input, executeOptions) =>
-      execute(
-        'partner.sites.sitemaps.action.create' satisfies GscdumpV1OperationIdForMethod<'createSitemapAction'>,
-        input,
-        executeOptions,
-      ),
-    querySitemapMembership: (input, executeOptions) =>
-      execute(
-        'partner.sites.sitemaps.membership.query' satisfies GscdumpV1OperationIdForMethod<'querySitemapMembership'>,
-        input,
-        executeOptions,
-      ),
-    createTeam: (input, executeOptions) =>
-      execute(
-        'partner.teams.create' satisfies GscdumpV1OperationIdForMethod<'createTeam'>,
-        input,
-        executeOptions,
-      ),
-    renameTeam: (input, executeOptions) =>
-      execute(
-        'partner.teams.rename' satisfies GscdumpV1OperationIdForMethod<'renameTeam'>,
-        input,
-        executeOptions,
-      ),
-    deleteTeam: (input, executeOptions) =>
-      execute(
-        'partner.teams.delete' satisfies GscdumpV1OperationIdForMethod<'deleteTeam'>,
-        input,
-        executeOptions,
-      ),
-    listTeamMembers: (input, executeOptions) =>
-      execute(
-        'partner.teams.members.list' satisfies GscdumpV1OperationIdForMethod<'listTeamMembers'>,
-        input,
-        executeOptions,
-      ),
-    addTeamMember: (input, executeOptions) =>
-      execute(
-        'partner.teams.members.add' satisfies GscdumpV1OperationIdForMethod<'addTeamMember'>,
-        input,
-        executeOptions,
-      ),
-    updateTeamMemberRole: (input, executeOptions) =>
-      execute(
-        'partner.teams.members.role.update' satisfies GscdumpV1OperationIdForMethod<'updateTeamMemberRole'>,
-        input,
-        executeOptions,
-      ),
-    removeTeamMember: (input, executeOptions) =>
-      execute(
-        'partner.teams.members.remove' satisfies GscdumpV1OperationIdForMethod<'removeTeamMember'>,
-        input,
-        executeOptions,
-      ),
-    updateSiteTeam: (input, executeOptions) =>
-      execute(
-        'partner.sites.team.update' satisfies GscdumpV1OperationIdForMethod<'updateSiteTeam'>,
-        input,
-        executeOptions,
-      ),
-    getTeamCatalog: (input, executeOptions) =>
-      execute(
-        'partner.teams.catalog.get' satisfies GscdumpV1OperationIdForMethod<'getTeamCatalog'>,
-        input,
-        executeOptions,
-      ),
-    bindTeamCatalog: (input, executeOptions) =>
-      execute(
-        'partner.teams.catalog.bind' satisfies GscdumpV1OperationIdForMethod<'bindTeamCatalog'>,
-        input,
-        executeOptions,
-      ),
-    getSiteIntIdCrosswalk: (input, executeOptions) =>
-      execute(
-        'partner.users.sites.crosswalk.get' satisfies GscdumpV1OperationIdForMethod<'getSiteIntIdCrosswalk'>,
-        input,
-        executeOptions,
-      ),
-    deleteUser: (input, executeOptions) =>
-      execute(
-        'partner.users.delete' satisfies GscdumpV1OperationIdForMethod<'deleteUser'>,
-        input,
-        executeOptions,
-      ),
-    createVerificationToken: (input, executeOptions) =>
-      execute(
-        'partner.users.verification.token.create' satisfies GscdumpV1OperationIdForMethod<'createVerificationToken'>,
-        input,
-        executeOptions,
-      ),
-    addAndVerifySite: (input, executeOptions) =>
-      execute(
-        'partner.users.sites.verify.create' satisfies GscdumpV1OperationIdForMethod<'addAndVerifySite'>,
-        input,
-        executeOptions,
-      ),
-    queryAnalyticsRows: (input, executeOptions) =>
-      execute(
-        'analytics.rows.query' satisfies GscdumpV1OperationIdForMethod<'queryAnalyticsRows'>,
-        input,
-        executeOptions,
-      ),
-    queryAnalyticsReport: (input, executeOptions) =>
-      execute(
-        'analytics.reports.query' satisfies GscdumpV1OperationIdForMethod<'queryAnalyticsReport'>,
-        input,
-        executeOptions,
-      ),
-    queryAnalyticsReportDetail: (input, executeOptions) =>
-      execute(
-        'analytics.reports.detail.query' satisfies GscdumpV1OperationIdForMethod<'queryAnalyticsReportDetail'>,
-        input,
-        executeOptions,
-      ),
-    getRealtimeStreamHead: (input = {}, executeOptions) =>
-      execute(
-        'realtime.stream.head.get' satisfies GscdumpV1OperationIdForMethod<'getRealtimeStreamHead'>,
-        input,
-        executeOptions,
-      ),
-    createRealtimeTicket: (input, executeOptions) =>
-      execute(
-        'realtime.tickets.create' satisfies GscdumpV1OperationIdForMethod<'createRealtimeTicket'>,
-        input,
-        executeOptions,
-      ),
+    getUserLifecycle: (input, executeOptions) => execute('partner.users.lifecycle.get' satisfies MethodId<'getUserLifecycle'>, input, executeOptions),
+    listAvailableSites: (input, executeOptions) => execute('partner.users.sites.available.list' satisfies MethodId<'listAvailableSites'>, input, executeOptions),
+    createSite: (input, executeOptions) => execute('partner.users.sites.create' satisfies MethodId<'createSite'>, input, executeOptions),
+    createUser: (input, executeOptions) => execute('partner.users.create' satisfies MethodId<'createUser'>, input, executeOptions),
+    updateUserTokens: (input, executeOptions) => execute('partner.users.tokens.update' satisfies MethodId<'updateUserTokens'>, input, executeOptions),
+    getSiteIndexing: (input, executeOptions) => execute('partner.sites.indexing.get' satisfies MethodId<'getSiteIndexing'>, input, executeOptions),
+    listSiteIndexingUrls: (input, executeOptions) => execute('partner.sites.indexing.urls.list' satisfies MethodId<'listSiteIndexingUrls'>, input, executeOptions),
+    listSiteBingIndexingEvidence: (input, executeOptions) => execute('partner.sites.indexing.bing.evidence.list' satisfies MethodId<'listSiteBingIndexingEvidence'>, input, executeOptions),
+    listSiteIndexingTransitions: (input, executeOptions) => execute('partner.sites.indexing.transitions.list' satisfies MethodId<'listSiteIndexingTransitions'>, input, executeOptions),
+    getSiteIndexingDiagnostics: (input, executeOptions) => execute('partner.sites.indexing.diagnostics.get' satisfies MethodId<'getSiteIndexingDiagnostics'>, input, executeOptions),
+    getSiteSitemaps: (input, executeOptions) => execute('partner.sites.sitemaps.get' satisfies MethodId<'getSiteSitemaps'>, input, executeOptions),
+    getSiteSitemapChanges: (input, executeOptions) => execute('partner.sites.sitemaps.changes.get' satisfies MethodId<'getSiteSitemapChanges'>, input, executeOptions),
+    listSitemapUrls: (input, executeOptions) => execute('partner.sites.sitemaps.urls.get' satisfies MethodId<'listSitemapUrls'>, input, executeOptions),
+    getSitemapExport: (input, executeOptions) => execute('partner.sites.sitemaps.export.get' satisfies MethodId<'getSitemapExport'>, input, executeOptions),
+    getSiteAnalysis: (input, executeOptions) => execute('partner.sites.analysis.get' satisfies MethodId<'getSiteAnalysis'>, input, executeOptions),
+    getSiteAnalysisBundle: (input, executeOptions) => execute('partner.sites.analysis.bundle.get' satisfies MethodId<'getSiteAnalysisBundle'>, input, executeOptions),
+    deleteSite: (input, executeOptions) => execute('partner.sites.delete' satisfies MethodId<'deleteSite'>, input, executeOptions),
+    getCanonicalMismatches: (input, executeOptions) => execute('partner.sites.canonical.mismatches.get' satisfies MethodId<'getCanonicalMismatches'>, input, executeOptions),
+    inspectSiteUrls: (input, executeOptions) => execute('partner.sites.indexing.inspect.create' satisfies MethodId<'inspectSiteUrls'>, input, executeOptions),
+    recoverSitePermission: (input, executeOptions) => execute('partner.sites.permission.recover' satisfies MethodId<'recoverSitePermission'>, input, executeOptions),
+    queryKeywordSparklines: (input, executeOptions) => execute('partner.sites.keyword.sparklines.query' satisfies MethodId<'queryKeywordSparklines'>, input, executeOptions),
+    getQueryTrend: (input, executeOptions) => execute('partner.sites.query.trend.get' satisfies MethodId<'getQueryTrend'>, input, executeOptions),
+    getPageTrend: (input, executeOptions) => execute('partner.sites.page.trend.get' satisfies MethodId<'getPageTrend'>, input, executeOptions),
+    getContentVelocity: (input, executeOptions) => execute('partner.sites.content.velocity.get' satisfies MethodId<'getContentVelocity'>, input, executeOptions),
+    getCtrCurve: (input, executeOptions) => execute('partner.sites.ctr.curve.get' satisfies MethodId<'getCtrCurve'>, input, executeOptions),
+    getDarkTraffic: (input, executeOptions) => execute('partner.sites.dark.traffic.get' satisfies MethodId<'getDarkTraffic'>, input, executeOptions),
+    getDeviceGap: (input, executeOptions) => execute('partner.sites.device.gap.get' satisfies MethodId<'getDeviceGap'>, input, executeOptions),
+    getKeywordBreadth: (input, executeOptions) => execute('partner.sites.keyword.breadth.get' satisfies MethodId<'getKeywordBreadth'>, input, executeOptions),
+    getPositionDistribution: (input, executeOptions) => execute('partner.sites.position.distribution.get' satisfies MethodId<'getPositionDistribution'>, input, executeOptions),
+    getTopAssociation: (input, executeOptions) => execute('partner.sites.top.association.get' satisfies MethodId<'getTopAssociation'>, input, executeOptions),
+    getIndexPercent: (input, executeOptions) => execute('partner.sites.index.percent.get' satisfies MethodId<'getIndexPercent'>, input, executeOptions),
+    createSitemapAction: (input, executeOptions) => execute('partner.sites.sitemaps.action.create' satisfies MethodId<'createSitemapAction'>, input, executeOptions),
+    querySitemapMembership: (input, executeOptions) => execute('partner.sites.sitemaps.membership.query' satisfies MethodId<'querySitemapMembership'>, input, executeOptions),
+    createTeam: (input, executeOptions) => execute('partner.teams.create' satisfies MethodId<'createTeam'>, input, executeOptions),
+    renameTeam: (input, executeOptions) => execute('partner.teams.rename' satisfies MethodId<'renameTeam'>, input, executeOptions),
+    deleteTeam: (input, executeOptions) => execute('partner.teams.delete' satisfies MethodId<'deleteTeam'>, input, executeOptions),
+    listTeamMembers: (input, executeOptions) => execute('partner.teams.members.list' satisfies MethodId<'listTeamMembers'>, input, executeOptions),
+    addTeamMember: (input, executeOptions) => execute('partner.teams.members.add' satisfies MethodId<'addTeamMember'>, input, executeOptions),
+    updateTeamMemberRole: (input, executeOptions) => execute('partner.teams.members.role.update' satisfies MethodId<'updateTeamMemberRole'>, input, executeOptions),
+    removeTeamMember: (input, executeOptions) => execute('partner.teams.members.remove' satisfies MethodId<'removeTeamMember'>, input, executeOptions),
+    updateSiteTeam: (input, executeOptions) => execute('partner.sites.team.update' satisfies MethodId<'updateSiteTeam'>, input, executeOptions),
+    getTeamCatalog: (input, executeOptions) => execute('partner.teams.catalog.get' satisfies MethodId<'getTeamCatalog'>, input, executeOptions),
+    bindTeamCatalog: (input, executeOptions) => execute('partner.teams.catalog.bind' satisfies MethodId<'bindTeamCatalog'>, input, executeOptions),
+    getSiteIntIdCrosswalk: (input, executeOptions) => execute('partner.users.sites.crosswalk.get' satisfies MethodId<'getSiteIntIdCrosswalk'>, input, executeOptions),
+    deleteUser: (input, executeOptions) => execute('partner.users.delete' satisfies MethodId<'deleteUser'>, input, executeOptions),
+    createVerificationToken: (input, executeOptions) => execute('partner.users.verification.token.create' satisfies MethodId<'createVerificationToken'>, input, executeOptions),
+    addAndVerifySite: (input, executeOptions) => execute('partner.users.sites.verify.create' satisfies MethodId<'addAndVerifySite'>, input, executeOptions),
+    queryAnalyticsRows: (input, executeOptions) => execute('analytics.rows.query' satisfies MethodId<'queryAnalyticsRows'>, input, executeOptions),
+    queryAnalyticsReport: (input, executeOptions) => execute('analytics.reports.query' satisfies MethodId<'queryAnalyticsReport'>, input, executeOptions),
+    queryAnalyticsReportDetail: (input, executeOptions) => execute('analytics.reports.detail.query' satisfies MethodId<'queryAnalyticsReportDetail'>, input, executeOptions),
+    getRealtimeStreamHead: (input = {}, executeOptions) => execute('realtime.stream.head.get' satisfies MethodId<'getRealtimeStreamHead'>, input, executeOptions),
+    createRealtimeTicket: (input, executeOptions) => execute('realtime.tickets.create' satisfies MethodId<'createRealtimeTicket'>, input, executeOptions),
   }
   return client
 }
