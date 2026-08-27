@@ -9,7 +9,6 @@ import type {
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import * as gscdump from '../../src'
 import { progressBar, rowWithMetricDefaults } from '../../src/core/cli-format'
-import { formatErrorForCli } from '../../src/core/errors'
 import { daysAgo as daysAgoUtcInternal } from '../../src/core/gsc-dates'
 import { daysAgoUtc } from '../../src/dates'
 import { daysAgo as daysAgoPst } from '../../src/query'
@@ -24,7 +23,6 @@ describe('v1 public surface', () => {
   })
 
   it('keeps internal helpers available to package modules', () => {
-    expect(formatErrorForCli(new Error('failed'))).toContain('failed')
     expect(progressBar(1, 2, 'sync')).toContain('sync')
     expect(rowWithMetricDefaults({ clicks: null })).toMatchObject({ clicks: 0 })
     expect(daysAgoUtc(1)).toBe(daysAgoUtcInternal(1))

@@ -156,6 +156,13 @@
   MS_PER_DAY: number
   resolveWindow: function
   toIsoDate: function
+./errors:
+  classifyError: function
+  GscApiError: function
+  gscErrorToException: function
+  isPermissionDeniedError: function
+  parseGoogleError: function
+  rethrowAsGscApiError: function
 ./normalize:
   normalizeUrl: function
 ./query:
