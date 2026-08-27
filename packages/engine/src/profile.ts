@@ -21,6 +21,8 @@
 
 import type { QueryProfiler, QuerySpan } from './storage'
 
+export type { QueryProfiler, QuerySpan } from './storage'
+
 /**
  * Build a {@link QueryProfiler} that records each closed span to `sink`.
  *

@@ -23,6 +23,7 @@ export default defineBuildConfig({
         './src/errors.ts',
         './src/contracts.ts',
         './src/planner.ts',
+        './src/profile.ts',
         './src/schema.ts',
         './src/sync-config.ts',
         './src/ingest.ts',
