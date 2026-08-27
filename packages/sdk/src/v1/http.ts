@@ -708,34 +708,37 @@ function operationLookup(
   return operations
 }
 
+interface GscdumpV1Runtime {
+  buildOperationPath: typeof buildHttpOperationPath
+  operations: ReturnType<typeof operationLookup>
+  protocol: GscdumpV1ProtocolShape
+}
+
+let runtimePromise: Promise<GscdumpV1Runtime> | undefined
+
+function getRuntime(): Promise<GscdumpV1Runtime> {
+  return runtimePromise ??= import('@gscdump/contracts/v1/http').then(({
+    buildHttpOperationPath: buildOperationPath,
+    createGscdumpV1Protocol,
+    listHttpOperations: listOperations,
+  }) => {
+    const protocol = createGscdumpV1Protocol()
+    return {
+      buildOperationPath,
+      operations: operationLookup(protocol, listOperations),
+      protocol,
+    }
+  })
+}
+
 /** Create one framework-neutral client whose behavior is driven by the v1 registry. */
 export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): GscdumpV1Client {
   const retryOptions = resolveRetryOptions(options.retry)
   const apiRoot = options.apiRoot ?? DEFAULT_API_ROOT
   const fetchImpl = options.fetch ?? globalThis.fetch
-  let runtimePromise: Promise<{
-    buildOperationPath: typeof buildHttpOperationPath
-    operations: ReturnType<typeof operationLookup>
-    protocol: GscdumpV1ProtocolShape
-  }> | undefined
 
   if (typeof fetchImpl !== 'function')
     throw new TypeError('createGscdumpV1Client requires a fetch implementation in this runtime.')
-
-  function getRuntime(): NonNullable<typeof runtimePromise> {
-    return runtimePromise ??= import('@gscdump/contracts/v1/http').then(({
-      buildHttpOperationPath: buildOperationPath,
-      createGscdumpV1Protocol,
-      listHttpOperations: listOperations,
-    }) => {
-      const protocol = createGscdumpV1Protocol()
-      return {
-        buildOperationPath,
-        operations: operationLookup(protocol, listOperations),
-        protocol,
-      }
-    })
-  }
 
   // Typed facade over an untyped body: the body only needs the operation
   // descriptor, and keeping the 30+-operation input/response unions out of its
