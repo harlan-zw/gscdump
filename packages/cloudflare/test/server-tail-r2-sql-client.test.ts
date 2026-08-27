@@ -5,7 +5,7 @@ import {
   inlineParams,
   R2SqlError,
   R2SqlTimeoutError,
-} from '../src/server-tail/r2-sql-client'
+} from '../src/server-tail'
 
 const range = { start: '2026-01-01', end: '2026-03-31' }
 
@@ -29,6 +29,14 @@ describe('inlineParams', () => {
 
   it('does not treat a ? inside a string literal as a placeholder', () => {
     expect(inlineParams('x = \'why?\' AND y = ?', [1])).toBe('x = \'why?\' AND y = 1')
+  })
+
+  it('maps nullish params to SQL NULL', () => {
+    expect(inlineParams('a = ? AND b = ?', [null, undefined])).toBe('a = NULL AND b = NULL')
+  })
+
+  it('rejects non-finite numeric params', () => {
+    expect(() => inlineParams('a = ?', [Number.NaN])).toThrow(R2SqlError)
   })
 
   it('throws on placeholder/param count mismatch', () => {
