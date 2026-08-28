@@ -49,6 +49,7 @@ describe('bingWebmaster', () => {
     const result = await client.getUserSites()
 
     expect(result).toEqual({ ok: true, value: [{
+      _tag: 'VerifiedSite',
       isVerified: true,
       url: 'https://nuxtseo.com/',
     }] })
@@ -208,6 +209,71 @@ describe('bingWebmaster', () => {
     expect(result).toEqual({ ok: false, error: {
       _tag: 'UnverifiedSite',
       siteUrl: 'https://nuxtseo.com/',
+    } })
+  })
+
+  it('keeps verification codes on an unverified Site', async () => {
+    const fetch = queuedFetch(json({ d: [{
+      AuthenticationCode: 'ABC123',
+      DnsVerificationCode: 'abc123.nuxtseo.com',
+      IsVerified: false,
+      Url: 'https://nuxtseo.com/',
+    }] }))
+    const client = bingWebmaster({ accessToken: 'access-token', clock, fetch })
+
+    const result = await client.getUserSites()
+
+    expect(result).toEqual({ ok: true, value: [{
+      _tag: 'UnverifiedSite',
+      authenticationCode: 'ABC123',
+      dnsVerificationCode: 'abc123.nuxtseo.com',
+      isVerified: false,
+      url: 'https://nuxtseo.com/',
+    }] })
+  })
+
+  it('adds a Site through the OAuth bearer boundary', async () => {
+    const fetch = queuedFetch(json({ d: null }))
+    const client = bingWebmaster({ accessToken: 'access-token', clock, fetch })
+
+    const result = await client.addSite('https://nuxtseo.com/')
+
+    expect(result).toEqual({ ok: true, value: undefined })
+    const [input, init] = vi.mocked(fetch).mock.calls[0]
+    expect(String(input)).toBe('https://www.bing.com/webmaster/api.svc/json/AddSite')
+    expect(init?.method).toBe('POST')
+    expect(init?.body).toBe(JSON.stringify({ siteUrl: 'https://nuxtseo.com/' }))
+  })
+
+  it('asks Bing to verify a Site', async () => {
+    const fetch = queuedFetch(json({ d: null }))
+    const client = bingWebmaster({ accessToken: 'access-token', clock, fetch })
+
+    const result = await client.verifySite('https://nuxtseo.com/')
+
+    expect(result).toEqual({ ok: true, value: undefined })
+    const [input, init] = vi.mocked(fetch).mock.calls[0]
+    expect(String(input)).toBe('https://www.bing.com/webmaster/api.svc/json/VerifySite')
+    expect(init?.method).toBe('POST')
+    expect(init?.body).toBe(JSON.stringify({ siteUrl: 'https://nuxtseo.com/' }))
+  })
+
+  it.each([
+    ['AddSite', (client: ReturnType<typeof bingWebmaster>) => client.addSite('https://nuxtseo.com/')],
+    ['VerifySite', (client: ReturnType<typeof bingWebmaster>) => client.verifySite('https://nuxtseo.com/')],
+  ] as const)('rejects a payload from %s', async (operation, call) => {
+    const client = bingWebmaster({
+      accessToken: 'access-token',
+      clock,
+      fetch: queuedFetch(json({ d: true })),
+    })
+
+    const result = await call(client)
+
+    expect(result).toEqual({ ok: false, error: {
+      _tag: 'MalformedResponse',
+      operation,
+      reason: 'invalid-payload',
     } })
   })
 
