@@ -4,8 +4,8 @@
 // "TypeError: Do not know how to serialize a BigInt", breaking every Iceberg
 // ingest commit in production (2026-05-25 incident).
 //
-// icebird 0.8.12 adds a BigInt-aware `stringifyIcebergJson`; this repo's
-// `patches/icebird@0.8.12.patch` also uses it for REST catalog commit bodies.
+// Icebird 0.8.26 includes `stringifyIcebergJson`. This repo's package patch
+// uses it for REST catalog commit bodies.
 // The engine BUNDLES this patched icebird into its dist, so this guard lives
 // here (not in the consumer, which no longer depends on icebird): it pins the
 // contract that plain `JSON.stringify` throws on a BigInt while

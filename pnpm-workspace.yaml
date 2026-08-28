@@ -33,27 +33,27 @@ overrides:
   typescript: 6.0.3
 patchedDependencies:
   hyparquet-writer@0.16.6: patches/hyparquet-writer@0.16.6.patch
-  icebird@0.8.22: patches/icebird@0.8.22.patch
+  icebird@0.8.26: patches/icebird@0.8.26.patch
 catalog:
-  '@cloudflare/vitest-pool-workers': ^0.21.3
-  '@cloudflare/workers-types': ^5.20260816.1
+  '@cloudflare/vitest-pool-workers': ^0.22.0
+  '@cloudflare/workers-types': ^5.20260827.1
   '@duckdb/duckdb-wasm': 1.33.1-dev57.0
   '@duckdb/node-api': 1.5.1-r.2
   '@modelcontextprotocol/sdk': ^1.30.0
   '@nuxt/schema': 4.5.2
-  '@nuxt/ui': ^4.10.0
-  '@types/node': ^26.2.0
+  '@nuxt/ui': ^4.11.0
+  '@types/node': ^26.4.0
   '@types/proper-lockfile': ^4.1.4
   '@unovis/ts': ^1.6.7
   '@unovis/vue': ^1.6.7
-  '@vitest/browser-playwright': ^4.1.10
+  '@vitest/browser-playwright': ^4.1.11
   '@vueuse/core': ^14.4.0
   aws4fetch: ^1.0.20
   drizzle-orm: 1.0.0-rc.4
-  hyparquet: ^1.28.2
+  hyparquet: ^1.29.2
   hyparquet-writer: ^0.16.6
-  icebird: ^0.8.22
-  js-yaml: ^5.3.0
+  icebird: ^0.8.26
+  js-yaml: ^5.4.1
   nuxt: ^4.5.2
   nuxt-use-query: ^1.0.1
   pathe: ^2.0.3
@@ -65,8 +65,8 @@ catalog:
   tsx: ^4.23.12
   unstorage: ^1.17.5
   vitest-package-exports: ^1.2.0
-  vue: ^3.5.41
-  wrangler: ^4.123.0
+  vue: ^3.5.42
+  wrangler: ^4.126.0
   zod: ^4.4.3
 catalogs:
   deps:
@@ -78,17 +78,17 @@ catalogs:
     open: ^11.0.1
     proper-lockfile: ^4.1.2
   dev-build:
-    bumpp: ^12.2.1
+    bumpp: ^12.2.2
     obuild: ^0.4.38
-    rolldown: ^1.2.4
+    rolldown: ^1.2.6
     typescript: ^7.0.2
   dev-lint:
     '@antfu/eslint-config': ^9.3.0
-    eslint: ^10.8.1
+    eslint: ^10.9.1
   dev-test:
     '@nuxt/test-utils': ^4.1.0
-    '@vitest/browser': ^4.1.10
-    vitest: ^4.1.10
+    '@vitest/browser': ^4.1.11
+    vitest: ^4.1.11
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true
