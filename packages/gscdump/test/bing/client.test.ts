@@ -502,8 +502,8 @@ describe('bingWebmaster', () => {
       accessToken: 'access-token',
       clock,
       fetch: queuedFetch(json({ d: [{
-        AvgClickPosition: 2,
-        AvgImpressionPosition: 4,
+        AvgClickPosition: -1,
+        AvgImpressionPosition: 4.25,
         Clicks: 3,
         Date: '/Date(1786406400000)/',
         Impressions: 40,
@@ -514,12 +514,82 @@ describe('bingWebmaster', () => {
     const result = await client.getPageStats('https://nuxtseo.com/')
 
     expect(result).toEqual({ ok: true, value: [{
-      averageClickPosition: 2,
-      averageImpressionPosition: 4,
+      averageClickPosition: null,
+      averageImpressionPosition: 4.25,
       clicks: 3,
       date: '2026-08-11T00:00:00.000Z',
       impressions: 40,
-      query: 'https://nuxtseo.com/',
+      page: 'https://nuxtseo.com/',
+    }] })
+  })
+
+  it('gets top query statistics without treating a query as a page', async () => {
+    const client = bingWebmaster({
+      accessToken: 'access-token',
+      clock,
+      fetch: queuedFetch(json({ d: [{
+        AvgClickPosition: 6.5,
+        AvgImpressionPosition: 7.25,
+        Clicks: 12,
+        Date: '/Date(1786406400000)/',
+        Impressions: 240,
+        Query: 'nuxt seo',
+      }] })),
+    })
+
+    const result = await client.getQueryStats('https://nuxtseo.com/')
+
+    expect(result).toEqual({ ok: true, value: [{
+      averageClickPosition: 6.5,
+      averageImpressionPosition: 7.25,
+      clicks: 12,
+      date: '2026-08-11T00:00:00.000Z',
+      impressions: 240,
+      query: 'nuxt seo',
+    }] })
+  })
+
+  it('gets daily crawl statistics and preserves optional failure counts', async () => {
+    const client = bingWebmaster({
+      accessToken: 'access-token',
+      clock,
+      fetch: queuedFetch(json({ d: [{
+        AllOtherCodes: 3,
+        BlockedByRobotsTxt: 4,
+        Code2xx: 9998,
+        Code301: 5,
+        Code302: 6,
+        Code4xx: 7,
+        Code5xx: 8,
+        ConnectionTimeout: 9,
+        ContainsMalware: 10,
+        CrawlErrors: 11,
+        CrawledPages: 10042,
+        Date: '/Date(1786406400000)/',
+        DnsFailures: 12,
+        InIndex: 1000,
+        InLinks: 2048,
+      }] })),
+    })
+
+    const result = await client.getCrawlStats('https://nuxtseo.com/')
+
+    expect(result).toEqual({ ok: true, value: [{
+      allOtherCodes: 3,
+      blockedByRobotsTxt: 4,
+      code2xx: 9998,
+      code301: 5,
+      code302: 6,
+      code4xx: 7,
+      code5xx: 8,
+      connectionTimeout: 9,
+      containsMalware: 10,
+      crawlErrors: 11,
+      crawledPages: 10042,
+      date: '2026-08-11T00:00:00.000Z',
+      dnsFailures: 12,
+      inIndex: 1000,
+      inLinks: 2048,
     }] })
   })
 

@@ -38,6 +38,25 @@ export interface BingQueryStatsWire {
   Query: string
 }
 
+export interface BingCrawlStatsWire {
+  __type?: string
+  AllOtherCodes: number
+  BlockedByRobotsTxt: number
+  Code2xx: number
+  Code301: number
+  Code302: number
+  Code4xx: number
+  Code5xx: number
+  ConnectionTimeout?: number
+  ContainsMalware: number
+  CrawlErrors: number
+  CrawledPages: number
+  Date: string
+  DnsFailures?: number
+  InIndex: number
+  InLinks: number
+}
+
 export interface BingCrawlIssueWire {
   __type?: string
   HttpCode: number
@@ -74,12 +93,39 @@ export interface BingUrlTrafficInfo {
 }
 
 export interface BingPageStats {
-  averageClickPosition: number
-  averageImpressionPosition: number
+  averageClickPosition: number | null
+  averageImpressionPosition: number | null
+  clicks: number
+  date: string
+  impressions: number
+  page: string
+}
+
+export interface BingQueryStats {
+  averageClickPosition: number | null
+  averageImpressionPosition: number | null
   clicks: number
   date: string
   impressions: number
   query: string
+}
+
+export interface BingCrawlStats {
+  allOtherCodes: number
+  blockedByRobotsTxt: number
+  code2xx: number
+  code301: number
+  code302: number
+  code4xx: number
+  code5xx: number
+  connectionTimeout?: number
+  containsMalware: number
+  crawlErrors: number
+  crawledPages: number
+  date: string
+  dnsFailures?: number
+  inIndex: number
+  inLinks: number
 }
 
 export type BingCrawlIssue
@@ -153,6 +199,8 @@ export type BingOperation
     | 'GetUrlTrafficInfo'
     | 'GetChildrenUrlInfo'
     | 'GetPageStats'
+    | 'GetQueryStats'
+    | 'GetCrawlStats'
     | 'GetCrawlIssues'
 
 export interface BingCallOptions {
@@ -184,6 +232,8 @@ export interface BingWebmasterClient {
   getUrlTrafficInfo: (siteUrl: string, url: string, options?: BingCallOptions) => Promise<Result<BingUrlTrafficInfo | null, BingProviderError>>
   getChildrenUrlInfo: (siteUrl: string, url: string, options?: BingChildrenOptions) => Promise<Result<BingUrlInfo[], BingProviderError>>
   getPageStats: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingPageStats[], BingProviderError>>
+  getQueryStats: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingQueryStats[], BingProviderError>>
+  getCrawlStats: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingCrawlStats[], BingProviderError>>
   getCrawlIssues: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingUrlWithCrawlIssues[], BingProviderError>>
 }
 

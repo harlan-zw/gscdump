@@ -1,9 +1,11 @@
 import type { Result } from '../core/result'
 import type {
   BingCrawlIssue,
+  BingCrawlStats,
   BingEvidenceError,
   BingIndexingEvidence,
   BingPageStats,
+  BingQueryStats,
   BingSite,
   BingUrlInfo,
   BingUrlTrafficInfo,
@@ -20,6 +22,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+function isNonNegativeNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+}
+
+function isBingAveragePosition(value: unknown): value is number {
+  return value === -1 || isNonNegativeNumber(value)
+}
+
+function normalizeBingAveragePosition(value: number): number | null {
+  return value === -1 ? null : value
 }
 
 function parseBingDate(value: unknown): Result<string | undefined, 'invalid-date'> {
@@ -99,10 +113,17 @@ export function normalizeBingUrlTrafficInfo(value: unknown): Result<BingUrlTraff
   })
 }
 
-export function normalizeBingPageStats(value: unknown): Result<BingPageStats, 'invalid-payload'> {
+function normalizeBingTrafficStats(value: unknown): Result<{
+  averageClickPosition: number | null
+  averageImpressionPosition: number | null
+  clicks: number
+  date: string
+  dimension: string
+  impressions: number
+}, 'invalid-payload'> {
   if (!isRecord(value)
-    || !isNonNegativeInteger(value.AvgClickPosition)
-    || !isNonNegativeInteger(value.AvgImpressionPosition)
+    || !isBingAveragePosition(value.AvgClickPosition)
+    || !isBingAveragePosition(value.AvgImpressionPosition)
     || !isNonNegativeInteger(value.Clicks)
     || !isNonNegativeInteger(value.Impressions)
     || typeof value.Query !== 'string') {
@@ -114,12 +135,70 @@ export function normalizeBingPageStats(value: unknown): Result<BingPageStats, 'i
     return err('invalid-payload')
 
   return ok({
-    averageClickPosition: value.AvgClickPosition,
-    averageImpressionPosition: value.AvgImpressionPosition,
+    averageClickPosition: normalizeBingAveragePosition(value.AvgClickPosition),
+    averageImpressionPosition: normalizeBingAveragePosition(value.AvgImpressionPosition),
     clicks: value.Clicks,
     date: date.value,
+    dimension: value.Query,
     impressions: value.Impressions,
-    query: value.Query,
+  })
+}
+
+export function normalizeBingPageStats(value: unknown): Result<BingPageStats, 'invalid-payload'> {
+  const parsed = normalizeBingTrafficStats(value)
+  if (!parsed.ok)
+    return parsed
+  const { dimension, ...stats } = parsed.value
+  return ok({ ...stats, page: dimension })
+}
+
+export function normalizeBingQueryStats(value: unknown): Result<BingQueryStats, 'invalid-payload'> {
+  const parsed = normalizeBingTrafficStats(value)
+  if (!parsed.ok)
+    return parsed
+  const { dimension, ...stats } = parsed.value
+  return ok({ ...stats, query: dimension })
+}
+
+export function normalizeBingCrawlStats(value: unknown): Result<BingCrawlStats, 'invalid-payload'> {
+  if (!isRecord(value)
+    || !isNonNegativeInteger(value.AllOtherCodes)
+    || !isNonNegativeInteger(value.BlockedByRobotsTxt)
+    || !isNonNegativeInteger(value.Code2xx)
+    || !isNonNegativeInteger(value.Code301)
+    || !isNonNegativeInteger(value.Code302)
+    || !isNonNegativeInteger(value.Code4xx)
+    || !isNonNegativeInteger(value.Code5xx)
+    || (value.ConnectionTimeout !== undefined && !isNonNegativeInteger(value.ConnectionTimeout))
+    || !isNonNegativeInteger(value.ContainsMalware)
+    || !isNonNegativeInteger(value.CrawlErrors)
+    || !isNonNegativeInteger(value.CrawledPages)
+    || (value.DnsFailures !== undefined && !isNonNegativeInteger(value.DnsFailures))
+    || !isNonNegativeInteger(value.InIndex)
+    || !isNonNegativeInteger(value.InLinks)) {
+    return err('invalid-payload')
+  }
+
+  const date = parseBingDate(value.Date)
+  if (!date.ok || !date.value)
+    return err('invalid-payload')
+
+  return ok({
+    allOtherCodes: value.AllOtherCodes,
+    blockedByRobotsTxt: value.BlockedByRobotsTxt,
+    code2xx: value.Code2xx,
+    code301: value.Code301,
+    code302: value.Code302,
+    code4xx: value.Code4xx,
+    code5xx: value.Code5xx,
+    ...(value.ConnectionTimeout === undefined ? {} : { connectionTimeout: value.ConnectionTimeout }),
+    containsMalware: value.ContainsMalware,
+    crawlErrors: value.CrawlErrors,
+    crawledPages: value.CrawledPages,
+    date: date.value,
+    ...(value.DnsFailures === undefined ? {} : { dnsFailures: value.DnsFailures }),
+    inIndex: value.InIndex,
+    inLinks: value.InLinks,
   })
 }
 

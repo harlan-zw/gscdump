@@ -17,8 +17,10 @@ import type {
 import { err, ok } from '../core/result'
 import {
   normalizeBingCrawlIssue,
+  normalizeBingCrawlStats,
   normalizeBingIndexingEvidence,
   normalizeBingPageStats,
+  normalizeBingQueryStats,
   normalizeBingSite,
   normalizeBingUrlInfo,
   normalizeBingUrlTrafficInfo,
@@ -295,6 +297,18 @@ export function bingWebmaster(options: BingWebmasterOptions): BingWebmasterClien
     getPageStats: (siteUrl, callOptions) => request(
       'GetPageStats',
       parseList(normalizeBingPageStats),
+      { query: { siteUrl }, signal: callOptions?.signal },
+    ),
+
+    getQueryStats: (siteUrl, callOptions) => request(
+      'GetQueryStats',
+      parseList(normalizeBingQueryStats),
+      { query: { siteUrl }, signal: callOptions?.signal },
+    ),
+
+    getCrawlStats: (siteUrl, callOptions) => request(
+      'GetCrawlStats',
+      parseList(normalizeBingCrawlStats),
       { query: { siteUrl }, signal: callOptions?.signal },
     ),
 
