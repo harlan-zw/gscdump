@@ -195,6 +195,15 @@ export type HttpV1RegistryOperationEntry<
   TId extends HttpV1RegistryOperationId<TProtocol>,
 > = HttpV1OperationEntryWithId<HttpV1OperationEntry<TProtocol>, TId>
 
+export type HttpV1RegistryPathParams<
+  TProtocol extends HttpV1ProtocolLike,
+  TId extends HttpV1RegistryOperationId<TProtocol>,
+> = HttpV1RegistryOperationEntry<TProtocol, TId>['operation']['request']['params'] extends infer TParams
+  ? TParams extends ZodTypeAny
+    ? z.input<TParams>
+    : undefined
+  : never
+
 export interface HttpV1RegistryPathOptions {
   /** Root replacing the contract's `/api` segment. */
   apiRoot?: string
@@ -210,9 +219,30 @@ export interface HttpV1Registry<TProtocol extends HttpV1ProtocolLike> {
   ) => ResolvedHttpV1Operation<HttpV1RegistryOperationEntry<TProtocol, TAllowed[number]>> | null
   path: <const TId extends HttpV1RegistryOperationId<TProtocol>>(
     id: TId,
-    params?: unknown,
+    params?: HttpV1RegistryPathParams<TProtocol, TId>,
     options?: HttpV1RegistryPathOptions,
   ) => string
+}
+
+export interface UnknownHttpV1OperationError extends TypeError {
+  readonly tag: 'UnknownHttpV1OperationError'
+  readonly operationId: string
+}
+
+export function isUnknownHttpV1OperationError(error: unknown): error is UnknownHttpV1OperationError {
+  return error instanceof TypeError
+    && 'tag' in error
+    && error.tag === 'UnknownHttpV1OperationError'
+    && 'operationId' in error
+    && typeof error.operationId === 'string'
+}
+
+function unknownHttpV1OperationError(operationId: string): UnknownHttpV1OperationError {
+  return Object.assign(new TypeError(`Unknown HTTP v1 operation ID: ${operationId}`), {
+    name: 'UnknownHttpV1OperationError',
+    operationId,
+    tag: 'UnknownHttpV1OperationError' as const,
+  })
 }
 
 function pathParameterNames(path: string): string[] {
@@ -514,7 +544,7 @@ export function createHttpV1Registry<const TProtocol extends HttpV1ProtocolLike>
   function operation(id: string): RuntimeEntry {
     const entry = entriesById.get(id)
     if (!entry)
-      throw new TypeError(`Unknown HTTP v1 operation ID: ${id}`)
+      throw unknownHttpV1OperationError(id)
     return entry
   }
 

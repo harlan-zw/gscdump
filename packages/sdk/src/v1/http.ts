@@ -505,6 +505,7 @@ function requestIdFrom(response: Response): string | undefined {
 }
 
 interface GscdumpV1Runtime {
+  isUnknownOperationError: (error: unknown) => boolean
   registry: HttpV1Registry<GscdumpV1ProtocolShape>
   protocol: GscdumpV1ProtocolShape
 }
@@ -515,9 +516,11 @@ function getRuntime(): Promise<GscdumpV1Runtime> {
   return runtimePromise ??= import('@gscdump/contracts/v1/http').then(({
     createGscdumpV1Protocol,
     createHttpV1Registry,
+    isUnknownHttpV1OperationError,
   }) => {
     const protocol = createGscdumpV1Protocol()
     return {
+      isUnknownOperationError: isUnknownHttpV1OperationError,
       protocol,
       registry: createHttpV1Registry(protocol),
     }
@@ -545,13 +548,15 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     input: unknown,
     executeOptions: GscdumpV1ExecuteOptions = {},
   ): Promise<unknown> {
-    const { protocol, registry } = await getRuntime()
+    const { isUnknownOperationError, protocol, registry } = await getRuntime()
     const entry = (() => {
       try {
         return registry.operation(operationId)
       }
-      catch {
-        return null
+      catch (cause) {
+        if (isUnknownOperationError(cause))
+          return null
+        throw cause
       }
     })()
     if (!entry) {
@@ -565,8 +570,14 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     const { operation } = entry
     if (typeof input !== 'object' || input === null || Array.isArray(input))
       throw requestValidationError(operation.id, 'input', new TypeError('input must be an object.'))
+    // The generic client shell erases params; the registry parses them before serialization.
+    const buildRegisteredPath = registry.path as unknown as (
+      id: GscdumpV1OperationId,
+      params?: unknown,
+      options?: { apiRoot?: string },
+    ) => string
     const prepared = prepareRequest(
-      params => registry.path(operationId, params, { apiRoot }),
+      params => buildRegisteredPath(operationId, params, { apiRoot }),
       operation,
       input as Record<string, unknown>,
       executeOptions,

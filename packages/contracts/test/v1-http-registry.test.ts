@@ -1,6 +1,7 @@
 import {
   createGscdumpV1Protocol,
   createHttpV1Registry,
+  isUnknownHttpV1OperationError,
 } from '@gscdump/contracts/v1/http'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
@@ -42,6 +43,9 @@ describe('@gscdump/contracts/v1/http registry', () => {
   })
 
   it('builds canonical direct and proxy paths from operation IDs', () => {
+    expectTypeOf(registry.path<'analytics.rows.query'>)
+      .parameter(1)
+      .toEqualTypeOf<{ siteId: string } | undefined>()
     expect(registry.path('partner.users.lifecycle.get', { userId: 'u_01' }))
       .toBe('/api/partner/v1/users/u_01/lifecycle')
     expect(registry.path(
@@ -54,7 +58,15 @@ describe('@gscdump/contracts/v1/http registry', () => {
   it('fails when callers retain stale operation IDs', () => {
     const stale = 'partner.sites.removed.get' as 'partner.users.lifecycle.get'
 
-    expect(() => registry.operation(stale)).toThrow(/Unknown HTTP v1 operation ID/)
+    const failure = (() => {
+      try {
+        return registry.operation(stale)
+      }
+      catch (cause) {
+        return cause
+      }
+    })()
+    expect(isUnknownHttpV1OperationError(failure)).toBe(true)
     expect(() => registry.path(stale)).toThrow(/Unknown HTTP v1 operation ID/)
     expect(() => registry.resolve({
       method: 'GET',
