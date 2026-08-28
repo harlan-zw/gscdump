@@ -24,7 +24,7 @@ flowchart LR
   QB[Query builder<br/><small>gscdump/query</small>]
   QT[queries table<br/><small>engine/schema</small>]
   GO[Google<br/><small>GoogleSearchConsoleClient</small>]
-  BI[Bing<br/><small>gscdump/bing · planned</small>]
+  BI[Bing<br/><small>gscdump/bing</small>]
   SEN[Search Engine<br/><small>public discriminator</small>]
   IE[Indexing Evidence<br/><small>contracts/v1</small>]
   SR[Submission Receipt<br/><small>delivery contract</small>]
@@ -60,8 +60,8 @@ flowchart LR
 | Term | Table / module | Owner | Cardinality | Customer word |
 | --- | --- | --- | --- | --- |
 | Site | (no table; `siteId` string key) | `gscdump/tenant` | Team 1—N Site (hosted); Auth 1—N Site (CLI) | "property" (README, docs), "site" (`--site`, `siteUrl`) |
-| Search Engine | `GoogleSearchConsoleClient`; planned `gscdump/bing` | `gscdump`, `@gscdump/contracts` | Site 1—N Search Engine | "Google" or "Bing" |
-| Indexing Evidence | `gscdump/api/indexing`; planned `gscdump/bing`; `@gscdump/contracts/v1` | `gscdump`, `@gscdump/contracts` | (Site, URL, Search Engine) 1—N observation | "indexing evidence" |
+| Search Engine | `GoogleSearchConsoleClient`; `gscdump/bing` | `gscdump`, `@gscdump/contracts` | Site 1—N Search Engine | "Google" or "Bing" |
+| Indexing Evidence | `gscdump/api/indexing`; `gscdump/bing`; `@gscdump/contracts/v1` | `gscdump`, `@gscdump/contracts` | (Site, URL, Search Engine) 1—N observation | "indexing evidence" |
 | Submission Receipt | deferred delivery contract in `@gscdump/contracts/v1` | `@gscdump/contracts` | Submission 1—1 Submission Receipt | "submission receipt" |
 | Team | `gscdumpTeamRowSchema` | `contracts/partner` | Team 1—N Site | "team" |
 | Engine | `packages/engine` + 3 adapters | `@gscdump/engine` | Engine 1—1 Driver | not surfaced |

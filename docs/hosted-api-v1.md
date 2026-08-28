@@ -2,7 +2,7 @@
 
 ## Status and intent
 
-This is the normative contract for the first public gscdump.com API. All 51
+This is the normative contract for the first public gscdump.com API. All 53
 HTTP operations are present in the executable contracts, generated artifacts,
 SDK, and hosted producer. The checked-in package version is `1.4.11`; the API
 wire version remains `1.0`. Expanded-operation production canaries, the
@@ -48,7 +48,7 @@ unrelated app routes such as `/api/pro/...` is not the public integration
 seam. This keeps auth, telemetry, caching, and future cutovers attributable to
 the actual upstream contract.
 
-The current v1 workspace registry contains 46 partner, three analytics, and
+The current v1 workspace registry contains 48 partner, three analytics, and
 two realtime HTTP operations. The exact method, path, schema, scope, ownership,
 error, example, lifecycle, resource, and retry metadata is generated from the
 executable registry:
@@ -81,7 +81,7 @@ one method/path descriptor and rely on an untyped body switch. Producer route,
 contract descriptor, SDK method, documentation, and contract test are one
 change.
 
-All 51 accepted v1 descriptors have complete schemas and matching deployed
+All 53 accepted v1 descriptors have complete schemas and matching deployed
 host routes. Expanded operations are not considered fully rolled out until
 their canary and consumer-handoff evidence is recorded. Legacy inventory
 findings continue to block promotion of affected operations; they do not
