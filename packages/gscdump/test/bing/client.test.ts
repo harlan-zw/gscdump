@@ -246,7 +246,7 @@ describe('bingWebmaster', () => {
   })
 
   it('asks Bing to verify a Site', async () => {
-    const fetch = queuedFetch(json({ d: null }))
+    const fetch = queuedFetch(json({ d: true }))
     const client = bingWebmaster({ accessToken: 'access-token', clock, fetch })
 
     const result = await client.verifySite('https://nuxtseo.com/')
@@ -259,13 +259,13 @@ describe('bingWebmaster', () => {
   })
 
   it.each([
-    ['AddSite', (client: ReturnType<typeof bingWebmaster>) => client.addSite('https://nuxtseo.com/')],
-    ['VerifySite', (client: ReturnType<typeof bingWebmaster>) => client.verifySite('https://nuxtseo.com/')],
-  ] as const)('rejects a payload from %s', async (operation, call) => {
+    ['AddSite', { d: true }, (client: ReturnType<typeof bingWebmaster>) => client.addSite('https://nuxtseo.com/')],
+    ['VerifySite', { d: null }, (client: ReturnType<typeof bingWebmaster>) => client.verifySite('https://nuxtseo.com/')],
+  ] as const)('rejects a payload from %s', async (operation, payload, call) => {
     const client = bingWebmaster({
       accessToken: 'access-token',
       clock,
-      fetch: queuedFetch(json({ d: true })),
+      fetch: queuedFetch(json(payload)),
     })
 
     const result = await call(client)

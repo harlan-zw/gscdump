@@ -114,6 +114,10 @@ function parseEmpty(value: unknown): Result<void, 'invalid-payload'> {
   return value === null ? ok(undefined) : err('invalid-payload')
 }
 
+function parseBooleanAcknowledgement(value: unknown): Result<void, 'invalid-payload'> {
+  return typeof value === 'boolean' ? ok(undefined) : err('invalid-payload')
+}
+
 function parseList<T>(parser: BoundaryParser<T>): BoundaryParser<T[]> {
   return (value) => {
     if (!Array.isArray(value))
@@ -337,7 +341,7 @@ export function bingWebmaster(options: BingWebmasterOptions): BingWebmasterClien
 
     verifySite: (siteUrl, callOptions) => request(
       'VerifySite',
-      parseEmpty,
+      parseBooleanAcknowledgement,
       { body: { siteUrl }, method: 'POST', signal: callOptions?.signal },
     ),
   }
