@@ -177,6 +177,44 @@ export type ResolvedHttpV1Operation<TEntry extends HttpV1OperationEntry = HttpV1
     path: string
   }
 
+export type HttpV1RegistryOperationId<TProtocol extends HttpV1ProtocolLike>
+  = HttpV1ProtocolOperation<TProtocol>['id'] & string
+
+type HttpV1OperationEntryWithId<TEntry, TId extends string>
+  = TEntry extends {
+    surface: infer TSurface extends HttpV1Surface
+    operation: infer TOperation extends HttpV1OperationDefinition
+  }
+    ? TOperation extends { id: TId }
+      ? { surface: TSurface, operation: TOperation }
+      : never
+    : never
+
+export type HttpV1RegistryOperationEntry<
+  TProtocol extends HttpV1ProtocolLike,
+  TId extends HttpV1RegistryOperationId<TProtocol>,
+> = HttpV1OperationEntryWithId<HttpV1OperationEntry<TProtocol>, TId>
+
+export interface HttpV1RegistryPathOptions {
+  /** Root replacing the contract's `/api` segment. */
+  apiRoot?: string
+}
+
+export interface HttpV1Registry<TProtocol extends HttpV1ProtocolLike> {
+  operation: <const TId extends HttpV1RegistryOperationId<TProtocol>>(
+    id: TId,
+  ) => HttpV1RegistryOperationEntry<TProtocol, TId>
+  resolve: <const TAllowed extends readonly HttpV1RegistryOperationId<TProtocol>[]>(
+    request: HttpV1OperationRequest,
+    options: { allow: TAllowed },
+  ) => ResolvedHttpV1Operation<HttpV1RegistryOperationEntry<TProtocol, TAllowed[number]>> | null
+  path: <const TId extends HttpV1RegistryOperationId<TProtocol>>(
+    id: TId,
+    params?: unknown,
+    options?: HttpV1RegistryPathOptions,
+  ) => string
+}
+
 function pathParameterNames(path: string): string[] {
   return [...path.matchAll(/\{([^{}]+)\}/g)].map(match => match[1]!)
 }
@@ -459,4 +497,41 @@ export function resolveHttpOperation<
     } as ResolvedHttpV1Operation<TEntries[number]>
   }
   return null
+}
+
+export function createHttpV1Registry<const TProtocol extends HttpV1ProtocolLike>(
+  protocol: TProtocol,
+): HttpV1Registry<TProtocol> {
+  interface RuntimeEntry { surface: HttpV1Surface, operation: HttpV1OperationDefinition }
+  const entries = listHttpOperations(protocol) as RuntimeEntry[]
+  const entriesById = new Map<string, RuntimeEntry>()
+  for (const entry of entries) {
+    if (entriesById.has(entry.operation.id))
+      throw new TypeError(`Duplicate HTTP v1 operation ID: ${entry.operation.id}`)
+    entriesById.set(entry.operation.id, entry)
+  }
+
+  function operation(id: string): RuntimeEntry {
+    const entry = entriesById.get(id)
+    if (!entry)
+      throw new TypeError(`Unknown HTTP v1 operation ID: ${id}`)
+    return entry
+  }
+
+  return {
+    operation: id => operation(id) as HttpV1RegistryOperationEntry<TProtocol, typeof id>,
+    resolve: (request, options) => {
+      const allowed = options.allow.map(id => operation(id))
+      return resolveHttpOperation(allowed, request) as ResolvedHttpV1Operation<
+        HttpV1RegistryOperationEntry<TProtocol, typeof options.allow[number]>
+      > | null
+    },
+    path: (id, params, options) => {
+      const entry = operation(id)
+      const path = buildHttpOperationPath(entry.surface, entry.operation, params)
+      if (options?.apiRoot === undefined)
+        return path
+      return `${options.apiRoot.replace(/\/+$/, '')}${path.slice('/api'.length)}`
+    },
+  }
 }

@@ -228,6 +228,7 @@
   buildHttpOperationPath: function
   createGscdumpV1Documents: function
   createGscdumpV1Protocol: function
+  createHttpV1Registry: function
   createRealtimeV1Schemas: function
   defineHttpOperation: function
   defineHttpSurface: function
@@ -267,6 +268,7 @@
 ./v1/http:
   buildHttpOperationPath: function
   createGscdumpV1Protocol: function
+  createHttpV1Registry: function
   defineHttpOperation: function
   defineHttpSurface: function
   defineResponseObject: function

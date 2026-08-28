@@ -1,12 +1,10 @@
 import type {
-  buildHttpOperationPath,
   GscdumpV1Operation as ContractGscdumpV1Operation,
   GscdumpV1OperationId as ContractGscdumpV1OperationId,
   createGscdumpV1Protocol,
   GscdumpV1ErrorEnvelope,
   HttpV1OperationDefinition,
-  HttpV1Surface,
-  listHttpOperations,
+  HttpV1Registry,
 } from '@gscdump/contracts/v1/http'
 import type { z, ZodTypeAny } from 'zod'
 
@@ -14,7 +12,6 @@ type MaybePromise<T> = T | Promise<T>
 type ValueOf<T> = T[keyof T]
 
 type GscdumpV1ProtocolShape = ReturnType<typeof createGscdumpV1Protocol>
-type GscdumpV1Surface = ValueOf<GscdumpV1ProtocolShape['surfaces']>
 type GscdumpV1RegistryOperations
   = GscdumpV1ProtocolShape['surfaces']['partner']['operations']
     & GscdumpV1ProtocolShape['surfaces']['analytics']['operations']
@@ -183,9 +180,6 @@ interface PreparedRequest {
 }
 
 const DEFAULT_API_ROOT = 'https://gscdump.com/api'
-const API_PREFIX_RE = /^\/api(?=\/)/
-const TRAILING_SLASH_RE = /\/+$/
-const LEADING_SLASH_RE = /^\/+/
 
 function validationDetails(cause: unknown): Record<string, unknown> {
   if (typeof cause === 'object' && cause !== null && 'issues' in cause)
@@ -236,11 +230,6 @@ function resolveRetryOptions(options: GscdumpV1RetryOptions | undefined): Resolv
     baseDelayMs,
     maxDelayMs,
   }
-}
-
-function resolveApiUrl(apiRoot: string, contractPath: string): string {
-  const relative = contractPath.replace(API_PREFIX_RE, '').replace(LEADING_SLASH_RE, '')
-  return `${apiRoot.replace(TRAILING_SLASH_RE, '')}/${relative}`
 }
 
 function appendQueryValue(search: URLSearchParams, key: string, value: unknown): void {
@@ -299,8 +288,7 @@ function parseLocation(
 }
 
 function prepareRequest(
-  buildOperationPath: typeof buildHttpOperationPath,
-  surface: HttpV1Surface,
+  buildOperationPath: (params?: unknown) => string,
   operation: HttpV1OperationDefinition,
   input: Record<string, unknown>,
   options: GscdumpV1ExecuteOptions,
@@ -308,13 +296,11 @@ function prepareRequest(
   let path: string
   if (operation.request.params === null) {
     assertAbsentLocation(operation.id, 'params', input.params)
-    path = buildOperationPath(surface, operation)
+    path = buildOperationPath()
   }
   else {
     try {
-      // buildOperationPath performs the one strict params parse and then
-      // serializes that parsed output into the template.
-      path = buildOperationPath(surface, operation, input.params)
+      path = buildOperationPath(input.params)
     }
     catch (cause) {
       throw requestValidationError(operation.id, 'params', cause)
@@ -518,29 +504,8 @@ function requestIdFrom(response: Response): string | undefined {
   return response.headers.get('x-request-id') ?? undefined
 }
 
-function operationLookup(
-  protocol: GscdumpV1ProtocolShape,
-  listOperations: typeof listHttpOperations,
-): Map<GscdumpV1OperationId, {
-  operation: GscdumpV1Operation
-  surface: GscdumpV1Surface
-}> {
-  const operations = new Map<GscdumpV1OperationId, {
-    operation: GscdumpV1Operation
-    surface: GscdumpV1Surface
-  }>()
-  for (const { operation, surface } of listOperations(protocol)) {
-    operations.set(operation.id as GscdumpV1OperationId, {
-      operation: operation as GscdumpV1Operation,
-      surface,
-    })
-  }
-  return operations
-}
-
 interface GscdumpV1Runtime {
-  buildOperationPath: typeof buildHttpOperationPath
-  operations: ReturnType<typeof operationLookup>
+  registry: HttpV1Registry<GscdumpV1ProtocolShape>
   protocol: GscdumpV1ProtocolShape
 }
 
@@ -548,15 +513,13 @@ let runtimePromise: Promise<GscdumpV1Runtime> | undefined
 
 function getRuntime(): Promise<GscdumpV1Runtime> {
   return runtimePromise ??= import('@gscdump/contracts/v1/http').then(({
-    buildHttpOperationPath: buildOperationPath,
     createGscdumpV1Protocol,
-    listHttpOperations: listOperations,
+    createHttpV1Registry,
   }) => {
     const protocol = createGscdumpV1Protocol()
     return {
-      buildOperationPath,
-      operations: operationLookup(protocol, listOperations),
       protocol,
+      registry: createHttpV1Registry(protocol),
     }
   })
 }
@@ -582,8 +545,15 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     input: unknown,
     executeOptions: GscdumpV1ExecuteOptions = {},
   ): Promise<unknown> {
-    const { buildOperationPath, operations, protocol } = await getRuntime()
-    const entry = operations.get(operationId)
+    const { protocol, registry } = await getRuntime()
+    const entry = (() => {
+      try {
+        return registry.operation(operationId)
+      }
+      catch {
+        return null
+      }
+    })()
     if (!entry) {
       throw new GscdumpV1Error({
         code: 'request_validation',
@@ -592,19 +562,18 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
         details: { operationId },
       })
     }
-    const { operation, surface } = entry
+    const { operation } = entry
     if (typeof input !== 'object' || input === null || Array.isArray(input))
       throw requestValidationError(operation.id, 'input', new TypeError('input must be an object.'))
     const prepared = prepareRequest(
-      buildOperationPath,
-      surface,
+      params => registry.path(operationId, params, { apiRoot }),
       operation,
       input as Record<string, unknown>,
       executeOptions,
     )
     let url: string
     try {
-      url = appendQuery(resolveApiUrl(apiRoot, prepared.path), prepared.query)
+      url = appendQuery(prepared.path, prepared.query)
     }
     catch (cause) {
       throw requestValidationError(operation.id, 'query', cause)
