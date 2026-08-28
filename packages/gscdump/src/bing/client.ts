@@ -110,6 +110,10 @@ function parseNullable<T>(parser: BoundaryParser<T>): BoundaryParser<T | null> {
   }
 }
 
+function parseEmpty(value: unknown): Result<void, 'invalid-payload'> {
+  return value === null ? ok(undefined) : err('invalid-payload')
+}
+
 function parseList<T>(parser: BoundaryParser<T>): BoundaryParser<T[]> {
   return (value) => {
     if (!Array.isArray(value))
@@ -228,6 +232,12 @@ export function bingWebmaster(options: BingWebmasterOptions): BingWebmasterClien
   )
 
   return {
+    addSite: (siteUrl, callOptions) => request(
+      'AddSite',
+      parseEmpty,
+      { body: { siteUrl }, method: 'POST', signal: callOptions?.signal },
+    ),
+
     getUserSites,
 
     async getVerifiedSite(siteUrl, callOptions) {
@@ -323,6 +333,12 @@ export function bingWebmaster(options: BingWebmasterOptions): BingWebmasterClien
       'GetCrawlIssues',
       parseList(normalizeBingCrawlIssue),
       { query: { siteUrl }, signal: callOptions?.signal },
+    ),
+
+    verifySite: (siteUrl, callOptions) => request(
+      'VerifySite',
+      parseEmpty,
+      { body: { siteUrl }, method: 'POST', signal: callOptions?.signal },
     ),
   }
 }

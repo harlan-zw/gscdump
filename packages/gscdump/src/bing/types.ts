@@ -76,10 +76,21 @@ export interface BingWireResponse<T> {
   d: T
 }
 
-export interface BingSite {
-  isVerified: boolean
+export interface BingVerifiedSite {
+  _tag: 'VerifiedSite'
+  isVerified: true
   url: string
 }
+
+export interface BingUnverifiedSite {
+  _tag: 'UnverifiedSite'
+  authenticationCode: string
+  dnsVerificationCode: string
+  isVerified: false
+  url: string
+}
+
+export type BingSite = BingVerifiedSite | BingUnverifiedSite
 
 export interface BingUrlInfo {
   anchorCount: number
@@ -207,7 +218,8 @@ export interface BingEvidenceError {
 }
 
 export type BingOperation
-  = | 'GetUserSites'
+  = | 'AddSite'
+    | 'GetUserSites'
     | 'GetUrlInfo'
     | 'GetUrlTrafficInfo'
     | 'GetChildrenUrlInfo'
@@ -216,6 +228,7 @@ export type BingOperation
     | 'GetRankAndTrafficStats'
     | 'GetCrawlStats'
     | 'GetCrawlIssues'
+    | 'VerifySite'
 
 export interface BingCallOptions {
   signal?: AbortSignal
@@ -239,8 +252,9 @@ export interface BingChildrenOptions extends BingCallOptions {
 }
 
 export interface BingWebmasterClient {
+  addSite: (siteUrl: string, options?: BingCallOptions) => Promise<Result<void, BingProviderError>>
   getUserSites: (options?: BingCallOptions) => Promise<Result<BingSite[], BingProviderError>>
-  getVerifiedSite: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingSite, BingProviderError>>
+  getVerifiedSite: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingVerifiedSite, BingProviderError>>
   getUrlInfo: (siteUrl: string, url: string, options?: BingCallOptions) => Promise<Result<BingUrlInfo | null, BingProviderError>>
   getIndexingEvidence: (siteUrl: string, url: string, options?: BingCallOptions) => Promise<Result<BingIndexingEvidence, BingProviderError | BingEvidenceError>>
   getUrlTrafficInfo: (siteUrl: string, url: string, options?: BingCallOptions) => Promise<Result<BingUrlTrafficInfo | null, BingProviderError>>
@@ -250,6 +264,7 @@ export interface BingWebmasterClient {
   getRankAndTrafficStats: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingRankAndTrafficStats[], BingProviderError>>
   getCrawlStats: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingCrawlStats[], BingProviderError>>
   getCrawlIssues: (siteUrl: string, options?: BingCallOptions) => Promise<Result<BingUrlWithCrawlIssues[], BingProviderError>>
+  verifySite: (siteUrl: string, options?: BingCallOptions) => Promise<Result<void, BingProviderError>>
 }
 
 export type BingFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
