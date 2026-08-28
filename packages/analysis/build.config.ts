@@ -8,6 +8,7 @@ export default defineBuildConfig({
         './src/index.ts',
         './src/default-registry.ts',
         './src/errors.ts',
+        './src/query-dimension.ts',
         './src/report/index.ts',
         './src/source/index.ts',
       ],
