@@ -549,6 +549,46 @@ describe('bingWebmaster', () => {
     }] })
   })
 
+  it('gets daily site traffic without summing partial result sets', async () => {
+    const client = bingWebmaster({
+      accessToken: 'access-token',
+      clock,
+      fetch: queuedFetch(json({ d: [{
+        Clicks: 18,
+        Date: '/Date(1786406400000)/',
+        Impressions: 480,
+      }] })),
+    })
+
+    const result = await client.getRankAndTrafficStats('https://nuxtseo.com/')
+
+    expect(result).toEqual({ ok: true, value: [{
+      clicks: 18,
+      date: '2026-08-11T00:00:00.000Z',
+      impressions: 480,
+    }] })
+  })
+
+  it('rejects malformed daily site traffic', async () => {
+    const client = bingWebmaster({
+      accessToken: 'access-token',
+      clock,
+      fetch: queuedFetch(json({ d: [{
+        Clicks: -1,
+        Date: '/Date(1786406400000)/',
+        Impressions: 480,
+      }] })),
+    })
+
+    const result = await client.getRankAndTrafficStats('https://nuxtseo.com/')
+
+    expect(result).toEqual({ ok: false, error: {
+      _tag: 'MalformedResponse',
+      operation: 'GetRankAndTrafficStats',
+      reason: 'invalid-payload',
+    } })
+  })
+
   it('gets daily crawl statistics and preserves optional failure counts', async () => {
     const client = bingWebmaster({
       accessToken: 'access-token',
