@@ -89,6 +89,12 @@ const evidence = await client.getIndexingEvidence(
 
 if (evidence.ok)
   console.log(evidence.value)
+
+const [pages, queries, crawl] = await Promise.all([
+  client.getPageStats('https://example.com/'),
+  client.getQueryStats('https://example.com/'),
+  client.getCrawlStats('https://example.com/'),
+])
 ```
 
 Sitemap XML reading and traversal lives in `sitemapd`. Product feed scoping and
