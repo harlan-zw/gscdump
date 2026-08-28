@@ -49,7 +49,7 @@ index 2bac90d09cfa5a05243b3cf8d450df2f9e4f3c3a..a177d71fca3a3dc840b8fadfaa3ca3d7
  export { fileCatalog } from './catalog/file.js'
  export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js'
 diff --git a/src/manifest.js b/src/manifest.js
-index ba5a83e72ab90761f17bdfa1c3e876014f7b77c5..a6018c2d4b64c47c6fb9a597b7148f20fcf84574 100644
+index 629db76c1ef27b7bd22b589ae3d2473c0b546333..b84039772cb2aa4390a252ad4eb05a2a46793b32 100644
 --- a/src/manifest.js
 +++ b/src/manifest.js
 @@ -7,13 +7,21 @@ import { fetchAvroRecords, urlResolver } from './fetch.js'
@@ -75,7 +75,7 @@ index ba5a83e72ab90761f17bdfa1c3e876014f7b77c5..a6018c2d4b64c47c6fb9a597b7148f20
    resolver ??= urlResolver()
    const rawTarget = snapshotId ?? metadata['current-snapshot-id']
    if (rawTarget == null || rawTarget < 0) {
-@@ -42,53 +50,102 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
+@@ -42,54 +50,103 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
      throw new Error('No manifest information found in snapshot')
    }
  
@@ -135,9 +135,11 @@ index ba5a83e72ab90761f17bdfa1c3e876014f7b77c5..a6018c2d4b64c47c6fb9a597b7148f20
 -    // Inherit sequence number from manifest if not present in entry
 -    for (const entry of entries) {
 -      entry.partition_spec_id = manifest.partition_spec_id ?? 0
+-      if (entry.snapshot_id == null) entry.snapshot_id = manifest.added_snapshot_id
 +  // Inherit sequence number from manifest if not present in entry
 +  for (const entry of entries) {
 +    entry.partition_spec_id = manifest.partition_spec_id ?? 0
++    if (entry.snapshot_id == null) entry.snapshot_id = manifest.added_snapshot_id
  
 +    if (entry.sequence_number === undefined) {
 +      // When reading v1 manifests with no sequence number column,
@@ -225,7 +227,7 @@ index daf4cd3b829d2110545c977fa8c347b42a712722..1a338d40c55681960092857dd0c07166
    'fields': SortField[]
  }
 diff --git a/src/write/stage.js b/src/write/stage.js
-index 69491ce64e97d46177a6a4797346778803fe5918..8957cf635fac8242a08bf445600aa2708d6a6144 100644
+index 487ec24ba6d936de8459d6084ca15aaa3efbef54..032c6ead0992ae42e85be8c7ccff65e36db0c56a 100644
 --- a/src/write/stage.js
 +++ b/src/write/stage.js
 @@ -52,9 +52,11 @@ import { computeColumnStats } from './stats.js'
@@ -277,10 +279,10 @@ index 69491ce64e97d46177a6a4797346778803fe5918..8957cf635fac8242a08bf445600aa270
    if (!tableUrl) throw new Error('tableUrl is required')
    if (!resolver?.writer) throw new Error('resolver.writer is required')
    const sequenceNumber = BigInt(metadata['last-sequence-number'] ?? 0) + 1n
-@@ -215,6 +217,11 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
-     'total-delete-files': '0',
-     'total-position-deletes': '0',
-     'total-equality-deletes': '0',
+@@ -218,6 +220,11 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
+     'total-delete-files': String(prevTotals.deleteFiles),
+     'total-position-deletes': String(prevTotals.positionDeletes),
+     'total-equality-deletes': String(prevTotals.equalityDeletes),
 +    // Caller-supplied extra summary properties (e.g. an idempotency token a
 +    // commit-retry wrapper reads back to detect a landed-but-errored commit).
 +    // Spread last; callers must namespace their keys so they never shadow the
@@ -289,7 +291,7 @@ index 69491ce64e97d46177a6a4797346778803fe5918..8957cf635fac8242a08bf445600aa270
    }
    return await buildSnapshotUpdate({
      tableUrl, metadata, resolver,
-@@ -231,6 +238,88 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
+@@ -234,6 +241,91 @@ export async function stageSnapshotForAppend({ tableUrl, metadata, prepared, res
    })
  }
  
@@ -344,6 +346,9 @@ index 69491ce64e97d46177a6a4797346778803fe5918..8957cf635fac8242a08bf445600aa270
 +    records: BigInt(prevSummary?.['total-records'] ?? '0'),
 +    size: BigInt(prevSummary?.['total-files-size'] ?? '0'),
 +    files: BigInt(prevSummary?.['total-data-files'] ?? '0'),
++    deleteFiles: BigInt(prevSummary?.['total-delete-files'] ?? '0'),
++    positionDeletes: BigInt(prevSummary?.['total-position-deletes'] ?? '0'),
++    equalityDeletes: BigInt(prevSummary?.['total-equality-deletes'] ?? '0'),
 +  }
 +  const summary = {
 +    operation: 'append',
@@ -354,9 +359,9 @@ index 69491ce64e97d46177a6a4797346778803fe5918..8957cf635fac8242a08bf445600aa270
 +    'total-records': String(prevTotals.records + BigInt(recordsCount)),
 +    'total-files-size': String(prevTotals.size + addedFilesSize),
 +    'total-data-files': String(prevTotals.files + BigInt(addedDataFilesCount)),
-+    'total-delete-files': '0',
-+    'total-position-deletes': '0',
-+    'total-equality-deletes': '0',
++    'total-delete-files': String(prevTotals.deleteFiles),
++    'total-position-deletes': String(prevTotals.positionDeletes),
++    'total-equality-deletes': String(prevTotals.equalityDeletes),
 +    ...(snapshotProperties ?? {}),
 +  }
 +
@@ -379,7 +384,7 @@ index 69491ce64e97d46177a6a4797346778803fe5918..8957cf635fac8242a08bf445600aa270
   * Bundled prepare + stage. Equivalent to the prior single-call API; left in
   * place so callers that don't run inside a retry loop (e.g. `icebergTransaction`)
 diff --git a/src/write/write.js b/src/write/write.js
-index e136626b75d56e92d28baf1d0790686bae4b7d9f..ea0720ef00fe8008042b83e566ee0c90ce433a1a 100644
+index 25d38887798ebe06ab434af5751c68a0e2b85d5a..e873e8b3960c8ce8290d9fa847f1ed7e59ecd842 100644
 --- a/src/write/write.js
 +++ b/src/write/write.js
 @@ -5,7 +5,7 @@ import { loadLatestFileCatalogMetadata } from '../metadata.js'
@@ -540,7 +545,7 @@ index 3f29f9f3c0ab8cc742c4a57c8cc689fdc05d2dd4..2f92916a90b9edcbc5681f821beeeac8
  /**
   * Bundled prepare + stage. Equivalent to the prior single-call API; left in
 diff --git a/types/write/write.d.ts b/types/write/write.d.ts
-index bcaab28249f2e0fdf05d0adacecd76b19f0311d5..f1aeb5af97b25900607fcd27fafe324170473a89 100644
+index 0a6b7d987ed74879c24922be49ba30de29409a69..80b66854d80fe06c6ccec49863ed770238fdfc17 100644
 --- a/types/write/write.d.ts
 +++ b/types/write/write.d.ts
 @@ -13,7 +13,7 @@ import type { Catalog, IcebergTransaction, Lister, PartitionSpec, Resolver, Sche
@@ -570,4 +575,4 @@ index bcaab28249f2e0fdf05d0adacecd76b19f0311d5..f1aeb5af97b25900607fcd27fafe3241
 +    snapshotProperties?: Record<string, string>;
  }): Promise<TableMetadata>;
  /**
-  * Compact / rewrite a table in one call: load metadata, read every live row
+  * Compact / rewrite a table in one call: load metadata, read the live rows of
