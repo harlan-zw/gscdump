@@ -13,6 +13,7 @@ export default defineBuildConfig({
         './src/v1/index.ts',
         './src/v1/browser.ts',
         './src/v1/http.ts',
+        './src/v1/paths.ts',
         './src/v1/realtime.ts',
       ],
     },

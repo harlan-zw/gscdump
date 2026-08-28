@@ -86,6 +86,7 @@ import {
   GSCDUMP_REALTIME_TICKET_TTL_SECONDS,
   REALTIME_V1_EVENT_SEMANTICS,
 } from './realtime'
+import { gscdumpV1OperationRoute, gscdumpV1Surface } from './route-catalog'
 import { GSCDUMP_HTTP_V1_VERSION } from './version'
 
 // The inferred enum tuple keeps each operation's error DTO closed to its own codes.
@@ -822,14 +823,10 @@ export function createGscdumpV1Protocol() {
   ] as const
 
   const partner = defineHttpSurface({
-    name: 'partner',
-    prefix: '/api/partner/v1',
-    version: GSCDUMP_HTTP_V1_VERSION,
+    ...gscdumpV1Surface('partner'),
     operations: {
       getUserLifecycle: defineHttpOperation({
-        id: 'partner.users.lifecycle.get',
-        method: 'GET',
-        path: '/users/{userId}/lifecycle',
+        ...gscdumpV1OperationRoute('partner.users.lifecycle.get'),
         visibility: 'public',
         semantics: {
           kind: 'query',
@@ -891,9 +888,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       listAvailableSites: defineHttpOperation({
-        id: 'partner.users.sites.available.list',
-        method: 'GET',
-        path: '/users/{userId}/available-sites',
+        ...gscdumpV1OperationRoute('partner.users.sites.available.list'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -932,9 +927,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       createSite: defineHttpOperation({
-        id: 'partner.users.sites.create',
-        method: 'POST',
-        path: '/users/{userId}/sites',
+        ...gscdumpV1OperationRoute('partner.users.sites.create'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -970,9 +963,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       createUser: defineHttpOperation({
-        id: 'partner.users.create',
-        method: 'POST',
-        path: '/users',
+        ...gscdumpV1OperationRoute('partner.users.create'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -997,9 +988,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       updateUserTokens: defineHttpOperation({
-        id: 'partner.users.tokens.update',
-        method: 'PATCH',
-        path: '/users/{userId}/tokens',
+        ...gscdumpV1OperationRoute('partner.users.tokens.update'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -1032,9 +1021,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getSiteIndexing: defineHttpOperation({
-        id: 'partner.sites.indexing.get',
-        method: 'GET',
-        path: '/sites/{siteId}/indexing',
+        ...gscdumpV1OperationRoute('partner.sites.indexing.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1103,9 +1090,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       listSiteIndexingUrls: defineHttpOperation({
-        id: 'partner.sites.indexing.urls.list',
-        method: 'GET',
-        path: '/sites/{siteId}/indexing/urls',
+        ...gscdumpV1OperationRoute('partner.sites.indexing.urls.list'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1145,9 +1130,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       listSiteBingIndexingEvidence: defineHttpOperation({
-        id: 'partner.sites.indexing.bing.evidence.list',
-        method: 'GET',
-        path: '/sites/{siteId}/indexing/bing/evidence',
+        ...gscdumpV1OperationRoute('partner.sites.indexing.bing.evidence.list'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1188,9 +1171,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       listSiteIndexingTransitions: defineHttpOperation({
-        id: 'partner.sites.indexing.transitions.list',
-        method: 'GET',
-        path: '/sites/{siteId}/indexing/transitions',
+        ...gscdumpV1OperationRoute('partner.sites.indexing.transitions.list'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1243,9 +1224,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getSiteIndexingDiagnostics: defineHttpOperation({
-        id: 'partner.sites.indexing.diagnostics.get',
-        method: 'GET',
-        path: '/sites/{siteId}/indexing/diagnostics',
+        ...gscdumpV1OperationRoute('partner.sites.indexing.diagnostics.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1285,9 +1264,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getSiteSitemaps: defineHttpOperation({
-        id: 'partner.sites.sitemaps.get',
-        method: 'GET',
-        path: '/sites/{siteId}/sitemaps',
+        ...gscdumpV1OperationRoute('partner.sites.sitemaps.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1334,9 +1311,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getSiteSitemapChanges: defineHttpOperation({
-        id: 'partner.sites.sitemaps.changes.get',
-        method: 'GET',
-        path: '/sites/{siteId}/sitemaps/changes',
+        ...gscdumpV1OperationRoute('partner.sites.sitemaps.changes.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1379,9 +1354,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getSiteAnalysis: defineHttpOperation({
-        id: 'partner.sites.analysis.get',
-        method: 'GET',
-        path: '/sites/{siteId}/analysis',
+        ...gscdumpV1OperationRoute('partner.sites.analysis.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1422,9 +1395,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getSiteAnalysisBundle: defineHttpOperation({
-        id: 'partner.sites.analysis.bundle.get',
-        method: 'GET',
-        path: '/sites/{siteId}/analysis/bundle',
+        ...gscdumpV1OperationRoute('partner.sites.analysis.bundle.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1463,9 +1434,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       deleteSite: defineHttpOperation({
-        id: 'partner.sites.delete',
-        method: 'DELETE',
-        path: '/sites/{siteId}',
+        ...gscdumpV1OperationRoute('partner.sites.delete'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -1504,9 +1473,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getCanonicalMismatches: defineHttpOperation({
-        id: 'partner.sites.canonical.mismatches.get',
-        method: 'GET',
-        path: '/sites/{siteId}/canonical-mismatches',
+        ...gscdumpV1OperationRoute('partner.sites.canonical.mismatches.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1542,9 +1509,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       inspectSiteUrls: defineHttpOperation({
-        id: 'partner.sites.indexing.inspect.create',
-        method: 'POST',
-        path: '/sites/{siteId}/indexing/inspect',
+        ...gscdumpV1OperationRoute('partner.sites.indexing.inspect.create'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: false, retry: 'never', readConsistency: null },
         auth: {
@@ -1583,9 +1548,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       recoverSitePermission: defineHttpOperation({
-        id: 'partner.sites.permission.recover',
-        method: 'POST',
-        path: '/sites/{siteId}/permission/recover',
+        ...gscdumpV1OperationRoute('partner.sites.permission.recover'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -1627,9 +1590,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       queryKeywordSparklines: defineHttpOperation({
-        id: 'partner.sites.keyword.sparklines.query',
-        method: 'POST',
-        path: '/sites/{siteId}/keyword-sparklines',
+        ...gscdumpV1OperationRoute('partner.sites.keyword.sparklines.query'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1665,9 +1626,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getQueryTrend: defineHttpOperation({
-        id: 'partner.sites.query.trend.get',
-        method: 'GET',
-        path: '/sites/{siteId}/query-trend',
+        ...gscdumpV1OperationRoute('partner.sites.query.trend.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1703,9 +1662,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getPageTrend: defineHttpOperation({
-        id: 'partner.sites.page.trend.get',
-        method: 'GET',
-        path: '/sites/{siteId}/page-trend',
+        ...gscdumpV1OperationRoute('partner.sites.page.trend.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1741,9 +1698,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getContentVelocity: defineHttpOperation({
-        id: 'partner.sites.content.velocity.get',
-        method: 'GET',
-        path: '/sites/{siteId}/content-velocity',
+        ...gscdumpV1OperationRoute('partner.sites.content.velocity.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1779,9 +1734,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getCtrCurve: defineHttpOperation({
-        id: 'partner.sites.ctr.curve.get',
-        method: 'GET',
-        path: '/sites/{siteId}/ctr-curve',
+        ...gscdumpV1OperationRoute('partner.sites.ctr.curve.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1817,9 +1770,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getDarkTraffic: defineHttpOperation({
-        id: 'partner.sites.dark.traffic.get',
-        method: 'GET',
-        path: '/sites/{siteId}/dark-traffic',
+        ...gscdumpV1OperationRoute('partner.sites.dark.traffic.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1855,9 +1806,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getDeviceGap: defineHttpOperation({
-        id: 'partner.sites.device.gap.get',
-        method: 'GET',
-        path: '/sites/{siteId}/device-gap',
+        ...gscdumpV1OperationRoute('partner.sites.device.gap.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1893,9 +1842,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getKeywordBreadth: defineHttpOperation({
-        id: 'partner.sites.keyword.breadth.get',
-        method: 'GET',
-        path: '/sites/{siteId}/keyword-breadth',
+        ...gscdumpV1OperationRoute('partner.sites.keyword.breadth.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1931,9 +1878,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getPositionDistribution: defineHttpOperation({
-        id: 'partner.sites.position.distribution.get',
-        method: 'GET',
-        path: '/sites/{siteId}/position-distribution',
+        ...gscdumpV1OperationRoute('partner.sites.position.distribution.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -1969,9 +1914,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getTopAssociation: defineHttpOperation({
-        id: 'partner.sites.top.association.get',
-        method: 'GET',
-        path: '/sites/{siteId}/top-association',
+        ...gscdumpV1OperationRoute('partner.sites.top.association.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -2007,9 +1950,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getIndexPercent: defineHttpOperation({
-        id: 'partner.sites.index.percent.get',
-        method: 'GET',
-        path: '/sites/{siteId}/index-percent',
+        ...gscdumpV1OperationRoute('partner.sites.index.percent.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -2051,9 +1992,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       createSitemapAction: defineHttpOperation({
-        id: 'partner.sites.sitemaps.action.create',
-        method: 'POST',
-        path: '/sites/{siteId}/sitemaps/actions',
+        ...gscdumpV1OperationRoute('partner.sites.sitemaps.action.create'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: false, retry: 'never', readConsistency: null },
         auth: {
@@ -2092,9 +2031,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       querySitemapMembership: defineHttpOperation({
-        id: 'partner.sites.sitemaps.membership.query',
-        method: 'POST',
-        path: '/sites/{siteId}/sitemaps/membership',
+        ...gscdumpV1OperationRoute('partner.sites.sitemaps.membership.query'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -2130,9 +2067,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       listSitemapUrls: defineHttpOperation({
-        id: 'partner.sites.sitemaps.urls.get',
-        method: 'GET',
-        path: '/sites/{siteId}/sitemaps/urls',
+        ...gscdumpV1OperationRoute('partner.sites.sitemaps.urls.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -2179,9 +2114,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getSitemapExport: defineHttpOperation({
-        id: 'partner.sites.sitemaps.export.get',
-        method: 'GET',
-        path: '/sites/{siteId}/sitemaps/export',
+        ...gscdumpV1OperationRoute('partner.sites.sitemaps.export.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -2227,9 +2160,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       createTeam: defineHttpOperation({
-        id: 'partner.teams.create',
-        method: 'POST',
-        path: '/teams',
+        ...gscdumpV1OperationRoute('partner.teams.create'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: false, retry: 'never', readConsistency: null },
         auth: {
@@ -2257,9 +2188,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       renameTeam: defineHttpOperation({
-        id: 'partner.teams.rename',
-        method: 'PATCH',
-        path: '/teams/{teamId}',
+        ...gscdumpV1OperationRoute('partner.teams.rename'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -2292,9 +2221,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       deleteTeam: defineHttpOperation({
-        id: 'partner.teams.delete',
-        method: 'DELETE',
-        path: '/teams/{teamId}',
+        ...gscdumpV1OperationRoute('partner.teams.delete'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -2327,9 +2254,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       listTeamMembers: defineHttpOperation({
-        id: 'partner.teams.members.list',
-        method: 'GET',
-        path: '/teams/{teamId}/members',
+        ...gscdumpV1OperationRoute('partner.teams.members.list'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -2359,9 +2284,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       addTeamMember: defineHttpOperation({
-        id: 'partner.teams.members.add',
-        method: 'POST',
-        path: '/teams/{teamId}/members',
+        ...gscdumpV1OperationRoute('partner.teams.members.add'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -2394,9 +2317,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       updateTeamMemberRole: defineHttpOperation({
-        id: 'partner.teams.members.role.update',
-        method: 'PATCH',
-        path: '/teams/{teamId}/members/{userId}',
+        ...gscdumpV1OperationRoute('partner.teams.members.role.update'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -2435,9 +2356,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       removeTeamMember: defineHttpOperation({
-        id: 'partner.teams.members.remove',
-        method: 'DELETE',
-        path: '/teams/{teamId}/members/{userId}',
+        ...gscdumpV1OperationRoute('partner.teams.members.remove'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -2476,9 +2395,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       updateSiteTeam: defineHttpOperation({
-        id: 'partner.sites.team.update',
-        method: 'PATCH',
-        path: '/sites/{siteId}/team',
+        ...gscdumpV1OperationRoute('partner.sites.team.update'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -2511,9 +2428,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getTeamCatalog: defineHttpOperation({
-        id: 'partner.teams.catalog.get',
-        method: 'GET',
-        path: '/teams/{teamId}/catalog',
+        ...gscdumpV1OperationRoute('partner.teams.catalog.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -2546,9 +2461,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       bindTeamCatalog: defineHttpOperation({
-        id: 'partner.teams.catalog.bind',
-        method: 'POST',
-        path: '/teams/{teamId}/catalog',
+        ...gscdumpV1OperationRoute('partner.teams.catalog.bind'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -2584,9 +2497,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       getSiteIntIdCrosswalk: defineHttpOperation({
-        id: 'partner.users.sites.crosswalk.get',
-        method: 'GET',
-        path: '/users/{userId}/sites/crosswalk',
+        ...gscdumpV1OperationRoute('partner.users.sites.crosswalk.get'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -2625,9 +2536,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       deleteUser: defineHttpOperation({
-        id: 'partner.users.delete',
-        method: 'DELETE',
-        path: '/users/{userId}',
+        ...gscdumpV1OperationRoute('partner.users.delete'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -2663,9 +2572,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       createVerificationToken: defineHttpOperation({
-        id: 'partner.users.verification.token.create',
-        method: 'POST',
-        path: '/users/{userId}/verification-token',
+        ...gscdumpV1OperationRoute('partner.users.verification.token.create'),
         visibility: 'public',
         semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
         auth: {
@@ -2707,9 +2614,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       addAndVerifySite: defineHttpOperation({
-        id: 'partner.users.sites.verify.create',
-        method: 'POST',
-        path: '/users/{userId}/sites/verify',
+        ...gscdumpV1OperationRoute('partner.users.sites.verify.create'),
         visibility: 'public',
         semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
         auth: {
@@ -2751,14 +2656,10 @@ export function createGscdumpV1Protocol() {
   })
 
   const analytics = defineHttpSurface({
-    name: 'analytics',
-    prefix: '/api/analytics/v1',
-    version: GSCDUMP_HTTP_V1_VERSION,
+    ...gscdumpV1Surface('analytics'),
     operations: {
       queryRows: defineHttpOperation({
-        id: 'analytics.rows.query',
-        method: 'POST',
-        path: '/sites/{siteId}/rows',
+        ...gscdumpV1OperationRoute('analytics.rows.query'),
         visibility: 'public',
         semantics: {
           kind: 'query',
@@ -2816,9 +2717,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       queryReport: defineHttpOperation({
-        id: 'analytics.reports.query',
-        method: 'POST',
-        path: '/sites/{siteId}/reports',
+        ...gscdumpV1OperationRoute('analytics.reports.query'),
         visibility: 'public',
         semantics: {
           kind: 'query',
@@ -2887,9 +2786,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       queryReportDetail: defineHttpOperation({
-        id: 'analytics.reports.detail.query',
-        method: 'POST',
-        path: '/sites/{siteId}/reports/detail',
+        ...gscdumpV1OperationRoute('analytics.reports.detail.query'),
         visibility: 'public',
         semantics: {
           kind: 'query',
@@ -2960,14 +2857,10 @@ export function createGscdumpV1Protocol() {
   })
 
   const realtime = defineHttpSurface({
-    name: 'realtime',
-    prefix: '/api/realtime/v1',
-    version: GSCDUMP_HTTP_V1_VERSION,
+    ...gscdumpV1Surface('realtime'),
     operations: {
       getStreamHead: defineHttpOperation({
-        id: 'realtime.stream.head.get',
-        method: 'GET',
-        path: '/stream/head',
+        ...gscdumpV1OperationRoute('realtime.stream.head.get'),
         visibility: 'public',
         semantics: {
           kind: 'query',
@@ -3009,9 +2902,7 @@ export function createGscdumpV1Protocol() {
         },
       }),
       createTicket: defineHttpOperation({
-        id: 'realtime.tickets.create',
-        method: 'POST',
-        path: '/tickets',
+        ...gscdumpV1OperationRoute('realtime.tickets.create'),
         visibility: 'public',
         semantics: {
           kind: 'mutation',

@@ -2,7 +2,7 @@
 
 Shared protocol contracts for gscdump.com integrations.
 
-> The executable 51-operation public-v1 registry is exported from
+> The executable public v1 registry is exported from
 > `@gscdump/contracts/v1`. Existing root route/endpoint exports still describe
 > the legacy host during the release and cutover overlap. See the
 > [integration guide](../../docs/guides/hosted-v1.md),
@@ -47,6 +47,19 @@ Framework adapters use the registry mechanics exported from
 
 Consumer authorization stays app-owned. A browser proxy selects its explicit
 operation-ID allowlist, then passes only those entries to the resolver.
+
+Consumers that only need operation metadata and paths can avoid the schema
+runtime:
+
+```ts
+import { createGscdumpV1Paths } from '@gscdump/contracts/v1/paths'
+
+const paths = createGscdumpV1Paths({ apiRoot: '/api/_gscdump' })
+const url = paths.path('analytics.rows.query', { siteId: 's_01' })
+```
+
+The subpath has no Zod dependency. It encodes each path parameter as one URL
+segment. Callers own query string construction and validation.
 
 Generated contract files:
 

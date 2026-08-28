@@ -284,6 +284,9 @@
   isUnknownHttpV1OperationError: function
   listHttpOperations: function
   resolveHttpOperation: function
+./v1/paths:
+  createGscdumpV1Paths: function
+  isUnknownHttpV1OperationError: function
 ./v1/realtime:
   createRealtimeV1Schemas: function
   GSCDUMP_REALTIME_ACK_POLICY: object
