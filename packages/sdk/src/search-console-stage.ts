@@ -102,7 +102,7 @@ export interface ClassifySearchConsoleStageInput {
   pageMoverDropCount?: number | null
   /** v2 trajectory axis — when present, drives the growth override + decline detection. */
   trajectory?: SearchConsoleStageTrajectory | null
-  /** v2 maturity axis — impressions over the trailing 28 days. Gates whether coverage% is even meaningful. */
+  /** v2 reach axis — impressions over the trailing 28 days. Gates comparative growth claims. */
   impressions28d?: number | null
   /**
    * v2 on-page technical faults from the crawl audit (broken links/images,
@@ -258,8 +258,8 @@ function stage(
 // MATURITY: the 5 sites >20k impressions/28d were all growing with coverage 52–100%,
 // so coverage% stops predicting health above this line; the next site down sits at ~5k.
 const ESTABLISHED_IMPRESSIONS_28D = 20000
-// Below this, traffic is too thin to diagnose coverage at all (gscdump 17, mdream 170, skilld 146).
-const NASCENT_IMPRESSIONS_28D = 1000
+// Below this, percentage growth is too sensitive to a few impressions to support a growth claim.
+const MIN_GROWTH_IMPRESSIONS_28D = 1000
 // GROWTH: every healthy exemplar cleared +10% clicks/90d (+25/+43/+100/+191/+28).
 const GROWTH_CLICKS_PCT_90D = 10
 const GROWTH_IMPRESSIONS_PCT_90D = 20
@@ -422,11 +422,8 @@ function severeCoverageStage(
 }
 
 /**
- * v2 classifier. Trajectory and maturity are first-class axes that run BEFORE
- * the coverage/discovery rungs, so a growing site is told to keep expanding —
- * never to "fix indexing". Reuses the existing stage-key enum (growth →
- * `healthy_growth_ready`, nascent → `waiting_for_data`, mass crawled-not-indexed
- * → `index_rejection`, on-page/crawl faults → `crawl_blocked`).
+ * v2 classifier. Direct indexing evidence remains actionable at any traffic
+ * volume. Comparative reach claims require enough current observations.
  */
 export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInput): SearchConsoleStage {
   const issues = input.issues ?? []
@@ -492,13 +489,15 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
   const clicks28d = traj?.clicksPct28d ?? null
   const clicksPrior28d = traj?.clicksPrior28d ?? null
 
-  const isGrowing = (clicks90d != null && clicks90d > GROWTH_CLICKS_PCT_90D)
+  const hasGrowthEvidence = impressions28d != null && impressions28d >= MIN_GROWTH_IMPRESSIONS_28D
+  const isGrowing = hasGrowthEvidence && (
+    (clicks90d != null && clicks90d > GROWTH_CLICKS_PCT_90D)
     || (imp90d != null && imp90d > GROWTH_IMPRESSIONS_PCT_90D && posDelta90d != null && posDelta90d < 0)
+  )
   // Both windows down AND enough prior traffic for the drop to be meaningful.
   const isDeclining = clicks90d != null && clicks90d < DECLINE_CLICKS_PCT
     && clicks28d != null && clicks28d < DECLINE_CLICKS_PCT
     && clicksPrior28d != null && clicksPrior28d >= MIN_DECLINE_PRIOR_CLICKS
-  const isNascent = impressions28d != null && impressions28d < NASCENT_IMPRESSIONS_28D
   const isEstablished = impressions28d != null && impressions28d >= ESTABLISHED_IMPRESSIONS_28D
   const hasHardBlocker = hardBlocks > Math.max(10, totalUrls * 0.05)
 
@@ -511,7 +510,7 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
     ])
   }
 
-  const severeCoverage = isNascent ? null : severeCoverageStage(input, totalUrls, indexed)
+  const severeCoverage = severeCoverageStage(input, totalUrls, indexed)
   if (severeCoverage)
     return severeCoverage
 
@@ -542,22 +541,11 @@ export function classifySearchConsoleStage(input: ClassifySearchConsoleStageInpu
     ])
   }
 
-  // Mass crawled-but-rejected on a large site = content quality. Diagnosable
-  // regardless of traffic maturity (Google actively crawled and refused these),
-  // so it sits ABOVE the nascent floor.
+  // Mass crawled-but-rejected on a large Site is direct content quality evidence.
   if (crawled > Math.max(10, totalUrls * 0.30) && totalUrls > 500) {
     return stage('index_rejection', [
       { label: 'Crawled, not indexed', value: formatSearchConsoleCount(crawled), source: 'indexing' },
       { label: 'Not indexed', value: formatSearchConsoleCount(notIndexed), source: 'indexing' },
-    ])
-  }
-
-  // Maturity floor: too little traffic to diagnose coverage. Catches brand-new
-  // sites the v1 model wrongly flagged as a discovery defect.
-  if (isNascent) {
-    return stage('waiting_for_data', [
-      { label: 'Impressions (28d)', value: formatSearchConsoleCount(impressions28d ?? 0), source: 'performance' },
-      { label: 'Indexed pages', value: `${formatSearchConsoleCount(indexed)} of ${formatSearchConsoleCount(totalUrls)}`, source: 'indexing' },
     ])
   }
 
