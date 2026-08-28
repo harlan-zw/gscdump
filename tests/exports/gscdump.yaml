@@ -132,6 +132,19 @@
   normalizeBingSite: function
   normalizeBingUrlInfo: function
   normalizeBingUrlTrafficInfo: function
+./client:
+  createAuth: function
+  createFetch: function
+  DEFAULT_GSC_REQUEST_TIMEOUT_MS: number
+  googleSearchConsole: function
+  GSC_INDEXING_SCOPE: string
+  GSC_READ_SCOPE: string
+  GSC_SITE_VERIFICATION_SCOPE: string
+  GSC_WRITE_SCOPE: string
+  hasGoogleScope: function
+  hasGscReadScope: function
+  hasGscWriteScope: function
+  hasIndexingScope: function
 ./contracts: {}
 ./dates:
   addDays: function
@@ -163,6 +176,20 @@
   isPermissionDeniedError: function
   parseGoogleError: function
   rethrowAsGscApiError: function
+./indexing:
+  batchInspectUrls: function
+  batchInspectUrlsFlatSettled: function
+  batchRequestIndexing: function
+  canUseUrlInspection: function
+  getIndexingEligibility: function
+  getIndexingMetadata: function
+  getNextCheckAfter: function
+  getNextCheckPriority: function
+  inspectUrl: function
+  inspectUrlFlat: function
+  MAX_FLAT_INSPECTION_BATCH_CONCURRENCY: number
+  requestIndexing: function
+  runSequentialBatch: function
 ./normalize:
   normalizeUrl: function
 ./query:
@@ -241,6 +268,23 @@
   sameSitemapIdentity: function
   scopeSitemapRecords: function
   sitemapContentHash: function
+./sites:
+  addSite: function
+  deleteSite: function
+  deleteSitemap: function
+  fetchSitemap: function
+  fetchSitemaps: function
+  fetchSites: function
+  fetchSitesWithSitemaps: function
+  getVerificationToken: function
+  getVerifiedSite: function
+  listVerifiedSites: function
+  resolveVerificationTarget: function
+  siteUrlToVerificationSite: function
+  submitSitemap: function
+  unverifySite: function
+  verificationMethodsFor: function
+  verifySite: function
 ./tenant:
   decodeSiteId: function
   encodeSiteId: function

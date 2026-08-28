@@ -1,19 +1,22 @@
-import type { Auth, VerificationMethod } from 'gscdump'
+import type { Auth } from 'gscdump/client'
+import type { VerificationMethod } from 'gscdump/sites'
 import type { HandlerContext } from '../types'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { googleSearchConsole } from 'gscdump/client'
+import {
+  getIndexingMetadata,
+  runSequentialBatch,
+} from 'gscdump/indexing'
+import { SearchTypes } from 'gscdump/query'
 import {
   addSite,
   deleteSite,
-  getIndexingMetadata,
   getVerificationToken,
   getVerifiedSite,
-  googleSearchConsole,
   listVerifiedSites,
-  runSequentialBatch,
   unverifySite,
   verifySite,
-} from 'gscdump'
-import { SearchTypes } from 'gscdump/query'
+} from 'gscdump/sites'
 import { z } from 'zod'
 import { discoverLiveSitemap } from '../../sitemap'
 import * as handlers from '../handlers'

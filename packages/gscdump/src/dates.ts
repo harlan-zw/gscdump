@@ -25,6 +25,8 @@ export {
   toIsoDate,
 } from './core/gsc-dates'
 
+export type { Period, ResolvedAnalyticsRange } from './core/types'
+
 export type {
   ComparisonMode,
   ResolvedWindow,

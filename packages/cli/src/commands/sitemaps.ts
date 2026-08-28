@@ -1,7 +1,7 @@
 import process from 'node:process'
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
 import { defineCommand } from 'citty'
-import { fetchSitemap } from 'gscdump'
+import { fetchSitemap } from 'gscdump/sites'
 import { sitemapsCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { resolveCliEnvironment } from '../environment'

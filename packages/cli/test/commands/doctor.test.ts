@@ -75,8 +75,8 @@ vi.mock('node:fs/promises', () => ({
   rm: (...args: unknown[]) => mocks.fsRm(...args),
 }))
 
-vi.mock('gscdump', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump')>()
+vi.mock('gscdump/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump/client')>()
   return {
     ...actual,
     googleSearchConsole: mocks.googleSearchConsole,

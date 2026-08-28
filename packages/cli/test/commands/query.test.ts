@@ -10,8 +10,8 @@ const mocks = vi.hoisted(() => ({
   storeRunRawSql: vi.fn(),
 }))
 
-vi.mock('gscdump', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump')>()
+vi.mock('gscdump/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('gscdump/client')>()
   return {
     ...actual,
     googleSearchConsole: vi.fn(() => ({
