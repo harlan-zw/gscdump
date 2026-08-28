@@ -228,6 +228,7 @@
   buildHttpOperationPath: function
   createGscdumpV1Documents: function
   createGscdumpV1Protocol: function
+  createHttpV1Registry: function
   createRealtimeV1Schemas: function
   defineHttpOperation: function
   defineHttpSurface: function
@@ -255,6 +256,7 @@
   HTTP_V1_METHODS: object
   HTTP_V1_SCOPES: object
   HTTP_V1_SURFACES: object
+  isUnknownHttpV1OperationError: function
   listHttpOperations: function
   REALTIME_V1_EVENT_NAMES: object
   REALTIME_V1_EVENT_SEMANTICS: object
@@ -267,6 +269,7 @@
 ./v1/http:
   buildHttpOperationPath: function
   createGscdumpV1Protocol: function
+  createHttpV1Registry: function
   defineHttpOperation: function
   defineHttpSurface: function
   defineResponseObject: function
@@ -278,6 +281,7 @@
   HTTP_V1_METHODS: object
   HTTP_V1_SCOPES: object
   HTTP_V1_SURFACES: object
+  isUnknownHttpV1OperationError: function
   listHttpOperations: function
   resolveHttpOperation: function
 ./v1/realtime:

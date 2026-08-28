@@ -6,8 +6,9 @@ import {
 } from '@gscdump/sdk/v1'
 import { describe, expect, it, vi } from 'vitest'
 
-const { createProtocolSpy } = vi.hoisted(() => ({
+const { createProtocolSpy, registryOperationFailure } = vi.hoisted(() => ({
   createProtocolSpy: vi.fn(),
+  registryOperationFailure: { value: null as Error | null },
 }))
 
 vi.mock(import('@gscdump/contracts/v1/http'), async (importOriginal) => {
@@ -17,6 +18,17 @@ vi.mock(import('@gscdump/contracts/v1/http'), async (importOriginal) => {
     createGscdumpV1Protocol() {
       createProtocolSpy()
       return actual.createGscdumpV1Protocol()
+    },
+    createHttpV1Registry(protocol: Parameters<typeof actual.createHttpV1Registry>[0]) {
+      const registry = actual.createHttpV1Registry(protocol)
+      return {
+        ...registry,
+        operation(id: Parameters<typeof registry.operation>[0]) {
+          if (registryOperationFailure.value)
+            throw registryOperationFailure.value
+          return registry.operation(id)
+        },
+      }
     },
   }
 })
@@ -471,5 +483,20 @@ describe('@gscdump/sdk/v1 HTTP executor', () => {
       details: { location: 'input' },
     })
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('rethrows unexpected registry failures', async () => {
+    const failure = new Error('registry failed')
+    const fetch = vi.fn<typeof globalThis.fetch>()
+    const client = createGscdumpV1Client({ credential: 'user_secret', fetch })
+    registryOperationFailure.value = failure
+
+    try {
+      await expect(client.getRealtimeStreamHead()).rejects.toBe(failure)
+      expect(fetch).not.toHaveBeenCalled()
+    }
+    finally {
+      registryOperationFailure.value = null
+    }
   })
 })
