@@ -63,8 +63,24 @@ export function normalizeBingSite(value: unknown): Result<BingSite, 'invalid-pay
     return err('invalid-payload')
   }
 
+  if (value.IsVerified) {
+    return ok({
+      _tag: 'VerifiedSite',
+      isVerified: true,
+      url: value.Url,
+    })
+  }
+
+  if (typeof value.AuthenticationCode !== 'string'
+    || typeof value.DnsVerificationCode !== 'string') {
+    return err('invalid-payload')
+  }
+
   return ok({
-    isVerified: value.IsVerified,
+    _tag: 'UnverifiedSite',
+    authenticationCode: value.AuthenticationCode,
+    dnsVerificationCode: value.DnsVerificationCode,
+    isVerified: false,
     url: value.Url,
   })
 }
