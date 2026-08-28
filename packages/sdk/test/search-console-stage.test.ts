@@ -2,6 +2,41 @@ import { describe, expect, it } from 'vitest'
 import { classifySearchConsoleStage } from '../src/search-console-stage'
 
 describe('classifySearchConsoleStage canonical clamp', () => {
+  it('keeps observed low-volume indexing data diagnosable', () => {
+    const stage = classifySearchConsoleStage({
+      connected: true,
+      summary: { totalUrls: 15, indexed: 7, indexedPercent: 46.7 },
+      issues: [],
+      sitemaps: [{ urlCount: 15 }],
+      impressions28d: 14,
+    })
+
+    expect(stage.key).not.toBe('waiting_for_data')
+  })
+
+  it('keeps waiting for data for an unfinished indexing sync', () => {
+    const stage = classifySearchConsoleStage({
+      connected: true,
+      indexingStatus: 'pending',
+      impressions28d: 14,
+    })
+
+    expect(stage.key).toBe('waiting_for_data')
+  })
+
+  it('does not promote trivial percentage growth to healthy growth', () => {
+    const stage = classifySearchConsoleStage({
+      connected: true,
+      summary: { totalUrls: 15, indexed: 7, indexedPercent: 46.7 },
+      issues: [{ type: 'unknown_to_google', label: 'Unknown to Google', count: 8 }],
+      sitemaps: [{ urlCount: 15 }],
+      impressions28d: 14,
+      trajectory: { clicksPct90d: 100, impressionsPct90d: 100, positionDelta90d: -1 },
+    })
+
+    expect(stage.key).toBe('weak_discovery')
+  })
+
   it('does not let growth mask a severe indexing coverage failure', () => {
     const stage = classifySearchConsoleStage({
       connected: true,

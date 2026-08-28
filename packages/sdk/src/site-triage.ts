@@ -20,8 +20,7 @@ import { countSearchConsoleIssues, formatSearchConsoleCount } from './search-con
 import { normalizeSiteType } from './site-baseline'
 
 export type ReachStage
-  = | 'waiting_for_data' // genuinely new — no history to diagnose
-    | 'emerging' // small but climbing
+  = | 'emerging' // observed, with too little current reach for a comparative claim
     | 'growing' // established + trending up
     | 'plateaued' // established + flat
     | 'declining' // established + sustained drop (still alive)
@@ -42,7 +41,7 @@ export interface TriageEvidence {
  * Distance-to-next-stage for one axis, so the UI never re-derives thresholds.
  *
  * `direction`:
- *  - `advance` — up-path rung (waiting → emerging → growing). `pct` = value/target.
+ *  - `advance` — up-path rung (emerging → growing). `pct` = value/target.
  *  - `escape`  — off-ramp recovery (declining/faded/decayed) or a held health gate
  *    (crawl_faults/quality_rejection). `pct` = inverse distance: closer to passing ⇒ higher.
  *  - `sustain` — already good (growing/healthy). `nextStage` null, `pct` 1, framed as momentum.
@@ -83,7 +82,6 @@ export interface SiteTriage {
 }
 
 export interface SiteTriageInput {
-  connected: boolean
   // ── maturity + reach (GSC, lag-trimmed windows) ──
   /** Impressions over the trailing 28 days — the maturity tier. */
   impressions28d?: number | null
@@ -110,9 +108,9 @@ export interface SiteTriageInput {
 }
 
 // ── thresholds (docs §10; derived from the 12-site distribution) ──
-const NASCENT_IMPRESSIONS_28D = 1000
+const MIN_GROWTH_IMPRESSIONS_28D = 1000
 const ESTABLISHED_IMPRESSIONS_28D = 20000
-const LIFETIME_FLOOR = 500 // <500 lifetime impressions ⇒ genuinely new
+const MIN_HISTORY_IMPRESSIONS = 500
 const GROWTH_CLICKS_PCT = 10
 const GROWTH_IMPRESSIONS_PCT = 20
 const DECLINE_CLICKS_PCT = -10
@@ -312,13 +310,9 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const REACH_COPY: Record<ReachStage, Pick<ReachVerdict, 'summary' | 'primaryAction'>> = {
-  waiting_for_data: {
-    summary: 'Too new to diagnose — not enough search history yet.',
-    primaryAction: 'Submit a clean sitemap, add internal links, and give it time.',
-  },
   emerging: {
-    summary: 'Early but climbing — real impressions are starting to land.',
-    primaryAction: 'Keep publishing on the themes already gaining impressions.',
+    summary: 'Search Console is ready. Search visibility is still limited.',
+    primaryAction: 'Improve discovery and indexing, then build on pages that earn impressions.',
   },
   growing: {
     summary: 'Discoverable, indexed-enough, and trending up. The next work is expansion, not cleanup.',
@@ -357,24 +351,12 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
   const posDelta = input.positionDelta90d ?? null
   const liveness = input.livenessRatio ?? null
 
-  // Maturity branch: genuinely new (no lifetime history) → nothing to diagnose.
-  if (imp12m != null && imp12m < LIFETIME_FLOOR) {
-    return reach(
-      'waiting_for_data',
-      [{ label: 'Impressions (12m)', value: formatSearchConsoleCount(imp12m) }],
-      advance(
-        'emerging',
-        'lifetime impressions',
-        imp12m,
-        LIFETIME_FLOOR,
-        `${formatSearchConsoleCount(imp12m)} of ${formatSearchConsoleCount(LIFETIME_FLOOR)} lifetime impressions — collecting data, keep indexing`,
-      ),
-    )
-  }
-
-  const hadRealReach = (imp12m ?? imp28d) > LIFETIME_FLOOR
-  const isGrowing = (clicks90dPct != null && clicks90dPct > GROWTH_CLICKS_PCT)
+  const hadRealReach = (imp12m ?? imp28d) > MIN_HISTORY_IMPRESSIONS
+  const hasGrowthEvidence = imp28d >= MIN_GROWTH_IMPRESSIONS_28D
+  const isGrowing = hasGrowthEvidence && (
+    (clicks90dPct != null && clicks90dPct > GROWTH_CLICKS_PCT)
     || (imp90dPct != null && imp90dPct > GROWTH_IMPRESSIONS_PCT && posDelta != null && posDelta < 0)
+  )
 
   // Faded: a real-reach site whose latest week collapsed vs its own peak. This
   // is the spike→died case the 90d-vs-prior delta cannot see.
@@ -440,7 +422,7 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
   // Decayed: established lifetime base, not growing, impressions linger but
   // clicks have evaporated (aged-out content ranking for stale/low-intent terms).
   const ctr = clicks28d != null && imp28d > 0 ? clicks28d / imp28d : null
-  if (hadRealReach && imp28d >= NASCENT_IMPRESSIONS_28D && ctr != null && ctr < DECAY_CTR) {
+  if (hadRealReach && imp28d >= MIN_GROWTH_IMPRESSIONS_28D && ctr != null && ctr < DECAY_CTR) {
     return reach(
       'decayed',
       [
@@ -457,7 +439,7 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
     )
   }
 
-  // Both emerging and plateaued advance to growing via 90d clicks growth > +10%.
+  // Sites with enough reach advance through measured growth.
   const growthVal = clicks90dPct ?? 0
   const growthGap = Math.max(0, GROWTH_CLICKS_PCT - growthVal)
   const growthProgression = (stage: 'emerging' | 'plateaued'): StageProgression => advance(
@@ -473,8 +455,19 @@ export function classifyReachStage(input: SiteTriageInput): ReachVerdict {
   // Established + neither up nor down → plateaued; small-but-real → emerging.
   if (imp28d >= ESTABLISHED_IMPRESSIONS_28D)
     return reach('plateaued', [{ label: 'Impressions (28d)', value: formatSearchConsoleCount(imp28d) }], growthProgression('plateaued'))
-  if (imp28d < NASCENT_IMPRESSIONS_28D)
-    return reach('emerging', [{ label: 'Impressions (28d)', value: formatSearchConsoleCount(imp28d) }], growthProgression('emerging'))
+  if (imp28d < MIN_GROWTH_IMPRESSIONS_28D) {
+    return reach(
+      'emerging',
+      [{ label: 'Impressions (28d)', value: formatSearchConsoleCount(imp28d) }],
+      advance(
+        'growing',
+        '28d impressions',
+        imp28d,
+        MIN_GROWTH_IMPRESSIONS_28D,
+        `${formatSearchConsoleCount(imp28d)} impressions in 28 days. Build enough visibility to measure growth reliably.`,
+      ),
+    )
+  }
   return reach('plateaued', [{ label: 'Impressions (28d)', value: formatSearchConsoleCount(imp28d) }], growthProgression('plateaued'))
 }
 
