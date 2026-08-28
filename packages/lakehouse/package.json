@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/lakehouse",
   "type": "module",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "Dataset-agnostic Iceberg lakehouse layer + dataset registry for R2 Data Catalog producers (ADR-0021).",
   "author": {
     "name": "Harlan Wilton",

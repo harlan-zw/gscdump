@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/sdk",
   "type": "module",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "Consumer SDK for hosted gscdump.com integrations.",
   "author": {
     "name": "Harlan Wilton",
