@@ -225,6 +225,8 @@
 ./search-types:
   GSC_SEARCH_TYPES: object
 ./v1:
+  bingCnameVerificationV1Schema: object
+  bingConnectionV1Schema: object
   buildHttpOperationPath: function
   createGscdumpV1Documents: function
   createGscdumpV1Protocol: function
@@ -267,6 +269,8 @@
   createGscdumpV1BrowserSchemas: function
   GSCDUMP_V1_ANALYTICS_DIMENSIONS: object
 ./v1/http:
+  bingCnameVerificationV1Schema: object
+  bingConnectionV1Schema: object
   buildHttpOperationPath: function
   createGscdumpV1Protocol: function
   createHttpV1Registry: function

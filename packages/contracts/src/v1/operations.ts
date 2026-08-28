@@ -56,6 +56,7 @@ import {
   teamCatalogRefSchema,
   updatePartnerUserTokensSchema,
 } from '../schemas'
+import { bingConnectionV1Schemas } from './bing'
 import {
   createGscdumpV1BrowserSchemas,
   GSCDUMP_V1_ANALYTICS_DIMENSIONS,
@@ -373,6 +374,7 @@ export function createGscdumpV1Protocol() {
     ])),
     pagination: bingIndexingEvidencePagination.client,
   }), partnerResponseMeta)
+  const bingConnectionResponse = defineSuccessResponse(bingConnectionV1Schemas, partnerResponseMeta)
   const indexingTransition = defineResponseObject({
     url: z.string(),
     field: gscdumpIndexingTransitionFieldSchema,
@@ -1164,6 +1166,98 @@ export function createGscdumpV1Protocol() {
                 siteUrl: 'https://example.com/',
                 indexingEvidence: [],
                 pagination: { total: 0, limit: 100, offset: 0, hasMore: false },
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      getSiteBingConnection: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.bing.connection.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: bingConnectionResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [
+            { type: 'site.auth', idFrom: 'params.siteId' },
+            { type: 'site.indexing', idFrom: 'params.siteId' },
+          ],
+          changes: [],
+        },
+        lifecycle: { introduced: '1.6.0' },
+        docs: {
+          summary: 'Get Bing connection',
+          description: 'Returns the Bing connection state and any CNAME record required to verify the Site.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { siteId: 's_01' } },
+            response: {
+              data: { _tag: 'disconnected', searchEngine: 'bing' },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      verifySiteBingConnection: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.bing.connection.verify'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['sites:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: bingConnectionResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'site.auth', idFrom: 'params.siteId' }],
+          changes: [
+            { type: 'site.auth', idFrom: 'params.siteId' },
+            { type: 'site.indexing', idFrom: 'params.siteId' },
+          ],
+        },
+        lifecycle: { introduced: '1.6.0' },
+        docs: {
+          summary: 'Check Bing Site verification',
+          description: 'Asks Bing to verify the Site. If Bing confirms ownership, it enables the connection and queues initial sync work.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { siteId: 's_01' } },
+            response: {
+              data: {
+                _tag: 'connected',
+                searchEngine: 'bing',
+                remoteSiteUrl: 'https://example.com/',
+                verified: true,
+                scopes: ['webmaster.read'],
+                tokenExpiresAt: null,
+                lastEvidenceAt: null,
               },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
@@ -2999,6 +3093,7 @@ export function createGscdumpV1Protocol() {
       indexingUrlsResponse,
       bingIndexingEvidenceQuery,
       bingIndexingEvidenceResponse,
+      bingConnectionResponse,
       lifecycleResponse,
       registerSiteRequest,
       sitemapChangesQuery,
@@ -3033,6 +3128,7 @@ export type PartnerAvailableSitesV1Response = z.infer<GscdumpV1Protocol['schemas
 export type PartnerIndexingV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingSummaryResponse']['client']>
 export type PartnerIndexingUrlsV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingUrlsResponse']['client']>
 export type PartnerBingIndexingEvidenceV1Response = z.infer<GscdumpV1Protocol['schemas']['bingIndexingEvidenceResponse']['client']>
+export type PartnerBingConnectionV1Response = z.infer<GscdumpV1Protocol['schemas']['bingConnectionResponse']['client']>
 export type PartnerIndexingTransitionsV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingTransitionsResponse']['client']>
 export type PartnerIndexingDiagnosticsV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingDiagnosticsResponse']['client']>
 export type PartnerSitemapsV1Response = z.infer<GscdumpV1Protocol['schemas']['sitemapsResponse']['client']>

@@ -720,6 +720,8 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     getSiteIndexing: (input, executeOptions) => execute('partner.sites.indexing.get' satisfies MethodId<'getSiteIndexing'>, input, executeOptions),
     listSiteIndexingUrls: (input, executeOptions) => execute('partner.sites.indexing.urls.list' satisfies MethodId<'listSiteIndexingUrls'>, input, executeOptions),
     listSiteBingIndexingEvidence: (input, executeOptions) => execute('partner.sites.indexing.bing.evidence.list' satisfies MethodId<'listSiteBingIndexingEvidence'>, input, executeOptions),
+    getSiteBingConnection: (input, executeOptions) => execute('partner.sites.indexing.bing.connection.get' satisfies MethodId<'getSiteBingConnection'>, input, executeOptions),
+    verifySiteBingConnection: (input, executeOptions) => execute('partner.sites.indexing.bing.connection.verify' satisfies MethodId<'verifySiteBingConnection'>, input, executeOptions),
     listSiteIndexingTransitions: (input, executeOptions) => execute('partner.sites.indexing.transitions.list' satisfies MethodId<'listSiteIndexingTransitions'>, input, executeOptions),
     getSiteIndexingDiagnostics: (input, executeOptions) => execute('partner.sites.indexing.diagnostics.get' satisfies MethodId<'getSiteIndexingDiagnostics'>, input, executeOptions),
     getSiteSitemaps: (input, executeOptions) => execute('partner.sites.sitemaps.get' satisfies MethodId<'getSiteSitemaps'>, input, executeOptions),
