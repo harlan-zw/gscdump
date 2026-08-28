@@ -19,7 +19,14 @@ import {
 } from 'gscdump/sites'
 import { z } from 'zod'
 import { discoverLiveSitemap } from '../../sitemap'
-import * as handlers from '../handlers'
+import { diagnostics } from '../handlers/diagnostics'
+import {
+  batchInspectUrls,
+  batchRequestIndexing,
+  getIndexingStatus,
+  requestIndexing,
+} from '../handlers/indexing'
+import { getSitemap, listSitesWithSitemaps } from '../handlers/sites'
 import {
   batchInspectUrlsInput,
   batchRequestIndexingInput,
@@ -150,7 +157,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: listSitesInput.shape,
     },
     async (args) => {
-      const result = await handlers.listSitesWithSitemaps(args, await getContext())
+      const result = await listSitesWithSitemaps(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -175,7 +182,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: sitemapInput.shape,
     },
     async (args) => {
-      const result = await handlers.getSitemap(args, await getContext())
+      const result = await getSitemap(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -213,7 +220,8 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: listReportsInput.shape,
     },
     async () => {
-      const result = handlers.listReports()
+      const { listReports } = await import('../handlers/reports')
+      const result = listReports()
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -225,7 +233,8 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: runReportInput.shape,
     },
     async (args) => {
-      const result = await handlers.runReportHandler(args, await getContext())
+      const { runReportHandler } = await import('../handlers/reports')
+      const result = await runReportHandler(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -303,7 +312,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: requestIndexingInput.shape,
     },
     async (args) => {
-      const result = await handlers.requestIndexing(args, await getContext())
+      const result = await requestIndexing(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -315,7 +324,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: getIndexingStatusInput.shape,
     },
     async (args) => {
-      const result = await handlers.getIndexingStatus(args, await getContext())
+      const result = await getIndexingStatus(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -327,7 +336,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: batchRequestIndexingInput.shape,
     },
     async (args) => {
-      const result = await handlers.batchRequestIndexing(args, await getContext())
+      const result = await batchRequestIndexing(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -339,7 +348,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: batchInspectUrlsInput.shape,
     },
     async (args) => {
-      const result = await handlers.batchInspectUrls(args, await getContext())
+      const result = await batchInspectUrls(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -351,7 +360,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: listSitesInput.shape,
     },
     async (args) => {
-      const result = await handlers.diagnostics(args, await getContext())
+      const result = await diagnostics(args, await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
