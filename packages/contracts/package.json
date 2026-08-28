@@ -61,6 +61,11 @@
       "import": "./dist/v1/http.mjs",
       "default": "./dist/v1/http.mjs"
     },
+    "./v1/paths": {
+      "types": "./dist/v1/paths.d.mts",
+      "import": "./dist/v1/paths.mjs",
+      "default": "./dist/v1/paths.mjs"
+    },
     "./v1/realtime": {
       "types": "./dist/v1/realtime.d.mts",
       "import": "./dist/v1/realtime.mjs",

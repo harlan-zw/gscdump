@@ -1,9 +1,22 @@
 import type { ZodRawShape, ZodTypeAny } from 'zod'
+import type { UnknownHttpV1OperationError } from './http-operation-error'
+import type {
+  HttpV1RouteMethod,
+} from './route-catalog'
+import type { HttpV1RouteSurfaceName } from './route-surfaces'
 import { z } from 'zod'
+import {
+  isUnknownHttpV1OperationError,
+  unknownHttpV1OperationError,
+} from './http-operation-error'
+import { serializeHttpV1PathSegment } from './path-segment'
+import { HTTP_V1_ROUTE_SURFACE_NAMES } from './route-surfaces'
 
 export { GSCDUMP_HTTP_V1_VERSION } from './version'
+export { isUnknownHttpV1OperationError }
+export type { UnknownHttpV1OperationError }
 
-export const HTTP_V1_SURFACES = ['partner', 'analytics', 'realtime'] as const
+export const HTTP_V1_SURFACES = HTTP_V1_ROUTE_SURFACE_NAMES
 export const HTTP_V1_METHODS = ['DELETE', 'GET', 'PATCH', 'POST'] as const
 export const HTTP_V1_CREDENTIALS = ['user_key', 'partner_key'] as const
 const HTTP_V1_USER_KEY_SCOPES = [
@@ -45,8 +58,8 @@ export const HTTP_V1_ERROR_CODES = [
   'contract_violation',
 ] as const
 
-export type HttpV1SurfaceName = typeof HTTP_V1_SURFACES[number]
-export type HttpV1Method = typeof HTTP_V1_METHODS[number]
+export type HttpV1SurfaceName = HttpV1RouteSurfaceName
+export type HttpV1Method = HttpV1RouteMethod
 export type HttpV1Credential = typeof HTTP_V1_CREDENTIALS[number]
 export type HttpV1Scope = typeof HTTP_V1_SCOPES[number]
 export type HttpV1ErrorCode = typeof HTTP_V1_ERROR_CODES[number]
@@ -222,27 +235,6 @@ export interface HttpV1Registry<TProtocol extends HttpV1ProtocolLike> {
     params?: HttpV1RegistryPathParams<TProtocol, TId>,
     options?: HttpV1RegistryPathOptions,
   ) => string
-}
-
-export interface UnknownHttpV1OperationError extends TypeError {
-  readonly tag: 'UnknownHttpV1OperationError'
-  readonly operationId: string
-}
-
-export function isUnknownHttpV1OperationError(error: unknown): error is UnknownHttpV1OperationError {
-  return error instanceof TypeError
-    && 'tag' in error
-    && error.tag === 'UnknownHttpV1OperationError'
-    && 'operationId' in error
-    && typeof error.operationId === 'string'
-}
-
-function unknownHttpV1OperationError(operationId: string): UnknownHttpV1OperationError {
-  return Object.assign(new TypeError(`Unknown HTTP v1 operation ID: ${operationId}`), {
-    name: 'UnknownHttpV1OperationError',
-    operationId,
-    tag: 'UnknownHttpV1OperationError' as const,
-  })
 }
 
 function pathParameterNames(path: string): string[] {
@@ -495,13 +487,7 @@ export function buildHttpOperationPath(
     throw new TypeError(`${operation.id}: operation has an invalid path contract`)
   const parsed = operation.request.params.parse(params) as Record<string, unknown>
   const relativePath = operation.path.replace(/\{([^{}]+)\}/g, (_match, name: string) => {
-    const value = parsed[name]
-    if (typeof value !== 'string' && typeof value !== 'number')
-      throw new TypeError(`${operation.id}: path parameter ${name} must serialize as a string or number`)
-    const serialized = String(value)
-    if (serialized.length === 0 || serialized === '.' || serialized === '..')
-      throw new TypeError(`${operation.id}: path parameter ${name} cannot serialize as an empty or dot segment`)
-    return encodeURIComponent(serialized)
+    return serializeHttpV1PathSegment(operation.id, name, parsed[name])
   })
   return `${surface.prefix}${relativePath}`
 }
