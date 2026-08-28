@@ -1,15 +1,12 @@
-import type { AnalysisParams } from '@gscdump/analysis'
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row, WriteCtx } from '@gscdump/engine/contracts'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import {
-  AnalyzerCapabilityError,
-  createEngineQuerySource,
-  runAnalyzerFromSource,
-} from '@gscdump/analysis'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
+import { AnalyzerCapabilityError, runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import { createNodeHarness, resetNodeDuckDB } from '@gscdump/engine/node'
+import { createEngineQuerySource } from '@gscdump/engine/source'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { hasLocalData } from '../src/analysis-local'
 

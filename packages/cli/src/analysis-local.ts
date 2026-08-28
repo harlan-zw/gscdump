@@ -1,20 +1,14 @@
-import type {
-  AnalysisParams,
-  AnalysisQuerySource,
-  AnalysisResult,
-} from '@gscdump/analysis'
+import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
+import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { Result } from 'gscdump/result'
 import type { LocalStore } from './local-store'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
-import {
-  AnalyzerCapabilityError,
-  createEngineQuerySource,
-  runAnalyzerFromSource,
-} from '@gscdump/analysis'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
+import { AnalyzerCapabilityError, runAnalyzerFromSource } from '@gscdump/engine/analyzer'
+import { createEngineQuerySource } from '@gscdump/engine/source'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { decodeSiteId, normalizeSiteUrl } from 'gscdump/tenant'
 import { createCommandContext } from './context'

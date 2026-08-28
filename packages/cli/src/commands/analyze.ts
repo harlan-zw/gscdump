@@ -1,4 +1,4 @@
-import type { AnalysisParams } from '@gscdump/analysis'
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { CommandDef } from 'citty'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { defineCommand } from 'citty'
