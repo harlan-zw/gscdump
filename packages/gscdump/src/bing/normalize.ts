@@ -6,6 +6,7 @@ import type {
   BingIndexingEvidence,
   BingPageStats,
   BingQueryStats,
+  BingRankAndTrafficStats,
   BingSite,
   BingUrlInfo,
   BingUrlTrafficInfo,
@@ -158,6 +159,24 @@ export function normalizeBingQueryStats(value: unknown): Result<BingQueryStats, 
     return parsed
   const { dimension, ...stats } = parsed.value
   return ok({ ...stats, query: dimension })
+}
+
+export function normalizeBingRankAndTrafficStats(value: unknown): Result<BingRankAndTrafficStats, 'invalid-payload'> {
+  if (!isRecord(value)
+    || !isNonNegativeInteger(value.Clicks)
+    || !isNonNegativeInteger(value.Impressions)) {
+    return err('invalid-payload')
+  }
+
+  const date = parseBingDate(value.Date)
+  if (!date.ok || !date.value)
+    return err('invalid-payload')
+
+  return ok({
+    clicks: value.Clicks,
+    date: date.value,
+    impressions: value.Impressions,
+  })
 }
 
 export function normalizeBingCrawlStats(value: unknown): Result<BingCrawlStats, 'invalid-payload'> {

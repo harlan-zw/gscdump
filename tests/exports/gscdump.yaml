@@ -131,6 +131,7 @@
   normalizeBingIndexingEvidence: function
   normalizeBingPageStats: function
   normalizeBingQueryStats: function
+  normalizeBingRankAndTrafficStats: function
   normalizeBingSite: function
   normalizeBingUrlInfo: function
   normalizeBingUrlTrafficInfo: function

@@ -21,6 +21,7 @@ import {
   normalizeBingIndexingEvidence,
   normalizeBingPageStats,
   normalizeBingQueryStats,
+  normalizeBingRankAndTrafficStats,
   normalizeBingSite,
   normalizeBingUrlInfo,
   normalizeBingUrlTrafficInfo,
@@ -303,6 +304,12 @@ export function bingWebmaster(options: BingWebmasterOptions): BingWebmasterClien
     getQueryStats: (siteUrl, callOptions) => request(
       'GetQueryStats',
       parseList(normalizeBingQueryStats),
+      { query: { siteUrl }, signal: callOptions?.signal },
+    ),
+
+    getRankAndTrafficStats: (siteUrl, callOptions) => request(
+      'GetRankAndTrafficStats',
+      parseList(normalizeBingRankAndTrafficStats),
       { query: { siteUrl }, signal: callOptions?.signal },
     ),
 
