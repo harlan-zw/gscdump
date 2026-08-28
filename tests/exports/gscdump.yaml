@@ -127,8 +127,10 @@
   DEFAULT_BING_CHILD_PAGE_LIMIT: number
   DEFAULT_BING_WEBMASTER_API_URL: string
   normalizeBingCrawlIssue: function
+  normalizeBingCrawlStats: function
   normalizeBingIndexingEvidence: function
   normalizeBingPageStats: function
+  normalizeBingQueryStats: function
   normalizeBingSite: function
   normalizeBingUrlInfo: function
   normalizeBingUrlTrafficInfo: function
