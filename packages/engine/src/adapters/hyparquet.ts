@@ -16,7 +16,7 @@
 // back out (the reader's JS `Date` is normalised to `YYYY-MM-DD` on decode).
 // INTEGER → INT32; BIGINT → INT64; DOUBLE → DOUBLE; VARCHAR → BYTE_ARRAY/UTF8.
 
-import type { AsyncBuffer, ParquetQueryFilter, SchemaElement } from 'hyparquet'
+import type { AsyncBuffer, FileMetaData, ParquetQueryFilter, SchemaElement } from 'hyparquet'
 import type { BasicType, ColumnSource } from 'hyparquet-writer'
 import type { ColumnDef, ColumnType } from '../schema'
 import type {
@@ -27,7 +27,7 @@ import type {
   TableName,
   WriteResult,
 } from '../storage'
-import { parquetReadObjects } from 'hyparquet'
+import { parquetMetadataAsync, parquetReadObjects, parquetSchema } from 'hyparquet'
 import { ByteWriter, parquetWriteRows } from 'hyparquet-writer'
 import { SCHEMAS, TABLE_METADATA } from '../schema'
 
@@ -322,8 +322,10 @@ export interface DecodeParquetOptions {
   /**
    * Project a subset of columns. hyparquet only fetches + decodes the named
    * column chunks, so a read that needs 2 of 14 columns skips the other 12's
-   * pages entirely. Omit to read every column. Names not present in the file
-   * are ignored by the reader.
+   * pages entirely. Omit to read every column. A name the file lacks is
+   * dropped from the projection before the read, so the decoded rows simply
+   * lack that key. That is what lets one projection span files written before
+   * a column existed (union-by-name); hyparquet itself throws on such a name.
    */
   columns?: readonly string[]
 }
@@ -334,12 +336,14 @@ export async function decodeParquetToRows(
 ): Promise<Row[]> {
   if (bytes.byteLength === 0)
     return []
+  const file = asyncBufferFromBytes(bytes)
+  const projection = opts.columns ? await presentColumns(file, opts.columns) : null
   const rows = await parquetReadObjects({
-    file: asyncBufferFromBytes(bytes),
+    file,
     ...(opts.rowStart === undefined ? {} : { rowStart: opts.rowStart }),
     ...(opts.rowEnd === undefined ? {} : { rowEnd: opts.rowEnd }),
     ...((opts.rowStart !== undefined || opts.rowEnd !== undefined) ? { useOffsetIndex: true } : {}),
-    ...(opts.columns ? { columns: [...opts.columns] } : {}),
+    ...(projection ? { metadata: projection.metadata, columns: projection.columns } : {}),
     // A filter on a high-cardinality `$eq`/`$in` column also benefits from the
     // file's bloom filters (when present): hyparquet skips whole row groups the
     // bloom proves cannot contain the value, below the min/max-stats granularity.
@@ -355,6 +359,21 @@ export async function decodeParquetToRows(
     ...(opts.filter ? { filter: opts.filter, useBloomFilters: true, usePageIndex: true } : {}),
   })
   return normalizeDecodedDates(rows as Row[])
+}
+
+/**
+ * The requested projection narrowed to the columns the file actually carries.
+ * Reads the footer once and returns it so the read does not parse it again.
+ * hyparquet >= 1.29 throws `parquet column not found` for an absent name; the
+ * contract here is that such a name decodes as a missing key.
+ */
+async function presentColumns(
+  file: AsyncBuffer,
+  requested: readonly string[],
+): Promise<{ metadata: FileMetaData, columns: string[] }> {
+  const metadata = await parquetMetadataAsync(file)
+  const present = new Set(parquetSchema(metadata).children.map(child => child.element.name))
+  return { metadata, columns: requested.filter(name => present.has(name)) }
 }
 
 /**
