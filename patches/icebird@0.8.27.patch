@@ -49,12 +49,22 @@ index 2bac90d09cfa5a05243b3cf8d450df2f9e4f3c3a..a177d71fca3a3dc840b8fadfaa3ca3d7
  export { fileCatalog } from './catalog/file.js'
  export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js'
 diff --git a/src/manifest.js b/src/manifest.js
-index 629db76c1ef27b7bd22b589ae3d2473c0b546333..b84039772cb2aa4390a252ad4eb05a2a46793b32 100644
+index 6d2934c6a5abeca81a3d2b512f4418727d1fcddd..97572271138c8bd0abb11c85276369de479950f7 100644
 --- a/src/manifest.js
 +++ b/src/manifest.js
-@@ -7,13 +7,21 @@ import { fetchAvroRecords, urlResolver } from './fetch.js'
+@@ -2,6 +2,9 @@ import { avroMetadata } from './avro/avro.metadata.js'
+ import { avroRead } from './avro/avro.read.js'
+ import { fetchAvroRecords, urlResolver } from './fetch.js'
+
++// Cloudflare Workers cap subrequests per invocation, so manifest reads need bounded concurrency.
++const MANIFEST_FETCH_CONCURRENCY = 8
++
+ /**
+  * Returns manifest entries for a snapshot. Defaults to the current snapshot;
+  * pass `snapshotId` to time-travel to a prior snapshot in the metadata's
+@@ -9,13 +12,21 @@ import { fetchAvroRecords, urlResolver } from './fetch.js'
   *
-  * @import {Resolver, TableMetadata, Manifest, ManifestEntry} from '../src/types.js'
+  * @import {Resolver, TableMetadata, Manifest, ManifestEntry, Snapshot} from '../src/types.js'
   * @typedef {{ url: string, entries: ManifestEntry[] }[]} ManifestList
 + * @typedef {(partitions: Manifest['partitions'], partitionSpecId: number, manifest: Manifest) => boolean} ManifestPartitionFilter
   * @param {object} options
@@ -75,43 +85,44 @@ index 629db76c1ef27b7bd22b589ae3d2473c0b546333..b84039772cb2aa4390a252ad4eb05a2a
    resolver ??= urlResolver()
    const rawTarget = snapshotId ?? metadata['current-snapshot-id']
    if (rawTarget == null || rawTarget < 0) {
-@@ -42,54 +50,103 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
+@@ -44,6 +55,17 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
      throw new Error('No manifest information found in snapshot')
    }
  
-+  // Prune the manifest list using the manifest-list `partitions` field-summary
-+  // bounds BEFORE fetching entries. The summaries are already in-hand here (we
-+  // just parsed them from the manifest-list avro), so a partition-pruning
-+  // caller pays zero extra fetches to skip a manifest. Keep-all on throw so a
-+  // buggy predicate degrades to the unpruned walk rather than dropping data.
 +  if (partitionFilter) {
 +    manifests = manifests.filter((manifest) => {
-+      let keep = true
 +      try {
-+        keep = partitionFilter(manifest.partitions, manifest.partition_spec_id ?? 0, manifest) !== false
++        return partitionFilter(manifest.partitions, manifest.partition_spec_id ?? 0, manifest) !== false
 +      } catch {
-+        keep = true
++        // Pruning is optional, so a filter failure must not hide data.
++        return true
 +      }
-+      return keep
 +    })
 +  }
 +
    return await fetchManifests(manifests, resolver)
  }
  
-+// gscdump patch: bound the manifest-entry fetch fan-out. The multi-tenant
-+// global fact tables can have hundreds of manifests in one snapshot; an
-+// unbounded `Promise.all` opened one in-flight fetch + one buffered avro per
-+// manifest at once, which blows the Cloudflare Workers subrequest ceiling and
-+// spikes isolate memory on a wide read. A fixed-size worker pool caps in-flight
-+// fetches while preserving input order in the result.
-+const MANIFEST_FETCH_CONCURRENCY = 8
-+
+@@ -60,7 +82,7 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
+  */
+ export async function resolveInlineManifests(snapshot, resolver) {
+   const inline = snapshot.manifests ?? []
+-  return await Promise.all(inline.map(async manifestPath => {
++  return await mapWithConcurrency(inline, async manifestPath => {
+     const ab = await resolver.reader(manifestPath)
+     const buffer = await ab.slice(0, ab.byteLength)
+     const reader = { view: new DataView(buffer), offset: 0 }
+@@ -85,54 +107,86 @@ export async function resolveInlineManifests(snapshot, resolver) {
+       existing_rows_count: rows[0],
+       deleted_rows_count: rows[2],
+     }
+-  }))
++  })
+ }
+
  /**
 - * Fetch manifest entries from a list of manifests in parallel.
-+ * Fetch one manifest's entries and apply sequence-number / first-row-id
-+ * inheritance. Extracted from {@link fetchManifests} so the bounded pool can
-+ * call it per manifest.
++ * Fetch one manifest's entries and apply inheritance.
   *
 - * @param {Manifest[]} manifests
 + * @param {Manifest} manifest
@@ -126,21 +137,22 @@ index 629db76c1ef27b7bd22b589ae3d2473c0b546333..b84039772cb2aa4390a252ad4eb05a2a
 -    const entries = /** @type {ManifestEntry[]} */ (
 -      await fetchAvroRecords(url, resolver, Number(manifest.manifest_length))
 -    )
+-
+-    // Inherit sequence number from manifest if not present in entry
+-    for (const entry of entries) {
+-      entry.partition_spec_id = manifest.partition_spec_id ?? 0
+-      if (entry.snapshot_id == null) entry.snapshot_id = manifest.added_snapshot_id
 +async function fetchOneManifest(manifest, resolver) {
 +  const url = manifest.manifest_path
 +  const entries = /** @type {ManifestEntry[]} */ (
 +    await fetchAvroRecords(url, resolver, Number(manifest.manifest_length))
 +  )
  
--    // Inherit sequence number from manifest if not present in entry
--    for (const entry of entries) {
--      entry.partition_spec_id = manifest.partition_spec_id ?? 0
--      if (entry.snapshot_id == null) entry.snapshot_id = manifest.added_snapshot_id
 +  // Inherit sequence number from manifest if not present in entry
 +  for (const entry of entries) {
 +    entry.partition_spec_id = manifest.partition_spec_id ?? 0
 +    if (entry.snapshot_id == null) entry.snapshot_id = manifest.added_snapshot_id
- 
++
 +    if (entry.sequence_number === undefined) {
 +      // When reading v1 manifests with no sequence number column,
 +      // sequence numbers for all files must default to 0.
@@ -181,40 +193,50 @@ index 629db76c1ef27b7bd22b589ae3d2473c0b546333..b84039772cb2aa4390a252ad4eb05a2a
 -    assignFirstRowIds(manifest, entries)
 +  }
 +  assignFirstRowIds(manifest, entries)
-+
-+  return { url, entries }
-+}
  
 -    return { url, entries }
 -  }))
++  return { url, entries }
++}
++
 +/**
-+ * Fetch manifest entries from a list of manifests, bounded to
-+ * {@link MANIFEST_FETCH_CONCURRENCY} in-flight fetches. Result order matches
-+ * the input `manifests` order.
++ * Fetch manifest entries with bounded concurrency and stable result order.
 + *
 + * @param {Manifest[]} manifests
 + * @param {Resolver} resolver
 + * @returns {Promise<ManifestList>}
 + */
 +async function fetchManifests(manifests, resolver) {
-+  const results = /** @type {ManifestList} */ (new Array(manifests.length))
++  return await mapWithConcurrency(manifests, manifest => fetchOneManifest(manifest, resolver))
++}
++
++/**
++ * Map manifest work with bounded concurrency and stable result order.
++ *
++ * @template T, U
++ * @param {T[]} items
++ * @param {(item: T) => Promise<U>} fn
++ * @returns {Promise<U[]>}
++ */
++async function mapWithConcurrency(items, fn) {
++  const results = /** @type {U[]} */ (new Array(items.length))
 +  let next = 0
 +  async function worker() {
-+    while (next < manifests.length) {
-+      const i = next++
-+      results[i] = await fetchOneManifest(manifests[i], resolver)
++    while (next < items.length) {
++      const index = next++
++      results[index] = await fn(items[index])
 +    }
 +  }
-+  const poolSize = Math.min(MANIFEST_FETCH_CONCURRENCY, manifests.length)
++  const poolSize = Math.min(MANIFEST_FETCH_CONCURRENCY, items.length)
 +  const workers = []
-+  for (let w = 0; w < poolSize; w++) workers.push(worker())
++  for (let index = 0; index < poolSize; index++) workers.push(worker())
 +  await Promise.all(workers)
 +  return results
  }
  
  /**
 diff --git a/src/types.d.ts b/src/types.d.ts
-index daf4cd3b829d2110545c977fa8c347b42a712722..1a338d40c55681960092857dd0c07166f999c167 100644
+index 2d00f3dd0951a3da58a4dc2bf2243a60a287f55b..a15d3503e300afeb2c87fe925f2ae9b6c58e454f 100644
 --- a/src/types.d.ts
 +++ b/src/types.d.ts
 @@ -177,7 +177,7 @@ interface PartitionStatistics {
@@ -473,25 +495,21 @@ index 7cfd5378c18f0cef88a1cee7f397095dd75cce76..b1cb9f5da0ed074c5dd9c9b7124fd944
  export { fileCatalog } from './catalog/file.js';
  export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js';
 diff --git a/types/manifest.d.ts b/types/manifest.d.ts
-index 22ec9a36ff4df1f2d60c4ac7e9b4158bdf52df99..94c49dc420b70f09d742afb25524298d51f18cd3 100644
+index 5545860383cee1b39726a6bbcc43bdd0243e0d2e..d02638096720604aaa7f9aeed827f4168212dd7c 100644
 --- a/types/manifest.d.ts
 +++ b/types/manifest.d.ts
-@@ -1,8 +1,13 @@
--import type { Resolver, TableMetadata, ManifestEntry } from '../src/types.js';
-+import type { Manifest, Resolver, TableMetadata, ManifestEntry } from '../src/types.js';
- export type ManifestList = {
+@@ -3,6 +3,10 @@ export type ManifestList = {
      url: string;
      entries: ManifestEntry[];
  }[];
 +/**
-+ * Predicate applied to each manifest's manifest-list `partitions` field-summary
-+ * array before entry fetch. Return `false` to skip the manifest's entry fetch.
++ * Predicate applied before fetching a manifest's entries.
 + */
 +export type ManifestPartitionFilter = (partitions: Manifest['partitions'], partitionSpecId: number, manifest: Manifest) => boolean;
  /**
   * Returns manifest entries for a snapshot. Defaults to the current snapshot;
   * pass `snapshotId` to time-travel to a prior snapshot in the metadata's
-@@ -16,10 +21,11 @@ export type ManifestList = {
+@@ -16,10 +20,11 @@ export type ManifestList = {
   * @param {number | bigint} [options.snapshotId] - Optional snapshot id; defaults to `current-snapshot-id`.
   * @returns {Promise<ManifestList>}
   */
@@ -503,7 +521,7 @@ index 22ec9a36ff4df1f2d60c4ac7e9b4158bdf52df99..94c49dc420b70f09d742afb25524298d
 +    partitionFilter?: ManifestPartitionFilter;
  }): Promise<ManifestList>;
  /**
-  * Split manifest entries into data and delete manifests.
+  * Turn a v1 snapshot's inline `manifests` (a list of manifest file locations)
 diff --git a/types/write/stage.d.ts b/types/write/stage.d.ts
 index 3f29f9f3c0ab8cc742c4a57c8cc689fdc05d2dd4..2f92916a90b9edcbc5681f821beeeac85458cc89 100644
 --- a/types/write/stage.d.ts
@@ -545,7 +563,7 @@ index 3f29f9f3c0ab8cc742c4a57c8cc689fdc05d2dd4..2f92916a90b9edcbc5681f821beeeac8
  /**
   * Bundled prepare + stage. Equivalent to the prior single-call API; left in
 diff --git a/types/write/write.d.ts b/types/write/write.d.ts
-index 0a6b7d987ed74879c24922be49ba30de29409a69..80b66854d80fe06c6ccec49863ed770238fdfc17 100644
+index 0a6b7d987ed74879c24922be49ba30de29409a69..614f90c2d8b20495ac11f93f9417430f2cd87ba3 100644
 --- a/types/write/write.d.ts
 +++ b/types/write/write.d.ts
 @@ -13,7 +13,7 @@ import type { Catalog, IcebergTransaction, Lister, PartitionSpec, Resolver, Sche

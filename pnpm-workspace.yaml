@@ -29,14 +29,15 @@ overrides:
   '@nuxt/schema': 4.5.2
   '@types/node>undici-types': ^7.0.0
   hono: 4.12.31
+  icebird>hyparquet-writer: 0.16.9
   tinyexec: 1.1.2
   typescript: 6.0.3
 patchedDependencies:
-  hyparquet-writer@0.16.6: patches/hyparquet-writer@0.16.6.patch
-  icebird@0.8.26: patches/icebird@0.8.26.patch
+  hyparquet-writer@0.16.9: patches/hyparquet-writer@0.16.9.patch
+  icebird@0.8.27: patches/icebird@0.8.27.patch
 catalog:
   '@cloudflare/vitest-pool-workers': ^0.22.0
-  '@cloudflare/workers-types': ^5.20260827.1
+  '@cloudflare/workers-types': ^5.20260831.1
   '@duckdb/duckdb-wasm': 1.33.1-dev57.0
   '@duckdb/node-api': 1.5.1-r.2
   '@modelcontextprotocol/sdk': ^1.30.0
@@ -51,8 +52,8 @@ catalog:
   aws4fetch: ^1.0.20
   drizzle-orm: 1.0.0-rc.4
   hyparquet: ^1.29.2
-  hyparquet-writer: ^0.16.6
-  icebird: ^0.8.26
+  hyparquet-writer: ^0.16.9
+  icebird: ^0.8.27
   js-yaml: ^5.4.1
   nuxt: ^4.5.2
   nuxt-use-query: ^1.0.1
@@ -62,12 +63,12 @@ catalog:
   retriv: ^0.15.0
   sitemapd: ^0.2.2
   tailwindcss: ^4.3.3
-  tsx: ^4.23.12
+  tsx: ^4.23.13
   unstorage: ^1.17.5
   vitest-package-exports: ^1.2.0
   vue: ^3.5.42
-  wrangler: ^4.126.0
-  zod: ^4.4.3
+  wrangler: ^4.127.1
+  zod: ^4.5.4
 catalogs:
   deps:
     '@clack/prompts': ^1.7.0
@@ -75,7 +76,7 @@ catalogs:
     consola: ^3.4.2
     google-auth-library: ^11.0.2
     ofetch: ^1.5.1
-    open: ^11.0.1
+    open: ^11.0.2
     proper-lockfile: ^4.1.2
   dev-build:
     bumpp: ^12.2.2
@@ -86,7 +87,7 @@ catalogs:
     '@antfu/eslint-config': ^9.3.0
     eslint: ^10.9.1
   dev-test:
-    '@nuxt/test-utils': ^4.1.0
+    '@nuxt/test-utils': ^4.2.0
     '@vitest/browser': ^4.1.11
     vitest: ^4.1.11
 allowBuilds:
