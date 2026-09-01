@@ -14,7 +14,7 @@ import { defineConfig } from 'vitest/config'
 // programmatic `cloudflareTest` plugin + `cloudflarePool` pool initializer.
 const poolOptions = {
   miniflare: {
-    compatibilityDate: '2024-12-01',
+    compatibilityDate: '2026-08-22',
     // In-memory R2 bucket exposed as `env.TEST_BUCKET` via `cloudflare:test`.
     r2Buckets: ['TEST_BUCKET'],
   },
