@@ -284,6 +284,32 @@ describe('hyparquet codec', () => {
     expect(rows[0]!.country).toBe('usa')
   })
 
+  it('decodeParquetToRows ignores a projected column the file lacks', async () => {
+    // A file written before `sum_position` existed. Union-by-name readers ask
+    // for the current column set and expect the missing name to decode as
+    // absent, not to throw.
+    const bytes = encodeRowsToParquetFlex(
+      [{ url: '/a', clicks: 1 }],
+      {
+        columns: [
+          { name: 'url', type: 'VARCHAR', nullable: false },
+          { name: 'clicks', type: 'BIGINT', nullable: false },
+        ],
+      },
+    )
+    const rows = await decodeParquetToRows(bytes, { columns: ['url', 'sum_position'] })
+    expect(rows).toEqual([{ url: '/a' }])
+  })
+
+  it('decodeParquetToRows returns keyless rows when no projected column exists in the file', async () => {
+    const bytes = encodeRowsToParquetFlex(
+      [{ url: '/a' }, { url: '/b' }],
+      { columns: [{ name: 'url', type: 'VARCHAR', nullable: false }] },
+    )
+    const rows = await decodeParquetToRows(bytes, { columns: ['sum_position'] })
+    expect(rows).toEqual([{}, {}])
+  })
+
   it('encodeRowsToParquetFlex round-trips an arbitrary column set', async () => {
     const bytes = encodeRowsToParquetFlex(
       [
