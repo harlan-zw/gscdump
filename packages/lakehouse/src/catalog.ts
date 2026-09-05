@@ -1122,19 +1122,22 @@ async function resolveViaMonthCache(
       }
     }
 
+    // Await the write when no `defer` hook exists: `cachePut` returns the
+    // pending put then, and a Worker without `cache.defer` suspends the
+    // isolate at response end, so a fire-and-forget write would be cut off
+    // and the month cache would never populate. With a `defer` hook
+    // `cachePut` hands the write off and returns immediately, keeping it off
+    // the response critical path either way. A driver failure is reported
+    // via `reportCatalogCacheError` inside `cachePut`, never thrown here.
+    // Start every month's put before awaiting any of them — a cold walk
+    // across N missed months pays one round-trip of KV latency, not N.
+    const puts: Promise<void>[] = []
     for (const [monthValue, files] of freshByMonth) {
       const key = monthKeys.get(monthValue)
-      if (!key)
-        continue
-      // Await the write when no `defer` hook exists: `cachePut` returns the
-      // pending put then, and a Worker without `cache.defer` suspends the
-      // isolate at response end, so a fire-and-forget write would be cut
-      // off and the month cache would never populate. With a `defer` hook
-      // `cachePut` hands the write off and returns immediately, keeping it
-      // off the response critical path. A driver failure is reported via
-      // `reportCatalogCacheError` inside `cachePut`, never thrown here.
-      await cachePut(cache, key, files, MONTH_FILES_TTL_MS, now)
+      if (key)
+        puts.push(cachePut(cache, key, files, MONTH_FILES_TTL_MS, now))
     }
+    await Promise.all(puts)
   }
 
   return { entries, manifestsWalked, monthsWanted, monthsHit }

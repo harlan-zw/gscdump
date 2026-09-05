@@ -314,6 +314,39 @@ describe('resolveIcebergDataFiles month-keyed manifest cache', () => {
     expect(keys.some(key => key.startsWith('lh-month'))).toBe(true)
   })
 
+  it('month-cache writes for multiple missed months are issued concurrently, not one at a time (no defer hook)', async () => {
+    setSnapshot('snap-1')
+    setManifests([
+      { path: 'm1', partitions: [NO_SUMMARY, monthSummary(monthVal('2026-05'))], entries: [dataFile(1, '2026-05', FILE_A)] },
+      { path: 'm2', partitions: [NO_SUMMARY, monthSummary(monthVal('2026-06'))], entries: [dataFile(1, '2026-06', FILE_B)] },
+    ])
+
+    // A cold resolve misses BOTH May and June, so two `lh-month` writes are
+    // due. Each write logs when it STARTS and when it (asynchronously)
+    // finishes; if the code awaited each put in turn, the log would
+    // alternate start/end/start/end. Collected up front via `Promise.all`,
+    // both starts land before either end.
+    const storage = createStorage()
+    const innerSetItem = storage.setItem.bind(storage) as (key: string, value: unknown, opts?: unknown) => Promise<void>
+    const events: string[] = []
+    storage.setItem = async (key: string, value: unknown, itemOpts?: unknown) => {
+      if (!key.startsWith('lh-month'))
+        return innerSetItem(key, value, itemOpts)
+      events.push(`start:${key}`)
+      await new Promise(resolve => setTimeout(resolve, 0))
+      events.push(`end:${key}`)
+      return innerSetItem(key, value, itemOpts)
+    }
+    const cache = { storage }
+
+    await resolveIcebergDataFiles(conn() as never, opts(RANGE, cache))
+
+    expect(events).toHaveLength(4)
+    const firstEndIndex = events.findIndex(e => e.startsWith('end:'))
+    expect(firstEndIndex).toBe(2) // both starts precede either end
+    expect(events.slice(0, 2).every(e => e.startsWith('start:'))).toBe(true)
+  })
+
   it('a cache driver failure degrades to a full walk', async () => {
     setSnapshot('snap-1')
     setManifests([
