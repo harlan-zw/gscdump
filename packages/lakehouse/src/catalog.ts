@@ -29,6 +29,7 @@ import { s3SignedResolver } from 'icebird/src/s3.js'
 import { stringifyBigintSafe } from './bigint'
 import { cacheGet, cachePut, reportCatalogCacheError } from './catalog-cache'
 import { toIcebergDayCount } from './date'
+import { wrapManifestCacheResolver } from './manifest-cache-resolver'
 import { buildManifestPartitionFilter } from './partition-prune'
 
 /** A field in an icebird table `Schema`. */
@@ -191,14 +192,21 @@ export async function connectIcebergCatalog(
     }
   }
 
-  const resolver = withVerifiedWriterByteLengths(cachingResolver(s3SignedResolver({
+  const cacheScope = catalogCacheScope(config)
+  const s3Resolver = s3SignedResolver({
     accessKeyId: config.s3.accessKeyId,
     secretAccessKey: config.s3.secretAccessKey,
     region: config.s3.region ?? 'auto',
     endpoint: config.s3.endpoint,
     pathStyle: true,
-  })))
-  return { catalog, resolver, namespace: config.namespace, cacheScope: catalogCacheScope(config) }
+  })
+  // Manifest/manifest-list `.avro` objects are immutable at their path, so a
+  // cross-isolate cache in front of the base resolver serves them without a
+  // fetch; the in-connection `cachingResolver` still sits on top so repeat
+  // reads within one request hit memory. See manifest-cache-resolver.ts.
+  const baseResolver = opts.cache ? wrapManifestCacheResolver(s3Resolver, opts.cache, cacheScope, opts.clock) : s3Resolver
+  const resolver = withVerifiedWriterByteLengths(cachingResolver(baseResolver))
+  return { catalog, resolver, namespace: config.namespace, cacheScope }
 }
 
 /**
