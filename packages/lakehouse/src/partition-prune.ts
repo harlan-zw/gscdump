@@ -134,3 +134,39 @@ export function buildManifestPartitionFilter(
     return true
   }
 }
+
+/**
+ * Sentinel for a manifest whose `month`-transform field summary does not
+ * prove it is confined to exactly one month — no month field in the spec, no
+ * `partitions` summary at all, an undecodable bound, or a summary spanning
+ * more than one month. Callers that cache per-month manifest sets (see
+ * `catalog.ts`'s `resolveIcebergDataFiles`) must always walk and never cache
+ * a `'multi'` manifest: caching it under one month would silently drop it
+ * from queries against any OTHER month it also covers.
+ */
+export const MULTI_MONTH_MANIFEST = 'multi' as const
+
+/**
+ * The single month (months-since-epoch) a manifest's partition-summary bounds
+ * prove every entry in it belongs to, or {@link MULTI_MONTH_MANIFEST} when
+ * that cannot be proven. A manifest is single-month only when its `month`
+ * field summary has identical, decodable lower and upper bounds — i.e. the
+ * manifest-list itself vouches that nothing in the manifest falls outside
+ * that one month.
+ */
+export function manifestMonthBucket(
+  partitionSpec: readonly IcebergPartitionField[],
+  partitions: IcebergFieldSummary[] | undefined,
+): number | typeof MULTI_MONTH_MANIFEST {
+  const monthFieldIndex = partitionSpec.findIndex(f => f.transform === 'month')
+  if (monthFieldIndex < 0 || !partitions || partitions.length <= monthFieldIndex)
+    return MULTI_MONTH_MANIFEST
+  const monthSummary = partitions[monthFieldIndex]
+  if (!monthSummary || (monthSummary.lower_bound == null && monthSummary.upper_bound == null))
+    return MULTI_MONTH_MANIFEST
+  const lo = decodeMonthInt(monthSummary.lower_bound)
+  const hi = decodeMonthInt(monthSummary.upper_bound)
+  if (lo == null || hi == null || lo !== hi)
+    return MULTI_MONTH_MANIFEST
+  return lo
+}
