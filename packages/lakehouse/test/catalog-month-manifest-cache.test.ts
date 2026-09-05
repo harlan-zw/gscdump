@@ -281,6 +281,39 @@ describe('resolveIcebergDataFiles month-keyed manifest cache', () => {
     expect(second.map(f => f.filePath).sort()).toEqual([FILE_A])
   })
 
+  it('a defer-less cache whose driver resolves setItem on a macrotask holds the month key once the resolve returns', async () => {
+    setSnapshot('snap-1')
+    setManifests([
+      { path: 'm1', partitions: [NO_SUMMARY, monthSummary(monthVal('2026-05'))], entries: [dataFile(1, '2026-05', FILE_A)] },
+    ])
+
+    // No `defer` hook, so `cachePut` returns its write for the caller to
+    // await (catalog-cache.ts contract). The driver defers the MONTH-key
+    // `setItem` to a macrotask (the awaited exact-range put that follows
+    // must not open an event-loop window the voided write could slip
+    // through): if the month put is fired and forgotten, its write is still
+    // pending when the resolve returns — exactly what cuts a defer-less
+    // Worker's put off when the isolate suspends at response end.
+    const storage = createStorage()
+    const innerSetItem = storage.setItem.bind(storage) as (key: string, value: unknown, opts?: unknown) => Promise<void>
+    storage.setItem = async (key: string, value: unknown, itemOpts?: unknown) => {
+      if (key.startsWith('lh-month')) {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      }
+      return innerSetItem(key, value, itemOpts)
+    }
+    const cache = { storage }
+
+    const out = await resolveIcebergDataFiles(conn() as never, opts(RANGE, cache))
+    expect(out.map(f => f.filePath)).toEqual([FILE_A])
+
+    // Back in the test only microtasks have drained; an un-awaited write
+    // would still be pending on its timer. The month key must already be
+    // in storage.
+    const keys = await storage.getKeys()
+    expect(keys.some(key => key.startsWith('lh-month'))).toBe(true)
+  })
+
   it('a cache driver failure degrades to a full walk', async () => {
     setSnapshot('snap-1')
     setManifests([

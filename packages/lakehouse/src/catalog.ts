@@ -1126,14 +1126,14 @@ async function resolveViaMonthCache(
       const key = monthKeys.get(monthValue)
       if (!key)
         continue
-      // Fire-and-forget: a month-cache write must never block the read that
-      // populated it. `cachePut` already routes through `cache.defer` when
-      // the caller supplied one; without one this simply completes in the
-      // background — a driver failure is reported via
-      // `reportCatalogCacheError` inside `cachePut`, never thrown here. A
-      // dropped write is acceptable for this cache: the next read just
-      // re-walks and re-populates it.
-      void cachePut(cache, key, files, MONTH_FILES_TTL_MS, now)
+      // Await the write when no `defer` hook exists: `cachePut` returns the
+      // pending put then, and a Worker without `cache.defer` suspends the
+      // isolate at response end, so a fire-and-forget write would be cut
+      // off and the month cache would never populate. With a `defer` hook
+      // `cachePut` hands the write off and returns immediately, keeping it
+      // off the response critical path. A driver failure is reported via
+      // `reportCatalogCacheError` inside `cachePut`, never thrown here.
+      await cachePut(cache, key, files, MONTH_FILES_TTL_MS, now)
     }
   }
 
