@@ -70,10 +70,16 @@ export async function cacheGet<T>(cache: CatalogCache, key: string, now: number)
 /**
  * Read many cached values in one storage round trip. Returns one slot per
  * input key: `undefined` on a miss, an expired entry, a malformed box, or any
- * driver error (the batch degrades to all-misses, never to an error). Slots
- * are positional — unstorage's `getItems` contract returns one entry per
- * input key, in order; drivers echo their own (transformed) key spelling, so
- * entries are matched by position and a short result degrades to all-misses.
+ * driver error (the batch degrades to all-misses, never to an error).
+ *
+ * Slots are matched to their input key, not to a result index: unstorage
+ * executes a multi-key read as one batch per mount and flattens the batches
+ * in mount order, so raw indices only line up with the input when every key
+ * shares a single mount. Entries echo their key, so each slot is filled from
+ * the entry echoed under that exact key; when the echoes do not round-trip to
+ * the input spelling (a driver may rewrite its keys) matching falls back to
+ * positional order, which stays correct for the single-mount key sets the
+ * catalog read path passes, and a short result degrades to all-misses.
  */
 export async function cacheGetMany<T>(cache: CatalogCache, keys: string[], now: number): Promise<(T | undefined)[]> {
   if (keys.length === 0)
@@ -82,8 +88,10 @@ export async function cacheGetMany<T>(cache: CatalogCache, keys: string[], now: 
     reportCatalogCacheError(cache, 'get', keys.length === 1 ? keys[0]! : `${keys[0]} (+${keys.length - 1} more)`, error)
     return null
   })
-  return keys.map((_, index) => {
-    const entry = boxed?.[index]?.value
+  const byKey = new Map((boxed ?? []).map(entry => [entry.key, entry] as const))
+  const echoRoundTrips = keys.every(key => byKey.has(key))
+  return keys.map((key, index) => {
+    const entry = (echoRoundTrips ? byKey.get(key) : boxed?.[index])?.value
     if (!entry || typeof entry.exp !== 'number' || entry.exp <= now)
       return undefined
     return entry.v
