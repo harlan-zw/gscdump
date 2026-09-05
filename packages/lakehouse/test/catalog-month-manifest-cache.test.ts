@@ -144,6 +144,30 @@ describe('resolveIcebergDataFiles month-keyed manifest cache', () => {
     expect(out.map(f => f.filePath).sort()).toEqual([FILE_A, FILE_B])
   })
 
+  it('a month whose every manifest entry fails the matches filter is cached as empty and never re-walked', async () => {
+    const cache = { storage: createStorage() }
+    setSnapshot('snap-1')
+    // site_id 2 fails the `matches` filter (site_id 1): the month's manifest
+    // survives partition pruning but resolves to zero files.
+    setManifests([
+      { path: 'm1', partitions: [NO_SUMMARY, monthSummary(monthVal('2026-05'))], entries: [dataFile(2, '2026-05', FILE_A)] },
+    ])
+
+    const first = await resolveIcebergDataFiles(conn() as never, opts(RANGE, cache))
+    expect(first).toEqual([])
+    const callsAfterCold = icebergManifests.mock.calls.length
+    expect(callsAfterCold).toBe(2) // list-only pass + walk pass
+
+    // A different exact range inside the same month: the exact-range cache
+    // misses, so only the month cache can serve the month.
+    const narrower = { start: '2026-05-10', end: '2026-05-20' }
+    const second = await resolveIcebergDataFiles(conn() as never, opts(narrower, cache))
+    expect(second).toEqual([])
+    // Only the list-only pass runs again — the empty month must be served
+    // from the cache. Before the repair the walk pass ran again (+2).
+    expect(icebergManifests.mock.calls.length).toBe(callsAfterCold + 1)
+  })
+
   it('a new snapshot that adds one manifest to a month re-walks only that month, serving the untouched month from cache', async () => {
     const cache = { storage: createStorage() }
     setSnapshot('snap-1')

@@ -1090,6 +1090,12 @@ async function resolveViaMonthCache(
     const freshByMonth = new Map<number, IcebergListedDataFile[]>()
     for (const m of manifests) {
       const bucket = manifestMonths.get(m.url)
+      // Seed EVERY walked single-month bucket before filtering its entries:
+      // a month whose entries all fail `matches` must still cache as an
+      // empty array under its content-addressed key, or every later query
+      // re-walks that month's manifests forever.
+      if (bucket !== undefined && bucket !== MULTI_MONTH_MANIFEST && !freshByMonth.has(bucket))
+        freshByMonth.set(bucket, [])
       for (const entry of m.entries) {
         const file = toListedFile(entry, matches, monthFieldName, wantedMonths, dateFieldId)
         if (!file)
