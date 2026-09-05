@@ -244,4 +244,36 @@ describe('resolveIcebergDataFiles month-keyed manifest cache', () => {
     expect(out.map(f => f.filePath).sort()).toEqual([FILE_A, FILE_B])
     expect(errors.length).toBeGreaterThan(0)
   })
+
+  it('an inverted or unparseable range returns [] with zero cache gets and zero walks, even when the cache is warm for those months', async () => {
+    const cache = { storage: createStorage() }
+    setSnapshot('snap-1')
+    setManifests([
+      { path: 'm1', partitions: [NO_SUMMARY, monthSummary(monthVal('2026-05'))], entries: [dataFile(1, '2026-05', FILE_A)] },
+      { path: 'm2', partitions: [NO_SUMMARY, monthSummary(monthVal('2026-06'))], entries: [dataFile(1, '2026-06', FILE_B)] },
+    ])
+
+    // Warm the month cache for both May and June first.
+    await resolveIcebergDataFiles(conn() as never, opts(RANGE, cache))
+    const manifestCallsAfterWarm = icebergManifests.mock.calls.length
+    const loadTableCallsAfterWarm = restCatalogLoadTable.mock.calls.length
+    expect(manifestCallsAfterWarm).toBeGreaterThan(0)
+
+    const getItemSpy = vi.spyOn(cache.storage, 'getItem')
+
+    // Inverted at month granularity: June before May, both of which are warm.
+    const inverted = await resolveIcebergDataFiles(conn() as never, opts({ start: '2026-06-15', end: '2026-05-01' }, cache))
+    expect(inverted).toEqual([])
+
+    // Unparseable — neither endpoint is a date.
+    const unparseable = await resolveIcebergDataFiles(conn() as never, opts({ start: 'not-a-date', end: 'also-not-a-date' }, cache))
+    expect(unparseable).toEqual([])
+
+    // Neither call touched the cache, the snapshot pointer, or the manifest
+    // walk — a warm cache for May/June must never leak into a query that
+    // asked for zero months.
+    expect(getItemSpy).not.toHaveBeenCalled()
+    expect(restCatalogLoadTable.mock.calls.length).toBe(loadTableCallsAfterWarm)
+    expect(icebergManifests.mock.calls.length).toBe(manifestCallsAfterWarm)
+  })
 })

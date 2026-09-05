@@ -1031,9 +1031,15 @@ async function resolveViaMonthCache(
     },
   })
 
+  // Only ever key/read the month cache for a month this call actually wants.
+  // `resolveIcebergDataFiles` already rejects an empty `wantedMonths`
+  // outright, but this stays as a second, independent guard: a manifest
+  // whose month bucket falls outside `wantedMonths` for any other reason
+  // must never turn into a cache get (and so can never turn into a hit) for
+  // a month the caller did not ask for.
   const pathsByMonth = new Map<number, string[]>()
   for (const [path, bucket] of manifestMonths) {
-    if (bucket === MULTI_MONTH_MANIFEST)
+    if (bucket === MULTI_MONTH_MANIFEST || !wantedMonths.has(bucket))
       continue
     const list = pathsByMonth.get(bucket)
     if (list)
@@ -1131,6 +1137,15 @@ export async function resolveIcebergDataFiles(
   const profiler = opts.profiler
   const now = (opts.clock ?? Date.now)()
   const wantedMonths = new Set(monthsInRange(opts.range).map(monthsSinceEpoch))
+  // An inverted (`end` before `start`, at month granularity) or unparseable
+  // range expands to zero wanted months. Every downstream filter treats an
+  // EMPTY `wantedMonths` as "no month restriction" (fail open, same as an
+  // absent month field), not "restrict to nothing" — so without this guard a
+  // warm month cache would happily serve whatever months it already holds
+  // for a query that asked for none of them. Return before touching the
+  // snapshot, the exact-range cache, or the month cache at all.
+  if (wantedMonths.size === 0)
+    return []
 
   const endSnapshot = profiler?.start('iceberg.snapshot')
   let { snapshotId, metadata } = await loadSnapshotId(conn, namespace, table, opts.cache, now)
