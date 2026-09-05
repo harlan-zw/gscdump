@@ -95,13 +95,15 @@ describe('connectIcebergCatalog manifest cache', () => {
     icebergManifests.mockReset()
   })
 
-  it('serves a manifest object from cache on a second connection without waiting for the write', async () => {
+  it('persists a defer-less manifest put before the read resolves, then serves it warm', async () => {
     const bytes = bytesOf(1, 2, 3, 4, 5)
     const readerSpy = vi.fn(async () => asyncBufferOf(bytes))
     s3SignedResolver.mockReturnValue(fakeReader(readerSpy))
     const storage = createStorage()
     // Simulate real write latency, for the manifest key only: the config put
-    // inside connect is awaited by design, the manifest put must not be.
+    // inside connect is awaited by design, and the manifest put must be
+    // awaited inline too — a defer-less cache (no ctx.waitUntil) has a pending
+    // write cut off the moment the Worker response returns.
     let writeSettled = false
     const originalSetItem = storage.setItem.bind(storage)
     storage.setItem = async (key, value, options) => {
@@ -115,9 +117,12 @@ describe('connectIcebergCatalog manifest cache', () => {
     const conn1 = await connectIcebergCatalog(CONFIG, { cache: { storage }, clock: () => 1_000 })
     const first = await readAll(conn1.resolver, MANIFEST_PATH)
     expect(first).toEqual(bytes)
-    expect(writeSettled).toBe(false)
 
-    await vi.waitFor(() => expect(writeSettled).toBe(true))
+    // The write landed synchronously with the read — not fire-and-forget.
+    expect(writeSettled).toBe(true)
+    const keys = await storage.getKeys()
+    expect(keys.some(k => k.includes('lh-manifest'))).toBe(true)
+
     const conn2 = await connectIcebergCatalog(CONFIG, { cache: { storage }, clock: () => 2_000 })
     const second = await readAll(conn2.resolver, MANIFEST_PATH)
 

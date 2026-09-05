@@ -67,19 +67,26 @@ export async function cacheGet<T>(cache: CatalogCache, key: string, now: number)
   return boxed.v
 }
 
+/** Mirrors unstorage's `normalizeKey`: the form `getItems` echoes as `entry.key`. */
+function normalizedStorageKey(key: string): string {
+  if (!key)
+    return ''
+  return key.split('?')[0]!.replace(/[/\\]/g, ':').replace(/:+/g, ':').replace(/^:|:$/g, '')
+}
+
 /**
  * Read many cached values in one storage round trip. Returns one slot per
  * input key: `undefined` on a miss, an expired entry, a malformed box, or any
  * driver error (the batch degrades to all-misses, never to an error).
  *
- * Slots are matched to their input key, not to a result index: unstorage
+ * Slots are matched to their input key, never to a result index: unstorage
  * executes a multi-key read as one batch per mount and flattens the batches
  * in mount order, so raw indices only line up with the input when every key
- * shares a single mount. Entries echo their key, so each slot is filled from
- * the entry echoed under that exact key; when the echoes do not round-trip to
- * the input spelling (a driver may rewrite its keys) matching falls back to
- * positional order, which stays correct for the single-mount key sets the
- * catalog read path passes, and a short result degrades to all-misses.
+ * shares a single mount. Entries echo their key in unstorage's normalized
+ * form (slashes rewritten to `:`, `:` runs collapsed, truncated at `?`), so
+ * each slot is filled from the entry echoed under the same normalized key. A
+ * driver that echoes an unmatchable key simply misses that slot, which
+ * degrades to a fresh load.
  */
 export async function cacheGetMany<T>(cache: CatalogCache, keys: string[], now: number): Promise<(T | undefined)[]> {
   if (keys.length === 0)
@@ -88,10 +95,9 @@ export async function cacheGetMany<T>(cache: CatalogCache, keys: string[], now: 
     reportCatalogCacheError(cache, 'get', keys.length === 1 ? keys[0]! : `${keys[0]} (+${keys.length - 1} more)`, error)
     return null
   })
-  const byKey = new Map((boxed ?? []).map(entry => [entry.key, entry] as const))
-  const echoRoundTrips = keys.every(key => byKey.has(key))
-  return keys.map((key, index) => {
-    const entry = (echoRoundTrips ? byKey.get(key) : boxed?.[index])?.value
+  const byKey = new Map((boxed ?? []).map(entry => [normalizedStorageKey(entry.key), entry] as const))
+  return keys.map((key) => {
+    const entry = byKey.get(normalizedStorageKey(key))?.value
     if (!entry || typeof entry.exp !== 'number' || entry.exp <= now)
       return undefined
     return entry.v

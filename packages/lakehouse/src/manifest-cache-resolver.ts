@@ -113,11 +113,14 @@ function bufferedAsyncBuffer(bytes: Uint8Array): AsyncBuffer {
  * read normally and never written to the cache. A base reader rejection is
  * never cached, so the next read retries the base.
  *
- * Cache writes never block the read: they are handed to `cache.defer` (e.g.
- * `ctx.waitUntil`) when the caller supplied one, and otherwise run
- * fire-and-forget — `cachePut` already reports driver failures, and losing a
- * write only costs the next read a fresh fetch. When `stats` is supplied the
- * wrapper counts hits and misses into it.
+ * Cache writes never block the read's critical path when the caller supplies
+ * `cache.defer` (e.g. `ctx.waitUntil`): they are handed to the hook and the
+ * response is not blocked on them. Without a `defer` hook the write is
+ * awaited inline — a deferred-less cache has no way to keep work alive past
+ * the response (Workers cut pending work off), so awaiting is the only way
+ * the write ever lands. `cachePut` already reports driver failures, and a
+ * failed write only costs the next read a fresh fetch. When `stats` is
+ * supplied the wrapper counts hits and misses into it.
  */
 export function wrapManifestCacheResolver(
   base: Resolver,
@@ -176,7 +179,7 @@ export function wrapManifestCacheResolver(
       const ab = await base.reader(path, byteLength)
       const bytes = new Uint8Array(await ab.slice(0, ab.byteLength))
       if (bytes.byteLength <= MAX_CACHED_MANIFEST_BYTES)
-        cachePut(cache, key, { b64: bytesToBase64(bytes) }, MANIFEST_CACHE_TTL_MS, clock())
+        await cachePut(cache, key, { b64: bytesToBase64(bytes) }, MANIFEST_CACHE_TTL_MS, clock())
       return bufferedAsyncBuffer(bytes)
     },
   }
