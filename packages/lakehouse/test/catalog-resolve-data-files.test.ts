@@ -7,6 +7,7 @@
 
 import { createStorage } from 'unstorage'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fakeManifestWalker } from './manifest-mock'
 
 const restCatalogLoadTable = vi.fn()
 const icebergManifests = vi.fn()
@@ -39,7 +40,10 @@ function dataFile(partition: { site_id: number, date_month: number }, file_path 
 
 function withSnapshot(entries: FakeEntry[]) {
   restCatalogLoadTable.mockResolvedValue({ metadata: { 'current-snapshot-id': 'snap-1' } })
-  icebergManifests.mockResolvedValue([{ entries }])
+  // No `partitions` summary on the fixture — an unprovable single month, so
+  // the month-cache path always walks it fresh, matching the pre-month-cache
+  // behaviour these tests were written against.
+  icebergManifests.mockImplementation(fakeManifestWalker([{ path: 'm0', entries }]))
 }
 
 const RANGE = { start: '2026-05-01', end: '2026-05-31' }
@@ -130,12 +134,16 @@ describe('resolveIcebergDataFiles', () => {
     const out1 = await resolveIcebergDataFiles(CONN, opts({ cache }))
     expect(out1).toHaveLength(1)
     expect(restCatalogLoadTable).toHaveBeenCalledTimes(1)
-    expect(icebergManifests).toHaveBeenCalledTimes(1)
+    // Month cache: a list-only pass (observes manifest -> month, walks
+    // nothing) plus one real walk of the (uncacheable, no-`partitions`)
+    // fixture manifest — 2 calls for the cold resolve, not 1.
+    expect(icebergManifests).toHaveBeenCalledTimes(2)
 
     const out2 = await resolveIcebergDataFiles(CONN, opts({ cache }))
     expect(out2).toEqual(out1)
     expect(restCatalogLoadTable).toHaveBeenCalledTimes(1)
-    expect(icebergManifests).toHaveBeenCalledTimes(1)
+    // Same exact range hits the `lh-files2` cache before any manifest work.
+    expect(icebergManifests).toHaveBeenCalledTimes(2)
   })
 
   it('hands the manifest list a partition filter that prunes a non-matching manifest', async () => {
@@ -164,7 +172,7 @@ describe('resolveIcebergDataFiles', () => {
         'snapshots': [{ 'snapshot-id': 8114363535789397000n, 'sequence-number': 42n }],
       },
     })
-    icebergManifests.mockResolvedValue([{ entries: [dataFile({ site_id: 1, date_month: monthVal('2026-05') })] }])
+    icebergManifests.mockImplementation(fakeManifestWalker([{ path: 'm0', entries: [dataFile({ site_id: 1, date_month: monthVal('2026-05') })] }]))
     const storage = createStorage()
     const setItem = storage.setItem.bind(storage)
     storage.setItem = async (key, value, options) => {
@@ -242,7 +250,7 @@ function schemaMetadata(dateType: string = 'date') {
 
 function withBoundedSnapshot(entries: FakeEntry[], dateType?: string) {
   restCatalogLoadTable.mockResolvedValue({ metadata: schemaMetadata(dateType) })
-  icebergManifests.mockResolvedValue([{ entries }])
+  icebergManifests.mockImplementation(fakeManifestWalker([{ path: 'm0', entries }]))
 }
 
 /** One daily file inside the May 2026 partition. */

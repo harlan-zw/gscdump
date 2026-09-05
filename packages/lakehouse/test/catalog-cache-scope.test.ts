@@ -10,6 +10,7 @@
 
 import { createStorage } from 'unstorage'
 import { describe, expect, it, vi } from 'vitest'
+import { fakeManifestWalker } from './manifest-mock'
 
 const restCatalogLoadTable = vi.fn()
 const icebergManifests = vi.fn()
@@ -57,9 +58,12 @@ describe('cross-catalog cache isolation', () => {
   it('two catalogs sharing one cache never see each other\'s snapshot/metadata/files', async () => {
     const cache = { storage: createStorage() }
 
-    // Team A resolves first: snapshot snap-A, one file for site 1.
+    // Team A resolves first: snapshot snap-A, one file for site 1. No
+    // `partitions` summary on the fixture (unprovable single month), so the
+    // month cache always walks it fresh — 2 `icebergManifests` calls per
+    // resolve (list-only pass + walk pass), same fixture for both.
     restCatalogLoadTable.mockResolvedValueOnce({ metadata: { 'current-snapshot-id': 'snap-A' } })
-    icebergManifests.mockResolvedValueOnce([{ entries: [entryFor(1, 's3://team-a/gsc/pages/a.parquet')] }])
+    icebergManifests.mockImplementation(fakeManifestWalker([{ path: 'a', entries: [entryFor(1, 's3://team-a/gsc/pages/a.parquet')] }]))
     const teamA = await resolveIcebergDataFiles(conn('cat\0team-a-int') as never, { ...opts(1), cache })
     expect(teamA).toHaveLength(1)
 
@@ -67,11 +71,11 @@ describe('cross-catalog cache isolation', () => {
     // loadTable + walk — a shared (namespace, table) key would have served it
     // team A's snapshot pointer and cached (empty-for-B) file list instead.
     restCatalogLoadTable.mockResolvedValueOnce({ metadata: { 'current-snapshot-id': 'snap-B' } })
-    icebergManifests.mockResolvedValueOnce([{ entries: [entryFor(2, 's3://team-b/gsc/pages/b.parquet')] }])
+    icebergManifests.mockImplementation(fakeManifestWalker([{ path: 'b', entries: [entryFor(2, 's3://team-b/gsc/pages/b.parquet')] }]))
     const teamB = await resolveIcebergDataFiles(conn('cat\0team-b-int') as never, { ...opts(2), cache })
     expect(teamB).toEqual([expect.objectContaining({ filePath: 's3://team-b/gsc/pages/b.parquet' })])
     expect(restCatalogLoadTable).toHaveBeenCalledTimes(2)
-    expect(icebergManifests).toHaveBeenCalledTimes(2)
+    expect(icebergManifests).toHaveBeenCalledTimes(4)
 
     // Same catalog + same query stays warm (cache still works within a scope).
     const teamARepeat = await resolveIcebergDataFiles(conn('cat\0team-a-int') as never, { ...opts(1), cache })

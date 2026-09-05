@@ -15,8 +15,8 @@ import type {
   icebergAppendBatches,
 } from 'icebird/src/write/write.js'
 import type { CatalogCache } from './catalog-cache'
-import type { PartitionValueMatch } from './partition-prune'
-import type { IcebergPrimitiveType, IcebergS3Config } from './schema'
+import type { IcebergFieldSummary, ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'
+import type { IcebergPartitionField, IcebergPrimitiveType, IcebergS3Config } from './schema'
 import {
   restCatalogConnect,
   restCatalogCreateNamespace,
@@ -29,8 +29,7 @@ import { s3SignedResolver } from 'icebird/src/s3.js'
 import { stringifyBigintSafe } from './bigint'
 import { cacheGet, cachePut, reportCatalogCacheError } from './catalog-cache'
 import { toIcebergDayCount } from './date'
-import { wrapManifestCacheResolver } from './manifest-cache-resolver'
-import { buildManifestPartitionFilter } from './partition-prune'
+import { buildManifestPartitionFilter, manifestMonthBucket, MULTI_MONTH_MANIFEST } from './partition-prune'
 
 /** A field in an icebird table `Schema`. */
 export interface IcebergSchemaField {
@@ -200,12 +199,7 @@ export async function connectIcebergCatalog(
     endpoint: config.s3.endpoint,
     pathStyle: true,
   })
-  // Manifest/manifest-list `.avro` objects are immutable at their path, so a
-  // cross-isolate cache in front of the base resolver serves them without a
-  // fetch; the in-connection `cachingResolver` still sits on top so repeat
-  // reads within one request hit memory. See manifest-cache-resolver.ts.
-  const baseResolver = opts.cache ? wrapManifestCacheResolver(s3Resolver, opts.cache, cacheScope, opts.clock) : s3Resolver
-  const resolver = withVerifiedWriterByteLengths(cachingResolver(baseResolver))
+  const resolver = withVerifiedWriterByteLengths(cachingResolver(s3Resolver))
   return { catalog, resolver, namespace: config.namespace, cacheScope }
 }
 
@@ -622,6 +616,13 @@ const SNAPSHOT_REF_TTL_MS = 30 * 60 * 1000
 const RESOLVED_FILES_TTL_MS = 24 * 60 * 60 * 1000
 const METADATA_TTL_MS = 24 * 60 * 60 * 1000
 const MAX_CACHED_METADATA_BYTES = 2 * 1024 * 1024
+/**
+ * TTL on a cached month's manifest-derived file list. Generous — the key
+ * itself (the sha-256 of that month's manifest-path SET) is what makes a hit
+ * correct, not the TTL; the TTL is only hygiene so a month nobody queries
+ * again eventually falls out of the store.
+ */
+const MONTH_FILES_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 function snapshotRefKey(scope: string, namespace: string, table: string): string {
   return `lh-snapref\0${scope}\0${namespace}\0${table}`
@@ -661,6 +662,10 @@ function metadataRefKey(scope: string, namespace: string, table: string, snapsho
  * `lh-files2` prefix retires the month-keyed `lh-files` entries written before
  * date pruning existed rather than reusing (and mis-serving) them.
  */
+function matchKeyOf(matches: readonly PartitionValueMatch[]): string {
+  return [...matches].map(m => `${m.field}=${m.value}`).sort().join(',')
+}
+
 function resolvedFilesKey(
   scope: string,
   namespace: string,
@@ -669,8 +674,7 @@ function resolvedFilesKey(
   matches: readonly PartitionValueMatch[],
   range: { start: string, end: string },
 ): string {
-  const matchKey = [...matches].map(m => `${m.field}=${m.value}`).sort().join(',')
-  return `lh-files2\0${scope}\0${namespace}\0${table}\0${snapshotId}\0${matchKey}\0${range.start}..${range.end}`
+  return `lh-files2\0${scope}\0${namespace}\0${table}\0${snapshotId}\0${matchKeyOf(matches)}\0${range.start}..${range.end}`
 }
 
 function monthsInRange(range: { start: string, end: string }): string[] {
@@ -693,6 +697,39 @@ function monthsInRange(range: { start: string, end: string }): string[] {
 function monthsSinceEpoch(ym: string): number {
   const [y, m] = ym.split('-').map(Number) as [number, number]
   return (y - 1970) * 12 + (m - 1)
+}
+
+function ymFromMonthsSinceEpoch(value: number): string {
+  const y = 1970 + Math.floor(value / 12)
+  const m = (((value % 12) + 12) % 12) + 1
+  return `${y}-${String(m).padStart(2, '0')}`
+}
+
+/**
+ * Key for a cached month's resolved-and-scoped (but NOT yet day-bounds-
+ * pruned) file list.
+ *
+ * `manifestSetHash` is a sha-256 of that month's sorted manifest-path set —
+ * that is what makes a hit correct BY CONSTRUCTION: a commit or a compaction
+ * that adds, removes or rewrites any manifest touching the month changes the
+ * hash, which changes the key, which misses. No snapshot id in the key: two
+ * snapshots that happen to walk the same manifest set for a month are
+ * legitimately the same cache entry.
+ */
+function monthFilesKey(
+  scope: string,
+  namespace: string,
+  table: string,
+  matchKey: string,
+  monthYm: string,
+  manifestSetHash: string,
+): string {
+  return `lh-month\0${scope}\0${namespace}\0${table}\0${matchKey}\0${monthYm}\0${manifestSetHash}`
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('')
 }
 
 // ---------------------------------------------------------------------------
@@ -836,6 +873,276 @@ async function loadSnapshotId(
   return { snapshotId, metadata }
 }
 
+/** Minimal shape of one manifest entry, as accessed while turning it into a listed data file. */
+interface ManifestWalkEntry {
+  status?: number
+  data_file: {
+    content?: number
+    file_path: string
+    file_size_in_bytes: unknown
+    record_count: unknown
+    partition: Record<string, unknown>
+    lower_bounds?: unknown
+    upper_bounds?: unknown
+  }
+}
+
+/** One manifest's walked result — `icebergManifests`'s return element. */
+interface WalkedManifest {
+  url: string
+  entries: ManifestWalkEntry[]
+}
+
+/** Outcome of resolving the manifests for one range: the scoped files plus profiler counters. */
+interface ManifestWalkOutcome {
+  entries: IcebergListedDataFile[]
+  manifestsWalked: number
+  monthsWanted: number
+  monthsHit: number
+}
+
+/**
+ * Turn one manifest entry into a listed data file: applies the DELETED/
+ * non-data-file checks, the identity/dims `matches`, and month-partition
+ * membership.
+ *
+ * Deliberately does NOT apply day-bounds pruning — that runs once, after
+ * cached-month entries and freshly-walked entries are merged, over the
+ * combined list (see {@link resolveIcebergDataFiles}). Pruning here would
+ * mean a month cached for one range's day-window could never serve a
+ * narrower or different range inside the same month.
+ */
+function toListedFile(
+  entry: ManifestWalkEntry,
+  matches: readonly PartitionValueMatch[],
+  monthFieldName: string | undefined,
+  wantedMonths: ReadonlySet<number>,
+  dateFieldId: number | null,
+): IcebergListedDataFile | null {
+  if (entry.status === 2)
+    return null
+  const df = entry.data_file
+  if (df.content !== 0)
+    return null
+  const part = df.partition
+  for (const match of matches) {
+    if (String(part[match.field]) !== String(match.value))
+      return null
+  }
+  if (monthFieldName) {
+    const month = part[monthFieldName]
+    if (typeof month !== 'number' || !wantedMonths.has(month))
+      return null
+  }
+  // `dateBounds` is null whenever the stats are absent, malformed, or of a
+  // type this decoder does not handle. A null NEVER prunes here — this
+  // function only decodes; day-bounds pruning is the caller's job.
+  const dateBounds = dateFieldId == null ? null : readDataFileDateBounds(df, dateFieldId)
+  return {
+    filePath: df.file_path,
+    objectKey: stripBucket(df.file_path),
+    bytes: Number(df.file_size_in_bytes),
+    rowCount: Number(df.record_count),
+    ...(dateBounds ? { dateBounds } : {}),
+  }
+}
+
+/**
+ * Resolve data files with a single, unfiltered manifest walk — the original
+ * behaviour, used whenever the month cache cannot apply (no cache injected,
+ * or the table's partition spec has no `month`-transform field to bucket by).
+ */
+async function resolveViaFullWalk(
+  conn: IcebergConnection,
+  metadata: LoadedTableMetadata,
+  partitionFilter: ManifestPartitionFilter,
+  matches: readonly PartitionValueMatch[],
+  monthFieldName: string | undefined,
+  wantedMonths: ReadonlySet<number>,
+  dateFieldId: number | null,
+): Promise<ManifestWalkOutcome> {
+  const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter })
+  const entries: IcebergListedDataFile[] = []
+  for (const m of manifests) {
+    for (const entry of m.entries) {
+      const file = toListedFile(entry, matches, monthFieldName, wantedMonths, dateFieldId)
+      if (file)
+        entries.push(file)
+    }
+  }
+  return { entries, manifestsWalked: manifests.length, monthsWanted: 0, monthsHit: 0 }
+}
+
+/**
+ * Resolve data files through the month-keyed manifest cache.
+ *
+ * Superseded design: 3.4.2 (PR #42) cached each manifest OBJECT individually
+ * behind a per-manifest KV get/put in `manifest-cache-resolver.ts`. Measured
+ * on team catalog `gsc-team-9df5b57c-...-int`, `gsc.queries`, one site, a
+ * 13-month range (164 manifests surviving partition pruning for 93 data
+ * files): a cold walk was 5–8s from a Worker; with the per-manifest cache it
+ * measured 11–20s and never improved, because a KV get of a 50–150KB base64
+ * manifest from a Worker costs about as much as the S3 GET it replaces, and
+ * the un-deferred KV put on every miss doubled that. Reverted in gscdump.com
+ * #224 (issue #43). The manifest is the wrong cache grain — a closed month's
+ * manifest SET does not change between daily commits, so this caches the
+ * MONTH instead: a content-addressed key (sha-256 of that month's sorted
+ * manifest-path set) makes a hit correct by construction, and a hit skips
+ * every manifest fetch for that month rather than trading N manifest GETs
+ * for N KV gets.
+ *
+ * Two calls to `icebergManifests`, both of which re-fetch the manifest-list
+ * avro (cheap — ONE object per snapshot, not per manifest): the first's
+ * `partitionFilter` always returns `false`, so `fetchManifests` is handed an
+ * empty array and walks nothing — it exists purely to observe every
+ * surviving manifest's `manifest_path` + `partitions` summary, which icebird
+ * hands the filter before deciding whether to fetch. The second walks only
+ * the manifests whose month missed the cache (or that cannot be proven
+ * single-month at all).
+ */
+async function resolveViaMonthCache(
+  conn: IcebergConnection,
+  cache: CatalogCache,
+  metadata: LoadedTableMetadata,
+  partitionFilter: ManifestPartitionFilter,
+  partitionSpec: readonly IcebergPartitionField[],
+  matches: readonly PartitionValueMatch[],
+  monthFieldName: string,
+  wantedMonths: ReadonlySet<number>,
+  dateFieldId: number | null,
+  scope: string,
+  namespace: string,
+  table: string,
+  now: number,
+): Promise<ManifestWalkOutcome> {
+  const matchKey = matchKeyOf(matches)
+
+  // Pass 1: list-only. Records (manifest_path -> month bucket) for every
+  // manifest the ordinary partition filter would keep; walks nothing.
+  const manifestMonths = new Map<string, number | typeof MULTI_MONTH_MANIFEST>()
+  await icebergManifests({
+    metadata,
+    resolver: conn.resolver,
+    partitionFilter: (partitions: IcebergFieldSummary[] | undefined, _specId: number, manifest: { manifest_path: string }) => {
+      try {
+        if (partitionFilter(partitions) === false)
+          return false
+        manifestMonths.set(manifest.manifest_path, manifestMonthBucket(partitionSpec, partitions))
+      }
+      catch {
+        // The pruning filter threw for this manifest (e.g. a malformed
+        // month-summary bound). Icebird's own catch KEEPS the manifest — a
+        // pruning failure must not hide data — so its entries WILL be
+        // fetched. Record it as un-cacheable so pass 2 walks it; leaving it
+        // unrecorded would make pass 2's `toWalk` filter skip it and its
+        // data files would silently vanish from the result.
+        manifestMonths.set(manifest.manifest_path, MULTI_MONTH_MANIFEST)
+      }
+      return false
+    },
+  })
+
+  // Only ever key/read the month cache for a month this call actually wants.
+  // `resolveIcebergDataFiles` already rejects an empty `wantedMonths`
+  // outright, but this stays as a second, independent guard: a manifest
+  // whose month bucket falls outside `wantedMonths` for any other reason
+  // must never turn into a cache get (and so can never turn into a hit) for
+  // a month the caller did not ask for.
+  const pathsByMonth = new Map<number, string[]>()
+  for (const [path, bucket] of manifestMonths) {
+    if (bucket === MULTI_MONTH_MANIFEST || !wantedMonths.has(bucket))
+      continue
+    const list = pathsByMonth.get(bucket)
+    if (list)
+      list.push(path)
+    else
+      pathsByMonth.set(bucket, [path])
+  }
+  const monthsWanted = pathsByMonth.size
+
+  // Content-address each wanted month by the sha-256 of its sorted manifest
+  // path set — the hash IS the correctness guard: any commit or compaction
+  // that changes which manifests touch the month changes the key.
+  const monthKeys = new Map<number, string>()
+  await Promise.all([...pathsByMonth].map(async ([monthValue, paths]) => {
+    const hash = await sha256Hex([...paths].sort().join('\0'))
+    monthKeys.set(monthValue, monthFilesKey(scope, namespace, table, matchKey, ymFromMonthsSinceEpoch(monthValue), hash))
+  }))
+
+  const cachedByMonth = new Map<number, IcebergListedDataFile[]>()
+  await Promise.all([...monthKeys].map(async ([monthValue, key]) => {
+    const cached = await cacheGet<IcebergListedDataFile[]>(cache, key, now)
+    if (cached !== undefined)
+      cachedByMonth.set(monthValue, cached)
+  }))
+  const monthsHit = cachedByMonth.size
+
+  const toWalk = new Set<string>()
+  for (const [path, bucket] of manifestMonths) {
+    if (bucket === MULTI_MONTH_MANIFEST || !cachedByMonth.has(bucket))
+      toWalk.add(path)
+  }
+
+  const entries: IcebergListedDataFile[] = []
+  for (const cached of cachedByMonth.values())
+    entries.push(...cached)
+
+  let manifestsWalked = 0
+  if (toWalk.size > 0) {
+    // Pass 2: walk only the missed/uncacheable manifests.
+    const manifests: WalkedManifest[] = await icebergManifests({
+      metadata,
+      resolver: conn.resolver,
+      partitionFilter: (_partitions: IcebergFieldSummary[] | undefined, _specId: number, manifest: { manifest_path: string }) =>
+        toWalk.has(manifest.manifest_path),
+    })
+    manifestsWalked = manifests.length
+
+    const freshByMonth = new Map<number, IcebergListedDataFile[]>()
+    for (const m of manifests) {
+      const bucket = manifestMonths.get(m.url)
+      // Seed EVERY walked single-month bucket before filtering its entries:
+      // a month whose entries all fail `matches` must still cache as an
+      // empty array under its content-addressed key, or every later query
+      // re-walks that month's manifests forever.
+      if (bucket !== undefined && bucket !== MULTI_MONTH_MANIFEST && !freshByMonth.has(bucket))
+        freshByMonth.set(bucket, [])
+      for (const entry of m.entries) {
+        const file = toListedFile(entry, matches, monthFieldName, wantedMonths, dateFieldId)
+        if (!file)
+          continue
+        entries.push(file)
+        if (bucket !== undefined && bucket !== MULTI_MONTH_MANIFEST) {
+          const list = freshByMonth.get(bucket)
+          if (list)
+            list.push(file)
+          else
+            freshByMonth.set(bucket, [file])
+        }
+      }
+    }
+
+    // Await the write when no `defer` hook exists: `cachePut` returns the
+    // pending put then, and a Worker without `cache.defer` suspends the
+    // isolate at response end, so a fire-and-forget write would be cut off
+    // and the month cache would never populate. With a `defer` hook
+    // `cachePut` hands the write off and returns immediately, keeping it off
+    // the response critical path either way. A driver failure is reported
+    // via `reportCatalogCacheError` inside `cachePut`, never thrown here.
+    // Start every month's put before awaiting any of them — a cold walk
+    // across N missed months pays one round-trip of KV latency, not N.
+    const puts: Promise<void>[] = []
+    for (const [monthValue, files] of freshByMonth) {
+      const key = monthKeys.get(monthValue)
+      if (key)
+        puts.push(cachePut(cache, key, files, MONTH_FILES_TTL_MS, now))
+    }
+    await Promise.all(puts)
+  }
+
+  return { entries, manifestsWalked, monthsWanted, monthsHit }
+}
+
 /**
  * List the parquet data files in the current snapshot of `table`, filtered to
  * one partition slice (`matches` + `range`). Generic over the partition spec —
@@ -850,6 +1157,15 @@ export async function resolveIcebergDataFiles(
   const profiler = opts.profiler
   const now = (opts.clock ?? Date.now)()
   const wantedMonths = new Set(monthsInRange(opts.range).map(monthsSinceEpoch))
+  // An inverted (`end` before `start`, at month granularity) or unparseable
+  // range expands to zero wanted months. Every downstream filter treats an
+  // EMPTY `wantedMonths` as "no month restriction" (fail open, same as an
+  // absent month field), not "restrict to nothing" — so without this guard a
+  // warm month cache would happily serve whatever months it already holds
+  // for a query that asked for none of them. Return before touching the
+  // snapshot, the exact-range cache, or the month cache at all.
+  if (wantedMonths.size === 0)
+    return []
 
   const endSnapshot = profiler?.start('iceberg.snapshot')
   let { snapshotId, metadata } = await loadSnapshotId(conn, namespace, table, opts.cache, now)
@@ -882,8 +1198,6 @@ export async function resolveIcebergDataFiles(
 
   const endWalk = profiler?.start('iceberg.walk')
   const partitionFilter = buildManifestPartitionFilter(opts.partitionSpec, opts.matches, wantedMonths)
-  const manifests = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter })
-
   const monthField = opts.partitionSpec.find(f => f.transform === 'month')
   const monthFieldName = monthField?.name
   // Per-file date-bound pruning inputs. Either being `null` disables the check
@@ -891,49 +1205,36 @@ export async function resolveIcebergDataFiles(
   // unparseable range all fall back to month-tuple pruning alone.
   const dateFieldId = dateColumnFieldId(metadata, monthField?.sourceColumn)
   const dayWindow = rangeDayWindow(opts.range)
+
+  const walk = opts.cache && monthFieldName
+    ? await resolveViaMonthCache(conn, opts.cache, metadata, partitionFilter, opts.partitionSpec, opts.matches, monthFieldName, wantedMonths, dateFieldId, scope, namespace, table, now)
+    : await resolveViaFullWalk(conn, metadata, partitionFilter, opts.matches, monthFieldName, wantedMonths, dateFieldId)
+
+  // Day-bounds pruning runs once, over the merged (cached ∪ freshly-walked)
+  // list — see `toListedFile` and `resolveViaMonthCache`'s doc for why it
+  // can't run per-manifest when some entries came from the month cache.
   let boundsPruned = 0
   const out: IcebergListedDataFile[] = []
-  for (const m of manifests) {
-    for (const entry of m.entries) {
-      if (entry.status === 2)
-        continue
-      const df = entry.data_file
-      if (df.content !== 0)
-        continue
-      const part = df.partition as Record<string, unknown>
-      let matchesAll = true
-      for (const match of opts.matches) {
-        if (String(part[match.field]) !== String(match.value)) {
-          matchesAll = false
-          break
-        }
-      }
-      if (!matchesAll)
-        continue
-      if (monthFieldName) {
-        const month = part[monthFieldName]
-        if (typeof month !== 'number' || !wantedMonths.has(month))
-          continue
-      }
-      // Narrow month → day. `dateBounds` is null whenever the stats are
-      // absent, malformed, or of a type this decoder does not handle, and a
-      // null keeps the file: a false negative here silently returns wrong
-      // rows, so pruning only ever acts on bounds it fully understands.
-      const dateBounds = dateFieldId == null ? null : readDataFileDateBounds(df, dateFieldId)
-      if (dateBounds && dayWindow && (dateBounds.maxDay < dayWindow.startDay || dateBounds.minDay > dayWindow.endDay)) {
-        boundsPruned++
-        continue
-      }
-      out.push({
-        filePath: df.file_path,
-        objectKey: stripBucket(df.file_path),
-        bytes: Number(df.file_size_in_bytes),
-        rowCount: Number(df.record_count),
-        ...(dateBounds ? { dateBounds } : {}),
-      })
+  for (const file of walk.entries) {
+    if (file.dateBounds && dayWindow && (file.dateBounds.maxDay < dayWindow.startDay || file.dateBounds.minDay > dayWindow.endDay)) {
+      boundsPruned++
+      continue
     }
+    out.push(file)
   }
-  endWalk?.({ manifests: manifests.length, files: out.length, boundsPruned })
+  // Merge order depends on which months were cache hits vs freshly walked,
+  // so it is not stable across calls — sort so the result is deterministic
+  // regardless of how it was assembled.
+  out.sort((a, b) => (a.filePath < b.filePath ? -1 : a.filePath > b.filePath ? 1 : 0))
+
+  endWalk?.({
+    manifests: walk.manifestsWalked,
+    files: out.length,
+    boundsPruned,
+    monthsWanted: walk.monthsWanted,
+    monthsHit: walk.monthsHit,
+    manifestsWalked: walk.manifestsWalked,
+  })
 
   if (opts.cache) {
     const freshKey = resolvedFilesKey(scope, namespace, table, snapshotId, opts.matches, opts.range)
