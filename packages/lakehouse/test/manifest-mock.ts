@@ -38,7 +38,19 @@ interface IcebergManifestsArgs { partitionFilter?: (partitions: unknown, specId:
 export function fakeManifestWalker(manifests: readonly ManifestFixture[]) {
   return async ({ partitionFilter }: IcebergManifestsArgs) => {
     return manifests
-      .filter(m => !partitionFilter || partitionFilter(m.partitions, 0, { manifest_path: m.path, partitions: m.partitions }) !== false)
+      .filter((m) => {
+        if (!partitionFilter)
+          return true
+        try {
+          return partitionFilter(m.partitions, 0, { manifest_path: m.path, partitions: m.partitions }) !== false
+        }
+        catch {
+          // Real icebird keeps a manifest whose filter throws ("a filter
+          // failure must not hide data", patches/icebird@0.8.27.patch) —
+          // mirror that keep-on-throw contract here.
+          return true
+        }
+      })
       .map(m => ({ url: m.path, entries: m.entries }))
   }
 }

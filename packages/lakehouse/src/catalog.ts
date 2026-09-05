@@ -1024,9 +1024,20 @@ async function resolveViaMonthCache(
     metadata,
     resolver: conn.resolver,
     partitionFilter: (partitions: IcebergFieldSummary[] | undefined, _specId: number, manifest: { manifest_path: string }) => {
-      if (partitionFilter(partitions) === false)
-        return false
-      manifestMonths.set(manifest.manifest_path, manifestMonthBucket(partitionSpec, partitions))
+      try {
+        if (partitionFilter(partitions) === false)
+          return false
+        manifestMonths.set(manifest.manifest_path, manifestMonthBucket(partitionSpec, partitions))
+      }
+      catch {
+        // The pruning filter threw for this manifest (e.g. a malformed
+        // month-summary bound). Icebird's own catch KEEPS the manifest — a
+        // pruning failure must not hide data — so its entries WILL be
+        // fetched. Record it as un-cacheable so pass 2 walks it; leaving it
+        // unrecorded would make pass 2's `toWalk` filter skip it and its
+        // data files would silently vanish from the result.
+        manifestMonths.set(manifest.manifest_path, MULTI_MONTH_MANIFEST)
+      }
       return false
     },
   })

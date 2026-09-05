@@ -246,6 +246,41 @@ describe('resolveIcebergDataFiles month-keyed manifest cache', () => {
     expect(icebergManifests.mock.calls.length).toBe(callsAfterFirst + 2)
   })
 
+  it('a pruning-filter throw (malformed month-summary bound) walks the manifest in both results, matching an uncached walk', async () => {
+    // A 2-byte month lower_bound makes `decodeMonthInt`'s getInt32 raise
+    // RangeError, so `buildManifestPartitionFilter` throws for this manifest.
+    // Icebird's own catch keeps it — pruning must not hide data — so the
+    // resolver must walk it too, on every resolve.
+    const fixtures: ManifestFixture[] = [
+      {
+        path: 'm-bad',
+        partitions: [NO_SUMMARY, { contains_null: false, lower_bound: new Uint8Array(2), upper_bound: intBound(monthVal('2026-05')) }],
+        entries: [dataFile(1, '2026-05', FILE_A)],
+      },
+    ]
+
+    setSnapshot('snap-1')
+    setManifests(fixtures)
+    const uncached = await resolveIcebergDataFiles(conn() as never, opts(RANGE))
+    expect(uncached.map(f => f.filePath).sort()).toEqual([FILE_A])
+
+    setSnapshot('snap-1')
+    setManifests(fixtures)
+    const cache = { storage: createStorage() }
+    const first = await resolveIcebergDataFiles(conn() as never, opts(RANGE, cache))
+
+    // Same snapshot, a different exact range: the exact-range cache misses,
+    // so the two-pass month-cache resolver runs again and must STILL walk
+    // the throw-kept manifest instead of silently dropping its files.
+    const narrower = { start: '2026-05-05', end: '2026-05-20' }
+    const second = await resolveIcebergDataFiles(conn() as never, opts(narrower, cache))
+
+    expect(first).toEqual(uncached)
+    expect(second).toEqual(uncached)
+    expect(first.map(f => f.filePath).sort()).toEqual([FILE_A])
+    expect(second.map(f => f.filePath).sort()).toEqual([FILE_A])
+  })
+
   it('a cache driver failure degrades to a full walk', async () => {
     setSnapshot('snap-1')
     setManifests([
