@@ -2,6 +2,7 @@
   bigintJsonReplacer: function
   buildManifestPartitionFilter: function
   cacheGet: function
+  cacheGetMany: function
   cachePut: function
   catalogCacheScope: function
   coerceBigIntToNumber: function
