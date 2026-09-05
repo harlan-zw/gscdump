@@ -25,13 +25,16 @@ const restCatalogConnect = vi.fn(async () => ({
   defaults: {},
   overrides: {},
 }))
+const restCatalogLoadTable = vi.fn()
 const s3SignedResolver = vi.fn()
+const icebergManifests = vi.fn()
 
-vi.mock('icebird/src/catalog/rest.js', () => ({ restCatalogConnect, restCatalogCreateNamespace: vi.fn(), restCatalogListTables: vi.fn(), restCatalogLoadTable: vi.fn() }))
+vi.mock('icebird/src/catalog/rest.js', () => ({ restCatalogConnect, restCatalogCreateNamespace: vi.fn(), restCatalogListTables: vi.fn(), restCatalogLoadTable }))
 vi.mock('icebird/src/fetch.js', () => ({ cachingResolver }))
 vi.mock('icebird/src/s3.js', () => ({ s3SignedResolver }))
+vi.mock('icebird/src/manifest.js', () => ({ icebergManifests }))
 
-const { connectIcebergCatalog } = await import('../src/catalog')
+const { connectIcebergCatalog, resolveIcebergDataFiles } = await import('../src/catalog')
 
 const CONFIG = {
   catalogUri: 'https://catalog.example/acct/warehouse',
@@ -47,6 +50,19 @@ const CONFIG = {
 
 const MANIFEST_PATH = 's3://acct_bucket/gsc/queries/metadata/1111-1111-m0.avro'
 const DATA_FILE_PATH = 's3://acct_bucket/gsc/queries/data/site_id=1/a.parquet'
+
+const MANIFEST_LIST_PATH = 's3://acct_bucket/gsc/queries/metadata/snap-1-1-abcd.avro'
+const WALK_MANIFEST_PATHS = [
+  's3://acct_bucket/gsc/queries/metadata/2222-2222-m0.avro',
+  's3://acct_bucket/gsc/queries/metadata/3333-3333-m0.avro',
+]
+const RANGE = { start: '2026-05-01', end: '2026-05-31' }
+const MAY_2026 = monthVal('2026-05')
+
+function monthVal(ym: string): number {
+  const [y, m] = ym.split('-').map(Number)
+  return (y - 1970) * 12 + (m - 1)
+}
 
 function fakeReader(readerSpy: ReturnType<typeof vi.fn>) {
   return { reader: readerSpy }
@@ -74,25 +90,59 @@ describe('connectIcebergCatalog manifest cache', () => {
   beforeEach(() => {
     cachingResolver.mockClear()
     restCatalogConnect.mockClear()
+    restCatalogLoadTable.mockReset()
     s3SignedResolver.mockReset()
+    icebergManifests.mockReset()
   })
 
-  it('serves a manifest object from cache on a second connection with zero base-reader calls', async () => {
+  it('serves a manifest object from cache on a second connection without waiting for the write', async () => {
     const bytes = bytesOf(1, 2, 3, 4, 5)
     const readerSpy = vi.fn(async () => asyncBufferOf(bytes))
     s3SignedResolver.mockReturnValue(fakeReader(readerSpy))
     const storage = createStorage()
+    // Simulate real write latency, for the manifest key only: the config put
+    // inside connect is awaited by design, the manifest put must not be.
+    let writeSettled = false
+    const originalSetItem = storage.setItem.bind(storage)
+    storage.setItem = async (key, value, options) => {
+      if (!String(key).includes('lh-manifest'))
+        return originalSetItem(key, value, options)
+      await new Promise(resolve => setTimeout(resolve, 20))
+      await originalSetItem(key, value, options)
+      writeSettled = true
+    }
 
     const conn1 = await connectIcebergCatalog(CONFIG, { cache: { storage }, clock: () => 1_000 })
     const first = await readAll(conn1.resolver, MANIFEST_PATH)
-    expect(readerSpy).toHaveBeenCalledTimes(1)
     expect(first).toEqual(bytes)
+    expect(writeSettled).toBe(false)
 
+    await vi.waitFor(() => expect(writeSettled).toBe(true))
     const conn2 = await connectIcebergCatalog(CONFIG, { cache: { storage }, clock: () => 2_000 })
     const second = await readAll(conn2.resolver, MANIFEST_PATH)
 
     expect(readerSpy).toHaveBeenCalledTimes(1)
     expect(second).toEqual(bytes)
+  })
+
+  it('coalesces concurrent manifest reads into one batched storage lookup', async () => {
+    const bytes = bytesOf(1, 2)
+    const readerSpy = vi.fn(async () => asyncBufferOf(bytes))
+    s3SignedResolver.mockReturnValue(fakeReader(readerSpy))
+    const storage = createStorage()
+    const batches: string[][] = []
+    const originalGetItems = storage.getItems.bind(storage)
+    storage.getItems = async (items, options) => {
+      batches.push(items.map(item => typeof item === 'string' ? item : item.key))
+      return originalGetItems(items, options)
+    }
+
+    const conn = await connectIcebergCatalog(CONFIG, { cache: { storage }, clock: () => 1_000 })
+    await Promise.all([MANIFEST_PATH, ...WALK_MANIFEST_PATHS].map(path => readAll(conn.resolver, path)))
+
+    expect(readerSpy).toHaveBeenCalledTimes(3)
+    expect(batches).toHaveLength(1)
+    expect(batches[0]).toHaveLength(3)
   })
 
   it('never caches a path that is not a metadata/*.avro object', async () => {
@@ -156,5 +206,80 @@ describe('connectIcebergCatalog manifest cache', () => {
     await readAll(conn2.resolver, MANIFEST_PATH)
 
     expect(readerSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('emits manifest cache hit/miss counts for the walk into the profiler span', async () => {
+    const readerSpy = vi.fn(async (_path: string) => asyncBufferOf(bytesOf(1, 2, 3)))
+    s3SignedResolver.mockReturnValue(fakeReader(readerSpy))
+    const storage = createStorage()
+    const deferred: Promise<unknown>[] = []
+    const cache = {
+      storage,
+      defer: (write: Promise<unknown>) => { deferred.push(write) },
+    }
+    const spans: { name: string, meta?: Record<string, string | number | boolean> }[] = []
+    const profiler = {
+      start: (name: string) => (meta?: Record<string, string | number | boolean>) => { spans.push({ name, meta }) },
+    }
+
+    icebergManifests.mockImplementation(async ({ resolver }: { resolver: { reader: (path: string) => Promise<unknown> } }) => {
+      await Promise.all([MANIFEST_LIST_PATH, ...WALK_MANIFEST_PATHS].map(path => resolver.reader(path)))
+      return [{
+        entries: [{
+          status: 1,
+          data_file: {
+            content: 0,
+            file_path: 's3://acct_bucket/gsc/queries/data/site_id=1/a.parquet',
+            file_size_in_bytes: 100,
+            record_count: 1,
+            partition: { site_id: 1, date_month: MAY_2026 },
+          },
+        }],
+      }]
+    })
+    restCatalogLoadTable.mockResolvedValue({ metadata: { 'current-snapshot-id': 'snap-1' } })
+
+    const conn1 = await connectIcebergCatalog(CONFIG, { cache, clock: () => 1_000 })
+    await resolveIcebergDataFiles(conn1, {
+      namespace: 'gsc',
+      table: 'queries',
+      partitionSpec: [
+        { sourceColumn: 'site_id', transform: 'identity', name: 'site_id' },
+        { sourceColumn: 'date', transform: 'month', name: 'date_month' },
+      ],
+      matches: [{ field: 'site_id', value: 1, encoding: 'int32' }],
+      range: RANGE,
+      cache,
+      profiler,
+    })
+
+    const coldWalk = spans.filter(span => span.name === 'iceberg.walk')
+    expect(coldWalk).toHaveLength(1)
+    expect(coldWalk[0]!.meta).toMatchObject({ manifestCacheHits: 0, manifestCacheMisses: 3 })
+    expect(readerSpy).toHaveBeenCalledTimes(3)
+
+    await Promise.all(deferred)
+    deferred.length = 0
+    spans.length = 0
+
+    const conn2 = await connectIcebergCatalog(CONFIG, { cache, clock: () => 2_000 })
+    const out = await resolveIcebergDataFiles(conn2, {
+      namespace: 'gsc',
+      table: 'queries',
+      partitionSpec: [
+        { sourceColumn: 'site_id', transform: 'identity', name: 'site_id' },
+        { sourceColumn: 'date', transform: 'month', name: 'date_month' },
+      ],
+      matches: [{ field: 'site_id', value: 1, encoding: 'int32' }],
+      range: { start: '2026-06-01', end: '2026-06-30' },
+      cache,
+      profiler,
+    })
+    expect(out).toEqual([])
+
+    const warmWalk = spans.filter(span => span.name === 'iceberg.walk')
+    expect(warmWalk).toHaveLength(1)
+    expect(warmWalk[0]!.meta).toMatchObject({ manifestCacheHits: 3, manifestCacheMisses: 0 })
+    expect(readerSpy).toHaveBeenCalledTimes(3)
   })
 })

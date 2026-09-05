@@ -29,7 +29,7 @@
 import type { AsyncBuffer } from 'hyparquet'
 import type { Resolver } from 'icebird/src/types.js'
 import type { CatalogCache } from './catalog-cache'
-import { cacheGet, cachePut } from './catalog-cache'
+import { cacheGetMany, cachePut } from './catalog-cache'
 
 /** Manifest and manifest-list files live at `.../metadata/<name>.avro`. */
 const MANIFEST_AVRO_PATH = /\/metadata\/[^/]+\.avro$/
@@ -42,6 +42,16 @@ const MAX_CACHED_MANIFEST_BYTES = 1024 * 1024
 
 /** Chunk size for `String.fromCharCode` spreads — stays well under engine argument-count limits. */
 const BASE64_CHUNK_BYTES = 0x8000
+
+/**
+ * Live hit/miss counters for one connection's manifest cache. Read paths diff
+ * these around the manifest walk to report a per-walk hit rate (see the
+ * `iceberg.walk` profiler span in `resolveIcebergDataFiles`).
+ */
+export interface ManifestCacheStats {
+  hits: number
+  misses: number
+}
 
 interface CachedManifestBytes {
   /** Base64-encoded object bytes. */
@@ -89,38 +99,84 @@ function bufferedAsyncBuffer(bytes: Uint8Array): AsyncBuffer {
  * base reader. Every other path (data files, `metadata.json`,
  * `version-hint.text`) passes straight through untouched.
  *
+ * The manifest walk reads dozens of objects with bounded concurrency (icebird
+ * fans out 8-wide), so lookups registered in the same tick are coalesced into
+ * one `getItems` batch — drivers without a native batch get back a parallel
+ * fan-out instead of sequential awaited round trips, which is what made the
+ * #42 wrapper slower than the S3 fetch it fronts on Workers.
+ *
  * On a hit the cached bytes are returned with no call to `base.reader`. On a
  * miss the base reader is used exactly as it would be without this wrapper —
  * `resolveIcebergDataFiles`/`fetchAvroRecords` already read the whole object
  * via `slice(0, byteLength)`, so materializing it here to populate the cache
  * adds no extra request. Objects over {@link MAX_CACHED_MANIFEST_BYTES} are
  * read normally and never written to the cache. A base reader rejection is
- * never cached, so the next read retries the base. Cache writes are
- * best-effort via `cachePut` (a driver failure degrades to "not cached", it
- * never fails the read).
+ * never cached, so the next read retries the base.
+ *
+ * Cache writes never block the read: they are handed to `cache.defer` (e.g.
+ * `ctx.waitUntil`) when the caller supplied one, and otherwise run
+ * fire-and-forget — `cachePut` already reports driver failures, and losing a
+ * write only costs the next read a fresh fetch. When `stats` is supplied the
+ * wrapper counts hits and misses into it.
  */
 export function wrapManifestCacheResolver(
   base: Resolver,
   cache: CatalogCache,
   scope: string,
   clock: () => number = Date.now,
+  stats?: ManifestCacheStats,
 ): Resolver {
+  let batchScheduled = false
+  const pendingGets = new Map<string, Array<(value: CachedManifestBytes | undefined) => void>>()
+
+  function flushPendingGets(): void {
+    batchScheduled = false
+    const groups = [...pendingGets]
+    pendingGets.clear()
+    cacheGetMany<CachedManifestBytes>(cache, groups.map(([key]) => key), clock()).then((values) => {
+      groups.forEach((group, index) => {
+        for (const resolve of group[1]) resolve(values[index])
+      })
+    })
+  }
+
+  /** Register a key and coalesce every lookup that arrives before the flush. */
+  function queuedGet(key: string): Promise<CachedManifestBytes | undefined> {
+    return new Promise((resolve) => {
+      const waiters = pendingGets.get(key)
+      if (waiters)
+        waiters.push(resolve)
+      else
+        pendingGets.set(key, [resolve])
+      if (!batchScheduled) {
+        batchScheduled = true
+        // A macrotask, not a microtask: concurrent fetch continuations land in
+        // separate macrotasks, so waiting one turn collects a whole wave.
+        setTimeout(flushPendingGets, 0)
+      }
+    })
+  }
+
   return {
     ...base,
     async reader(path, byteLength) {
       if (!isManifestObjectPath(path))
         return base.reader(path, byteLength)
 
-      const now = clock()
       const key = manifestCacheKey(scope, path)
-      const cached = await cacheGet<CachedManifestBytes>(cache, key, now)
-      if (cached)
+      const cached = await queuedGet(key)
+      if (cached) {
+        if (stats)
+          stats.hits++
         return bufferedAsyncBuffer(base64ToBytes(cached.b64))
+      }
+      if (stats)
+        stats.misses++
 
       const ab = await base.reader(path, byteLength)
       const bytes = new Uint8Array(await ab.slice(0, ab.byteLength))
       if (bytes.byteLength <= MAX_CACHED_MANIFEST_BYTES)
-        await cachePut(cache, key, { b64: bytesToBase64(bytes) }, MANIFEST_CACHE_TTL_MS, now)
+        cachePut(cache, key, { b64: bytesToBase64(bytes) }, MANIFEST_CACHE_TTL_MS, clock())
       return bufferedAsyncBuffer(bytes)
     },
   }

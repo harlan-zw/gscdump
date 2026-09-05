@@ -41,7 +41,7 @@ export type {
   ResolveIcebergDataFilesOptions,
 } from './catalog'
 
-export { cacheGet, cachePut } from './catalog-cache'
+export { cacheGet, cacheGetMany, cachePut } from './catalog-cache'
 export type { CatalogCache } from './catalog-cache'
 
 export {
@@ -68,6 +68,8 @@ export type {
 } from './dataset'
 
 export { toIcebergDayCount } from './date'
+
+export type { ManifestCacheStats } from './manifest-cache-resolver'
 
 export { buildManifestPartitionFilter } from './partition-prune'
 export type { IcebergFieldSummary, ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'

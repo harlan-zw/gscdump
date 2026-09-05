@@ -15,6 +15,7 @@ import type {
   icebergAppendBatches,
 } from 'icebird/src/write/write.js'
 import type { CatalogCache } from './catalog-cache'
+import type { ManifestCacheStats } from './manifest-cache-resolver'
 import type { PartitionValueMatch } from './partition-prune'
 import type { IcebergPrimitiveType, IcebergS3Config } from './schema'
 import {
@@ -106,6 +107,12 @@ export interface IcebergConnection {
    * omit it ONLY when their cache is not shared across catalogs.
    */
   cacheScope?: string
+  /**
+   * Live hit/miss counters for the cross-isolate manifest cache. Present only
+   * when the connection was created with a cache; read paths diff these
+   * around the manifest walk to emit a per-walk hit rate into the profiler.
+   */
+  manifestCacheStats?: ManifestCacheStats
 }
 
 /** Options for {@link connectIcebergCatalog}. */
@@ -204,9 +211,18 @@ export async function connectIcebergCatalog(
   // cross-isolate cache in front of the base resolver serves them without a
   // fetch; the in-connection `cachingResolver` still sits on top so repeat
   // reads within one request hit memory. See manifest-cache-resolver.ts.
-  const baseResolver = opts.cache ? wrapManifestCacheResolver(s3Resolver, opts.cache, cacheScope, opts.clock) : s3Resolver
+  const manifestCacheStats = opts.cache ? { hits: 0, misses: 0 } : undefined
+  const baseResolver = opts.cache && manifestCacheStats
+    ? wrapManifestCacheResolver(s3Resolver, opts.cache, cacheScope, opts.clock, manifestCacheStats)
+    : s3Resolver
   const resolver = withVerifiedWriterByteLengths(cachingResolver(baseResolver))
-  return { catalog, resolver, namespace: config.namespace, cacheScope }
+  return {
+    catalog,
+    resolver,
+    namespace: config.namespace,
+    cacheScope,
+    ...(manifestCacheStats ? { manifestCacheStats } : {}),
+  }
 }
 
 /**
@@ -882,6 +898,11 @@ export async function resolveIcebergDataFiles(
 
   const endWalk = profiler?.start('iceberg.walk')
   const partitionFilter = buildManifestPartitionFilter(opts.partitionSpec, opts.matches, wantedMonths)
+  // The counters are connection-lifetime, so diff them around the walk to
+  // report exactly this walk's hit rate.
+  const stats = conn.manifestCacheStats
+  const hitsBefore = stats?.hits ?? 0
+  const missesBefore = stats?.misses ?? 0
   const manifests = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter })
 
   const monthField = opts.partitionSpec.find(f => f.transform === 'month')
@@ -933,7 +954,17 @@ export async function resolveIcebergDataFiles(
       })
     }
   }
-  endWalk?.({ manifests: manifests.length, files: out.length, boundsPruned })
+  endWalk?.({
+    manifests: manifests.length,
+    files: out.length,
+    boundsPruned,
+    ...(stats
+      ? {
+          manifestCacheHits: stats.hits - hitsBefore,
+          manifestCacheMisses: stats.misses - missesBefore,
+        }
+      : {}),
+  })
 
   if (opts.cache) {
     const freshKey = resolvedFilesKey(scope, namespace, table, snapshotId, opts.matches, opts.range)

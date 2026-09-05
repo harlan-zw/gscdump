@@ -68,6 +68,29 @@ export async function cacheGet<T>(cache: CatalogCache, key: string, now: number)
 }
 
 /**
+ * Read many cached values in one storage round trip. Returns one slot per
+ * input key: `undefined` on a miss, an expired entry, a malformed box, or any
+ * driver error (the batch degrades to all-misses, never to an error). Slots
+ * are positional — unstorage's `getItems` contract returns one entry per
+ * input key, in order; drivers echo their own (transformed) key spelling, so
+ * entries are matched by position and a short result degrades to all-misses.
+ */
+export async function cacheGetMany<T>(cache: CatalogCache, keys: string[], now: number): Promise<(T | undefined)[]> {
+  if (keys.length === 0)
+    return []
+  const boxed = await cache.storage.getItems<Boxed<T>>(keys).catch((error: unknown) => {
+    reportCatalogCacheError(cache, 'get', keys.length === 1 ? keys[0]! : `${keys[0]} (+${keys.length - 1} more)`, error)
+    return null
+  })
+  return keys.map((_, index) => {
+    const entry = boxed?.[index]?.value
+    if (!entry || typeof entry.exp !== 'number' || entry.exp <= now)
+      return undefined
+    return entry.v
+  })
+}
+
+/**
  * Write a cached value with an embedded expiry and a forwarded driver TTL.
  *
  * Returns the write promise. With a `defer` hook the write is handed to the
