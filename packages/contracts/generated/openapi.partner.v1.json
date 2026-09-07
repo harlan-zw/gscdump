@@ -171,6 +171,91 @@
           }
         ]
       },
+      "partner.sites.bing.data.get.error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                  "unauthorized",
+                  "forbidden",
+                  "site_not_found",
+                  "rate_limited",
+                  "internal_error",
+                  "contract_violation"
+                ],
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/partner.sites.bing.data.get.error.__schema0"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^req_[\\w-]+$",
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "requestId",
+              "retryable",
+              "details"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "partner.sites.bing.data.get.error.__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/partner.sites.bing.data.get.error.__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/partner.sites.bing.data.get.error.__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      },
       "partner.sites.canonical.mismatches.get.error": {
         "additionalProperties": false,
         "properties": {
@@ -5323,6 +5408,1252 @@
         },
         "x-gscdump-scopes": [
           "analytics:execute"
+        ],
+        "x-gscdump-semantics": {
+          "idempotent": true,
+          "kind": "query",
+          "readConsistency": "primary",
+          "retry": "idempotent",
+          "sideEffects": "none"
+        },
+        "x-gscdump-visibility": "public"
+      }
+    },
+    "/api/partner/v1/sites/{siteId}/bing/data": {
+      "get": {
+        "description": "Reads a bounded provider-date range from the latest successful dataset. Ranked rows are not complete Site totals.",
+        "operationId": "partner.sites.bing.data.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "pattern": "^s_[\\w-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dataset",
+            "required": true,
+            "schema": {
+              "enum": [
+                "traffic",
+                "pages",
+                "keywords",
+                "crawl"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "pattern": "^req_[\\w-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "dataset": {
+                              "const": "traffic",
+                              "type": "string"
+                            },
+                            "pagination": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "hasMore": {
+                                  "type": "boolean"
+                                },
+                                "limit": {
+                                  "maximum": 500,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "offset": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "total": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "total",
+                                "limit",
+                                "offset",
+                                "hasMore"
+                              ],
+                              "type": "object"
+                            },
+                            "rows": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "clicks": {
+                                    "minimum": 0,
+                                    "type": "number"
+                                  },
+                                  "date": {
+                                    "format": "date",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                    "type": "string"
+                                  },
+                                  "impressions": {
+                                    "minimum": 0,
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "date",
+                                  "clicks",
+                                  "impressions"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "searchEngine": {
+                              "const": "bing",
+                              "type": "string"
+                            },
+                            "semantics": {
+                              "const": "site-totals",
+                              "type": "string"
+                            },
+                            "siteUrl": {
+                              "format": "uri",
+                              "type": "string"
+                            },
+                            "sync": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "missing",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "ready",
+                                      "type": "string"
+                                    },
+                                    "observedAt": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    },
+                                    "providerEndDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "providerStartDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "observedAt",
+                                    "providerStartDate",
+                                    "providerEndDate"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "unavailable",
+                                      "type": "string"
+                                    },
+                                    "lastAttemptAt": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    },
+                                    "observedAt": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date-time",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "providerEndDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "providerStartDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "reason": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "observedAt",
+                                    "providerStartDate",
+                                    "providerEndDate",
+                                    "lastAttemptAt",
+                                    "reason"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "searchEngine",
+                            "siteUrl",
+                            "dataset",
+                            "semantics",
+                            "sync",
+                            "rows",
+                            "pagination"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "dataset": {
+                              "const": "pages",
+                              "type": "string"
+                            },
+                            "pagination": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "hasMore": {
+                                  "type": "boolean"
+                                },
+                                "limit": {
+                                  "maximum": 500,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "offset": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "total": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "total",
+                                "limit",
+                                "offset",
+                                "hasMore"
+                              ],
+                              "type": "object"
+                            },
+                            "rows": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "averageClickPosition": {
+                                    "anyOf": [
+                                      {
+                                        "minimum": 0,
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "averageImpressionPosition": {
+                                    "anyOf": [
+                                      {
+                                        "minimum": 0,
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "clicks": {
+                                    "minimum": 0,
+                                    "type": "number"
+                                  },
+                                  "date": {
+                                    "format": "date",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                    "type": "string"
+                                  },
+                                  "impressions": {
+                                    "minimum": 0,
+                                    "type": "number"
+                                  },
+                                  "page": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "date",
+                                  "clicks",
+                                  "impressions",
+                                  "page",
+                                  "averageClickPosition",
+                                  "averageImpressionPosition"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "searchEngine": {
+                              "const": "bing",
+                              "type": "string"
+                            },
+                            "semantics": {
+                              "const": "ranked-pages",
+                              "type": "string"
+                            },
+                            "siteUrl": {
+                              "format": "uri",
+                              "type": "string"
+                            },
+                            "sync": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "missing",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "ready",
+                                      "type": "string"
+                                    },
+                                    "observedAt": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    },
+                                    "providerEndDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "providerStartDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "observedAt",
+                                    "providerStartDate",
+                                    "providerEndDate"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "unavailable",
+                                      "type": "string"
+                                    },
+                                    "lastAttemptAt": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    },
+                                    "observedAt": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date-time",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "providerEndDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "providerStartDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "reason": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "observedAt",
+                                    "providerStartDate",
+                                    "providerEndDate",
+                                    "lastAttemptAt",
+                                    "reason"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "searchEngine",
+                            "siteUrl",
+                            "dataset",
+                            "semantics",
+                            "sync",
+                            "rows",
+                            "pagination"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "dataset": {
+                              "const": "keywords",
+                              "type": "string"
+                            },
+                            "pagination": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "hasMore": {
+                                  "type": "boolean"
+                                },
+                                "limit": {
+                                  "maximum": 500,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "offset": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "total": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "total",
+                                "limit",
+                                "offset",
+                                "hasMore"
+                              ],
+                              "type": "object"
+                            },
+                            "rows": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "averageClickPosition": {
+                                    "anyOf": [
+                                      {
+                                        "minimum": 0,
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "averageImpressionPosition": {
+                                    "anyOf": [
+                                      {
+                                        "minimum": 0,
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "clicks": {
+                                    "minimum": 0,
+                                    "type": "number"
+                                  },
+                                  "date": {
+                                    "format": "date",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                    "type": "string"
+                                  },
+                                  "impressions": {
+                                    "minimum": 0,
+                                    "type": "number"
+                                  },
+                                  "keyword": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "date",
+                                  "clicks",
+                                  "impressions",
+                                  "keyword",
+                                  "averageClickPosition",
+                                  "averageImpressionPosition"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "searchEngine": {
+                              "const": "bing",
+                              "type": "string"
+                            },
+                            "semantics": {
+                              "const": "ranked-keywords",
+                              "type": "string"
+                            },
+                            "siteUrl": {
+                              "format": "uri",
+                              "type": "string"
+                            },
+                            "sync": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "missing",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "ready",
+                                      "type": "string"
+                                    },
+                                    "observedAt": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    },
+                                    "providerEndDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "providerStartDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "observedAt",
+                                    "providerStartDate",
+                                    "providerEndDate"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "unavailable",
+                                      "type": "string"
+                                    },
+                                    "lastAttemptAt": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    },
+                                    "observedAt": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date-time",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "providerEndDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "providerStartDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "reason": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "observedAt",
+                                    "providerStartDate",
+                                    "providerEndDate",
+                                    "lastAttemptAt",
+                                    "reason"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "searchEngine",
+                            "siteUrl",
+                            "dataset",
+                            "semantics",
+                            "sync",
+                            "rows",
+                            "pagination"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "dataset": {
+                              "const": "crawl",
+                              "type": "string"
+                            },
+                            "pagination": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "hasMore": {
+                                  "type": "boolean"
+                                },
+                                "limit": {
+                                  "maximum": 500,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "offset": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "total": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "total",
+                                "limit",
+                                "offset",
+                                "hasMore"
+                              ],
+                              "type": "object"
+                            },
+                            "rows": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "allOtherCodes": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "blockedByRobotsTxt": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "code2xx": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "code301": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "code302": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "code4xx": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "code5xx": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "connectionTimeout": {
+                                    "anyOf": [
+                                      {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "containsMalware": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "crawlErrors": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "crawledPages": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "date": {
+                                    "format": "date",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                    "type": "string"
+                                  },
+                                  "dnsFailures": {
+                                    "anyOf": [
+                                      {
+                                        "maximum": 9007199254740991,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "inIndex": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "inLinks": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "date",
+                                  "crawledPages",
+                                  "inIndex",
+                                  "inLinks",
+                                  "crawlErrors",
+                                  "blockedByRobotsTxt",
+                                  "containsMalware",
+                                  "code2xx",
+                                  "code301",
+                                  "code302",
+                                  "code4xx",
+                                  "code5xx",
+                                  "allOtherCodes",
+                                  "connectionTimeout",
+                                  "dnsFailures"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "searchEngine": {
+                              "const": "bing",
+                              "type": "string"
+                            },
+                            "semantics": {
+                              "const": "crawl-statistics",
+                              "type": "string"
+                            },
+                            "siteUrl": {
+                              "format": "uri",
+                              "type": "string"
+                            },
+                            "sync": {
+                              "oneOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "missing",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "ready",
+                                      "type": "string"
+                                    },
+                                    "observedAt": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    },
+                                    "providerEndDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "providerStartDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "observedAt",
+                                    "providerStartDate",
+                                    "providerEndDate"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "_tag": {
+                                      "const": "unavailable",
+                                      "type": "string"
+                                    },
+                                    "lastAttemptAt": {
+                                      "format": "date-time",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                      "type": "string"
+                                    },
+                                    "observedAt": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date-time",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "providerEndDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "providerStartDate": {
+                                      "anyOf": [
+                                        {
+                                          "format": "date",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "reason": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "_tag",
+                                    "observedAt",
+                                    "providerStartDate",
+                                    "providerEndDate",
+                                    "lastAttemptAt",
+                                    "reason"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "searchEngine",
+                            "siteUrl",
+                            "dataset",
+                            "semantics",
+                            "sync",
+                            "rows",
+                            "pagination"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "pattern": "^req_[\\w-]+$",
+                          "type": "string"
+                        },
+                        "surface": {
+                          "const": "partner",
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": "1.0",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId",
+                        "surface",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.bing.data.get.error"
+                }
+              }
+            },
+            "description": "Declared client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.bing.data.get.error"
+                }
+              }
+            },
+            "description": "Safe internal or contract error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/partner.sites.bing.data.get.error"
+                }
+              }
+            },
+            "description": "Stable error envelope"
+          }
+        },
+        "security": [
+          {
+            "user_key": []
+          },
+          {
+            "partner_key": []
+          }
+        ],
+        "summary": "Read Bing search data",
+        "tags": [
+          "Analytics"
+        ],
+        "x-gscdump-errors": [
+          "invalid_request",
+          "unauthorized",
+          "forbidden",
+          "site_not_found",
+          "rate_limited",
+          "internal_error",
+          "contract_violation"
+        ],
+        "x-gscdump-examples": {
+          "request": {
+            "params": {
+              "siteId": "s_01"
+            },
+            "query": {
+              "dataset": "traffic",
+              "endDate": "2026-08-31",
+              "limit": 100,
+              "offset": 0,
+              "startDate": "2026-08-01"
+            }
+          },
+          "response": {
+            "data": {
+              "dataset": "traffic",
+              "pagination": {
+                "hasMore": false,
+                "limit": 100,
+                "offset": 0,
+                "total": 0
+              },
+              "rows": [],
+              "searchEngine": "bing",
+              "semantics": "site-totals",
+              "siteUrl": "https://example.com/",
+              "sync": {
+                "_tag": "missing"
+              }
+            },
+            "meta": {
+              "requestId": "req_01",
+              "surface": "partner",
+              "version": "1.0"
+            }
+          }
+        },
+        "x-gscdump-lifecycle": {
+          "introduced": "1.6.0"
+        },
+        "x-gscdump-ownership": [
+          {
+            "credential": "user_key",
+            "rule": "authorized_site"
+          },
+          {
+            "credential": "partner_key",
+            "rule": "authorized_site"
+          }
+        ],
+        "x-gscdump-resources": {
+          "changes": [],
+          "reads": [
+            {
+              "idFrom": "params.siteId",
+              "type": "site.analytics"
+            }
+          ]
+        },
+        "x-gscdump-scopes": [
+          "analytics:read"
         ],
         "x-gscdump-semantics": {
           "idempotent": true,

@@ -1,4 +1,6 @@
 export { bingCnameVerificationV1Schema, bingConnectionV1Schema } from './bing'
 export type { BingCnameVerificationV1, BingConnectionV1 } from './bing'
+export { bingDataQueryV1Schema, bingDataV1Schemas } from './bing-data'
+export type { BingDataQueryV1, BingDataV1 } from './bing-data'
 export * from './http-core'
 export * from './operations'

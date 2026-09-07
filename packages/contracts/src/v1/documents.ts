@@ -77,9 +77,11 @@ function objectSchemaProperties(schema: ZodTypeAny): {
   required: Set<string>
 } {
   const document = jsonSchema(schema)
+  // Defaults make output fields required even when callers can omit them.
+  const inputDocument = z.toJSONSchema(schema, { io: 'input' })
   return {
     properties: document.properties as Record<string, ContractDocument> ?? {},
-    required: new Set(document.required as string[] ?? []),
+    required: new Set(inputDocument.required ?? []),
   }
 }
 
