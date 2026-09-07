@@ -227,6 +227,8 @@
 ./v1:
   bingCnameVerificationV1Schema: object
   bingConnectionV1Schema: object
+  bingDataQueryV1Schema: object
+  bingDataV1Schemas: object
   buildHttpOperationPath: function
   createGscdumpV1Documents: function
   createGscdumpV1Protocol: function
@@ -271,6 +273,8 @@
 ./v1/http:
   bingCnameVerificationV1Schema: object
   bingConnectionV1Schema: object
+  bingDataQueryV1Schema: object
+  bingDataV1Schemas: object
   buildHttpOperationPath: function
   createGscdumpV1Protocol: function
   createHttpV1Registry: function

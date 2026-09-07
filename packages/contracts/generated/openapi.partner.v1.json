@@ -5460,7 +5460,7 @@
           {
             "in": "query",
             "name": "limit",
-            "required": true,
+            "required": false,
             "schema": {
               "default": 100,
               "maximum": 500,
@@ -5471,7 +5471,7 @@
           {
             "in": "query",
             "name": "offset",
-            "required": true,
+            "required": false,
             "schema": {
               "default": 0,
               "maximum": 100000,

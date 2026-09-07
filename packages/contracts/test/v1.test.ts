@@ -825,6 +825,23 @@ describe('@gscdump/contracts/v1 generated documents', () => {
     }
   })
 
+  it('allows omitted Bing pagination while documenting numeric bounds and defaults', () => {
+    const document = createGscdumpV1Documents()['openapi.partner.v1.json']
+    const paths = document.paths as Record<string, { get: { parameters: Array<{ name: string, required: boolean, schema: Record<string, unknown> }> } }>
+    const parameters = paths['/api/partner/v1/sites/{siteId}/bing/data']!.get.parameters
+
+    expect(parameters.find(parameter => parameter.name === 'limit')).toMatchObject({
+      required: false,
+      schema: { type: 'integer', minimum: 1, maximum: 500, default: 100 },
+    })
+    expect(parameters.find(parameter => parameter.name === 'offset')).toMatchObject({
+      required: false,
+      schema: { type: 'integer', minimum: 0, maximum: 100_000, default: 0 },
+    })
+    for (const name of ['dataset', 'startDate', 'endDate'])
+      expect(parameters.find(parameter => parameter.name === name)?.required).toBe(true)
+  })
+
   it('publishes the literal v1 paths and protocol schemas', () => {
     const documents = createGscdumpV1Documents()
     const analytics = documents['openapi.analytics.v1.json']
