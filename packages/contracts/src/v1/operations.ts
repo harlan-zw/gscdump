@@ -57,6 +57,7 @@ import {
   updatePartnerUserTokensSchema,
 } from '../schemas'
 import { bingConnectionV1Schemas } from './bing'
+import { bingDataQueryV1Schema, bingDataV1Schemas } from './bing-data'
 import {
   createGscdumpV1BrowserSchemas,
   GSCDUMP_V1_ANALYTICS_DIMENSIONS,
@@ -1128,6 +1129,31 @@ export function createGscdumpV1Protocol() {
               },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
+          },
+        },
+      }),
+      getSiteBingData: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.bing.data.get'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['analytics:read'],
+          ownership: [{ credential: 'user_key', rule: 'authorized_site' }, { credential: 'partner_key', rule: 'authorized_site' }],
+        },
+        request: { params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }), query: bingDataQueryV1Schema, headers: requestHeaders, body: null },
+        responses: { 200: defineSuccessResponse(bingDataV1Schemas, partnerResponseMeta) },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.analytics', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '1.6.0' },
+        docs: {
+          summary: 'Read Bing search data',
+          description: 'Reads a bounded provider-date range from the latest successful dataset. Ranked rows are not complete Site totals.',
+          tags: ['Analytics'],
+          examples: {
+            request: { params: { siteId: 's_01' }, query: { dataset: 'traffic', startDate: '2026-08-01', endDate: '2026-08-31', limit: 100, offset: 0 } },
+            response: { data: { searchEngine: 'bing', siteUrl: 'https://example.com/', dataset: 'traffic', semantics: 'site-totals', sync: { _tag: 'missing' }, rows: [], pagination: { total: 0, limit: 100, offset: 0, hasMore: false } }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
           },
         },
       }),
