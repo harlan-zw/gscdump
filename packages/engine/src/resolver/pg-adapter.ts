@@ -138,6 +138,7 @@ export function createParquetResolverAdapter(options: ResolverAdapterOptions = {
 
 /**
  * Multi-tenant pg-flavored adapter for the Iceberg / R2 SQL read path.
+ * Set `dialect: 'r2sql'` to emit R2 SQL regex predicates. The default targets DuckDB.
  * Identical SQL output to `pgResolverAdapter` except WHERE clauses inject
  * `site_id = ?` AND `search_type = ?` automatically when those scopes are
  * passed to `resolveToSQL`. Required for the Iceberg fact tables which are
@@ -146,13 +147,20 @@ export function createParquetResolverAdapter(options: ResolverAdapterOptions = {
  * so callers must rewrite bare table names to their qualified form (e.g.
  * `${namespace}.pages`) before sending to R2 SQL.
  */
-export function createIcebergResolverAdapter(options: ResolverAdapterOptions = {}): ResolverAdapter<PgTableKey> {
+export function createIcebergResolverAdapter(
+  options: ResolverAdapterOptions & { dialect?: 'duckdb' | 'r2sql' } = {},
+): ResolverAdapter<PgTableKey> {
   return createResolverAdapter<PgTableKey>({
     ...PG_BASE_CONFIG,
     schema: icebergSchema,
     includeSiteId: true,
     includeSearchType: true,
     tableLabel: 'iceberg-resolver-adapter',
+    regexPredicate: options.dialect === 'r2sql'
+      ? (expr, pattern, negate) => negate
+          ? sql`NOT regexp_like(${expr}, ${pattern})`
+          : sql`regexp_like(${expr}, ${pattern})`
+      : PG_BASE_CONFIG.regexPredicate,
     queryCanonicalSource: options.queryCanonicalSource ?? 'queryDim',
     // `icebergSchema` table entries are plain object spreads of drizzle tables,
     // so they preserve column symbols (for `colRef`) but lose the table-level
