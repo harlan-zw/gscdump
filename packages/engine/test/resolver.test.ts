@@ -341,6 +341,26 @@ describe('createIcebergResolverAdapter', () => {
     expect(r.sql).toContain('"pages"."search_type"')
     expect(r.params).toContain('image')
   })
+
+  it('uses CONCAT partition predicates for string-encoded R2 SQL catalogs', () => {
+    const adapter = createIcebergResolverAdapter({ dialect: 'r2sql', partitionKeyEncoding: 'string' })
+    const r = resolverResolveToSQL(state({}), { adapter, siteId: 'site-42', searchType: 'web' })
+    expect(r.sql).toContain('CONCAT("pages"."site_id", \'\') = $1')
+    expect(r.sql).toContain('CONCAT("pages"."search_type", \'\') = $2')
+    expect(r.sql).not.toContain('"pages"."site_id" = $1')
+    expect(r.params).toContain('site-42')
+    expect(r.params).toContain('web')
+  })
+
+  it('keeps bare partition predicates by default for int-encoded catalogs', () => {
+    const adapter = createIcebergResolverAdapter({ dialect: 'r2sql' })
+    const r = resolverResolveToSQL(state({}), { adapter, siteId: 42, searchType: 1 })
+    expect(r.sql).toContain('"pages"."site_id" = $1')
+    expect(r.sql).toContain('"pages"."search_type" = $2')
+    expect(r.sql).not.toContain('CONCAT("pages"."site_id"')
+    expect(r.params).toContain(42)
+    expect(r.params).toContain(1)
+  })
 })
 
 describe('createR2SqlResolverAdapter', () => {

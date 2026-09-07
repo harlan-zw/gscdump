@@ -126,6 +126,27 @@ export interface R2SqlResolverAdapterOptions extends ResolverAdapterOptions {
   partitionKeyEncoding?: 'string' | 'int'
 }
 
+/**
+ * Shared partition-encoding escape hatch for the multi-tenant Iceberg
+ * adapters. Int-encoded catalogs (the default) keep bare equality so R2 SQL
+ * can prune partitions; string-encoded catalogs wrap the tenant columns with
+ * `CONCAT(col, '')` to work around R2 SQL's partition-string equality
+ * undercount while preserving bound params.
+ */
+function withPartitionKeyEncoding(
+  adapter: ResolverAdapter<PgTableKey>,
+  encoding: R2SqlResolverAdapterOptions['partitionKeyEncoding'],
+): ResolverAdapter<PgTableKey> {
+  if ((encoding ?? DEFAULT_PARTITION_KEY_ENCODING) === 'int')
+    return adapter
+
+  return {
+    ...adapter,
+    siteIdColRef: tk => sql`CONCAT(${adapter.siteIdColRef!(tk)}, '')`,
+    searchTypeColRef: tk => sql`CONCAT(${adapter.searchTypeColRef!(tk)}, '')`,
+  }
+}
+
 export function createParquetResolverAdapter(options: ResolverAdapterOptions = {}): ResolverAdapter<PgTableKey> {
   return createResolverAdapter<PgTableKey>({
     ...PG_BASE_CONFIG,
@@ -138,6 +159,7 @@ export function createParquetResolverAdapter(options: ResolverAdapterOptions = {
 
 /**
  * Multi-tenant pg-flavored adapter for the Iceberg / R2 SQL read path.
+ * Set `dialect: 'r2sql'` to emit R2 SQL regex predicates. The default targets DuckDB.
  * Identical SQL output to `pgResolverAdapter` except WHERE clauses inject
  * `site_id = ?` AND `search_type = ?` automatically when those scopes are
  * passed to `resolveToSQL`. Required for the Iceberg fact tables which are
@@ -145,14 +167,26 @@ export function createParquetResolverAdapter(options: ResolverAdapterOptions = {
  * cross-tenant data. Single-use: the adapter has no `tableRef` override,
  * so callers must rewrite bare table names to their qualified form (e.g.
  * `${namespace}.pages`) before sending to R2 SQL.
+ *
+ * The bare `site_id = ?` / `search_type = ?` partition predicates are only
+ * safe on int-partition catalogs. Legacy string-partition catalogs must pass
+ * `partitionKeyEncoding: 'string'` to emit `CONCAT(col, '') = ?` instead —
+ * bare equality undercounts (silently returns fewer rows) on those catalogs.
  */
-export function createIcebergResolverAdapter(options: ResolverAdapterOptions = {}): ResolverAdapter<PgTableKey> {
-  return createResolverAdapter<PgTableKey>({
+export function createIcebergResolverAdapter(
+  options: R2SqlResolverAdapterOptions & { dialect?: 'duckdb' | 'r2sql' } = {},
+): ResolverAdapter<PgTableKey> {
+  const adapter = createResolverAdapter<PgTableKey>({
     ...PG_BASE_CONFIG,
     schema: icebergSchema,
     includeSiteId: true,
     includeSearchType: true,
     tableLabel: 'iceberg-resolver-adapter',
+    regexPredicate: options.dialect === 'r2sql'
+      ? (expr, pattern, negate) => negate
+          ? sql`NOT regexp_like(${expr}, ${pattern})`
+          : sql`regexp_like(${expr}, ${pattern})`
+      : PG_BASE_CONFIG.regexPredicate,
     queryCanonicalSource: options.queryCanonicalSource ?? 'queryDim',
     // `icebergSchema` table entries are plain object spreads of drizzle tables,
     // so they preserve column symbols (for `colRef`) but lose the table-level
@@ -162,6 +196,8 @@ export function createIcebergResolverAdapter(options: ResolverAdapterOptions = {
     tableRef: tk => sql.raw(`"${tk}"`),
     queryDimTableRef: () => sql.raw('"query_dim"'),
   })
+
+  return withPartitionKeyEncoding(adapter, options.partitionKeyEncoding)
 }
 
 /**
@@ -194,12 +230,5 @@ export function createR2SqlResolverAdapter(
     queryDimTableRef: () => sql.raw('"query_dim"'),
   })
 
-  if ((options.partitionKeyEncoding ?? DEFAULT_PARTITION_KEY_ENCODING) === 'int')
-    return adapter
-
-  return {
-    ...adapter,
-    siteIdColRef: tk => sql`CONCAT(${adapter.siteIdColRef!(tk)}, '')`,
-    searchTypeColRef: tk => sql`CONCAT(${adapter.searchTypeColRef!(tk)}, '')`,
-  }
+  return withPartitionKeyEncoding(adapter, options.partitionKeyEncoding)
 }
