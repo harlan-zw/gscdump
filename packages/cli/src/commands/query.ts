@@ -260,19 +260,25 @@ export const queryCommand = defineCommand({
     },
   },
   async run({ args }) {
+    const ctxConfig = await loadConfig()
+    const format = args.format ?? ctxConfig.defaultFormat ?? 'json'
+    if (format !== 'json' && format !== 'csv') {
+      logger.error('Invalid --format. Use --format json or --format csv.')
+      process.exit(1)
+    }
     if (args.sql) {
       await runRawSqlMode({
         sql: String(args.sql),
         site: args.site ? String(args.site) : undefined,
         table: args.table ? String(args.table) : 'pages',
         output: args.output ? String(args.output) : undefined,
+        format,
         quiet: Boolean(args.quiet),
         searchType: parseSearchType(args.type, '--type'),
       })
       return
     }
 
-    const ctxConfig = await loadConfig()
     const dimNames = await resolveDimensions(args)
     const { startDate, endDate } = await resolveRange(args)
     await promptFilters(args as Record<string, unknown>)
@@ -280,11 +286,6 @@ export const queryCommand = defineCommand({
     const rowLimit = Number(limitArg)
     if (!POSITIVE_INTEGER_RE.test(limitArg) || !Number.isSafeInteger(rowLimit) || rowLimit < 1) {
       logger.error('Invalid --limit. Use a positive safe integer, such as --limit 1000.')
-      process.exit(1)
-    }
-    const format = args.format ?? ctxConfig.defaultFormat ?? 'json'
-    if (format !== 'json' && format !== 'csv') {
-      logger.error('Invalid --format. Use --format json or --format csv.')
       process.exit(1)
     }
     const dimensionFilter = buildDimensionFilter(args)
@@ -591,6 +592,7 @@ async function runRawSqlMode(opts: {
   site: string | undefined
   table: string
   output: string | undefined
+  format: 'json' | 'csv'
   quiet: boolean
   searchType?: SearchType
 }): Promise<void> {
@@ -616,7 +618,9 @@ async function runRawSqlMode(opts: {
     process.exit(1)
   })
 
-  const payload = JSON.stringify({ sql, total: rows.length, data: rows }, null, 2)
+  const payload = opts.format === 'csv'
+    ? toCSV(rows, Object.keys(rows[0] ?? {}))
+    : JSON.stringify({ sql, total: rows.length, data: rows }, null, 2)
   if (opts.output && opts.output !== '-') {
     await fs.writeFile(opts.output, payload)
     if (!opts.quiet)

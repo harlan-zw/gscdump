@@ -181,6 +181,29 @@ describe('query command', () => {
     expect(consoleOutput).toEqual(['query,clicks,impressions,ctr,position'])
   })
 
+  it.each([
+    [[], 'page,clicks\n/a,2'],
+    [['--format', 'csv'], 'page,clicks\n/a,2'],
+  ])('writes raw SQL results in the requested CSV format: %j', async (flags, output) => {
+    mocks.loadConfig.mockResolvedValue({ defaultFormat: 'csv' })
+    mocks.storeRunRawSql.mockResolvedValue({ rows: [{ page: '/a', clicks: 2 }], sql: 'SELECT page, clicks FROM pages' })
+
+    await runCommand(queryCommand, {
+      rawArgs: ['--quiet', '--sql', 'SELECT page, clicks FROM pages', ...flags],
+    })
+
+    expect(consoleOutput).toEqual([output])
+  })
+
+  it('rejects invalid output formats before running raw SQL', async () => {
+    await expect(runCommand(queryCommand, {
+      rawArgs: ['--quiet', '--sql', 'SELECT 1', '--format', 'yaml'],
+    })).rejects.toThrow('__exit_1__')
+
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('--format'))
+    expect(mocks.storeRunRawSql).not.toHaveBeenCalled()
+  })
+
   it('--explain in --live mode prints request body and exits without calling API', async () => {
     await queryCommand.run!({
       args: {
