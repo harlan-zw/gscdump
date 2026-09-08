@@ -36,7 +36,7 @@ export interface R2SqlTransport {
 }
 
 interface R2SqlEnvelope {
-  success?: boolean
+  success: boolean
   errors?: Array<{ message?: string }>
   result?: {
     rows?: R2SqlTransportRow[]
@@ -54,8 +54,36 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 function parseEnvelope(value: unknown): R2SqlEnvelope | null {
-  return value && typeof value === 'object' ? value as R2SqlEnvelope : null
+  if (!isRecord(value) || typeof value.success !== 'boolean')
+    return null
+  if (!value.success) {
+    if (value.errors !== undefined && (!Array.isArray(value.errors)
+      || !value.errors.every(error => isRecord(error) && (error.message === undefined || typeof error.message === 'string')))) {
+      return null
+    }
+    return value as unknown as R2SqlEnvelope
+  }
+  const result = value.result
+  if (!isRecord(result))
+    return null
+  if (result.rows !== undefined) {
+    if (!Array.isArray(result.rows) || !result.rows.every(isRecord))
+      return null
+  }
+  else {
+    const columns = result.columns
+    const data = result.data
+    if (!Array.isArray(columns) || !columns.every(column => typeof column === 'string')
+      || !Array.isArray(data) || !data.every(tuple => Array.isArray(tuple) && tuple.length === columns.length)) {
+      return null
+    }
+  }
+  return value as unknown as R2SqlEnvelope
 }
 
 function normalizeRows(result: R2SqlEnvelope['result']): R2SqlTransportRow[] {
@@ -124,6 +152,8 @@ export function createR2SqlTransport(config: R2SqlTransportConfig): R2SqlTranspo
           error => ({ _tag: 'error' as const, error }),
         )
         if (bodyResult._tag === 'error') {
+          if (controller.signal.aborted || (bodyResult.error as { name?: string })?.name === 'AbortError')
+            return { _tag: 'timeout', timeoutMs }
           return {
             _tag: 'error',
             kind: 'network',
@@ -149,6 +179,8 @@ export function createR2SqlTransport(config: R2SqlTransportConfig): R2SqlTranspo
         error => ({ _tag: 'error' as const, error }),
       )
       if (envelopeResult._tag === 'error') {
+        if (controller.signal.aborted || (envelopeResult.error as { name?: string })?.name === 'AbortError')
+          return { _tag: 'timeout', timeoutMs }
         return {
           _tag: 'error',
           kind: 'invalid_response',

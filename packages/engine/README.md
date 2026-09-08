@@ -40,7 +40,7 @@ Optional peers (install only what your runtime needs):
 | `@gscdump/engine/node` | Node-only DuckDB handle. |
 | `@gscdump/engine/filesystem` | Node-only `DataSource` + `ManifestStore` adapters. |
 | `@gscdump/engine/hyparquet` | Pure-JS `ParquetCodec`. |
-| `@gscdump/engine/r2` | Cloudflare R2 `DataSource` (structurally typed against `R2Bucket`). |
+| `@gscdump/engine/r2` | Cloudflare R2 `DataSource` and `createR2ManifestStore` (structurally typed against `R2Bucket`). |
 | `@gscdump/engine/iceberg` | Edge-safe GSC dataset schemas, catalog wrappers, and append sink. Generic Iceberg APIs live in `@gscdump/lakehouse`. |
 | `@gscdump/engine/sink-node` | Node-only Iceberg overwrite/delete recovery writer. |
 | `@gscdump/engine/source` | Query-source contracts and factories. |
@@ -50,7 +50,7 @@ Optional peers (install only what your runtime needs):
 | Surface | Stability |
 |---|---|
 | `createStorageEngine` and storage contracts (`StorageEngine`, `Row`, `WriteCtx`, ...) | Public |
-| Adapters (`/node`, `/filesystem`, `/hyparquet`, `/r2`, `/r2-manifest`) | Public |
+| Adapters (`/node`, `/filesystem`, `/hyparquet`, `/r2`) | Public |
 | Planner (`resolveToSQL`, `enumeratePartitions`) | Public |
 | Schema (`SCHEMAS`, `allTables`, ...) | Public |
 | Internals reached through `@gscdump/engine/<file>` paths not listed above | Private — may break between minors |

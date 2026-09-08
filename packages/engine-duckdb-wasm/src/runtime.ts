@@ -861,9 +861,13 @@ export function createBrowserAnalysisRuntime(
       attachedTables = next
     },
     async close(): Promise<void> {
-      await conn.close()
-      // terminate() is safe here because this runtime owns the db+worker pair.
-      await db.terminate()
+      try {
+        await conn.close()
+      }
+      finally {
+        // This runtime owns the worker, even when its connection cannot close.
+        await db.terminate()
+      }
     },
   }
 }

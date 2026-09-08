@@ -227,6 +227,17 @@ async function postOAuthTokenResult(
     return parsed
 
   const data = parsed.value
+  if (typeof data.access_token !== 'string' || !data.access_token.trim()
+    || typeof data.expires_in !== 'number' || !Number.isFinite(data.expires_in) || data.expires_in < 0
+    || (data.refresh_token !== undefined && typeof data.refresh_token !== 'string')
+    || (data.scope !== undefined && typeof data.scope !== 'string')) {
+    return err({
+      kind: 'transport',
+      message: `Invalid ${op} token response`,
+      status: response.value.status,
+      cause: new TypeError('OAuth response requires a nonempty access_token and a finite, nonnegative expires_in.'),
+    })
+  }
   return ok({
     accessToken: data.access_token,
     expiresAt: Math.floor(Date.now() / 1000) + data.expires_in,
@@ -278,7 +289,10 @@ async function readOAuthJsonResult<T>(
   op: OAuthOperation,
 ): Promise<Result<T, GscError>> {
   try {
-    return ok(await response.json() as T)
+    const value: unknown = await response.json()
+    if (value === null || typeof value !== 'object' || Array.isArray(value))
+      throw new TypeError('OAuth response must be an object.')
+    return ok(value as T)
   }
   catch (cause) {
     return err({

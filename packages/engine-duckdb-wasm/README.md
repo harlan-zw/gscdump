@@ -6,7 +6,7 @@
 
 > DuckDB-WASM engine adapter for `@gscdump/analysis` — typed browser analytics against parquet via R2.
 
-In-browser DuckDB-WASM connection wrapped as a `SqlQuerySource`. Ships a vendored, stripped-down drizzle-orm DuckDB-WASM adapter (~240 LoC, adapted from `@proj-airi/drizzle-duckdb-wasm`, MIT). Transactions throw — analytics workload is read-only.
+In-browser DuckDB-WASM connection with attached tables, queried through an `AnalysisQuerySource`. Ships a vendored, stripped-down drizzle-orm DuckDB-WASM adapter (~240 LoC, adapted from `@proj-airi/drizzle-duckdb-wasm`, MIT). Transactions throw — analytics workload is read-only.
 
 Bundle: **10.3 kB / 2.72 kB gzipped**. `@duckdb/duckdb-wasm` is an optional peer dep.
 

@@ -52,7 +52,7 @@ const source = createLiveGscSource({
 
 - `createGscApiQuerySource({ client, siteUrl })`: `AnalysisQuerySource` over a `GoogleSearchConsoleClient`.
 - `createLiveGscSource({ siteUrl, getAccessToken })` — token-refresh wrapper on top of `createGscApiQuerySource`.
-- `canProxyToGsc(state)` — guard for `createCompositeSource`: returns `true` if a `BuilderState` can be answered by GSC's native API (no metric filters, no engine-derived dimensions).
+- `canProxyToGsc(state)` — guard for `createCompositeSource`: rejects prefilters and Engine-derived dimensions in selections or filters. Metric filters remain supported after row collection.
 - `fetchGscTopN({ client, siteUrl, dimension, range, limit })` — typed top-N rollup helper.
 - `fetchGscDaily({ client, siteUrl, range })` — typed daily timeseries helper.
 

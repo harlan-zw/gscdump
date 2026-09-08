@@ -14,6 +14,10 @@ export async function runSequentialBatch<I, R>(
   } = {},
 ): Promise<R[]> {
   const { delayMs = 0, concurrency = 1, onProgress } = options
+  if (!Number.isInteger(concurrency) || concurrency < 1)
+    throw new RangeError('concurrency must be a positive integer.')
+  if (!Number.isFinite(delayMs) || delayMs < 0)
+    throw new RangeError('delayMs must be a finite, nonnegative number.')
   const results: R[] = Array.from({ length: items.length })
   let completed = 0
 

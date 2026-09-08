@@ -11,17 +11,22 @@
 import type { SearchType as EngineSearchType } from '@gscdump/engine'
 import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { GoogleSearchConsoleClient } from 'gscdump'
-import type { BuilderState } from 'gscdump/query'
+import type { BuilderState, Filter } from 'gscdump/query'
 import { googleSearchConsole } from 'gscdump'
 import { createGscApiQuerySource } from './source'
 
 // Dimensions the GSC API can't produce (engine-derived).
 const PRO_ONLY_DIMENSIONS = new Set<string>(['queryCanonical', 'page_keywords'])
 
+function hasMatchingFilter(filter: Filter<any> | undefined, matches: (dimension: string) => boolean): boolean {
+  return !!filter && (filter._filters.some(leaf => matches(leaf.dimension))
+    || (filter._nestedGroups ?? []).some(group => hasMatchingFilter(group, matches)))
+}
+
 export function canProxyToGsc(state: BuilderState): boolean {
-  if (state.dimensions.some(d => PRO_ONLY_DIMENSIONS.has(d)))
-    return false
-  return true
+  return !hasMatchingFilter(state.prefilter, () => true)
+    && !state.dimensions.some(d => PRO_ONLY_DIMENSIONS.has(d))
+    && !hasMatchingFilter(state.filter, dimension => PRO_ONLY_DIMENSIONS.has(dimension))
 }
 
 export interface CreateLiveGscSourceOptions {
@@ -53,7 +58,11 @@ export function createLiveGscSource(opts: CreateLiveGscSourceOptions): AnalysisQ
     if (!clientPromise) {
       clientPromise = opts.getAccessToken().then(accessToken =>
         opts.createClient?.(accessToken) ?? googleSearchConsole({ accessToken }),
-      )
+      ).catch((error: unknown) => {
+        // A failed token refresh or client setup must not poison later queries.
+        clientPromise = null
+        throw error
+      })
     }
     return clientPromise
   }

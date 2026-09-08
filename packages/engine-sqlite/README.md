@@ -6,7 +6,7 @@
 
 > SQLite / D1 engine adapter for `@gscdump/analysis` — typed analytics over sqlite-proxy executors (Cloudflare D1, libsql).
 
-Wraps any sqlite-proxy executor (`(sql, params) => rows`) as a `SqlQuerySource` bound to a tenant `siteId`. Driver glue only; the typed builder + raw-SQL plumbing lives in `@gscdump/engine/resolver`.
+Wraps any sqlite-proxy executor (`(sql, params) => rows`) as an `AnalysisQuerySource` bound to a tenant `siteId`. Driver glue only; the typed builder + raw-SQL plumbing lives in `@gscdump/engine/resolver`.
 
 Bundle: **5.3 kB / 1.4 kB gzipped**.
 

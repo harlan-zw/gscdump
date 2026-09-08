@@ -31,7 +31,9 @@ export async function requestIndexing(
     .then(r => ({
       url,
       type,
-      notifyTime: r.urlNotificationMetadata?.latestUpdate?.notifyTime || undefined,
+      notifyTime: (type === 'URL_DELETED'
+        ? r.urlNotificationMetadata?.latestRemove
+        : r.urlNotificationMetadata?.latestUpdate)?.notifyTime || undefined,
     }))
 }
 

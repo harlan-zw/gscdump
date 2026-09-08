@@ -96,7 +96,7 @@ export function shouldRouteToLive(state: BuilderState, site: SyncedRange): boole
     return true
   if (startDate < site.oldestDateSynced || endDate > site.newestDateSynced)
     return true
-  if (site.coveredSpans && site.coveredSpans.length > 0)
+  if (site.coveredSpans)
     return hasGapInCoveredSpans(startDate, endDate, site.coveredSpans)
   return false
 }
