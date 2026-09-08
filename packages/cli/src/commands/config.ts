@@ -1,7 +1,10 @@
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
 import { configCommandMeta } from '../command-meta'
-import { getConfigPath, loadConfig, saveConfig } from '../config'
+import { getConfigPath, loadConfig, resolveDataDir, saveConfig } from '../config'
+import { createCommandContext } from '../context'
 import { applyOutputMode, displayPath, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
 
 const showCommand = defineCommand({
@@ -135,67 +138,68 @@ const validateCommand = defineCommand({
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
-    const { resolveDataDir } = await import('../config')
-    const fs = await import('node:fs/promises')
     const config = await loadConfig()
     const issues: Array<{ key: string, level: 'fail' | 'warn', message: string }> = []
 
     // dataDir: must exist (or be createable) and be writable.
     const dataDir = resolveDataDir(config)
     const dataDirDisplay = displayPath(dataDir)
-    const stat = await fs.stat(dataDir).catch(() => null)
+    const stat = await fs.stat(dataDir).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT')
+        return undefined
+      issues.push({ key: 'dataDir', level: 'fail', message: `Could not inspect ${dataDirDisplay}: ${error.message}` })
+      return null
+    })
     if (stat && !stat.isDirectory()) {
       issues.push({ key: 'dataDir', level: 'fail', message: `${dataDirDisplay} is not a directory` })
     }
     else if (stat) {
-      const probe = `${dataDir}/.gscdump-config-probe`
-      const writable = await fs.writeFile(probe, '').then(() => fs.rm(probe)).then(() => true).catch(() => false)
+      // A unique directory checks write access without replacing an existing file.
+      const writable = await fs.mkdtemp(path.join(dataDir, '.gscdump-config-probe-'))
+        .then(probe => fs.rmdir(probe))
+        .then(() => true)
+        .catch(() => false)
       if (!writable)
         issues.push({ key: 'dataDir', level: 'fail', message: `${dataDirDisplay} not writable` })
     }
-    else {
+    else if (stat === undefined) {
       issues.push({ key: 'dataDir', level: 'warn', message: `${dataDirDisplay} does not exist (will be created on first sync)` })
     }
 
     // defaultSite: best-effort check against the verified site list. Skip
     // when no auth is configured (we can't list sites yet).
     if (config.defaultSite) {
-      const haveAuth = !!config.clientId && !!config.clientSecret
+      const haveAuth = (!!config.clientId && !!config.clientSecret) || !!config.serviceAccountPath
       if (haveAuth) {
-        const { createCommandContext } = await import('../context')
-        const ctx = await createCommandContext({ needsAuth: true }).catch(() => null)
-        if (ctx) {
-          const sites = await ctx.loadSites().catch(() => null)
-          if (sites && !sites.some(s => s.siteUrl === config.defaultSite || s.siteUrl.includes(String(config.defaultSite))))
-            issues.push({ key: 'defaultSite', level: 'fail', message: `${config.defaultSite} is not in the verified site list` })
-        }
+        const sites = await createCommandContext({ needsAuth: true })
+          .then(ctx => ctx.loadSites())
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error)
+            issues.push({ key: 'defaultSite', level: 'warn', message: `Could not verify Site: ${message}` })
+            return undefined
+          })
+        if (sites && !sites.some(s => s.siteUrl === config.defaultSite || s.siteUrl.includes(String(config.defaultSite))))
+          issues.push({ key: 'defaultSite', level: 'fail', message: `${config.defaultSite} is not in the verified site list` })
       }
       else {
-        issues.push({ key: 'defaultSite', level: 'warn', message: 'set, but auth not configured — skipping verification' })
+        issues.push({ key: 'defaultSite', level: 'warn', message: 'Set, but auth is not configured. Verification skipped.' })
       }
     }
 
-    // Enum-style values: check known constants.
-    if (config.defaultFormat && !['json', 'csv'].includes(config.defaultFormat))
-      issues.push({ key: 'defaultFormat', level: 'fail', message: `unknown format: ${config.defaultFormat}` })
-
-    const { SearchTypes } = await import('gscdump/query')
-    const allowedSearchTypes = Object.values(SearchTypes)
-    if (config.defaultSearchType && !allowedSearchTypes.includes(config.defaultSearchType as any))
-      issues.push({ key: 'defaultSearchType', level: 'fail', message: `unknown search type: ${config.defaultSearchType} (allowed: ${allowedSearchTypes.join(', ')})` })
-
-    const allowedDataStates = ['all', 'final', 'hourly_all']
-    if (config.defaultDataState && !allowedDataStates.includes(config.defaultDataState))
-      issues.push({ key: 'defaultDataState', level: 'fail', message: `unknown data state: ${config.defaultDataState} (allowed: ${allowedDataStates.join(', ')})` })
-
     if (config.serviceAccountPath) {
-      const sa = await fs.stat(config.serviceAccountPath).catch(() => null)
-      if (!sa)
-        issues.push({ key: 'serviceAccountPath', level: 'fail', message: `${displayPath(config.serviceAccountPath)} does not exist` })
+      const saPath = config.serviceAccountPath
+      const readable = await fs.stat(saPath)
+        .then(async stat => stat.isFile() && await fs.access(saPath, fs.constants.R_OK).then(() => true))
+        .catch(() => false)
+      if (!readable)
+        issues.push({ key: 'serviceAccountPath', level: 'fail', message: `${displayPath(config.serviceAccountPath)} must point to a readable file` })
     }
 
     if (json) {
-      console.log(JSON.stringify({ ok: !issues.some(i => i.level === 'fail'), issues }, null, 2))
+      const failed = issues.some(i => i.level === 'fail')
+      console.log(JSON.stringify({ ok: !failed, issues }, null, 2))
+      if (failed)
+        process.exit(1)
       return
     }
     if (issues.length === 0) {

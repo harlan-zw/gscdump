@@ -100,7 +100,12 @@ gscdump query --live --site sc-domain:example.com \
 - `--no-color` / `NO_COLOR` env: strip ANSI from stdout (stderr keeps colour for interactive use).
 - `--config-dir <path>` / `GSCDUMP_CONFIG_DIR`: override `~/.config/gscdump`.
 - `--profile <name>` / `GSCDUMP_PROFILE`: scope tokens + config to a profile under `~/.config/gscdump/profiles/<name>` (juggle multiple GSC accounts).
+
 - Most commands accept `--quiet` and `--json` for scripted use; `logger` writes to stderr so `--json` output is safe to pipe.
+
+Use `query --profile` for query timings. Use `--profile <name>` to select an account profile.
+Numeric flags reject fractions, negative counts, and text suffixes.
+Saved config rejects invalid values and unknown keys. If parsing fails, fix the reported file.
 
 ## Analyzers
 

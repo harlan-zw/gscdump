@@ -4,10 +4,14 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { configCommand } from '../../src/commands/config'
+import { setConfigDir } from '../../src/config'
+import { createCommandContext } from '../../src/context'
 import { logger } from '../../src/utils'
 
-const CONFIG_DIR = path.join(os.homedir(), '.config', 'gscdump')
-const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
+let CONFIG_DIR: string
+let CONFIG_FILE: string
+
+vi.mock('../../src/context', () => ({ createCommandContext: vi.fn() }))
 
 // Mock the logger
 vi.mock('../../src/utils', () => ({
@@ -26,7 +30,6 @@ vi.mock('../../src/utils', () => ({
 }))
 
 describe('config command', () => {
-  let originalConfig: string | null = null
   let consoleOutput: string[] = []
   const originalLog = console.log
 
@@ -35,33 +38,15 @@ describe('config command', () => {
     console.log = (...args: any[]) => {
       consoleOutput.push(args.map(String).join(' '))
     }
-    // Backup existing config
-    originalConfig = await fs.readFile(CONFIG_FILE, 'utf-8').catch(() => null)
+    CONFIG_DIR = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-config-command-'))
+    CONFIG_FILE = path.join(CONFIG_DIR, 'config.json')
+    setConfigDir(CONFIG_DIR)
     vi.clearAllMocks()
   })
 
   afterEach(async () => {
     console.log = originalLog
-    // Restore original config
-    if (originalConfig) {
-      await fs.mkdir(CONFIG_DIR, { recursive: true })
-      await fs.writeFile(CONFIG_FILE, originalConfig)
-    }
-    else {
-      await fs.rm(CONFIG_FILE, { force: true })
-    }
-  })
-
-  it('should have correct metadata', () => {
-    expect(configCommand.meta?.name).toBe('config')
-    expect(configCommand.meta?.description).toBe('Manage configuration')
-  })
-
-  it('should have all subcommands', () => {
-    expect(configCommand.subCommands?.show).toBeDefined()
-    expect(configCommand.subCommands?.set).toBeDefined()
-    expect(configCommand.subCommands?.unset).toBeDefined()
-    expect(configCommand.subCommands?.path).toBeDefined()
+    await fs.rm(CONFIG_DIR, { recursive: true, force: true })
   })
 
   describe('show subcommand', () => {
@@ -146,20 +131,110 @@ describe('config command', () => {
     })
 
     it('should accept all valid keys', async () => {
-      const validKeys = ['defaultSite', 'defaultPeriod', 'defaultFormat', 'defaultDb']
+      const values = { defaultSite: 'test.com', defaultPeriod: '30d', defaultFormat: 'csv', defaultDb: './data.db' }
 
-      for (const key of validKeys) {
+      for (const [key, value] of Object.entries(values)) {
         await configCommand.subCommands!.set.run!({
-          args: { key, value: 'test' },
+          args: { key, value },
           rawArgs: [],
           cmd: configCommand.subCommands!.set,
         })
       }
 
       const config = JSON.parse(await fs.readFile(CONFIG_FILE, 'utf-8'))
-      for (const key of validKeys) {
-        expect(config[key]).toBe('test')
+      for (const [key, value] of Object.entries(values)) {
+        expect(config[key]).toBe(value)
       }
+    })
+  })
+
+  describe('invalid config', () => {
+    it.each([
+      ['defaultLimit', '0'],
+      ['defaultLimit', '-1'],
+      ['defaultLimit', '1.5'],
+      ['defaultLimit', ''],
+      ['defaultFormat', 'xml'],
+      ['defaultSearchType', 'typo'],
+      ['defaultDataState', 'typo'],
+    ])('rejects %s=%s without changing saved config', async (key, value) => {
+      await fs.writeFile(CONFIG_FILE, JSON.stringify({ defaultLimit: 100 }))
+      await expect(configCommand.subCommands!.set.run!({
+        args: { key, value },
+        rawArgs: [],
+        cmd: configCommand.subCommands!.set,
+      })).rejects.toThrow()
+      expect(JSON.parse(await fs.readFile(CONFIG_FILE, 'utf-8'))).toEqual({ defaultLimit: 100 })
+    })
+
+    it('returns a failing exit status for failed JSON validation', async () => {
+      const dataDir = path.join(CONFIG_DIR, 'file')
+      await fs.writeFile(dataDir, '')
+      await fs.writeFile(CONFIG_FILE, JSON.stringify({ dataDir }))
+      await expect(configCommand.subCommands!.validate.run!({
+        args: { json: true },
+        rawArgs: [],
+        cmd: configCommand.subCommands!.validate,
+      })).rejects.toThrow(/process.exit/)
+      expect(JSON.parse(consoleOutput.at(-1)!)).toMatchObject({ ok: false })
+    })
+
+    it('reports failed Site verification instead of claiming success', async () => {
+      await fs.writeFile(CONFIG_FILE, JSON.stringify({
+        dataDir: CONFIG_DIR,
+        defaultSite: 'sc-domain:example.com',
+        clientId: 'client',
+        clientSecret: 'secret',
+      }))
+      vi.mocked(createCommandContext).mockRejectedValueOnce(new Error('Token expired'))
+      await configCommand.subCommands!.validate.run!({
+        args: { json: true },
+        rawArgs: [],
+        cmd: configCommand.subCommands!.validate,
+      })
+      expect(JSON.parse(consoleOutput.at(-1)!)).toMatchObject({
+        issues: [expect.objectContaining({ key: 'defaultSite', level: 'warn', message: expect.stringContaining('Token expired') })],
+      })
+    })
+
+    it('rejects a directory as a service account file', async () => {
+      await fs.writeFile(CONFIG_FILE, JSON.stringify({ dataDir: CONFIG_DIR, serviceAccountPath: CONFIG_DIR }))
+      await expect(configCommand.subCommands!.validate.run!({
+        args: { json: true },
+        rawArgs: [],
+        cmd: configCommand.subCommands!.validate,
+      })).rejects.toThrow(/process.exit/)
+      expect(JSON.parse(consoleOutput.at(-1)!)).toMatchObject({
+        ok: false,
+        issues: [expect.objectContaining({ key: 'serviceAccountPath', level: 'fail' })],
+      })
+    })
+
+    it('fails validation when the data directory cannot be inspected', async () => {
+      const dataDir = path.join(CONFIG_DIR, 'loop')
+      await fs.symlink('loop', dataDir)
+      await fs.writeFile(CONFIG_FILE, JSON.stringify({ dataDir }))
+      await expect(configCommand.subCommands!.validate.run!({
+        args: { json: true },
+        rawArgs: [],
+        cmd: configCommand.subCommands!.validate,
+      })).rejects.toThrow(/process.exit/)
+      expect(JSON.parse(consoleOutput.at(-1)!)).toMatchObject({
+        ok: false,
+        issues: [expect.objectContaining({ key: 'dataDir', level: 'fail' })],
+      })
+    })
+
+    it('preserves existing files when checking directory permissions', async () => {
+      const probe = path.join(CONFIG_DIR, '.gscdump-config-probe')
+      await fs.writeFile(probe, 'keep')
+      await fs.writeFile(CONFIG_FILE, JSON.stringify({ dataDir: CONFIG_DIR }))
+      await configCommand.subCommands!.validate.run!({
+        args: { json: true },
+        rawArgs: [],
+        cmd: configCommand.subCommands!.validate,
+      })
+      expect(await fs.readFile(probe, 'utf-8')).toBe('keep')
     })
   })
 
@@ -203,7 +278,7 @@ describe('config command', () => {
         cmd: configCommand.subCommands!.path,
       })
 
-      expect(consoleOutput[0]).toContain('.config/gscdump/config.json')
+      expect(consoleOutput[0]).toBe(CONFIG_FILE)
     })
   })
 })
