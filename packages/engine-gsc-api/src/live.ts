@@ -13,6 +13,7 @@ import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { GoogleSearchConsoleClient } from 'gscdump'
 import type { BuilderState, Filter } from 'gscdump/query'
 import { googleSearchConsole } from 'gscdump'
+import { normalizeBuilderStateResult } from 'gscdump/query'
 import { createGscApiQuerySource } from './source'
 
 // Dimensions the GSC API can't produce (engine-derived).
@@ -23,10 +24,18 @@ function hasMatchingFilter(filter: Filter<any> | undefined, matches: (dimension:
     || (filter._nestedGroups ?? []).some(group => hasMatchingFilter(group, matches)))
 }
 
+// Classifies raw routing inputs, so both the builder shape and the partner
+// wire shape (`{ type, filters: [{ type, column, ... }] }`) parse here. A
+// state that fails validation is never proxyable: it can't be trusted to
+// reach the live API.
 export function canProxyToGsc(state: BuilderState): boolean {
-  return !hasMatchingFilter(state.prefilter, () => true)
-    && !state.dimensions.some(d => PRO_ONLY_DIMENSIONS.has(d))
-    && !hasMatchingFilter(state.filter, dimension => PRO_ONLY_DIMENSIONS.has(dimension))
+  const parsed = normalizeBuilderStateResult(state)
+  if (!parsed.ok)
+    return false
+  const normalized = parsed.value
+  return !hasMatchingFilter(normalized.prefilter, () => true)
+    && !normalized.dimensions.some(d => PRO_ONLY_DIMENSIONS.has(d))
+    && !hasMatchingFilter(normalized.filter, dimension => PRO_ONLY_DIMENSIONS.has(dimension))
 }
 
 export interface CreateLiveGscSourceOptions {

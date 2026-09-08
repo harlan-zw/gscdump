@@ -36,6 +36,22 @@ describe('live Source recovery and routing', () => {
   ])('keeps Engine-derived filters away from live routing', (filter) => {
     expect(canProxyToGsc(gsc.select(query).where(filter).getState())).toBe(false)
   })
+
+  it('classifies raw partner wire states instead of crashing', () => {
+    const wireState = (leaves: unknown[]) => ({
+      dimensions: ['query'],
+      filter: {
+        type: 'and',
+        filters: [
+          { type: 'between', column: 'date', from: '2026-06-01', to: '2026-06-30' },
+          ...leaves,
+        ],
+      },
+    }) as any
+    expect(canProxyToGsc(wireState([{ type: 'eq', column: 'queryCanonical', value: 'canonical' }]))).toBe(false)
+    expect(canProxyToGsc(wireState([{ type: 'eq', column: 'query', value: 'raw' }]))).toBe(true)
+    expect(canProxyToGsc(wireState([{ type: 'eq', column: 'nonsense', value: 'x' }]))).toBe(false)
+  })
 })
 
 describe('live Source prefilters', () => {
