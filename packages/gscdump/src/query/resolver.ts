@@ -323,7 +323,11 @@ export function extractSearchType(state: BuilderState | undefined | null): Searc
  * aggregationType combination). `resolveToBody` is the throwing wrapper over this
  * for `.toBody()` and the live-API client paths.
  */
-export function resolveToBodyResult(state: BuilderState): Result<GscSearchAnalyticsRequest, QueryError> {
+export function resolveToBodyResult(input: BuilderState): Result<GscSearchAnalyticsRequest, QueryError> {
+  const parsed = normalizeBuilderStateResult(input)
+  if (!parsed.ok)
+    return parsed
+  const state = parsed.value
   // Extract date constraints and query params from filter
   const { startDate, endDate, searchType, dimensionFilter } = extractSpecialFilters(state.filter)
 

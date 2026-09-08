@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { between, clicks, date, gsc, gt, normalizeBuilderState, normalizeBuilderStateResult, page } from '../../src/query'
+import { between, buildLogicalPlanResult, clicks, date, gsc, gt, normalizeBuilderState, normalizeBuilderStateResult, page, resolveToBodyResult } from '../../src/query'
 import { buildLogicalPlan } from '../../src/query/plan'
 
 describe('query state serialization', () => {
@@ -115,5 +115,12 @@ describe('serialized expression values', () => {
   ])('rejects invalid expressions before date arithmetic or SQL: %j', (leaf) => {
     expect(normalizeBuilderStateResult({ filter: { _filters: [leaf] } }))
       .toMatchObject({ ok: false, error: { kind: 'invalid-filter' } })
+  })
+})
+
+describe('query Result entrypoints', () => {
+  it.each([buildLogicalPlanResult, resolveToBodyResult])('returns invalid-filter instead of throwing during normalization', (resolve) => {
+    const state = gsc.select(page).where(between(date, 'not-a-date', '2026-01-31')).getState()
+    expect(resolve(state)).toMatchObject({ ok: false, error: { kind: 'invalid-filter' } })
   })
 })
