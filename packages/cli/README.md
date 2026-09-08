@@ -81,6 +81,20 @@ gscdump query --live --site sc-domain:example.com \
   --page '~/blog/' --query '~brand' --dimensions page,query
 ```
 
+`--limit` and `--format` override saved `defaultLimit` and `defaultFormat` values.
+Without saved values, queries use 1000 rows and JSON.
+Limits must be positive integers. Formats must be `json` or `csv`.
+
+`--start` and `--end` work independently. An omitted date keeps its default.
+Non-interactive queries default to 31 days ago through three days ago, using UTC dates.
+Dates must use `YYYY-MM-DD`, and `--start` cannot follow `--end`.
+
+```bash
+# Export query rows with a CSV header.
+gscdump query --live --site sc-domain:example.com \
+  --dimensions page,query --format csv --output rows.csv
+```
+
 ### Global flags
 
 - `--no-color` / `NO_COLOR` env: strip ANSI from stdout (stderr keeps colour for interactive use).

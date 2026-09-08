@@ -80,7 +80,7 @@ export const queryErrors = {
     return { kind: 'invalid-builder-state', cause, message: 'Invalid state' }
   },
   malformedFilterLeaf(): QueryError {
-    return { kind: 'invalid-filter', message: 'Malformed filter: each filter leaf requires a string `dimension` and `operator`' }
+    return { kind: 'invalid-filter', message: 'Malformed filter: each leaf requires a string `dimension` and `operator`. Each nested group requires a `_filters` array.' }
   },
   unsupportedCapability(capability: string, context: string): QueryError {
     return { kind: 'unsupported-capability', capability, context, message: `${context} requires ${capability} capability` }

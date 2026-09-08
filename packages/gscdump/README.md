@@ -25,6 +25,24 @@ const client = googleSearchConsole({ accessToken: 'ya29.xxx' })
 const sites = await client.sites()
 ```
 
+Use `fetchOptions` for custom headers, request hooks, or retry settings:
+
+```ts
+const client = googleSearchConsole('ya29.xxx', {
+  fetchOptions: {
+    headers: new Headers({ 'x-project': 'analytics' }),
+    retry: 0,
+    timeout: 10_000,
+    onRequest({ options }) {
+      options.headers.set('x-request-id', crypto.randomUUID())
+    },
+  },
+})
+```
+
+Request hooks run after authentication. The client awaits each hook, including arrays of hooks.
+If you omit retry settings, requests use three retries and respect Google's `Retry-After` header.
+
 Use `gscdump/query` to build a request. `client.query()` paginates through Google's 25,000-row pages and yields each non-empty batch.
 
 ```ts

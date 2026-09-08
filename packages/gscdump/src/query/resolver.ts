@@ -118,11 +118,8 @@ function normalizeOrderBy(orderBy: unknown): OrderBy | undefined {
   return { column: o.column as OrderBy['column'], dir }
 }
 
-// Per-leaf filter validation (Sentry GSCDUMP-Q). `normalizeFilter` passes an
-// already-internal `{ _filters }` object through untouched, so a hand-built
-// leaf missing its `operator`/`dimension` used to reach the engine, where
-// `f.operator.startsWith('metric')` threw a raw TypeError. Reject those here so
-// genuinely malformed input becomes an honest `invalid-filter` QueryError.
+// Internal filter objects can arrive through JSON. Check nested groups before
+// the planner iterates them, and leaves before it reads their operators.
 function hasMalformedFilterLeaf(filter: Filter<any> | undefined): boolean {
   if (!filter || typeof filter !== 'object')
     return false
@@ -135,9 +132,11 @@ function hasMalformedFilterLeaf(filter: Filter<any> | undefined): boolean {
       }
     }
   }
-  if (Array.isArray(filter._nestedGroups)) {
+  if (filter._nestedGroups !== undefined) {
+    if (!Array.isArray(filter._nestedGroups))
+      return true
     for (const group of filter._nestedGroups) {
-      if (hasMalformedFilterLeaf(group))
+      if (!group || typeof group !== 'object' || !Array.isArray(group._filters) || hasMalformedFilterLeaf(group))
         return true
     }
   }
@@ -161,7 +160,8 @@ export function normalizeBuilderStateResult(state: unknown): Result<BuilderState
     return err(queryErrors.invalidBuilderState(state))
   const s = state as Record<string, unknown>
   const filter = normalizeFilter(s.filter as FilterInput | undefined)
-  if (hasMalformedFilterLeaf(filter))
+  const prefilter = normalizeFilter(s.prefilter as FilterInput | undefined)
+  if (hasMalformedFilterLeaf(filter) || hasMalformedFilterLeaf(prefilter))
     return err(queryErrors.malformedFilterLeaf())
   const normalized: BuilderState = {
     // `dimensions` is iterated and `.includes()`d downstream (host handlers +
@@ -176,6 +176,7 @@ export function normalizeBuilderStateResult(state: unknown): Result<BuilderState
     // page-breakdown query (GSCDUMP-A/C). Leave the undefined sentinel intact.
     metrics: s.metrics as BuilderState['metrics'],
     filter: filter as BuilderState['filter'],
+    prefilter,
     orderBy: normalizeOrderBy(s.orderBy),
     rowLimit: s.rowLimit as number | undefined,
     startRow: s.startRow as number | undefined,
