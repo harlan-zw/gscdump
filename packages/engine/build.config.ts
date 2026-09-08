@@ -15,6 +15,21 @@ const hysnappyShim = fileURLToPath(new URL('./src/vendor/hysnappy-purejs.ts', im
 // pushing publish OOM on the GitHub-hosted runner. One entry = one shared
 // type pass, with rolldown emitting per-input chunks under `dist/`.
 export default defineBuildConfig({
+  hooks: {
+    rolldownConfig(config) {
+      if (!Array.isArray(config.external))
+        throw new Error('Engine build requires an external dependency list')
+      const externalDependencies = config.external
+      config.external = (id, importer) => {
+        if (id === 'drizzle-orm' || id.startsWith('drizzle-orm/')) {
+          // Bundle runtime code to avoid repeatedly parsing Drizzle's large
+          // export map in Node. Keep public types tied to the installed ORM.
+          return !!importer && /\.d\.[cm]?ts$/.test(importer)
+        }
+        return externalDependencies.some(external => typeof external === 'string' ? external === id : external.test(id))
+      }
+    },
+  },
   entries: [
     {
       type: 'bundle',

@@ -36,7 +36,9 @@ const built = existsSync(join(root, 'packages/engine/dist/index.mjs'))
 describe.skipIf(!built)('published import graph budgets', () => {
   it('keeps the engine storage root focused', async () => {
     const closure = await staticClosure(join(root, 'packages/engine/dist/index.mjs'))
-    expect(closure.bytes).toBeLessThan(100_000)
+    // This closure now includes Drizzle's bundled runtime. The previous
+    // budget excluded that external dependency and its import-time cost.
+    expect(closure.bytes).toBeLessThan(200_000)
     expect(closure.external).not.toContain('@gscdump/lakehouse')
   })
 
