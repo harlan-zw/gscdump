@@ -16,7 +16,7 @@
 // back out (the reader's JS `Date` is normalised to `YYYY-MM-DD` on decode).
 // INTEGER → INT32; BIGINT → INT64; DOUBLE → DOUBLE; VARCHAR → BYTE_ARRAY/UTF8.
 
-import type { AsyncBuffer, FileMetaData, ParquetQueryFilter, SchemaElement } from 'hyparquet'
+import type { AsyncBuffer, ParquetQueryFilter, SchemaElement } from 'hyparquet'
 import type { BasicType, ColumnSource } from 'hyparquet-writer'
 import type { ColumnDef, ColumnType } from '../schema'
 import type {
@@ -190,15 +190,60 @@ function sortRowsByClusterKey(table: TableName, rows: readonly Row[]): readonly 
   return copy
 }
 
-function naturalKeyFor(table: TableName, row: Row): string {
-  const key = TABLE_METADATA[table].sortKey
-  let value = ''
-  for (let index = 0; index < key.length; index++) {
-    if (index > 0)
-      value += '\0'
-    value += `${row[key[index]!] ?? ''}`
+function naturalKeyHash(key: readonly string[], row: Row): number {
+  let hash = 2166136261
+  for (const column of key) {
+    const value = String(row[column] ?? '')
+    for (let i = 0; i < value.length; i++)
+      hash = Math.imul(hash ^ value.charCodeAt(i), 16777619)
+    hash = Math.imul(hash, 16777619)
   }
-  return value
+  // Keep numeric keys small. Collisions are resolved by comparing every field.
+  return hash & 0x3FFFFFFF
+}
+
+function sameNaturalKey(key: readonly string[], a: Row, b: Row): boolean {
+  return key.every(column => String(a[column] ?? '') === String(b[column] ?? ''))
+}
+
+type RowBucket = Row | Row[] | Map<string, Row>
+
+function naturalKeyTuple(key: readonly string[], row: Row): string {
+  return JSON.stringify(key.map(column => String(row[column] ?? '')))
+}
+
+// Numeric hashes avoid retaining a joined string for every row. Compare the
+// original fields to resolve collisions. Limit linear scans to eight rows;
+// larger buckets use exact tuple keys, including embedded separator characters.
+function indexRow(index: Map<number, RowBucket>, key: readonly string[], row: Row): void {
+  const hash = naturalKeyHash(key, row)
+  const existing = index.get(hash)
+  if (existing === undefined) {
+    index.set(hash, row)
+  }
+  else if (existing instanceof Map) {
+    existing.set(naturalKeyTuple(key, row), row)
+  }
+  else if (Array.isArray(existing)) {
+    const match = existing.findIndex(candidate => sameNaturalKey(key, candidate, row))
+    if (match >= 0) {
+      existing[match] = row
+    }
+    else if (existing.length < 8) {
+      existing.push(row)
+    }
+    else {
+      const bucket = new Map(existing.map(candidate => [naturalKeyTuple(key, candidate), candidate]))
+      bucket.set(naturalKeyTuple(key, row), row)
+      index.set(hash, bucket)
+    }
+  }
+  else if (sameNaturalKey(key, existing, row)) {
+    index.set(hash, row)
+  }
+  else {
+    index.set(hash, [existing, row])
+  }
 }
 
 // Encode an already-ordered row array to a parquet buffer. Feeds rows through
@@ -334,46 +379,50 @@ export async function decodeParquetToRows(
   bytes: Uint8Array,
   opts: DecodeParquetOptions = {},
 ): Promise<Row[]> {
-  if (bytes.byteLength === 0)
-    return []
-  const file = asyncBufferFromBytes(bytes)
-  const projection = opts.columns ? await presentColumns(file, opts.columns) : null
-  const rows = await parquetReadObjects({
-    file,
-    ...(opts.rowStart === undefined ? {} : { rowStart: opts.rowStart }),
-    ...(opts.rowEnd === undefined ? {} : { rowEnd: opts.rowEnd }),
-    ...((opts.rowStart !== undefined || opts.rowEnd !== undefined) ? { useOffsetIndex: true } : {}),
-    ...(projection ? { metadata: projection.metadata, columns: projection.columns } : {}),
-    // A filter on a high-cardinality `$eq`/`$in` column also benefits from the
-    // file's bloom filters (when present): hyparquet skips whole row groups the
-    // bloom proves cannot contain the value, below the min/max-stats granularity.
-    //
-    // `usePageIndex` adds a third, finer pruning tier: hyparquet reads the
-    // ColumnIndex + OffsetIndex and skips individual pages whose bounds cannot
-    // match, below row-group granularity. It is inert unless the filter
-    // column's chunk carries BOTH indexes, which needs more than one page.
-    // `encodeOrderedRows` passes no `pageSize`, so the writer's 1MB default
-    // applies — a full 25k-row group of `query`/`url` exceeds that uncompressed
-    // and does split, so the high-cardinality string columns we actually filter
-    // on carry indexes. Chunks without them cost no extra fetch.
-    ...(opts.filter ? { filter: opts.filter, useBloomFilters: true, usePageIndex: true } : {}),
-  })
-  return normalizeDecodedDates(rows as Row[])
+  const rows: Row[] = []
+  for await (const group of decodeParquetGroups(bytes, opts)) {
+    for (const row of group)
+      rows.push(row)
+  }
+  return rows
 }
 
-/**
- * The requested projection narrowed to the columns the file actually carries.
- * Reads the footer once and returns it so the read does not parse it again.
- * hyparquet >= 1.29 throws `parquet column not found` for an absent name; the
- * contract here is that such a name decodes as a missing key.
- */
-async function presentColumns(
-  file: AsyncBuffer,
-  requested: readonly string[],
-): Promise<{ metadata: FileMetaData, columns: string[] }> {
+// Decode one physical row group at a time. The reader otherwise retains all
+// decoded columns while assembling rows. Compaction can fold each group
+// immediately without retaining a second array for the whole input file.
+async function* decodeParquetGroups(
+  bytes: Uint8Array,
+  opts: DecodeParquetOptions = {},
+): AsyncGenerator<Row[]> {
+  if (bytes.byteLength === 0)
+    return
+  const file = asyncBufferFromBytes(bytes)
   const metadata = await parquetMetadataAsync(file)
   const present = new Set(parquetSchema(metadata).children.map(child => child.element.name))
-  return { metadata, columns: requested.filter(name => present.has(name)) }
+  // Missing projected columns remain absent for older files.
+  const columns = opts.columns?.filter(name => present.has(name))
+  let groupStart = 0
+  for (const group of metadata.row_groups) {
+    const groupEnd = groupStart + Number(group.num_rows)
+    const rowStart = Math.max(groupStart, opts.rowStart ?? 0)
+    const rowEnd = Math.min(groupEnd, opts.rowEnd ?? Infinity)
+    if (rowStart < rowEnd) {
+      const rows = await parquetReadObjects({
+        file,
+        // Chunk offsets remain absolute. Row selection becomes local to this
+        // group so the reader does not rescan every group for each request.
+        metadata: { ...metadata, row_groups: [group], num_rows: group.num_rows },
+        columns,
+        rowStart: rowStart - groupStart,
+        rowEnd: rowEnd - groupStart,
+        useOffsetIndex: rowStart > groupStart || rowEnd < groupEnd,
+        // Preserve bloom and page-index pruning for filtered reads.
+        ...(opts.filter ? { filter: opts.filter, useBloomFilters: true, usePageIndex: true } : {}),
+      })
+      yield normalizeDecodedDates(rows as Row[])
+    }
+    groupStart = groupEnd
+  }
 }
 
 /**
@@ -381,26 +430,26 @@ async function presentColumns(
  * the codec contract carries (and that JSON / Workers RPC round-trips cleanly).
  * A native parquet DATE column decodes to a JS `Date` (hyparquet's
  * `dateFromDays`); legacy string-`date` files already hold strings and pass
- * through. Date-valued columns are detected once from the first row, so the
- * per-cell rewrite only touches actual DATE columns.
+ * through. Share repeated date strings within this decode. Bound the cache
+ * so files with many distinct dates cannot retain a second copy of every day.
  */
 function normalizeDecodedDates(rows: Row[]): Row[] {
-  if (rows.length === 0)
-    return rows
-  const dateCols: string[] = []
-  const first = rows[0] as Record<string, unknown>
-  for (const k in first) {
-    if (first[k] instanceof Date)
-      dateCols.push(k)
-  }
-  if (dateCols.length === 0)
-    return rows
+  const dates = new Map<number, string>()
   for (const row of rows) {
     const r = row as Record<string, unknown>
-    for (const k of dateCols) {
+    for (const k in r) {
       const v = r[k]
-      if (v instanceof Date)
-        r[k] = isoFromDate(v)
+      if (v instanceof Date) {
+        const day = Math.floor(v.getTime() / EPOCH_DAY_MS)
+        let iso = dates.get(day)
+        if (iso === undefined) {
+          iso = isoFromDate(v)
+          if (dates.size >= 1024)
+            dates.clear()
+          dates.set(day, iso)
+        }
+        r[k] = iso
+      }
     }
   }
   return rows
@@ -450,16 +499,19 @@ export function createHyparquetCodec(options: HyparquetCodecOptions = {}): Parqu
         await dataSource.write(outputKey, bytes)
         return { bytes: bytes.byteLength, rowCount: 0 }
       }
-      const byNaturalKey = new Map<string, Row>()
+      const key = TABLE_METADATA[ctx.table].sortKey
+      const byNaturalKey = new Map<number, RowBucket>()
       for (let offset = 0; offset < inputKeys.length; offset += compactionReadConcurrency) {
         const batch = inputKeys.slice(offset, offset + compactionReadConcurrency)
         const inputs = await Promise.all(batch.map(key => dataSource.read(key)))
         // Decode/fold in input order so collision semantics remain unchanged,
         // while the latency-bound object reads overlap.
-        for (const input of inputs) {
-          const rows = await decodeParquetToRows(input)
-          for (let i = 0; i < rows.length; i++)
-            byNaturalKey.set(naturalKeyFor(ctx.table, rows[i]!), rows[i]!)
+        while (inputs.length > 0) {
+          const input = inputs.shift()!
+          for await (const rows of decodeParquetGroups(input)) {
+            for (const row of rows)
+              indexRow(byNaturalKey, key, row)
+          }
         }
       }
       // Recurrence guard: correct compaction inputs own disjoint natural keys,
@@ -467,7 +519,17 @@ export function createHyparquetCodec(options: HyparquetCodecOptions = {}): Parqu
       // any natural-key collision before encoding. Accumulating directly into
       // the map avoids holding both `allRows` and a second dedupe map for
       // whale-site compactions.
-      const rows = [...byNaturalKey.values()]
+      const rows: Row[] = []
+      for (const entry of byNaturalKey.values()) {
+        if (entry instanceof Map || Array.isArray(entry)) {
+          for (const row of entry.values())
+            rows.push(row)
+        }
+        else {
+          rows.push(entry)
+        }
+      }
+      byNaturalKey.clear()
       const bytes = encodeRowsToParquet(ctx.table, rows)
       await dataSource.write(outputKey, bytes)
       return { bytes: bytes.byteLength, rowCount: rows.length }
