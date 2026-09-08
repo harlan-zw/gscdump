@@ -4,11 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dm/@gscdump/engine-gsc-api?color=yellow)](https://npm.chart.dev/@gscdump/engine-gsc-api)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-> GSC live-API engine adapter — wraps the Search Analytics REST API as an `AnalysisQuerySource` for typed analyzer dispatch.
-
-Wraps the Google Search Console live REST API as a `RowQuerySource` so row-based analyzers (`striking-distance`, `opportunity`, `movers`, `decay`, `brand`, `clustering`, `concentration`, `seasonality`) dispatch through the same `runAnalyzerFromSource` pipeline as engine-backed sources.
-
-Use this when you have a GSC OAuth token but no synced parquet data — free-tier flows, demo pages, queries whose date range falls outside the synced window. Pair with `createCompositeSource` to fall back to GSC for out-of-range queries.
+Use Google Search Console as an `AnalysisQuerySource`.
+This adapter runs Analyzers with row plans without a local Store.
 
 ## Install
 
@@ -16,53 +13,56 @@ Use this when you have a GSC OAuth token but no synced parquet data — free-tie
 npm install @gscdump/engine-gsc-api @gscdump/engine gscdump
 ```
 
-## Usage
+## Query live rows
 
 ```ts
-import { analyzeMoversFromSource } from '@gscdump/analysis'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 import { googleSearchConsole } from 'gscdump'
+import { between, date, gsc, page } from 'gscdump/query'
 
-const client = googleSearchConsole(auth)
+const client = googleSearchConsole({ accessToken: process.env.GSC_ACCESS_TOKEN! })
 const source = createGscApiQuerySource({ client, siteUrl: 'sc-domain:example.com' })
+const state = gsc.select(page)
+  .where(between(date, '2026-08-01', '2026-08-28'))
+  .limit(100)
+  .getState()
 
-const movers = await analyzeMoversFromSource(source, {
-  current: { startDate: '2026-04-01', endDate: '2026-04-28' },
-  previous: { startDate: '2026-03-01', endDate: '2026-03-31' },
-})
+const rows = await source.queryRows(state)
+console.log(rows)
 ```
 
-For host apps that mint short-lived access tokens per request:
+See [`@gscdump/analysis`](../analysis/README.md#sources) for Analyzer dispatch.
 
-```ts
-import { createLiveGscSource } from '@gscdump/engine-gsc-api'
+## Deferred authentication
 
-const source = createLiveGscSource({
-  siteUrl,
-  getAccessToken: () => refreshAccessTokenForUser(userId),
-})
-```
+`createLiveGscSource({ siteUrl, getAccessToken })` calls your token function on the first query.
+It reuses the resulting client for that Source's lifetime.
+Create a Source per request if your host manages token refresh between requests.
 
 ## Exports
 
-- `createGscApiQuerySource({ client, siteUrl })` — `RowQuerySource` over a `GoogleSearchConsoleClient`.
-- `createLiveGscSource({ siteUrl, getAccessToken })` — token-refresh wrapper on top of `createGscApiQuerySource`.
-- `canProxyToGsc(state)` — guard for `createCompositeSource`: returns `true` if a `BuilderState` can be answered by GSC's native API (no metric filters, no engine-derived dimensions).
-- `fetchGscTopN({ client, siteUrl, dimension, range, limit })` — typed top-N rollup helper.
-- `fetchGscDaily({ client, siteUrl, range })` — typed daily timeseries helper.
-- `collectGscRows(asyncIterable)` — drain `client.query()` into an array.
-- `applyBuilderStatePostProcessing(rows, state)` — post-process row collections for predicates GSC can't push down (metric filters, special operators).
-- `GSC_API_CAPABILITIES` — `PlannerCapabilities` for the GSC API surface.
+| Export | Purpose |
+| --- | --- |
+| `createGscApiQuerySource` | Wrap a Google client as a Source |
+| `createLiveGscSource` | Create a Source with deferred token lookup |
+| `canProxyToGsc` | Reject Engine-derived grouping dimensions before live routing |
+| `fetchGscTopN` | Read top rows for a dimension and date range |
+| `fetchGscDaily` | Read daily metrics |
+| `runGscSyncSlice` | Read a bounded Search Analytics sync slice |
+| `runGscSearchAppearanceContextSlice` | Read a Search Appearance context slice |
 
-## Capabilities
+## Limits and fallback
 
-GSC supports regex pushdown via `INCLUDING_REGEX` / `EXCLUDING_REGEX` filters but has no SQL surface, no comparison joins, no cross-dataset queries, and no engine-derived dimensions (`queryCanonical`, `page_keywords`). Pair with `createCompositeSource({ engine, gsc })` from `@gscdump/analysis/source` to route SQL-shaped queries to the engine and date-out-of-range queries to GSC.
+The Source supports row queries and regex filters.
+It has no SQL execution, comparison joins, or Engine-derived dimensions such as `queryCanonical`.
+`canProxyToGsc` checks grouping dimensions; it does not validate the entire request.
 
-## Related
+`createCompositeSource` from `@gscdump/analysis/source` accepts `{ engine, live, site }`.
+It sends supported queries to Google when stored coverage or dimensions cannot answer them.
+The `site` input supplies sync bounds and optional covered date spans.
+SQL execution uses the Engine.
 
-- [`@gscdump/engine`](../engine) — Source contracts (`RowQuerySource`, `AnalysisQuerySource`).
-- [`@gscdump/analysis`](../analysis) — Analyzer instances and portable source factories.
-- [`gscdump`](../gscdump) — REST client + query builder.
+Google's [Search Analytics limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data) still apply.
 
 ## License
 

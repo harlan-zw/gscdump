@@ -19,15 +19,15 @@ stdio-compatible MCP client:
 }
 ```
 
-The server also accepts the CLI's `GSC_ACCESS_TOKEN`, service-account, and
-OAuth refresh-token configuration. Secrets stay in the local MCP process and
-are not sent to the model.
+The server accepts the CLI's `GSC_ACCESS_TOKEN`, service-account, and OAuth refresh-token configuration.
+Configure credentials in the server process.
+Tool responses can contain your search data; review your MCP client's data-sharing settings.
 
 ## Tool groups
 
-The current server exposes:
+Available tool groups:
 
-- Search Console sites and verification (`list-sites`, `add-site`,
+- Search Console Sites and verification (`list-sites`, `add-site`,
   `verify-site`, and related tools).
 - Sitemaps (`list-sitemaps`, `get-sitemap`, `submit-sitemap`,
   `delete-sitemap`, `discover-sitemap`).
@@ -42,7 +42,18 @@ were removed; application embedding is not a supported v1 package surface.
 
 ## Example prompts
 
-- “List my Search Console properties.”
-- “Run the health report for `sc-domain:example.com` over the last 28 days.”
+- “List my Search Console Sites.”
+- “Run the movers report for `sc-domain:example.com` over the last 28 days.”
 - “Query clicks and impressions by page for this month.”
-- “Inspect these URLs and summarize indexing failures.”
+- “Inspect these URLs and summarize the Indexing Evidence.”
+
+MCP Reports use the live Google API.
+They do not read the local Store.
+Reports with required SQL-only steps, such as `health`, cannot run through this MCP handler.
+Use the CLI for Reports that need stored data.
+
+`run-report` currently accepts the Site, Report ID, date windows, comparison, and maximum findings.
+It does not forward `target`, `topic`, or `brandTerms`.
+Use the CLI for `triage`, `pre-publish`, and `brand`.
+
+Indexing notifications follow [Google's eligibility requirements](./url-indexing.md#send-eligible-indexing-notifications).

@@ -1,163 +1,132 @@
-# Building a Historical Database
+# Keep historical data in a Store
 
-Google deletes your Search Console data after 16 months. gscdump lets you keep it forever in a local SQLite database.
+Sync Search Console data to local Parquet files, then query it with DuckDB.
+Keep the files as long as you need them.
 
-## Why Persist to SQLite?
+## First sync
 
-- **No expiry** - Keep data indefinitely
-- **Faster queries** - Local DB beats API latency
-- **Offline access** - No internet required after sync
-- **AI-ready** - MCP server can query DB directly
-
-## First Sync
+After [authentication](./getting-started.md), choose a Store directory and sync 90 days:
 
 ```bash
-# Sync last 90 days to SQLite
-npx @gscdump/cli sync --site sc-domain:example.com --db ./gsc.db
+gscdump config set dataDir /absolute/path/to/gsc-data
+gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries
 ```
 
-This syncs:
-- Daily site metrics
-- Page-level analytics
-- Keyword data
-- Country/device breakdowns
+Without `--days`, sync fetches three days ending three days ago.
+It skips dates already marked `done`.
+Use `--force` when you need to refresh completed dates.
 
-## What Gets Stored
+## Stored tables
+
+Without `--types`, sync selects `web`.
+The table choices used here are:
 
 | Table | Data |
-|-------|------|
-| `sites` | Your GSC properties |
-| `site_date_analytics` | Daily site totals |
-| `site_path_date_analytics` | Daily page metrics |
-| `site_keyword_date_analytics` | Daily keyword metrics |
-| `site_date_country_analytics` | Country breakdown |
-| `site_date_device_analytics` | Device breakdown |
+| --- | --- |
+| `pages` | Daily page metrics |
+| `queries` | Daily query metrics |
+| `countries` | Country metrics |
+| `page_queries` | Daily page/query pairs |
 
-## Sync Options
+The CLI default list includes `dates`, but its current sync path cannot write non-empty `dates` responses.
+Use the explicit table lists shown here to sync the supported data.
+If an Analyzer requires Site totals from `dates`, these sync examples will not supply them.
 
-### Full Sync (All Dimensions)
+Sync also rebuilds Rollups unless you pass `--no-rollups`.
+Run `gscdump sync --help` for the full table and search-type options.
 
-```bash
-npx @gscdump/cli sync -s sc-domain:example.com --db ./gsc.db --all
-```
-
-### Keyword × Page Data (Most Granular)
+## Backfill and retry
 
 ```bash
-npx @gscdump/cli sync -s sc-domain:example.com --db ./gsc.db --keyword-paths
+# Start 450 days ago, ending three days ago
+gscdump sync --site sc-domain:example.com --full --tables pages,queries,page_queries,countries
+
+# Select an exact range
+gscdump sync --site sc-domain:example.com --start 2026-08-01 --end 2026-08-31 \
+  --tables pages,queries,page_queries,countries
+
+# Read sync progress
+gscdump sync --site sc-domain:example.com --status
+
+# Retry failed dates in the selected window
+gscdump sync --site sc-domain:example.com --days 90 \
+  --tables pages,queries,page_queries,countries --retry-failed
+
+# Refresh completed dates too
+gscdump sync --site sc-domain:example.com --days 7 --force \
+  --tables pages,queries,page_queries,countries
 ```
 
-This creates `site_keyword_path_date_analytics` - useful for cannibalization analysis.
+Sync follows Google's pagination until a request returns no rows.
+Google can omit rows, so a successful sync does not guarantee complete Search Console data.
+See [Google's extraction guidance](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data).
 
-### Specific Period
+## Select tables and search types
 
 ```bash
-# Backfill historical data
-npx @gscdump/cli sync -s sc-domain:example.com --db ./gsc.db --period 16months
+gscdump sync --site sc-domain:example.com --days 28 \
+  --tables pages,queries,page_queries,countries --types web,image
 ```
 
-## Automate with Cron
+Each search type has separate files and sync state.
+If a search type previously returned no data, use `--force-types` to check it again.
+`--concurrency` controls simultaneous day requests per table; `--serial-tables` runs one table at a time.
 
-### Daily Sync Script
+## Automate a daily sync
+
+Use a persistent machine with the CLI installed and a refresh token or service-account key configured.
+Access tokens expire, so they need renewal for unattended use.
+
+Save this as `sync-gsc.sh`, then make it executable:
 
 ```bash
-#!/bin/bash
-# sync-gsc.sh
-npx @gscdump/cli sync \
-  --site sc-domain:example.com \
-  --db /path/to/gsc.db \
-  --period 7d
+#!/usr/bin/env bash
+set -euo pipefail
+/path/to/gscdump sync --site sc-domain:example.com --days 7 --force \
+  --tables pages,queries,page_queries,countries
 ```
 
-### Cron Entry
+Replace `/path/to/gscdump` with the output of `command -v gscdump`.
+Run it daily with cron:
+
+```cron
+0 6 * * * /path/to/sync-gsc.sh >> /path/to/gsc-sync.log 2>&1
+```
+
+The scheduled process needs the same credentials and Store directory as your interactive shell.
+If you use a temporary CI runner, restore and save the entire Store between runs.
+
+## Query and export
 
 ```bash
-# Run daily at 6am
-0 6 * * * /path/to/sync-gsc.sh >> /var/log/gsc-sync.log 2>&1
+gscdump query --site sc-domain:example.com --dimensions page --limit 100
+
+gscdump dump --site sc-domain:example.com --format parquet --out ./parquet-export
+
+gscdump store export --help
 ```
 
-### GitHub Actions
+`dump` writes files to a directory.
+`store export` creates a single `.duckdb` file.
 
-```yaml
-name: Sync GSC Data
-on:
-  schedule:
-    - cron: '0 6 * * *'
-  workflow_dispatch:
-
-jobs:
-  sync:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Sync GSC
-        env:
-          GSCDUMP_ACCESS_TOKEN: ${{ secrets.GSC_ACCESS_TOKEN }}
-        run: |
-          npx @gscdump/cli sync \
-            --site sc-domain:example.com \
-            --db ./data/gsc.db \
-            --period 7d
-
-      - name: Commit DB
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add data/gsc.db
-          git commit -m "chore: sync gsc data" || exit 0
-          git push
-```
-
-## Database Maintenance
-
-### Prune Old Data
+## Maintain the Store
 
 ```bash
-# Keep only last 2 years
-npx @gscdump/cli db prune --days 730
+gscdump store stats
+gscdump store compact --dry-run
+gscdump store gc --dry-run
 ```
 
-### Vacuum (Reclaim Space)
+Compaction combines older daily data into weekly, monthly, and quarterly tiers.
+Garbage collection removes orphaned files after the grace period.
+It does not prune live historical data.
+Review each preview before rerunning without `--dry-run`.
 
-```bash
-npx @gscdump/cli db vacuum
-```
+Store size depends on row counts and dimensions.
+Use `store stats` to measure your data, and back up the whole Store directory.
 
-## Programmatic Access
+## Next steps
 
-```ts
-import { createGscDb } from '@gscdump/db'
-
-const db = createGscDb('./gsc.db')
-
-// Query pages with comparison
-const pages = await queryPagesWithComparison(db, siteId, currentRange, previousRange)
-
-// Get top keywords
-const keywords = await getTopKeywords(db, siteId, startDate, endDate, 100)
-
-// Weekly rollup
-const weekly = await queryWeeklyRollup(db, siteId, startDate, endDate)
-```
-
-## Storage Estimates
-
-| Data Type | ~Size per Site/Month |
-|-----------|---------------------|
-| Site metrics | ~1 KB |
-| Pages (1k pages) | ~50 KB |
-| Keywords (10k) | ~500 KB |
-| Keyword×Page | ~5 MB |
-
-A typical site with 1k pages and 10k keywords uses ~6 MB/month, or ~72 MB/year.
-
-## Next Steps
-
-- [AI Integration](/docs/guides/ai-integration) - Query your DB with Claude
-- [SEO Analysis](/docs/guides/seo-analysis) - Run analysis on historical data
+- [Run SEO Analyzers and Reports](./seo-analysis.md)
+- [Connect an AI assistant](./ai-integration.md)
+- [Use the storage package](../../packages/engine/README.md)

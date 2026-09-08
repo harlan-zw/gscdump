@@ -2,17 +2,13 @@
 
 Consumer SDK for hosted gscdump.com integrations.
 
-> The descriptor-driven HTTP client and ticketed realtime state machine are
-> exported from `@gscdump/sdk/v1`. Focused helper and compatibility clients
-> use explicit subpaths; the package root is intentionally not importable.
-> The unsafe long-lived-key realtime client was removed before v1. See the
-> [integration guide](../../docs/guides/hosted-v1.md) and
-> [v1 contract](../../docs/hosted-api-v1.md).
+Use `@gscdump/sdk/v1` for hosted HTTP and realtime clients.
+The package root has no export.
+Keep long-lived credentials on your server.
 
-This package is for partner applications that consume gscdump.com APIs,
-webhooks, and realtime events. Callers inject the HTTP transport and auth they
-want to use; route construction stays inside the hosted adapter. New hosted
-HTTP integrations should import the stable v1 client:
+```bash
+npm install @gscdump/sdk
+```
 
 ```ts
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
@@ -28,7 +24,7 @@ const lifecycle = await gscdump.getUserLifecycle({
 ```
 
 The v1 surface uses a server-held Bearer credential and exposes a generic
-operation executor plus typed convenience methods for all 51 registered HTTP
+operation executor plus typed convenience methods for all 55 registered HTTP
 operations across partner, analytics, and realtime.
 
 Focused guides:
@@ -59,51 +55,19 @@ const report = await gscdump.queryAnalyticsReport({
 })
 ```
 
-## Scope
+## Browser integration
 
-- Partner user lifecycle
-- Partner site lifecycle
-- Data/detail queries
-- Analysis presets
-- Sitemap and indexing reads
-- Webhook receiver contracts and HMAC verification helpers
-- Shared request/response types re-exported from `@gscdump/contracts`
+Keep `user_key` and `partner_key` credentials on your server.
+Expose a same-origin proxy that preserves the upstream surface and major version, such as `/api/gscdump/analytics/v1/...`.
+The browser receives a single-use realtime ticket.
 
-Analyzer Source dispatch, browser DuckDB-WASM boot, and R2 parquet attach are
-separate engine/Nuxt concerns. A Nuxt app can consume the hosted SDK through
-its own query layer; the current consumer uses `nuxt-use-query` rather than
-making the public API depend on `@gscdump/nuxt`.
+Your `applyEvent` callback must await every cache change before the SDK advances its cursor or sends an ACK.
+Your `resync` callback must clear the affected cache scope and reload authoritative state.
+See the [realtime guide](../../docs/guides/hosted-v1.md#realtime) for the client hooks.
 
-For v1, a Nuxt consumer keeps `user_key` and `partner_key` credentials on its
-server and exposes proxy paths that retain the upstream surface and major
-(for example `/api/gscdump/analytics/v1/...`). Browser realtime receives only
-a single-use ticket. Every semantic event's `changes[]` maps to one ordered,
-awaited query-cache effect; unsafe resync purges the whole host-owned cache
-scope and primary-reseeds it before the SDK advances its cursor or ACKs.
-
-## Boundary
-
-`@gscdump/sdk` is a consumer SDK. It must not own gscdump.com producer
-behavior.
-
-Belongs here:
-
-- request/response types and schemas for partner apps
-- route builders and pluggable HTTP clients
-- ticketed websocket client, replay/resync state, and event schemas
-- awaited realtime apply/resync hooks; a rejected effect never advances ACK
-- webhook header constants, event schemas, parsing, normalization, and signature
-  verification for receivers
-
-Does not belong here:
-
-- deciding when gscdump.com emits webhooks
-- queueing, retries, backoff, idempotency, or activity logging
-- resolving public user/site IDs from gscdump.com storage
-- generating or storing production webhook secrets
-- creating production webhook delivery IDs or envelopes
-- partner subscription filtering for outgoing deliveries
-- Durable Object stream storage, replay retention, or outbox dispatch
+The SDK provides HTTP transport, realtime state, and webhook receiver helpers.
+Your application owns authentication, caching, and UI integration.
+gscdump.com owns webhook delivery, queues, and storage.
 
 ## Webhooks
 
@@ -115,7 +79,7 @@ delivery.
 ```ts
 import { parseWebhookPayload } from '@gscdump/sdk/webhook'
 
-const envelope = await parseWebhookPayload(rawJson, {
+const envelope = await parseWebhookPayload(await request.text(), {
   secret: webhookSecret,
   signature: request.headers.get('x-gscdump-signature'),
 })

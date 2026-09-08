@@ -1,144 +1,96 @@
 # Hosted API inventory
 
-This is the migration evidence for the public v1 design. It inventories the
-actual gscdump.com host, then overlays legacy package route builders/descriptors
-and the generated public-v1 operations. Inventory inclusion comes from the
-producer filesystem, not from either descriptor set.
+This inventory matches package descriptors to routes in the gscdump.com host checkout.
+It records implemented routes, including legacy mismatches.
+It does not verify production deployment or consumer migrations.
 
-The machine-readable snapshot is
-[`hosted-api-inventory.json`](./hosted-api-inventory.json). Regenerate it from
-the adjacent package and host checkouts with:
+The snapshot uses host commit
+[`b93a2e6`](https://github.com/harlan-zw/gscdump.com/commit/b93a2e6f224dd3eda1d33f708fde726442c49a83).
+The machine-readable data is [`hosted-api-inventory.json`](./hosted-api-inventory.json).
+
+## Regenerate
+
+Run from this repository with the gscdump.com checkout available:
 
 ```bash
-node scripts/validate-hosted-route-inventory.mjs --check
-node scripts/validate-hosted-route-inventory.mjs --print
-node scripts/validate-hosted-route-inventory.mjs --write
-
-# If gscdump.com is elsewhere:
-node scripts/validate-hosted-route-inventory.mjs --check \
-  --host-root /path/to/gscdump.com
+node scripts/validate-hosted-route-inventory.mjs --check --host-root /path/to/gscdump.com
+node scripts/validate-hosted-route-inventory.mjs --print --host-root /path/to/gscdump.com
+node scripts/validate-hosted-route-inventory.mjs --write --host-root /path/to/gscdump.com
 ```
 
-`--check` is the default. It rebuilds the inventory in memory and requires a
-byte-for-byte match with the checked-in JSON. `--print` emits the deterministic
-replacement for deliberate review; `--write` updates the checked-in snapshot.
+`--check` compares the rebuilt inventory with the saved JSON.
+`--print` previews the replacement; `--write` saves it.
+Review the diff before committing a regenerated snapshot.
 
 ## Snapshot summary
 
 | Evidence | Count |
 | --- | ---: |
-| Live `server/api` route files | 251 |
-| HTTP method/path operations | 251 |
-| Legacy WebSocket operations | 0 |
-| Total hosted operations | 251 |
-| Legacy package endpoint descriptors | 56 |
-| Generated public-v1 operation descriptors | 53 |
-| Distinct hosted operations owned by a descriptor | 109 |
-| Hosted operations without a descriptor | 142 |
-| Schema-less legacy descriptors | 3 |
-| Legacy descriptors with no producer handler | 0 |
-| Legacy descriptor method/path collisions | 0 |
+| HTTP route files and operations | 114 |
+| Legacy public WebSocket operations | 0 |
+| Legacy package descriptors | 36 |
+| Public v1 HTTP descriptors | 55 |
+| Hosted operations matched to a descriptor | 57 |
+| Hosted operations without a descriptor | 57 |
+| Legacy descriptors without schemas | 3 |
+| Legacy descriptors without a host handler | 34 |
+| Descriptor method/path collisions | 0 |
 
-The retired `server/routes/ws/user.ts` and `server/routes/ws/partner.ts`
-handlers are absent. The separately owned admin route under
-`layers/admin/server/routes/ws/admin.ts` is not a public protocol operation.
+All 55 public v1 HTTP descriptors match host routes.
+The remaining 34 unmatched descriptors belong to legacy exports.
+A legacy SDK method's existence does not guarantee a working host route.
+Use v1 for new integrations.
 
-The 142 unowned operations are not all public-contract gaps. The v1 review
-classification is:
-
-| Review outcome | Operations | Meaning |
+| Classification | Operations | Meaning |
 | --- | ---: | --- |
-| Accepted v1 slice | 53 | Executable descriptor, generated contract, SDK, and hosted route exist |
-| Analytics candidate | 22 | Review for `/api/analytics/v1` |
-| Partner candidate | 45 | Review for `/api/partner/v1` |
-| Decision required | 51 | Shared user/site/team routes that need an explicit boundary decision |
-| Outside public protocol | 80 | Admin, CLI, public-host, session, webhook, and other host concerns |
+| Accepted v1 | 55 | Public descriptor and matching host route |
+| Partner candidate | 3 | Needs review before promotion to v1 |
+| Decision required | 7 | User, Site, or Team route with an unresolved public boundary |
+| Outside public protocol | 49 | Host-owned routes, including admin, session, CLI, and webhook routes |
 
-An operation marked as a candidate is still not accepted into v1 until it has
-an executable descriptor, schemas, auth/scopes, ownership checks, consistency,
-SDK coverage, and producer contract tests. An operation outside protocol
-should remain host-owned rather than receive a package descriptor merely to
-make the count reach zero.
+These classifications cover all host operations.
+They are separate from descriptor ownership.
+An unmatched host route does not automatically need a public descriptor.
 
-The exact accepted set is the 53 `*-v1` descriptor rows in the machine-readable
-snapshot and the three generated OpenAPI artifacts. Keeping that list generated
-avoids a second hand-maintained operation registry in this migration record.
+## Remaining legacy gaps
 
-The 56 legacy descriptors and their findings remain migration evidence. Their
-three `noSchema` entries are not defects in the public HTTP-v1 descriptors;
-they identify the remaining deployed-wire operations that cannot yet be treated
-as fully typed package APIs.
-
-## Concrete contract findings
-
-Three current legacy descriptors use `noSchema`:
+Three legacy descriptors lack schemas:
 
 - `analytics.analyze`
 - `partner.deleteSite`
 - `partner.getSyncStatus`
 
-V1 permits no schema-less descriptor. Each accepted operation needs request
-and response schemas; removed operations should be deleted from the v1
-registry rather than carried as placeholders.
+The JSON `findings.descriptorIdsWithoutHandler` list names the 34 descriptors whose host handlers are absent.
+Check that list before using legacy route builders or SDK clients.
+These gaps do not change the public v1 contracts.
 
-All legacy descriptors now match a deployed producer method/path and no two
-logical descriptors claim the same method/path. Sitemap transport exists only
-on public partner v1. Its generation-pinned snapshot, changes, exact membership
-evidence, bounded URL/lastmod pages, bulk export, and action operations are
-separately typed. GSC submitted-sitemap metadata does not establish URL
-membership.
+Sitemap v1 operations provide snapshots, changes, exact membership, URL pages, bulk exports, and actions.
+Google's submitted-sitemap metadata does not prove URL membership.
 
-## Scope and exclusions
+## Scanner scope
 
-The scanner includes every method-suffixed TypeScript file below
-`server/api`, the explicitly reviewed generic R2 route, and any legacy public
-socket routes below `server/routes/ws`. Nitro `index` segments are removed and dynamic segments
-are normalized (`[siteId]` → `{siteId}`, `[...path]` → `{path+}`). Descriptor
-matching ignores placeholder names but preserves catch-all semantics.
+The scanner reads method-suffixed TypeScript files under the host's `server/api` directory.
+It also checks explicitly supported generic routes and legacy public socket paths.
+It removes Nitro `index` segments and normalizes dynamic parameters when matching method/path pairs.
 
-One underscore-prefixed utility beneath `server/api` is excluded because it is
-imported helper code, not a Nitro handler:
-
-- `server/api/__gsc/sites/[siteId]/inspections/_inspection-record.ts`
-
-Three non-API `server/routes` files are recorded as out of inventory:
+The snapshot excludes these non-API routes:
 
 - `server/routes/__test/durable-job.get.ts`
+- `server/routes/auth/bing.get.ts`
 - `server/routes/auth/google.get.ts`
 - `server/routes/mcp.post.ts`
 
-The validator fails when a new generic `.ts` file appears under `server/api`
-without an explicit method rule. This prevents an implicit handler from
-silently escaping the snapshot. The excluded files are also recorded in JSON,
-so additions or removals produce a reviewed diff.
+Admin WebSocket routes are outside the public protocol inventory.
+The retired user and partner WebSocket handlers are absent.
 
-It also fails immediately when a route under one of the three public v1 HTTP
-prefixes has no generated v1 descriptor, or when a generated v1 descriptor has
-no hosted route. Updating the legacy snapshot cannot waive that two-way gate.
+A new generic API file without a scanner rule fails validation.
+So does a public v1 route without a descriptor, or a v1 descriptor without a route.
 
-## How ownership is derived
+## Ownership evidence
 
-The validator parses `packages/contracts/src/routes.ts` and
-`packages/contracts/src/endpoints.ts` with the TypeScript AST for legacy
-evidence. It also reads the three deterministic public-v1 OpenAPI artifacts.
-It resolves legacy route-builder templates, normalizes legacy partner paths to
-their hosted `/api` form, and matches both descriptor sets to producer handlers
-by method plus normalized path.
+The validator reads package route builders, legacy endpoint descriptors, and the three generated v1 OpenAPI files.
+It matches them to host handlers by method and normalized path.
+Each operation records its producer file, classification, descriptor owners, and route-builder owners.
 
-Every operation row records:
-
-- producer file, method, and path;
-- current surface and proposed v1 review bucket;
-- matching endpoint descriptor IDs (`descriptorOwners`);
-- matching package route-builder IDs (`routeBuilderOwners`).
-
-Every descriptor row records its owner, method/path, route builder, schema
-status, and matching producer files. The findings section keeps schema gaps,
-missing handlers, collisions, and all unowned hosted operations directly
-queryable.
-
-This snapshot is intentionally about the whole current producer. Only rows
-marked `accepted-v1` are in the initial public slice; legacy candidates remain
-unpublished. The protocol rules live in
-[`hosted-api-v1.md`](./hosted-api-v1.md); changing the snapshot does not by
-itself approve or version a public API operation.
+The [v1 contract](./hosted-api-v1.md) defines protocol behavior.
+Updating this inventory does not approve a new public operation.
