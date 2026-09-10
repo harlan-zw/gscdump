@@ -12,7 +12,7 @@ const REQUEST_TIMEOUT_MS = 10_000
  */
 // Single-line fields refuse control characters: they render as one line in
 // the operator's report, and gscdump.com rejects them with a 400 otherwise.
-const singleLine = (max: number) => z.string().trim().min(1).max(max).regex(/^\P{Cc}*$/u, 'must be a single line without control characters')
+const singleLine = (max: number): z.ZodString => z.string().trim().min(1).max(max).regex(/^\P{Cc}*$/u, 'must be a single line without control characters')
 
 export const papercutBodySchema = z.strictObject({
   command: singleLine(200),
