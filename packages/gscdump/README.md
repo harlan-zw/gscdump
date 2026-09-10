@@ -47,16 +47,14 @@ Use `gscdump/query` to build a request. `client.query()` paginates through Googl
 
 ```ts
 import { googleSearchConsole } from 'gscdump'
-import { and, between, date, daysAgo, gsc, page, query, today } from 'gscdump/query'
+import { between, date, daysAgo, gsc, page, query } from 'gscdump/query'
 
 const client = googleSearchConsole('ya29.xxx')
 const siteUrl = 'sc-domain:example.com'
 
 const request = gsc
   .select(page, query)
-  .where(and(
-    between(date, daysAgo(28), today()),
-  ))
+  .where(between(date, daysAgo(30), daysAgo(3)))
 
 for await (const rows of client.query(siteUrl, request)) {
   for (const row of rows)
@@ -77,7 +75,7 @@ const response = await client.searchAnalytics.query(siteUrl, {
 
 ## Other Google resources
 
-The same client exposes the Google resources owned by this package:
+Use the same client for sitemaps, inspections, and eligible Indexing API notifications:
 
 ```ts
 const sitemapList = await client.sitemaps.list(siteUrl)
@@ -88,6 +86,9 @@ await client.indexing.publish(
   'URL_UPDATED',
 )
 ```
+
+Indexing notifications apply only to eligible job or livestream pages.
+See [URL inspection and indexing](../../docs/guides/url-indexing.md).
 
 The package root also exports batch and projection helpers such as `fetchSitesWithSitemaps`, `batchInspectUrlsFlatSettled`, `inspectUrlFlat`, and `batchRequestIndexing`.
 
@@ -115,12 +116,17 @@ const [pages, queries, crawl] = await Promise.all([
 ])
 ```
 
-Sitemap XML reading and traversal lives in `sitemapd`. Product feed scoping and
+Sitemap XML reading and traversal live in `sitemapd`. Product feed scoping and
 exact membership hashing live in `gscdump/sitemap-identity`. Hosted canonical
 sitemap membership is available through `@gscdump/sdk/v1`.
 
 ## Public subpaths
 
+- `gscdump/client`: Google client and authentication types
+- `gscdump/indexing`: inspection and indexing helpers
+- `gscdump/errors`: typed Google API failures
+- `gscdump/sites`: Site helpers
+- `gscdump/sitemap-identity`: sitemap scope and membership hashing
 - `gscdump/query`: query builder, columns, operators, Pacific date helpers, and logical query plans
 - `gscdump/query/plan`: logical query planning only
 - `gscdump/bing`: Bing Site, URL, traffic, and crawl evidence calls

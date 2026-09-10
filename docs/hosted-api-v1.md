@@ -1,26 +1,15 @@
-# Hosted API v1 contract freeze
+# Hosted API v1 contract
 
 ## Status and intent
 
-This is the normative contract for the first public gscdump.com API. All 53
-HTTP operations are present in the executable contracts, generated artifacts,
-SDK, and hosted producer. The checked-in package version is `1.4.11`; the API
-wire version remains `1.0`. Expanded-operation production canaries, the
-coordinated NuxtSEO production handoff, and per-route zero-use evidence remain
-required before legacy compatibility routes may be removed.
+This document defines the public gscdump.com API contract.
+The current package registry contains 55 HTTP operations: 50 partner, three analytics, and two realtime operations.
+The API wire version is `1.0`; npm package versions follow a separate release cycle.
 
-The initial host HTTP and realtime slice has direct production canaries for
-all four original HTTP operations, single-use tickets, outbox-to-socket
-delivery, effect-aware cursor confirmation, duplicate-event suppression,
-documented idle-hibernation resume, and the full 15-minute alarm expiry. This
-status does not claim that every expanded operation is canaried, that legacy routes
-have been cut, or that the API has launched publicly. The
-checked-in constants are machine-readable in
-[`hosted-api-v1-constants.json`](./hosted-api-v1-constants.json), and the
-legacy producer evidence is in
-[`hosted-api-inventory.md`](./hosted-api-inventory.md).
-Consumer setup is in the
-[hosted v1 integration guide](./guides/hosted-v1.md).
+The [producer inventory](./hosted-api-inventory.md) matches these operations to the host checkout.
+It does not prove production deployment or consumer migration.
+Use the [integration guide](./guides/hosted-v1.md) for setup and examples.
+Shared constants live in [`hosted-api-v1-constants.json`](./hosted-api-v1-constants.json).
 
 The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are normative. A
 constant change requires a reviewed update to this document and its JSON
@@ -45,23 +34,16 @@ clients MUST use the paths above.
 A consumer-side proxy MUST retain both the surface and major in its path. For
 example, `/api/gscdump/analytics/v1/...` is acceptable; collapsing it into
 unrelated app routes such as `/api/pro/...` is not the public integration
-seam. This keeps auth, telemetry, caching, and future cutovers attributable to
-the actual upstream contract.
+seam. This keeps the upstream contract visible in authentication, telemetry, and caching.
 
-The current v1 workspace registry contains 48 partner, three analytics, and
-two realtime HTTP operations. The exact method, path, schema, scope, ownership,
-error, example, lifecycle, resource, and retry metadata is generated from the
-executable registry:
+The executable registry generates operation paths, schemas, scopes, ownership checks, errors, examples, lifecycle metadata, and retry rules:
 
 - [Partner OpenAPI](../packages/contracts/generated/openapi.partner.v1.json)
 - [Analytics OpenAPI](../packages/contracts/generated/openapi.analytics.v1.json)
 - [Realtime HTTP OpenAPI](../packages/contracts/generated/openapi.realtime.v1.json)
 - [Realtime AsyncAPI](../packages/contracts/generated/asyncapi.realtime.v1.json)
 
-The current legacy filesystem is evidence, not a promise that all 255 hosted
-operations become public. Any later partner or analytics operation must pass
-the same descriptor, implementation, SDK, and publication gates before it is
-added to the generated registry.
+Later operations must pass the same descriptor, implementation, SDK, and publication requirements before joining the public registry.
 
 ## Contract registry and release gate
 
@@ -81,13 +63,10 @@ one method/path descriptor and rely on an untyped body switch. Producer route,
 contract descriptor, SDK method, documentation, and contract test are one
 change.
 
-All 53 accepted v1 descriptors have complete schemas and matching deployed
-host routes. Expanded operations are not considered fully rolled out until
-their canary and consumer-handoff evidence is recorded. Legacy inventory
-findings continue to block promotion of affected operations; they do not
-silently expand this registry. Host-only, session-only, CLI, public-site, and
-admin operations should remain out of protocol rather than receiving
-accidental contracts.
+All 55 v1 descriptors have schemas and matching routes in the host inventory.
+New operations need production checks and consumer migration evidence before rollout is complete.
+Legacy gaps block promotion of affected operations.
+Host-only, session, CLI, public-site, and admin operations remain outside this protocol.
 
 ## Authentication and static scopes
 
@@ -180,55 +159,61 @@ principal and operation:
 
 | Operation | Requests per 60 seconds |
 | --- | ---: |
-| `partner.users.lifecycle.get` | 120 |
-| `partner.users.sites.available.list` | 30 |
-| `partner.users.sites.create` | 20 |
-| `partner.users.create` | 20 |
-| `partner.users.tokens.update` | 20 |
-| `partner.sites.indexing.get` | 60 |
-| `partner.sites.indexing.urls.list` | 60 |
-| `partner.sites.indexing.transitions.list` | 30 |
-| `partner.sites.indexing.diagnostics.get` | 60 |
-| `partner.sites.sitemaps.get` | 60 |
-| `partner.sites.sitemaps.changes.get` | 60 |
-| `partner.sites.analysis.get` | 30 |
+| `analytics.reports.detail.query` | 60 |
+| `analytics.reports.query` | 60 |
+| `analytics.rows.query` | 60 |
 | `partner.sites.analysis.bundle.get` | 20 |
-| `partner.sites.delete` | 20 |
+| `partner.sites.analysis.get` | 30 |
+| `partner.sites.bing.data.get` | 60 |
 | `partner.sites.canonical.mismatches.get` | 60 |
-| `partner.sites.indexing.inspect.create` | 20 |
-| `partner.sites.permission.recover` | 10 |
-| `partner.sites.keyword.sparklines.query` | 60 |
-| `partner.sites.query.trend.get` | 60 |
-| `partner.sites.page.trend.get` | 60 |
 | `partner.sites.content.velocity.get` | 60 |
 | `partner.sites.ctr.curve.get` | 30 |
 | `partner.sites.dark.traffic.get` | 30 |
+| `partner.sites.delete` | 20 |
 | `partner.sites.device.gap.get` | 60 |
-| `partner.sites.keyword.breadth.get` | 30 |
-| `partner.sites.position.distribution.get` | 60 |
-| `partner.sites.top.association.get` | 120 |
 | `partner.sites.index.percent.get` | 30 |
-| `analytics.rows.query` | 60 |
-| `analytics.reports.query` | 60 |
-| `analytics.reports.detail.query` | 60 |
+| `partner.sites.indexing.bing.connection.get` | 60 |
+| `partner.sites.indexing.bing.connection.verify` | 10 |
+| `partner.sites.indexing.bing.evidence.list` | 60 |
+| `partner.sites.indexing.diagnostics.get` | 60 |
+| `partner.sites.indexing.get` | 60 |
+| `partner.sites.indexing.inspect.create` | 20 |
+| `partner.sites.indexing.transitions.list` | 30 |
+| `partner.sites.indexing.urls.list` | 60 |
+| `partner.sites.keyword.breadth.get` | 30 |
+| `partner.sites.keyword.sparklines.query` | 60 |
+| `partner.sites.page.trend.get` | 60 |
+| `partner.sites.permission.recover` | 10 |
+| `partner.sites.position.distribution.get` | 60 |
+| `partner.sites.query.trend.get` | 60 |
+| `partner.sites.sitemaps.action.create` | 10 |
+| `partner.sites.sitemaps.changes.get` | 60 |
+| `partner.sites.sitemaps.export.get` | 20 |
+| `partner.sites.sitemaps.get` | 60 |
+| `partner.sites.sitemaps.membership.query` | 60 |
+| `partner.sites.sitemaps.urls.get` | 60 |
+| `partner.sites.team.update` | 30 |
+| `partner.sites.top.association.get` | 120 |
+| `partner.teams.catalog.bind` | 10 |
+| `partner.teams.catalog.get` | 60 |
+| `partner.teams.create` | 20 |
+| `partner.teams.delete` | 20 |
+| `partner.teams.members.add` | 30 |
+| `partner.teams.members.list` | 60 |
+| `partner.teams.members.remove` | 30 |
+| `partner.teams.members.role.update` | 30 |
+| `partner.teams.rename` | 20 |
+| `partner.users.create` | 20 |
+| `partner.users.delete` | 10 |
+| `partner.users.lifecycle.get` | 120 |
+| `partner.users.sites.available.list` | 30 |
+| `partner.users.sites.create` | 20 |
+| `partner.users.sites.crosswalk.get` | 10 |
+| `partner.users.sites.verify.create` | 10 |
+| `partner.users.tokens.update` | 20 |
+| `partner.users.verification.token.create` | 10 |
 | `realtime.stream.head.get` | 120 |
 | `realtime.tickets.create` | 30 |
-| `partner.sites.sitemaps.action.create` | 10 |
-| `partner.sites.sitemaps.membership.query` | 60 |
-| `partner.teams.create` | 20 |
-| `partner.teams.rename` | 20 |
-| `partner.teams.delete` | 20 |
-| `partner.teams.members.list` | 60 |
-| `partner.teams.members.add` | 30 |
-| `partner.teams.members.role.update` | 30 |
-| `partner.teams.members.remove` | 30 |
-| `partner.sites.team.update` | 30 |
-| `partner.teams.catalog.get` | 60 |
-| `partner.teams.catalog.bind` | 10 |
-| `partner.users.sites.crosswalk.get` | 10 |
-| `partner.users.delete` | 10 |
-| `partner.users.verification.token.create` | 10 |
-| `partner.users.sites.verify.create` | 10 |
 
 Valid credentials consume quota after their static scope is accepted, including
 resource-forbidden and failed domain attempts. Malformed requests, invalid keys,
@@ -243,9 +228,8 @@ HTTPAPI Internet-Draft structured-field form. A rejected attempt returns
 `GSCdump-API-Version: 1.0`, `Cache-Control: private, no-store`, and
 `Vary: Authorization`.
 
-The 51 v1 operations are not deprecated and emit no `Deprecation` or `Sunset`.
-Their predecessor compatibility routes have independent, route-specific
-deprecation dates and usage telemetry. A future v1 deprecation must update
+The current v1 descriptors declare no deprecation or sunset date.
+Legacy routes have separate lifecycle metadata and usage telemetry. A future v1 deprecation must update
 executable lifecycle metadata, generated artifacts, and its migration guide
 first. Runtime signaling then uses the RFC 9745
 `Deprecation: @<unix-seconds>` date form, a `rel="deprecation"` documentation
@@ -427,8 +411,8 @@ error codes are `invalid_frame`, `protocol_mismatch`, `policy_violation`,
 
 One semantic event can carry several `changes`. For example,
 `site.analytics.ready` invalidates both `site.analytics` and `site.lifecycle`.
-The base `changes` array is the forward-compatible cache effect contract; the
-optional `data` object is never authoritative state. The SDK strictly validates
+The base `changes` array defines the cache effects.
+The optional `data` object is never authoritative state. The SDK strictly validates
 the base envelope. For an unknown event name or unsupported known
 `eventVersion`, it ignores `data`, applies every base change, and emits a
 non-fatal upgrade advisory.
@@ -457,8 +441,9 @@ A pure client entry with no watermark captures `ready.head`, performs the full
 unsafe resync while event application is paused, and only then resumes after
 the captured head.
 
-Events are invalidation facts, not authoritative resource snapshots. The
-source mutation and a durable outbox record MUST commit together. Dispatch to
+Events tell clients which resources changed.
+Clients fetch authoritative state separately.
+The source mutation and a durable outbox record MUST commit together. Dispatch to
 the stream is idempotent by event `id`. A delete, unlink, or transfer captures
 the audience before and after mutation in the outbox and targets the union, so
 both the old and new principal caches are invalidated after ownership changes.
@@ -511,20 +496,16 @@ and does not invent an auth, Origin, or replay diagnosis from unavailable HTTP
 details. A JSON protocol error's optional `retryAfter` is an integer number of
 seconds. All byte limits measure the UTF-8 serialized frame or envelope.
 
-These application limits are intentionally far below Cloudflare's platform
-ceilings: incoming WebSocket messages currently allow 32 MiB, Durable Object
-SQLite strings/BLOBs allow 2 MB, and serialized WebSocket attachments allow
-16,384 bytes. Small protocol bounds protect the Worker's 128 MB isolate and
-make replay latency predictable. See Cloudflare's
+These application limits bound allocation and replay work per connection.
+For platform limits, see Cloudflare's
 [WebSocket guidance](https://developers.cloudflare.com/durable-objects/best-practices/websockets/),
 [Durable Object limits](https://developers.cloudflare.com/durable-objects/platform/limits/),
 and [Workers limits](https://developers.cloudflare.com/workers/platform/limits/).
 
 ## ACKs, rejected effects, and safe cache integration
 
-An ACK is a correctness boundary, not a receipt callback. For each durable
-event, the
-SDK MUST:
+An ACK confirms that the client applied a durable event.
+For each durable event, the SDK MUST:
 
 1. deduplicate by event `id` and cursor without advancing beyond an unapplied sequence;
 2. await the required `applyEvent` effect;
@@ -610,19 +591,7 @@ WebSocket filters, team/scoped credentials, arbitrary stream selection, or a
 generic public operation passthrough. Any of these requires a new evidence-led
 design; none should be pre-scaffolded into the first implementation.
 
-The released package, deployed host, SDK, and NuxtSEO adapters agree on the
-expanded 51-operation registry. The additive operations must pass their
-production canary, consumer-handoff, and zero-use gates before predecessor
-compatibility routes are eligible for removal. Contract, Workerd, and existing
-production canaries cover the original host and transport gates; those
-canaries include credentialed primary reads, single-use tickets,
-queue-to-socket delivery, effect-aware ACK cursor confirmation, and duplicate
-outbox suppression.
-
-Before public documentation is opened, the deferred NuxtSEO production cut
-must still prove an authenticated browser refresh through its proxy and the
-absence of long-lived gscdump keys from browser payloads. Protected host run
-`29324725739` closed the idle-hibernation/full-lifetime gate without product
-mutation. Production failure drills for replay expiry, backpressure, and
-ticket-key rotation remain publication evidence even though their deterministic
-contract and Workerd coverage is green.
+Before removing legacy routes, verify the replacement in production and complete the consumer migration.
+Record zero-use evidence for each predecessor route.
+Browser checks must cover authenticated proxy reads and confirm that long-lived keys never reach browser payloads.
+Production checks must also cover replay expiry, backpressure, and ticket-key rotation.

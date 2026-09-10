@@ -4,7 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dm/@gscdump/analysis?color=yellow)](https://npm.chart.dev/@gscdump/analysis)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-> SEO analyzers for Google Search Console data. Row-based, DuckDB-native, D1-ready.
+SEO Analyzers and Reports for Google Search Console data.
+Use pure functions for rows you already have, or run an Analyzer against a Source.
 
 ## Install
 
@@ -12,199 +13,159 @@
 npm install @gscdump/analysis
 ```
 
-## When to use which subpath
+Node.js 22 or newer is required for Node consumers.
 
-| Subpath | Use when |
-|---|---|
-| `@gscdump/analysis` | Pure analyzers, `analyzeInBrowser`, and shared analyzer contracts. |
-| `@gscdump/analysis/registry` | Pre-built `defaultAnalyzerRegistry` (rows + sql). Convenience for callers who don't care about bundle size. |
-| `@gscdump/analysis/errors` | Typed analysis failures and rendering helpers. |
-| `@gscdump/analysis/report` | Report registry and runtime. |
-| `@gscdump/analysis/source` | Portable source factories. |
+## Choose an export
 
-The contract layer (`Analyzer`, `Plan`, `Capability`, `AnalysisParams`, `AnalysisResult`, `AnalysisQuerySource`, `runAnalyzerFromSource`, `createAnalyzerRegistry`, `defineAnalyzer`, period helpers, `createEngineQuerySource`) lives in `@gscdump/engine` under the `/analyzer`, `/analysis-types`, `/period`, `/source`, and `/resolver` subpaths. Most are re-exported from `@gscdump/analysis` for convenience.
+| Subpath | Purpose |
+| --- | --- |
+| `@gscdump/analysis` | Pure Analyzers, browser dispatch, and shared Analyzer contracts |
+| `@gscdump/analysis/registry` | All 29 registered Analyzers, including SQL implementations |
+| `@gscdump/analysis/report` | Report registry, `runReport`, and formatting |
+| `@gscdump/analysis/source` | Composite and in-memory Source factories |
+| `@gscdump/analysis/errors` | Typed analysis errors and rendering helpers |
 
-## Row-based analyzers
+`@gscdump/engine` owns the Analyzer, Source, and period contracts.
+The analysis root re-exports the common contracts.
+The default registry imports every Analyzer; avoid it when you need a smaller browser bundle.
 
-Pure functions. Take typed arrays in, return typed results out.
+## Analyze rows
 
 ```ts
 import { analyzeDecay, analyzeMovers } from '@gscdump/analysis'
 
-const previousRows = [{
-  query: 'nuxt seo',
-  page: 'https://example.com/',
+const current = [{
+  query: 'example query',
+  page: 'https://example.com/docs',
+  clicks: 40,
+  impressions: 1000,
+  ctr: 0.04,
+  position: 8,
+}]
+const previous = [{
+  query: 'example query',
+  page: 'https://example.com/docs',
   clicks: 100,
   impressions: 1000,
   ctr: 0.1,
   position: 4,
 }]
-const currentRows = [{ ...previousRows[0]!, clicks: 50, ctr: 0.05 }]
 
-const movers = analyzeMovers({ current: currentRows, previous: previousRows })
-const decay = analyzeDecay({ current: currentRows, previous: previousRows })
+const movers = analyzeMovers({ current, previous })
+const decay = analyzeDecay({ current, previous })
+console.log(movers.declining, decay)
 ```
 
-Meta-analyses live in the report layer. Run a composed evidence report via `runReport`:
+Comparison functions take one `{ current, previous }` input object.
+Options are a separate second argument.
+See the [SEO guide](../../docs/guides/seo-analysis.md) for a complete striking-distance example.
+
+## Sources
+
+Use `runAnalyzerFromSource` to choose an Analyzer's row or SQL plan:
 
 ```ts
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
-import {
-  defaultReportRegistry,
-  runReport,
-} from '@gscdump/analysis/report'
+import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
+import { runAnalyzerFromSource } from '@gscdump/engine/analyzer'
+import { googleSearchConsole } from 'gscdump'
+
+const client = googleSearchConsole({ accessToken: process.env.GSC_ACCESS_TOKEN! })
+const source = createGscApiQuerySource({ client, siteUrl: 'sc-domain:example.com' })
+const result = await runAnalyzerFromSource(source, {
+  type: 'striking-distance',
+  startDate: '2026-08-01',
+  endDate: '2026-08-28',
+  minImpressions: 100,
+}, defaultAnalyzerRegistry)
+
+console.log(result.results)
+```
+
+Install `@gscdump/engine`, `@gscdump/engine-gsc-api`, and `gscdump` for this example.
+
+Twelve Analyzers have row plans:
+
+- `brand`, `cannibalization`, `clustering`, `concentration`
+- `data-detail`, `data-query`, `decay`, `movers`
+- `opportunity`, `seasonality`, `striking-distance`, `zero-click`
+
+All 29 Analyzers have SQL plans.
+SQL-only Analyzers need a Source that supports their required capabilities.
+
+| Factory | Import path | Input |
+| --- | --- | --- |
+| `createGscApiQuerySource` | `@gscdump/engine-gsc-api` | `{ client, siteUrl }` |
+| `createLiveGscSource` | `@gscdump/engine-gsc-api` | `{ siteUrl, getAccessToken }` |
+| `createEngineQuerySource` | `@gscdump/engine/source` | `{ engine, ctx }` |
+| `createSqliteQuerySource` | `@gscdump/engine-sqlite` | `{ executor, siteId, regex? }` |
+| `createInMemoryQuerySource` | `@gscdump/analysis/source` | `{ queryRows }` |
+| `createCompositeSource` | `@gscdump/analysis/source` | `{ engine, live, site }` |
+
+For a composite Source, `site` contains `oldestDateSynced`, `newestDateSynced`, and optional `coveredSpans`.
+It routes supported queries to Google when stored coverage is missing or stored dimensions cannot answer the query.
+SQL execution always uses the Engine.
+
+## Reports
+
+Reports combine Analyzers into bounded Sections.
+After creating `source` above, run a Report supported by that Source:
+
+```ts
+import { defaultReportRegistry, runReport } from '@gscdump/analysis/report'
 import { resolveWindow } from '@gscdump/engine/period'
 
-const report = defaultReportRegistry.getReport('health')!
-const window = resolveWindow({ preset: 'last-28d', comparison: 'none' })
+const report = defaultReportRegistry.getReport('movers')!
+const window = resolveWindow({ preset: 'last-28d', comparison: 'prev-period' })
 const result = await runReport(report, {
   source,
   analyzers: defaultAnalyzerRegistry,
-  ctx: { site: siteUrl, window, params: {}, registryVersion: defaultReportRegistry.version },
+  ctx: {
+    site: 'sc-domain:example.com',
+    window,
+    params: {},
+    registryVersion: defaultReportRegistry.version,
+  },
 })
-// result.sections[0].findings — bounded evidence, page+query keyed.
+
+console.log(result.sections, result.meta.degraded)
 ```
 
-Run an Analyzer against a live Source:
+See the [Report list](../../README.md#reports) for inputs and defaults.
+If an optional step fails, `meta.degraded` is `true`.
+A required step failure rejects the Report.
 
-```ts
-import { runAnalyzerFromSource } from '@gscdump/analysis'
-import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
-import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
-import { googleSearchConsole } from 'gscdump'
+Use `defineReport` from `@gscdump/engine/report` to define your own Report.
 
-const client = googleSearchConsole('ya29.xxx')
-const source = createGscApiQuerySource({ client, siteUrl: 'sc-domain:example.com' })
-const movers = await runAnalyzerFromSource(source, {
-  type: 'movers',
-  startDate: '2026-04-01',
-  endDate: '2026-04-28',
-  prevStartDate: '2026-03-04',
-  prevEndDate: '2026-03-31',
-}, defaultAnalyzerRegistry)
-console.log(movers.results)
-```
+## DuckDB and browser use
 
-## DuckDB (Node)
+For Node, create an Engine Source with `createEngineQuerySource({ engine, ctx })` from `@gscdump/engine/source`.
+The context supplies `userId` and `siteId`.
+Node attachment helpers live at `@gscdump/engine/node`.
 
-SQL-native path. `SQL_ANALYZERS` dispatch through `runAnalyzerFromSource` against an engine-backed source.
+For browsers, use [`@gscdump/engine-duckdb-wasm`](../engine-duckdb-wasm/README.md) to attach Parquet tables.
+`analyzeInBrowser` accepts a runner with `query(sql, params, signal?)`, options, analysis parameters, and an Analyzer registry.
+Browser analysis uses attached tables as described in [ADR-0001](../../docs/adr/0001-browser-engine-uses-attached-tables.md).
 
-```ts
-import { ROW_ANALYZERS, SQL_ANALYZERS } from '@gscdump/analysis/registry'
-import { createAnalyzerRegistry, runAnalyzerFromSource } from '@gscdump/engine/analyzer'
-import { createEngineQuerySource } from '@gscdump/engine/source'
+For SQLite and D1, use [`@gscdump/engine-sqlite`](../engine-sqlite/README.md).
+Analyzer support depends on the Source's SQL dialect and capabilities.
 
-const source = createEngineQuerySource({ engine, ctx })
-const registry = createAnalyzerRegistry({ rows: ROW_ANALYZERS, sql: SQL_ANALYZERS })
-const result = await runAnalyzerFromSource(source, { type: 'striking-distance', minImpressions: 100 }, registry)
-```
-
-`attachParquetIndex` and `attachSnapshotIndex` from `@gscdump/engine/node`
-wire parquet files (per-day, per-month, or pre-baked `.duckdb` snapshots) into
-a Node DuckDB session.
-
-## Browser (DuckDB-WASM)
-
-```ts
-import { analyzeInBrowser } from '@gscdump/analysis'
-// Compose your own narrow registry instead of pulling the kitchen-sink default
-// (which statically imports every SQL analyzer). For demo only:
-import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
-
-const result = await analyzeInBrowser(
-  runner,
-  { schema: 'gsc' },
-  { type: 'striking-distance' },
-  defaultAnalyzerRegistry,
-)
-```
-
-`analyzeInBrowser` wraps any runner with `query(sql, params, signal?)` in an `AnalysisQuerySource` with the `attachedTables` capability and dispatches via `runAnalyzerFromSource`.
-
-`@gscdump/engine-duckdb-wasm` exports `bootDuckDBWasm`,
-`attachParquetUrlTables`, `createBrowserAnalysisRuntime`, and `resolveWindow`
-(re-exported from `@gscdump/engine/period`). Browser analysis uses attached
-tables rather than a canonical-schema `createEngine`; see ADR-0001.
-
-## SQLite (D1 / Cloudflare Workers)
-
-Mirror of the DuckDB path, dialect-targeted at sqlite-core. `@gscdump/engine-sqlite` exports `createSqliteQuerySource` (an `AnalysisQuerySource` over `executor + siteId`), `compileSqlite`, drizzle helpers (`gsc_keywords`, etc.), and `resolveWindow` (re-export from `@gscdump/engine/period`).
-
-## Query composers (dialect-neutral)
-
-```ts
-import { sqliteResolverAdapter } from '@gscdump/engine-sqlite'
-import { pgResolverAdapter, resolveToSQL } from '@gscdump/engine/resolver'
-
-const resolved = resolveToSQL(builderState, { adapter: sqliteResolverAdapter, siteId })
-```
-
-Pass `sqliteResolverAdapter` from `@gscdump/engine-sqlite` (D1, `site_id`-scoped) or `pgResolverAdapter` from `@gscdump/engine/resolver` (parquet via DuckDB, single tenant). Composers stay identical; only the column bindings + dialect compilation differ.
-
-## Sources (portable)
-
-`/source` is the cross-implementation seam:
-
-```ts
-import type { AnalysisQuerySource } from '@gscdump/analysis'
-import { createCompositeSource } from '@gscdump/analysis/source'
-import { createLiveGscSource } from '@gscdump/engine-gsc-api'
-
-declare const engine: AnalysisQuerySource
-const live = createLiveGscSource({
-  siteUrl: 'sc-domain:example.com',
-  getAccessToken: async () => 'ya29.xxx',
-})
-const source = createCompositeSource({
-  engine,
-  live,
-  site: { oldestDateSynced: '2026-04-01', newestDateSynced: '2026-04-28' },
-})
-```
-
-Available source factories:
-
-- `createGscApiQuerySource({ client, siteUrl })` — `@gscdump/engine-gsc-api`
-- `createLiveGscSource({ getAccessToken, siteUrl })`: `@gscdump/engine-gsc-api`
-- `createCompositeSource({ engine, live, site })`: `@gscdump/analysis/source`; Engine first, live Source fallback
-- `createInMemoryQuerySource({ queryRows })` — `@gscdump/analysis/source`
-- `createEngineQuerySource({ engine, ctx })` — `@gscdump/engine/source`
-- `createSqliteQuerySource({ ... })` — `@gscdump/engine-sqlite`
-
-Portable analyzers currently cover the row-based tools:
-`striking-distance`, `opportunity`, `brand`, `clustering`, `concentration`,
-`seasonality`, `movers`, and `decay`.
-
-## Window resolution
+## Date windows
 
 ```ts
 import { resolveWindow } from '@gscdump/analysis'
 
-const w = resolveWindow({ preset: 'last-30d', comparison: 'yoy' })
-// { start: '...', end: '...', days: 30, comparison: { start, end } }
+const window = resolveWindow({ preset: 'last-30d', comparison: 'yoy' })
+console.log(window.start, window.end, window.comparison)
 ```
 
-Presets: `last-7d`, `last-28d`, `last-30d`, `last-90d`, `last-180d`, `last-365d`, `mtd`, `ytd`, `custom`. Comparison modes: `none`, `prev-period`, `yoy`.
+Presets: `last-7d`, `last-28d`, `last-30d`, `last-90d`, `last-180d`, `last-365d`, `mtd`, `ytd`, and `custom`.
+Comparisons: `none`, `prev-period`, and `yoy`.
 
-## Stability
+## Public API
 
-| Surface | Stability |
-|---|---|
-| Row analyzers (`analyzeMovers`, `analyzeDecay`, ...) | Public |
-| Source factories + `runAnalyzerFromSource` | Public |
-| `Analyzer<P, R>` contract + `createAnalyzerRegistry` (re-exported from `@gscdump/engine/analyzer`) | Public |
-| Source factories under `@gscdump/analysis/source` | Public |
-| Per-analyzer modules under `analysis/src/analyzers/<name>` | Private |
-
-## Related
-
-- [`gscdump`](../gscdump) — REST client + query builder (edge-safe).
-- [`@gscdump/engine`](../engine) — Parquet/DuckDB storage engine + analyzer/source/period contracts.
-- [`@gscdump/engine/node`](../engine) — Node DuckDB handle + parquet/snapshot attach helpers.
-- [`@gscdump/engine-duckdb-wasm`](../engine-duckdb-wasm) — DuckDB-WASM browser runtime + drizzle adapter.
-- [`@gscdump/engine-sqlite`](../engine-sqlite) — SQLite / D1 dialect adapter.
-- [`@gscdump/engine-gsc-api`](../engine-gsc-api) — GSC live-API engine adapter.
-- [`@gscdump/cli`](../cli) — CLI wrapping `gscdump` + `@gscdump/engine` + `@gscdump/analysis`.
+Use the package exports listed above.
+Files under `src/` are private and may change without a public migration path.
 
 ## License
 

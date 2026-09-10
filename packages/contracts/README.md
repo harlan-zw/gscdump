@@ -2,33 +2,23 @@
 
 Shared protocol contracts for gscdump.com integrations.
 
-> The executable public v1 registry is exported from
-> `@gscdump/contracts/v1`. Existing root route/endpoint exports still describe
-> the legacy host during the release and cutover overlap. See the
-> [integration guide](../../docs/guides/hosted-v1.md),
-> [v1 contract](../../docs/hosted-api-v1.md), and
-> [producer inventory](../../docs/hosted-api-inventory.md).
+Use `@gscdump/contracts/v1` for operation definitions, request and response schemas, and protocol constants.
+The registry describes 55 HTTP operations and the realtime protocol.
+For HTTP calls, install [`@gscdump/sdk`](../sdk/README.md).
 
-This package contains types, route metadata, Zod schemas, shared storage/query
-primitives, event names, and contract versions. It has no HTTP client, no
-websocket client, no queueing, and no producer behavior.
+```bash
+npm install @gscdump/contracts
+```
 
-Used by:
+The root also exports shared types and legacy route metadata.
+Use the [v1 guide](../../docs/guides/hosted-v1.md) for new integrations.
+The [producer inventory](../../docs/hosted-api-inventory.md) records remaining legacy mismatches.
 
-- `@gscdump/sdk` for consuming gscdump.com
-- gscdump.com route/webhook/realtime contract tests
-- CLI and MCP integrations that need protocol validation
+## Operation contracts
 
-Producer behavior such as DB reads, auth, queues, webhook delivery, retries,
-and storage remains in gscdump.com.
-
-## Public v1 bar
-
-Each public operation has one executable descriptor covering its
-surface/version, method/path, query or mutation semantics, credential classes,
-static scopes, ownership policy, request/response schemas, consistency,
-idempotency, and errors. V1 has no schema-less descriptor and no two logical
-operations sharing an ambiguous method/path.
+Each operation has one descriptor with its method, path, schemas, credentials, scopes, ownership rules, consistency, and retry behavior.
+Descriptors distinguish queries from mutations independently of HTTP method.
+Every public operation has schemas and a unique method/path pair.
 
 Response object schemas are additive for consumers: parsers accept unknown
 object keys while validating known fields. Producer contract tests remain
@@ -36,7 +26,7 @@ strict against the documented current schema, and enum values remain closed.
 Every `user_key` query declares primary read consistency with no caller
 override.
 
-Framework adapters use the registry mechanics exported from
+Framework adapters use
 `@gscdump/contracts/v1/http`:
 
 - `listHttpOperations(protocol)` produces the canonical surface/operation
@@ -45,8 +35,8 @@ Framework adapters use the registry mechanics exported from
   and surface-relative path; it decodes and parses path parameters through the
   descriptor, rejects unsafe segments, and returns the canonical path.
 
-Consumer authorization stays app-owned. A browser proxy selects its explicit
-operation-ID allowlist, then passes only those entries to the resolver.
+Your application owns authorization.
+A browser proxy must pass only its allowed operations to the resolver.
 
 Consumers that only need operation metadata and paths can avoid the schema
 runtime:

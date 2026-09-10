@@ -10,13 +10,16 @@ The app supports three build-time modes through `GSCDUMP_ANALYTICS_MODE`:
 - `consumer`: requests a remote hosted origin through
   `GSCDUMP_ANALYTICS_API_BASE`.
 
-The local `layers/gsc` directory is a buildable UI fixture. The example owns
-its runtime defaults and analyzer plugin. Consumer applications own their Nuxt
-integration, views, authentication, routes, and product fallback policy.
+The local `layers/gsc` directory contains example UI and an Analyzer plugin.
+Your application owns its authentication, routes, and fallback behavior.
 
 ## Run
 
+Run from the repository root with Node.js 22 or newer:
+
 ```sh
+pnpm install
+pnpm build
 pnpm --filter @gscdump/example-nuxt-dashboard dev:local
 ```
 
@@ -31,7 +34,8 @@ GSCDUMP_PARTNER_USER_ID=...
 Use `dev:origin` or `dev:consumer` for the other modes. See
 `nuxt.config.ts` and `.env.example` for the complete configuration surface.
 
-## V1 status
+## Integration scope
 
-The example is a regression fixture. Its local components and composables are
-examples, not a shared UI contract.
+The example exercises package integration and includes legacy hosted routes.
+For a new hosted application, follow the [v1 integration guide](../../docs/guides/hosted-v1.md).
+Components and composables under `layers/gsc` belong to this example.

@@ -1,215 +1,112 @@
-# URL Indexing Management
+# URL inspection and indexing
 
-Check index status, request indexing, and track results across your site.
+Read Google's Indexing Evidence, save inspections, and manage sitemap submissions.
 
-## Check Index Status
-
-### Single URL
+## Inspect a URL
 
 ```bash
-npx @gscdump/cli inspect -s sc-domain:example.com -u https://example.com/blog/post
+gscdump inspect https://example.com/blog/post --site sc-domain:example.com --json
 ```
 
-Returns:
-- Coverage state (Indexed, Crawled, Excluded, etc.)
-- Last crawl time
-- Indexing issues
-- Mobile usability status
+The URL is positional.
+Results include Google's verdict, coverage state, last crawl, canonical URLs, and available rich-result details.
+Fields may be absent when Google has no evidence for them.
 
-### Batch Inspect
+## Inspect a batch
+
+Put one URL per line in `urls.txt`:
 
 ```bash
-# Inspect all pages in DB
-npx @gscdump/cli index inspect -s sc-domain:example.com
+gscdump inspect batch --site sc-domain:example.com --file urls.txt --concurrency 2 --json
 
-# Inspect from sitemap
-npx @gscdump/cli index inspect -s sc-domain:example.com --from-sitemap
+gscdump inspect batch --site sc-domain:example.com --from-sitemap https://example.com/sitemap.xml --json
 ```
 
-## Request Indexing
+`--from-sitemap` takes a sitemap URL and reads its URLs, including sitemap indexes.
+It does not read saved sitemap membership from the hosted API.
 
-### Single URL
+## Save inspection results
 
 ```bash
-npx @gscdump/cli index request -s sc-domain:example.com -u https://example.com/new-page
+gscdump entities inspect --site sc-domain:example.com --file urls.txt
+
+gscdump entities show https://example.com/blog/post --site sc-domain:example.com
 ```
 
-### Batch Request
+These commands save and read inspection records in the local Store.
+To save Google's notification metadata too:
 
 ```bash
-# Request indexing for URLs in DB marked as needing it
-npx @gscdump/cli index request -s sc-domain:example.com --batch
-
-# From a file
-npx @gscdump/cli index request -s sc-domain:example.com --file urls.txt
+gscdump entities indexing snapshot --site sc-domain:example.com --file urls.txt
 ```
 
-### Rate Limits
+## Send eligible indexing notifications
 
-Google's Indexing API has quotas:
-- **200 requests/day** per project
-- Batch operations respect this limit automatically
-
-## Track Status in Database
-
-Sync URL indexing status to your local DB:
+Google limits its Indexing API to pages with `JobPosting` or `BroadcastEvent` inside `VideoObject` markup.
+Complete [Google's prerequisites](https://developers.google.com/search/apis/indexing-api/v3/quickstart), including service-account access and approval.
+For other page types, use sitemaps and Search Console's URL Inspection interface.
 
 ```bash
-# Initial inspection + sync
-npx @gscdump/cli sync -s sc-domain:example.com --db ./gsc.db --indexing
+gscdump indexing submit https://example.com/jobs/frontend-engineer
+
+gscdump indexing status https://example.com/jobs/frontend-engineer
+
+gscdump indexing batch --file job-urls.txt --concurrency 1 --json
 ```
 
-This creates `site_path_indexing` table tracking:
-- Coverage state
-- Last inspected
-- Last indexing request
-- Issues
+`indexing status` reads notification metadata.
+Use `inspect` to read Google's Indexing Evidence for the URL.
 
-### Query Indexing Stats
+After removing an eligible page from your server, send its removal notification:
 
 ```bash
-npx @gscdump/cli index status -s sc-domain:example.com
+gscdump indexing remove https://example.com/jobs/expired-role
 ```
 
-Output:
+Google's initial testing quota allows 200 publish requests per project per day, shared by updates and removals.
+It resets at midnight Pacific time.
+Check your project's actual quota and approval in [Google's quota guide](https://developers.google.com/search/apis/indexing-api/v3/quota-pricing).
+
+Batch concurrency and delays control request pacing.
+The CLI does not track the project's remaining daily quota.
+
+## Manage sitemaps
+
+```bash
+gscdump sitemaps list --site sc-domain:example.com
+
+gscdump sitemaps submit https://example.com/sitemap.xml --site sc-domain:example.com
+
+gscdump sitemaps delete https://example.com/old-sitemap.xml --site sc-domain:example.com
 ```
-Indexed:     1,234 (82%)
-Crawled:       156 (10%)
-Excluded:       89 (6%)
-Error:          21 (2%)
 
-Last sync: 2024-01-15 06:00
-```
+A sitemap submission tells Google where to find URLs.
+Inspect individual URLs to see the evidence Google currently returns for them.
 
-## Programmatic Usage
+The CLI also supports hosted sitemap reads through `sitemaps current`, `history`, `membership`, `lastmod`, and `export`.
+These require a hosted Site ID and API credential.
+Use each command's `--help` for its inputs.
 
-### Inspect URLs
+## TypeScript
 
 ```ts
-import { batchInspectUrls, inspectUrl } from 'gscdump'
+import { googleSearchConsole } from 'gscdump'
 
-// Single URL
-const result = await inspectUrl(auth, 'sc-domain:example.com', 'https://example.com/page')
+const client = googleSearchConsole({ accessToken: process.env.GSC_ACCESS_TOKEN! })
+const siteUrl = 'sc-domain:example.com'
+const url = 'https://example.com/blog/post'
 
-console.log(result.inspectionResult.indexStatusResult.coverageState)
-// 'Submitted and indexed' | 'Crawled - currently not indexed' | etc.
+const result = await client.inspect(siteUrl, url)
+console.log(result.inspectionResult?.indexStatusResult?.coverageState)
 
-// Batch inspect (handles rate limiting)
-const results = await batchInspectUrls(auth, 'sc-domain:example.com', urls)
+const sitemaps = await client.sitemaps.list(siteUrl)
+console.log(sitemaps)
 ```
 
-### Request Indexing
+For ordered, per-URL results, use `batchInspectUrlsFlatSettled` from `gscdump`.
+For Bing, see [Bing Indexing Evidence](../../packages/gscdump/README.md#read-bing-indexing-evidence).
 
-```ts
-import { batchRequestIndexing, requestIndexing } from 'gscdump'
+## Next steps
 
-// Single URL
-await requestIndexing(auth, 'https://example.com/new-page')
-
-// Batch with rate limiting
-const results = await batchRequestIndexing(auth, urls, {
-  onProgress: (completed, total) => console.log(`${completed}/${total}`),
-  delayMs: 1000, // Delay between requests
-})
-```
-
-### Database Operations
-
-```ts
-import { createGscDb, getIndexingStats, getUrlsNeedingIndexing, inspectAndSyncUrl } from '@gscdump/db'
-
-const db = createGscDb('./gsc.db')
-
-// Inspect and save to DB
-await inspectAndSyncUrl(db, auth, siteId, property, '/blog/post')
-
-// Get summary stats
-const stats = await getIndexingStats(db, siteId)
-// { indexed: 1234, crawled: 156, excluded: 89, error: 21 }
-
-// Find URLs needing attention
-const needsIndexing = await getUrlsNeedingIndexing(db, siteId, {
-  states: ['Discovered - currently not indexed', 'Crawled - currently not indexed'],
-  limit: 100,
-})
-```
-
-## Sitemap Management
-
-### List Sitemaps
-
-```bash
-npx @gscdump/cli sitemaps -s sc-domain:example.com
-```
-
-### Submit Sitemap
-
-```bash
-npx @gscdump/cli sitemaps submit -s sc-domain:example.com --url https://example.com/sitemap.xml
-```
-
-### Delete Sitemap
-
-```bash
-npx @gscdump/cli sitemaps delete -s sc-domain:example.com --url https://example.com/old-sitemap.xml
-```
-
-### Programmatic
-
-```ts
-import { deleteSitemap, fetchSitemaps, submitSitemap } from 'gscdump'
-
-const sitemaps = await fetchSitemaps(auth, 'sc-domain:example.com')
-
-await submitSitemap(auth, 'sc-domain:example.com', 'https://example.com/sitemap.xml')
-```
-
-## Workflows
-
-### New Content Workflow
-
-1. Publish content
-2. Submit sitemap (if not auto-discovered)
-3. Request indexing for new URLs
-4. Monitor coverage state
-
-```bash
-# After publishing
-npx @gscdump/cli index request -s sc-domain:example.com -u https://example.com/new-post
-
-# Check status next day
-npx @gscdump/cli inspect -s sc-domain:example.com -u https://example.com/new-post
-```
-
-### Audit Workflow
-
-1. Sync all pages to DB
-2. Batch inspect coverage
-3. Identify issues
-4. Request indexing for missed pages
-
-```bash
-# Full audit
-npx @gscdump/cli sync -s sc-domain:example.com --db ./gsc.db
-npx @gscdump/cli index inspect -s sc-domain:example.com --batch
-npx @gscdump/cli index status -s sc-domain:example.com
-
-# Fix issues
-npx @gscdump/cli index request -s sc-domain:example.com --batch
-```
-
-## Coverage States
-
-| State | Meaning | Action |
-|-------|---------|--------|
-| `Submitted and indexed` | In Google's index | None needed |
-| `Crawled - currently not indexed` | Crawled but not indexed | Improve content quality |
-| `Discovered - currently not indexed` | Known but not crawled | Request indexing |
-| `Excluded by 'noindex' tag` | Intentionally excluded | Check if intentional |
-| `Blocked by robots.txt` | Can't crawl | Update robots.txt |
-| `URL is unknown to Google` | Never seen | Submit sitemap + request |
-
-## Next Steps
-
-- [Historical Database](/docs/guides/historical-database) - Track indexing over time
-- [AI Integration](/docs/guides/ai-integration) - Ask Claude about indexing status
+- [Keep historical data](./historical-database.md)
+- [Connect an AI assistant](./ai-integration.md)

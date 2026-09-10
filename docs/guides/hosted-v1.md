@@ -1,6 +1,6 @@
 # Hosted API v1 integration guide
 
-The hosted v1 API has 51 HTTP operations: 46 partner, three analytics, and two
+The hosted v1 API has 55 HTTP operations: 50 partner, three analytics, and two
 realtime HTTP operations. The HTTP wire version is `1.0`.
 
 Use these generated files to inspect exact paths, inputs, responses, scopes,
@@ -12,8 +12,7 @@ ownership rules, errors, and retry semantics:
 - [Realtime AsyncAPI](../../packages/contracts/generated/asyncapi.realtime.v1.json)
 
 The generated files come from the executable `@gscdump/contracts/v1` registry.
-The [normative contract](../hosted-api-v1.md) covers behavior shared by every
-operation.
+The [v1 contract](../hosted-api-v1.md) defines behavior shared by every operation.
 
 ## Quickstart
 
@@ -44,7 +43,7 @@ Each registered operation has a typed convenience method. You can also call
 the operation ID directly:
 
 ```ts
-const lifecycle = await gscdump.execute(
+const lifecycle = await gscdump.execute<'partner.users.lifecycle.get'>(
   'partner.users.lifecycle.get',
   { params: { userId: 'u_01' } },
 )
@@ -105,6 +104,7 @@ const gscdump = createGscdumpV1Client({
 
 const result = await gscdump.getSiteIndexing({
   params: { siteId: 's_01' },
+  query: {},
 }).catch((error: unknown) => {
   if (isGscdumpV1Error(error)) {
     console.error(error.code, error.requestId, error.retryable)
@@ -128,7 +128,7 @@ and `Vary: Authorization`.
 The host keeps one atomic 60-second fixed-window counter per authenticated
 principal and operation. Limits range from 10 to 120 requests per window. The
 [rate-limit table](../hosted-api-v1.md#rate-limits-and-lifecycle-signaling)
-lists all 51 deployed policies.
+lists all 55 operation policies.
 
 Quota-evaluated responses include `RateLimit-Policy` and `RateLimit`. On
 `429 rate_limited`, wait for the `Retry-After` duration. Treat it as
@@ -140,8 +140,8 @@ The SDK honors `Retry-After` when the operation descriptor allows a retry.
 ## Idempotency and retries
 
 The OpenAPI `x-gscdump-semantics` object records whether an operation is
-idempotent and whether the SDK may retry it. The current registry contains 47
-idempotent operations: 33 queries and 14 mutations.
+idempotent and whether the SDK may retry it. The current registry contains 51
+idempotent operations: 36 queries and 15 mutations.
 
 Four mutations are non-idempotent and use `retry: "never"`:
 
@@ -170,8 +170,7 @@ long-lived Bearer credential.
 
 1. Your server calls `realtime.tickets.create` with `{}` or the browser's exact
    registered Origin.
-2. The browser opens the returned `socketUrl` with `gscdump.v1` and the ticket
-   as the two WebSocket subprotocol values.
+2. The browser opens `socketUrl` with `gscdump.v1` and the ticket as its two WebSocket subprotocols.
 3. The client applies each durable event before it advances its cursor or
    acknowledges the event.
 4. If replay is unsafe, the client runs a full authoritative resync before it
@@ -193,6 +192,7 @@ const http = createGscdumpV1Client({
 
 const realtime = createGscdumpRealtimeV1Client({
   ticketProvider: () => http.createRealtimeTicket({ body: {} }),
+  // Implement these hooks in your application.
   applyEvent: async (event) => {
     await invalidateResources(event.changes)
   },
@@ -204,8 +204,9 @@ const realtime = createGscdumpRealtimeV1Client({
 await realtime.start()
 ```
 
-In a browser integration, make `ticketProvider` call your same-origin server
-ticket endpoint instead. See the [Realtime AsyncAPI](../../packages/contracts/generated/asyncapi.realtime.v1.json)
+This example runs on the server.
+For browsers, make `ticketProvider` call your same-origin server ticket endpoint.
+That endpoint must request a ticket with the browser's exact registered Origin. See the [Realtime AsyncAPI](../../packages/contracts/generated/asyncapi.realtime.v1.json)
 for frames and the [realtime contract](../hosted-api-v1.md#realtime-identity-and-ticket-exchange)
 for ticket, replay, ACK, resync, and close-code rules.
 
@@ -222,9 +223,9 @@ For an operation present in the generated v1 registry:
 6. Remove the compatibility call after the consumer passes against the
    deployed v1 route.
 
-Do not build new integrations on `createPartnerClient` or
-`createAnalyticsClient`. They remain temporary compatibility surfaces for
-operations not yet removed from the legacy inventory.
+Use v1 operations for new integrations.
+The legacy `createPartnerClient` and `createAnalyticsClient` exports remain in the package, but many host routes have been removed.
+Check the [producer inventory](../hosted-api-inventory.md) before relying on a legacy call.
 
 See [v1 breaking changes and migration](../v1-migration.md) for package export
 moves and the hosted client cutover.

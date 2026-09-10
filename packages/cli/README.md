@@ -4,7 +4,9 @@
 [![npm downloads](https://img.shields.io/npm/dm/@gscdump/cli?color=yellow)](https://npm.chart.dev/@gscdump/cli)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-> CLI for Google Search Console — sync to a local DuckDB/Parquet store, run typed queries, execute 29 SEO analyzers, and serve an MCP endpoint for AI assistants.
+Query Google Search Console, sync a local Parquet Store, and run SEO Analyzers or Reports.
+The package also provides the MCP server.
+Node.js 22 or newer is required.
 
 ## Install
 
@@ -17,20 +19,20 @@ npx @gscdump/cli
 ## Quick start
 
 ```bash
-# First-run setup — OAuth with Google
+# Set up Google OAuth
 gscdump init
 
 # List sites
 gscdump sites
 
-# Sync the last 28 days to a local Parquet store
-gscdump sync --site https://example.com
+# Sync 90 days to the Store
+gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries
 
-# Query the store
-gscdump query --site https://example.com --dimensions page,query --limit 50
+# Query the Store
+gscdump query --site sc-domain:example.com --dimensions page,query --limit 50
 
-# Run an analyzer
-gscdump analyze striking-distance --site https://example.com
+# Run an Analyzer
+gscdump analyze striking-distance --site sc-domain:example.com
 
 # Start the MCP server
 gscdump mcp
@@ -40,26 +42,29 @@ gscdump mcp
 
 | Command | Description |
 |---|---|
-| `init` | Full setup (OAuth + dataDir; offers to write a `.env` for portability) |
+| `init` | Full setup (OAuth + dataDir; offers to write a `.env` for later use) |
 | `auth` | Manage authentication (`status`, `login`, `logout`, `refresh`) |
 | `config` | Manage CLI configuration (`show`, `set`, `unset`, `path`, `validate`) |
 | `doctor` | Health checks: auth, scopes, dataDir writability, API reachability |
 | `sites [--owner-only] [--with-sitemaps]` | List available GSC sites |
-| `sites add <url>` / `sites delete <url> [--yes]` | Register / remove a property in Search Console (add registers in unverified state) |
+| `sites add <url>` / `sites delete <url> [--yes]` | Register or remove a Site in Search Console (add registers in unverified state) |
 | `sites verify-token <url> [--method]` / `sites verify <url> [--method]` | Get a verification token, then trigger ownership verification (META/FILE/DNS_TXT/DNS_CNAME/ANALYTICS/TAG_MANAGER) |
-| `sitemaps` | GSC CRUD, explicit live probes, and hosted canonical reads (`current`, `history`, `membership`, `lastmod`, `export`) |
-| `inspect <url>` / `inspect batch [--concurrency]` | URL inspection (single URL or batch from file/stdin); renders index status, rich results, and AMP |
-| `indexing` | Notify Google about URL changes (`submit`, `remove`, `status`, `batch [--concurrency] [--yes]`); supports `--retries` |
-| `sync` | Sync GSC data to the local Parquet store; `--retry-failed`, `--dry-run` |
-| `query` | Run a search analytics query (local store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. |
-| `dump` | Export from the store to a directory (`--format parquet\|json\|ndjson\|csv`, `--tables`, `--all-sites`) |
-| `analyze <tool>` | Run an SEO analyzer against the store (`--live` for row-based against fresh API) |
+| `sitemaps` | List, submit, or delete Google sitemaps; probe live URLs; read hosted snapshots (`current`, `history`, `membership`, `lastmod`, `export`) |
+| `inspect <url>` / `inspect batch [--concurrency]` | URL inspection (single URL or batch from file/stdin); renders Indexing Evidence, rich results, and AMP |
+| `indexing` | Notify Google about URL changes (`submit`, `remove`, `status`, `batch`, `batch-status`, `quota`); supports `--retries` |
+| `sync` | Sync GSC data to the local Parquet Store; `--retry-failed`, `--dry-run` |
+| `query` | Run a search analytics query (Store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. |
+| `dump` | Export from the Store to a directory (`--format parquet\|json\|ndjson\|csv`, `--tables`, `--all-sites`) |
+| `analyze <tool>` | Run an SEO Analyzer against the Store (`--live` for row-based against fresh API) |
 | `entities` | Snapshot URL inspections and indexing metadata into the local entity store |
 | `store stats` | Show row/byte counts per table and on-disk footprint |
-| `store compact` | Roll daily partitions older than N days into monthly files (`--dry-run`) |
+| `store compact` | Compact older data into weekly, monthly, and quarterly tiers (`--dry-run`) |
 | `store gc` | Delete orphaned objects past the grace window (`--dry-run`) |
 | `store export` | Export the live store to a single `.duckdb` file |
+| `store rm-site` / `store reset` | Delete one Site's data or reset the Store; inspect `--help` before use |
 | `store rollups rebuild` | Rebuild post-sync rollup tables |
+| `report <id>` / `report list` | Run or list Reports; `--explain` previews a plan |
+| `profile` | Create, select, list, or delete credential profiles |
 | `mcp` | Start the MCP server for AI assistants |
 
 ### Filter expressions
@@ -99,46 +104,51 @@ gscdump query --live --site sc-domain:example.com \
 
 - `--no-color` / `NO_COLOR` env: strip ANSI from stdout (stderr keeps colour for interactive use).
 - `--config-dir <path>` / `GSCDUMP_CONFIG_DIR`: override `~/.config/gscdump`.
-- `--profile <name>` / `GSCDUMP_PROFILE`: scope tokens + config to a profile under `~/.config/gscdump/profiles/<name>` (juggle multiple GSC accounts).
+- `--profile <name>` / `GSCDUMP_PROFILE`: separate tokens and config to a profile under `~/.config/gscdump/profiles/<name>` (separate Google credentials).
+- Most commands accept `--quiet` and `--json` for scripts. The `query` command uses `--format json` instead.
 
-- Most commands accept `--quiet` and `--json` for scripted use; `logger` writes to stderr so `--json` output is safe to pipe.
-
-Use `query --profile` for query timings. Use `--profile <name>` to select an account profile.
+Use `query --profile` for query timings. Use `--profile <name>` to select a credential profile.
 Numeric flags reject fractions, negative counts, and text suffixes.
 Saved config rejects invalid values and unknown keys. If parsing fails, fix the reported file.
 
 ## Analyzers
 
-`gscdump analyze <tool>` dispatches to `@gscdump/analysis`. 21 tools available:
+`gscdump analyze <tool>` runs one of 29 Analyzers from `@gscdump/analysis`.
+See the [full list](../../README.md#analyzers) and [Source support](../analysis/README.md#sources).
 
-**Core SEO:** `striking-distance`, `opportunity`, `movers`, `decay`, `zero-click`, `brand`, `cannibalization`
+Each Analyzer accepts `--site`, `--start`, `--end`, `--limit`, and output flags.
+`movers` and `decay` also accept `--prev-start` and `--prev-end`.
+Use `gscdump analyze <tool> --help` for additional options.
 
-**Statistical:** `ctr-anomaly`, `position-volatility`, `bayesian-ctr`, `stl-decompose`, `change-point`, `survival`
-
-**Structural:** `long-tail`, `intent-atlas`, `query-migration`, `clustering`, `concentration`, `seasonality`, `trends`, `bipartite-pagerank`
-
-Each analyzer accepts `--site`, date range flags, and tool-specific options (see `gscdump analyze <tool> --help`). Pass `--live` to bypass the local store and run against fresh GSC API results.
+The CLI requires local data unless you pass `--live`.
+Pass `--live` to use Google explicitly.
+SQL-only Analyzers require local data.
 
 ## Sync
 
 ```bash
-# Default: sync the last 7 days, skipping dates already marked done
-gscdump sync --site https://example.com
+# Default: three days ending three days ago; skip completed dates
+gscdump sync --site sc-domain:example.com --tables pages,queries,page_queries,countries
 
-# Backfill the full 450-day history
-gscdump sync --site https://example.com --full
+# Backfill from 450 days ago to three days ago
+gscdump sync --site sc-domain:example.com --full --tables pages,queries,page_queries,countries
 
 # Custom range
-gscdump sync --site https://example.com --start 2024-01-01 --end 2024-01-31
+gscdump sync --site sc-domain:example.com --start 2026-08-01 --end 2026-08-31 \
+  --tables pages,queries,page_queries,countries
 
-# Check status — watermarks + pending/inflight/done/failed counts
-gscdump sync --site https://example.com --status
+# Check sync state and watermarks
+gscdump sync --site sc-domain:example.com --status
 
-# Parallel table fetches
-gscdump sync --site https://example.com --concurrency 4
+# Limit concurrent day requests per table
+gscdump sync --site sc-domain:example.com --concurrency 4 \
+  --tables pages,queries,page_queries,countries
 ```
 
-Sync is idempotent. Cross-process locking protects concurrent `sync`/`compact`/`gc` runs. Pagination walks past GSC's 25k-row-per-request cap automatically.
+The explicit table list avoids the current [daily totals sync limitation](../../docs/guides/historical-database.md#stored-tables).
+Sync skips completed dates; `--force` refreshes them.
+Cross-process locks coordinate `sync`, `compact`, and `gc`.
+Pagination follows Google's 25,000-row pages, subject to [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data).
 
 ## MCP server
 
@@ -155,7 +165,7 @@ Add to your Claude / VS Code config:
   "mcpServers": {
     "gscdump": {
       "command": "npx",
-      "args": ["@gscdump/cli", "mcp"]
+      "args": ["-y", "@gscdump/cli", "mcp"]
     }
   }
 }
@@ -164,7 +174,7 @@ Add to your Claude / VS Code config:
 Then ask questions like:
 
 - "What pages lost traffic this week?"
-- "Find keywords in striking distance (position 4-20)."
+- "Find queries in striking distance (positions 4 to 20)."
 - "Which queries have cannibalization issues?"
 - "Compare this month vs last month for /blog/ pages."
 
@@ -187,21 +197,22 @@ Skip `init` entirely by setting env vars. Either path works (`GSC_*` preferred, 
 # Option A: raw bearer token (e.g., from gcloud or another OAuth flow)
 export GSC_ACCESS_TOKEN=ya29...
 
-# Option B: refresh-token flow (no google-auth-library dep used)
+# Option B: refresh-token flow (OAuth refresh credentials)
 export GSC_CLIENT_ID=...
 export GSC_CLIENT_SECRET=...
 export GSC_REFRESH_TOKEN=...
 ```
 
-When BYOK is detected, `gscdump auth status` reports `byok` as the source and `gscdump auth login` is a no-op.
+`gscdump auth status` shows which credential source is active.
+`auth login` skips OAuth when it finds BYOK credentials.
 
 ### Service account
 
-For CI / headless usage, point `gscdump` at a service-account JSON key. The service account must be granted access to each property in Search Console (Settings → Users and permissions).
+For CI / headless usage, point `gscdump` at a service-account JSON key. Grant the service account access to each Site in Search Console under Settings → Users and permissions.
 
 ```bash
 gscdump auth login --service-account ./gsc-sa.json   # smoke-test the key
-export GOOGLE_APPLICATION_CREDENTIALS=$(realpath ./gsc-sa.json)
+export GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/gsc-sa.json
 gscdump sites
 ```
 
@@ -214,11 +225,17 @@ gscdump auth login --no-browser
 # → opens a verification URL on any device; type the displayed user code
 ```
 
+The device-code flow requires a Google OAuth client and scopes that support this flow.
+If Google rejects the flow, use a refresh token or service account.
+
+Indexing notifications apply only to eligible job or livestream pages.
+See [URL inspection and indexing](../../docs/guides/url-indexing.md).
+
 ## Related
 
-- [`gscdump`](../gscdump) — Core library: GSC API client + query builder + analytics pipeline.
-- [`@gscdump/engine`](../engine) — Storage engine the CLI syncs into.
-- [`@gscdump/analysis`](../analysis) — SEO analyzers (row-based + DuckDB-native).
+- [`gscdump`](../gscdump) : Google and Bing clients with a typed query builder.
+- [`@gscdump/engine`](../engine) : Storage engine the CLI syncs into.
+- [`@gscdump/analysis`](../analysis) : SEO Analyzers (row-based + DuckDB-native).
 
 ## License
 

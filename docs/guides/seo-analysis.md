@@ -1,203 +1,130 @@
-# SEO Analysis Playbook
+# SEO analysis
 
-gscdump includes built-in analysis functions for common SEO tasks. Each analysis returns deterministic evidence.
+Use a Report for a question that needs several Analyzers.
+Use `analyze` when you want one Analyzer's results.
 
-## Available Analyses
-
-| Analysis | What It Finds |
-|----------|---------------|
-| `striking-distance` | Keywords ranking 4-20 with high impressions |
-| `opportunity` | Keywords with best optimization potential |
-| `movers` | Significant ranking/traffic changes |
-| `decay` | Pages losing traffic over time |
-| `cannibalization` | Multiple pages competing for same keyword |
-| `zero-click` | High-impression queries with low CTR |
-
-## Striking Distance Keywords
-
-Find keywords almost on page 1 - small improvements yield big gains.
+## Prepare data
 
 ```bash
-npx @gscdump/cli analyze striking-distance -s sc-domain:example.com
+gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries
 ```
 
-**What it finds:** Keywords in positions 4-20 with high impressions but few clicks.
+The CLI reads the Store by default.
+If no local data is available, sync first or pass `--live`.
+Live Sources support Analyzers with row plans; SQL-only Analyzers need stored data.
 
-**Evidence:** Position, impressions, clicks, and potential clicks by query.
+## Start with a Report
 
-### Programmatic
+```bash
+gscdump report list
+gscdump report opportunities --site sc-domain:example.com --json
+gscdump report movers --site sc-domain:example.com --period 28d --vs prev-period --json
+```
+
+Reports return a `ReportResult` with bounded Sections and next steps.
+Use `--explain` to inspect a Report plan without authentication or data access.
+
+```bash
+gscdump report triage --target /blog/post --target-kind page --explain
+gscdump report pre-publish --topic widgets --explain
+```
+
+See the [Report list](../../README.md#reports) for default windows and required inputs.
+
+## Run one Analyzer
+
+| Analyzer | What to look for |
+| --- | --- |
+| `striking-distance` | Queries in positions 4 to 20 with low CTR and enough impressions |
+| `opportunity` | Queries ranked by position, impressions, and CTR gap |
+| `movers` | Queries gaining or losing traffic between two periods |
+| `decay` | Pages losing clicks between two periods |
+| `cannibalization` | Multiple pages receiving impressions for the same query |
+| `zero-click` | Queries with high impressions and low CTR |
+| `concentration` | Traffic concentrated in a few pages or queries |
+
+These results identify candidates for review.
+They do not establish why traffic changed or guarantee gains from an edit.
+
+```bash
+gscdump analyze striking-distance --site sc-domain:example.com --json
+gscdump analyze cannibalization --site sc-domain:example.com --json
+gscdump analyze zero-click --site sc-domain:example.com --json
+gscdump analyze brand --site sc-domain:example.com --brand-terms 'acme,acme corp' --json
+```
+
+Use `--start` and `--end` for Analyzer date ranges.
+For `movers` and `decay`, provide comparison dates too:
+
+```bash
+gscdump analyze decay --site sc-domain:example.com \
+  --start 2026-08-01 --end 2026-08-28 --prev-start 2026-07-04 --prev-end 2026-07-31 --json
+```
+
+`--period` and `--vs` belong to `report`.
+Check `gscdump analyze <tool> --help` for each Analyzer's supported flags.
+
+## Analyze rows in TypeScript
+
+Install the analysis package:
+
+```bash
+npm install @gscdump/analysis
+```
 
 ```ts
-import { analyzeStrikingDistance, fetchKeywordsWithComparison } from 'gscdump'
+import { analyzeStrikingDistance } from '@gscdump/analysis'
 
-const { current } = await fetchKeywordsWithComparison(auth, site, range)
-const striking = analyzeStrikingDistance(current, {
+const rows = [{
+  query: 'example query',
+  page: 'https://example.com/docs',
+  clicks: 5,
+  impressions: 1000,
+  ctr: 0.005,
+  position: 8,
+}]
+
+const results = analyzeStrikingDistance(rows, {
   minPosition: 4,
   maxPosition: 20,
   minImpressions: 100,
 })
 
-// Returns: { keyword, page, position, impressions, clicks, potential }[]
+console.log(results[0]?.keyword, results[0]?.potentialClicks)
 ```
 
-## Content Decay Detection
+The existing result field is named `keyword`; it contains the query text.
+`potentialClicks` estimates clicks at a fixed 15% CTR.
+It is a heuristic, not a traffic forecast.
 
-Find pages that were performing well but are now declining.
+## Analyze live data in TypeScript
 
 ```bash
-npx @gscdump/cli analyze decay -s sc-domain:example.com --period 90d
+npm install @gscdump/analysis @gscdump/engine @gscdump/engine-gsc-api gscdump
 ```
-
-**What it finds:** Pages with significant traffic drops vs previous period.
-
-**Evidence:** Current clicks, prior clicks, and percentage change by Page.
-
-### Programmatic
 
 ```ts
-import { analyzeDecay, fetchPagesWithComparison } from 'gscdump'
+import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
+import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
+import { runAnalyzerFromSource } from '@gscdump/engine/analyzer'
+import { googleSearchConsole } from 'gscdump'
 
-const { current, previous } = await fetchPagesWithComparison(auth, site, range)
-const decaying = analyzeDecay(current, previous, {
-  minClicksChange: -20, // Lost at least 20 clicks
-  minChangePercent: -0.2, // 20%+ decline
-})
+const client = googleSearchConsole({ accessToken: process.env.GSC_ACCESS_TOKEN! })
+const source = createGscApiQuerySource({ client, siteUrl: 'sc-domain:example.com' })
 
-// Returns: { page, currentClicks, previousClicks, changePercent }[]
-```
-
-## Keyword Cannibalization
-
-Find keywords where multiple pages compete against each other.
-
-```bash
-npx @gscdump/cli analyze cannibalization -s sc-domain:example.com
-```
-
-**What it finds:** Keywords ranking for 2+ pages, splitting your authority.
-
-**Evidence:** Competing Pages, impressions, clicks, and traffic share by query.
-
-### Programmatic
-
-```ts
-import { analyzeCannibalization } from 'gscdump'
-
-// Requires keyword×page data
-const cannibalized = analyzeCannibalization(keywordPageData, {
-  minPages: 2,
-  minImpressions: 50,
-})
-
-// Returns: { keyword, pages: [{ url, position, clicks }], impactScore }[]
-```
-
-## Movers & Shakers
-
-Track significant ranking changes - both winners and losers.
-
-```bash
-npx @gscdump/cli analyze movers -s sc-domain:example.com --period 28d
-```
-
-**What it finds:** Keywords/pages with biggest position or traffic changes.
-
-**Evidence:** Current and prior position, clicks, and impressions by Page and query.
-
-### Programmatic
-
-```ts
-import { analyzeMovers, fetchKeywordsWithComparison } from 'gscdump'
-
-const { current, previous } = await fetchKeywordsWithComparison(auth, site, range)
-const movers = analyzeMovers(current, previous, {
-  minPositionChange: 5,
-  minClicksChange: 10,
-})
-
-// Returns: { keyword, currentPosition, previousPosition, positionChange, ... }[]
-```
-
-## Zero-Click Queries
-
-Find queries getting impressions but no clicks - SERP features may be stealing traffic.
-
-```bash
-npx @gscdump/cli analyze zero-click -s sc-domain:example.com
-```
-
-**What it finds:** High-impression queries with CTR below threshold.
-
-**Evidence:** Impressions, position, and click-through rate for zero-click queries.
-
-### Programmatic
-
-```ts
-import { analyzeZeroClick, fetchKeywordsWithComparison } from 'gscdump'
-
-const { current } = await fetchKeywordsWithComparison(auth, site, range)
-const zeroClick = analyzeZeroClick(current, {
+const result = await runAnalyzerFromSource(source, {
+  type: 'striking-distance',
+  startDate: '2026-08-01',
+  endDate: '2026-08-28',
   minImpressions: 100,
-  maxCtr: 0.01, // Less than 1% CTR
-})
+}, defaultAnalyzerRegistry)
+
+console.log(result.results)
 ```
 
-## Opportunity Scoring
+For SQL and browser examples, see [`@gscdump/analysis`](../../packages/analysis/README.md).
 
-Composite score ranking keywords by optimization potential.
+## Next steps
 
-```bash
-npx @gscdump/cli analyze opportunity -s sc-domain:example.com
-```
-
-Factors in: position (room to improve), impressions (search volume), CTR gap (vs expected).
-
-## Traffic Concentration
-
-Check if you're over-reliant on few pages/keywords.
-
-```ts
-import { analyzeKeywordConcentration, analyzePageConcentration } from 'gscdump'
-
-const pageConcentration = analyzePageConcentration(pages)
-const keywordConcentration = analyzeKeywordConcentration(keywords)
-
-// HHI thresholds:
-// < 1500: Low risk (well distributed)
-// 1500-2500: Medium risk
-// > 2500: High risk (over-reliance)
-```
-
-## Combining Analyses
-
-Run multiple analyses for a complete audit:
-
-```ts
-import {
-  analyzeCannibalization,
-  analyzeDecay,
-  analyzeMovers,
-  analyzeStrikingDistance,
-  fetchKeywordsWithComparison,
-  fetchPagesWithComparison,
-} from 'gscdump'
-import { daysAgo, today } from 'gscdump/query'
-
-const range = { period: { start: daysAgo(90), end: today() } }
-
-const [keywords, pages] = await Promise.all([
-  fetchKeywordsWithComparison(auth, site, range),
-  fetchPagesWithComparison(auth, site, range),
-])
-
-const audit = {
-  striking: analyzeStrikingDistance(keywords.current),
-  decay: analyzeDecay(pages.current, pages.previous),
-  movers: analyzeMovers(keywords.current, keywords.previous),
-}
-```
-
-## Next Steps
-
-- [AI Integration](/docs/guides/ai-integration) - Ask Claude to run analyses
-- [Historical Database](/docs/guides/historical-database) - Run analysis on historical data
+- [Keep historical data](./historical-database.md)
+- [Connect an AI assistant](./ai-integration.md)

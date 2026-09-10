@@ -1,8 +1,8 @@
 # v1 breaking changes and migration
 
-Audience: the two consumers (`gscdump.com`, `nuxtseo.com`) and CLI/MCP users.
-Both consumers were migrated in lockstep with these changes; this records what
-changed and why for the v1 release notes.
+Use this guide when updating package imports, CLI scripts, or a hosted integration.
+The API wire version is `1.0`, separate from npm package versions.
+Check each consumer against the deployed host before removing its legacy calls.
 
 ## Removed export subpaths
 
@@ -40,12 +40,11 @@ package's emitted `dist` layout (ADR-0012).
 
 Focused utility imports are now available at `@gscdump/engine/entity-keys`,
 `@gscdump/lakehouse/bigint`, `@gscdump/lakehouse/schema`, and
-`@gscdump/analysis/source`. The SDK root remains a compatibility aggregate;
-new code should use its documented domain subpaths.
+`@gscdump/analysis/source`. The SDK root has no export.
+Use `@gscdump/sdk/v1` for hosted calls or a documented helper subpath.
 
-The SQLite names are a hard rename without deprecated aliases: the factory
-creates an `AnalysisQuerySource`, not a storage engine. The lakehouse move
-keeps stable application maintenance separate from raw Icebird primitives.
+The SQLite factory creates an `AnalysisQuerySource`; its old names have no aliases.
+The lakehouse maintenance subpath contains supported cleanup and retry helpers.
 
 ## Runtime and package-family baseline
 
@@ -55,9 +54,6 @@ keeps stable application maintenance separate from raw Icebird primitives.
 - DuckDB-WASM development is pinned to `1.33.1-dev57.0`, matching the production
   consumer. The optional peer range is `^1.33.1-dev57.0`, which accepts that
   tested build and compatible stable 1.x releases.
-- The release lockfile forces Hono `4.12.31` so the CLI dependency graph does
-  not retain the vulnerable `4.12.23` release.
-
 ## Canonical package ownership
 
 - `gscdump` owns direct Google Search Console, Indexing, Site Verification,
@@ -97,8 +93,8 @@ methods.
   with new `QueryError` kind `'invalid-filter'`
   (`queryErrors.malformedFilterLeaf()`). Hosts map that error to a 4xx instead
   of maintaining local hardening wrappers.
-- `@gscdump/sdk/archetype` `builderStateToArchetype(siteId, state, opts?)`: the single
-  fail-closed BuilderState→ArchetypeQuery compiler (returns `null` for
+- `@gscdump/sdk/archetype` `builderStateToArchetype(siteId, state, opts?)`: the shared
+  BuilderState-to-ArchetypeQuery compiler (returns `null` for
   unrepresentable predicates; previously duplicated in both consumers with
   divergent drop semantics). Also `extractWireDateRange`,
   `archetypeSeamSupportsQuery`.
@@ -143,21 +139,36 @@ methods.
   comparison queries deliberately ignore it so lost/declining rows remain
   observable.
 
-## Hosted v1 posture
+## Hosted v1 operations
 
-The public v1 surface has 51 accepted operations on `@gscdump/contracts/v1`
-and `@gscdump/sdk/v1`: 46 partner, three analytics, and two realtime HTTP
-operations. The API wire version remains `1.0`; the checked-in package version
-is `1.4.11`. See the [generated OpenAPI files](../packages/contracts/generated)
+The public v1 registry has 55 HTTP operations on `@gscdump/contracts/v1`
+and `@gscdump/sdk/v1`: 50 partner, three analytics, and two realtime HTTP
+operations. The API wire version remains `1.0`. See the [generated OpenAPI files](../packages/contracts/generated)
 for the exact registry and the
 [hosted v1 integration guide](./guides/hosted-v1.md) for consumer setup.
 
-Legacy `createPartnerClient` / `createAnalyticsClient` remain for the
-enumerated compatibility remainder. Deletion stays gated on operation
-promotion or host-private classification.
+Legacy `createPartnerClient` and `createAnalyticsClient` exports remain, but many corresponding host routes have been removed.
+Use the [producer inventory](./hosted-api-inventory.md) to check individual operations.
 
-## Consumer note
+## CLI and MCP migration
 
-Both consumer repos temporarily override `@gscdump/*` to local links against
-the local package checkout for pre-release verification. Remove those
-overrides (restore catalog semver) when v1 publishes.
+| Earlier usage | Current usage |
+| --- | --- |
+| `npx gscdump` | `npx -y @gscdump/cli` |
+| `@gscdump/mcp` | `gscdump mcp` from `@gscdump/cli` |
+| `sync --db` | `config set dataDir`, then `sync` into a Parquet Store |
+| `dump --period` or `dump --dimensions` | `query --start ... --end ... --dimensions ... --output ...` |
+| `index request` | `indexing submit <url>` for eligible URLs |
+| `inspect -u <url>` | `inspect <url>` |
+| Analysis imports from `gscdump` | `@gscdump/analysis` or its registry and Report subpaths |
+
+These are command replacements, not a SQLite data migration.
+Back up old files before changing your data workflow.
+See [getting started](./guides/getting-started.md) and [historical data](./guides/historical-database.md).
+Indexing notifications must meet [Google's eligibility requirements](./guides/url-indexing.md#send-eligible-indexing-notifications).
+
+## Consumer checks
+
+If a consumer uses local workspace links, verify it with published package versions before release.
+Test the operation's authentication, inputs, response parsing, and failure handling against the deployed host.
+For browsers, also verify the proxy and realtime ticket flow.

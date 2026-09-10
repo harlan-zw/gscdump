@@ -1,106 +1,97 @@
-# Getting Started
+# Getting started
 
-Export your first Google Search Console data in under 5 minutes.
+Install the CLI, connect Google Search Console, then query live data or sync it to a local Store.
 
 ## Prerequisites
 
-- Node.js 22+
-- Access to at least one Google Search Console property
+- Node.js 22 or newer.
+- Access to a Site in Google Search Console.
+- Your own Google OAuth credentials, access token, or service-account key.
 
-## Quick Setup
-
-```bash
-# Run the init wizard
-npx @gscdump/cli init
-```
-
-You'll be prompted to choose an auth mode:
-
-| Mode | Best For |
-|------|----------|
-| **Cloud** | Quick setup, no API keys needed |
-| **Local** | Full control, your own OAuth credentials |
-
-### Cloud Mode (Recommended)
-
-Select "cloud" and follow the browser auth flow. Done.
-
-### Local Mode
-
-1. Create a [Google Cloud project](https://console.cloud.google.com/)
-2. Enable "Search Console API" and "Web Search Indexing API"
-3. Create OAuth2 credentials (Desktop app type)
-4. Run `npx @gscdump/cli init` and paste your credentials
-
-## List Your Sites
+## Install and authenticate
 
 ```bash
-npx @gscdump/cli sites
+npm install -g @gscdump/cli
+gscdump init
 ```
 
-Output:
-```
-sc-domain:example.com
-https://example.com/
-https://staging.example.com/
-```
+The `gscdump` npm package contains the library. Install `@gscdump/cli` to get the `gscdump` command.
+You can also run any command with `npx -y @gscdump/cli`.
 
-## Export Data
+For OAuth setup:
 
-### Quick Dump (stdout)
+1. Create a [Google Cloud project](https://console.cloud.google.com/).
+2. Enable the Search Console API.
+3. Create OAuth credentials with the Desktop app type.
+4. Run `gscdump init`, choose a Store directory, and enter your credentials.
+5. Complete Google sign-in.
+
+If you already have an access token, set `GSC_ACCESS_TOKEN` and skip `init`.
+For refresh tokens and service accounts, see [CLI authentication](../../packages/cli/README.md#auth).
 
 ```bash
-# Last 7 days of page data
-npx @gscdump/cli dump --site sc-domain:example.com --period 7d
-
-# Last 28 days of keywords
-npx @gscdump/cli dump --site sc-domain:example.com --period 28d --dimensions keywords
+export GSC_ACCESS_TOKEN=ya29.example
+gscdump auth status
+gscdump sites
 ```
 
-### Export to File
+Use the exact Site value returned by `sites`, such as `sc-domain:example.com` or `https://example.com/`.
+
+## Query live data
 
 ```bash
-# JSON
-npx @gscdump/cli dump -s sc-domain:example.com -p 90d -o ./export.json
-
-# CSV
-npx @gscdump/cli dump -s sc-domain:example.com -p 90d -f csv -o ./export.csv
+gscdump query --live --site sc-domain:example.com --dimensions page,query --limit 1000
 ```
 
-### Multiple Dimensions
+By default, `query` starts 31 days ago and ends three days ago.
+Use `--start` and `--end` for a specific range.
+Dimension names are singular: `page`, `query`, `date`, `country`, and `device`.
 
 ```bash
-# Pages + keywords + devices
-npx @gscdump/cli dump -s sc-domain:example.com -d pages,keywords,devices
+gscdump query --live --site sc-domain:example.com \
+  --dimensions page,query --start 2026-08-01 --end 2026-08-31 --format csv --output ./search-analytics.csv
 ```
 
-## Period Formats
-
-| Format | Meaning |
-|--------|---------|
-| `7d` | Last 7 days |
-| `28d` | Last 28 days |
-| `90d` | Last 90 days |
-| `2024-01-01:2024-01-31` | Specific date range |
-| `lastMonth` | Previous calendar month |
-| `lastWeek` | Previous calendar week |
-
-## Set Defaults
-
-Avoid repeating flags:
+## Sync and query the Store
 
 ```bash
-npx @gscdump/cli config set defaultSite sc-domain:example.com
-npx @gscdump/cli config set defaultPeriod 90d
+gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries
+gscdump query --site sc-domain:example.com --dimensions page --limit 1000
 ```
 
-Now just run:
+Sync writes Parquet files to `~/.gscdump/data` unless you chose another directory.
+Later queries read those files by default.
+The explicit table list avoids the current `dates` sync limitation described in [Store setup](./historical-database.md#stored-tables).
+Google still controls which rows its API returns; pagination cannot recover omitted data.
+See [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data).
+
+## Export stored data
+
 ```bash
-npx @gscdump/cli dump
+# Copy Parquet files to a directory
+gscdump dump --site sc-domain:example.com --out ./export
+
+# Export the pages table as CSV files
+gscdump dump --site sc-domain:example.com --tables pages --format csv --out ./export-csv
 ```
 
-## Next Steps
+`dump` exports data already in the Store.
+Use `query --output` to write a filtered result to one file.
 
-- [Build a Historical Database](/docs/guides/historical-database) - Persist data to SQLite
-- [SEO Analysis](/docs/guides/seo-analysis) - Find optimization opportunities
-- [AI Integration](/docs/guides/ai-integration) - Let Claude query your data
+## Set defaults
+
+```bash
+gscdump config set defaultSite sc-domain:example.com
+gscdump config set dataDir /absolute/path/to/gsc-data
+gscdump config show
+```
+
+After setting `defaultSite`, you can omit `--site`.
+Changing `dataDir` selects a directory; it does not move existing files.
+
+## Next steps
+
+- [Keep historical data](./historical-database.md)
+- [Run SEO Analyzers and Reports](./seo-analysis.md)
+- [Connect an AI assistant](./ai-integration.md)
+- [Inspect URLs and manage sitemaps](./url-indexing.md)

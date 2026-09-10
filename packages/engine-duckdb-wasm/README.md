@@ -4,11 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/@gscdump/engine-duckdb-wasm?color=yellow)](https://npm.chart.dev/@gscdump/engine-duckdb-wasm)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-> DuckDB-WASM engine adapter for `@gscdump/analysis` — typed browser analytics against parquet via R2.
-
-In-browser DuckDB-WASM connection with attached tables, queried through an `AnalysisQuerySource`. Ships a vendored, stripped-down drizzle-orm DuckDB-WASM adapter (~240 LoC, adapted from `@proj-airi/drizzle-duckdb-wasm`, MIT). Transactions throw — analytics workload is read-only.
-
-Bundle: **10.3 kB / 2.72 kB gzipped**. `@duckdb/duckdb-wasm` is an optional peer dep.
+Run DuckDB queries and Analyzers over Parquet files in the browser.
 
 ## Install
 
@@ -16,7 +12,7 @@ Bundle: **10.3 kB / 2.72 kB gzipped**. `@duckdb/duckdb-wasm` is an optional peer
 npm install @gscdump/engine-duckdb-wasm @duckdb/duckdb-wasm
 ```
 
-## Usage
+## Query Parquet URLs
 
 ```ts
 import {
@@ -29,60 +25,63 @@ const { db, conn } = await bootDuckDBWasm()
 await attachParquetUrlTables({
   db,
   conn,
-  tables: [{ table: 'queries', urls: ['/r2/queries.parquet'] }],
+  tables: [{ table: 'queries', urls: ['https://example.com/data/queries.parquet'] }],
+  maxFiles: 10,
+  maxBytes: 50_000_000,
 })
 
 const runner = await createInsightRunner({ db, conn })
 const client = await runner.client
 const rows = await client.query('SELECT query, clicks, impressions FROM queries LIMIT 50')
+console.log(rows)
+await runner.close()
+await db.terminate()
 ```
 
-## Browser Parquet Attachment Strategy
+Replace the URL with a Parquet file containing the expected table columns, including `date`.
+The endpoint must support browser access and byte-range reads.
 
-`attachParquetUrlTables()` uses URL registration with DuckDB-WASM's HTTP file
-reader rather than downloading parquet objects into JS memory. Each exact-object
-URL is preflighted with `HEAD`; if the endpoint does not support `HEAD`, the
-runtime performs a one-byte `Range: bytes=0-0` probe. Attachment fails closed
-unless the response proves `Content-Length` / `Content-Range` and byte-range
-support.
+## Attachment and caching
 
-The runtime keeps local guards independent of the server response:
-`maxFiles`, `maxBytes`, `fetchConcurrency`, and `AbortSignal` are enforced
-before registering files. `bootDuckDBWasm()` opens DuckDB with full HTTP reads
-disabled, so a server that cannot satisfy range reads routes to server-side
-fallback instead of causing broad browser object downloads.
+`attachParquetUrlTables` registers URLs with DuckDB's HTTP reader.
+It supports `maxFiles`, `maxBytes`, `fetchConcurrency`, and `signal` limits.
 
-OPFS (`attachOpfsParquetTables` et al., in `src/opfs.ts`) is the primary
-write-through parquet cache: attached snapshot files persist keyed by
-manifest `contentHash`/object key, gated by the same file/byte budgets before
-anything is materialized locally.
+Preflight uses `HEAD`, with a one-byte range probe when needed.
+Trusted URL size hints can skip preflight by default; set `trustSizeHint: false` to require endpoint checks.
+The default HTTP mode disables full-file fallback reads.
+Handle attachment failures in your application if you want to offer server queries instead.
 
-### Attaching parquet as analyzer sources
+`fetchInit` applies to preflight requests only.
+DuckDB's own range reads need URLs that work without custom request headers.
 
-Per [ADR-0001](../../docs/adr/0001-browser-engine-uses-attached-tables.md), the
-browser engine dispatches over attached parquet tables (`createAttachedTableSource`
-from `@gscdump/engine/source`, wired up inside `createBrowserAnalysisRuntime`),
-not a canonical-schema `SqlQuerySource`. An earlier `createEngine()` wrapping the
-canonical-schema path had zero callers and was deleted in 2026-05 — don't
-reintroduce it; extend `createAttachedTableSource` or the attach helpers below
-instead.
+Use `attachOpfsParquetTables` to cache snapshot files in the browser's Origin Private File System.
+Its file and byte limits apply before download.
+Use `estimateOpfsStorage`, `requestPersistentStorage`, and `clearOpfsSnapshotCache` to manage that cache.
+
+## Analyzers
+
+`createBrowserAnalysisRuntime` runs Analyzers against attached tables.
+See [`@gscdump/analysis`](../analysis/README.md#duckdb-and-browser-use) and
+[ADR-0001](../../docs/adr/0001-browser-engine-uses-attached-tables.md) for the Source contract.
+
+The package includes a vendored Drizzle adapter for typed queries.
+Transactions are unsupported.
 
 ## Exports
 
-- `createInsightRunner({ db, conn })` — drizzle-orm handle for typed `.select()` / window functions, with `sql\`...\`` raw escape hatch.
-- `bootDuckDBWasm()` / `attachParquetTables()` / `attachParquetUrlTables()` / `createBrowserAnalysisRuntime()` — browser runtime primitives.
-- `attachOpfsParquetTables()` / `readOpfsSnapshotFile()` / `estimateOpfsStorage()` / `requestPersistentStorage()` / `clearOpfsSnapshotCache()` — OPFS-backed parquet cache.
-- `scopeFor(table, { siteId, window })` / `mergeScope()` — tenant scope predicates.
-- `pages` / `queries` / `page_queries` / `countries` / `dates` / `hourly_pages` / `schema` — drizzle schema mirroring `gscdump/analytics` `SCHEMAS`. Drift fails loudly at module load.
-- `compileArchetypeSql()` / `tableForArchetype()` — archetype query compilation.
-- `createClient` / `drizzle` / `DuckDBWasmDatabase` — vendored drizzle-orm DuckDB-WASM adapter.
-- `resolveWindow` (re-exported from `@gscdump/engine/period`).
+| Group | Exports |
+| --- | --- |
+| Runtime | `bootDuckDBWasm`, `createInsightRunner`, `createBrowserAnalysisRuntime` |
+| Attachment | `attachParquetTables`, `attachParquetUrlTables`, `attachParquetUrlTablesResult` |
+| OPFS | `attachOpfsParquetTables`, `readOpfsSnapshotFile`, storage and cache helpers |
+| Schema | `pages`, `queries`, `page_queries`, `countries`, `dates`, `hourly_pages`, `schema` |
+| Queries | `compileArchetypeSql`, `tableForArchetype`, `scopeFor`, `mergeScope` |
+| Drizzle | `createClient`, `drizzle`, `DuckDBWasmDatabase` |
+| Dates | `resolveWindow`, re-exported from `@gscdump/engine/period` |
 
-## Related
-
-- [`@gscdump/engine`](../engine) — Storage contracts + dialect-neutral resolver.
-- [`@gscdump/analysis`](../analysis) — Portable analyzer registry and browser dispatch.
-- [`@gscdump/engine-sqlite`](../engine-sqlite) — SQLite / D1 counterpart.
+Schema exports follow `@gscdump/engine/schema`.
+Parquet snapshots are Site-specific; browser `scopeFor` currently adds no `siteId` predicate.
+Keep authorization and file selection in your application.
 
 ## License
 
