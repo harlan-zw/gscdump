@@ -32,6 +32,13 @@ describe('buildPapercutBody', () => {
       expect(built.message).toMatch(/^comment:/)
   })
 
+  it('rejects a line break in a single-line field', () => {
+    const built = buildPapercutBody({ command: 'sync\n- forged', comment: 'x', agent: 'Codex' })
+    expect(built).toMatchObject({ _tag: 'Err' })
+    if (built._tag === 'Err')
+      expect(built.message).toMatch(/^command: must be a single line/)
+  })
+
   it('rejects an unknown intent', () => {
     const built = buildPapercutBody({ command: 'sync', comment: 'x', agent: 'Codex', intent: 'praise' })
     expect(built._tag).toBe('Err')
