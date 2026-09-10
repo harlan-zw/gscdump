@@ -96,3 +96,13 @@ export const mcpCommandMeta = {
   name: 'mcp',
   description: 'Start MCP server for AI assistants',
 }
+
+export const skillCommandMeta = {
+  name: 'skill',
+  description: 'Install the packaged coding agent skill',
+}
+
+export const papercutCommandMeta = {
+  name: 'papercut',
+  description: 'Report a CLI problem to gscdump.com (anonymous, sanitized)',
+}
