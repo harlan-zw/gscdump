@@ -3,6 +3,32 @@
 `@gscdump/cli` owns the MCP server. Authenticate once with `gscdump init` (or
 provide BYOK environment variables), then start it with `gscdump mcp`.
 
+## Agent skill
+
+The package ships a skill at `skills/gscdump/SKILL.md` for coding agents that
+run the CLI directly. It documents every command, the JSON output rules, the
+data boundaries, and the guardrails.
+
+```bash
+gscdump skill install --agent claude    # Codex: --agent codex
+```
+
+The same file is published at [gscdump.com/SKILL.md](https://gscdump.com/SKILL.md).
+
+## Papercuts
+
+Agents and people can report CLI problems without an account:
+
+```bash
+gscdump papercut --command "report triage" --agent "Claude Code" \
+  --comment "Agent report by Claude Code. Expected --target-kind in --help. Received an unknown flag error." \
+  --yes --json
+```
+
+The CLI adds its version, Node version, and platform. The endpoint is
+anonymous and allows ten reports per network address each hour. Send
+sanitized details only.
+
 ## MCP client configuration
 
 Use the same command in Claude Desktop, Claude Code, Cursor, or another

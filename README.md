@@ -95,6 +95,8 @@ Guides:
 | `config` | Manage CLI configuration |
 | `doctor` | Diagnose setup problems |
 | `mcp` | Start the MCP server |
+| `skill install` | Copy the agent skill (SKILL.md) into `~/.claude/skills` or `~/.codex/skills` |
+| `papercut` | Report a CLI problem to gscdump.com (anonymous) |
 
 See the [CLI reference](./packages/cli/README.md) for flags and authentication options.
 

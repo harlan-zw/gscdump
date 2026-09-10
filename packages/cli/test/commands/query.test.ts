@@ -5,6 +5,7 @@ import { DuckDBInstance } from '@duckdb/node-api'
 import { runCommand } from 'citty'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { queryCommand } from '../../src/commands/query'
+import { createCliRuntime, runWithCliRuntime } from '../../src/runtime'
 import { logger } from '../../src/utils'
 
 const mocks = vi.hoisted(() => ({
@@ -65,6 +66,7 @@ vi.mock('../../src/utils', async (importOriginal) => {
   return {
     ...actual,
     logger: {
+      debug: vi.fn(),
       info: vi.fn(),
       success: vi.fn(),
       warn: vi.fn(),
@@ -248,6 +250,32 @@ describe('query command', () => {
     }
   })
 
+  it.each(['stdout', 'file'])('writes nested raw SQL integers in table output to %s', async (destination) => {
+    const directory = await mkdtemp(join(tmpdir(), 'gscdump-sql-table-'))
+    const outputPath = join(directory, 'query.txt')
+    const instance = await DuckDBInstance.create(':memory:')
+    const connection = await instance.connect()
+    const sql = `SELECT {'v': 9007199254740993::BIGINT, 'items': [1::BIGINT, NULL]} AS nested`
+    mocks.storeRunRawSql.mockImplementationOnce(async ({ sql }) => ({
+      rows: (await connection.runAndReadAll(sql)).getRowObjectsJS(),
+      sql,
+    }))
+
+    try {
+      await runCommand(queryCommand, {
+        rawArgs: ['--quiet', '--sql', sql, '--format', 'table', ...(destination === 'file' ? ['--output', outputPath] : [])],
+      })
+
+      const output = destination === 'file' ? await readFile(outputPath, 'utf8') : consoleOutput[0]!
+      expect(output).toContain('{"v":"9007199254740993","items":["1",null]}')
+    }
+    finally {
+      connection.closeSync()
+      instance.closeSync()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   it('--explain in --live mode prints request body and exits without calling API', async () => {
     await queryCommand.run!({
       args: {
@@ -352,5 +380,38 @@ describe('query command', () => {
     expect(exitSpy).not.toHaveBeenCalled()
     expect(mocks.storeWatermarks).toHaveBeenCalledWith(expect.objectContaining({ searchType: 'image' }))
     expect(mocks.storeQuery.mock.calls[0]![0]).toMatchObject({ searchType: 'image' })
+  })
+  it('renders an explicit human query with charts and precise rates', async () => {
+    mocks.rawQuery.mockResolvedValueOnce({ rows: [{ keys: ['/docs'], clicks: 12, impressions: 1000, ctr: 0.012, position: 8.4 }] }).mockResolvedValueOnce({ rows: [] })
+    await runCommand(queryCommand, { rawArgs: ['--live', '--dimensions', 'page', '--format', 'table', '--start', '2026-04-01', '--end', '2026-04-07'] })
+    const output = consoleOutput.join('\n')
+    expect(output).toContain('example.com / query')
+    expect(output.match(/\/docs/g)).toHaveLength(1)
+    expect(output).toMatch(/[#█]+\s+12/)
+    expect(output).toContain('1.20%')
+    expect(output).not.toContain('Totals cover these rows only.')
+    expect(logger.info).not.toHaveBeenCalled()
+  })
+
+  it('renders SQL tables without changing JSON defaults', async () => {
+    mocks.storeRunRawSql.mockResolvedValue({ rows: [{ clicks: 12000 }], sql: 'SELECT 12000 AS clicks' })
+    await runCommand(queryCommand, { rawArgs: ['--sql', 'SELECT 12000 AS clicks', '--format', 'table'] })
+    expect(consoleOutput.join('\n')).toContain('12,000')
+  })
+  it('writes a human query file without ANSI even when color is forced', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'gscdump-chart-file-'))
+    try {
+      mocks.rawQuery.mockResolvedValueOnce({ rows: [{ keys: ['/docs'], clicks: 12, impressions: 1000, ctr: 0.012 }] }).mockResolvedValueOnce({ rows: [] })
+      const runtime = createCliRuntime({ environment: { FORCE_COLOR: '1' } })
+      const file = join(directory, 'results.txt')
+      await runWithCliRuntime(runtime, () => runCommand(queryCommand, { rawArgs: ['--live', '--dimensions', 'page', '--format', 'table', '--output', file] }))
+      const output = await readFile(file, 'utf8')
+      expect(output).toContain('1.20%')
+      expect(output).not.toContain('\x1B')
+      expect(consoleOutput).toEqual([])
+    }
+    finally {
+      await rm(directory, { recursive: true, force: true })
+    }
   })
 })

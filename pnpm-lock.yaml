@@ -182,6 +182,9 @@ catalogs:
     sitemapd:
       specifier: ^0.2.2
       version: 0.2.2
+    string-width:
+      specifier: ^8.2.2
+      version: 8.2.2
     tailwindcss:
       specifier: ^4.3.3
       version: 4.3.3
@@ -454,6 +457,9 @@ importers:
       sitemapd:
         specifier: 'catalog:'
         version: 0.2.2
+      string-width:
+        specifier: 'catalog:'
+        version: 8.2.2
       zod:
         specifier: 'catalog:'
         version: 4.6.1

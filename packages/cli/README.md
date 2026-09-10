@@ -66,6 +66,8 @@ gscdump mcp
 | `report <id>` / `report list` | Run or list Reports; `--explain` previews a plan |
 | `profile` | Create, select, list, or delete credential profiles |
 | `mcp` | Start the MCP server for AI assistants |
+| `skill install [--agent claude\|codex] [--target <dir>]` | Copy the packaged `gscdump` agent skill (SKILL.md) into an agent skill directory |
+| `papercut --command <cmd> --comment <text> --agent <name> [--intent bug\|improvement] --yes` | Report a CLI problem to gscdump.com; anonymous, ten per hour per network address |
 
 ### Filter expressions
 
@@ -260,3 +262,10 @@ See [URL inspection and indexing](../../docs/guides/url-indexing.md).
 ## License
 
 [MIT](../../LICENSE)
+
+## CLI charts
+
+Human output shares chart styles and metric units across Analyzers, Reports, and Store stats.
+Use `gscdump query --format table` for query charts.
+JSON and CSV keep their existing payloads and defaults.
+See [CLI charts](../../docs/guides/cli-charts.md) for examples and data limits.
