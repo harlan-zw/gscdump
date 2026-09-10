@@ -403,6 +403,26 @@ describe('sync command (local analytics)', () => {
     }])
   })
 
+  it('preserves URL variant metrics across a forced repeat sync', async () => {
+    const day = '2026-09-01'
+    const first = { keys: ['https://example.com/guide#first', day], clicks: 2, impressions: 10, position: 2 }
+    const second = { keys: ['https://docs.example.com/guide#second', day], clicks: 3, impressions: 20, position: 4 }
+    rawQuerySpy.mockImplementation((_siteUrl, params) => Promise.resolve({
+      rows: params.startRow === 0 ? [first, second, first] : [],
+    }))
+    const args = { 'site': SITE, 'start': day, 'end': day, 'tables': 'pages', 'quiet': true, 'no-rollups': true, 'force': true }
+    for (let sync = 0; sync < 2; sync++)
+      await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
+
+    const harness = createNodeHarness({ dataDir: tmpDir })
+    const result = await harness.runRawSql({
+      siteUrl: SITE,
+      table: 'pages',
+      sql: 'SELECT url, clicks, impressions, sum_position FROM read_parquet({{FILES}})',
+    })
+    expect(result.rows).toEqual([{ url: '/guide', clicks: 5, impressions: 30, sum_position: 70 }])
+  })
+
   it('leaves daily totals empty when Google returns no totals', async () => {
     rawQuerySpy.mockResolvedValue({ rows: [] })
     const day = '2026-04-10'

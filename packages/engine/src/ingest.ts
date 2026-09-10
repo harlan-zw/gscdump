@@ -157,6 +157,8 @@ export function toSumPosition(apiPosition: number, impressions: number): number 
 /**
  * Map one GSC API row into `{ date, row }` for the given table, or null if
  * the row has no keys (GSC occasionally emits empty-keys placeholders).
+ * Use `createRowAccumulator` for a complete slice so URL variants combine
+ * before the storage engine deduplicates stored keys.
  */
 export function transformGscRow(
   table: TableName,
@@ -345,6 +347,8 @@ export interface RowAccumulator {
   /**
    * Consume accumulated rows, grouped by `table → date → rows`. Resets
    * internal state; subsequent pushes behave as on a fresh accumulator.
+   * Repeated source identities count once. Distinct URL variants that share
+   * stored dimensions contribute their combined metrics.
    */
   drain: () => Map<TableName, Map<string, Row[]>>
   /**
@@ -359,7 +363,7 @@ export interface RowAccumulator {
    * eventual `drain()` at job end.
    */
   drainCompleted: () => Map<TableName, Map<string, Row[]>>
-  /** Total row count across all tables/dates since last drain. */
+  /** Distinct source row count across all tables/dates since last drain. */
   readonly totalRows: number
   /** Whether the accumulator has overflowed since last drain. */
   readonly overflowed: boolean
@@ -387,10 +391,35 @@ export interface RowAccumulatorOptions extends IngestOptions {
 
 const DEFAULT_MAX_ROWS = 500_000
 
+function storedRows(table: TableName, sourceRows: Map<string, Row>): Row[] {
+  if (!TABLE_DIMS[table].includes('page'))
+    return [...sourceRows.values()]
+
+  // Distinct Google URLs can share a stored path. Combine their additive
+  // metrics only after source identities have absorbed repeated API rows.
+  const grouped = new Map<string, Row>()
+  for (const row of sourceRows.values()) {
+    const key = JSON.stringify([
+      row.searchAppearance,
+      ...TABLE_DIMS[table].map(dimension => row[dimension === 'page' ? 'url' : dimension]),
+    ])
+    const prior = grouped.get(key)
+    if (prior) {
+      prior.clicks = Number(prior.clicks) + Number(row.clicks)
+      prior.impressions = Number(prior.impressions) + Number(row.impressions)
+      prior.sum_position = Number(prior.sum_position) + Number(row.sum_position)
+    }
+    else {
+      grouped.set(key, { ...row })
+    }
+  }
+  return [...grouped.values()]
+}
+
 export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAccumulator {
   const maxRows = options.maxRows ?? DEFAULT_MAX_ROWS
   const trackDateBoundary = options.trackDateBoundary === true
-  let buckets = new Map<TableName, Map<string, Row[]>>()
+  let buckets = new Map<TableName, Map<string, Map<string, Row>>>()
   const latestDate = new Map<TableName, string>()
   let total = 0
   let overflowed = false
@@ -417,11 +446,15 @@ export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAc
         }
         let dateRows = byDate.get(t.date)
         if (!dateRows) {
-          dateRows = []
+          dateRows = new Map()
           byDate.set(t.date, dateRows)
         }
-        dateRows.push(t.row)
-        total++
+        // Keep the exact Google dimension tuple until aggregation. A repeated
+        // tuple replaces its metrics; distinct URLs remain separate here.
+        const sourceKey = JSON.stringify(r.keys)
+        if (!dateRows.has(sourceKey))
+          total++
+        dateRows.set(sourceKey, t.row)
         if (trackDateBoundary && (!newestDate || t.date > newestDate))
           newestDate = t.date
         if (total > maxRows) {
@@ -436,7 +469,12 @@ export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAc
       return true
     },
     drain() {
-      const out = buckets
+      const out = new Map<TableName, Map<string, Row[]>>()
+      for (const [table, byDate] of buckets) {
+        out.set(table, new Map(
+          [...byDate].map(([date, sourceRows]) => [date, storedRows(table, sourceRows)]),
+        ))
+      }
       buckets = new Map()
       latestDate.clear()
       total = 0
@@ -458,8 +496,8 @@ export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAc
               outBy = new Map()
               out.set(table, outBy)
             }
-            outBy.set(date, dateRows)
-            total -= dateRows.length
+            outBy.set(date, storedRows(table, dateRows))
+            total -= dateRows.size
           }
         }
         if (outBy) {
