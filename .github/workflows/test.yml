@@ -72,8 +72,32 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 
+  windows:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm i --filter . --filter "./packages/*" --frozen-lockfile --trust-lockfile
+        env:
+          PNPM_MINIMUM_RELEASE_AGE: 0
+      - name: Build CLI packages
+        run: pnpm --filter @gscdump/cli... run build
+      - name: Check filesystem and native runtime
+        run: pnpm exec vitest run packages/engine/test/filesystem.test.ts packages/engine/test/filesystem-windows.test.ts packages/engine/test/duckdb-native.test.ts packages/engine/test/duckdb-buffer-concurrency.test.ts
+      - name: Check installed CLI
+        run: pnpm test:packed
+
   test:
-    needs: [changes, packages]
+    needs: [changes, packages, windows]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -82,8 +106,10 @@ jobs:
           CHANGES_RESULT: ${{ needs.changes.result }}
           CODE_CHANGED: ${{ needs.changes.outputs.code }}
           PACKAGES_RESULT: ${{ needs.packages.result }}
+          WINDOWS_RESULT: ${{ needs.windows.result }}
         run: |
           test "$CHANGES_RESULT" = success
           if [ "$CODE_CHANGED" = true ]; then
             test "$PACKAGES_RESULT" = success
+            test "$WINDOWS_RESULT" = success
           fi

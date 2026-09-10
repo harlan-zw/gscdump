@@ -3,20 +3,28 @@ import { Buffer } from 'node:buffer'
 import { execFile } from 'node:child_process'
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
 const execute = promisify(execFile)
 const root = fileURLToPath(new URL('..', import.meta.url))
-const temporary = await mkdtemp(join(tmpdir(), 'gscdump-packed-cli-'))
-const consumer = join(temporary, 'consumer')
+const temporary = await mkdtemp(join(tmpdir(), 'gscdump packed cli & fixtures-'))
+const consumer = join(temporary, 'consumer project')
 const config = join(consumer, 'config')
 const artifacts = join(temporary, 'packages')
 const runtimeHome = join(temporary, 'home')
-const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+// pnpm 12 provides a native executable. Windows cannot execute .cmd shims with execFile.
+const pnpm = process.env.npm_execpath || (process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
+const npmCli = join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js')
+
+function runNpm(args, options) {
+  // setup-node installs npm beside node.exe. Invoke its JavaScript entrypoint without a shell.
+  return process.platform === 'win32'
+    ? execute(process.execPath, [npmCli, ...args], options)
+    : execute('npm', args, options)
+}
 
 try {
   await mkdir(config, { recursive: true })
@@ -42,7 +50,7 @@ try {
     await execute(pnpm, ['--config.ignore-scripts=true', 'pack', '--out', tarball], { cwd })
   }
   await pack('cli')
-  await execute(npm, ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', ...packed.values()], {
+  await runNpm(['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', ...packed.values()], {
     cwd: consumer,
     maxBuffer: 4 * 1024 * 1024,
   })
@@ -70,7 +78,7 @@ try {
   async function cli(...args) {
     const { stdout } = await execute(process.execPath, [
       '--import',
-      join(consumer, 'google.mjs'),
+      pathToFileURL(join(consumer, 'google.mjs')).href,
       join(consumer, 'node_modules/@gscdump/cli/bin/gscdump.mjs'),
       '--config-dir',
       config,
@@ -97,10 +105,10 @@ try {
   assert.equal(rows[0].clicks, 5)
   assert.equal(rows[0].impressions, 50)
 
-  const parquetDirectory = join(consumer, 'exported-parquet')
+  const parquetDirectory = join(consumer, 'exported parquet')
   const dumped = JSON.parse(await cli('dump', '--site', site, '--tables', 'pages', '--format', 'parquet', '--out', parquetDirectory, '--json'))
   assert.equal(dumped.sites[0].files, 1)
-  const duckdbFile = join(consumer, 'exported.duckdb')
+  const duckdbFile = join(consumer, 'exported store.duckdb')
   const exported = JSON.parse(await cli('store', 'export', '--site', site, '--out', duckdbFile, '--json'))
   assert.equal(exported.totalRows, 1)
 
@@ -112,8 +120,8 @@ try {
     const expected = [{ url: '/guide', date: '2026-08-01', clicks: 5, impressions: 50 }]
     const columns = 'url, CAST(date AS VARCHAR) AS date, clicks::INTEGER AS clicks, impressions::INTEGER AS impressions'
     for (const [path, source] of [
-      [':memory:', "read_parquet('exported-parquet/**/*.parquet')"],
-      ['exported.duckdb', 'pages'],
+      [':memory:', "read_parquet('exported parquet/**/*.parquet')"],
+      ['exported store.duckdb', 'pages'],
     ]) {
       const instance = await DuckDBInstance.create(path)
       const connection = await instance.connect()
@@ -135,7 +143,7 @@ try {
 
   async function measureInstallation() {
     const lock = JSON.parse(await readFile(join(consumer, 'package-lock.json'), 'utf8'))
-    const npmCache = (await execute(npm, ['config', 'get', 'cache'], { cwd: consumer })).stdout.trim()
+    const npmCache = (await runNpm(['config', 'get', 'cache'], { cwd: consumer })).stdout.trim()
     const packages = []
     async function fileBytes(directory) {
       let bytes = 0
