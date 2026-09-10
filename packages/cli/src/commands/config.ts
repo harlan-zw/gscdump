@@ -17,7 +17,9 @@ const showCommand = defineCommand({
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
-    const config = await loadConfig()
+    const config = { ...await loadConfig() }
+    if (config.clientSecret)
+      config.clientSecret = config.clientSecret.length <= 6 ? '***' : `***${config.clientSecret.slice(-6)}`
     const configPath = getConfigPath()
 
     if (json) {

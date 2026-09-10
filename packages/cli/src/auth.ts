@@ -2,43 +2,32 @@ import type { OAuth2Client } from 'google-auth-library'
 import type { Credentials } from 'google-auth-library/build/src/auth/credentials.js'
 import type { Auth as GscAuth } from 'gscdump/client'
 import type { Result } from 'gscdump/result'
-import type { Server } from 'node:http'
 import type { GscdumpConfig } from './config'
+import { Buffer } from 'node:buffer'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import fs from 'node:fs/promises'
 import { createServer } from 'node:http'
 import path from 'node:path'
 import process from 'node:process'
 import { isCancel, text } from '@clack/prompts'
-import { JWT as GoogleJWT, OAuth2Client as OAuth2ClientClass } from 'google-auth-library'
+import { CodeChallengeMethod, JWT as GoogleJWT, OAuth2Client as OAuth2ClientClass } from 'google-auth-library'
 import { createAuth } from 'gscdump/client'
 import { err, ok, unwrapResult } from 'gscdump/result'
-import { ofetch } from 'ofetch'
+import open from 'open'
 import { getConfigDir, loadConfig } from './config'
 import { getAppliedEnvKeys, getLoadedEnvPath } from './env-file'
 import { pickCliEnvironmentValue, resolveCliEnvironment } from './environment'
 import { displayPath, logger } from './utils'
 
-/**
- * Modelled, caller-actionable auth failures. `kind`-discriminated (matching the
- * repo's `GscError`/`EngineError` convention, not `_tag`), paired with `Result`
- * so the `*Result` cores can be branched on / unit-tested without `try`/`catch`.
- * The throwing wrappers preserve the exact `.message` callers print today.
- *
- * Defects (a network IO blowup mid-poll the loop already retries, a programmer
- * invariant) are NOT modelled here; they keep propagating.
- */
+/** Caller-actionable failures use the repository's `kind` and `Result` convention. */
 export type AuthError
   = | { kind: 'not-service-account', path: string, accountType: string, message: string }
-    | { kind: 'device-code-request-failed', message: string, cause?: unknown }
-    | { kind: 'device-code-denied', message: string }
-    | { kind: 'device-code-expired', message: string }
-    | { kind: 'device-code-failed', reason: string, message: string }
-    | { kind: 'device-code-timed-out', message: string }
+    | { kind: 'oauth-denied', message: string }
+    | { kind: 'oauth-failed', message: string }
+    | { kind: 'oauth-timed-out', message: string }
 
 function authErrorToException(error: AuthError): Error {
   const exception = new Error(error.message)
-  if ('cause' in error && error.cause !== undefined)
-    (exception as Error & { cause?: unknown }).cause = error.cause
   ;(exception as Error & { authError?: AuthError }).authError = error
   return exception
 }
@@ -106,97 +95,6 @@ export async function resolveServiceAccount(opts: { path?: string } = {}): Promi
   return loadServiceAccount(p)
 }
 
-interface DeviceCodeResponse {
-  device_code: string
-  user_code: string
-  verification_url: string
-  expires_in: number
-  interval: number
-}
-interface DeviceTokenResponse {
-  access_token?: string
-  refresh_token?: string
-  expires_in?: number
-  token_type?: string
-  error?: string
-  error_description?: string
-}
-
-/**
- * OAuth 2.0 device-code flow. Used when there's no browser / loopback
- * (headless servers, WSL2 without forwarding, containers). User opens the
- * URL on another device, types the code; we poll the token endpoint.
- */
-export async function authenticateDeviceCode(credentials: OAuth2Credentials): Promise<Credentials> {
-  return unwrapResult(await authenticateDeviceCodeResult(credentials), authErrorToException)
-}
-
-/**
- * Errors-as-values core for {@link authenticateDeviceCode}. Each terminal
- * outcome of the device-code flow (Google rejected the initial request, the
- * user denied, the code expired, the flow timed out, Google returned a hard
- * error) is a typed `AuthError` value the caller can branch on, rather than a
- * bare `throw` the global handler string-matches. `authorization_pending` /
- * `slow_down` keep looping; a transient network blip mid-poll is swallowed by
- * the inner `.catch` into a retry (a genuinely-expected, ignorable failure).
- */
-export async function authenticateDeviceCodeResult(credentials: OAuth2Credentials): Promise<Result<Credentials, AuthError>> {
-  // Step 1: ask Google for a device code.
-  const init = await ofetch<DeviceCodeResponse>('https://oauth2.googleapis.com/device/code', {
-    method: 'POST',
-    body: new URLSearchParams({
-      client_id: credentials.clientId,
-      scope: SCOPES.join(' '),
-    }),
-  }).then(ok<DeviceCodeResponse>).catch((e: Error) => err<AuthError>({ kind: 'device-code-request-failed', message: `Device-code request failed: ${e.message}`, cause: e }))
-  if (!init.ok)
-    return init
-  return pollDeviceCode(credentials, init.value)
-}
-
-async function pollDeviceCode(credentials: OAuth2Credentials, init: DeviceCodeResponse): Promise<Result<Credentials, AuthError>> {
-  console.log()
-  console.log(`  \x1B[1mDevice-code OAuth\x1B[0m`)
-  console.log(`  1. On any device, open: \x1B[36m${init.verification_url}\x1B[0m`)
-  console.log(`  2. Enter this code:     \x1B[1m${init.user_code}\x1B[0m`)
-  console.log(`  3. Approve the requested scopes`)
-  console.log()
-  logger.info(`Polling for completion (expires in ${Math.floor(init.expires_in / 60)}m)...`)
-
-  // Step 2: poll until the user completes (or denies / expires).
-  const intervalMs = init.interval * 1000
-  const deadline = Date.now() + init.expires_in * 1000
-  while (Date.now() < deadline) {
-    await new Promise(r => setTimeout(r, intervalMs))
-    const res = await ofetch<DeviceTokenResponse>('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      body: new URLSearchParams({
-        client_id: credentials.clientId,
-        client_secret: credentials.clientSecret,
-        device_code: init.device_code,
-        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-      }),
-    }).catch((e: any) => e?.data ?? { error: 'request_failed' } as DeviceTokenResponse)
-
-    if (res.access_token) {
-      return ok({
-        access_token: res.access_token,
-        refresh_token: res.refresh_token,
-        expiry_date: res.expires_in ? Date.now() + res.expires_in * 1000 : undefined,
-      })
-    }
-    if (res.error === 'authorization_pending' || res.error === 'slow_down')
-      continue
-    if (res.error === 'access_denied')
-      return err({ kind: 'device-code-denied', message: 'User denied authorization.' })
-    if (res.error === 'expired_token')
-      return err({ kind: 'device-code-expired', message: 'Device code expired. Re-run `gscdump auth login --no-browser`.' })
-    if (res.error)
-      return err({ kind: 'device-code-failed', reason: res.error, message: `Device-code poll failed: ${res.error_description || res.error}` })
-  }
-  return err({ kind: 'device-code-timed-out', message: 'Device-code flow timed out.' })
-}
-
 /**
  * Resolve BYOK from env + flags. Priority: explicit args > GSC_* env > GOOGLE_* env.
  * Returns a minimal `Auth` shape for `googleSearchConsole(auth)` if any BYOK is found,
@@ -215,8 +113,6 @@ export function resolveBYOK(opts: BYOKOptions = {}): GscAuth | null {
     return accessToken
   return null
 }
-
-const REDIRECT_URI_RE = /redirect_uri=[^&]+/
 
 function getTokensPath(): string {
   return path.join(getConfigDir(), 'tokens.json')
@@ -308,75 +204,125 @@ interface LoopbackAuthResult {
   redirectUri: string
 }
 
-async function getAuthCodeViaLoopback(authUrl: string): Promise<LoopbackAuthResult> {
+async function getAuthCodeViaLoopback(authUrl: URL, expectedState: string, noBrowser: boolean): Promise<LoopbackAuthResult> {
   return new Promise((resolve, reject) => {
     let resolvedRedirectUri = ''
     let timeoutId: ReturnType<typeof setTimeout> | undefined
-    let server: Server
+    let settled = false
+    const server = createServer()
 
-    const settle = (fn: () => void): void => {
-      if (timeoutId)
-        clearTimeout(timeoutId)
-      server.closeAllConnections?.()
+    const settle = (result: Result<LoopbackAuthResult, Error>): void => {
+      if (settled)
+        return
+      settled = true
+      clearTimeout(timeoutId)
       server.close()
-      fn()
+      server.closeAllConnections()
+      if (result.ok)
+        resolve(result.value)
+      else
+        reject(result.error)
     }
 
-    server = createServer((req, res) => {
-      const url = new URL(req.url || '', `http://127.0.0.1`)
-      const code = url.searchParams.get('code')
-      const error = url.searchParams.get('error')
-
-      if (error) {
-        res.writeHead(400, { 'Content-Type': 'text/html' })
-        res.end(`<html><body><h1>Authorization Failed</h1><p>${error}</p><p>You can close this window.</p></body></html>`)
-        settle(() => reject(new Error(`OAuth error: ${error}`)))
+    server.on('request', (req, res) => {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+      res.setHeader('Cache-Control', 'no-store')
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      if (settled) {
+        res.writeHead(409)
+        res.end('Authorization already completed.')
+        return
+      }
+      if (!URL.canParse(req.url || '/', 'http://127.0.0.1')) {
+        res.writeHead(400)
+        res.end('Invalid authorization URL.')
+        return
+      }
+      const url = new URL(req.url || '/', 'http://127.0.0.1')
+      if (req.method !== 'GET' || url.pathname !== '/') {
+        res.writeHead(404)
+        res.end('Not found.')
         return
       }
 
-      if (code) {
-        res.writeHead(200, { 'Content-Type': 'text/html' })
-        res.end(`<html><body><h1>Authorization Successful</h1><p>You can close this window and return to the terminal.</p></body></html>`)
-        settle(() => resolve({ code, redirectUri: resolvedRedirectUri }))
+      const state = url.searchParams.getAll('state')
+      const receivedState = Buffer.from(state[0] ?? '')
+      const expected = Buffer.from(expectedState)
+      if (state.length !== 1 || receivedState.length !== expected.length || !timingSafeEqual(receivedState, expected)) {
+        res.writeHead(400)
+        res.end('Invalid authorization state. Use the URL shown in the terminal.')
         return
       }
 
-      res.writeHead(400, { 'Content-Type': 'text/html' })
-      res.end(`<html><body><h1>Missing authorization code</h1></body></html>`)
+      const codes = url.searchParams.getAll('code')
+      const errors = url.searchParams.getAll('error')
+      if (codes.length === 1 && codes[0] && errors.length === 0) {
+        // Wait for the response to flush before closing loopback connections.
+        res.once('finish', () => settle(ok({ code: codes[0]!, redirectUri: resolvedRedirectUri })))
+        res.writeHead(200)
+        res.end('Authorization successful. Close this window and return to the terminal.')
+        return
+      }
+      if (errors.length === 1 && errors[0] && codes.length === 0) {
+        const error: AuthError = errors[0] === 'access_denied'
+          ? { kind: 'oauth-denied', message: 'Authorization denied. If you want to retry, run `gscdump auth login`.' }
+          : { kind: 'oauth-failed', message: 'Authorization failed. Run `gscdump auth login` to retry.' }
+        res.once('finish', () => settle(err(authErrorToException(error))))
+        res.writeHead(400)
+        res.end(error.message)
+        return
+      }
+
+      res.writeHead(400)
+      res.end('Invalid authorization response. Use the URL shown in the terminal.')
     })
+
+    server.on('error', error => settle(err(error)))
+    timeoutId = setTimeout(() => {
+      settle(err(authErrorToException({
+        kind: 'oauth-timed-out',
+        message: 'Authorization timed out. Use a Desktop application OAuth client. Run `gscdump auth login` to retry.',
+      })))
+    }, 5 * 60 * 1000)
 
     server.listen(0, '127.0.0.1', () => {
       const addr = server.address()
       if (!addr || typeof addr === 'string') {
-        settle(() => reject(new Error('Failed to start local server')))
+        settle(err(new Error('Failed to start local server')))
         return
       }
 
-      const port = addr.port
-      resolvedRedirectUri = `http://127.0.0.1:${port}`
-      const fullAuthUrl = authUrl.replace(REDIRECT_URI_RE, `redirect_uri=${encodeURIComponent(resolvedRedirectUri)}`)
+      resolvedRedirectUri = `http://127.0.0.1:${addr.port}`
+      authUrl.searchParams.set('redirect_uri', resolvedRedirectUri)
+      const fullAuthUrl = authUrl.toString()
 
       console.log()
-      console.log('  \x1B[1mOpening browser for authorization...\x1B[0m')
-      console.log(`  \x1B[90mIf browser doesn't open, visit:\x1B[0m`)
-      console.log(`  \x1B[36m${fullAuthUrl}\x1B[0m`)
+      if (noBrowser) {
+        console.log('  Open this URL in your browser:')
+      }
+      else {
+        console.log('  Opening browser for authorization...')
+        console.log('  If the browser does not open, visit:')
+      }
+      console.log(`  ${fullAuthUrl}`)
       console.log()
-      console.log(`  \x1B[90mIf Google says "redirect_uri_mismatch", your OAuth client is`)
-      console.log(`  not a "Desktop application" type. Create a Desktop client at`)
-      console.log(`  https://console.cloud.google.com/apis/credentials, then run`)
-      console.log(`  \`gscdump init --force\` with the new ID/secret.\x1B[0m`)
+      if (noBrowser) {
+        console.log(`  If the CLI runs on another host, forward loopback port ${addr.port} before opening the URL.`)
+        console.log(`  On your browser host, run: ssh -N -L ${addr.port}:127.0.0.1:${addr.port} user@host`)
+        console.log('  Replace user@host with the CLI host. Keep this command running during login.')
+        console.log()
+      }
+      console.log('  If Google reports redirect_uri_mismatch, use a Desktop application OAuth client.')
+      console.log('  Create it at https://console.cloud.google.com/apis/credentials.')
+      console.log('  Then run `gscdump init --force` with the new client credentials.')
       console.log()
 
-      import('open').then(({ default: open }) => open(fullAuthUrl)).catch(() => {
-        logger.warn('Could not open browser automatically')
-      })
+      if (!noBrowser) {
+        open(fullAuthUrl).catch(() => {
+          logger.warn('Could not open browser automatically. Open the URL shown above.')
+        })
+      }
     })
-
-    server.on('error', err => settle(() => reject(err)))
-
-    timeoutId = setTimeout(() => {
-      settle(() => reject(new Error('Authorization timed out. If Google showed "redirect_uri_mismatch", your OAuth client must be type "Desktop application" (create one at https://console.cloud.google.com/apis/credentials and run `gscdump init --force`).')))
-    }, 5 * 60 * 1000)
   })
 }
 
@@ -450,31 +396,26 @@ export async function authenticate(
     process.exit(1)
   }
 
-  // Device-code flow: headless (no loopback / no browser). User opens the
-  // verification URL on another device and types the user_code.
-  if (opts.noBrowser) {
-    const tokens = await authenticateDeviceCode(credentials)
-    oauth2Client.setCredentials(tokens)
-    await saveTokens(tokens)
-    logger.success(`Tokens saved to ${displayPath(getTokensPath())}`)
-    return oauth2Client
-  }
-
-  const authUrl = oauth2Client.generateAuthUrl({
+  const state = randomBytes(32).toString('base64url')
+  const codeVerifier = randomBytes(32).toString('base64url')
+  const authUrl = new URL(oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: SCOPES,
     prompt: 'consent',
-  })
+    state,
+    code_challenge: createHash('sha256').update(codeVerifier).digest('base64url'),
+    code_challenge_method: CodeChallengeMethod.S256,
+  }))
 
   logger.info('Waiting for authorization...')
-  const { code, redirectUri } = await getAuthCodeViaLoopback(authUrl)
+  const { code, redirectUri } = await getAuthCodeViaLoopback(authUrl, state, Boolean(opts.noBrowser))
 
   const tokenClient = new OAuth2ClientClass(
     credentials.clientId,
     credentials.clientSecret,
     redirectUri,
   )
-  const { tokens } = await tokenClient.getToken(code)
+  const { tokens } = await tokenClient.getToken({ code, codeVerifier, redirect_uri: redirectUri })
   oauth2Client.setCredentials(tokens)
   await saveTokens(tokens)
   logger.success(`Tokens saved to ${displayPath(getTokensPath())}`)
@@ -487,7 +428,7 @@ export interface GetAuthOptions {
   config?: GscdumpConfig
   /** Per-call BYOK override; if unset, env vars are checked. */
   byok?: BYOKOptions
-  /** Use device-code flow instead of loopback. Headless / no-browser environments. */
+  /** Print the loopback authorization URL without opening a browser. */
   noBrowser?: boolean
   /** Force a fresh OAuth flow even if env tokens / saved tokens exist. */
   force?: boolean
@@ -505,7 +446,7 @@ export async function getAuth(opts: GetAuthOptions = {}): Promise<OAuth2Client> 
  * Returns the right auth shape for `googleSearchConsole(auth)`. Priority:
  *   1. Explicit / env-configured service-account JSON (JWT)
  *   2. BYOK env vars
- *   3. Saved OAuth tokens / interactive flow (loopback or device-code)
+ *   3. Saved OAuth tokens / interactive loopback flow
  */
 export async function resolveAuth(opts: GetAuthOptions = {}): Promise<GscAuth | OAuth2Client | GoogleJWT> {
   const sa = await resolveServiceAccount({ path: opts.serviceAccount })

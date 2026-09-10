@@ -182,10 +182,14 @@ Then ask questions like:
 
 `gscdump init` walks you through full setup (OAuth + data dir). Credentials are stored locally under `~/.config/gscdump/` (XDG) or equivalent. Use `gscdump auth login` if you only want to refresh OAuth tokens without touching config.
 
+Browser login uses a temporary listener on `127.0.0.1` with a random port.
+Each attempt uses state validation and PKCE S256 to bind the authorization response to that attempt.
+The listener closes after authorization, denial, or a five-minute timeout.
+
 For manual setup:
 
 1. Create a Google Cloud project.
-2. Enable **Search Console API** and **Web Search Indexing API**.
+2. Enable **Search Console API**, **Web Search Indexing API**, and **Site Verification API**.
 3. Create OAuth2 credentials (Desktop app).
 4. Run `gscdump init` (or `gscdump auth login`).
 
@@ -218,15 +222,32 @@ gscdump sites
 
 ### Headless OAuth
 
-When the loopback flow can't open a browser (servers, containers, WSL2 without forwarding), use the device-code flow:
+If you want to open the authorization URL yourself, disable automatic browser opening:
 
 ```bash
 gscdump auth login --no-browser
-# → opens a verification URL on any device; type the displayed user code
+# Open the printed URL in your browser.
 ```
 
-The device-code flow requires a Google OAuth client and scopes that support this flow.
-If Google rejects the flow, use a refresh token or service account.
+This uses the same Desktop application OAuth client and loopback flow as browser login.
+Google's device flow does not support the required scopes.
+
+If the CLI runs on another host, forward its printed loopback port before opening the URL.
+Keep the login command running on that host.
+For example, if the CLI prints port `45678`, run this command on your browser host:
+
+```bash
+ssh -N -L 45678:127.0.0.1:45678 user@host
+```
+
+Replace `user@host` with the CLI host.
+Keep the forwarding command running until login completes.
+Then open the printed authorization URL in your browser.
+For containers or WSL, forward the same port to the environment running the CLI.
+If you cannot forward loopback traffic, use a refresh token or service account.
+
+See Google's [native application OAuth guide](https://developers.google.com/identity/protocols/oauth2/native-app)
+and [device flow scope limits](https://developers.google.com/identity/protocols/oauth2/limited-input-device#allowedscopes).
 
 Indexing notifications apply only to eligible job or livestream pages.
 See [URL inspection and indexing](../../docs/guides/url-indexing.md).

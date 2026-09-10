@@ -50,6 +50,21 @@ describe('config command', () => {
   })
 
   describe('show subcommand', () => {
+    it.each([false, true])('redacts the client secret with json=%s', async (json) => {
+      const config = { clientId: 'public-client', clientSecret: 'secret-value-123456' }
+      await fs.writeFile(CONFIG_FILE, JSON.stringify(config))
+
+      await configCommand.subCommands!.show.run!({
+        args: { json },
+        rawArgs: [],
+        cmd: configCommand.subCommands!.show,
+      })
+
+      expect(consoleOutput.join('\n')).toContain('***123456')
+      expect(consoleOutput.join('\n')).not.toContain(config.clientSecret)
+      expect(JSON.parse(await fs.readFile(CONFIG_FILE, 'utf-8'))).toEqual(config)
+    })
+
     it('should show config path', async () => {
       await configCommand.subCommands!.show.run!({
         args: {},
