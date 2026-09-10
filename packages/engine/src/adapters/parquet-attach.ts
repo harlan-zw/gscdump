@@ -10,7 +10,7 @@ import type { SnapshotQueryRunner } from './snapshot-attach'
 
 export interface AttachParquetIndexOptions {
   /**
-   * Map of table name → list of Parquet URLs. The URL list may mix monthly
+   * Map of table name → list of Parquet URLs or local paths. The list may mix monthly
    * compacted files and per-day files — DuckDB will scan all of them with
    * `union_by_name = true`. Empty lists are skipped (no view created).
    */
@@ -31,6 +31,7 @@ export interface AttachParquetIndexResult {
 }
 
 const IDENT_RE = /^[A-Z_][\w$]*$/i
+const REMOTE_URL_RE = /^(?:https?|s3):\/\//i
 
 export async function attachParquetIndex(
   runner: SnapshotQueryRunner,
@@ -48,9 +49,14 @@ export async function attachParquetIndex(
       throw new TypeError(`attachParquetIndex: invalid table identifier ${JSON.stringify(table)}`)
   }
 
-  await runner('LOAD httpfs').catch(() => undefined)
-  if (forceDownload)
-    await runner('SET force_download=true')
+  const remote = Object.values(opts.tables).some(urls => urls.some(url => REMOTE_URL_RE.test(url)))
+  if (remote) {
+    await runner('LOAD httpfs').catch((cause: unknown) => {
+      throw new Error('Remote files require the DuckDB httpfs extension. Install httpfs before attaching remote files.', { cause })
+    })
+    if (forceDownload)
+      await runner('SET force_download=true')
+  }
 
   // Ensure the target schema exists — required when callers pick anything
   // other than `main` (the default schema of the in-memory DB).

@@ -21,8 +21,8 @@ export interface AttachSnapshotOptions {
   /** Index produced by the builder. */
   index: SnapshotIndex
   /**
-   * Map from filename (`cold-YYYY-MM.duckdb`, `hot.duckdb`) to an HTTPS
-   * URL (typically a pre-signed R2 URL). Must contain an entry for every
+   * Map from filename (`cold-YYYY-MM.duckdb`, `hot.duckdb`) to a local path
+   * or remote HTTP(S)/S3 URL. Must contain an entry for every
    * cold month in `index.cold` and — if `index.hot` — for `hot.duckdb`.
    */
   attachUrls: Record<string, string>
@@ -46,6 +46,7 @@ export interface AttachSnapshotResult {
 const YEAR_MONTH_RE = /^\d{4}-\d{2}$/
 const SCHEMA_IDENT_RE = /^[A-Z_][\w$]*$/i
 const COLD_FILENAME_RE = /^cold-(\d{4}-\d{2})\.duckdb$/
+const REMOTE_URL_RE = /^(?:https?|s3):\/\//i
 
 /**
  * Turns a filename like `cold-2024-09.duckdb` into a valid SQL identifier
@@ -107,13 +108,6 @@ async function attachSnapshotIndexResult(
       return err(engineErrors.invalidYearMonth(ym))
   }
 
-  // httpfs is bundled in both DuckDB-WASM and @duckdb/node-api; LOAD is a
-  // no-op if already loaded. Some environments auto-load it, so we ignore
-  // LOAD errors.
-  await runner('LOAD httpfs').catch(() => undefined)
-  if (forceDownload)
-    await runner('SET force_download=true')
-
   const plan: Array<{ fileName: string, alias: string, url: string }> = []
   for (const ym of index.cold) {
     const fileName = `cold-${ym}.duckdb`
@@ -128,6 +122,14 @@ async function attachSnapshotIndexResult(
     if (!url)
       return err(engineErrors.missingAttachUrl(fileName))
     plan.push({ fileName, alias: snapshotAlias(fileName), url })
+  }
+
+  if (plan.some(({ url }) => REMOTE_URL_RE.test(url))) {
+    await runner('LOAD httpfs').catch((cause: unknown) => {
+      throw new Error('Remote files require the DuckDB httpfs extension. Install httpfs before attaching remote files.', { cause })
+    })
+    if (forceDownload)
+      await runner('SET force_download=true')
   }
 
   const aliases: string[] = []

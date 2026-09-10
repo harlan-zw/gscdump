@@ -415,9 +415,6 @@ importers:
       '@clack/prompts':
         specifier: catalog:deps
         version: 1.8.0
-      '@duckdb/duckdb-wasm':
-        specifier: 'catalog:'
-        version: 1.33.1-dev57.0
       '@duckdb/node-api':
         specifier: 'catalog:'
         version: 1.5.5-r.4
@@ -533,6 +530,9 @@ importers:
       '@duckdb/duckdb-wasm':
         specifier: 'catalog:'
         version: 1.33.1-dev57.0
+      '@duckdb/node-api':
+        specifier: 'catalog:'
+        version: 1.5.5-r.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.5.1
