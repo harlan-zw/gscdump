@@ -101,7 +101,7 @@ See `docs/adr/` for the full set. Highlights:
   for the method, not a flag.
 - **Analyzer registration is consumer-owned** (ADR-0004): Nuxt consumers import
   their registry statically, with no published Nuxt integration package.
-- **Export surface tracks the two consumers** (ADR-0012): subpaths exist only
+- **Export surface tracks the two consumers** ([export surface decision](./docs/adr/0012-export-surface-tracks-consumers.md)): subpaths exist only
   where `gscdump.com` or `nuxtseo.com` import them; internal wiring stays private.
 
 ## MCP Server

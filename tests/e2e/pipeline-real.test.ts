@@ -86,7 +86,10 @@ describe.skipIf(skip)('analytics pipeline — real API → parquet → query', (
     let fetched: GscApiRow[] = []
     let totalRows = 0
     let denied = 0
-    for (const site of sites.slice(0, 12)) {
+    const selectedSite = process.env.GSC_SITE_URL
+    const candidates = selectedSite ? sites.filter(site => site.siteUrl === selectedSite) : sites.slice(0, 12)
+    expect(candidates.length, 'GSC_SITE_URL must identify an accessible Site.').toBeGreaterThan(0)
+    for (const site of candidates) {
       const rows: GscApiRow[] = []
       let result: Awaited<ReturnType<typeof runGscSyncSlice>>
       try {
@@ -120,10 +123,8 @@ describe.skipIf(skip)('analytics pipeline — real API → parquet → query', (
       }
     }
 
-    if (!siteUrl) {
-      console.warn(`[pipeline-real] no GSC page data in ${startDate}..${endDate} across sampled sites (${denied} denied) — pipeline ran, round-trip skipped`)
-      return
-    }
+    if (!siteUrl)
+      throw new Error(`No GSC page rows in ${startDate}..${endDate}; ${denied} Sites denied access. Set GSC_SITE_URL to a Site with traffic.`)
 
     expect(fetched.length).toBe(totalRows)
     const fetchedClicks = fetched.reduce((s, r) => s + r.clicks, 0)

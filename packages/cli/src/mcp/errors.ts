@@ -19,12 +19,14 @@ import { isQueryError } from 'gscdump/query'
 
 export type McpHandlerErrorKind
   = | 'unknown-report'
+    | 'unsupported-report'
     | 'unknown-period'
     | 'unknown-comparison'
     | 'no-valid-dimension'
 
 export type McpHandlerError
   = | { kind: 'unknown-report', id: string, available: readonly string[], message: string }
+    | { kind: 'unsupported-report', id: string, available: readonly string[], message: string }
     | { kind: 'unknown-period', value: string, supported: readonly string[], message: string }
     | { kind: 'unknown-comparison', value: string, supported: readonly string[], message: string }
     | { kind: 'no-valid-dimension', message: string }
@@ -35,6 +37,9 @@ const COMPARISONS = ['none', 'prev-period', 'yoy'] as const
 export const mcpHandlerErrors = {
   unknownReport(id: string, available: readonly string[]): McpHandlerError {
     return { kind: 'unknown-report', id, available, message: `Unknown report id "${id}". Available: ${available.join(', ')}` }
+  },
+  unsupportedReport(id: string, available: readonly string[]): McpHandlerError {
+    return { kind: 'unsupported-report', id, available, message: `Report "${id}" cannot run through the live MCP Source. Use the CLI with the local Store.` }
   },
   unknownPeriod(value: string): McpHandlerError {
     return { kind: 'unknown-period', value, supported: PERIODS, message: `Unknown period "${value}". Supported: ${PERIODS.join(', ')}.` }
