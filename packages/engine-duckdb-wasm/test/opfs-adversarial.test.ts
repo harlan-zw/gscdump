@@ -546,13 +546,14 @@ describe('opfs adversarial: cross-DB isolation', () => {
 })
 
 describe('opfs adversarial: content-addressed sweep', () => {
-  it('reaps stale-hash + legacy index entries for the table, keeps sibling tables', async () => {
+  it('reaps unused legacy entries and retains content hashes outside the requested range', async () => {
     const opfs = makeFakeOpfs()
     const { contentHashSlugFor } = await import('./helpers/slug')
     const staleSlug = await contentHashSlugFor('iceberg/old.parquet')
     const legacySlug = await contentHashSlugFor('iceberg/legacy.parquet')
-    // Stale content-addressed entry (hash no longer in the manifest).
+    // Another content-addressed file outside this requested range.
     opfs.files.set(`gscdump-snapshot__pages_${staleSlug}.parquet`, new Uint8Array([9]))
+    opfs.files.set('gscdump-snapshot__pages_1234567890123456.parquet', new Uint8Array([5]))
     // Legacy index-named entries from a pre-content-addressing build — both the
     // `<table>_<n>_<slug>` and the bare `<table>_<n>` forms.
     opfs.files.set(`gscdump-snapshot__pages_0_${legacySlug}.parquet`, new Uint8Array([8]))
@@ -574,8 +575,10 @@ describe('opfs adversarial: content-addressed sweep', () => {
     const keys = [...opfs.files.keys()]
     // Sibling table preserved.
     expect(keys).toContain('gscdump-snapshot__pages_summary_aaaaaaaaaaaaaaaa.parquet')
-    // Stale + both legacy forms for `pages` reaped.
-    expect(keys.some(k => k.includes(`pages_${staleSlug}`))).toBe(false)
+    // Content hashes survive, including those that contain only digits.
+    expect(opfs.files.get(`gscdump-snapshot__pages_${staleSlug}.parquet`)).toEqual(new Uint8Array([9]))
+    expect(opfs.files.get('gscdump-snapshot__pages_1234567890123456.parquet')).toEqual(new Uint8Array([5]))
+    // Both legacy forms for `pages` are reaped.
     expect(keys.some(k => k.includes(`pages_0_${legacySlug}`))).toBe(false)
     expect(keys).not.toContain('gscdump-snapshot__pages_1.parquet')
     // The fresh file is materialised under its content address.

@@ -20,9 +20,9 @@
  *   `bulk-sources` vs a multi-table `analysis-sources`), so any index in the
  *   filename would re-download identical bytes under a new name and orphan the
  *   old copy. Different hash → new filename → fresh download. No re-hashing on
- *   the cache-hit path. Stale entries for a table (a hash no longer in the
- *   current manifest, plus legacy index-named files from older builds) are
- *   swept at attach time.
+ *   the cache-hit path. Date-range subsets cannot identify obsolete hashes.
+ *   Retain content-addressed files across attaches. Sweep only legacy index
+ *   names; browser quota and explicit cache clearing bound retained storage.
  * - QUOTA-SAFE — `QuotaExceededError` degrades (the caller routes that table
  *   server-side); it never crashes the page.
  * - `navigator.storage.persist()` is requested up front so the browser is less
@@ -379,26 +379,23 @@ function escapeRegExp(s: string): string {
 }
 
 /**
- * Matcher for every OPFS entry that belongs to `table` — the content-addressed
- * form `<table>_<16hex>.parquet` and the legacy index forms `<table>_<n>.parquet`
- * / `<table>_<n>_<16hex>.parquet` left by older builds. Anchored on the exact
- * slug/index shape so a sibling table whose name extends this one (`pages` vs
- * `pages_summary`, `search_appearance` vs `search_appearance_pages`) never
- * matches: the segment after `<table>_` is then a word, not hex-or-digits.
+ * Match legacy index names for this table only.
+ * Keep content addresses and sibling tables such as `pages_summary`.
  */
-function tableEntryMatcher(table: string): RegExp {
-  return new RegExp(`^${escapeRegExp(`${OPFS_PREFIX}${table}_`)}(?:[0-9a-f]{16}|\\d+(?:_[0-9a-f]{16})?)\\.parquet$`)
+function legacyEntryMatcher(table: string): RegExp {
+  // A content hash can contain only digits. Exclude all 16-character hashes
+  // before matching the legacy numeric index form.
+  return new RegExp(`^${escapeRegExp(`${OPFS_PREFIX}${table}_`)}(?![0-9a-f]{16}\\.parquet$)\\d+(?:_[0-9a-f]{16})?\\.parquet$`)
 }
 
 /**
- * Reap every cached OPFS entry for the attached tables that the current
- * manifest no longer references — stale-hash files (content rotated to a new
- * snapshot) and legacy index-named files from builds before content-addressing.
- * One directory scan; an entry is removed only when it matches exactly one
- * attached table's shape, isn't in that table's expected set, and isn't held
- * live by the registry (a concurrent consumer of the shared DB).
+ * Remove unused legacy index names for the attached tables.
+ * The requested files may cover one month of a cached six-month range.
+ * Missing content hashes therefore say nothing about snapshot validity.
+ * Keep those files until browser eviction or explicit cache clearing.
+ * Preserve legacy files still requested or held by another consumer.
  */
-async function sweepStaleEntries(
+async function sweepLegacyEntries(
   root: FileSystemDirectoryHandle,
   registry: OpfsHandleRegistry,
   expectedByTable: Map<string, Set<string>>,
@@ -406,7 +403,7 @@ async function sweepStaleEntries(
   const dir = root as FileSystemDirectoryHandle & { keys?: () => AsyncIterableIterator<string> }
   if (!dir.keys)
     return
-  const matchers = [...expectedByTable].map(([table, expected]) => ({ expected, re: tableEntryMatcher(table) }))
+  const matchers = [...expectedByTable].map(([table, expected]) => ({ expected, re: legacyEntryMatcher(table) }))
   for await (const name of dir.keys()) {
     const m = matchers.find(m => m.re.test(name))
     if (!m || m.expected.has(name) || registry.refs(name) > 0)
@@ -416,7 +413,7 @@ async function sweepStaleEntries(
     }
     catch (error) {
       if (!isNotFoundError(error))
-        reportBestEffortFailure(`removing stale OPFS entry ${name}`, error)
+        reportBestEffortFailure(`removing legacy OPFS entry ${name}`, error)
     }
   }
 }
@@ -527,7 +524,7 @@ export async function readOpfsSnapshotFile(
  * Return an OPFS file handle for `file`, downloading it if absent. The
  * filename encodes the `contentHash` (when supplied), so existence + size
  * match is sufficient verification — no SHA recomputation on the hot path.
- * Stale entries are reaped once up front by {@link sweepStaleEntries}, so this
+ * Legacy entries are reaped once up front by {@link sweepLegacyEntries}, so this
  * is a pure cache-probe-then-download.
  */
 async function materialiseFile(
@@ -768,8 +765,7 @@ export async function attachOpfsParquetTables(
   // index disambiguator sits AFTER the lake files for the no-`contentHash`
   // fallback, and it's flagged so the view build can dedup the lake against it.
   const flat: Array<{ table: string, file: OpfsParquetFile, name: string, overlay?: boolean }> = []
-  // Expected OPFS names per table — the cache-address set the sweep keeps and
-  // everything else for the table (stale hashes, legacy index names) reaps.
+  // Keep legacy index names when a caller still requests them without hashes.
   const expectedByTable = new Map<string, Set<string>>()
   await timed(onTiming, 'plan', { tables: tables.length }, async () => {
     for (const t of tables) {
@@ -802,12 +798,11 @@ export async function attachOpfsParquetTables(
   const registry = getOpfsRegistry(db, DuckDBDataProtocol.BROWSER_FSACCESS)
   const bufferRegistry = getBufferRegistry(db)
 
-  // Reap stale-hash + legacy index-named entries for these tables up front (one
-  // directory scan) so OPFS doesn't accumulate a copy per snapshot version /
-  // manifest ordering. Best-effort — a sweep failure never blocks the attach.
-  await timed(onTiming, 'sweep', { files: total, tables: tables.length }, () => sweepStaleEntries(root, registry, expectedByTable))
+  // A filtered fileset cannot identify obsolete content hashes. Remove only
+  // unused legacy names. A sweep failure never blocks the attach.
+  await timed(onTiming, 'sweep', { files: total, tables: tables.length }, () => sweepLegacyEntries(root, registry, expectedByTable))
     .catch((error: unknown) => {
-      reportBestEffortFailure('stale OPFS cache sweep', error)
+      reportBestEffortFailure('legacy OPFS cache sweep', error)
     })
 
   // Per-table OPFS file names + the registered handles, so a table that hits

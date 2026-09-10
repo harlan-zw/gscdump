@@ -2,7 +2,7 @@
  * Unit tests for the OPFS attach module.
  *
  * Verifies the content-addressed cache (filename embeds `contentHash` so a
- * cache hit is filename-existence + size match — no SHA recomputation), stale-
+ * cache hit is filename-existence + size match — no SHA recomputation), legacy
  * entry sweep on re-attach, quota degradation, and view tear-down. The REAL
  * OPFS round-trip (`navigator.storage.getDirectory` + DuckDB-WASM
  * `BROWSER_FSACCESS`) needs a browser and is covered by
@@ -352,10 +352,10 @@ describe('attachOpfsParquetTables', () => {
     })
 
     expect(fetchSpy).toHaveBeenCalledOnce()
-    // Stale entry swept; only the new file remains.
-    expect(opfs.files.size).toBe(1)
+    // A different requested hash does not prove that the old file is obsolete.
+    expect(opfs.files.get(`gscdump-snapshot__pages_${oldSlug}.parquet`)).toEqual(new Uint8Array([0, 0, 0]))
     const newSlug = await expectedSlug('iceberg/new.parquet')
-    expect([...opfs.files.keys()][0]).toBe(`gscdump-snapshot__pages_${newSlug}.parquet`)
+    expect(opfs.files.get(`gscdump-snapshot__pages_${newSlug}.parquet`)).toEqual(fresh)
   })
 
   it('re-downloads when a cached file has the wrong byte size (partial write)', async () => {
