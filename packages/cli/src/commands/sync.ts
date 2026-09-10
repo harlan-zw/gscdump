@@ -1,7 +1,7 @@
 import type { googleSearchConsole } from 'gscdump/client'
 import type { SearchType } from 'gscdump/query'
 import type { ResolvedGscdumpConfig } from '../config'
-import type { LocalStore, Row, TableName, WriteCtx } from '../local-store'
+import type { GscApiRow, LocalStore, Row, TableName, WriteCtx } from '../local-store'
 import process from 'node:process'
 import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
@@ -10,7 +10,7 @@ import { daysAgoUtc as daysAgo, getDateRange } from 'gscdump/dates'
 import { SearchTypes } from 'gscdump/query'
 import { syncCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
-import { allTables, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
+import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
 const DEFAULT_TABLES: TableName[] = ['pages', 'queries', 'countries', 'dates']
@@ -113,17 +113,15 @@ async function syncTable(
   return { rows: totalRows, skipped, failed }
 }
 
-async function runOneDate(
-  store: LocalStore,
+async function fetchDateRows(
   client: ReturnType<typeof googleSearchConsole>,
   siteUrl: string,
-  table: TableName,
   searchType: SearchType,
   dims: string[],
   date: string,
-): Promise<{ kind: 'ok', rows: number }> {
+): Promise<GscApiRow[]> {
   const rowLimit = 25000
-  const rows: Row[] = []
+  const rows: GscApiRow[] = []
   let startRow = 0
 
   while (true) {
@@ -139,19 +137,47 @@ async function runOneDate(
     } as any)
     const batch = response.rows || []
     for (const apiRow of batch) {
-      const transformed = transformGscRow(table, {
+      rows.push({
         keys: (apiRow.keys ?? []) as string[],
         clicks: apiRow.clicks ?? 0,
         impressions: apiRow.impressions ?? 0,
         ctr: apiRow.ctr ?? 0,
         position: apiRow.position ?? 0,
       })
-      if (transformed)
-        rows.push(transformed.row)
     }
     if (batch.length === 0)
       break
     startRow += batch.length
+  }
+  return rows
+}
+
+async function runOneDate(
+  store: LocalStore,
+  client: ReturnType<typeof googleSearchConsole>,
+  siteUrl: string,
+  table: TableName,
+  searchType: SearchType,
+  dims: string[],
+  date: string,
+): Promise<{ kind: 'ok', rows: number }> {
+  const apiRows = await fetchDateRows(client, siteUrl, searchType, dims, date)
+  const rows: Row[] = []
+  if (table === 'dates') {
+    const totals = apiRows.find(row => row.keys[0] === date)
+    if (totals) {
+      const deviceRows = await fetchDateRows(client, siteUrl, searchType, ['date', 'device'], date)
+      const queryRows = await fetchDateRows(client, siteUrl, searchType, TABLE_DIMS.queries, date)
+      const queryImpressions = queryRows.reduce((sum, row) => sum + row.impressions, 0)
+      rows.push(assembleDatesRow(date, totals, deviceRows, queryImpressions).row)
+    }
+  }
+  else {
+    for (const apiRow of apiRows) {
+      const transformed = transformGscRow(table, apiRow)
+      if (transformed)
+        rows.push(transformed.row)
+    }
   }
 
   const writeCtx: WriteCtx = {
@@ -266,9 +292,24 @@ export const syncCommand = defineCommand({
       process.exit(1)
     }
 
-    const siteId = ctx.store!.siteIdFor(siteUrl)
-    const emptyTypesStore = createEmptyTypesStore({ dataSource: ctx.store!.dataSource })
-    const emptyTypesDoc = await emptyTypesStore.load({ userId: ctx.store!.userId, siteId })
+    const store = ctx.store!
+    const siteId = store.siteIdFor(siteUrl)
+    const scope = { userId: store.userId, siteId }
+    const emptyTypesStore = createEmptyTypesStore({ dataSource: store.dataSource })
+    let emptyTypesDoc = await emptyTypesStore.load(scope)
+    // Older sync runs could mark populated types empty after skipping done dates.
+    // Existing rows disprove those markers, including rows in unselected tables.
+    if (emptyTypesDoc.emptyTypes.length > 0) {
+      const entries = await store.engine.listLive(scope)
+      const populated = new Set(entries.filter(entry => entry.rowCount > 0).map(entry => entry.searchType ?? 'web'))
+      const toClear = requestedTypes.filter(type => emptyTypesDoc.emptyTypes.includes(type) && populated.has(type))
+      if (toClear.length > 0) {
+        if (!args['dry-run'])
+          emptyTypesDoc = await emptyTypesStore.clear(scope, toClear)
+        else
+          emptyTypesDoc.emptyTypes = emptyTypesDoc.emptyTypes.filter(type => !toClear.includes(type as SearchType))
+      }
+    }
     const forceTypes = Boolean(args['force-types'])
     const skippedTypes: SearchType[] = []
     const types: SearchType[] = []
@@ -311,8 +352,6 @@ export const syncCommand = defineCommand({
       logger.error(`No dates to sync (start=${startDate}, end=${endDate})`)
       process.exit(1)
     }
-
-    const store = ctx.store!
 
     // --retry-failed shrinks the date list to exactly the dates currently in
     // `failed` state for the requested (table, type) jobs. Force-mode is
@@ -403,7 +442,7 @@ export const syncCommand = defineCommand({
           dates,
           client,
           concurrency,
-          args.force,
+          args.force || forceTypes,
           progress,
         )
       }
@@ -418,7 +457,7 @@ export const syncCommand = defineCommand({
           dates,
           client,
           concurrency,
-          args.force,
+          args.force || forceTypes,
           progress,
         )),
       )
@@ -444,27 +483,30 @@ export const syncCommand = defineCommand({
 
     const anyFailed = Object.values(totals).some(t => t.failed > 0)
 
-    // Empty-type detection: a type whose full sync window yielded zero rows
-    // (across every table, every date) almost certainly has no coverage for
-    // this site. Persist a marker so future syncs skip it until --force-types
-    // is passed. Requires a wide-enough window (`EMPTY_TYPE_PROBE_MIN_DAYS`)
-    // to avoid false positives on outages / low-traffic sites.
+    // Only fresh, complete probes can establish emptiness. Skipped dates
+    // provide no evidence. Existing rows also rule out a site-wide marker.
     const rowsByType = new Map<SearchType, number>()
     const failedByType = new Map<SearchType, number>()
+    const skippedByType = new Map<SearchType, number>()
     for (const job of jobs) {
       const t = totals[job.label]
       rowsByType.set(job.type, (rowsByType.get(job.type) ?? 0) + t.rows)
       failedByType.set(job.type, (failedByType.get(job.type) ?? 0) + t.failed)
+      skippedByType.set(job.type, (skippedByType.get(job.type) ?? 0) + t.skipped)
     }
-    if (!forceTypes && dates.length >= EMPTY_TYPE_PROBE_MIN_DAYS) {
+    if (!forceTypes && tables.length > 0 && dates.length >= EMPTY_TYPE_PROBE_MIN_DAYS) {
       const toMark: SearchType[] = []
       for (const type of types) {
         if (EMPTY_TYPE_PROTECTED.includes(type))
           continue
         if ((failedByType.get(type) ?? 0) > 0)
           continue
-        if ((rowsByType.get(type) ?? 0) === 0)
-          toMark.push(type)
+        if ((skippedByType.get(type) ?? 0) > 0 || (rowsByType.get(type) ?? 0) > 0)
+          continue
+        const entries = await store.engine.listLive({ ...scope, searchType: type })
+        if (entries.some(entry => entry.rowCount > 0))
+          continue
+        toMark.push(type)
       }
       if (toMark.length > 0) {
         await emptyTypesStore.mark({ userId: store.userId, siteId }, toMark)
