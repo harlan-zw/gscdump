@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, parse, relative, sep } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -71,6 +71,22 @@ describe('filesystemDataSource', () => {
         // Consume the iterator so path validation runs.
       }
     }).rejects.toThrow(/escapes root/)
+  })
+
+  it.skipIf(sep !== '/').each(['pages\\day.parquet', '..\\outside.parquet'])('preserves literal POSIX backslashes in %s', async (key) => {
+    const rootDir = join(dir, 'store\\folder')
+    const ds = createFilesystemDataSource({ rootDir })
+    const bytes = new Uint8Array([4, 5, 6])
+
+    await ds.write(key, bytes)
+
+    expect(ds.uri!(key)).toBe(join(rootDir, key))
+    expect(new Uint8Array(await readFile(ds.uri!(key)!))).toEqual(bytes)
+    expect(await ds.list('')).toEqual([key])
+    const streamed: string[] = []
+    for await (const entry of ds.streamList!(''))
+      streamed.push(entry)
+    expect(streamed).toEqual([key])
   })
 })
 

@@ -35,6 +35,11 @@ export interface FilesystemDataSourceOptions {
   rootDir: string
 }
 
+function portablePath(path: string): string {
+  // POSIX allows literal backslashes in filenames. Only Windows treats them as separators.
+  return sep === '\\' ? normalize(path) : path
+}
+
 export function createFilesystemDataSource(opts: FilesystemDataSourceOptions): DataSource {
   const root = resolve(opts.rootDir)
   const readyDirectories = new Map<string, Promise<void>>()
@@ -124,12 +129,12 @@ export function createFilesystemDataSource(opts: FilesystemDataSourceOptions): D
       const full = pathFor(prefix)
       const out: string[] = []
       await walk(full, out)
-      return out.map(p => normalize(relative(root, p)))
+      return out.map(p => portablePath(relative(root, p)))
     },
     async* streamList(prefix) {
       const full = pathFor(prefix)
       for await (const p of walkStream(full))
-        yield normalize(relative(root, p))
+        yield portablePath(relative(root, p))
     },
     async head(key) {
       const path = pathFor(key)
@@ -143,7 +148,7 @@ export function createFilesystemDataSource(opts: FilesystemDataSourceOptions): D
       )
     },
     uri(key) {
-      return normalize(pathFor(key))
+      return portablePath(pathFor(key))
     },
   }
 }
