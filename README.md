@@ -1,10 +1,18 @@
-<h1>gscdump</h1>
+<p align="center">
+  <a href="https://gscdump.com"><img src="./.github/assets/og.png" alt="gscdump" width="1200"></a>
+</p>
 
 [![npm version](https://img.shields.io/npm/v/gscdump?color=yellow)](https://npmjs.com/package/gscdump)
 [![npm downloads](https://img.shields.io/npm/dm/gscdump?color=yellow)](https://npm.chart.dev/gscdump)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
 > Google Search Console data and SEO analysis for TypeScript, the CLI, and AI assistants.
+
+Tell your agent:
+
+> Set up gscdump using this skill: https://gscdump.com/SKILL.md
+
+If you cloned this repository, use [`packages/cli/skills/gscdump/SKILL.md`](./packages/cli/skills/gscdump/SKILL.md) instead.
 
 <p align="center">
 <table>
