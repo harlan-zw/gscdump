@@ -12,6 +12,36 @@ Google again. Every command has `--help`.
 Use it to answer "what is happening in search for this Site", then act on the
 findings in the repository you are working in.
 
+## Choose local or the platform first
+
+There are two ways to reach Search Console data. They differ in who holds
+the credentials and where the data lives. If the user has not said which one
+they want, ask before you run anything. Do not guess.
+
+| | Local CLI (this skill) | The platform (gscdump.com) |
+| --- | --- | --- |
+| Credentials | The user's own Google OAuth client, token, or service account | gscdump.com holds a read-only Google grant after sign-in |
+| Where data lives | Parquet files on this machine | Synced continuously on gscdump.com, history kept past Google's 16 months |
+| Setup cost | A Google Cloud project with the Search Console API enabled | Sign in once; free during beta |
+| How you reach it | `gscdump` commands in this terminal | MCP over HTTP at `https://gscdump.com/mcp` |
+| Good for | One machine, private data, CI, raw SQL over Parquet | Several clients, long history, no local sync to babysit |
+
+Ask in one line, for example: "Do you want to use your own Google keys
+locally with the gscdump CLI, or connect to your gscdump.com account?"
+
+If the user chooses the platform, this skill does not apply. Connect the MCP
+server instead and stop here:
+
+```sh
+claude mcp add --transport http --scope user gscdump https://gscdump.com/mcp
+```
+
+Claude, ChatGPT, and Claude Code sign in with OAuth. Cursor and Codex send an
+API key from gscdump.com settings as the `x-api-key` header. Setup for each
+client: https://gscdump.com/mcp
+
+If the user chooses local, continue below.
+
 ## Data boundaries
 
 - `sync`, `query --live`, `analyze --live`, `report --live`, `sites`,
