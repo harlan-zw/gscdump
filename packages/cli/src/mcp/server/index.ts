@@ -26,6 +26,7 @@ import {
   getIndexingStatus,
   requestIndexing,
 } from '../handlers/indexing'
+import { listReports, runReportHandler } from '../handlers/reports'
 import { getSitemap, listSitesWithSitemaps } from '../handlers/sites'
 import {
   batchInspectUrlsInput,
@@ -216,11 +217,10 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
   server.registerTool(
     'list-reports',
     {
-      description: 'List available reports (intent-keyed analyzer compositions). Returns id, description, default period/comparison, and per-report argsSpec.',
+      description: 'List Reports supported by the live Google API. Returns defaults and argsSpec using run-report input names.',
       inputSchema: listReportsInput.shape,
     },
     async () => {
-      const { listReports } = await import('../handlers/reports')
       const result = listReports()
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
@@ -233,8 +233,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: runReportInput.shape,
     },
     async (args) => {
-      const { runReportHandler } = await import('../handlers/reports')
-      const result = await runReportHandler(args, await getContext())
+      const result = await runReportHandler(args, getContext)
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )

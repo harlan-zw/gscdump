@@ -108,7 +108,7 @@ export const listReportsInput = z.object({})
 
 export const runReportInput = z.object({
   siteUrl: siteUrlSchema,
-  id: z.string().describe('Report id (e.g. health, movers, opportunities, risks). See list-reports.'),
+  id: z.string().describe('Report ID supported by the live Google API. See list-reports.'),
   period: z.string().optional().describe('Window: 7d|28d|30d|90d|180d|365d|mtd|ytd|custom (default per report).'),
   comparison: z.string().optional().describe('Comparison: none|prev-period|yoy (default per report).'),
   start: z.string().optional().describe('Custom window start (YYYY-MM-DD); requires period=custom.'),
@@ -116,6 +116,11 @@ export const runReportInput = z.object({
   prevStart: z.string().optional().describe('Override comparison-window start.'),
   prevEnd: z.string().optional().describe('Override comparison-window end.'),
   maxFindings: z.number().optional().describe('Cap findings per section (per-report default ~5).'),
+  minClicksChange: z.number().optional().describe('Minimum absolute click change for movers findings.'),
+  target: z.string().optional().describe('Page URL or query for triage. This Report requires the local Store.'),
+  targetKind: z.enum(['page', 'query']).optional().describe('Target kind for triage. Defaults to page.'),
+  topic: z.string().optional().describe('Required for pre-publish: topic or URL slug to check.'),
+  brandTerms: z.string().optional().describe('Required for brand: comma-separated brand terms.'),
 })
 
 // Helper to convert zod period to gscdump Period

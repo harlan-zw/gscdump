@@ -18,7 +18,7 @@ export type {
   GscRange,
   GscTopNRow,
 } from './rollup-synth'
-export { createGscApiQuerySource } from './source'
+export { createGscApiQuerySource, GSC_API_CAPABILITIES } from './source'
 export type { GscApiQuerySourceOptions } from './source'
 export type {
   GscApiRow,

@@ -10,7 +10,7 @@ const ctx = { auth: 'x', client: {} as any } as any
 
 describe('mcp handler error cores (errors-as-values)', () => {
   it('runReportHandlerResult returns a typed unknown-report error', async () => {
-    const r = await runReportHandlerResult({ id: 'nope', siteUrl: 'sc-domain:example.com' } as any, ctx)
+    const r = await runReportHandlerResult({ id: 'nope', siteUrl: 'sc-domain:example.com' } as any, () => ctx)
     expect(r.ok).toBe(false)
     if (!r.ok) {
       expect(r.error.kind).toBe('unknown-report')
@@ -19,14 +19,14 @@ describe('mcp handler error cores (errors-as-values)', () => {
   })
 
   it('runReportHandlerResult returns a typed unknown-period error', async () => {
-    const r = await runReportHandlerResult({ id: 'health', period: 'fortnight', siteUrl: 'sc-domain:example.com' } as any, ctx)
+    const r = await runReportHandlerResult({ id: 'movers', period: 'fortnight', siteUrl: 'sc-domain:example.com' } as any, () => ctx)
     expect(r.ok).toBe(false)
     if (!r.ok)
       expect(r.error.kind).toBe('unknown-period')
   })
 
   it('runReportHandlerResult returns a typed unknown-comparison error', async () => {
-    const r = await runReportHandlerResult({ id: 'health', comparison: 'sideways', siteUrl: 'sc-domain:example.com' } as any, ctx)
+    const r = await runReportHandlerResult({ id: 'movers', comparison: 'sideways', siteUrl: 'sc-domain:example.com' } as any, () => ctx)
     expect(r.ok).toBe(false)
     if (!r.ok)
       expect(r.error.kind).toBe('unknown-comparison')
