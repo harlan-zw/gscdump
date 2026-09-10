@@ -3,12 +3,14 @@ import type { DefinedReport, ReportArgsSpec, ReportContext, ReportParams } from 
 import type { CommandDef } from 'citty'
 import type { Result } from 'gscdump/result'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
-import { defaultReportRegistry, dryRunReport, formatReport, runReport } from '@gscdump/analysis/report'
+import { defaultReportRegistry, dryRunReport, runReport } from '@gscdump/analysis/report'
 import { resolveWindow } from '@gscdump/engine/period'
 import { defineCommand } from 'citty'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { resolveAnalysisSource } from '../analysis-local'
 import { reportCommandMeta } from '../command-meta'
+import { renderCliReport } from '../render/report'
+import { terminalOutputOptions } from '../render/terminal'
 import { logger } from '../utils'
 
 /**
@@ -183,7 +185,7 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
         console.log(JSON.stringify(result, null, 2))
         return
       }
-      console.log(formatReport(result))
+      console.log(renderCliReport(result, terminalOutputOptions()))
       if (result.meta.degraded)
         logger.warn(`degraded: ${result.meta.steps.filter(s => s.status === 'error').map(s => `${s.key}(${s.error})`).join(', ')}`)
     },

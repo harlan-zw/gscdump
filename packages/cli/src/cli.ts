@@ -5,15 +5,17 @@ import { CLI_SUBCOMMANDS } from './command-registry'
 import { applyProfileFromCli } from './commands/profile-selection'
 import { loadEnvFromCwd } from './env-file'
 import { resolveCliEnvironment } from './environment'
+import { terminalOutputOptions } from './render/terminal'
 import { createCliRuntime, runWithCliRuntime } from './runtime'
-import { configureColor, showSplash, VERSION, withConfiguredOutput } from './utils'
+import { setNoColor, showSplash, VERSION, withConfiguredOutput } from './utils'
 
 // Splash is purely cosmetic; suppress whenever it would corrupt machine output
 // or be spammed across non-interactive runs.
 function shouldShowSplash(rawArgs: string[]): boolean {
   if (!process.stdout.isTTY)
     return false
-  if (rawArgs.includes('mcp'))
+  // Data commands own their headings, including JSON and CSV formats.
+  if (rawArgs[0] !== 'init' && rawArgs[0] !== 'auth')
     return false
   for (const flag of ['--json', '--quiet', '-q', '--version', '-v', '--help', '-h']) {
     if (rawArgs.includes(flag))
@@ -28,11 +30,7 @@ function shouldShowSplash(rawArgs: string[]): boolean {
 function prepareCliArgs(input: readonly string[]): string[] {
   const rawArgs = [...input]
   const env = resolveCliEnvironment()
-  configureColor({
-    noColor: rawArgs.includes('--no-color') || env.noColor,
-    forceColor: env.forceColor,
-    stderrIsTTY: Boolean(process.stderr.isTTY),
-  })
+  setNoColor(!terminalOutputOptions().color)
 
   const profile = pluckArgValue(rawArgs, '--profile', true)
   const configDir = pluckArgValue(rawArgs, '--config-dir') ?? env.configDir ?? null

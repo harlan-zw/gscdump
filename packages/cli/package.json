@@ -64,6 +64,7 @@
     "ofetch": "catalog:deps",
     "open": "catalog:deps",
     "sitemapd": "catalog:",
+    "string-width": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

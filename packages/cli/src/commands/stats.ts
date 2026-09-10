@@ -2,8 +2,14 @@ import type { ManifestEntry, Watermark } from '../local-store'
 import process from 'node:process'
 import { filesystemStats } from '@gscdump/engine/filesystem'
 import { defineCommand } from 'citty'
+import { decodeSiteId, parseGscSiteUrl } from 'gscdump'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
+import { columnsFor } from '../render/analysis'
+import { barColumn } from '../render/charts'
+import { renderTable, textLines } from '../render/layout'
+import { formatMetric } from '../render/metrics'
+import { terminalOutputOptions } from '../render/terminal'
 import { applyOutputMode, displayPath, formatAge, logger, OUTPUT_ARGS } from '../utils'
 
 export const statsCommand = defineCommand({
@@ -79,41 +85,44 @@ export const statsCommand = defineCommand({
       return
     }
 
-    console.log()
-    console.log(`  \x1B[1m${displayPath(store.dataDir)}\x1B[0m`)
-    console.log(`  \x1B[90mDisk: ${disk.files} file(s), ${formatBytes(disk.bytes)}\x1B[0m`)
-    console.log()
-
-    const totalRows = perTable.reduce((acc, t) => acc + sumRows(t.live), 0)
-    const totalBytes = perTable.reduce((acc, t) => acc + sumBytes(t.live), 0)
-    const totalFiles = perTable.reduce((acc, t) => acc + t.live.length, 0)
-    const totalRetiredFiles = perTable.reduce((acc, t) => acc + t.retired.length, 0)
-    const totalRetiredBytes = perTable.reduce((acc, t) => acc + sumBytes(t.retired), 0)
-
-    for (const { table, live, retired } of perTable) {
-      const rows = sumRows(live).toLocaleString()
-      const bytes = formatBytes(sumBytes(live))
-      const retiredSuffix = retired.length > 0
-        ? ` \x1B[90m(+${retired.length} retired, ${formatBytes(sumBytes(retired))})\x1B[0m`
-        : ''
-      console.log(`  ${table.padEnd(15)} \x1B[36m${String(live.length).padStart(4)}\x1B[0m files, ${rows.padStart(10)} rows, ${bytes}${retiredSuffix}`)
+    const options = terminalOutputOptions()
+    const rows = perTable.filter(({ live, retired }) => live.length || retired.length).map(({ table, live, retired }) => ({
+      table,
+      liveFiles: live.length,
+      liveRows: sumRows(live),
+      liveBytes: sumBytes(live),
+      retiredFiles: retired.length,
+      retiredBytes: sumBytes(retired),
+    }))
+    const retired = rows.some(row => row.retiredFiles > 0)
+    const lines = [
+      ...textLines(`Store / ${displayPath(store.dataDir)}`, options, 'accent'),
+      ...textLines(`Disk ${formatMetric('bytes', disk.bytes)}  ${disk.files} files`, options),
+      '',
+      ...(rows.length
+        ? renderTable(rows, [
+            { key: 'table', label: 'Table' },
+            ...columnsFor(rows, ['liveFiles', 'liveRows']),
+            barColumn(rows, 'liveBytes', options),
+            ...(retired
+              ? [
+                  { key: 'retiredFiles', label: 'Retired files', numeric: true },
+                  { key: 'retiredBytes', label: 'Retired bytes', numeric: true, format: (value: unknown) => formatMetric('bytes', value) },
+                ]
+              : []),
+          ], options)
+        : textLines('Empty Store.', options)),
+    ]
+    if (rows.length > 1)
+      lines.push(...textLines(`Total ${formatMetric('bytes', rows.reduce((sum, row) => sum + row.liveBytes, 0))} live`, options, 'muted'))
+    if (watermarks.length) {
+      lines.push('', ...renderTable(sortWatermarks(watermarks).map(w => ({
+        scope: w.siteId ? `${w.table}@${parseGscSiteUrl(decodeSiteId(w.siteId)).hostname}` : w.table,
+        dates: `${w.oldestDateSynced} to ${w.newestDateSynced}`,
+        synced: formatAge(w.lastSyncAt),
+      })), [{ key: 'scope', label: '' }, { key: 'dates', label: 'Dates' }, { key: 'synced', label: 'Synced' }], options))
     }
-
-    console.log()
-    console.log(`  \x1B[1mTotal:\x1B[0m ${totalFiles} files, ${totalRows.toLocaleString()} rows, ${formatBytes(totalBytes)} live`)
-    if (totalRetiredFiles > 0)
-      console.log(`  \x1B[90mRetired: ${totalRetiredFiles} files, ${formatBytes(totalRetiredBytes)} awaiting GC\x1B[0m`)
-
-    if (watermarks.length > 0) {
-      console.log()
-      console.log(`  \x1B[1mSync watermarks:\x1B[0m`)
-      for (const w of sortWatermarks(watermarks)) {
-        const scope = w.siteId ? `${w.table}@${w.siteId}` : w.table
-        console.log(`  ${scope.padEnd(24)} \x1B[36m${w.oldestDateSynced}\x1B[0m → \x1B[36m${w.newestDateSynced}\x1B[0m  \x1B[90m(last ${formatAge(w.lastSyncAt)})\x1B[0m`)
-      }
-    }
-
-    console.log()
+    console.log(lines.join('\n'))
   },
 })
 
@@ -131,14 +140,4 @@ function sumRows(entries: ManifestEntry[]): number {
 
 function sumBytes(entries: ManifestEntry[]): number {
   return entries.reduce((acc, e) => acc + e.bytes, 0)
-}
-
-function formatBytes(n: number): string {
-  if (n < 1024)
-    return `${n} B`
-  if (n < 1024 * 1024)
-    return `${(n / 1024).toFixed(1)} KB`
-  if (n < 1024 * 1024 * 1024)
-    return `${(n / 1024 / 1024).toFixed(1)} MB`
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
 }
