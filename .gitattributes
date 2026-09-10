@@ -1,0 +1,2 @@
+# Package manager patches need LF line endings on every platform.
+*.patch text eol=lf
