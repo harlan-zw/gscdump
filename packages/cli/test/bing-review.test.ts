@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { runCommand } from 'citty'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { saveAuthentication } from '../src/auth-state'
 import { saveBingCredentials } from '../src/bing-auth'
 import { resolveHostedBingSites } from '../src/bing-hosted'
 import { bingCommand } from '../src/commands/bing'
@@ -124,4 +125,82 @@ it('resolves an explicit hosted Site when an unrelated shared Site denies Bing a
 
   expect(sites).toMatchObject([{ siteId: 's_allowed', connection: { _tag: 'connected' } }])
   expect(requested).not.toContain('/api/partner/v1/sites/s_shared/indexing/bing/connection')
+})
+
+it('lists reachable hosted Sites when one Site denies Bing access', async () => {
+  const state = { _tag: 'Cloud' as const, apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_listing' }
+  await runWithCliRuntime(runtime, () => saveAuthentication(state))
+  const output: string[] = []
+  vi.spyOn(console, 'log').mockImplementation((...args) => output.push(args.map(String).join(' ')))
+  const warn = vi.spyOn(runtime.logger, 'warn')
+  vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {
+    const url = new URL(input)
+    if (url.pathname === '/api/cli/me') {
+      return Response.json({
+        user: { publicId: 'u_mixed', email: 'mixed@example.com' },
+        sites: [
+          { siteId: 's_denied', siteUrl: 'https://denied.example.com/' },
+          { siteId: 's_ready', siteUrl: 'https://ready.example.com/' },
+        ],
+      })
+    }
+    if (url.pathname.includes('/s_denied/')) {
+      return Response.json({ error: {
+        code: 'forbidden',
+        message: 'Bing preview access is not enabled for this Site owner.',
+        requestId: 'req_denied',
+        retryable: false,
+        details: {},
+      } }, { status: 403 })
+    }
+    if (url.pathname.includes('/s_ready/')) {
+      return Response.json({
+        data: {
+          _tag: 'connected',
+          searchEngine: 'bing',
+          remoteSiteUrl: 'https://ready.example.com/',
+          verified: true,
+          scopes: ['webmaster.manage'],
+          tokenExpiresAt: null,
+          lastEvidenceAt: null,
+        },
+        meta: { requestId: 'req_ready', surface: 'partner', version: '1.0' },
+      })
+    }
+    throw new Error(`Unexpected request: ${url.pathname}`)
+  }))
+
+  await runWithCliRuntime(runtime, () => runCommand(bingCommand, { rawArgs: ['sites', '--json'] }))
+
+  expect(JSON.parse(output.at(-1)!)).toMatchObject({ searchEngine: 'bing', sites: [
+    { siteId: 's_ready', siteUrl: 'https://ready.example.com/', connection: { _tag: 'connected' } },
+  ] })
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining('denied.example.com'))
+})
+
+it('keeps the hard failure for an explicit hosted Site whose connection is denied', async () => {
+  const state = { _tag: 'Cloud' as const, apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_explicit' }
+  vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {
+    const url = new URL(input)
+    if (url.pathname === '/api/cli/me') {
+      return Response.json({
+        user: { publicId: 'u_explicit', email: 'explicit@example.com' },
+        sites: [{ siteId: 's_denied', siteUrl: 'https://denied.example.com/' }],
+      })
+    }
+    if (url.pathname.includes('/s_denied/')) {
+      return Response.json({ error: {
+        code: 'forbidden',
+        message: 'Bing preview access is not enabled for this Site owner.',
+        requestId: 'req_denied',
+        retryable: false,
+        details: {},
+      } }, { status: 403 })
+    }
+    throw new Error(`Unexpected request: ${url.pathname}`)
+  }))
+
+  await expect(resolveHostedBingSites(state, { site: 's_denied', requireConnected: false }))
+    .rejects
+    .toThrow('Bing preview access is not enabled')
 })

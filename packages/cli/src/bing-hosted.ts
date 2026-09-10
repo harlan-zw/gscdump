@@ -4,6 +4,7 @@ import type { BingDumpDataset, BingDumpSummary, parseBingDumpOptions } from './b
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
 import { getCloudAccount } from './auth-state'
 import { writeBingDump } from './bing-data'
+import { logger } from './utils'
 
 interface HostedBingSite {
   siteId: string
@@ -17,16 +18,31 @@ export function hostedBingClient(state: CloudAuthentication): GscdumpV1Client {
 
 export async function listHostedBingSites(state: CloudAuthentication): Promise<HostedBingSite[]> {
   const account = await getCloudAccount(state)
-  return loadHostedBingConnections(state, account.sites)
+  return loadHostedBingConnections(state, account.sites, { tolerateFailures: true })
 }
 
-async function loadHostedBingConnections(state: CloudAuthentication, sites: { siteId: string, siteUrl: string }[]): Promise<HostedBingSite[]> {
+async function loadHostedBingConnections(
+  state: CloudAuthentication,
+  sites: { siteId: string, siteUrl: string }[],
+  options: { tolerateFailures?: boolean } = {},
+): Promise<HostedBingSite[]> {
   const client = hostedBingClient(state)
-  return Promise.all(sites.map(async site => ({
-    siteId: site.siteId,
-    siteUrl: site.siteUrl,
-    connection: (await client.getSiteBingConnection({ params: { siteId: site.siteId } }, { signal: AbortSignal.timeout(30_000) })).data,
-  })))
+  const loaded = await Promise.all(sites.map(async (site): Promise<HostedBingSite | null> => {
+    // One denied or failing Site is that Site's status, not a whole-account
+    // failure: tolerated misses drop out of the listing with a warning.
+    // Explicit single-Site lookups keep the hard failure.
+    const connection = await client.getSiteBingConnection({ params: { siteId: site.siteId } }, { signal: AbortSignal.timeout(30_000) })
+      .then(response => response.data)
+      .catch((error: unknown) => {
+        if (!options.tolerateFailures)
+          throw error
+        const detail = error instanceof Error ? error.message : 'Bing connection request failed.'
+        logger.warn(`Bing connection for ${site.siteUrl} is unavailable: ${detail}`)
+        return null
+      })
+    return connection && { siteId: site.siteId, siteUrl: site.siteUrl, connection }
+  }))
+  return loaded.filter(site => site !== null)
 }
 
 export async function resolveHostedBingSites(state: CloudAuthentication, input: { site?: string, allSites?: boolean, requireConnected?: boolean }): Promise<HostedBingSite[]> {
@@ -42,7 +58,7 @@ export async function resolveHostedBingSites(state: CloudAuthentication, input: 
     throw new Error('No matching Bing site. Run `gscdump bing sites`.')
   if (!input.allSites && requested.length > 1)
     throw new Error('Multiple Bing sites match. Use a site ID from `gscdump bing sites`.')
-  const connections = await loadHostedBingConnections(state, requested)
+  const connections = await loadHostedBingConnections(state, requested, { tolerateFailures: Boolean(input.allSites) })
   const selected = input.allSites ? connections.filter(site => site.connection._tag === 'connected') : connections
   if (selected.length === 0)
     throw new Error('No matching Bing site. Run `gscdump bing sites`.')

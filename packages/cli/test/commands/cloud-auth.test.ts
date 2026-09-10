@@ -53,6 +53,28 @@ it('reports cloud account and features without token details', async () => {
   expect(JSON.stringify(result)).not.toContain(cloud.apiKey)
 })
 
+it('reports a failed cloud status instead of rejecting when the hosted API fails', async () => {
+  await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
+  vi.mocked(fetch).mockImplementation(async (input: string | URL) => {
+    const url = new URL(input)
+    if (url.pathname.endsWith('/cli/me'))
+      return Response.json({ error: { code: 'internal', message: 'Hosted failure.', requestId: 'req_down', retryable: true, details: {} } }, { status: 500 })
+    throw new Error(`Unexpected request: ${url.pathname}`)
+  })
+  const warn = vi.spyOn(runtime.logger, 'warn')
+
+  const jsonRun = runWithCliRuntime(runtime, () => run('status', { json: true }))
+  await expect(jsonRun.then(() => 'resolved' as const)).resolves.toBe('resolved')
+  const result = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])
+  expect(result).toMatchObject({ authenticated: false, mode: 'cloud', apiRoot: cloud.apiRoot })
+  expect(result.error).toContain('500')
+  expect(JSON.stringify(result)).not.toContain(cloud.apiKey)
+
+  const humanRun = runWithCliRuntime(runtime, () => run('status', {}))
+  await expect(humanRun.then(() => 'resolved' as const)).resolves.toBe('resolved')
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining('500'))
+})
+
 it('clears shared authentication on logout', async () => {
   await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
   await run('logout', { quiet: true })

@@ -102,20 +102,36 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
   applyAuthMode(args)
   const authentication = await resolveAuthentication()
   if (authentication._tag === 'Cloud') {
-    const account = await getCloudAccount(authentication)
     const capabilities = {
       google: ['sites', 'query', 'sync', 'inspect', 'sitemaps', 'analyze', 'report'],
       bing: ['sites', 'dump', 'inspect', 'login', 'status', 'verify'],
       cloud: ['sitemaps current', 'sitemaps history', 'sitemaps membership', 'sitemaps lastmod', 'sitemaps export'],
       local: ['indexing', 'sites verification'],
     }
+    // A hosted failure is a status result, not a command crash: report it
+    // like the local branch reports a failed provider verification.
+    const account = await getCloudAccount(authentication).then(
+      value => ({ _tag: 'Ok' as const, value }),
+      (error: unknown) => ({ _tag: 'Err' as const, detail: error instanceof Error ? error.message : 'Hosted authentication failed.' }),
+    )
+    if (account._tag === 'Err') {
+      if (json) {
+        console.log(JSON.stringify({ authenticated: false, mode: 'cloud', apiRoot: authentication.apiRoot, error: account.detail }, null, 2))
+      }
+      else {
+        logger.warn(`Cloud status check failed: ${account.detail}`)
+        logger.info(`API: ${authentication.apiRoot}`)
+        logger.info('Fix connectivity or the API key, then run `gscdump auth status` again.')
+      }
+      return
+    }
     if (json) {
-      console.log(JSON.stringify({ authenticated: true, mode: 'cloud', account: account.user.email, apiRoot: authentication.apiRoot, sites: account.sites, capabilities }, null, 2))
+      console.log(JSON.stringify({ authenticated: true, mode: 'cloud', account: account.value.user.email, apiRoot: authentication.apiRoot, sites: account.value.sites, capabilities }, null, 2))
     }
     else {
-      logger.success(`Authenticated with cloud: ${account.user.email}`)
+      logger.success(`Authenticated with cloud: ${account.value.user.email}`)
       console.log(`  API: ${authentication.apiRoot}`)
-      console.log(`  Sites: ${account.sites.length}`)
+      console.log(`  Sites: ${account.value.sites.length}`)
       console.log('  Google and Bing use connections saved on gscdump.com.')
       console.log(`  Cloud commands: ${capabilities.cloud.join(', ')}`)
       console.log('  Google indexing and Site Verification require --mode local.')
