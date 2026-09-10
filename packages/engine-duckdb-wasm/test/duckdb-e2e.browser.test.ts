@@ -20,9 +20,9 @@ import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm'
 import mvpWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url'
 // @ts-expect-error - Vite ?url asset import, no type decl
 import mvpWasm from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url'
+import { attachOpfsParquetTables, clearOpfsSnapshotCache } from '@gscdump/engine-duckdb-wasm'
 import { encodeRowsToParquetFlex } from '@gscdump/engine/hyparquet'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { attachOpfsParquetTables, clearOpfsSnapshotCache } from '../src/opfs'
 import { bootDuckDBWasm } from '../src/runtime'
 
 // `?url` yields a root-relative `/@fs/...` path; `importScripts` inside the
@@ -78,6 +78,62 @@ describe('real DuckDB-WASM + real OPFS e2e', () => {
   afterEach(async () => {
     await clearOpfsSnapshotCache()
   })
+
+  it('reuses six months of cached Parquet after attaching a narrower date range', async () => {
+    const months = Array.from({ length: 6 }, (_, i) => {
+      const month = String(i + 1).padStart(2, '0')
+      const parquet = encodeRowsToParquetFlex(Array.from({ length: 30_000 }, (_, row) => ({
+        date: `2026-${month}-${String(row % 28 + 1).padStart(2, '0')}`,
+        query: `query ${row}`,
+        clicks: i + 1,
+      })), {
+        columns: [
+          { name: 'date', type: 'DATE', nullable: false },
+          { name: 'query', type: 'VARCHAR', nullable: false },
+          { name: 'clicks', type: 'INTEGER', nullable: false },
+        ],
+      })
+      return { url: `/month-${month}`, parquet }
+    })
+    const files = months.map(({ url, parquet }) => ({ url, bytes: parquet.byteLength, contentHash: `range-cache${url}` }))
+    let downloadedBytes = 0
+    let downloads = 0
+    const fetch: typeof globalThis.fetch = async (input) => {
+      const month = months.find(month => month.url === String(input))!
+      downloadedBytes += month.parquet.byteLength
+      downloads++
+      return new Response(month.parquet.slice().buffer)
+    }
+    const attach = (selected: typeof files) => attachOpfsParquetTables({
+      db,
+      conn,
+      fetch,
+      tables: [{ table: 'queries', files: selected }],
+    })
+
+    const first = await attach(files)
+    await first.detach()
+    const narrow = await attach(files.slice(-1))
+    expect((await rows(conn, 'SELECT SUM(clicks) AS clicks FROM main.queries')).map(row => Number(row.clicks))).toEqual([180_000])
+    await narrow.detach()
+
+    downloadedBytes = 0
+    downloads = 0
+    const started = performance.now()
+    const again = await attach(files)
+    const out = await rows(conn, 'SELECT SUM(clicks) AS clicks FROM main.queries')
+    await again.detach()
+    console.warn('[six-month OPFS benchmark]', JSON.stringify({
+      rows: 180_000,
+      files: files.length,
+      snapshotBytes: files.reduce((sum, file) => sum + file.bytes, 0),
+      repeatedDownloads: downloads,
+      repeatedDownloadBytes: downloadedBytes,
+      repeatedAttachAndQueryMs: Math.round(performance.now() - started),
+    }))
+    expect(out.map(row => Number(row.clicks))).toEqual([630_000])
+    expect(downloadedBytes).toBe(0)
+  }, 60_000)
 
   it('attaches a real parquet into OPFS and queries it through BROWSER_FSACCESS', async () => {
     const parquet = datesParquet([{ date: '2026-05-01', clicks: 10 }, { date: '2026-05-02', clicks: 20 }])
