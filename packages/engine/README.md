@@ -40,7 +40,7 @@ The package includes `hyparquet` and `hyparquet-writer` for JavaScript Parquet e
 | `@gscdump/engine/node` | Node-only DuckDB handle. |
 | `@gscdump/engine/filesystem` | Node-only `DataSource` and `ManifestStore` adapters. |
 | `@gscdump/engine/hyparquet` | Pure-JS `ParquetCodec`. |
-| `@gscdump/engine/r2` | Cloudflare R2 `DataSource` (structurally typed against `R2Bucket`). |
+| `@gscdump/engine/r2` | Cloudflare R2 `DataSource` and `createR2ManifestStore` (structurally typed against `R2Bucket`). |
 | `@gscdump/engine/iceberg` | Edge-safe GSC dataset schemas, catalog wrappers, and append sink. Generic Iceberg APIs live in `@gscdump/lakehouse`. |
 | `@gscdump/engine/sink-node` | Node-only Iceberg overwrite/delete recovery writer. |
 | `@gscdump/engine/source` | Source contracts and factories. |

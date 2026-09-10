@@ -52,13 +52,9 @@ describe('hourly Discover support', () => {
       expect(resolveToBody(normalized).type).toBe('discover')
     })
 
-    it('drops invalid searchType during normalizeBuilderState', () => {
-      const normalized = normalizeBuilderState({
-        dimensions: ['page'],
-        searchType: 'blogs',
-      })
-
-      expect(normalized.searchType).toBeUndefined()
+    it('rejects an invalid searchType during normalization', () => {
+      expect(() => normalizeBuilderState({ dimensions: ['date'], searchType: 'bogus' }))
+        .toThrowError(expect.objectContaining({ queryError: expect.objectContaining({ kind: 'invalid-builder-state' }) }))
     })
   })
 

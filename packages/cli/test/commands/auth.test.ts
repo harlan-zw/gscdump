@@ -26,6 +26,7 @@ vi.mock('../../src/config', () => ({
 
 // Mock auth
 const mocks = vi.hoisted(() => ({
+  ofetch: vi.fn(),
   loadTokens: vi.fn(),
   clearTokens: vi.fn(),
   loadCloudTokens: vi.fn(),
@@ -34,6 +35,8 @@ const mocks = vi.hoisted(() => ({
   getAuth: vi.fn(),
   resolveAuth: vi.fn(),
 }))
+
+vi.mock('ofetch', () => ({ ofetch: mocks.ofetch }))
 
 vi.mock('../../src/auth', () => ({
   loadTokens: mocks.loadTokens,
@@ -55,6 +58,10 @@ describe('auth command', () => {
       consoleOutput.push(args.map(String).join(' '))
     }
     vi.clearAllMocks()
+    mocks.ofetch.mockResolvedValue({
+      email: 'test@example.com',
+      scope: 'https://www.googleapis.com/auth/webmasters.readonly',
+    })
     // Default loadTokens to return null
     mocks.loadTokens.mockResolvedValue(null)
   })
@@ -112,6 +119,8 @@ describe('auth command', () => {
       const output = consoleOutput.join('\n')
       expect(output).toContain('Access token')
       expect(output).toContain('Refresh token')
+      expect(output).toContain('test@example.com')
+      expect(output).toContain('https://www.googleapis.com/auth/webmasters.readonly')
     })
 
     it('should show expired status for expired tokens', async () => {

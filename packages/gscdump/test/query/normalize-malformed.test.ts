@@ -15,9 +15,8 @@ describe('normalizeBuilderState — malformed dimensions (GSCDUMP-8)', () => {
     expect(() => state.dimensions.includes('date')).not.toThrow()
   })
 
-  it('coerces a non-array dimensions field to an empty array', () => {
-    const state = normalizeBuilderState({ dimensions: 'page', metrics: ['clicks'] } as never)
-    expect(state.dimensions).toEqual([])
+  it('rejects a non-array dimensions field', () => {
+    expect(normalizeBuilderStateResult({ dimensions: 'page' })).toMatchObject({ ok: false })
   })
 
   it('leaves an omitted metrics field as undefined (the all-metrics default sentinel)', () => {
@@ -30,22 +29,14 @@ describe('normalizeBuilderState — malformed dimensions (GSCDUMP-8)', () => {
 })
 
 describe('normalizeFilter / extractDateRange — malformed filter (GSCDUMP-9)', () => {
-  it('treats a filter whose _filters is not an array as no filter', () => {
-    expect(normalizeFilter({ _filters: { dimension: 'date' } } as never)).toBeUndefined()
-  })
-
-  it('treats a plain object with no filter structure as no filter', () => {
-    expect(normalizeFilter({ foo: 'bar' } as never)).toBeUndefined()
-  })
-
-  it('extractDateRange does not throw on a non-iterable _filters', () => {
-    expect(() => extractDateRange({ _filters: 'nope' } as never)).not.toThrow()
-    expect(extractDateRange({ _filters: 'nope' } as never)).toEqual({ startDate: undefined, endDate: undefined })
-  })
-
-  it('extractMetricFilters / extractSpecialOperatorFilters return [] on malformed input', () => {
-    expect(extractMetricFilters({ _filters: 42 } as never)).toEqual([])
-    expect(extractSpecialOperatorFilters({ _filters: null } as never)).toEqual([])
+  it.each([
+    () => normalizeFilter({ _filters: {} } as never),
+    () => normalizeFilter({ foo: 'bar' } as never),
+    () => extractDateRange({ _filters: 'nope' } as never),
+    () => extractMetricFilters({ _filters: 42 } as never),
+    () => extractSpecialOperatorFilters({ _filters: null } as never),
+  ])('reports malformed filters through a typed error', (run) => {
+    expect(run).toThrowError(expect.objectContaining({ queryError: expect.objectContaining({ kind: 'invalid-filter' }) }))
   })
 
   it('still passes a well-formed filter through unchanged', () => {
@@ -84,9 +75,9 @@ describe('normalizeBuilderState — orderBy coercion (GSCDUMP-1M)', () => {
       .toEqual({ column: 'clicks', dir: 'asc' })
   })
 
-  it('drops orderBy with no valid column so the engine uses its default ordering', () => {
-    expect(normalizeBuilderState({ dimensions: ['page'], orderBy: {} }).orderBy).toBeUndefined()
-    expect(normalizeBuilderState({ dimensions: ['page'], orderBy: [] }).orderBy).toBeUndefined()
+  it('rejects malformed ordering without changing the query', () => {
+    expect(normalizeBuilderStateResult({ dimensions: ['page'], orderBy: {} })).toMatchObject({ ok: false })
+    expect(normalizeBuilderStateResult({ dimensions: ['page'], orderBy: [] })).toMatchObject({ ok: false })
     expect(normalizeBuilderState({ dimensions: ['page'] }).orderBy).toBeUndefined()
   })
 })

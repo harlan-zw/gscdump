@@ -203,7 +203,11 @@ export function bingWebmaster(options: BingWebmasterOptions): BingWebmasterClien
 
     const payload = await response.json()
       .then(value => ok(value))
-      .catch(() => err<'invalid-json'>('invalid-json'))
+      .catch((cause: unknown) => {
+        if (cause instanceof SyntaxError)
+          return err<'invalid-json'>('invalid-json')
+        throw cause
+      })
     if (!response.ok)
       return err(mapResponseError(response, payload.ok ? payload.value : undefined, clock()))
 

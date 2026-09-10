@@ -5,17 +5,10 @@ import { indexingCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { loadSitemapUrls } from '../sitemap'
-import { applyOutputMode, logger, OUTPUT_ARGS, readUrlList } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, readUrlList } from '../utils'
 
 const RETRIES_ARG = {
   retries: { type: 'string' as const, description: 'Override per-call retry count (default: 3)' },
-}
-
-function parseRetries(v: unknown): number | undefined {
-  if (v == null || v === '')
-    return undefined
-  const n = Number.parseInt(String(v), 10)
-  return Number.isFinite(n) && n >= 0 ? n : undefined
 }
 
 async function resolveUrlSource(args: { 'urls'?: unknown, 'file'?: unknown, 'from-sitemap'?: unknown }): Promise<string[]> {
@@ -45,7 +38,7 @@ const submitCommand = defineCommand({
   },
   async run({ args }) {
     applyOutputMode(args)
-    const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: parseRetries(args.retries) } })
+    const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: parseIntegerOption(args.retries, '--retries', 0) } })
     const result = await requestIndexing(ctx.client!, args.url, { type: 'URL_UPDATED' }).catch(gscErrorHandler)
     if (args.json) {
       console.log(JSON.stringify(result, null, 2))
@@ -69,7 +62,7 @@ const removeCommand = defineCommand({
   },
   async run({ args }) {
     applyOutputMode(args)
-    const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: parseRetries(args.retries) } })
+    const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: parseIntegerOption(args.retries, '--retries', 0) } })
     const result = await requestIndexing(ctx.client!, args.url, { type: 'URL_DELETED' }).catch(gscErrorHandler)
     if (args.json) {
       console.log(JSON.stringify(result, null, 2))
@@ -166,6 +159,9 @@ const batchCommand = defineCommand({
   },
   async run({ args }) {
     applyOutputMode(args)
+    const retry = parseIntegerOption(args.retries, '--retries', 0)
+    const delayMs = parseIntegerOption(args['delay-ms'], '--delay-ms', 0) ?? 100
+    const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? 1
     const urls = await resolveUrlSource(args)
     if (urls.length === 0) {
       logger.error('No URLs provided. Pass URLs as args, --file, --from-sitemap, or stdin.')
@@ -185,9 +181,7 @@ const batchCommand = defineCommand({
     if (urls.length > INDEXING_DAILY_QUOTA && !args.json && !args.quiet)
       logger.warn(`Proceeding with ${urls.length} URLs (over the ${INDEXING_DAILY_QUOTA}/day quota). Excess will fail.`)
 
-    const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: parseRetries(args.retries) } })
-    const delayMs = Number.parseInt(String(args['delay-ms']), 10)
-    const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 1)
+    const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry } })
 
     if (!args.json && !args.quiet)
       logger.info(`Submitting ${urls.length} URLs (${type}) ...`)
@@ -226,14 +220,15 @@ const batchStatusCommand = defineCommand({
   },
   async run({ args }) {
     applyOutputMode(args)
+    const retry = parseIntegerOption(args.retries, '--retries', 0)
+    const delayMs = parseIntegerOption(args['delay-ms'], '--delay-ms', 0) ?? 100
+    const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? 1
     const urls = await resolveUrlSource(args)
     if (urls.length === 0) {
       logger.error('No URLs provided. Pass URLs as args, --file, --from-sitemap, or stdin.')
       process.exit(1)
     }
-    const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: parseRetries(args.retries) } })
-    const delayMs = Number.parseInt(String(args['delay-ms']), 10)
-    const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 1)
+    const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry } })
 
     if (!args.json && !args.quiet)
       logger.info(`Fetching status for ${urls.length} URLs ...`)

@@ -153,13 +153,18 @@ export function createFetch(auth: Auth, options?: FetchOptions): $Fetch {
     ? createAuth(auth)
     : auth
 
+  const headers = new Headers(options?.headers)
+  if (!headers.has('Accept-Encoding'))
+    headers.set('Accept-Encoding', 'gzip')
+  if (!headers.has('User-Agent'))
+    headers.set('User-Agent', 'gscdump (gzip)')
+
   return ofetch.create({
     ...options,
-    timeout: options?.timeout ?? DEFAULT_GSC_REQUEST_TIMEOUT_MS,
-    retry: 3,
+    retry: options?.retry ?? 3,
     // Honour `Retry-After` on 429/503 (RFC 7231): seconds or HTTP-date.
     // Fall back to 1s for other retryable codes.
-    retryDelay: (ctx: FetchContext) => {
+    retryDelay: options?.retryDelay ?? ((ctx: FetchContext) => {
       const status = ctx.response?.status
       if (status === 429 || status === 503) {
         const header = ctx.response?.headers.get('retry-after')
@@ -173,18 +178,20 @@ export function createFetch(auth: Auth, options?: FetchOptions): $Fetch {
         }
       }
       return 1000
-    },
-    retryStatusCodes: [408, 425, 429, 500, 502, 503, 504],
-    headers: {
-      ...options?.headers,
-      'Accept-Encoding': 'gzip',
-      'User-Agent': 'gscdump (gzip)',
-    },
-    async onRequest({ options }) {
+    }),
+    retryStatusCodes: options?.retryStatusCodes ?? [408, 425, 429, 500, 502, 503, 504],
+    timeout: options?.timeout ?? DEFAULT_GSC_REQUEST_TIMEOUT_MS,
+    headers,
+    async onRequest(ctx) {
       const token = await resolveToken(authState)
       if (token) {
-        options.headers = new Headers(options.headers)
-        options.headers.set('Authorization', `Bearer ${token}`)
+        ctx.options.headers = new Headers(ctx.options.headers)
+        ctx.options.headers.set('Authorization', `Bearer ${token}`)
+      }
+      if (options?.onRequest) {
+        const handlers = Array.isArray(options.onRequest) ? options.onRequest : [options.onRequest]
+        for (const handler of handlers)
+          await handler(ctx)
       }
     },
     async onResponseError(ctx) {

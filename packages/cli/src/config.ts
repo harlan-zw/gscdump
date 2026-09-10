@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { SearchTypes } from 'gscdump/query'
+import { z } from 'zod'
 import { useCliRuntime } from './runtime'
 
 export function setConfigDir(dir: string): void {
@@ -11,18 +13,29 @@ export function getConfigDir(): string {
   return useCliRuntime().configDir
 }
 
-export interface GscdumpConfig {
-  clientId?: string
-  clientSecret?: string
-  defaultSite?: string
-  defaultPeriod?: string
-  defaultFormat?: 'json' | 'csv'
-  defaultDb?: string
-  dataDir?: string
-  defaultLimit?: number
-  defaultSearchType?: string
-  defaultDataState?: string
-  serviceAccountPath?: string
+const configSchema = z.strictObject({
+  clientId: z.string().optional(),
+  clientSecret: z.string().optional(),
+  defaultSite: z.string().optional(),
+  defaultPeriod: z.string().optional(),
+  defaultFormat: z.enum(['json', 'csv']).optional(),
+  defaultDb: z.string().optional(),
+  dataDir: z.string().optional(),
+  defaultLimit: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+  defaultSearchType: z.enum(SearchTypes).optional(),
+  defaultDataState: z.enum(['all', 'final', 'hourly_all']).optional(),
+  serviceAccountPath: z.string().optional(),
+})
+
+export type GscdumpConfig = z.infer<typeof configSchema>
+
+function parseConfig(value: unknown): GscdumpConfig {
+  const parsed = configSchema.safeParse(value)
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map(issue => `${issue.path.join('.') || 'config'}: ${issue.message}`)
+    throw new Error(`Invalid config at ${getConfigPath()}. ${issues.join('; ')}`)
+  }
+  return parsed.data
 }
 
 export function defaultDataDir(): string {
@@ -47,9 +60,17 @@ function expandTilde(p: string): string {
 }
 
 export async function loadConfig(): Promise<GscdumpConfig> {
-  return fs.readFile(path.join(getConfigDir(), 'config.json'), 'utf-8')
-    .then(data => JSON.parse(data) as GscdumpConfig)
-    .catch(() => ({}))
+  const data = await fs.readFile(getConfigPath(), 'utf-8').catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT')
+      return undefined
+    throw error
+  })
+  if (data === undefined)
+    return {}
+  const value: unknown = await Promise.resolve().then(() => JSON.parse(data)).catch((cause: unknown) => {
+    throw new Error(`Invalid JSON at ${getConfigPath()}. Fix this file before running the command.`, { cause })
+  })
+  return parseConfig(value)
 }
 
 export async function loadResolvedConfig(): Promise<ResolvedGscdumpConfig> {
@@ -58,9 +79,10 @@ export async function loadResolvedConfig(): Promise<ResolvedGscdumpConfig> {
 }
 
 export async function saveConfig(config: GscdumpConfig): Promise<void> {
+  const parsed = parseConfig(config)
   const configDir = getConfigDir()
   await fs.mkdir(configDir, { recursive: true, mode: 0o700 })
-  await fs.writeFile(path.join(configDir, 'config.json'), JSON.stringify(config, null, 2), { mode: 0o600 })
+  await fs.writeFile(path.join(configDir, 'config.json'), JSON.stringify(parsed, null, 2), { mode: 0o600 })
 }
 
 export function getConfigPath(): string {

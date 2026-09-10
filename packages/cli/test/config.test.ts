@@ -45,15 +45,30 @@ describe('config module', () => {
       expect(config).toEqual(testConfig)
     })
 
-    it('should return empty object for invalid JSON', async () => {
+    it('reports invalid JSON without changing the file', async () => {
       await fs.writeFile(configFile, 'invalid json')
+      await expect(loadConfig()).rejects.toThrow(/config.json/)
+      expect(await fs.readFile(configFile, 'utf-8')).toBe('invalid json')
+    })
 
-      const config = await loadConfig()
-      expect(config).toEqual({})
+    it.each([null, [], 1, { defaultLimit: -1 }, { defaultLimit: 1.5 }, { defaultLimit: '100' }, { defaultFormat: 'xml' }, { dataDir: 3 }, { defaultSearchType: 'typo' }, { defaultDataState: 'typo' }, { typo: true }])('rejects malformed saved config: %j', async (value) => {
+      await fs.writeFile(configFile, JSON.stringify(value))
+      await expect(loadConfig()).rejects.toThrow(/config.json/)
+    })
+
+    it('propagates config read failures', async () => {
+      await fs.mkdir(configFile)
+      await expect(loadConfig()).rejects.toMatchObject({ code: 'EISDIR' })
     })
   })
 
   describe('saveConfig', () => {
+    it('rejects invalid values before replacing saved config', async () => {
+      await saveConfig({ defaultLimit: 100 })
+      await expect(saveConfig({ defaultLimit: 0 })).rejects.toThrow(/defaultLimit/)
+      expect(await loadConfig()).toEqual({ defaultLimit: 100 })
+    })
+
     it('should save config to file', async () => {
       const testConfig = {
         defaultSite: 'sc-domain:test.com',

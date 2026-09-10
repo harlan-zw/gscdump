@@ -4,8 +4,8 @@ import type { BuilderState, GSCQueryBuilder } from 'gscdump/query'
 
 import type { PlannerCapabilities } from 'gscdump/query/plan'
 
-import { assertDimensionsSupported, getFilterDimensions } from '@gscdump/engine/resolver'
-import { extractMetricFilters, extractSpecialOperatorFilters } from 'gscdump/query'
+import { assertDimensionsSupported, getFilterDimensions, getInternalFilters } from '@gscdump/engine/resolver'
+import { extractMetricFilters, extractSpecialOperatorFilters, normalizeFilter, UnsupportedLogicalCapabilityError } from 'gscdump/query'
 import { buildLogicalPlan } from 'gscdump/query/plan'
 import { applyBuilderStatePostProcessing } from './post-process'
 import { collectRows } from './rollup-synth'
@@ -55,6 +55,8 @@ export function createGscApiQuerySource(
     kind: 'live',
     capabilities: GSC_API_CAPABILITIES,
     async queryRows(state): Promise<QueryRow[]> {
+      if (getInternalFilters(normalizeFilter(state.prefilter)).length > 0)
+        throw new UnsupportedLogicalCapabilityError('prefilter', 'gsc-api query source')
       // Plan-time gating: throws UnsupportedLogicalCapabilityError on filters
       // the API can't honor (e.g. comparison joins). Runs before the network
       // call so consumers fail fast instead of paying for a doomed fetch.

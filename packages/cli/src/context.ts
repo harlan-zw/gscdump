@@ -64,10 +64,7 @@ export async function createCommandContext(
   const loadSites = async (): Promise<GscSite[]> => {
     if (!client)
       throw new Error('loadSites requires needsAuth: true')
-    const gscSites = await client.sites().catch((e: Error) => {
-      logger.error(`Failed to fetch sites: ${e.message}`)
-      process.exit(1)
-    })
+    const gscSites = await client.sites()
     return gscSites
       .filter(s => s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser')
       .map(s => ({ siteUrl: s.siteUrl!, permissionLevel: s.permissionLevel || 'unknown' }))
@@ -81,9 +78,15 @@ export async function createCommandContext(
       process.exit(1)
     }
     if (hint) {
-      const match = sites.find(s => s.siteUrl === hint || s.siteUrl.includes(hint))
-      if (match)
-        return match.siteUrl
+      const exact = sites.find(site => site.siteUrl === hint)
+      if (exact)
+        return exact.siteUrl
+      const matches = sites.filter(site => site.siteUrl.includes(hint))
+      if (matches.length === 1)
+        return matches[0]!.siteUrl
+      if (matches.length > 1)
+        throw new Error(`Multiple Sites match "${hint}". Use an exact Site URL from gscdump sites.`)
+      throw new Error(`No verified Site matches "${hint}". Run gscdump sites to list available Sites.`)
     }
     if (sites.length === 1)
       return sites[0].siteUrl

@@ -1,5 +1,18 @@
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sitesCommand } from '../../src/commands/sites'
+import { setConfigDir } from '../../src/config'
+
+let configDir: string
+beforeEach(async () => {
+  configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-command-test-'))
+  setConfigDir(configDir)
+})
+afterEach(async () => {
+  await fs.rm(configDir, { recursive: true, force: true })
+})
 
 const mockSites = [
   { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' },

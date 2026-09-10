@@ -98,6 +98,32 @@ describe('createCompositeSource', () => {
     expect(engine.queryRows).not.toHaveBeenCalled()
   })
 
+  it('classifies a partner wire filter state instead of crashing', async () => {
+    const engine = makeSource()
+    const live = makeSource()
+    const c = createCompositeSource({
+      engine,
+      live,
+      site: { oldestDateSynced: '2024-01-01', newestDateSynced: '2024-12-31' },
+    })
+    // Partner wire filter shape: { type, filters: [{ type, column, ... }] }, no _filters key.
+    const wireState = {
+      dimensions: ['query'],
+      filter: {
+        type: 'and',
+        filters: [
+          { type: 'between', column: 'date', from: '2024-06-01', to: '2024-06-30' },
+          { type: 'eq', column: 'queryCanonical', value: 'x' },
+        ],
+      },
+      rowLimit: 100,
+    } as any
+
+    await expect(c.queryRows(wireState)).resolves.toEqual([])
+    expect(engine.queryRows).toHaveBeenCalledTimes(1)
+    expect(live.queryRows).not.toHaveBeenCalled()
+  })
+
   it('exposes executeSql when engine has one; omits otherwise', async () => {
     const executeSql = vi.fn(async () => [{ x: 1 }] as any[])
     const engine = makeSource({ executeSql: executeSql as any })

@@ -19,6 +19,7 @@ import {
   extractDateRange,
   extractMetricFilters,
   extractSpecialOperatorFilters,
+  normalizeBuilderStateResult,
   normalizeFilter,
 } from './resolver'
 
@@ -259,14 +260,14 @@ function buildDimensionFilterTree(
  * `buildLogicalPlan` is the throwing wrapper for call sites that prefer exceptions.
  */
 export function buildLogicalPlanResult(
-  state: BuilderState,
+  input: BuilderState,
   capabilities: PlannerCapabilities = {},
 ): Result<LogicalQueryPlan, QueryError> {
-  // Coerce wire-format filters (`{ type, filters | column, value, from, to }`)
-  // up-front so every downstream traversal sees the SDK's `_filters` shape.
-  // Browser path (engine-duckdb-wasm) feeds raw consumer state; server path is
-  // already pre-normalized by gscdump.com but normalizing twice is a no-op.
-  const normalizedFilter = normalizeFilter(state.filter) as FilterInput | undefined
+  const parsed = normalizeBuilderStateResult(input)
+  if (!parsed.ok)
+    return parsed
+  const state = parsed.value
+  const normalizedFilter = state.filter
 
   const { startDate, endDate } = extractDateRange(normalizedFilter)
   if (!startDate || !endDate)
@@ -282,7 +283,7 @@ export function buildLogicalPlanResult(
 
   const metricFilters = extractMetricFilters(normalizedFilter)
   const specialFilters = extractSpecialOperatorFilters(normalizedFilter)
-  const normalizedPrefilter = normalizeFilter(state.prefilter) as FilterInput | undefined
+  const normalizedPrefilter = state.prefilter
   const prefilters = extractMetricFilters(normalizedPrefilter)
 
   const queryParams: Partial<Record<QueryParamName, string>> = {}

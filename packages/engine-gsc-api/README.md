@@ -10,7 +10,7 @@ This adapter runs Analyzers with row plans without a local Store.
 ## Install
 
 ```bash
-npm install @gscdump/engine-gsc-api @gscdump/engine gscdump
+npm install @gscdump/engine-gsc-api @gscdump/analysis gscdump
 ```
 
 ## Query live rows
@@ -45,7 +45,7 @@ Create a Source per request if your host manages token refresh between requests.
 | --- | --- |
 | `createGscApiQuerySource` | Wrap a Google client as a Source |
 | `createLiveGscSource` | Create a Source with deferred token lookup |
-| `canProxyToGsc` | Reject Engine-derived grouping dimensions before live routing |
+| `canProxyToGsc` | Check whether query inputs support live routing |
 | `fetchGscTopN` | Read top rows for a dimension and date range |
 | `fetchGscDaily` | Read daily metrics |
 | `runGscSyncSlice` | Read a bounded Search Analytics sync slice |
@@ -55,7 +55,8 @@ Create a Source per request if your host manages token refresh between requests.
 
 The Source supports row queries and regex filters.
 It has no SQL execution, comparison joins, or Engine-derived dimensions such as `queryCanonical`.
-`canProxyToGsc` checks grouping dimensions; it does not validate the entire request.
+`canProxyToGsc` rejects malformed inputs, prefilters, and Engine-derived dimensions in selections or filters.
+Metric filters remain supported after row collection.
 
 `createCompositeSource` from `@gscdump/analysis/source` accepts `{ engine, live, site }`.
 It sends supported queries to Google when stored coverage or dimensions cannot answer them.

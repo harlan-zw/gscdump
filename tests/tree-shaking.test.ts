@@ -37,7 +37,7 @@ const cases: readonly TreeShakeCase[] = [
     entry: 'packages/engine-gsc-api/dist/index.mjs',
     exportName: 'canProxyToGsc',
     maxBytes: 500,
-    allowedImports: ['gscdump'],
+    allowedImports: ['gscdump', 'gscdump/query'],
   },
   {
     entry: 'packages/engine-sqlite/dist/index.mjs',

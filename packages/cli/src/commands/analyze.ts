@@ -5,7 +5,7 @@ import { defineCommand } from 'citty'
 import { resolveAnalysisSource } from '../analysis-local'
 import { analyzeCommandMeta } from '../command-meta'
 import { gscErrorHandler } from '../error-handler'
-import { logger, toCSV } from '../utils'
+import { logger, parseIntegerOption, toCSV } from '../utils'
 
 const ANALYSIS_TOOLS = defaultAnalyzerRegistry.listAnalyzerIds()
 
@@ -45,7 +45,7 @@ function buildParams(tool: AnalysisTool, args: Record<string, unknown>): Analysi
     type: tool as AnalysisParams['type'],
     startDate: args.start ? String(args.start) : undefined,
     endDate: args.end ? String(args.end) : undefined,
-    limit: args.limit ? Number(args.limit) : undefined,
+    limit: parseIntegerOption(args.limit, '--limit'),
   }
 
   if (args['brand-terms'])
@@ -62,10 +62,12 @@ function buildParams(tool: AnalysisTool, args: Record<string, unknown>): Analysi
     params.metric = String(args.metric) as 'clicks' | 'impressions'
   if (args['cluster-by'])
     params.clusterBy = String(args['cluster-by']) as 'prefix' | 'intent' | 'both'
-  if (args.weeks)
-    params.weeks = Number(args.weeks)
-  if (args['min-weeks'])
-    params.minWeeksWithData = Number(args['min-weeks'])
+  const weeks = parseIntegerOption(args.weeks, '--weeks')
+  const minWeeks = parseIntegerOption(args['min-weeks'], '--min-weeks')
+  if (weeks !== undefined)
+    params.weeks = weeks
+  if (minWeeks !== undefined)
+    params.minWeeksWithData = minWeeks
 
   return params
 }
@@ -89,6 +91,7 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       ...extraArgs,
     },
     async run({ args }) {
+      const params = buildParams(tool, args)
       const { format, runAnalysis } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
@@ -98,7 +101,6 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
 
       logger.info(`Running ${tool} analysis...`)
 
-      const params = buildParams(tool, args)
       const result = await runAnalysis(params).catch(gscErrorHandler)
 
       if (format === 'json') {

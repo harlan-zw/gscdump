@@ -1,3 +1,5 @@
+import { ZodError } from 'zod'
+
 export type PartnerErrorKind
   = | 'auth'
     | 'rate-limit'
@@ -36,7 +38,7 @@ function statusOf(error: unknown): number | undefined {
     status?: number
     response?: { status?: number }
   }
-  return rec.statusCode ?? rec.status ?? rec.response?.status
+  return rec?.statusCode ?? rec?.status ?? rec?.response?.status
 }
 
 function messageOf(error: unknown): string {
@@ -45,7 +47,7 @@ function messageOf(error: unknown): string {
     message?: string
     statusMessage?: string
   }
-  return rec.data?.message ?? rec.data?.statusMessage ?? rec.message ?? rec.statusMessage ?? String(error)
+  return rec?.data?.message ?? rec?.data?.statusMessage ?? rec?.message ?? rec?.statusMessage ?? String(error)
 }
 
 function kindOf(status: number | undefined, message: string): PartnerErrorKind {
@@ -71,6 +73,13 @@ function kindOf(status: number | undefined, message: string): PartnerErrorKind {
 export function toPartnerError(error: unknown): PartnerApiError {
   if (error instanceof PartnerApiError)
     return error
+  if (error instanceof ZodError) {
+    return new PartnerApiError({
+      kind: 'validation',
+      message: error.message,
+      data: { issues: error.issues },
+    })
+  }
   const statusCode = statusOf(error)
   const message = messageOf(error)
   const data = (error as { data?: unknown })?.data

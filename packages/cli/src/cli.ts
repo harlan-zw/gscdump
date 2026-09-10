@@ -34,7 +34,7 @@ function prepareCliArgs(input: readonly string[]): string[] {
     stderrIsTTY: Boolean(process.stderr.isTTY),
   })
 
-  const profile = pluckArgValue(rawArgs, '--profile')
+  const profile = pluckArgValue(rawArgs, '--profile', true)
   const configDir = pluckArgValue(rawArgs, '--config-dir') ?? env.configDir ?? null
 
   // Profiles live under ~/.config/gscdump/profiles/<name>; tokens.json and
@@ -53,21 +53,27 @@ function prepareCliArgs(input: readonly string[]): string[] {
 
 // Splice out `--flag value` pairs (and `--flag=value`) from argv so citty
 // doesn't see them; returns the value or null.
-function pluckArgValue(argv: string[], flag: string): string | null {
+function pluckArgValue(argv: string[], flag: string, allowQueryTiming = false): string | null {
+  let value: string | null = null
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
-    if (a === flag && i + 1 < argv.length) {
-      const v = argv[i + 1]
-      argv.splice(i, 2)
-      return v
+    if (a === '--')
+      break
+    if (a !== flag && !a.startsWith(`${flag}=`))
+      continue
+    const inline = a !== flag
+    const next = inline ? a.slice(flag.length + 1) : argv[i + 1]
+    if (!inline && allowQueryTiming && argv.includes('query') && argv.indexOf('query') < i
+      && (next === undefined || next.startsWith('-'))) {
+      continue
     }
-    if (a.startsWith(`${flag}=`)) {
-      const v = a.slice(flag.length + 1)
-      argv.splice(i, 1)
-      return v
-    }
+    if (!next || (!inline && next.startsWith('-')))
+      throw new Error(`${flag} requires a value. Use ${flag}=VALUE.`)
+    value = next
+    argv.splice(i, inline ? 1 : 2)
+    i--
   }
-  return null
+  return value
 }
 
 export const main = defineCommand({

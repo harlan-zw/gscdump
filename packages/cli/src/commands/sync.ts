@@ -11,7 +11,7 @@ import { SearchTypes } from 'gscdump/query'
 import { syncCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { allTables, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
-import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, progressBar, runWithConcurrency } from '../utils'
+import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
 const DEFAULT_TABLES: TableName[] = ['pages', 'queries', 'countries', 'dates']
 const DEFAULT_TYPES: readonly SearchType[] = ['web']
@@ -242,6 +242,8 @@ export const syncCommand = defineCommand({
   },
   async run({ args }) {
     const { json, quiet } = applyOutputMode(args)
+    const days = parseIntegerOption(args.days, '--days')
+    const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? DEFAULT_CONCURRENCY
     if (args.status) {
       const ctx = await createCommandContext()
       await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, args.site ? String(args.site) : undefined, json)
@@ -297,8 +299,8 @@ export const syncCommand = defineCommand({
     else if (args.full) {
       startDate = daysAgo(450)
     }
-    else if (args.days) {
-      startDate = daysAgo(Number.parseInt(String(args.days), 10) + DEFAULT_PENDING_DAYS - 1)
+    else if (days !== undefined) {
+      startDate = daysAgo(days + DEFAULT_PENDING_DAYS - 1)
     }
     else {
       startDate = daysAgo(DEFAULT_PENDING_DAYS + DEFAULT_PENDING_DAYS - 1)
@@ -375,9 +377,6 @@ export const syncCommand = defineCommand({
       logger.info(`Range: ${startDate} → ${endDate} (${dates.length} days)`)
     }
 
-    const concurrency = args.concurrency
-      ? Math.max(1, Number.parseInt(String(args.concurrency), 10) || DEFAULT_CONCURRENCY)
-      : DEFAULT_CONCURRENCY
     const serialTables = Boolean(args['serial-tables'])
 
     const start = Date.now()
