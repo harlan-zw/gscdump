@@ -1,6 +1,10 @@
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { runCommand } from 'citty'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { queryCommand } from '../../src/commands/query'
+import { createCliRuntime, runWithCliRuntime } from '../../src/runtime'
 import { logger } from '../../src/utils'
 
 const mocks = vi.hoisted(() => ({
@@ -308,5 +312,35 @@ describe('query command', () => {
     expect(exitSpy).not.toHaveBeenCalled()
     expect(mocks.storeWatermarks).toHaveBeenCalledWith(expect.objectContaining({ searchType: 'image' }))
     expect(mocks.storeQuery.mock.calls[0]![0]).toMatchObject({ searchType: 'image' })
+  })
+  it('renders an explicit human query with charts and precise rates', async () => {
+    mocks.rawQuery.mockResolvedValueOnce({ rows: [{ keys: ['/docs'], clicks: 12, impressions: 1000, ctr: 0.012, position: 8.4 }] }).mockResolvedValueOnce({ rows: [] })
+    await runCommand(queryCommand, { rawArgs: ['--live', '--dimensions', 'page', '--format', 'table', '--start', '2026-04-01', '--end', '2026-04-07'] })
+    const output = consoleOutput.join('\n')
+    expect(output).toContain('Clicks: top 1 returned rows')
+    expect(output).toContain('1.20%')
+    expect(output).toContain('Totals cover these rows only.')
+  })
+
+  it('renders SQL tables without changing JSON defaults', async () => {
+    mocks.storeRunRawSql.mockResolvedValue({ rows: [{ clicks: 12000 }], sql: 'SELECT 12000 AS clicks' })
+    await runCommand(queryCommand, { rawArgs: ['--sql', 'SELECT 12000 AS clicks', '--format', 'table'] })
+    expect(consoleOutput.join('\n')).toContain('12,000')
+  })
+  it('writes a human query file without ANSI even when color is forced', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'gscdump-chart-file-'))
+    try {
+      mocks.rawQuery.mockResolvedValueOnce({ rows: [{ keys: ['/docs'], clicks: 12, impressions: 1000, ctr: 0.012 }] }).mockResolvedValueOnce({ rows: [] })
+      const runtime = createCliRuntime({ environment: { FORCE_COLOR: '1' } })
+      const file = path.join(directory, 'results.txt')
+      await runWithCliRuntime(runtime, () => runCommand(queryCommand, { rawArgs: ['--live', '--dimensions', 'page', '--format', 'table', '--output', file] }))
+      const output = await readFile(file, 'utf8')
+      expect(output).toContain('1.20%')
+      expect(output).not.toContain('\x1B')
+      expect(consoleOutput).toEqual([])
+    }
+    finally {
+      await rm(directory, { recursive: true, force: true })
+    }
   })
 })

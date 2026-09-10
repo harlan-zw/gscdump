@@ -81,6 +81,9 @@ catalogs:
     sitemapd:
       specifier: ^0.2.2
       version: 0.2.2
+    string-width:
+      specifier: ^8.2.2
+      version: 8.2.2
     tailwindcss:
       specifier: ^4.3.3
       version: 4.3.3
@@ -336,6 +339,9 @@ importers:
       sitemapd:
         specifier: 'catalog:'
         version: 0.2.2
+      string-width:
+        specifier: 'catalog:'
+        version: 8.2.2
       zod:
         specifier: 'catalog:'
         version: 4.5.4
@@ -7158,6 +7164,10 @@ packages:
   string-width@7.2.0:
     resolution: {integrity: sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==}
     engines: {node: '>=18'}
+
+  string-width@8.2.2:
+    resolution: {integrity: sha512-GaPUh5gfdrYzqeVNZvUfT23vYYxXzKYidUcnMtJg/3rxRV63EFZy3k6xfKlmfeJD0176lnUV/Usr3XcwSvFzpg==}
+    engines: {node: '>=20'}
 
   string_decoder@1.1.1:
     resolution: {integrity: sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==}
@@ -15513,6 +15523,11 @@ snapshots:
   string-width@7.2.0:
     dependencies:
       emoji-regex: 10.6.0
+      get-east-asian-width: 1.6.0
+      strip-ansi: 7.2.0
+
+  string-width@8.2.2:
+    dependencies:
       get-east-asian-width: 1.6.0
       strip-ansi: 7.2.0
 

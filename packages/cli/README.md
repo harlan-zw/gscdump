@@ -240,3 +240,10 @@ See [URL inspection and indexing](../../docs/guides/url-indexing.md).
 ## License
 
 [MIT](../../LICENSE)
+
+## CLI charts
+
+Human output shares chart styles and metric units across Analyzers, Reports, and Store stats.
+Use `gscdump query --format table` for query charts.
+JSON and CSV keep their existing payloads and defaults.
+See [CLI charts](../../docs/guides/cli-charts.md) for examples and data limits.

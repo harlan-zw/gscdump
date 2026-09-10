@@ -4,6 +4,10 @@ import { filesystemStats } from '@gscdump/engine/filesystem'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
+import { renderBars, renderMetrics } from '../render/charts'
+import { textLines } from '../render/layout'
+import { formatMetric } from '../render/metrics'
+import { terminalOutputOptions } from '../render/terminal'
 import { applyOutputMode, displayPath, formatAge, logger, OUTPUT_ARGS } from '../utils'
 
 export const statsCommand = defineCommand({
@@ -79,41 +83,34 @@ export const statsCommand = defineCommand({
       return
     }
 
-    console.log()
-    console.log(`  \x1B[1m${displayPath(store.dataDir)}\x1B[0m`)
-    console.log(`  \x1B[90mDisk: ${disk.files} file(s), ${formatBytes(disk.bytes)}\x1B[0m`)
-    console.log()
-
-    const totalRows = perTable.reduce((acc, t) => acc + sumRows(t.live), 0)
-    const totalBytes = perTable.reduce((acc, t) => acc + sumBytes(t.live), 0)
-    const totalFiles = perTable.reduce((acc, t) => acc + t.live.length, 0)
-    const totalRetiredFiles = perTable.reduce((acc, t) => acc + t.retired.length, 0)
-    const totalRetiredBytes = perTable.reduce((acc, t) => acc + sumBytes(t.retired), 0)
-
+    const options = terminalOutputOptions()
+    const lines = [
+      ...textLines('gscdump / store stats', options, 'accent'),
+      ...textLines(displayPath(store.dataDir), options),
+      ...textLines(`Disk: ${disk.files} files, ${formatMetric('bytes', disk.bytes)}`, options),
+      '',
+      ...textLines('Live bytes by table', options),
+      ...renderBars(perTable.map(({ table, live }) => ({ label: table, value: sumBytes(live) })), 'bytes', options),
+      '',
+    ]
     for (const { table, live, retired } of perTable) {
-      const rows = sumRows(live).toLocaleString()
-      const bytes = formatBytes(sumBytes(live))
-      const retiredSuffix = retired.length > 0
-        ? ` \x1B[90m(+${retired.length} retired, ${formatBytes(sumBytes(retired))})\x1B[0m`
-        : ''
-      console.log(`  ${table.padEnd(15)} \x1B[36m${String(live.length).padStart(4)}\x1B[0m files, ${rows.padStart(10)} rows, ${bytes}${retiredSuffix}`)
+      lines.push(...textLines(`${table}: ${formatMetric('clicks', live.length)} files, ${formatMetric('clicks', sumRows(live))} rows`, options))
+      if (retired.length)
+        lines.push(...textLines(`Retired: ${retired.length} files, ${formatMetric('bytes', sumBytes(retired))}`, options, 'muted'))
     }
-
-    console.log()
-    console.log(`  \x1B[1mTotal:\x1B[0m ${totalFiles} files, ${totalRows.toLocaleString()} rows, ${formatBytes(totalBytes)} live`)
-    if (totalRetiredFiles > 0)
-      console.log(`  \x1B[90mRetired: ${totalRetiredFiles} files, ${formatBytes(totalRetiredBytes)} awaiting GC\x1B[0m`)
-
-    if (watermarks.length > 0) {
-      console.log()
-      console.log(`  \x1B[1mSync watermarks:\x1B[0m`)
+    lines.push('', ...renderMetrics([
+      { key: 'liveFiles', label: 'Live files', current: perTable.reduce((sum, row) => sum + row.live.length, 0) },
+      { key: 'liveRows', label: 'Live rows', current: perTable.reduce((sum, row) => sum + sumRows(row.live), 0) },
+      { key: 'bytes', label: 'Live bytes', current: perTable.reduce((sum, row) => sum + sumBytes(row.live), 0) },
+    ], options))
+    if (watermarks.length) {
+      lines.push('', ...textLines('Sync watermarks', options, 'accent'))
       for (const w of sortWatermarks(watermarks)) {
-        const scope = w.siteId ? `${w.table}@${w.siteId}` : w.table
-        console.log(`  ${scope.padEnd(24)} \x1B[36m${w.oldestDateSynced}\x1B[0m → \x1B[36m${w.newestDateSynced}\x1B[0m  \x1B[90m(last ${formatAge(w.lastSyncAt)})\x1B[0m`)
+        lines.push(...textLines(w.siteId ? `${w.table}@${w.siteId}` : w.table, options))
+        lines.push(...textLines(`${w.oldestDateSynced} to ${w.newestDateSynced} (last ${formatAge(w.lastSyncAt)})`, options, 'muted'))
       }
     }
-
-    console.log()
+    console.log(lines.join('\n'))
   },
 })
 
@@ -131,14 +128,4 @@ function sumRows(entries: ManifestEntry[]): number {
 
 function sumBytes(entries: ManifestEntry[]): number {
   return entries.reduce((acc, e) => acc + e.bytes, 0)
-}
-
-function formatBytes(n: number): string {
-  if (n < 1024)
-    return `${n} B`
-  if (n < 1024 * 1024)
-    return `${(n / 1024).toFixed(1)} KB`
-  if (n < 1024 * 1024 * 1024)
-    return `${(n / 1024 / 1024).toFixed(1)} MB`
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
 }

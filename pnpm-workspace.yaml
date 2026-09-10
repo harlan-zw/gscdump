@@ -62,6 +62,7 @@ catalog:
   pluralize: ^8.0.0
   retriv: ^0.15.0
   sitemapd: ^0.2.2
+  string-width: ^8.2.2
   tailwindcss: ^4.3.3
   tsx: ^4.23.13
   unstorage: ^1.17.5

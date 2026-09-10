@@ -117,11 +117,6 @@ export function setNoColor(disable: boolean): void {
     useCliRuntime().colorEnabled = false
 }
 
-export function configureColor(opts: { noColor: boolean, forceColor: boolean, stderrIsTTY: boolean }): void {
-  if (opts.noColor || (!opts.forceColor && !opts.stderrIsTTY))
-    setNoColor(true)
-}
-
 export function isColorEnabled(): boolean {
   return useCliRuntime().colorEnabled
 }

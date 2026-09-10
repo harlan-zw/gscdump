@@ -14,6 +14,10 @@ import { loadConfig } from '../config'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { allTables, inferTable } from '../local-store'
+import { asRecord, columnsFor } from '../render/analysis'
+import { renderTable } from '../render/layout'
+import { renderQuery } from '../render/query'
+import { terminalOutputOptions } from '../render/terminal'
 import { ALL_SEARCH_TYPES, logger, parseSearchType, toCSV } from '../utils'
 
 const DIMENSIONS = ['page', 'query', 'date', 'hour', 'country', 'device', 'searchAppearance'] as const
@@ -189,7 +193,7 @@ export const queryCommand = defineCommand({
     'format': {
       type: 'string',
       alias: 'f',
-      description: 'Output format: json or csv (default: saved defaultFormat or json)',
+      description: 'Output format: table, json, or csv (default: saved defaultFormat or json)',
     },
     'sql': {
       type: 'string',
@@ -262,8 +266,8 @@ export const queryCommand = defineCommand({
   async run({ args }) {
     const ctxConfig = await loadConfig()
     const format = args.format ?? ctxConfig.defaultFormat ?? 'json'
-    if (format !== 'json' && format !== 'csv') {
-      logger.error('Invalid --format. Use --format json or --format csv.')
+    if (format !== 'json' && format !== 'csv' && format !== 'table') {
+      logger.error('Invalid --format. Use table, json, or csv.')
       process.exit(1)
     }
     if (args.sql) {
@@ -592,7 +596,7 @@ async function runRawSqlMode(opts: {
   site: string | undefined
   table: string
   output: string | undefined
-  format: 'json' | 'csv'
+  format: 'json' | 'csv' | 'table'
   quiet: boolean
   searchType?: SearchType
 }): Promise<void> {
@@ -618,9 +622,11 @@ async function runRawSqlMode(opts: {
     process.exit(1)
   })
 
-  const payload = opts.format === 'csv'
-    ? toCSV(rows, Object.keys(rows[0] ?? {}))
-    : JSON.stringify({ sql, total: rows.length, data: rows }, null, 2)
+  const payload = opts.format === 'table'
+    ? renderTable(rows, columnsFor(rows), terminalOutputOptions(Boolean(opts.output && opts.output !== '-'))).join('\n')
+    : opts.format === 'csv'
+      ? toCSV(rows, Object.keys(rows[0] ?? {}))
+      : JSON.stringify({ sql, total: rows.length, data: rows }, null, 2)
   if (opts.output && opts.output !== '-') {
     await fs.writeFile(opts.output, payload)
     if (!opts.quiet)
@@ -658,13 +664,16 @@ function logProfile(spans: QuerySpan[]): void {
 
 async function writeOutput(opts: {
   output: { dimensions: string[], data: Record<string, unknown>[], [key: string]: unknown }
-  format: 'json' | 'csv'
+  format: 'json' | 'csv' | 'table'
   path: string | undefined
   quiet: boolean
 }): Promise<void> {
-  const content = opts.format === 'csv'
-    ? toCSV(opts.output.data, [...opts.output.dimensions, 'clicks', 'impressions', 'ctr', 'position'])
-    : JSON.stringify(opts.output, null, 2)
+  const range = asRecord(opts.output.dateRange)
+  const content = opts.format === 'table'
+    ? renderQuery({ site: String(opts.output.siteUrl), start: String(range.start), end: String(range.end), dimensions: opts.output.dimensions, rows: opts.output.data }, terminalOutputOptions(Boolean(opts.path && opts.path !== '-')))
+    : opts.format === 'csv'
+      ? toCSV(opts.output.data, [...opts.output.dimensions, 'clicks', 'impressions', 'ctr', 'position'])
+      : JSON.stringify(opts.output, null, 2)
   // `--output -` is the conventional stdout sentinel; everything else is a path.
   if (opts.path && opts.path !== '-') {
     await fs.writeFile(opts.path, content)
