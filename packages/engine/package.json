@@ -191,10 +191,10 @@
     "prepack": "pnpm run build"
   },
   "peerDependencies": {
-    "@duckdb/duckdb-wasm": "^1.33.1-dev57.0"
+    "@duckdb/node-api": "^1.5.5-r.4"
   },
   "peerDependenciesMeta": {
-    "@duckdb/duckdb-wasm": {
+    "@duckdb/node-api": {
       "optional": true
     }
   },
@@ -203,10 +203,12 @@
     "@gscdump/lakehouse": "workspace:^",
     "drizzle-orm": "catalog:",
     "gscdump": "workspace:^",
+    "pathe": "catalog:",
     "proper-lockfile": "catalog:deps"
   },
   "devDependencies": {
     "@duckdb/duckdb-wasm": "catalog:",
+    "@duckdb/node-api": "catalog:",
     "@types/node": "catalog:",
     "@types/proper-lockfile": "catalog:",
     "aws4fetch": "catalog:",

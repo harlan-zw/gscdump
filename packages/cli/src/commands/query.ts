@@ -626,7 +626,11 @@ async function runRawSqlMode(opts: {
     ? renderTable(rows, columnsFor(rows), terminalOutputOptions(Boolean(opts.output && opts.output !== '-'))).join('\n')
     : opts.format === 'csv'
       ? toCSV(rows, Object.keys(rows[0] ?? {}))
-      : JSON.stringify({ sql, total: rows.length, data: rows }, null, 2)
+      : JSON.stringify(
+          { sql, total: rows.length, data: rows },
+          (_key, value: unknown) => typeof value === 'bigint' ? value.toString() : value,
+          2,
+        )
   if (opts.output && opts.output !== '-') {
     await fs.writeFile(opts.output, payload)
     if (!opts.quiet)

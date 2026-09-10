@@ -1,6 +1,6 @@
 import type { BuildConfig } from 'obuild/config'
 import { Buffer } from 'node:buffer'
-import { relative, resolve } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { rolldown } from 'rolldown'
 
 export interface TreeShakeBuildContext {
@@ -51,13 +51,21 @@ async function emittedSideEffects(packageDir: string, target: string): Promise<{
   bytes: number
   modules: string[]
 }> {
-  const entry = resolve(packageDir, target)
+  const packageRoot = resolve(packageDir)
+  const entry = resolve(packageRoot, target)
   const bundle = await rolldown({
-    cwd: packageDir,
+    cwd: packageRoot,
     input: '#side-effect-entry',
     logLevel: 'silent',
     platform: 'neutral',
-    external: id => id[0] !== '.' && !id.startsWith(packageDir),
+    external: (id) => {
+      if (id[0] === '.')
+        return false
+      if (!isAbsolute(id))
+        return true
+      const child = relative(packageRoot, id)
+      return child === '..' || child.startsWith(`..${sep}`) || isAbsolute(child)
+    },
     plugins: [{
       name: 'side-effect-entry',
       resolveId(id) {
@@ -79,7 +87,7 @@ async function emittedSideEffects(packageDir: string, target: string): Promise<{
     modules: [...new Set(chunks.flatMap(chunk =>
       Object.entries(chunk.modules)
         .filter(([, module]) => module.renderedLength > 0)
-        .map(([id]) => relative(packageDir, id)),
+        .map(([id]) => relative(packageRoot, id)),
     ))].sort(),
   }
 }

@@ -16,7 +16,8 @@ Node filesystem and DuckDB helpers live on dedicated subpaths.
 npm install @gscdump/engine
 ```
 
-`@duckdb/duckdb-wasm` is an optional peer for the WASM runtime.
+`@duckdb/node-api` is an optional peer for the Node runtime.
+The CLI installs this peer. Browser consumers use `@gscdump/engine-duckdb-wasm`.
 The package includes `hyparquet` and `hyparquet-writer` for JavaScript Parquet encoding and decoding.
 
 ## Subpath exports

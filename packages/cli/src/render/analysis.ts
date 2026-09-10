@@ -38,7 +38,7 @@ export function columnsFor(rows: readonly Record<string, unknown>[], keys?: read
       if (Array.isArray(value))
         return `[${value.length} items]`
       if (typeof value === 'object')
-        return JSON.stringify(value)
+        return JSON.stringify(value, (_key, nested: unknown) => typeof nested === 'bigint' ? nested.toString() : nested)
       return String(value)
     },
   }))

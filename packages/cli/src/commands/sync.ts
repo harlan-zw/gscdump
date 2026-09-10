@@ -4,13 +4,14 @@ import type { ResolvedGscdumpConfig } from '../config'
 import type { GscApiRow, LocalStore, Row, TableName, WriteCtx } from '../local-store'
 import process from 'node:process'
 import { createEmptyTypesStore } from '@gscdump/engine/entities'
+import { createRowAccumulator } from '@gscdump/engine/ingest'
 import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
 import { daysAgoUtc as daysAgo, getDateRange } from 'gscdump/dates'
 import { SearchTypes } from 'gscdump/query'
 import { syncCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
-import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS, transformGscRow } from '../local-store'
+import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS } from '../local-store'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
 const DEFAULT_TABLES: TableName[] = ['pages', 'queries', 'countries', 'dates']
@@ -162,7 +163,7 @@ async function runOneDate(
   date: string,
 ): Promise<{ kind: 'ok', rows: number }> {
   const apiRows = await fetchDateRows(client, siteUrl, searchType, dims, date)
-  const rows: Row[] = []
+  let rows: Row[] = []
   if (table === 'dates') {
     const totals = apiRows.find(row => row.keys[0] === date)
     if (totals) {
@@ -173,11 +174,9 @@ async function runOneDate(
     }
   }
   else {
-    for (const apiRow of apiRows) {
-      const transformed = transformGscRow(table, apiRow)
-      if (transformed)
-        rows.push(transformed.row)
-    }
+    const accumulator = createRowAccumulator({ maxRows: apiRows.length })
+    accumulator.push(table, apiRows)
+    rows = accumulator.drain().get(table)?.get(date) ?? []
   }
 
   const writeCtx: WriteCtx = {
