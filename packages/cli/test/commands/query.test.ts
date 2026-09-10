@@ -1,5 +1,7 @@
+import { runCommand } from 'citty'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { queryCommand } from '../../src/commands/query'
+import { logger } from '../../src/utils'
 
 const mocks = vi.hoisted(() => ({
   rawQuery: vi.fn(),
@@ -78,6 +80,7 @@ describe('query command', () => {
       consoleOutput.push(args.map(String).join(' '))
     }
     vi.clearAllMocks()
+    mocks.rawQuery.mockReset()
     mocks.resolveSite.mockResolvedValue('https://example.com/')
     mocks.loadConfig.mockResolvedValue({})
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
@@ -88,23 +91,117 @@ describe('query command', () => {
   afterEach(() => {
     console.log = originalLog
     exitSpy.mockRestore()
+    vi.useRealTimers()
   })
 
-  it('has correct metadata', () => {
-    expect(queryCommand.meta?.name).toBe('query')
-    expect(queryCommand.meta?.description).toContain('search analytics')
+  it.each([
+    ['--dimensions', 'page,typo'],
+    ['--dimensions', ''],
+    ['--limit', 'ten'],
+    ['--limit', '10rows'],
+    ['--limit', '1.5'],
+    ['--limit', '0'],
+    ['--limit', '-1'],
+    ['--limit', '9007199254740992'],
+    ['--format', 'yaml'],
+    ['--start', '2026-02-30'],
+    ['--end', '2026-13-01'],
+    ['--start', '2026-04-08'],
+  ])('rejects %s=%s before accessing the Site', async (flag, value) => {
+    await expect(runCommand(queryCommand, {
+      rawArgs: ['--live', '--explain', '--start', '2026-04-01', '--end', '2026-04-07', flag, value],
+    })).rejects.toThrow('__exit_1__')
+
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining(flag))
+    expect(mocks.resolveSite).not.toHaveBeenCalled()
+    expect(mocks.rawQuery).not.toHaveBeenCalled()
+    expect(mocks.storeQuery).not.toHaveBeenCalled()
   })
 
-  it('exposes core flags', () => {
-    expect(queryCommand.args?.site).toBeDefined()
-    expect(queryCommand.args?.dimensions).toBeDefined()
-    expect(queryCommand.args?.start).toBeDefined()
-    expect(queryCommand.args?.end).toBeDefined()
-    expect(queryCommand.args?.limit).toBeDefined()
-    expect(queryCommand.args?.live).toBeDefined()
-    expect(queryCommand.args?.sql).toBeDefined()
-    expect(queryCommand.args?.format).toBeDefined()
-    expect(queryCommand.args?.explain).toBeDefined()
+  it('trims and deduplicates dimensions', async () => {
+    await runCommand(queryCommand, { rawArgs: ['--live', '--explain', '--dimensions', 'page, query,page'] })
+
+    expect(JSON.parse(consoleOutput[0]!).body.dimensions).toEqual(['page', 'query'])
+  })
+
+  it.each([
+    ['--start', '2026-04-01', { startDate: '2026-04-01', endDate: '2026-04-27' }],
+    ['--end', '2026-04-15', { startDate: '2026-03-30', endDate: '2026-04-15' }],
+  ])('preserves a single %s flag', async (flag, value, range) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-30T12:00:00Z'))
+
+    await runCommand(queryCommand, { rawArgs: ['--live', '--explain', flag, value] })
+
+    expect(JSON.parse(consoleOutput[0]!).body).toMatchObject(range)
+  })
+
+  it.each([
+    [[], 25],
+    [['--limit', '1000'], 1000],
+  ])('uses explicit flags before saved limits: %j', async (flags, expectedLimit) => {
+    mocks.loadConfig.mockResolvedValue({ defaultLimit: 25 })
+
+    await runCommand(queryCommand, { rawArgs: ['--live', '--explain', ...flags] })
+
+    expect(JSON.parse(consoleOutput[0]!).body.rowLimit).toBe(expectedLimit)
+  })
+
+  it.each([
+    [[], 'page,clicks,impressions,ctr,position'],
+    [['--format', 'json'], '{'],
+  ])('uses explicit flags before the saved format: %j', async (flags, prefix) => {
+    mocks.loadConfig.mockResolvedValue({ defaultFormat: 'csv' })
+    mocks.rawQuery.mockResolvedValueOnce({ rows: [{ keys: ['/a'], clicks: 1 }] }).mockResolvedValueOnce({ rows: [] })
+
+    await runCommand(queryCommand, { rawArgs: ['--live', '--quiet', '--dimensions', 'page', ...flags] })
+
+    expect(consoleOutput[0]).toContain(prefix)
+  })
+
+  it.each([true, false])('writes CSV rows in live=%s mode', async (live) => {
+    const page = 'https://example.com/a,b'
+    mocks.rawQuery.mockResolvedValueOnce({ rows: [{ keys: [page], clicks: 2, impressions: 4, ctr: 0.5, position: 1 }] })
+      .mockResolvedValueOnce({ rows: [] })
+    mocks.storeWatermarks.mockResolvedValue([{ oldestDateSynced: '2026-04-01', newestDateSynced: '2026-04-30' }])
+    mocks.storeQuery.mockResolvedValue({ rows: [{ page, clicks: 2, impressions: 4, ctr: 0.5, position: 1 }] })
+
+    await runCommand(queryCommand, {
+      rawArgs: ['--quiet', '--start', '2026-04-01', '--end', '2026-04-07', '--dimensions', 'page', '--format', 'csv', ...(live ? ['--live'] : [])],
+    })
+
+    expect(consoleOutput).toEqual(['page,clicks,impressions,ctr,position\n"https://example.com/a,b",2,4,0.5,1'])
+  })
+
+  it('writes a CSV header for an empty result', async () => {
+    mocks.rawQuery.mockResolvedValueOnce({ rows: [] })
+
+    await runCommand(queryCommand, { rawArgs: ['--live', '--quiet', '--dimensions', 'query', '--format', 'csv'] })
+
+    expect(consoleOutput).toEqual(['query,clicks,impressions,ctr,position'])
+  })
+
+  it.each([
+    [[], 'page,clicks\n/a,2'],
+    [['--format', 'csv'], 'page,clicks\n/a,2'],
+  ])('writes raw SQL results in the requested CSV format: %j', async (flags, output) => {
+    mocks.loadConfig.mockResolvedValue({ defaultFormat: 'csv' })
+    mocks.storeRunRawSql.mockResolvedValue({ rows: [{ page: '/a', clicks: 2 }], sql: 'SELECT page, clicks FROM pages' })
+
+    await runCommand(queryCommand, {
+      rawArgs: ['--quiet', '--sql', 'SELECT page, clicks FROM pages', ...flags],
+    })
+
+    expect(consoleOutput).toEqual([output])
+  })
+
+  it('rejects invalid output formats before running raw SQL', async () => {
+    await expect(runCommand(queryCommand, {
+      rawArgs: ['--quiet', '--sql', 'SELECT 1', '--format', 'yaml'],
+    })).rejects.toThrow('__exit_1__')
+
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('--format'))
+    expect(mocks.storeRunRawSql).not.toHaveBeenCalled()
   })
 
   it('--explain in --live mode prints request body and exits without calling API', async () => {

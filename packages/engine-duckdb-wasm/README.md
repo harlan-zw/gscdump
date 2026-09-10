@@ -6,7 +6,7 @@
 
 > DuckDB-WASM engine adapter for `@gscdump/analysis` — typed browser analytics against parquet via R2.
 
-In-browser DuckDB-WASM connection wrapped as a `SqlQuerySource`. Ships a vendored, stripped-down drizzle-orm DuckDB-WASM adapter (~240 LoC, adapted from `@proj-airi/drizzle-duckdb-wasm`, MIT). Transactions throw — analytics workload is read-only.
+In-browser DuckDB-WASM connection with attached tables, queried through an `AnalysisQuerySource`. Ships a vendored, stripped-down drizzle-orm DuckDB-WASM adapter (~240 LoC, adapted from `@proj-airi/drizzle-duckdb-wasm`, MIT). Transactions throw — analytics workload is read-only.
 
 Bundle: **10.3 kB / 2.72 kB gzipped**. `@duckdb/duckdb-wasm` is an optional peer dep.
 
@@ -26,7 +26,11 @@ import {
 } from '@gscdump/engine-duckdb-wasm'
 
 const { db, conn } = await bootDuckDBWasm()
-await attachParquetUrlTables(conn, { tables: [{ name: 'queries', url: '/r2/queries.parquet' }] })
+await attachParquetUrlTables({
+  db,
+  conn,
+  tables: [{ table: 'queries', urls: ['/r2/queries.parquet'] }],
+})
 
 const runner = await createInsightRunner({ db, conn })
 const client = await runner.client
@@ -66,7 +70,7 @@ instead.
 ## Exports
 
 - `createInsightRunner({ db, conn })` — drizzle-orm handle for typed `.select()` / window functions, with `sql\`...\`` raw escape hatch.
-- `bootDuckDBWasm()` / `attachParquetTables()` / `attachParquetUrlTables()` / `attachSingleTable()` / `createBrowserAnalysisRuntime()` / `createDuckDBBundlesFromBase()` / `listAttachedTables()` — browser runtime primitives.
+- `bootDuckDBWasm()` / `attachParquetTables()` / `attachParquetUrlTables()` / `createBrowserAnalysisRuntime()` — browser runtime primitives.
 - `attachOpfsParquetTables()` / `readOpfsSnapshotFile()` / `estimateOpfsStorage()` / `requestPersistentStorage()` / `clearOpfsSnapshotCache()` — OPFS-backed parquet cache.
 - `scopeFor(table, { siteId, window })` / `mergeScope()` — tenant scope predicates.
 - `pages` / `queries` / `page_queries` / `countries` / `dates` / `hourly_pages` / `schema` — drizzle schema mirroring `gscdump/analytics` `SCHEMAS`. Drift fails loudly at module load.

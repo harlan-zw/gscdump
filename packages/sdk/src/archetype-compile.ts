@@ -17,7 +17,7 @@
  * Input tolerance: the filter tree may be the SDK-branded `{ _filters }` form
  * OR the partner wire form (`{ type: 'and', filters: [...] }` groups around
  * `{ type, column, value, from, to }` leaves used by legacy hosted payloads).
- * `normalizeFilter` from `gscdump/query` coerces both into the internal shape,
+ * `normalizeBuilderStateResult` from `gscdump/query` parses both into the internal shape,
  * and equality leaves are recognised under both spellings (`eq` / `equals`).
  *
  * Pure — no I/O, no env. Unit-tested directly.
@@ -30,7 +30,7 @@ import type {
   GscSearchType,
   WireDateRange,
 } from '@gscdump/contracts'
-import type { BuilderState, Dimension, Filter, FilterInput, Metric } from 'gscdump/query'
+import type { BuilderState, Dimension, Filter, Metric } from 'gscdump/query'
 import {
   entityDailyTimeseries as createEntityDailyTimeseries,
   multiSeriesStackedDaily as createMultiSeriesStackedDaily,
@@ -38,7 +38,7 @@ import {
   topNBreakdown as createTopNBreakdown,
   twoDimensionDetail as createTwoDimensionDetail,
 } from '@gscdump/contracts/archetypes'
-import { extractDateRange, normalizeFilter } from 'gscdump/query'
+import { extractDateRange, normalizeBuilderStateResult } from 'gscdump/query'
 
 // The dimensions the compiler knows how to reason about. `searchType` is a
 // query param (handled separately via `opts.searchType`/`state.searchType`),
@@ -101,7 +101,10 @@ function collectEqualityMatches(filter: Filter<any> | undefined, out: Map<Dimens
  * complete range is present.
  */
 export function extractWireDateRange(filter: unknown): WireDateRange | null {
-  const { startDate, endDate } = extractDateRange(filter as FilterInput | undefined)
+  const parsed = normalizeBuilderStateResult({ filter })
+  if (!parsed.ok)
+    return null
+  const { startDate, endDate } = extractDateRange(parsed.value.filter)
   return startDate && endDate ? { start: startDate, end: endDate } : null
 }
 
@@ -134,15 +137,24 @@ export interface BuilderStateToArchetypeOptions {
  */
 export function builderStateToArchetype(
   siteId: string,
-  state: BuilderState,
+  input: BuilderState,
   opts: BuilderStateToArchetypeOptions = {},
 ): ArchetypeQuery | null {
-  const range = extractWireDateRange(state.filter)
-  if (!range)
+  const parsed = normalizeBuilderStateResult(input)
+  if (!parsed.ok)
     return null
+  const state = parsed.value
+
+  // Archetypes cannot express raw-row predicates or live response options.
+  if (state.prefilter !== undefined || state.dataState !== undefined || state.aggregationType !== undefined)
+    return null
+  const { startDate, endDate } = extractDateRange(state.filter)
+  if (!startDate || !endDate)
+    return null
+  const range = { start: startDate, end: endDate }
 
   const matches = new Map<Dimension, string>()
-  if (!collectEqualityMatches(normalizeFilter(state.filter as FilterInput | undefined), matches))
+  if (!collectEqualityMatches(state.filter, matches))
     return null
 
   const dims = (state.dimensions ?? []) as Dimension[]
@@ -151,7 +163,13 @@ export function builderStateToArchetype(
   if (dims.includes('hour') || dims.includes('searchAppearance'))
     return null // no archetype SQL builder groups by these today
 
-  const searchType = opts.searchType
+  if (dims.includes('date') && (state.rowLimit !== undefined || state.startRow !== undefined || state.orderBy !== undefined))
+    return null
+  if (state.orderBy?.column === 'date')
+    return null
+
+  const searchType = opts.searchType ?? state.searchType
+  const metrics = state.metrics
   const cmp = opts.compareRange
   const order = state.orderBy ? { metric: state.orderBy.column as Metric, dir: state.orderBy.dir } : undefined
 
@@ -164,19 +182,21 @@ export function builderStateToArchetype(
       const dim = entityDims[0]!
       if (matches.size > 1)
         return null // an extra unaccounted filter dimension would be silently dropped
-      return createEntityDailyTimeseries(siteId, range, { dimension: dim, value: matches.get(dim)! }, { searchType, compareRange: cmp })
+      return createEntityDailyTimeseries(siteId, range, { dimension: dim, value: matches.get(dim)! }, { searchType, compareRange: cmp, metrics })
     }
     if (matches.size > 0)
       return null // e.g. a bare country/device filter on a whole-site series — buildSiteDailyTimeseries applies no facets
-    return createSiteDailyTimeseries(siteId, range, { searchType, compareRange: cmp })
+    return createSiteDailyTimeseries(siteId, range, { searchType, compareRange: cmp, metrics })
   }
 
   // date + secondary dimension → stacked series
   if (dims.length === 2 && dims.includes('date')) {
     if (matches.size > 0)
       return null // buildMultiSeriesStackedDaily applies no equality facets
+    if (metrics !== undefined && metrics.length !== 1)
+      return null
     const series = dims.find(d => d !== 'date')!
-    return createMultiSeriesStackedDaily(siteId, range, series, { searchType, compareRange: cmp })
+    return createMultiSeriesStackedDaily(siteId, range, series, { searchType, compareRange: cmp, metric: metrics?.[0] })
   }
 
   // single non-date dimension → ranked breakdown. top-n-breakdown is the one
@@ -190,6 +210,7 @@ export function builderStateToArchetype(
     const facets: ArchetypeFacet[] = [...matches.entries()].map(([column, value]) => ({ column, op: 'eq' as const, value }))
     return createTopNBreakdown(siteId, range, primary, {
       searchType,
+      metrics,
       compareRange: cmp,
       ...(order ? { orderBy: order } : {}),
       limit: state.rowLimit ?? 50,
@@ -203,6 +224,8 @@ export function builderStateToArchetype(
   // so only compile when the pair really IS {page, query} — anything else
   // (e.g. country × device) would silently return the wrong grid.
   if (dims.length === 2 && !dims.includes('date')) {
+    if (state.startRow !== undefined && state.startRow !== 0)
+      return null
     const set = new Set(dims)
     if (!set.has('page') || !set.has('query'))
       return null
@@ -210,6 +233,7 @@ export function builderStateToArchetype(
       return null // two-dimension-detail's `filter` only takes page/query values, not arbitrary facets
     return createTwoDimensionDetail(siteId, range, {
       searchType,
+      metrics,
       compareRange: cmp,
       ...(order ? { orderBy: order } : {}),
       ...(state.rowLimit ? { limit: state.rowLimit } : {}),

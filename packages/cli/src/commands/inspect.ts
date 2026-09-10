@@ -6,7 +6,7 @@ import { inspectCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { loadSitemapUrls } from '../sitemap'
-import { applyOutputMode, logger, OUTPUT_ARGS, readUrlList } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, readUrlList } from '../utils'
 
 function verdictTone(verdict: string | null | undefined): string {
   if (verdict === 'PASS')
@@ -128,6 +128,8 @@ const batchCommand = defineCommand({
   },
   async run({ args }) {
     const { json, quiet } = applyOutputMode(args)
+    const delayMs = parseIntegerOption(args['delay-ms'], '--delay-ms', 0) ?? 200
+    const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? 1
     let urls: string[]
     if (args['from-sitemap']) {
       const result = await loadSitemapUrls(String(args['from-sitemap']))
@@ -148,8 +150,6 @@ const batchCommand = defineCommand({
     }
     const ctx = await createCommandContext({ needsAuth: true })
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-    const delayMs = Number.parseInt(String(args['delay-ms']), 10)
-    const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 1)
     if (!quiet)
       logger.info(`Inspecting ${urls.length} URLs ...`)
 

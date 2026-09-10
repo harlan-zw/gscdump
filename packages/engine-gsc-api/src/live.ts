@@ -11,17 +11,31 @@
 import type { SearchType as EngineSearchType } from '@gscdump/engine'
 import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { GoogleSearchConsoleClient } from 'gscdump'
-import type { BuilderState } from 'gscdump/query'
+import type { BuilderState, Filter } from 'gscdump/query'
 import { googleSearchConsole } from 'gscdump'
+import { normalizeBuilderStateResult } from 'gscdump/query'
 import { createGscApiQuerySource } from './source'
 
 // Dimensions the GSC API can't produce (engine-derived).
 const PRO_ONLY_DIMENSIONS = new Set<string>(['queryCanonical', 'page_keywords'])
 
+function hasMatchingFilter(filter: Filter<any> | undefined, matches: (dimension: string) => boolean): boolean {
+  return !!filter && (filter._filters.some(leaf => matches(leaf.dimension))
+    || (filter._nestedGroups ?? []).some(group => hasMatchingFilter(group, matches)))
+}
+
+// Classifies raw routing inputs, so both the builder shape and the partner
+// wire shape (`{ type, filters: [{ type, column, ... }] }`) parse here. A
+// state that fails validation is never proxyable: it can't be trusted to
+// reach the live API.
 export function canProxyToGsc(state: BuilderState): boolean {
-  if (state.dimensions.some(d => PRO_ONLY_DIMENSIONS.has(d)))
+  const parsed = normalizeBuilderStateResult(state)
+  if (!parsed.ok)
     return false
-  return true
+  const normalized = parsed.value
+  return !hasMatchingFilter(normalized.prefilter, () => true)
+    && !normalized.dimensions.some(d => PRO_ONLY_DIMENSIONS.has(d))
+    && !hasMatchingFilter(normalized.filter, dimension => PRO_ONLY_DIMENSIONS.has(dimension))
 }
 
 export interface CreateLiveGscSourceOptions {
@@ -53,7 +67,11 @@ export function createLiveGscSource(opts: CreateLiveGscSourceOptions): AnalysisQ
     if (!clientPromise) {
       clientPromise = opts.getAccessToken().then(accessToken =>
         opts.createClient?.(accessToken) ?? googleSearchConsole({ accessToken }),
-      )
+      ).catch((error: unknown) => {
+        // A failed token refresh or client setup must not poison later queries.
+        clientPromise = null
+        throw error
+      })
     }
     return clientPromise
   }

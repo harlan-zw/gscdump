@@ -29,19 +29,20 @@ The contract layer (`Analyzer`, `Plan`, `Capability`, `AnalysisParams`, `Analysi
 Pure functions. Take typed arrays in, return typed results out.
 
 ```ts
-import {
-  analyzeBrandSegmentation,
-  analyzeClustering,
-  analyzeConcentration,
-  analyzeDecay,
-  analyzeMovers,
-  analyzeOpportunity,
-  analyzeSeasonality,
-  padTimeseries,
-} from '@gscdump/analysis'
+import { analyzeDecay, analyzeMovers } from '@gscdump/analysis'
 
-const movers = analyzeMovers(currentRows, previousRows)
-const decay = analyzeDecay(currentRows, previousRows)
+const previousRows = [{
+  query: 'nuxt seo',
+  page: 'https://example.com/',
+  clicks: 100,
+  impressions: 1000,
+  ctr: 0.1,
+  position: 4,
+}]
+const currentRows = [{ ...previousRows[0]!, clicks: 50, ctr: 0.05 }]
+
+const movers = analyzeMovers({ current: currentRows, previous: previousRows })
+const decay = analyzeDecay({ current: currentRows, previous: previousRows })
 ```
 
 Meta-analyses live in the report layer. Run a composed evidence report via `runReport`:
@@ -64,14 +65,24 @@ const result = await runReport(report, {
 // result.sections[0].findings — bounded evidence, page+query keyed.
 ```
 
-Source adapters compose a GSC client + analyzer in one call:
+Run an Analyzer against a live Source:
 
 ```ts
-import { analyzeMoversFromSource } from '@gscdump/analysis'
+import { runAnalyzerFromSource } from '@gscdump/analysis'
+import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
+import { googleSearchConsole } from 'gscdump'
 
-const source = createGscApiQuerySource({ client, siteUrl })
-const movers = await analyzeMoversFromSource(source, { current, previous })
+const client = googleSearchConsole('ya29.xxx')
+const source = createGscApiQuerySource({ client, siteUrl: 'sc-domain:example.com' })
+const movers = await runAnalyzerFromSource(source, {
+  type: 'movers',
+  startDate: '2026-04-01',
+  endDate: '2026-04-28',
+  prevStartDate: '2026-03-04',
+  prevEndDate: '2026-03-31',
+}, defaultAnalyzerRegistry)
+console.log(movers.results)
 ```
 
 ## DuckDB (Node)
@@ -135,20 +146,27 @@ Pass `sqliteResolverAdapter` from `@gscdump/engine-sqlite` (D1, `site_id`-scoped
 `/source` is the cross-implementation seam:
 
 ```ts
-import { analyzeMoversFromSource } from '@gscdump/analysis'
-import { createEngineQuerySource, queryRows } from '@gscdump/engine/source'
+import type { AnalysisQuerySource } from '@gscdump/analysis'
+import { createCompositeSource } from '@gscdump/analysis/source'
+import { createLiveGscSource } from '@gscdump/engine-gsc-api'
 
-const source = createEngineQuerySource({ engine, ctx: { userId, siteId } })
-
-const rows = await queryRows(source, builderState)
-const movers = await analyzeMoversFromSource(source, periods)
+declare const engine: AnalysisQuerySource
+const live = createLiveGscSource({
+  siteUrl: 'sc-domain:example.com',
+  getAccessToken: async () => 'ya29.xxx',
+})
+const source = createCompositeSource({
+  engine,
+  live,
+  site: { oldestDateSynced: '2026-04-01', newestDateSynced: '2026-04-28' },
+})
 ```
 
 Available source factories:
 
 - `createGscApiQuerySource({ client, siteUrl })` — `@gscdump/engine-gsc-api`
-- `createLiveGscSource({ accessToken, siteUrl })` — `@gscdump/engine-gsc-api`
-- `createCompositeSource({ engine, gsc })` — `@gscdump/analysis/source`; engine first, GSC fallback
+- `createLiveGscSource({ getAccessToken, siteUrl })`: `@gscdump/engine-gsc-api`
+- `createCompositeSource({ engine, live, site })`: `@gscdump/analysis/source`; Engine first, live Source fallback
 - `createInMemoryQuerySource({ queryRows })` — `@gscdump/analysis/source`
 - `createEngineQuerySource({ engine, ctx })` — `@gscdump/engine/source`
 - `createSqliteQuerySource({ ... })` — `@gscdump/engine-sqlite`
@@ -173,7 +191,7 @@ Presets: `last-7d`, `last-28d`, `last-30d`, `last-90d`, `last-180d`, `last-365d`
 | Surface | Stability |
 |---|---|
 | Row analyzers (`analyzeMovers`, `analyzeDecay`, ...) | Public |
-| Source factories + `analyzeFromSource` | Public |
+| Source factories + `runAnalyzerFromSource` | Public |
 | `Analyzer<P, R>` contract + `createAnalyzerRegistry` (re-exported from `@gscdump/engine/analyzer`) | Public |
 | Source factories under `@gscdump/analysis/source` | Public |
 | Per-analyzer modules under `analysis/src/analyzers/<name>` | Private |

@@ -10,7 +10,7 @@ import {
 import { defineCommand } from 'citty'
 import { entitiesCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
-import { applyOutputMode, logger, OUTPUT_ARGS, progressBar, runWithConcurrency } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
 const INSPECTION_QPD_PER_PROPERTY = 2000
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
@@ -87,12 +87,12 @@ const inspectSubCommand = defineCommand({
   },
   async run({ args }) {
     const { json, quiet } = applyOutputMode(args)
+    const limit = parseIntegerOption(args.limit, '--limit') ?? INSPECTION_QPD_PER_PROPERTY
+    const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? 4
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const client = ctx.client!
     const store = ctx.store!
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-    const limit = args.limit ? Number.parseInt(String(args.limit), 10) : INSPECTION_QPD_PER_PROPERTY
-    const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 4)
 
     const urls = (await readUrlList({ file: args.file ? String(args.file) : undefined })).slice(0, limit)
     if (urls.length === 0) {
@@ -246,11 +246,11 @@ const indexingSnapshotSubCommand = defineCommand({
   },
   async run({ args }) {
     const { quiet } = applyOutputMode(args)
+    const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? 4
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
     const client = ctx.client!
     const store = ctx.store!
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-    const concurrency = Math.max(1, Number.parseInt(String(args.concurrency), 10) || 4)
 
     const urls = await readUrlList({ file: args.file ? String(args.file) : undefined })
     if (urls.length === 0) {

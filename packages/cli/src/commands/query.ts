@@ -14,7 +14,7 @@ import { loadConfig } from '../config'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { allTables, inferTable } from '../local-store'
-import { ALL_SEARCH_TYPES, exportToCSV, logger, parseSearchType } from '../utils'
+import { ALL_SEARCH_TYPES, logger, parseSearchType, toCSV } from '../utils'
 
 const DIMENSIONS = ['page', 'query', 'date', 'hour', 'country', 'device', 'searchAppearance'] as const
 type DimensionName = typeof DIMENSIONS[number]
@@ -40,6 +40,8 @@ const FILTER_COL: Record<FilterDim, Column<Dimension>> = {
 }
 const DATA_STATES = ['all', 'final', 'hourly_all'] as const
 const AGGREGATION_TYPES = ['auto', 'byPage', 'byProperty'] as const
+const POSITIVE_INTEGER_RE = /^\d+$/
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 // Filter expression prefixes for `--query`, `--page`, `--country`, `--device`,
 // `--search-appearance`. Bare values default to equals.
@@ -177,8 +179,7 @@ export const queryCommand = defineCommand({
     'limit': {
       type: 'string',
       alias: 'l',
-      default: '1000',
-      description: 'Max rows (default: 1000)',
+      description: 'Max rows (default: saved defaultLimit or 1000)',
     },
     'output': {
       type: 'string',
@@ -188,8 +189,7 @@ export const queryCommand = defineCommand({
     'format': {
       type: 'string',
       alias: 'f',
-      default: 'json',
-      description: 'Output format: json or csv',
+      description: 'Output format: json or csv (default: saved defaultFormat or json)',
     },
     'sql': {
       type: 'string',
@@ -260,28 +260,34 @@ export const queryCommand = defineCommand({
     },
   },
   async run({ args }) {
+    const ctxConfig = await loadConfig()
+    const format = args.format ?? ctxConfig.defaultFormat ?? 'json'
+    if (format !== 'json' && format !== 'csv') {
+      logger.error('Invalid --format. Use --format json or --format csv.')
+      process.exit(1)
+    }
     if (args.sql) {
       await runRawSqlMode({
         sql: String(args.sql),
         site: args.site ? String(args.site) : undefined,
         table: args.table ? String(args.table) : 'pages',
         output: args.output ? String(args.output) : undefined,
+        format,
         quiet: Boolean(args.quiet),
         searchType: parseSearchType(args.type, '--type'),
       })
       return
     }
 
-    const ctxConfig = await loadConfig()
     const dimNames = await resolveDimensions(args)
     const { startDate, endDate } = await resolveRange(args)
     await promptFilters(args as Record<string, unknown>)
-    // --limit takes precedence; fall back to config.defaultLimit before the hardcoded 1000.
-    const limitArg = args.limit != null ? String(args.limit) : null
-    const rowLimit = limitArg != null && limitArg !== '1000'
-      ? Number.parseInt(limitArg, 10)
-      : (ctxConfig.defaultLimit ?? 1000)
-    const format = String(args.format) as 'json' | 'csv'
+    const limitArg = String(args.limit ?? ctxConfig.defaultLimit ?? 1000)
+    const rowLimit = Number(limitArg)
+    if (!POSITIVE_INTEGER_RE.test(limitArg) || !Number.isSafeInteger(rowLimit) || rowLimit < 1) {
+      logger.error('Invalid --limit. Use a positive safe integer, such as --limit 1000.')
+      process.exit(1)
+    }
     const dimensionFilter = buildDimensionFilter(args)
     const searchType = parseSearchType(args.type ?? ctxConfig.defaultSearchType, '--type')
     const dataState = args['data-state']
@@ -401,8 +407,14 @@ export const queryCommand = defineCommand({
 })
 
 async function resolveDimensions(args: Record<string, unknown>): Promise<string[]> {
-  if (args.dimensions)
-    return String(args.dimensions).split(',').filter(d => (DIMENSIONS as readonly string[]).includes(d))
+  if (args.dimensions != null) {
+    const dimensions = String(args.dimensions).split(',').map(d => d.trim())
+    if (dimensions.some(d => !(DIMENSIONS as readonly string[]).includes(d))) {
+      logger.error(`Invalid --dimensions. Use a comma-separated list from: ${DIMENSIONS.join(', ')}.`)
+      process.exit(1)
+    }
+    return [...new Set(dimensions)]
+  }
 
   if (args.interactive) {
     const selected = await multiselect({
@@ -421,36 +433,47 @@ async function resolveDimensions(args: Record<string, unknown>): Promise<string[
 }
 
 async function resolveRange(args: Record<string, unknown>): Promise<{ startDate: string, endDate: string }> {
-  if (args.start && args.end)
-    return { startDate: String(args.start), endDate: String(args.end) }
-
+  let startDate = args.start != null ? String(args.start) : undefined
+  let endDate = args.end != null ? String(args.end) : undefined
   if (args.interactive) {
-    const startInput = await text({
-      message: 'Start date (YYYY-MM-DD)',
-      placeholder: daysAgo(28),
-    })
-    if (isCancel(startInput)) {
-      cancel('Cancelled')
-      process.exit(0)
+    if (startDate === undefined) {
+      const startInput = await text({
+        message: 'Start date (YYYY-MM-DD)',
+        placeholder: daysAgo(28),
+      })
+      if (isCancel(startInput)) {
+        cancel('Cancelled')
+        process.exit(0)
+      }
+      startDate = String(startInput) || daysAgo(28)
     }
-    const endInput = await text({
-      message: 'End date (YYYY-MM-DD)',
-      placeholder: daysAgo(3),
-    })
-    if (isCancel(endInput)) {
-      cancel('Cancelled')
-      process.exit(0)
-    }
-    return {
-      startDate: String(startInput) || daysAgo(28),
-      endDate: String(endInput) || daysAgo(3),
+    if (endDate === undefined) {
+      const endInput = await text({
+        message: 'End date (YYYY-MM-DD)',
+        placeholder: daysAgo(3),
+      })
+      if (isCancel(endInput)) {
+        cancel('Cancelled')
+        process.exit(0)
+      }
+      endDate = String(endInput) || daysAgo(3)
     }
   }
 
-  return {
-    startDate: daysAgo(31),
-    endDate: daysAgo(3),
+  startDate ??= daysAgo(31)
+  endDate ??= daysAgo(3)
+  for (const [flag, value] of [['--start', startDate], ['--end', endDate]]) {
+    const date = new Date(`${value}T00:00:00Z`)
+    if (!ISO_DATE_RE.test(value) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+      logger.error(`Invalid ${flag}. Use a calendar date in YYYY-MM-DD format.`)
+      process.exit(1)
+    }
   }
+  if (startDate > endDate) {
+    logger.error('Invalid date range. --start must be on or before --end.')
+    process.exit(1)
+  }
+  return { startDate, endDate }
 }
 
 // Interactive mode fills in args.query/page/country/device/searchAppearance/type/data-state
@@ -569,6 +592,7 @@ async function runRawSqlMode(opts: {
   site: string | undefined
   table: string
   output: string | undefined
+  format: 'json' | 'csv'
   quiet: boolean
   searchType?: SearchType
 }): Promise<void> {
@@ -594,7 +618,9 @@ async function runRawSqlMode(opts: {
     process.exit(1)
   })
 
-  const payload = JSON.stringify({ sql, total: rows.length, data: rows }, null, 2)
+  const payload = opts.format === 'csv'
+    ? toCSV(rows, Object.keys(rows[0] ?? {}))
+    : JSON.stringify({ sql, total: rows.length, data: rows }, null, 2)
   if (opts.output && opts.output !== '-') {
     await fs.writeFile(opts.output, payload)
     if (!opts.quiet)
@@ -631,12 +657,14 @@ function logProfile(spans: QuerySpan[]): void {
 }
 
 async function writeOutput(opts: {
-  output: Record<string, unknown>
+  output: { dimensions: string[], data: Record<string, unknown>[], [key: string]: unknown }
   format: 'json' | 'csv'
   path: string | undefined
   quiet: boolean
 }): Promise<void> {
-  const content = opts.format === 'csv' ? exportToCSV(opts.output) : JSON.stringify(opts.output, null, 2)
+  const content = opts.format === 'csv'
+    ? toCSV(opts.output.data, [...opts.output.dimensions, 'clicks', 'impressions', 'ctr', 'position'])
+    : JSON.stringify(opts.output, null, 2)
   // `--output -` is the conventional stdout sentinel; everything else is a path.
   if (opts.path && opts.path !== '-') {
     await fs.writeFile(opts.path, content)

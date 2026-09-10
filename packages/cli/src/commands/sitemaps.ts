@@ -7,7 +7,7 @@ import { createCommandContext } from '../context'
 import { resolveCliEnvironment } from '../environment'
 import { gscErrorHandler } from '../error-handler'
 import { discoverLiveSitemap, loadSitemapUrls } from '../sitemap'
-import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
+import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS, parseIntegerOption } from '../utils'
 
 const HOSTED_ARGS = {
   'api-root': { type: 'string' as const, description: 'Hosted API root; defaults to GSCDUMP_API_ROOT or https://gscdump.com/api/_gscdump' },
@@ -211,8 +211,8 @@ const urlsCommand = defineCommand({
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
-    const limit = args.limit ? Number.parseInt(String(args.limit), 10) : undefined
-    const maxDepth = args['max-depth'] ? Number.parseInt(String(args['max-depth']), 10) : undefined
+    const limit = parseIntegerOption(args.limit, '--limit')
+    const maxDepth = parseIntegerOption(args['max-depth'], '--max-depth', 0)
     const result = await loadSitemapUrls(String(args.url), { maxUrls: limit, maxDepth })
     if (result._tag === 'error') {
       logger.error(`Sitemap fetch failed: ${result.message}`)
@@ -269,7 +269,7 @@ const historyCommand = defineCommand({
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
-    const days = args.days ? Number.parseInt(String(args.days), 10) : undefined
+    const days = parseIntegerOption(args.days, '--days')
     const result = await hostedClient(args).getSiteSitemapChanges({
       params: { siteId: String(args['site-id']) },
       query: { ...(days ? { days } : {}) },
@@ -329,13 +329,14 @@ const lastmodCommand = defineCommand({
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
+    const limit = parseIntegerOption(args.limit, '--limit')
     const result = await hostedClient(args).listSitemapUrls({
       params: { siteId: String(args['site-id']) },
       query: {
         ...(args.generation ? { generationId: String(args.generation) } : {}),
         ...(args.feedpath ? { feedpath: String(args.feedpath) } : {}),
         ...(args.cursor ? { cursor: String(args.cursor) } : {}),
-        ...(args.limit ? { limit: Number.parseInt(String(args.limit), 10) } : {}),
+        ...(limit !== undefined ? { limit } : {}),
       },
     })
     if (json) {

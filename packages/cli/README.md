@@ -81,12 +81,31 @@ gscdump query --live --site sc-domain:example.com \
   --page '~/blog/' --query '~brand' --dimensions page,query
 ```
 
+`--limit` and `--format` override saved `defaultLimit` and `defaultFormat` values.
+Without saved values, queries use 1000 rows and JSON.
+Limits must be positive integers. Formats must be `json` or `csv`.
+
+`--start` and `--end` work independently. An omitted date keeps its default.
+Non-interactive queries default to 31 days ago through three days ago, using UTC dates.
+Dates must use `YYYY-MM-DD`, and `--start` cannot follow `--end`.
+
+```bash
+# Export query rows with a CSV header.
+gscdump query --live --site sc-domain:example.com \
+  --dimensions page,query --format csv --output rows.csv
+```
+
 ### Global flags
 
 - `--no-color` / `NO_COLOR` env: strip ANSI from stdout (stderr keeps colour for interactive use).
 - `--config-dir <path>` / `GSCDUMP_CONFIG_DIR`: override `~/.config/gscdump`.
 - `--profile <name>` / `GSCDUMP_PROFILE`: scope tokens + config to a profile under `~/.config/gscdump/profiles/<name>` (juggle multiple GSC accounts).
+
 - Most commands accept `--quiet` and `--json` for scripted use; `logger` writes to stderr so `--json` output is safe to pipe.
+
+Use `query --profile` for query timings. Use `--profile <name>` to select an account profile.
+Numeric flags reject fractions, negative counts, and text suffixes.
+Saved config rejects invalid values and unknown keys. If parsing fails, fix the reported file.
 
 ## Analyzers
 

@@ -92,6 +92,19 @@ export function parseSearchType(value: unknown, flag: string = '--search-type'):
   return v as SearchType
 }
 
+/** Parse a decimal CLI integer before starting authentication or network work. */
+export function parseIntegerOption(value: unknown, flag: string, minimum: 0 | 1 = 1): number | undefined {
+  if (value === undefined || value === null)
+    return undefined
+  const text = typeof value === 'number' || typeof value === 'string' ? String(value).trim() : ''
+  const parsed = Number(text)
+  if (!/^\d+$/.test(text) || !Number.isSafeInteger(parsed) || parsed < minimum) {
+    const requirement = minimum === 0 ? 'a non-negative integer' : 'a positive integer'
+    throw new Error(`${flag} must be ${requirement}.`)
+  }
+  return parsed
+}
+
 // Colour is configured deliberately by the CLI creation layer. Keeping the
 // module default declaration-only avoids env reads and stdout mutation during
 // import; direct programmatic callers may opt out with `setNoColor(true)`.
