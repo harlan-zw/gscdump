@@ -217,8 +217,6 @@ const loginCommand = defineCommand({
       logger.info(`Saved path to config: ${saPath}`)
       return
     }
-    if (args.force)
-      await clearTokens()
     const oauth = await getAuth({ interactive: true, noBrowser: args.browser === false, force: Boolean(args.force) }).catch((e: Error) => {
       logger.error(`Login failed: ${e.message}`)
       process.exit(1)
