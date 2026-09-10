@@ -1,11 +1,14 @@
 {
   "type": "module",
   "private": true,
-  "packageManager": "pnpm@11.25.0",
+  "packageManager": "pnpm@12.3.4",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/harlan-zw/gscdump.git"
+  },
+  "engines": {
+    "node": "^22.13.0 || >=24.0.0"
   },
   "scripts": {
     "build": "pnpm run -r build",
@@ -13,7 +16,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm run -r typecheck",
-    "test": "vitest --run",
+    "test": "vitest --run && pnpm --filter @gscdump/cloudflare test",
     "test:contracts": "pnpm --filter @gscdump/sdk... build && pnpm --filter gscdump exec vitest run test/core/contracts.test.ts test/query/builder.test.ts test/query/metrics.test.ts test/query/plan.test.ts && pnpm --filter @gscdump/contracts exec vitest run test/contracts.test.ts test/v1.test.ts test/bing-indexing-evidence-v1.test.ts && pnpm --filter @gscdump/contracts typecheck && pnpm --filter @gscdump/sdk exec vitest run test/v1-http.test.ts test/v1-realtime.test.ts test/bing-indexing-evidence-v1.test.ts && pnpm --filter @gscdump/sdk typecheck",
     "test:e2e": "vitest --run --config tests/e2e/vitest.config.ts",
     "release": "pnpm build && bumpp --output=CHANGELOG.md packages/*/package.json packages/sdk/src/v1/realtime.ts"
@@ -24,6 +27,7 @@
     "@gscdump/engine-gsc-api": "workspace:*",
     "@nuxt/test-utils": "catalog:dev-test",
     "@types/node": "catalog:",
+    "@typescript/native": "catalog:dev-build",
     "bumpp": "catalog:dev-build",
     "eslint": "catalog:dev-lint",
     "gscdump": "workspace:*",
