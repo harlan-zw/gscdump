@@ -1,4 +1,5 @@
 import type { OutputOptions } from './layout'
+import { parseGscSiteUrl } from 'gscdump'
 import { columnsFor, rowLabel } from './analysis'
 import { renderBars, renderSparklines } from './charts'
 import { renderTable, textLines } from './layout'
@@ -13,7 +14,7 @@ export function renderQuery(input: {
 }, options: OutputOptions): string {
   const lines = [
     ...textLines('gscdump / query', options, 'accent'),
-    ...textLines(`Site: ${input.site}`, options),
+    ...textLines(`Site: ${parseGscSiteUrl(input.site).hostname}`, options),
     ...textLines(`${input.start} to ${input.end}`, options, 'muted'),
     '',
   ]

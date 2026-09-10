@@ -1,5 +1,6 @@
 import type { ReportResult } from '@gscdump/engine/report'
 import type { OutputOptions } from './layout'
+import { parseGscSiteUrl } from 'gscdump'
 import { columnsFor } from './analysis'
 import { renderBars, renderMetrics } from './charts'
 import { renderTable, textLines } from './layout'
@@ -7,7 +8,7 @@ import { renderTable, textLines } from './layout'
 export function renderCliReport(report: ReportResult, options: OutputOptions): string {
   const lines = [
     ...textLines(`gscdump / ${report.id}`, options, 'accent'),
-    ...textLines(`Site: ${report.site}`, options),
+    ...textLines(`Site: ${parseGscSiteUrl(report.site).hostname}`, options),
     ...textLines(`${report.window.start} to ${report.window.end} (${report.window.days} days)`, options, 'muted'),
   ]
   if (report.window.comparison)

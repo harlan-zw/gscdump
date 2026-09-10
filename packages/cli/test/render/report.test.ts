@@ -20,6 +20,12 @@ function fixture(): ReportResult {
 }
 
 describe('cLI Reports', () => {
+  it.each(['sc-domain:example.com', 'https://example.com/', 'example.com'])('shows the host for Site %s', (site) => {
+    const report = { ...fixture(), site }
+    const output = renderCliReport(report, { columns: 80, color: false, unicode: true })
+    expect(output).toContain('Site: example.com\n')
+  })
+
   it('shows structured deltas, units, and truncation', () => {
     const output = renderCliReport(fixture(), { columns: 80, color: false, unicode: true })
     expect(output).toContain('+20.0%')

@@ -38,6 +38,8 @@ describe('analyzer human output', () => {
   it('formats CTR as a rate with useful precision', async () => {
     boundary.result = { results: [{ page: '/docs', clicks: 12, impressions: 1000, ctr: 0.012 }], meta: {} }
     const text = await output('opportunity')
+    expect(text).toContain('Site: example.com')
+    expect(text).not.toContain('sc-domain:')
     expect(text).toContain('1.20%')
     expect(text).not.toContain('+1%')
   })

@@ -2,6 +2,7 @@ import type { ManifestEntry, Watermark } from '../local-store'
 import process from 'node:process'
 import { filesystemStats } from '@gscdump/engine/filesystem'
 import { defineCommand } from 'citty'
+import { decodeSiteId, parseGscSiteUrl } from 'gscdump'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
 import { renderBars, renderMetrics } from '../render/charts'
@@ -106,7 +107,7 @@ export const statsCommand = defineCommand({
     if (watermarks.length) {
       lines.push('', ...textLines('Sync watermarks', options, 'accent'))
       for (const w of sortWatermarks(watermarks)) {
-        lines.push(...textLines(w.siteId ? `${w.table}@${w.siteId}` : w.table, options))
+        lines.push(...textLines(w.siteId ? `${w.table}@${parseGscSiteUrl(decodeSiteId(w.siteId)).hostname}` : w.table, options))
         lines.push(...textLines(`${w.oldestDateSynced} to ${w.newestDateSynced} (last ${formatAge(w.lastSyncAt)})`, options, 'muted'))
       }
     }

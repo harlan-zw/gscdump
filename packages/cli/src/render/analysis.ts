@@ -1,5 +1,6 @@
 import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { OutputOptions, TableColumn } from './layout'
+import { parseGscSiteUrl } from 'gscdump'
 import { calendarBuckets, renderBars, renderShare, renderSparklines } from './charts'
 import { renderTable, textLines } from './layout'
 import { finite, formatMetric, metricLabel } from './metrics'
@@ -50,7 +51,7 @@ export function renderAnalysis(result: AnalysisResult, context: AnalysisDisplayC
   const end = typeof meta.endDate === 'string' ? meta.endDate : context.end
   const lines = [
     ...textLines(`gscdump / ${context.id}`, options, 'accent'),
-    ...textLines(`Site: ${context.site}`, options),
+    ...textLines(`Site: ${parseGscSiteUrl(context.site).hostname}`, options),
     ...textLines(`${start} to ${end}`, options, 'muted'),
   ]
   if (context.previous)

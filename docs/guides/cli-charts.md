@@ -2,6 +2,7 @@
 
 The CLI uses one chart kit for human output.
 Charts keep exact values, metric units, and period labels visible.
+Site labels show the host, such as `example.com`.
 JSON and CSV retain their existing payloads.
 
 ## Commands
@@ -22,8 +23,8 @@ Query output still defaults to JSON, or your saved format.
 Use an explicit table format to see query charts:
 
 ```sh
-gscdump query --site sc-domain:example.com --dimensions page --format table
-gscdump query --site sc-domain:example.com --dimensions date --format table
+gscdump query --site example.com --dimensions page --format table
+gscdump query --site example.com --dimensions date --format table
 ```
 
 Use `--json` for Analyzer or Report JSON.
