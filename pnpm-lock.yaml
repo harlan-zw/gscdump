@@ -297,6 +297,9 @@ importers:
       '@clack/prompts':
         specifier: catalog:deps
         version: 1.7.0
+      '@duckdb/duckdb-wasm':
+        specifier: 'catalog:'
+        version: 1.33.1-dev57.0
       '@duckdb/node-api':
         specifier: 'catalog:'
         version: 1.5.1-r.2

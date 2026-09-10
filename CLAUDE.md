@@ -2,7 +2,7 @@
 
 This file gives repository-specific guidance for Claude Code and other coding
 agents. Product/user docs live in `README.md`; architecture language lives in
-`ARCHITECTURE.md` and `CONTEXT.md`; active work lives in `ROADMAP.md`.
+`ARCHITECTURE.md` and `GLOSSARY.md`; active work lives in `ROADMAP.md`.
 
 ## Consumers
 

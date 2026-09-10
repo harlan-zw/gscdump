@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-The export-surface audit (ADR-0012) flagged a class of `@gscdump/engine`
+The export-surface audit ([export surface decision](./0012-export-surface-tracks-consumers.md)) flagged a class of `@gscdump/engine`
 subpaths that neither consumer site (`gscdump.com`, `nuxtseo.com`) imports
 directly:
 

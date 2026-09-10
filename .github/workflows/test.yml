@@ -2,15 +2,17 @@ name: Test
 
 on:
   push:
-    # A branch filter prevents release tags from running this workflow again.
-    # The commit was already tested by its branch push, while the tag has its
-    # own release workflow.
-    branches:
-      - '**'
+    branches: [main]
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
       - LICENSE
+  pull_request:
+    # A required check must report a result for documentation PRs too.
+    # Only the change filter runs for those PRs; package checks stay skipped.
+    paths:
+      - '**'
+      - '**/*.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,42 +22,68 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: [self-hosted, linux, x64, harlan-desktop-ci]
-    timeout-minutes: 15
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import os, subprocess
+          if os.environ['BASE_SHA']:
+              paths = subprocess.check_output(['git', 'diff', '--name-only', '-z', os.environ['BASE_SHA'] + '...' + os.environ['HEAD_SHA']]).decode().split('\0')
+              code = any(path and not (path.endswith('.md') or path.startswith('docs/') or path == 'LICENSE') for path in paths)
+          else:
+              code = True
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('code=' + str(code).lower() + '\n')
+          PY
 
+  packages:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    # Public contributions must not have access to the shared Hogwild pool.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v6
-
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: lts/*
+          node-version: 22
           cache: pnpm
-
-      # Install the workspace root and publishable packages only. The Nuxt
-      # example has its own dependency tree and postinstall preparation.
       - run: pnpm i --filter . --filter "./packages/*" --frozen-lockfile --trust-lockfile
         env:
           PNPM_MINIMUM_RELEASE_AGE: 0
+      - name: Install Chromium
+        run: pnpm --filter @gscdump/engine-duckdb-wasm exec playwright install --with-deps chromium
+      - name: Check packages and runtimes
+        run: pnpm check:release
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
 
-      - name: Lint
-        run: pnpm lint
-
-      - name: Build
-        # The private Nuxt dashboard example is not published and added about
-        # 55 seconds to every package CI run. Its focused e2e suite remains
-        # available via `pnpm test:e2e`.
-        run: pnpm --filter "./packages/*" run build
-
-      # Export snapshots and hosted contracts were the recurring late failures
-      # in the usage-report window. Run this cheap subset first so contract
-      # drift fails before the four-minute full suite.
-      - name: Fast contract checks
-        run: pnpm exec vitest run tests/exports.test.ts packages/contracts/test/contracts.test.ts
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
+  test:
+    needs: [changes, packages]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require successful checks
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CODE_CHANGED: ${{ needs.changes.outputs.code }}
+          PACKAGES_RESULT: ${{ needs.packages.result }}
+        run: |
+          test "$CHANGES_RESULT" = success
+          if [ "$CODE_CHANGED" = true ]; then
+            test "$PACKAGES_RESULT" = success
+          fi

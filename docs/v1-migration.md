@@ -19,7 +19,7 @@ Check each consumer against the deployed host before removing its legacy calls.
 
 `@gscdump/engine/vendor/hysnappy` is intentionally kept: `gscdump.com`
 resolves that public export for its Worker-safe alias without depending on the
-package's emitted `dist` layout (ADR-0012).
+package's emitted `dist` layout ([export surface decision](./adr/0012-export-surface-tracks-consumers.md)).
 
 ## Renamed and relocated exports
 

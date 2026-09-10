@@ -9,7 +9,7 @@ After [authentication](./getting-started.md), choose a Store directory and sync 
 
 ```bash
 gscdump config set dataDir /absolute/path/to/gsc-data
-gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries
+gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries,dates
 ```
 
 Without `--days`, sync fetches three days ending three days ago.
@@ -27,10 +27,11 @@ The table choices used here are:
 | `queries` | Daily query metrics |
 | `countries` | Country metrics |
 | `page_queries` | Daily page/query pairs |
+| `dates` | Site totals, device metrics, and anonymized impressions |
 
-The CLI default list includes `dates`, but its current sync path cannot write non-empty `dates` responses.
-Use the explicit table lists shown here to sync the supported data.
-If an Analyzer requires Site totals from `dates`, these sync examples will not supply them.
+Default sync includes `pages`, `queries`, `countries`, and `dates`.
+Include `page_queries` when an Analyzer needs page/query pairs.
+The `dates` sync combines separate requests for Site totals, device metrics, and query impressions.
 
 Sync also rebuilds Rollups unless you pass `--no-rollups`.
 Run `gscdump sync --help` for the full table and search-type options.
@@ -39,22 +40,22 @@ Run `gscdump sync --help` for the full table and search-type options.
 
 ```bash
 # Start 450 days ago, ending three days ago
-gscdump sync --site sc-domain:example.com --full --tables pages,queries,page_queries,countries
+gscdump sync --site sc-domain:example.com --full --tables pages,queries,page_queries,countries,dates
 
 # Select an exact range
 gscdump sync --site sc-domain:example.com --start 2026-08-01 --end 2026-08-31 \
-  --tables pages,queries,page_queries,countries
+  --tables pages,queries,page_queries,countries,dates
 
 # Read sync progress
 gscdump sync --site sc-domain:example.com --status
 
 # Retry failed dates in the selected window
 gscdump sync --site sc-domain:example.com --days 90 \
-  --tables pages,queries,page_queries,countries --retry-failed
+  --tables pages,queries,page_queries,countries,dates --retry-failed
 
 # Refresh completed dates too
 gscdump sync --site sc-domain:example.com --days 7 --force \
-  --tables pages,queries,page_queries,countries
+  --tables pages,queries,page_queries,countries,dates
 ```
 
 Sync follows Google's pagination until a request returns no rows.
@@ -65,7 +66,7 @@ See [Google's extraction guidance](https://developers.google.com/webmaster-tools
 
 ```bash
 gscdump sync --site sc-domain:example.com --days 28 \
-  --tables pages,queries,page_queries,countries --types web,image
+  --tables pages,queries,page_queries,countries,dates --types web,image
 ```
 
 Each search type has separate files and sync state.
@@ -83,7 +84,7 @@ Save this as `sync-gsc.sh`, then make it executable:
 #!/usr/bin/env bash
 set -euo pipefail
 /path/to/gscdump sync --site sc-domain:example.com --days 7 --force \
-  --tables pages,queries,page_queries,countries
+  --tables pages,queries,page_queries,countries,dates
 ```
 
 Replace `/path/to/gscdump` with the output of `command -v gscdump`.

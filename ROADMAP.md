@@ -1,10 +1,11 @@
-# v1 closeout
+# Release readiness
 
-Last updated: 2026-07-20
+Last updated: 2026-09-10
 
-Working line: **`0.40.x`**. This file lists only work that still gates v1 or
-the deletion of a compatibility surface. Shipped work belongs in tests, ADRs,
-release notes, and git history.
+Published line: **`3.5.x`**. Hosted API wire version: **`1.0`**.
+
+This file tracks release checks and remaining consumer migrations.
+Package version and hosted wire version are separate contracts.
 
 ## Package set
 
@@ -23,7 +24,19 @@ release notes, and git history.
 `@gscdump/nuxt` and `@gscdump/mcp` were deleted. Nuxt integration is owned by
 consumer layers, and the MCP server is owned by the CLI.
 
-## Open gates
+## Package release checks
+
+1. Run `pnpm check:release` after installing Chromium.
+2. Run `pnpm test:live` with credentials and a Site with recent traffic.
+3. Complete a fresh Desktop OAuth login, including `--no-browser` when forwarding a local port.
+4. Merge the reviewed PR after the required `test` check passes.
+5. Create the release tag from main. The release workflow repeats package and runtime checks before publishing.
+
+The packaged CLI check uses an isolated installation and a temporary Store.
+MCP discovery includes only Reports with usable live Sections.
+The Nuxt example and hosted deployment migrations have separate validation.
+
+## Consumer migration gates
 
 ### Hosted v1 cutover
 
@@ -69,16 +82,16 @@ example layer while the example extends it.
 
 ### Live Google verification
 
-Run `pnpm test:e2e` with `GSC_ACCESS_TOKEN`, or with
-`GSC_CLIENT_ID` + `GSC_CLIENT_SECRET` + `GSC_REFRESH_TOKEN`, before the v1 tag.
-Credential-free local runs intentionally skip live Google assertions.
+Run `pnpm test:live` with `GSC_ACCESS_TOKEN`, or with
+`GSC_CLIENT_ID` + `GSC_CLIENT_SECRET` + `GSC_REFRESH_TOKEN`, before release.
+Set `GSC_SITE_URL` to target a Site with recent traffic.
+The command fails without credentials or pipeline data.
 
 ## Completion bar
 
-V1 is ready when package build/typecheck/tests pass, consumer migrations and
-their focused tests pass, live Google e2e has run with credentials, and every
-remaining compatibility surface above has an explicit owner and deletion
-gate. The frozen manifest baseline is Node.js 22+, compatible (`^`) published
-package-family runtime dependencies, DuckDB-WASM `1.33.1-dev57.0` in development
-with a compatible peer range, and no vulnerable Hono `4.12.23` in the release
-lockfile. No new 0.x compatibility aliases should be added.
+Package delivery needs passing build, typecheck, unit, packed-install, browser, and Workers checks.
+Live Google verification must exercise data rather than skip.
+
+Hosted cutover and legacy storage removal need their consumer deployment evidence before those changes ship.
+The July consumer notes above remain the last recorded deployment status.
+They do not prove the current hosted rollout state.
