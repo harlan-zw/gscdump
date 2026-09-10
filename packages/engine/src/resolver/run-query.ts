@@ -402,10 +402,6 @@ export async function runOptimizedQuery(
     : probe
 
   const optimized = resolveToSQLOptimized(state, { adapter, siteId: undefined })
-  const extras = buildExtrasQueries(state, { adapter: probe, siteId: undefined })
-  const extraSource = extras.length > 0
-    ? (useCanonicalSource ? decidePrimarySource(options, dateRange) : source)
-    : undefined
 
   // Main reads rollup keys when eligible. Extras need fact-grain rows, so they
   // use the primary fact source when present and raw partitions only through an
@@ -417,6 +413,14 @@ export async function runOptimizedQuery(
       ? primaryRunArgs(ctx, options.primarySource!.keys)
       : base
   const mainArgs = withQueryDimFileSet(mainArgsBase, queryDim, canonicalRequested && !useCanonicalSource)
+  const optRes = await runSQL({ ...mainArgs, sql: optimized.sql, params: optimized.params })
+  // Limit the variant aggregation to groups that the selected page displays.
+  // Filtering raw variants instead would change each group's label and count.
+  const queryCanonicalKeys = optRes.rows.flatMap(row => typeof row.queryCanonical === 'string' ? [row.queryCanonical] : [])
+  const extras = buildExtrasQueries(state, { adapter: probe, siteId: undefined }, queryCanonicalKeys)
+  const extraSource = extras.length > 0
+    ? (useCanonicalSource ? decidePrimarySource(options, dateRange) : source)
+    : undefined
   const extraArgsBase = extraSource?.kind === 'primary-columnar'
     ? primaryRunArgs(ctx, options.primarySource!.keys)
     : base
@@ -426,9 +430,8 @@ export async function runOptimizedQuery(
   // `null` result means "not available / declined" and we run the live SQL.
   // The overlay skips the live window-function pass entirely on a hit.
   const resolveExtra = options.resolveExtra
-  const [optRes, ...extrasRows] = await Promise.all([
-    runSQL({ ...mainArgs, sql: optimized.sql, params: optimized.params }),
-    ...extras.map(async (e) => {
+  const extrasRows = await Promise.all(
+    extras.map(async (e) => {
       const overlaid = resolveExtra
         ? await resolveExtra({ key: e.key, state, ctx, dateRange })
         : null
@@ -436,7 +439,7 @@ export async function runOptimizedQuery(
         ? { rows: overlaid }
         : runSQL({ ...extraArgs, sql: e.sql, params: e.params })
     }),
-  ])
+  )
 
   const firstRow = optRes.rows[0] as Record<string, unknown> | undefined
   const totalCount = Number(firstRow?.totalCount ?? 0)
