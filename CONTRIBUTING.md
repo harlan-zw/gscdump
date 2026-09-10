@@ -1,6 +1,7 @@
 # Contributing
 
-Use Node.js 22 or newer and the pnpm version declared in `package.json`.
+Use Node.js 22.13 or newer from the 22.x line, or Node.js 24 or newer.
+Use the pnpm version declared in `package.json`.
 Install dependencies with `pnpm install --frozen-lockfile`.
 
 ## Choose the package

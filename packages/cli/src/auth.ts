@@ -9,7 +9,7 @@ import fs from 'node:fs/promises'
 import { createServer } from 'node:http'
 import path from 'node:path'
 import process from 'node:process'
-import { isCancel, text } from '@clack/prompts'
+import { text } from '@clack/prompts'
 import { CodeChallengeMethod, JWT as GoogleJWT, OAuth2Client as OAuth2ClientClass } from 'google-auth-library'
 import { createAuth } from 'gscdump/client'
 import { err, ok, unwrapResult } from 'gscdump/result'
@@ -183,14 +183,14 @@ export async function getAuthCredentials(interactive: boolean): Promise<OAuth2Cr
     placeholder: 'your-client-id.googleusercontent.com',
     validate: v => v ? undefined : 'Required',
   })
-  if (isCancel(clientIdResult))
+  if (typeof clientIdResult !== 'string')
     process.exit(1)
 
   const clientSecretResult = await text({
     message: 'Enter your Google OAuth Client Secret:',
     validate: v => v ? undefined : 'Required',
   })
-  if (isCancel(clientSecretResult))
+  if (typeof clientSecretResult !== 'string')
     process.exit(1)
 
   console.log()

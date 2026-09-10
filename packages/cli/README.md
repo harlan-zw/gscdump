@@ -26,7 +26,7 @@ gscdump init
 gscdump sites
 
 # Sync 90 days to the Store
-gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries
+gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries,dates
 
 # Query the Store
 gscdump query --site sc-domain:example.com --dimensions page,query --limit 50
@@ -128,24 +128,23 @@ SQL-only Analyzers require local data.
 
 ```bash
 # Default: three days ending three days ago; skip completed dates
-gscdump sync --site sc-domain:example.com --tables pages,queries,page_queries,countries
+gscdump sync --site sc-domain:example.com --tables pages,queries,page_queries,countries,dates
 
 # Backfill from 450 days ago to three days ago
-gscdump sync --site sc-domain:example.com --full --tables pages,queries,page_queries,countries
+gscdump sync --site sc-domain:example.com --full --tables pages,queries,page_queries,countries,dates
 
 # Custom range
 gscdump sync --site sc-domain:example.com --start 2026-08-01 --end 2026-08-31 \
-  --tables pages,queries,page_queries,countries
+  --tables pages,queries,page_queries,countries,dates
 
 # Check sync state and watermarks
 gscdump sync --site sc-domain:example.com --status
 
 # Limit concurrent day requests per table
 gscdump sync --site sc-domain:example.com --concurrency 4 \
-  --tables pages,queries,page_queries,countries
+  --tables pages,queries,page_queries,countries,dates
 ```
 
-The explicit table list avoids the current [daily totals sync limitation](../../docs/guides/historical-database.md#stored-tables).
 Sync skips completed dates; `--force` refreshes them.
 Cross-process locks coordinate `sync`, `compact`, and `gc`.
 Pagination follows Google's 25,000-row pages, subject to [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data).
