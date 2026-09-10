@@ -30,7 +30,9 @@
 
 gscdump gives you Google Search Console data without building your own API integration.
 Query Google directly, keep a local history, or run SEO analysis from the CLI and your AI assistant.
-The TypeScript library also reads Bing Webmaster data and Indexing Evidence.
+The CLI and TypeScript library also read Bing Webmaster data and Indexing Evidence.
+The CLI supports shared hosted authentication and local Google or Bing credentials.
+See [Bing commands and authentication](./packages/cli/README.md#hosted-and-local-authentication).
 
 The core library uses `fetch` and supports edge runtimes.
 The CLI and local Store need Node.js 22 or newer.

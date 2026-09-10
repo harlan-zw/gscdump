@@ -1,12 +1,13 @@
 import type { CliRuntime } from './runtime'
 import process from 'node:process'
 import { defineCommand, runMain } from 'citty'
+import { parseAuthMode } from './auth-state'
 import { CLI_SUBCOMMANDS } from './command-registry'
 import { applyProfileFromCli } from './commands/profile-selection'
 import { loadEnvFromCwd } from './env-file'
 import { resolveCliEnvironment } from './environment'
 import { terminalOutputOptions } from './render/terminal'
-import { createCliRuntime, runWithCliRuntime } from './runtime'
+import { createCliRuntime, runWithCliRuntime, useCliRuntime } from './runtime'
 import { setNoColor, showSplash, VERSION, withConfiguredOutput } from './utils'
 
 // Splash is purely cosmetic; suppress whenever it would corrupt machine output
@@ -29,6 +30,7 @@ function shouldShowSplash(rawArgs: string[]): boolean {
 // stripping them before citty parses. Env vars provide the same controls.
 function prepareCliArgs(input: readonly string[]): string[] {
   const rawArgs = [...input]
+  useCliRuntime().authModeOverride = parseAuthMode(pluckArgValue(rawArgs, '--mode') ?? undefined)
   const env = resolveCliEnvironment()
   setNoColor(!terminalOutputOptions().color)
 

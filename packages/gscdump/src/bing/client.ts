@@ -28,6 +28,7 @@ import {
 } from './normalize'
 
 export const DEFAULT_BING_WEBMASTER_API_URL = 'https://www.bing.com/webmaster/api.svc/json'
+const DEFAULT_BING_API_KEY_URL = 'https://ssl.bing.com/webmaster/api.svc/json'
 export const DEFAULT_BING_CHILD_PAGE_LIMIT = 100
 const BING_MAX_CHILD_PAGE_COUNT = 65_536
 
@@ -174,7 +175,7 @@ function toFilterProperties(filters: BingChildrenFilters = {}): Record<string, u
 }
 
 export function bingWebmaster(options: BingWebmasterOptions): BingWebmasterClient {
-  const baseUrl = (options.baseUrl ?? DEFAULT_BING_WEBMASTER_API_URL).replace(/\/+$/, '')
+  const baseUrl = (options.baseUrl ?? (options.apiKey === undefined ? DEFAULT_BING_WEBMASTER_API_URL : DEFAULT_BING_API_KEY_URL)).replace(/\/+$/, '')
   const clock = options.clock ?? (() => new Date())
   const fetch = options.fetch ?? globalThis.fetch.bind(globalThis)
 
@@ -183,10 +184,13 @@ export function bingWebmaster(options: BingWebmasterOptions): BingWebmasterClien
     parser: BoundaryParser<T>,
     input: InternalRequest = {},
   ): Promise<Result<T, BingProviderError>> => {
-    if (!options.accessToken.trim())
+    const accessToken = typeof options.accessToken === 'function' ? await options.accessToken() : options.accessToken
+    if (!(options.apiKey ?? accessToken)?.trim())
       return err({ _tag: 'AuthenticationRequired' })
 
     const url = new URL(`${baseUrl}/${operation}`)
+    if (options.apiKey !== undefined)
+      url.searchParams.set('apikey', options.apiKey)
     for (const [key, value] of Object.entries(input.query ?? {}))
       url.searchParams.set(key, value)
 
@@ -194,7 +198,7 @@ export function bingWebmaster(options: BingWebmasterOptions): BingWebmasterClien
       ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
       headers: {
         Accept: 'application/json',
-        Authorization: `Bearer ${options.accessToken}`,
+        ...(accessToken === undefined ? {} : { Authorization: `Bearer ${accessToken}` }),
         ...(input.body === undefined ? {} : { 'Content-Type': 'application/json; charset=utf-8' }),
       },
       method: input.method ?? 'GET',

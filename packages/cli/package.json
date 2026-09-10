@@ -2,7 +2,7 @@
   "name": "@gscdump/cli",
   "type": "module",
   "version": "3.5.0",
-  "description": "CLI for Google Search Console - dump, query, run the MCP server, and install the agent skill",
+  "description": "CLI for Google Search Console and Bing with hosted or local authentication, data exports, and an MCP server",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",

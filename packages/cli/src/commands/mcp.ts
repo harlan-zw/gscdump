@@ -1,13 +1,20 @@
 import process from 'node:process'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { defineCommand } from 'citty'
-import { loadTokens, resolveAuth, resolveBYOK, resolveServiceAccount } from '../auth'
+import { loadTokens, resolveBYOK, resolveServiceAccount } from '../auth'
+import { getCloudAccount, resolveAuthentication } from '../auth-state'
 import { mcpCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
+import { createCommandContext } from '../context'
 import { createGscMcpServer } from '../mcp/server'
 import { VERSION } from '../utils'
 
 async function checkAuth(): Promise<{ ok: boolean, error?: string }> {
+  const authentication = await resolveAuthentication()
+  if (authentication._tag === 'Cloud') {
+    await getCloudAccount(authentication)
+    return { ok: true }
+  }
   // Service-account auth is sufficient when configured.
   if (await resolveServiceAccount().then(Boolean).catch(() => false))
     return { ok: true }
@@ -62,7 +69,10 @@ export const mcpCommand = defineCommand({
     const server = createGscMcpServer({
       name: 'gscdump',
       version: VERSION,
-      getAuth: () => resolveAuth({ interactive: false }),
+      getContext: async () => {
+        const ctx = await createCommandContext({ needsAuth: true })
+        return { authentication: ctx.authentication, auth: ctx.auth, client: ctx.client! }
+      },
     })
 
     const transport = new StdioServerTransport()

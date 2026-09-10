@@ -8,6 +8,7 @@ import { createConsola } from 'consola'
 export type CliEnvironmentSource = Record<string, string | undefined>
 
 export interface CliRuntime {
+  authModeOverride?: 'cloud' | 'local'
   activeProfileOverride: string | null
   colorEnabled: boolean
   configDir: string

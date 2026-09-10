@@ -1,16 +1,58 @@
 import path from 'node:path'
 import process from 'node:process'
+import { isCancel, password } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { ofetch } from 'ofetch'
 import { authenticate, clearTokens, formatAuthProvenance, getAuth, getAuthCredentials, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
+import { clearAuthentication, getCloudAccount, parseAuthentication, parseAuthMode, resolveAuthentication, saveAuthentication } from '../auth-state'
+import { clearBingCredentials, getBingClient, inspectBingCredentials } from '../bing-auth'
 import { authCommandMeta } from '../command-meta'
 import { loadConfig, saveConfig } from '../config'
+import { useCliRuntime } from '../runtime'
 import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
 import { runSmokeTest } from './init'
 import { adoptCurrentConfigAsProfile, profileNameFromEmail, resolveActiveProfile } from './profile'
 
 const AUTH_SUBCOMMANDS = ['status', 'login', 'logout', 'refresh', 'scopes'] as const
+
+const MODE_ARG = { type: 'string' as const, description: 'Authentication mode: cloud or local' }
+
+function applyAuthMode(args: Record<string, unknown>): void {
+  const mode = parseAuthMode(args.mode)
+  if (mode)
+    useCliRuntime().authModeOverride = mode
+}
+
+async function requireLocalAuth(args: Record<string, unknown>): Promise<void> {
+  applyAuthMode(args)
+  if ((await resolveAuthentication())._tag === 'Cloud')
+    throw new Error('Cloud authentication uses an API key. OAuth scopes and token refresh require --mode local.')
+}
+
+async function loginCloud(args: Record<string, unknown>): Promise<void> {
+  const env = useCliRuntime().environment
+  let apiKey = String(args['api-key'] ?? env.GSCDUMP_API_KEY ?? '')
+  if (!apiKey) {
+    if (!process.stdin.isTTY)
+      throw new Error('Cloud login requires --api-key or GSCDUMP_API_KEY.')
+    const answer = await password({ message: 'gscdump user API key' })
+    if (isCancel(answer) || typeof answer !== 'string')
+      throw new Error('Login cancelled.')
+    apiKey = answer
+  }
+  const state = parseAuthentication({
+    _tag: 'Cloud',
+    apiKey,
+    apiRoot: String(args['api-root'] ?? env.GSCDUMP_API_ROOT ?? 'https://gscdump.com/api'),
+  })
+  if (state._tag !== 'Cloud')
+    throw new Error('Cloud login requires a gscdump user API key.')
+  const account = await getCloudAccount(state)
+  await saveAuthentication(state)
+  logger.success(`Cloud authentication saved for ${account.user.email}`)
+  logger.info('Google and Bing commands use connections saved on gscdump.com.')
+}
 
 interface TokenInfo {
   scope?: string
@@ -57,14 +99,43 @@ async function resolveLiveAuthState(): Promise<{
 
 async function runStatus(args: Record<string, unknown>): Promise<void> {
   const { json } = applyOutputMode(args)
+  applyAuthMode(args)
+  const authentication = await resolveAuthentication()
+  if (authentication._tag === 'Cloud') {
+    const account = await getCloudAccount(authentication)
+    const capabilities = {
+      google: ['sites', 'query', 'sync', 'inspect', 'sitemaps', 'analyze', 'report'],
+      bing: ['sites', 'dump', 'inspect', 'login', 'status', 'verify'],
+      cloud: ['sitemaps current', 'sitemaps history', 'sitemaps membership', 'sitemaps lastmod', 'sitemaps export'],
+      local: ['indexing', 'sites verification'],
+    }
+    if (json) {
+      console.log(JSON.stringify({ authenticated: true, mode: 'cloud', account: account.user.email, apiRoot: authentication.apiRoot, sites: account.sites, capabilities }, null, 2))
+    }
+    else {
+      logger.success(`Authenticated with cloud: ${account.user.email}`)
+      console.log(`  API: ${authentication.apiRoot}`)
+      console.log(`  Sites: ${account.sites.length}`)
+      console.log('  Google and Bing use connections saved on gscdump.com.')
+      console.log(`  Cloud commands: ${capabilities.cloud.join(', ')}`)
+      console.log('  Google indexing and Site Verification require --mode local.')
+    }
+    return
+  }
   const { byok, tokens, tokenInfo, scopes, missing } = await resolveLiveAuthState()
+  const bingCredentials = await inspectBingCredentials()
+  const bingResult = bingCredentials._tag === 'Missing' ? null : await (await getBingClient()).getUserSites({ signal: AbortSignal.timeout(10_000) })
+  const bing = { configured: bingCredentials._tag !== 'Missing', authenticated: bingResult?.ok === true, source: bingCredentials._tag === 'Missing' ? null : bingCredentials._tag }
   const byokKind = byok
     ? typeof byok === 'string' ? 'access-token' : 'refresh-token'
     : null
 
   if (json) {
     console.log(JSON.stringify({
-      authenticated: !!tokens || !!byok,
+      authenticated: !!tokens || !!byok || bing.authenticated,
+      mode: 'local',
+      googleAuthenticated: !!tokens || !!byok,
+      bing,
       source: byok ? 'byok' : tokens ? 'saved-tokens' : null,
       byokKind,
       scopes,
@@ -80,6 +151,11 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
     }, null, 2))
     return
   }
+
+  if (bing.authenticated)
+    logger.success(`Bing authenticated locally (${bing.source})`)
+  else if (bing.configured)
+    logger.warn('Bing credentials failed verification. Run `gscdump bing login` again.')
 
   const reportScopes = (): void => {
     if (scopes.length === 0)
@@ -104,6 +180,10 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
   }
 
   if (!tokens) {
+    if (bing.authenticated) {
+      logger.info('Google credentials are missing. Run `gscdump auth login --mode local` to connect Google.')
+      return
+    }
     logger.warn('Not authenticated')
     logger.info('Run `gscdump init` (full setup) or `gscdump auth login` (OAuth only)')
     logger.info('Or set GSC_ACCESS_TOKEN / GSC_CLIENT_ID + GSC_CLIENT_SECRET + GSC_REFRESH_TOKEN env vars')
@@ -139,6 +219,7 @@ const statusCommand = defineCommand({
   meta: authCommandMeta.status,
   args: {
     ...OUTPUT_ARGS,
+    mode: MODE_ARG,
   },
   async run({ args }) {
     await runStatus(args as Record<string, unknown>)
@@ -152,9 +233,11 @@ const refreshCommand = defineCommand({
   },
   args: {
     ...OUTPUT_ARGS,
+    mode: MODE_ARG,
   },
   async run({ args }) {
     applyOutputMode(args)
+    await requireLocalAuth(args)
     if (resolveBYOK()) {
       logger.info('BYOK detected; refresh handled per-call by the SDK')
       return
@@ -186,14 +269,24 @@ const loginCommand = defineCommand({
   meta: authCommandMeta.login,
   args: {
     ...OUTPUT_ARGS,
+    'mode': MODE_ARG,
+    'api-key': { type: 'string', description: 'gscdump user API key; defaults to GSCDUMP_API_KEY' },
+    'api-root': { type: 'string', description: 'Cloud API root; defaults to GSCDUMP_API_ROOT or https://gscdump.com/api' },
     'force': { type: 'boolean', alias: 'f', default: false, description: 'Re-run OAuth even if tokens already exist' },
     'browser': { type: 'boolean', default: true, description: 'Open the authorization URL automatically. Pass --no-browser to open it yourself.' },
     'service-account': { type: 'string', description: 'Path to a service-account JSON key (skips OAuth)' },
   },
   async run({ args }) {
     applyOutputMode(args)
+    const runtime = useCliRuntime()
+    const requestedMode = parseAuthMode(args.mode) ?? runtime.authModeOverride ?? parseAuthMode(runtime.environment.GSCDUMP_AUTH_MODE)
+    if (requestedMode === 'cloud' || (!requestedMode && (args['api-key'] || (await resolveAuthentication())._tag === 'Cloud'))) {
+      await loginCloud(args)
+      return
+    }
     const byok = resolveBYOK()
     if (byok && !args.force) {
+      await saveAuthentication({ _tag: 'Local' })
       logger.info('BYOK env vars detected, no login needed (--force to override)')
       return
     }
@@ -213,6 +306,7 @@ const loginCommand = defineCommand({
       const config = await loadConfig()
       config.serviceAccountPath = saPath
       await saveConfig(config)
+      await saveAuthentication({ _tag: 'Local' })
       logger.success(`Service-account verified: ${(jwt as any).email ?? 'OK'}`)
       logger.info(`Saved path to config: ${saPath}`)
       return
@@ -226,6 +320,7 @@ const loginCommand = defineCommand({
     // Smoke-test: catch project-level misconfig (API not enabled, missing
     // scopes) here rather than letting the user discover it on first query.
     await runSmokeTest(oauth)
+    await saveAuthentication({ _tag: 'Local' })
 
     // Auto-adopt: if no profile was active, derive one from the Google account
     // email so subsequent runs are scoped per-account without manual setup.
@@ -262,6 +357,8 @@ const logoutCommand = defineCommand({
   async run({ args }) {
     applyOutputMode(args)
     await clearTokens()
+    await clearBingCredentials()
+    await clearAuthentication()
     const config = await loadConfig()
     if (config.serviceAccountPath) {
       delete config.serviceAccountPath
@@ -278,9 +375,11 @@ const scopesCommand = defineCommand({
   },
   args: {
     ...OUTPUT_ARGS,
+    mode: MODE_ARG,
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
+    await requireLocalAuth(args)
     const { liveToken, scopes, missing } = await resolveLiveAuthState()
 
     if (!liveToken) {
@@ -309,6 +408,7 @@ export const authCommand = defineCommand({
   meta: authCommandMeta.auth,
   args: {
     ...OUTPUT_ARGS,
+    mode: MODE_ARG,
   },
   subCommands: {
     status: statusCommand,

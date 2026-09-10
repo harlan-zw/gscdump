@@ -32,6 +32,15 @@ describe('classifyError', () => {
     else throw new Error(`expected rate-limited, got ${e.kind}`)
   })
 
+  it.each([
+    { headers: new Headers({ 'Retry-After': '12' }) },
+    { response: new Response(null, { status: 429, headers: { 'Retry-After': '12' } }) },
+  ])('preserves retry timing from native Headers %j', (extras) => {
+    const error = ofetchLike(429, 'Too Many Requests', extras)
+
+    expect(classifyError(error)).toMatchObject({ kind: 'rate-limited', retryAfter: 12 })
+  })
+
   it('classifies 403+quota as rate-limited, not auth-expired', () => {
     const e = classifyError(ofetchLike(403, 'Quota exceeded for the day'))
     expect(e.kind).toBe('rate-limited')

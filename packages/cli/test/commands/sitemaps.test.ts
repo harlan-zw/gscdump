@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sitemapsCommand } from '../../src/commands/sitemaps'
 
+vi.mock('../../src/auth-state', () => ({ resolveAuthentication: async () => ({ _tag: 'Local' }) }))
+
 const listMock = vi.fn()
 const getMock = vi.fn()
 const submitMock = vi.fn()

@@ -1,51 +1,52 @@
 ---
 name: gscdump
-description: Drive the `gscdump` CLI for Google Search Console work. Sync Search Console rows to a local Store, query pages and queries, run SEO Analyzers and Reports, inspect URL indexing, manage sitemaps, and report CLI papercuts. Use whenever the user mentions gscdump, the `gscdump` command, Search Console data, or GSC automation.
+description: Drive the `gscdump` CLI for Google Search Console and Bing work. Sync Search Console rows to a local Store, query pages and queries, run SEO Analyzers and Reports, inspect URL indexing, manage sitemaps, and report CLI papercuts. Use whenever the user mentions gscdump, the `gscdump` command, Search Console data, or GSC automation.
 ---
 
 # gscdump CLI
 
-`gscdump` reads Google Search Console through Google's API with the user's own
-credentials. It keeps a local Parquet Store so repeated questions do not hit
-Google again. Every command has `--help`.
+`gscdump` reads Google Search Console and Bing with hosted or local authentication.
+It keeps a local Parquet Store for Google rows. Every command has `--help`.
 
-Use it to answer "what is happening in search for this Site", then act on the
-findings in the repository you are working in.
+## Authentication mode
 
-## Choose local or the platform first
+Check `gscdump auth status --json` before queries. Reuse the user's selected mode.
 
-There are two ways to reach Search Console data. They differ in who holds
-the credentials and where the data lives. If the user has not said which one
-they want, ask before you run anything. Do not guess.
-
-| | Local CLI (this skill) | The platform (gscdump.com) |
+| Mode | Credentials | Query path |
 | --- | --- | --- |
-| Credentials | The user's own Google OAuth client, token, or service account | gscdump.com holds a read-only Google grant after sign-in |
-| Where data lives | Parquet files on this machine | Synced continuously on gscdump.com, history kept past Google's 16 months |
-| Setup cost | A Google Cloud project with the Search Console API enabled | Sign in once; free during beta |
-| How you reach it | `gscdump` commands in this terminal | MCP over HTTP at `https://gscdump.com/mcp` |
-| Good for | One machine, private data, CI, raw SQL over Parquet | Several clients, long history, no local sync to babysit |
+| `cloud` | gscdump user API key | `https://gscdump.com/api` uses saved Search Engine connections |
+| `local` | Google OAuth/service account or Bing API key/OAuth | Calls the Search Engine directly |
 
-Ask in one line, for example: "Do you want to use your own Google keys
-locally with the gscdump CLI, or connect to your gscdump.com account?"
-
-If the user chooses the platform, this skill does not apply. Connect the MCP
-server instead and stop here:
+`--mode cloud|local` overrides one invocation. `GSCDUMP_AUTH_MODE` also overrides the saved mode.
+A successful login saves the mode per profile. Without saved state, `GSCDUMP_API_KEY` selects hosted mode.
+Otherwise, the CLI uses local mode. Never switch modes to bypass an authentication failure.
 
 ```sh
-claude mcp add --transport http --scope user gscdump https://gscdump.com/mcp
+# The user supplies a user API key from gscdump.com settings.
+gscdump auth login --mode cloud
+gscdump bing sites --json
+gscdump bing login --site s_SITE_ID
+gscdump bing dump --site s_SITE_ID --out ./bing-export --format json
+
+# Local Google and Bing credentials stay separate.
+gscdump auth login --mode local
+gscdump bing login --mode local
+gscdump bing dump --site https://example.com/ --out ./bing-export
 ```
 
-Claude, ChatGPT, and Claude Code sign in with OAuth. Cursor and Codex send an
-API key from gscdump.com settings as the `x-api-key` header. Setup for each
-client: https://gscdump.com/mcp
+Hosted Bing login opens the existing connection flow on gscdump.com.
+Local Bing login uses `BING_API_KEY` or a password prompt.
+Local `--oauth` uses `BING_CLIENT_ID`, `BING_CLIENT_SECRET`, and a registered loopback callback.
 
-If the user chooses local, continue below.
+Hosted Bing commands use the API's plan and preview access rules.
+Hosted connection verification uses `bing verify --site s_SITE_ID`.
+Google Indexing API and Site Verification commands require local mode.
+Hosted sitemap membership and history require hosted credentials.
 
 ## Data boundaries
 
 - `sync`, `query --live`, `analyze --live`, `report --live`, `sites`,
-  `sitemaps`, `inspect`, and `indexing` call Google.
+  `sitemaps`, and `inspect` use the selected authentication mode. `indexing` requires local Google credentials.
 - `query`, `analyze`, `report`, `dump`, and `store` read the local Store by
   default. If the Store has no rows for the Site, sync first or pass `--live`.
 - Google returns a 2 to 3 day data delay. Default windows end three days ago.
@@ -123,7 +124,10 @@ Parse JSON. Never scrape human output.
 
 | Command | Use it for |
 | --- | --- |
-| `gscdump sites` | List Sites and permission levels |
+| `gscdump sites` | List Google Sites and permission levels |
+| `gscdump bing sites` | List Bing Sites and connection details |
+| `gscdump bing dump` | Export Bing traffic, pages, keywords, and crawl data |
+| `gscdump bing inspect` | Read Bing Indexing Evidence for one URL |
 | `gscdump sync` | Copy Search Console rows into the local Store |
 | `gscdump query` | Rows by page, query, date, country, or device |
 | `gscdump analyze <id>` | One Analyzer over the Store or live rows |
@@ -251,3 +255,13 @@ the failure and continue. Never retry an uncertain submission.
   rows as zero traffic.
 - **Do not widen the Site.** A `sc-domain:` property includes every
   subdomain. Filter with `--page` when the user means one host.
+
+## Bing exports
+
+`bing dump` writes JSON, NDJSON, or CSV under one directory per Site.
+`--datasets` selects `traffic`, `pages`, `keywords`, or `crawl`.
+Local mode also supports `crawl-issues`.
+Hosted exports follow pagination and reject missing, unavailable, or changing datasets.
+Hosted date ranges span at most 366 days. The default range is the last 366 days.
+Local date filters only narrow data currently returned by Bing.
+Do not treat Bing crawl evidence as proof that a URL is indexed.

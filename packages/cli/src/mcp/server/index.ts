@@ -41,11 +41,16 @@ import {
   sitemapInput,
 } from '../types'
 
-export interface CreateGscMcpServerOptions {
+export type CreateGscMcpServerOptions = {
   name?: string
   version?: string
+} & ({
   getAuth: () => Promise<Auth> | Auth
-}
+  getContext?: never
+} | {
+  getContext: () => Promise<HandlerContext> | HandlerContext
+  getAuth?: never
+})
 
 interface QueryToolArgs {
   siteUrl: string
@@ -119,21 +124,21 @@ export async function runMcpSearchAnalyticsQuery(
 }
 
 export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServer {
-  const { name = 'gscdump', version = '1.0.0', getAuth } = options
+  const { name = 'gscdump', version = '1.0.0' } = options
 
   const server = new McpServer({ name, version })
 
-  const auth = async (): Promise<Auth> => Promise.resolve(getAuth())
-
   const getContext = async (): Promise<HandlerContext> => {
-    const a = await auth()
+    if (options.getContext)
+      return options.getContext()
+    const a = await options.getAuth()
     return {
       auth: a,
       client: googleSearchConsole(a),
     }
   }
 
-  const getClient = async (): Promise<ReturnType<typeof googleSearchConsole>> => googleSearchConsole(await auth())
+  const getClient = async (): Promise<ReturnType<typeof googleSearchConsole>> => (await getContext()).client
 
   server.registerTool(
     'list-sites',

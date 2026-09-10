@@ -4,7 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dm/@gscdump/cli?color=yellow)](https://npm.chart.dev/@gscdump/cli)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-Query Google Search Console, sync a local Parquet Store, and run SEO Analyzers or Reports.
+Query Google Search Console and Bing with hosted or local authentication.
+Sync Google rows to a local Parquet Store, and run SEO Analyzers or Reports.
 The package also provides the MCP server.
 Node.js 22 or newer is required.
 
@@ -44,6 +45,7 @@ gscdump mcp
 |---|---|
 | `init` | Full setup (OAuth + dataDir; offers to write a `.env` for later use) |
 | `auth` | Manage authentication (`status`, `login`, `logout`, `refresh`) |
+| `bing` | Connect Bing, list sites, dump datasets, inspect URLs, and check hosted verification |
 | `config` | Manage CLI configuration (`show`, `set`, `unset`, `path`, `validate`) |
 | `doctor` | Health checks: auth, scopes, dataDir writability, API reachability |
 | `sites [--owner-only] [--with-sitemaps]` | List available GSC sites |
@@ -68,6 +70,95 @@ gscdump mcp
 | `mcp` | Start the MCP server for AI assistants |
 | `skill install [--agent claude\|codex] [--target <dir>]` | Copy the packaged `gscdump` agent skill (SKILL.md) into an agent skill directory |
 | `papercut --command <cmd> --comment <text> --agent <name> [--intent bug\|improvement] --yes` | Report a CLI problem to gscdump.com; anonymous, ten per hour per network address |
+
+## Hosted and local authentication
+
+One authentication mode applies to both Google and Bing.
+Credentials and the saved mode belong to the current `--profile` or `--config-dir`.
+
+```bash
+# Use a user API key from https://gscdump.com/app/settings
+export GSCDUMP_API_KEY=gsd_user_...
+gscdump auth login --mode cloud
+gscdump auth status --json
+
+# Google uses the connection on gscdump.com
+gscdump sites --json
+gscdump query --live --site sc-domain:example.com --dimensions page
+
+# Connect Bing through gscdump.com, then read its data
+gscdump bing sites --json
+gscdump bing login --site s_SITE_ID
+gscdump bing status --site s_SITE_ID --json
+gscdump bing dump --site s_SITE_ID --out ./bing-export --format csv
+
+# Use local credentials for one command
+gscdump bing sites --mode local --json
+
+# Save local mode after successful Google login
+gscdump auth login --mode local
+```
+
+`--mode cloud|local` overrides the mode for one invocation.
+`GSCDUMP_AUTH_MODE` provides the same override.
+A successful login saves the mode for later commands.
+Without saved state, `GSCDUMP_API_KEY` selects hosted authentication. Otherwise, the CLI uses local authentication.
+`GSCDUMP_API_ROOT` defaults to `https://gscdump.com/api`.
+If you change a saved API root, supply the API key explicitly.
+
+| Operation | Hosted authentication | Local authentication |
+| --- | --- | --- |
+| Google queries, sync, sites, sitemaps, URL inspection | Uses the Google connection through gscdump.com | Calls Google with local credentials |
+| Google Indexing API and Site Verification API | Requires local mode | Supported with the required Google scopes |
+| Bing datasets | Reads synced datasets through the public API | Reads data currently returned by Bing |
+| Bing connection and CNAME verification | Uses `bing login`, `bing status`, and `bing verify` | Verify sites in Bing Webmaster Tools |
+| Hosted sitemap membership and history | Supported | Requires hosted authentication |
+| Store queries and exports | Reads the local Store | Reads the local Store |
+
+Hosted Bing access follows the API's plan and preview access rules.
+`auth logout` removes the saved mode and saved Google and Bing credentials.
+Environment credentials remain active until you unset them.
+
+## Bing
+
+For local Bing access, generate an API key in Bing Webmaster Tools under Settings, API Access.
+See [Microsoft's authentication guide](https://learn.microsoft.com/en-us/bingwebmaster/getting-access).
+
+```bash
+export BING_API_KEY=...
+gscdump bing login --mode local
+gscdump bing sites --json
+gscdump bing dump --site https://example.com/ --format json --out ./bing-export
+gscdump bing dump --all-sites --format ndjson
+gscdump bing inspect https://example.com/page --site https://example.com/ --json
+```
+
+`BING_ACCESS_TOKEN` also accepts an existing Bing OAuth access token.
+Local API keys and OAuth credentials are saved separately from Google credentials.
+`bing logout --mode local` removes only saved Bing credentials.
+
+For local browser OAuth, register a Bing OAuth client with this exact redirect URI:
+`http://127.0.0.1:53683/oauth/bing`.
+
+```bash
+export BING_CLIENT_ID=...
+export BING_CLIENT_SECRET=...
+gscdump bing login --mode local --oauth
+```
+
+Use `--redirect-uri` or `BING_REDIRECT_URI` for another registered loopback URI.
+`--no-browser` prints the authorization URL. Saved OAuth credentials refresh automatically.
+
+`bing dump` exports `traffic`, `pages`, `keywords`, and `crawl` by default.
+Use `--datasets traffic,pages` to select datasets.
+Local mode also supports `--datasets crawl-issues`.
+Files use JSON, NDJSON, or CSV, with one directory per Bing site and a `metadata.json` file.
+
+In hosted mode, exports default to the last 366 days.
+Use `--start YYYY-MM-DD --end YYYY-MM-DD` for a range up to 366 days.
+The CLI follows every returned page and rejects unavailable datasets or a snapshot that changes during export.
+In local mode, date options filter the rows Bing returns. They cannot recover older history.
+Bing Indexing Evidence preserves uncertainty and does not imply an indexed verdict.
 
 ### Filter expressions
 

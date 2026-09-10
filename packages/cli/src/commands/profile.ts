@@ -58,7 +58,7 @@ export async function adoptCurrentConfigAsProfile(name: string): Promise<string 
   if (currentDir === targetDir)
     return targetDir
   await fsp.mkdir(targetDir, { recursive: true, mode: 0o700 })
-  for (const f of ['tokens.json', 'config.json']) {
+  for (const f of ['tokens.json', 'config.json', 'authentication.json', 'bing-tokens.json']) {
     const src = path.join(currentDir, f)
     const dst = path.join(targetDir, f)
     const exists = await fsp.stat(src).then(() => true).catch(() => false)

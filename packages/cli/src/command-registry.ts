@@ -2,6 +2,7 @@ import type { CommandDef, CommandMeta, Resolvable, SubCommandsDef } from 'citty'
 import {
   analyzeCommandMeta,
   authCommandMeta,
+  bingCommandMeta,
   configCommandMeta,
   doctorCommandMeta,
   dumpCommandMeta,
@@ -49,6 +50,10 @@ function shallowCommand(meta: CommandMeta, load: CommandLoader): CommandDef<any>
 }
 
 export const CLI_SUBCOMMANDS = {
+  bing: shallowCommand(
+    bingCommandMeta,
+    () => import('./commands/bing').then(module => module.bingCommand),
+  ),
   init: shallowCommand(
     initCommandMeta,
     () => import('./commands/init').then(module => module.initCommand),

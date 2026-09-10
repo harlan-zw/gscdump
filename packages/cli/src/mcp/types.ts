@@ -1,6 +1,7 @@
 import type { Auth, GoogleSearchConsoleClient } from 'gscdump/client'
 import type { Period, ResolvedAnalyticsRange } from 'gscdump/dates'
 import type { Site } from 'gscdump/sites'
+import type { Authentication } from '../auth-state'
 import { MS_PER_DAY, toIsoDate } from 'gscdump/dates'
 import { SearchTypes } from 'gscdump/query'
 import { z } from 'zod'
@@ -24,7 +25,8 @@ export const queryOptionsSchema = z.object({
 
 // Handler context - what each handler receives
 export interface HandlerContext {
-  auth: Auth
+  authentication?: Authentication
+  auth: Auth | null
   client: GoogleSearchConsoleClient
 }
 

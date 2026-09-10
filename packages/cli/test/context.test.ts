@@ -4,6 +4,7 @@ import { createCommandContext } from '../src/context'
 const sites = vi.hoisted(() => vi.fn())
 vi.mock('gscdump/client', () => ({ googleSearchConsole: () => ({ sites }) }))
 vi.mock('../src/auth', () => ({ resolveAuth: async () => 'token' }))
+vi.mock('../src/auth-state', () => ({ resolveAuthentication: async () => ({ _tag: 'Local' }) }))
 vi.mock('../src/config', () => ({ loadResolvedConfig: async () => ({ config: {}, dataDir: '/tmp/gscdump-context' }) }))
 
 beforeEach(() => {

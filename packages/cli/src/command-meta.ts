@@ -106,3 +106,4 @@ export const papercutCommandMeta = {
   name: 'papercut',
   description: 'Report a CLI problem to gscdump.com (anonymous, sanitized)',
 }
+export const bingCommandMeta = { name: 'bing', description: 'Authenticate Bing, list sites, dump data, and read Indexing Evidence' }
