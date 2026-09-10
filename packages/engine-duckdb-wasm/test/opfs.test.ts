@@ -15,7 +15,7 @@ import { attachOpfsParquetTables, OpfsQuotaExceededError } from '../src/opfs'
 
 // ── in-memory OPFS fake ─────────────────────────────────────────────────────
 
-function makeFakeOpfs(opts: { quotaBytes?: number, writeConflict?: Set<string> } = {}) {
+function makeFakeOpfs(opts: { quotaBytes?: number, writeConflict?: Set<string>, onWrite?: () => Promise<void> } = {}) {
   const files = new Map<string, Uint8Array>()
   let used = 0
   const quota = opts.quotaBytes ?? Infinity
@@ -45,6 +45,7 @@ function makeFakeOpfs(opts: { quotaBytes?: number, writeConflict?: Set<string> }
         let pending: Uint8Array = new Uint8Array()
         return {
           async write(data: ArrayBuffer | Uint8Array) {
+            await opts.onWrite?.()
             const chunk = data instanceof Uint8Array ? data : new Uint8Array(data)
             const combined = new Uint8Array(pending.byteLength + chunk.byteLength)
             combined.set(pending)
@@ -579,6 +580,98 @@ describe('attachOpfsParquetTables', () => {
     expect(dropFile).not.toHaveBeenCalled()
     await second.detach()
     expect(dropFile).toHaveBeenCalledOnce()
+  })
+
+  it('cancels a waiting writer without blocking another file or aborting sibling consumers', async () => {
+    const writeStarted = Promise.withResolvers<void>()
+    const finishWrite = Promise.withResolvers<void>()
+    let writes = 0
+    const opfs = makeFakeOpfs({
+      async onWrite() {
+        if (++writes === 1) {
+          writeStarted.resolve()
+          await finishWrite.promise
+        }
+      },
+    })
+    installNavigatorStorage(opfs.root)
+    const { db, conn, registerFileHandle } = stubDuckDb()
+    const controller = new AbortController()
+    const payload = new Uint8Array([1, 2, 3])
+    const responseCancelled = vi.fn()
+    const mk = (signal?: AbortSignal, fetch = okFetch(payload)) => attachOpfsParquetTables({
+      db,
+      conn,
+      signal,
+      fetch,
+      tables: [{ table: 'dates', files: [{ url: '/queued', bytes: 3, contentHash: 'queued.parquet' }] }],
+    })
+    const firstPending = mk()
+    await writeStarted.promise
+    const cancelledPending = mk(controller.signal, async () => new Response(new ReadableStream({
+      start(stream) { stream.enqueue(payload) },
+      cancel: responseCancelled,
+    })))
+    const unrelated = await attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(payload),
+      tables: [{ table: 'pages', files: [{ url: '/independent', bytes: 3, contentHash: 'independent.parquet' }] }],
+    })
+    expect(unrelated.tables).toEqual(['pages'])
+    expect(writes).toBe(2)
+    controller.abort()
+    await expect(cancelledPending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(responseCancelled).toHaveBeenCalledOnce()
+
+    const siblingPending = mk()
+    finishWrite.resolve()
+    const [first, sibling] = await Promise.all([firstPending, siblingPending])
+    expect(first.tables).toEqual(['dates'])
+    expect(sibling.tables).toEqual(['dates'])
+    expect(writes).toBe(2)
+    expect(registerFileHandle).toHaveBeenCalledTimes(2)
+    await first.detach()
+    await sibling.detach()
+    await unrelated.detach()
+  })
+
+  it.each([
+    ['fails', new Error('write failed')],
+    ['aborts', new DOMException('write aborted', 'AbortError')],
+  ])('lets a waiting download succeed after the preceding writer %s', async (_outcome, error) => {
+    const writeStarted = Promise.withResolvers<void>()
+    const failWrite = Promise.withResolvers<void>()
+    let writes = 0
+    const opfs = makeFakeOpfs({
+      async onWrite() {
+        if (++writes === 1) {
+          writeStarted.resolve()
+          await failWrite.promise
+          throw error
+        }
+      },
+    })
+    installNavigatorStorage(opfs.root)
+    const { db, conn } = stubDuckDb()
+    const payload = new Uint8Array([4, 5, 6])
+    const mk = () => attachOpfsParquetTables({
+      db,
+      conn,
+      fetch: okFetch(payload),
+      tables: [{ table: 'dates', files: [{ url: '/retry', bytes: 3, contentHash: 'retry.parquet' }] }],
+    })
+    const firstPending = mk()
+    const firstRejected = expect(firstPending).rejects.toBe(error)
+    await writeStarted.promise
+    const secondPending = mk()
+    failWrite.resolve()
+    await firstRejected
+    const second = await secondPending
+    expect(second.tables).toEqual(['dates'])
+    expect(second.degradedTables).toEqual([])
+    expect([...opfs.files.values()]).toEqual([payload])
+    await second.detach()
   })
 
   it('overlay view keeps the served lake scan pushdown-friendly', async () => {

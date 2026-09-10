@@ -134,12 +134,9 @@ describe('opfs attach against real browser OPFS', () => {
     await root.removeEntry('exclusivity-probe.bin')
   })
 
-  it('characterization: real OPFS tolerates concurrent createWritable (materialise race is safe)', async () => {
-    // The download path opens a writable per file. Two concurrent attaches of
-    // the same COLD file would both reach createWritable. Chromium does NOT
-    // throw on the second open — so the materialise race needs no extra
-    // coalescing: both write identical bytes (content-addressed by hash), the
-    // size check passes, and the registry serialises the single registration.
+  it('the platform allows two writable streams before a read handle opens', async () => {
+    // Two writers can coexist. A later writer still conflicts if a reader
+    // opens its sync handle first, as the delayed-download regression proves.
     const root = await navigator.storage.getDirectory()
     const fh = await root.getFileHandle('concurrent-writable-probe.bin', { create: true })
     const w1 = await fh.createWritable()
@@ -280,6 +277,44 @@ describe('opfs attach against real browser OPFS', () => {
     await first.detach()
     expect(await hw.count()).toBe(1)
     await second.detach()
+    expect(await hw.count()).toBe(0)
+  })
+
+  it('reuses a completed file when another cold download finishes after its read handle opens', async () => {
+    const hw = makeHandleWorker()
+    activeWorker = hw
+    const { db, conn } = makeRealHandleDb(hw)
+    const secondFetchStarted = Promise.withResolvers<void>()
+    const firstAttached = Promise.withResolvers<void>()
+    const mk = (fetch: typeof globalThis.fetch) => attachOpfsParquetTables({
+      db,
+      conn,
+      fetch,
+      tables: [{ table: 'dates', files: [{ url: '/delayed', bytes: 4, contentHash: 'iceberg/delayed.parquet' }] }],
+    })
+
+    const firstPending = mk(async () => {
+      await secondFetchStarted.promise
+      return new Response(new Uint8Array([9, 9, 9, 9]))
+    })
+    const secondPending = mk(async () => {
+      secondFetchStarted.resolve()
+      await firstAttached.promise
+      return new Response(new Uint8Array([9, 9, 9, 9]))
+    })
+    const first = await firstPending
+    firstAttached.resolve()
+    const second = await secondPending
+    try {
+      expect(first.tables).toEqual(['dates'])
+      expect(second.tables).toEqual(['dates'])
+      expect(second.degradedTables).toEqual([])
+      expect(await hw.count()).toBe(1)
+    }
+    finally {
+      await first.detach()
+      await second.detach()
+    }
     expect(await hw.count()).toBe(0)
   })
 

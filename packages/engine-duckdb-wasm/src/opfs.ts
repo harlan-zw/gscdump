@@ -520,6 +520,57 @@ export async function readOpfsSnapshotFile(
   }
 }
 
+// File handles share one backing file within this browser context. Serialize
+// writes by filename so a reader never races a second writer of the same bytes.
+const fileWriteTails = new Map<string, Promise<void>>()
+
+async function withFileWrite<T>(name: string, signal: AbortSignal | undefined, write: () => Promise<T>): Promise<T> {
+  signal?.throwIfAborted()
+  const previous = fileWriteTails.get(name) ?? Promise.resolve()
+  const released = Promise.withResolvers<void>()
+  const tail = previous.then(() => released.promise)
+  fileWriteTails.set(name, tail)
+  void tail.then(() => {
+    if (fileWriteTails.get(name) === tail)
+      fileWriteTails.delete(name)
+  })
+  let onAbort: (() => void) | undefined
+  try {
+    if (signal) {
+      await new Promise<void>((resolve, reject) => {
+        onAbort = () => reject(signal.reason)
+        signal.addEventListener('abort', onAbort, { once: true })
+        void previous.then(resolve)
+      })
+    }
+    else {
+      await previous
+    }
+    signal?.throwIfAborted()
+    return await write()
+  }
+  finally {
+    if (signal && onAbort)
+      signal.removeEventListener('abort', onAbort)
+    // A cancelled waiter releases only its own turn. The queue still waits
+    // for the preceding writer, and its failure never reaches other callers.
+    released.resolve()
+  }
+}
+
+async function cachedFile(root: FileSystemDirectoryHandle, name: string, expectedBytes: number): Promise<FileSystemFileHandle | undefined> {
+  try {
+    const handle = await root.getFileHandle(name)
+    const cached = await handle.getFile()
+    return cached.size === expectedBytes ? handle : undefined
+  }
+  catch (error) {
+    if (!isNotFoundError(error))
+      throw error
+    return undefined
+  }
+}
+
 /**
  * Return an OPFS file handle for `file`, downloading it if absent. The
  * filename encodes the `contentHash` (when supplied), so existence + size
@@ -538,18 +589,9 @@ async function materialiseFile(
   signal?.throwIfAborted()
 
   // ---- cache probe --------------------------------------------------------
-  let handle: FileSystemFileHandle | undefined
-  try {
-    handle = await root.getFileHandle(name)
-    const cached = await handle.getFile()
-    if (cached.size === file.bytes)
-      return { handle, outcome: 'cache-hit' }
-    // Size mismatch — partial / corrupt write. Re-download.
-  }
-  catch (error) {
-    if (!isNotFoundError(error))
-      throw error
-  }
+  const cached = await cachedFile(root, name, file.bytes)
+  if (cached)
+    return { handle: cached, outcome: 'cache-hit' }
 
   // ---- download -----------------------------------------------------------
   signal?.throwIfAborted()
@@ -565,64 +607,79 @@ async function materialiseFile(
   if (!resp.ok)
     throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} failed: ${resp.status}`)
 
-  // ---- write to OPFS ------------------------------------------------------
-  // Stream the response into OPFS instead of materialising the whole parquet
-  // in an ArrayBuffer first. Snapshot files can approach the browser attach
-  // ceiling, so buffering here briefly doubled the live bytes for every
-  // concurrent download. Writable writes provide the backpressure boundary.
-  // A `QuotaExceededError` can surface from createWritable / write / close.
-  // It is allowed to propagate — `attachOpfsParquetTables` catches it and
-  // degrades the affected table.
-  handle = await root.getFileHandle(name, { create: true })
-  let writable: FileSystemWritableFileStream
   try {
-    writable = await handle.createWritable()
-  }
-  catch (err) {
-    await resp.body?.cancel().catch(() => undefined)
-    throw err
-  }
-  let reader: ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>> | undefined
-  let bytesWritten = 0
-  try {
-    if (resp.body) {
-      reader = resp.body.getReader()
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done)
-          break
-        bytesWritten += value.byteLength
-        if (bytesWritten > file.bytes) {
-          throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} byte length mismatch: expected ${file.bytes}, got more than ${file.bytes}`)
-        }
-        await writable.write(value)
+    return await withFileWrite(name, signal, async () => {
+      // Another download may have finished while this one fetched or waited.
+      // Reuse its completed file before opening a writable under a live reader.
+      const cached = await cachedFile(root, name, file.bytes)
+      if (cached)
+        return { handle: cached, outcome: 'cache-hit' as const }
+
+      // ---- write to OPFS ------------------------------------------------------
+      // Stream the response into OPFS instead of materialising the whole parquet
+      // in an ArrayBuffer first. Snapshot files can approach the browser attach
+      // ceiling, so buffering here briefly doubled the live bytes for every
+      // concurrent download. Writable writes provide the backpressure boundary.
+      // A `QuotaExceededError` can surface from createWritable / write / close.
+      // It is allowed to propagate — `attachOpfsParquetTables` catches it and
+      // degrades the affected table.
+      const handle = await root.getFileHandle(name, { create: true })
+      let writable: FileSystemWritableFileStream
+      try {
+        writable = await handle.createWritable()
       }
-    }
-    else {
-      // Body-less Response implementations are rare but valid. Retain a
-      // compatibility fallback without putting the normal browser path back
-      // on the eager-buffering route.
-      const buf = await resp.arrayBuffer()
-      bytesWritten = buf.byteLength
-      await writable.write(buf)
-    }
-    if (bytesWritten !== file.bytes) {
-      throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} byte length mismatch: expected ${file.bytes}, got ${bytesWritten}`)
-    }
-    await writable.close()
-  }
-  catch (err) {
-    await reader?.cancel().catch(() => undefined)
-    if (writable.abort)
-      await attemptCleanup(`aborting partial OPFS write ${name}`, () => writable.abort!())
-    // The partial / empty file is useless — remove it so a later run re-downloads.
-    await attemptCleanup(`removing partial OPFS file ${name}`, () => root.removeEntry(name))
-    throw err
+      catch (err) {
+        await resp.body?.cancel().catch(() => undefined)
+        throw err
+      }
+      let reader: ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>> | undefined
+      let bytesWritten = 0
+      try {
+        if (resp.body) {
+          reader = resp.body.getReader()
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done)
+              break
+            bytesWritten += value.byteLength
+            if (bytesWritten > file.bytes) {
+              throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} byte length mismatch: expected ${file.bytes}, got more than ${file.bytes}`)
+            }
+            await writable.write(value)
+          }
+        }
+        else {
+          // Body-less Response implementations are rare but valid. Retain a
+          // compatibility fallback without putting the normal browser path back
+          // on the eager-buffering route.
+          const buf = await resp.arrayBuffer()
+          bytesWritten = buf.byteLength
+          await writable.write(buf)
+        }
+        if (bytesWritten !== file.bytes) {
+          throw new Error(`[engine-duckdb-wasm/opfs] download ${file.url} byte length mismatch: expected ${file.bytes}, got ${bytesWritten}`)
+        }
+        await writable.close()
+      }
+      catch (err) {
+        await reader?.cancel().catch(() => undefined)
+        if (writable.abort)
+          await attemptCleanup(`aborting partial OPFS write ${name}`, () => writable.abort!())
+        // The partial / empty file is useless — remove it so a later run re-downloads.
+        await attemptCleanup(`removing partial OPFS file ${name}`, () => root.removeEntry(name))
+        throw err
+      }
+      finally {
+        reader?.releaseLock()
+      }
+      return { handle, outcome: 'downloaded' as const }
+    })
   }
   finally {
-    reader?.releaseLock()
+    // A cache hit or cancelled waiter leaves the response unread. Release it.
+    if (resp.body && !resp.bodyUsed)
+      await attemptCleanup(`cancelling unused OPFS download ${name}`, () => resp.body!.cancel())
   }
-  return { handle, outcome: 'downloaded' }
 }
 
 function quoteList(files: string[]): string {
