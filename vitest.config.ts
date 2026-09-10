@@ -16,6 +16,6 @@ export default defineConfig({
     // `*.workers.test.ts` run in a real workerd runtime via the Cloudflare
     // pool — see `packages/cloudflare/vitest.workers.config.ts` (`pnpm
     // test:workers`). They can't run in this node project.
-    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**', '**/*.workers.test.ts', '**/*.browser.test.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**', 'packages/cloudflare/**', '**/*.workers.test.ts', '**/*.browser.test.ts'],
   },
 })

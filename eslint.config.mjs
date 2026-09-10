@@ -96,6 +96,12 @@ export default antfu({
     'examples/browser-http/_served/**',
   ],
 }, {
+  files: ['pnpm-workspace.yaml'],
+  rules: {
+    // Cloudflare's pool supports Vitest 4 while the other suites use Vitest 5.
+    'pnpm/yaml-no-duplicate-catalog-item': ['error', { allow: ['vitest', '@vitest/browser-playwright'] }],
+  },
+}, {
   // Core overall — no reaching into sibling @gscdump/* packages (would create a
   // cycle); only the @gscdump/contracts leaf is an allowed edge.
   files: ['packages/gscdump/src/**/*.ts'],

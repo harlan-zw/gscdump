@@ -21,6 +21,7 @@ Thumbs.db
 
 # Test
 coverage
+.vitest
 
 # Local
 .env
@@ -56,3 +57,6 @@ examples/browser-attach/screenshot.png
 eslint-typegen.d.ts
 
 gsc-api-reference
+
+# PR Lens writes its previews here. They are rebuilt on demand.
+.pr-lens/
