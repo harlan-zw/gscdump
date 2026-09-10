@@ -14,7 +14,7 @@ function fakeRunSQL(extraRows: Array<Record<string, unknown>>): RunSQLFn {
   return async ({ sql }) => {
     if (sql.includes('joinKey'))
       return { rows: extraRows }
-    return { rows: [{ totalCount: 1, totalClicks: 7, totalImpressions: 70, totalCtr: 0.1, totalPosition: 3 }] }
+    return { rows: [{ queryCanonical: 'bar', totalCount: 1, totalClicks: 7, totalImpressions: 70, totalCtr: 0.1, totalPosition: 3 }] }
   }
 }
 

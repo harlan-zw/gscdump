@@ -509,11 +509,15 @@ export function resolveComparisonSQL<TK extends string>(
   return { sql: main.sql, params: main.params, countSql: count.sql, countParams: count.params }
 }
 
-// Canonical-variant enrichment — lazily fetched alongside the main query when
-// `queryCanonical` appears in dimensions.
+/**
+ * Enrich Canonical Query groups with their raw variants.
+ * Supply selected keys to limit aggregation to the current page.
+ * An empty key list skips enrichment. Omit keys to enrich the full window.
+ */
 export function buildExtrasQueries<TK extends string>(
   state: BuilderState,
   options: ResolverOptions<TK>,
+  queryCanonicalKeys?: readonly string[],
 ): ExtraQuery[] {
   const { adapter, siteId, searchType } = options
   const plan = buildLogicalPlan(state, adapter.capabilities)
@@ -521,7 +525,7 @@ export function buildExtrasQueries<TK extends string>(
   const extras: ExtraQuery[] = []
 
   const hasQueryCanonical = dims.includes('queryCanonical')
-  if (!hasQueryCanonical)
+  if (!hasQueryCanonical || queryCanonicalKeys?.length === 0)
     return extras
 
   const queriesKey = adapter.tableKeyForDataset('queries') as TK
@@ -537,12 +541,16 @@ export function buildExtrasQueries<TK extends string>(
   whereParts.push(sql`${adapter.dateColRef(queriesKey)} >= ${plan.dateRange.startDate}`)
   whereParts.push(sql`${adapter.dateColRef(queriesKey)} <= ${plan.dateRange.endDate}`)
 
-  const whereExpr = whereParts.length > 0 ? sql`WHERE ${joinAnd(whereParts)}` : sql``
   const outerQueryCol = sql.raw('query')
   // Key on the total canonical derived from query_dim, with raw query as the
   // fallback. The live extras then share one key space with the main canonical
   // query and the `query_canonical_*` rollups.
   const canonKey = adapter.dimExprSql('queryCanonical', queriesKey)
+  if (queryCanonicalKeys) {
+    const keys = [...new Set(queryCanonicalKeys)].map(key => sql`${key}`)
+    whereParts.push(sql`${canonKey} IN (${joinComma(keys)})`)
+  }
+  const whereExpr = whereParts.length > 0 ? sql`WHERE ${joinAnd(whereParts)}` : sql``
   const q = sql`WITH per_variant AS (SELECT ${canonKey} as joinKey, ${t.query} as query, SUM(${t.clicks}) as clicks, SUM(${t.impressions}) as impressions, SUM(${t.sum_position}) as sum_pos, ROW_NUMBER() OVER (PARTITION BY ${canonKey} ORDER BY SUM(${t.clicks}) DESC) as rn, COUNT(*) OVER (PARTITION BY ${canonKey}) as variantCount FROM ${table} ${whereExpr} GROUP BY ${canonKey}, ${t.query}) SELECT joinKey, MAX(variantCount) as variantCount, MAX(CASE WHEN rn = 1 THEN ${outerQueryCol} END) as canonicalName, STRING_AGG(CASE WHEN rn <= 10 THEN ${outerQueryCol} || ':::' || clicks || ':::' || impressions || ':::' || CAST(ROUND(CAST(sum_pos AS REAL) / NULLIF(impressions, 0) + 1, 1) AS TEXT) END, '||') as variants FROM per_variant GROUP BY joinKey`
 
   const compiled = compileCollapsed(adapter, q)
