@@ -1,8 +1,8 @@
 import { stripVTControlCharacters } from 'node:util'
 import stringWidth from 'string-width'
 import { describe, expect, it } from 'vitest'
-import { columnsFor } from '../../src/render/analysis'
-import { renderBars, renderMetrics, renderShare, renderSparklines } from '../../src/render/charts'
+import { columnsFor, renderAnalysis } from '../../src/render/analysis'
+import { barColumn, renderBars, renderMetrics, renderShare, renderSparklines } from '../../src/render/charts'
 import { fitLabel, renderTable, textLines } from '../../src/render/layout'
 import { formatChange, formatMetric } from '../../src/render/metrics'
 import { resolveOutputOptions } from '../../src/render/terminal'
@@ -59,12 +59,12 @@ describe('cLI chart kit', () => {
     ], range, 'clicks', plain).join('\n')
     expect(output).toContain('▁·▁')
     expect(output).toContain('▄·▄')
-    expect(output).toContain('Scale: each row')
+    expect(output).toContain('· missing')
   })
 
   it('aggregates consecutive dates when a series exceeds the width', () => {
     const output = renderSparklines([{ label: 'docs', total: 31, points: Array.from({ length: 31 }, (_, i) => ({ date: `2026-08-${String(i + 1).padStart(2, '0')}`, value: 1 })) }], { start: '2026-08-01', end: '2026-08-31', unit: 'day' }, 'clicks', { ...plain, columns: 20 }).join('\n')
-    expect(output.replace(/\s+/g, ' ')).toContain('Each cell sums up to 2 days.')
+    expect(output.replace(/\s+/g, ' ')).toContain('sum / 2 days')
   })
 
   it('retains fields appearing after the first row and formats numeric columns consistently', () => {
@@ -129,5 +129,45 @@ describe('cLI chart kit', () => {
     expect(output).toContain('12,480')
     expect(output).toContain('1.20%')
     expect(output).toContain('…')
+  })
+
+  it('puts signed chart values in the same row as the comparison', () => {
+    const rows = [{ query: 'search analytics', page: '/pricing', recentClicks: 270, baselineClicks: 570, clicksChange: -300, ctr: 0.018, position: 11 }]
+    const output = renderAnalysis({ results: rows, meta: {} }, {
+      id: 'movers',
+      site: 'sc-domain:example.com',
+      start: '2026-08-01',
+      end: '2026-08-28',
+      previous: { start: '2026-07-01', end: '2026-07-28' },
+    }, plain)
+    expect(output.match(/search analytics/g)).toHaveLength(1)
+    expect(output).toContain('search analytics (/pricing)')
+    expect(output).toContain('270')
+    expect(output).toContain('570')
+    expect(output).toContain('-300')
+    expect(output).toContain('│')
+    expect(output).not.toMatch(/Shared scale|Weekly data|returned rows|gscdump|Site:/)
+  })
+
+  it('keeps chart columns aligned after applying color', () => {
+    const options = { ...plain, color: true }
+    const rows = [{ query: 'docs', clicks: 12480 }, { query: 'blog', clicks: 0 }]
+    const output = renderTable(rows, [columnsFor(rows, ['query'])[0]!, barColumn(rows, 'clicks', options)], options)
+    expect(output.every(line => stringWidth(line) <= 80)).toBe(true)
+    expect(stripVTControlCharacters(output.join('\n'))).toContain('12,480')
+    expect(output.join('\n')).toContain('\x1B[36m')
+  })
+
+  it('only explains series gaps when gaps exist', () => {
+    const rows = [{ label: 'docs', total: 12, points: [{ date: '2026-08-01', value: 12 }] }]
+    const output = renderSparklines(rows, { start: '2026-08-01', end: '2026-08-01', unit: 'day' }, 'clicks', plain).join('\n')
+    expect(output).toContain('12')
+    expect(output).not.toMatch(/missing|No data|2026-08-01/)
+  })
+
+  it('aligns the zero axis when changes have different digit counts', () => {
+    const rows = [{ change: -300 }, { change: 20 }]
+    const output = renderTable(rows, [barColumn(rows, 'change', plain, true)], plain).slice(2)
+    expect(output[0]!.indexOf('│')).toBe(output[1]!.indexOf('│'))
   })
 })

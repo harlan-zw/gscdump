@@ -335,7 +335,7 @@ export const queryCommand = defineCommand({
         return
       }
       if (!args.quiet)
-        logger.info(`Querying ${siteUrl} via live GSC API...`)
+        logger.debug(`Querying ${siteUrl} via live GSC API...`)
       const result = await runLiveQuery(ctx.client!, siteUrl, {
         startDate,
         endDate,
@@ -366,7 +366,7 @@ export const queryCommand = defineCommand({
     }
 
     if (!args.quiet)
-      logger.info(`Querying ${siteUrl} from local Parquet store...`)
+      logger.debug(`Querying ${siteUrl} from local Parquet store...`)
 
     const state = buildLocalState(dimNames, startDate, endDate, rowLimit, dimensionFilter)
     const store = ctx.store!
@@ -610,7 +610,7 @@ async function runRawSqlMode(opts: {
   const store = ctx.store!
 
   if (!opts.quiet)
-    logger.info(`Running raw SQL over table "${opts.table}" for ${siteUrl}`)
+    logger.debug(`Running raw SQL over table "${opts.table}" for ${siteUrl}`)
 
   const { rows, sql } = await store.runRawSql({
     sql: opts.sql,

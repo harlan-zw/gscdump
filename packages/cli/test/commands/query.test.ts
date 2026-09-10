@@ -65,6 +65,7 @@ vi.mock('../../src/utils', async (importOriginal) => {
   return {
     ...actual,
     logger: {
+      debug: vi.fn(),
       info: vi.fn(),
       success: vi.fn(),
       warn: vi.fn(),
@@ -317,11 +318,12 @@ describe('query command', () => {
     mocks.rawQuery.mockResolvedValueOnce({ rows: [{ keys: ['/docs'], clicks: 12, impressions: 1000, ctr: 0.012, position: 8.4 }] }).mockResolvedValueOnce({ rows: [] })
     await runCommand(queryCommand, { rawArgs: ['--live', '--dimensions', 'page', '--format', 'table', '--start', '2026-04-01', '--end', '2026-04-07'] })
     const output = consoleOutput.join('\n')
-    expect(output).toContain('Site: example.com')
-    expect(output).not.toContain('Site: https://')
-    expect(output).toContain('Clicks: top 1 returned rows')
+    expect(output).toContain('example.com / query')
+    expect(output.match(/\/docs/g)).toHaveLength(1)
+    expect(output).toMatch(/[#█]+\s+12/)
     expect(output).toContain('1.20%')
-    expect(output).toContain('Totals cover these rows only.')
+    expect(output).not.toContain('Totals cover these rows only.')
+    expect(logger.info).not.toHaveBeenCalled()
   })
 
   it('renders SQL tables without changing JSON defaults', async () => {

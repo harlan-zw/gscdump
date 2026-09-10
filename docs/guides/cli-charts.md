@@ -9,7 +9,7 @@ JSON and CSV retain their existing payloads.
 
 | Command | Human output |
 | --- | --- |
-| `gscdump analyze trends` | Weekly sparklines, growth, and average position. |
+| `gscdump analyze trends` | Weekly sparklines, click totals, and average position in one table. |
 | `gscdump analyze movers` | Click changes around zero, current values, and previous values. |
 | `gscdump analyze brand --brand-terms example` | Brand click share and returned rows. |
 | `gscdump analyze seasonality` | Monthly volume and available-history warnings. |
@@ -17,7 +17,7 @@ JSON and CSV retain their existing payloads.
 | `gscdump report movers` | Section coverage, click changes, and metric summaries. |
 | Other Reports | Section coverage and formatted findings. |
 | `gscdump store stats` | Live bytes by table, counts, and sync watermarks. |
-| `gscdump query --format table` | A human table, plus ranked bars or daily sparklines for supported dimensions. |
+| `gscdump query --format table` | Bars within the result table for supported dimensions. |
 
 Query output still defaults to JSON, or your saved format.
 Use an explicit table format to see query charts:
@@ -31,6 +31,16 @@ Use `--json` for Analyzer or Report JSON.
 Use `--format csv` for Analyzer or query CSV.
 Use `--output results.txt --format table` to save a plain query table.
 Raw SQL supports `--format table` without selecting a chart.
+
+## Default output
+
+Each view names the Site and period once.
+Charts share rows with their exact values.
+Movers show period comparisons. Trends show weekly history.
+Routine row counts, scale tutorials, and progress messages stay out of default output.
+Only truncation adds a row-count footer.
+Empty Reports emit one message. Partial Reports keep their unavailable data visible.
+Store stats omit empty tables.
 
 ## Reading charts
 
@@ -48,6 +58,7 @@ Raw SQL supports `--format table` without selecting a chart.
 
 A constant positive sparkline uses the middle glyph.
 A zero sparkline uses the lowest glyph and displays an exact zero total.
+Gap legends appear only when data is missing.
 
 ## Metric units
 
@@ -63,14 +74,14 @@ A zero sparkline uses the lowest glyph and displays an exact zero total.
 
 `pp` means percentage points.
 A lower average position means improvement.
-A zero previous value has no percentage change. The output states the zero baseline.
+A zero previous value has no percentage change. The comparison table shows the zero value.
 Unknown values display `n/a`.
 
 ## Data limits
 
 Brand share covers the returned rows used by the Analyzer.
 It is not necessarily the complete Site population.
-Query chart totals also cover returned rows only.
+Query bars show individual returned rows. They do not estimate Site totals.
 Reports keep their existing Section limits and show known omitted counts.
 
 Missing dates stay visible.

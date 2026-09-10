@@ -104,7 +104,7 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
         format: args.format,
       })
 
-      logger.info(`Running ${tool} analysis...`)
+      logger.debug(`Running ${tool} analysis...`)
 
       const result = await runAnalysis(params).catch(gscErrorHandler)
 

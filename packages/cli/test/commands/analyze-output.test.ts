@@ -38,7 +38,7 @@ describe('analyzer human output', () => {
   it('formats CTR as a rate with useful precision', async () => {
     boundary.result = { results: [{ page: '/docs', clicks: 12, impressions: 1000, ctr: 0.012 }], meta: {} }
     const text = await output('opportunity')
-    expect(text).toContain('Site: example.com')
+    expect(text).toContain('example.com / opportunity')
     expect(text).not.toContain('sc-domain:')
     expect(text).toContain('1.20%')
     expect(text).not.toContain('+1%')
@@ -52,18 +52,19 @@ describe('analyzer human output', () => {
     const text = await output('brand', ['--brand-terms', 'example'])
     expect(text).toContain('40.0%')
     expect(text).toContain('12,000 clicks in returned rows')
-    expect(text).toContain('Showing 1 of 500')
+    expect(text).toContain('1 of 500 rows')
   })
 
   it('preserves weeks missing from every series', async () => {
-    boundary.result = { results: [{ page: '/docs', totalClicks: 100, series: [
+    boundary.result = { results: [{ page: '/docs', totalClicks: 100, growthRatio: 0.5, series: [
       { week: '2026-08-03', clicks: 0 },
       { week: '2026-08-17', clicks: 100 },
     ] }], meta: { startDate: '2026-08-03', endDate: '2026-08-23' } }
     const text = await output('trends')
     expect(text).toContain('▁·█')
-    expect(text).toContain('No data')
+    expect(text).toContain('· missing')
     expect(text).toContain('2026-08-03')
+    expect(text).not.toContain('Growth')
   })
 
   it('stacks long labels without losing exact values at 40 columns', async () => {
@@ -87,31 +88,35 @@ describe('analyzer human output', () => {
   })
   it('shows missing months and short-history limitations', async () => {
     boundary.result = { results: [{ month: '2026-01', value: 800 }, { month: '2026-03', value: 1000 }], meta: { insufficientData: true } }
-    const text = await output('seasonality', ['--start', '2026-01-01', '--end', '2026-03-31'])
+    const text = await output('seasonality', ['--start', '2026-01-01', '--end', '2026-03-20'])
     expect(text).toContain('2026-02')
     expect(text).toContain('n/a')
-    expect(text).toContain('Fewer than 12 months available.')
+    expect(text).toContain('! 2 of 12 months')
+    expect(text).toContain('2026-03*')
+    expect(text).toContain('* partial month')
   })
 
-  it('keeps a zero baseline explicit for movers without weekly data', async () => {
+  it('shows a zero baseline as data without a percentage claim', async () => {
+    Object.defineProperty(process.stdout, 'columns', { configurable: true, value: 40 })
     boundary.result = { results: [{ keyword: 'example', recentClicks: 100, baselineClicks: 0, clicksChange: 100, clicksChangePercent: 100 }], meta: {} }
     const text = await output('movers', ['--prev-start', '2026-07-01', '--prev-end', '2026-07-28'])
     expect(text).toContain('+100')
-    expect(text.replace(/\s+/g, ' ')).toContain('previous clicks: 0.')
+    expect(text).toContain('Previous: 0')
     expect(text).not.toContain('+100%')
-    expect(text).toContain('Weekly data unavailable.')
+    expect(text).not.toContain('Weekly data unavailable.')
   })
 
   it('rejects unsupported output formats', async () => {
     await expect(output('opportunity', ['--format', 'yaml'])).rejects.toThrow('Invalid --format')
   })
-  it('preserves available weekly mover series across both periods', async () => {
+  it('keeps mover series in JSON without repeating the comparison in human output', async () => {
     boundary.result = { results: [{ keyword: 'example', recentClicks: 200, baselineClicks: 100, clicksChange: 100, series: [
       { week: '2026-08-03', clicks: 100 },
       { week: '2026-08-10', clicks: 200 },
     ] }], meta: {} }
     const text = await output('movers', ['--start', '2026-08-10', '--end', '2026-08-16', '--prev-start', '2026-08-03', '--prev-end', '2026-08-09'])
-    expect(text).toContain('▁█')
-    expect(text).toContain('300')
+    expect(text.match(/example(?!\.com)/g)).toHaveLength(1)
+    expect(text).not.toContain('Weekly')
+    expect(JSON.parse(await output('movers', ['--json']))).toEqual(boundary.result)
   })
 })

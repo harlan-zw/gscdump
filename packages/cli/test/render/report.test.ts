@@ -23,14 +23,14 @@ describe('cLI Reports', () => {
   it.each(['sc-domain:example.com', 'https://example.com/', 'example.com'])('shows the host for Site %s', (site) => {
     const report = { ...fixture(), site }
     const output = renderCliReport(report, { columns: 80, color: false, unicode: true })
-    expect(output).toContain('Site: example.com\n')
+    expect(output).toContain('example.com / movers\n')
   })
 
   it('shows structured deltas, units, and truncation', () => {
     const output = renderCliReport(fixture(), { columns: 80, color: false, unicode: true })
     expect(output).toContain('+20.0%')
     expect(output).toContain('1.20%')
-    expect(output).toContain('Showing 1 of 20 results.')
+    expect(output).toContain('1 of 20 rows')
     expect(output).toContain('2026-07-04 to 2026-07-31')
   })
 
@@ -41,9 +41,31 @@ describe('cLI Reports', () => {
     report.sections[0].coverage = 'partial'
     report.sections[0].findings = []
     const output = renderCliReport(report, { columns: 40, color: false, unicode: false })
-    expect(output).toContain('! Partial Report: decay')
+    expect(output).toContain('! Unavailable: decay')
     expect(output).toContain('(partial)')
-    expect(output).toContain('Data unavailable for this Section.')
+    expect(output).not.toContain('No findings.')
     expect(output.split('\n').every(line => stringWidth(line) <= 40)).toBe(true)
+  })
+
+  it('does not repeat empty Sections as separate success messages', () => {
+    const report = fixture()
+    report.sections[0].findings = []
+    const output = renderCliReport(report, { columns: 80, color: false, unicode: true })
+    expect(output).toContain('No findings.')
+    expect(output).not.toContain('Rising queries')
+    expect(output).not.toContain('[info]')
+  })
+
+  it('does not repeat the click change as loss metrics or a narrative total', () => {
+    const report = fixture()
+    report.sections[0].summary.magnitudeLabel = '600 clicks lost'
+    report.sections[0].findings = [
+      { entity: { kind: 'query', value: 'search analytics' }, metrics: { clicks: 270 }, delta: { metric: 'clicks', current: 270, prior: 570, pct: -52.6 } },
+      { entity: { kind: 'page', value: '/pricing' }, metrics: { clicks: 270, lostClicks: 300, declinePercent: 300 / 570 }, delta: { metric: 'clicks', current: 270, prior: 570, pct: -52.6 } },
+    ]
+    const output = renderCliReport(report, { columns: 80, color: false, unicode: true })
+    expect(output).toContain('-300')
+    expect(output).toContain('-52.6%')
+    expect(output).not.toMatch(/lostClicks|Decline|600 clicks lost|n\/a/)
   })
 })

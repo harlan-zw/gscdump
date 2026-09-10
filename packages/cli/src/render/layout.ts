@@ -80,6 +80,7 @@ export interface TableColumn {
   label: string
   numeric?: boolean
   format?: (value: unknown) => string
+  tone?: Tone | ((value: unknown) => Tone)
 }
 
 export function renderTable(rows: readonly Record<string, unknown>[], columns: readonly TableColumn[], options: OutputOptions): string[] {
@@ -103,15 +104,20 @@ export function renderTable(rows: readonly Record<string, unknown>[], columns: r
     }
   }
   if (totalWidth > contentWidth(options)) {
-    return cells.flatMap(row => [
-      ...columns.flatMap((_, i) => textLines(`${labels[i]}: ${row[i]}`, options)),
+    return cells.flatMap((row, rowIndex) => [
+      ...columns.flatMap((col, i) => textLines(labels[i] ? `${labels[i]}: ${row[i]}` : row[i], options, typeof col.tone === 'function' ? col.tone(rows[rowIndex][col.key]) : col.tone)),
       '',
     ])
   }
-  const line = (values: string[], truncate = false): string => `  ${values.map((value, i) => pad(truncate && !columns[i].numeric ? fitLabel(value, widths[i], options) : value, widths[i], columns[i].numeric)).join('  ')}`
+  const line = (values: string[], row?: Record<string, unknown>): string => `  ${values.map((value, i) => {
+    const col = columns[i]
+    const cell = pad(row && !col.numeric ? fitLabel(value, widths[i], options) : value, widths[i], col.numeric)
+    const tone = row && (typeof col.tone === 'function' ? col.tone(row[col.key]) : col.tone)
+    return paint(cell, tone || 'neutral', options)
+  }).join('  ')}`
   return [
     line(labels),
     `  ${paint(widths.map(width => (options.unicode ? '─' : '-').repeat(width)).join('  '), 'muted', options)}`,
-    ...cells.map(row => line(row, true)),
+    ...cells.map((row, i) => line(row, rows[i])),
   ]
 }

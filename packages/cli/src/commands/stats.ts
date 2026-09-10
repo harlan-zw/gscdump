@@ -5,8 +5,9 @@ import { defineCommand } from 'citty'
 import { decodeSiteId, parseGscSiteUrl } from 'gscdump'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
-import { renderBars, renderMetrics } from '../render/charts'
-import { textLines } from '../render/layout'
+import { columnsFor } from '../render/analysis'
+import { barColumn } from '../render/charts'
+import { renderTable, textLines } from '../render/layout'
 import { formatMetric } from '../render/metrics'
 import { terminalOutputOptions } from '../render/terminal'
 import { applyOutputMode, displayPath, formatAge, logger, OUTPUT_ARGS } from '../utils'
@@ -85,31 +86,41 @@ export const statsCommand = defineCommand({
     }
 
     const options = terminalOutputOptions()
+    const rows = perTable.filter(({ live, retired }) => live.length || retired.length).map(({ table, live, retired }) => ({
+      table,
+      liveFiles: live.length,
+      liveRows: sumRows(live),
+      liveBytes: sumBytes(live),
+      retiredFiles: retired.length,
+      retiredBytes: sumBytes(retired),
+    }))
+    const retired = rows.some(row => row.retiredFiles > 0)
     const lines = [
-      ...textLines('gscdump / store stats', options, 'accent'),
-      ...textLines(displayPath(store.dataDir), options),
-      ...textLines(`Disk: ${disk.files} files, ${formatMetric('bytes', disk.bytes)}`, options),
+      ...textLines(`Store / ${displayPath(store.dataDir)}`, options, 'accent'),
+      ...textLines(`Disk ${formatMetric('bytes', disk.bytes)}  ${disk.files} files`, options),
       '',
-      ...textLines('Live bytes by table', options),
-      ...renderBars(perTable.map(({ table, live }) => ({ label: table, value: sumBytes(live) })), 'bytes', options),
-      '',
+      ...(rows.length
+        ? renderTable(rows, [
+            { key: 'table', label: 'Table' },
+            ...columnsFor(rows, ['liveFiles', 'liveRows']),
+            barColumn(rows, 'liveBytes', options),
+            ...(retired
+              ? [
+                  { key: 'retiredFiles', label: 'Retired files', numeric: true },
+                  { key: 'retiredBytes', label: 'Retired bytes', numeric: true, format: (value: unknown) => formatMetric('bytes', value) },
+                ]
+              : []),
+          ], options)
+        : textLines('Empty Store.', options)),
     ]
-    for (const { table, live, retired } of perTable) {
-      lines.push(...textLines(`${table}: ${formatMetric('clicks', live.length)} files, ${formatMetric('clicks', sumRows(live))} rows`, options))
-      if (retired.length)
-        lines.push(...textLines(`Retired: ${retired.length} files, ${formatMetric('bytes', sumBytes(retired))}`, options, 'muted'))
-    }
-    lines.push('', ...renderMetrics([
-      { key: 'liveFiles', label: 'Live files', current: perTable.reduce((sum, row) => sum + row.live.length, 0) },
-      { key: 'liveRows', label: 'Live rows', current: perTable.reduce((sum, row) => sum + sumRows(row.live), 0) },
-      { key: 'bytes', label: 'Live bytes', current: perTable.reduce((sum, row) => sum + sumBytes(row.live), 0) },
-    ], options))
+    if (rows.length > 1)
+      lines.push(...textLines(`Total ${formatMetric('bytes', rows.reduce((sum, row) => sum + row.liveBytes, 0))} live`, options, 'muted'))
     if (watermarks.length) {
-      lines.push('', ...textLines('Sync watermarks', options, 'accent'))
-      for (const w of sortWatermarks(watermarks)) {
-        lines.push(...textLines(w.siteId ? `${w.table}@${parseGscSiteUrl(decodeSiteId(w.siteId)).hostname}` : w.table, options))
-        lines.push(...textLines(`${w.oldestDateSynced} to ${w.newestDateSynced} (last ${formatAge(w.lastSyncAt)})`, options, 'muted'))
-      }
+      lines.push('', ...renderTable(sortWatermarks(watermarks).map(w => ({
+        scope: w.siteId ? `${w.table}@${parseGscSiteUrl(decodeSiteId(w.siteId)).hostname}` : w.table,
+        dates: `${w.oldestDateSynced} to ${w.newestDateSynced}`,
+        synced: formatAge(w.lastSyncAt),
+      })), [{ key: 'scope', label: '' }, { key: 'dates', label: 'Dates' }, { key: 'synced', label: 'Synced' }], options))
     }
     console.log(lines.join('\n'))
   },
