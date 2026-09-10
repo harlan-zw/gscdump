@@ -11,6 +11,8 @@ export default defineConfig({
     globals: true,
     // Bound concurrent DuckDB instances on shared CI runners.
     maxWorkers: 4,
+    // DuckDB WASM cold starts can exceed the default five-second timeout.
+    testTimeout: 30_000,
     // `*.workers.test.ts` run in a real workerd runtime via the Cloudflare
     // pool — see `packages/cloudflare/vitest.workers.config.ts` (`pnpm
     // test:workers`). They can't run in this node project.
