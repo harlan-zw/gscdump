@@ -10,11 +10,13 @@ import {
   initCommandMeta,
   inspectCommandMeta,
   mcpCommandMeta,
+  papercutCommandMeta,
   profileCommandMeta,
   queryCommandMeta,
   reportCommandMeta,
   sitemapsCommandMeta,
   sitesCommandMeta,
+  skillCommandMeta,
   storeCommandMeta,
   syncCommandMeta,
 } from './command-meta'
@@ -126,5 +128,13 @@ export const CLI_SUBCOMMANDS = {
   mcp: shallowCommand(
     mcpCommandMeta,
     () => import('./commands/mcp').then(module => module.mcpCommand),
+  ),
+  skill: shallowCommand(
+    skillCommandMeta,
+    () => import('./commands/skill').then(module => module.skillCommand),
+  ),
+  papercut: shallowCommand(
+    papercutCommandMeta,
+    () => import('./commands/papercut').then(module => module.papercutCommand),
   ),
 } satisfies SubCommandsDef

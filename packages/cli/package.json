@@ -2,7 +2,7 @@
   "name": "@gscdump/cli",
   "type": "module",
   "version": "3.5.0",
-  "description": "CLI for Google Search Console - dump, query, and run MCP server",
+  "description": "CLI for Google Search Console - dump, query, run the MCP server, and install the agent skill",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
@@ -35,7 +35,8 @@
   },
   "files": [
     "bin",
-    "dist"
+    "dist",
+    "skills"
   ],
   "engines": {
     "node": ">=22"
