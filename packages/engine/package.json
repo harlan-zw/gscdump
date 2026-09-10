@@ -203,6 +203,7 @@
     "@gscdump/lakehouse": "workspace:^",
     "drizzle-orm": "catalog:",
     "gscdump": "workspace:^",
+    "pathe": "catalog:",
     "proper-lockfile": "catalog:deps"
   },
   "devDependencies": {

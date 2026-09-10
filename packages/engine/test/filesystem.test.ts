@@ -1,6 +1,6 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, parse, relative, sep } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createFilesystemDataSource,
@@ -13,7 +13,7 @@ import { createJsonCodec, createUnionExecutor } from './helpers/in-memory'
 describe('filesystemDataSource', () => {
   let dir: string
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'gscdump-fs-'))
+    dir = await mkdtemp(join(tmpdir(), 'gscdump Store 日本語 '))
   })
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true })
@@ -29,6 +29,11 @@ describe('filesystemDataSource', () => {
 
     const listed = await ds.list('u_1/')
     expect(listed).toContain('u_1/pages/daily/2026-04-10__v1.parquet')
+    const streamed: string[] = []
+    for await (const key of ds.streamList!('u_1/'))
+      streamed.push(key)
+    expect(streamed).toEqual(listed)
+    expect(await ds.head!('u_1/pages/daily/2026-04-10__v1.parquet')).toEqual({ bytes: 4 })
 
     const slice = await ds.read('u_1/pages/daily/2026-04-10__v1.parquet', { offset: 1, length: 2 })
     expect(Array.from(slice)).toEqual([2, 3])
@@ -37,6 +42,23 @@ describe('filesystemDataSource', () => {
 
     await ds.delete(['u_1/pages/daily/2026-04-10__v1.parquet'])
     expect(await ds.list('u_1/')).toHaveLength(0)
+  })
+
+  it('reads and lists files when the Store uses a filesystem root', async () => {
+    const root = parse(dir).root
+    const prefix = relative(root, dir).split(sep).join('/')
+    const key = `${prefix}/pages/data.parquet`
+    const ds = createFilesystemDataSource({ rootDir: root })
+    const bytes = new Uint8Array([7, 8, 9])
+
+    await ds.write(key, bytes)
+
+    expect(await ds.read(key)).toEqual(bytes)
+    expect(await ds.list(prefix)).toEqual([key])
+    const streamed: string[] = []
+    for await (const entry of ds.streamList!(prefix))
+      streamed.push(entry)
+    expect(streamed).toEqual([key])
   })
 
   it('rejects paths that escape root', async () => {

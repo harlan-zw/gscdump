@@ -18,7 +18,8 @@ import type {
 import { Buffer } from 'node:buffer'
 import { randomBytes } from 'node:crypto'
 import { mkdir, open, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { normalize } from 'pathe'
 import { lock as lockFile } from 'proper-lockfile'
 import {
   manifestEntryKey,
@@ -40,7 +41,8 @@ export function createFilesystemDataSource(opts: FilesystemDataSourceOptions): D
 
   function pathFor(key: string): string {
     const resolved = resolve(root, key)
-    if (!resolved.startsWith(`${root}/`) && resolved !== root)
+    const child = relative(root, resolved)
+    if (child === '..' || child.startsWith(`..${sep}`) || isAbsolute(child))
       throw new Error(`path escapes root: ${key}`)
     return resolved
   }
@@ -122,12 +124,12 @@ export function createFilesystemDataSource(opts: FilesystemDataSourceOptions): D
       const full = pathFor(prefix)
       const out: string[] = []
       await walk(full, out)
-      return out.map(p => p.slice(root.length + 1))
+      return out.map(p => normalize(relative(root, p)))
     },
     async* streamList(prefix) {
       const full = pathFor(prefix)
       for await (const p of walkStream(full))
-        yield p.slice(root.length + 1)
+        yield normalize(relative(root, p))
     },
     async head(key) {
       const path = pathFor(key)
@@ -141,7 +143,7 @@ export function createFilesystemDataSource(opts: FilesystemDataSourceOptions): D
       )
     },
     uri(key) {
-      return pathFor(key)
+      return normalize(pathFor(key))
     },
   }
 }
