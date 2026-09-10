@@ -92,7 +92,7 @@ jobs:
       - name: Build CLI packages
         run: pnpm --filter @gscdump/cli... run build
       - name: Check filesystem and native runtime
-        run: pnpm exec vitest run packages/engine/test/filesystem.test.ts packages/engine/test/filesystem-windows.test.ts packages/engine/test/duckdb-native.test.ts packages/engine/test/duckdb-buffer-concurrency.test.ts
+        run: pnpm exec vitest run tests/build-config.test.ts packages/engine/test/filesystem.test.ts packages/engine/test/filesystem-windows.test.ts packages/engine/test/duckdb-native.test.ts packages/engine/test/duckdb-buffer-concurrency.test.ts
       - name: Check installed CLI
         run: pnpm test:packed
 
