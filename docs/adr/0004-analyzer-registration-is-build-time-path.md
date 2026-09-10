@@ -5,7 +5,7 @@
 Superseded
 
 Superseded on 2026-08-28. Both production consumers now own their Nuxt
-integration. ADR-0012 governs removal of the unused published package.
+integration. The [export surface decision](./0012-export-surface-tracks-consumers.md) governs removal of the unused published package.
 
 ## Context
 

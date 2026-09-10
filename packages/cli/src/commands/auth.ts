@@ -187,7 +187,7 @@ const loginCommand = defineCommand({
   args: {
     ...OUTPUT_ARGS,
     'force': { type: 'boolean', alias: 'f', default: false, description: 'Re-run OAuth even if tokens already exist' },
-    'browser': { type: 'boolean', default: true, description: 'Use loopback browser flow. Pass --no-browser for device-code (headless).' },
+    'browser': { type: 'boolean', default: true, description: 'Open the authorization URL automatically. Pass --no-browser to open it yourself.' },
     'service-account': { type: 'string', description: 'Path to a service-account JSON key (skips OAuth)' },
   },
   async run({ args }) {
@@ -217,8 +217,6 @@ const loginCommand = defineCommand({
       logger.info(`Saved path to config: ${saPath}`)
       return
     }
-    if (args.force)
-      await clearTokens()
     const oauth = await getAuth({ interactive: true, noBrowser: args.browser === false, force: Boolean(args.force) }).catch((e: Error) => {
       logger.error(`Login failed: ${e.message}`)
       process.exit(1)

@@ -70,16 +70,45 @@ were removed; application embedding is not a supported v1 package surface.
 
 - “List my Search Console Sites.”
 - “Run the movers report for `sc-domain:example.com` over the last 28 days.”
+- “Run the brand Report for `sc-domain:example.com` with brand terms `example,example.com`.”
+- “Run the pre-publish Report for `sc-domain:example.com` with topic `running shoes`.”
 - “Query clicks and impressions by page for this month.”
 - “Inspect these URLs and summarize the Indexing Evidence.”
 
 MCP Reports use the live Google API.
 They do not read the local Store.
-Reports with required SQL-only steps, such as `health`, cannot run through this MCP handler.
-Use the CLI for Reports that need stored data.
+`list-reports` advertises only Reports with supported inputs and at least one live Section.
+Every required Analyzer must support the live Source.
+The supported Reports are `brand`, `movers`, `opportunities`, `pre-publish`, and `risks`.
 
-`run-report` currently accepts the Site, Report ID, date windows, comparison, and maximum findings.
-It does not forward `target`, `topic`, or `brandTerms`.
-Use the CLI for `triage`, `pre-publish`, and `brand`.
+`health`, `growth`, and `triage` require the local Store.
+MCP rejects them before authentication or Google requests.
+Run them with `gscdump report <id>` after syncing the Site.
+
+`run-report` accepts the Site, Report ID, date windows, comparison, and `maxFindings`.
+Report inputs use the same names shown in `list-reports.argsSpec`:
+
+| Report | Additional inputs |
+| --- | --- |
+| `brand` | `brandTerms`: required comma-separated brand terms |
+| `movers` | `minClicksChange`: minimum absolute click change, default `5` |
+| `pre-publish` | `topic`: required topic or URL slug |
+
+Example `run-report` arguments:
+
+```json
+{
+  "siteUrl": "sc-domain:example.com",
+  "id": "brand",
+  "period": "28d",
+  "brandTerms": "example,example.com",
+  "maxFindings": 5
+}
+```
+
+Optional Analyzers can require SQL even when the Report supports the live Source.
+Unavailable Sections have `severity: "unknown"` and `coverage: "partial"`.
+The Report sets `meta.degraded` to `true` and records failed Analyzers in `meta.steps`.
+Treat these Sections as unavailable evidence. Use the local Store for complete SQL coverage.
 
 Indexing notifications follow [Google's eligibility requirements](./url-indexing.md#send-eligible-indexing-notifications).

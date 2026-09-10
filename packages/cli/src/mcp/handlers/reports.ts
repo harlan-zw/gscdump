@@ -2,22 +2,23 @@
  * MCP report handlers — `list-reports`, `run-report`. Backed by
  * `defaultReportRegistry` + `runReport` from `@gscdump/analysis/report`.
  *
- * Source: live GSC API only. Local-store mode requires the user's Parquet
- * directory which the MCP server has no access to.
+ * Source: live GSC API only. Reports that require the local Store use the CLI.
  */
 
 import type { ComparisonMode, WindowPreset } from '@gscdump/engine/period'
-import type { ReportContext, ReportResult } from '@gscdump/engine/report'
+import type { DefinedReport, ReportArgsSpec, ReportContext, ReportPlanStep, ReportResult } from '@gscdump/engine/report'
+import type { SourceCapabilities } from '@gscdump/engine/source'
 import type { Result } from 'gscdump/result'
 import type { z } from 'zod'
 import type { McpHandlerError } from '../errors'
-import type { HandlerContext, runReportInput } from '../types'
+import type { HandlerContext } from '../types'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { defaultReportRegistry, runReport } from '@gscdump/analysis/report'
-import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
+import { createGscApiQuerySource, GSC_API_CAPABILITIES } from '@gscdump/engine-gsc-api'
 import { resolveWindow } from '@gscdump/engine/period'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { enrichToolError, mcpHandlerErrors, mcpHandlerErrorToException } from '../errors'
+import { runReportInput } from '../types'
 
 const PERIOD_ALIASES: Record<string, WindowPreset> = {
   '7d': 'last-7d',
@@ -44,16 +45,46 @@ export interface ListReportsResult {
   description: string
   defaultPeriod: string
   defaultComparison: string
-  argsSpec: Record<string, unknown>
+  argsSpec: ReportArgsSpec
+}
+
+function mcpArgName(name: string): string {
+  return name.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase())
+}
+
+function supportsLiveSteps(steps: readonly ReportPlanStep[]): boolean {
+  const capabilities: SourceCapabilities = GSC_API_CAPABILITIES
+  const supported = steps.map((step) => {
+    const analyzer = defaultAnalyzerRegistry.resolveAnalyzer(step.type, false)
+    return !!analyzer && analyzer.requires.every(capability =>
+      capability !== 'executeSql' && capabilities[capability] === true,
+    )
+  })
+  return supported.some(Boolean) && steps.every((step, index) => !step.required || supported[index])
+}
+
+function supportsLiveReport(report: DefinedReport): boolean {
+  const args = Object.entries(report.argsSpec)
+  if (args.some(([name]) => !Object.hasOwn(runReportInput.shape, mcpArgName(name))))
+    return false
+
+  // Plans declare Analyzer requirements. Discovery supplies placeholder inputs
+  // to inspect the plan without authentication or Google requests.
+  const params = Object.fromEntries(args.map(([name, arg]) => [
+    mcpArgName(name),
+    arg.default ?? (arg.type === 'number' ? 1 : arg.type === 'boolean' ? false : 'mcp-discovery'),
+  ]))
+  const window = resolveWindow({ preset: report.defaultPeriod, comparison: report.defaultComparison })
+  return supportsLiveSteps(report.plan(params, window))
 }
 
 export function listReports(): ListReportsResult[] {
-  return defaultReportRegistry.listReports().map(r => ({
+  return defaultReportRegistry.listReports().filter(supportsLiveReport).map(r => ({
     id: r.id,
     description: r.description,
-    defaultPeriod: r.defaultPeriod,
+    defaultPeriod: r.defaultPeriod.replace(/^last-/, ''),
     defaultComparison: r.defaultComparison,
-    argsSpec: r.argsSpec,
+    argsSpec: Object.fromEntries(Object.entries(r.argsSpec).map(([name, arg]) => [mcpArgName(name), arg])),
   }))
 }
 
@@ -67,11 +98,13 @@ export function listReports(): ListReportsResult[] {
  */
 export async function runReportHandlerResult(
   input: z.infer<typeof runReportInput>,
-  ctx: HandlerContext,
+  getContext: () => Promise<HandlerContext> | HandlerContext,
 ): Promise<Result<ReportResult, McpHandlerError>> {
   const report = defaultReportRegistry.getReport(input.id)
   if (!report)
-    return err(mcpHandlerErrors.unknownReport(input.id, defaultReportRegistry.listReportIds()))
+    return err(mcpHandlerErrors.unknownReport(input.id, listReports().map(report => report.id)))
+  if (!supportsLiveReport(report))
+    return err(mcpHandlerErrors.unsupportedReport(input.id, listReports().map(report => report.id)))
 
   const preset = input.period
     ? (PERIOD_ALIASES[input.period.toLowerCase()] ?? null)
@@ -94,10 +127,14 @@ export async function runReportHandlerResult(
   if (input.prevStart && input.prevEnd)
     window.comparison = { start: input.prevStart, end: input.prevEnd }
 
-  const params: Record<string, unknown> = {}
-  if (input.maxFindings != null)
-    params.maxFindings = input.maxFindings
+  const params = Object.fromEntries(Object.keys(report.argsSpec).map((name) => {
+    const key = mcpArgName(name) as keyof typeof input
+    return [key, input[key]]
+  }).filter(([, value]) => value !== undefined))
+  if (!supportsLiveSteps(report.plan(params, window)))
+    return err(mcpHandlerErrors.unsupportedReport(input.id, listReports().map(report => report.id)))
 
+  const ctx = await getContext()
   const source = createGscApiQuerySource({ client: ctx.client, siteUrl: input.siteUrl })
   const reportCtx: ReportContext = {
     site: input.siteUrl,
@@ -118,10 +155,10 @@ export async function runReportHandlerResult(
  */
 export async function runReportHandler(
   input: z.infer<typeof runReportInput>,
-  ctx: HandlerContext,
+  getContext: () => Promise<HandlerContext> | HandlerContext,
 ): Promise<ReportResult> {
   return unwrapResult(
-    await runReportHandlerResult(input, ctx).catch((thrown: unknown) => {
+    await runReportHandlerResult(input, getContext).catch((thrown: unknown) => {
       throw enrichToolError(thrown) ?? thrown
     }),
     mcpHandlerErrorToException,

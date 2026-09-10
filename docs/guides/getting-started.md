@@ -55,13 +55,13 @@ gscdump query --live --site sc-domain:example.com \
 ## Sync and query the Store
 
 ```bash
-gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries
+gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries,dates
 gscdump query --site sc-domain:example.com --dimensions page --limit 1000
 ```
 
 Sync writes Parquet files to `~/.gscdump/data` unless you chose another directory.
 Later queries read those files by default.
-The explicit table list avoids the current `dates` sync limitation described in [Store setup](./historical-database.md#stored-tables).
+Daily totals combine Site totals, device metrics, and query impressions.
 Google still controls which rows its API returns; pagination cannot recover omitted data.
 See [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data).
 

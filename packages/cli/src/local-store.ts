@@ -20,7 +20,8 @@ export type {
   Watermark,
   WriteCtx,
 } from '@gscdump/engine/contracts'
-export { TABLE_DIMS, transformGscRow } from '@gscdump/engine/ingest'
+export type { GscApiRow } from '@gscdump/engine/ingest'
+export { assembleDatesRow, TABLE_DIMS, transformGscRow } from '@gscdump/engine/ingest'
 export { allTables, inferTable } from '@gscdump/engine/schema'
 
 /**

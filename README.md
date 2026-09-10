@@ -48,7 +48,7 @@ gscdump init
 gscdump sites
 
 # Sync before querying or exporting stored data
-gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries
+gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries,dates
 gscdump query --site sc-domain:example.com --dimensions page,query
 gscdump dump --site sc-domain:example.com --out ./export
 
@@ -58,8 +58,6 @@ gscdump query --live --site sc-domain:example.com --dimensions page,query
 # Start the MCP server
 gscdump mcp
 ```
-
-The explicit sync table list avoids the current [daily totals limitation](./docs/guides/historical-database.md#stored-tables).
 
 For one-off commands, use `npx -y @gscdump/cli` in place of `gscdump`.
 The `gscdump` npm package contains the library; `@gscdump/cli` provides the command.
@@ -257,9 +255,11 @@ Then ask your assistant:
 `list-reports` returns Report descriptions, date defaults, and argument definitions.
 `run-report` accepts the Site, Report ID, date windows, comparison, and maximum findings.
 
-MCP Reports use the live Google API and cannot read the local Store.
-Use the CLI for `health`, which needs SQL, and `triage`, `pre-publish`, and `brand`, which need extra inputs.
-The MCP handler does not forward `target`, `topic`, or `brandTerms`.
+MCP Reports use the live Google API.
+Discovery lists `brand`, `movers`, `opportunities`, `pre-publish`, and `risks`.
+Supply `brandTerms` for `brand` and `topic` for `pre-publish`.
+Some optional SQL Sections return an unknown result with an explanation.
+Use the CLI with a Store for `health`, `growth`, and `triage`.
 
 **Sites:** `list-sites`, `list-sites-with-sitemaps`, `add-site`, `delete-site`.
 
@@ -394,6 +394,20 @@ Existing integrations can use the [migration guide](./docs/v1-migration.md).
 | [`@gscdump/sdk`](./packages/sdk) | Hosted HTTP, realtime, and webhook clients |
 | [`@gscdump/cloudflare`](./packages/cloudflare) | Cloudflare server-tail and request deduplication helpers |
 | [`@gscdump/cli`](./packages/cli) | CLI and MCP server (`gscdump mcp`) |
+
+## Support and contributions
+
+| Entry point | Scope | First result |
+| --- | --- | --- |
+| CLI | Node.js 22 or newer, local Store and live Google queries | [Getting started](./docs/guides/getting-started.md) |
+| Core library | Google and Bing clients, typed queries, fetch runtimes | [Library examples](./packages/gscdump/README.md) |
+| MCP | Live Google queries and supported Reports | [AI integration](./docs/guides/ai-integration.md) |
+| Hosted SDK | gscdump.com API credentials and published v1 operations | [Hosted integration](./docs/guides/hosted-v1.md) |
+| Runtime adapters | Browser DuckDB, SQLite, and Cloudflare integrations | Package READMEs above |
+
+Use the latest published version when reporting a bug.
+See [Contributing](./CONTRIBUTING.md) for setup and checks.
+Report vulnerabilities through [Security](./SECURITY.md).
 
 ## License
 

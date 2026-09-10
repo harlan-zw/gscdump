@@ -50,6 +50,7 @@
   },
   "dependencies": {
     "@clack/prompts": "catalog:deps",
+    "@duckdb/duckdb-wasm": "catalog:",
     "@duckdb/node-api": "catalog:",
     "@gscdump/analysis": "workspace:^",
     "@gscdump/engine": "workspace:^",
