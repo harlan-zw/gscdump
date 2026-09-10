@@ -1,6 +1,6 @@
 // DuckDB-backed codec + executor, edge-compatible. Consumers (CLI, Workers)
 // supply a DuckDBHandle backed by whatever loader fits their runtime —
-// async-over-worker in browsers, blocking-node bindings in Node.
+// async-over-worker in browsers, native bindings in Node.
 //
 // This file is the *virtual-FS* implementation: rows ↔ Parquet bytes round-
 // trip through DuckDB's in-memory FS, then through `dataSource.read`/`.write`.
@@ -316,9 +316,12 @@ export function createDuckDBExecutor(factory: DuckDBFactory, options: DuckDBRead
               // current window and a broader comparison window). Registering
               // it once is sufficient because every placeholder uses the same
               // vFS name; avoid duplicate GETs and duplicate registrations.
-              if (!bufferedByName.has(key))
-                bufferedByName.set(key, { key, name: key })
-              resolved.push(key)
+              let buffered = bufferedByName.get(key)
+              if (!buffered) {
+                buffered = { key, name: db.makeTempPath('parquet') }
+                bufferedByName.set(key, buffered)
+              }
+              resolved.push(buffered.name)
             }
           }
           placeholders[name] = resolved

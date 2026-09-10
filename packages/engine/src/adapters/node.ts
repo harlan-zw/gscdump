@@ -1,5 +1,5 @@
 // Single Node entrypoint barrel. Concentrates all Node-specific primitives
-// behind one subpath (`@gscdump/engine/node`): the blocking DuckDB handle,
+// behind one subpath (`@gscdump/engine/node`): the native DuckDB handle,
 // the filesystem-wired harness, and the parquet/snapshot attach helpers.
 
 export { createNodeDuckDBHandle, resetNodeDuckDB } from './duckdb-node'

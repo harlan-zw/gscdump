@@ -1,5 +1,5 @@
 // Node-only convenience: wire the storage engine against the filesystem
-// DataSource + ManifestStore + the blocking DuckDB handle in one call.
+// DataSource + ManifestStore + the native DuckDB handle in one call.
 //
 // Consumers that want a different combination (e.g. R2 DataSource + D1
 // ManifestStore) compose `createStorageEngine` directly. This helper exists

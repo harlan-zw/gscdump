@@ -1,175 +1,170 @@
-// Node-only DuckDB handle, built on the blocking bindings (no worker, no
-// fetch). Used by the CLI's integration tests and by `gscdump query` in the
-// CLI package. For browsers / Cloudflare Workers, ship an AsyncDuckDB-based
-// handle from the adapter layer of the consuming app.
-
+import type { DuckDBConnection, DuckDBValue, JS } from '@duckdb/node-api'
 import type { DuckDBHandle } from '../duckdb'
 import type { Row } from '../storage'
-import { unlinkSync } from 'node:fs'
-import { createRequire } from 'node:module'
+import { randomUUID } from 'node:crypto'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
-import { fileURLToPath } from 'node:url'
-// @ts-expect-error - blocking variant ships as CJS, no type export published
-import { ConsoleLogger, createDuckDB, NODE_RUNTIME, VoidLogger } from '@duckdb/duckdb-wasm/dist/duckdb-node-blocking.cjs'
-import { arrowToRows } from '../arrow-utils'
-
-const require_ = createRequire(typeof __filename !== 'undefined' ? __filename : (typeof import.meta !== 'undefined' ? fileURLToPath(import.meta.url) : process.cwd()))
+import { blobValue, DuckDBInstance, timestampValue } from '@duckdb/node-api'
 
 export interface NodeDuckDBOptions {
   verbose?: boolean
 }
 
-interface DuckDBNodeBindings {
-  instantiate: () => Promise<DuckDBNodeBindings>
-  connect: () => DuckDBConnection
-  registerFileBuffer: (name: string, bytes: Uint8Array) => void
-  copyFileToBuffer: (name: string) => Uint8Array
-  dropFile: (name: string) => void
-  dropFiles: (names?: string[]) => void
-  reset: () => void
+type ConnectionState
+  = { _tag: 'Unopened' }
+    | { _tag: 'Opened', instance: DuckDBInstance, connection: DuckDBConnection }
+
+interface Runtime {
+  directory: string
+  onExit: () => void
+  tail: Promise<void>
+  state: ConnectionState
 }
 
-interface DuckDBConnection {
-  query: (sql: string) => unknown
-  prepare: (sql: string) => PreparedStatementLike
-  close: () => void
-}
+let singleton: Runtime | undefined
 
-interface PreparedStatementLike {
-  query: (...params: unknown[]) => unknown
-  close: () => void
-}
-
-let singleton: Promise<{ db: DuckDBNodeBindings, conn: DuckDBConnection }> | null = null
-// Opts captured on first init. The instance is a process-wide singleton, so a
-// later caller's opts can't re-configure it; we keep the first set to detect
-// (and warn about) a divergent second request rather than silently dropping it.
-let singletonOpts: NodeDuckDBOptions | null = null
-
-function bundles(): unknown {
-  return {
-    mvp: {
-      mainModule: require_.resolve('@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm'),
-      mainWorker: null,
-    },
-    eh: {
-      mainModule: require_.resolve('@duckdb/duckdb-wasm/dist/duckdb-eh.wasm'),
-      mainWorker: null,
-    },
-  }
-}
-
-async function initialize(opts: NodeDuckDBOptions): Promise<{ db: DuckDBNodeBindings, conn: DuckDBConnection }> {
-  const logger = opts.verbose ? new ConsoleLogger() : new VoidLogger()
-  const db = (await createDuckDB(bundles(), logger, NODE_RUNTIME)) as DuckDBNodeBindings
-  await db.instantiate()
-  const conn = db.connect()
-  return { db, conn }
-}
-
-/**
- * Return the live instance, initializing it on demand. Lazy so a handle held
- * across a `resetNodeDuckDB()` (which nulls `singleton`) transparently re-inits
- * on its next call instead of dereferencing null — the handle stays usable for
- * its whole lifetime regardless of reset cycles. Silent by design: the
- * divergent-opts warning fires once at `createNodeDuckDBHandle` time, not on
- * every method call.
- */
-function getSingleton(opts: NodeDuckDBOptions): Promise<{ db: DuckDBNodeBindings, conn: DuckDBConnection }> {
-  if (!singleton) {
-    singleton = initialize(opts)
-    singletonOpts = opts
+function getRuntime(): Runtime {
+  if (singleton)
+    return singleton
+  const directory = mkdtempSync(join(tmpdir(), 'gscdump-duckdb-'))
+  const onExit = (): void => rmSync(directory, { recursive: true, force: true })
+  process.once('exit', onExit)
+  singleton = {
+    directory,
+    onExit,
+    tail: Promise.resolve(),
+    state: { _tag: 'Unopened' },
   }
   return singleton
 }
 
-export function createNodeDuckDBHandle(opts: NodeDuckDBOptions = {}): DuckDBHandle {
-  if (singleton && opts.verbose !== undefined && opts.verbose !== (singletonOpts?.verbose ?? false)) {
-    // The shared instance is already running; its logger can't be swapped. Say
-    // so instead of silently honoring the first caller's verbosity only.
-    console.warn(
-      `[gscdump] createNodeDuckDBHandle: ignoring verbose=${opts.verbose} — a shared `
-      + `DuckDB instance was already initialized with verbose=${singletonOpts?.verbose ?? false}. `
-      + `Call resetNodeDuckDB() before re-initializing to change it.`,
-    )
-  }
-  // Eagerly ensure the instance exists at create time (preserves the historical
-  // init-on-create timing); `getSingleton` then re-inits lazily if a later
-  // reset nulls it out from under this handle.
-  void getSingleton(opts)
+function enqueue<T>(runtime: Runtime, operation: () => Promise<T>): Promise<T> {
+  const result = runtime.tail.then(operation)
+  // The caller receives failures. Keep later operations usable after a rejected query.
+  runtime.tail = result.then(() => undefined, () => undefined)
+  return result
+}
 
+async function connect(runtime: Runtime, opts: NodeDuckDBOptions): Promise<DuckDBConnection> {
+  if (runtime.state._tag === 'Opened')
+    return runtime.state.connection
+  const instance = await DuckDBInstance.create(':memory:', {
+    temp_directory: join(runtime.directory, 'spill'),
+  })
+  try {
+    const connection = await instance.connect()
+    runtime.state = { _tag: 'Opened', instance, connection }
+    await connection.run('SET file_search_path = $1', [runtime.directory])
+    if (opts.verbose)
+      console.warn('[gscdump] Native DuckDB initialized')
+    return connection
+  }
+  catch (error) {
+    if (runtime.state._tag === 'Opened')
+      runtime.state.connection.closeSync()
+    runtime.state = { _tag: 'Unopened' }
+    instance.closeSync()
+    throw error
+  }
+}
+
+function temporaryPath(runtime: Runtime, name: string): string {
+  const path = resolve(runtime.directory, name)
+  const child = relative(runtime.directory, path)
+  if (!child || child === '..' || child.startsWith(`..${sep}`) || isAbsolute(child))
+    throw new TypeError('DuckDB temporary files must stay inside the temporary directory.')
+  return path
+}
+
+function parameter(value: unknown): DuckDBValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'bigint')
+    return value
+  if (typeof value === 'number' && Number.isFinite(value))
+    return value
+  if (value instanceof Date && Number.isFinite(value.getTime()))
+    return timestampValue(BigInt(value.getTime()) * 1000n)
+  if (value instanceof Uint8Array)
+    return blobValue(value)
+  throw new TypeError('DuckDB parameters must be finite scalars, dates, byte arrays, or null.')
+}
+
+function rowValue(value: JS): unknown {
+  // Preserve the Engine's epoch-millisecond dates and exact BIGINT values.
+  if (value instanceof Date)
+    return value.getTime()
+  if (Array.isArray(value))
+    return value.map(rowValue)
+  if (value instanceof Uint8Array)
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+  if (value !== null && typeof value === 'object')
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, rowValue(item)]))
+  return value
+}
+
+/** Node uses one native connection. Browser and Worker adapters own their WASM runtimes. */
+export function createNodeDuckDBHandle(opts: NodeDuckDBOptions = {}): DuckDBHandle {
   return {
-    async query(sql: string, params?: unknown[]): Promise<Row[]> {
-      const { conn } = await getSingleton(opts)
-      if (!params || params.length === 0) {
-        const result = conn.query(sql)
-        return arrowToRows(result) as Row[]
-      }
-      const stmt = conn.prepare(sql)
-      try {
-        const result = stmt.query(...params)
-        return arrowToRows(result) as Row[]
-      }
-      finally {
-        stmt.close()
-      }
+    query(sql, params): Promise<Row[]> {
+      const runtime = getRuntime()
+      return enqueue(runtime, async () => {
+        const connection = await connect(runtime, opts)
+        const result = await connection.runAndReadAll(sql, params?.length ? params.map(parameter) : undefined)
+        const names = result.columnNames()
+        return result.getRowsJS().map(values => Object.fromEntries(
+          names.map((name, index) => [name, rowValue(values[index]!)]),
+        ))
+      })
     },
-    async registerFileBuffer(name: string, bytes: Uint8Array): Promise<void> {
-      const { db } = await getSingleton(opts)
-      db.registerFileBuffer(name, bytes)
+    registerFileBuffer(name, bytes): Promise<void> {
+      const runtime = getRuntime()
+      return enqueue(runtime, async () => {
+        const path = temporaryPath(runtime, name)
+        await mkdir(dirname(path), { recursive: true })
+        await writeFile(path, bytes)
+      })
     },
-    async copyFileToBuffer(name: string): Promise<Uint8Array> {
-      const { db } = await getSingleton(opts)
-      return db.copyFileToBuffer(name)
+    copyFileToBuffer(name): Promise<Uint8Array> {
+      const runtime = getRuntime()
+      return enqueue(runtime, () => readFile(temporaryPath(runtime, name)))
     },
-    async dropFiles(names: string[]): Promise<void> {
-      const { db } = await getSingleton(opts)
-      for (const name of names) {
-        try {
-          db.dropFile(name)
+    dropFiles(names): Promise<void> {
+      const runtime = getRuntime()
+      return enqueue(runtime, async () => {
+        for (const name of names) {
+          // COPY can fail before creating its output. Missing files need no cleanup.
+          await rm(temporaryPath(runtime, name), { force: true })
         }
-        catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          if (!/not found|does not exist|unknown file/i.test(message))
-            throw error
-        }
-        // `COPY TO '...'` under NODE_RUNTIME writes to the actual filesystem;
-        // `dropFile` only unregisters the virtual-FS entry. Unlink the real
-        // file too so codec temp outputs don't accumulate.
-        try {
-          unlinkSync(name)
-        }
-        catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
-            throw error
-        }
-      }
+      })
     },
-    makeTempPath(ext: string): string {
-      return join(tmpdir(), `gscdump-${Math.random().toString(36).slice(2, 10)}.${ext}`)
+    makeTempPath(ext): string {
+      const runtime = getRuntime()
+      return temporaryPath(runtime, `${randomUUID()}.${ext}`)
     },
   }
 }
 
 export function resetNodeDuckDB(): void {
-  const pending = singleton
-  // Null the singleton first so the next `createNodeDuckDBHandle` re-inits a
-  // fresh instance rather than racing the teardown below.
-  singleton = null
-  singletonOpts = null
-  // Best-effort: close the connection and reset the bindings so the native
-  // DuckDB instance is released instead of leaking across CLI/test runs.
-  // Fire-and-forget keeps the synchronous signature the many call sites rely on.
-  void pending
-    ?.then(({ db, conn }) => {
-      conn.close()
-      db.reset()
-    })
-    // Don't swallow silently: a failed release means a leaked native instance,
-    // which compounds across long CLI/test runs. Surface it so it's diagnosable.
-    .catch((err) => {
-      console.warn('[gscdump] resetNodeDuckDB: failed to release DuckDB instance', err)
-    })
+  const runtime = singleton
+  singleton = undefined
+  if (!runtime)
+    return
+  // Drain accepted operations before releasing their connection and files.
+  // Held handles resolve the new runtime on their next operation.
+  void enqueue(runtime, async () => {
+    try {
+      if (runtime.state._tag === 'Opened') {
+        runtime.state.connection.closeSync()
+        runtime.state.instance.closeSync()
+      }
+    }
+    finally {
+      await rm(runtime.directory, { recursive: true, force: true })
+      process.removeListener('exit', runtime.onExit)
+    }
+  }).catch((error) => {
+    console.warn('[gscdump] Failed to release DuckDB resources', error)
+  })
 }
