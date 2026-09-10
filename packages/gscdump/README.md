@@ -117,6 +117,10 @@ const [pages, queries, crawl] = await Promise.all([
 ])
 ```
 
+`accessToken` also accepts a function returning a string or `Promise<string>`.
+The client calls that function before each request, so callers can refresh expiring tokens during long exports.
+The CLI manages this refresh when you use `gscdump bing login --mode local --oauth`.
+
 Sitemap XML reading and traversal live in `sitemapd`. Product feed scoping and
 exact membership hashing live in `gscdump/sitemap-identity`. Hosted canonical
 sitemap membership is available through `@gscdump/sdk/v1`.

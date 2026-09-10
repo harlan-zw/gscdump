@@ -38,11 +38,44 @@ READMEs and the root `CLAUDE.md` carry the operational detail.
 - `@gscdump/engine-gsc-api` → `gscdump`, `@gscdump/engine`
 - `@gscdump/analysis` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-gsc-api`
 - `@gscdump/cloudflare` → `gscdump`, `@gscdump/contracts`, `@gscdump/engine`, `@gscdump/engine-sqlite`
-- `@gscdump/cli` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-gsc-api`, `@gscdump/analysis`
+- `@gscdump/cli` → `gscdump`, `@gscdump/engine`, `@gscdump/engine-gsc-api`, `@gscdump/analysis`, `@gscdump/sdk`
 - `@gscdump/sdk` → `gscdump`, `@gscdump/contracts`, `@gscdump/engine`, `@gscdump/analysis`
 
 The graph is acyclic. Contracts and Lakehouse are the lowest internal layers;
 runtime adapters build on Engine, while SDK and CLI compose public surfaces.
+
+## CLI authentication
+
+`packages/cli/src/auth-state.ts` resolves cloud or local authentication for the current profile.
+The command's `--mode` overrides `GSCDUMP_AUTH_MODE`, which overrides the saved mode.
+If no mode is saved, `GSCDUMP_API_KEY` selects cloud authentication.
+With neither source, the default is local authentication.
+Local credentials remain separate for Google and Bing.
+
+```mermaid
+flowchart LR
+  Commands[CLI commands] --> Auth{Selected authentication}
+  Auth --> Local[Local credentials]
+  Auth --> Cloud[gscdump user API key]
+  Local --> Google[Google API]
+  Local --> Bing[Bing API]
+  Cloud --> GoogleRoutes[CLI Google routes]
+  Cloud --> BingRoutes[Public Bing API]
+  GoogleRoutes --> Google
+  BingRoutes --> Saved[Saved Bing datasets and evidence]
+  Commands --> Store[Local Store]
+```
+
+`context.ts` constructs the Google client for the selected mode.
+`cloud-google.ts` preserves Google query-builder behavior through the host's CLI routes.
+Those routes remain outside the public v1 protocol.
+`bing-hosted.ts` uses `@gscdump/sdk/v1` for cloud Bing reads and connection verification.
+`bing-auth.ts` resolves local Bing credentials and refreshes OAuth tokens before requests.
+
+Google live queries and sync use the selected mode. Store queries and exports read local files in either mode.
+Bing dumps export provider rows or saved hosted datasets directly. They do not populate the Google Store.
+Google Indexing API and Site Verification operations require local mode.
+Cloud Bing connection verification and saved sitemap history require cloud mode.
 
 ## Data Flow
 
@@ -107,11 +140,13 @@ See `docs/adr/` for the full set. Highlights:
 ## MCP Server
 
 The MCP server lives inside `@gscdump/cli` (`src/mcp/`), exposed through the
-`gscdump mcp` command (interactive auth/config loading). There is no separate
+`gscdump mcp` command. Each tool call resolves the selected CLI authentication and constructs its Google client.
+There is no separate
 `@gscdump/mcp` package. MCP tools: `list-reports`, `run-report`, `list-sites`,
 `inspect-url`, `batch-inspect`, `request-indexing`, `list-sitemaps`,
 `get-indexing-status`. Handler signature is
 `(args, context) => Promise<CallToolResult>`.
+MCP exposes Google tools. Agents run Bing operations through `gscdump bing` commands and the packaged skill.
 
 ## Testing
 

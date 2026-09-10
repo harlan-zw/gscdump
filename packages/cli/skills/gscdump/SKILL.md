@@ -1,6 +1,6 @@
 ---
 name: gscdump
-description: Drive the `gscdump` CLI for Google Search Console and Bing work. Sync Search Console rows to a local Store, query pages and queries, run SEO Analyzers and Reports, inspect URL indexing, manage sitemaps, and report CLI papercuts. Use whenever the user mentions gscdump, the `gscdump` command, Search Console data, or GSC automation.
+description: Drive the `gscdump` CLI for Google Search Console and Bing with cloud or local authentication. Sync Google rows to a local Store, export Bing datasets, run SEO Analyzers and Reports, inspect Indexing Evidence, and manage sitemaps. Use when the user mentions gscdump, Search Console data, Bing Webmaster data, or GSC automation.
 ---
 
 # gscdump CLI
@@ -18,8 +18,12 @@ Check `gscdump auth status --json` before queries. Reuse the user's selected mod
 | `local` | Google OAuth/service account or Bing API key/OAuth | Calls the Search Engine directly |
 
 `--mode cloud|local` overrides one invocation. `GSCDUMP_AUTH_MODE` also overrides the saved mode.
-A successful login saves the mode per profile. Without saved state, `GSCDUMP_API_KEY` selects hosted mode.
-Otherwise, the CLI uses local mode. Never switch modes to bypass an authentication failure.
+A successful login saves the mode per profile.
+If no mode is saved, `GSCDUMP_API_KEY` selects cloud mode.
+With neither source, the CLI defaults to local mode.
+When a saved mode exists, it remains selected unless an explicit override applies.
+Never switch modes to bypass an authentication failure.
+`GSCDUMP_API_ROOT` defaults to `https://gscdump.com/api`. Supply the API key explicitly when changing a saved API root.
 
 ```sh
 # The user supplies a user API key from gscdump.com settings.
@@ -37,6 +41,11 @@ gscdump bing dump --site https://example.com/ --out ./bing-export
 Hosted Bing login opens the existing connection flow on gscdump.com.
 Local Bing login uses `BING_API_KEY` or a password prompt.
 Local `--oauth` uses `BING_CLIENT_ID`, `BING_CLIENT_SECRET`, and a registered loopback callback.
+The default callback is `http://127.0.0.1:53683/oauth/bing`. `BING_ACCESS_TOKEN` accepts an existing OAuth access token.
+After cloud Bing login opens a browser, use `bing status --site s_SITE_ID` to confirm the connection.
+
+`auth logout` removes the saved mode and saved Google and Bing credentials.
+`bing logout --mode local` removes only saved Bing credentials. Environment credentials remain active until unset.
 
 Hosted Bing commands use the API's plan and preview access rules.
 Hosted connection verification uses `bing verify --site s_SITE_ID`.
@@ -46,7 +55,8 @@ Hosted sitemap membership and history require hosted credentials.
 ## Data boundaries
 
 - `sync`, `query --live`, `analyze --live`, `report --live`, `sites`,
-  `sitemaps`, and `inspect` use the selected authentication mode. `indexing` requires local Google credentials.
+  `sitemaps`, and `inspect` use the selected authentication mode.
+- Google Indexing API requests require local credentials. `indexing quota` only prints documented limits and needs no authentication.
 - `query`, `analyze`, `report`, `dump`, and `store` read the local Store by
   default. If the Store has no rows for the Site, sync first or pass `--live`.
 - Google returns a 2 to 3 day data delay. Default windows end three days ago.
@@ -62,7 +72,8 @@ npx -y @gscdump/cli --version    # no install
 npm install -g @gscdump/cli      # or pnpm add -g
 ```
 
-Node 22 or newer is required. `gscdump` alone is the library; `@gscdump/cli`
+Use Node 22.13 or later in the 22 release line, or Node 24 or later.
+`gscdump` alone is the library; `@gscdump/cli`
 provides the command.
 
 ## Install this skill
@@ -71,10 +82,11 @@ provides the command.
 gscdump skill install --agent claude    # Codex: --agent codex
 ```
 
+After upgrading the CLI, run this command again to update the installed skill.
 The command prints where it wrote the skill. Clients without a skill
 directory can read `gscdump --help` and `gscdump <command> --help` instead.
 
-## Authenticate
+## Local Google authentication
 
 Check first. Never run `init` when credentials already work.
 
@@ -83,28 +95,32 @@ gscdump auth status
 gscdump doctor --json
 ```
 
-If `auth status` reports no credentials, use one of these paths:
+If local Google credentials are missing, use one of these paths:
 
 | Path | When | Command |
 | --- | --- | --- |
 | Environment token | The user already has an OAuth access token | `export GSC_ACCESS_TOKEN=ya29...` |
 | Refresh token | CI or a headless machine with OAuth client credentials | `export GSC_CLIENT_ID=... GSC_CLIENT_SECRET=... GSC_REFRESH_TOKEN=...` |
 | Service account | CI with a service-account key that has Site access | `export GOOGLE_APPLICATION_CREDENTIALS=/abs/path/key.json` |
-| Interactive OAuth | A person is present | `gscdump init` |
+| Interactive OAuth | A person is present | `gscdump init --mode local` |
 
 `init` needs a Google Cloud OAuth client of type Desktop app. Ask the user to
-run it; do not guess client credentials. Use `gscdump auth login --no-browser`
+run it; do not guess client credentials. Use `gscdump auth login --mode local --no-browser`
 when a browser cannot open.
+Run `gscdump auth login --mode local` to save local mode after configuring credentials.
 
-`--profile <name>` or `GSCDUMP_PROFILE` isolates credentials per Google
-account.
+`--profile <name>` or `GSCDUMP_PROFILE` isolates the selected mode and Google, Bing, and cloud credentials.
 
 ## Site identifiers
 
-Use the exact value that `gscdump sites` prints.
+For Google, use the exact value that `gscdump sites` prints.
 
 - Domain property: `sc-domain:example.com`
 - URL-prefix property: `https://example.com/` (trailing slash included)
+
+For cloud Bing commands, use a Site ID from `gscdump bing sites`, such as `s_SITE_ID`.
+For local Bing commands, use the full verified Site URL from `gscdump bing sites --mode local`.
+Bing commands require their own explicit `--site`; the Google `defaultSite` setting does not select a Bing Site.
 
 Set a default once to drop `--site` from later commands:
 
@@ -125,9 +141,11 @@ Parse JSON. Never scrape human output.
 | Command | Use it for |
 | --- | --- |
 | `gscdump sites` | List Google Sites and permission levels |
+| `gscdump bing login`, `status`, `logout` | Manage Bing authentication and check connections |
 | `gscdump bing sites` | List Bing Sites and connection details |
 | `gscdump bing dump` | Export Bing traffic, pages, keywords, and crawl data |
 | `gscdump bing inspect` | Read Bing Indexing Evidence for one URL |
+| `gscdump bing verify` | Check and activate a cloud Bing connection |
 | `gscdump sync` | Copy Search Console rows into the local Store |
 | `gscdump query` | Rows by page, query, date, country, or device |
 | `gscdump analyze <id>` | One Analyzer over the Store or live rows |
@@ -143,12 +161,13 @@ Parse JSON. Never scrape human output.
 | `gscdump auth` | `status`, `login`, `logout`, `refresh` |
 | `gscdump doctor` | Health checks for auth, scopes, Store, and reachability |
 | `gscdump init` | Interactive first-time setup |
-| `gscdump mcp` | Start the MCP server for AI clients |
+| `gscdump mcp` | Start Google MCP tools with the selected authentication |
 | `gscdump skill install` | Copy this skill into an agent skill directory |
 | `gscdump papercut` | Report a CLI problem to gscdump.com |
 
 `gscdump login`, `gscdump logout`, and `gscdump status` are top-level aliases of
 the matching `auth` subcommands.
+The MCP server does not expose Bing tools. Use `gscdump bing` commands through this skill.
 
 ## Sync before local analysis
 
@@ -212,8 +231,9 @@ gscdump inspect batch --site sc-domain:example.com --file urls.txt --json
 gscdump indexing quota --json
 ```
 
-Inspection spends the 2,000 per Site per day pool. Check `indexing quota`
-before a batch. Report the Indexing Evidence fields as Google returned them.
+Inspection spends Google's separate 2,000 requests per Site per day quota.
+`indexing quota` describes Indexing API limits. It does not report remaining URL Inspection requests.
+Report the Indexing Evidence fields as Google returned them.
 
 ## Report a papercut
 

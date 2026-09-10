@@ -15,7 +15,7 @@ and covered by their tests.
 
 ## Project Shape
 
-`gscdump` is a pnpm monorepo for Google Search Console data:
+`gscdump` is a pnpm monorepo for Google Search Console and Bing data:
 
 - `gscdump`: edge-safe REST client, typed query builder, core primitives.
 - `@gscdump/engine`: Parquet/DuckDB storage, manifests, compaction, rollups,
@@ -59,6 +59,11 @@ after e2e passes with either `GSC_ACCESS_TOKEN` or
   from `@gscdump/contracts`; the SDK does not duplicate either surface.
 - The MCP server lives in `@gscdump/cli` (`src/mcp/`); there is no separate
   MCP package. Edit it through the CLI surface.
+- Resolve shared cloud or local authentication before Search Engine requests. Keep local Google and Bing credentials separate.
+- Public hosted calls use `@gscdump/sdk/v1`. CLI Google routes use `cloud-google.ts` and remain outside the v1 protocol.
+- MCP exposes Google tools. The packaged skill covers both Google and Bing CLI commands.
+- Keep CLI authentication docs and `packages/cli/skills/gscdump/SKILL.md` aligned with command behavior.
+- The website publishes that skill as `~/sites/gscdump.com/public/SKILL.md`; refresh its copy with coordinated CLI changes.
 
 ## Completion Bar
 

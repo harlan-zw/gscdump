@@ -7,7 +7,7 @@
 Query Google Search Console and Bing with hosted or local authentication.
 Sync Google rows to a local Parquet Store, and run SEO Analyzers or Reports.
 The package also provides the MCP server.
-Node.js 22 or newer is required.
+Use Node.js 22.13 or later in the 22 release line, or Node.js 24 or later.
 
 ## Install
 
@@ -20,8 +20,9 @@ npx @gscdump/cli
 ## Quick start
 
 ```bash
-# Set up Google OAuth
-gscdump init
+# Set up local Google OAuth
+gscdump init --mode local
+gscdump auth login --mode local
 
 # List sites
 gscdump sites
@@ -102,7 +103,9 @@ gscdump auth login --mode local
 `--mode cloud|local` overrides the mode for one invocation.
 `GSCDUMP_AUTH_MODE` provides the same override.
 A successful login saves the mode for later commands.
-Without saved state, `GSCDUMP_API_KEY` selects hosted authentication. Otherwise, the CLI uses local authentication.
+If no mode is saved, `GSCDUMP_API_KEY` selects hosted authentication.
+With neither source, the CLI defaults to local authentication.
+When a saved mode exists, it remains selected unless an explicit override applies.
 `GSCDUMP_API_ROOT` defaults to `https://gscdump.com/api`.
 If you change a saved API root, supply the API key explicitly.
 
@@ -272,9 +275,12 @@ Then ask questions like:
 
 ## Auth
 
-`gscdump init` walks you through full setup (OAuth + data dir). Credentials are stored locally under `~/.config/gscdump/` (XDG) or equivalent. Use `gscdump auth login` if you only want to refresh OAuth tokens without touching config.
+This section covers local Google credentials. See [shared authentication](#hosted-and-local-authentication) for cloud mode and [Bing](#bing) for Bing credentials.
+`gscdump init --mode local` configures Google OAuth and a Store directory.
+Credentials are saved under `~/.config/gscdump/` on XDG systems, or the platform equivalent.
+Use `gscdump auth login --mode local` to connect Google and save local mode.
 
-Browser login uses a temporary listener on `127.0.0.1` with a random port.
+Local Google browser login uses a temporary listener on `127.0.0.1` with a random port.
 Each attempt uses state validation and PKCE S256 to bind the authorization response to that attempt.
 The listener closes after authorization, denial, or a five-minute timeout.
 
@@ -283,7 +289,8 @@ For manual setup:
 1. Create a Google Cloud project.
 2. Enable **Search Console API**, **Web Search Indexing API**, and **Site Verification API**.
 3. Create OAuth2 credentials (Desktop app).
-4. Run `gscdump init` (or `gscdump auth login`).
+4. Run `gscdump init --mode local` to configure credentials and a Store directory.
+5. Run `gscdump auth login --mode local` to save local mode.
 
 ### BYOK (Bring Your Own Key)
 
@@ -300,14 +307,14 @@ export GSC_REFRESH_TOKEN=...
 ```
 
 `gscdump auth status` shows which credential source is active.
-`auth login` skips OAuth when it finds BYOK credentials.
+`auth login --mode local` skips OAuth when it finds BYOK credentials and saves local mode.
 
 ### Service account
 
 For CI / headless usage, point `gscdump` at a service-account JSON key. Grant the service account access to each Site in Search Console under Settings → Users and permissions.
 
 ```bash
-gscdump auth login --service-account ./gsc-sa.json   # smoke-test the key
+gscdump auth login --mode local --service-account ./gsc-sa.json   # smoke-test the key
 export GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/gsc-sa.json
 gscdump sites
 ```
@@ -317,7 +324,7 @@ gscdump sites
 If you want to open the authorization URL yourself, disable automatic browser opening:
 
 ```bash
-gscdump auth login --no-browser
+gscdump auth login --mode local --no-browser
 # Open the printed URL in your browser.
 ```
 

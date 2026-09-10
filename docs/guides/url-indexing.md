@@ -1,6 +1,7 @@
 # URL inspection and indexing
 
-Read Google's Indexing Evidence, save inspections, and manage sitemap submissions.
+Read Google and Bing Indexing Evidence, save Google inspections, and manage sitemap submissions.
+Google inspection and sitemap commands use the selected cloud or local authentication.
 
 ## Inspect a URL
 
@@ -37,7 +38,7 @@ These commands save and read inspection records in the local Store.
 To save Google's notification metadata too:
 
 ```bash
-gscdump entities indexing snapshot --site sc-domain:example.com --file urls.txt
+gscdump entities indexing snapshot --mode local --site sc-domain:example.com --file urls.txt
 ```
 
 ## Send eligible indexing notifications
@@ -45,13 +46,14 @@ gscdump entities indexing snapshot --site sc-domain:example.com --file urls.txt
 Google limits its Indexing API to pages with `JobPosting` or `BroadcastEvent` inside `VideoObject` markup.
 Complete [Google's prerequisites](https://developers.google.com/search/apis/indexing-api/v3/quickstart), including service-account access and approval.
 For other page types, use sitemaps and Search Console's URL Inspection interface.
+Indexing API requests require local Google credentials, including when cloud mode is saved.
 
 ```bash
-gscdump indexing submit https://example.com/jobs/frontend-engineer
+gscdump indexing submit https://example.com/jobs/frontend-engineer --mode local
 
-gscdump indexing status https://example.com/jobs/frontend-engineer
+gscdump indexing status https://example.com/jobs/frontend-engineer --mode local
 
-gscdump indexing batch --file job-urls.txt --concurrency 1 --json
+gscdump indexing batch --mode local --file job-urls.txt --concurrency 1 --json
 ```
 
 `indexing status` reads notification metadata.
@@ -60,7 +62,7 @@ Use `inspect` to read Google's Indexing Evidence for the URL.
 After removing an eligible page from your server, send its removal notification:
 
 ```bash
-gscdump indexing remove https://example.com/jobs/expired-role
+gscdump indexing remove https://example.com/jobs/expired-role --mode local
 ```
 
 Google's initial testing quota allows 200 publish requests per project per day, shared by updates and removals.
@@ -84,8 +86,21 @@ A sitemap submission tells Google where to find URLs.
 Inspect individual URLs to see the evidence Google currently returns for them.
 
 The CLI also supports hosted sitemap reads through `sitemaps current`, `history`, `membership`, `lastmod`, and `export`.
-These require a hosted Site ID and API credential.
+These require a hosted Site ID and cloud authentication from the current profile or environment.
 Use each command's `--help` for its inputs.
+
+## Inspect with Bing
+
+```bash
+# Use the saved cloud connection for this Site.
+gscdump bing inspect https://example.com/page --site s_SITE_ID --mode cloud --json
+
+# Use local Bing credentials and the exact URL from bing sites.
+gscdump bing inspect https://example.com/page --site https://example.com/ --mode local --json
+```
+
+Cloud mode reads saved Bing Indexing Evidence. Local mode reads Bing directly.
+An unknown result does not prove that a URL is absent from Bing's index.
 
 ## TypeScript
 
