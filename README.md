@@ -30,10 +30,12 @@
 
 gscdump gives you Google Search Console data without building your own API integration.
 Query Google directly, keep a local history, or run SEO analysis from the CLI and your AI assistant.
-The TypeScript library also reads Bing Webmaster data and Indexing Evidence.
+The CLI and TypeScript library also read Bing Webmaster data and Indexing Evidence.
+The CLI supports shared hosted authentication and local Google or Bing credentials.
+See [Bing commands and authentication](./packages/cli/README.md#hosted-and-local-authentication).
 
 The core library uses `fetch` and supports edge runtimes.
-The CLI and local Store need Node.js 22 or newer.
+For the CLI, use Node.js 22.13 or later in the 22 release line, or Node.js 24 or later.
 You control how long you keep synced data.
 Google still limits which rows its API returns; pagination cannot recover omitted data.
 See [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data#data-limits).
@@ -43,8 +45,9 @@ See [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-
 ```bash
 npm install -g @gscdump/cli
 
-# Set up your Google OAuth credentials and Store directory
-gscdump init
+# Set up local Google OAuth credentials and a Store directory
+gscdump init --mode local
+gscdump auth login --mode local
 gscdump sites
 
 # Sync before querying or exporting stored data
@@ -53,7 +56,7 @@ gscdump query --site sc-domain:example.com --dimensions page,query
 gscdump dump --site sc-domain:example.com --out ./export
 
 # Query Google directly
-gscdump query --live --site sc-domain:example.com --dimensions page,query
+gscdump query --live --mode local --site sc-domain:example.com --dimensions page,query
 
 # Start the MCP server
 gscdump mcp
@@ -61,6 +64,20 @@ gscdump mcp
 
 For one-off commands, use `npx -y @gscdump/cli` in place of `gscdump`.
 The `gscdump` npm package contains the library; `@gscdump/cli` provides the command.
+
+To use connections saved on gscdump.com:
+
+```bash
+export GSCDUMP_API_KEY=gsd_user_...
+gscdump auth login --mode cloud
+gscdump sites --json
+gscdump bing sites --json
+gscdump bing login --site s_SITE_ID
+gscdump bing dump --site s_SITE_ID --format csv --out ./bing-export
+```
+
+Complete the Bing browser connection before exporting.
+For local Bing credentials and available operations, see [CLI authentication](./packages/cli/README.md#hosted-and-local-authentication).
 
 Guides:
 
@@ -76,6 +93,7 @@ Guides:
 | --- | --- |
 | `init` | Set up OAuth credentials and the Store directory |
 | `auth` | Manage authentication with `status`, `login`, and `logout` |
+| `bing` | Connect Bing, export datasets, inspect URLs, and check cloud connection verification |
 | `profile` | Manage separate credential profiles |
 | `dump` | Export stored files to a directory |
 | `query` | Query stored rows, or Google with `--live` |
@@ -241,7 +259,8 @@ Add this entry to your MCP client's server configuration:
 }
 ```
 
-Authenticate first with `gscdump init` or environment variables.
+Authenticate first with cloud mode or local Google credentials. MCP uses the selected mode for Google tools.
+Google Indexing API and Site Verification tools require local mode. Run Bing commands through the CLI and agent skill.
 Then ask your assistant:
 
 - "List my Search Console Sites."
@@ -255,7 +274,7 @@ Then ask your assistant:
 `list-reports` returns Report descriptions, date defaults, and argument definitions.
 `run-report` accepts the Site, Report ID, date windows, comparison, and maximum findings.
 
-MCP Reports use the live Google API.
+MCP Reports read live Google data through the selected authentication mode.
 Discovery lists `brand`, `movers`, `opportunities`, `pre-publish`, and `risks`.
 Supply `brandTerms` for `brand` and `topic` for `pre-publish`.
 Some optional SQL Sections return an unknown result with an explanation.
@@ -341,19 +360,22 @@ const metadata = await client.indexing.getMetadata(url)
 
 ## Auth Setup
 
-Bring your own Google OAuth credentials:
+Choose [cloud or local authentication](./packages/cli/README.md#hosted-and-local-authentication) for Google and Bing.
+Cloud mode uses a gscdump user API key and saved Search Engine connections.
+For local Google OAuth:
 
 1. Create a Google Cloud project and enable the Search Console API.
 2. Configure the OAuth consent screen and create OAuth credentials for a Desktop app.
-3. Run `gscdump init` to save your credentials and Store settings.
+3. Run `gscdump init --mode local` to save your credentials and Store settings.
+4. Run `gscdump auth login --mode local` to save local mode.
 
 Enable the Web Search Indexing API if you need eligible indexing notifications.
-Use `gscdump auth login` to authenticate without running the full setup.
+Use `gscdump auth login --mode local` to authenticate without running the full setup.
 See [Getting started](./docs/guides/getting-started.md) for service accounts and other authentication options.
 
 ### BYOK environment variables
 
-The CLI also accepts credentials from environment variables, so you can skip `init`.
+Local Google authentication accepts environment credentials, so you can skip `init`.
 Use one of these options:
 
 ```bash
@@ -367,7 +389,8 @@ export GSC_REFRESH_TOKEN=...
 ```
 
 The CLI prefers `GSC_*` names and also accepts their `GOOGLE_*` equivalents.
-When it finds environment credentials, `gscdump auth status` reports `byok` as the source.
+Run `gscdump auth login --mode local` to save local mode after setting environment credentials.
+In local mode, `gscdump auth status` reports `byok` for Google environment credentials.
 
 ## Hosted API v1
 
@@ -399,7 +422,7 @@ Existing integrations can use the [migration guide](./docs/v1-migration.md).
 
 | Entry point | Scope | First result |
 | --- | --- | --- |
-| CLI | Node.js 22 or newer, local Store and live Google queries | [Getting started](./docs/guides/getting-started.md) |
+| CLI | Cloud/local Google and Bing authentication, local Store, exports | [Getting started](./docs/guides/getting-started.md) |
 | Core library | Google and Bing clients, typed queries, fetch runtimes | [Library examples](./packages/gscdump/README.md) |
 | MCP | Live Google queries and supported Reports | [AI integration](./docs/guides/ai-integration.md) |
 | Hosted SDK | gscdump.com API credentials and published v1 operations | [Hosted integration](./docs/guides/hosted-v1.md) |

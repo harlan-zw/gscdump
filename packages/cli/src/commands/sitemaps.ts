@@ -2,6 +2,7 @@ import process from 'node:process'
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
 import { defineCommand } from 'citty'
 import { fetchSitemap } from 'gscdump/sites'
+import { parseAuthentication, resolveAuthentication } from '../auth-state'
 import { sitemapsCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { resolveCliEnvironment } from '../environment'
@@ -10,17 +11,20 @@ import { discoverLiveSitemap, loadSitemapUrls } from '../sitemap'
 import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS, parseIntegerOption } from '../utils'
 
 const HOSTED_ARGS = {
-  'api-root': { type: 'string' as const, description: 'Hosted API root; defaults to GSCDUMP_API_ROOT or https://gscdump.com/api/_gscdump' },
+  'api-root': { type: 'string' as const, description: 'Hosted API root; defaults to saved cloud authentication or https://gscdump.com/api' },
   'api-key': { type: 'string' as const, description: 'Hosted API key; defaults to GSCDUMP_API_KEY' },
 }
 
-function hostedClient(args: Record<string, unknown>): ReturnType<typeof createGscdumpV1Client> {
+async function hostedClient(args: Record<string, unknown>): Promise<ReturnType<typeof createGscdumpV1Client>> {
   const environment = resolveCliEnvironment().values
-  const apiRoot = String(args['api-root'] || environment.GSCDUMP_API_ROOT || 'https://gscdump.com/api/_gscdump')
-  const apiKey = String(args['api-key'] || environment.GSCDUMP_API_KEY || '')
-  if (!apiKey)
-    throw new Error('Hosted sitemap reads require --api-key or GSCDUMP_API_KEY')
-  return createGscdumpV1Client({ apiRoot, credential: apiKey })
+  const authentication = args['api-key']
+    ? parseAuthentication({ _tag: 'Cloud', apiKey: args['api-key'], apiRoot: String(args['api-root'] || environment.GSCDUMP_API_ROOT || 'https://gscdump.com/api') })
+    : await resolveAuthentication()
+  if (authentication._tag !== 'Cloud')
+    throw new Error('Hosted sitemap reads require cloud authentication. Run `gscdump auth login --mode cloud` or supply --api-key.')
+  if (args['api-root'] && String(args['api-root']).replace(/\/+$/, '') !== authentication.apiRoot)
+    throw new Error('The API root changed. Supply --api-key explicitly for the new API root.')
+  return createGscdumpV1Client({ apiRoot: authentication.apiRoot, credential: authentication.apiKey })
 }
 
 const listCommand = defineCommand({
@@ -242,7 +246,7 @@ const currentCommand = defineCommand({
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
-    const result = await hostedClient(args).getSiteSitemaps({
+    const result = await (await hostedClient(args)).getSiteSitemaps({
       params: { siteId: String(args['site-id']) },
     })
     if (json) {
@@ -270,7 +274,7 @@ const historyCommand = defineCommand({
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const days = parseIntegerOption(args.days, '--days')
-    const result = await hostedClient(args).getSiteSitemapChanges({
+    const result = await (await hostedClient(args)).getSiteSitemapChanges({
       params: { siteId: String(args['site-id']) },
       query: { ...(days ? { days } : {}) },
     })
@@ -293,7 +297,7 @@ const membershipCommand = defineCommand({
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const urls = String(args.urls).split(',').map(url => url.trim()).filter(Boolean)
-    const result = await hostedClient(args).querySitemapMembership({
+    const result = await (await hostedClient(args)).querySitemapMembership({
       params: { siteId: String(args['site-id']) },
       body: {
         urls,
@@ -330,7 +334,7 @@ const lastmodCommand = defineCommand({
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const limit = parseIntegerOption(args.limit, '--limit')
-    const result = await hostedClient(args).listSitemapUrls({
+    const result = await (await hostedClient(args)).listSitemapUrls({
       params: { siteId: String(args['site-id']) },
       query: {
         ...(args.generation ? { generationId: String(args.generation) } : {}),
@@ -364,7 +368,7 @@ const exportCommand = defineCommand({
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
-    const result = await hostedClient(args).getSitemapExport({
+    const result = await (await hostedClient(args)).getSitemapExport({
       params: { siteId: String(args['site-id']) },
       query: {
         ...(args.generation ? { generationId: String(args.generation) } : {}),

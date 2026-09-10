@@ -1,3 +1,5 @@
+import type { ApiSite } from 'gscdump/sites'
+import type { CloudAuthentication } from '../auth-state'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
@@ -6,6 +8,7 @@ import { googleSearchConsole } from 'gscdump/client'
 import { ofetch } from 'ofetch'
 import { loadTokens, resolveAuth, resolveBYOK } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
+import { getCloudAccount, resolveAuthentication } from '../auth-state'
 import { doctorCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createCommandContext } from '../context'
@@ -267,19 +270,63 @@ async function checkGscSites(): Promise<Check[]> {
   if (sites instanceof Error)
     return [{ name: 'gsc.sites', status: 'fail', detail: `sites() failed: ${sites.message}` }]
 
+  return describeGscSites(sites, config.defaultSite)
+}
+
+function describeGscSites(sites: ApiSite[], defaultSite?: string): Check[] {
   const checks: Check[] = []
   const verified = sites.filter(s => s.permissionLevel !== 'siteUnverifiedUser').length
   checks.push({ name: 'gsc.sites', status: 'pass', detail: `${sites.length} site(s) accessible (${verified} verified)` })
 
-  if (config.defaultSite) {
-    const match = sites.find(s => s.siteUrl === config.defaultSite || (s.siteUrl ?? '').includes(String(config.defaultSite)))
+  if (defaultSite) {
+    const match = sites.find(s => s.siteUrl === defaultSite || (s.siteUrl ?? '').includes(defaultSite))
     checks.push(match
-      ? { name: 'config.defaultSite', status: 'pass', detail: `${config.defaultSite} ✓` }
-      : { name: 'config.defaultSite', status: 'fail', detail: `${config.defaultSite} not in verified site list` },
+      ? { name: 'config.defaultSite', status: 'pass', detail: `${defaultSite} ✓` }
+      : { name: 'config.defaultSite', status: 'fail', detail: `${defaultSite} not in verified site list` },
     )
   }
 
   return checks
+}
+
+async function checkCloudConnection(authentication: CloudAuthentication): Promise<Check[]> {
+  const account = await getCloudAccount(authentication).then(
+    value => ({ _tag: 'Ok' as const, value }),
+    (error: unknown) => ({ _tag: 'Err' as const, detail: error instanceof Error ? error.message : 'Hosted authentication failed.' }),
+  )
+  if (account._tag === 'Err') {
+    return [
+      { name: 'auth', status: 'fail', detail: account.detail },
+      { name: 'gsc.sites', status: 'warn', detail: 'skipped (auth failed)' },
+    ]
+  }
+
+  const sitesChecks = await createCommandContext({ needsAuth: true }).then(async context =>
+    describeGscSites(await context.loadSites(), context.config.defaultSite),
+  ).catch((error: unknown): Check[] => [{
+    name: 'gsc.sites',
+    status: 'fail',
+    detail: error instanceof Error ? error.message : 'Hosted Sites request failed.',
+  }])
+  return [
+    { name: 'auth', status: 'pass', detail: `cloud via ${authentication.apiRoot}` },
+    { name: 'auth.account', status: 'pass', detail: account.value.user.email },
+    ...sitesChecks,
+  ]
+}
+
+async function checkLocalConnection(envKeys: Set<string>): Promise<Check[]> {
+  const [authResult, timeChecks, gscApi, indexingApi, siteVerificationApi] = await Promise.all([
+    checkAuth(envKeys),
+    checkTimeSkew(),
+    checkApiReachable('gsc.api', 'https://searchconsole.googleapis.com/$discovery/rest?version=v1'),
+    checkApiReachable('indexing.api', 'https://indexing.googleapis.com/$discovery/rest?version=v3'),
+    checkApiReachable('siteverification.api', 'https://www.googleapis.com/discovery/v1/apis/siteVerification/v1/rest'),
+  ])
+  const sitesChecks: Check[] = authResult.liveToken
+    ? await checkGscSites()
+    : [{ name: 'gsc.sites', status: 'warn', detail: 'skipped (auth failed)' }]
+  return [...authResult.checks, ...timeChecks, ...gscApi, ...indexingApi, ...siteVerificationApi, ...sitesChecks]
 }
 
 export const doctorCommand = defineCommand({
@@ -290,35 +337,21 @@ export const doctorCommand = defineCommand({
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const { dataDir } = await createCommandContext()
-    // Cheap probes run unconditionally and in parallel. The auth check yields
-    // the live token used by gsc.sites, so it stays sequential to that.
-    // env runs first so the auth check can report which env var drives BYOK.
+    const authentication = await resolveAuthentication()
     const envResult = await checkEnv()
-    const [authResult, timeChecks, dataDirChecks, watermarkChecks, gscApi, indexingApi, siteVerificationApi] = await Promise.all([
-      checkAuth(envResult.envKeys),
-      checkTimeSkew(),
+    const [connectionChecks, dataDirChecks, watermarkChecks] = await Promise.all([
+      authentication._tag === 'Cloud'
+        ? checkCloudConnection(authentication)
+        : checkLocalConnection(envResult.envKeys),
       checkDataDir(dataDir),
       checkStoreWatermarks(dataDir),
-      checkApiReachable('gsc.api', 'https://searchconsole.googleapis.com/$discovery/rest?version=v1'),
-      checkApiReachable('indexing.api', 'https://indexing.googleapis.com/$discovery/rest?version=v3'),
-      checkApiReachable('siteverification.api', 'https://www.googleapis.com/discovery/v1/apis/siteVerification/v1/rest'),
     ])
-
-    // gsc.sites needs auth resolved already; only run if auth passed.
-    const sitesChecks = authResult.liveToken
-      ? await checkGscSites()
-      : [{ name: 'gsc.sites', status: 'warn' as const, detail: 'skipped (auth failed)' }]
 
     const all = [
       ...envResult.checks,
-      ...authResult.checks,
-      ...timeChecks,
+      ...connectionChecks,
       ...dataDirChecks,
       ...watermarkChecks,
-      ...gscApi,
-      ...indexingApi,
-      ...siteVerificationApi,
-      ...sitesChecks,
     ]
 
     if (json) {

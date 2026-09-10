@@ -269,8 +269,7 @@ export interface BingWebmasterClient {
 
 export type BingFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
-export interface BingWebmasterOptions {
-  accessToken: string
+export type BingWebmasterOptions = ({ accessToken: string | (() => string | Promise<string>), apiKey?: never } | { apiKey: string, accessToken?: never }) & {
   baseUrl?: string
   clock?: () => Date
   fetch?: BingFetch

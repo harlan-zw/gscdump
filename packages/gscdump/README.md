@@ -94,13 +94,14 @@ The package root also exports batch and projection helpers such as `fetchSitesWi
 
 ## Read Bing Indexing Evidence
 
-Use `gscdump/bing` with an OAuth access token. The client returns tagged
+Use `gscdump/bing` with an OAuth access token or Bing Webmaster API key. The client returns tagged
 `Result` values and never infers an indexed verdict from crawl evidence.
 
 ```ts
 import { bingWebmaster } from 'gscdump/bing'
 
 const client = bingWebmaster({ accessToken: 'access-token' })
+// API key alternative: bingWebmaster({ apiKey: 'bing-webmaster-api-key' })
 const evidence = await client.getIndexingEvidence(
   'https://example.com/',
   'https://example.com/docs',
@@ -115,6 +116,10 @@ const [pages, queries, crawl] = await Promise.all([
   client.getCrawlStats('https://example.com/'),
 ])
 ```
+
+`accessToken` also accepts a function returning a string or `Promise<string>`.
+The client calls that function before each request, so callers can refresh expiring tokens during long exports.
+The CLI manages this refresh when you use `gscdump bing login --mode local --oauth`.
 
 Sitemap XML reading and traversal live in `sitemapd`. Product feed scoping and
 exact membership hashing live in `gscdump/sitemap-identity`. Hosted canonical

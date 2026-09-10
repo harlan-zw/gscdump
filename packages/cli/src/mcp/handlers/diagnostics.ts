@@ -2,6 +2,7 @@ import type { z } from 'zod'
 import type { HandlerContext, listSitesInput } from '../types'
 import { ofetch } from 'ofetch'
 import { missingRequiredScopes } from '../../auth-scopes'
+import { getCloudAccount } from '../../auth-state'
 
 const FETCH_TIMEOUT_MS = 5000
 const TIME_SKEW_WARN_MS = 5 * 60_000
@@ -22,6 +23,21 @@ export async function diagnostics(
   ctx: HandlerContext,
 ): Promise<DiagnosticsResult> {
   const checks: DiagnosticsCheck[] = []
+
+  if (ctx.authentication?._tag === 'Cloud') {
+    const [account, sites] = await Promise.all([
+      getCloudAccount(ctx.authentication).catch((error: Error) => error),
+      ctx.client.sites().catch((error: Error) => error),
+    ])
+    checks.push(account instanceof Error
+      ? { name: 'auth', status: 'fail', detail: account.message }
+      : { name: 'auth', status: 'pass', detail: `Cloud account: ${account.user.email}` })
+    checks.push(sites instanceof Error
+      ? { name: 'gsc.sites', status: 'fail', detail: sites.message }
+      : { name: 'gsc.sites', status: 'pass', detail: `${sites.length} Site(s) accessible through cloud authentication` })
+    checks.push({ name: 'auth.capabilities', status: 'info', detail: 'Google indexing and Site Verification require --mode local.' })
+    return { ok: checks.every(check => check.status !== 'fail'), checks }
+  }
 
   const token = await resolveAccessToken(ctx.auth)
   if (!token) {

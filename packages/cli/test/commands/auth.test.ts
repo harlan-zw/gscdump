@@ -4,6 +4,13 @@ import { authCommand } from '../../src/commands/auth'
 import { logger } from '../../src/utils'
 import { mockCredentials, mockExpiredCredentials } from '../__fixtures__/mocks'
 
+vi.mock('../../src/auth-state', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/auth-state')>(),
+  resolveAuthentication: async () => ({ _tag: 'Local' }),
+  clearAuthentication: vi.fn(),
+}))
+vi.mock('../../src/bing-auth', () => ({ clearBingCredentials: vi.fn(), inspectBingCredentials: async () => ({ _tag: 'Missing' }) }))
+
 // Mock the logger
 vi.mock('../../src/utils', () => ({
   OUTPUT_ARGS: { json: { type: 'boolean', default: false, description: 'Output as JSON' }, quiet: { type: 'boolean', alias: 'q', default: false, description: 'Suppress info/success output' } },

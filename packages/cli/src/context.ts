@@ -2,12 +2,15 @@ import type { OAuth2Client } from 'google-auth-library'
 import type { googleSearchConsole, Auth as GscAuth } from 'gscdump/client'
 import type { FetchOptions } from 'ofetch'
 import type { BYOKOptions } from './auth'
+import type { Authentication } from './auth-state'
 import type { GscdumpConfig } from './config'
 import type { LocalStore } from './local-store'
 import process from 'node:process'
 import { cancel, isCancel, select } from '@clack/prompts'
 import { googleSearchConsole as createGsc } from 'gscdump/client'
 import { resolveAuth } from './auth'
+import { resolveAuthentication } from './auth-state'
+import { createCloudGoogleClient } from './cloud-google'
 import { loadResolvedConfig } from './config'
 import { createLocalStore } from './local-store'
 import { logger } from './utils'
@@ -20,6 +23,7 @@ export interface GscSite {
 type GscClient = ReturnType<typeof googleSearchConsole>
 
 export interface CommandContext {
+  authentication: Authentication
   config: GscdumpConfig
   /** Fully resolved local data directory from the same config load. */
   dataDir: string
@@ -57,8 +61,11 @@ export async function createCommandContext(
 ): Promise<CommandContext> {
   const { needsAuth = false, needsStore = false, interactive = false, byok, fetchOptions } = opts
   const { config, dataDir } = await loadResolvedConfig()
-  const auth = needsAuth ? await resolveAuth({ interactive, config, byok }) : null
-  const client = auth ? createGsc(auth as GscAuth, { fetchOptions }) : null
+  const authentication = needsAuth ? await resolveAuthentication() : { _tag: 'Local' } as const
+  const auth = needsAuth && authentication._tag === 'Local' ? await resolveAuth({ interactive, config, byok }) : null
+  const client = needsAuth && authentication._tag === 'Cloud'
+    ? createCloudGoogleClient(authentication, fetchOptions)
+    : auth ? createGsc(auth as GscAuth, { fetchOptions }) : null
   const store = needsStore ? createLocalStore({ dataDir }) : null
 
   const loadSites = async (): Promise<GscSite[]> => {
@@ -101,5 +108,5 @@ export async function createCommandContext(
     return selected as string
   }
 
-  return { config, dataDir, auth, client, store, loadSites, resolveSite }
+  return { config, dataDir, authentication, auth, client, store, loadSites, resolveSite }
 }

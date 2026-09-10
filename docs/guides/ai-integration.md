@@ -1,7 +1,8 @@
 # AI integration
 
-`@gscdump/cli` owns the MCP server. Authenticate once with `gscdump init` (or
-provide BYOK environment variables), then start it with `gscdump mcp`.
+`@gscdump/cli` owns the MCP server. It uses the CLI's selected cloud or local authentication for Google tools.
+Authenticate with `gscdump auth login --mode cloud`, or configure local Google credentials, then run `gscdump mcp`.
+See [authentication setup](./getting-started.md#install-and-authenticate).
 
 ## Agent skill
 
@@ -14,6 +15,7 @@ gscdump skill install --agent claude    # Codex: --agent codex
 ```
 
 The same file is published at [gscdump.com/SKILL.md](https://gscdump.com/SKILL.md).
+After upgrading the CLI, run `skill install` again to update an installed copy.
 
 ## Papercuts
 
@@ -45,8 +47,11 @@ stdio-compatible MCP client:
 }
 ```
 
-The server accepts the CLI's `GSC_ACCESS_TOKEN`, service-account, and OAuth refresh-token configuration.
-Configure credentials in the server process.
+The server uses the saved authentication for its profile.
+Cloud mode accepts `GSCDUMP_API_KEY`. Local mode accepts Google access tokens, service accounts, and OAuth refresh tokens.
+Set environment credentials in the server process. Use `--profile NAME` or `--mode local` in its arguments when needed.
+Cloud Google tools use gscdump.com. Google Indexing API and Site Verification tools require local mode.
+Bing commands are available through the CLI and agent skill. The MCP server does not expose Bing tools.
 Tool responses can contain your search data; review your MCP client's data-sharing settings.
 
 ## Tool groups
@@ -75,7 +80,7 @@ were removed; application embedding is not a supported v1 package surface.
 - “Query clicks and impressions by page for this month.”
 - “Inspect these URLs and summarize the Indexing Evidence.”
 
-MCP Reports use the live Google API.
+MCP Reports read live Google data through the selected authentication mode.
 They do not read the local Store.
 `list-reports` advertises only Reports with supported inputs and at least one live Section.
 Every required Analyzer must support the live Source.

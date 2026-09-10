@@ -75,6 +75,7 @@ function extractMessage(error: unknown): string {
 }
 
 function extractRetryAfter(error: unknown): number | undefined {
+  const headers = pickField(error, [['headers'], ['response', 'headers']], (value): value is Headers => value instanceof Headers)
   const raw = pickField(
     error,
     [
@@ -84,7 +85,7 @@ function extractRetryAfter(error: unknown): number | undefined {
       ['response', 'headers', 'Retry-After'],
     ],
     (v): v is number | string => typeof v === 'number' || typeof v === 'string',
-  )
+  ) ?? headers?.get('retry-after')
   if (typeof raw === 'number')
     return raw
   if (typeof raw === 'string') {

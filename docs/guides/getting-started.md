@@ -1,43 +1,83 @@
 # Getting started
 
-Install the CLI, connect Google Search Console, then query live data or sync it to a local Store.
+Install the CLI, choose cloud or local authentication, then read Google Search Console or Bing data.
 
 ## Prerequisites
 
-- Node.js 22 or newer.
-- Access to a Site in Google Search Console.
-- Your own Google OAuth credentials, access token, or service-account key.
+- Node.js 22.13 or later in the 22 release line, or Node.js 24 or later.
+- Access to a Site in Google Search Console or Bing Webmaster Tools.
+- A gscdump user API key for cloud mode, or local Search Engine credentials.
 
 ## Install and authenticate
 
 ```bash
 npm install -g @gscdump/cli
-gscdump init
 ```
 
 The `gscdump` npm package contains the library. Install `@gscdump/cli` to get the `gscdump` command.
 You can also run any command with `npx -y @gscdump/cli`.
 
-For OAuth setup:
+Cloud mode uses the Search Engine connections saved on gscdump.com:
+
+```bash
+export GSCDUMP_API_KEY=gsd_user_...
+gscdump auth login --mode cloud
+gscdump auth status --json
+gscdump sites --json
+gscdump bing sites --json
+```
+
+Get a user API key from your gscdump.com settings.
+The saved mode applies to Google and Bing within the selected profile.
+Use `--mode cloud` or `--mode local` to override one command.
+
+For local Google OAuth setup:
 
 1. Create a [Google Cloud project](https://console.cloud.google.com/).
 2. Enable the Search Console API.
 3. Create OAuth credentials with the Desktop app type.
-4. Run `gscdump init`, choose a Store directory, and enter your credentials.
+4. Run `gscdump init --mode local`, choose a Store directory, and enter your credentials.
 5. Complete Google sign-in.
+6. Run `gscdump auth login --mode local` to save local mode.
 
 If you already have an access token, set `GSC_ACCESS_TOKEN` and skip `init`.
 For refresh tokens and service accounts, see [CLI authentication](../../packages/cli/README.md#auth).
 
 ```bash
 export GSC_ACCESS_TOKEN=ya29.example
-gscdump auth status
-gscdump sites
+gscdump auth login --mode local
+gscdump auth status --json
+gscdump sites --json
 ```
 
 Use the exact Site value returned by `sites`, such as `sc-domain:example.com` or `https://example.com/`.
 
+## Read Bing data
+
+With cloud authentication, connect Bing for a Site listed by `bing sites`:
+
+```bash
+gscdump bing login --site s_SITE_ID
+gscdump bing status --site s_SITE_ID --json
+gscdump bing dump --site s_SITE_ID --format csv --out ./bing-export
+```
+
+Complete the browser connection before exporting. Hosted exports read the datasets saved by gscdump.com.
+For local access, use a Bing Webmaster API key:
+
+```bash
+export BING_API_KEY=...
+gscdump bing login --mode local
+gscdump bing sites --json
+gscdump bing dump --site https://example.com/ --format csv --out ./bing-export
+```
+
+Local exports read the rows Bing currently returns.
+See [Bing authentication and exports](../../packages/cli/README.md#bing) for OAuth, datasets, date limits, and formats.
+
 ## Query live data
+
+Google queries use the selected authentication mode.
 
 ```bash
 gscdump query --live --site sc-domain:example.com --dimensions page,query --limit 1000
@@ -75,7 +115,7 @@ gscdump dump --site sc-domain:example.com --out ./export
 gscdump dump --site sc-domain:example.com --tables pages --format csv --out ./export-csv
 ```
 
-`dump` exports data already in the Store.
+`dump` exports Google data already in the Store. `bing dump` reads Bing datasets through the selected authentication mode.
 Use `query --output` to write a filtered result to one file.
 
 ## Set defaults

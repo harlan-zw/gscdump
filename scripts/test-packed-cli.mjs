@@ -15,6 +15,7 @@ const consumer = join(temporary, 'consumer project')
 const config = join(consumer, 'config')
 const artifacts = join(temporary, 'packages')
 const runtimeHome = join(temporary, 'home')
+const httpTrace = join(consumer, 'http-requests.ndjson')
 // pnpm 12 provides a native executable. Windows cannot execute .cmd shims with execFile.
 const pnpm = process.env.npm_execpath || (process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
 const npmCli = join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js')
@@ -67,9 +68,10 @@ try {
     XDG_CACHE_HOME: join(runtimeHome, 'cache'),
     XDG_DATA_HOME: join(runtimeHome, 'data'),
     GSC_ACCESS_TOKEN: 'packed-cli-fixture',
+    PACKED_CLI_REQUESTS: httpTrace,
   }
   for (const name of Object.keys(env)) {
-    if (name.startsWith('GOOGLE_') || name.startsWith('GSCDUMP_') || name.startsWith('DUCKDB_') || (name.startsWith('GSC_') && name !== 'GSC_ACCESS_TOKEN'))
+    if (name.startsWith('GOOGLE_') || name.startsWith('GSCDUMP_') || name.startsWith('BING_') || name.startsWith('DUCKDB_') || (name.startsWith('GSC_') && name !== 'GSC_ACCESS_TOKEN'))
       delete env[name]
   }
   delete env.NODE_OPTIONS
@@ -136,6 +138,53 @@ try {
     }
   `], { cwd: consumer, env })
   console.log('Packed CLI: Reports, sync, repeated sync, stored query, Parquet export, and DuckDB export passed.')
+
+  const localBingSite = 'https://local-bing.example.com/'
+  await cli('bing', 'login', '--mode', 'local', '--api-key', 'packed-bing-key', '--json')
+  const localBingSites = JSON.parse(await cli('bing', 'sites', '--json'))
+  assert.equal(localBingSites.sites[0].url, localBingSite)
+  const localBingDump = JSON.parse(await cli('bing', 'dump', '--site', localBingSite, '--datasets', 'traffic,keywords', '--out', join(consumer, 'local Bing export'), '--json'))
+  const localTraffic = JSON.parse(await readFile(localBingDump.files.find(file => file.dataset === 'traffic').path, 'utf8'))
+  const localQueries = JSON.parse(await readFile(localBingDump.files.find(file => file.dataset === 'keywords').path, 'utf8'))
+  assert.deepEqual(localTraffic.map(({ clicks, impressions }) => ({ clicks, impressions })), [{ clicks: 12, impressions: 80 }])
+  assert.equal(localQueries[0].query, 'local search')
+
+  // One saved Cloud login must route both Search Engines in later processes.
+  await writeFile(httpTrace, '')
+  await cli('auth', 'login', '--mode', 'cloud', '--api-key', 'gsd_user_packed_fixture', '--json')
+  const cloudSite = 'sc-domain:cloud.example.com'
+  const cloudGoogleSites = JSON.parse(await cli('sites', '--json'))
+  assert.equal(cloudGoogleSites[0].siteUrl, cloudSite)
+  const cloudQuery = JSON.parse(await cli('query', '--live', '--site', cloudSite, '--start', '2026-08-01', '--end', '2026-08-01', '--dimensions', 'page', '--format', 'json', '--quiet'))
+  assert.equal(cloudQuery.data[0].clicks, 9)
+  assert.equal(cloudQuery.data[0].impressions, 90)
+  const cloudBingSites = JSON.parse(await cli('bing', 'sites', '--json'))
+  assert.equal(cloudBingSites.sites[0].siteId, 's_packed')
+  assert.equal(cloudBingSites.sites[0].connection._tag, 'connected')
+  const cloudBingDump = JSON.parse(await cli('bing', 'dump', '--site', 's_packed', '--start', '2026-08-01', '--end', '2026-08-31', '--datasets', 'traffic,keywords', '--format', 'ndjson', '--out', join(consumer, 'cloud Bing export'), '--json'))
+  for (const file of cloudBingDump.files) {
+    const rows = (await readFile(file.path, 'utf8')).trim().split('\n').map(row => JSON.parse(row))
+    assert.equal(rows.length, 501)
+    assert.equal(rows.at(-1).clicks, 510)
+    assert.equal(file.sync._tag, 'ready')
+    if (file.dataset === 'keywords')
+      assert.equal(rows.at(-1).query, 'cloud search 500')
+  }
+  const hostedRequests = (await readFile(httpTrace, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+  assert(hostedRequests.every(request => request.origin === 'https://gscdump.com'))
+  assert.deepEqual(hostedRequests.filter(request => request.pathname.endsWith('/bing/data')).map(request => request.offset), ['0', '500', '0', '500'])
+
+  // A local override uses saved Bing credentials and leaves the Cloud login selected afterward.
+  await writeFile(httpTrace, '')
+  const overriddenBingSites = JSON.parse(await cli('bing', 'sites', '--mode', 'local', '--json'))
+  assert.equal(overriddenBingSites.sites[0].url, localBingSite)
+  const overriddenGoogleSites = JSON.parse(await cli('sites', '--mode', 'local', '--json'))
+  assert.equal(overriddenGoogleSites[0].siteUrl, site)
+  const localRequests = (await readFile(httpTrace, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+  assert(localRequests.every(request => request.origin !== 'https://gscdump.com'))
+  const stillCloud = JSON.parse(await cli('bing', 'sites', '--json'))
+  assert.equal(stillCloud.sites[0].siteId, 's_packed')
+  console.log('Packed CLI: saved local Bing login/dump, shared Cloud Google/Bing queries, pagination, and local mode overrides passed.')
 
   if (process.platform === 'linux' && process.arch === 'x64') {
     assert(size.installedFileBytes <= 135_000_000, `Packed CLI exceeds 135 MB installed: ${(size.installedFileBytes / 1_000_000).toFixed(2)} MB`)
