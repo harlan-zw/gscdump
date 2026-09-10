@@ -124,7 +124,14 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
   }
   const { byok, tokens, tokenInfo, scopes, missing } = await resolveLiveAuthState()
   const bingCredentials = await inspectBingCredentials()
-  const bingResult = bingCredentials._tag === 'Missing' ? null : await (await getBingClient()).getUserSites({ signal: AbortSignal.timeout(10_000) })
+  // A failed Bing token refresh or verification is a status result, not a
+  // command crash: it surfaces as bing.authenticated false plus the
+  // 'Bing credentials failed verification' warning below.
+  const bingResult = bingCredentials._tag === 'Missing'
+    ? null
+    : await getBingClient()
+        .then(client => client.getUserSites({ signal: AbortSignal.timeout(10_000) }))
+        .catch(() => null)
   const bing = { configured: bingCredentials._tag !== 'Missing', authenticated: bingResult?.ok === true, source: bingCredentials._tag === 'Missing' ? null : bingCredentials._tag }
   const byokKind = byok
     ? typeof byok === 'string' ? 'access-token' : 'refresh-token'
