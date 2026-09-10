@@ -10,14 +10,18 @@ const REQUEST_TIMEOUT_MS = 10_000
  * The wire shape gscdump.com accepts. Keep it in sync with
  * `server/api/cli/papercuts.post.ts` in the gscdump.com repository.
  */
+// Single-line fields refuse control characters: they render as one line in
+// the operator's report, and gscdump.com rejects them with a 400 otherwise.
+const singleLine = (max: number) => z.string().trim().min(1).max(max).regex(/^[^\p{Cc}]*$/u, 'must be a single line without control characters')
+
 export const papercutBodySchema = z.strictObject({
-  command: z.string().trim().min(1).max(200),
+  command: singleLine(200),
   comment: z.string().trim().min(1).max(2000),
-  agent: z.string().trim().min(1).max(100),
+  agent: singleLine(100),
   intent: z.enum(['bug', 'improvement']).default('bug'),
-  cliVersion: z.string().trim().min(1).max(64),
-  node: z.string().trim().min(1).max(64),
-  platform: z.string().trim().min(1).max(32),
+  cliVersion: singleLine(64),
+  node: singleLine(64),
+  platform: singleLine(32),
 })
 
 export type PapercutBody = z.infer<typeof papercutBodySchema>
