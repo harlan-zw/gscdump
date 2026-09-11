@@ -259,14 +259,14 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
   })
 
   const filterGroupSchema = z.object({
-    groupType: z.enum(['and']).optional().describe('Always "and"; multiple groups are OR-ed together'),
+    groupType: z.enum(['and']).optional().describe('Only "and" is supported; multiple groups do not implement OR'),
     filters: z.array(dimensionFilterSchema),
   })
 
   server.registerTool(
     'query',
     {
-      description: 'Run a custom search analytics query. Supports dimension filters (regex/contains/equals) via dimensionFilterGroups; multiple groups are OR-ed.',
+      description: 'Run a custom search analytics query with dimension filters (regex/contains/equals). Multiple filter groups do not implement OR.',
       inputSchema: z.object({
         siteUrl: z.string().describe('GSC property URL (e.g., sc-domain:example.com)'),
         startDate: z.string().describe('Start date (YYYY-MM-DD)'),
@@ -276,7 +276,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
         type: z.enum(SearchTypes).optional().describe('Search type'),
         dataState: z.enum(['final', 'all']).optional().describe('Data state: final (settled) or all (includes fresh)'),
         aggregationType: z.enum(['byPage', 'byProperty']).optional().describe('Aggregation type'),
-        dimensionFilterGroups: z.array(filterGroupSchema).optional().describe('Filter groups (each "and"-ed internally; multiple groups are OR-ed)'),
+        dimensionFilterGroups: z.array(filterGroupSchema).optional().describe('Filter groups use "and" internally. Multiple groups do not implement OR.'),
       }).shape,
     },
     async ({ siteUrl, startDate, endDate, dimensions, rowLimit, type, dataState, aggregationType, dimensionFilterGroups }) => {

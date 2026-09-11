@@ -23,8 +23,8 @@ export interface GscApiRow {
 
 export interface SyncSliceDomainFilter {
   /**
-   * Domain (eTLD+1 + subdomain) to scope the slice to — matches both
-   *  `www.` and bare variants. Strip the protocol; the regex is built here.
+   * Exact registered host to scope the slice to, without a protocol.
+   * `www.example.com` and `example.com` remain separate hosts.
    */
   domain?: string
 }
@@ -155,12 +155,9 @@ function isTimeoutLike(err: unknown): boolean {
   return err.name === 'AbortError' || err.message?.includes('timeout') || err.message?.includes('aborted')
 }
 
-// Builds the GSC `dimensionFilterGroups` that scopes a slice to the registered
-// host. A site is scoped to the EXACT host the user registered, never the whole
-// GSC property — when a site maps to a broader `sc-domain:` property this `page`
-// regex (`^https?://(www\.)?<domain>/`) intentionally excludes all subdomain
-// traffic. This host-scoping is a DECISION (ADR-0033), not a bug — do not widen
-// it to "match the GSC UI".
+// Scope each slice to the exact registered host, including its www prefix.
+// A broader Search Console property must not widen this scope.
+// The page filter excludes every other host, including the alternate www host.
 //
 // Behaviour of attaching this filter, measured 2026-05 (see gscdump.com
 // docs/postmortems/2026-05-gsc-page-filter-sampling.md):
@@ -189,9 +186,8 @@ function buildDimensionFilterGroups(
     expression: f.expression,
   }))
   if (domainFilter?.domain) {
-    const rootDomain = domainFilter.domain.replace(/^www\./, '')
-    const escapedDomain = rootDomain.replace(/\./g, '\\.')
-    const pattern = `^https?://(www\\.)?${escapedDomain}/`
+    const escapedDomain = domainFilter.domain.replace(/\./g, '\\.')
+    const pattern = `^https?://${escapedDomain}/`
     out.push({
       dimension: 'page',
       operator: 'includingRegex',

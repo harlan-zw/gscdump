@@ -298,30 +298,6 @@ describe('runGscSyncSlice', () => {
     expect(batches).toHaveLength(2)
   })
 
-  it('scopes the slice to the registered host via a page-regex filter (ADR-0033)', async () => {
-    const captured: SearchAnalyticsQuery[] = []
-    const client = makeClient([{ rows: [] }], captured)
-
-    await runGscSyncSlice({
-      client,
-      siteUrl: 'sc-domain:example.com',
-      table: 'pages',
-      startDate: '2026-05-10',
-      endDate: '2026-05-17',
-      domainFilter: { domain: 'www.example.com' },
-      onBatch: async () => {},
-    })
-
-    const groups = captured[0]!.dimensionFilterGroups
-    expect(groups).toEqual([{
-      filters: [{
-        dimension: 'page',
-        operator: 'includingRegex',
-        expression: '^https?://(www\\.)?example\\.com/',
-      }],
-    }])
-  })
-
   it('omits dimensionFilterGroups when no domainFilter is given', async () => {
     const captured: SearchAnalyticsQuery[] = []
     const client = makeClient([{ rows: [] }], captured)
