@@ -15,6 +15,13 @@ describe('normalizeQuery', () => {
     expect(normalizeQuery('schema.org')).toBe('org schema')
   })
 
+  it('drops quotes and treats sentence punctuation as separators', () => {
+    expect(normalizeQuery('"keyword cannibalization checker')).toBe(normalizeQuery('keyword cannibalization checker'))
+    expect(normalizeQuery('what is nuxt seo?')).toBe(normalizeQuery('what is nuxt seo'))
+    expect(normalizeQuery('nuxt seo (module)')).toBe(normalizeQuery('nuxt seo module'))
+    expect(normalizeQuery('don\'t index')).toBe(normalizeQuery('dont index'))
+  })
+
   it('collapses whitespace', () => {
     expect(normalizeQuery('nuxt   seo   module')).toBe('module nuxt seo')
   })
@@ -178,6 +185,6 @@ describe('normalizeQuery', () => {
   })
 
   it('exposes a bumped NORMALIZER_VERSION for staleness tracking', () => {
-    expect(NORMALIZER_VERSION).toBe(2)
+    expect(NORMALIZER_VERSION).toBe(3)
   })
 })
