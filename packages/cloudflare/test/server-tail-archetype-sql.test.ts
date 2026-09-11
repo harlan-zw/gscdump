@@ -22,7 +22,7 @@ describe('buildArchetypeSql', () => {
     const plan = buildArchetypeSql(q)
     expect(plan.table).toBe('dates')
     expect(plan.sql).toContain('SUM(clicks) AS clicks')
-    expect(plan.sql).toContain('SUM(clicks) / NULLIF(SUM(impressions), 0) AS ctr')
+    expect(plan.sql).toContain('CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr')
     expect(plan.sql).toContain('SUM(sum_position) / NULLIF(SUM(impressions), 0) + 1 AS position')
     expect(plan.sql).toContain('GROUP BY date')
     // partition-pruning prefix is 4 bound params
