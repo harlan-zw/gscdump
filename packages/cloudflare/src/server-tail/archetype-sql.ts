@@ -100,7 +100,10 @@ function metricExpr(metric: Metric): string {
     case 'impressions':
       return 'SUM(impressions) AS impressions'
     case 'ctr':
-      return 'SUM(clicks) / NULLIF(SUM(impressions), 0) AS ctr'
+      // R2 SQL divides two integer sums as integers: 4 / 247 is 0, so every
+      // CTR under 100% read as 0 on the server tail while DuckDB answered
+      // 0.016. Cast the numerator so the division is floating point.
+      return 'CAST(SUM(clicks) AS DOUBLE) / NULLIF(SUM(impressions), 0) AS ctr'
     case 'position':
       // Fact-table convention: `sum_position = (position − 1) × impressions`
       // (engine `metrics.ts`), so the mean must be recovered with `+ 1` — the
@@ -144,7 +147,7 @@ function metricExprForSource(metric: Metric, source: {
     case 'impressions':
       return `SUM(${source.impressions}) AS impressions`
     case 'ctr':
-      return `SUM(${source.clicks}) / NULLIF(SUM(${source.impressions}), 0) AS ctr`
+      return `CAST(SUM(${source.clicks}) AS DOUBLE) / NULLIF(SUM(${source.impressions}), 0) AS ctr`
     case 'position':
       // Same `+ 1` recovery as `metricExpr` — device-suffixed sums share the
       // `(position − 1) × impressions` storage convention.
