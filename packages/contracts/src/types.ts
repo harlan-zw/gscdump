@@ -121,7 +121,7 @@ export interface InspectionRecordRaw {
   /** Unix seconds. Mirrors the `next_check_after` column. */
   nextCheckAfter?: number
   /** Mirrors the `next_check_priority` column. */
-  priority?: 'high' | 'medium' | 'low'
+  priority?: 'high' | 'medium' | 'low' | 'critical' | 'elevated' | 'normal' | 'dormant'
   /** JSON-encoded `string[]` of sitemap URLs containing this URL. */
   sitemaps?: string | null
   /** JSON-encoded `string[]` of referring URLs Google reported. */

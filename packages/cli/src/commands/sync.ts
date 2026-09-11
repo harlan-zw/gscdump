@@ -200,7 +200,7 @@ export const syncCommand = defineCommand({
     },
     'start': {
       type: 'string',
-      description: 'Start date (YYYY-MM-DD) for historical sync',
+      description: 'Start date (YYYY-MM-DD) for backfill',
     },
     'end': {
       type: 'string',
@@ -231,7 +231,7 @@ export const syncCommand = defineCommand({
     },
     'full': {
       type: 'boolean',
-      description: 'Sync the last 450 days (full GSC history)',
+      description: 'Backfill up to 450 days of available Search Console data',
     },
     ...OUTPUT_ARGS,
     'force': {

@@ -119,7 +119,7 @@ export const scheduleStateSchema = z.object({
 export const inspectionRecordRawSchema = z.object({
   schedule: scheduleStateSchema.optional(),
   nextCheckAfter: z.number().optional(),
-  priority: z.enum(['high', 'medium', 'low']).optional(),
+  priority: z.enum(['high', 'medium', 'low', 'critical', 'elevated', 'normal', 'dormant']).optional(),
   sitemaps: z.string().nullable().optional(),
   referringUrls: z.string().nullable().optional(),
   crawlingUserAgent: z.string().nullable().optional(),
