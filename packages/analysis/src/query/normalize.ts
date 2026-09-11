@@ -187,7 +187,11 @@ function depluralize(token: string): string {
   return singular
 }
 
-const SEPARATOR_RE = /[-_/.@#:+]+/g
+const SEPARATOR_RE = /[-_/.@#:+,;!?()[\]]+/g
+// Quotes never separate words: `"keyword checker` is the same query as
+// `keyword checker` (a searcher who typed one quote), and `don't` must stay one
+// token rather than split into `don t`.
+const QUOTE_RE = /["'\u2018\u2019\u201C\u201D`]+/g
 const WHITESPACE_RE = /\s+/g
 const DIACRITICS_RE = /\p{Diacritic}/gu
 
@@ -197,9 +201,11 @@ const DIACRITICS_RE = /\p{Diacritic}/gu
  * `query_canonical` and detect/repair staleness on a rule change instead of
  * silently mixing old and new keys. v1 = the original ASCII heuristic;
  * v2 adds Unicode folding, the empty-canonical guard, and `pluralize`-based
- * singularization.
+ * singularization. v3 drops quotes and treats sentence punctuation
+ * (`, ; ! ? ( ) [ ]`) as separators, so a stray `"` or `?` no longer keeps a
+ * query out of its canonical bucket.
  */
-export const NORMALIZER_VERSION = 2
+export const NORMALIZER_VERSION = 3
 
 /**
  * Fold to a script-neutral base so accented and full-width variants of the same
@@ -270,6 +276,7 @@ function isOrderSensitive(tokens: readonly string[]): boolean {
 export function normalizeQuery(query: string): string {
   const normalized = foldUnicode(query)
     .toLowerCase()
+    .replace(QUOTE_RE, '')
     .replace(SEPARATOR_RE, ' ')
     .replace(WHITESPACE_RE, ' ')
     .trim()
