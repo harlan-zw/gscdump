@@ -57,6 +57,7 @@ export const GSCDUMP_V1_ROUTE_CATALOG = {
     'partner.teams.members.add': { surface: 'partner', method: 'POST', template: '/teams/{teamId}/members' },
     'partner.teams.members.role.update': { surface: 'partner', method: 'PATCH', template: '/teams/{teamId}/members/{userId}' },
     'partner.teams.members.remove': { surface: 'partner', method: 'DELETE', template: '/teams/{teamId}/members/{userId}' },
+    'partner.sites.tier.update': { surface: 'partner', method: 'PATCH', template: '/sites/{siteId}/tier' },
     'partner.sites.team.update': { surface: 'partner', method: 'PATCH', template: '/sites/{siteId}/team' },
     'partner.teams.catalog.get': { surface: 'partner', method: 'GET', template: '/teams/{teamId}/catalog' },
     'partner.teams.catalog.bind': { surface: 'partner', method: 'POST', template: '/teams/{teamId}/catalog' },

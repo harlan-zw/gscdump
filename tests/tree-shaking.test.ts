@@ -92,7 +92,8 @@ const cases: readonly TreeShakeCase[] = [
   {
     entry: 'packages/contracts/dist/v1/http.mjs',
     exportName: 'createGscdumpV1Protocol',
-    maxBytes: 140_000,
+    // The Site tier operation raises the complete protocol to 141,430 bytes.
+    maxBytes: 142_000,
     allowedImports: ['zod'],
   },
   {

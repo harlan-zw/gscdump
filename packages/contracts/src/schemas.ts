@@ -97,6 +97,8 @@ export const searchAppearanceResponseSchema = z.object({
 }).loose()
 
 export const siteListItemSchema = z.object({
+  tier: z.enum(['free', 'pro']),
+  tierExpiresAt: z.number().nullable(),
   id: z.string(),
   label: z.string(),
   hostname: z.string(),
@@ -494,6 +496,8 @@ export const partnerLifecycleAccountSchema = z.object({
 }).loose()
 
 export const partnerLifecycleSiteSchema = z.object({
+  tier: z.enum(['free', 'pro']),
+  tierExpiresAt: z.number().nullable(),
   siteId: z.string(),
   // Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize
   // into their own catalog namespaces. Nullable only for pre-0029 unbackfilled rows.
@@ -571,6 +575,8 @@ export const gscdumpAvailableSiteSchema = z.object({
 }).loose()
 
 export const gscdumpUserSiteSchema = z.object({
+  tier: z.enum(['free', 'pro']),
+  tierExpiresAt: z.number().nullable(),
   siteId: z.string(),
   siteUrl: z.string(),
   syncStatus: z.enum(['idle', 'pending', 'syncing', 'synced', 'error']),
@@ -598,6 +604,7 @@ export const gscdumpSiteRegistrationSchema = z.object({
 }).loose()
 
 export const registerPartnerSiteSchema = z.object({
+  tier: z.enum(['free', 'pro']).optional(),
   userId: z.string(),
   siteUrl: z.string().min(1),
   requestedUrl: z.string().optional(),

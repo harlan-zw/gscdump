@@ -93,6 +93,8 @@ export interface SearchAppearanceResponse {
 
 export interface SiteListItem {
   id: string
+  tier: 'free' | 'pro'
+  tierExpiresAt: number | null
   label: string
   hostname: string
   propertyType: 'domain' | 'url-prefix'
@@ -546,6 +548,8 @@ export interface GscAddAndVerifyResponse {
 }
 
 export interface GscdumpUserSite {
+  tier: 'free' | 'pro'
+  tierExpiresAt: number | null
   siteId: string
   siteUrl: string
   analyticsSyncStatus?: 'idle' | 'pending' | 'syncing' | 'synced' | 'error'
@@ -969,6 +973,7 @@ export interface UpdatePartnerUserTokensParams {
 
 export interface RegisterPartnerSiteParams {
   userId: string
+  tier?: 'free' | 'pro'
   siteUrl: string
   requestedUrl?: string
   gscPropertyUrl?: string

@@ -755,6 +755,7 @@ export function createGscdumpV1Client(options: CreateGscdumpV1ClientOptions): Gs
     addTeamMember: (input, executeOptions) => execute('partner.teams.members.add' satisfies MethodId<'addTeamMember'>, input, executeOptions),
     updateTeamMemberRole: (input, executeOptions) => execute('partner.teams.members.role.update' satisfies MethodId<'updateTeamMemberRole'>, input, executeOptions),
     removeTeamMember: (input, executeOptions) => execute('partner.teams.members.remove' satisfies MethodId<'removeTeamMember'>, input, executeOptions),
+    updateSiteTier: (input, executeOptions) => execute('partner.sites.tier.update' satisfies MethodId<'updateSiteTier'>, input, executeOptions),
     updateSiteTeam: (input, executeOptions) => execute('partner.sites.team.update' satisfies MethodId<'updateSiteTeam'>, input, executeOptions),
     getTeamCatalog: (input, executeOptions) => execute('partner.teams.catalog.get' satisfies MethodId<'getTeamCatalog'>, input, executeOptions),
     bindTeamCatalog: (input, executeOptions) => execute('partner.teams.catalog.bind' satisfies MethodId<'bindTeamCatalog'>, input, executeOptions),
