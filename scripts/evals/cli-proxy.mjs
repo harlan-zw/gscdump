@@ -8,7 +8,7 @@ import { reserve } from './reservation.mjs'
 const args = process.argv.slice(2)
 const settings = JSON.parse(readFileSync(process.env.EVAL_SETTINGS, 'utf8'))
 const queuedAt = new Date().toISOString()
-const reservation = await reserve(settings.reservations, checkScope(args, settings))
+const reservation = await reserve(settings.reservations, { ...checkScope(args, settings), args })
 const reason = reservation.reason
 const began = Date.now()
 const result = reason

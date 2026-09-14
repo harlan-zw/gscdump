@@ -12,6 +12,8 @@ import { checked, credentialEnvironment, installCandidate, run } from './runtime
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const options = parseOptions(process.argv.slice(2))
+// Freeze proxy code before packaging. Later source edits must not change a running trial.
+const proxySources = new Map(await Promise.all(['cli-proxy.mjs', 'core.mjs', 'cases.mjs', 'policy.mjs', 'reservation.mjs'].map(async file => [file, await readFile(new URL(file, import.meta.url), 'utf8')])))
 const docs = ['packages/cli/skills/gscdump/SKILL.md', 'packages/cli/README.md', 'docs/testing/cli-live-journey.md', 'docs/testing/cli-analysis-journey.md']
 const documents = await Promise.all(docs.map(async path => ({ path, text: await readFile(join(root, path), 'utf8') })))
 const inventory = documents.flatMap(doc => commands(doc.text).map(command => ({ source: doc.path, ...command })))
@@ -99,9 +101,9 @@ async function context(id, { seeded = false, cloud = false, authenticated = true
   await writeFile(trace, '', { mode: 0o600 })
   await writeFile(settings, JSON.stringify({ cli, env, site, start, end, trace, secrets, workspace, allowLive: id === 'docs', tables: id === 'analysis' ? 'pages,queries,page_queries' : 'pages', reservations: join(directory, 'reservations') }), { mode: 0o600 })
   for (const file of ['core.mjs', 'cases.mjs', 'policy.mjs', 'reservation.mjs'])
-    await writeFile(join(bin, file), await readFile(new URL(file, import.meta.url)))
+    await writeFile(join(bin, file), proxySources.get(file))
   const proxy = join(bin, 'gscdump')
-  await writeFile(proxy, `#!${process.execPath}\n${await readFile(new URL('./cli-proxy.mjs', import.meta.url), 'utf8')}`, { mode: 0o700 })
+  await writeFile(proxy, `#!${process.execPath}\n${proxySources.get('cli-proxy.mjs')}`, { mode: 0o700 })
   return { directory, workspace, config, setup, trace, store: join(directory, 'store'), env: { ...env, PATH: `${bin}:${credentials.PATH}`, EVAL_SETTINGS: settings, EVAL_SITE: site, EVAL_START: start, EVAL_END: end } }
 }
 async function calls(ctx) {
@@ -138,6 +140,7 @@ async function verifyExport(ctx, expected) {
   return { rows: exported.length, pages: totals.size }
 }
 try {
+  await save('proxy-source.json', Object.fromEntries(proxySources))
   const sourcePaths = ['packages/cli', 'scripts/evals', 'docs/testing']
   const diff = await checked('git', ['diff', 'HEAD', '--', ...sourcePaths], { cwd: root })
   const untracked = (await checked('git', ['ls-files', '--others', '--exclude-standard', '--', ...sourcePaths], { cwd: root })).trim().split('\n').filter(Boolean)
@@ -320,8 +323,11 @@ try {
           if (kind !== 'negative')
             requireGoogle()
           const ctx = await context(id, { seeded: test.seeded, authenticated: kind !== 'negative' })
-          if (test.installSkill !== false)
+          if (test.installSkill !== false) {
             await ctx.setup(['skill', 'install', '--target', join(ctx.workspace, '.opencode/skills')])
+            const installed = await readFile(join(ctx.workspace, '.opencode/skills/gscdump/SKILL.md'), 'utf8')
+            assert.equal(installed, documents[0].text, 'The installed skill changed after the run started. Start a new run.')
+          }
           const data = join(ctx.directory, 'xdg-data')
           const config = join(ctx.directory, 'xdg-config')
           await mkdir(join(data, 'opencode'), { recursive: true })

@@ -32,7 +32,7 @@ export async function reserve(directory, request, maxCalls = 20) {
       reason = 'The trial reached its CLI command limit.'
     if (request.sync && prior.some(call => call.sync && call.reason === null))
       reason = 'Only one sync is allowed per trial.'
-    const reservation = { id: randomUUID(), reservedAt: new Date().toISOString(), sync: request.sync, reason }
+    const reservation = { id: randomUUID(), reservedAt: new Date().toISOString(), args: request.args, sync: request.sync, reason }
     await appendFile(journal, `${JSON.stringify(reservation)}\n`, { mode: 0o600 })
     return reservation
   }

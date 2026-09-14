@@ -19,12 +19,14 @@ it('reserves at most one sync across real concurrent processes', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'gscdump-reservation-'))
   try {
     const module = new URL('./reservation.mjs', import.meta.url).href
-    const script = `import { reserve } from ${JSON.stringify(module)}; const result = await reserve(process.argv[1], {sync:true,reason:null}, 20); console.log(JSON.stringify(result))`
+    const script = `import { reserve } from ${JSON.stringify(module)}; const result = await reserve(process.argv[1], {sync:true,reason:null,args:['sync']}, 20); console.log(JSON.stringify(result))`
     const results = await Promise.all(Array.from({ length: 8 }, () => run(process.execPath, ['--input-type=module', '-e', script, directory])))
     for (const result of results)
       assert.equal(result.code, 0, result.stderr)
     assert.equal(results.filter(result => JSON.parse(result.stdout).reason === null).length, 1)
-    assert.equal((await readFile(join(directory, 'reservations.jsonl'), 'utf8')).trim().split('\n').length, 8)
+    const journal = (await readFile(join(directory, 'reservations.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+    assert.equal(journal.length, 8)
+    assert(journal.every(entry => entry.args[0] === 'sync'))
   }
   finally {
     await rm(directory, { recursive: true, force: true })
