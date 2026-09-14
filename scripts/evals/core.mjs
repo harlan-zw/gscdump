@@ -81,17 +81,36 @@ export function gradeAgent({ calls, loaded, kind, text }) {
 }
 
 export function gradeAnswer(text, expected) {
-  const json = text.match(/```(?:json)?[ \t]*\r?\n([\s\S]*?)```/)?.[1] ?? text.trim()
-  try {
-    const value = JSON.parse(json)
-    const rows = Array.isArray(value) ? value : value.data
-    assert(Array.isArray(rows), 'The answer must contain JSON rows.')
-    compareRows(pageMetrics(rows), pageMetrics(expected))
-    return { passed: true, failures: [] }
+  const blocks = []
+  let capture = null
+  for (const line of text.split('\n')) {
+    if (capture === null) {
+      if (line.startsWith('```'))
+        capture = []
+      continue
+    }
+    if (line.startsWith('```')) {
+      blocks.push(capture.join('\n'))
+      capture = null
+      continue
+    }
+    capture.push(line)
   }
-  catch (error) {
-    return { passed: false, failures: [`The final JSON answer does not preserve queried page metrics: ${error.message}`] }
+  const candidates = blocks.length > 0 ? blocks : [text.trim()]
+  let failure
+  for (const json of candidates) {
+    try {
+      const value = JSON.parse(json)
+      const rows = Array.isArray(value) ? value : value.data
+      assert(Array.isArray(rows), 'The answer must contain JSON rows.')
+      compareRows(pageMetrics(rows), pageMetrics(expected))
+      return { passed: true, failures: [] }
+    }
+    catch (error) {
+      failure = error
+    }
   }
+  return { passed: false, failures: [`The final JSON answer does not preserve queried page metrics: ${failure.message}`] }
 }
 
 export function pageMetrics(rows) {

@@ -1,4 +1,5 @@
 import type { ManifestEntry, Watermark } from '../local-store'
+import process from 'node:process'
 import { filesystemStats } from '@gscdump/engine/filesystem'
 import { defineCommand } from 'citty'
 import { decodeSiteId, parseGscSiteUrl } from 'gscdump'
@@ -9,7 +10,7 @@ import { barColumn } from '../render/charts'
 import { renderTable, textLines } from '../render/layout'
 import { formatMetric } from '../render/metrics'
 import { terminalOutputOptions } from '../render/terminal'
-import { applyOutputMode, displayPath, formatAge, OUTPUT_ARGS } from '../utils'
+import { applyOutputMode, displayPath, formatAge, logger, OUTPUT_ARGS } from '../utils'
 
 export const statsCommand = defineCommand({
   meta: {
@@ -28,7 +29,14 @@ export const statsCommand = defineCommand({
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
     const allEntries = await store.engine.listAll({ userId: store.userId })
+    const knownSites = [...new Set(allEntries
+      .filter(entry => entry.retiredAt === undefined && entry.siteId !== undefined)
+      .map(entry => entry.siteId))]
     const siteId = args.site ? store.siteIdFor(args.site) : undefined
+    if (args.site && !json && !knownSites.includes(siteId)) {
+      logger.error(`No local data for --site=${args.site}. Known site IDs: ${knownSites.length === 0 ? '(none — run \`gscdump sync\` first)' : knownSites.join(', ')}`)
+      process.exit(1)
+    }
     const selectedEntries = siteId === undefined
       ? allEntries
       : allEntries.filter(entry => entry.siteId === siteId)
@@ -48,7 +56,7 @@ export const statsCommand = defineCommand({
       const payload = {
         dataDir: store.dataDir,
         siteId: siteId ?? null,
-        knownSites: [...new Set(allEntries.filter(entry => entry.retiredAt === undefined).map(entry => entry.siteId).filter(Boolean))],
+        knownSites,
         nextCommand: `gscdump sync${args.site ? ` --site '${String(args.site).replaceAll('\'', '\'\\\'\'')}'` : ''} --status --json`,
         disk,
         tables: perTable.map(({ table, live, retired }) => ({
