@@ -24,7 +24,20 @@ EVAL_SITE=sc-domain:example.com node --env-file=.env.test scripts/evals/run.mjs
 EVAL_SITE=sc-domain:example.com node --env-file=.env.test scripts/evals/run.mjs --agents
 ```
 
-`--agents` uses three trials per scenario. `--trials 1` allows a cheaper development run.
+`--agents` uses the smoke suite and three trials per scenario.
+Select cases before spending more model runs:
+
+```sh
+EVAL_SITE=sc-domain:example.com node --env-file=.env.test scripts/evals/run.mjs --agents --suite extended --trials 1 --no-docs
+EVAL_SITE=sc-domain:example.com node --env-file=.env.test scripts/evals/run.mjs --agents --case syntax,recovery --trials 1 --no-docs
+EVAL_SITE=sc-domain:example.com node --env-file=.env.test scripts/evals/run.mjs --agents --suite holdout --trials 1 --no-docs
+```
+
+`--no-docs` skips service journeys. It does not replace their previous results with passes.
+The smoke suite contains stored queries, empty Stores, and consent requests.
+The extended suite covers implicit activation, option syntax, expected recovery, and two negative prompts.
+Reserve the holdout suite for a chosen candidate.
+`--trials 1` allows a cheaper development run.
 The fixed model applies to the main agent and helper model settings.
 Subagent tools are disabled. Trials stop after 12 agent steps or four minutes.
 Each trial allows at most 20 CLI calls and one bounded sync.
@@ -62,9 +75,12 @@ Clicks and impressions must match exactly after grouping.
 The bounded comparison requires fewer than 1,000 page rows.
 
 Agent queries require skill activation, successful authentication checks, and correct real query results.
-The final answer must contain JSON with the same page clicks and impressions.
+The final answer must preserve the complete CLI JSON response, including metadata and every metric.
+Only object-key order and row order may differ. Earlier progress messages do not count as the final answer.
 Additional prose still needs review. The JSON grader does not validate every natural-language claim.
-The empty Store scenario also requires a coverage check.
+The empty Store scenario requires a coverage check. One useful check is enough.
+Real journeys also cover a missing middle date, a covered empty filter, and export paths containing spaces.
+The analysis journey runs an Analyzer and a Report over real multi-dimension rows.
 The consent scenario fails if the agent attempts a deletion, even when the harness blocks it.
 It also fails if an explanation triggers traffic queries or syncs.
 Real CLI recovery checks cover missing tables, completed syncs, skipped dates, and empty retry plans.
@@ -73,7 +89,9 @@ It does not fabricate CLI results.
 OpenCode permission controls are defence in depth, not an operating-system sandbox.
 Run untrusted candidate skills inside a disposable machine.
 
-A failed command remains a failure if the agent later recovers.
+The recovery case expects one missing-coverage error, one bounded sync, and a successful retry.
+It can pass task correctness while reporting `cleanExecution: false`. Unexpected errors still fail.
+Consent cases compare Store file hashes and require a confirmation request. Their wording also needs human review.
 A skipped or blocked case never counts as passed.
 The process exits nonzero when a requested service check fails or lacks credentials.
 The ordinary unit test suite does not invoke paid agent sessions or live services.
@@ -91,7 +109,10 @@ A smaller dataset produces a blocked result, not a pass.
 The agent checks evaluate execution and selected process requirements.
 They do not automatically judge every sentence in the final answer.
 The consent wording check is a narrow heuristic. Review its saved transcript.
-Skill discovery under implicit requests and skill-disabled comparisons remain future coverage.
+Implicit requests test skill discovery. Two unrelated prompts test unwanted activation.
+`--suite baseline` repeats the implicit query without installing the skill.
+Compare it with `--case implicit-query` on the same candidate and model.
+A single pair suggests a difference. It does not establish statistical reliability.
 
 ## Evidence
 
@@ -124,13 +145,17 @@ Scheduling remains disabled until service credentials and test Sites are configu
 ## Agent waste and issues
 
 Each agent trial records all tool events and CLI calls, including failures and denied operations.
-Calls include timestamps and elapsed time.
+Calls include queue, start, and finish timestamps.
+Atomic reservations prevent concurrent processes from exceeding the one-sync limit.
+Reservation journals expose calls that never completed.
 The suite flags exact retries, repeated syncs, failed commands, empty sync responses, and unnecessary traffic queries before consent.
 It records help lookups as context, without automatically treating them as waste.
 Permission failures remain separate from CLI defects.
 
-`findings.md` contains evidence and a suggested investigation for each detected issue.
-`waste.json` contains the same findings as structured data.
+`regrades/<timestamp>-<digest>/findings.md` contains evidence and suggested investigations.
+The adjacent `report.json` records separate process and answer grades.
+Each regrade links the original report and input digests. It never overwrites previous grades.
+Evaluator digests identify the grader, cases, runner, proxy, and reservation code.
 Review transcripts for issues beyond these detectors, especially inaccurate explanations.
 
 Rebuild findings from existing evidence without another model run:

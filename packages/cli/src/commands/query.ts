@@ -313,7 +313,12 @@ export const queryCommand = defineCommand({
       needsStore: !args.live,
       interactive: Boolean(args.interactive),
     })
-    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
+    const hint = args.site ? String(args.site) : ctx.config.defaultSite
+    // An exact local Site identifies files already owned by this Store.
+    // Only live reads and shorthand discovery need Google's Site listing.
+    const siteUrl = !args.live && hint && /^(?:sc-domain:\S+|https?:\/\/\S+)$/.test(hint)
+      ? hint
+      : await ctx.resolveSite(hint)
 
     if (args.live) {
       if (args.explain) {
@@ -578,13 +583,27 @@ async function assertRangeCovered(
     ...(searchType !== undefined ? { searchType } : {}),
   })
   const wm = watermarks[0]
-  if (wm && startDate >= wm.oldestDateSynced && endDate <= wm.newestDateSynced)
+  const states = await store.engine.getSyncStates({
+    userId: store.userId,
+    siteId: store.siteIdFor(siteUrl),
+    table,
+    searchType: searchType ?? 'web',
+    state: 'done',
+  })
+  const completed = new Set(states.map(state => state.date))
+  const missingDates: string[] = []
+  for (let date = Date.parse(startDate); date <= Date.parse(endDate); date += 86400_000) {
+    const day = new Date(date).toISOString().slice(0, 10)
+    if (!completed.has(day))
+      missingDates.push(day)
+  }
+  if (missingDates.length === 0)
     return
   const nextArgs = ['sync', '--site', siteUrl, '--start', startDate, '--end', endDate, '--tables', table, '--types', searchType ?? 'web', '--json']
   const nextCommand = `gscdump ${nextArgs.map(value => /^[\w:./=-]+$/.test(value) ? value : `'${value.replaceAll('\'', '\'\\\'\'')}'`).join(' ')}`
   const message = !wm
     ? `No data synced for ${siteUrl} / ${table}.`
-    : `Requested dates exceed Store coverage (${wm.oldestDateSynced} to ${wm.newestDateSynced}).`
+    : `Store coverage is incomplete for ${missingDates.length} requested dates.`
   if (json) {
     const available = await store.engine.getWatermarks({ userId: store.userId, siteId: store.siteIdFor(siteUrl) })
     console.log(JSON.stringify({ error: {
@@ -593,6 +612,7 @@ async function assertRangeCovered(
       siteUrl,
       table,
       range: { start: startDate, end: endDate },
+      missingDates,
       watermarks: watermarks.filter(w => w.table === table),
       availableTables: available.map(w => ({ ...w, dimensions: tableDimensions(w.table) })),
       nextArgs,

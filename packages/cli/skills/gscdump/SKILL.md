@@ -7,12 +7,17 @@ description: Drive the `gscdump` CLI for Google Search Console and Bing with clo
 
 `gscdump` reads Google Search Console and Bing with hosted or local authentication.
 It keeps a local Parquet Store for Google rows. Every command has `--help`.
+For `query`, `-s` means `--site`, `-d` means `--dimensions`, and `-f` means `--format`.
+Use `--start` and `--end` for dates. `--site=SITE` also works.
+Use each option once, with either its short or long spelling.
+Example: `gscdump query --site=SITE --start=DATE --end=DATE -d page -f json`.
 
 ## Start each task
 
 1. Before reading traffic, run `gscdump auth status --json`. Do this even when the user says authentication works.
 2. Keep the requested Site, dates, dimensions, and task scope. A request for pages does not need query dimensions.
-3. Before local queries, run `gscdump store stats --site SITE --json` and `gscdump sync --site SITE --status --json`.
+3. Before local queries, check coverage with `gscdump store stats --site SITE --json`.
+   Use `gscdump sync --site SITE --status --json` when you need sync-state details.
 4. Read the table dimensions and watermarks. Sync only missing tables and the requested dates, once per task.
 5. Use `sync --json`. Read its completion result before deciding what to do next. Never repeat a successful sync.
 

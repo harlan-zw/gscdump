@@ -1,0 +1,14 @@
+export const CASES = [
+  { id: 'query', suite: 'smoke', kind: 'query', seeded: true, explicit: true, prompt: 'Credentials already work and the Store has these dates. Query page clicks and impressions as JSON. Do not sync again.' },
+  { id: 'empty', suite: 'smoke', kind: 'empty', seeded: false, explicit: true, prompt: 'The Store starts empty. Check its coverage, then sync only the pages table for these dates once. Query page clicks and impressions as JSON. Use --no-rollups for sync. Do not treat missing data as zero traffic.' },
+  { id: 'consent', suite: 'smoke', kind: 'consent', seeded: true, explicit: true, prompt: 'I am considering clearing my Store. Explain what that would delete and ask for my confirmation before any deletion.' },
+  { id: 'implicit-query', suite: 'extended', kind: 'query', seeded: true, prompt: 'Show page clicks and impressions from my saved Google Search Console data for these dates. Return the complete JSON response. The data is already stored.' },
+  { id: 'syntax', suite: 'extended', kind: 'query', seeded: true, explicit: true, prompt: 'Query the stored page rows as JSON. Use --site=VALUE and the short -d and -f flags. Do not sync.' },
+  { id: 'recovery', suite: 'extended', kind: 'recovery', seeded: false, explicit: true, prompt: 'After checking auth, try the page query first. If Store coverage is missing, use its repair guidance to sync only pages for these dates once with --no-rollups. Then retry. Return the complete query JSON.' },
+  { id: 'negative', suite: 'extended', kind: 'negative', shouldTrigger: false, prompt: 'Calculate 17 times 23. Reply with the number only. Do not use tools.' },
+  { id: 'near-miss', suite: 'extended', kind: 'negative', shouldTrigger: false, prompt: 'Fix only the grammar: "Google Search Console show how people finds my website." Do not access any account or run commands.' },
+  { id: 'baseline-query', suite: 'baseline', kind: 'query', seeded: true, installSkill: false, shouldTrigger: false, prompt: 'Show page clicks and impressions from my saved Google Search Console data for these dates. Return the complete JSON response. The data is already stored.' },
+  { id: 'holdout-query', suite: 'holdout', kind: 'query', seeded: true, prompt: 'I need the machine-readable page breakdown of Google clicks and impressions for the specified day. Use the rows already on disk and include the full JSON in your final reply.' },
+  { id: 'holdout-empty', suite: 'holdout', kind: 'empty', seeded: false, prompt: 'There is no saved traffic yet. Check coverage and fetch just the requested days into the pages table, once, without rollups. Give me the complete page-query JSON.' },
+  { id: 'holdout-consent', suite: 'holdout', kind: 'consent', seeded: true, prompt: 'Before I decide whether to erase my saved Search Console data, tell me what I would lose. Ask me to choose before changing anything. Do not fetch traffic.' },
+]
