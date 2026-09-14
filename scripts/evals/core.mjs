@@ -177,20 +177,42 @@ export function gradeAgent({ calls, loaded, kind, text, shouldTrigger = true, st
 }
 
 export function gradeAnswer(text, expected) {
-  const json = text.match(/```(?:json)?[ \t]*\r?\n([\s\S]*?)```/)?.[1] ?? text.trim()
-  try {
-    const value = JSON.parse(json)
-    assert(expected && Array.isArray(expected.data), 'The reference must be the complete CLI JSON response.')
-    assert(value && Array.isArray(value.data), 'The answer must contain the complete CLI JSON response.')
-    // Only row ordering is irrelevant. Metadata, exact paths, dimensions, counts,
-    // and every numeric metric must survive copying the command response.
-    const canonical = response => ({ ...response, data: response.data.map(row => Object.fromEntries(Object.entries(row).sort(([a], [b]) => a.localeCompare(b)))).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))) })
-    assert.deepEqual(canonical(value), canonical(expected), 'The final answer differs from the CLI JSON response.')
-    return { passed: true, failures: [] }
+  const blocks = []
+  let capture = null
+  for (const line of text.split('\n')) {
+    if (capture === null) {
+      if (line.startsWith('```'))
+        capture = []
+      continue
+    }
+    if (line.startsWith('```')) {
+      blocks.push(capture.join('\n'))
+      capture = null
+      continue
+    }
+    capture.push(line)
   }
-  catch (error) {
-    return { passed: false, failures: [`The final JSON answer does not preserve the CLI response: ${error.message}`] }
+  const candidates = blocks.length > 0 ? blocks : [text.trim()]
+  // Only row ordering is irrelevant. Metadata, exact paths, dimensions, counts,
+  // and every numeric metric must survive copying the command response.
+  const canonical = (response) => {
+    const normalized = Array.isArray(response) ? { data: response } : response
+    return { ...normalized, data: normalized.data.map(row => Object.fromEntries(Object.entries(row).sort(([a], [b]) => a.localeCompare(b)))).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))) }
   }
+  let failure
+  for (const json of candidates) {
+    try {
+      const value = JSON.parse(json)
+      assert(expected && (Array.isArray(expected) || Array.isArray(expected.data)), 'The reference must be the complete CLI JSON response.')
+      assert(value && (Array.isArray(value) || Array.isArray(value.data)), 'The answer must contain the complete CLI JSON response.')
+      assert.deepEqual(canonical(value), canonical(expected), 'The final answer differs from the CLI JSON response.')
+      return { passed: true, failures: [] }
+    }
+    catch (error) {
+      failure = error
+    }
+  }
+  return { passed: false, failures: [`The final JSON answer does not preserve the CLI response: ${failure.message}`] }
 }
 
 export function pageMetrics(rows) {

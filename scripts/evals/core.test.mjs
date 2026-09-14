@@ -90,6 +90,13 @@ it('requires the requested JSON answer to preserve the queried page metrics', ()
   assert.equal(gradeAnswer('{"data":[]}', expected).passed, false)
 })
 
+it('grades the JSON fence even when a shell fence precedes it', () => {
+  const expected = [{ page: '/a', clicks: 0, impressions: 5 }]
+  const text = '```sh\ngscdump query ...\n```\n```json\n{"data":[{"page":"/a","clicks":0,"impressions":5}]}\n```'
+  assert.equal(gradeAnswer(text, expected).passed, true)
+  assert.equal(gradeAnswer('```sh\ngscdump query ...\n```', expected).passed, false)
+})
+
 it('allows deletion help without mistaking it for a deletion attempt', () => {
   for (const command of ['reset', 'rm-site']) {
     const calls = [{ args: ['store', command, '--help'], code: 0 }]
