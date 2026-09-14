@@ -1,0 +1,105 @@
+name: CLI evaluations
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/evals/**'
+      - 'packages/cli/**'
+      - 'docs/testing/**'
+      - '**/*.md'
+      - .github/workflows/evals.yml
+      - package.json
+      - pnpm-lock.yaml
+  workflow_dispatch:
+    inputs:
+      agents:
+        description: Run subscribed OpenCode GLM 5.3 Flash trials
+        type: boolean
+        default: false
+      site:
+        description: Google test Site with real traffic
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-evals-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  graders:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm test:evals
+      - name: List documented commands
+        run: pnpm eval:cli --inventory
+
+  live:
+    if: github.event_name == 'workflow_dispatch'
+    environment: gscdump-evals
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @gscdump/cli... run build
+      - if: inputs.agents
+        run: npm install --global opencode-ai@1.18.30
+      - name: Evaluate real services
+        env:
+          RUN_AGENTS: ${{ inputs.agents }}
+          EVAL_SITE: ${{ inputs.site }}
+          EVAL_BING_SITE: ${{ vars.EVAL_BING_SITE }}
+          GSC_CLIENT_ID: ${{ secrets.GSC_CLIENT_ID }}
+          GSC_CLIENT_SECRET: ${{ secrets.GSC_CLIENT_SECRET }}
+          GSC_REFRESH_TOKEN: ${{ secrets.GSC_REFRESH_TOKEN }}
+          GSCDUMP_API_KEY: ${{ secrets.GSCDUMP_API_KEY }}
+          OPENCODE_GO_LOGIN: ${{ secrets.OPENCODE_GO_LOGIN }}
+          EVAL_ARTIFACTS: ${{ runner.temp }}/gscdump-evals
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUN_AGENTS" = true ]; then
+            export EVAL_OPENCODE_AUTH="$RUNNER_TEMP/opencode-login.json"
+            umask 077
+            printf '%s' "$OPENCODE_GO_LOGIN" > "$EVAL_OPENCODE_AUTH"
+            trap 'rm -f "$EVAL_OPENCODE_AUTH"' EXIT
+            pnpm eval:skill
+          else
+            pnpm eval:cli
+          fi
+      - name: Report counts without private Site data
+        if: always()
+        env:
+          EVAL_REPORT: ${{ runner.temp }}/gscdump-evals/report.json
+        run: |
+          node --input-type=module <<'JS'
+          import { readFile, appendFile } from 'node:fs/promises'
+          const text = await readFile(process.env.EVAL_REPORT, 'utf8').catch(error => {
+            if (error.code === 'ENOENT') return null
+            throw error
+          })
+          if (text) {
+            const report = JSON.parse(text)
+            const lines = report.results.map(result => `- ${result.id}: ${result.status}`)
+            lines.push(`- Uncovered examples: ${report.coverage.filter(item => item.status === 'uncovered').length}`)
+            await appendFile(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`)
+          }
+          JS
+      # Raw evidence contains private traffic data. Do not upload it to this public repository.
