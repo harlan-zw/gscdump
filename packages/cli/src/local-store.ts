@@ -6,6 +6,7 @@
 
 import type { DataSource, StorageEngine } from '@gscdump/engine/contracts'
 import { createNodeHarness } from '@gscdump/engine/node'
+import { SCHEMAS } from '@gscdump/engine/schema'
 
 export type {
   DataSource,
@@ -23,6 +24,12 @@ export type {
 export type { GscApiRow } from '@gscdump/engine/ingest'
 export { assembleDatesRow, TABLE_DIMS, transformGscRow } from '@gscdump/engine/ingest'
 export { allTables, inferTable } from '@gscdump/engine/schema'
+
+export function tableDimensions(table: keyof typeof SCHEMAS): string[] {
+  return SCHEMAS[table].columns
+    .map(column => column.name === 'url' ? 'page' : column.name === 'search_appearance' ? 'searchAppearance' : column.name)
+    .filter(name => ['page', 'query', 'date', 'hour', 'country', 'device', 'searchAppearance'].includes(name))
+}
 
 /**
  * CLI-facing store facade. Narrower than `NodeHarness` — exposes only the

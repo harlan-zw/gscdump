@@ -319,12 +319,6 @@ export const syncCommand = defineCommand({
       }
       types.push(t)
     }
-    if (types.length === 0) {
-      logger.warn(
-        `All requested types (${requestedTypes.join(', ')}) are marked empty for this site. Pass --force-types to re-probe.`,
-      )
-      return
-    }
     if (skippedTypes.length > 0 && !quiet) {
       logger.info(
         `Skipping ${skippedTypes.join(', ')} (marked empty for this site; pass --force-types to re-probe).`,
@@ -352,6 +346,29 @@ export const syncCommand = defineCommand({
       process.exit(1)
     }
 
+    const printCompletion = async (status: 'completed' | 'failed' | 'skipped', totals: Record<string, { rows: number, skipped: number, failed: number }>, reason?: string, rollupError?: string): Promise<void> => {
+      if (!json)
+        return
+      console.log(JSON.stringify({
+        status,
+        ...(reason ? { reason } : {}),
+        siteUrl,
+        range: { start: startDate, end: endDate },
+        tables,
+        types,
+        skippedTypes,
+        totals,
+        watermarks: await store.engine.getWatermarks({ userId: store.userId, siteId }),
+        ...(rollupError ? { rollupError } : {}),
+      }, null, 2))
+    }
+    if (types.length === 0) {
+      if (!quiet)
+        logger.warn(`All requested types are marked empty. Pass --force-types to check them again.`)
+      await printCompletion('skipped', {}, 'empty-types')
+      return
+    }
+
     // --retry-failed shrinks the date list to exactly the dates currently in
     // `failed` state for the requested (table, type) jobs. Force-mode is
     // implied; the loop will re-run those dates and overwrite their state.
@@ -371,7 +388,9 @@ export const syncCommand = defineCommand({
       }
       dates = dates.filter(d => failedSet.has(d))
       if (dates.length === 0) {
-        logger.success('No failed dates in range — nothing to retry.')
+        if (!quiet)
+          logger.success('No failed dates in range. Nothing to retry.')
+        await printCompletion('skipped', {}, 'no-failed-dates')
         return
       }
       // Force-mode is implied so the syncer overwrites the existing `failed`
@@ -532,6 +551,7 @@ export const syncCommand = defineCommand({
     // reflect the sync we just ran. Skipped on --no-rollups, on zero-row syncs
     // (nothing to aggregate), and on full-failure runs (would read stale data).
     const noRollups = Boolean(args['no-rollups'])
+    let rollupError: string | undefined
     const anyRowsSynced = Object.values(totals).some(t => t.rows > 0)
     if (!noRollups && anyRowsSynced) {
       if (!quiet)
@@ -554,6 +574,7 @@ export const syncCommand = defineCommand({
         ctx: { userId: store.userId, siteId },
         defs: DEFAULT_ROLLUPS,
       }).catch((err: Error) => {
+        rollupError = err.message
         logger.warn(`Rollup rebuild failed: ${err.message}`)
         return [] as Awaited<ReturnType<typeof rebuildRollups>>
       })
@@ -564,7 +585,8 @@ export const syncCommand = defineCommand({
       }
     }
 
-    if (anyFailed)
+    await printCompletion(anyFailed || rollupError ? 'failed' : 'completed', totals, undefined, rollupError)
+    if (anyFailed || rollupError)
       process.exit(1)
   },
 })

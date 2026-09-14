@@ -2,6 +2,7 @@ import type { CliRuntime } from './runtime'
 import process from 'node:process'
 import { defineCommand, runMain } from 'citty'
 import { parseAuthMode } from './auth-state'
+import { checkCliArgs } from './cli-args'
 import { CLI_SUBCOMMANDS } from './command-registry'
 import { applyProfileFromCli } from './commands/profile-selection'
 import { loadEnvFromCwd } from './env-file'
@@ -105,6 +106,9 @@ export async function runCli(opts: RunCliOptions = {}): Promise<void> {
       loadEnvFromCwd()
     const rawArgs = prepareCliArgs(input)
     runtime.rawArgs = [...rawArgs]
+    const argumentError = await checkCliArgs(main, rawArgs)
+    if (argumentError)
+      throw new Error(argumentError)
     await withConfiguredOutput(() => runMain(main, { rawArgs }))
   })
 }

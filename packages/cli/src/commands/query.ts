@@ -13,7 +13,7 @@ import { queryCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
-import { allTables, inferTable } from '../local-store'
+import { allTables, inferTable, tableDimensions } from '../local-store'
 import { asRecord, columnsFor } from '../render/analysis'
 import { renderTable } from '../render/layout'
 import { renderQuery } from '../render/query'
@@ -375,7 +375,7 @@ export const queryCommand = defineCommand({
       console.log(JSON.stringify({ siteUrl, table, state }, null, 2))
       return
     }
-    await assertRangeCovered(store, siteUrl, table, startDate, endDate, searchType)
+    await assertRangeCovered(store, siteUrl, table, startDate, endDate, format === 'json', searchType)
     const profiling = Boolean(args.profile)
     const probe = profiling ? collectSpans() : undefined
     const result = await store.engine.query(
@@ -568,6 +568,7 @@ async function assertRangeCovered(
   table: TableName,
   startDate: string,
   endDate: string,
+  json: boolean,
   searchType?: SearchType,
 ): Promise<void> {
   const watermarks = await store.engine.getWatermarks({
@@ -577,18 +578,29 @@ async function assertRangeCovered(
     ...(searchType !== undefined ? { searchType } : {}),
   })
   const wm = watermarks[0]
-  if (!wm) {
-    logger.error(`No data synced for ${siteUrl} / ${table}. Run \`gscdump sync\` first, or pass --live.`)
-    process.exit(1)
+  if (wm && startDate >= wm.oldestDateSynced && endDate <= wm.newestDateSynced)
+    return
+  const nextArgs = ['sync', '--site', siteUrl, '--start', startDate, '--end', endDate, '--tables', table, '--types', searchType ?? 'web', '--json']
+  const nextCommand = `gscdump ${nextArgs.map(value => /^[\w:./=-]+$/.test(value) ? value : `'${value.replaceAll('\'', '\'\\\'\'')}'`).join(' ')}`
+  const message = !wm
+    ? `No data synced for ${siteUrl} / ${table}.`
+    : `Requested dates exceed Store coverage (${wm.oldestDateSynced} to ${wm.newestDateSynced}).`
+  if (json) {
+    const available = await store.engine.getWatermarks({ userId: store.userId, siteId: store.siteIdFor(siteUrl) })
+    console.log(JSON.stringify({ error: {
+      code: 'STORE_RANGE_NOT_COVERED',
+      message,
+      siteUrl,
+      table,
+      range: { start: startDate, end: endDate },
+      watermarks: watermarks.filter(w => w.table === table),
+      availableTables: available.map(w => ({ ...w, dimensions: tableDimensions(w.table) })),
+      nextArgs,
+      nextCommand,
+    } }, null, 2))
   }
-  if (endDate > wm.newestDateSynced) {
-    logger.error(`Requested end=${endDate} is newer than last sync (${wm.newestDateSynced}). Run \`gscdump sync\` first, or pass --live.`)
-    process.exit(1)
-  }
-  if (startDate < wm.oldestDateSynced) {
-    logger.error(`Requested start=${startDate} is older than first sync (${wm.oldestDateSynced}). Run \`gscdump sync --start=${startDate}\` first, or pass --live.`)
-    process.exit(1)
-  }
+  logger.error(`${message} Run ${nextCommand}, or pass --live.`)
+  process.exit(1)
 }
 
 async function runRawSqlMode(opts: {
