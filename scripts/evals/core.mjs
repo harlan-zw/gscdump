@@ -73,6 +73,8 @@ export function compareRows(left, right) {
 
 export function invocation(args) {
   const options = Object.fromEntries(['start', 'end', 'tables', 'types', 'config-dir', 'profile', 'sql', 'data-dir', 'api-key', 'api-root', 'out', 'type', 'limit', 'query', 'page', 'country', 'device', 'datasets', 'agent', 'target'].map(name => [name, { type: 'string' }]))
+  for (const name of ['status', 'dry-run', 'live', 'json', 'explain', 'version', 'rollups', 'retry-failed', 'force', 'all-sites', 'interactive'])
+    options[name] = { type: 'boolean' }
   Object.assign(options, {
     site: { type: 'string', short: 's' },
     dimensions: { type: 'string', short: 'd' },
@@ -93,6 +95,18 @@ export function invocation(args) {
   for (const [name, option] of Object.entries(options)) {
     if (option.type === 'string' && name in parsed.values && typeof parsed.values[name] !== 'string')
       return { command: parsed.positionals[0], subcommand: parsed.positionals[1], values: parsed.values, help: false, duplicateOptions: [], parseError: `Option --${name} needs a value.` }
+  }
+  // Match Citty's explicit boolean values and negative-flag precedence.
+  for (const [name, value] of Object.entries(parsed.values)) {
+    if (options[name]?.type === 'boolean' && typeof value === 'string')
+      parsed.values[name] = value !== 'false'
+  }
+  for (const token of parsed.tokens) {
+    if (token.kind === 'option' && token.name.startsWith('no-')) {
+      const name = token.name.slice(3)
+      if (options[name]?.type === 'boolean')
+        parsed.values[name] = false
+    }
   }
   const names = parsed.tokens.filter(token => token.kind === 'option').map(token => token.name)
   return { command: parsed.positionals[0], subcommand: parsed.positionals[1], values: parsed.values, help: parsed.values.help === true, duplicateOptions: names.filter((name, i) => names.indexOf(name) !== i) }

@@ -30,3 +30,10 @@ it('reserves at most one sync across real concurrent processes', async () => {
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+it('counts a sync when boolean flags explicitly disable status or dry-run', () => {
+  const settings = { site: 'sc-domain:example.com', start: '2026-08-01', end: '2026-08-01', workspace: '/tmp/eval' }
+  const args = ['sync', '--site', settings.site, '--start', settings.start, '--end', settings.end, '--tables', 'pages']
+  for (const flags of [['--status=false'], ['--dry-run=false'], ['--status', '--no-status']])
+    assert.equal(checkScope([...args, ...flags], settings).sync, true)
+})
