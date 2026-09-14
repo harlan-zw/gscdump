@@ -455,16 +455,20 @@ export async function icebergAppendRetrying(
     snapshotProperties: { ...(args as { snapshotProperties?: Record<string, string> }).snapshotProperties, [APPEND_ID_SUMMARY_KEY]: appendId },
   } as IcebergAppendArgs
 
-  if (await appendAlreadyLanded(args, appendId))
+  let check = await checkAppendLanded(args, appendId)
+  if (check.landed)
     return
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const err = await icebergAppend(stampedArgs).then(() => undefined, (e: unknown) => e)
+    // The landed-check just loaded the table. Hand that load to icebird so the
+    // attempt does not issue a second billed load-table for the same state.
+    const err = await icebergAppend({ ...stampedArgs, metadata: check.metadata }).then(() => undefined, (e: unknown) => e)
     if (err === undefined)
       return
     if (!isCommitTransient(err))
       throw err
-    if (await appendAlreadyLanded(args, appendId))
+    check = await checkAppendLanded(args, appendId)
+    if (check.landed)
       return
     if (attempt === maxAttempts - 1)
       throw err
@@ -496,19 +500,22 @@ export async function icebergAppendBatchesRetrying(
     snapshotProperties: { ...appendArgs.snapshotProperties, [APPEND_ID_SUMMARY_KEY]: appendId },
   }
 
-  if (await appendAlreadyLanded(args, appendId))
+  let check = await checkAppendLanded(args, appendId)
+  if (check.landed)
     return false
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const err = await icebergAppendBatches({
       ...stampedArgs,
+      metadata: check.metadata,
       batches: batchFactory(),
     }).then(() => undefined, (e: unknown) => e)
     if (err === undefined)
       return true
     if (!isCommitTransient(err))
       throw err
-    if (await appendAlreadyLanded(args, appendId))
+    check = await checkAppendLanded(args, appendId)
+    if (check.landed)
       return true
     if (attempt === maxAttempts - 1)
       throw err
@@ -530,14 +537,25 @@ async function deriveAppendId(args: IcebergAppendArgs): Promise<string> {
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('')
 }
 
+type LandedCheckMetadata = Awaited<ReturnType<typeof restCatalogLoadTable>>['metadata']
+
+/**
+ * Result of the landed-check. `metadata` is the table state the check loaded,
+ * so the next append attempt can stage against it without loading the table
+ * again. It is `undefined` for non-REST catalogs, where icebird loads itself.
+ */
+type AppendLandedCheck
+  = | { landed: true }
+    | { landed: false, metadata: LandedCheckMetadata | undefined }
+
 /** Did the append carrying `appendId` already commit? REST catalogs only. */
-async function appendAlreadyLanded(
+async function checkAppendLanded(
   args: { catalog?: { type?: string }, namespace?: string | string[], table?: string },
   appendId: string,
-): Promise<boolean> {
+): Promise<AppendLandedCheck> {
   const a = args as { catalog?: { type?: string }, namespace?: string | string[], table?: string }
   if (a.catalog?.type !== 'rest' || a.namespace == null || a.table == null)
-    return false
+    return { landed: false, metadata: undefined }
   const { metadata } = await restCatalogLoadTable(a.catalog as Parameters<typeof restCatalogLoadTable>[0], {
     namespace: a.namespace,
     table: a.table,
@@ -546,9 +564,9 @@ async function appendAlreadyLanded(
   const from = Math.max(0, snapshots.length - APPEND_LANDED_SCAN_DEPTH)
   for (let i = snapshots.length - 1; i >= from; i--) {
     if (snapshots[i]?.summary?.[APPEND_ID_SUMMARY_KEY] === appendId)
-      return true
+      return { landed: true }
   }
-  return false
+  return { landed: false, metadata }
 }
 
 // ---------------------------------------------------------------------------

@@ -49,13 +49,13 @@ index 2bac90d09cfa5a05243b3cf8d450df2f9e4f3c3a..a177d71fca3a3dc840b8fadfaa3ca3d7
  export { fileCatalog } from './catalog/file.js'
  export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js'
 diff --git a/src/manifest.js b/src/manifest.js
-index 6d2934c6a5abeca81a3d2b512f4418727d1fcddd..97572271138c8bd0abb11c85276369de479950f7 100644
+index 873101728c62f83932cac785fb26625512c83e2b..439f7a925337f6dc52cad08eee194b9ffae7328c 100644
 --- a/src/manifest.js
 +++ b/src/manifest.js
 @@ -2,6 +2,9 @@ import { avroMetadata } from './avro/avro.metadata.js'
  import { avroRead } from './avro/avro.read.js'
  import { fetchAvroRecords, urlResolver } from './fetch.js'
-
+ 
 +// Cloudflare Workers cap subrequests per invocation, so manifest reads need bounded concurrency.
 +const MANIFEST_FETCH_CONCURRENCY = 8
 +
@@ -85,7 +85,7 @@ index 6d2934c6a5abeca81a3d2b512f4418727d1fcddd..97572271138c8bd0abb11c85276369de
    resolver ??= urlResolver()
    const rawTarget = snapshotId ?? metadata['current-snapshot-id']
    if (rawTarget == null || rawTarget < 0) {
-@@ -44,6 +55,17 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
+@@ -45,6 +56,17 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
      throw new Error('No manifest information found in snapshot')
    }
  
@@ -103,7 +103,7 @@ index 6d2934c6a5abeca81a3d2b512f4418727d1fcddd..97572271138c8bd0abb11c85276369de
    return await fetchManifests(manifests, resolver)
  }
  
-@@ -60,7 +82,7 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
+@@ -61,7 +83,7 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
   */
  export async function resolveInlineManifests(snapshot, resolver) {
    const inline = snapshot.manifests ?? []
@@ -112,14 +112,14 @@ index 6d2934c6a5abeca81a3d2b512f4418727d1fcddd..97572271138c8bd0abb11c85276369de
      const ab = await resolver.reader(manifestPath)
      const buffer = await ab.slice(0, ab.byteLength)
      const reader = { view: new DataView(buffer), offset: 0 }
-@@ -85,54 +107,86 @@ export async function resolveInlineManifests(snapshot, resolver) {
+@@ -86,54 +108,86 @@ export async function resolveInlineManifests(snapshot, resolver) {
        existing_rows_count: rows[0],
        deleted_rows_count: rows[2],
      }
 -  }))
 +  })
  }
-
+ 
  /**
 - * Fetch manifest entries from a list of manifests in parallel.
 + * Fetch one manifest's entries and apply inheritance.
@@ -406,7 +406,7 @@ index 487ec24ba6d936de8459d6084ca15aaa3efbef54..032c6ead0992ae42e85be8c7ccff65e3
   * Bundled prepare + stage. Equivalent to the prior single-call API; left in
   * place so callers that don't run inside a retry loop (e.g. `icebergTransaction`)
 diff --git a/src/write/write.js b/src/write/write.js
-index 25d38887798ebe06ab434af5751c68a0e2b85d5a..e873e8b3960c8ce8290d9fa847f1ed7e59ecd842 100644
+index 02ab344831083a390fda9a5038c33d0997ec72ef..b8d819f0c22cacb3569d9d3526154d7b02fa8ded 100644
 --- a/src/write/write.js
 +++ b/src/write/write.js
 @@ -5,7 +5,7 @@ import { loadLatestFileCatalogMetadata } from '../metadata.js'
@@ -418,16 +418,49 @@ index 25d38887798ebe06ab434af5751c68a0e2b85d5a..e873e8b3960c8ce8290d9fa847f1ed7e
  import { icebergStageRewrite } from './rewrite.js'
  
  /**
-@@ -34,7 +34,7 @@ const DEFAULT_RETRY = Object.freeze({
+@@ -20,6 +20,27 @@ const DEFAULT_RETRY = Object.freeze({
+   totalTimeoutMs: 30 * 60 * 1000,
+ })
+ 
++/**
++ * Load the table context, or build it from metadata the caller already holds.
++ * Reuse applies to REST catalogs only: a REST load returns exactly
++ * `{ metadata, tableUrl: metadata.location }`, so a fresh caller load is
++ * equivalent. File catalogs keep their own metadata-file probe.
++ *
++ * @param {object} options
++ * @param {Catalog} options.catalog
++ * @param {string | string[]} [options.namespace]
++ * @param {string} [options.table]
++ * @param {string} [options.tableUrl]
++ * @param {Resolver} [options.resolver]
++ * @param {TableMetadata} [options.metadata]
++ */
++async function loadTableOrReuse({ catalog, namespace, table, tableUrl, resolver, metadata }) {
++  if (metadata && catalog.type === 'rest') {
++    return { metadata, metadataFileName: undefined, tableUrl: metadata.location, resolver }
++  }
++  return await loadTable({ catalog, namespace, table, tableUrl, resolver })
++}
++
+ /**
+  * Append rows to a table in one call: load metadata, stage the parquet writes
+  * + manifest + new snapshot, commit through the catalog.
+@@ -32,10 +53,11 @@ const DEFAULT_RETRY = Object.freeze({
+  * @param {Resolver} [options.resolver]
+  * @param {Record<string, any>[]} options.records
   * @param {number} [options.sortOrderId] - Sort order id to apply; defaults to the table default.
++ * @param {TableMetadata} [options.metadata] - REST catalog only. Table metadata the caller just loaded; skips the initial load-table. A commit conflict still reloads.
   * @returns {Promise<TableMetadata>}
   */
 -export async function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId }) {
-+export async function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId, snapshotProperties }) {
-   const ctx = await loadTable({ catalog, namespace, table, tableUrl, resolver })
+-  const ctx = await loadTable({ catalog, namespace, table, tableUrl, resolver })
++export async function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId, snapshotProperties, metadata }) {
++  const ctx = await loadTableOrReuse({ catalog, namespace, table, tableUrl, resolver, metadata })
    // Spec v3 §"Manifest Inheritance": data and manifest files do NOT need to
    // be rewritten on optimistic-commit retry. Prepare them once outside the
-@@ -55,6 +55,56 @@ export async function icebergAppend({ catalog, namespace, table, tableUrl, resol
+   // retry loop; per attempt only the manifest list and metadata.json change.
+@@ -55,6 +77,57 @@ export async function icebergAppend({ catalog, namespace, table, tableUrl, resol
        metadata: workingCtx.metadata,
        prepared,
        resolver: requireResolver(workingCtx.resolver, 'icebergAppend'),
@@ -451,10 +484,11 @@ index 25d38887798ebe06ab434af5751c68a0e2b85d5a..e873e8b3960c8ce8290d9fa847f1ed7e
 + * @param {Iterable<Record<string, any>[]> | AsyncIterable<Record<string, any>[]>} options.batches
 + * @param {number} [options.sortOrderId]
 + * @param {Record<string, string>} [options.snapshotProperties]
++ * @param {TableMetadata} [options.metadata] - REST catalog only. Table metadata the caller just loaded; skips the initial load-table. A commit conflict still reloads.
 + * @returns {Promise<TableMetadata>}
 + */
-+export async function icebergAppendBatches({ catalog, namespace, table, tableUrl, resolver, batches, sortOrderId, snapshotProperties }) {
-+  const ctx = await loadTable({ catalog, namespace, table, tableUrl, resolver })
++export async function icebergAppendBatches({ catalog, namespace, table, tableUrl, resolver, batches, sortOrderId, snapshotProperties, metadata }) {
++  const ctx = await loadTableOrReuse({ catalog, namespace, table, tableUrl, resolver, metadata })
 +  const writer = requireResolver(ctx.resolver, 'icebergAppendBatches')
 +  const prepared = []
 +  let snapshotId
@@ -495,7 +529,7 @@ index 7cfd5378c18f0cef88a1cee7f397095dd75cce76..b1cb9f5da0ed074c5dd9c9b7124fd944
  export { fileCatalog } from './catalog/file.js';
  export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js';
 diff --git a/types/manifest.d.ts b/types/manifest.d.ts
-index 5545860383cee1b39726a6bbcc43bdd0243e0d2e..d02638096720604aaa7f9aeed827f4168212dd7c 100644
+index 5545860383cee1b39726a6bbcc43bdd0243e0d2e..7201f13ae29b1b93b17d2d2ce92a48924d0c94d3 100644
 --- a/types/manifest.d.ts
 +++ b/types/manifest.d.ts
 @@ -3,6 +3,10 @@ export type ManifestList = {
@@ -563,7 +597,7 @@ index 3f29f9f3c0ab8cc742c4a57c8cc689fdc05d2dd4..2f92916a90b9edcbc5681f821beeeac8
  /**
   * Bundled prepare + stage. Equivalent to the prior single-call API; left in
 diff --git a/types/write/write.d.ts b/types/write/write.d.ts
-index 0a6b7d987ed74879c24922be49ba30de29409a69..614f90c2d8b20495ac11f93f9417430f2cd87ba3 100644
+index 0a6b7d987ed74879c24922be49ba30de29409a69..4239bd10472e389dee1ed6b1f7caeb3adc9f8d5f 100644
 --- a/types/write/write.d.ts
 +++ b/types/write/write.d.ts
 @@ -13,7 +13,7 @@ import type { Catalog, IcebergTransaction, Lister, PartitionSpec, Resolver, Sche
@@ -575,11 +609,12 @@ index 0a6b7d987ed74879c24922be49ba30de29409a69..614f90c2d8b20495ac11f93f9417430f
      catalog: Catalog;
      namespace?: string | string[];
      table?: string;
-@@ -21,6 +21,18 @@ export declare function icebergAppend({ catalog, namespace, table, tableUrl, res
+@@ -21,6 +21,20 @@ export declare function icebergAppend({ catalog, namespace, table, tableUrl, res
      resolver?: Resolver;
      records: Record<string, any>[];
      sortOrderId?: number;
 +    snapshotProperties?: Record<string, string>;
++    metadata?: TableMetadata;
 +}): Promise<TableMetadata>;
 +/** Append lazy row batches as one snapshot and one catalog commit. */
 +export declare function icebergAppendBatches({ catalog, namespace, table, tableUrl, resolver, batches, sortOrderId, snapshotProperties }: {
@@ -591,6 +626,7 @@ index 0a6b7d987ed74879c24922be49ba30de29409a69..614f90c2d8b20495ac11f93f9417430f
 +    batches: Iterable<Record<string, any>[]> | AsyncIterable<Record<string, any>[]>;
 +    sortOrderId?: number;
 +    snapshotProperties?: Record<string, string>;
++    metadata?: TableMetadata;
  }): Promise<TableMetadata>;
  /**
   * Compact / rewrite a table in one call: load metadata, read the live rows of
