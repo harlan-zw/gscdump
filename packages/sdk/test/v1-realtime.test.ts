@@ -230,8 +230,21 @@ function ackSequences(socket: FakeSocket): string[] {
 }
 
 describe('@gscdump/sdk/v1 realtime state machine', () => {
-  it('advertises the published SDK version in its default hello frame', () => {
-    expect(GSCDUMP_REALTIME_V1_SDK_VERSION).toBe(sdkPackage.version)
+  it('advertises the package version after a manifest-only release bump', async () => {
+    const runtime = new FakeRuntime()
+    const client = createGscdumpRealtimeV1Client({
+      runtime,
+      cursorStore: new MemoryCursorStore({ streamId: STREAM, sequence: '0' }),
+      ticketProvider: () => ticket(runtime, '0'),
+      applyEvent: async () => {},
+      resync: async () => {},
+    })
+
+    await client.start()
+    const socket = runtime.sockets[0]!
+    socket.open()
+    expect(JSON.parse(socket.sent[0]!)).toMatchObject({ sdkVersion: sdkPackage.version })
+    await client.stop()
   })
 
   it('gets a fresh ticket per attempt and opens with only the v1 protocol plus ticket', async () => {

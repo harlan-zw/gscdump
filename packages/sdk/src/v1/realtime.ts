@@ -19,12 +19,13 @@ import {
   REALTIME_V1_EVENT_NAMES,
   REALTIME_V1_RESOURCE_TYPES,
 } from '@gscdump/contracts/v1/realtime'
+import { version } from '../../package.json'
 import { utf8Size } from '../utf8'
 
 type MaybePromise<T> = T | Promise<T>
 type RealtimeTicketData = RealtimeTicketV1Response['data']
 
-export const GSCDUMP_REALTIME_V1_SDK_VERSION = '3.6.2' as const
+export const GSCDUMP_REALTIME_V1_SDK_VERSION = version
 
 export type GscdumpRealtimeV1TransportState
   = | 'idle'
