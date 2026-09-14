@@ -2514,39 +2514,6 @@ export function createGscdumpV1Protocol() {
           },
         },
       }),
-      updateSiteTier: defineHttpOperation({
-        ...gscdumpV1OperationRoute('partner.sites.tier.update'),
-        visibility: 'public',
-        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
-        auth: {
-          credentials: ['partner_key'],
-          scopes: ['sites:write'],
-          ownership: [{ credential: 'partner_key', rule: 'authorized_site' }],
-        },
-        request: {
-          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
-          query: null,
-          headers: requestHeaders,
-          body: z.discriminatedUnion('tier', [z.strictObject({ tier: z.literal('free'), expiresAt: z.null() }), z.strictObject({ tier: z.literal('pro'), expiresAt: z.number().int().positive().nullable() })]),
-        },
-        responses: { 200: defineSuccessResponse(defineResponseObject({ tier: z.enum(['free', 'pro']), expiresAt: z.number().int().positive().nullable() }), partnerResponseMeta) },
-        errors: partnerSiteErrors,
-        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
-        resources: {
-          reads: [{ type: 'site.registration', idFrom: 'params.siteId' }],
-          changes: [{ type: 'site.registration', idFrom: 'params.siteId' }],
-        },
-        lifecycle: { introduced: '1.3.0' },
-        docs: {
-          summary: 'Set a site tier',
-          description: 'Assigns free proxy access or paid catalog sync to a partner-owned site.',
-          tags: ['Sites'],
-          examples: {
-            request: { params: { siteId: 's_01' }, body: { tier: 'pro', expiresAt: null } },
-            response: { data: { tier: 'pro', expiresAt: null }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
-          },
-        },
-      }),
       updateSiteTeam: defineHttpOperation({
         ...gscdumpV1OperationRoute('partner.sites.team.update'),
         visibility: 'public',

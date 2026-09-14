@@ -163,8 +163,6 @@ export interface PartnerLifecycleAccount {
 
 export interface PartnerLifecycleSite {
   siteId: string
-  tier: 'free' | 'pro'
-  tierExpiresAt: number | null
   /** Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize into their own catalog namespaces. Nullable only for pre-0029 unbackfilled rows. */
   intId: number | null
   /** Team-scoped catalog identifier (`user_sites.catalog_site_id`). Defaults to `intId` for sites without a caller-supplied catalog ID. */

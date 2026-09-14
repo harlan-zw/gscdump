@@ -95,29 +95,6 @@ describe('@gscdump/sdk/v1 HTTP executor', () => {
     expect(secondFetch).toHaveBeenCalledTimes(1)
   })
 
-  it('sets a partner Site trial with its expiry through the authenticated tier endpoint', async () => {
-    const body = { tier: 'pro' as const, expiresAt: 1900000000 }
-    const fetch = vi.fn<typeof globalThis.fetch>(async (request, init) => {
-      expect(request).toBe('https://gscdump.com/api/partner/v1/sites/s_site/tier')
-      expect(init?.method).toBe('PATCH')
-      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer partner_secret')
-      expect(JSON.parse(String(init?.body))).toEqual(body)
-      return jsonResponse({ data: body, meta: { ...successMeta, surface: 'partner' } })
-    })
-    const client = createGscdumpV1Client({ credential: 'partner_secret', fetch })
-    await expect(client.updateSiteTier({ params: { siteId: 's_site' }, body })).resolves.toMatchObject({ data: body })
-  })
-
-  it('rejects a free Site with a trial expiry before sending the request', async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>()
-    const client = createGscdumpV1Client({ credential: 'partner_secret', fetch })
-    await expect(client.updateSiteTier({
-      params: { siteId: 's_site' },
-      body: { tier: 'free', expiresAt: 1900000000 } as never,
-    })).rejects.toMatchObject({ code: 'request_validation' })
-    expect(fetch).not.toHaveBeenCalled()
-  })
-
   it('validates strict input once and executes the registered path with Bearer auth', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async (request, init) => {
       expect(request).toBe('/api/_gscdump/analytics/v1/sites/s_site/rows')

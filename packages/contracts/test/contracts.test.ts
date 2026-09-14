@@ -230,8 +230,6 @@ describe('@gscdump/contracts', () => {
         siteId: 'site_1',
         intId: 1001,
         catalogSiteId: 2001,
-        tier: 'pro',
-        tierExpiresAt: null,
         externalSiteId: null,
         requestedUrl: 'sc-domain:example.com',
         gscPropertyUrl: 'sc-domain:example.com',
@@ -262,12 +260,5 @@ describe('@gscdump/contracts', () => {
         updatedAt: '2026-05-11T00:00:00.000Z',
       }],
     })).toMatchObject({ userId: 'user_1' })
-  })
-})
-
-describe('site tier registration', () => {
-  it('preserves the paid site selection across the request boundary', () => {
-    const result = partnerEndpointSchemas.registerSite.body.parse({ userId: 'u_01', siteUrl: 'example.com', tier: 'pro' })
-    expect(result).toMatchObject({ tier: 'pro' })
   })
 })
