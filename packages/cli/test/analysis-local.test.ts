@@ -1,14 +1,17 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row, WriteCtx } from '@gscdump/engine/contracts'
+import type { GoogleSearchConsoleClient } from 'gscdump'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
+import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 import { AnalyzerCapabilityError, runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import { createNodeHarness, resetNodeDuckDB } from '@gscdump/engine/node'
 import { createEngineQuerySource } from '@gscdump/engine/source'
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { hasLocalData } from '../src/analysis-local'
+import { LocalStoreUnsupportedError } from '../src/error-handler'
 
 const SITE = 'sc-domain:example.com'
 
@@ -49,6 +52,27 @@ function dispatch(
 }
 
 describe('analysis-local', () => {
+  it('explains how to run SQL analysis when the live API cannot support it', () => {
+    expect(new LocalStoreUnsupportedError('keyword-breadth', 'live').message)
+      .toContain('Run gscdump sync, then retry without --live.')
+  })
+
+  it('rejects SQL-only analysis before making any live API request', async () => {
+    const query = vi.fn(async function* () {
+      yield []
+    })
+    const source = createGscApiQuerySource({
+      client: { query } as unknown as GoogleSearchConsoleClient,
+      siteUrl: SITE,
+    })
+    await expect(runAnalyzerFromSource(source, {
+      type: 'keyword-breadth',
+      startDate: '2026-04-10',
+      endDate: '2026-04-10',
+    }, defaultAnalyzerRegistry)).rejects.toThrow(AnalyzerCapabilityError)
+    expect(query).not.toHaveBeenCalled()
+  })
+
   let tmpDir: string
 
   beforeEach(async () => {
@@ -108,6 +132,22 @@ describe('analysis-local', () => {
     expect(out.meta.source).toBe('local')
     expect(out.results.length).toBeGreaterThan(0)
     expect((out.results[0] as { keyword: string }).keyword).toBe('opportunity candidate')
+  })
+
+  it('runs SQL-only analysis on local data without a paid account', async () => {
+    const harness = createNodeHarness({ dataDir: tmpDir })
+    await seedPageKeywords(harness, [
+      { url: '/guide', query: 'local keyword', date: '2026-04-10', clicks: 10, impressions: 200, sum_position: 400 },
+    ])
+    const out = await dispatch(harness, {
+      type: 'keyword-breadth',
+      startDate: '2026-04-10',
+      endDate: '2026-04-10',
+    })
+    expect(out.meta.source).toBe('local')
+    expect(out.results).toEqual(expect.arrayContaining([
+      expect.objectContaining({ bucket: '1', pageCount: 1 }),
+    ]))
   })
 
   it('dispatches brand when brandTerms provided', async () => {

@@ -143,7 +143,9 @@ export class LocalStoreUnsupportedError extends Error {
   readonly tool: string
   readonly mode: 'live' | 'local'
   constructor(tool: string, mode: 'live' | 'local') {
-    super(`analysis "${tool}" has no implementation for the ${mode} source`)
+    super(mode === 'live'
+      ? `The live API cannot run analysis "${tool}". Run gscdump sync, then retry without --live.`
+      : `Local data cannot run analysis "${tool}".`)
     this.name = 'LocalStoreUnsupportedError'
     this.tool = tool
     this.mode = mode
