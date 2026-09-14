@@ -22,7 +22,10 @@
     "release": "pnpm build && bumpp --output=CHANGELOG.md packages/*/package.json packages/sdk/src/v1/realtime.ts",
     "test:packed": "node scripts/test-packed-cli.mjs",
     "test:live": "node scripts/test-live.mjs",
-    "check:release": "pnpm lint && pnpm --filter \"./packages/*\" run build && pnpm typecheck && pnpm test && pnpm test:packed && pnpm --filter @gscdump/cloudflare test:workers && pnpm --filter @gscdump/engine-duckdb-wasm test:browser"
+    "check:release": "pnpm lint && pnpm --filter \"./packages/*\" run build && pnpm typecheck && pnpm test && pnpm test:packed && pnpm --filter @gscdump/cloudflare test:workers && pnpm --filter @gscdump/engine-duckdb-wasm test:browser",
+    "eval:cli": "node scripts/evals/run.mjs",
+    "eval:skill": "node scripts/evals/run.mjs --agents",
+    "test:evals": "vitest run scripts/evals/core.test.mjs"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev-lint",
