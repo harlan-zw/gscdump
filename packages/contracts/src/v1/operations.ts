@@ -2539,7 +2539,7 @@ export function createGscdumpV1Protocol() {
         lifecycle: { introduced: '1.3.0' },
         docs: {
           summary: 'Set a site tier',
-          description: 'Assigns free proxy access or paid catalog sync to a partner-owned site.',
+          description: 'Assigns free proxy access or paid catalog sync to a partner-owned site. For the pro tier, `expiresAt` is the trial end as epoch seconds (Unix time); `null` means no expiry. The free tier requires `expiresAt: null`.',
           tags: ['Sites'],
           examples: {
             request: { params: { siteId: 's_01' }, body: { tier: 'pro', expiresAt: null } },

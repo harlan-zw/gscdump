@@ -164,6 +164,7 @@ export interface PartnerLifecycleAccount {
 export interface PartnerLifecycleSite {
   siteId: string
   tier: 'free' | 'pro'
+  /** Unix seconds. Trial end for the pro tier; `null` = no expiry. Cleared when the tier drops to free. */
   tierExpiresAt: number | null
   /** Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize into their own catalog namespaces. Nullable only for pre-0029 unbackfilled rows. */
   intId: number | null

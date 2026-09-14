@@ -94,6 +94,7 @@ export interface SearchAppearanceResponse {
 export interface SiteListItem {
   id: string
   tier: 'free' | 'pro'
+  /** Unix seconds. Trial end for the pro tier; `null` = no expiry. */
   tierExpiresAt: number | null
   label: string
   hostname: string
@@ -549,6 +550,7 @@ export interface GscAddAndVerifyResponse {
 
 export interface GscdumpUserSite {
   tier: 'free' | 'pro'
+  /** Unix seconds. Trial end for the pro tier; `null` = no expiry. */
   tierExpiresAt: number | null
   siteId: string
   siteUrl: string

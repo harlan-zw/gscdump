@@ -825,6 +825,16 @@ describe('@gscdump/contracts/v1 generated documents', () => {
     }
   })
 
+  it('states the epoch unit for the site tier expiry in the published operation', async () => {
+    const committed = await readFile(new URL('../generated/openapi.partner.v1.json', import.meta.url), 'utf8')
+    const document = JSON.parse(committed) as {
+      paths: Record<string, { patch: { description: string } }>
+    }
+    const description = document.paths['/api/partner/v1/sites/{siteId}/tier']!.patch.description
+
+    expect(description).toMatch(/epoch (seconds|milliseconds)/)
+  })
+
   it('allows omitted Bing pagination while documenting numeric bounds and defaults', () => {
     const document = createGscdumpV1Documents()['openapi.partner.v1.json']
     const paths = document.paths as Record<string, { get: { parameters: Array<{ name: string, required: boolean, schema: Record<string, unknown> }> } }>

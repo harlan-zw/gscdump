@@ -98,6 +98,7 @@ export const searchAppearanceResponseSchema = z.object({
 
 export const siteListItemSchema = z.object({
   tier: z.enum(['free', 'pro']),
+  // Unix seconds. Trial end for the pro tier; `null` = no expiry.
   tierExpiresAt: z.number().nullable(),
   id: z.string(),
   label: z.string(),
@@ -497,6 +498,8 @@ export const partnerLifecycleAccountSchema = z.object({
 
 export const partnerLifecycleSiteSchema = z.object({
   tier: z.enum(['free', 'pro']),
+  // Unix seconds. Trial end for the pro tier; `null` = no expiry. Cleared when
+  // the tier drops to free.
   tierExpiresAt: z.number().nullable(),
   siteId: z.string(),
   // Integer alias (`user_sites.int_id`) — the int JOIN key partners denormalize
@@ -576,6 +579,7 @@ export const gscdumpAvailableSiteSchema = z.object({
 
 export const gscdumpUserSiteSchema = z.object({
   tier: z.enum(['free', 'pro']),
+  // Unix seconds. Trial end for the pro tier; `null` = no expiry.
   tierExpiresAt: z.number().nullable(),
   siteId: z.string(),
   siteUrl: z.string(),

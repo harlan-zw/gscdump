@@ -17032,7 +17032,7 @@
     },
     "/api/partner/v1/sites/{siteId}/tier": {
       "patch": {
-        "description": "Assigns free proxy access or paid catalog sync to a partner-owned site.",
+        "description": "Assigns free proxy access or paid catalog sync to a partner-owned site. For the pro tier, `expiresAt` is the trial end as epoch seconds (Unix time); `null` means no expiry. The free tier requires `expiresAt: null`.",
         "operationId": "partner.sites.tier.update",
         "parameters": [
           {
