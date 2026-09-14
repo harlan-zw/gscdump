@@ -25,7 +25,7 @@
     "check:release": "pnpm lint && pnpm --filter \"./packages/*\" run build && pnpm typecheck && pnpm test && pnpm test:packed && pnpm --filter @gscdump/cloudflare test:workers && pnpm --filter @gscdump/engine-duckdb-wasm test:browser",
     "eval:cli": "node scripts/evals/run.mjs",
     "eval:skill": "node scripts/evals/run.mjs --agents",
-    "test:evals": "vitest run scripts/evals/core.test.mjs"
+    "test:evals": "vitest run scripts/evals"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev-lint",

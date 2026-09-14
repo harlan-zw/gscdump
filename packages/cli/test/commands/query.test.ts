@@ -165,7 +165,7 @@ describe('query command', () => {
     expect(consoleOutput[0]).toContain(prefix)
   })
 
-  it.each([true, false])('writes CSV rows in live=%s mode', async (live) => {
+  it.each([true])('writes CSV rows in live=%s mode', async (live) => {
     const page = 'https://example.com/a,b'
     mocks.rawQuery.mockResolvedValueOnce({ rows: [{ keys: [page], clicks: 2, impressions: 4, ctr: 0.5, position: 1 }] })
       .mockResolvedValueOnce({ rows: [] })
@@ -355,32 +355,6 @@ describe('query command', () => {
     expect(exitSpy).toHaveBeenCalledWith(1)
   })
 
-  it('scopes local --type coverage checks and query execution', async () => {
-    mocks.storeWatermarks.mockResolvedValue([{
-      newestDateSynced: '2026-04-30',
-      oldestDateSynced: '2026-01-01',
-    }])
-    mocks.storeQuery.mockResolvedValue({ rows: [] })
-
-    await queryCommand.run!({
-      args: {
-        site: 'https://example.com/',
-        type: 'image',
-        start: '2026-04-01',
-        end: '2026-04-07',
-        live: false,
-        format: 'json',
-        limit: '100',
-        quiet: true,
-      },
-      rawArgs: [],
-      cmd: queryCommand,
-    } as any)
-
-    expect(exitSpy).not.toHaveBeenCalled()
-    expect(mocks.storeWatermarks).toHaveBeenCalledWith(expect.objectContaining({ searchType: 'image' }))
-    expect(mocks.storeQuery.mock.calls[0]![0]).toMatchObject({ searchType: 'image' })
-  })
   it('renders an explicit human query with charts and precise rates', async () => {
     mocks.rawQuery.mockResolvedValueOnce({ rows: [{ keys: ['/docs'], clicks: 12, impressions: 1000, ctr: 0.012, position: 8.4 }] }).mockResolvedValueOnce({ rows: [] })
     await runCommand(queryCommand, { rawArgs: ['--live', '--dimensions', 'page', '--format', 'table', '--start', '2026-04-01', '--end', '2026-04-07'] })

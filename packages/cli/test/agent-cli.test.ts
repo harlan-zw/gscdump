@@ -49,3 +49,10 @@ it.each([['store', 'stats'], ['store']])('returns empty Store metadata for an un
   expect(output.nextCommand).toContain('gscdump sync')
   expect(output.nextCommand).toContain('--status')
 })
+
+it('suggests the unique full option name before authentication', async () => {
+  const result = await invoke(['query', '--dimension', 'page'])
+  expect(result.code).toBe(1)
+  expect(result.stderr).toContain('Use --dimensions.')
+  expect(result.stderr).not.toMatch(/credentials|authenticate/i)
+})

@@ -36,8 +36,11 @@ export async function checkCliArgs(command: CommandDef, rawArgs: string[], path 
     if (token.index >= boundary || token.kind !== 'option')
       continue
     const option = options[token.name]
-    if (!option)
-      return `Unknown option ${token.rawName}. Run ${path} --help.`
+    if (!option) {
+      const matches = Object.keys(definitions).filter(name => definitions[name]?.type !== 'positional' && name.startsWith(token.name) && name.length - token.name.length <= 2)
+      const suggestion = matches.length === 1 ? ` Use --${matches[0]}.` : ''
+      return `Unknown option ${token.rawName}.${suggestion} Run ${path} --help.`
+    }
     if (option.type === 'string' && (token.value === undefined || (!token.inlineValue && token.value.startsWith('-'))))
       return `${token.rawName} requires a value. Use ${token.rawName}=VALUE.`
   }
