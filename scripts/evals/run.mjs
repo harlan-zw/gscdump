@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { analyzeWaste, commands, compareRows, gradeAgent, MODEL, pageMetrics, parseOptions } from './core.mjs'
+import { analyzeWaste, commands, compareRows, gradeAgent, gradeAnswer, MODEL, pageMetrics, parseOptions } from './core.mjs'
 import { checked, credentialEnvironment, installCandidate, run } from './runtime.mjs'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
@@ -129,8 +129,14 @@ async function verifyExport(ctx, expected) {
   return { rows: exported.length, pages: totals.size }
 }
 try {
+  const sourcePaths = ['packages/cli', 'scripts/evals', 'docs/testing']
+  const diff = await checked('git', ['diff', 'HEAD', '--', ...sourcePaths], { cwd: root })
+  const untracked = (await checked('git', ['ls-files', '--others', '--exclude-standard', '--', ...sourcePaths], { cwd: root })).trim().split('\n').filter(Boolean)
+  await save('candidate-source.json', { diff, untracked: await Promise.all(untracked.map(async path => ({ path, text: await readFile(join(root, path), 'utf8') }))) })
+  report.sourceDirty = Boolean(diff || untracked.length)
   console.log('Installing packed candidate packages')
   cli = await installCandidate(root, join(temporary, 'consumer'))
+  report.packages = await Promise.all((await readdir(join(temporary, 'consumer'))).filter(name => name.endsWith('.tgz')).sort().map(async name => ({ name, sha256: createHash('sha256').update(await readFile(join(temporary, 'consumer', name))).digest('hex') })))
   report.cliVersion = (await checked(process.execPath, [cli, '--version'], { env: credentials })).trim()
   await attempt('docs-google-round-trip', async () => {
     requireGoogle()
@@ -145,11 +151,37 @@ try {
       assert.equal(result.code, 0, `Documented command at ${example.source}:${example.line} failed: ${result.stderr}`)
     }
     const history = await calls(ctx)
+    const completion = JSON.parse(history.find(call => call.args[0] === 'sync' && !call.args.includes('--status')).stdout)
+    assert.equal(completion.status, 'completed')
+    assert.equal(completion.siteUrl, site)
+    assert.deepEqual(completion.range, { start, end })
+    assert(completion.totals.pages.rows > 0, 'Sync must report ingested rows.')
+    assert.equal(completion.totals.pages.failed, 0)
     const queries = history.filter(call => call.args[0] === 'query')
     const stored = rows(queries[0].stdout)
     await save('docs-export-check.json', await verifyExport(ctx, stored))
     compareRows(pageMetrics(stored), pageMetrics(rows(queries[1].stdout)))
     return verifyExport(ctx, stored)
+  })
+  await attempt('cli-agent-recovery', async () => {
+    requireGoogle()
+    const ctx = await context('recovery', { seeded: true })
+    const result = await run(process.execPath, [cli, 'query', '--site', site, '--start', start, '--end', end, '--dimensions', 'query', '--format', 'json'], { cwd: ctx.workspace, env: ctx.env })
+    await save('recovery-query.json', result)
+    assert.equal(result.code, 1)
+    const missing = JSON.parse(result.stdout)
+    assert.equal(missing.error.code, 'STORE_RANGE_NOT_COVERED')
+    assert.equal(missing.error.table, 'queries')
+    assert(missing.error.availableTables.some(table => table.table === 'pages' && table.dimensions.includes('page')))
+    assert(missing.error.nextArgs.includes(start) && missing.error.nextArgs.includes(end))
+    const skipped = JSON.parse(await ctx.setup(['sync', '--site', site, '--start', start, '--end', end, '--tables', 'pages', '--json', '--no-rollups']))
+    assert.equal(skipped.status, 'completed')
+    assert.equal(skipped.totals.pages.rows, 0)
+    assert(skipped.totals.pages.skipped > 0)
+    const retry = JSON.parse(await ctx.setup(['sync', '--site', site, '--start', start, '--end', end, '--tables', 'pages', '--json', '--retry-failed']))
+    assert.equal(retry.status, 'skipped')
+    assert.equal(retry.reason, 'no-failed-dates')
+    return { missingTable: missing.error.table, skippedDates: skipped.totals.pages.skipped }
   })
   await attempt('docs-skill-reference', async () => {
     requireGoogle()
@@ -258,6 +290,9 @@ try {
             const expected = await ctx.setup(['query', '--live', '--site', site, '--start', start, '--end', end, '--dimensions', 'page', '--limit', '1000', '--format', 'json', '--quiet'])
             compareRows(pageMetrics(rows(query.stdout)), pageMetrics(rows(expected)))
             report.agentTrials.at(-1).dataOutcome = 'passed'
+            const answerGrade = gradeAnswer(text, rows(query.stdout))
+            report.agentTrials.at(-1).answerGrade = answerGrade
+            assert(answerGrade.passed, answerGrade.failures.join(' '))
           }
           assert(grade.passed, grade.failures.join(' '))
           return { usage, grade }

@@ -62,8 +62,12 @@ Clicks and impressions must match exactly after grouping.
 The bounded comparison requires fewer than 1,000 page rows.
 
 Agent queries require skill activation, successful authentication checks, and correct real query results.
+The final answer must contain JSON with the same page clicks and impressions.
+Additional prose still needs review. The JSON grader does not validate every natural-language claim.
 The empty Store scenario also requires a coverage check.
 The consent scenario fails if the agent attempts a deletion, even when the harness blocks it.
+It also fails if an explanation triggers traffic queries or syncs.
+Real CLI recovery checks cover missing tables, completed syncs, skipped dates, and empty retry plans.
 The proxy records real calls and rejects operations outside the test scope.
 It does not fabricate CLI results.
 OpenCode permission controls are defence in depth, not an operating-system sandbox.
@@ -92,6 +96,7 @@ Skill discovery under implicit requests and skill-disabled comparisons remain fu
 ## Evidence
 
 Each run writes a report with source SHA, package version, document digests, and per-case status.
+Package tarball digests identify the installed candidate. A source snapshot records uncommitted changes and new source files.
 Agent runs include the OpenCode version, fixed model, events, and observed CLI calls.
 Every attempt is retained. The runner does not retry failed trials automatically.
 Known credential values are redacted. Files can still contain private Site data.

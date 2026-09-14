@@ -8,6 +8,19 @@ description: Drive the `gscdump` CLI for Google Search Console and Bing with clo
 `gscdump` reads Google Search Console and Bing with hosted or local authentication.
 It keeps a local Parquet Store for Google rows. Every command has `--help`.
 
+## Start each task
+
+1. Before reading traffic, run `gscdump auth status --json`. Do this even when the user says authentication works.
+2. Keep the requested Site, dates, dimensions, and task scope. A request for pages does not need query dimensions.
+3. Before local queries, run `gscdump store stats --site SITE --json` and `gscdump sync --site SITE --status --json`.
+4. Read the table dimensions and watermarks. Sync only missing tables and the requested dates, once per task.
+5. Use `sync --json`. Read its completion result before deciding what to do next. Never repeat a successful sync.
+
+If the task only asks about deletion, explain the scope and ask for consent.
+You may read Store metadata with `store stats` and `sync --status`.
+Do not query traffic, sync rows, or delete data to explain deletion.
+Call the local data directory the Store in your answer.
+
 ## Authentication mode
 
 Check `gscdump auth status --json` before queries. Reuse the user's selected mode.
@@ -130,11 +143,14 @@ gscdump config set defaultSite sc-domain:example.com
 
 ## Output
 
-Pass `--json` on every command that supports it. `query` uses
+Pass `--json` on every command that supports it. `sync --json` includes completion, row counts, skipped dates, and failures.
+`query` uses
 `--format json` and prints rows to stdout. Progress goes to stderr, so stdout
 stays parseable. `--quiet` drops progress lines.
 
 Parse JSON. Never scrape human output.
+If the user requests JSON, return the CLI JSON unchanged. Do not replace it with a table.
+Do not rewrite rows, estimate metrics, or add manually calculated totals.
 
 ## Commands
 
@@ -172,9 +188,10 @@ The MCP server does not expose Bing tools. Use `gscdump bing` commands through t
 ## Sync before local analysis
 
 ```sh
+gscdump store stats --site sc-domain:example.com --json
 gscdump sync --site sc-domain:example.com --days 90 \
-  --tables pages,queries,page_queries,countries
-gscdump sync --site sc-domain:example.com --status
+  --tables pages,queries,page_queries,countries --json
+gscdump sync --site sc-domain:example.com --status --json
 ```
 
 - Pass an explicit `--tables` list. The default list has a known daily-totals
@@ -183,6 +200,8 @@ gscdump sync --site sc-domain:example.com --status
 - Sync skips completed dates. `--force` refreshes them. `--retry-failed`
   reruns only failed dates.
 - `--dry-run` prints the planned work without calling Google.
+- Use the user's date range. The 90-day example does not authorize a wider sync.
+- Empty Store metadata is expected before the first sync. It does not prove zero traffic.
 
 ## Query rows
 
@@ -195,8 +214,11 @@ gscdump query --site sc-domain:example.com --dimensions page,query \
 - Filters: `--query`, `--page`, `--country`, `--device`,
   `--search-appearance`. Prefixes: bare equals, `~` contains, `!~` not
   contains, `re:` regex, `!re:` not regex, `!` not equals.
-- `--live` bypasses the Store. `--search-type`, `--data-state`, and
-  `--aggregation-type` apply to live mode only.
+- `--live` bypasses the Store. `--type` selects a search type.
+  `--data-state` and `--aggregation-type` apply to live mode only.
+- Metrics already include clicks, impressions, CTR, and position. There is no `--metrics` option.
+- If Store coverage is missing, read the JSON error and its bounded `nextArgs` before syncing.
+  Do not switch dimensions to make a failed query succeed.
 - `--explain` prints the request body or planned SQL without executing.
 - `--sql` runs raw DuckDB SQL over the Store with `{{FILES}}` as the file list.
 
@@ -270,9 +292,9 @@ the failure and continue. Never retry an uncertain submission.
   delete local data. `--yes` is consent you borrow from the user.
 - **Never loop unattended.** One `sync` per Site per task. Inspection batches
   spend a daily pool. Use `--dry-run` and `--explain` to plan first.
-- **Report the result as the CLI gave it.** An empty result is not a clean
-  Site. Check `sync --status` for the covered date range before reading zero
-  rows as zero traffic.
+- **Report the result as the CLI gave it.** Zero clicks with impressions means rows exist with no clicks.
+  An empty row array means no rows matched. Missing coverage means the Store cannot answer that date range.
+  Check `sync --status --json` before interpreting empty rows. None of these results proves a clean Site.
 - **Do not widen the Site.** A `sc-domain:` property includes every
   subdomain. Filter with `--page` when the user means one host.
 
@@ -285,3 +307,14 @@ Hosted exports follow pagination and reject missing, unavailable, or changing da
 Hosted date ranges span at most 366 days. The default range is the last 366 days.
 Local date filters only narrow data currently returned by Bing.
 Do not treat Bing crawl evidence as proof that a URL is indexed.
+
+## Before the next command
+
+For a traffic task, run `gscdump auth status --json` now, before any `query` command.
+The user saying credentials work does not replace this check. It identifies the selected authentication mode.
+Then check Store metadata, keep the requested dimensions, and read or sync only the requested dates.
+If the user requests JSON, return the command's JSON unchanged, without a table or a separate totals summary.
+Include that JSON in your final response. Tool output alone is not a final answer.
+Include every returned row. Do not refer the user to results "above".
+
+For a deletion explanation, read metadata only if needed. Explain the scope and ask for consent, then stop.
