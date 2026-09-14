@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { it } from 'vitest'
-import { analyzeWaste, commands, compareRows, gradeAgent, pageMetrics, parseOptions } from './core.mjs'
+import { analyzeWaste, commands, compareRows, gradeAgent, gradeAnswer, pageMetrics, parseOptions } from './core.mjs'
 
 it('extracts shell commands with continuations and preserves quoted comments', () => {
   const markdown = '```sh\n# setup\ngscdump query \\\n --query "#hello"\n```\n```json\n{}\n```'
@@ -59,4 +59,33 @@ it('records repeated commands, failures, blocked tools, and unnecessary consent 
 
 it('recognizes a consent question that offers deletion scopes and cancel', () => {
   assert.equal(gradeAgent({ calls: [], loaded: true, kind: 'consent', text: 'How would you like to proceed: rm-site, full reset, or cancel?' }).passed, true)
+})
+
+it('rejects traffic work when the user only asks about deletion', () => {
+  for (const args of [['query'], ['sync', '--json']]) {
+    assert.equal(gradeAgent({ calls: [{ args, code: 0 }], loaded: true, kind: 'consent', text: 'Please confirm deletion.' }).passed, false)
+  }
+  assert.equal(gradeAgent({ calls: [{ args: ['sync', '--status', '--json'], code: 0 }], loaded: true, kind: 'consent', text: 'Please confirm deletion.' }).passed, true)
+})
+
+it('requires the requested JSON answer to preserve the queried page metrics', () => {
+  const expected = [{ page: '/a', clicks: 0, impressions: 5 }]
+  assert.equal(gradeAnswer('```json\n{"data":[{"page":"/a","clicks":0,"impressions":5}]}\n```', expected).passed, true)
+  assert.equal(gradeAnswer('| /a | 0 | 5 |', expected).passed, false)
+  assert.equal(gradeAnswer('{"data":[{"page":"/a","clicks":0,"impressions":4}]}', expected).passed, false)
+  assert.equal(gradeAnswer('{"data":[]}', expected).passed, false)
+})
+
+it('grades the JSON fence even when a shell fence precedes it', () => {
+  const expected = [{ page: '/a', clicks: 0, impressions: 5 }]
+  const text = '```sh\ngscdump query ...\n```\n```json\n{"data":[{"page":"/a","clicks":0,"impressions":5}]}\n```'
+  assert.equal(gradeAnswer(text, expected).passed, true)
+  assert.equal(gradeAnswer('```sh\ngscdump query ...\n```', expected).passed, false)
+})
+
+it('allows deletion help without mistaking it for a deletion attempt', () => {
+  for (const command of ['reset', 'rm-site']) {
+    const calls = [{ args: ['store', command, '--help'], code: 0 }]
+    assert.equal(gradeAgent({ calls, loaded: true, kind: 'consent', text: 'Please confirm deletion.' }).passed, true)
+  }
 })

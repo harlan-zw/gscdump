@@ -4,7 +4,7 @@ import { filesystemStats } from '@gscdump/engine/filesystem'
 import { defineCommand } from 'citty'
 import { decodeSiteId, parseGscSiteUrl } from 'gscdump'
 import { createCommandContext } from '../context'
-import { allTables } from '../local-store'
+import { allTables, tableDimensions } from '../local-store'
 import { columnsFor } from '../render/analysis'
 import { barColumn } from '../render/charts'
 import { renderTable, textLines } from '../render/layout'
@@ -26,24 +26,16 @@ export const statsCommand = defineCommand({
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
-    // Validate --site against the set of sites with local data so a typo
-    // surfaces an error instead of silently showing zero.
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
     const allEntries = await store.engine.listAll({ userId: store.userId })
-    let siteId: string | undefined
-    if (args.site) {
-      const known = new Set(
-        allEntries
-          .filter(entry => entry.retiredAt === undefined && entry.siteId !== undefined)
-          .map(entry => entry.siteId!),
-      )
-      const candidate = store.siteIdFor(args.site)
-      if (!known.has(candidate)) {
-        logger.error(`No local data for --site=${args.site}. Known site IDs: ${known.size === 0 ? '(none — run \`gscdump sync\` first)' : Array.from(known).join(', ')}`)
-        process.exit(1)
-      }
-      siteId = candidate
+    const knownSites = [...new Set(allEntries
+      .filter(entry => entry.retiredAt === undefined && entry.siteId !== undefined)
+      .map(entry => entry.siteId))]
+    const siteId = args.site ? store.siteIdFor(args.site) : undefined
+    if (args.site && !json && !knownSites.includes(siteId)) {
+      logger.error(`No local data for --site=${args.site}. Known site IDs: ${knownSites.length === 0 ? '(none — run \`gscdump sync\` first)' : knownSites.join(', ')}`)
+      process.exit(1)
     }
     const selectedEntries = siteId === undefined
       ? allEntries
@@ -57,15 +49,19 @@ export const statsCommand = defineCommand({
 
     const [watermarks, disk] = await Promise.all([
       store.engine.getWatermarks({ userId: store.userId, siteId }),
-      filesystemStats(store.dataDir).catch(() => ({ files: 0, bytes: 0 })),
+      filesystemStats(store.dataDir),
     ])
 
     if (json) {
       const payload = {
         dataDir: store.dataDir,
+        siteId: siteId ?? null,
+        knownSites,
+        nextCommand: `gscdump sync${args.site ? ` --site '${String(args.site).replaceAll('\'', '\'\\\'\'')}'` : ''} --status --json`,
         disk,
         tables: perTable.map(({ table, live, retired }) => ({
           table,
+          dimensions: tableDimensions(table),
           liveFiles: live.length,
           liveRows: sumRows(live),
           liveBytes: sumBytes(live),
@@ -75,6 +71,7 @@ export const statsCommand = defineCommand({
             .filter(w => w.table === table)
             .map(w => ({
               siteId: w.siteId ?? null,
+              searchType: w.searchType ?? 'web',
               newestDateSynced: w.newestDateSynced,
               oldestDateSynced: w.oldestDateSynced,
               lastSyncAt: w.lastSyncAt,

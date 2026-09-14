@@ -8,8 +8,8 @@ These commands read Google and write only the temporary Store and export directo
 
 ```sh
 gscdump auth status --json
-gscdump sync --site "$EVAL_SITE" --start "$EVAL_START" --end "$EVAL_END" --tables pages --no-rollups --quiet
-gscdump sync --site "$EVAL_SITE" --status
+gscdump sync --site "$EVAL_SITE" --start "$EVAL_START" --end "$EVAL_END" --tables pages --no-rollups --json
+gscdump sync --site "$EVAL_SITE" --status --json
 gscdump query --site "$EVAL_SITE" --start "$EVAL_START" --end "$EVAL_END" --dimensions page --limit 1000 --format json --quiet
 gscdump query --live --site "$EVAL_SITE" --start "$EVAL_START" --end "$EVAL_END" --dimensions page --limit 1000 --format json --quiet
 gscdump dump --site "$EVAL_SITE" --tables pages --format json --out ./export --json

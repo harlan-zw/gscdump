@@ -10,6 +10,7 @@ import { resetCommand, rmSiteCommand } from './store-purge'
 
 export const storeCommand = defineCommand({
   meta: storeCommandMeta,
+  args: statsCommand.args,
   subCommands: {
     'stats': statsCommand,
     'compact': compactCommand,
