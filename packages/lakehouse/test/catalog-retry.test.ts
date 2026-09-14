@@ -105,6 +105,28 @@ describe('icebergAppendRetrying', () => {
     expect(icebergAppend).toHaveBeenCalledTimes(1)
   })
 
+  // Every commit already pays one catalog load-table for the landed-check.
+  // Handing that metadata to the append saves the second load-table icebird
+  // would issue a few milliseconds later (R2 Data Catalog bills each one).
+  it('hands the landed-check metadata to the first append attempt', async () => {
+    const loaded = { snapshots: [], location: 's3://bucket/table' }
+    restCatalogLoadTable.mockResolvedValueOnce({ metadata: loaded })
+    await icebergAppendRetrying(APPEND_ARGS, { ...FAST, appendId: 'reuse-1' })
+    expect(restCatalogLoadTable).toHaveBeenCalledTimes(1)
+    expect(icebergAppend.mock.calls[0][0].metadata).toBe(loaded)
+  })
+
+  it('hands the post-failure landed-check metadata to the retry, never the stale first load', async () => {
+    const first = { snapshots: [], location: 's3://bucket/table' }
+    const afterFailure = { snapshots: [{ summary: { operation: 'append' } }], location: 's3://bucket/table' }
+    restCatalogLoadTable.mockResolvedValueOnce({ metadata: first }).mockResolvedValueOnce({ metadata: afterFailure })
+    icebergAppend.mockRejectedValueOnce(new Error('429 too many commits to this table')).mockResolvedValueOnce({})
+    await icebergAppendRetrying(APPEND_ARGS, { ...FAST, appendId: 'reuse-2' })
+    expect(restCatalogLoadTable).toHaveBeenCalledTimes(2)
+    expect(icebergAppend.mock.calls[0][0].metadata).toBe(first)
+    expect(icebergAppend.mock.calls[1][0].metadata).toBe(afterFailure)
+  })
+
   it('retries a 429 and recovers once the commit succeeds', async () => {
     icebergAppend
       .mockRejectedValueOnce(new Error('429 too many commits to this table'))
@@ -272,6 +294,19 @@ describe('icebergAppendBatchesRetrying', () => {
     expect(batchFactory).toHaveBeenCalledTimes(2)
     expect(icebergAppendBatches).toHaveBeenCalledTimes(2)
     expect(icebergAppendBatches.mock.calls[0][0].snapshotProperties).toEqual({ 'lakehouse.append-id': 'batch-1' })
+  })
+
+  it('hands each landed-check metadata load to the batch append attempt that follows it', async () => {
+    const first = { snapshots: [], location: 's3://bucket/table' }
+    const afterFailure = { snapshots: [{ summary: { operation: 'append' } }], location: 's3://bucket/table' }
+    restCatalogLoadTable.mockResolvedValueOnce({ metadata: first }).mockResolvedValueOnce({ metadata: afterFailure })
+    icebergAppendBatches
+      .mockRejectedValueOnce(new Error('429 too many commits to this table'))
+      .mockResolvedValueOnce({})
+    await icebergAppendBatchesRetrying(args, { ...FAST, appendId: 'batch-reuse' })
+    expect(restCatalogLoadTable).toHaveBeenCalledTimes(2)
+    expect(icebergAppendBatches.mock.calls[0][0].metadata).toBe(first)
+    expect(icebergAppendBatches.mock.calls[1][0].metadata).toBe(afterFailure)
   })
 
   it('creates a fresh lazy batch source for a transient 500 retry', async () => {

@@ -3,6 +3,21 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
 
+export function killProcessGroup(child) {
+  try {
+    if (process.platform === 'win32')
+      child.kill('SIGKILL')
+    else if (child.pid)
+      process.kill(-child.pid, 'SIGKILL')
+  }
+  catch (error) {
+    // The child can exit and be reaped before 'close' clears the kill timer.
+    // A missing process group means the kill already happened. Ignore it.
+    if (error.code !== 'ESRCH' && error.code !== 'SRCH')
+      throw error
+  }
+}
+
 export function run(command, args, { cwd, env, timeout = 180_000 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd, env, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
@@ -13,10 +28,7 @@ export function run(command, args, { cwd, env, timeout = 180_000 } = {}) {
       if (timedOut)
         return
       timedOut = true
-      if (process.platform === 'win32')
-        child.kill('SIGKILL')
-      else if (child.pid)
-        process.kill(-child.pid, 'SIGKILL')
+      killProcessGroup(child)
     }
     const timer = setTimeout(kill, timeout)
     child.stdout.on('data', (chunk) => {
