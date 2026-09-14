@@ -12,8 +12,21 @@ const files = await readdir(directory)
 const original = await readFile(join(directory, 'report.json'), 'utf8')
 const report = JSON.parse(original)
 const evaluator = await evaluatorIdentity()
-const target = join(directory, 'regrades', `${new Date().toISOString().replaceAll(':', '-')}-${evaluator.grader.slice(0, 12)}`)
-await mkdir(target, { recursive: true, mode: 0o700 })
+const stamp = `${new Date().toISOString().replaceAll(':', '-')}-${evaluator.grader.slice(0, 12)}`
+const regrades = join(directory, 'regrades')
+await mkdir(regrades, { recursive: true, mode: 0o700 })
+let target
+for (let attempt = 0; ; attempt++) {
+  target = join(regrades, attempt === 0 ? stamp : `${stamp}.${attempt}`)
+  try {
+    await mkdir(target, { mode: 0o700 })
+    break
+  }
+  catch (error) {
+    if (error.code !== 'EEXIST')
+      throw error
+  }
+}
 const summaries = []
 for (const filename of files.filter(name => /-\d+-calls\.json$/.test(name))) {
   const id = filename.replace('-calls.json', '')
