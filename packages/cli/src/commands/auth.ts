@@ -92,7 +92,7 @@ async function resolveLiveAuthState(): Promise<{
 
   const tokenInfo = liveToken ? await fetchTokenInfo(liveToken) : null
   const scopes = tokenInfo?.scope ? tokenInfo.scope.split(/\s+/).filter(Boolean) : []
-  const missing = missingRequiredScopes(scopes)
+  const missing = missingRequiredScopes(scopes, byok ? undefined : tokens?.provider)
 
   return { byok, tokens, liveToken, tokenInfo, scopes, missing }
 }

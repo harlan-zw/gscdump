@@ -145,7 +145,7 @@ async function checkAuth(envKeys: Set<string>): Promise<{ checks: Check[], liveT
     checks.push({ name: 'auth.account', status: 'pass', detail: info.email })
 
   const scopes = info.scope ? info.scope.split(/\s+/) : []
-  const missing = missingRequiredScopes(scopes)
+  const missing = missingRequiredScopes(scopes, byok ? undefined : tokens?.provider)
   if (missing.length > 0)
     checks.push({ name: 'auth.scopes', status: 'warn', detail: `missing: ${missing.join(', ')} — \`gscdump auth login --force\` to re-consent` })
   else

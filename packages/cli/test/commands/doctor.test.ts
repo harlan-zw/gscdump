@@ -101,6 +101,13 @@ describe('doctor command', () => {
     await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
   }
 
+  it('accepts the platform read-only grant', async () => {
+    mocks.loadTokens.mockResolvedValue({ provider: 'gscdump', access_token: 'token' })
+    mocks.ofetch.mockResolvedValue({ scope: 'webmasters.readonly' })
+    const result = await run()
+    expect(result.checks).toContainEqual({ name: 'auth.scopes', status: 'pass', detail: '1 granted' })
+  })
+
   it('reports missing local authentication and keeps Store diagnostics', async () => {
     const result = await run()
 

@@ -44,6 +44,6 @@ describe('free CLI authentication', () => {
 
   it('does not expose a server error body containing tokens', async () => {
     const request = vi.fn().mockResolvedValue(new Response('secret-token', { status: 401 }))
-    await expect(refreshWithPlatform('refresh', request)).rejects.toThrow('Run `gscdump auth login`')
+    await expect(refreshWithPlatform('refresh', request)).rejects.toThrow('Run `gscdump auth login --mode local --force`')
   })
 })

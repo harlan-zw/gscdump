@@ -23,8 +23,11 @@ async function requestJson(request: typeof fetch, route: string, init: RequestIn
     redirect: 'error',
     signal: AbortSignal.timeout(30_000),
   })
-  if (!response.ok)
-    throw new Error('Google authorization failed. Run `gscdump auth login` to reconnect.')
+  if (!response.ok) {
+    if (response.status === 429 || response.status >= 500)
+      throw new Error('Google authorization is temporarily unavailable. Try again later.')
+    throw new Error('Google authorization failed. Run `gscdump auth login --mode local --force` to reconnect.')
+  }
   return response.json()
 }
 
