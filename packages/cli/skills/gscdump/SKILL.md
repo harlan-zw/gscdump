@@ -122,10 +122,13 @@ If local Google credentials are missing, use one of these paths:
 | Service account | CI with a service-account key that has Site access | `export GOOGLE_APPLICATION_CREDENTIALS=/abs/path/key.json` |
 | Interactive OAuth | A person is present | `gscdump init --mode local` |
 
-`init` needs a Google Cloud OAuth client of type Desktop app. Ask the user to
-run it; do not guess client credentials. Use `gscdump auth login --mode local --no-browser`
-when a browser cannot open.
-Run `gscdump auth login --mode local` to save local mode after configuring credentials.
+Default local login opens gscdump.com for free Google login and token refresh.
+Data queries call Google directly. No Google Cloud project or hosted activation is required.
+Use `gscdump auth login --mode local --no-browser` when a browser runs on another host.
+The default grant is read-only Search Console access.
+For Google write operations, use your own OAuth client with the required scopes.
+Set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET` to use a Desktop app OAuth client.
+Cloud mode requires hosted access. Pro is free during beta, then paid after launch.
 
 `--profile <name>` or `GSCDUMP_PROFILE` isolates the selected mode and Google, Bing, and cloud credentials.
 

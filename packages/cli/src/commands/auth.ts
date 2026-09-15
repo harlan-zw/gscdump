@@ -3,7 +3,7 @@ import process from 'node:process'
 import { isCancel, password } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { ofetch } from 'ofetch'
-import { authenticate, clearTokens, formatAuthProvenance, getAuth, getAuthCredentials, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
+import { clearTokens, formatAuthProvenance, getAuth, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
 import { clearAuthentication, getCloudAccount, parseAuthentication, parseAuthMode, resolveAuthentication, saveAuthentication } from '../auth-state'
 import { clearBingCredentials, getBingClient, inspectBingCredentials } from '../bing-auth'
@@ -270,13 +270,9 @@ const refreshCommand = defineCommand({
       logger.error('No saved refresh token. Run `gscdump auth login`.')
       process.exit(1)
     }
-    const credentials = await getAuthCredentials(false).catch((e: Error) => {
-      logger.error(`Cannot resolve credentials: ${e.message}`)
-      process.exit(1)
-    })
     // Force expiry so authenticate() runs the refresh path.
     await saveTokens({ ...tokens, expiry_date: 1 })
-    const client = await authenticate(credentials, false).catch((e: Error) => {
+    const client = await getAuth({ interactive: false }).catch((e: Error) => {
       logger.error(`Refresh failed: ${e.message}`)
       process.exit(1)
     })

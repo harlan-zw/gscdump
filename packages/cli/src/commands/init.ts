@@ -5,7 +5,7 @@ import process from 'node:process'
 import { confirm, isCancel, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { googleSearchConsole } from 'gscdump/client'
-import { authenticate, getAuthCredentials, loadTokens, resolveBYOK, saveTokens } from '../auth'
+import { authenticate, getAuth, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { initCommandMeta } from '../command-meta'
 import { defaultDataDir, loadConfig, saveConfig } from '../config'
 import { applyCliEnvironment } from '../environment'
@@ -141,14 +141,11 @@ export const initCommand = defineCommand({
     console.log()
 
     const dataDir = args['no-store'] ? undefined : await promptDataDir(config.dataDir)
-    const credentials = await getAuthCredentials(true)
     await saveConfig({
       ...config,
       ...(dataDir ? { dataDir } : {}),
-      clientId: credentials.clientId,
-      clientSecret: credentials.clientSecret,
     })
-    const oauth = await authenticate(credentials, true)
+    const oauth = await getAuth({ interactive: true })
 
     // Smoke-test the new credentials by listing sites. Catches missing scopes
     // (e.g., user enabled Search Console API but didn't tick the indexing
@@ -156,7 +153,8 @@ export const initCommand = defineCommand({
     // can't immediately attribute.
     await smokeTest(oauth)
 
-    await maybeWriteEnvFile(credentials.clientId, credentials.clientSecret)
+    if (config.clientId && config.clientSecret)
+      await maybeWriteEnvFile(config.clientId, config.clientSecret)
 
     console.log()
     logger.success('Setup complete! Run gscdump to get started.')
