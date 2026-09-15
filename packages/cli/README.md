@@ -20,7 +20,7 @@ npx @gscdump/cli
 ## Quick start
 
 ```bash
-# Set up local Google OAuth
+# Connect Google for free local CLI use
 gscdump init --mode local
 gscdump auth login --mode local
 
@@ -280,16 +280,22 @@ This section covers local Google credentials. See [shared authentication](#hoste
 Credentials are saved under `~/.config/gscdump/` on XDG systems, or the platform equivalent.
 Use `gscdump auth login --mode local` to connect Google and save local mode.
 
-Local Google browser login uses a temporary listener on `127.0.0.1` with a random port.
+If you configure your own Google OAuth client, browser login uses a temporary listener on `127.0.0.1` with a random port.
 Each attempt uses state validation and PKCE S256 to bind the authorization response to that attempt.
 The listener closes after authorization, denial, or a five-minute timeout.
 
-For manual setup:
+By default, login opens gscdump.com. No Google Cloud project is required.
+The platform handles Google login and token refresh. Data queries call Google directly.
+This grants read-only Search Console access. It does not activate hosted sync, storage, or hosted MCP.
+Hosted Pro is free during beta and will require payment after launch.
+For Google write operations, configure your own OAuth client with the required scopes.
+
+For your own OAuth client:
 
 1. Create a Google Cloud project.
 2. Enable **Search Console API**, **Web Search Indexing API**, and **Site Verification API**.
 3. Create OAuth2 credentials (Desktop app).
-4. Run `gscdump init --mode local` to configure credentials and a Store directory.
+4. Set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET` for your Desktop app.
 5. Run `gscdump auth login --mode local` to save local mode.
 
 ### BYOK (Bring Your Own Key)
@@ -328,8 +334,9 @@ gscdump auth login --mode local --no-browser
 # Open the printed URL in your browser.
 ```
 
-This uses the same Desktop application OAuth client and loopback flow as browser login.
-Google's device flow does not support the required scopes.
+Default login works from a remote terminal without port forwarding. Keep the command running until you approve the browser request.
+
+With your own OAuth client, login uses the Desktop application loopback flow.
 
 If the CLI runs on another host, forward its printed loopback port before opening the URL.
 Keep the login command running on that host.

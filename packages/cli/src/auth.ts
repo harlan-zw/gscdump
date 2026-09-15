@@ -9,6 +9,7 @@ import fs from 'node:fs/promises'
 import { createServer } from 'node:http'
 import path from 'node:path'
 import process from 'node:process'
+import { setTimeout as waitForPoll } from 'node:timers/promises'
 import { text } from '@clack/prompts'
 import { CodeChallengeMethod, JWT as GoogleJWT, OAuth2Client as OAuth2ClientClass } from 'google-auth-library'
 import { createAuth } from 'gscdump/client'
@@ -17,6 +18,7 @@ import open from 'open'
 import { getConfigDir, loadConfig } from './config'
 import { getAppliedEnvKeys, getLoadedEnvPath } from './env-file'
 import { pickCliEnvironmentValue, resolveCliEnvironment } from './environment'
+import { loginWithPlatform, refreshWithPlatform } from './hosted-auth'
 import { displayPath, logger } from './utils'
 
 /** Caller-actionable failures use the repository's `kind` and `Result` convention. */
@@ -124,13 +126,15 @@ export interface OAuth2Credentials {
   redirectUri?: string
 }
 
-export async function loadTokens(): Promise<Credentials | null> {
+export type SavedTokens = Credentials & { provider?: 'gscdump' }
+
+export async function loadTokens(): Promise<SavedTokens | null> {
   return fs.readFile(getTokensPath(), 'utf-8')
-    .then(data => JSON.parse(data) as Credentials)
+    .then(data => JSON.parse(data) as SavedTokens)
     .catch(() => null)
 }
 
-export async function saveTokens(tokens: Credentials): Promise<void> {
+export async function saveTokens(tokens: SavedTokens): Promise<void> {
   await fs.mkdir(getConfigDir(), { recursive: true, mode: 0o700 })
   await fs.writeFile(getTokensPath(), JSON.stringify(tokens, null, 2), { mode: 0o600 })
 }
@@ -356,7 +360,8 @@ export async function authenticate(
     return oauth2Client
   }
 
-  const existingTokens = !opts.force ? await loadTokens() : null
+  const savedTokens = !opts.force ? await loadTokens() : null
+  const existingTokens = savedTokens?.provider === 'gscdump' ? null : savedTokens
   let refreshFailed = false
   let refreshError: Error | null = null
   if (existingTokens) {
@@ -438,8 +443,41 @@ export interface GetAuthOptions {
 
 export async function getAuth(opts: GetAuthOptions = {}): Promise<OAuth2Client> {
   const { interactive = true, noBrowser = false, force = false } = opts
-  const credentials = await getAuthCredentials(interactive)
-  return authenticate(credentials, interactive, { noBrowser, force })
+  const env = resolveCliEnvironment()
+  const config = opts.config ?? await loadConfig()
+  if ((env.clientId && env.clientSecret) || (config.clientId && config.clientSecret)) {
+    const credentials = await getAuthCredentials(interactive)
+    return authenticate(credentials, interactive, { noBrowser, force })
+  }
+
+  let tokens = force ? null : await loadTokens()
+  if (tokens?.provider !== 'gscdump' || !tokens.refresh_token) {
+    if (!interactive)
+      throw new Error('Run `gscdump auth login` to connect Google.')
+    tokens = await loginWithPlatform({
+      force,
+      request: fetch,
+      now: Date.now,
+      wait: waitForPoll,
+      authorize: async (url) => {
+        logger.info(`Open this URL to connect Google:\n${url}`)
+        if (!noBrowser)
+          await open(url).catch((error: Error) => logger.warn(`Browser could not open: ${error.message}. Open the URL above.`))
+      },
+    })
+    await saveTokens(tokens)
+  }
+  const refreshToken = tokens.refresh_token!
+  const client = new OAuth2ClientClass()
+  // Google data calls stay direct. The platform only refreshes its own OAuth grant.
+  client.refreshHandler = async () => {
+    const refreshed = await refreshWithPlatform(refreshToken)
+    await saveTokens({ provider: 'gscdump', refresh_token: refreshToken, ...refreshed })
+    return refreshed
+  }
+  client.setCredentials({ access_token: tokens.access_token, expiry_date: tokens.expiry_date })
+  await client.getAccessToken()
+  return client
 }
 
 /**

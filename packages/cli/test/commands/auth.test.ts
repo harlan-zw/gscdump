@@ -1,3 +1,4 @@
+import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { authCommand } from '../../src/commands/auth'
 
@@ -86,6 +87,44 @@ describe('auth command', () => {
     expect(authCommand.subCommands?.status).toBeDefined()
     expect(authCommand.subCommands?.login).toBeDefined()
     expect(authCommand.subCommands?.logout).toBeDefined()
+  })
+
+  it('accepts saved platform read-only scopes without requesting re-consent', async () => {
+    mocks.loadTokens.mockResolvedValue({ ...mockCredentials, provider: 'gscdump' })
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('unexpected exit')
+    }) as never)
+    try {
+      const scopes = authCommand.subCommands!.scopes
+      await scopes.run!({ args: { json: true }, rawArgs: [], cmd: scopes })
+      expect(JSON.parse(consoleOutput.at(-1)!)).toEqual({
+        scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+        missing: [],
+      })
+      const status = authCommand.subCommands!.status
+      await status.run!({ args: {}, rawArgs: [], cmd: status })
+      expect(consoleOutput.join('\n')).not.toContain('re-consent')
+    }
+    finally {
+      exit.mockRestore()
+    }
+  })
+
+  it('still rejects missing BYOK scopes when platform tokens are saved', async () => {
+    mocks.loadTokens.mockResolvedValue({ ...mockCredentials, provider: 'gscdump' })
+    mocks.resolveBYOK.mockReturnValue('byok-access' as never)
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit 1')
+    }) as never)
+    try {
+      const scopes = authCommand.subCommands!.scopes
+      await expect(scopes.run!({ args: { json: true }, rawArgs: [], cmd: scopes })).rejects.toThrow('exit 1')
+      expect(JSON.parse(consoleOutput.at(-1)!).missing).toContain('https://www.googleapis.com/auth/webmasters')
+    }
+    finally {
+      mocks.resolveBYOK.mockReturnValue(null)
+      exit.mockRestore()
+    }
   })
 
   describe('status subcommand', () => {
