@@ -26,6 +26,17 @@ describe('free CLI authentication', () => {
     }))
   })
 
+  it('requests fresh Google consent and returns to the same poll code when forced', async () => {
+    const code = '0123456789ABCDEFABCD'
+    const request = vi.fn()
+      .mockResolvedValueOnce(response({ code, expiresIn: 600, authUrl: 'https://evil.example/' }))
+      .mockResolvedValueOnce(response({ status: 'complete', tokens: { accessToken: 'access', refreshToken: 'refresh', expiresAt: 1800000000000 } }))
+    const authorize = vi.fn()
+    await loginWithPlatform({ request, authorize, wait: async () => {}, now: () => 0, force: true })
+    expect(authorize).toHaveBeenCalledWith(`https://gscdump.com/auth/google?reauth=1&redirect=${encodeURIComponent(`/app/cli/auth?code=${code}`)}`)
+    expect(request).toHaveBeenLastCalledWith(`https://gscdump.com/api/cli/auth/poll?code=${code}`, expect.objectContaining({ redirect: 'error' }))
+  })
+
   it('rejects malformed tokens before they enter storage', async () => {
     const request = vi.fn()
       .mockResolvedValueOnce(response({ code: 'A'.repeat(20), expiresIn: 600 }))

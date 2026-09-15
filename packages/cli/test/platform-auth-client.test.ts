@@ -59,7 +59,7 @@ it('reconnects rejected credentials with the prescribed local forced login', asy
     `https://gscdump.com/api/cli/auth/poll?code=${'A'.repeat(20)}`,
     'https://oauth2.googleapis.com/tokeninfo?access_token=new-access',
   ])
-  expect(open).toHaveBeenCalledWith(`https://gscdump.com/app/cli/auth?code=${'A'.repeat(20)}`)
+  expect(open).toHaveBeenCalledWith(`https://gscdump.com/auth/google?reauth=1&redirect=${encodeURIComponent(`/app/cli/auth?code=${'A'.repeat(20)}`)}`)
   expect(await loadTokens()).toEqual({ provider: 'gscdump', access_token: 'new-access', refresh_token: 'new-refresh', expiry_date: expiresAt })
 })
 

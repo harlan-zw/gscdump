@@ -455,6 +455,7 @@ export async function getAuth(opts: GetAuthOptions = {}): Promise<OAuth2Client> 
     if (!interactive)
       throw new Error('Run `gscdump auth login` to connect Google.')
     tokens = await loginWithPlatform({
+      force,
       request: fetch,
       now: Date.now,
       wait: waitForPoll,

@@ -45,6 +45,7 @@ export async function loginWithPlatform(deps: {
   authorize: (url: string) => Promise<void>
   wait: (milliseconds: number) => Promise<void>
   now: () => number
+  force?: boolean
 }): Promise<PlatformTokens> {
   const init = z.object({
     code: z.string().regex(/^[A-F0-9]{20}$/),
@@ -52,7 +53,9 @@ export async function loginWithPlatform(deps: {
   }).parse(await requestJson(deps.request, 'init', { method: 'POST' }))
   const deadline = deps.now() + init.expiresIn * 1000
   // Ignore response URLs. Only the fixed platform receives credentials or opens in a browser.
-  await deps.authorize(`${ORIGIN}/app/cli/auth?code=${init.code}`)
+  const redirect = `/app/cli/auth?code=${init.code}`
+  const route = deps.force ? `/auth/google?reauth=1&redirect=${encodeURIComponent(redirect)}` : redirect
+  await deps.authorize(`${ORIGIN}${route}`)
   while (deps.now() < deadline) {
     const result = pollSchema.parse(await requestJson(deps.request, `poll?code=${init.code}`))
     if (result.status === 'complete') {
