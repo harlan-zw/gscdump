@@ -128,7 +128,7 @@ and `Vary: Authorization`.
 The host keeps one atomic 60-second fixed-window counter per authenticated
 principal and operation. Limits range from 10 to 120 requests per window. The
 [rate-limit table](../hosted-api-v1.md#rate-limits-and-lifecycle-signaling)
-lists all 55 operation policies.
+lists all 58 operation policies.
 
 Quota-evaluated responses include `RateLimit-Policy` and `RateLimit`. On
 `429 rate_limited`, wait for the `Retry-After` duration. Treat it as
