@@ -82,13 +82,19 @@ jobs:
 
       - name: Measure both builds
         working-directory: head
+        # Every value a pull request can influence arrives as an environment
+        # variable. Nothing from the event is pasted into this script.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PAIRED: ${{ steps.pairing.outputs.paired }}
         run: |
           node scripts/perf/run.mjs \
             --head . \
             --parent ../base \
-            --commit "${{ github.event.pull_request.head.sha }}" \
-            --parent-commit "${{ github.event.pull_request.base.sha }}" \
-            --paired "${{ steps.pairing.outputs.paired }}" \
+            --commit "$HEAD_SHA" \
+            --parent-commit "$BASE_SHA" \
+            --paired "$PAIRED" \
             --out "$RUNNER_TEMP/perf-report/measurement.json"
 
       - name: Write the report

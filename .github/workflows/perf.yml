@@ -82,13 +82,16 @@ jobs:
 
       - name: Measure both builds
         working-directory: head
+        env:
+          PAIRED: ${{ steps.parent.outputs.paired }}
+          PARENT_SHA: ${{ steps.parent.outputs.sha }}
         run: |
           node scripts/perf/run.mjs \
             --head . \
             --parent ../parent \
             --commit "$GITHUB_SHA" \
-            --parent-commit "${{ steps.parent.outputs.sha }}" \
-            --paired "${{ steps.parent.outputs.paired }}" \
+            --parent-commit "$PARENT_SHA" \
+            --paired "$PAIRED" \
             --out ../measurement.json
 
       - name: Store the measurement
