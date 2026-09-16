@@ -119,8 +119,8 @@ export function renderReport(measurement, baseLabel = '') {
     output.push(...renderTable(rows), '', ...renderHowToRead(rows))
   else
     output.push('No benchmark produced a reading.')
-  if (measurement.paired === false)
-    output.push('', '> ⚠️ This pull request changes `pnpm-lock.yaml`. Both sides build from one lockfile, so this comparison is not valid.')
+  if (measurement.dependenciesChanged === true)
+    output.push('', '> ℹ️ This pull request changes `pnpm-lock.yaml`. Each side still builds from its own lockfile, so the comparison holds. A change above may belong to a dependency rather than to this repository.')
   if (baseLabel)
     output.push('', `<sub>Base: ${escapeCell(baseLabel)}. Both sides ran on the same runner, ${measurement.repeats ?? rows[0]?.repeats ?? 'several'} repeats each.</sub>`)
   return `${output.join('\n')}\n`

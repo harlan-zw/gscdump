@@ -37,13 +37,13 @@ jobs:
           set -euo pipefail
           parent="$(git rev-parse HEAD~1)"
           echo "sha=$parent" >> "$GITHUB_OUTPUT"
-          # One install serves both builds. A commit that moves its own
-          # dependencies therefore builds its parent against the wrong
-          # lockfile, so its pairing is invalid and the reader must drop it.
+          # Each side installs from its own lockfile, so this does not affect
+          # whether the comparison holds. It tells a reader where a delta may
+          # have come from.
           if git diff --quiet HEAD~1 HEAD -- pnpm-lock.yaml; then
-            echo "paired=true" >> "$GITHUB_OUTPUT"
+            echo "dependencies_changed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "paired=false" >> "$GITHUB_OUTPUT"
+            echo "dependencies_changed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Check out the parent commit
@@ -83,7 +83,7 @@ jobs:
       - name: Measure both builds
         working-directory: head
         env:
-          PAIRED: ${{ steps.parent.outputs.paired }}
+          DEPENDENCIES_CHANGED: ${{ steps.parent.outputs.dependencies_changed }}
           PARENT_SHA: ${{ steps.parent.outputs.sha }}
         run: |
           node scripts/perf/run.mjs \
@@ -91,7 +91,7 @@ jobs:
             --parent ../parent \
             --commit "$GITHUB_SHA" \
             --parent-commit "$PARENT_SHA" \
-            --paired "$PAIRED" \
+            --dependencies-changed "$DEPENDENCIES_CHANGED" \
             --out ../measurement.json
 
       - name: Store the measurement

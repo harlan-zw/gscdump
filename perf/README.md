@@ -39,7 +39,7 @@ A delta no larger than the control says nothing.
 Measured on an idle laptop the control sits near 1%. On a loaded machine it reaches 3%.
 One control is one sample of the noise, so the harness reports both numbers and judges neither.
 
-`paired` is false when the commit changed `pnpm-lock.yaml`, because both sides then build from one lockfile and the comparison is invalid. Drop those.
+`dependenciesChanged` is true when the commit moved `pnpm-lock.yaml`. Each side installs from its own lockfile, so the comparison still holds. It is there to say where a delta may have come from: a dependency, rather than this repository's own code.
 
 `verified` is false when the two sides produced different output. A faster revision that returns different bytes is a defect, never a win.
 

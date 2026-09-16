@@ -150,9 +150,10 @@ const measurement = {
   harness: manifest.harness,
   commit: argument('commit', 'unknown'),
   parentCommit: argument('parent-commit', 'unknown'),
-  // A commit that moves its own dependencies invalidates its own pairing,
-  // because both sides build from one lockfile. The reader drops these.
-  paired: argument('paired', 'true') === 'true',
+  // Each side installs from its own lockfile, so a dependency change does not
+  // invalidate the comparison. It does explain one: a delta here may belong to
+  // the dependency rather than to this repository's code.
+  dependenciesChanged: argument('dependencies-changed', 'false') === 'true',
   runner: process.env.RUNNER_NAME === undefined ? 'local' : process.env.ImageOS ?? 'unknown',
   node: process.version,
   cpu: cpus()[0]?.model ?? 'unknown',

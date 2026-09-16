@@ -64,19 +64,20 @@ jobs:
           pnpm i --filter . --filter "./packages/*" --no-frozen-lockfile --trust-lockfile
           pnpm --filter @gscdump/engine... run build
 
-      - name: Decide whether the comparison is valid
-        id: pairing
+      - name: Note whether the dependencies moved
+        id: deps
         working-directory: head
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          # One install serves both builds. A pull request that moves its own
-          # dependencies therefore builds its base against the wrong lockfile.
+          # Each side installs from its own lockfile, so this does not affect
+          # whether the comparison holds. It tells a reader where a delta may
+          # have come from.
           if git diff --quiet "$BASE_SHA" HEAD -- pnpm-lock.yaml; then
-            echo "paired=true" >> "$GITHUB_OUTPUT"
+            echo "dependencies_changed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "paired=false" >> "$GITHUB_OUTPUT"
+            echo "dependencies_changed=true" >> "$GITHUB_OUTPUT"
           fi
           echo "label=$(git log -1 --format='%h · %cs' "$BASE_SHA")" >> "$GITHUB_OUTPUT"
 
@@ -87,20 +88,20 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PAIRED: ${{ steps.pairing.outputs.paired }}
+          DEPENDENCIES_CHANGED: ${{ steps.deps.outputs.dependencies_changed }}
         run: |
           node scripts/perf/run.mjs \
             --head . \
             --parent ../base \
             --commit "$HEAD_SHA" \
             --parent-commit "$BASE_SHA" \
-            --paired "$PAIRED" \
+            --dependencies-changed "$DEPENDENCIES_CHANGED" \
             --out "$RUNNER_TEMP/perf-report/measurement.json"
 
       - name: Write the report
         working-directory: head
         env:
-          BASE_LABEL: ${{ github.base_ref }} @ ${{ steps.pairing.outputs.label }}
+          BASE_LABEL: ${{ github.base_ref }} @ ${{ steps.deps.outputs.label }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           MEASUREMENT: ${{ runner.temp }}/perf-report/measurement.json
           PR_NUMBER: ${{ github.event.pull_request.number }}

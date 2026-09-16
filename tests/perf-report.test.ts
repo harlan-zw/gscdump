@@ -12,10 +12,10 @@ interface BenchmarkInput {
   verified?: boolean
 }
 
-function measurement(benchmarks: BenchmarkInput[], paired = true) {
+function measurement(benchmarks: BenchmarkInput[], dependenciesChanged = false) {
   return {
     harness: 1,
-    paired,
+    dependenciesChanged,
     benchmarks: benchmarks.map(benchmark => ({
       id: benchmark.id,
       kind: benchmark.kind,
@@ -68,9 +68,15 @@ describe('perf report', () => {
     expect(report).not.toContain('🔴')
   })
 
-  it('warns that a lockfile change invalidates the comparison', () => {
-    const report = renderReport(measurement([timed(100, 100, 0.1)], false))
+  it('says a dependency change may own the delta, without calling the comparison invalid', () => {
+    const report = renderReport(measurement([timed(100, 100, 0.1)], true))
     expect(report).toContain('pnpm-lock.yaml')
+    expect(report).toContain('the comparison holds')
+    expect(report).not.toContain('not valid')
+  })
+
+  it('says nothing about dependencies when the lockfile did not move', () => {
+    expect(renderReport(measurement([timed(100, 100, 0.1)]))).not.toContain('pnpm-lock.yaml')
   })
 
   it('names an improvement when the change beats the noise downwards', () => {
