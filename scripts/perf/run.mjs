@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { cpus, tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 
 // Measures two revisions of the same code against each other in one process
@@ -160,6 +160,8 @@ const measurement = {
   benchmarks,
 }
 
+// The caller names a path, not a directory it has to remember to create.
+mkdirSync(dirname(outPath), { recursive: true })
 writeFileSync(outPath, `${JSON.stringify(measurement, null, 2)}\n`)
 const signed = value => value === null ? 'n/a' : `${value > 0 ? '+' : ''}${value}%`
 for (const benchmark of benchmarks) {
