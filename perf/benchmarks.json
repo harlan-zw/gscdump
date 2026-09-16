@@ -1,0 +1,27 @@
+{
+  "harness": 1,
+  "repeats": 9,
+  "warmups": 2,
+  "build": "pnpm --filter @gscdump/engine... run build",
+  "benchmarks": [
+    {
+      "id": "engine/decode-parquet-200k",
+      "kind": "time",
+      "unit": "ms",
+      "case": "scripts/perf/cases/decode-parquet.mjs",
+      "source": "packages/engine/src/hyparquet/decode.ts",
+      "measures": "decodeParquetToRows over 200,000 page_queries rows"
+    },
+    {
+      "id": "engine/dist-bytes",
+      "kind": "count",
+      "unit": "bytes",
+      "case": "scripts/perf/cases/engine-dist-bytes.mjs",
+      "repeats": 1,
+      "warmups": 0,
+      "prepare": false,
+      "source": "packages/engine/build.config.ts",
+      "measures": "total built byte size of @gscdump/engine"
+    }
+  ]
+}
