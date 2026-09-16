@@ -1,6 +1,6 @@
 # Hosted API v1 integration guide
 
-The hosted v1 API has 55 HTTP operations: 50 partner, three analytics, and two
+The hosted v1 API has 58 HTTP operations: 53 partner, three analytics, and two
 realtime HTTP operations. The HTTP wire version is `1.0`.
 
 Use these generated files to inspect exact paths, inputs, responses, scopes,
@@ -128,7 +128,7 @@ and `Vary: Authorization`.
 The host keeps one atomic 60-second fixed-window counter per authenticated
 principal and operation. Limits range from 10 to 120 requests per window. The
 [rate-limit table](../hosted-api-v1.md#rate-limits-and-lifecycle-signaling)
-lists all 55 operation policies.
+lists all 58 operation policies.
 
 Quota-evaluated responses include `RateLimit-Policy` and `RateLimit`. On
 `429 rate_limited`, wait for the `Retry-After` duration. Treat it as

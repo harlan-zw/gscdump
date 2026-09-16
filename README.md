@@ -403,7 +403,7 @@ In local mode, `gscdump auth status` reports `byok` for Google environment crede
 ## Hosted API v1
 
 Use `@gscdump/sdk/v1` for the hosted gscdump.com API.
-The current contracts describe 55 HTTP operations: 50 partner, three analytics, and two realtime operations.
+The current contracts describe 58 HTTP operations: 53 partner, three analytics, and two realtime operations.
 The API wire version is `1.0`, separate from npm package versions.
 
 Start with the [hosted integration guide](./docs/guides/hosted-v1.md).

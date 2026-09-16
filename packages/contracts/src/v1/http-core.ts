@@ -52,6 +52,8 @@ export const HTTP_V1_ERROR_CODES = [
   'forbidden',
   'user_not_found',
   'site_not_found',
+  'api_key_not_found',
+  'api_key_limit_reached',
   'rate_limited',
   'realtime_unavailable',
   'internal_error',
@@ -328,7 +330,8 @@ function assertPathContract(operation: HttpV1OperationDefinition): void {
 }
 
 function assertOperation(operation: HttpV1OperationDefinition): void {
-  if (!/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+$/.test(operation.id))
+  // Segments are lowercase words; a single underscore may join words (`api_keys`).
+  if (!/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*(?:\.[a-z][a-z0-9]*(?:_[a-z0-9]+)*)+$/.test(operation.id))
     throw new TypeError(`${operation.id}: operation ID must be a stable dotted lowercase identifier`)
   if (!isSafePathTemplate(operation.path))
     throw new TypeError(`${operation.id}: path must be a safe literal surface-relative template`)

@@ -141,8 +141,8 @@ methods.
 
 ## Hosted v1 operations
 
-The public v1 registry has 55 HTTP operations on `@gscdump/contracts/v1`
-and `@gscdump/sdk/v1`: 50 partner, three analytics, and two realtime HTTP
+The public v1 registry has 58 HTTP operations on `@gscdump/contracts/v1`
+and `@gscdump/sdk/v1`: 53 partner, three analytics, and two realtime HTTP
 operations. The API wire version remains `1.0`. See the [generated OpenAPI files](../packages/contracts/generated)
 for the exact registry and the
 [hosted v1 integration guide](./guides/hosted-v1.md) for consumer setup.

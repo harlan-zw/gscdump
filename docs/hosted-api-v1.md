@@ -3,7 +3,7 @@
 ## Status and intent
 
 This document defines the public gscdump.com API contract.
-The current package registry contains 55 HTTP operations: 50 partner, three analytics, and two realtime operations.
+The current package registry contains 58 HTTP operations: 53 partner, three analytics, and two realtime operations.
 The API wire version is `1.0`; npm package versions follow a separate release cycle.
 
 The [producer inventory](./hosted-api-inventory.md) matches these operations to the host checkout.
@@ -63,7 +63,9 @@ one method/path descriptor and rely on an untyped body switch. Producer route,
 contract descriptor, SDK method, documentation, and contract test are one
 change.
 
-All 55 v1 descriptors have schemas and matching routes in the host inventory.
+All 58 v1 descriptors have schemas.
+The host inventory matches 55 of them to routes.
+The three `partner.users.api_keys.*` operations join the inventory when the host ships their routes.
 New operations need production checks and consumer migration evidence before rollout is complete.
 Legacy gaps block promotion of affected operations.
 Host-only, session, CLI, public-site, and admin operations remain outside this protocol.
@@ -152,6 +154,30 @@ and closed for each operation. `message` is not a parsing contract. `details`
 is a required object (empty when unused) and is additive. Authentication
 failures do not reveal whether a principal or resource exists.
 
+## User API keys
+
+A partner can issue API keys on behalf of a linked user.
+The user puts an API key in the CLI, the MCP server, or a v1 client.
+Each API key is separate from the partner's own `partner_key`.
+Revoking an API key does not affect the partner, and repairing the partner credential does not revoke user API keys.
+
+| Operation | Method and path | Success |
+| --- | --- | --- |
+| `partner.users.api_keys.create` | `POST /api/partner/v1/users/{userId}/api-keys` | `201` |
+| `partner.users.api_keys.list` | `GET /api/partner/v1/users/{userId}/api-keys` | `200` |
+| `partner.users.api_keys.revoke` | `DELETE /api/partner/v1/users/{userId}/api-keys/{keyId}` | `200` |
+
+- Only `partner_key` may call these operations, with `linked_user` ownership.
+- Create and revoke need `users:write`. List needs `users:read`.
+- An API key has the `gsd_user_` prefix and authenticates as `user_key`. Its public id has the `ak_` prefix.
+- The create response is the only response that contains the raw API key. The host stores a hash and a preview. The partner shows the key once and does not store it.
+- Create is not idempotent and never retries. A retry would issue a second key.
+- The limit is 10 active API keys per partner and user. If the limit is reached, create returns `409 api_key_limit_reached`.
+- List returns only active API keys that the calling partner issued.
+- Revoke is idempotent. If the calling partner already revoked the key, revoke returns `200` again.
+- If the key is unknown or another issuer created it, revoke returns `404 api_key_not_found`.
+- `createdAt` and `lastUsedAt` are Unix seconds. `lastUsedAt` is `null` until first use.
+
 ## Rate limits and lifecycle signaling
 
 The hosted policy is one atomic 60-second fixed-window counter per authenticated
@@ -203,6 +229,9 @@ principal and operation:
 | `partner.teams.members.remove` | 30 |
 | `partner.teams.members.role.update` | 30 |
 | `partner.teams.rename` | 20 |
+| `partner.users.api_keys.create` | 10 |
+| `partner.users.api_keys.list` | 60 |
+| `partner.users.api_keys.revoke` | 20 |
 | `partner.users.create` | 20 |
 | `partner.users.delete` | 10 |
 | `partner.users.lifecycle.get` | 120 |

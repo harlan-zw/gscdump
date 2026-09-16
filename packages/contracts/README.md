@@ -3,7 +3,7 @@
 Shared protocol contracts for gscdump.com integrations.
 
 Use `@gscdump/contracts/v1` for operation definitions, request and response schemas, and protocol constants.
-The registry describes 55 HTTP operations and the realtime protocol.
+The registry describes 58 HTTP operations and the realtime protocol.
 For HTTP calls, install [`@gscdump/sdk`](../sdk/README.md).
 
 ```bash
