@@ -1,0 +1,123 @@
+name: Perf
+
+# Measures every merged commit against its parent, in one job, on one machine.
+# It runs after merge and never on a pull request, so it adds no pull request
+# latency and gates nothing. The numbers land on refs/notes/perf.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - LICENSE
+  workflow_dispatch:
+
+concurrency:
+  group: perf
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out this commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: head
+          fetch-depth: 2
+
+      - name: Name the parent commit
+        id: parent
+        working-directory: head
+        run: |
+          set -euo pipefail
+          parent="$(git rev-parse HEAD~1)"
+          echo "sha=$parent" >> "$GITHUB_OUTPUT"
+          # Each side installs from its own lockfile, so this does not affect
+          # whether the comparison holds. It tells a reader where a delta may
+          # have come from.
+          if git diff --quiet HEAD~1 HEAD -- pnpm-lock.yaml; then
+            echo "dependencies_changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "dependencies_changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out the parent commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: parent
+          ref: ${{ steps.parent.outputs.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+        with:
+          # Both revisions sit in subdirectories, so the workspace root holds
+          # no package.json for the action to read its version from.
+          package_json_file: head/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: head/pnpm-lock.yaml
+
+      - name: Build this commit
+        working-directory: head
+        env:
+          PNPM_MINIMUM_RELEASE_AGE: 0
+        run: |
+          pnpm i --filter . --filter "./packages/*" --frozen-lockfile --trust-lockfile
+          pnpm --filter @gscdump/engine... run build
+
+      - name: Build the parent commit
+        working-directory: parent
+        env:
+          PNPM_MINIMUM_RELEASE_AGE: 0
+        run: |
+          pnpm i --filter . --filter "./packages/*" --no-frozen-lockfile --trust-lockfile
+          pnpm --filter @gscdump/engine... run build
+
+      - name: Measure both builds
+        working-directory: head
+        env:
+          DEPENDENCIES_CHANGED: ${{ steps.parent.outputs.dependencies_changed }}
+          PARENT_SHA: ${{ steps.parent.outputs.sha }}
+        run: |
+          node scripts/perf/run.mjs \
+            --head . \
+            --parent ../parent \
+            --commit "$GITHUB_SHA" \
+            --parent-commit "$PARENT_SHA" \
+            --dependencies-changed "$DEPENDENCIES_CHANGED" \
+            --out ../measurement.json
+
+      - name: Store the measurement
+        working-directory: head
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Another push can land a note between the fetch and the push, so
+          # take the remote copy and reapply on top of it.
+          for attempt in 1 2 3; do
+            git fetch origin "refs/notes/perf:refs/notes/perf" || true
+            git notes --ref=perf add -f -F ../measurement.json "$GITHUB_SHA"
+            if git push origin refs/notes/perf; then
+              exit 0
+            fi
+            git update-ref -d refs/notes/perf || true
+            sleep $((attempt * 5))
+          done
+          echo "Could not store the measurement after three attempts."
+          exit 1
+
+      - name: Keep the measurement when the note cannot be stored
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: measurement
+          path: measurement.json
+          if-no-files-found: warn

@@ -1,0 +1,122 @@
+name: Perf Pull Request
+
+# Measures a pull request against its base, in one job, on one machine.
+# It holds no write access and posts nothing. Perf Comment does that, from the
+# artifact this job uploads, so a fork pull request never reaches a token.
+# It is not a required check and it never blocks a merge.
+on:
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - LICENSE
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: head
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: base
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+        with:
+          # Both revisions sit in subdirectories, so the workspace root holds
+          # no package.json for the action to read its version from.
+          package_json_file: head/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: head/pnpm-lock.yaml
+
+      - name: Build the pull request
+        working-directory: head
+        env:
+          PNPM_MINIMUM_RELEASE_AGE: 0
+        run: |
+          pnpm i --filter . --filter "./packages/*" --frozen-lockfile --trust-lockfile
+          pnpm --filter @gscdump/engine... run build
+
+      - name: Build the base commit
+        working-directory: base
+        env:
+          PNPM_MINIMUM_RELEASE_AGE: 0
+        run: |
+          pnpm i --filter . --filter "./packages/*" --no-frozen-lockfile --trust-lockfile
+          pnpm --filter @gscdump/engine... run build
+
+      - name: Note whether the dependencies moved
+        id: deps
+        working-directory: head
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          # Each side installs from its own lockfile, so this does not affect
+          # whether the comparison holds. It tells a reader where a delta may
+          # have come from.
+          if git diff --quiet "$BASE_SHA" HEAD -- pnpm-lock.yaml; then
+            echo "dependencies_changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "dependencies_changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "label=$(git log -1 --format='%h · %cs' "$BASE_SHA")" >> "$GITHUB_OUTPUT"
+
+      - name: Measure both builds
+        working-directory: head
+        # Every value a pull request can influence arrives as an environment
+        # variable. Nothing from the event is pasted into this script.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DEPENDENCIES_CHANGED: ${{ steps.deps.outputs.dependencies_changed }}
+        run: |
+          node scripts/perf/run.mjs \
+            --head . \
+            --parent ../base \
+            --commit "$HEAD_SHA" \
+            --parent-commit "$BASE_SHA" \
+            --dependencies-changed "$DEPENDENCIES_CHANGED" \
+            --out "$RUNNER_TEMP/perf-report/measurement.json"
+
+      - name: Write the report
+        working-directory: head
+        env:
+          BASE_LABEL: ${{ github.base_ref }} @ ${{ steps.deps.outputs.label }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MEASUREMENT: ${{ runner.temp }}/perf-report/measurement.json
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPORT_DIR: ${{ runner.temp }}/perf-report
+        run: |
+          set -euo pipefail
+          node scripts/perf/report.mjs | tee "$REPORT_DIR/report.md"
+          cat "$REPORT_DIR/report.md" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$PR_NUMBER" > "$REPORT_DIR/pr-number.txt"
+          printf '%s\n' "$HEAD_SHA" > "$REPORT_DIR/head-sha.txt"
+
+      - name: Upload the report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: perf-report
+          path: ${{ runner.temp }}/perf-report
+          if-no-files-found: error
+          retention-days: 14

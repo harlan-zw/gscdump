@@ -85,5 +85,9 @@ All pull requests run on isolated GitHub-hosted runners.
 The required `test` check also completes for documentation changes, with package checks skipped.
 Main and release jobs also use GitHub-hosted runners.
 
+The `Perf` workflow measures each merged commit against its parent and stores the numbers on `refs/notes/perf`.
+It runs only after merge. It never runs on a pull request and it gates nothing.
+Run it yourself with `node scripts/perf/run.mjs --head . --parent <other-checkout> --out perf.json`, where both checkouts are already built.
+
 If you report a bug, include the package version, Node.js version, operating system, command, and redacted error.
 Use [SECURITY.md](./SECURITY.md) for vulnerabilities.
