@@ -268,6 +268,10 @@ _Avoid_: using `partnerEndpointSchemas` as a catch-all for unrelated hosted APIs
 SDK-private HTTP transport factory for hosted clients. Owns base-path joining, headers/API-key merge, validation phase policy, and partner error mapping. Surface clients own endpoint-specific schemas and method names.
 _Avoid_: duplicating request helpers in each hosted SDK client.
 
+**API key**:
+A revocable `gsd_user_` credential that authenticates as `user_key` for the CLI, the MCP server, and v1 clients. A partner issues one for a linked user through `partner.users.api_keys.*`; its public id has the `ak_` prefix. The raw key appears once, in the create response.
+_Avoid_: token, secret, or personal access token for this credential; "token" already names Google OAuth grants and realtime tickets.
+
 **Search Console API surface**:
 The package root is the sole direct Google Search Console / Indexing / Site Verification client surface. Query, date, result, normalization, and tenant concepts use their named subpaths; v1 removes the duplicate `gscdump/api` barrel.
 _Avoid_: recreating an app-local direct Google client or importing the removed `gscdump/api` barrel.

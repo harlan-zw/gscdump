@@ -1,6 +1,6 @@
 # Hosted API v1 integration guide
 
-The hosted v1 API has 55 HTTP operations: 50 partner, three analytics, and two
+The hosted v1 API has 58 HTTP operations: 53 partner, three analytics, and two
 realtime HTTP operations. The HTTP wire version is `1.0`.
 
 Use these generated files to inspect exact paths, inputs, responses, scopes,

@@ -477,6 +477,41 @@ export function createGscdumpV1Protocol() {
     updated: z.boolean(),
     sites: z.array(gscdumpAvailableSiteSchema),
   }), partnerResponseMeta)
+  // API keys a partner issues on a user's behalf. They are separate from the
+  // partner's own per-user credential, so a user can revoke one without
+  // breaking the partner. The raw key appears only in the create response.
+  const partnerUserApiKeyLabel = z.string().min(1).max(64)
+  const partnerUserApiKeyId = z.string().regex(/^ak_[\w-]+$/)
+  const partnerUserApiKeyParams = z.strictObject({
+    userId: realtimeSchemas.publicUserId,
+    keyId: partnerUserApiKeyId,
+  })
+  const createUserApiKeyRequest = z.strictObject({
+    label: z.string().trim().min(1).max(64),
+  })
+  const partnerUserApiKeyCreatedAt = z.number().int().nonnegative()
+  const createUserApiKeyResponse = defineSuccessResponse(defineResponseObject({
+    keyId: partnerUserApiKeyId,
+    apiKey: z.string().regex(/^gsd_user_[\w-]+$/),
+    preview: z.string().min(1),
+    label: partnerUserApiKeyLabel,
+    createdAt: partnerUserApiKeyCreatedAt,
+  }), partnerResponseMeta)
+  const partnerUserApiKey = defineResponseObject({
+    keyId: partnerUserApiKeyId,
+    preview: z.string().min(1),
+    label: partnerUserApiKeyLabel,
+    createdAt: partnerUserApiKeyCreatedAt,
+    lastUsedAt: z.number().int().nonnegative().nullable(),
+  })
+  const listUserApiKeysResponse = defineSuccessResponse(defineResponseObject(
+    { keys: z.array(partnerUserApiKey.producer) },
+    { keys: z.array(partnerUserApiKey.client) },
+  ), partnerResponseMeta)
+  const revokeUserApiKeyResponse = defineSuccessResponse(defineResponseObject({
+    ok: z.literal(true),
+    keyId: partnerUserApiKeyId,
+  }), partnerResponseMeta)
 
   // ── 1.1.0 promotions (2026-07-22 full train, tranche A) ────────────────────
   // Response shapes wrap the SAME shared schemas the private handlers already
@@ -806,6 +841,8 @@ export function createGscdumpV1Protocol() {
     'internal_error',
     'contract_violation',
   ] as const
+  const partnerUserApiKeyCreateErrors = [...partnerUserErrors, 'api_key_limit_reached'] as const
+  const partnerUserApiKeyRevokeErrors = [...partnerUserErrors, 'api_key_not_found'] as const
   const analyticsRowsErrors = [
     'invalid_request',
     'unauthorized',
@@ -2769,6 +2806,111 @@ export function createGscdumpV1Protocol() {
               data: { siteUrl: 'https://example.com', site: { type: 'INET_DOMAIN', identifier: 'example.com' }, method: 'DNS_TXT', verified: true, owners: ['owner@example.com'] },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
+          },
+        },
+      }),
+      createUserApiKey: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.users.api_keys.create'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: false, retry: 'never', readConsistency: null },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['users:write'],
+          ownership: [{ credential: 'partner_key', rule: 'linked_user' }],
+        },
+        request: {
+          params: z.strictObject({ userId: realtimeSchemas.publicUserId }),
+          query: null,
+          headers: requestHeaders,
+          body: createUserApiKeyRequest,
+        },
+        responses: { 201: createUserApiKeyResponse },
+        errors: partnerUserApiKeyCreateErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserApiKeyCreateErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'partner.user', idFrom: 'params.userId' }],
+          changes: [{ type: 'partner.user', idFrom: 'params.userId' }],
+        },
+        lifecycle: { introduced: '3.8.0' },
+        docs: {
+          summary: 'Create a user API key',
+          description: 'Issues a new revocable API key for a partner-linked user. The raw key appears only in this response; store or show it once. Each partner may hold at most 10 API keys per user; a create beyond the limit fails with `409 api_key_limit_reached`.',
+          tags: ['Users'],
+          examples: {
+            request: { params: { userId: 'u_01' }, body: { label: 'Laptop CLI' } },
+            response: {
+              data: { keyId: 'ak_01', apiKey: 'gsd_user_0123456789abcdef', preview: 'gsd_user_012345...cdef', label: 'Laptop CLI', createdAt: 1789516800 },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      listUserApiKeys: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.users.api_keys.list'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['users:read'],
+          ownership: [{ credential: 'partner_key', rule: 'linked_user' }],
+        },
+        request: {
+          params: z.strictObject({ userId: realtimeSchemas.publicUserId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: listUserApiKeysResponse },
+        errors: partnerUserErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'partner.user', idFrom: 'params.userId' }],
+          changes: [],
+        },
+        lifecycle: { introduced: '3.8.0' },
+        docs: {
+          summary: 'List user API keys',
+          description: 'Lists the active API keys the authenticated partner issued for a user. Keys issued by other partners or by the user are excluded. Raw keys are never returned.',
+          tags: ['Users'],
+          examples: {
+            request: { params: { userId: 'u_01' } },
+            response: {
+              data: { keys: [{ keyId: 'ak_01', preview: 'gsd_user_012345...cdef', label: 'Laptop CLI', createdAt: 1789516800, lastUsedAt: null }] },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      revokeUserApiKey: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.users.api_keys.revoke'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['partner_key'],
+          scopes: ['users:write'],
+          ownership: [{ credential: 'partner_key', rule: 'linked_user' }],
+        },
+        request: {
+          params: partnerUserApiKeyParams,
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: revokeUserApiKeyResponse },
+        errors: partnerUserApiKeyRevokeErrors,
+        errorResponse: errorEnvelopeSchemas(partnerUserApiKeyRevokeErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'partner.user', idFrom: 'params.userId' }],
+          changes: [{ type: 'partner.user', idFrom: 'params.userId' }],
+        },
+        lifecycle: { introduced: '3.8.0' },
+        docs: {
+          summary: 'Revoke a user API key',
+          description: 'Revokes an API key the authenticated partner issued for a user. The key stops working immediately. Revoking an already revoked key succeeds again. An unknown key, or a key issued by another partner or by the user, fails with `404 api_key_not_found`.',
+          tags: ['Users'],
+          examples: {
+            request: { params: { userId: 'u_01', keyId: 'ak_01' } },
+            response: { data: { ok: true, keyId: 'ak_01' }, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } },
           },
         },
       }),
