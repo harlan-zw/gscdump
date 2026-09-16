@@ -1,0 +1,12 @@
+version: 1
+routines:
+  # Reads the Measurements .github/workflows/perf.yml stores on refs/notes/perf.
+  # It judges nothing until a Benchmark has ten usable Measurements, so the
+  # first several runs will report coverage and file nothing.
+  - name: perf-review
+    on:
+      schedule:
+        - cron: '0 11 * * 1'
+    timezone: Australia/Melbourne
+    mode: propose
+    enabled: true
