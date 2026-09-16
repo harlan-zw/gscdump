@@ -29,6 +29,20 @@ function argument(name, fallback) {
   return value
 }
 
+/**
+ * Reads a true or false flag, and refuses anything else.
+ *
+ * A caller that passes an empty value means something went wrong on its side.
+ * Reading that as false would hide the fault and store a wrong measurement, so
+ * it fails here instead.
+ */
+function flag(name) {
+  const value = argument(name, 'false')
+  if (value !== 'true' && value !== 'false')
+    throw new Error(`--${name} takes true or false, not ${JSON.stringify(value)}`)
+  return value === 'true'
+}
+
 /** Runs one case file in a fresh process and reads its single JSON line. */
 function sample(caseFile, command, root, fixtures) {
   const result = spawnSync(process.execPath, [
@@ -153,7 +167,7 @@ const measurement = {
   // Each side installs from its own lockfile, so a dependency change does not
   // invalidate the comparison. It does explain one: a delta here may belong to
   // the dependency rather than to this repository's code.
-  dependenciesChanged: argument('dependencies-changed', 'false') === 'true',
+  dependenciesChanged: flag('dependencies-changed'),
   runner: process.env.RUNNER_NAME === undefined ? 'local' : process.env.ImageOS ?? 'unknown',
   node: process.version,
   cpu: cpus()[0]?.model ?? 'unknown',

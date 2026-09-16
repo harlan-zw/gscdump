@@ -29,7 +29,7 @@ Each benchmark reports three sides:
 | Field | Means |
 | --- | --- |
 | `head` | the commit under measurement |
-| `parent` | its parent, built from the same lockfile |
+| `parent` | its parent, built from its own lockfile |
 | `control` | the head build measured a second time |
 
 `deltaPercent` is head against parent. `controlPercent` is head against itself.
