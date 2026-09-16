@@ -29,8 +29,17 @@ const configSchema = z.strictObject({
 
 export type GscdumpConfig = z.infer<typeof configSchema>
 
+// Earlier CLI versions wrote these keys. Drop them so old configs still load.
+const RETIRED_KEYS = ['mode', 'cloudUrl']
+
+function dropRetiredKeys(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return value
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !RETIRED_KEYS.includes(key)))
+}
+
 function parseConfig(value: unknown): GscdumpConfig {
-  const parsed = configSchema.safeParse(value)
+  const parsed = configSchema.safeParse(dropRetiredKeys(value))
   if (!parsed.success) {
     const issues = parsed.error.issues.map(issue => `${issue.path.join('.') || 'config'}: ${issue.message}`)
     throw new Error(`Invalid config at ${getConfigPath()}. ${issues.join('; ')}`)
