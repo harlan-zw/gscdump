@@ -56,6 +56,11 @@ describe('config module', () => {
       await expect(loadConfig()).rejects.toThrow(/config.json/)
     })
 
+    it('ignores keys written by earlier CLI versions', async () => {
+      await fs.writeFile(configFile, JSON.stringify({ mode: 'local', cloudUrl: 'https://cloud.gscdump.com', defaultPeriod: '30d' }))
+      expect(await loadConfig()).toEqual({ defaultPeriod: '30d' })
+    })
+
     it('propagates config read failures', async () => {
       await fs.mkdir(configFile)
       await expect(loadConfig()).rejects.toMatchObject({ code: 'EISDIR' })
