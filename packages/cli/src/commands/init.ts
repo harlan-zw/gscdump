@@ -61,12 +61,12 @@ async function loadEnvFile(): Promise<Record<string, string> | null> {
 export const initCommand = defineCommand({
   meta: initCommandMeta,
   args: {
-    force: {
+    'force': {
       type: 'boolean',
       alias: 'f',
       description: 'Force re-initialization',
     },
-    store: {
+    'store': {
       type: 'boolean',
       default: true,
       description: 'Ask where to keep the local Store',
