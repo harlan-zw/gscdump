@@ -1,3 +1,7 @@
+import { generateKeyPairSync } from 'node:crypto'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { analysisErrors } from '@gscdump/analysis/errors'
 import { engineErrors } from '@gscdump/engine/errors'
 import { queryErrors } from 'gscdump/query'
@@ -5,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { enrichToolError, mcpHandlerErrors, mcpHandlerErrorToException, toolErrorMessage } from '../src/mcp/errors'
 import { customQueryResult } from '../src/mcp/handlers/query'
 import { runReportHandlerResult } from '../src/mcp/handlers/reports'
+import { createCliRuntime, runWithCliRuntime } from '../src/runtime'
 
 const ctx = { auth: 'x', client: {} as any } as any
 
@@ -107,5 +112,43 @@ describe('toolErrorMessage (Google + hosted API failures)', () => {
 
     expect(message).toContain('Invalid dimension "bogus".')
     expect(message).toContain('Check the tool arguments')
+  })
+
+  it('points a failing service-account credential at its key file, not the BYOK env vars', async () => {
+    const { privateKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    })
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-mcp-errors-'))
+    const keyPath = path.join(configDir, 'service-account.json')
+    await fs.writeFile(keyPath, JSON.stringify({
+      type: 'service_account',
+      client_email: 'stub@gscdump-test.iam.gserviceaccount.com',
+      private_key: privateKey,
+    }))
+    // Tool handlers resolve the credential through this invocation's runtime.
+    const runtime = createCliRuntime({
+      configDir,
+      environment: { GSC_SERVICE_ACCOUNT_JSON: keyPath, GSC_ACCESS_TOKEN: 'stale-token' },
+    })
+    // google-auth-library rethrows a rejected service-account token mint as a
+    // GaxiosError: message `error: description`, numeric `.status`, body at
+    // `.response.data`.
+    const rejectedMint = Object.assign(new Error('invalid_client: Unauthorized'), {
+      status: 401,
+      response: {
+        status: 401,
+        data: { error: 'invalid_client', error_description: 'Unauthorized' },
+      },
+    })
+
+    const message = await runWithCliRuntime(runtime, () => toolErrorMessage(rejectedMint))
+
+    expect(message).toContain('API error 401')
+    expect(message).toContain('GSC_SERVICE_ACCOUNT_JSON')
+    expect(message).not.toContain('GSC_ACCESS_TOKEN')
+    expect(message).not.toContain('gscdump auth login')
+    await fs.rm(configDir, { recursive: true, force: true })
   })
 })

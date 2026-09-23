@@ -18,7 +18,7 @@ import { isAnalysisError } from '@gscdump/analysis/errors'
 import { isEngineError } from '@gscdump/engine/errors'
 import { classifyError } from 'gscdump/errors'
 import { isQueryError } from 'gscdump/query'
-import { resolveBYOK } from '../auth'
+import { resolveBYOK, resolveServiceAccount } from '../auth'
 import { resolveAuthentication } from '../auth-state'
 
 export type McpHandlerErrorKind
@@ -122,18 +122,24 @@ function httpStatus(error: unknown): number | undefined {
 }
 
 /** The authentication mode the failing call ran in; it decides the next step. */
-export type ApiErrorMode = 'cloud' | 'local' | 'byok'
+export type ApiErrorMode = 'cloud' | 'local' | 'byok' | 'service-account'
 
 /**
  * The active authentication mode for error advice. Falls back to `local` when
- * the mode cannot be resolved, keeping the long-standing local advice. BYOK env
- * vars outrank saved tokens in `resolveAuth`, so a non-null `resolveBYOK()`
- * means the failing call used them; `auth login` cannot fix their failures.
+ * the mode cannot be resolved, keeping the long-standing local advice. The
+ * order mirrors `resolveAuth`: service account first, then BYOK env vars, so
+ * the advice names the credential the failing call actually used instead of
+ * one `resolveAuth` would keep outranking.
  */
 async function authenticationMode(): Promise<ApiErrorMode> {
   const state = await resolveAuthentication().catch(() => null)
   if (state?._tag === 'Cloud')
     return 'cloud'
+  // A stale pointer (missing or malformed key file) is ignorable here: it
+  // falls through to BYOK and saved tokens, exactly like `resolveAuth`.
+  const serviceAccount = await resolveServiceAccount().then(Boolean).catch(() => null)
+  if (serviceAccount)
+    return 'service-account'
   // A throw here only means no runtime context; fall back to the local advice.
   const byok = await Promise.resolve().then(() => resolveBYOK()).catch(() => null)
   return byok ? 'byok' : 'local'
@@ -166,6 +172,8 @@ function nextStep(error: GscError, status: number, mode: ApiErrorMode): string {
   if (status === 401 || error.kind === 'auth-expired') {
     if (mode === 'cloud')
       return 'Set or refresh GSCDUMP_API_KEY to a user API key from your gscdump.com settings.'
+    if (mode === 'service-account')
+      return 'Fix the service-account key (GSC_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS) in the MCP server configuration and restart the MCP client, or run `gscdump auth status`.'
     if (mode === 'byok')
       return 'Refresh GSC_ACCESS_TOKEN (or GSC_CLIENT_ID, GSC_CLIENT_SECRET, and GSC_REFRESH_TOKEN) in the MCP server configuration and restart the MCP client.'
     return 'Run `gscdump auth login` in a terminal to connect again.'
