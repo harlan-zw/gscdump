@@ -26,6 +26,14 @@ describe('planJobDates', () => {
     expect(plan.skippedDone).toBe(2)
   })
 
+  it('drops failed hourly dates that Google no longer serves', () => {
+    const states = [{ date: '2026-03-01', state: 'failed' }, { date: '2026-09-18', state: 'failed' }]
+    const plan = planJobDates({ table: 'hourly_pages', window: catchUp, states, today: '2026-09-22', mode: 'resume' })
+    expect(plan.dates).not.toContain('2026-03-01')
+    expect(plan.dates).toContain('2026-09-18')
+    expect(plan.dates.every(date => date >= '2026-09-12')).toBe(true)
+  })
+
   it('ignores history older than Google\'s retention floor', () => {
     const states = [{ date: '2024-01-01', state: 'done' }, { date: '2025-06-01', state: 'done' }]
     const plan = planJobDates({ table: 'pages', window: catchUp, states, today: '2026-09-22', mode: 'resume' })
