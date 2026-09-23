@@ -7,6 +7,7 @@ import { runCommand } from 'citty'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { queryCommand } from '../../src/commands/query'
 import { createLocalStore } from '../../src/local-store'
+import { recordStoreSite } from '../../src/store-sites'
 import { logger } from '../../src/utils'
 
 const state = vi.hoisted(() => ({ store: undefined as LocalStore | undefined }))
@@ -81,6 +82,17 @@ describe('query --sql views', () => {
         { site: SITE_A, search_type: 'web', impressions: 20 },
       ],
     })
+  })
+
+  it('names a Site with a path by its recorded Site URL', async () => {
+    const blog = 'https://blog.example/news/'
+    const store = state.store!
+    await store.engine.writeDay({ userId: store.userId, siteId: store.siteIdFor(blog), table: 'pages', date: '2026-04-10' }, [{ url: '/n', date: '2026-04-10', clicks: 1, impressions: 1, sum_position: 0 }])
+    expect((await recordStoreSite(dataDir, blog)).ok).toBe(true)
+
+    const result = await sql(`SELECT DISTINCT site FROM pages WHERE url = '/n'`)
+
+    expect(result.data).toEqual([{ site: blog }])
   })
 
   it('joins two tables and weights position with gsc_position', async () => {

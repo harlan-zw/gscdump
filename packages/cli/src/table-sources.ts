@@ -6,9 +6,10 @@
 import type { ColumnDef } from '@gscdump/engine/schema'
 import type { SearchType } from 'gscdump/query'
 import type { ManifestEntry, TableName } from './local-store'
+import type { SiteMap } from './store-sites'
 import path from 'node:path'
 import { SCHEMAS } from '@gscdump/engine/schema'
-import { decodeSiteId } from 'gscdump/tenant'
+import { siteUrlForId } from './store-sites'
 
 /** Parquet files of one table for one Site and one search type. */
 export interface TableSource {
@@ -23,18 +24,12 @@ export interface TableSource {
 }
 
 /**
- * The Site URL for a Store site id.
- * Seam: the Site resolver work replaces this with the stored siteId → siteUrl map.
- */
-export function siteUrlFor(siteId: string): string {
-  return decodeSiteId(siteId)
-}
-
-/**
  * Group live manifest entries by table, Site, and search type. Entries
- * with no rows are left out, so no reader sees an empty file.
+ * with no rows are left out, so no reader sees an empty file. `siteMap`
+ * names each siteId: the encoding drops the path and scheme case, so only
+ * the recorded Site URL is exact.
  */
-export function groupTableSources(entries: readonly ManifestEntry[], dataDir: string): TableSource[] {
+export function groupTableSources(entries: readonly ManifestEntry[], dataDir: string, siteMap: SiteMap): TableSource[] {
   const groups = new Map<string, TableSource>()
   for (const entry of entries) {
     if (!entry.siteId || entry.rowCount === 0)
@@ -43,7 +38,7 @@ export function groupTableSources(entries: readonly ManifestEntry[], dataDir: st
     const key = `${entry.table}\u0000${entry.siteId}\u0000${searchType}`
     let group = groups.get(key)
     if (!group) {
-      group = { table: entry.table, siteId: entry.siteId, site: siteUrlFor(entry.siteId), searchType, files: [], rows: 0 }
+      group = { table: entry.table, siteId: entry.siteId, site: siteUrlForId(siteMap, entry.siteId), searchType, files: [], rows: 0 }
       groups.set(key, group)
     }
     group.files.push(path.join(dataDir, entry.objectKey))

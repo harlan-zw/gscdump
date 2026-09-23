@@ -288,9 +288,9 @@ async function dumpEachSite(sink: DumpSink, opts: Parameters<typeof dumpSites>[0
       : await listLiveEntries(store, target.siteId, opts.searchType))
       .filter(e => !tables || tables.has(e.table))
     const datasets: DumpedDataset[] = []
-    // Tag rows with the Site the caller resolved, which may differ in case from the site id.
-    for (const source of groupTableSources(entries, store.dataDir))
-      datasets.push(await sink.writeTable({ ...source, site: target.site }))
+    // Tag rows with the Site the caller resolved; it names the site id exactly.
+    for (const source of groupTableSources(entries, store.dataDir, { [target.siteId]: target.site }))
+      datasets.push(await sink.writeTable(source))
 
     const skipped: SiteDumpSummary['skipped'] = []
     for (const dataset of await readEntityDatasets(store.dataSource, { userId: store.userId, siteId: target.siteId }, wantedEntities)) {
