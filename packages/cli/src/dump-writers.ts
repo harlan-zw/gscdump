@@ -14,6 +14,7 @@ import type { ColumnDef } from '@gscdump/engine/schema'
 import type { SearchType } from 'gscdump/query'
 import type { EntityDatasetRows } from './local-entities'
 import type { TableSource } from './table-sources'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -54,6 +55,27 @@ export interface DumpSink {
 /** Directory name for a Site URL inside a dump. */
 export function siteDirName(siteUrl: string): string {
   return siteUrl.replace(/[^a-z0-9]+/gi, '_')
+}
+
+/**
+ * One directory per Site for the whole dump. `siteDirName` is lossy, so two
+ * Site URLs can sanitize to the same name (https://x.com/a-b and
+ * https://x.com/a_b). A colliding Site appends a short hash of its exact URL,
+ * so every Site keeps its own files.
+ */
+export function createSiteDirNamer(): (siteUrl: string) => string {
+  const dirBySite = new Map<string, string>()
+  return (siteUrl) => {
+    const known = dirBySite.get(siteUrl)
+    if (known !== undefined)
+      return known
+    const base = siteDirName(siteUrl)
+    const dir = [...dirBySite.values()].includes(base)
+      ? `${base}_${createHash('sha256').update(siteUrl).digest('hex').slice(0, 8)}`
+      : base
+    dirBySite.set(siteUrl, dir)
+    return dir
+  }
 }
 
 /** Database file that a `sqlite` or `duckdb` dump writes into the output directory. */
@@ -136,6 +158,7 @@ export async function openDumpSink(outDir: string, format: DumpFormat): Promise<
 async function openFileSink(outDir: string, format: FileFormat): Promise<DumpSink> {
   const session = await openSession()
   const written: string[] = []
+  const siteDir = createSiteDirNamer()
   const copy = async (select: string, target: string): Promise<number> => {
     await fs.mkdir(path.dirname(target), { recursive: true })
     const rows = await countOf(session.connection, `COPY (${select}) TO ${sqlString(target)} (${COPY_OPTIONS[format]})`)
@@ -147,11 +170,11 @@ async function openFileSink(outDir: string, format: FileFormat): Promise<DumpSin
   return {
     async writeTable(source) {
       const select = sourceSelectSql(source, await presentColumns(session.connection, source), { position, dates: 'date' })
-      const target = path.join(outDir, siteDirName(source.site), source.searchType, `${source.table}.${format}`)
+      const target = path.join(outDir, siteDir(source.site), source.searchType, `${source.table}.${format}`)
       return { dataset: source.table, searchType: source.searchType, path: target, rows: await copy(select, target) }
     },
     async writeEntity(site, dataset) {
-      const target = path.join(outDir, siteDirName(site), `${dataset.dataset}.${format}`)
+      const target = path.join(outDir, siteDir(site), `${dataset.dataset}.${format}`)
       return { dataset: dataset.dataset, path: target, rows: await copy(await entitySelect(session, site, dataset), target) }
     },
     async close() {
