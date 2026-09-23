@@ -201,10 +201,21 @@ export function decideRoute(req: RouteRequest, state: RouteState): Route {
   const windows = coverage.flatMap(need => need.kind === 'window' ? [need.window] : [])
   const gaps = coverage.flatMap(need => need.kind === 'window' ? need.gaps : [])
   const wanted = datesOf(windows)
-  const missing = datesOf(gaps)
+  // A day counts as done when any needed table holds it: the headline must
+  // not claim fewer covered days than a fully synced table provides.
+  const coveredDays = new Set<string>()
+  for (const need of coverage) {
+    if (need.kind !== 'window')
+      continue
+    const missingDays = datesOf(need.gaps)
+    for (const date of datesOf([need.window])) {
+      if (!missingDays.has(date))
+        coveredDays.add(date)
+    }
+  }
   return {
     kind: 'prompt',
-    reason: { kind: 'partial', done: wanted.size - missing.size, total: wanted.size, missing: gaps, windows: windowGaps(coverage) },
+    reason: { kind: 'partial', done: coveredDays.size, total: wanted.size, missing: gaps, windows: windowGaps(coverage) },
     nextCommand: connected ? syncCommand : LOGIN_COMMAND,
   }
 }

@@ -178,8 +178,21 @@ describe('read routing', () => {
   it('asks to sync before --sql when the Store has no data', async () => {
     const run = await cli(['query', '--sql', 'SELECT SUM(clicks) AS clicks FROM pages', '--site', 'example.com', '-f', 'json'])
     expect(run.code).toBe(1)
-    expect(JSON.parse(run.stdout).error).toMatchObject({ code: 'NO_SYNCED_DATA', nextCommand: 'gscdump sync --site example.com --tables pages' })
+    expect(run.stderr).toContain('The Store has no data. Run `gscdump sync --site example.com` first.')
     expect(analyticsCalls).toBe(0)
+  })
+
+  it('stops when --sql or --schema names a Site the Store does not hold', async () => {
+    await seed('pages', ['2026-08-01', '2026-08-02', '2026-08-03'])
+    for (const args of [
+      ['query', '--schema', '--site', 'nonexistent.example', '-f', 'json'],
+      ['query', '--sql', 'SELECT 1 AS n', '--site', 'nonexistent.example', '-f', 'json'],
+    ]) {
+      const run = await cli(args)
+      expect(run.code, run.stderr).toBe(1)
+      expect(run.stderr).toContain('The Store has no data for "nonexistent.example"')
+      expect(run.stderr).toContain('Local Sites: sc-domain:example.com')
+    }
   })
 
   it('says when the quota resets instead of calling Google', async () => {

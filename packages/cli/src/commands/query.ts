@@ -555,10 +555,10 @@ async function runSqlMode(opts: {
   const ctx = await createCommandContext({ needsStore: true })
   const store = ctx.store!
   const found = opts.site ? await ctx.matchSite(opts.site, { scope: 'store' }) : undefined
-  if (found && found.kind !== 'resolved' && found.kind !== 'not-found')
+  if (found && found.kind !== 'resolved')
     throw new Error(formatSiteResolution(found, 'store'))
   const site = found?.kind === 'resolved' ? found.siteUrl : undefined
-  const siteIds = site ? [store.siteIdFor(site)] : opts.site ? [] : undefined
+  const siteIds = site ? [store.siteIdFor(site)] : undefined
   const views = await openSqlViews(store, {
     ...(siteIds ? { siteIds } : {}),
     ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
