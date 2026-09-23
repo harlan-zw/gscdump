@@ -10,8 +10,6 @@ import {
 import { defineCommand } from 'citty'
 import { entitiesCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
-import { INSPECTION_QPD_PER_PROPERTY, toInspectionRecord } from '../inspection-record'
-import { loadInspectionState, recordInspections } from '../local-entities'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
@@ -57,110 +55,6 @@ async function readUrlList(opts: { file?: string }): Promise<string[]> {
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
   return Buffer.concat(chunks).toString('utf8').split('\n').map(l => l.trim()).filter(Boolean)
 }
-
-const inspectSubCommand = defineCommand({
-  meta: {
-    name: 'inspect',
-    description: 'Run URL Inspection for a list of URLs and persist results to the local entity store',
-  },
-  args: {
-    site: {
-      type: 'string',
-      alias: 's',
-      description: 'Site URL (e.g., sc-domain:example.com); defaults to config.defaultSite or prompt',
-    },
-    file: {
-      type: 'string',
-      alias: 'f',
-      description: 'Path to a file with one URL per line. If omitted, reads from stdin.',
-    },
-    limit: {
-      type: 'string',
-      description: `Max URLs to inspect this run (default: ${INSPECTION_QPD_PER_PROPERTY}, the per-property GSC daily quota)`,
-    },
-    concurrency: {
-      type: 'string',
-      alias: 'c',
-      default: '4',
-      description: 'Concurrent in-flight inspect calls (default: 4)',
-    },
-    ...OUTPUT_ARGS,
-  },
-  async run({ args }) {
-    const { json, quiet } = applyOutputMode(args)
-    const limit = parseIntegerOption(args.limit, '--limit') ?? INSPECTION_QPD_PER_PROPERTY
-    const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? 4
-    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
-    const client = ctx.client!
-    const store = ctx.store!
-    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-
-    const urls = (await readUrlList({ file: args.file ? String(args.file) : undefined })).slice(0, limit)
-    if (urls.length === 0) {
-      logger.warn('No URLs to inspect.')
-      return
-    }
-    if (urls.length === limit && limit < INSPECTION_QPD_PER_PROPERTY)
-      logger.info(`Capping at --limit ${limit}`)
-    if (urls.length === INSPECTION_QPD_PER_PROPERTY)
-      logger.info(`Hit per-property daily inspection quota (${INSPECTION_QPD_PER_PROPERTY}); remaining URLs will be queued for tomorrow.`)
-
-    const tenant = { userId: store.userId, siteId: store.siteIdFor(siteUrl) }
-    const { latest } = await loadInspectionState(store.dataSource, tenant, new Date())
-
-    let completed = 0
-    let failed = 0
-    const records: InspectionRecord[] = []
-    const failures: Array<{ url: string, error: string }> = []
-
-    await runWithConcurrency(urls, concurrency, async (url) => {
-      const result = await client.inspect(siteUrl, url).catch((err: Error) => err)
-      if (result instanceof Error) {
-        failed++
-        failures.push({ url, error: result.message })
-      }
-      else {
-        records.push(toInspectionRecord({
-          url,
-          result: result.inspectionResult,
-          inspectedAt: new Date(),
-          previous: latest.get(url),
-        }))
-      }
-      completed++
-      if (!quiet)
-        process.stdout.write(`\r${progressBar(completed, urls.length, `${url.slice(0, 60)}`)}`)
-    })
-
-    if (!quiet)
-      process.stdout.write('\n')
-
-    await recordInspections(store.dataSource, tenant, latest, records)
-
-    if (json) {
-      console.log(JSON.stringify({
-        site: siteUrl,
-        inspected: records.length,
-        failed,
-        failures,
-        records,
-      }, null, 2))
-    }
-    else if (!quiet) {
-      logger.success(`Inspected ${records.length}/${urls.length} URL(s)`)
-      if (failed > 0) {
-        logger.warn(`${failed} failed:`)
-        for (const f of failures.slice(0, 5))
-          console.log(`  ${f.url}: ${f.error}`)
-        if (failures.length > 5)
-          console.log(`  ... and ${failures.length - 5} more`)
-      }
-    }
-
-    if (failed > 0)
-      process.exit(1)
-  },
-})
 
 const showSubCommand = defineCommand({
   meta: {
@@ -314,7 +208,6 @@ const indexingSubCommand = defineCommand({
 export const entitiesCommand = defineCommand({
   meta: entitiesCommandMeta,
   subCommands: {
-    inspect: inspectSubCommand,
     show: showSubCommand,
     indexing: indexingSubCommand,
   },

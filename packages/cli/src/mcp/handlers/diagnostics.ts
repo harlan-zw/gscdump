@@ -1,8 +1,10 @@
 import type { z } from 'zod'
+import type { AccessTokenResult } from '../../token-info'
 import type { HandlerContext, listSitesInput } from '../types'
 import { ofetch } from 'ofetch'
 import { missingRequiredScopes } from '../../auth-scopes'
 import { getCloudAccount } from '../../auth-state'
+import { currentAccessToken, fetchTokenInfo, redactTokens } from '../../token-info'
 
 const FETCH_TIMEOUT_MS = 5000
 const TIME_SKEW_WARN_MS = 5 * 60_000
@@ -39,29 +41,26 @@ export async function diagnostics(
     return { ok: checks.every(check => check.status !== 'fail'), checks }
   }
 
-  const token = await resolveAccessToken(ctx.auth)
-  if (!token) {
-    checks.push({ name: 'auth', status: 'fail', detail: 'no usable access token (refresh failed or no credentials)' })
+  const current = await resolveAccessToken(ctx.auth)
+  if (current.kind === 'failed') {
+    checks.push({ name: 'auth', status: 'fail', detail: `no usable access token: ${current.detail}` })
     return { ok: false, checks }
   }
 
   const [tokenInfo, timeCheck, gscReachable, indexingReachable, sites] = await Promise.all([
-    ofetch<{ scope?: string, email?: string, expires_in?: number }>(
-      'https://oauth2.googleapis.com/tokeninfo',
-      { query: { access_token: token } },
-    ).catch((e: Error) => ({ error: e.message } as const)),
+    fetchTokenInfo(current.token),
     probeTimeSkew(),
     probeReachable('https://searchconsole.googleapis.com/$discovery/rest?version=v1'),
     probeReachable('https://indexing.googleapis.com/$discovery/rest?version=v3'),
     ctx.client.sites().catch((e: Error) => e),
   ])
 
-  if ('error' in tokenInfo) {
-    checks.push({ name: 'auth', status: 'fail', detail: `tokeninfo failed: ${tokenInfo.error}` })
+  if (tokenInfo.kind === 'invalid') {
+    checks.push({ name: 'auth', status: 'fail', detail: `tokeninfo failed: ${tokenInfo.detail}` })
   }
   else {
-    checks.push({ name: 'auth', status: 'pass', detail: tokenInfo.email ?? 'token valid' })
-    const scopes = tokenInfo.scope ? tokenInfo.scope.split(/\s+/) : []
+    checks.push({ name: 'auth', status: 'pass', detail: tokenInfo.info.email ?? 'token valid' })
+    const scopes = tokenInfo.info.scope ? tokenInfo.info.scope.split(/\s+/) : []
     const missing = missingRequiredScopes(scopes)
     checks.push(missing.length > 0
       ? { name: 'auth.scopes', status: 'warn', detail: `missing: ${missing.join(', ')}` }
@@ -81,7 +80,7 @@ export async function diagnostics(
   })
 
   if (sites instanceof Error) {
-    checks.push({ name: 'gsc.sites', status: 'fail', detail: `sites() failed: ${sites.message}` })
+    checks.push({ name: 'gsc.sites', status: 'fail', detail: `sites() failed: ${redactTokens(sites.message, [current.token])}` })
   }
   else {
     const verified = sites.filter(s => s.permissionLevel !== 'siteUnverifiedUser').length
@@ -95,16 +94,10 @@ export async function diagnostics(
   return { ok: !checks.some(c => c.status === 'fail'), checks }
 }
 
-async function resolveAccessToken(auth: HandlerContext['auth']): Promise<string | null> {
-  if (typeof auth === 'string')
-    return auth
-  if (auth && typeof auth === 'object' && 'getAccessToken' in auth) {
-    const result = await (auth as { getAccessToken: () => Promise<{ token?: string | null }> })
-      .getAccessToken()
-      .catch(() => null)
-    return result?.token ?? null
-  }
-  return null
+async function resolveAccessToken(auth: HandlerContext['auth']): Promise<AccessTokenResult> {
+  if (typeof auth === 'string' || (auth && typeof auth === 'object'))
+    return currentAccessToken(auth)
+  return { kind: 'failed', detail: 'no credentials' }
 }
 
 async function probeTimeSkew(): Promise<DiagnosticsCheck> {

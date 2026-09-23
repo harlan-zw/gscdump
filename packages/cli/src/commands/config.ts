@@ -5,7 +5,7 @@ import { defineCommand } from 'citty'
 import { configCommandMeta } from '../command-meta'
 import { getConfigPath, loadConfig, resolveDataDir, saveConfig } from '../config'
 import { createCommandContext } from '../context'
-import { applyOutputMode, displayPath, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
+import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
 
 const showCommand = defineCommand({
   meta: {
@@ -228,8 +228,6 @@ export const configCommand = defineCommand({
   },
   // No subcommand: show the current config.
   async run({ args }) {
-    if (!noSubcommandSelected('config', ['show', 'set', 'unset', 'path', 'validate']))
-      return
     await showCommand.run?.({ args, cmd: showCommand, rawArgs: [] } as any)
   },
 })

@@ -108,11 +108,11 @@ Guides:
 | `sync` | Fetch Google data into the Store |
 | `sites [--with-sitemaps]` | List Sites and manage Site verification |
 | `sitemaps` | List, submit, delete, and discover sitemaps |
-| `inspect <url>` / `inspect batch` | Inspect one URL or a batch of URLs |
+| `inspect <url...>` | Inspect one or more URLs and save the results to the Store |
 | `indexing` | Send eligible notifications with `submit`, `remove`, and `batch`; read metadata with `status`; list hosted URL Inspection results with `urls` |
 | `analyze <tool>` | Run one Analyzer |
 | `report <id>` | Run a Report |
-| `entities` | Save URL inspections and indexing notification metadata locally |
+| `entities` | Read saved URL inspections and save indexing notification metadata locally |
 | `store stats` | Show row counts, file sizes, and sync progress |
 | `store compact` | Combine older daily partitions into monthly files |
 | `store gc` | Delete orphaned Store files |

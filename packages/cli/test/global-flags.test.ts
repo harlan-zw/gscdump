@@ -34,6 +34,9 @@ describe('global CLI flags', () => {
     ['--profile'],
     ['--profile='],
   ])('rejects a global flag without a value: %j', async (...rawArgs) => {
-    await expect(runCli({ rawArgs, loadEnv: false, environment: {} })).rejects.toThrow(/requires a value/)
+    const errors: string[] = []
+    vi.spyOn(console, 'error').mockImplementation((...args) => errors.push(args.map(String).join(' ')))
+    expect(await runCli({ rawArgs, loadEnv: false, environment: {} })).toBe(1)
+    expect(errors.join('\n')).toMatch(/requires a value/)
   })
 })

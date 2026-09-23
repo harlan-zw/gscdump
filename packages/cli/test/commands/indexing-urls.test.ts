@@ -155,24 +155,24 @@ describe('hosted indexing urls and sitemap commands', () => {
   it('tells a local-only user about the hosted requirement and the local alternative', async () => {
     runtime.environment = { GSCDUMP_CONFIG_DIR: runtime.configDir }
 
-    await expect(run(['indexing', 'urls', '--site', 'example.com'])).rejects.toThrow('process.exit(1)')
+    await expect(run(['indexing', 'urls', '--site', 'example.com'])).resolves.toBe(1)
 
     expect(requests).toEqual([])
     const lines = stderr.trim().split('\n')
     expect(lines).toHaveLength(1)
     expect(lines[0]).toContain('`gscdump indexing urls` needs hosted authentication')
-    expect(lines[0]).toContain('`gscdump entities inspect`')
+    expect(lines[0]).toContain('`gscdump inspect`')
   })
 
   it('names the hosted Sites when --site matches none', async () => {
-    await expect(run(['indexing', 'urls', '--site', 'missing.dev'])).rejects.toThrow('process.exit(1)')
+    await expect(run(['indexing', 'urls', '--site', 'missing.dev'])).resolves.toBe(1)
 
     expect(stderr).toContain('No hosted Site matches "missing.dev". Hosted Sites: sc-domain:example.com, https://other.dev/.')
     expect(indexingRequests()).toEqual([])
   })
 
   it('rejects an invalid --status before any request', async () => {
-    await expect(run(['indexing', 'urls', '--site', 'example.com', '--status', 'unknown'])).rejects.toThrow()
+    await expect(run(['indexing', 'urls', '--site', 'example.com', '--status', 'unknown'])).resolves.toBe(1)
     expect(requests).toEqual([])
   })
 
@@ -190,7 +190,7 @@ describe('hosted indexing urls and sitemap commands', () => {
     ]
     await fs.writeFile(path.join(runtime.configDir, 'config.json'), JSON.stringify({ defaultSite: 'two.test' }))
 
-    await expect(run(['sitemaps', 'current', 's_01'])).rejects.toThrow('process.exit(1)')
+    await expect(run(['sitemaps', 'current', 's_01'])).resolves.toBe(1)
 
     expect(stderr).toContain('`gscdump sitemaps current` does not accept a positional Site ID. Pass --site instead.')
     expect(requests).toEqual([])
@@ -204,7 +204,7 @@ describe('hosted indexing urls and sitemap commands', () => {
     ]
     await fs.writeFile(path.join(runtime.configDir, 'config.json'), JSON.stringify({ defaultSite: 'two.test' }))
 
-    await expect(run(['indexing', 'urls', 'one.test', '--json'])).rejects.toThrow('process.exit(1)')
+    await expect(run(['indexing', 'urls', 'one.test', '--json'])).resolves.toBe(1)
 
     expect(stderr).toContain('`gscdump indexing urls` does not accept a positional Site ID. Pass --site instead.')
     expect(requests).toEqual([])
