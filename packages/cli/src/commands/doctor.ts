@@ -4,6 +4,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
+import { resolveSiteInput } from 'gscdump'
 import { googleSearchConsole } from 'gscdump/client'
 import { ofetch } from 'ofetch'
 import { loadTokens, resolveAuth, resolveBYOK } from '../auth'
@@ -11,7 +12,7 @@ import { missingRequiredScopes } from '../auth-scopes'
 import { getCloudAccount, resolveAuthentication } from '../auth-state'
 import { doctorCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
-import { createCommandContext } from '../context'
+import { createCommandContext, formatSiteResolution } from '../context'
 import { parseEnvFile } from '../env-file'
 import { resolveCliEnvironment } from '../environment'
 import { createLocalStore } from '../local-store'
@@ -279,10 +280,10 @@ function describeGscSites(sites: ApiSite[], defaultSite?: string): Check[] {
   checks.push({ name: 'gsc.sites', status: 'pass', detail: `${sites.length} site(s) accessible (${verified} verified)` })
 
   if (defaultSite) {
-    const match = sites.find(s => s.siteUrl === defaultSite || (s.siteUrl ?? '').includes(defaultSite))
-    checks.push(match
-      ? { name: 'config.defaultSite', status: 'pass', detail: `${defaultSite} ✓` }
-      : { name: 'config.defaultSite', status: 'fail', detail: `${defaultSite} not in verified site list` },
+    const resolution = resolveSiteInput(defaultSite, sites.flatMap(s => s.siteUrl ? [{ siteUrl: s.siteUrl }] : []))
+    checks.push(resolution.kind === 'resolved'
+      ? { name: 'config.defaultSite', status: 'pass', detail: `${resolution.siteUrl} ✓` }
+      : { name: 'config.defaultSite', status: 'fail', detail: formatSiteResolution(resolution, 'account') },
     )
   }
 

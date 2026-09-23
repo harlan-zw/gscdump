@@ -6,7 +6,7 @@ Google inspection and sitemap commands use the selected cloud or local authentic
 ## Inspect a URL
 
 ```bash
-gscdump inspect https://example.com/blog/post --site sc-domain:example.com --json
+gscdump inspect https://example.com/blog/post --site example.com --json
 ```
 
 The URL is positional.
@@ -18,9 +18,9 @@ Fields may be absent when Google has no evidence for them.
 Put one URL per line in `urls.txt`:
 
 ```bash
-gscdump inspect batch --site sc-domain:example.com --file urls.txt --concurrency 2 --json
+gscdump inspect batch --site example.com --file urls.txt --concurrency 2 --json
 
-gscdump inspect batch --site sc-domain:example.com --from-sitemap https://example.com/sitemap.xml --json
+gscdump inspect batch --site example.com --from-sitemap https://example.com/sitemap.xml --json
 ```
 
 `--from-sitemap` takes a sitemap URL and reads its URLs, including sitemap indexes.
@@ -29,16 +29,16 @@ It does not read saved sitemap membership from the hosted API.
 ## Save inspection results
 
 ```bash
-gscdump entities inspect --site sc-domain:example.com --file urls.txt
+gscdump entities inspect --site example.com --file urls.txt
 
-gscdump entities show https://example.com/blog/post --site sc-domain:example.com
+gscdump entities show https://example.com/blog/post --site example.com
 ```
 
 These commands save and read inspection records in the local Store.
 To save Google's notification metadata too:
 
 ```bash
-gscdump entities indexing snapshot --mode local --site sc-domain:example.com --file urls.txt
+gscdump entities indexing snapshot --mode local --site example.com --file urls.txt
 ```
 
 ## Send eligible indexing notifications
@@ -75,11 +75,11 @@ The CLI does not track the project's remaining daily quota.
 ## Manage sitemaps
 
 ```bash
-gscdump sitemaps list --site sc-domain:example.com
+gscdump sitemaps list --site example.com
 
-gscdump sitemaps submit https://example.com/sitemap.xml --site sc-domain:example.com
+gscdump sitemaps submit https://example.com/sitemap.xml --site example.com
 
-gscdump sitemaps delete https://example.com/old-sitemap.xml --site sc-domain:example.com
+gscdump sitemaps delete https://example.com/old-sitemap.xml --site example.com
 ```
 
 A sitemap submission tells Google where to find URLs.
