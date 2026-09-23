@@ -142,6 +142,13 @@ export function createInMemoryManifestStore(): ManifestStore & {
       syncStates.set(key, mergeSyncState(syncStates.get(key), scope, state, detail))
       return Promise.resolve()
     },
+    setSyncStates(scopes, state, detail) {
+      for (const scope of scopes) {
+        const key = syncStateKey(scope)
+        syncStates.set(key, mergeSyncState(syncStates.get(key), scope, state, detail))
+      }
+      return Promise.resolve()
+    },
     bumpWatermark(scope, date, at) {
       const key = watermarkKey(scope)
       const existing = watermarks.get(key)

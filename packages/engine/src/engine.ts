@@ -494,6 +494,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
     getWatermarks: filter => manifestStore.getWatermarks(filter),
     getSyncStates: filter => manifestStore.getSyncStates(filter),
     setSyncState: (scope, state, detail) => manifestStore.setSyncState(scope, state, detail),
+    setSyncStates: (scopes, state, detail) => manifestStore.setSyncStates(scopes, state, detail),
     readObject: key => dataSource.read(key),
   }
 }

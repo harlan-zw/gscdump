@@ -319,6 +319,8 @@ export interface ManifestStore {
   bumpWatermark: (scope: WatermarkScope, date: string, at?: number) => Promise<void>
   getSyncStates: (filter: SyncStateFilter) => Promise<SyncState[]>
   setSyncState: (scope: SyncStateScope, state: SyncStateKind, detail?: SyncStateDetail) => Promise<void>
+  /** Set one state on many scopes in a single write. Sync uses it to mark a whole plan `pending`. */
+  setSyncStates: (scopes: readonly SyncStateScope[], state: SyncStateKind, detail?: SyncStateDetail) => Promise<void>
   /**
    * Serialize concurrent writers against the same scope. Held across the
    * write+register window so GC (orphan sweep) won't delete bytes that are
@@ -589,6 +591,8 @@ export interface StorageEngine {
   getWatermarks: (filter: WatermarkFilter) => Promise<Watermark[]>
   getSyncStates: (filter: SyncStateFilter) => Promise<SyncState[]>
   setSyncState: (scope: SyncStateScope, state: SyncStateKind, detail?: SyncStateDetail) => Promise<void>
+  /** Set one state on many scopes in a single write. Sync uses it to mark a whole plan `pending`. */
+  setSyncStates: (scopes: readonly SyncStateScope[], state: SyncStateKind, detail?: SyncStateDetail) => Promise<void>
   /** Read the raw bytes of a single object. Rarely needed outside the `dump` CLI. */
   readObject: (key: string) => Promise<Uint8Array>
 }
