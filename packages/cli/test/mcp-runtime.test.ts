@@ -159,6 +159,8 @@ describe('gscdump mcp runtime', () => {
       ? googleError(403, 'Search Analytics load quota exceeded.', 'quotaExceeded')
       : undefined)
 
+    // One retry waits 5s on the real clock. The CLI default backoff (65s)
+    // outlasts both this test's timeout and the MCP client's 60s request timeout.
     const result = await client.callTool({
       name: 'query',
       arguments: { siteUrl: 'example.com', startDate: '2026-08-01', endDate: '2026-08-28', dimensions: ['query'] },

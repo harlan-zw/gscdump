@@ -20,6 +20,11 @@ export const MCP_NO_AUTH_MESSAGE = [
   'If the gscdump command is missing, run `npm install -g @gscdump/cli`.',
 ].join(' ')
 
+// One retry per Google call. The CLI default retries a quota 403 after 5s,
+// 15s and 45s. Those 65s exceed the 60s request timeout of most MCP clients,
+// so the agent saw a timeout instead of the quota message.
+const MCP_RETRIES = 1
+
 /** True when some credential can reach Google without an interactive sign-in. */
 async function hasAuthentication(): Promise<boolean> {
   if ((await resolveAuthentication())._tag === 'Cloud')
@@ -45,7 +50,7 @@ export async function startMcpServer(transport: Transport, runtime: CliRuntime =
     getContext: async () => {
       if (!await hasAuthentication())
         throw new Error(MCP_NO_AUTH_MESSAGE)
-      const ctx = await createCommandContext({ needsAuth: true })
+      const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: MCP_RETRIES } })
       return { authentication: ctx.authentication, auth: ctx.auth, client: ctx.client! }
     },
   })
