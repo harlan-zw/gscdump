@@ -197,6 +197,12 @@ export interface InspectionStore {
    */
   loadHistory: (ctx: TenantCtx, yearMonth: string) => Promise<InspectionHistoryShard | undefined>
   /**
+   * Month buckets (`YYYY-MM`, or `unknown`) that hold at least one history
+   * shard, sorted ascending. Pair with {@link InspectionStore.loadHistory} to
+   * read the full history.
+   */
+  listHistoryMonths: (ctx: TenantCtx) => Promise<string[]>
+  /**
    * Encode caller-provided rows into the inspections parquet sidecar at
    * `entities/inspections/index.parquet`. Sorted by `urlHash` so DuckDB
    * row-group stats can prune URL-keyed JOINs efficiently. One PUT.
@@ -507,6 +513,17 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
         return shard?.records ?? []
       })
       return { version: 1, records: records.flat() }
+    },
+
+    async listHistoryMonths(ctx) {
+      const prefix = inspectionHistoryPrefix(ctx, '')
+      const months = new Set<string>()
+      for (const key of await ds.list(prefix)) {
+        const month = key.slice(prefix.length).split('/')[0]
+        if (month)
+          months.add(month)
+      }
+      return [...months].sort()
     },
 
     async materialize(ctx, rowIter) {
