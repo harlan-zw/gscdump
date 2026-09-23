@@ -6,8 +6,8 @@ import { inspectCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { checkInspectionBatch, inspectUrls } from '../inspect-urls'
 import { toInspectionRecord } from '../inspection-record'
-import { formatSiteIdCollision, recordStoreSite } from '../store-sites'
 import { appendInspections, loadInspectionState, materializeInspectionIndex, urlInProperty } from '../local-entities'
+import { formatSiteIdCollision, recordStoreSite } from '../store-sites'
 import { applyOutputMode, dim, logger, OUTPUT_ARGS, readUrlList, red } from '../utils'
 
 function verdictTone(verdict: string | null | undefined): string {

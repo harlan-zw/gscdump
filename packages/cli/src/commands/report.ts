@@ -10,7 +10,7 @@ import { DEFAULT_FETCH_BUDGET, MAX_FETCH_BUDGET } from '@gscdump/engine/analysis
 import { defineCommand } from 'citty'
 import { getLatestGscDate } from 'gscdump/dates'
 import { unwrapResult } from 'gscdump/result'
-import { analyzerTables, resolveAnalysisSource } from '../analysis-local'
+import { analyzerReads, analyzerTables, resolveAnalysisSource } from '../analysis-local'
 import { reportCommandMeta } from '../command-meta'
 import { renderCliReport } from '../render/report'
 import { terminalOutputOptions } from '../render/terminal'
@@ -121,13 +121,18 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
         return
       }
 
-      const { source, siteUrl, anchorFor } = await resolveAnalysisSource({
+      const { source, siteUrl, anchorFor, checkCoverage } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
         json: !!args.json,
       })
-      const anchor = await anchorFor(reportTables(report, params, flags))
+      const tables = reportTables(report, params, flags)
+      const anchor = await anchorFor(tables)
       const window = unwrapResult(parseWindowFlags(flags, reportDefaults(report), anchor), windowFlagErrorToException)
+      const reads = report.plan(params, window).flatMap(step => analyzerReads({ ...step.params, type: step.type } as AnalysisParams))
+      const coverage = await checkCoverage(reads)
+      if (coverage.kind === 'gaps')
+        throw new Error(coverage.message)
 
       const ctx: ReportContext = { site: siteUrl, window, params, registryVersion: defaultReportRegistry.version, ...(fetchBudget !== undefined ? { fetchBudget } : {}) }
       const result = await runReport(report, { source, analyzers: defaultAnalyzerRegistry, ctx })

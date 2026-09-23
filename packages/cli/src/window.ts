@@ -187,6 +187,60 @@ export function newestDoneDate(states: readonly SyncState[], tables: readonly Ta
   return anchor
 }
 
+/** One table that a run reads over one window. */
+export interface WindowRead {
+  window: 'current' | 'comparison'
+  table: TableName
+  start: string
+  end: string
+}
+
+/** A read whose window holds days with no `done` sync state. */
+export interface CoverageGap extends WindowRead {
+  /** First and last day without a `done` sync state. */
+  missingStart: string
+  missingEnd: string
+  missingDays: number
+  expectedDays: number
+}
+
+export type WindowCoverage
+  = | { kind: 'covered' }
+    | { kind: 'gaps', gaps: CoverageGap[] }
+
+function daysBetween(start: string, end: string): string[] {
+  const out: string[] = []
+  for (let time = Date.parse(`${start}T00:00:00Z`); time <= Date.parse(`${end}T00:00:00Z`); time += 86_400_000)
+    out.push(new Date(time).toISOString().slice(0, 10))
+  return out
+}
+
+/**
+ * Check that every day of every read has a `done` web sync state. A failed,
+ * pending or absent day is a gap: the run would read partial data and report
+ * wrong numbers. Duplicate reads count once. Pure.
+ */
+export function windowCoverage(states: readonly SyncState[], reads: readonly WindowRead[]): WindowCoverage {
+  const done = new Set<string>()
+  for (const state of states) {
+    if (state.state === 'done' && (state.searchType ?? 'web') === 'web')
+      done.add(`${state.table}:${state.date}`)
+  }
+  const seen = new Set<string>()
+  const gaps: CoverageGap[] = []
+  for (const read of reads) {
+    const key = `${read.window}:${read.table}:${read.start}:${read.end}`
+    if (seen.has(key))
+      continue
+    seen.add(key)
+    const expected = daysBetween(read.start, read.end)
+    const missing = expected.filter(date => !done.has(`${read.table}:${date}`))
+    if (missing.length)
+      gaps.push({ ...read, missingStart: missing[0]!, missingEnd: missing.at(-1)!, missingDays: missing.length, expectedDays: expected.length })
+  }
+  return gaps.length ? { kind: 'gaps', gaps } : { kind: 'covered' }
+}
+
 export type AnchorTarget
   = | { kind: 'live' }
     | { kind: 'local', store: LocalStore, siteUrl: string, tables: readonly TableName[] }

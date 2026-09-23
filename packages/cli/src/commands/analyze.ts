@@ -5,7 +5,7 @@ import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { DEFAULT_FETCH_BUDGET, MAX_FETCH_BUDGET } from '@gscdump/engine/analysis-types'
 import { defineCommand } from 'citty'
 import { unwrapResult } from 'gscdump/result'
-import { analyzerTables, resolveAnalysisSource } from '../analysis-local'
+import { analyzerReads, analyzerTables, resolveAnalysisSource } from '../analysis-local'
 import { analyzeCommandMeta } from '../command-meta'
 import { coverageWarning, renderAnalysis } from '../render/analysis'
 import { terminalOutputOptions } from '../render/terminal'
@@ -126,14 +126,18 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       if (!args.json && !['table', 'json', 'csv'].includes(args.format ?? 'table'))
         throw new Error('Invalid --format. Use table, json, or csv.')
       const baseParams = buildParams(tool, args)
-      const { format, runAnalysis, siteUrl, anchorFor } = await resolveAnalysisSource({
+      const { format, runAnalysis, siteUrl, anchorFor, checkCoverage } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
         json: !!args.json,
         format: args.format,
       })
-      const anchor = await anchorFor(analyzerTables(baseParams))
+      const tables = analyzerTables(baseParams)
+      const anchor = await anchorFor(tables)
       const params = withWindow(tool, baseParams, args, anchor)
+      const coverage = await checkCoverage(analyzerReads(params))
+      if (coverage.kind === 'gaps')
+        throw new Error(coverage.message)
 
       logger.debug(`Running ${tool} analysis...`)
 

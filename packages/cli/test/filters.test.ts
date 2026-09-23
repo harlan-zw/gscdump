@@ -17,9 +17,18 @@ describe('--page parsing', () => {
     expect(leaves(toLiveFilter(filters, 'sc-domain:example.com'))).toEqual([{ dimension: 'page', operator: 'equals', expression: 'https://blog.example.com/post' }])
   })
 
-  it('expands a path to the origin of a URL-prefix property', () => {
-    const filters = parseFilterArgs({ page: '/post' })
-    expect(leaves(toLiveFilter(filters, 'https://example.com/docs/'))).toEqual([{ dimension: 'page', operator: 'equals', expression: 'https://example.com/post' }])
+  it.each([
+    ['/post', 'https://example.com/blog/', 'https://example.com/blog/post'],
+    ['/post', 'https://example.com/', 'https://example.com/post'],
+    ['/post', 'https://example.com', 'https://example.com/post'],
+  ])('expands %s under the prefix of the URL-prefix property %s', (page, siteUrl, expected) => {
+    const filters = parseFilterArgs({ page })
+    expect(leaves(toLiveFilter(filters, siteUrl))).toEqual([{ dimension: 'page', operator: 'equals', expression: expected }])
+  })
+
+  it('expands a stored path that already carries the property prefix once', () => {
+    const filters = parseFilterArgs({ page: '/blog/post' })
+    expect(leaves(toLiveFilter(filters, 'https://example.com/blog/'))).toEqual([{ dimension: 'page', operator: 'equals', expression: 'https://example.com/blog/post' }])
   })
 
   it.each([

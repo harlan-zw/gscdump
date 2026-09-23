@@ -137,7 +137,10 @@ describe('site picker', () => {
     setTTY(false)
     const run = await cli('analyze', 'striking-distance', '--json')
     expect(run.stderr).not.toContain('Pass --site')
-    expect(run.code).toBe(0)
+    // One synced day cannot cover the 28-day window, so the coverage check
+    // stops the run with a sync command for the picked Site.
+    expect(run.code).toBe(1)
+    expect(run.stderr).toContain('gscdump sync --site sc-domain:example.com')
   })
 })
 
