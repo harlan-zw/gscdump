@@ -667,9 +667,10 @@ export async function probeAuth(): Promise<'none' | 'google' | 'hosted'> {
     return 'hosted'
   if (resolveBYOK())
     return 'google'
-  // A stale pointer (missing or malformed key file) is ignorable here: it
-  // must not hide saved tokens, which can still authenticate.
-  if (await resolveServiceAccount().then(Boolean).catch(() => false))
+  // A stale pointer (missing file or malformed JSON) is ignorable here, as in
+  // resolveAuth. A misconfigured key still counts: resolveAuth then reports it.
+  const serviceAccount = await resolveServiceAccount().then(Boolean, (error: unknown) => !isStaleServiceAccountPointer(error))
+  if (serviceAccount)
     return 'google'
   return (await loadTokens()) !== null ? 'google' : 'none'
 }
