@@ -10,8 +10,8 @@ import {
 import { defineCommand } from 'citty'
 import { entitiesCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
-import { INSPECTION_QPD_PER_PROPERTY, latestByUrl, toInspectionRecord } from '../inspection-record'
-import { loadInspectionHistory, recordInspections } from '../local-entities'
+import { INSPECTION_QPD_PER_PROPERTY, toInspectionRecord } from '../inspection-record'
+import { loadInspectionState, recordInspections } from '../local-entities'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
@@ -106,8 +106,7 @@ const inspectSubCommand = defineCommand({
       logger.info(`Hit per-property daily inspection quota (${INSPECTION_QPD_PER_PROPERTY}); remaining URLs will be queued for tomorrow.`)
 
     const tenant = { userId: store.userId, siteId: store.siteIdFor(siteUrl) }
-    const history = await loadInspectionHistory(store.dataSource, tenant)
-    const latest = latestByUrl(history)
+    const { latest } = await loadInspectionState(store.dataSource, tenant, new Date())
 
     let completed = 0
     let failed = 0
@@ -136,7 +135,7 @@ const inspectSubCommand = defineCommand({
     if (!quiet)
       process.stdout.write('\n')
 
-    await recordInspections(store.dataSource, tenant, history, records)
+    await recordInspections(store.dataSource, tenant, latest, records)
 
     if (json) {
       console.log(JSON.stringify({

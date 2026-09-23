@@ -215,6 +215,11 @@ export interface InspectionStore {
    */
   materialize: (ctx: TenantCtx, rows: Iterable<InspectionParquetRow>) => Promise<{ key: string, rowCount: number, bytes: number }>
   /**
+   * Rows of the inspections parquet sidecar that {@link InspectionStore.materialize}
+   * wrote last, or `undefined` if it was never written.
+   */
+  loadMaterialized: (ctx: TenantCtx) => Promise<InspectionParquetRow[] | undefined>
+  /**
    * Append a batch of inspection results as an immutable per-batch parquet
    * under `events/<YYYY-MM>/<batchId>.parquet`, partitioned by the `YYYY-MM`
    * of each row's `inspectedAt` (a batch spanning a month boundary writes one
@@ -537,6 +542,16 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
       const key = inspectionParquetKey(ctx)
       await ds.write(key, bytes)
       return { key, rowCount: rows.length, bytes: bytes.byteLength }
+    },
+
+    async loadMaterialized(ctx) {
+      const bytes = await readOptional(ds, inspectionParquetKey(ctx))
+      if (!bytes)
+        return undefined
+      return (await decodeParquetToRows(bytes)).map(row => ({
+        ...row,
+        scheduleNextAt: row.scheduleNextAt == null ? null : Number(row.scheduleNextAt),
+      }) as InspectionParquetRow)
     },
 
     async appendInspectionEvents(ctx, rows, options) {
