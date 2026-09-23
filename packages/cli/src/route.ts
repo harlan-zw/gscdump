@@ -165,7 +165,9 @@ function windowGapLine(gap: WindowGap): string {
 export function decideRoute(req: RouteRequest, state: RouteState): Route {
   const { auth, coverage, syncRun } = state
   const stored = coverage.some(need => need.stored)
-  const covered = coverage.every(isCovered)
+  // Empty coverage says nothing, so it cannot count as covered: an unknown
+  // read must stop or go live instead of routing into the Store.
+  const covered = coverage.length > 0 && coverage.every(isCovered)
   const connected = auth !== 'none'
   const syncCommand = syncCommandFor(req.site ?? req.siteHint, coverage)
   const tables = [...new Set(coverage.flatMap(need => need.kind === 'window' ? [need.table] : need.tables))]

@@ -36,4 +36,10 @@ describe('analysisNeeds', () => {
       { kind: 'any', tables: [] },
     ])
   })
+
+  it('keeps the need unmet when a plain analyzer plan cannot build from the params', () => {
+    expect(analysisNeeds({ type: 'brand', startDate: '2026-08-01', endDate: '2026-08-03' })).toEqual([
+      { kind: 'any', tables: [] },
+    ])
+  })
 })

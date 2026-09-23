@@ -122,7 +122,9 @@ function builderStateNeeds(params: AnalysisParams): RouteNeed[] {
  * A FileSet without daily partitions scopes its own rows, so any synced day
  * of its table counts. Plans that cannot build here (the BuilderState-driven
  * ones) fall back to `builderStateNeeds` — an unanalysed read must never
- * look covered, or the router sends an empty Store into the analyzer.
+ * look covered, or the router sends an empty Store into the analyzer. The
+ * list is never empty: a read the plan cannot describe stays unmet, because
+ * the router reads empty coverage as fully covered.
  */
 export function analysisNeeds(params: AnalysisParams): RouteNeed[] {
   const needs: RouteNeed[] = []
@@ -134,7 +136,15 @@ export function analysisNeeds(params: AnalysisParams): RouteNeed[] {
     }
     needs.push({ kind: 'window', period, table: fileSet.table, searchType: 'web', window: { start: dates[0]!, end: dates.at(-1)! } })
   }
-  return needs.length > 0 ? needs : builderStateNeeds(params)
+  if (needs.length > 0)
+    return needs
+  const builderNeeds = builderStateNeeds(params)
+  if (builderNeeds.length > 0)
+    return builderNeeds
+  // The plan cannot build from these params (a missing required flag, for
+  // example), so the run reads an unknown set: keep it unmet and let the
+  // router stop or answer live instead of treating coverage as vacuous.
+  return [{ kind: 'any', tables: [] }]
 }
 
 /** Which sources can run these analyzers. */

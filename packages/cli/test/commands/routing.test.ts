@@ -119,6 +119,15 @@ describe('read routing', () => {
     expect(analyticsCalls).toBe(0)
   })
 
+  it('stops with the routing message when an analyzer plan cannot build', async () => {
+    const run = await cli(['analyze', 'brand', '--site', 'example.com', '--json'], 'none')
+    expect(run.code, run.stderr).toBe(1)
+    expect(run.stderr).toContain('Run `gscdump init`')
+    expect(JSON.parse(run.stdout).error).toMatchObject({ code: 'NOT_CONNECTED' })
+    expect(run.stderr).not.toContain('Unexpected error')
+    expect(analyticsCalls).toBe(0)
+  })
+
   it('answers an empty Store from the live API when the analyzer plan has no daily partitions', async () => {
     const run = await cli(['analyze', 'data-query', '--site', 'example.com', '--json'])
     expect(run.stderr).toContain('No synced data for sc-domain:example.com; answering from the live Search Console API.')
