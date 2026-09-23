@@ -188,23 +188,43 @@ export function newestDoneDate(states: readonly SyncState[], tables: readonly Ta
 }
 
 /**
- * Whether every listed table has at least one synced day inside
- * `[start, end]`. An empty table list means every table in `states`.
- * Filters states like `newestDoneDate`. Pure.
+ * Per-table sync coverage of `[start, end]`. `missing` lists tables with no
+ * synced day in the window: they read a zero-row baseline. `partial` lists
+ * tables with some but not every day of the window synced: their baseline
+ * covers fewer days than the current window and inflates change percentages.
  */
-export function hasSyncedDays(states: readonly SyncState[], tables: readonly TableName[], start: string, end: string): boolean {
+export interface ComparisonSyncGaps {
+  missing: TableName[]
+  partial: Array<{ table: TableName, syncedDays: number, expectedDays: number }>
+}
+
+/** Distinct done days a table has synced inside `[start, end]`. Pure. */
+function syncedDayCount(states: readonly SyncState[], table: TableName, start: string, end: string): number {
+  const dates = new Set<string>()
+  for (const state of states) {
+    if (state.table === table && state.state === 'done' && (state.searchType ?? 'web') === 'web' && state.date >= start && state.date <= end)
+      dates.add(state.date)
+  }
+  return dates.size
+}
+
+/**
+ * Split the listed tables by sync coverage of `[start, end]`. An empty table
+ * list means every table in `states`. Filters states like `newestDoneDate`.
+ * Pure.
+ */
+export function comparisonSyncGaps(states: readonly SyncState[], tables: readonly TableName[], start: string, end: string): ComparisonSyncGaps {
   const wanted = tables.length ? tables : [...new Set(states.map(state => state.table))]
-  if (!wanted.length)
-    return false
-  return wanted.every(table =>
-    states.some(state =>
-      state.table === table
-      && state.state === 'done'
-      && (state.searchType ?? 'web') === 'web'
-      && state.date >= start
-      && state.date <= end,
-    ),
-  )
+  const expectedDays = Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1
+  const gaps: ComparisonSyncGaps = { missing: [], partial: [] }
+  for (const table of wanted) {
+    const syncedDays = syncedDayCount(states, table, start, end)
+    if (syncedDays === 0)
+      gaps.missing.push(table)
+    else if (syncedDays < expectedDays)
+      gaps.partial.push({ table, syncedDays, expectedDays })
+  }
+  return gaps
 }
 
 export type AnchorTarget
