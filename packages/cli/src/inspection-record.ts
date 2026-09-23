@@ -71,6 +71,12 @@ export function toInspectionRecord(input: {
   return record
 }
 
+/** Months (`YYYY-MM`, UTC) a history shard for the 24 hours before `now` can sit in. */
+export function recentMonths(now: Date): string[] {
+  const month = (at: number): string => new Date(at).toISOString().slice(0, 7)
+  return [...new Set([month(now.getTime() - DAY_MS), month(now.getTime())])]
+}
+
 /** Newest record per URL. */
 export function latestByUrl(records: readonly InspectionRecord[]): Map<string, InspectionRecord> {
   const latest = new Map<string, InspectionRecord>()
@@ -98,18 +104,21 @@ export interface InspectionPlan {
  */
 export function planInspections(input: {
   candidates: readonly string[]
-  history: readonly InspectionRecord[]
+  /** Newest record per URL. */
+  latest: ReadonlyMap<string, InspectionRecord>
+  /** Records that cover at least the last 24 hours. */
+  recent: readonly InspectionRecord[]
   now: Date
   limit: number
 }): InspectionPlan {
   const now = input.now.getTime()
   const since = now - DAY_MS
-  const usedToday = input.history.filter((record) => {
+  const usedToday = input.recent.filter((record) => {
     const at = Date.parse(record.inspectedAt)
     return at > since && at <= now
   }).length
   const quotaLeft = Math.max(0, INSPECTION_QPD_PER_PROPERTY - usedToday)
-  const latest = latestByUrl(input.history)
+  const latest = input.latest
 
   const fresh: string[] = []
   const due: Array<{ url: string, nextAt: number }> = []

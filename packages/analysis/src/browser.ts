@@ -1,6 +1,7 @@
 /**
  * Run analyzers against an already-attached DuckDB database (schema-per-table,
- * as produced by `gscdump store export`). Wraps the runner in an
+ * an Analyzer snapshot fixture, as written by the CLI's `writeAnalyzerSnapshot`).
+ * Wraps the runner in an
  * `AnalysisQuerySource` with the `attachedTables` capability and dispatches
  * via the unified analyzer pipeline.
  *

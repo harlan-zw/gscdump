@@ -167,6 +167,15 @@ describe('gscdump inspect', () => {
     expect(await storedUrls()).toEqual(['https://example.com/b'])
   })
 
+  it('names the failure without claiming Store persistence when nothing was saved', async () => {
+    inspectMock.mockRejectedValue(googleError(403, 'Permission denied.'))
+    const code = await cli('https://example.com/a', '--site', 'https://example.com/', '--json')
+    expect(code).toBe(1)
+    const text = errors.join('\n')
+    expect(text).toContain('1 failed.')
+    expect(text).not.toContain('saved the results')
+  })
+
   it('does not present deprecated mobile usability data', async () => {
     inspectMock.mockResolvedValue({
       inspectionResult: {

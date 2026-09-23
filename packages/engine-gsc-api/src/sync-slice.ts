@@ -128,6 +128,13 @@ export interface RunGscSearchAppearanceContextSliceResult {
   totalRows: number
   hasMore: boolean
   continuation?: SearchAppearanceContinuation
+  /**
+   * Metadata from the LAST GSC API page seen, across the discovery and
+   * context queries. With the default `dataState='all'` it carries
+   * `first_incomplete_date` / `first_incomplete_hour` so hosts can keep
+   * still-updating days pending.
+   */
+  metadata?: GscSearchAnalyticsMetadata
 }
 
 // Keyed by engine `SyncTableName` (post Iceberg rename). `dates` fetches the
@@ -351,6 +358,7 @@ export async function runGscSearchAppearanceContextSlice(
   const appearances = opts.continuation?.appearances?.slice() ?? opts.appearances?.slice() ?? []
   let totalRows = 0
   let hasMore = false
+  let metadata: GscSearchAnalyticsMetadata | undefined
 
   if (!opts.appearances && opts.continuation?.phase !== 'context') {
     const discovered = new Set<string>(appearances)
@@ -378,12 +386,14 @@ export async function runGscSearchAppearanceContextSlice(
       },
     })
     totalRows += discovery.totalRows
+    metadata = discovery.metadata
     if (discovery.hasMore) {
       return {
         appearances: [...discovered],
         totalRows,
         hasMore: true,
         continuation: { phase: 'discovery', appearances: [...discovered], nextStartRow: discovery.nextStartRow },
+        metadata,
       }
     }
     hasMore ||= discovery.hasMore
@@ -412,16 +422,18 @@ export async function runGscSearchAppearanceContextSlice(
       onBatch: rows => opts.onContextBatch({ searchAppearance, table, rows }),
     })
     totalRows += context.totalRows
+    metadata = context.metadata
     if (context.hasMore) {
       return {
         appearances,
         totalRows,
         hasMore: true,
         continuation: { phase: 'context', appearances, appearanceIndex: i, nextStartRow: context.nextStartRow },
+        metadata,
       }
     }
     hasMore ||= context.hasMore
   }
 
-  return { appearances, totalRows, hasMore }
+  return { appearances, totalRows, hasMore, metadata }
 }

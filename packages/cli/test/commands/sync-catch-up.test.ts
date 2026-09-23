@@ -162,6 +162,26 @@ describe('sync catch-up', () => {
     expect(querySpy).toHaveBeenCalled()
   })
 
+  it('keeps a still-updating day pending for search appearance context tables', async () => {
+    const day = '2026-09-19'
+    querySpy.mockImplementation(async (_site, params) => ({
+      rows: (params.startRow ?? 0) > 0
+        ? []
+        : params.dimensions.join(',') === 'searchAppearance'
+          ? [{ keys: ['VIDEO'], clicks: 1, impressions: 3, position: 1 }]
+          : [row(params)],
+      metadata: { first_incomplete_hour: `${day}T18:00:00-07:00` },
+    }))
+    const flags = ['--site', SITE, '--tables', 'search_appearance_pages', '--types', 'web', '--no-sitemaps', '--no-inspections', '--no-rollups', '--start', day, '--end', day, '--quiet']
+
+    await sync(...flags)
+    expect((await states('search_appearance_pages')).map(s => s.state)).toEqual(['pending'])
+
+    querySpy.mockClear()
+    await sync(...flags)
+    expect(querySpy).toHaveBeenCalled()
+  })
+
   it('stops on a Google quota refusal, keeps the rest pending, and exits 0', async () => {
     querySpy.mockImplementation(async (_site, params) => {
       if (params.startDate === '2026-09-17')

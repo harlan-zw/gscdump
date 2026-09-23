@@ -76,6 +76,10 @@ export async function resolveHostedSite(
   args: Record<string, unknown>,
   command: { name: string, localAlternative: string },
 ): Promise<{ client: GscdumpV1Client, site: HostedSite }> {
+  // citty parks undeclared positional tokens in `args._`; without this guard a
+  // stale `sitemaps current s_01` invocation silently reads the default Site.
+  if ((args._ as string[] | undefined)?.length)
+    fail(`\`gscdump ${command.name}\` does not accept a positional Site ID. Pass --site instead.`)
   const environment = resolveCliEnvironment().values
   const authentication = args['api-key']
     ? parseAuthentication({ _tag: 'Cloud', apiKey: args['api-key'], apiRoot: String(args['api-root'] || environment.GSCDUMP_API_ROOT || 'https://gscdump.com/api') })

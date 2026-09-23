@@ -110,6 +110,20 @@ describe('openQuotaLedger', () => {
     expect(next.reserve('urlInspection', SITE, 500)).toEqual({ kind: 'partial', n: 100, resetsAt: NEXT_RESET })
   })
 
+  it('keeps both reservations when two flushes overlap', async () => {
+    const now = (): Date => NOW
+    const ledger = await openQuotaLedger({ dataDir: dir, now })
+    ledger.reserve('urlInspection', SITE, 1)
+    const first = ledger.flush()
+    ledger.reserve('urlInspection', SITE, 1)
+    const second = ledger.flush()
+    await Promise.all([first, second])
+
+    expect(ledger.status('urlInspection', SITE).used).toBe(2)
+    const next = await openQuotaLedger({ dataDir: dir, now })
+    expect(next.status('urlInspection', SITE).used).toBe(2)
+  })
+
   it('gives unused calls back and keeps a refusal across runs', async () => {
     const now = (): Date => NOW
     const first = await openQuotaLedger({ dataDir: dir, now })
