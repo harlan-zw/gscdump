@@ -10,12 +10,13 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
 import type { QueryPageRow, SortOrder } from '../types'
-import { num } from '@gscdump/engine/analysis-types'
+import { fetchBudgetOf, num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { queriesQueryState } from '../analyzer/adapt-rows'
+import { paginateInMemory, TOTAL_COUNT_SELECT, totalCountOf } from '../analyzer/paginate'
 import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 import { createSorter } from '../types'
 
@@ -255,7 +256,10 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
               * LEAST(LOG10(GREATEST(t.total_impressions, 10.0)) / 5.0, 1.0),
             1.0 / 3.0
           )
-        )) AS DOUBLE) AS severity
+        )) AS DOUBLE) AS severity,
+        SUM(e.stolen_clicks) OVER () AS allStolenClicks,
+        AVG(GREATEST(0.0, 1.0 - e.hhi / 10000.0)) OVER () AS allFragmentation,
+        ${TOTAL_COUNT_SELECT}
       FROM events e
       JOIN query_totals t USING (query)
       ORDER BY severity DESC, stolenClicks DESC
@@ -328,15 +332,15 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
     }))
     const edges = [...edgeAgg.values()]
 
-    const avgFragmentation = events.length > 0
-      ? events.reduce((s, e) => s + e.fragmentation, 0) / events.length
-      : 0
-    const totalStolenClicks = events.reduce((s, e) => s + e.stolenClicks, 0)
+    // Window aggregates run before LIMIT, so these cover every event, not the page.
+    const avgFragmentation = arr[0] ? num(arr[0].allFragmentation) : 0
+    const totalStolenClicks = arr[0] ? num(arr[0].allStolenClicks) : 0
 
     return {
       results: events,
       meta: {
-        total: events.length,
+        total: totalCountOf(arr),
+        returned: events.length,
         totalStolenClicks,
         avgFragmentation,
         graph: { nodes, edges },
@@ -346,7 +350,7 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
 
   buildRows(params) {
     return {
-      rows: queriesQueryState(periodOf(params), params.limit),
+      rows: queriesQueryState(periodOf(params), fetchBudgetOf(params)),
     }
   },
 
@@ -357,6 +361,7 @@ export const cannibalizationAnalyzer = defineAnalyzer<AnalysisParams, Row, Canni
       maxPositionSpread: params.maxPositionSpread,
       minPages: params.minPages,
     })
-    return { results, meta: { total: results.length } }
+    const paged = paginateInMemory(results, { limit: params.limit, offset: params.offset })
+    return { results: paged, meta: { total: results.length, returned: paged.length } }
   },
 })

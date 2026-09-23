@@ -3,6 +3,7 @@ import type { Dimension, InternalFilter, Metric } from 'gscdump/query'
 import type { LogicalDataset } from 'gscdump/query/plan'
 
 import { sql } from 'drizzle-orm'
+import { toPath } from '../ingest'
 import { escapeLike } from '../sql-fragments'
 
 import {
@@ -291,19 +292,22 @@ export function createSqlFragments<TableKey extends string>(
         : colRef(tableKey, dimColumn(dim, tableKey))
       const matchExpr = dim === 'page' || dim === 'queryCanonical' ? dimExprSql(dim, tableKey) : cRef!
       const patternExpr = dim === 'queryCanonical' ? matchExpr : cRef!
+      // `matchExpr` reduces a stored page to its path, so the value must be a
+      // path too: a full URL would never equal a path and match nothing.
+      const value = dim === 'page' ? toPath(f.expression) : f.expression
 
       switch (f.operator) {
         case 'equals':
-          preds.push(sql`${matchExpr} = ${f.expression}`)
+          preds.push(sql`${matchExpr} = ${value}`)
           break
         case 'notEquals':
-          preds.push(sql`${matchExpr} != ${f.expression}`)
+          preds.push(sql`${matchExpr} != ${value}`)
           break
         case 'contains':
-          preds.push(sql`${patternExpr} LIKE ${`%${escapeLike(f.expression)}%`} ESCAPE '\\'`)
+          preds.push(sql`${patternExpr} LIKE ${`%${escapeLike(value)}%`} ESCAPE '\\'`)
           break
         case 'notContains':
-          preds.push(sql`${patternExpr} NOT LIKE ${`%${escapeLike(f.expression)}%`} ESCAPE '\\'`)
+          preds.push(sql`${patternExpr} NOT LIKE ${`%${escapeLike(value)}%`} ESCAPE '\\'`)
           break
         case 'includingRegex':
           preds.push(regexPredicate(patternExpr, f.expression, false))

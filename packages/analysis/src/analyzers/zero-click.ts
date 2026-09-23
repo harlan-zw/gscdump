@@ -8,15 +8,13 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
 import type { QueryPageRow } from '../types'
-import { num } from '@gscdump/engine/analysis-types'
+import { fetchBudgetOf, num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
-import { between, date as dateCol, gsc, page as pageCol, query as queryCol } from 'gscdump/query'
-import { paginateClause, paginateSortedInMemory } from '../analyzer/paginate'
-
-const DEFAULT_ROW_LIMIT = 25_000
+import { queriesQueryState } from '../analyzer/adapt-rows'
+import { paginateClause, paginateSortedInMemory, TOTAL_COUNT_SELECT, totalCountOf } from '../analyzer/paginate'
 
 export interface ZeroClickResult {
   query: string
@@ -87,7 +85,8 @@ export const zeroClickAnalyzer = defineAnalyzer<AnalysisParams, Row, ZeroClickRe
             WHEN position <= 5 THEN 0.08
             ELSE 0.04
           END
-        )) - clicks) AS DOUBLE) AS missedClicks
+        )) - clicks) AS DOUBLE) AS missedClicks,
+        ${TOTAL_COUNT_SELECT}
       FROM agg
       WHERE position <= ? AND ctr < ?
       ORDER BY impressions DESC
@@ -116,15 +115,13 @@ export const zeroClickAnalyzer = defineAnalyzer<AnalysisParams, Row, ZeroClickRe
         position: num(r.position),
         missedClicks: num(r.missedClicks),
       } as unknown as ZeroClickResult)),
-      meta: { total: arr.length, minImpressions, maxCtr, maxPosition },
+      meta: { total: totalCountOf(arr), returned: arr.length, minImpressions, maxCtr, maxPosition },
     }
   },
 
   buildRows(params) {
-    const period = periodOf(params)
-    const limit = params.limit ?? DEFAULT_ROW_LIMIT
     return {
-      rows: gsc.select(queryCol, pageCol).where(between(dateCol, period.startDate, period.endDate)).limit(limit).getState(),
+      rows: queriesQueryState(periodOf(params), fetchBudgetOf(params)),
     }
   },
 

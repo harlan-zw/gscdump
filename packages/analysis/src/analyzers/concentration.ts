@@ -10,7 +10,7 @@ import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row, TableName } from '@gscdump/engine/contracts'
 import type { BuilderState } from 'gscdump/query'
 import type { PageRow, QueriesRow } from '../types'
-import { num } from '@gscdump/engine/analysis-types'
+import { fetchBudgetOf, num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
@@ -243,9 +243,9 @@ export const concentrationAnalyzer = defineAnalyzer<AnalysisParams, Row, Concent
     const period = periodOf(params)
     const out: Record<string, BuilderState> = {}
     if (dim === 'pages')
-      out.pages = pagesQueryState(period, params.limit)
+      out.pages = pagesQueryState(period, fetchBudgetOf(params))
     else
-      out.queries = queriesQueryState(period, params.limit)
+      out.queries = queriesQueryState(period, fetchBudgetOf(params))
     return out
   },
 

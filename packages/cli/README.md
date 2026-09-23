@@ -185,9 +185,15 @@ gscdump query --live --site sc-domain:example.com \
 Without saved values, queries use 1000 rows and JSON.
 Limits must be positive integers. Formats must be `json` or `csv`.
 
-`--start` and `--end` work independently. An omitted date keeps its default.
-Non-interactive queries default to 31 days ago through three days ago, using UTC dates.
+Without dates, a query reads the last 28 days that end on the newest synced day of the table it reads.
+With `--live`, the window ends three days ago, Pacific time: the newest final GSC date.
+`--start` alone runs to that end date. `--end` alone reads the 28 days that end on it.
 Dates must use `YYYY-MM-DD`, and `--start` cannot follow `--end`.
+
+`--page` accepts a path or a full URL. The Store compares paths, so `https://example.com/a` matches `/a`.
+Live queries expand a path to the Site's origin. For a domain property, a path matches that path on any host.
+Filtered dimensions choose the Store table too: `-d query --page /a` reads `page_queries`.
+If no Store table holds every dimension and filter, the query fails and names `--live`.
 
 ```bash
 # Export query rows with a CSV header.
@@ -253,8 +259,12 @@ Saved config rejects invalid values and unknown keys. If parsing fails, fix the 
 `gscdump analyze <tool>` runs one of 29 Analyzers from `@gscdump/analysis`.
 See the [full list](../../README.md#analyzers) and [Source support](../analysis/README.md#sources).
 
-Each Analyzer accepts `--site`, `--start`, `--end`, `--limit`, and output flags.
-`movers` and `decay` also accept `--prev-start` and `--prev-end`.
+Each Analyzer accepts `--site`, `--period`, `--start`, `--end`, `--limit`, `--fetch-budget`, and output flags.
+Windows default to the last 28 days that end on the newest synced day.
+`movers` and `decay` compare with the previous period by default. Override it with `--prev-start` and `--prev-end` together.
+`movers` also accepts `--sort-by`: `clicksDelta` (default) sorts by absolute click change, `clicksDeltaPercent` by percent change.
+`--limit` caps the rows shown. `--fetch-budget` caps the rows each live fetch reads (default 25000, max 100000).
+If a fetch reaches the budget, the output shows a partial-data warning.
 Use `gscdump analyze <tool> --help` for additional options.
 
 The CLI requires local data unless you pass `--live`.

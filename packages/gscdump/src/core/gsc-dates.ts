@@ -35,6 +35,9 @@ export function getPstDate(now: Date = new Date()): string {
   return `${get('year')}-${get('month')}-${get('day')}`
 }
 
+// Calendar arithmetic on the Pacific date string, so the host time zone never
+// shifts the result. Re-parsing a `toLocaleString` value as host-local time
+// moved the date by one day on hosts east of UTC.
 function getPstDateDaysAgo(daysAgo: number): string {
   return addDays(getPstDate(), -daysAgo)
 }

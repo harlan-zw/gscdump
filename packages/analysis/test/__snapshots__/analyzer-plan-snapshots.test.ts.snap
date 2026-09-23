@@ -22,7 +22,7 @@ exports[`analyzer plan snapshots > rows plan: brand 1`] = `
           ],
         },
         "metrics": undefined,
-        "rowLimit": 100,
+        "rowLimit": 25000,
       },
     },
   },
@@ -51,7 +51,7 @@ exports[`analyzer plan snapshots > rows plan: cannibalization 1`] = `
           ],
         },
         "metrics": undefined,
-        "rowLimit": 100,
+        "rowLimit": 25000,
       },
     },
   },
@@ -80,7 +80,7 @@ exports[`analyzer plan snapshots > rows plan: clustering 1`] = `
           ],
         },
         "metrics": undefined,
-        "rowLimit": 100,
+        "rowLimit": 25000,
       },
     },
   },
@@ -108,7 +108,7 @@ exports[`analyzer plan snapshots > rows plan: concentration 1`] = `
           ],
         },
         "metrics": undefined,
-        "rowLimit": 100,
+        "rowLimit": 25000,
       },
     },
   },
@@ -289,7 +289,7 @@ exports[`analyzer plan snapshots > rows plan: decay 1`] = `
           ],
         },
         "metrics": undefined,
-        "rowLimit": 100,
+        "rowLimit": 25000,
       },
     },
     "previous": {
@@ -309,7 +309,7 @@ exports[`analyzer plan snapshots > rows plan: decay 1`] = `
           ],
         },
         "metrics": undefined,
-        "rowLimit": 100,
+        "rowLimit": 25000,
       },
     },
   },
@@ -338,7 +338,7 @@ exports[`analyzer plan snapshots > rows plan: movers 1`] = `
           ],
         },
         "metrics": undefined,
-        "rowLimit": 100,
+        "rowLimit": 25000,
       },
     },
     "previous": {
@@ -359,7 +359,7 @@ exports[`analyzer plan snapshots > rows plan: movers 1`] = `
           ],
         },
         "metrics": undefined,
-        "rowLimit": 100,
+        "rowLimit": 25000,
       },
     },
   },
@@ -388,7 +388,7 @@ exports[`analyzer plan snapshots > rows plan: opportunity 1`] = `
           ],
         },
         "metrics": undefined,
-        "rowLimit": 100,
+        "rowLimit": 25000,
       },
     },
   },
@@ -416,7 +416,7 @@ exports[`analyzer plan snapshots > rows plan: seasonality 1`] = `
           ],
         },
         "metrics": undefined,
-        "rowLimit": 100,
+        "rowLimit": 25000,
       },
     },
   },
@@ -445,7 +445,7 @@ exports[`analyzer plan snapshots > rows plan: striking-distance 1`] = `
           ],
         },
         "metrics": undefined,
-        "rowLimit": 100,
+        "rowLimit": 25000,
       },
     },
   },
@@ -474,7 +474,7 @@ exports[`analyzer plan snapshots > rows plan: zero-click 1`] = `
           ],
         },
         "metrics": undefined,
-        "rowLimit": 100,
+        "rowLimit": 25000,
       },
     },
   },
@@ -717,11 +717,21 @@ exports[`analyzer plan snapshots > sql plan: brand 1`] = `
       WHERE date >= ? AND date <= ?
       GROUP BY query, url
       HAVING SUM(impressions) >= ?
+    ),
+    segmented AS (
+      SELECT
+        query, page, clicks, impressions, ctr, position,
+        CASE WHEN regexp_matches(LOWER(query), ?) THEN 'brand' ELSE 'non-brand' END AS segment
+      FROM agg
     )
     SELECT
-      query, page, clicks, impressions, ctr, position,
-      CASE WHEN regexp_matches(LOWER(query), ?) THEN 'brand' ELSE 'non-brand' END AS segment
-    FROM agg
+      query, page, clicks, impressions, ctr, position, segment,
+      SUM(CASE WHEN segment = 'brand' THEN clicks ELSE 0 END) OVER () AS brandClicks,
+      SUM(CASE WHEN segment = 'brand' THEN 0 ELSE clicks END) OVER () AS nonBrandClicks,
+      SUM(CASE WHEN segment = 'brand' THEN impressions ELSE 0 END) OVER () AS brandImpressions,
+      SUM(CASE WHEN segment = 'brand' THEN 0 ELSE impressions END) OVER () AS nonBrandImpressions,
+      CAST(COUNT(*) OVER () AS DOUBLE) AS totalCount
+    FROM segmented
     ORDER BY clicks DESC
     LIMIT 100
   ",
@@ -872,7 +882,10 @@ exports[`analyzer plan snapshots > sql plan: cannibalization 1`] = `
               * LEAST(LOG10(GREATEST(t.total_impressions, 10.0)) / 5.0, 1.0),
             1.0 / 3.0
           )
-        )) AS DOUBLE) AS severity
+        )) AS DOUBLE) AS severity,
+        SUM(e.stolen_clicks) OVER () AS allStolenClicks,
+        AVG(GREATEST(0.0, 1.0 - e.hhi / 10000.0)) OVER () AS allFragmentation,
+        CAST(COUNT(*) OVER () AS DOUBLE) AS totalCount
       FROM events e
       JOIN query_totals t USING (query)
       ORDER BY severity DESC, stolenClicks DESC
@@ -2162,11 +2175,11 @@ exports[`analyzer plan snapshots > sql plan: decay 1`] = `
         LEFT JOIN cur c ON p.url = c.url
         LEFT JOIN series_by_url s ON p.url = s.url
       )
-      SELECT *
+      SELECT *, CAST(COUNT(*) OVER () AS DOUBLE) AS totalCount
       FROM joined
       WHERE declinePercent >= ? AND lostClicks > 0
       ORDER BY lostClicks DESC
-      LIMIT 2000
+      LIMIT 100
     ",
 }
 `;
@@ -2677,13 +2690,13 @@ exports[`analyzer plan snapshots > sql plan: movers 1`] = `
     "2024-02-29",
     "2024-01-01",
     "2024-01-31",
+    10,
+    0.2,
+    0.2,
     "2024-02-01",
     "2024-02-29",
     "2024-01-01",
     "2024-01-31",
-    10,
-    0.2,
-    0.2,
   ],
   "previous": {
     "partitions": [
@@ -2749,6 +2762,64 @@ exports[`analyzer plan snapshots > sql plan: movers 1`] = `
         WHERE date >= ? AND date <= ?
         GROUP BY query, url
       ),
+      joined AS (
+        SELECT
+          COALESCE(c.query, p.query) AS keyword,
+          COALESCE(c.url, p.url) AS page,
+          COALESCE(c.clicks, 0.0) AS recentClicks,
+          COALESCE(c.impressions, 0.0) AS recentImpressions,
+          c.position AS recentPosition,
+          COALESCE(p.clicks, 0.0) AS baselineClicks,
+          COALESCE(p.impressions, 0.0) AS baselineImpressions,
+          p.position AS baselinePosition
+        FROM cur c
+        FULL OUTER JOIN prev p ON c.query = p.query AND c.url = p.url
+        WHERE GREATEST(COALESCE(c.impressions, 0.0), COALESCE(p.impressions, 0.0)) >= ?
+      ),
+      derived AS (
+        SELECT
+          *,
+          (recentClicks - baselineClicks) AS clicksChange,
+          CASE
+            WHEN baselineClicks = 0 THEN CASE WHEN recentClicks > 0 THEN 100.0 ELSE 0.0 END
+            ELSE (recentClicks - baselineClicks) * 100.0 / baselineClicks
+          END AS clicksChangePercent,
+          (recentImpressions - baselineImpressions) AS impressionsChange,
+          CASE
+            WHEN baselineImpressions = 0 THEN CASE WHEN recentImpressions > 0 THEN 100.0 ELSE 0.0 END
+            ELSE (recentImpressions - baselineImpressions) * 100.0 / baselineImpressions
+          END AS impressionsChangePercent,
+          CASE
+            WHEN recentPosition IS NOT NULL AND baselinePosition IS NOT NULL THEN (recentPosition - baselinePosition)
+            ELSE NULL
+          END AS positionChange
+        FROM joined
+      ),
+      classified AS (
+        SELECT
+          *,
+          CASE
+            WHEN clicksChangePercent > 0 AND ABS(clicksChangePercent) / 100.0 >= ? THEN 'rising'
+            WHEN clicksChangePercent < 0 AND ABS(clicksChangePercent) / 100.0 >= ? THEN 'declining'
+            ELSE 'stable'
+          END AS direction
+        FROM derived
+      ),
+      counted AS (
+        SELECT
+          *,
+          CAST(SUM(CASE WHEN direction = 'rising' THEN 1 ELSE 0 END) OVER () AS DOUBLE) AS risingCount,
+          CAST(SUM(CASE WHEN direction = 'declining' THEN 1 ELSE 0 END) OVER () AS DOUBLE) AS decliningCount,
+          CAST(SUM(CASE WHEN direction = 'stable' THEN 1 ELSE 0 END) OVER () AS DOUBLE) AS stableCount
+        FROM classified
+      ),
+      selected AS (
+        SELECT *
+        FROM counted
+        WHERE direction IN ('rising', 'declining')
+        ORDER BY ABS(clicksChange) DESC, keyword ASC, page ASC
+        LIMIT 100
+      ),
       weekly AS (
         SELECT query, url, date_trunc('week', CAST(date AS DATE)) AS week,
           CAST(SUM(clicks) AS DOUBLE) AS clicks,
@@ -2761,7 +2832,8 @@ exports[`analyzer plan snapshots > sql plan: movers 1`] = `
           SELECT query, url, date, clicks, impressions
           FROM read_parquet({{FILES_PREV}}, union_by_name = true)
           WHERE date >= ? AND date <= ?
-        )
+        ) u
+        SEMI JOIN selected ON u.query = selected.keyword AND u.url = selected.page
         GROUP BY query, url, week
       ),
       series_by_entity AS (
@@ -2771,42 +2843,11 @@ exports[`analyzer plan snapshots > sql plan: movers 1`] = `
           'impressions': impressions
         } ORDER BY week)) AS seriesJson
         FROM weekly GROUP BY query, url
-      ),
-      joined AS (
-        SELECT
-          c.query AS keyword,
-          c.url AS page,
-          c.clicks AS recentClicks,
-          c.impressions AS recentImpressions,
-          c.position AS recentPosition,
-          COALESCE(p.clicks, 0.0) AS baselineClicks,
-          COALESCE(p.impressions, 0.0) AS baselineImpressions,
-          p.position AS baselinePosition,
-          (c.clicks - COALESCE(p.clicks, 0.0)) AS clicksChange,
-          CASE
-            WHEN COALESCE(p.clicks, 0.0) = 0 THEN CASE WHEN c.clicks > 0 THEN 100.0 ELSE 0.0 END
-            ELSE (c.clicks - p.clicks) * 100.0 / p.clicks
-          END AS clicksChangePercent,
-          CASE
-            WHEN COALESCE(p.impressions, 0.0) = 0 THEN CASE WHEN c.impressions > 0 THEN 100.0 ELSE 0.0 END
-            ELSE (c.impressions - p.impressions) * 100.0 / p.impressions
-          END AS impressionsChangePercent,
-          CASE WHEN p.position IS NOT NULL THEN (c.position - p.position) ELSE NULL END AS positionChange,
-          s.seriesJson
-        FROM cur c
-        LEFT JOIN prev p ON c.query = p.query AND c.url = p.url
-        LEFT JOIN series_by_entity s ON c.query = s.query AND c.url = s.url
-        WHERE c.impressions >= ?
       )
-      SELECT *,
-        CASE
-          WHEN clicksChangePercent > 0 AND ABS(clicksChangePercent) / 100.0 >= ? THEN 'rising'
-          WHEN clicksChangePercent < 0 AND ABS(clicksChangePercent) / 100.0 >= ? THEN 'declining'
-          ELSE 'stable'
-        END AS direction
-      FROM joined
-      ORDER BY ABS(clicksChangePercent) DESC
-      LIMIT 100
+      SELECT selected.*, s.seriesJson
+      FROM selected
+      LEFT JOIN series_by_entity s ON selected.keyword = s.query AND selected.page = s.url
+      ORDER BY ABS(clicksChange) DESC, keyword ASC, page ASC
     ",
 }
 `;
@@ -2921,7 +2962,8 @@ exports[`analyzer plan snapshots > sql plan: opportunity 1`] = `
           ELSE 0.10
         END
       )) AS DOUBLE) AS potentialClicks,
-      positionScore, impressionScore, ctrGapScore
+      positionScore, impressionScore, ctrGapScore,
+      CAST(COUNT(*) OVER () AS DOUBLE) AS totalCount
     FROM gapped
     ORDER BY opportunityScore DESC
     LIMIT 100
@@ -4032,7 +4074,8 @@ exports[`analyzer plan snapshots > sql plan: zero-click 1`] = `
             WHEN position <= 5 THEN 0.08
             ELSE 0.04
           END
-        )) - clicks) AS DOUBLE) AS missedClicks
+        )) - clicks) AS DOUBLE) AS missedClicks,
+        CAST(COUNT(*) OVER () AS DOUBLE) AS totalCount
       FROM agg
       WHERE position <= ? AND ctr < ?
       ORDER BY impressions DESC
