@@ -234,7 +234,7 @@ Every exported row has `site` and `search_type` columns.
 | `duckdb` | One `gscdump.duckdb` file |
 
 Inspections, sitemaps, and Indexing API metadata go to `<site>/<dataset>.<ext>`, or to their own tables in a database file.
-`manifest.json` lists every dataset with its row count.
+`manifest.json` lists every dataset with its row count, and the same coverage that `sync --status` reports.
 `--format sqlite` needs Node.js 22.13 or later.
 
 ### Global flags

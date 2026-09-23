@@ -287,7 +287,7 @@ gscdump dump --all-sites --format sqlite --out ./export
 - `csv`, `json`, and `ndjson` rows also have `position`: `sum_position / impressions + 1`.
 - `sqlite` and `duckdb` write one file, `gscdump.sqlite` or `gscdump.duckdb`,
   with one table per dataset for every Site and search type.
-- `manifest.json` lists every dataset with its row count and the Store coverage.
+- `manifest.json` lists every dataset with its row count, plus the coverage that `sync --status --json` reports. Partial coverage is progress: daily sync fills the rest.
 
 ## Analyze and report
 

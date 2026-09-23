@@ -1,4 +1,5 @@
 import type { SearchType } from 'gscdump/query'
+import type { StoreCoverage } from '../coverage'
 import type { BingDumpStep } from '../dump-bing'
 import type { DumpedDataset, DumpFormat, DumpSink, WrittenFile } from '../dump-writers'
 import type { EntityDataset } from '../local-entities'
@@ -8,13 +9,15 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
-import { getDateRange } from 'gscdump/dates'
 import { dumpCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
+import { nextCommand, readStoreCoverage, renderCoverage } from '../coverage'
 import { dumpBing } from '../dump-bing'
 import { DUMP_FORMATS, isDumpFormat, openDumpSink } from '../dump-writers'
 import { ENTITY_DATASETS, readEntityDatasets } from '../local-entities'
 import { allTables } from '../local-store'
+import { DEFAULT_INSPECT_LIMIT } from '../sync-plan'
+import { isProcessAlive, readSyncRun, syncRunStatus } from '../sync-run'
 import { groupTableSources, siteUrlFor } from '../table-sources'
 import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseSearchType } from '../utils'
 
@@ -159,9 +162,13 @@ export const dumpCommand = defineCommand({
       }
       for (const skip of site.skipped)
         console.log(`  \x1B[90m${skip.dataset}: no rows yet; skipped\x1B[0m`)
-      const gaps = site.coverage.filter(entry => entry.missingDates.length > 0 || entry.failedDates.length > 0)
-      for (const gap of gaps)
-        logger.warn(`  ${gap.table}${gap.searchType === 'web' ? '' : `/${gap.searchType}`}: ${gap.missingDates.length} missing and ${gap.failedDates.length} failed date(s); see manifest.json`)
+      for (const line of renderCoverage(site.coverage))
+        console.log(`  ${line}`)
+      // Partial coverage is progress. Only a failed date earns a warning.
+      for (const job of site.coverage.analytics) {
+        if (job.coverage.kind === 'partial' && job.coverage.failed > 0)
+          logger.warn(`${site.site} ${job.table} (${job.searchType}): ${job.coverage.failed} failed date(s). Run ${nextCommand(site.coverage)} to retry them.`)
+      }
     }
     if (bing._tag === 'dumped') {
       for (const site of bing.sites) {
@@ -190,17 +197,6 @@ export const dumpCommand = defineCommand({
 
 export type { DumpedDataset, DumpFormat, WrittenFile } from '../dump-writers'
 
-export interface CoverageEntry {
-  table: TableName
-  searchType: SearchType
-  oldestDate: string | null
-  newestDate: string | null
-  lastSyncAt: string | null
-  /** Dates inside the synced range with no completed sync. */
-  missingDates: string[]
-  failedDates: Array<{ date: string, error: string | null }>
-}
-
 export interface SiteDumpSummary {
   site: string
   siteId: string
@@ -208,8 +204,8 @@ export interface SiteDumpSummary {
   /** Datasets with no rows. They get no file. */
   skipped: Array<{ dataset: EntityDataset, reason: 'empty' }>
   totals: { datasets: number, rows: number }
-  /** What the Store holds for each table and search type, including its gaps. */
-  coverage: CoverageEntry[]
+  /** How much of the Site the Store holds so far. Daily sync fills the rest. */
+  coverage: StoreCoverage
 }
 
 export interface DumpResult {
@@ -305,7 +301,7 @@ async function dumpEachSite(sink: DumpSink, opts: Parameters<typeof dumpSites>[0
     summary.push({
       site: target.site,
       siteId: target.siteId,
-      coverage: await readDumpCoverage(store, target.siteId),
+      coverage: await readDumpCoverage(store, target.site),
       datasets,
       skipped,
       totals: {
@@ -324,50 +320,12 @@ async function writeJsonFile(target: string, value: unknown): Promise<WrittenFil
 }
 
 /**
- * Coverage seam: the one place `dump` reads what the Store holds for a Site.
- * Its result goes to the summary and to manifest.json. The shared Store
- * coverage model from the sync work replaces this function.
+ * What the Store holds for a Site, from the same model as `sync --status`.
+ * The summary and manifest.json both carry it. It reads the Store only.
  */
-async function readDumpCoverage(store: LocalStore, siteId: string): Promise<CoverageEntry[]> {
-  return readCoverage(store, siteId)
-}
-
-/** Watermarks plus failed and missing dates for every table and search type the Store knows. */
-async function readCoverage(store: LocalStore, siteId: string): Promise<CoverageEntry[]> {
-  const scope = { userId: store.userId, siteId }
-  const [watermarks, states] = await Promise.all([store.engine.getWatermarks(scope), store.engine.getSyncStates(scope)])
-  const groups = new Map<string, CoverageEntry & { done: Set<string> }>()
-  const group = (table: TableName, searchType: SearchType): CoverageEntry & { done: Set<string> } => {
-    const key = `${table}\u0000${searchType}`
-    let entry = groups.get(key)
-    if (!entry) {
-      entry = { table, searchType, oldestDate: null, newestDate: null, lastSyncAt: null, missingDates: [], failedDates: [], done: new Set() }
-      groups.set(key, entry)
-    }
-    return entry
-  }
-  for (const mark of watermarks) {
-    const entry = group(mark.table, mark.searchType ?? 'web')
-    entry.oldestDate = mark.oldestDateSynced
-    entry.newestDate = mark.newestDateSynced
-    entry.lastSyncAt = new Date(mark.lastSyncAt).toISOString()
-  }
-  for (const state of states) {
-    const entry = group(state.table, state.searchType ?? 'web')
-    if (state.state === 'done')
-      entry.done.add(state.date)
-    else if (state.state === 'failed')
-      entry.failedDates.push({ date: state.date, error: state.error ?? null })
-  }
-  return [...groups.values()]
-    .map(({ done, ...entry }) => {
-      const failed = new Set(entry.failedDates.map(f => f.date))
-      const missingDates = entry.oldestDate && entry.newestDate
-        ? getDateRange(entry.oldestDate, entry.newestDate).filter(date => !done.has(date) && !failed.has(date))
-        : []
-      return { ...entry, missingDates, failedDates: entry.failedDates.sort((a, b) => a.date.localeCompare(b.date)) }
-    })
-    .sort((a, b) => a.table.localeCompare(b.table) || a.searchType.localeCompare(b.searchType))
+async function readDumpCoverage(store: LocalStore, site: string): Promise<StoreCoverage> {
+  const run = syncRunStatus(await readSyncRun(store.dataDir), { now: Date.now(), isAlive: isProcessAlive })
+  return readStoreCoverage({ store, site, inspectLimit: DEFAULT_INSPECT_LIMIT, run })
 }
 
 async function listLiveEntries(store: LocalStore, siteId: string, searchType?: SearchType): Promise<ManifestEntry[]> {

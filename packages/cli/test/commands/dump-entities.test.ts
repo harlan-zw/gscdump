@@ -4,6 +4,7 @@ import path from 'node:path'
 import { DuckDBInstance } from '@duckdb/node-api'
 import { createIndexingMetadataStore, createInspectionStore, createSitemapListStore, createSitemapStore } from '@gscdump/engine/entities'
 import { resetNodeDuckDB } from '@gscdump/engine/node'
+import { addDays, getLatestGscDate } from 'gscdump/dates'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { dumpSites } from '../../src/commands/dump'
 import { createLocalStore } from '../../src/local-store'
@@ -148,15 +149,17 @@ describe('dumpSites entity datasets', () => {
     expect(summary!.skipped.every(skip => skip.reason === 'empty')).toBe(true)
   })
 
-  it('writes manifest.json with coverage gaps and sites.json with the site list', async () => {
+  it('writes manifest.json with Store coverage and sites.json with the site list', async () => {
     const store = createLocalStore({ dataDir })
     const siteId = store.siteIdFor(SITE)
     const scope = { userId: store.userId, siteId, table: 'pages' as const }
-    for (const date of ['2026-04-10', '2026-04-13']) {
+    const latest = getLatestGscDate()
+    const [first, failed] = [addDays(latest, -3), addDays(latest, -2)]
+    for (const date of [first, latest]) {
       await store.engine.writeDay({ ...scope, date }, [{ url: '/a', date, clicks: 1, impressions: 10, sum_position: 0 }])
       await store.engine.setSyncState({ ...scope, date }, 'done')
     }
-    await store.engine.setSyncState({ ...scope, date: '2026-04-11' }, 'failed', { error: 'quota exceeded' })
+    await store.engine.setSyncState({ ...scope, date: failed }, 'failed', { error: 'quota exceeded' })
 
     const result = await dumpSites({
       store,
@@ -168,14 +171,14 @@ describe('dumpSites entity datasets', () => {
 
     expect(result.metadataFiles.map(file => path.basename(file.path))).toEqual(['sites.json', 'manifest.json'])
     const manifest = JSON.parse(await fs.readFile(path.join(outDir, 'manifest.json'), 'utf8'))
-    expect(manifest.sites[0].coverage).toEqual([expect.objectContaining({
+    expect(manifest.sites[0].coverage.analytics).toEqual([{
       table: 'pages',
       searchType: 'web',
-      oldestDate: '2026-04-10',
-      newestDate: '2026-04-13',
-      missingDates: ['2026-04-12'],
-      failedDates: [{ date: '2026-04-11', error: 'quota exceeded' }],
-    })])
+      from: first,
+      to: latest,
+      coverage: { kind: 'partial', done: 2, total: 4, failed: 1, pending: 1 },
+    }])
+    expect(result.sites[0]!.coverage).toEqual(manifest.sites[0].coverage)
     expect(manifest.sites[0].datasets[0].path).toBe('sc_domain_example_com/web/pages.parquet')
     const sites = JSON.parse(await fs.readFile(path.join(outDir, 'sites.json'), 'utf8'))
     expect(sites).toEqual({ sites: [{ siteUrl: SITE, permissionLevel: 'siteOwner' }] })
