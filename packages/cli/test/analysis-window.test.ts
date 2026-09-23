@@ -49,8 +49,9 @@ function days(end: string, count: number): string[] {
   return Array.from({ length: count }, (_, i) => new Date(Date.parse(`${end}T00:00:00Z`) - i * 86_400_000).toISOString().slice(0, 10)).reverse()
 }
 
-async function cli(...args: string[]): Promise<void> {
-  await runCli({
+/** Run one CLI invocation and return its exit code, as the command shell does. */
+async function cli(...args: string[]): Promise<number> {
+  return runCli({
     rawArgs: ['--config-dir', directory, ...args],
     // Local Store reads build auth but never contact Google.
     environment: { HOME: directory, GSC_ACCESS_TOKEN: 'unused-offline-token', NO_COLOR: '1' },
@@ -95,7 +96,7 @@ describe('local --page filters', () => {
   })
 
   it('rejects a dimension and filter pair no Store table holds', async () => {
-    await expect(cli('query', '--site', SITE, '-d', 'query', '--country', 'usa', '-f', 'json')).rejects.toThrow('exit 1')
+    await expect(cli('query', '--site', SITE, '-d', 'query', '--country', 'usa', '-f', 'json')).resolves.toBe(1)
     expect(stderr.join('')).toContain('No Store table holds query with country')
   })
 })
@@ -112,7 +113,7 @@ describe('local sync coverage', () => {
     const store = createLocalStore({ dataDir: join(directory, 'store') })
     await store.engine.setSyncState({ userId: store.userId, siteId: store.siteIdFor(SITE), table: 'page_queries', date: '2026-03-06' }, 'failed')
 
-    await expect(cli('analyze', 'striking-distance', '--site', SITE)).rejects.toThrow('exit 1')
+    await expect(cli('analyze', 'striking-distance', '--site', SITE)).resolves.toBe(1)
 
     const message = stderr.join('\n')
     expect(message).toContain('current window 2026-02-21 to 2026-03-20')
@@ -127,7 +128,7 @@ describe('local sync coverage', () => {
     // comparison window holds exactly one synced day (2026-02-20).
     await seed('page_queries', days('2026-03-20', 29), queryRows)
 
-    await expect(cli('analyze', 'movers', '--site', SITE, '--json')).rejects.toThrow('exit 1')
+    await expect(cli('analyze', 'movers', '--site', SITE, '--json')).resolves.toBe(1)
 
     const message = stderr.join('\n')
     expect(message).toContain('comparison window 2026-01-24 to 2026-02-20')
@@ -142,7 +143,7 @@ describe('local sync coverage', () => {
     await seed('page_queries', days('2026-03-20', 28), queryRows)
     await seed('pages', days('2026-03-20', 56), pageRows)
 
-    await expect(cli('report', 'movers', '--site', SITE, '--period', '28d', '--json')).rejects.toThrow('exit 1')
+    await expect(cli('report', 'movers', '--site', SITE, '--period', '28d', '--json')).resolves.toBe(1)
 
     const message = stderr.join('\n')
     expect(message).toContain('comparison window 2026-01-24 to 2026-02-20: page_queries misses 28 of 28 days')
@@ -181,7 +182,7 @@ describe('report window flags', () => {
   })
 
   it('rejects --prev-start without --prev-end', async () => {
-    await expect(cli('report', 'movers', '--prev-start', '2026-01-01', '--explain')).rejects.toThrow()
+    await expect(cli('report', 'movers', '--prev-start', '2026-01-01', '--explain')).resolves.toBe(1)
     expect(stderr.join('\n')).toContain('Pass --prev-start and --prev-end together.')
   })
 })
