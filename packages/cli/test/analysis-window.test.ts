@@ -49,8 +49,8 @@ function days(end: string, count: number): string[] {
   return Array.from({ length: count }, (_, i) => new Date(Date.parse(`${end}T00:00:00Z`) - i * 86_400_000).toISOString().slice(0, 10)).reverse()
 }
 
-async function cli(...args: string[]): Promise<void> {
-  await runCli({
+async function cli(...args: string[]): Promise<number> {
+  return runCli({
     rawArgs: ['--config-dir', directory, ...args],
     // Local Store reads build auth but never contact Google.
     environment: { HOME: directory, GSC_ACCESS_TOKEN: 'unused-offline-token', NO_COLOR: '1' },
@@ -95,7 +95,7 @@ describe('local --page filters', () => {
   })
 
   it('rejects a dimension and filter pair no Store table holds', async () => {
-    await expect(cli('query', '--site', SITE, '-d', 'query', '--country', 'usa', '-f', 'json')).rejects.toThrow('exit 1')
+    expect(await cli('query', '--site', SITE, '-d', 'query', '--country', 'usa', '-f', 'json')).toBe(1)
     expect(stderr.join('')).toContain('No Store table holds query with country')
   })
 })
@@ -108,7 +108,7 @@ describe('report window flags', () => {
   })
 
   it('rejects --prev-start without --prev-end', async () => {
-    await expect(cli('report', 'movers', '--prev-start', '2026-01-01', '--explain')).rejects.toThrow()
+    expect(await cli('report', 'movers', '--prev-start', '2026-01-01', '--explain')).toBe(1)
     expect(stderr.join('\n')).toContain('Pass --prev-start and --prev-end together.')
   })
 })

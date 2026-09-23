@@ -32,16 +32,14 @@ async function cli(...rawArgs: string[]): Promise<CliRun> {
   vi.spyOn(console, 'log').mockImplementation((...values: unknown[]) => stdout.push(values.map(String).join(' ')))
   vi.spyOn(console, 'error').mockImplementation((...values: unknown[]) => stderr.push(values.map(String).join(' ')))
   vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+  // runCli catches every failure, including a mocked exit, so keep the code it asked for.
+  let exitCode: number | undefined
   vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
-    throw Object.assign(new Error('exit'), { exitCode: code ?? 0 })
+    exitCode ??= code ?? 0
+    throw new Error(`exit ${code ?? 0}`)
   }) as never)
-  const code = await runCli({ rawArgs, environment: { GSCDUMP_CONFIG_DIR: configDir }, loadEnv: false })
-    .then(() => 0)
-    .catch((error: { exitCode?: number }) => {
-      if (error.exitCode === undefined)
-        throw error
-      return error.exitCode
-    })
+  const returned = await runCli({ rawArgs, environment: { GSCDUMP_CONFIG_DIR: configDir }, loadEnv: false })
+  const code = exitCode ?? returned
   vi.restoreAllMocks()
   return { code, stdout: stdout.join('\n'), stderr: stderr.join('\n') }
 }
