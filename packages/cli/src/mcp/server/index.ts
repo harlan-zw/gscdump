@@ -144,19 +144,26 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
 
   const getClient = async (): Promise<ReturnType<typeof googleSearchConsole>> => (await getContext()).client
 
-  // One Site list per server. `add-site` and `delete-site` clear it.
+  // One Site list per server. `list-sites` refreshes it; handlers that add,
+  // delete, verify or unverify a Site clear it.
   let siteList: Promise<SiteCandidate[]> | undefined
-  const loadSiteList = (): Promise<SiteCandidate[]> => {
-    siteList ??= getClient()
-      .then(client => client.sites())
-      .then(raw => raw.flatMap(s => s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser' ? [{ siteUrl: s.siteUrl }] : []))
+  const fetchSites = async (): Promise<{ siteUrl: string, permissionLevel: string }[]> => {
+    const raw = await (await getClient()).sites()
+    return raw.flatMap(s => s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser' ? [{ siteUrl: s.siteUrl, permissionLevel: s.permissionLevel || 'unknown' }] : [])
+  }
+  const cacheSiteList = (sites: Promise<{ siteUrl: string }[]>): Promise<SiteCandidate[]> => {
+    const cached = sites
+      .then(list => list.map(({ siteUrl }) => ({ siteUrl })))
       .catch((error: unknown) => {
         // Do not cache a failure; the next tool call asks again.
-        siteList = undefined
+        if (siteList === cached)
+          siteList = undefined
         throw error
       })
-    return siteList
+    siteList = cached
+    return cached
   }
+  const loadSiteList = (): Promise<SiteCandidate[]> => siteList ?? cacheSiteList(fetchSites())
   // Agents pass Sites as people write them (`example.com`), not as GSC keys.
   const withSite = async <T extends { siteUrl: string }>(args: T): Promise<T> => {
     const resolution = resolveSiteInput(args.siteUrl, await loadSiteList())
@@ -172,11 +179,12 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: listSitesInput.shape,
     },
     async () => {
-      const client = await getClient()
-      const raw = await client.sites()
-      const sites = raw
-        .filter(s => s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser')
-        .map(s => ({ siteUrl: s.siteUrl!, permissionLevel: s.permissionLevel || 'unknown' }))
+      const fetched = fetchSites()
+      // Refresh the cache so the resolver accepts every listed Site.
+      cacheSiteList(fetched).catch(() => {
+        // The same failure rejects `fetched` below and reaches the caller.
+      })
+      const sites = await fetched
       return { content: [{ type: 'text', text: JSON.stringify(sites, null, 2) }] }
     },
   )
@@ -457,6 +465,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     async ({ siteUrl, method }) => {
       const client = await getClient()
       const resource = await verifySite(client, siteUrl as string, method as VerificationMethod)
+      siteList = undefined
       return { content: [{ type: 'text', text: JSON.stringify({ siteUrl, method, resource }, null, 2) }] }
     },
   )
@@ -496,6 +505,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     async ({ id }) => {
       const client = await getClient()
       await unverifySite(client, id as string)
+      siteList = undefined
       return { content: [{ type: 'text', text: JSON.stringify({ id, status: 'unverified' }, null, 2) }] }
     },
   )
