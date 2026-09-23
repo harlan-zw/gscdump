@@ -144,13 +144,25 @@ If you use a temporary CI runner, restore and save the entire Store between runs
 ```bash
 gscdump query --site sc-domain:example.com --dimensions page --limit 100
 
-gscdump dump --site sc-domain:example.com --format parquet --out ./parquet-export
+gscdump query --format json --sql "SELECT search_type, SUM(clicks) AS clicks,
+  gsc_position(sum_position, impressions) AS position
+  FROM pages GROUP BY search_type"
 
-gscdump store export --help
+gscdump dump --site sc-domain:example.com --format parquet --out ./parquet-export
+gscdump dump --all-sites --format sqlite --out ./sqlite-export
 ```
 
-`dump` writes files to a directory.
-`store export` creates a single `.duckdb` file.
+`query --sql` runs DuckDB SQL over one view per Store table.
+`query --schema` lists the views, their columns, and their date ranges.
+Every view and every exported row has `site` and `search_type` columns.
+The Store keeps every search type, so filter or group by `search_type` before you add rows together.
+`url` holds the page path, and `page` is the same value.
+`sum_position` is the zero-based position multiplied by impressions.
+`gsc_position(sum_position, impressions)` returns the impression-weighted average position.
+
+`dump` writes Parquet, CSV, JSON, or NDJSON files to a directory.
+`--format sqlite` and `--format duckdb` write one database file with one table per dataset.
+CSV, JSON, and NDJSON rows also have a per-row `position`.
 
 ## Maintain the Store
 

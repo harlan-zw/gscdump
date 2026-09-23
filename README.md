@@ -103,8 +103,8 @@ Guides:
 | `auth` | Manage authentication with `status`, `login`, and `logout` |
 | `bing` | Connect Bing, export datasets, inspect URLs, and check cloud connection verification |
 | `profile` | Manage separate credential profiles |
-| `dump` | Export stored files to a directory |
-| `query` | Query stored rows, or Google with `--live` |
+| `dump` | Export the Store as Parquet, CSV, JSON, NDJSON, SQLite, or DuckDB |
+| `query` | Query stored rows, run SQL with `--sql`, or query Google with `--live` |
 | `sync` | Fetch Google data into the Store |
 | `sites [--with-sitemaps]` | List Sites and manage Site verification |
 | `sitemaps` | List, submit, delete, and discover sitemaps |
@@ -116,7 +116,6 @@ Guides:
 | `store stats` | Show row counts, file sizes, and sync progress |
 | `store compact` | Combine older daily partitions into monthly files |
 | `store gc` | Delete orphaned Store files |
-| `store export` | Export a DuckDB file |
 | `store rollups` | Rebuild Rollups |
 | `config` | Manage CLI configuration |
 | `doctor` | Diagnose setup problems |
