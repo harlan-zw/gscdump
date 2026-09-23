@@ -71,6 +71,11 @@ export function hashUrl(url: string): string {
   return ((hi >>> 0).toString(16).padStart(8, '0') + (lo >>> 0).toString(16).padStart(8, '0'))
 }
 
+/** Search Console's own sitemap list for the site (path, status, counts). */
+export function sitemapListKey(ctx: TenantCtx): string {
+  return `${tenantEntityPrefix(ctx)}/sitemaps/gsc-list.json`
+}
+
 export function sitemapUrlsPrefix(ctx: TenantCtx): string {
   return `${tenantEntityPrefix(ctx)}/sitemaps/urls`
 }

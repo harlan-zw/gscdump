@@ -12,6 +12,7 @@ import { decodeParquetToRows, encodeRowsToParquetFlex } from '../src/adapters/hy
 import {
   createEmptyTypesStore,
   createInspectionStore,
+  createSitemapListStore,
   emptyTypesKey,
   hashUrl,
   INSPECTION_HISTORY_MAX_BYTES,
@@ -147,6 +148,22 @@ describe('createInspectionStore: appendHistory + loadHistory', () => {
 
     const apr = await inspector.loadHistory(ctx, '2026-04')
     expect(apr?.records).toHaveLength(3)
+  })
+
+  it('listHistoryMonths returns every month that holds a shard, ascending', async () => {
+    const { ds } = makeFakeDataSource()
+    const inspector = createInspectionStore({ dataSource: ds })
+    const ctx = { userId: 'u1', siteId: 's1' }
+    expect(await inspector.listHistoryMonths(ctx)).toEqual([])
+
+    await inspector.appendHistory(ctx, [
+      rec('https://x.com/a', { inspectedAt: '2026-05-01T00:00:00Z' }),
+      rec('https://x.com/b', { inspectedAt: '2026-03-01T00:00:00Z' }),
+    ], { batchId: 'b1' })
+    await inspector.appendHistory(ctx, [rec('https://x.com/c', { inspectedAt: '2026-05-09T00:00:00Z' })], { batchId: 'b2' })
+    await inspector.appendHistory({ userId: 'u1', siteId: 'other' }, [rec('https://y.com/a', { inspectedAt: '2026-01-01T00:00:00Z' })])
+
+    expect(await inspector.listHistoryMonths(ctx)).toEqual(['2026-03', '2026-05'])
   })
 
   it('loads independent history shards concurrently', async () => {
@@ -874,5 +891,42 @@ describe('createInspectionStore: transition capture', () => {
     // The whole point: events are disposable, transitions are not.
     expect(Array.from(store.keys()).filter(k => k.includes('/events/'))).toHaveLength(0)
     expect(await transitionsFor(store, '2026-04')).toHaveLength(1)
+  })
+})
+
+describe('createSitemapListStore', () => {
+  it('returns undefined before the first save and the saved list after it', async () => {
+    const { ds } = makeFakeDataSource()
+    const lists = createSitemapListStore({ dataSource: ds })
+    const ctx = { userId: 'u1', siteId: 's1' }
+    expect(await lists.load(ctx)).toBeUndefined()
+
+    const doc = {
+      version: 1 as const,
+      fetchedAt: '2026-09-01T00:00:00.000Z',
+      sitemaps: [{
+        path: 'https://example.com/sitemap.xml',
+        type: 'sitemap',
+        isPending: false,
+        isSitemapsIndex: false,
+        lastSubmitted: '2026-08-01T00:00:00.000Z',
+        lastDownloaded: null,
+        warnings: 1,
+        errors: 0,
+        contents: [{ type: 'web', submitted: 12, indexed: null }],
+      }],
+    }
+    const saved = await lists.save(ctx, doc)
+    expect(saved.bytes).toBeGreaterThan(0)
+    expect(await lists.load(ctx)).toEqual(doc)
+    expect(await lists.load({ userId: 'u1', siteId: 's2' })).toBeUndefined()
+  })
+
+  it('propagates a real read failure instead of reading it as absent', async () => {
+    const { ds } = makeFakeDataSource()
+    const lists = createSitemapListStore({
+      dataSource: { ...ds, read: async () => { throw new Error('disk on fire') } },
+    })
+    await expect(lists.load({ userId: 'u1', siteId: 's1' })).rejects.toThrow('disk on fire')
   })
 })
