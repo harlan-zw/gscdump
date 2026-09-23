@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   batchInspectUrlsFlatSettled,
   canUseUrlInspection,
+  describeInspectionError,
   getIndexingEligibility,
   getNextCheckAfter,
   getNextCheckPriority,
@@ -177,5 +178,24 @@ describe('getIndexingEligibility', () => {
       indexingIneligibleReason: 'missing_gsc_read_scope',
       indexingPermissionLevel: 'siteOwner',
     })
+  })
+})
+
+describe('describeInspectionError', () => {
+  const googleError = (status: number, message: string) => Object.assign(new Error(`[POST] url: ${status}`), { statusCode: status, data: { error: { code: status, message } } })
+
+  it.each([
+    [429, 'Quota exceeded for quota metric.'],
+    [403, 'Search Analytics load quota exceeded.'],
+  ])('names the per-property quota for a %i quota error', (status, message) => {
+    expect(describeInspectionError(googleError(status, message))).toContain('2,000 inspections per day and 600 per minute for each property')
+  })
+
+  it('names the property rule for a permission 403', () => {
+    expect(describeInspectionError(googleError(403, 'You do not own this site.'))).toBe('The URL is outside this property, or you are not a full user or owner of the property.')
+  })
+
+  it('keeps Google\'s text for other failures', () => {
+    expect(describeInspectionError(googleError(400, 'Invalid inspectionUrl'))).toBe('Invalid inspectionUrl')
   })
 })

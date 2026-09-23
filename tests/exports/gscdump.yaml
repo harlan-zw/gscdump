@@ -19,6 +19,7 @@
   DEFAULT_GSC_REQUEST_TIMEOUT_MS: number
   deleteSite: function
   deleteSitemap: function
+  describeInspectionError: function
   encodeSiteId: function
   err: function
   exchangeAuthCodeResult: function
@@ -119,6 +120,7 @@
   unverifySite: function
   unwrapResult: function
   URL_INSPECTION_EFFECTIVE_LIMIT: number
+  URL_INSPECTION_QUOTA: object
   urlMatchKey: function
   verificationMethodsFor: function
   verifySite: function
@@ -184,6 +186,7 @@
   batchInspectUrlsFlatSettled: function
   batchRequestIndexing: function
   canUseUrlInspection: function
+  describeInspectionError: function
   getIndexingEligibility: function
   getIndexingMetadata: function
   getNextCheckAfter: function
@@ -193,6 +196,7 @@
   MAX_FLAT_INSPECTION_BATCH_CONCURRENCY: number
   requestIndexing: function
   runSequentialBatch: function
+  URL_INSPECTION_QUOTA: object
 ./normalize:
   normalizeUrl: function
 ./query:
