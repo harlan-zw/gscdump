@@ -1,4 +1,5 @@
 import process from 'node:process'
+import { runCommand } from 'citty'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { authCommand } from '../../src/commands/auth'
 
@@ -54,6 +55,7 @@ vi.mock('../../src/auth', () => ({
   resolveBYOK: mocks.resolveBYOK,
   getAuth: mocks.getAuth,
   resolveAuth: mocks.resolveAuth,
+  GOOGLE_NOT_CONNECTED: 'Google is not connected. Use one of these:',
 }))
 
 describe('auth command', () => {
@@ -72,6 +74,7 @@ describe('auth command', () => {
     })
     // Default loadTokens to return null
     mocks.loadTokens.mockResolvedValue(null)
+    mocks.getAuth.mockResolvedValue({ getAccessToken: async () => ({ token: 'refreshed-access' }) })
   })
 
   afterEach(() => {
@@ -137,7 +140,30 @@ describe('auth command', () => {
         cmd: authCommand.subCommands!.status,
       })
 
-      expect(logger.warn).toHaveBeenCalledWith('Not authenticated')
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Google is not connected'))
+    })
+
+    it('reports a BYOK token Google rejects as not authenticated', async () => {
+      mocks.resolveBYOK.mockReturnValue('bogus-token' as never)
+      mocks.ofetch.mockRejectedValue(Object.assign(new Error('400 Bad Request'), { data: { error_description: 'Invalid Value' } }))
+      try {
+        await runCommand(authCommand.subCommands!.status, { rawArgs: ['--json'] })
+        expect(JSON.parse(consoleOutput.at(-1)!)).toMatchObject({ authenticated: false, googleAuthenticated: false, googleError: 'Invalid Value' })
+
+        await runCommand(authCommand.subCommands!.status, { rawArgs: [] })
+        expect(logger.success).not.toHaveBeenCalled()
+        expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('failed verification: Invalid Value'))
+      }
+      finally {
+        mocks.resolveBYOK.mockReturnValue(null)
+      }
+    })
+
+    it('verifies saved tokens with a refreshed access token', async () => {
+      mocks.loadTokens.mockResolvedValue(mockExpiredCredentials)
+      await runCommand(authCommand.subCommands!.status, { rawArgs: ['--json'] })
+      expect(JSON.parse(consoleOutput.at(-1)!)).toMatchObject({ googleAuthenticated: true, tokenAccount: 'test@example.com' })
+      expect(String(mocks.ofetch.mock.calls[0]?.[1]?.body)).toBe('access_token=refreshed-access')
     })
 
     it('should show authenticated when tokens exist', async () => {

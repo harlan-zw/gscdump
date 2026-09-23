@@ -3,7 +3,6 @@ import { defineCommand } from 'citty'
 import { batchRequestIndexing, getIndexingMetadata, requestIndexing, runSequentialBatch } from 'gscdump/indexing'
 import { indexingCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
-import { gscErrorHandler } from '../error-handler'
 import { loadSitemapUrls } from '../sitemap'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, readUrlList } from '../utils'
 
@@ -11,7 +10,7 @@ const RETRIES_ARG = {
   retries: { type: 'string' as const, description: 'Override per-call retry count (default: 3)' },
 }
 
-async function resolveUrlSource(args: { 'urls'?: unknown, 'file'?: unknown, 'from-sitemap'?: unknown }): Promise<string[]> {
+async function resolveUrlSource(args: { '_'?: unknown[], 'file'?: unknown, 'from-sitemap'?: unknown }): Promise<string[]> {
   const fromSitemap = args['from-sitemap']
   if (fromSitemap) {
     const result = await loadSitemapUrls(String(fromSitemap))
@@ -23,7 +22,7 @@ async function resolveUrlSource(args: { 'urls'?: unknown, 'file'?: unknown, 'fro
       logger.warn('Sitemap walk was incomplete; indexing only the URLs that were read')
     return result.value.urls
   }
-  return readUrlList(args)
+  return readUrlList({ file: args.file, positionals: args._ })
 }
 
 const submitCommand = defineCommand({
@@ -39,7 +38,7 @@ const submitCommand = defineCommand({
   async run({ args }) {
     applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: parseIntegerOption(args.retries, '--retries', 0) } })
-    const result = await requestIndexing(ctx.client!, args.url, { type: 'URL_UPDATED' }).catch(gscErrorHandler)
+    const result = await requestIndexing(ctx.client!, args.url, { type: 'URL_UPDATED' })
     if (args.json) {
       console.log(JSON.stringify(result, null, 2))
       return
@@ -63,7 +62,7 @@ const removeCommand = defineCommand({
   async run({ args }) {
     applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: parseIntegerOption(args.retries, '--retries', 0) } })
-    const result = await requestIndexing(ctx.client!, args.url, { type: 'URL_DELETED' }).catch(gscErrorHandler)
+    const result = await requestIndexing(ctx.client!, args.url, { type: 'URL_DELETED' })
     if (args.json) {
       console.log(JSON.stringify(result, null, 2))
       return
@@ -87,7 +86,7 @@ const statusCommand = defineCommand({
   async run({ args }) {
     applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true })
-    const meta = await getIndexingMetadata(ctx.client!, args.url).catch(gscErrorHandler)
+    const meta = await getIndexingMetadata(ctx.client!, args.url)
     if (args.json) {
       console.log(JSON.stringify(meta, null, 2))
       return
@@ -193,7 +192,7 @@ const batchCommand = defineCommand({
       onProgress: (args.json || args.quiet)
         ? undefined
         : (r, i, total) => logger.info(`[${i + 1}/${total}] ${r.url}`),
-    }).catch(gscErrorHandler)
+    })
 
     if (args.json) {
       console.log(JSON.stringify(results, null, 2))
@@ -243,7 +242,7 @@ const batchStatusCommand = defineCommand({
           ? undefined
           : (r, i, total) => logger.info(`[${i + 1}/${total}] ${r.url}`),
       },
-    ).catch(gscErrorHandler)
+    )
 
     if (args.json) {
       console.log(JSON.stringify(results, null, 2))

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
+import { HOSTED_KEY_REJECTED } from './error-handler'
 import { useCliRuntime } from './runtime'
 
 const apiRootSchema = z.url().transform(value => value.replace(/\/+$/, '')).refine((value) => {
@@ -100,7 +101,10 @@ export async function cloudRequest(state: CloudAuthentication, route: string, op
     redirect: 'error',
   })
   if (!response.ok) {
-    throw Object.assign(new Error(`Hosted request failed (${response.status}) for ${route.split('?')[0]}. Check \`gscdump auth status\`.`), {
+    const message = response.status === 401
+      ? HOSTED_KEY_REJECTED
+      : `Hosted request failed (${response.status}) for ${route.split('?')[0]}. Check \`gscdump auth status\`.`
+    throw Object.assign(new Error(message), {
       statusCode: response.status,
       retryAfter: response.headers.get('retry-after'),
       response,

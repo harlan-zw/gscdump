@@ -51,15 +51,16 @@ async function loadEnvFile(): Promise<Record<string, string> | null> {
 export const initCommand = defineCommand({
   meta: initCommandMeta,
   args: {
-    'force': {
+    force: {
       type: 'boolean',
       alias: 'f',
       description: 'Force re-initialization',
     },
-    'no-store': {
+    store: {
       type: 'boolean',
-      default: false,
-      description: 'Skip dataDir prompt (auth-only setup)',
+      default: true,
+      description: 'Ask where to keep the local Store',
+      negativeDescription: 'Skip the Store location prompt (authentication only)',
     },
     ...OUTPUT_ARGS,
   },
@@ -89,7 +90,7 @@ export const initCommand = defineCommand({
     // BYOK shortcut: env vars already provide credentials, skip OAuth setup.
     const byok = resolveBYOK()
     if (byok) {
-      const dataDir = args['no-store'] ? undefined : await promptDataDir(config.dataDir)
+      const dataDir = args.store ? await promptDataDir(config.dataDir) : undefined
       await saveConfig({ ...config, dataDir: dataDir ?? config.dataDir })
       logger.success(`BYOK detected (${typeof byok === 'string' ? 'access-token' : 'refresh-token'}) — auth setup skipped`)
       logger.success('Setup complete! Run gscdump to get started.')
@@ -140,7 +141,7 @@ export const initCommand = defineCommand({
     console.log('  \x1B[90mGoogle Search Console data extraction CLI\x1B[0m')
     console.log()
 
-    const dataDir = args['no-store'] ? undefined : await promptDataDir(config.dataDir)
+    const dataDir = args.store ? await promptDataDir(config.dataDir) : undefined
     await saveConfig({
       ...config,
       ...(dataDir ? { dataDir } : {}),

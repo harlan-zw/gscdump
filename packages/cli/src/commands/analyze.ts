@@ -5,7 +5,6 @@ import { periodOf } from '@gscdump/engine/period'
 import { defineCommand } from 'citty'
 import { resolveAnalysisSource } from '../analysis-local'
 import { analyzeCommandMeta } from '../command-meta'
-import { gscErrorHandler } from '../error-handler'
 import { renderAnalysis } from '../render/analysis'
 import { terminalOutputOptions } from '../render/terminal'
 import { logger, parseIntegerOption, toCSV } from '../utils'
@@ -58,6 +57,10 @@ function buildParams(tool: AnalysisTool, args: Record<string, unknown>): Analysi
     params.prevStartDate = String(args['prev-start'])
   if (args['prev-end'])
     params.prevEndDate = String(args['prev-end'])
+  // Comparison analyzers need both ends of the previous period. Check here so
+  // the error names the flags, not the engine's parameter names.
+  if (TOOL_EXTRA_ARGS[tool]?.['prev-start'] && (!params.prevStartDate || !params.prevEndDate))
+    throw new Error(`${tool} compares two periods. Pass --prev-start and --prev-end (YYYY-MM-DD).`)
 
   if (args.dimension)
     params.dimension = String(args.dimension) as 'pages' | 'keywords'
@@ -106,7 +109,7 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
 
       logger.debug(`Running ${tool} analysis...`)
 
-      const result = await runAnalysis(params).catch(gscErrorHandler)
+      const result = await runAnalysis(params)
 
       if (format === 'json') {
         console.log(JSON.stringify(result, null, 2))

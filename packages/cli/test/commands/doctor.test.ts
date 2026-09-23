@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   resolveBYOK: vi.fn(),
   loadTokens: vi.fn(),
   resolveAuth: vi.fn(),
+  getAuth: vi.fn(),
   ofetchRaw: vi.fn(),
   ofetch: vi.fn(),
   localSites: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('../../src/auth', () => ({
   resolveBYOK: mocks.resolveBYOK,
   loadTokens: mocks.loadTokens,
   resolveAuth: mocks.resolveAuth,
+  getAuth: mocks.getAuth,
 }))
 vi.mock('../../src/env-file', () => ({ parseEnvFile: () => null }))
 vi.mock('../../src/local-store', () => ({
@@ -69,6 +71,7 @@ describe('doctor command', () => {
     mocks.resolveBYOK.mockReturnValue(null)
     mocks.loadTokens.mockResolvedValue(null)
     mocks.resolveAuth.mockResolvedValue('local-token')
+    mocks.getAuth.mockResolvedValue({ getAccessToken: async () => ({ token: 'refreshed-token' }) })
     mocks.localSites.mockResolvedValue([{ siteUrl: 'https://local.example.com/', permissionLevel: 'siteOwner' }])
     mocks.getWatermarks.mockResolvedValue([])
     mocks.ofetchRaw.mockResolvedValue({ headers: { get: () => new Date().toUTCString() } })
@@ -97,6 +100,15 @@ describe('doctor command', () => {
     }
   }
 
+  function tokenInfoCalls(): string[] {
+    return mocks.ofetch.mock.calls
+      .filter(([url]) => url === 'https://oauth2.googleapis.com/tokeninfo')
+      .map(([, init]) => {
+        expect(init).toMatchObject({ method: 'POST' })
+        return String(init.body)
+      })
+  }
+
   async function selectCloud() {
     await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
   }
@@ -106,6 +118,24 @@ describe('doctor command', () => {
     mocks.ofetch.mockResolvedValue({ scope: 'webmasters.readonly' })
     const result = await run()
     expect(result.checks).toContainEqual({ name: 'auth.scopes', status: 'pass', detail: '1 granted' })
+  })
+
+  it('refreshes saved tokens before asking Google about them', async () => {
+    mocks.loadTokens.mockResolvedValue({ provider: 'gscdump', access_token: 'expired-token', refresh_token: 'r', expiry_date: 1 })
+    const result = await run()
+    expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth', status: 'pass' }))
+    expect(tokenInfoCalls()).toEqual(['access_token=refreshed-token'])
+  })
+
+  it.each([
+    ['a network failure', () => new Error('[POST] "https://oauth2.googleapis.com/tokeninfo?access_token=ya29.live-secret-token": <no response> fetch failed')],
+    ['a Google error body', () => Object.assign(new Error('400 Bad Request'), { data: { error_description: 'Invalid Value for ya29.live-secret-token' } })],
+  ])('never prints the access token after %s', async (_label, failure) => {
+    mocks.resolveBYOK.mockReturnValue('ya29.live-secret-token')
+    mocks.ofetch.mockRejectedValue(failure())
+    const result = await run()
+    expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth', status: 'fail', detail: expect.stringContaining('tokeninfo failed') }))
+    expect(output.join('\n')).not.toContain('live-secret-token')
   })
 
   it('reports missing local authentication and keeps Store diagnostics', async () => {
@@ -126,7 +156,7 @@ describe('doctor command', () => {
     expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth', status: 'pass', detail: expect.stringContaining('BYOK') }))
     expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth.scopes', status: 'pass' }))
     expect(result.checks).toContainEqual(expect.objectContaining({ name: 'gsc.sites', status: 'pass' }))
-    expect(mocks.ofetch).toHaveBeenCalledWith('https://oauth2.googleapis.com/tokeninfo', { query: { access_token: 'byok-token' } })
+    expect(tokenInfoCalls()).toEqual(['access_token=byok-token'])
     expect(requests).toEqual([])
   })
 
@@ -160,7 +190,7 @@ describe('doctor command', () => {
     const result = await run()
 
     expect(result.ok).toBe(false)
-    expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth', status: 'fail', detail: expect.stringContaining('401') }))
+    expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth', status: 'fail', detail: expect.stringContaining('gscdump.com rejected the API key') }))
     expect(result.checks).toContainEqual(expect.objectContaining({ name: 'gsc.sites', status: 'warn' }))
     expect(requests.map(request => request.url.pathname)).toEqual(['/api/cli/me'])
     expect(mocks.resolveAuth).not.toHaveBeenCalled()
@@ -188,7 +218,7 @@ describe('doctor command', () => {
     const result = await run()
 
     expect(result.ok).toBe(true)
-    expect(mocks.ofetch).toHaveBeenCalledWith('https://oauth2.googleapis.com/tokeninfo', { query: { access_token: 'local-override-token' } })
+    expect(tokenInfoCalls()).toEqual(['access_token=local-override-token'])
     expect(mocks.localSites).toHaveBeenCalledOnce()
     expect(requests).toEqual([])
   })

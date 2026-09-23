@@ -21,7 +21,7 @@ import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS } from '../lo
 import { createRequestPacer } from '../request-pacer'
 import { loadSitemapUrls } from '../sitemap'
 import { datesForJob, FULL_HISTORY_DAYS, planSyncJobs } from '../sync-plan'
-import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
+import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, parseNameList, progressBar, runWithConcurrency } from '../utils'
 
 const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
 // Every table and every search type. Stored empty-type markers skip types
@@ -386,6 +386,8 @@ export const syncCommand = defineCommand({
       parseIntegerOption(args['inspect-limit'], '--inspect-limit', 0) ?? DEFAULT_INSPECT_LIMIT,
       INSPECTION_QPD_PER_PROPERTY,
     )
+    const tables = args.tables ? parseNameList(args.tables, allTables(), '--tables') : DEFAULT_TABLES
+    const requestedTypes = args.types ? parseNameList(args.types, ALL_SEARCH_TYPES, '--types') : DEFAULT_TYPES
     if (args.status) {
       const ctx = await createCommandContext()
       await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, args.site ? String(args.site) : undefined, json)
@@ -399,18 +401,6 @@ export const syncCommand = defineCommand({
     })
     const client = pacedClient(ctx.client!, pacer)
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-
-    const tables = args.tables
-      ? String(args.tables).split(',').map(t => t.trim()).filter(isKnownTable)
-      : DEFAULT_TABLES
-
-    const requestedTypes = args.types
-      ? String(args.types).split(',').map(t => t.trim()).filter(isKnownSearchType)
-      : DEFAULT_TYPES
-    if (requestedTypes.length === 0) {
-      logger.error(`No valid search types specified. Allowed: ${ALL_SEARCH_TYPES.join(',')}`)
-      process.exit(1)
-    }
 
     const store = ctx.store!
     const siteId = store.siteIdFor(siteUrl)
@@ -859,14 +849,6 @@ function pacedClient(
       query: (...args: Parameters<typeof query>) => pacer.run(() => query(...args)),
     },
   }
-}
-
-function isKnownTable(name: string): name is TableName {
-  return (allTables() as readonly string[]).includes(name)
-}
-
-function isKnownSearchType(name: string): name is SearchType {
-  return (ALL_SEARCH_TYPES as readonly string[]).includes(name)
 }
 
 async function printSyncStatus(
