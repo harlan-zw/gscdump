@@ -134,31 +134,28 @@ export function describeApiError(error: unknown): string | null {
   const status = httpStatus(error)
   if (status === undefined)
     return null
+  // classifyError already prefers Google's own explanation over the fetch wrapper text.
   const classified = classifyError(error)
-  const reason = (googleMessage(error) ?? classified.message).replace(/\s+/g, ' ').trim().replace(/\.$/, '')
+  const reason = classified.message.replace(/\s+/g, ' ').trim().replace(/\.$/, '')
   return `API error ${status}: ${reason}. ${nextStep(classified, status)}`.trim()
 }
 
-/** Google's own explanation beats the fetch wrapper text (`[GET] url: 403`). */
-function googleMessage(error: unknown): string | undefined {
-  const data = (error as { data?: { error?: unknown, error_description?: unknown } } | null)?.data
-  const nested = (data?.error as { message?: unknown } | undefined)?.message
-  const message = typeof nested === 'string' ? nested : data?.error_description
-  return typeof message === 'string' && message ? message : undefined
-}
-
 function nextStep(error: GscError, status: number): string {
-  if (error.kind === 'rate-limited')
-    return `Google quota or rate limit reached. Try again in ${error.retryAfter ? `${error.retryAfter}s` : 'a few minutes'}.`
-  if (status === 403)
-    return 'The signed-in account cannot open this Site. Check its Search Console permissions, or run `gscdump auth status` to see the account.'
-  if (status === 401)
-    return 'Run `gscdump auth login` in a terminal to connect again.'
-  if (error.kind === 'not-found')
-    return 'Check the Site and URL. Call list-sites to see the Sites of this account.'
-  if (error.kind === 'validation')
-    return 'Check the tool arguments.'
-  return status >= 500 ? 'Try again later.' : ''
+  switch (error.kind) {
+    case 'rate-limited':
+      return `Google quota or rate limit reached. Try again in ${error.retryAfter ? `${error.retryAfter}s` : 'a few minutes'}.`
+    case 'permission-denied':
+      return 'The signed-in account cannot open this Site. Check its Search Console permissions, or run `gscdump auth status` to see the account.'
+    case 'auth-expired':
+      return 'Run `gscdump auth login` in a terminal to connect again.'
+    case 'not-found':
+      return 'Check the Site and URL. Call list-sites to see the Sites of this account.'
+    case 'validation':
+      return 'Check the tool arguments.'
+    case 'storage':
+    case 'transport':
+      return status >= 500 ? 'Try again later.' : ''
+  }
 }
 
 /** The text an agent sees when a tool fails. */
