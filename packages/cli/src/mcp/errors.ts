@@ -18,6 +18,7 @@ import { isAnalysisError } from '@gscdump/analysis/errors'
 import { isEngineError } from '@gscdump/engine/errors'
 import { classifyError } from 'gscdump/errors'
 import { isQueryError } from 'gscdump/query'
+import { resolveAuthentication } from '../auth-state'
 
 export type McpHandlerErrorKind
   = | 'unknown-report'
@@ -119,18 +120,51 @@ function httpStatus(error: unknown): number | undefined {
   return typeof status === 'number' ? status : undefined
 }
 
+/** The authentication mode the failing call ran in; it decides the next step. */
+export type ApiErrorMode = 'cloud' | 'local'
+
+/**
+ * The active authentication mode for error advice. Falls back to `local` when
+ * the mode cannot be resolved, keeping the long-standing local advice.
+ */
+async function authenticationMode(): Promise<ApiErrorMode> {
+  return resolveAuthentication()
+    .then(state => (state._tag === 'Cloud' ? 'cloud' : 'local'))
+    .catch(() => 'local')
+}
+
+function nextStep(error: GscError, status: number, mode: ApiErrorMode): string {
+  if (error.kind === 'rate-limited')
+    return `Google quota or rate limit reached. Try again in ${error.retryAfter ? `${error.retryAfter}s` : 'a few minutes'}.`
+  if (status === 403) {
+    if (mode === 'cloud')
+      return 'The gscdump.com account cannot open this Site. Check the Site is connected to your account at gscdump.com.'
+    return 'The signed-in account cannot open this Site. Check its Search Console permissions, or run `gscdump auth status` to see the account.'
+  }
+  if (status === 401) {
+    if (mode === 'cloud')
+      return 'Set or refresh GSCDUMP_API_KEY to a user API key from your gscdump.com settings.'
+    return 'Run `gscdump auth login` in a terminal to connect again.'
+  }
+  if (error.kind === 'not-found')
+    return 'Check the Site and URL. Call list-sites to see the Sites of this account.'
+  if (error.kind === 'validation')
+    return 'Check the tool arguments.'
+  return status >= 500 ? 'Try again later.' : ''
+}
+
 /**
  * One line for a failed Google or hosted API call: the status, Google's own
  * explanation, and the next step. Returns `null` for an error with no HTTP
  * status, so the caller keeps its message.
  */
-export function describeApiError(error: unknown): string | null {
+export function describeApiError(error: unknown, mode: ApiErrorMode = 'local'): string | null {
   const status = httpStatus(error)
   if (status === undefined)
     return null
   const classified = classifyError(error)
   const reason = (googleMessage(error) ?? classified.message).replace(/\s+/g, ' ').trim().replace(/\.$/, '')
-  return `API error ${status}: ${reason}. ${nextStep(classified, status)}`.trim()
+  return `API error ${status}: ${reason}. ${nextStep(classified, status, mode)}`.trim()
 }
 
 /** Google's own explanation beats the fetch wrapper text (`[GET] url: 403`). */
@@ -141,23 +175,10 @@ function googleMessage(error: unknown): string | undefined {
   return typeof message === 'string' && message ? message : undefined
 }
 
-function nextStep(error: GscError, status: number): string {
-  if (error.kind === 'rate-limited')
-    return `Google quota or rate limit reached. Try again in ${error.retryAfter ? `${error.retryAfter}s` : 'a few minutes'}.`
-  if (status === 403)
-    return 'The signed-in account cannot open this Site. Check its Search Console permissions, or run `gscdump auth status` to see the account.'
-  if (status === 401)
-    return 'Run `gscdump auth login` in a terminal to connect again.'
-  if (error.kind === 'not-found')
-    return 'Check the Site and URL. Call list-sites to see the Sites of this account.'
-  if (error.kind === 'validation')
-    return 'Check the tool arguments.'
-  return status >= 500 ? 'Try again later.' : ''
-}
-
 /** The text an agent sees when a tool fails. */
-export function toolErrorMessage(error: unknown): string {
+export async function toolErrorMessage(error: unknown): Promise<string> {
+  const mode = await authenticationMode()
   return enrichToolError(error)?.message
-    ?? describeApiError(error)
+    ?? describeApiError(error, mode)
     ?? (error instanceof Error ? error.message : String(error))
 }
