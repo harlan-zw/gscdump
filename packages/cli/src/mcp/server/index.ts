@@ -22,6 +22,7 @@ import {
 import { z } from 'zod'
 import { formatSiteResolution } from '../../context'
 import { discoverLiveSitemap } from '../../sitemap'
+import { toolErrorMessage } from '../errors'
 import { diagnostics } from '../handlers/diagnostics'
 import {
   batchInspectUrls,
@@ -132,6 +133,13 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
 
   const server = new McpServer({ name, version })
 
+  // A failed tool call returns its explanation and next step to the agent.
+  const registerTool = ((toolName: string, config: unknown, callback: (...args: unknown[]) => unknown) =>
+    (server.registerTool as (...args: unknown[]) => unknown)(toolName, config, (...args: unknown[]) =>
+      Promise.resolve()
+        .then(() => callback(...args))
+        .catch((error: unknown) => ({ isError: true, content: [{ type: 'text', text: toolErrorMessage(error) }] })))) as McpServer['registerTool']
+
   const getContext = async (): Promise<HandlerContext> => {
     if (options.getContext)
       return options.getContext()
@@ -165,7 +173,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     return { ...args, siteUrl: resolution.siteUrl }
   }
 
-  server.registerTool(
+  registerTool(
     'list-sites',
     {
       description: 'List all Google Search Console sites visible to the authenticated user.',
@@ -181,7 +189,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'list-sites-with-sitemaps',
     {
       description: 'List all GSC sites with their sitemaps',
@@ -193,7 +201,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'list-sitemaps',
     {
       description: 'List sitemaps for a specific site',
@@ -207,7 +215,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'get-sitemap',
     {
       description: 'Get details for a specific sitemap',
@@ -219,7 +227,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'submit-sitemap',
     {
       description: 'Submit a sitemap to Google Search Console',
@@ -233,7 +241,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'delete-sitemap',
     {
       description: 'Delete a sitemap from Google Search Console',
@@ -247,7 +255,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'list-reports',
     {
       description: 'List Reports supported by the live Google API. Returns defaults and argsSpec using run-report input names.',
@@ -259,7 +267,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'run-report',
     {
       description: 'Run a report against the GSC API. Returns a structured ReportResult with bounded findings per section. See list-reports for ids.',
@@ -291,7 +299,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     filters: z.array(dimensionFilterSchema),
   })
 
-  server.registerTool(
+  registerTool(
     'query',
     {
       description: 'Run a custom search analytics query with dimension filters (regex/contains/equals). Multiple filter groups do not implement OR.',
@@ -325,7 +333,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'inspect-url',
     {
       description: 'Inspect a URL to check its indexing status in Google Search Console',
@@ -339,7 +347,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'request-indexing',
     {
       description: 'Request Google to index or remove a URL via the Indexing API',
@@ -351,7 +359,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'get-indexing-status',
     {
       description: 'Get indexing status metadata for a URL',
@@ -363,7 +371,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'batch-request-indexing',
     {
       description: 'Batch request indexing for multiple URLs with rate limiting',
@@ -375,7 +383,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'batch-inspect-urls',
     {
       description: 'Batch inspect multiple URLs to check their indexing status',
@@ -387,7 +395,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'diagnostics',
     {
       description: 'Run health checks on the active GSC connection: auth/scopes, time skew, API reachability, sites count.',
@@ -399,7 +407,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'add-site',
     {
       description: 'Register a property in Search Console (unverified). Verify ownership separately.',
@@ -413,7 +421,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'delete-site',
     {
       description: 'Remove a property from Search Console.',
@@ -429,7 +437,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
 
   const verificationMethodSchema = z.enum(['META', 'FILE', 'DNS_TXT', 'DNS_CNAME', 'ANALYTICS', 'TAG_MANAGER'])
 
-  server.registerTool(
+  registerTool(
     'get-verification-token',
     {
       description: 'Get a verification token to place on the site or in DNS.',
@@ -445,7 +453,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'verify-site',
     {
       description: 'Trigger Google to validate a placed verification token.',
@@ -461,7 +469,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'list-verified-sites',
     {
       description: 'List verified WebResources from the Site Verification API.',
@@ -474,7 +482,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'get-verified-site',
     {
       description: 'Fetch a single verified WebResource by id.',
@@ -487,7 +495,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'unverify-site',
     {
       description: 'Drop the calling user\'s verified ownership of a WebResource. Remove the placed token first or Google may re-verify.',
@@ -500,7 +508,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'discover-sitemap',
     {
       description: 'Probe a domain\'s robots.txt + common paths for an advertised sitemap (no auth).',
@@ -523,7 +531,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     },
   )
 
-  server.registerTool(
+  registerTool(
     'batch-get-indexing-status',
     {
       description: 'Get indexing notification metadata for multiple URLs.',

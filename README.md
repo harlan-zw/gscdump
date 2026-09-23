@@ -272,7 +272,8 @@ Add this entry to your MCP client's server configuration:
 }
 ```
 
-Authenticate first with cloud mode or local Google credentials. MCP uses the selected mode for Google tools.
+Authenticate with cloud mode or local Google credentials. MCP uses the selected mode for Google tools.
+If no authentication exists, the server still starts, and each Google tool returns the command to run.
 Google Indexing API and Site Verification tools require local mode. Run Bing commands through the CLI and agent skill.
 Then ask your assistant:
 
