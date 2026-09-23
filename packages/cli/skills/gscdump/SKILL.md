@@ -222,7 +222,8 @@ gscdump sync --site example.com --json
 - Sync covers every table and search type by default. Pass `--tables` and
   `--types` to sync less. Sync skips table and type pairs Google cannot answer.
 - Sync paces Google calls: 8 in flight and 600 per minute across all tables.
-  `--requests-per-minute N` changes the rate. A quota 403 retries with backoff.
+  `--requests-per-minute N` changes the rate.
+  Sync does not retry a quota 403. The quota ledger stops the run instead.
 - Every call goes through a quota ledger in the Store directory. If Google
   refuses a call for quota, or the run reaches `--max-calls N`, sync stops,
   keeps the rest `pending`, and exits 0. `status` in `sync --json` is then
