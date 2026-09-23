@@ -4,6 +4,7 @@ import type { ResolvedGscdumpConfig } from '../config'
 import type { InspectionSyncResult, SitemapSyncResult } from '../local-entities'
 import type { GscApiRow, LocalStore, Row, TableName, WriteCtx } from '../local-store'
 import type { RequestPacer } from '../request-pacer'
+import type { SyncJob } from '../sync-plan'
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
 import { runGscSearchAppearanceContextSlice, runGscSyncSlice } from '@gscdump/engine-gsc-api'
@@ -518,10 +519,29 @@ export const syncCommand = defineCommand({
         logger.info(`--retry-failed: ${dates.length} date(s) to retry`)
     }
 
+    // A plain sync also heals: it re-runs every earlier failed date that
+    // Google still keeps, for the selected jobs. An explicit range syncs only that range.
+    const explicitRange = Boolean(args.start || args.end || args.days || args.full || args['retry-failed'])
+    const healDates = new Map<string, string[]>()
+    if (!explicitRange) {
+      const oldestKept = daysAgo(FULL_HISTORY_DAYS)
+      const labels = new Map(jobs.map(job => [`${job.table}\u0000${job.type}`, job.label]))
+      for (const state of await store.engine.getSyncStates({ userId: store.userId, siteId, state: 'failed' })) {
+        const label = labels.get(`${state.table}\u0000${state.searchType ?? 'web'}`)
+        if (label && state.date >= oldestKept && !dates.includes(state.date))
+          healDates.set(label, [...(healDates.get(label) ?? []), state.date])
+      }
+      const healed = [...healDates.values()].reduce((sum, list) => sum + list.length, 0)
+      if (healed > 0 && !quiet)
+        logger.info(`Retrying ${healed} earlier failed day(s) as well`)
+    }
+    const jobDates = (job: SyncJob): string[] =>
+      datesForJob(job.table, [...(healDates.get(job.label) ?? []), ...dates].sort(), today)
+
     if (args['dry-run']) {
       const plan: Array<{ table: string, searchType: string, date: string }> = []
       for (const job of jobs) {
-        for (const date of datesForJob(job.table, dates, today))
+        for (const date of jobDates(job))
           plan.push({ table: job.table, searchType: job.type, date })
       }
       if (json) {
@@ -558,7 +578,7 @@ export const syncCommand = defineCommand({
     // sync stream — runs in parallel by default, sequentially with
     // --serial-tables for predictable ordering / debug.
     const progress = createProgressTracker(
-      jobs.reduce((sum, job) => sum + datesForJob(job.table, dates, today).length, 0),
+      jobs.reduce((sum, job) => sum + jobDates(job).length, 0),
       quiet,
     )
 
@@ -569,7 +589,7 @@ export const syncCommand = defineCommand({
           siteUrl,
           job.table,
           job.type,
-          datesForJob(job.table, dates, today),
+          jobDates(job),
           client,
           concurrency,
           args.force || forceTypes,
@@ -584,7 +604,7 @@ export const syncCommand = defineCommand({
           siteUrl,
           job.table,
           job.type,
-          datesForJob(job.table, dates, today),
+          jobDates(job),
           client,
           concurrency,
           args.force || forceTypes,

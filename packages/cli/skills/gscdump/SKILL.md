@@ -214,8 +214,9 @@ gscdump sync --site sc-domain:example.com --status --json
   It inspects up to 50 due URLs per run. `--inspect-limit N` changes that.
   `--no-sitemaps` and `--no-inspections` skip those steps. Read the
   `sitemaps` and `inspections` fields of `sync --json`.
-- Sync skips completed dates. `--force` refreshes them. `--retry-failed`
-  reruns only failed dates.
+- Sync skips completed dates. `--force` refreshes them. A plain `sync` with no
+  range also retries every earlier failed date. `--retry-failed` reruns only
+  failed dates in the range.
 - `--dry-run` prints the planned work without calling Google.
 - Use the user's date range. The 90-day example does not authorize a wider sync.
 - Empty Store metadata is expected before the first sync. It does not prove zero traffic.
