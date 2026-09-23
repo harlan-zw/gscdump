@@ -115,6 +115,13 @@ export const dumpCommand = defineCommand({
     const siteList = ctx.client
       ? await ctx.loadSites().then(sites => sites.map(site => ({ siteUrl: site.siteUrl, permissionLevel: site.permissionLevel })))
       : undefined
+    const bing: BingDumpStep = args.bing === false || (tablesFilter && !tablesFilter.has('bing'))
+      ? { _tag: 'disabled' }
+      : await dumpBing({
+          googleSites: args['all-sites'] ? 'all' : targets.map(target => target.site),
+          outDir,
+          format,
+        }).catch((error: unknown) => ({ _tag: 'failed' as const, reason: error instanceof Error ? error.message : String(error) }))
     const result = await dumpSites({
       store,
       targets,
@@ -124,14 +131,8 @@ export const dumpCommand = defineCommand({
       ...(searchType !== undefined ? { searchType } : {}),
       ...(preloadedEntries ? { entries: preloadedEntries } : {}),
       ...(siteList ? { siteList } : {}),
+      bing,
     })
-    const bing: BingDumpStep = args.bing === false || (tablesFilter && !tablesFilter.has('bing'))
-      ? { _tag: 'disabled' }
-      : await dumpBing({
-          googleSites: args['all-sites'] ? 'all' : targets.map(target => target.site),
-          outDir,
-          format,
-        }).catch((error: unknown) => ({ _tag: 'failed' as const, reason: error instanceof Error ? error.message : String(error) }))
 
     if (json) {
       console.log(JSON.stringify({ ...result, bing }, null, 2))
@@ -256,6 +257,8 @@ export async function dumpSites(opts: {
   entries?: readonly ManifestEntry[]
   /** Search Console sites and permission levels, written to `sites.json`. */
   siteList?: readonly SiteListing[]
+  /** Outcome of the Bing step, listed in `manifest.json`. */
+  bing?: BingDumpStep
 }): Promise<DumpResult> {
   const { store, outDir, format, tables } = opts
   const wantedEntities = ENTITY_DATASETS.filter(dataset => !tables || tables.has(dataset))
@@ -313,8 +316,22 @@ export async function dumpSites(opts: {
       skipped: site.skipped,
       coverage: site.coverage,
     })),
+    ...(opts.bing ? { bing: manifestBing(opts.bing, outDir) } : {}),
   }))
   return { outDir, sites: summary, metadataFiles }
+}
+
+/** The Bing step for `manifest.json`, with file paths relative to the dump directory. */
+function manifestBing(step: BingDumpStep, outDir: string): BingDumpStep {
+  if (step._tag !== 'dumped')
+    return step
+  return {
+    ...step,
+    sites: step.sites.map(site => ({
+      siteUrl: site.siteUrl,
+      files: site.files.map(file => ({ ...file, path: path.relative(outDir, file.path) })),
+    })),
+  }
 }
 
 async function writeJsonFile(target: string, value: unknown): Promise<{ path: string, bytes: number }> {

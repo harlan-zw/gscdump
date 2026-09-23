@@ -16,7 +16,7 @@ import {
   hashUrl,
   parseSitemapFeedIdentity,
 } from '@gscdump/engine/entities'
-import { latestByUrl, planInspections, scheduleOf, toInspectionRecord } from './inspection-record'
+import { latestByUrl, planInspections, recentMonths, scheduleOf, toInspectionRecord } from './inspection-record'
 import { runWithConcurrency } from './utils'
 
 type GscClient = ReturnType<typeof googleSearchConsole>
@@ -37,6 +37,52 @@ export async function loadInspectionHistory(dataSource: DataSource, ctx: TenantC
       records.push(...shard.records)
   }
   return records
+}
+
+/** What planning and recording need: the newest record per URL and the last 24 hours of calls. */
+export interface InspectionState {
+  latest: Map<string, InspectionRecord>
+  recent: InspectionRecord[]
+}
+
+/**
+ * Read the newest record per URL from `index.parquet` and only the history
+ * months that cover the last 24 hours. A Store without an index falls back
+ * to the full history once; the next recorded batch writes the index.
+ */
+export async function loadInspectionState(dataSource: DataSource, ctx: TenantCtx, now: Date): Promise<InspectionState> {
+  const inspector = createInspectionStore({ dataSource })
+  const indexed = await inspector.loadMaterialized(ctx)
+  if (!indexed) {
+    const history = await loadInspectionHistory(dataSource, ctx)
+    return { latest: latestByUrl(history), recent: history }
+  }
+  const recent: InspectionRecord[] = []
+  for (const month of recentMonths(now)) {
+    const shard = await inspector.loadHistory(ctx, month)
+    if (shard)
+      recent.push(...shard.records)
+  }
+  return { latest: latestByUrl([...indexed.map(fromParquetRow), ...recent]), recent }
+}
+
+function fromParquetRow(row: InspectionParquetRow): InspectionRecord {
+  const record: InspectionRecord = { url: row.url, inspectedAt: row.inspectedAt }
+  for (const field of ['indexStatus', 'lastCrawlTime', 'googleCanonical', 'userCanonical', 'coverageState', 'robotsTxtState', 'indexingState', 'pageFetchState', 'mobileUsabilityVerdict', 'richResultsVerdict'] as const) {
+    const value = row[field]
+    if (value != null)
+      record[field] = value
+  }
+  if (row.scheduleNextAt != null && row.scheduleConsecutiveUnchanged != null && row.schedulePolicyVersion != null) {
+    record.raw = {
+      schedule: {
+        nextAt: row.scheduleNextAt,
+        consecutiveUnchanged: row.scheduleConsecutiveUnchanged,
+        policyVersion: row.schedulePolicyVersion,
+      },
+    }
+  }
+  return record
 }
 
 function toParquetRow(record: InspectionRecord): InspectionParquetRow {
@@ -67,14 +113,18 @@ export async function appendInspections(dataSource: DataSource, ctx: TenantCtx, 
     await createInspectionStore({ dataSource }).appendHistory(ctx, records)
 }
 
-/** Rewrite the latest-per-URL `index.parquet` from every record, so DuckDB readers see the newest state. */
+/**
+ * Rewrite the latest-per-URL `index.parquet` from the previous newest record
+ * per URL plus the new records, so DuckDB readers see the newest state.
+ */
 export async function materializeInspectionIndex(
   dataSource: DataSource,
   ctx: TenantCtx,
+  latest: ReadonlyMap<string, InspectionRecord>,
   records: readonly InspectionRecord[],
 ): Promise<{ indexKey: string, indexRows: number }> {
-  const latest = latestByUrl(records)
-  const result = await createInspectionStore({ dataSource }).materialize(ctx, [...latest.values()].map(toParquetRow))
+  const merged = latestByUrl([...latest.values(), ...records])
+  const result = await createInspectionStore({ dataSource }).materialize(ctx, [...merged.values()].map(toParquetRow))
   return { indexKey: result.key, indexRows: result.rowCount }
 }
 
@@ -85,13 +135,13 @@ export async function materializeInspectionIndex(
 export async function recordInspections(
   dataSource: DataSource,
   ctx: TenantCtx,
-  history: readonly InspectionRecord[],
+  latest: ReadonlyMap<string, InspectionRecord>,
   records: readonly InspectionRecord[],
 ): Promise<{ indexKey: string, indexRows: number } | undefined> {
   if (records.length === 0)
     return undefined
   await appendInspections(dataSource, ctx, records)
-  return materializeInspectionIndex(dataSource, ctx, [...history, ...records])
+  return materializeInspectionIndex(dataSource, ctx, latest, records)
 }
 
 /** True when `url` belongs to the Search Console property `siteUrl`. */
@@ -170,13 +220,12 @@ export async function syncInspections(deps: {
   now: () => Date
   onProgress?: (done: number, total: number) => void
 }): Promise<InspectionSyncResult> {
-  const history = await loadInspectionHistory(deps.dataSource, deps.ctx)
+  const { latest, recent } = await loadInspectionState(deps.dataSource, deps.ctx, deps.now())
   const candidates = deps.candidates.filter(url => urlInProperty(deps.siteUrl, url))
-  const plan = planInspections({ candidates, history, now: deps.now(), limit: deps.limit })
+  const plan = planInspections({ candidates, latest, recent, now: deps.now(), limit: deps.limit })
   if (plan.urls.length === 0)
     return { _tag: 'nothing_due', candidates: candidates.length, quotaLeft: plan.quotaLeft }
 
-  const latest = latestByUrl(history)
   const records: InspectionRecord[] = []
   const failures: Array<{ url: string, error: string }> = []
   let done = 0
@@ -197,7 +246,7 @@ export async function syncInspections(deps: {
     deps.onProgress?.(done, plan.urls.length)
   })
 
-  await recordInspections(deps.dataSource, deps.ctx, history, records)
+  await recordInspections(deps.dataSource, deps.ctx, latest, records)
   return {
     _tag: 'inspected',
     inspected: records.length,

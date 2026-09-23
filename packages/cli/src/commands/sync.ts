@@ -21,7 +21,7 @@ import { loadSitemapGenerationUrls, resolvePagePaths, syncInspections, syncSitem
 import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS } from '../local-store'
 import { createRequestPacer } from '../request-pacer'
 import { loadSitemapUrls } from '../sitemap'
-import { datesForJob, FULL_HISTORY_DAYS, planSyncJobs } from '../sync-plan'
+import { datesForJob, FULL_HISTORY_DAYS, planHealDates, planSyncJobs } from '../sync-plan'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, parseNameList, progressBar, runWithConcurrency } from '../utils'
 
 const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
@@ -522,19 +522,17 @@ export const syncCommand = defineCommand({
     // A plain sync also heals: it re-runs every earlier failed date that
     // Google still keeps, for the selected jobs. An explicit range syncs only that range.
     const explicitRange = Boolean(args.start || args.end || args.days || args.full || args['retry-failed'])
-    const healDates = new Map<string, string[]>()
-    if (!explicitRange) {
-      const oldestKept = daysAgo(FULL_HISTORY_DAYS)
-      const labels = new Map(jobs.map(job => [`${job.table}\u0000${job.type}`, job.label]))
-      for (const state of await store.engine.getSyncStates({ userId: store.userId, siteId, state: 'failed' })) {
-        const label = labels.get(`${state.table}\u0000${state.searchType ?? 'web'}`)
-        if (label && state.date >= oldestKept && !dates.includes(state.date))
-          healDates.set(label, [...(healDates.get(label) ?? []), state.date])
-      }
-      const healed = [...healDates.values()].reduce((sum, list) => sum + list.length, 0)
-      if (healed > 0 && !quiet)
-        logger.info(`Retrying ${healed} earlier failed day(s) as well`)
-    }
+    const healDates = explicitRange
+      ? new Map<string, string[]>()
+      : planHealDates({
+          jobs,
+          failed: await store.engine.getSyncStates({ userId: store.userId, siteId, state: 'failed' }),
+          rangeDates: dates,
+          today,
+        })
+    const healed = [...healDates.values()].reduce((sum, list) => sum + list.length, 0)
+    if (healed > 0 && !quiet)
+      logger.info(`Retrying ${healed} earlier failed day(s) as well`)
     const jobDates = (job: SyncJob): string[] =>
       datesForJob(job.table, [...(healDates.get(job.label) ?? []), ...dates].sort(), today)
 

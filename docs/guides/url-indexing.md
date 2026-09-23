@@ -83,8 +83,34 @@ A sitemap submission tells Google where to find URLs.
 Inspect individual URLs to see the evidence Google currently returns for them.
 
 The CLI also supports hosted sitemap reads through `sitemaps current`, `history`, `membership`, `lastmod`, and `export`.
-These require a hosted Site ID and cloud authentication from the current profile or environment.
-Use each command's `--help` for its inputs.
+These require cloud authentication from the current profile or environment.
+Pass the Site with `--site`, for example `--site example.com`.
+Use each command's `--help` for its other inputs.
+
+## Find URLs Google has not indexed
+
+With cloud authentication, gscdump.com inspects the URLs in your sitemaps and saves the results.
+`indexing urls` reads those saved results. It spends no URL Inspection quota.
+
+```bash
+gscdump indexing urls --site example.com --status not_indexed
+
+gscdump indexing urls --site example.com --status not_indexed --all --format csv > not-indexed.csv
+```
+
+`--status` takes `indexed`, `not_indexed`, or `pending`.
+`--search` keeps only URLs that contain the text.
+Each row lists the sitemaps that contain the URL.
+The output formats are `table`, `json`, and `csv`.
+
+A page holds 100 rows by default and 500 at most.
+Use `--offset` for the next page, or `--all` to read every page.
+
+With local authentication, save inspections to the local Store instead:
+
+```bash
+gscdump sitemaps urls https://example.com/sitemap.xml | gscdump inspect --site sc-domain:example.com
+```
 
 ## Inspect with Bing
 

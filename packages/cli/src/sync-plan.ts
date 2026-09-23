@@ -62,3 +62,27 @@ export function datesForJob(table: TableName, dates: readonly string[], today: s
   const cutoff = new Date(Date.parse(`${today}T00:00:00Z`) - HOURLY_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10)
   return dates.filter(date => date >= cutoff)
 }
+
+/**
+ * Earlier failed dates a plain sync re-runs, by job label. It keeps only
+ * dates Google still serves for that job and that the current range misses.
+ */
+export function planHealDates(opts: {
+  jobs: readonly SyncJob[]
+  failed: ReadonlyArray<{ table: TableName, searchType?: SearchType | null, date: string }>
+  rangeDates: readonly string[]
+  today: string
+}): Map<string, string[]> {
+  const oldestKept = new Date(Date.parse(`${opts.today}T00:00:00Z`) - FULL_HISTORY_DAYS * 86_400_000).toISOString().slice(0, 10)
+  const inRange = new Set(opts.rangeDates)
+  const heal = new Map<string, string[]>()
+  for (const job of opts.jobs) {
+    const failed = opts.failed
+      .filter(state => state.table === job.table && (state.searchType ?? 'web') === job.type && state.date >= oldestKept && !inRange.has(state.date))
+      .map(state => state.date)
+    const dates = datesForJob(job.table, failed, opts.today)
+    if (dates.length > 0)
+      heal.set(job.label, dates)
+  }
+  return heal
+}
