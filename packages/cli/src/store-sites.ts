@@ -1,7 +1,8 @@
 // The Store keys each Site by `encodeSiteId(siteUrl)`. That encoding is lossy:
 // `http://x.com/` and `https://x.com/` share `h_x.com`, and paths collapse to
 // `_`. So `sync` records the real Site URL for each siteId in `sites.json`,
-// and refuses a Site whose siteId already holds data for a different Site.
+// and refuses a Site whose siteId already holds data for a different Site,
+// whether the owner is recorded in the map or inferred from `decodeSiteId`.
 // Stores created before the map fall back to `decodeSiteId`.
 //
 // Syncs run in parallel (`--all-sites`, several processes). Every change to
@@ -37,6 +38,11 @@ const siteMapSchema = z.object({
 })
 
 const SITE_ID_DIR_RE = /^[dh]_[\w.-]+$/
+
+// A decodeSiteId result that is a clean https origin: no `_`, because a
+// collapsed path or port always leaves one behind. Only then does the
+// decoded label name the pre-map owner instead of garbage.
+const DECODED_ORIGIN_RE = /^https:\/\/[a-z0-9.-]+\/$/i
 
 function tenantDir(dataDir: string, userId: string): string {
   return path.join(dataDir, `u_${userId}`)
@@ -83,11 +89,21 @@ export function siteUrlForId(map: SiteMap, siteId: string): string {
 
 /**
  * Decide if `siteUrl` may own `siteId`. A recorded Site URL wins while its
- * data exists. A siteId without data can be claimed again.
+ * data exists. The same holds for a Store created before the map, whose
+ * only owner label is the decoded origin. A siteId without data can be
+ * claimed again.
  */
 export function claimSiteId(map: SiteMap, siteUrl: string, hasData: boolean): Result<SiteMap, SiteIdCollision> {
   const siteId = encodeSiteId(siteUrl)
   const existing = map[siteId]
+  if (existing === undefined && hasData) {
+    // The pre-map owner has no map entry. Its decoded origin is what every
+    // reader falls back to, so it wins like a recorded URL; a claimant that
+    // disagrees would silently relabel the data.
+    const decoded = decodeSiteId(siteId)
+    if (DECODED_ORIGIN_RE.test(decoded) && decoded !== siteUrl)
+      return err({ kind: 'site-id-collision', siteId, siteUrl, existing: decoded })
+  }
   if (existing !== undefined && existing !== siteUrl && hasData)
     return err({ kind: 'site-id-collision', siteId, siteUrl, existing })
   return ok(existing === siteUrl ? map : { ...map, [siteId]: siteUrl })

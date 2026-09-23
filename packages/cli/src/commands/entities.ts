@@ -10,6 +10,7 @@ import {
 import { defineCommand } from 'citty'
 import { entitiesCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
+import { formatSiteIdCollision, recordStoreSite } from '../store-sites'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
 const INSPECTION_QPD_PER_PROPERTY = 2000
@@ -103,6 +104,14 @@ const inspectSubCommand = defineCommand({
       logger.info(`Capping at --limit ${limit}`)
     if (urls.length === INSPECTION_QPD_PER_PROPERTY)
       logger.info(`Hit per-property daily inspection quota (${INSPECTION_QPD_PER_PROPERTY}); remaining URLs will be queued for tomorrow.`)
+
+    // Claim the siteId before spending quota, so the writes below cannot
+    // land beside another Site's data unlabelled.
+    const claim = await recordStoreSite(store.dataDir, siteUrl, { userId: store.userId })
+    if (!claim.ok) {
+      logger.error(formatSiteIdCollision(claim.error))
+      process.exit(1)
+    }
 
     const inspector = createInspectionStore({ dataSource: store.dataSource })
 
@@ -256,6 +265,14 @@ const indexingSnapshotSubCommand = defineCommand({
     if (urls.length === 0) {
       logger.warn('No URLs to fetch metadata for.')
       return
+    }
+
+    // Claim the siteId before spending quota, so the write below cannot
+    // land beside another Site's data unlabelled.
+    const claim = await recordStoreSite(store.dataDir, siteUrl, { userId: store.userId })
+    if (!claim.ok) {
+      logger.error(formatSiteIdCollision(claim.error))
+      process.exit(1)
     }
 
     const records: IndexingMetadataRecord[] = []
