@@ -6,6 +6,7 @@ import { createCommandContext } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { loadSitemapUrls } from '../sitemap'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, readUrlList } from '../utils'
+import { indexingUrlsCommand } from './indexing-urls'
 
 const RETRIES_ARG = {
   retries: { type: 'string' as const, description: 'Override per-call retry count (default: 3)' },
@@ -263,5 +264,6 @@ export const indexingCommand = defineCommand({
     'batch': batchCommand,
     'batch-status': batchStatusCommand,
     'quota': quotaCommand,
+    'urls': indexingUrlsCommand,
   },
 })

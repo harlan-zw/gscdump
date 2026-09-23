@@ -68,7 +68,7 @@ After cloud Bing login opens a browser, use `bing status --site s_SITE_ID` to co
 Hosted Bing commands use the API's plan and preview access rules.
 Hosted connection verification uses `bing verify --site s_SITE_ID`.
 Google Indexing API and Site Verification commands require local mode.
-Hosted sitemap membership and history require hosted credentials.
+Hosted sitemap reads and `indexing urls` require hosted credentials. Their `--site` takes a Site URL, such as `example.com`.
 
 ## Data boundaries
 
@@ -176,7 +176,7 @@ Do not rewrite rows, estimate metrics, or add manually calculated totals.
 | `gscdump report <id>` | A Report that composes several Analyzers |
 | `gscdump inspect <url>` | URL Inspection with Indexing Evidence |
 | `gscdump sitemaps` | List, submit, delete, and probe sitemaps |
-| `gscdump indexing` | Indexing API notifications and quota |
+| `gscdump indexing` | Indexing API notifications and quota; hosted URL Inspection results |
 | `gscdump dump` | Export Store tables to Parquet, CSV, JSON, or NDJSON |
 | `gscdump store` | Store stats, compaction, garbage collection, resets |
 | `gscdump entities` | Snapshot URL inspections into the entity store |
@@ -264,6 +264,19 @@ gscdump indexing quota --json
 Inspection spends Google's separate 2,000 requests per Site per day quota.
 `indexing quota` describes Indexing API limits. It does not report remaining URL Inspection requests.
 Report the Indexing Evidence fields as Google returned them.
+
+## Find URLs Google has not indexed (hosted)
+
+```sh
+gscdump indexing urls --site example.com --status not_indexed --json
+gscdump indexing urls --site example.com --status not_indexed --all --format csv
+```
+
+- The command reads URL Inspection results that gscdump.com already saved. It spends no inspection quota.
+- `--status` takes `indexed`, `not_indexed`, or `pending`. `--search` keeps URLs that contain the text.
+- Each row lists the sitemaps that contain the URL.
+- Pages hold 100 rows by default and 500 at most. Use `--offset` for the next page, or `--all` for every page.
+- With local authentication, the command fails. Pipe `gscdump sitemaps urls <sitemap-url>` into `gscdump entities inspect` instead.
 
 ## Report a papercut
 
