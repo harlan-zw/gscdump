@@ -112,6 +112,20 @@ describe('read routing', () => {
     expect(JSON.parse(run.stdout).meta.source).toBe('live')
   })
 
+  it('stops for a partition-less analyzer plan on an empty Store without auth', async () => {
+    const run = await cli(['analyze', 'data-query', '--site', 'example.com', '--json'], 'none')
+    expect(run.code).toBe(1)
+    expect(JSON.parse(run.stdout).error).toMatchObject({ code: 'NOT_CONNECTED' })
+    expect(analyticsCalls).toBe(0)
+  })
+
+  it('answers an empty Store from the live API when the analyzer plan has no daily partitions', async () => {
+    const run = await cli(['analyze', 'data-query', '--site', 'example.com', '--json'])
+    expect(run.stderr).toContain('No synced data for sc-domain:example.com; answering from the live Search Console API.')
+    expect(run.stderr).not.toContain('Local data cannot run analysis')
+    expect(analyticsCalls).toBe(0)
+  })
+
   it('asks to sync the missing days when coverage is partial', async () => {
     await seed('pages', ['2026-08-01', '2026-08-03'])
     const run = await cli(query())

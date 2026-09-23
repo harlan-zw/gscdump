@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict'
 import { it } from 'vitest'
-import { analyzeWaste, commands, compareRows, finalResponse, gradeAgent, gradeAnswer, invocation, pageMetrics, parseOptions } from './core.mjs'
+import { CASES } from './cases.mjs'
+import { analyzeWaste, commands, compareRows, finalResponse, gradeAgent, gradeAnswer, invocation, pageMetrics, parseOptions, seedCommand } from './core.mjs'
+
+it('seeds the recovery case with a partial Store so the coverage stop can trigger', () => {
+  const recovery = CASES.find(test => test.id === 'recovery')
+  assert.equal(recovery.seeded, 'partial')
+  assert.deepEqual(
+    seedCommand('sc-domain:example.com', '2026-08-01', '2026-08-05', recovery.seeded),
+    ['sync', '--site', 'sc-domain:example.com', '--start', '2026-08-01', '--end', '2026-08-01', '--tables', 'pages', '--no-rollups', '--quiet'],
+  )
+  assert.deepEqual(
+    seedCommand('sc-domain:example.com', '2026-08-01', '2026-08-05', true),
+    ['sync', '--site', 'sc-domain:example.com', '--start', '2026-08-01', '--end', '2026-08-05', '--tables', 'pages', '--no-rollups', '--quiet'],
+  )
+})
 
 it('selects bounded cases and rejects misspelled selections', () => {
   const options = parseOptions(['--agents', '--case', 'syntax,recovery', '--no-docs', '--trials', '1'])

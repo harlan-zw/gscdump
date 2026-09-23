@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { CASES } from './cases.mjs'
-import { analyzeWaste, commands, compareRows, finalResponse, gradeAgent, gradeAnswer, invocation, MODEL, pageMetrics, parseOptions } from './core.mjs'
+import { analyzeWaste, commands, compareRows, finalResponse, gradeAgent, gradeAnswer, invocation, MODEL, pageMetrics, parseOptions, seedCommand } from './core.mjs'
 import { evaluatorIdentity, fileState } from './evidence.mjs'
 import { checked, credentialEnvironment, installCandidate, run } from './runtime.mjs'
 
@@ -95,7 +95,7 @@ async function context(id, { seeded = false, cloud = false, authenticated = true
   if (authenticated)
     await setup(['auth', 'login', '--mode', cloud ? 'cloud' : 'local', '--json'])
   if (seeded)
-    await setup(['sync', '--site', site, '--start', start, '--end', end, '--tables', 'pages', '--no-rollups', '--quiet'])
+    await setup(seedCommand(site, start, end, seeded))
   const trace = join(directory, 'calls.jsonl')
   const settings = join(directory, 'settings.json')
   await writeFile(trace, '', { mode: 0o600 })
@@ -314,6 +314,8 @@ try {
     const auth = JSON.parse(await readFile(authPath, 'utf8'))
     assert(auth['opencode-go'], 'OpenCode Go CLI login is required. Model API keys are not accepted.')
     const selectedCases = CASES.filter(test => options.cases.length ? options.cases.includes(test.id) : options.suite === 'all' || test.suite === options.suite)
+    if (selectedCases.some(test => test.seeded === 'partial'))
+      assert(Date.parse(end) > Date.parse(start), 'A partial seed needs a window longer than one day. Set EVAL_END to a day after EVAL_START.')
     for (const test of selectedCases) {
       const kind = test.kind
       for (let trial = 1; trial <= options.trials; trial++) {

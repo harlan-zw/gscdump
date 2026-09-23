@@ -1,5 +1,6 @@
 import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { AnalysisQuerySource, FileSet } from '@gscdump/engine/source'
+import type { BuilderState } from 'gscdump/query'
 import type { Result } from 'gscdump/result'
 import type { TableName } from './local-store'
 import type { LiveReason, RouteNeed } from './route'
@@ -8,9 +9,11 @@ import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 import { AnalyzerCapabilityError, runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import { createEngineQuerySource } from '@gscdump/engine/source'
 import { getLatestGscDate } from 'gscdump/dates'
+import { extractDateRange } from 'gscdump/query'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { createCommandContext } from './context'
 import { LocalStoreUnsupportedError } from './error-handler'
+import { inferTable } from './local-store'
 import { decideRoute, liveNote, readRouteState, readSiteStates, resolveReadSite, stopAtRoute } from './route'
 import { useCliRuntime } from './runtime'
 import { logger } from './utils'
@@ -66,19 +69,62 @@ export function analyzerTables(params: AnalysisParams): TableName[] {
   return [...new Set((fileSets ?? []).map(fileSet => fileSet.table))]
 }
 
+/** Whether the analyzer's SQL plan compiles through a BuildContext adapter. */
+function isAdapterPlanned(type: string): boolean {
+  return defaultAnalyzerRegistry.getAnalyzerVariants(type)?.sql?.requires.includes('adapter') ?? false
+}
+
+function isBuilderState(value: unknown): value is BuilderState {
+  return Boolean(value) && typeof value === 'object' && Array.isArray((value as { dimensions?: unknown }).dimensions)
+}
+
+/** The Store read of one BuilderState: its table, scoped to its own dates. */
+function builderStateNeed(state: BuilderState): RouteNeed {
+  const table = inferTable(state.dimensions)
+  const { startDate, endDate } = extractDateRange(state.filter)
+  const searchType = state.searchType && state.searchType !== 'web' ? state.searchType : undefined
+  if (startDate && endDate)
+    return { kind: 'window', table, searchType: searchType ?? 'web', window: { start: startDate, end: endDate } }
+  return { kind: 'any', tables: [table], ...(searchType ? { searchType } : {}) }
+}
+
+/**
+ * Store needs of the BuilderState-driven analyzers (`data-query`,
+ * `data-detail`). Their SQL plan compiles only through a source adapter, so
+ * routing reads the tables and dates off `params.q` / `params.qc` instead.
+ * Without a `q` the run reads no known table, so the need stays unmet and
+ * the router stops or answers live rather than assuming coverage.
+ */
+function builderStateNeeds(params: AnalysisParams): RouteNeed[] {
+  if (!isAdapterPlanned(params.type))
+    return []
+  if (!isBuilderState(params.q))
+    return [{ kind: 'any', tables: [] }]
+  const needs = [builderStateNeed(params.q)]
+  if (isBuilderState(params.qc))
+    needs.push(builderStateNeed(params.qc))
+  return needs
+}
+
 /**
  * What a run reads from the Store: each FileSet of the analyzer's SQL plan,
  * with the dates of its daily partitions. `params` must hold the real window.
+ * A FileSet without daily partitions scopes its own rows, so any synced day
+ * of its table counts. Plans that cannot build here (the BuilderState-driven
+ * ones) fall back to `builderStateNeeds` — an unanalysed read must never
+ * look covered, or the router sends an empty Store into the analyzer.
  */
 export function analysisNeeds(params: AnalysisParams): RouteNeed[] {
   const needs: RouteNeed[] = []
   for (const fileSet of sqlPlanFileSets(params) ?? []) {
     const dates = fileSet.partitions.flatMap(partition => DAILY_PARTITION_RE.exec(partition)?.[1] ?? []).sort()
-    if (dates.length === 0)
+    if (dates.length === 0) {
+      needs.push({ kind: 'any', tables: [fileSet.table] })
       continue
+    }
     needs.push({ kind: 'window', table: fileSet.table, searchType: 'web', window: { start: dates[0]!, end: dates.at(-1)! } })
   }
-  return needs
+  return needs.length > 0 ? needs : builderStateNeeds(params)
 }
 
 /** Which sources can run these analyzers. */
