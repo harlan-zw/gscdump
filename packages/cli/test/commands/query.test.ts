@@ -1,10 +1,10 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DuckDBInstance } from '@duckdb/node-api'
 import { runCommand } from 'citty'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { queryCommand } from '../../src/commands/query'
+import { createCommandContext } from '../../src/context'
 import { createCliRuntime, runWithCliRuntime } from '../../src/runtime'
 import { logger } from '../../src/utils'
 
@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
   loadConfig: vi.fn(() => Promise.resolve({})),
   storeQuery: vi.fn(),
   storeWatermarks: vi.fn(),
-  storeRunRawSql: vi.fn(),
 }))
 
 vi.mock('gscdump/client', async (importOriginal) => {
@@ -54,7 +53,6 @@ vi.mock('../../src/context', () => ({
         query: mocks.storeQuery,
         getWatermarks: mocks.storeWatermarks,
       },
-      runRawSql: mocks.storeRunRawSql,
     },
     loadSites: vi.fn().mockResolvedValue([{ siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' }]),
     resolveSite: mocks.resolveSite,
@@ -187,93 +185,13 @@ describe('query command', () => {
     expect(consoleOutput).toEqual(['query,clicks,impressions,ctr,position'])
   })
 
-  it.each([
-    [[], 'page,clicks\n/a,2'],
-    [['--format', 'csv'], 'page,clicks\n/a,2'],
-  ])('writes raw SQL results in the requested CSV format: %j', async (flags, output) => {
-    mocks.loadConfig.mockResolvedValue({ defaultFormat: 'csv' })
-    mocks.storeRunRawSql.mockResolvedValue({ rows: [{ page: '/a', clicks: 2 }], sql: 'SELECT page, clicks FROM pages' })
-
-    await runCommand(queryCommand, {
-      rawArgs: ['--quiet', '--sql', 'SELECT page, clicks FROM pages', ...flags],
-    })
-
-    expect(consoleOutput).toEqual([output])
-  })
-
   it('rejects invalid output formats before running raw SQL', async () => {
     await expect(runCommand(queryCommand, {
       rawArgs: ['--quiet', '--sql', 'SELECT 1', '--format', 'yaml'],
     })).rejects.toThrow('__exit_1__')
 
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('--format'))
-    expect(mocks.storeRunRawSql).not.toHaveBeenCalled()
-  })
-
-  it.each(['stdout', 'file'])('writes exact raw SQL integers as JSON strings to %s', async (destination) => {
-    const directory = await mkdtemp(join(tmpdir(), 'gscdump-sql-json-'))
-    const outputPath = join(directory, 'query.json')
-    const instance = await DuckDBInstance.create(':memory:')
-    const connection = await instance.connect()
-    const sql = `SELECT SUM(i) AS total, COUNT(*) AS count,
-      9007199254740993::BIGINT AS exact,
-      {'values': [9007199254740993::BIGINT, NULL, -9007199254740993::BIGINT]} AS nested,
-      1.25::DOUBLE AS fraction
-      FROM range(10) t(i)`
-    mocks.storeRunRawSql.mockImplementationOnce(async ({ sql }) => ({
-      rows: (await connection.runAndReadAll(sql)).getRowObjectsJS(),
-      sql,
-    }))
-
-    try {
-      await runCommand(queryCommand, {
-        rawArgs: ['--quiet', '--sql', sql, '--format', 'json', ...(destination === 'file' ? ['--output', outputPath] : [])],
-      })
-
-      const output = destination === 'file' ? await readFile(outputPath, 'utf8') : consoleOutput[0]!
-      expect(JSON.parse(output)).toEqual({
-        sql,
-        total: 1,
-        data: [{
-          total: '45',
-          count: '10',
-          exact: '9007199254740993',
-          nested: { values: ['9007199254740993', null, '-9007199254740993'] },
-          fraction: 1.25,
-        }],
-      })
-    }
-    finally {
-      connection.closeSync()
-      instance.closeSync()
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  it.each(['stdout', 'file'])('writes nested raw SQL integers in table output to %s', async (destination) => {
-    const directory = await mkdtemp(join(tmpdir(), 'gscdump-sql-table-'))
-    const outputPath = join(directory, 'query.txt')
-    const instance = await DuckDBInstance.create(':memory:')
-    const connection = await instance.connect()
-    const sql = `SELECT {'v': 9007199254740993::BIGINT, 'items': [1::BIGINT, NULL]} AS nested`
-    mocks.storeRunRawSql.mockImplementationOnce(async ({ sql }) => ({
-      rows: (await connection.runAndReadAll(sql)).getRowObjectsJS(),
-      sql,
-    }))
-
-    try {
-      await runCommand(queryCommand, {
-        rawArgs: ['--quiet', '--sql', sql, '--format', 'table', ...(destination === 'file' ? ['--output', outputPath] : [])],
-      })
-
-      const output = destination === 'file' ? await readFile(outputPath, 'utf8') : consoleOutput[0]!
-      expect(output).toContain('{"v":"9007199254740993","items":["1",null]}')
-    }
-    finally {
-      connection.closeSync()
-      instance.closeSync()
-      await rm(directory, { recursive: true, force: true })
-    }
+    expect(createCommandContext).not.toHaveBeenCalled()
   })
 
   it('--explain in --live mode prints request body and exits without calling API', async () => {
@@ -367,11 +285,6 @@ describe('query command', () => {
     expect(logger.info).not.toHaveBeenCalled()
   })
 
-  it('renders SQL tables without changing JSON defaults', async () => {
-    mocks.storeRunRawSql.mockResolvedValue({ rows: [{ clicks: 12000 }], sql: 'SELECT 12000 AS clicks' })
-    await runCommand(queryCommand, { rawArgs: ['--sql', 'SELECT 12000 AS clicks', '--format', 'table'] })
-    expect(consoleOutput.join('\n')).toContain('12,000')
-  })
   it('writes a human query file without ANSI even when color is forced', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'gscdump-chart-file-'))
     try {

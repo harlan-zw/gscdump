@@ -536,7 +536,7 @@ describe('sync command (local analytics)', () => {
       format: 'json',
       tables: new Set(['inspections', 'sitemaps', 'sitemap_urls']),
     })
-    expect(Object.fromEntries(summary!.files.map(file => [file.dataset, file.rows]))).toEqual({ inspections: 2, sitemaps: 1, sitemap_urls: 3 })
+    expect(Object.fromEntries(summary!.datasets.map(dataset => [dataset.dataset, dataset.rows]))).toEqual({ inspections: 2, sitemaps: 1, sitemap_urls: 3 })
 
     // A second run finds nothing due: both URLs were just inspected.
     inspectSpy.mockClear()
