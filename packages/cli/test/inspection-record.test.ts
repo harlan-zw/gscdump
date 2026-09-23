@@ -1,6 +1,6 @@
 import type { InspectionRecord } from '@gscdump/engine/entities'
 import { describe, expect, it } from 'vitest'
-import { planInspections, toInspectionRecord } from '../src/inspection-record'
+import { latestByUrl, planInspections, toInspectionRecord } from '../src/inspection-record'
 import { resolvePagePaths } from '../src/local-entities'
 
 const NOW = new Date('2026-09-20T12:00:00.000Z')
@@ -23,7 +23,8 @@ describe('planInspections', () => {
     ]
     const plan = planInspections({
       candidates: ['https://e.com/fail-8d', 'https://e.com/pass-2d', 'https://e.com/new', 'https://e.com/pass-40d', 'https://e.com/new'],
-      history,
+      latest: latestByUrl(history),
+      recent: history,
       now: NOW,
       limit: 10,
     })
@@ -35,7 +36,8 @@ describe('planInspections', () => {
     const history = Array.from({ length: 1998 }, (_, i) => inspected(`https://e.com/done-${i}`, 0.5, 'PASS'))
     const plan = planInspections({
       candidates: ['https://e.com/a', 'https://e.com/b', 'https://e.com/c'],
-      history,
+      latest: latestByUrl(history),
+      recent: history,
       now: NOW,
       limit: 50,
     })

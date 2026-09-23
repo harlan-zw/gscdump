@@ -296,7 +296,7 @@ export const queryCommand = defineCommand({
     const anchor = forceLive || !table ? getLatestGscDate() : newestDoneDate(states, [table]) ?? getLatestGscDate()
     const { start: startDate, end: endDate } = windowOrExit(windowFlags, anchor)
     const req: RouteRequest = { site, siteHint, label: 'query', localCapable: resolvable, liveCapable: true, forceLive, argv: useCliRuntime().rawArgs }
-    const needs: RouteNeed[] = table ? [{ kind: 'window', table, searchType: localSearchType, window: { start: startDate, end: endDate } }] : []
+    const needs: RouteNeed[] = table ? [{ kind: 'window', period: 'current', table, searchType: localSearchType, window: { start: startDate, end: endDate } }] : []
     const routeState = await readRouteState({ store, site, needs, states, auth })
     const route = decideRoute(req, routeState)
     const json = format === 'json'

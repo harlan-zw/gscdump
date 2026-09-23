@@ -3,7 +3,7 @@ import type { AnalysisQuerySource, FileSet } from '@gscdump/engine/source'
 import type { BuilderState } from 'gscdump/query'
 import type { Result } from 'gscdump/result'
 import type { TableName } from './local-store'
-import type { LiveReason, RouteNeed } from './route'
+import type { LiveReason, NeedPeriod, RouteNeed } from './route'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 import { AnalyzerCapabilityError, runAnalyzerFromSource } from '@gscdump/engine/analyzer'
@@ -41,7 +41,13 @@ export interface ResolvedAnalysisSource {
 const PLACEHOLDER_DATE = '2000-01-01'
 const DAILY_PARTITION_RE = /^daily\/(\d{4}-\d{2}-\d{2})$/
 
-function sqlPlanFileSets(params: AnalysisParams): FileSet[] | undefined {
+/** A FileSet of a SQL plan, with the window it reads: `previous` reads the comparison window. */
+interface PlannedRead {
+  period: NeedPeriod
+  fileSet: FileSet
+}
+
+function sqlPlanReads(params: AnalysisParams): PlannedRead[] | undefined {
   const analyzer = defaultAnalyzerRegistry.getAnalyzerVariants(params.type)?.sql
   if (!analyzer)
     return undefined
@@ -56,7 +62,11 @@ function sqlPlanFileSets(params: AnalysisParams): FileSet[] | undefined {
   }
   if (plan.kind !== 'sql')
     return undefined
-  return [plan.current, plan.previous, ...Object.values(plan.extraFiles ?? {})].filter((fileSet): fileSet is FileSet => Boolean(fileSet))
+  return [
+    { period: 'current', fileSet: plan.current },
+    ...(plan.previous ? [{ period: 'comparison', fileSet: plan.previous } as const] : []),
+    ...Object.values(plan.extraFiles ?? {}).map(fileSet => ({ period: 'current', fileSet }) as const),
+  ]
 }
 
 /**
@@ -65,8 +75,8 @@ function sqlPlanFileSets(params: AnalysisParams): FileSet[] | undefined {
  * the analyzer has no SQL plan or its plan cannot build from these params.
  */
 export function analyzerTables(params: AnalysisParams): TableName[] {
-  const fileSets = sqlPlanFileSets({ startDate: PLACEHOLDER_DATE, endDate: PLACEHOLDER_DATE, prevStartDate: PLACEHOLDER_DATE, prevEndDate: PLACEHOLDER_DATE, ...params })
-  return [...new Set((fileSets ?? []).map(fileSet => fileSet.table))]
+  const reads = sqlPlanReads({ startDate: PLACEHOLDER_DATE, endDate: PLACEHOLDER_DATE, prevStartDate: PLACEHOLDER_DATE, prevEndDate: PLACEHOLDER_DATE, ...params })
+  return [...new Set((reads ?? []).map(read => read.fileSet.table))]
 }
 
 /** Whether the analyzer's SQL plan compiles through a BuildContext adapter. */
@@ -79,12 +89,12 @@ function isBuilderState(value: unknown): value is BuilderState {
 }
 
 /** The Store read of one BuilderState: its table, scoped to its own dates. */
-function builderStateNeed(state: BuilderState): RouteNeed {
+function builderStateNeed(state: BuilderState, period: NeedPeriod): RouteNeed {
   const table = inferTable(state.dimensions)
   const { startDate, endDate } = extractDateRange(state.filter)
   const searchType = state.searchType && state.searchType !== 'web' ? state.searchType : undefined
   if (startDate && endDate)
-    return { kind: 'window', table, searchType: searchType ?? 'web', window: { start: startDate, end: endDate } }
+    return { kind: 'window', period, table, searchType: searchType ?? 'web', window: { start: startDate, end: endDate } }
   return { kind: 'any', tables: [table], ...(searchType ? { searchType } : {}) }
 }
 
@@ -100,9 +110,9 @@ function builderStateNeeds(params: AnalysisParams): RouteNeed[] {
     return []
   if (!isBuilderState(params.q))
     return [{ kind: 'any', tables: [] }]
-  const needs = [builderStateNeed(params.q)]
+  const needs = [builderStateNeed(params.q, 'current')]
   if (isBuilderState(params.qc))
-    needs.push(builderStateNeed(params.qc))
+    needs.push(builderStateNeed(params.qc, 'comparison'))
   return needs
 }
 
@@ -116,13 +126,13 @@ function builderStateNeeds(params: AnalysisParams): RouteNeed[] {
  */
 export function analysisNeeds(params: AnalysisParams): RouteNeed[] {
   const needs: RouteNeed[] = []
-  for (const fileSet of sqlPlanFileSets(params) ?? []) {
+  for (const { period, fileSet } of sqlPlanReads(params) ?? []) {
     const dates = fileSet.partitions.flatMap(partition => DAILY_PARTITION_RE.exec(partition)?.[1] ?? []).sort()
     if (dates.length === 0) {
       needs.push({ kind: 'any', tables: [fileSet.table] })
       continue
     }
-    needs.push({ kind: 'window', table: fileSet.table, searchType: 'web', window: { start: dates[0]!, end: dates.at(-1)! } })
+    needs.push({ kind: 'window', period, table: fileSet.table, searchType: 'web', window: { start: dates[0]!, end: dates.at(-1)! } })
   }
   return needs.length > 0 ? needs : builderStateNeeds(params)
 }

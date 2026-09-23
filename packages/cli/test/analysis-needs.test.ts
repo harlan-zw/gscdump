@@ -11,7 +11,7 @@ describe('analysisNeeds', () => {
   it('reads the table and dates off a BuilderState plan it cannot compile', () => {
     const q = gsc.select('page').where(between(date, '2026-08-01', '2026-08-03')).getState()
     expect(analysisNeeds(dataQueryParams({ q }))).toEqual([
-      { kind: 'window', table: 'pages', searchType: 'web', window: { start: '2026-08-01', end: '2026-08-03' } },
+      { kind: 'window', period: 'current', table: 'pages', searchType: 'web', window: { start: '2026-08-01', end: '2026-08-03' } },
     ])
   })
 
@@ -26,8 +26,8 @@ describe('analysisNeeds', () => {
     const q = gsc.select('page', 'query').where(between(date, '2026-08-01', '2026-08-03')).getState()
     const qc = gsc.select('page', 'query').where(between(date, '2026-07-01', '2026-07-03')).getState()
     expect(analysisNeeds(dataQueryParams({ q, qc }))).toEqual([
-      { kind: 'window', table: 'page_queries', searchType: 'web', window: { start: '2026-08-01', end: '2026-08-03' } },
-      { kind: 'window', table: 'page_queries', searchType: 'web', window: { start: '2026-07-01', end: '2026-07-03' } },
+      { kind: 'window', period: 'current', table: 'page_queries', searchType: 'web', window: { start: '2026-08-01', end: '2026-08-03' } },
+      { kind: 'window', period: 'comparison', table: 'page_queries', searchType: 'web', window: { start: '2026-07-01', end: '2026-07-03' } },
     ])
   })
 

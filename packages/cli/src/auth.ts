@@ -490,7 +490,9 @@ export async function getAuth(opts: GetAuthOptions = {}): Promise<OAuth2Client> 
  *   3. Saved OAuth tokens / interactive loopback flow
  */
 export async function resolveAuth(opts: GetAuthOptions = {}): Promise<GscAuth | OAuth2Client | GoogleJWT> {
-  const sa = await resolveServiceAccount({ path: opts.serviceAccount })
+  // A stale pointer (missing or malformed key file) is ignorable here: it
+  // falls through to BYOK and saved tokens instead of failing resolution.
+  const sa = await resolveServiceAccount({ path: opts.serviceAccount }).catch(() => null)
   if (sa) {
     logger.success('Using service-account credentials')
     return sa
@@ -651,7 +653,11 @@ export type { GscdumpConfig }
 export async function probeAuth(): Promise<'none' | 'google' | 'hosted'> {
   if ((await resolveAuthentication())._tag === 'Cloud')
     return 'hosted'
-  if (resolveBYOK() || await resolveServiceAccount())
+  if (resolveBYOK())
+    return 'google'
+  // A stale pointer (missing or malformed key file) is ignorable here: it
+  // must not hide saved tokens, which can still authenticate.
+  if (await resolveServiceAccount().then(Boolean).catch(() => false))
     return 'google'
   return (await loadTokens()) !== null ? 'google' : 'none'
 }

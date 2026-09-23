@@ -5,8 +5,9 @@ import { defineCommand } from 'citty'
 import { inspectCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { checkInspectionBatch, inspectUrls } from '../inspect-urls'
-import { latestByUrl, toInspectionRecord } from '../inspection-record'
-import { appendInspections, loadInspectionHistory, materializeInspectionIndex, urlInProperty } from '../local-entities'
+import { toInspectionRecord } from '../inspection-record'
+import { appendInspections, loadInspectionState, materializeInspectionIndex, urlInProperty } from '../local-entities'
+import { formatSiteIdCollision, recordStoreSite } from '../store-sites'
 import { applyOutputMode, dim, logger, OUTPUT_ARGS, readUrlList, red } from '../utils'
 
 function verdictTone(verdict: string | null | undefined): string {
@@ -159,9 +160,13 @@ export const inspectCommand = defineCommand({
     const client = ctx.client!
     const store = ctx.store!
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
+    // Claim the siteId before spending quota, so the writes below cannot
+    // land beside another Site's data unlabelled.
+    const claim = await recordStoreSite(store.dataDir, siteUrl, { userId: store.userId })
+    if (!claim.ok)
+      throw new Error(formatSiteIdCollision(claim.error))
     const tenant = { userId: store.userId, siteId: store.siteIdFor(siteUrl) }
-    const history = await loadInspectionHistory(store.dataSource, tenant)
-    const latest = latestByUrl(history)
+    const { latest } = await loadInspectionState(store.dataSource, tenant, new Date())
     const saved: InspectionRecord[] = []
 
     if (!quiet && urls.length > 1)
@@ -182,7 +187,7 @@ export const inspectCommand = defineCommand({
       },
     })
     if (saved.length > 0)
-      await materializeInspectionIndex(store.dataSource, tenant, [...history, ...saved])
+      await materializeInspectionIndex(store.dataSource, tenant, latest, saved)
 
     const failed = run.outcomes.filter(outcome => outcome.kind === 'failed')
     const remaining = run.stopped?.remaining ?? 0
@@ -203,7 +208,9 @@ export const inspectCommand = defineCommand({
       throw new Error(run.outcomes[0].error)
     }
 
-    const summary = [`Inspected ${saved.length} of ${urls.length} URL${urls.length === 1 ? '' : 's'} and saved the results to the Store.`]
+    const summary = [saved.length > 0
+      ? `Inspected ${saved.length} of ${urls.length} URL${urls.length === 1 ? '' : 's'} and saved the results to the Store.`
+      : `Inspected ${saved.length} of ${urls.length} URL${urls.length === 1 ? '' : 's'}. Nothing was saved to the Store.`]
     if (failed.length > 0)
       summary.push(`${failed.length} failed.`)
     if (run.stopped)

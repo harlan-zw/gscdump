@@ -23,15 +23,18 @@ import { isProcessAlive, readSyncRun, syncRunStatus } from './sync-run'
 
 export type RouteAuth = 'none' | 'google' | 'hosted'
 
+/** Which window of a run a need reads: the main window, or the one it compares against. */
+export type NeedPeriod = 'current' | 'comparison'
+
 /** What a command reads from the Store. */
 export type RouteNeed
   /** Every day of `window` for one table and search type. */
-  = | { kind: 'window', table: TableName, searchType: SearchType, window: DateSpan }
+  = | { kind: 'window', period: NeedPeriod, table: TableName, searchType: SearchType, window: DateSpan }
   /** Any synced day of any of these tables. Raw SQL has no window. */
     | { kind: 'any', tables: readonly TableName[], searchType?: SearchType }
 
 export type NeedCoverage
-  = | { kind: 'window', table: TableName, searchType: SearchType, window: DateSpan, stored: boolean, gaps: DateSpan[] }
+  = | { kind: 'window', period: NeedPeriod, table: TableName, searchType: SearchType, window: DateSpan, stored: boolean, gaps: DateSpan[] }
     | { kind: 'any', tables: readonly TableName[], searchType?: SearchType, stored: boolean }
 
 export interface RouteRequest {
@@ -56,13 +59,21 @@ export interface RouteState {
   syncRun: SyncRunStatus
 }
 
+/** One table and window that misses days, for the stop message. */
+export interface WindowGap {
+  period: NeedPeriod
+  table: TableName
+  window: DateSpan
+  missing: DateSpan[]
+}
+
 export type PromptReason
   /** Nothing can answer without Google, and Google is not connected. */
   = | { kind: 'not-connected', tables: TableName[] }
   /** The Store has no data for these tables, and the request cannot go to the live API. */
     | { kind: 'no-data', tables: TableName[] }
-  /** The Store has some of the dates. */
-    | { kind: 'partial', done: number, total: number, missing: DateSpan[] }
+  /** The Store has some of the dates. `windows` names each table and window that misses days. */
+    | { kind: 'partial', done: number, total: number, missing: DateSpan[], windows: WindowGap[] }
   /** `--live` on a request only the Store can answer. */
     | { kind: 'store-only' }
   /** Only the live API can answer, and the user did not pass `--live`. */
@@ -125,6 +136,31 @@ function runsForSite(syncRun: SyncRunStatus, site: string | undefined): syncRun 
   return syncRun.kind === 'running' && (site === undefined || syncRun.record.sites.includes(site))
 }
 
+/** Each uncovered table and window once. A report can read the same one in several steps. */
+function windowGaps(coverage: readonly NeedCoverage[]): WindowGap[] {
+  const seen = new Set<string>()
+  const out: WindowGap[] = []
+  for (const need of coverage) {
+    if (need.kind !== 'window' || need.gaps.length === 0)
+      continue
+    const key = `${need.period}|${need.table}|${need.searchType}|${need.window.start}|${need.window.end}`
+    if (seen.has(key))
+      continue
+    seen.add(key)
+    out.push({ period: need.period, table: need.table, window: need.window, missing: need.gaps })
+  }
+  return out
+}
+
+/** One line per table and window that misses days. */
+function windowGapLine(gap: WindowGap): string {
+  const expected = datesOf([gap.window]).size
+  const missing = datesOf(gap.missing).size
+  const first = gap.missing[0]!.start
+  const last = gap.missing.at(-1)!.end
+  return `  ${gap.period} window ${gap.window.start} to ${gap.window.end}: ${gap.table} misses ${missing} of ${expected} days (${first} to ${last}).`
+}
+
 /** Decide where a read goes. Pure. */
 export function decideRoute(req: RouteRequest, state: RouteState): Route {
   const { auth, coverage, syncRun } = state
@@ -168,7 +204,7 @@ export function decideRoute(req: RouteRequest, state: RouteState): Route {
   const missing = datesOf(gaps)
   return {
     kind: 'prompt',
-    reason: { kind: 'partial', done: wanted.size - missing.size, total: wanted.size, missing: gaps },
+    reason: { kind: 'partial', done: wanted.size - missing.size, total: wanted.size, missing: gaps, windows: windowGaps(coverage) },
     nextCommand: connected ? syncCommand : LOGIN_COMMAND,
   }
 }
@@ -199,12 +235,12 @@ export function routeMessage(route: Exclude<Route, { kind: 'local' } | { kind: '
     case 'store-only':
       return `\`${req.label}\` reads synced data only. Remove --live. If the Store has no data for ${site}, run \`${next}\` first.`
     case 'partial': {
-      const { done, total } = route.reason
-      const head = `The Store has ${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} days for ${site}.`
+      const { done, total, windows } = route.reason
+      const head = [`The Store has ${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} days for ${site}.`, ...windows.map(windowGapLine)].join('\n')
       if (auth === 'none')
-        return `${head} Run \`${next}\` to connect Google, then \`${syncCommandFor(req.site ?? req.siteHint, [])}\` to sync the rest.`
+        return `${head}\nRun \`${next}\` to connect Google, then \`${syncCommandFor(req.site ?? req.siteHint, [])}\` to sync the rest.`
       const live = req.liveCapable ? ', or pass --live to ask Search Console directly' : ''
-      return `${head} Run \`${next}\` to sync the rest${live}.`
+      return `${head}\nRun \`${next}\` to sync the rest${live}.`
     }
   }
 }

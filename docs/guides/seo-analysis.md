@@ -54,7 +54,7 @@ gscdump analyze zero-click --site example.com --json
 gscdump analyze brand --site example.com --brand-terms 'acme,acme corp' --json
 ```
 
-Analyzer windows default to the last 28 days that end on the newest synced day.
+Analyzer windows default to the last 28 days that end on the newest synced day. If the current or comparison window holds a day that is not synced, the run stops and prints the `gscdump sync` command that fills it. Pass `--live` to read Google instead.
 Use `--period`, or `--start` and `--end`, for other ranges.
 `movers` and `decay` compare with the previous period by default. To compare other dates, pass both comparison flags:
 

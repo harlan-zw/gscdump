@@ -182,4 +182,28 @@ describe('dumpSites entity datasets', () => {
     const sites = JSON.parse(await fs.readFile(path.join(outDir, 'sites.json'), 'utf8'))
     expect(sites).toEqual({ sites: [{ siteUrl: SITE, siteId }] })
   })
+  it('lists exported Bing files in manifest.json with relative paths', async () => {
+    const store = createLocalStore({ dataDir })
+    const siteId = store.siteIdFor(SITE)
+    const bingFile = path.join(outDir, 'bing', 'example_com', 'traffic.json')
+
+    await dumpSites({
+      store,
+      targets: [{ site: SITE, siteId }],
+      outDir,
+      format: 'json',
+      bing: {
+        _tag: 'dumped',
+        sites: [{ siteUrl: 'https://example.com/', files: [{ dataset: 'traffic', path: bingFile, bytes: 42, rows: 3 }] }],
+        failures: [{ siteUrl: 'https://other.example/', error: 'quota' }],
+      },
+    })
+
+    const manifest = JSON.parse(await fs.readFile(path.join(outDir, 'manifest.json'), 'utf8'))
+    expect(manifest.bing).toEqual({
+      _tag: 'dumped',
+      sites: [{ siteUrl: 'https://example.com/', files: [{ dataset: 'traffic', path: 'bing/example_com/traffic.json', bytes: 42, rows: 3 }] }],
+      failures: [{ siteUrl: 'https://other.example/', error: 'quota' }],
+    })
+  })
 })

@@ -154,4 +154,33 @@ describe('dump output formats', () => {
       { dataset: 'queries', searchType: 'web', path: 'sc_domain_a_example/web/queries.csv', rows: 1 },
     ])
   })
+
+  it('keeps two Sites whose names sanitize identically in distinct files and manifest paths', async () => {
+    const store = createLocalStore({ dataDir })
+    const one = 'https://x.com/a-b'
+    const two = 'https://x.com/a_b'
+    const targets = [
+      { site: one, siteId: store.siteIdFor(one) },
+      { site: two, siteId: store.siteIdFor(two) },
+    ]
+    await store.engine.writeDay({ userId: store.userId, siteId: targets[0]!.siteId, table: 'pages', date: '2026-04-10', searchType: 'web' }, [
+      { url: '/one', date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 1 },
+    ])
+    await store.engine.writeDay({ userId: store.userId, siteId: targets[1]!.siteId, table: 'pages', date: '2026-04-10', searchType: 'web' }, [
+      { url: '/two', date: '2026-04-10', clicks: 2, impressions: 20, sum_position: 2 },
+    ])
+
+    const result = await dumpSites({ store, targets, outDir, format: 'parquet', tables: new Set(['pages']) })
+
+    const datasets = result.sites.flatMap(site => site.datasets)
+    expect(new Set(datasets.map(dataset => dataset.path)).size).toBe(2)
+    const rows = await duckdbRows(`SELECT site, url FROM read_parquet([${datasets.map(dataset => `'${dataset.path}'`).join(', ')}]) ORDER BY site, url`)
+    expect(rows).toEqual([
+      { site: one, url: '/one' },
+      { site: two, url: '/two' },
+    ])
+    const manifest = JSON.parse(await fs.readFile(path.join(outDir, 'manifest.json'), 'utf8'))
+    const paths = manifest.sites.flatMap((site: { datasets: Array<{ path: string }> }) => site.datasets.map((dataset: { path: string }) => dataset.path))
+    expect(new Set(paths).size).toBe(2)
+  })
 })

@@ -35,14 +35,14 @@ describe('gscdump mcp runtime', () => {
   let client: Client
   let fetchMock: ReturnType<typeof vi.fn>
 
-  async function connect(route: Route = () => undefined): Promise<void> {
+  async function connect(route: Route = () => undefined, environment: Record<string, string> = {}): Promise<void> {
     fetchMock = vi.fn(async (input: string | URL | Request, init: RequestInit = {}) => {
       const url = String(input instanceof Request ? input.url : input)
       return route(url, init)
         ?? (url.endsWith('/webmasters/v3/sites') ? Response.json(SITES) : Response.json({}))
     })
     vi.stubGlobal('fetch', fetchMock)
-    const runtime = createCliRuntime({ configDir, environment: {}, rawArgs: ['mcp'] })
+    const runtime = createCliRuntime({ configDir, environment, rawArgs: ['mcp'] })
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
     // Start outside any runtime context, as stdin events arrive in production.
     await startMcpServer(serverTransport, runtime)
@@ -81,6 +81,49 @@ describe('gscdump mcp runtime', () => {
     expect(JSON.parse(text(result))).toEqual([{ siteUrl: 'sc-domain:example.com', permissionLevel: 'siteOwner' }])
     const headers = new Headers(fetchMock.mock.calls[0]![1]?.headers)
     expect(headers.get('authorization')).toBe('Bearer token-from-config-dir')
+  })
+
+  it('falls back to saved tokens when the service-account pointer is broken', async () => {
+    await saveTokens('token-beside-broken-pointer')
+    await connect(undefined, { GOOGLE_APPLICATION_CREDENTIALS: path.join(configDir, 'missing-key.json') })
+
+    const result = await client.callTool({ name: 'list-sites', arguments: {} }) as CallToolResult
+
+    expect(result.isError, text(result)).not.toBe(true)
+    expect(JSON.parse(text(result))).toEqual([{ siteUrl: 'sc-domain:example.com', permissionLevel: 'siteOwner' }])
+    const headers = new Headers(fetchMock.mock.calls[0]![1]?.headers)
+    expect(headers.get('authorization')).toBe('Bearer token-beside-broken-pointer')
+  })
+
+  it('points a hosted 401 at GSCDUMP_API_KEY, not the local login flow', async () => {
+    await connect(
+      url => url.endsWith('/cli/gsc/sites')
+        ? Response.json({ error: { message: 'Invalid API key' } }, { status: 401 })
+        : undefined,
+      { GSCDUMP_API_KEY: 'gsd_user_test' },
+    )
+
+    const result = await client.callTool({ name: 'list-sites', arguments: {} }) as CallToolResult
+
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('GSCDUMP_API_KEY')
+    expect(text(result)).not.toContain('gscdump auth login')
+  })
+
+  it('points an expired BYOK access token at the MCP server configuration, not auth login', async () => {
+    await connect(
+      url => url.endsWith('/webmasters/v3/sites')
+        ? googleError(401, 'Request had invalid authentication credentials.')
+        : undefined,
+      { GSC_ACCESS_TOKEN: 'stale-token' },
+    )
+
+    const result = await client.callTool({ name: 'list-sites', arguments: {} }) as CallToolResult
+
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('GSC_ACCESS_TOKEN')
+    expect(text(result)).toContain('MCP server configuration')
+    expect(text(result)).not.toContain('gscdump auth login')
   })
 
   it('starts without authentication and returns the next command from a tool call', async () => {

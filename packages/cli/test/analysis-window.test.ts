@@ -100,6 +100,80 @@ describe('local --page filters', () => {
   })
 })
 
+describe('local sync coverage', () => {
+  const queryRows = (date: string) => [{ date, url: '/a', query: 'alpha', clicks: 2, impressions: 50, sum_position: 0 }]
+  const pageRows = (date: string) => [{ date, url: '/a', clicks: 2, impressions: 50, sum_position: 0 }]
+
+  it('stops when the current window has a gap and names the sync command', async () => {
+    const synced = days('2026-03-20', 28)
+    const gap = ['2026-03-05', '2026-03-06', '2026-03-07']
+    await seed('page_queries', synced.filter(date => !gap.includes(date)), queryRows)
+    // A failed day counts as a gap, the same as a day never synced.
+    const store = createLocalStore({ dataDir: join(directory, 'store') })
+    await store.engine.setSyncState({ userId: store.userId, siteId: store.siteIdFor(SITE), table: 'page_queries', date: '2026-03-06' }, 'failed')
+
+    expect(await cli('analyze', 'striking-distance', '--site', SITE)).toBe(1)
+
+    const message = stderr.join('\n')
+    expect(message).toContain('current window 2026-02-21 to 2026-03-20')
+    expect(message).toContain('page_queries misses 3 of 28 days')
+    expect(message).toContain(`gscdump sync --site example.com --start 2026-03-05 --end 2026-03-07 --tables page_queries`)
+    expect(message).toContain('--live')
+    expect(stdout.join('\n')).not.toContain('alpha')
+  })
+
+  it('stops when the comparison window is only partially synced', async () => {
+    // 29 days ending 2026-03-20: the 28-day window is fully synced, but its
+    // comparison window holds exactly one synced day (2026-02-20).
+    await seed('page_queries', days('2026-03-20', 29), queryRows)
+
+    expect(await cli('analyze', 'movers', '--site', SITE, '--json')).toBe(1)
+
+    const message = stderr.join('\n')
+    expect(message).toContain('comparison window 2026-01-24 to 2026-02-20')
+    expect(message).toContain('page_queries misses 27 of 28 days')
+    expect(message).toContain(`gscdump sync --site example.com --start 2026-01-24 --end 2026-02-19 --tables page_queries`)
+    expect(message).not.toContain('current window')
+    // --json prints the stop, never results.
+    expect(JSON.parse(stdout.join('\n'))).toMatchObject({ error: { code: 'STORE_RANGE_NOT_COVERED' } })
+  })
+
+  it('stops report movers on a comparison gap and names only the tables it misses', async () => {
+    // page_queries misses the comparison window; pages covers it fully.
+    await seed('page_queries', days('2026-03-20', 28), queryRows)
+    await seed('pages', days('2026-03-20', 56), pageRows)
+
+    expect(await cli('report', 'movers', '--site', SITE, '--period', '28d', '--json')).toBe(1)
+
+    const message = stderr.join('\n')
+    expect(message).toContain('comparison window 2026-01-24 to 2026-02-20: page_queries misses 28 of 28 days')
+    expect(message).toContain(`gscdump sync --site example.com --start 2026-01-24 --end 2026-02-20 --tables page_queries`)
+    expect(message).not.toContain('pages misses')
+    expect(JSON.parse(stdout.join('\n'))).toMatchObject({ error: { code: 'STORE_RANGE_NOT_COVERED' } })
+  })
+
+  it('runs an explicit range that the Store fully covers', async () => {
+    // Synced 2026-02-01 to 2026-03-20; the run reads 2026-03-01 to 2026-03-14
+    // and its comparison 2026-02-15 to 2026-02-28.
+    await seed('page_queries', days('2026-03-20', 48), queryRows)
+
+    await cli('analyze', 'movers', '--site', SITE, '--start', '2026-03-01', '--end', '2026-03-14', '--json')
+
+    expect(JSON.parse(stdout.join('\n')).results).toBeInstanceOf(Array)
+    expect(stderr.join('\n')).not.toContain('misses')
+  })
+
+  it('runs a default comparison window once both windows are synced', async () => {
+    await seed('page_queries', days('2026-03-20', 56), queryRows)
+    await seed('pages', days('2026-03-20', 56), pageRows)
+
+    await cli('report', 'movers', '--site', SITE, '--json')
+
+    expect(JSON.parse(stdout.join('\n')).window).toMatchObject({ start: '2026-03-14', end: '2026-03-20' })
+    expect(stderr.join('\n')).not.toContain('misses')
+  })
+})
+
 describe('report window flags', () => {
   it('treats --start/--end without --period as a custom window', async () => {
     await cli('report', 'opportunities', '--start', '2026-01-01', '--end', '2026-01-10', '--explain')

@@ -287,6 +287,21 @@ export async function openQuotaLedger(opts: { dataDir: string, now?: () => Date 
   let state = pruneLedger(await readLedgerState(file), now())
   // Changes since the last flush, merged into the file so parallel commands add up.
   let delta = emptyLedgerState()
+  // The heartbeat and the post-sync flush can overlap. Serialize them like
+  // sync-run's save queue, so each merge lands on the previous write and no
+  // delta is lost.
+  let flushes: Promise<void> = Promise.resolve()
+  const flush = (): Promise<void> => {
+    const next = flushes.then(async () => {
+      const onDisk = await readLedgerState(file)
+      state = pruneLedger(mergeLedger(onDisk, delta), now())
+      delta = emptyLedgerState()
+      await writeLedgerState(file, state)
+    })
+    // A failed flush must not poison later ones; the caller still sees the error.
+    flushes = next.catch(() => {})
+    return next
+  }
 
   return {
     reserve(api, site, n) {
@@ -307,12 +322,7 @@ export async function openQuotaLedger(opts: { dataDir: string, now?: () => Date 
     status(api, site) {
       return quotaStatus(state, { api, site, now: now() })
     },
-    async flush() {
-      const onDisk = await readLedgerState(file)
-      state = pruneLedger(mergeLedger(onDisk, delta), now())
-      delta = emptyLedgerState()
-      await writeLedgerState(file, state)
-    },
+    flush,
   }
 }
 
