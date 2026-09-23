@@ -113,11 +113,15 @@ gscdump dump --site sc-domain:example.com --out ./export
 
 # Export the pages table as CSV files
 gscdump dump --site sc-domain:example.com --tables pages --format csv --out ./export-csv
+
+# Export every Site to one SQLite file
+gscdump dump --all-sites --format sqlite --out ./export-sqlite
 ```
 
 `dump` exports the Google data in the Store: analytics tables, URL inspections, sitemaps, and Indexing API metadata.
 It also exports Bing data for matching sites when a Bing login exists. Pass `--no-bing` to skip it.
-Each dump writes `manifest.json` with every file size and the dates the Store is missing.
+Every row has `site` and `search_type` columns. The Store keeps every search type, so filter or group by `search_type` before you add rows together.
+Each dump writes `manifest.json` with every file size and how much of each dataset the Store holds so far. Daily sync fills the rest.
 Use `query --output` to write a filtered result to one file.
 
 ## Set defaults

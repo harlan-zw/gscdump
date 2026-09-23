@@ -56,14 +56,13 @@ gscdump mcp
 | `inspect <url...> [--file]` | URL inspection for one or more URLs; renders Indexing Evidence, rich results, and AMP, and saves each result to the Store |
 | `indexing` | Notify Google about URL changes (`submit`, `remove`, `status`, `batch`, `batch-status`, `quota`); supports `--retries`. `indexing urls --status not_indexed` lists hosted URL Inspection results |
 | `sync` | Sync GSC data, sitemaps, and URL Inspection results to the local Store; `--inspect-limit`, `--max-calls`, `--all-sites`, `--no-sitemaps`, `--no-inspections`, `--retry-failed`, `--dry-run` |
-| `query` | Run a search analytics query (Store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. |
-| `dump` | Export the Store, inspections, sitemaps, and Bing data to a directory, with a size per file (`--format parquet\|json\|ndjson\|csv`, `--tables`, `--all-sites`, `--no-bing`) |
+| `query` | Run a search analytics query (Store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. `--sql` runs DuckDB SQL over the Store views; `--schema` lists them. |
+| `dump` | Export the Store, inspections, sitemaps, and Bing data (`--format parquet\|csv\|json\|ndjson\|sqlite\|duckdb`, `--tables`, `--all-sites`, `--no-bing`). Every row has `site` and `search_type` |
 | `analyze <tool>` | Run an SEO Analyzer against the Store (`--live` for row-based against fresh API) |
 | `entities` | Read saved URL inspections and snapshot indexing metadata into the local entity store |
 | `store stats` | Show row/byte counts per table and on-disk footprint |
 | `store compact` | Compact older data into weekly, monthly, and quarterly tiers (`--dry-run`) |
 | `store gc` | Delete orphaned objects past the grace window (`--dry-run`) |
-| `store export` | Export the live store to a single `.duckdb` file |
 | `store rm-site` / `store reset` | Delete one Site's data or reset the Store; inspect `--help` before use |
 | `store rollups rebuild` | Rebuild post-sync rollup tables |
 | `report <id>` / `report list` | Run or list Reports; `--explain` previews a plan |
@@ -195,6 +194,48 @@ Dates must use `YYYY-MM-DD`, and `--start` cannot follow `--end`.
 gscdump query --live --site sc-domain:example.com \
   --dimensions page,query --format csv --output rows.csv
 ```
+
+### SQL over the Store
+
+`query --sql` runs DuckDB SQL over one view per Store table.
+Run `query --schema` to list the views, their columns, and their date ranges.
+
+```bash
+gscdump query --format json --sql "
+  SELECT p.page, SUM(q.clicks) AS clicks, gsc_position(q.sum_position, q.impressions) AS position
+  FROM pages p JOIN page_queries q USING (site, search_type, url, date)
+  WHERE p.search_type = 'web' AND p.date >= DATE '2026-08-01'
+  GROUP BY p.page ORDER BY clicks DESC LIMIT 20"
+```
+
+| Column | Meaning |
+| --- | --- |
+| `site` | The Site URL, such as `sc-domain:example.com` |
+| `search_type` | `web`, `image`, `video`, `news`, `discover`, or `googleNews` |
+| `url`, `page` | The page path. `page` is the same value as `url` |
+| `sum_position` | Zero-based position multiplied by impressions |
+
+- The Store keeps every search type. Filter or group by `search_type`, or a `SUM` adds web, image, and Discover rows together.
+- `gsc_position(sum_position, impressions)` returns the impression-weighted average position. Use it with `GROUP BY`.
+- The views cover every Site in the Store. `--site` and `--type` narrow them.
+- Dates return as `YYYY-MM-DD`. Integers return as numbers, and an integer past 2^53 returns as a string.
+- If the SQL names a table with no synced data, the CLI prints a warning.
+
+### Export formats
+
+`dump` reads only the Store. It never calls Google to fill a gap.
+Every exported row has `site` and `search_type` columns.
+
+| `--format` | Output |
+| --- | --- |
+| `parquet` (default) | `<site>/<search_type>/<table>.parquet` |
+| `csv`, `json`, `ndjson` | `<site>/<search_type>/<table>.<ext>`, plus a per-row `position` |
+| `sqlite` | One `gscdump.sqlite` file. Dates are `YYYY-MM-DD` text |
+| `duckdb` | One `gscdump.duckdb` file |
+
+Inspections, sitemaps, and Indexing API metadata go to `<site>/<dataset>.<ext>`, or to their own tables in a database file.
+`manifest.json` lists every dataset with its row count, and the same coverage that `sync --status` reports.
+`--format sqlite` needs Node.js 22.13 or later.
 
 ### Global flags
 

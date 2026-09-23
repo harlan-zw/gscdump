@@ -22,6 +22,9 @@ const TABLE_NEEDS: Record<TableName, { queries: boolean, dimensions: boolean }> 
   hourly_pages: { queries: false, dimensions: false },
 }
 
+/** URLs a sync inspects per run unless `--inspect-limit` says otherwise. */
+export const DEFAULT_INSPECT_LIMIT = 50
+
 /**
  * Days a plain `sync` fetches for a table with no history. It matches the
  * 28 day window of Search Console and of the Analyzers.

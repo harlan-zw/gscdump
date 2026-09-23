@@ -1,7 +1,6 @@
 import { defineCommand } from 'citty'
 import { storeCommandMeta } from '../command-meta'
 import { compactCommand } from './compact'
-import { exportCommand } from './export'
 import { gcCommand } from './gc'
 import { rollupsCommand } from './rollups'
 import { statsCommand } from './stats'
@@ -14,7 +13,6 @@ export const storeCommand = defineCommand({
     'stats': statsCommand,
     'compact': compactCommand,
     'gc': gcCommand,
-    'export': exportCommand,
     'rollups': rollupsCommand,
     'rm-site': rmSiteCommand,
     'reset': resetCommand,

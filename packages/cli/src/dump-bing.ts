@@ -3,6 +3,7 @@
 // optional, so a missing login is a skip and a failure is reported.
 
 import type { BingDumpSummary } from './bing-data'
+import type { DumpFormat } from './dump-writers'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { resolveAuthentication } from './auth-state'
@@ -51,14 +52,14 @@ function message(error: unknown): string {
 
 /**
  * Write Bing datasets under `<outDir>/bing/`. Bing files use JSON, NDJSON,
- * or CSV; a Parquet dump writes its Bing files as JSON.
+ * or CSV; a Parquet, SQLite, or DuckDB dump writes its Bing files as JSON.
  */
 export async function dumpBing(opts: {
   googleSites: readonly string[] | 'all'
   outDir: string
-  format: 'parquet' | 'json' | 'ndjson' | 'csv'
+  format: DumpFormat
 }): Promise<BingDumpStep> {
-  const options = parseBingDumpOptions({ format: opts.format === 'parquet' ? 'json' : opts.format })
+  const options = parseBingDumpOptions({ format: opts.format === 'csv' || opts.format === 'ndjson' ? opts.format : 'json' })
   const bingDir = path.join(opts.outDir, 'bing')
   const sites: Array<{ siteUrl: string, files: BingDumpFile[] }> = []
   const failures: Array<{ siteUrl: string, error: string }> = []

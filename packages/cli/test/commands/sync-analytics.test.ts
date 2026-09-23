@@ -611,7 +611,7 @@ describe('sync command (local analytics)', () => {
       format: 'json',
       tables: new Set(['inspections', 'sitemaps', 'sitemap_urls']),
     })
-    expect(Object.fromEntries(summary!.files.map(file => [file.dataset, file.rows]))).toEqual({ inspections: 2, sitemaps: 1, sitemap_urls: 3 })
+    expect(Object.fromEntries(summary!.datasets.map(dataset => [dataset.dataset, dataset.rows]))).toEqual({ inspections: 2, sitemaps: 1, sitemap_urls: 3 })
 
     // A second run finds nothing due: both URLs were just inspected.
     inspectSpy.mockClear()
@@ -703,7 +703,7 @@ describe('sync command (local analytics)', () => {
     expect(plan.plan.map((item: { table: string }) => item.table)).toEqual(['pages', 'pages'])
   })
 
-  it('lists a date that failed on Google quota as a failed date in the dump manifest', async () => {
+  it('counts a date that failed on Google quota as failed in the dump manifest', async () => {
     rawQuerySpy.mockImplementation((_siteUrl, params) => {
       if (params.startDate === '2026-04-02')
         return Promise.reject(new Error('[POST] 403 Search Analytics load quota exceeded'))
@@ -725,8 +725,8 @@ describe('sync command (local analytics)', () => {
     const outDir = path.join(tmpDir, 'out')
     await dumpSites({ store, targets: [{ site: SITE, siteId: store.siteIdFor(SITE) }], outDir, format: 'parquet', tables: new Set(['pages']) })
     const manifest = JSON.parse(await fs.readFile(path.join(outDir, 'manifest.json'), 'utf8'))
-    const pages = manifest.sites[0].coverage.find((entry: { table: string }) => entry.table === 'pages')
-    expect(pages.failedDates).toEqual([{ date: '2026-04-02', error: expect.stringContaining('quota exceeded') }])
+    const pages = manifest.sites[0].coverage.analytics.find((entry: { table: string }) => entry.table === 'pages')
+    expect(pages).toMatchObject({ from: '2026-04-01', coverage: { kind: 'partial', done: 2, failed: 1 } })
   })
 
   it('keeps Search Analytics requests from all tables under one in-flight cap', async () => {

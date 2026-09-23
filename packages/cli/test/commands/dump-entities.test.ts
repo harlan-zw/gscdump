@@ -4,6 +4,7 @@ import path from 'node:path'
 import { DuckDBInstance } from '@duckdb/node-api'
 import { createIndexingMetadataStore, createInspectionStore, createSitemapListStore, createSitemapStore } from '@gscdump/engine/entities'
 import { resetNodeDuckDB } from '@gscdump/engine/node'
+import { addDays, getLatestGscDate } from 'gscdump/dates'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { dumpSites } from '../../src/commands/dump'
 import { createLocalStore } from '../../src/local-store'
@@ -90,23 +91,27 @@ describe('dumpSites entity datasets', () => {
   it('writes each entity dataset as Parquet and reports every file with bytes and rows', async () => {
     const { store, target } = await seed({ entities: true })
 
-    const { sites: [summary] } = await dumpSites({ store, targets: [target], outDir, format: 'parquet' })
+    const { files, sites: [summary] } = await dumpSites({ store, targets: [target], outDir, format: 'parquet' })
 
-    const byDataset = new Map(summary!.files.map(file => [file.dataset, file]))
+    const byDataset = new Map(summary!.datasets.map(file => [file.dataset, file]))
     expect([...byDataset.keys()].sort()).toEqual(['indexing_metadata', 'inspection_history', 'inspections', 'pages', 'sitemap_urls', 'sitemaps'])
-    for (const file of summary!.files)
+    expect(summary!.datasets.map(dataset => path.relative(outDir, dataset.path)).sort()).toEqual([
+      'sc_domain_example_com/indexing_metadata.parquet',
+      'sc_domain_example_com/inspection_history.parquet',
+      'sc_domain_example_com/inspections.parquet',
+      'sc_domain_example_com/sitemap_urls.parquet',
+      'sc_domain_example_com/sitemaps.parquet',
+      'sc_domain_example_com/web/pages.parquet',
+    ])
+    for (const file of files)
       expect(file.bytes).toBe((await fs.stat(file.path)).size)
-    expect(summary!.totals).toEqual({
-      files: summary!.files.length,
-      bytes: summary!.files.reduce((sum, file) => sum + file.bytes, 0),
-      rows: 2 + 2 + 3 + 1 + 2 + 1,
-    })
+    expect(summary!.totals).toEqual({ datasets: 6, rows: 2 + 2 + 3 + 1 + 2 + 1 })
     expect(summary!.skipped).toEqual([])
 
     const latest = await readParquet(byDataset.get('inspections')!.path)
-    expect(latest.map(row => [row.url, row.index_status])).toEqual([
-      ['https://example.com/a', 'PASS'],
-      ['https://example.com/b', 'PASS'],
+    expect(latest.map(row => [row.site, row.url, row.index_status])).toEqual([
+      [SITE, 'https://example.com/a', 'PASS'],
+      [SITE, 'https://example.com/b', 'PASS'],
     ])
     expect(byDataset.get('inspections')!.rows).toBe(2)
     expect(await readParquet(byDataset.get('inspection_history')!.path)).toHaveLength(3)
@@ -127,8 +132,8 @@ describe('dumpSites entity datasets', () => {
 
     const { sites: [summary] } = await dumpSites({ store, targets: [target], outDir, format: 'ndjson', tables: new Set(['inspections', 'sitemaps']) })
 
-    expect(summary!.files.map(file => path.basename(file.path)).sort()).toEqual(['inspections.ndjson', 'sitemaps.ndjson'])
-    const inspections = summary!.files.find(file => file.dataset === 'inspections')!
+    expect(summary!.datasets.map(file => path.basename(file.path)).sort()).toEqual(['inspections.ndjson', 'sitemaps.ndjson'])
+    const inspections = summary!.datasets.find(file => file.dataset === 'inspections')!
     const lines = (await fs.readFile(inspections.path, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
     expect(lines.map(line => line.url)).toEqual(['https://example.com/a', 'https://example.com/b'])
     expect(inspections.rows).toBe(2)
@@ -139,38 +144,22 @@ describe('dumpSites entity datasets', () => {
 
     const { sites: [summary] } = await dumpSites({ store, targets: [target], outDir, format: 'csv' })
 
-    expect(summary!.files.map(file => file.dataset)).toEqual(['pages'])
+    expect(summary!.datasets.map(file => file.dataset)).toEqual(['pages'])
     expect(summary!.skipped.map(skip => skip.dataset).sort()).toEqual(['indexing_metadata', 'inspection_history', 'inspections', 'sitemap_urls', 'sitemaps'])
     expect(summary!.skipped.every(skip => skip.reason === 'empty')).toBe(true)
   })
 
-  it('keeps each search type in its own row-format file', async () => {
-    const store = createLocalStore({ dataDir })
-    const siteId = store.siteIdFor(SITE)
-    const row = { url: '/a', date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 0 }
-    await store.engine.writeDay({ userId: store.userId, siteId, table: 'pages', date: '2026-04-10' }, [row])
-    await store.engine.writeDay({ userId: store.userId, siteId, table: 'pages', date: '2026-04-10', searchType: 'discover' }, [{ ...row, clicks: 7 }])
-
-    const { sites: [summary] } = await dumpSites({ store, targets: [{ site: SITE, siteId }], outDir, format: 'json', tables: new Set(['pages']) })
-
-    const files = summary!.files.map(file => ({ file: path.relative(outDir, file.path), searchType: file.searchType, rows: file.rows }))
-    expect(files).toEqual([
-      { file: 'sc_domain_example_com/discover/pages.json', searchType: 'discover', rows: 1 },
-      { file: 'sc_domain_example_com/pages.json', searchType: 'web', rows: 1 },
-    ])
-    const discover = JSON.parse(await fs.readFile(path.join(outDir, files[0]!.file), 'utf8'))
-    expect(discover[0].clicks).toBe(7)
-  })
-
-  it('writes manifest.json with coverage gaps and sites.json with the site list', async () => {
+  it('writes manifest.json with Store coverage and sites.json with the site list', async () => {
     const store = createLocalStore({ dataDir })
     const siteId = store.siteIdFor(SITE)
     const scope = { userId: store.userId, siteId, table: 'pages' as const }
-    for (const date of ['2026-04-10', '2026-04-13']) {
+    const latest = getLatestGscDate()
+    const [first, failed] = [addDays(latest, -3), addDays(latest, -2)]
+    for (const date of [first, latest]) {
       await store.engine.writeDay({ ...scope, date }, [{ url: '/a', date, clicks: 1, impressions: 10, sum_position: 0 }])
       await store.engine.setSyncState({ ...scope, date }, 'done')
     }
-    await store.engine.setSyncState({ ...scope, date: '2026-04-11' }, 'failed', { error: 'quota exceeded' })
+    await store.engine.setSyncState({ ...scope, date: failed }, 'failed', { error: 'quota exceeded' })
 
     const result = await dumpSites({
       store,
@@ -182,15 +171,15 @@ describe('dumpSites entity datasets', () => {
 
     expect(result.metadataFiles.map(file => path.basename(file.path))).toEqual(['sites.json', 'manifest.json'])
     const manifest = JSON.parse(await fs.readFile(path.join(outDir, 'manifest.json'), 'utf8'))
-    expect(manifest.sites[0].coverage).toEqual([expect.objectContaining({
+    expect(manifest.sites[0].coverage.analytics).toEqual([{
       table: 'pages',
       searchType: 'web',
-      oldestDate: '2026-04-10',
-      newestDate: '2026-04-13',
-      missingDates: ['2026-04-12'],
-      failedDates: [{ date: '2026-04-11', error: 'quota exceeded' }],
-    })])
-    expect(manifest.sites[0].files[0].path).toMatch(/^u_local\//)
+      from: first,
+      to: latest,
+      coverage: { kind: 'partial', done: 2, total: 4, failed: 1, pending: 1 },
+    }])
+    expect(result.sites[0]!.coverage).toEqual(manifest.sites[0].coverage)
+    expect(manifest.sites[0].datasets[0].path).toBe('sc_domain_example_com/web/pages.parquet')
     const sites = JSON.parse(await fs.readFile(path.join(outDir, 'sites.json'), 'utf8'))
     expect(sites).toEqual({ sites: [{ siteUrl: SITE, permissionLevel: 'siteOwner' }] })
   })
