@@ -11,7 +11,7 @@ import { defineCommand } from 'citty'
 import { entitiesCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { INSPECTION_QPD_PER_PROPERTY, latestByUrl, toInspectionRecord } from '../inspection-record'
-import { loadInspectionHistory } from '../local-entities'
+import { loadInspectionHistory, recordInspections } from '../local-entities'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
@@ -105,9 +105,9 @@ const inspectSubCommand = defineCommand({
     if (urls.length === INSPECTION_QPD_PER_PROPERTY)
       logger.info(`Hit per-property daily inspection quota (${INSPECTION_QPD_PER_PROPERTY}); remaining URLs will be queued for tomorrow.`)
 
-    const inspector = createInspectionStore({ dataSource: store.dataSource })
     const tenant = { userId: store.userId, siteId: store.siteIdFor(siteUrl) }
-    const latest = latestByUrl(await loadInspectionHistory(store.dataSource, tenant))
+    const history = await loadInspectionHistory(store.dataSource, tenant)
+    const latest = latestByUrl(history)
 
     let completed = 0
     let failed = 0
@@ -136,7 +136,7 @@ const inspectSubCommand = defineCommand({
     if (!quiet)
       process.stdout.write('\n')
 
-    await inspector.appendHistory(tenant, records)
+    await recordInspections(store.dataSource, tenant, history, records)
 
     if (json) {
       console.log(JSON.stringify({

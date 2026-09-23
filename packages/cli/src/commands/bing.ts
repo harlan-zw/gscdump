@@ -149,7 +149,7 @@ export const bingCommand = defineCommand({
         'all-sites': { type: 'boolean', description: 'Dump every verified Bing site' },
         'out': { type: 'string', alias: 'o', default: './bing-export', description: 'Output directory, with one directory per site' },
         'format': { type: 'string', alias: 'F', default: 'json', description: 'File format: json, ndjson, csv' },
-        'datasets': { type: 'string', description: `Comma-separated datasets: ${BING_DATASETS.join(', ')}. Default: all except crawl-issues` },
+        'datasets': { type: 'string', description: `Comma-separated datasets: ${BING_DATASETS.join(', ')}. Default: all. Crawl issues have no dates, so --start, --end, and cloud mode leave them out` },
         'start': { type: 'string', description: 'Keep returned dates on or after YYYY-MM-DD' },
         'end': { type: 'string', description: 'Keep returned dates on or before YYYY-MM-DD' },
         ...OUTPUT_ARGS,
@@ -159,7 +159,7 @@ export const bingCommand = defineCommand({
         const options = parseBingDumpOptions(args)
         const authentication = await resolveAuthentication()
         if (authentication._tag === 'Cloud') {
-          if (options.datasets.includes('crawl-issues'))
+          if (options.datasetsExplicit && options.datasets.includes('crawl-issues'))
             throw new Error('Bing crawl issues require local authentication. Use --mode local.')
           if (options.start && options.end && Date.parse(options.end) - Date.parse(options.start) > 366 * 86_400_000)
             throw new Error('Hosted Bing exports support at most 366 days. Use a shorter --start and --end range.')

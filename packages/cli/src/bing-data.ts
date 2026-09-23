@@ -17,18 +17,23 @@ const dumpSchema = z.object({
   end: dateSchema.optional(),
 }).refine(value => !value.start || !value.end || value.start <= value.end, { message: '--start must precede --end' })
 
-export type BingDumpOptions = z.infer<typeof dumpSchema>
+export type BingDumpOptions = z.infer<typeof dumpSchema> & {
+  /** False when the caller took the default dataset list. */
+  datasetsExplicit: boolean
+}
 
+// Crawl issues have no dates, so the default list includes them only when no date range is set.
 export function parseBingDumpOptions(args: { format?: string, datasets?: string, start?: string, end?: string }): BingDumpOptions {
+  const defaults = args.start || args.end ? datedDatasets : [...BING_DATASETS]
   const parsed = dumpSchema.safeParse({
     ...args,
-    datasets: args.datasets ? [...new Set(args.datasets.split(',').map(value => value.trim()))] : datedDatasets,
+    datasets: args.datasets ? [...new Set(args.datasets.split(',').map(value => value.trim()))] : defaults,
   })
   if (!parsed.success)
     throw new Error(`Invalid Bing dump options: ${parsed.error.issues.map(issue => issue.message).join('; ')}.`)
   if (parsed.data.datasets.includes('crawl-issues') && (parsed.data.start || parsed.data.end))
     throw new Error('Bing crawl issues have no dates. Export them without --start or --end.')
-  return parsed.data
+  return { ...parsed.data, datasetsExplicit: Boolean(args.datasets) }
 }
 
 export function unwrapBing<T>(result: Result<T, BingProviderError | BingEvidenceError>): T {
