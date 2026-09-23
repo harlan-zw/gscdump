@@ -2,16 +2,18 @@
 // sitemap URL generations, and URL Inspection history. The engine owns the
 // storage layout; this module wires it to the CLI and shapes dump rows.
 
-import type { InspectionRecord, ParsedUrl, SitemapListDoc, SitemapListEntry } from '@gscdump/engine/entities'
+import type { InspectionParquetRow, InspectionRecord, ParsedUrl, SitemapListDoc, SitemapListEntry } from '@gscdump/engine/entities'
 import type { EncodeFlexOptions } from '@gscdump/engine/hyparquet'
 import type { googleSearchConsole } from 'gscdump/client'
 import type { ApiSitemap } from 'gscdump/sites'
 import type { DataSource, Row, TenantCtx } from './local-store'
 import {
+  createIndexingMetadataStore,
   createInspectionStore,
   createSitemapListStore,
   createSitemapReadStore,
   createSitemapStore,
+  hashUrl,
   parseSitemapFeedIdentity,
 } from '@gscdump/engine/entities'
 import { latestByUrl, planInspections, scheduleOf, toInspectionRecord } from './inspection-record'
@@ -35,6 +37,47 @@ export async function loadInspectionHistory(dataSource: DataSource, ctx: TenantC
       records.push(...shard.records)
   }
   return records
+}
+
+function toParquetRow(record: InspectionRecord): InspectionParquetRow {
+  const schedule = scheduleOf(record)
+  return {
+    urlHash: hashUrl(record.url),
+    url: record.url,
+    inspectedAt: record.inspectedAt,
+    indexStatus: record.indexStatus ?? null,
+    lastCrawlTime: record.lastCrawlTime ?? null,
+    googleCanonical: record.googleCanonical ?? null,
+    userCanonical: record.userCanonical ?? null,
+    coverageState: record.coverageState ?? null,
+    robotsTxtState: record.robotsTxtState ?? null,
+    indexingState: record.indexingState ?? null,
+    pageFetchState: record.pageFetchState ?? null,
+    mobileUsabilityVerdict: record.mobileUsabilityVerdict ?? null,
+    richResultsVerdict: record.richResultsVerdict ?? null,
+    scheduleNextAt: schedule.nextAt,
+    scheduleConsecutiveUnchanged: schedule.consecutiveUnchanged,
+    schedulePolicyVersion: schedule.policyVersion,
+  }
+}
+
+/**
+ * Append new inspection records to the history, then rewrite the
+ * latest-per-URL `index.parquet` so DuckDB readers see the newest state.
+ */
+export async function recordInspections(
+  dataSource: DataSource,
+  ctx: TenantCtx,
+  history: readonly InspectionRecord[],
+  records: readonly InspectionRecord[],
+): Promise<{ indexKey: string, indexRows: number } | undefined> {
+  if (records.length === 0)
+    return undefined
+  const inspector = createInspectionStore({ dataSource })
+  await inspector.appendHistory(ctx, records)
+  const latest = latestByUrl([...history, ...records])
+  const result = await inspector.materialize(ctx, [...latest.values()].map(toParquetRow))
+  return { indexKey: result.key, indexRows: result.rowCount }
 }
 
 /** True when `url` belongs to the Search Console property `siteUrl`. */
@@ -140,7 +183,7 @@ export async function syncInspections(deps: {
     deps.onProgress?.(done, plan.urls.length)
   })
 
-  await createInspectionStore({ dataSource: deps.dataSource }).appendHistory(deps.ctx, records)
+  await recordInspections(deps.dataSource, deps.ctx, history, records)
   return {
     _tag: 'inspected',
     inspected: records.length,
@@ -301,7 +344,7 @@ export async function loadSitemapGenerationUrls(dataSource: DataSource, ctx: Ten
 // Dump datasets
 // ---------------------------------------------------------------------------
 
-export const ENTITY_DATASETS = ['inspections', 'inspection_history', 'sitemaps', 'sitemap_urls'] as const
+export const ENTITY_DATASETS = ['inspections', 'inspection_history', 'sitemaps', 'sitemap_urls', 'indexing_metadata'] as const
 export type EntityDataset = typeof ENTITY_DATASETS[number]
 
 export function isEntityDataset(name: string): name is EntityDataset {
@@ -351,6 +394,13 @@ const SITEMAP_URL_COLUMNS: ColumnDefs = [
   { name: 'lastmod', type: 'VARCHAR', nullable: true },
   { name: 'first_seen_at', type: 'VARCHAR', nullable: false },
   { name: 'last_seen_at', type: 'VARCHAR', nullable: false },
+]
+
+const INDEXING_METADATA_COLUMNS: ColumnDefs = [
+  { name: 'url', type: 'VARCHAR', nullable: false },
+  { name: 'captured_at', type: 'VARCHAR', nullable: false },
+  { name: 'latest_update_at', type: 'VARCHAR', nullable: true },
+  { name: 'latest_remove_at', type: 'VARCHAR', nullable: true },
 ]
 
 function inspectionRow(record: InspectionRecord): Row {
@@ -434,5 +484,20 @@ export async function readEntityDatasets(
   }
   if (want.has('sitemap_urls'))
     out.push({ dataset: 'sitemap_urls', columns: SITEMAP_URL_COLUMNS, rows: await sitemapUrlRows(dataSource, ctx) })
+  if (want.has('indexing_metadata')) {
+    const index = await createIndexingMetadataStore({ dataSource }).loadIndex(ctx)
+    out.push({
+      dataset: 'indexing_metadata',
+      columns: INDEXING_METADATA_COLUMNS,
+      rows: Object.values(index.records)
+        .sort((a, b) => a.url.localeCompare(b.url))
+        .map(record => ({
+          url: record.url,
+          captured_at: record.capturedAt,
+          latest_update_at: record.latestUpdateAt ?? null,
+          latest_remove_at: record.latestRemoveAt ?? null,
+        })),
+    })
+  }
   return out
 }
