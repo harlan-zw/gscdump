@@ -6,9 +6,8 @@ import { parseAuthentication, resolveAuthentication } from '../auth-state'
 import { sitemapsCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { resolveCliEnvironment } from '../environment'
-import { gscErrorHandler } from '../error-handler'
 import { discoverLiveSitemap, loadSitemapUrls } from '../sitemap'
-import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS, parseIntegerOption } from '../utils'
+import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption } from '../utils'
 
 const HOSTED_ARGS = {
   'api-root': { type: 'string' as const, description: 'Hosted API root; defaults to saved cloud authentication or https://gscdump.com/api' },
@@ -44,7 +43,7 @@ const listCommand = defineCommand({
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const client = ctx.client!
 
-    const raw = await client.sitemaps.list(siteUrl).catch(gscErrorHandler)
+    const raw = await client.sitemaps.list(siteUrl)
 
     let sitemaps = raw.map(sm => ({
       path: sm.path!,
@@ -98,7 +97,7 @@ const getCommand = defineCommand({
     const ctx = await createCommandContext({ needsAuth: true })
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const client = ctx.client!
-    const sitemap = await fetchSitemap(client, siteUrl, args.url).catch(gscErrorHandler)
+    const sitemap = await fetchSitemap(client, siteUrl, args.url)
 
     if (json) {
       console.log(JSON.stringify(sitemap, null, 2))
@@ -139,7 +138,7 @@ const submitCommand = defineCommand({
     const ctx = await createCommandContext({ needsAuth: true })
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const client = ctx.client!
-    await client.sitemaps.submit(siteUrl, args.url).catch(gscErrorHandler)
+    await client.sitemaps.submit(siteUrl, args.url)
     if (json) {
       console.log(JSON.stringify({ siteUrl, feedpath: args.url, status: 'submitted' }, null, 2))
       return
@@ -163,7 +162,7 @@ const deleteCommand = defineCommand({
     const ctx = await createCommandContext({ needsAuth: true })
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
     const client = ctx.client!
-    await client.sitemaps.delete(siteUrl, args.url).catch(gscErrorHandler)
+    await client.sitemaps.delete(siteUrl, args.url)
     if (json) {
       console.log(JSON.stringify({ siteUrl, feedpath: args.url, status: 'deleted' }, null, 2))
       return
@@ -202,6 +201,9 @@ const discoverCommand = defineCommand({
   },
 })
 
+// The walk reads at most this many URLs, to bound memory on a runaway index.
+const SITEMAP_WALK_MAX_URLS = 1_000_000
+
 const urlsCommand = defineCommand({
   meta: {
     name: 'urls',
@@ -210,21 +212,23 @@ const urlsCommand = defineCommand({
   args: {
     ...OUTPUT_ARGS,
     'url': { type: 'positional', required: true, description: 'Sitemap URL (index files are followed)' },
-    'limit': { type: 'string', alias: 'l', description: 'Stop after N URLs across all nested sitemaps' },
+    'limit': { type: 'string', alias: 'l', description: 'Print at most N URLs across all nested sitemaps' },
     'max-depth': { type: 'string', description: 'Max sitemap-index nesting depth (default: 3)' },
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const limit = parseIntegerOption(args.limit, '--limit')
     const maxDepth = parseIntegerOption(args['max-depth'], '--max-depth', 0)
-    const result = await loadSitemapUrls(String(args.url), { maxUrls: limit, maxDepth })
-    if (result._tag === 'error') {
-      logger.error(`Sitemap fetch failed: ${result.message}`)
-      process.exit(1)
-    }
-    const { urls, complete, documentsRead } = result.value
+    // sitemapd's maxUrls stops before a whole document that would pass it, so
+    // --limit 10 on one 500-URL sitemap read nothing. Walk with a safety cap,
+    // then cut the output.
+    const result = await loadSitemapUrls(String(args.url), { maxUrls: SITEMAP_WALK_MAX_URLS, maxDepth })
+    if (result._tag === 'error')
+      throw new Error(`Sitemap fetch failed: ${result.message}`)
+    const { complete, documentsRead } = result.value
+    const urls = limit === undefined ? result.value.urls : result.value.urls.slice(0, limit)
     if (json) {
-      console.log(JSON.stringify({ sitemap: args.url, count: urls.length, complete, documentsRead, urls }, null, 2))
+      console.log(JSON.stringify({ sitemap: args.url, count: urls.length, found: result.value.urls.length, complete, documentsRead, urls }, null, 2))
       return
     }
     if (!complete)
@@ -402,8 +406,6 @@ export const sitemapsCommand = defineCommand({
   },
   // No subcommand: list sitemaps (requires --site).
   async run({ args }) {
-    if (!noSubcommandSelected('sitemaps', ['list', 'get', 'submit', 'delete', 'discover', 'urls', 'current', 'history', 'membership', 'lastmod', 'export']))
-      return
     await listCommand.run?.({ args, cmd: listCommand, rawArgs: [] } as any)
   },
 })

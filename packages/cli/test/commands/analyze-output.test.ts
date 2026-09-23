@@ -114,9 +114,14 @@ describe('analyzer human output', () => {
       { week: '2026-08-03', clicks: 100 },
       { week: '2026-08-10', clicks: 200 },
     ] }], meta: {} }
-    const text = await output('movers', ['--start', '2026-08-10', '--end', '2026-08-16', '--prev-start', '2026-08-03', '--prev-end', '2026-08-09'])
+    const periods = ['--start', '2026-08-10', '--end', '2026-08-16', '--prev-start', '2026-08-03', '--prev-end', '2026-08-09']
+    const text = await output('movers', periods)
     expect(text.match(/example(?!\.com)/g)).toHaveLength(1)
     expect(text).not.toContain('Weekly')
-    expect(JSON.parse(await output('movers', ['--json']))).toEqual(boundary.result)
+    expect(JSON.parse(await output('movers', [...periods, '--json']))).toEqual(boundary.result)
+  })
+
+  it('names the comparison flags when one is missing', async () => {
+    await expect(output('movers', ['--prev-start', '2026-08-03'])).rejects.toThrow('Pass --prev-start and --prev-end')
   })
 })

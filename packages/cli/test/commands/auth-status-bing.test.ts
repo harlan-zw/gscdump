@@ -50,7 +50,7 @@ describe('auth status when the Bing token refresh fails', () => {
     await seedExpiredOAuthCredentials()
     const warn = vi.spyOn(runtime.logger, 'warn')
 
-    const run = runWithCliRuntime(runtime, () => runCommand(authCommand, { rawArgs: ['status', '--json'] }))
+    const run = runWithCliRuntime(runtime, () => runCommand(authCommand.subCommands!.status, { rawArgs: ['--json'] }))
     await expect(run.then(() => 'resolved' as const)).resolves.toBe('resolved')
 
     const report = JSON.parse(output.at(-1)!)
@@ -60,8 +60,8 @@ describe('auth status when the Bing token refresh fails', () => {
     })
 
     output = []
-    await runWithCliRuntime(runtime, () => runCommand(authCommand, { rawArgs: ['status'] }))
+    await runWithCliRuntime(runtime, () => runCommand(authCommand.subCommands!.status, { rawArgs: [] }))
     expect(warn).toHaveBeenCalledWith('Bing credentials failed verification. Run `gscdump bing login` again.')
-    expect(warn).toHaveBeenCalledWith('Not authenticated')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Google is not connected'))
   })
 })

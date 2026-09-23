@@ -16,11 +16,13 @@ export {
   batchInspectUrls,
   batchInspectUrlsFlatSettled,
   canUseUrlInspection,
+  describeInspectionError,
   getIndexingEligibility,
   getNextCheckAfter,
   getNextCheckPriority,
   inspectUrl,
   inspectUrlFlat,
   MAX_FLAT_INSPECTION_BATCH_CONCURRENCY,
+  URL_INSPECTION_QUOTA,
 } from './api/inspection'
 export type { UrlInspectionResult } from './core/types'

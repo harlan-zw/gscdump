@@ -19,7 +19,7 @@ import { allTables } from '../local-store'
 import { DEFAULT_INSPECT_LIMIT } from '../sync-plan'
 import { isProcessAlive, readSyncRun, syncRunStatus } from '../sync-run'
 import { groupTableSources, siteUrlFor } from '../table-sources'
-import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseSearchType } from '../utils'
+import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseNameList, parseSearchType } from '../utils'
 
 const DEFAULT_OUT = './gscdump-export'
 
@@ -78,7 +78,7 @@ export const dumpCommand = defineCommand({
       process.exit(1)
     }
     const tablesFilter = args.tables
-      ? new Set(String(args.tables).split(',').map(t => t.trim()).filter(Boolean))
+      ? new Set<string>(parseNameList(args.tables, [...allTables(), ...ENTITY_DATASETS, 'bing'], '--tables'))
       : null
     const searchType = parseSearchType(args['search-type'])
     const ctx = await createCommandContext({ needsAuth: !args['all-sites'], needsStore: true })

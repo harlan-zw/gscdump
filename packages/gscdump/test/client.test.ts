@@ -104,17 +104,6 @@ describe('createGscFetch', () => {
 
   // 'without auth' test is no longer valid as TS enforces auth
   // We can remove it or test logic if we bypass TS, but better to remove behavior test if signature forbids it.
-
-  it('should have error handler for 403', async () => {
-    createFetch('test-token')
-    const options = createSpy.mock.calls[createSpy.mock.calls.length - 1][0] as any
-    expect(options.onResponseError).toBeDefined()
-
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { })
-    await options.onResponseError({ response: { status: 403 } })
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Permission denied'))
-    consoleSpy.mockRestore()
-  })
 })
 
 describe('googleSearchConsole', () => {

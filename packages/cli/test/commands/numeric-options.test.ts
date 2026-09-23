@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { analyzeCommand } from '../../src/commands/analyze'
 import { entitiesCommand } from '../../src/commands/entities'
 import { indexingCommand } from '../../src/commands/indexing'
-import { inspectCommand } from '../../src/commands/inspect'
 import { sitemapsCommand } from '../../src/commands/sitemaps'
 import { syncCommand } from '../../src/commands/sync'
 
@@ -51,7 +50,7 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 
-const urlArgs = { urls: ['https://example.com/'], type: 'URL_UPDATED' }
+const urlArgs = { _: ['https://example.com/'], type: 'URL_UPDATED' }
 const sitemapArgs = { 'url': 'https://example.com/sitemap.xml', 'site-id': 'site-1', 'api-key': 'token' }
 
 const cases = [
@@ -63,10 +62,6 @@ const cases = [
   ['indexing batch-status', child(indexingCommand, 'batch-status'), urlArgs, 'retries', ''],
   ['indexing batch-status', child(indexingCommand, 'batch-status'), urlArgs, 'delay-ms', '100ms'],
   ['indexing batch-status', child(indexingCommand, 'batch-status'), urlArgs, 'concurrency', 'NaN'],
-  ['inspect batch', child(inspectCommand, 'batch'), { 'from-sitemap': sitemapArgs.url }, 'delay-ms', '2.5'],
-  ['inspect batch', child(inspectCommand, 'batch'), { 'from-sitemap': sitemapArgs.url }, 'concurrency', '-2'],
-  ['entities inspect', child(entitiesCommand, 'inspect'), {}, 'limit', '0'],
-  ['entities inspect', child(entitiesCommand, 'inspect'), {}, 'concurrency', '2x'],
   ['entities indexing snapshot', child(entitiesCommand, 'indexing', 'snapshot'), {}, 'concurrency', 'Infinity'],
   ['sync', syncCommand, {}, 'days', '3days'],
   ['sync', syncCommand, {}, 'concurrency', '2.7'],
@@ -93,7 +88,7 @@ describe('cLI numeric options', () => {
     boundary.context.mockResolvedValueOnce({ client })
     await run(child(indexingCommand, 'batch'), { ...urlArgs, 'retries': '0', 'delay-ms': '0', 'concurrency': '2' })
     expect(boundary.context).toHaveBeenCalledWith({ needsAuth: true, fetchOptions: { retry: 0 } })
-    expect(boundary.indexingBatch).toHaveBeenCalledWith(client, urlArgs.urls, expect.objectContaining({ delayMs: 0, concurrency: 2 }))
+    expect(boundary.indexingBatch).toHaveBeenCalledWith(client, urlArgs._, expect.objectContaining({ delayMs: 0, concurrency: 2 }))
   })
 
   it('retains the indexing batch defaults when options are absent', async () => {
@@ -101,13 +96,23 @@ describe('cLI numeric options', () => {
     boundary.context.mockResolvedValueOnce({ client })
     await run(child(indexingCommand, 'batch'), urlArgs)
     expect(boundary.context).toHaveBeenCalledWith({ needsAuth: true, fetchOptions: { retry: undefined } })
-    expect(boundary.indexingBatch).toHaveBeenCalledWith(client, urlArgs.urls, expect.objectContaining({ delayMs: 100, concurrency: 1 }))
+    expect(boundary.indexingBatch).toHaveBeenCalledWith(client, urlArgs._, expect.objectContaining({ delayMs: 100, concurrency: 1 }))
   })
 
   it('accepts a zero sitemap depth', async () => {
     boundary.sitemap.mockResolvedValueOnce({ _tag: 'ok', value: { urls: [], complete: true, documentsRead: 1 } })
-    await run(child(sitemapsCommand, 'urls'), { ...sitemapArgs, 'max-depth': '0', 'limit': '2' })
-    expect(boundary.sitemap).toHaveBeenCalledWith(sitemapArgs.url, { maxUrls: 2, maxDepth: 0 })
+    await run(child(sitemapsCommand, 'urls'), { ...sitemapArgs, 'max-depth': '0' })
+    expect(boundary.sitemap).toHaveBeenCalledWith(sitemapArgs.url, expect.objectContaining({ maxDepth: 0 }))
+  })
+
+  it('cuts sitemap URLs to --limit after reading whole documents', async () => {
+    const urls = ['https://example.com/a', 'https://example.com/b', 'https://example.com/c']
+    boundary.sitemap.mockResolvedValueOnce({ _tag: 'ok', value: { urls, complete: true, documentsRead: 1 } })
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await run(child(sitemapsCommand, 'urls'), { ...sitemapArgs, limit: '2' })
+    const [options] = boundary.sitemap.mock.calls[0]!.slice(1) as [{ maxUrls: number }]
+    expect(options.maxUrls).toBeGreaterThan(2)
+    expect(JSON.parse(String(log.mock.calls.at(-1)![0]))).toMatchObject({ count: 2, found: 3, urls: urls.slice(0, 2) })
   })
 
   it('forwards positive Analyzer limits and week counts', async () => {

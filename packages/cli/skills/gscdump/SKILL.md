@@ -10,6 +10,8 @@ It keeps a local Parquet Store for Google rows. Every command has `--help`.
 For `query`, `-s` means `--site`, `-d` means `--dimensions`, and `-f` means `--format`.
 Use `--start` and `--end` for dates. `--site=SITE` also works.
 Use each option once, with either its short or long spelling.
+Put options after the subcommand name: `gscdump store stats --json`, not `gscdump store --json stats`.
+A failed command prints one `Error:` line to stderr and exits 1.
 Example: `gscdump query --site=SITE --start=DATE --end=DATE -d page -f json`.
 
 ## Start each task
@@ -29,6 +31,7 @@ Call the local data directory the Store in your answer.
 ## Authentication mode
 
 Check `gscdump auth status --json` before queries. Reuse the user's selected mode.
+In local mode, `googleAuthenticated: true` means Google accepted the credentials. When it is false, `googleError` says why.
 
 | Mode | Credentials | Query path |
 | --- | --- | --- |
@@ -174,12 +177,12 @@ Do not rewrite rows, estimate metrics, or add manually calculated totals.
 | `gscdump query` | Rows by page, query, date, country, or device |
 | `gscdump analyze <id>` | One Analyzer over the Store or live rows |
 | `gscdump report <id>` | A Report that composes several Analyzers |
-| `gscdump inspect <url>` | URL Inspection with Indexing Evidence |
+| `gscdump inspect <url...>` | URL Inspection with Indexing Evidence, saved to the Store |
 | `gscdump sitemaps` | List, submit, delete, and probe sitemaps |
 | `gscdump indexing` | Indexing API notifications and quota |
 | `gscdump dump` | Export Store tables, inspections, sitemaps, and Bing data as Parquet, CSV, JSON, NDJSON, SQLite, or DuckDB |
 | `gscdump store` | Store stats, compaction, garbage collection, resets |
-| `gscdump entities` | Snapshot URL inspections into the entity store |
+| `gscdump entities` | Read saved inspections; snapshot Indexing API metadata |
 | `gscdump config` | Defaults such as `defaultSite`, `dataDir`, `defaultLimit` |
 | `gscdump profile` | Separate credential and config directories |
 | `gscdump auth` | `status`, `login`, `logout`, `refresh` |
@@ -228,7 +231,7 @@ gscdump sync --site sc-domain:example.com --json
   reruns only failed dates. A plain sync also retries failed dates.
 - `--dry-run` prints the planned dates and the fewest calls without calling Google.
 - `--all-sites` syncs every verified Site, one after another.
-- Use the user's date range. The 90-day example does not authorize a wider sync.
+- Use the user's date range. If the user names a range, pass `--start` and `--end`, not `--full`.
 - Empty Store metadata is expected before the first sync. It does not prove zero traffic.
 
 ## Query rows
@@ -315,12 +318,14 @@ gscdump analyze striking-distance --site sc-domain:example.com --json
 ## Inspect and index
 
 ```sh
-gscdump inspect https://example.com/page --site sc-domain:example.com --json
-gscdump inspect batch --site sc-domain:example.com --file urls.txt --json
+gscdump inspect https://example.com/page https://example.com/other --site sc-domain:example.com --json
+gscdump inspect --site sc-domain:example.com --file urls.txt --json
 gscdump indexing quota --json
 ```
 
-Inspection spends Google's separate 2,000 requests per Site per day quota.
+Inspection spends Google's separate quota: 2,000 requests per day and 600 per minute for each property.
+`inspect` refuses more than 2,000 URLs in one run. It saves each result to the Store.
+On a quota error it stops and reports `remaining`. It exits 1 when any URL fails or remains.
 `indexing quota` describes Indexing API limits. It does not report remaining URL Inspection requests.
 Report the Indexing Evidence fields as Google returned them.
 

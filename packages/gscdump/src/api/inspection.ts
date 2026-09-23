@@ -1,5 +1,6 @@
 import type { CallOptions, GoogleSearchConsoleClient } from '../core/client'
 import type { UrlInspectionResult as GscUrlInspectionResult } from '../core/types'
+import { classifyError } from '../core/errors'
 import { hasGscReadScope } from '../core/scopes'
 import { runSequentialBatch } from './batch'
 
@@ -21,6 +22,22 @@ export async function inspectUrl(
   const inspection = response.inspectionResult
   const isIndexed = inspection?.indexStatusResult?.verdict === 'PASS'
   return { inspection, isIndexed }
+}
+
+/** Google's URL Inspection quota for each property. */
+export const URL_INSPECTION_QUOTA = { perDay: 2000, perMinute: 600 } as const
+
+/**
+ * Plain text for a failed URL Inspection call. The generic 403 and 429 texts
+ * do not say what URL Inspection needs, so these name the real limits.
+ */
+export function describeInspectionError(cause: unknown): string {
+  const error = classifyError(cause)
+  if (error.kind === 'rate-limited')
+    return `URL Inspection quota reached. Google allows ${URL_INSPECTION_QUOTA.perDay.toLocaleString('en-US')} inspections per day and ${URL_INSPECTION_QUOTA.perMinute} per minute for each property.`
+  if (error.kind === 'permission-denied')
+    return 'The URL is outside this property, or you are not a full user or owner of the property.'
+  return error.message
 }
 
 /**

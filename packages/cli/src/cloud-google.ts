@@ -4,6 +4,7 @@ import type { CloudAuthentication } from './auth-state'
 import { googleSearchConsole } from 'gscdump/client'
 import { ofetch } from 'ofetch'
 import { cloudRequest } from './auth-state'
+import { HOSTED_KEY_REJECTED } from './error-handler'
 
 /** Keep the Google query builder and pagination while routing supported requests through the hosted API. */
 export function createCloudGoogleClient(state: CloudAuthentication, fetchOptions?: FetchOptions): GoogleSearchConsoleClient {
@@ -71,8 +72,13 @@ export function createCloudGoogleClient(state: CloudAuthentication, fetchOptions
     return result === undefined ? new Response(null, { status: 204 }) : Response.json(result)
   }
   const fetchHosted = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => request(input, init).catch((error: unknown) => {
-    if (error && typeof error === 'object' && 'response' in error && error.response instanceof Response)
+    if (error && typeof error === 'object' && 'response' in error && error.response instanceof Response) {
+      // The Google client reports failures against the Google URL it asked
+      // for. A hosted 401 is about the gscdump.com key, so say that instead.
+      if (error.response.status === 401)
+        return Response.json({ error: { code: 401, message: HOSTED_KEY_REJECTED } }, { status: 401 })
       return error.response
+    }
     throw error
   })
   return googleSearchConsole('', {

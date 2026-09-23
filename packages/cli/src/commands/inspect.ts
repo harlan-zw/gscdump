@@ -1,12 +1,13 @@
+import type { InspectionRecord } from '@gscdump/engine/entities'
 import type { UrlInspectionResult } from 'gscdump/indexing'
-import process from 'node:process'
+import type { InspectOutcome } from '../inspect-urls'
 import { defineCommand } from 'citty'
-import { batchInspectUrls } from 'gscdump/indexing'
 import { inspectCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
-import { gscErrorHandler } from '../error-handler'
-import { loadSitemapUrls } from '../sitemap'
-import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, readUrlList } from '../utils'
+import { checkInspectionBatch, inspectUrls } from '../inspect-urls'
+import { latestByUrl, toInspectionRecord } from '../inspection-record'
+import { appendInspections, loadInspectionHistory, materializeInspectionIndex, urlInProperty } from '../local-entities'
+import { applyOutputMode, dim, logger, OUTPUT_ARGS, readUrlList, red } from '../utils'
 
 function verdictTone(verdict: string | null | undefined): string {
   if (verdict === 'PASS')
@@ -112,108 +113,104 @@ function printInspection(url: string, inspection: UrlInspectionResult | undefine
   console.log()
 }
 
-const batchCommand = defineCommand({
-  meta: {
-    name: 'batch',
-    description: 'Inspect many URLs from a file or stdin (one URL per line)',
-  },
-  args: {
-    ...OUTPUT_ARGS,
-    'site': { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
-    'urls': { type: 'positional', required: false, description: 'URLs (or use --file/--from-sitemap/stdin)' },
-    'file': { type: 'string', alias: 'f', description: 'File with URLs (one per line)' },
-    'from-sitemap': { type: 'string', description: 'Sitemap URL (or sitemap index) to pull URLs from' },
-    'delay-ms': { type: 'string', default: '200', description: 'Delay between requests' },
-    'concurrency': { type: 'string', alias: 'c', default: '1', description: 'Concurrent in-flight requests' },
-  },
-  async run({ args }) {
-    const { json, quiet } = applyOutputMode(args)
-    const delayMs = parseIntegerOption(args['delay-ms'], '--delay-ms', 0) ?? 200
-    const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? 1
-    let urls: string[]
-    if (args['from-sitemap']) {
-      const result = await loadSitemapUrls(String(args['from-sitemap']))
-      if (result._tag === 'error') {
-        logger.error(`Sitemap fetch failed: ${result.message}`)
-        process.exit(1)
-      }
-      if (!result.value.complete)
-        logger.warn('Sitemap walk was incomplete; inspecting only the URLs that were read')
-      urls = result.value.urls
-    }
-    else {
-      urls = await readUrlList(args)
-    }
-    if (urls.length === 0) {
-      logger.error('No URLs provided. Pass URLs as args, --file, --from-sitemap, or stdin.')
-      process.exit(1)
-    }
-    const ctx = await createCommandContext({ needsAuth: true })
-    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-    if (!quiet)
-      logger.info(`Inspecting ${urls.length} URLs ...`)
+function outcomeJson(outcome: InspectOutcome): Record<string, unknown> {
+  if (outcome.kind === 'failed')
+    return { url: outcome.url, status: 'failed', error: outcome.error }
+  const indexStatus = outcome.result?.indexStatusResult
+  return {
+    url: outcome.url,
+    status: 'inspected',
+    verdict: indexStatus?.verdict ?? null,
+    coverageState: indexStatus?.coverageState ?? null,
+    indexingState: indexStatus?.indexingState ?? null,
+    lastCrawlTime: indexStatus?.lastCrawlTime ?? null,
+    isIndexed: indexStatus?.verdict === 'PASS',
+    raw: outcome.result ?? null,
+  }
+}
 
-    const results = await batchInspectUrls(ctx.client!, siteUrl, urls, {
-      delayMs,
-      concurrency,
-      onProgress: quiet
-        ? undefined
-        : (r, i, total) => logger.info(`[${i + 1}/${total}] ${r.url} ${r.isIndexed ? 'PASS' : 'FAIL'}`),
-    }).catch(gscErrorHandler)
-
-    if (json) {
-      const flattened = results.map((r) => {
-        const indexStatus = r.inspection?.indexStatusResult
-        return {
-          url: r.url,
-          verdict: indexStatus?.verdict || null,
-          coverageState: indexStatus?.coverageState || null,
-          indexingState: indexStatus?.indexingState || null,
-          lastCrawlTime: indexStatus?.lastCrawlTime || null,
-          isIndexed: r.isIndexed,
-          raw: r.inspection,
-        }
-      })
-      console.log(JSON.stringify(flattened, null, 2))
-      return
-    }
-    const indexed = results.filter(r => r.isIndexed).length
-    if (!quiet)
-      logger.success(`Inspected ${results.length} URLs (${indexed} indexed, ${results.length - indexed} not)`)
-  },
-})
+function printOutcomeLine(outcome: InspectOutcome): void {
+  if (outcome.kind === 'failed') {
+    console.log(`  ${red('ERROR')}  ${outcome.url}  ${dim(outcome.error)}`)
+    return
+  }
+  const indexStatus = outcome.result?.indexStatusResult
+  console.log(`  ${colorVerdict(indexStatus?.verdict)}  ${outcome.url}  ${dim(indexStatus?.coverageState ?? '')}`)
+}
 
 export const inspectCommand = defineCommand({
   meta: inspectCommandMeta,
   args: {
     ...OUTPUT_ARGS,
     site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
-    url: { type: 'positional', required: true, description: 'URL to inspect' },
-  },
-  subCommands: {
-    batch: batchCommand,
+    urls: { type: 'positional', required: false, description: 'One or more URLs to inspect' },
+    file: { type: 'string', alias: 'f', description: 'File with URLs, one per line' },
   },
   async run({ args }) {
-    const { json } = applyOutputMode(args)
-    const ctx = await createCommandContext({ needsAuth: true })
-    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-    const result = await ctx.client!.inspect(siteUrl, args.url).catch(gscErrorHandler)
-    const inspection = result?.inspectionResult
-    const indexStatus = inspection?.indexStatusResult
+    const { json, quiet } = applyOutputMode(args)
+    const urls = [...new Set(await readUrlList({ file: args.file, positionals: args._ }))]
+    if (urls.length === 0)
+      throw new Error('No URLs given. Pass URLs as arguments, use --file, or pipe them on stdin.')
+    const batch = checkInspectionBatch(urls)
+    if (batch.kind === 'too-many')
+      throw new Error(batch.message)
 
+    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
+    const client = ctx.client!
+    const store = ctx.store!
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
+    const tenant = { userId: store.userId, siteId: store.siteIdFor(siteUrl) }
+    const history = await loadInspectionHistory(store.dataSource, tenant)
+    const latest = latestByUrl(history)
+    const saved: InspectionRecord[] = []
+
+    if (!quiet && urls.length > 1)
+      logger.info(`Inspecting ${urls.length} URLs ...`)
+    const run = await inspectUrls({
+      urls,
+      inspect: async url => (await client.inspect(siteUrl, url)).inspectionResult,
+      inProperty: url => urlInProperty(siteUrl, url),
+      onOutcome: async (outcome) => {
+        if (outcome.kind === 'inspected') {
+          // Save each result as it arrives: a quota stop keeps the finished work.
+          const record = toInspectionRecord({ url: outcome.url, result: outcome.result, inspectedAt: new Date(), previous: latest.get(outcome.url) })
+          await appendInspections(store.dataSource, tenant, [record])
+          saved.push(record)
+        }
+        if (!json && urls.length > 1)
+          printOutcomeLine(outcome)
+      },
+    })
+    if (saved.length > 0)
+      await materializeInspectionIndex(store.dataSource, tenant, [...history, ...saved])
+
+    const failed = run.outcomes.filter(outcome => outcome.kind === 'failed')
+    const remaining = run.stopped?.remaining ?? 0
     if (json) {
       console.log(JSON.stringify({
-        url: args.url,
-        verdict: indexStatus?.verdict || null,
-        coverageState: indexStatus?.coverageState || null,
-        indexingState: indexStatus?.indexingState || null,
-        lastCrawlTime: indexStatus?.lastCrawlTime || null,
-        isIndexed: indexStatus?.verdict === 'PASS',
-        raw: result,
+        site: siteUrl,
+        inspected: saved.length,
+        failed: failed.length,
+        remaining,
+        ...(run.stopped ? { stoppedReason: run.stopped.reason } : {}),
+        results: run.outcomes.map(outcomeJson),
       }, null, 2))
-      return
+    }
+    else if (urls.length === 1 && run.outcomes[0]?.kind === 'inspected') {
+      printInspection(run.outcomes[0].url, run.outcomes[0].result)
+    }
+    else if (urls.length === 1 && run.outcomes[0]?.kind === 'failed') {
+      throw new Error(run.outcomes[0].error)
     }
 
-    printInspection(args.url, inspection)
+    const summary = [`Inspected ${saved.length} of ${urls.length} URL${urls.length === 1 ? '' : 's'} and saved the results to the Store.`]
+    if (failed.length > 0)
+      summary.push(`${failed.length} failed.`)
+    if (run.stopped)
+      summary.push(`${remaining} remaining. ${run.stopped.reason} Run the command again after the quota resets.`)
+    if (failed.length > 0 || run.stopped)
+      throw new Error(summary.join(' '))
+    if (!quiet)
+      logger.success(summary[0])
   },
 })

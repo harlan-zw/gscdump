@@ -66,10 +66,11 @@ export const initCommand = defineCommand({
       alias: 'f',
       description: 'Force re-initialization',
     },
-    'no-store': {
+    'store': {
       type: 'boolean',
-      default: false,
-      description: 'Skip dataDir prompt (auth-only setup)',
+      default: true,
+      description: 'Ask where to keep the local Store',
+      negativeDescription: 'Skip the Store location prompt (authentication only)',
     },
     'mode': {
       type: 'string',
@@ -120,7 +121,7 @@ export const initCommand = defineCommand({
     const byok = resolveBYOK()
     if (byok) {
       // The credentials came from the environment, so nothing here needs a person.
-      const dataDir = args['no-store'] ? config.dataDir : config.dataDir ?? defaultDataDir()
+      const dataDir = args.store ? config.dataDir ?? defaultDataDir() : config.dataDir
       await saveConfig({ ...config, ...(dataDir ? { dataDir } : {}) })
       await saveAuthentication({ _tag: 'Local' })
       logger.success(`BYOK detected (${typeof byok === 'string' ? 'access-token' : 'refresh-token'}). Auth setup skipped.`)
@@ -193,7 +194,7 @@ export const initCommand = defineCommand({
     console.log('  \x1B[90mGoogle Search Console data extraction CLI\x1B[0m')
     console.log()
 
-    const dataDir = args['no-store'] ? undefined : await promptDataDir(config.dataDir)
+    const dataDir = args.store ? await promptDataDir(config.dataDir) : undefined
     await saveConfig({
       ...config,
       ...(dataDir ? { dataDir } : {}),
