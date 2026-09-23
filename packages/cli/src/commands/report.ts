@@ -4,13 +4,14 @@ import type { DefinedReport, ReportArgsSpec, ReportContext, ReportParams } from 
 import type { CommandDef } from 'citty'
 import type { TableName } from '../local-store'
 import type { WindowDefaults, WindowFlags } from '../window'
+import process from 'node:process'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { defaultReportRegistry, dryRunReport, runReport } from '@gscdump/analysis/report'
 import { DEFAULT_FETCH_BUDGET, MAX_FETCH_BUDGET } from '@gscdump/engine/analysis-types'
 import { defineCommand } from 'citty'
 import { getLatestGscDate } from 'gscdump/dates'
 import { unwrapResult } from 'gscdump/result'
-import { analyzerTables, resolveAnalysisSource } from '../analysis-local'
+import { analyzerReads, analyzerTables, resolveAnalysisSource } from '../analysis-local'
 import { reportCommandMeta } from '../command-meta'
 import { renderCliReport } from '../render/report'
 import { terminalOutputOptions } from '../render/terminal'
@@ -121,7 +122,7 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
         return
       }
 
-      const { source, siteUrl, anchorFor, comparisonWarning } = await resolveAnalysisSource({
+      const { source, siteUrl, anchorFor, checkCoverage } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
         json: !!args.json,
@@ -129,10 +130,11 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
       const tables = reportTables(report, params, flags)
       const anchor = await anchorFor(tables)
       const window = unwrapResult(parseWindowFlags(flags, reportDefaults(report), anchor), windowFlagErrorToException)
-      if (window.comparison) {
-        const missing = await comparisonWarning(tables, window.comparison.start, window.comparison.end)
-        if (missing)
-          logger.warn(missing)
+      const reads = report.plan(params, window).flatMap(step => analyzerReads({ ...step.params, type: step.type } as AnalysisParams))
+      const coverage = await checkCoverage(reads)
+      if (coverage.kind === 'gaps') {
+        logger.error(coverage.message)
+        process.exit(1)
       }
 
       const ctx: ReportContext = { site: siteUrl, window, params, registryVersion: defaultReportRegistry.version, ...(fetchBudget !== undefined ? { fetchBudget } : {}) }

@@ -1,11 +1,12 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { CommandDef } from 'citty'
+import process from 'node:process'
 import { MOVERS_SORT_METRICS } from '@gscdump/analysis'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { DEFAULT_FETCH_BUDGET, MAX_FETCH_BUDGET } from '@gscdump/engine/analysis-types'
 import { defineCommand } from 'citty'
 import { unwrapResult } from 'gscdump/result'
-import { analyzerTables, resolveAnalysisSource } from '../analysis-local'
+import { analyzerReads, analyzerTables, resolveAnalysisSource } from '../analysis-local'
 import { analyzeCommandMeta } from '../command-meta'
 import { coverageWarning, renderAnalysis } from '../render/analysis'
 import { terminalOutputOptions } from '../render/terminal'
@@ -126,7 +127,7 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       if (!args.json && !['table', 'json', 'csv'].includes(args.format ?? 'table'))
         throw new Error('Invalid --format. Use table, json, or csv.')
       const baseParams = buildParams(tool, args)
-      const { format, runAnalysis, siteUrl, anchorFor, comparisonWarning } = await resolveAnalysisSource({
+      const { format, runAnalysis, siteUrl, anchorFor, checkCoverage } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
         json: !!args.json,
@@ -135,10 +136,10 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       const tables = analyzerTables(baseParams)
       const anchor = await anchorFor(tables)
       const params = withWindow(tool, baseParams, args, anchor)
-      if (params.prevStartDate && params.prevEndDate) {
-        const missing = await comparisonWarning(tables, params.prevStartDate, params.prevEndDate)
-        if (missing)
-          logger.warn(missing)
+      const coverage = await checkCoverage(analyzerReads(params))
+      if (coverage.kind === 'gaps') {
+        logger.error(coverage.message)
+        process.exit(1)
       }
 
       logger.debug(`Running ${tool} analysis...`)

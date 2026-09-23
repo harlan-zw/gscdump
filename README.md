@@ -195,7 +195,7 @@ gscdump report brand --site sc-domain:example.com --brand-terms 'acme,acme corp'
 
 Use `--period` for `7d`, `28d`, `30d`, `90d`, `180d`, `365d`, `mtd`, `qtd`, `ytd`, `last-quarter`, or `custom`.
 Use `--vs` for `none`, `prev-period`, or `yoy`. `yoy` compares with the same weekdays 52 weeks earlier.
-Windows end on the newest complete date: the newest synced day in the Store, or three days ago (Pacific time) with `--live`.
+Windows end on the newest complete date: the newest synced day in the Store, or three days ago (Pacific time) with `--live`. If a local `analyze` or `report` window holds a day that is not synced, the run stops and prints the `gscdump sync` command that fills it.
 `--start` or `--end` without `--period` selects a custom window.
 Comparison overrides need both `--prev-start` and `--prev-end`.
 If a live fetch reaches its row budget, the output shows a partial-data warning. `--fetch-budget` raises the budget up to 100000 rows.

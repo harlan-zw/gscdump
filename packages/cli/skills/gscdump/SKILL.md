@@ -324,6 +324,10 @@ gscdump analyze striking-distance --site sc-domain:example.com --json
 - A `! Partial data` warning, or `meta.coverage.kind: "truncated"` in JSON,
   means a live fetch hit its budget. Say the result is partial, or rerun
   with a larger `--fetch-budget`.
+- Local `analyze` and `report` runs need every day of the current and
+  comparison windows synced. If a day is missing, failed or pending, the
+  run stops and prints the `gscdump sync --site ... --start ... --end ...
+  --tables ...` command that fills it. Run it, or pass `--live`.
 - SQL-only Analyzers need Store rows. `--live` runs row-based Analyzers
   against Google.
 - Results name candidates for review. They do not prove why traffic changed.
