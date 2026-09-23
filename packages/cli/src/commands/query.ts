@@ -9,10 +9,9 @@ import { collectSpans } from '@gscdump/engine/profile'
 import { defineCommand } from 'citty'
 import { daysAgoUtc as daysAgo } from 'gscdump/dates'
 import { and, between, contains, country, date as dateCol, device, eq, gsc, hour, notRegex, page, query as queryCol, regex, searchAppearance } from 'gscdump/query'
-import { decodeSiteId } from 'gscdump/tenant'
 import { queryCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
-import { createCommandContext } from '../context'
+import { createCommandContext, siteArg } from '../context'
 import { gscErrorHandler } from '../error-handler'
 import { allTables, inferTable, tableDimensions } from '../local-store'
 import { asRecord, columnsFor } from '../render/analysis'
@@ -166,7 +165,7 @@ export const queryCommand = defineCommand({
     'site': {
       type: 'string',
       alias: 's',
-      description: 'Site URL (e.g., sc-domain:example.com)',
+      description: 'Site, for example example.com',
     },
     'dimensions': {
       type: 'string',
@@ -310,24 +309,11 @@ export const queryCommand = defineCommand({
     }
 
     const ctx = await createCommandContext({
-      needsAuth: true,
+      needsAuth: Boolean(args.live),
       needsStore: !args.live,
       interactive: Boolean(args.interactive),
     })
-    const hint = args.site ? String(args.site) : ctx.config.defaultSite
-    // An exact local Site identifies files already owned by this Store.
-    // Only live reads and shorthand discovery need Google's Site listing.
-    // The Store's site ids keep letter case while Google canonicalises
-    // domain properties to lowercase, so trust the hint only when the
-    // Store holds data for that Site, verbatim or under the canonical
-    // case it synced with. Data-less hints fall back to Site discovery
-    // for accurate errors.
-    const exactHint = !args.live && hint && /^(?:sc-domain:\S+|https?:\/\/\S+)$/.test(hint)
-      ? hint
-      : undefined
-    const siteUrl = exactHint
-      ? (await resolveLocalSite(ctx.store!, exactHint)) ?? await ctx.resolveSite(hint)
-      : await ctx.resolveSite(hint)
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined, { scope: args.live ? 'account' : 'store' })
 
     if (args.live) {
       if (args.explain) {
@@ -539,31 +525,6 @@ async function promptFilters(args: Record<string, unknown>): Promise<void> {
   }
 }
 
-/**
- * Resolve an exact Site hint against the Sites this Store actually synced.
- * `encodeSiteId` keeps letter case while Google canonicalises domain
- * properties to lowercase, so a hint like `sc-domain:Example.com` must
- * resolve to the canonical `sc-domain:example.com` the data lives under.
- * Otherwise the query reports a false coverage gap whose own sync
- * suggestion can never converge. Returns the hint verbatim when the Store
- * knows it exactly, the single case-insensitive match when one exists, and
- * undefined when the Site is data-less so Site discovery can produce an
- * accurate error.
- */
-async function resolveLocalSite(store: LocalStore, hint: string): Promise<string | undefined> {
-  const siteIds = new Set(
-    (await store.engine.getWatermarks({ userId: store.userId }))
-      .map(w => w.siteId)
-      .filter((siteId): siteId is string => siteId !== undefined),
-  )
-  const exact = store.siteIdFor(hint)
-  if (siteIds.has(exact))
-    return hint
-  const lowered = exact.toLowerCase()
-  const matches = [...siteIds].filter(siteId => siteId.toLowerCase() === lowered)
-  return matches.length === 1 ? decodeSiteId(matches[0]!) : undefined
-}
-
 function buildLocalState(
   dimNames: string[],
   startDate: string,
@@ -633,7 +594,7 @@ async function assertRangeCovered(
   }
   if (missingDates.length === 0)
     return
-  const nextArgs = ['sync', '--site', siteUrl, '--start', startDate, '--end', endDate, '--tables', table, '--types', searchType ?? 'web', '--json']
+  const nextArgs = ['sync', '--site', siteArg(siteUrl), '--start', startDate, '--end', endDate, '--tables', table, '--types', searchType ?? 'web', '--json']
   const nextCommand = `gscdump ${nextArgs.map(value => /^[\w:./=-]+$/.test(value) ? value : `'${value.replaceAll('\'', '\'\\\'\'')}'`).join(' ')}`
   const message = !wm
     ? `No data synced for ${siteUrl} / ${table}.`
@@ -671,8 +632,8 @@ async function runRawSqlMode(opts: {
     process.exit(1)
   }
 
-  const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
-  const siteUrl = await ctx.resolveSite(opts.site)
+  const ctx = await createCommandContext({ needsStore: true })
+  const siteUrl = await ctx.resolveSite(opts.site, { scope: 'store' })
   const store = ctx.store!
 
   if (!opts.quiet)

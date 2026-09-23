@@ -21,7 +21,7 @@ const listCommand = defineCommand({
   },
   args: {
     ...OUTPUT_ARGS,
-    site: { type: 'string', alias: 's', description: 'Site URL (e.g., sc-domain:example.com or https://example.com/)' },
+    site: { type: 'string', alias: 's', description: 'Site, for example example.com' },
     pending: { type: 'boolean', default: false, description: 'Show only sitemaps with isPending=true' },
     errored: { type: 'boolean', default: false, description: 'Show only sitemaps with errors > 0' },
   },

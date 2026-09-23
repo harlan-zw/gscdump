@@ -8,6 +8,7 @@ import { dumpCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
 import { readParquetRows } from '../native-duckdb'
+import { readSiteMap, siteUrlForId } from '../store-sites'
 import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseSearchType, runWithConcurrency, toCSV } from '../utils'
 
 const DEFAULT_OUT = './gscdump-export'
@@ -20,7 +21,7 @@ export const dumpCommand = defineCommand({
     'site': {
       type: 'string',
       alias: 's',
-      description: 'Site URL (e.g., sc-domain:example.com); ignored with --all-sites',
+      description: 'Site, for example example.com; ignored with --all-sites',
     },
     'out': {
       type: 'string',
@@ -66,9 +67,10 @@ export const dumpCommand = defineCommand({
       ? new Set(String(args.tables).split(',').map(t => t.trim()).filter(Boolean))
       : null
     const searchType = parseSearchType(args['search-type'])
-    const ctx = await createCommandContext({ needsAuth: !args['all-sites'], needsStore: true })
+    const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
     const outDir = path.resolve(String(args.out))
+    const siteMap = await readSiteMap(store.dataDir, store.userId)
 
     let preloadedEntries = args['all-sites']
       ? await store.engine.listLive({
@@ -78,8 +80,8 @@ export const dumpCommand = defineCommand({
       : undefined
     const targets: Array<{ site: string, siteId: string }> = args['all-sites']
       ? [...new Set(preloadedEntries!.flatMap(entry => entry.siteId ? [entry.siteId] : []))]
-          .map(siteId => ({ site: siteId, siteId }))
-      : await ctx.resolveSite(args.site ? String(args.site) : undefined)
+          .map(siteId => ({ site: siteUrlForId(siteMap, siteId), siteId }))
+      : await ctx.resolveSite(args.site ? String(args.site) : undefined, { scope: 'store' })
           .then(site => [{ site, siteId: store.siteIdFor(site) }])
     if (targets.length === 0) {
       logger.warn('No sites with local data. Run `gscdump sync` first.')

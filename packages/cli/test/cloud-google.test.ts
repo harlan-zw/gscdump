@@ -19,6 +19,8 @@ const siteUrl = 'sc-domain:example.com'
 
 beforeEach(async () => {
   runtime = createCliRuntime({ configDir: await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-cloud-google-')), environment: {} })
+  // Keep Site resolution away from the developer's real Store.
+  await fs.writeFile(path.join(runtime.configDir, 'config.json'), JSON.stringify({ dataDir: path.join(runtime.configDir, 'data') }))
   requests = []
   await runWithCliRuntime(runtime, () => saveAuthentication({ _tag: 'Cloud', apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_test' }))
   vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => {

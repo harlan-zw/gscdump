@@ -65,7 +65,7 @@ export const exportCommand = defineCommand({
     },
     site: {
       type: 'string',
-      description: 'Limit export to a single site URL (omit to include all)',
+      description: 'Limit the export to one Site, for example example.com (omit to include all)',
     },
     force: {
       type: 'boolean',
@@ -78,7 +78,7 @@ export const exportCommand = defineCommand({
     const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
-    const siteId = args.site ? store.siteIdFor(args.site) : undefined
+    const siteId = args.site ? store.siteIdFor(await ctx.resolveSite(String(args.site), { scope: 'store' })) : undefined
 
     const result = await exportToDuckDB({
       engine: store.engine,

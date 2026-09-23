@@ -7,7 +7,14 @@ import { createGscMcpServer } from '../src/mcp/server'
 
 const { apiQuery } = vi.hoisted(() => ({ apiQuery: vi.fn() }))
 
-vi.mock('ofetch', () => ({ ofetch: { create: () => apiQuery } }))
+// The Site list answers separately, so `apiQuery` records only data requests.
+vi.mock('ofetch', () => ({
+  ofetch: {
+    create: () => (url: string, options: unknown) => String(url).endsWith('/webmasters/v3/sites')
+      ? Promise.resolve({ siteEntry: [{ siteUrl: 'sc-domain:example.com', permissionLevel: 'siteOwner' }] })
+      : apiQuery(url, options),
+  },
+}))
 
 const SITE = 'sc-domain:example.com'
 const WINDOW = { period: 'custom', start: '2026-08-01', end: '2026-08-28' }
@@ -91,6 +98,20 @@ describe('report discovery and execution over MCP', () => {
       summary: { magnitudeLabel: 'brand share 40.0% (40 brand vs 60 non-brand clicks)' },
       findings: [{ entity: { kind: 'query', value: 'Acme shoes' }, metrics: { clicks: 30 } }],
     })
+  })
+
+  it('resolves a Site written as a person writes it', async () => {
+    readResult<ReportResult>(await client.callTool({
+      name: 'run-report',
+      arguments: { siteUrl: 'https://www.Example.com/', id: 'movers', ...WINDOW },
+    }) as CallToolResult)
+    expect(apiQuery.mock.calls.map(([url]) => decodeURIComponent(String(url)))).toContainEqual(expect.stringContaining('/sites/sc-domain:example.com/searchAnalytics'))
+  })
+
+  it('rejects a Site the account cannot read before querying data', async () => {
+    const result = await client.callTool({ name: 'run-report', arguments: { siteUrl: 'example.org', id: 'movers', ...WINDOW } })
+    expect(result).toMatchObject({ isError: true, content: [{ type: 'text', text: expect.stringContaining('No Site matches "example.org"') }] })
+    expect(apiQuery).not.toHaveBeenCalled()
   })
 
   it('uses topic to select pre-publish findings', async () => {

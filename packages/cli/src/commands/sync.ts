@@ -12,6 +12,7 @@ import { SearchTypes } from 'gscdump/query'
 import { syncCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS } from '../local-store'
+import { formatSiteIdCollision, readSiteMap, recordStoreSite, siteUrlForId } from '../store-sites'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
 const DEFAULT_TABLES: TableName[] = ['pages', 'queries', 'countries', 'dates']
@@ -196,7 +197,7 @@ export const syncCommand = defineCommand({
     'site': {
       type: 'string',
       alias: 's',
-      description: 'Site URL',
+      description: 'Site, for example example.com',
     },
     'start': {
       type: 'string',
@@ -271,7 +272,8 @@ export const syncCommand = defineCommand({
     const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? DEFAULT_CONCURRENCY
     if (args.status) {
       const ctx = await createCommandContext()
-      await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, args.site ? String(args.site) : undefined, json)
+      const siteUrl = args.site ? await ctx.resolveSite(String(args.site), { scope: 'store' }) : undefined
+      await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, siteUrl, json)
       return
     }
 
@@ -292,6 +294,11 @@ export const syncCommand = defineCommand({
     }
 
     const store = ctx.store!
+    const claim = await recordStoreSite(store.dataDir, siteUrl, { userId: store.userId, write: !args['dry-run'] })
+    if (!claim.ok) {
+      logger.error(formatSiteIdCollision(claim.error))
+      process.exit(1)
+    }
     const siteId = store.siteIdFor(siteUrl)
     const scope = { userId: store.userId, siteId }
     const emptyTypesStore = createEmptyTypesStore({ dataSource: store.dataSource })
@@ -606,8 +613,11 @@ async function printSyncStatus(
 ): Promise<void> {
   const store = createLocalStore({ dataDir: resolved.dataDir })
   const siteId = siteFilter ? store.siteIdFor(siteFilter) : undefined
+  const siteMap = await readSiteMap(store.dataDir, store.userId)
+  const siteLabel = (id: string | undefined): string => id ? `@${siteUrlForId(siteMap, id)}` : ''
 
-  const watermarks = await store.engine.getWatermarks({ userId: store.userId, siteId })
+  const watermarks = (await store.engine.getWatermarks({ userId: store.userId, siteId }))
+    .map(w => ({ ...w, siteUrl: w.siteId ? siteUrlForId(siteMap, w.siteId) : null }))
   const states = await store.engine.getSyncStates({ userId: store.userId, siteId })
   const failed = states.filter(s => s.state === 'failed')
   const inflight = states.filter(s => s.state === 'inflight')
@@ -642,7 +652,7 @@ async function printSyncStatus(
     return (a.siteId ?? '').localeCompare(b.siteId ?? '')
   })
   for (const w of sorted) {
-    const scope = w.siteId ? `${w.table}@${w.siteId}` : w.table
+    const scope = `${w.table}${siteLabel(w.siteId)}`
     console.log(`  ${scope.padEnd(28)} \x1B[36m${w.oldestDateSynced}\x1B[0m → \x1B[36m${w.newestDateSynced}\x1B[0m  \x1B[90m(last ${formatAge(w.lastSyncAt)})\x1B[0m`)
   }
 
@@ -650,14 +660,14 @@ async function printSyncStatus(
     console.log()
     console.log(`  \x1B[33m${inflight.length} inflight:\x1B[0m`)
     for (const s of inflight)
-      console.log(`    ${s.table}${s.siteId ? `@${s.siteId}` : ''} ${s.date} (attempt ${s.attempts}, started ${formatAge(s.updatedAt)})`)
+      console.log(`    ${s.table}${siteLabel(s.siteId)} ${s.date} (attempt ${s.attempts}, started ${formatAge(s.updatedAt)})`)
   }
 
   if (failed.length > 0) {
     console.log()
     console.log(`  \x1B[31m${failed.length} failed:\x1B[0m`)
     for (const s of failed)
-      console.log(`    ${s.table}${s.siteId ? `@${s.siteId}` : ''} ${s.date}: ${s.error ?? 'unknown'}`)
+      console.log(`    ${s.table}${siteLabel(s.siteId)} ${s.date}: ${s.error ?? 'unknown'}`)
     console.log()
     console.log(`  Re-run \`gscdump sync --force\` to retry failed dates.`)
   }
