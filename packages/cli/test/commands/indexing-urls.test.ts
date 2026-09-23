@@ -189,7 +189,7 @@ describe('hosted indexing urls and sitemap commands', () => {
     ]
     await fs.writeFile(path.join(runtime.configDir, 'config.json'), JSON.stringify({ defaultSite: 'two.test' }))
 
-    await expect(run(['sitemaps', 'current', 's_01'])).rejects.toThrow('process.exit(1)')
+    expect(await run(['sitemaps', 'current', 's_01'])).toBe(1)
 
     expect(stderr).toContain('`gscdump sitemaps current` no longer accepts a positional Site ID. Pass --site instead.')
     expect(requests).toEqual([])
