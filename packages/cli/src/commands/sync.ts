@@ -5,6 +5,7 @@ import type { InspectionSyncResult, SitemapSyncResult } from '../local-entities'
 import type { GscApiRow, LocalStore, Row, TableName, WriteCtx } from '../local-store'
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
+import { runGscSearchAppearanceContextSlice, runGscSyncSlice } from '@gscdump/engine-gsc-api'
 import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { createRowAccumulator } from '@gscdump/engine/ingest'
 import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
@@ -17,11 +18,22 @@ import { INSPECTION_QPD_PER_PROPERTY } from '../inspection-record'
 import { loadSitemapGenerationUrls, resolvePagePaths, syncInspections, syncSitemaps } from '../local-entities'
 import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS } from '../local-store'
 import { loadSitemapUrls } from '../sitemap'
+import { datesForJob, FULL_HISTORY_DAYS, planSyncJobs } from '../sync-plan'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
-const DEFAULT_TABLES: TableName[] = ['pages', 'queries', 'countries', 'dates']
-const DEFAULT_TYPES: readonly SearchType[] = ['web']
 const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
+// Every table and every search type. Stored empty-type markers skip types
+// with no data, and capability rules skip pairs Google cannot answer.
+const DEFAULT_TABLES: readonly TableName[] = allTables()
+const DEFAULT_TYPES: readonly SearchType[] = ALL_SEARCH_TYPES
+const GSC_ROW_LIMIT = 25_000
+const MAX_SLICE_ROWS = 5_000_000
+const SLICE_TABLES = ['search_appearance', 'search_appearance_pages', 'search_appearance_queries', 'search_appearance_page_queries', 'hourly_pages'] as const
+type SliceTable = typeof SLICE_TABLES[number]
+
+function isSliceTable(table: TableName): table is SliceTable {
+  return (SLICE_TABLES as readonly string[]).includes(table)
+}
 const DEFAULT_PENDING_DAYS = 3
 const DEFAULT_CONCURRENCY = 8
 // 50 calls at 4 in flight add about 15 seconds to a daily sync. At that
@@ -173,6 +185,8 @@ async function runOneDate(
   dims: string[],
   date: string,
 ): Promise<{ kind: 'ok', rows: number }> {
+  if (isSliceTable(table))
+    return runSliceDate(store, client, siteUrl, table, searchType, date)
   const apiRows = await fetchDateRows(client, siteUrl, searchType, dims, date)
   let rows: Row[] = []
   if (table === 'dates') {
@@ -189,7 +203,66 @@ async function runOneDate(
     accumulator.push(table, apiRows)
     rows = accumulator.drain().get(table)?.get(date) ?? []
   }
+  return writeDayRows(store, siteUrl, table, searchType, date, rows)
+}
 
+// Search appearance and hourly tables need Google's own query shapes, so
+// they go through the engine's slice runners instead of `fetchDateRows`.
+async function runSliceDate(
+  store: LocalStore,
+  client: ReturnType<typeof googleSearchConsole>,
+  siteUrl: string,
+  table: SliceTable,
+  searchType: SearchType,
+  date: string,
+): Promise<{ kind: 'ok', rows: number }> {
+  const base = { client, siteUrl, startDate: date, endDate: date, searchType, rowLimit: GSC_ROW_LIMIT, cpuBudgetMs: Infinity }
+  const drainDay = (accumulator: ReturnType<typeof createRowAccumulator>): Row[] => {
+    if (accumulator.overflowed)
+      throw new Error(`${table} ${date}: more rows than one sync can hold`)
+    return accumulator.drain().get(table)?.get(date) ?? []
+  }
+  let rows: Row[]
+  if (table === 'search_appearance' || table === 'hourly_pages') {
+    // GSC groups `searchAppearance` only on its own, so the day comes from the query range.
+    const accumulator = createRowAccumulator({ maxRows: MAX_SLICE_ROWS, date })
+    const result = await runGscSyncSlice({ ...base, table, onBatch: async (batch) => {
+      accumulator.push(table, batch)
+    } })
+    if (result.hasMore)
+      throw new Error(`${table} ${date}: Google stopped before the last page`)
+    rows = drainDay(accumulator)
+  }
+  else {
+    // Discover each appearance, then fetch its rows with a filter on it.
+    const byAppearance = new Map<string, ReturnType<typeof createRowAccumulator>>()
+    const result = await runGscSearchAppearanceContextSlice({
+      ...base,
+      table,
+      onContextBatch: async ({ searchAppearance, rows: batch }) => {
+        let accumulator = byAppearance.get(searchAppearance)
+        if (!accumulator) {
+          accumulator = createRowAccumulator({ maxRows: MAX_SLICE_ROWS, searchAppearance })
+          byAppearance.set(searchAppearance, accumulator)
+        }
+        accumulator.push(table, batch)
+      },
+    })
+    if (result.hasMore)
+      throw new Error(`${table} ${date}: Google stopped before the last page`)
+    rows = [...byAppearance.values()].flatMap(drainDay)
+  }
+  return writeDayRows(store, siteUrl, table, searchType, date, rows)
+}
+
+async function writeDayRows(
+  store: LocalStore,
+  siteUrl: string,
+  table: TableName,
+  searchType: SearchType,
+  date: string,
+  rows: Row[],
+): Promise<{ kind: 'ok', rows: number }> {
   const writeCtx: WriteCtx = {
     userId: store.userId,
     siteId: store.siteIdFor(siteUrl),
@@ -259,7 +332,7 @@ export const syncCommand = defineCommand({
     },
     'full': {
       type: 'boolean',
-      description: 'Backfill up to 450 days of available Search Console data',
+      description: `Backfill up to ${FULL_HISTORY_DAYS} days, all the Search Console data Google keeps`,
     },
     ...OUTPUT_ARGS,
     'force': {
@@ -363,7 +436,7 @@ export const syncCommand = defineCommand({
       startDate = String(args.start)
     }
     else if (args.full) {
-      startDate = daysAgo(450)
+      startDate = daysAgo(FULL_HISTORY_DAYS)
     }
     else if (days !== undefined) {
       startDate = daysAgo(days + DEFAULT_PENDING_DAYS - 1)
@@ -402,6 +475,12 @@ export const syncCommand = defineCommand({
       return
     }
 
+    const today = new Date().toISOString().slice(0, 10)
+    const { jobs, unsupported } = planSyncJobs(tables, types)
+    if (unsupported.length > 0 && !quiet && (args.tables || args.types)) {
+      logger.info(`Skipping ${unsupported.map(job => job.label).join(', ')}: Google has no such breakdown for that search type.`)
+    }
+
     // --retry-failed shrinks the date list to exactly the dates currently in
     // `failed` state for the requested (table, type) jobs. Force-mode is
     // implied; the loop will re-run those dates and overwrite their state.
@@ -435,11 +514,9 @@ export const syncCommand = defineCommand({
 
     if (args['dry-run']) {
       const plan: Array<{ table: string, searchType: string, date: string }> = []
-      for (const table of tables) {
-        for (const type of types) {
-          for (const date of dates)
-            plan.push({ table, searchType: type, date })
-        }
+      for (const job of jobs) {
+        for (const date of datesForJob(job.table, dates, today))
+          plan.push({ table: job.table, searchType: job.type, date })
       }
       if (json) {
         console.log(JSON.stringify({
@@ -474,14 +551,10 @@ export const syncCommand = defineCommand({
     // Build the (table, searchType) work list. Each pair is an independent
     // sync stream — runs in parallel by default, sequentially with
     // --serial-tables for predictable ordering / debug.
-    const jobs: Array<{ table: TableName, type: SearchType, label: string }> = []
-    for (const table of tables) {
-      for (const type of types) {
-        const label = type === 'web' ? table : `${table}/${type}`
-        jobs.push({ table, type, label })
-      }
-    }
-    const progress = createProgressTracker(dates.length * jobs.length, quiet)
+    const progress = createProgressTracker(
+      jobs.reduce((sum, job) => sum + datesForJob(job.table, dates, today).length, 0),
+      quiet,
+    )
 
     if (serialTables) {
       for (const job of jobs) {
@@ -490,7 +563,7 @@ export const syncCommand = defineCommand({
           siteUrl,
           job.table,
           job.type,
-          dates,
+          datesForJob(job.table, dates, today),
           client,
           concurrency,
           args.force || forceTypes,
@@ -505,7 +578,7 @@ export const syncCommand = defineCommand({
           siteUrl,
           job.table,
           job.type,
-          dates,
+          datesForJob(job.table, dates, today),
           client,
           concurrency,
           args.force || forceTypes,
