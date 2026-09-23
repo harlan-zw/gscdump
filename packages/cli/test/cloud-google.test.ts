@@ -142,12 +142,15 @@ it('uses saved cloud authentication for hosted sitemap commands', async () => {
     generation: null,
     meta: { siteUrl, gscPropertyUrl: siteUrl, syncStatus: 'synced', sitemapScope: { excludedCount: 0, duplicateCount: 0 } },
   }
-  vi.mocked(fetch).mockResolvedValue(Response.json({ data, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } }))
+  vi.mocked(fetch).mockImplementation(async (url: string | URL | Request) => String(url).endsWith('/cli/me')
+    ? Response.json({ user: { publicId: 'u_01', email: 'user@example.com' }, sites: [{ siteId: 's_01', siteUrl }] })
+    : Response.json({ data, meta: { requestId: 'req_01', surface: 'partner', version: '1.0' } }))
   const output = vi.spyOn(console, 'log').mockImplementation(() => {})
   const command = sitemapsCommand.subCommands!.current
-  await runWithCliRuntime(runtime, () => command.run!({ args: { 'site-id': 's_01', 'json': true }, rawArgs: [], cmd: command }))
+  await runWithCliRuntime(runtime, () => command.run!({ args: { site: siteUrl, json: true }, rawArgs: [], cmd: command }))
   expect(JSON.parse(output.mock.calls[0][0])).toEqual(data)
-  const [url, options] = vi.mocked(fetch).mock.calls[0]
+  expect(String(vi.mocked(fetch).mock.calls[0][0])).toBe('https://gscdump.com/api/cli/me')
+  const [url, options] = vi.mocked(fetch).mock.calls[1]
   expect(String(url)).toBe('https://gscdump.com/api/partner/v1/sites/s_01/sitemaps')
   expect(new Headers(options?.headers).get('authorization')).toBe('Bearer gsd_user_test')
 })
