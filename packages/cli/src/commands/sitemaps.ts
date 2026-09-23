@@ -1,30 +1,17 @@
 import process from 'node:process'
-import { createGscdumpV1Client } from '@gscdump/sdk/v1'
 import { defineCommand } from 'citty'
 import { fetchSitemap } from 'gscdump/sites'
-import { parseAuthentication, resolveAuthentication } from '../auth-state'
 import { sitemapsCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
-import { resolveCliEnvironment } from '../environment'
 import { gscErrorHandler } from '../error-handler'
+import { HOSTED_ARGS, resolveHostedSite } from '../hosted-site'
 import { discoverLiveSitemap, loadSitemapUrls } from '../sitemap'
 import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS, parseIntegerOption } from '../utils'
 
-const HOSTED_ARGS = {
-  'api-root': { type: 'string' as const, description: 'Hosted API root; defaults to saved cloud authentication or https://gscdump.com/api' },
-  'api-key': { type: 'string' as const, description: 'Hosted API key; defaults to GSCDUMP_API_KEY' },
-}
+const HOSTED_SITEMAP_ALTERNATIVE = 'read a live sitemap with `gscdump sitemaps urls <sitemap-url>`'
 
-async function hostedClient(args: Record<string, unknown>): Promise<ReturnType<typeof createGscdumpV1Client>> {
-  const environment = resolveCliEnvironment().values
-  const authentication = args['api-key']
-    ? parseAuthentication({ _tag: 'Cloud', apiKey: args['api-key'], apiRoot: String(args['api-root'] || environment.GSCDUMP_API_ROOT || 'https://gscdump.com/api') })
-    : await resolveAuthentication()
-  if (authentication._tag !== 'Cloud')
-    throw new Error('Hosted sitemap reads require cloud authentication. Run `gscdump auth login --mode cloud` or supply --api-key.')
-  if (args['api-root'] && String(args['api-root']).replace(/\/+$/, '') !== authentication.apiRoot)
-    throw new Error('The API root changed. Supply --api-key explicitly for the new API root.')
-  return createGscdumpV1Client({ apiRoot: authentication.apiRoot, credential: authentication.apiKey })
+function hostedSitemapSite(args: Record<string, unknown>, name: string): ReturnType<typeof resolveHostedSite> {
+  return resolveHostedSite(args, { name: `sitemaps ${name}`, localAlternative: HOSTED_SITEMAP_ALTERNATIVE })
 }
 
 const listCommand = defineCommand({
@@ -237,17 +224,17 @@ const urlsCommand = defineCommand({
 const currentCommand = defineCommand({
   meta: {
     name: 'current',
-    description: 'Read the hosted canonical sitemap generation and feed list',
+    description: 'Read the canonical sitemap generation and feed list (hosted)',
   },
   args: {
     ...OUTPUT_ARGS,
     ...HOSTED_ARGS,
-    'site-id': { type: 'positional', required: true, description: 'Hosted gscdump site id' },
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
-    const result = await (await hostedClient(args)).getSiteSitemaps({
-      params: { siteId: String(args['site-id']) },
+    const { client, site } = await hostedSitemapSite(args, 'current')
+    const result = await client.getSiteSitemaps({
+      params: { siteId: site.siteId },
     })
     if (json) {
       console.log(JSON.stringify(result.data, null, 2))
@@ -263,19 +250,19 @@ const currentCommand = defineCommand({
 const historyCommand = defineCommand({
   meta: {
     name: 'history',
-    description: 'Read hosted canonical sitemap membership and lastmod changes',
+    description: 'Read canonical sitemap membership and lastmod changes (hosted)',
   },
   args: {
     ...OUTPUT_ARGS,
     ...HOSTED_ARGS,
-    'site-id': { type: 'positional', required: true, description: 'Hosted gscdump site id' },
-    'days': { type: 'string', description: 'History window in days' },
+    days: { type: 'string', description: 'History window in days' },
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const days = parseIntegerOption(args.days, '--days')
-    const result = await (await hostedClient(args)).getSiteSitemapChanges({
-      params: { siteId: String(args['site-id']) },
+    const { client, site } = await hostedSitemapSite(args, 'history')
+    const result = await client.getSiteSitemapChanges({
+      params: { siteId: site.siteId },
       query: { ...(days ? { days } : {}) },
     })
     console.log(JSON.stringify(result.data, null, json ? 2 : 0))
@@ -285,20 +272,20 @@ const historyCommand = defineCommand({
 const membershipCommand = defineCommand({
   meta: {
     name: 'membership',
-    description: 'Query exact hosted membership evidence for comma-separated URLs',
+    description: 'Query exact sitemap membership evidence for comma-separated URLs (hosted)',
   },
   args: {
     ...OUTPUT_ARGS,
     ...HOSTED_ARGS,
-    'site-id': { type: 'positional', required: true, description: 'Hosted gscdump site id' },
-    'urls': { type: 'string', required: true, description: 'Comma-separated exact URLs' },
-    'generation': { type: 'string', description: 'Pin the query to a generation id' },
+    urls: { type: 'string', required: true, description: 'Comma-separated exact URLs' },
+    generation: { type: 'string', description: 'Pin the query to a generation id' },
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const urls = String(args.urls).split(',').map(url => url.trim()).filter(Boolean)
-    const result = await (await hostedClient(args)).querySitemapMembership({
-      params: { siteId: String(args['site-id']) },
+    const { client, site } = await hostedSitemapSite(args, 'membership')
+    const result = await client.querySitemapMembership({
+      params: { siteId: site.siteId },
       body: {
         urls,
         ...(args.generation ? { generationId: String(args.generation) } : {}),
@@ -320,22 +307,22 @@ const membershipCommand = defineCommand({
 const lastmodCommand = defineCommand({
   meta: {
     name: 'lastmod',
-    description: 'List a generation-pinned hosted page of URL lastmod evidence',
+    description: 'List a generation-pinned page of URL lastmod evidence (hosted)',
   },
   args: {
     ...OUTPUT_ARGS,
     ...HOSTED_ARGS,
-    'site-id': { type: 'positional', required: true, description: 'Hosted gscdump site id' },
-    'generation': { type: 'string', description: 'Pin to a generation id' },
-    'feedpath': { type: 'string', description: 'Restrict to one exact sitemap feed URL' },
-    'cursor': { type: 'string', description: 'Opaque cursor from the prior page' },
-    'limit': { type: 'string', description: 'Page size, maximum 10000' },
+    generation: { type: 'string', description: 'Pin to a generation id' },
+    feedpath: { type: 'string', description: 'Restrict to one exact sitemap feed URL' },
+    cursor: { type: 'string', description: 'Opaque cursor from the prior page' },
+    limit: { type: 'string', description: 'Page size, maximum 10000' },
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const limit = parseIntegerOption(args.limit, '--limit')
-    const result = await (await hostedClient(args)).listSitemapUrls({
-      params: { siteId: String(args['site-id']) },
+    const { client, site } = await hostedSitemapSite(args, 'lastmod')
+    const result = await client.listSitemapUrls({
+      params: { siteId: site.siteId },
       query: {
         ...(args.generation ? { generationId: String(args.generation) } : {}),
         ...(args.feedpath ? { feedpath: String(args.feedpath) } : {}),
@@ -357,19 +344,19 @@ const lastmodCommand = defineCommand({
 const exportCommand = defineCommand({
   meta: {
     name: 'export',
-    description: 'Get a generation-pinned hosted bulk export descriptor',
+    description: 'Get a generation-pinned bulk sitemap export descriptor (hosted)',
   },
   args: {
     ...OUTPUT_ARGS,
     ...HOSTED_ARGS,
-    'site-id': { type: 'positional', required: true, description: 'Hosted gscdump site id' },
-    'generation': { type: 'string', description: 'Pin to a generation id' },
-    'feedpath': { type: 'string', description: 'Restrict to one exact sitemap feed URL' },
+    generation: { type: 'string', description: 'Pin to a generation id' },
+    feedpath: { type: 'string', description: 'Restrict to one exact sitemap feed URL' },
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
-    const result = await (await hostedClient(args)).getSitemapExport({
-      params: { siteId: String(args['site-id']) },
+    const { client, site } = await hostedSitemapSite(args, 'export')
+    const result = await client.getSitemapExport({
+      params: { siteId: site.siteId },
       query: {
         ...(args.generation ? { generationId: String(args.generation) } : {}),
         ...(args.feedpath ? { feedpath: String(args.feedpath) } : {}),

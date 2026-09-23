@@ -52,7 +52,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 const urlArgs = { urls: ['https://example.com/'], type: 'URL_UPDATED' }
-const sitemapArgs = { 'url': 'https://example.com/sitemap.xml', 'site-id': 'site-1', 'api-key': 'token' }
+const sitemapArgs = { 'url': 'https://example.com/sitemap.xml', 'site': 'example.com', 'api-key': 'token' }
 
 const cases = [
   ['indexing submit', child(indexingCommand, 'submit'), { url: 'https://example.com/' }, 'retries', '1.5'],
@@ -68,6 +68,9 @@ const cases = [
   ['entities inspect', child(entitiesCommand, 'inspect'), {}, 'limit', '0'],
   ['entities inspect', child(entitiesCommand, 'inspect'), {}, 'concurrency', '2x'],
   ['entities indexing snapshot', child(entitiesCommand, 'indexing', 'snapshot'), {}, 'concurrency', 'Infinity'],
+  ['indexing urls', child(indexingCommand, 'urls'), { site: 'example.com', format: 'table' }, 'limit', '0'],
+  ['indexing urls', child(indexingCommand, 'urls'), { site: 'example.com', format: 'table' }, 'limit', '501'],
+  ['indexing urls', child(indexingCommand, 'urls'), { site: 'example.com', format: 'table' }, 'offset', '-1'],
   ['sync', syncCommand, {}, 'days', '3days'],
   ['sync', syncCommand, {}, 'concurrency', '2.7'],
   ['sitemaps urls', child(sitemapsCommand, 'urls'), sitemapArgs, 'limit', '0'],
