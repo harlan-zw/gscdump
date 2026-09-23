@@ -59,7 +59,7 @@ gscdump auth login --mode local
 gscdump sites
 
 # Sync before querying or exporting stored data
-gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries,dates
+gscdump sync --site sc-domain:example.com --days 90
 gscdump query --site sc-domain:example.com --dimensions page,query
 gscdump dump --site sc-domain:example.com --out ./export
 

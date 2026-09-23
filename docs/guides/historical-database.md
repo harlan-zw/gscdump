@@ -28,19 +28,27 @@ The table choices used here are:
 | `countries` | Country metrics |
 | `page_queries` | Daily page/query pairs |
 | `dates` | Site totals, device metrics, and anonymized impressions |
+| `search_appearance` | Daily totals per search appearance |
+| `search_appearance_pages`, `search_appearance_queries`, `search_appearance_page_queries` | Page and query rows for each search appearance |
+| `hourly_pages` | Hourly page metrics for the last 10 days |
 
-Default sync includes `pages`, `queries`, `countries`, and `dates`.
-Include `page_queries` when an Analyzer needs page/query pairs.
+Default sync includes every table and every search type.
+Sync skips pairs that Google cannot answer. Discover and Google News have no query or country rows.
+Hourly rows cover only the last 10 days.
+Stored empty-type markers skip search types with no data.
 The `dates` sync combines separate requests for Site totals, device metrics, and query impressions.
 
 Sync also rebuilds Rollups unless you pass `--no-rollups`.
+Sync saves the sitemap list and sitemap URLs unless you pass `--no-sitemaps`.
+Sync inspects up to 50 due URLs per run unless you pass `--no-inspections`.
+Use `--inspect-limit N` to change the budget. Google allows 2,000 inspections per property per day.
 Run `gscdump sync --help` for the full table and search-type options.
 
 ## Backfill and retry
 
 ```bash
-# Start 450 days ago, ending three days ago
-gscdump sync --site sc-domain:example.com --full --tables pages,queries,page_queries,countries,dates
+# Start 486 days ago, ending three days ago
+gscdump sync --site sc-domain:example.com --full
 
 # Select an exact range
 gscdump sync --site sc-domain:example.com --start 2026-08-01 --end 2026-08-31 \
