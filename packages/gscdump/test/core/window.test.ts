@@ -10,6 +10,7 @@ describe('resolveWindow', () => {
     ['last-180d', '2024-09-02', 180],
     ['last-365d', '2024-03-01', 365],
     ['mtd', '2025-02-01', 28],
+    ['qtd', '2025-01-01', 59],
     ['ytd', '2025-01-01', 59],
   ] as const)('resolves %s as an inclusive window', (preset, start, days) => {
     expect(resolveWindow({ preset, anchor: '2025-02-28' })).toEqual({
@@ -19,7 +20,24 @@ describe('resolveWindow', () => {
     })
   })
 
-  it('resolves previous-period and 365-day comparison windows', () => {
+  it.each([
+    ['2025-02-28', '2024-10-01', '2024-12-31'],
+    ['2025-03-31', '2025-01-01', '2025-03-31'],
+    ['2025-01-01', '2024-10-01', '2024-12-31'],
+  ])('resolves last-quarter at anchor %s to the newest complete quarter', (anchor, start, end) => {
+    expect(resolveWindow({ preset: 'last-quarter', anchor })).toMatchObject({ start, end })
+  })
+
+  it('ends on the anchor, never on the wall clock', () => {
+    expect(resolveWindow({ preset: 'last-7d', anchor: '2020-06-10' })).toEqual({ start: '2020-06-04', end: '2020-06-10', days: 7 })
+  })
+
+  it('rejects a preset without an anchor', () => {
+    expect(() => resolveWindow({ preset: 'last-7d' } as never))
+      .toThrow('resolveWindow: preset=last-7d requires an anchor date')
+  })
+
+  it('resolves previous-period and weekday-aligned year-over-year windows', () => {
     expect(resolveWindow({
       preset: 'custom',
       start: '2024-02-01',
@@ -41,12 +59,13 @@ describe('resolveWindow', () => {
       start: '2024-02-01',
       end: '2024-02-29',
       days: 29,
-      comparison: { start: '2023-02-01', end: '2023-03-01' },
+      // 364 days back: 2024-02-01 (Thu) compares with 2023-02-02 (Thu).
+      comparison: { start: '2023-02-02', end: '2023-03-02' },
     })
   })
 
   it('rejects a custom preset without both bounds', () => {
-    expect(() => resolveWindow({ preset: 'custom', start: '2025-01-01' }))
+    expect(() => resolveWindow({ preset: 'custom', start: '2025-01-01' } as never))
       .toThrow('resolveWindow: preset=custom requires start and end')
   })
 })

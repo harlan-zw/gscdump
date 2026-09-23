@@ -1,86 +1,48 @@
-import type { ComparisonMode, WindowPreset } from '@gscdump/engine/period'
+import type { AnalysisParams } from '@gscdump/engine/analysis-types'
+import type { WindowPreset } from '@gscdump/engine/period'
 import type { DefinedReport, ReportArgsSpec, ReportContext, ReportParams } from '@gscdump/engine/report'
 import type { CommandDef } from 'citty'
-import type { Result } from 'gscdump/result'
+import type { TableName } from '../local-store'
+import type { WindowDefaults, WindowFlags } from '../window'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { defaultReportRegistry, dryRunReport, runReport } from '@gscdump/analysis/report'
-import { resolveWindow } from '@gscdump/engine/period'
+import { DEFAULT_FETCH_BUDGET, MAX_FETCH_BUDGET } from '@gscdump/engine/analysis-types'
 import { defineCommand } from 'citty'
-import { err, ok, unwrapResult } from 'gscdump/result'
-import { resolveAnalysisSource } from '../analysis-local'
+import { getLatestGscDate } from 'gscdump/dates'
+import { unwrapResult } from 'gscdump/result'
+import { analyzerTables, resolveAnalysisSource } from '../analysis-local'
 import { reportCommandMeta } from '../command-meta'
 import { renderCliReport } from '../render/report'
 import { terminalOutputOptions } from '../render/terminal'
-import { logger } from '../utils'
-
-/**
- * Modelled, caller-actionable flag-parsing failures for the `report` command:
- * an unknown `--period` or `--vs` the user passed. `kind`-discriminated, paired
- * with `Result` so the `*Result` core can be unit-tested without `try`/`catch`.
- */
-type ReportFlagError
-  = | { kind: 'unknown-period', value: string, message: string }
-    | { kind: 'unknown-comparison', value: string, message: string }
-
-function reportFlagErrorToException(error: ReportFlagError): Error {
-  const exception = new Error(error.message)
-  ;(exception as Error & { reportFlagError?: ReportFlagError }).reportFlagError = error
-  return exception
-}
+import { logger, parseFetchBudget } from '../utils'
+import { COMPARISON_FLAGS, parseWindowFlags, PERIOD_FLAGS, windowFlagErrorToException } from '../window'
 
 const REPORT_IDS = defaultReportRegistry.listReportIds()
 
-const PERIOD_ALIASES: Record<string, WindowPreset> = {
-  '7d': 'last-7d',
-  '28d': 'last-28d',
-  '30d': 'last-30d',
-  '90d': 'last-90d',
-  '180d': 'last-180d',
-  '365d': 'last-365d',
-  'last-7d': 'last-7d',
-  'last-28d': 'last-28d',
-  'last-30d': 'last-30d',
-  'last-90d': 'last-90d',
-  'last-180d': 'last-180d',
-  'last-365d': 'last-365d',
-  'mtd': 'mtd',
-  'ytd': 'ytd',
-  'custom': 'custom',
+function reportDefaults(report: DefinedReport): WindowDefaults {
+  if (report.defaultPeriod === 'custom')
+    throw new Error(`Report "${report.id}" declares a custom default period. Declare a preset.`)
+  return { preset: report.defaultPeriod, comparison: report.defaultComparison }
 }
 
-const COMPARISON_ALIASES: Record<string, ComparisonMode> = {
-  'none': 'none',
-  'prev': 'prev-period',
-  'prev-period': 'prev-period',
-  'prior': 'prev-period',
-  'prior-period': 'prev-period',
-  'yoy': 'yoy',
+function windowFlags(args: Record<string, unknown>): WindowFlags {
+  const optional = (key: string): string | undefined => args[key] ? String(args[key]) : undefined
+  return {
+    period: optional('period'),
+    vs: optional('vs'),
+    start: optional('start'),
+    end: optional('end'),
+    prevStart: optional('prev-start'),
+    prevEnd: optional('prev-end'),
+  }
 }
 
-function resolvePeriodResult(input: string | undefined, fallback: WindowPreset): Result<WindowPreset, ReportFlagError> {
-  if (!input)
-    return ok(fallback)
-  const preset = PERIOD_ALIASES[input.toLowerCase()]
-  if (!preset)
-    return err({ kind: 'unknown-period', value: input, message: `Unknown --period "${input}". Supported: 7d, 28d, 30d, 90d, 180d, 365d, mtd, ytd, custom.` })
-  return ok(preset)
-}
-
-function resolvePeriod(input: string | undefined, fallback: WindowPreset): WindowPreset {
-  return unwrapResult(resolvePeriodResult(input, fallback), reportFlagErrorToException)
-}
-
-function resolveComparisonResult(input: string | undefined, fallback: ComparisonMode): Result<ComparisonMode, ReportFlagError> {
-  if (!input)
-    return ok(fallback)
-  const mode = COMPARISON_ALIASES[input.toLowerCase()]
-  if (!mode)
-    return err({ kind: 'unknown-comparison', value: input, message: `Unknown --vs "${input}". Supported: none, prev-period, yoy.` })
-  return ok(mode)
-}
-
-function resolveComparison(input: string | undefined, fallback: ComparisonMode): ComparisonMode {
-  return unwrapResult(resolveComparisonResult(input, fallback), reportFlagErrorToException)
+/** Tables every step of `report` reads, for anchoring its window. */
+function reportTables(report: DefinedReport, params: ReportParams, flags: WindowFlags): TableName[] {
+  // Tables do not depend on dates, so any valid window plans them.
+  const provisional = unwrapResult(parseWindowFlags(flags, reportDefaults(report), getLatestGscDate()), windowFlagErrorToException)
+  const steps = report.plan(params, provisional)
+  return [...new Set(steps.flatMap(step => analyzerTables({ ...step.params, type: step.type } as AnalysisParams)))]
 }
 
 function reportArgsToCitty(spec: ReportArgsSpec): Record<string, { type: 'string' | 'boolean', description?: string, default?: unknown, alias?: string, required?: boolean }> {
@@ -133,12 +95,13 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
     },
     args: {
       'site': { type: 'string', alias: 's', description: 'Site URL' },
-      'period': { type: 'string', description: 'Window: 7d|28d|90d|mtd|ytd|custom', default: presetToFlag(report.defaultPeriod) },
-      'vs': { type: 'string', description: 'Comparison: none|prev-period|yoy', default: report.defaultComparison },
-      'start': { type: 'string', description: 'Custom start date (YYYY-MM-DD)' },
-      'end': { type: 'string', description: 'Custom end date (YYYY-MM-DD)' },
-      'prev-start': { type: 'string', description: 'Override comparison start' },
-      'prev-end': { type: 'string', description: 'Override comparison end' },
+      'period': { type: 'string', description: `Window: ${PERIOD_FLAGS.join('|')} (default: ${presetToFlag(report.defaultPeriod)}, ending on the newest synced day)` },
+      'vs': { type: 'string', description: `Comparison: ${COMPARISON_FLAGS.join('|')} (default: ${report.defaultComparison}). yoy compares with the same weekdays 52 weeks earlier` },
+      'start': { type: 'string', description: 'Custom start date (YYYY-MM-DD). Implies --period custom' },
+      'end': { type: 'string', description: 'Custom end date (YYYY-MM-DD). Implies --period custom' },
+      'prev-start': { type: 'string', description: 'Override comparison start (pass with --prev-end)' },
+      'prev-end': { type: 'string', description: 'Override comparison end (pass with --prev-start)' },
+      'fetch-budget': { type: 'string', description: `Max rows each live fetch reads (default: ${DEFAULT_FETCH_BUDGET}, max: ${MAX_FETCH_BUDGET})` },
       'live': { type: 'boolean', default: false, description: 'Force live GSC API; bypass local store' },
       'json': { type: 'boolean', default: false, description: 'Emit full ReportResult JSON' },
       'explain': { type: 'boolean', default: false, description: 'Print plan steps + window without executing' },
@@ -146,39 +109,27 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
       ...reportArgs,
     },
     async run({ args }) {
-      const preset = resolvePeriod(args.period as string | undefined, report.defaultPeriod)
-      const comparison = resolveComparison(args.vs as string | undefined, report.defaultComparison)
-
-      const window = resolveWindow({
-        preset,
-        comparison,
-        start: args.start as string | undefined,
-        end: args.end as string | undefined,
-      })
-
-      if (args['prev-start'] && args['prev-end']) {
-        window.comparison = {
-          start: String(args['prev-start']),
-          end: String(args['prev-end']),
-        }
-      }
-
+      const flags = windowFlags(args)
       const params = buildReportParams(report, args)
+      const fetchBudget = parseFetchBudget(args['fetch-budget'])
 
       if (args.explain || args['dry-run']) {
+        const window = unwrapResult(parseWindowFlags(flags, reportDefaults(report), getLatestGscDate()), windowFlagErrorToException)
         const ctx: ReportContext = { site: args.site ? String(args.site) : '(unresolved)', window, params, registryVersion: defaultReportRegistry.version }
         const dry = await dryRunReport(report, ctx)
-        console.log(JSON.stringify({ id: report.id, window, comparison, plan: dry.steps }, null, 2))
+        console.log(JSON.stringify({ id: report.id, window, plan: dry.steps }, null, 2))
         return
       }
 
-      const { source, siteUrl } = await resolveAnalysisSource({
+      const { source, siteUrl, anchorFor } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
         json: !!args.json,
       })
+      const anchor = await anchorFor(reportTables(report, params, flags))
+      const window = unwrapResult(parseWindowFlags(flags, reportDefaults(report), anchor), windowFlagErrorToException)
 
-      const ctx: ReportContext = { site: siteUrl, window, params, registryVersion: defaultReportRegistry.version }
+      const ctx: ReportContext = { site: siteUrl, window, params, registryVersion: defaultReportRegistry.version, ...(fetchBudget !== undefined ? { fetchBudget } : {}) }
       const result = await runReport(report, { source, analyzers: defaultAnalyzerRegistry, ctx })
 
       if (args.json) {
@@ -193,9 +144,7 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
 }
 
 function presetToFlag(preset: WindowPreset): string {
-  if (preset === 'mtd' || preset === 'ytd' || preset === 'custom')
-    return preset
-  return preset.replace(/^last-/, '')
+  return /^last-\d+d$/.test(preset) ? preset.replace(/^last-/, '') : preset
 }
 
 const listCommand = defineCommand({

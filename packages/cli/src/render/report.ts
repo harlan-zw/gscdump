@@ -1,7 +1,7 @@
 import type { ReportResult } from '@gscdump/engine/report'
 import type { OutputOptions } from './layout'
 import { parseGscSiteUrl } from 'gscdump'
-import { columnsFor } from './analysis'
+import { columnsFor, coverageWarning } from './analysis'
 import { barColumn, renderMetrics } from './charts'
 import { renderTable, textLines } from './layout'
 
@@ -14,6 +14,11 @@ export function renderCliReport(report: ReportResult, options: OutputOptions): s
     lines.push(...textLines(`vs ${report.window.comparison.start} to ${report.window.comparison.end}`, options, 'muted'))
   if (report.meta.degraded)
     lines.push(...textLines(`! Unavailable: ${report.meta.steps.filter(step => step.status === 'error').map(step => step.key).join(', ')}`, options, 'warning'))
+  const truncated = report.meta.steps.filter(step => step.coverage?.kind === 'truncated')
+  const largest = truncated.reduce((max, step) => Math.max(max, step.coverage?.kind === 'truncated' ? step.coverage.fetched : 0), 0)
+  const warning = coverageWarning(truncated.length ? { kind: 'truncated', fetched: largest } : undefined)
+  if (warning)
+    lines.push(...textLines(`${warning} Steps: ${truncated.map(step => step.key).join(', ')}.`, options, 'warning'))
   const sections = report.sections.filter(section => section.findings.length || section.coverage === 'partial')
   for (const section of sections) {
     const status = section.coverage === 'partial' ? ' (partial)' : ['info', 'low'].includes(section.severity) ? '' : ` [${section.severity}]`

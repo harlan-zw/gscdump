@@ -1,7 +1,7 @@
 import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { Result } from 'gscdump/result'
-import type { LocalStore } from './local-store'
+import type { LocalStore, TableName } from './local-store'
 import process from 'node:process'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
@@ -12,6 +12,7 @@ import { createCommandContext, siteArg } from './context'
 import { LocalStoreUnsupportedError } from './error-handler'
 import { createLocalStore } from './local-store'
 import { logger } from './utils'
+import { resolveAnchor } from './window'
 
 export async function hasLocalData(
   store: LocalStore,
@@ -36,6 +37,41 @@ export interface ResolvedAnalysisSource {
    * `gscErrorHandler` to render + exit.
    */
   runAnalysis: (params: AnalysisParams) => Promise<AnalysisResult>
+  /**
+   * Newest complete date for `tables`: the Store's newest synced day in
+   * local mode, `getLatestGscDate()` in live mode. Windows end on it.
+   */
+  anchorFor: (tables: readonly TableName[]) => Promise<string>
+}
+
+/**
+ * Tables an analyzer's SQL plan reads, for anchoring its window. Dates in
+ * `params` do not change the tables. Returns an empty list (any table) when
+ * the analyzer has no SQL plan or its plan cannot build from these params;
+ * the run itself then reports that build failure.
+ */
+export function analyzerTables(params: AnalysisParams): TableName[] {
+  const analyzer = defaultAnalyzerRegistry.getAnalyzerVariants(params.type)?.sql
+  if (!analyzer)
+    return []
+  let plan: ReturnType<typeof analyzer.build>
+  try {
+    plan = analyzer.build({ startDate: '2000-01-01', endDate: '2000-01-01', prevStartDate: '2000-01-01', prevEndDate: '2000-01-01', ...params })
+  }
+  catch (error) {
+    logger.debug(`Cannot plan ${params.type} to pick its tables: ${(error as Error).message}`)
+    return []
+  }
+  if (plan.kind !== 'sql')
+    return []
+  const fileSets = [plan.current, plan.previous, ...Object.values(plan.extraFiles ?? {})]
+  return [...new Set(fileSets.flatMap(fileSet => fileSet ? [fileSet.table] : []))]
+}
+
+function warnMissingSync(siteUrl: string) {
+  return (tables: readonly TableName[], fallback: string): void => {
+    logger.warn(`No synced days for ${tables.length ? tables.join(', ') : 'any table'} on ${siteUrl}. Windows end on ${fallback}. Run \`gscdump sync\` first.`)
+  }
 }
 
 export interface ResolveAnalysisSourceArgs {
@@ -105,11 +141,25 @@ export async function resolveAnalysisSource(
       engine: store.engine,
       ctx: { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
     })
-    return { source, siteUrl, format, isLive, runAnalysis: makeRunAnalysis(source, 'local') }
+    return {
+      source,
+      siteUrl,
+      format,
+      isLive,
+      runAnalysis: makeRunAnalysis(source, 'local'),
+      anchorFor: tables => resolveAnchor({ kind: 'local', store, siteUrl, tables }, warnMissingSync(siteUrl)),
+    }
   }
 
   const ctx = await createCommandContext({ needsAuth: true, needsStore: false })
   const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
   const source = createGscApiQuerySource({ client: ctx.client!, siteUrl })
-  return { source, siteUrl, format, isLive, runAnalysis: makeRunAnalysis(source, 'live') }
+  return {
+    source,
+    siteUrl,
+    format,
+    isLive,
+    runAnalysis: makeRunAnalysis(source, 'live'),
+    anchorFor: () => resolveAnchor({ kind: 'live' }, warnMissingSync(siteUrl)),
+  }
 }

@@ -8,7 +8,7 @@
  * Pure types only. Runtime lives in `@gscdump/analysis/report`.
  */
 
-import type { AnalysisParams, AnalysisResult } from '../analysis-types'
+import type { AnalysisParams, AnalysisResult, AnalyzerCoverage } from '../analysis-types'
 import type { ComparisonMode, ResolvedWindow, WindowPreset } from '../period'
 
 export type ReportStepStatus = 'pending' | 'running' | 'done' | 'skipped' | 'error'
@@ -110,6 +110,8 @@ export interface ReportStepStateMeta {
   type: string
   status: ReportStepStatus
   error?: string
+  /** Set on `done` steps. `truncated` means the step read only part of its rows. */
+  coverage?: AnalyzerCoverage
 }
 
 export interface ReportResultMeta {
@@ -146,6 +148,11 @@ export interface ReportContext<P extends ReportParams = ReportParams> {
   params: P
   /** Hash of registry/code version. Bumped via package version. */
   registryVersion: string
+  /**
+   * Row-plan fetch cap applied to every step (`AnalysisParams.fetchBudget`).
+   * Omit for the default. SQL plans ignore it.
+   */
+  fetchBudget?: number
 }
 
 /**

@@ -71,20 +71,20 @@ describe('@gscdump/engine-duckdb-wasm', () => {
   })
 
   it('resolveWindow: custom requires start/end', () => {
-    expect(() => resolveWindow({ preset: 'custom' })).toThrow(/custom/)
+    expect(() => resolveWindow({ preset: 'custom' } as never)).toThrow(/custom/)
     const w = resolveWindow({ preset: 'custom', start: '2025-01-01', end: '2025-12-31' })
     expect(w.days).toBe(365)
   })
 
-  it('resolveWindow: yoy produces a year-shifted comparison window', () => {
+  it('resolveWindow: yoy produces a weekday-aligned year-shifted comparison window', () => {
     const w = resolveWindow({
       preset: 'last-30d',
       comparison: 'yoy',
       anchor: '2026-04-14',
     })
     expect(w.comparison).toEqual({
-      start: '2025-03-16',
-      end: '2025-04-14',
+      start: '2025-03-17',
+      end: '2025-04-15',
     })
   })
 

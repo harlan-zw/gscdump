@@ -28,6 +28,9 @@
 ./analysis-range:
   analysisRequestedRange: function
 ./analysis-types:
+  DEFAULT_FETCH_BUDGET: number
+  fetchBudgetOf: function
+  MAX_FETCH_BUDGET: number
   num: function
 ./analyzer:
   AnalyzerCapabilityError: function

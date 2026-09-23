@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { addDays, generateGscDateRange, getBackfillProgress, getFreshestGscDate, getOldestGscDate } from '../../src/core/gsc-dates'
+import { addDays, generateGscDateRange, getBackfillProgress, getFreshestGscDate, getLatestGscDate, getOldestGscDate } from '../../src/core/gsc-dates'
 import { currentPstDate, daysAgoPst } from '../../src/query/utils/dayjs'
 
 describe('gsc date helpers', () => {
@@ -18,6 +18,16 @@ describe('gsc date helpers', () => {
       addDays(oldest, 2),
     ])
     expect(generateGscDateRange(addDays(freshest, -1), addDays(freshest, 5))).toEqual([addDays(freshest, -1), freshest])
+  })
+
+  it.each([
+    // 12:00 UTC is 05:00 Pacific on the same day.
+    ['2026-04-30T12:00:00.000Z', '2026-04-27'],
+    // 06:00 UTC is still 23:00 Pacific on the previous day.
+    ['2026-04-30T06:00:00.000Z', '2026-04-26'],
+  ])('counts the finalized date from the Pacific calendar at %s', (now, latest) => {
+    vi.setSystemTime(new Date(now))
+    expect(getLatestGscDate()).toBe(latest)
   })
 
   it('counts synced and available backfill days inclusively', () => {

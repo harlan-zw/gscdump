@@ -10,7 +10,7 @@ import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection, ReportSeverity } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
 import { requireComparisonWindow } from '../require'
-import { reportRows, sectionArtifact, sectionCoverage, truncation } from '../sections'
+import { reportRows, resultTotal, sectionArtifact, sectionCoverage, truncation } from '../sections'
 
 export interface RisksReportParams {
   maxFindings?: number
@@ -75,7 +75,7 @@ function buildDecaySection(res: AnalysisResult | undefined, max: number): Report
     severity,
     summary: { delta: -totalLost, direction: totalLost > 0 ? 'down' : 'flat', magnitudeLabel: `${Math.round(totalLost)} clicks lost` },
     findings,
-    truncated: truncation(rows.length, kept.length),
+    truncated: truncation(resultTotal(res, rows.length), kept.length),
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'decay'),
   }
@@ -111,7 +111,7 @@ function buildCannibalizationSection(res: AnalysisResult | undefined, max: numbe
     severity: kept.length ? 'medium' : 'info',
     summary: {},
     findings,
-    truncated: truncation(rows.length, kept.length),
+    truncated: truncation(resultTotal(res, rows.length), kept.length),
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'cannibalization'),
   }
@@ -140,7 +140,7 @@ function buildDarkTrafficSection(res: AnalysisResult | undefined, max: number): 
     severity: kept.length ? 'low' : 'info',
     summary: { magnitudeLabel: `${Math.round(totalDark)} unattributed clicks` },
     findings,
-    truncated: truncation(rows.length, kept.length),
+    truncated: truncation(resultTotal(res, rows.length), kept.length),
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'dark-traffic'),
   }
@@ -173,7 +173,7 @@ function buildDeviceGapSection(res: AnalysisResult | undefined, max: number): Re
     severity: 'info',
     summary: {},
     findings,
-    truncated: truncation(rows.length, kept.length),
+    truncated: truncation(resultTotal(res, rows.length), kept.length),
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'device-gap'),
   }

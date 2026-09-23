@@ -5,7 +5,8 @@
  * `capabilities.fileSets` consume them, others ignore them.
  */
 
-import type { AnalysisParams, AnalysisResult } from '../analysis-types'
+import type { BuilderState } from 'gscdump/query'
+import type { AnalysisParams, AnalysisResult, AnalyzerCoverage } from '../analysis-types'
 import type { EngineError } from '../errors'
 import type { AnalysisQuerySource, FileSet, QueryRow } from '../source/source-types'
 import type { AnalyzerRegistry } from './registry'
@@ -94,6 +95,30 @@ export async function runAnalyzerFromSource(
   return runSqlPlanAgainstSource(source, analyzer, plan, params)
 }
 
+/** Rows from one plan query, and whether the fetch stopped at its budget. */
+interface FetchedRows {
+  rows: AnalyzerRow[]
+  truncated: boolean
+}
+
+/**
+ * Run one row query. A query whose row count reaches its `rowLimit` may have
+ * more matching rows than it returned, so it reports `truncated: true`.
+ */
+async function fetchPlanRows(source: AnalysisQuerySource, state: BuilderState): Promise<FetchedRows> {
+  const rows = await source.queryRows(state)
+  const truncated = state.rowLimit != null && rows.length >= state.rowLimit
+  return { rows, truncated }
+}
+
+/** Fold per-query fetch results into one coverage value for the run. */
+function coverageOf(fetches: readonly FetchedRows[]): AnalyzerCoverage {
+  const truncated = fetches.filter(f => f.truncated)
+  if (truncated.length === 0)
+    return { kind: 'complete' }
+  return { kind: 'truncated', fetched: Math.max(...truncated.map(f => f.rows.length)) }
+}
+
 async function runRowsPlanAgainstSource(
   source: AnalysisQuerySource,
   analyzer: Analyzer,
@@ -101,14 +126,14 @@ async function runRowsPlanAgainstSource(
   params: AnalysisParams,
 ): Promise<AnalysisResult> {
   const entries = Object.entries(plan.queries)
-  const resolved = await Promise.all(
-    entries.map(async ([k, q]) => [k, await source.queryRows(q.state)] as const),
+  const fetched = await Promise.all(
+    entries.map(async ([k, q]) => [k, await fetchPlanRows(source, q.state)] as const),
   )
-  const rowMap = Object.fromEntries(resolved) as Record<string, AnalyzerRow[]>
+  const rowMap = Object.fromEntries(fetched.map(([k, f]) => [k, f.rows])) as Record<string, AnalyzerRow[]>
   const { results, meta } = analyzer.reduce(rowMap, { params })
   return {
     results: results as AnalysisResult['results'],
-    meta: { tool: params.type, ...meta },
+    meta: { tool: params.type, ...meta, coverage: coverageOf(fetched.map(([, f]) => f)) },
   }
 }
 
@@ -146,6 +171,6 @@ async function runSqlPlanAgainstSource(
   const sourceMeta: { source?: string } = source.kind ? { source: source.kind } : {}
   return {
     results: results as AnalysisResult['results'],
-    meta: { tool: params.type, ...sourceMeta, ...meta },
+    meta: { tool: params.type, ...sourceMeta, ...meta, coverage: { kind: 'complete' } },
   }
 }

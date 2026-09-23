@@ -9,13 +9,13 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
 import type { QueriesRow } from '../types'
-import { num } from '@gscdump/engine/analysis-types'
+import { fetchBudgetOf, num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { queriesQueryState } from '../analyzer/adapt-rows'
-import { paginateClause, paginateSortedInMemory } from '../analyzer/paginate'
+import { paginateClause, paginateSortedInMemory, TOTAL_COUNT_SELECT, totalCountOf } from '../analyzer/paginate'
 
 export type OpportunitySortMetric = 'opportunityScore' | 'potentialClicks' | 'impressions' | 'position'
 
@@ -220,7 +220,8 @@ export const opportunityAnalyzer = defineAnalyzer<AnalysisParams, Row, Opportuni
           ELSE 0.10
         END
       )) AS DOUBLE) AS potentialClicks,
-      positionScore, impressionScore, ctrGapScore
+      positionScore, impressionScore, ctrGapScore,
+      ${TOTAL_COUNT_SELECT}
     FROM gapped
     ORDER BY opportunityScore DESC
     ${paginateClause({ limit, offset: params.offset })}
@@ -251,13 +252,13 @@ export const opportunityAnalyzer = defineAnalyzer<AnalysisParams, Row, Opportuni
           ctrGapScore: num(r.ctrGapScore),
         },
       })),
-      meta: { total: arr.length },
+      meta: { total: totalCountOf(arr), returned: arr.length },
     }
   },
 
   buildRows(params) {
     return {
-      queries: queriesQueryState(periodOf(params), params.limit),
+      queries: queriesQueryState(periodOf(params), fetchBudgetOf(params)),
     }
   },
 
