@@ -141,6 +141,7 @@ describe('sync command (local analytics)', () => {
         start,
         end,
         tables: 'pages,queries',
+        types: 'web',
         quiet: true,
       },
       rawArgs: [],
@@ -185,7 +186,7 @@ describe('sync command (local analytics)', () => {
   it('replacing a day retires the prior version via writeDay atomicity', async () => {
     const day = '2026-04-05'
     // force=true so the second run re-syncs even though the first marked this date done.
-    const args = { site: SITE, start: day, end: day, tables: 'pages', quiet: true, force: true }
+    const args = { site: SITE, start: day, end: day, tables: 'pages', types: 'web', quiet: true, force: true }
 
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
@@ -210,7 +211,7 @@ describe('sync command (local analytics)', () => {
 
   it('skips dates already marked done on a second run (idempotent resume)', async () => {
     const day = '2026-04-06'
-    const args = { site: SITE, start: day, end: day, tables: 'pages', quiet: true }
+    const args = { site: SITE, start: day, end: day, tables: 'pages', types: 'web', quiet: true }
 
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
     expect(rawQuerySpy).toHaveBeenCalledTimes(2)
@@ -239,7 +240,7 @@ describe('sync command (local analytics)', () => {
     }) as never)
 
     await expect(syncCommand.run!({
-      args: { site: SITE, start: day, end: day, tables: 'pages', quiet: true },
+      args: { site: SITE, start: day, end: day, tables: 'pages', types: 'web', quiet: true },
       rawArgs: [],
       cmd: syncCommand,
     })).rejects.toThrow('process.exit(1)')
@@ -391,7 +392,7 @@ describe('sync command (local analytics)', () => {
     }) as never)
 
     await syncCommand.run!({
-      args: { 'site': SITE, 'start': day, 'end': day, 'quiet': true, 'no-rollups': true },
+      args: { site: SITE, start: day, end: day, types: 'web', quiet: true, rollups: false },
       rawArgs: [],
       cmd: syncCommand,
     })
@@ -426,7 +427,7 @@ describe('sync command (local analytics)', () => {
     rawQuerySpy.mockImplementation((_siteUrl, params) => Promise.resolve({
       rows: params.startRow === 0 ? [first, second, first] : [],
     }))
-    const args = { site: SITE, start: day, end: day, tables: 'pages', quiet: true, rollups: false, force: true }
+    const args = { site: SITE, start: day, end: day, tables: 'pages', types: 'web', quiet: true, rollups: false, force: true }
     for (let sync = 0; sync < 2; sync++)
       await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
 
@@ -443,7 +444,7 @@ describe('sync command (local analytics)', () => {
     rawQuerySpy.mockResolvedValue({ rows: [] })
     const day = '2026-04-10'
     await syncCommand.run!({
-      args: { 'site': SITE, 'start': day, 'end': day, 'tables': 'dates', 'quiet': true, 'no-rollups': true },
+      args: { site: SITE, start: day, end: day, tables: 'dates', types: 'web', quiet: true, rollups: false },
       rawArgs: [],
       cmd: syncCommand,
     })
@@ -459,7 +460,7 @@ describe('sync command (local analytics)', () => {
 
   it('keeps existing daily totals if a device fetch fails during a forced sync', async () => {
     const day = '2026-04-10'
-    const args = { 'site': SITE, 'start': day, 'end': day, 'tables': 'dates', 'quiet': true, 'no-rollups': true }
+    const args = { site: SITE, start: day, end: day, tables: 'dates', types: 'web', quiet: true, rollups: false }
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
     rawQuerySpy.mockImplementation((_siteUrl, params) => {
       if (params.dimensions.includes('device'))
@@ -493,7 +494,7 @@ describe('sync command (local analytics)', () => {
   })
   async function runSyncJson(args: Record<string, unknown>): Promise<Record<string, any>> {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-    await syncCommand.run!({ args: { site: SITE, start: '2026-04-01', end: '2026-04-01', tables: 'pages', json: true, rollups: false, ...args }, rawArgs: [], cmd: syncCommand })
+    await syncCommand.run!({ args: { site: SITE, start: '2026-04-01', end: '2026-04-01', tables: 'pages', types: 'web', json: true, rollups: false, ...args }, rawArgs: [], cmd: syncCommand })
     const output = log.mock.calls.map(call => String(call[0])).find(line => line.trimStart().startsWith('{'))
     log.mockRestore()
     return JSON.parse(output!)
@@ -528,7 +529,7 @@ describe('sync command (local analytics)', () => {
     expect(inspectSpy.mock.calls.map(call => call[1])).toEqual(['https://example.com/guide', 'https://example.com/a'])
 
     const store = createLocalStore({ dataDir: tmpDir })
-    const [summary] = await dumpSites({
+    const { sites: [summary] } = await dumpSites({
       store,
       targets: [{ site: SITE, siteId: store.siteIdFor(SITE) }],
       outDir: path.join(tmpDir, 'out'),
@@ -564,5 +565,66 @@ describe('sync command (local analytics)', () => {
     expect(result.inspections).toEqual({ _tag: 'disabled' })
     expect(sitemapsListSpy).not.toHaveBeenCalled()
     expect(inspectSpy).not.toHaveBeenCalled()
+  })
+
+  it('syncs every table and search type Google can answer, with search appearance filters and hourly data', async () => {
+    const day = new Date(Date.now() - 4 * 86_400_000).toISOString().slice(0, 10)
+    rawQuerySpy.mockImplementation((_siteUrl, params) => {
+      if ((params.startRow ?? 0) > 0)
+        return Promise.resolve({ rows: [] })
+      const dims = params.dimensions.join(',')
+      if (dims === 'searchAppearance')
+        return Promise.resolve({ rows: [{ keys: ['VIDEO'], clicks: 4, impressions: 40, position: 2 }] })
+      if (dims === 'hour,page')
+        return Promise.resolve({ rows: [{ keys: [`${day}T15:00:00-07:00`, 'https://example.com/guide'], clicks: 1, impressions: 9, position: 2 }] })
+      return Promise.resolve(buildRawResponse(params))
+    })
+
+    await syncCommand.run!({
+      args: { site: SITE, start: day, end: day, quiet: true, rollups: false, sitemaps: false, inspections: false },
+      rawArgs: [],
+      cmd: syncCommand,
+    })
+
+    const calls = rawQuerySpy.mock.calls.map(([, params]) => params).filter(params => (params.startRow ?? 0) === 0)
+    const typeOf = (params: any): string => params.type ?? params.searchType
+    // Discover and Google News have no query or country breakdown.
+    for (const type of ['discover', 'googleNews'])
+      expect(new Set(calls.filter(params => typeOf(params) === type).map(params => params.dimensions.join(',')))).toEqual(new Set(['page,date', 'hour,page']))
+    // Search appearance groups alone, then filters each appearance for its context.
+    const webCalls = calls.filter(params => typeOf(params) === 'web')
+    expect(webCalls.some(params => params.dimensions.join(',') === 'searchAppearance,date')).toBe(false)
+    const filtered = webCalls.filter(params => params.dimensionFilterGroups?.[0]?.filters?.[0]?.dimension === 'searchAppearance')
+    expect(filtered.map(params => params.dimensions.join(',')).sort()).toEqual(['page,date', 'page,query,date', 'query,date'])
+    expect(filtered.every(params => params.dimensionFilterGroups[0].filters[0].expression === 'VIDEO')).toBe(true)
+    expect(webCalls.find(params => params.dimensions.join(',') === 'hour,page')?.dataState).toBe('hourly_all')
+
+    const harness = createNodeHarness({ dataDir: tmpDir })
+    const appearance = await harness.runRawSql({
+      siteUrl: SITE,
+      table: 'search_appearance_pages',
+      searchType: 'web',
+      sql: 'SELECT searchAppearance, url FROM read_parquet({{FILES}})',
+    })
+    expect(appearance.rows).toEqual([{ searchAppearance: 'VIDEO', url: '/guide' }])
+    const hourly = await harness.runRawSql({
+      siteUrl: SITE,
+      table: 'hourly_pages',
+      searchType: 'web',
+      sql: 'SELECT hour, url, impressions FROM read_parquet({{FILES}})',
+    })
+    expect(hourly.rows).toEqual([{ hour: 15, url: '/guide', impressions: 9 }])
+  })
+
+  it('leaves hourly dates outside Google\'s hourly window out of the plan', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await syncCommand.run!({
+      args: { 'site': SITE, 'start': '2026-01-01', 'end': '2026-01-02', 'tables': 'pages,hourly_pages', 'types': 'web', 'dry-run': true, 'json': true },
+      rawArgs: [],
+      cmd: syncCommand,
+    })
+    const plan = JSON.parse(String(log.mock.calls[0]![0]))
+    log.mockRestore()
+    expect(plan.plan.map((item: { table: string }) => item.table)).toEqual(['pages', 'pages'])
   })
 })

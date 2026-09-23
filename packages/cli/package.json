@@ -52,6 +52,7 @@
     "@clack/prompts": "catalog:deps",
     "@duckdb/node-api": "catalog:",
     "@gscdump/analysis": "workspace:^",
+    "@gscdump/contracts": "workspace:^",
     "@gscdump/engine": "workspace:^",
     "@gscdump/engine-gsc-api": "workspace:^",
     "@gscdump/sdk": "workspace:^",
