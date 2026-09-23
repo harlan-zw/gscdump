@@ -200,6 +200,8 @@ Do not rewrite rows, estimate metrics, or add manually calculated totals.
 `gscdump login`, `gscdump logout`, and `gscdump status` are top-level aliases of
 the matching `auth` subcommands.
 The MCP server does not expose Bing tools. Use `gscdump bing` commands through this skill.
+`gscdump mcp` starts without authentication. Its Google tools then return an error with the command to run.
+A failed Google request returns its status, Google's explanation, and the next step in the tool result.
 
 ## Sync before local analysis
 

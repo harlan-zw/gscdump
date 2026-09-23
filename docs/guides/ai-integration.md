@@ -48,8 +48,16 @@ stdio-compatible MCP client:
 ```
 
 The server uses the saved authentication for its profile.
+It reads the config directory from `--config-dir` or `GSCDUMP_CONFIG_DIR`, and the profile from `--profile` or `GSCDUMP_PROFILE`.
 Cloud mode accepts `GSCDUMP_API_KEY`. Local mode accepts Google access tokens, service accounts, and OAuth refresh tokens.
 Set environment credentials in the server process. Use `--profile NAME` or `--mode local` in its arguments when needed.
+
+The server starts without authentication, and the client can list its tools.
+If no authentication exists, each Google tool returns an error with the command to run.
+After `gscdump auth login`, call the tool again. After a change to environment credentials, restart the MCP client.
+
+If a Google request fails, the tool result holds the HTTP status, Google's explanation, and the next step.
+For example, a 403 permission failure names the account check, and a quota failure says when to try again.
 Cloud Google tools use gscdump.com. Google Indexing API and Site Verification tools require local mode.
 Bing commands are available through the CLI and agent skill. The MCP server does not expose Bing tools.
 Tool responses can contain your search data; review your MCP client's data-sharing settings.
