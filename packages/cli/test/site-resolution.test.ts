@@ -135,9 +135,10 @@ describe('site picker', () => {
   it('picks the only local Site when no auth is present', async () => {
     await seed('sc-domain:example.com')
     setTTY(false)
-    const run = await cli('analyze', 'striking-distance', '--json')
+    const run = await cli('query', '-d', 'page', '--start', '2026-08-01', '--end', '2026-08-01', '-f', 'json')
     expect(run.stderr).not.toContain('Pass --site')
     expect(run.code).toBe(0)
+    expect(JSON.parse(run.stdout).siteUrl).toBe('sc-domain:example.com')
   })
 })
 

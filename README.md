@@ -196,6 +196,8 @@ gscdump report brand --site example.com --brand-terms 'acme,acme corp' --json
 Use `--period` for `7d`, `28d`, `30d`, `90d`, `180d`, `365d`, `mtd`, `qtd`, `ytd`, `last-quarter`, or `custom`.
 Use `--vs` for `none`, `prev-period`, or `yoy`. `yoy` compares with the same weekdays 52 weeks earlier.
 Windows end on the newest complete date: the newest synced day in the Store, or three days ago (Pacific time) with `--live`.
+A Site with no Store data is answered from the live API when Google is connected. Partial coverage stops with the exact `gscdump sync` command.
+See [Routing](./packages/cli/README.md#routing).
 `--start` or `--end` without `--period` selects a custom window.
 Comparison overrides need both `--prev-start` and `--prev-end`.
 If a live fetch reaches its row budget, the output shows a partial-data warning. `--fetch-budget` raises the budget up to 100000 rows.

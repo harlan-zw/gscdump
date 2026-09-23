@@ -149,7 +149,7 @@ describe('dumpSites entity datasets', () => {
     expect(summary!.skipped.every(skip => skip.reason === 'empty')).toBe(true)
   })
 
-  it('writes manifest.json with Store coverage and sites.json with the site list', async () => {
+  it('writes manifest.json with Store coverage and sites.json from the Store Site map', async () => {
     const store = createLocalStore({ dataDir })
     const siteId = store.siteIdFor(SITE)
     const scope = { userId: store.userId, siteId, table: 'pages' as const }
@@ -166,7 +166,6 @@ describe('dumpSites entity datasets', () => {
       targets: [{ site: SITE, siteId }],
       outDir,
       format: 'parquet',
-      siteList: [{ siteUrl: SITE, permissionLevel: 'siteOwner' }],
     })
 
     expect(result.metadataFiles.map(file => path.basename(file.path))).toEqual(['sites.json', 'manifest.json'])
@@ -181,6 +180,6 @@ describe('dumpSites entity datasets', () => {
     expect(result.sites[0]!.coverage).toEqual(manifest.sites[0].coverage)
     expect(manifest.sites[0].datasets[0].path).toBe('sc_domain_example_com/web/pages.parquet')
     const sites = JSON.parse(await fs.readFile(path.join(outDir, 'sites.json'), 'utf8'))
-    expect(sites).toEqual({ sites: [{ siteUrl: SITE, permissionLevel: 'siteOwner' }] })
+    expect(sites).toEqual({ sites: [{ siteUrl: SITE, siteId }] })
   })
 })

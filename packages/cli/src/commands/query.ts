@@ -1,7 +1,8 @@
 import type { QuerySpan } from '@gscdump/engine/profile'
 import type { googleSearchConsole } from 'gscdump/client'
 import type { BuilderState, Column, Dimension, Filter, SearchType } from 'gscdump/query'
-import type { LocalStore, TableName } from '../local-store'
+import type { TableName } from '../local-store'
+import type { RouteNeed, RouteRequest } from '../route'
 import type { SqlResult, SqlViews } from '../sql-views'
 import type { WindowFlags } from '../window'
 import fs from 'node:fs/promises'
@@ -14,16 +15,18 @@ import { and, between, country, date as dateCol, device, gsc, hour, page, query 
 import { inferDataset, isDatasetResolvable } from 'gscdump/query/plan'
 import { queryCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
-import { createCommandContext, siteArg } from '../context'
+import { createCommandContext, formatSiteResolution } from '../context'
 import { FILTER_DIMS, filterDimensions, parseFilterArgs, toLiveFilter, toLocalFilter } from '../filters'
-import { tableDimensions } from '../local-store'
+import { allTables } from '../local-store'
 import { asRecord, columnsFor } from '../render/analysis'
 import { renderTable } from '../render/layout'
 import { renderQuery } from '../render/query'
 import { terminalOutputOptions } from '../render/terminal'
-import { openSqlViews, referencedEmptyTables } from '../sql-views'
+import { decideRoute, describeStop, liveNote, readRouteState, readSiteStates, resolveReadSite, stopAtRoute } from '../route'
+import { useCliRuntime } from '../runtime'
+import { openSqlViews, referencedTables } from '../sql-views'
 import { ALL_SEARCH_TYPES, logger, parseSearchType, toCSV } from '../utils'
-import { checkWindowFlags, DEFAULT_WINDOW, parseWindowFlags, resolveAnchor } from '../window'
+import { checkWindowFlags, DEFAULT_WINDOW, newestDoneDate, parseWindowFlags } from '../window'
 
 const DIMENSIONS = ['page', 'query', 'date', 'hour', 'country', 'device', 'searchAppearance'] as const
 type DimensionName = typeof DIMENSIONS[number]
@@ -239,6 +242,7 @@ export const queryCommand = defineCommand({
         output: args.output ? String(args.output) : undefined,
         format,
         quiet: Boolean(args.quiet),
+        forceLive: Boolean(args.live),
         searchType: parseSearchType(args.type, '--type'),
       })
       return
@@ -267,11 +271,6 @@ export const queryCommand = defineCommand({
       : ctxConfig.defaultDataState
     const aggregationType = args['aggregation-type'] ? String(args['aggregation-type']) : undefined
     const filterDims = filterDimensions(filters)
-    if (!args.live && !isDatasetResolvable(dimNames as Dimension[], filterDims)) {
-      logger.error(`No Store table holds ${[...new Set([...dimNames, ...filterDims])].join(' with ')}. Remove a dimension or filter, or pass --live.`)
-      process.exit(1)
-    }
-
     if (dataState && !DATA_STATES.includes(dataState as any)) {
       logger.error(`Invalid --data-state: ${dataState}. Allowed: ${DATA_STATES.join(', ')}`)
       process.exit(1)
@@ -281,15 +280,30 @@ export const queryCommand = defineCommand({
       process.exit(1)
     }
 
-    const ctx = await createCommandContext({
-      needsAuth: Boolean(args.live),
-      needsStore: !args.live,
-      interactive: Boolean(args.interactive),
-    })
-    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined, { scope: args.live ? 'account' : 'store' })
+    const forceLive = Boolean(args.live)
+    const resolvable = isDatasetResolvable(dimNames as Dimension[], filterDims)
+    // Never answer live on our own here: the Store may hold the Site, and one run never mixes sources.
+    if (!resolvable && !forceLive)
+      throw new Error(`No Store table holds ${[...new Set([...dimNames, ...filterDims])].join(' with ')}. Remove a dimension or filter, or pass --live.`)
+    const storeCtx = await createCommandContext({ needsStore: true })
+    const store = storeCtx.store!
+    let liveCtx: ReturnType<typeof createCommandContext> | undefined
+    const connect = (): ReturnType<typeof createCommandContext> => (liveCtx ??= createCommandContext({ needsAuth: true, interactive: Boolean(args.interactive) }))
+    const { site, siteHint, auth } = await resolveReadSite(storeCtx, args.site ? String(args.site) : undefined, { forceLive, connect })
+    // Filtered dimensions pick the table too: `-d query --page /a` needs page_queries.
+    const table = resolvable ? inferDataset(dimNames as Dimension[], filterDims) as TableName : undefined
+    const states = site ? await readSiteStates(store, site) : []
+    const anchor = forceLive || !table ? getLatestGscDate() : newestDoneDate(states, [table]) ?? getLatestGscDate()
+    const { start: startDate, end: endDate } = windowOrExit(windowFlags, anchor)
+    const req: RouteRequest = { site, siteHint, label: 'query', localCapable: resolvable, liveCapable: true, forceLive, argv: useCliRuntime().rawArgs }
+    const needs: RouteNeed[] = table ? [{ kind: 'window', table, searchType: localSearchType, window: { start: startDate, end: endDate } }] : []
+    const routeState = await readRouteState({ store, site, needs, states, auth })
+    const route = decideRoute(req, routeState)
+    const json = format === 'json'
 
-    if (args.live) {
-      const { start: startDate, end: endDate } = windowOrExit(windowFlags, getLatestGscDate())
+    if (route.kind === 'live') {
+      const live = await connect()
+      const siteUrl = site ?? await live.resolveSite(undefined)
       const dimensionFilter = toLiveFilter(filters, siteUrl)
       if (args.explain) {
         const body: Record<string, unknown> = {
@@ -306,12 +320,14 @@ export const queryCommand = defineCommand({
           body.aggregationType = aggregationType
         if (dimensionFilter)
           body.dimensionFilterGroups = filterToGroups(dimensionFilter)
-        console.log(JSON.stringify({ siteUrl, body }, null, 2))
+        console.log(JSON.stringify({ siteUrl, source: 'live', body }, null, 2))
         return
       }
+      if (route.reason === 'no-store-data')
+        logger.warn(liveNote(siteUrl))
       if (!args.quiet)
         logger.debug(`Querying ${siteUrl} via live GSC API...`)
-      const result = await runLiveQuery(ctx.client!, siteUrl, {
+      const result = await runLiveQuery(live.client!, siteUrl, {
         startDate,
         endDate,
         dimensions: dimNames,
@@ -328,6 +344,7 @@ export const queryCommand = defineCommand({
           dateRange: { start: startDate, end: endDate },
           total: result.rows.length,
           data: result.rows,
+          meta: { source: 'live' },
         },
         format,
         path: args.output ? String(args.output) : undefined,
@@ -336,33 +353,30 @@ export const queryCommand = defineCommand({
       return
     }
 
+    const state = buildLocalState(dimNames, startDate, endDate, rowLimit, toLocalFilter(filters))
+    if (args.explain) {
+      // A plan preview never stops: it shows the stop the real run would hit.
+      const stop = route.kind === 'local' ? undefined : describeStop(route, req, routeState.auth)
+      console.log(JSON.stringify({ siteUrl: site ?? null, source: 'local', table, state, ...(stop ? { stop } : {}) }, null, 2))
+      return
+    }
+    if (route.kind === 'syncing' || route.kind === 'prompt')
+      stopAtRoute(route, req, routeState.auth, { json })
+
     if (dataState || aggregationType) {
       logger.warn('--data-state / --aggregation-type are ignored without --live')
     }
 
+    const siteUrl = site!
     if (!args.quiet)
       logger.debug(`Querying ${siteUrl} from local Parquet store...`)
-
-    const store = ctx.store!
-    // Filtered dimensions pick the table too: `-d query --page /a` needs page_queries.
-    const table = inferDataset(dimNames as Dimension[], filterDimensions(filters)) as TableName
-    const anchor = await resolveAnchor({ kind: 'local', store, siteUrl, tables: [table] }, (tables, fallback) => {
-      logger.warn(`No synced days for ${tables.join(', ')} on ${siteUrl}. The window ends on ${fallback}.`)
-    })
-    const { start: startDate, end: endDate } = windowOrExit(windowFlags, anchor)
-    const state = buildLocalState(dimNames, startDate, endDate, rowLimit, toLocalFilter(filters))
-    if (args.explain) {
-      console.log(JSON.stringify({ siteUrl, table, state }, null, 2))
-      return
-    }
-    await assertRangeCovered(store, siteUrl, table, startDate, endDate, format === 'json', localSearchType)
     const profiling = Boolean(args.profile)
     const probe = profiling ? collectSpans() : undefined
     const result = await store.engine.query(
       {
         userId: store.userId,
         siteId: store.siteIdFor(siteUrl),
-        table,
+        table: table!,
         searchType: localSearchType,
         ...(probe ? { profiler: probe.profiler } : {}),
       },
@@ -382,6 +396,7 @@ export const queryCommand = defineCommand({
         dateRange: { start: startDate, end: endDate },
         total: result.rows.length,
         data: result.rows,
+        meta: { source: 'local' },
       },
       format,
       path: args.output ? String(args.output) : undefined,
@@ -523,62 +538,6 @@ function buildLocalState(
     .getState()
 }
 
-async function assertRangeCovered(
-  store: LocalStore,
-  siteUrl: string,
-  table: TableName,
-  startDate: string,
-  endDate: string,
-  json: boolean,
-  searchType?: SearchType,
-): Promise<void> {
-  const watermarks = await store.engine.getWatermarks({
-    userId: store.userId,
-    siteId: store.siteIdFor(siteUrl),
-    table,
-    ...(searchType !== undefined ? { searchType } : {}),
-  })
-  const wm = watermarks[0]
-  const states = await store.engine.getSyncStates({
-    userId: store.userId,
-    siteId: store.siteIdFor(siteUrl),
-    table,
-    searchType: searchType ?? 'web',
-    state: 'done',
-  })
-  const completed = new Set(states.map(state => state.date))
-  const missingDates: string[] = []
-  for (let date = Date.parse(startDate); date <= Date.parse(endDate); date += 86400_000) {
-    const day = new Date(date).toISOString().slice(0, 10)
-    if (!completed.has(day))
-      missingDates.push(day)
-  }
-  if (missingDates.length === 0)
-    return
-  const nextArgs = ['sync', '--site', siteArg(siteUrl), '--start', startDate, '--end', endDate, '--tables', table, '--types', searchType ?? 'web', '--json']
-  const nextCommand = `gscdump ${nextArgs.map(value => /^[\w:./=-]+$/.test(value) ? value : `'${value.replaceAll('\'', '\'\\\'\'')}'`).join(' ')}`
-  const message = !wm
-    ? `No data synced for ${siteUrl} / ${table}.`
-    : `Store coverage is incomplete for ${missingDates.length} requested dates.`
-  if (json) {
-    const available = await store.engine.getWatermarks({ userId: store.userId, siteId: store.siteIdFor(siteUrl) })
-    console.log(JSON.stringify({ error: {
-      code: 'STORE_RANGE_NOT_COVERED',
-      message,
-      siteUrl,
-      table,
-      range: { start: startDate, end: endDate },
-      missingDates,
-      watermarks: watermarks.filter(w => w.table === table),
-      availableTables: available.map(w => ({ ...w, dimensions: tableDimensions(w.table) })),
-      nextArgs,
-      nextCommand,
-    } }, null, 2))
-  }
-  logger.error(`${message} Run ${nextCommand}, or pass --live.`)
-  process.exit(1)
-}
-
 type SqlMode
   = | { kind: 'sql', sql: string }
     | { kind: 'schema' }
@@ -589,16 +548,35 @@ async function runSqlMode(opts: {
   output: string | undefined
   format: 'json' | 'csv' | 'table'
   quiet: boolean
+  forceLive: boolean
   searchType?: SearchType
 }): Promise<void> {
   // The views cover every Site in the Store. Only --site needs the Site resolver.
   const ctx = await createCommandContext({ needsStore: true })
   const store = ctx.store!
-  const siteIds = opts.site ? [store.siteIdFor(await ctx.resolveSite(opts.site, { scope: 'store' }))] : undefined
+  const found = opts.site ? await ctx.matchSite(opts.site, { scope: 'store' }) : undefined
+  if (found && found.kind !== 'resolved' && found.kind !== 'not-found')
+    throw new Error(formatSiteResolution(found, 'store'))
+  const site = found?.kind === 'resolved' ? found.siteUrl : undefined
+  const siteIds = site ? [store.siteIdFor(site)] : opts.site ? [] : undefined
   const views = await openSqlViews(store, {
     ...(siteIds ? { siteIds } : {}),
     ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
   })
+  if (opts.mode.kind === 'sql') {
+    // Raw SQL reads the Store only. It stops when no view it names holds data.
+    const tables = referencedTables(opts.mode.sql, allTables())
+    if (tables.length > 0) {
+      const req: RouteRequest = { site, siteHint: opts.site, label: 'query --sql', localCapable: true, liveCapable: false, forceLive: opts.forceLive }
+      const routeState = await readRouteState({ store, site, needs: [], states: [] })
+      const stored = tables.some(table => !views.emptyTables.includes(table))
+      const route = decideRoute(req, { ...routeState, coverage: [{ kind: 'any', tables, stored }] })
+      if (route.kind === 'syncing' || route.kind === 'prompt') {
+        views.close()
+        stopAtRoute(route, req, routeState.auth, { json: opts.format === 'json' })
+      }
+    }
+  }
   try {
     const result = opts.mode.kind === 'schema'
       ? await describeViews(views)
@@ -626,7 +604,7 @@ async function runSqlMode(opts: {
 }
 
 async function runSql(views: SqlViews, sql: string): Promise<SqlResult & { warnings: string[] }> {
-  const warnings = referencedEmptyTables(sql, views.emptyTables)
+  const warnings = referencedTables(sql, views.emptyTables)
     .map(table => `No synced data for table ${table}. Run gscdump sync --tables ${table} to fill it.`)
   for (const warning of warnings)
     logger.warn(warning)

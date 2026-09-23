@@ -7,15 +7,14 @@
  * Pacific time). The wall clock never sets a window end, so a 7-day window
  * holds 7 final days.
  *
- * `parseWindowFlags` is pure. `newestDoneDate` is the pure core of the Store
- * anchor; `resolveAnchor` is its effectful shell.
+ * `parseWindowFlags` and `newestDoneDate` are pure. The router reads the
+ * Store's sync states and passes them in.
  */
 
 import type { ComparisonMode, ResolvedWindow, WindowPreset } from '@gscdump/engine/period'
 import type { Result } from 'gscdump/result'
-import type { LocalStore, SyncState, TableName } from './local-store'
+import type { SyncState, TableName } from './local-store'
 import { resolveWindow } from '@gscdump/engine/period'
-import { getLatestGscDate } from 'gscdump/dates'
 import { err, ok } from 'gscdump/result'
 
 export const PERIOD_ALIASES: Readonly<Record<string, WindowPreset>> = {
@@ -185,32 +184,4 @@ export function newestDoneDate(states: readonly SyncState[], tables: readonly Ta
       anchor = newest
   }
   return anchor
-}
-
-export type AnchorTarget
-  = | { kind: 'live' }
-    | { kind: 'local', store: LocalStore, siteUrl: string, tables: readonly TableName[] }
-
-/**
- * The anchor for a command's window. `local` reads the Store's sync states.
- * When a table has no synced day, `onMissing` runs so the caller can warn,
- * and the window anchors on the GSC date instead.
- */
-export async function resolveAnchor(
-  target: AnchorTarget,
-  onMissing: (tables: readonly TableName[], fallback: string) => void,
-): Promise<string> {
-  if (target.kind === 'live')
-    return getLatestGscDate()
-  const states = await target.store.engine.getSyncStates({
-    userId: target.store.userId,
-    siteId: target.store.siteIdFor(target.siteUrl),
-    state: 'done',
-  })
-  const anchor = newestDoneDate(states, target.tables)
-  if (anchor)
-    return anchor
-  const fallback = getLatestGscDate()
-  onMissing(target.tables, fallback)
-  return fallback
 }

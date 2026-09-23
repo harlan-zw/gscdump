@@ -116,9 +116,6 @@ export const dumpCommand = defineCommand({
       }
     }
 
-    const siteList = ctx.client
-      ? await ctx.loadSites().then(sites => sites.map(site => ({ siteUrl: site.siteUrl, permissionLevel: site.permissionLevel })))
-      : undefined
     const result = await dumpSites({
       store,
       targets,
@@ -127,7 +124,6 @@ export const dumpCommand = defineCommand({
       ...(tablesFilter ? { tables: tablesFilter } : {}),
       ...(searchType !== undefined ? { searchType } : {}),
       ...(preloadedEntries ? { entries: preloadedEntries } : {}),
-      ...(siteList ? { siteList } : {}),
     })
     const bing: BingDumpStep = args.bing === false || (tablesFilter && !tablesFilter.has('bing'))
       ? { _tag: 'disabled' }
@@ -215,14 +211,15 @@ export interface DumpResult {
   format: DumpFormat
   /** Data files the dump wrote, with their sizes. A database format writes one. */
   files: WrittenFile[]
-  /** Files that describe the whole dump: `manifest.json`, and `sites.json` when the Site list was known. */
+  /** Files that describe the whole dump: `sites.json` and `manifest.json`. */
   metadataFiles: WrittenFile[]
   sites: SiteDumpSummary[]
 }
 
+/** One dumped Site: its Site URL and the Store ID its files use. */
 export interface SiteListing {
   siteUrl: string
-  permissionLevel: string | null
+  siteId: string
 }
 
 export function formatBytes(bytes: number): string {
@@ -252,8 +249,6 @@ export async function dumpSites(opts: {
   tables?: ReadonlySet<string>
   searchType?: SearchType
   entries?: readonly ManifestEntry[]
-  /** Search Console Sites and permission levels, written to `sites.json`. */
-  siteList?: readonly SiteListing[]
 }): Promise<DumpResult> {
   const { outDir, format } = opts
   const sink = await openDumpSink(outDir, format)
@@ -264,8 +259,9 @@ export async function dumpSites(opts: {
   })
   const files = await sink.close()
   const metadataFiles: WrittenFile[] = []
-  if (opts.siteList)
-    metadataFiles.push(await writeJsonFile(path.join(outDir, 'sites.json'), { sites: opts.siteList }))
+  // The targets come from the Store's Site map, so `sites.json` needs no Google call.
+  const sites: SiteListing[] = opts.targets.map(target => ({ siteUrl: target.site, siteId: target.siteId }))
+  metadataFiles.push(await writeJsonFile(path.join(outDir, 'sites.json'), { sites }))
   metadataFiles.push(await writeJsonFile(path.join(outDir, 'manifest.json'), {
     generatedAt: new Date().toISOString(),
     format,

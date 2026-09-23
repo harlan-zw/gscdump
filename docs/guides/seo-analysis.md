@@ -9,8 +9,9 @@ Use `analyze` when you want one Analyzer's results.
 gscdump sync --site example.com --days 90 --tables pages,queries,page_queries,countries
 ```
 
-The CLI reads the Store by default.
-If no local data is available, sync first or pass `--live`.
+The CLI reads the Store when it covers the window.
+If the Site has no Store data and Google is connected, the CLI asks the live API and says so on stderr.
+If the Store holds only some of the dates, the CLI stops and prints the `gscdump sync` command that fills them.
 Live Sources support Analyzers with row plans; SQL-only Analyzers need stored data.
 
 ## Start with a Report

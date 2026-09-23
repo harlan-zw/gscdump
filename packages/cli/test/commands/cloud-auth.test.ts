@@ -53,6 +53,29 @@ it('reports cloud account and features without token details', async () => {
   expect(JSON.stringify(result)).not.toContain(cloud.apiKey)
 })
 
+it('reports hosted sync progress for each registered Site', async () => {
+  await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
+  vi.mocked(fetch).mockImplementation(async (input: string | URL) => {
+    const url = new URL(input)
+    if (url.pathname.endsWith('/cli/me'))
+      return Response.json({ user: { publicId: 'user-1', email: 'user@example.com' }, sites: [{ siteId: 's_1', siteUrl: 'sc-domain:example.com' }] })
+    if (url.pathname.endsWith('/cli/sites/available')) {
+      return Response.json([
+        { siteUrl: 'sc-domain:example.com', permissionLevel: 'siteOwner', registered: true, syncStatus: 'syncing', syncProgress: { completed: 41, total: 90, percent: 45.5 } },
+        { siteUrl: 'https://other.example/', permissionLevel: 'siteOwner', registered: false },
+      ])
+    }
+    throw new Error(`Unexpected request: ${url.pathname}`)
+  })
+
+  await run('status', { json: true })
+  const result = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])
+  expect(result.hostedSync).toEqual([{ siteUrl: 'sc-domain:example.com', syncStatus: 'syncing', syncProgress: { completed: 41, total: 90, percent: 45.5 }, oldestDateSynced: null, newestDateSynced: null }])
+
+  await run('status', {})
+  expect(vi.mocked(console.log).mock.calls.map(call => String(call[0]))).toContain('    sc-domain:example.com  syncing: 41 of 90 days (46%)')
+})
+
 it('reports a failed cloud status instead of rejecting when the hosted API fails', async () => {
   await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
   vi.mocked(fetch).mockImplementation(async (input: string | URL) => {

@@ -100,7 +100,10 @@ gscdump query --site example.com --dimensions page --limit 1000
 ```
 
 Sync writes Parquet files to `~/.gscdump/data` unless you chose another directory.
-Later queries read those files by default.
+Later queries read those files when they cover the requested dates.
+Before the first sync, a query without `--live` asks the live API and says so on stderr.
+If the Store holds only some of the dates, the query stops and prints the `gscdump sync` command for the rest.
+While a sync runs, a query of dates it has not reached yet prints its progress instead.
 Daily totals combine Site totals, device metrics, and query impressions.
 Google still controls which rows its API returns; pagination cannot recover omitted data.
 See [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data).
@@ -122,6 +125,7 @@ gscdump dump --all-sites --format sqlite --out ./export-sqlite
 It also exports Bing data for matching sites when a Bing login exists. Pass `--no-bing` to skip it.
 Every row has `site` and `search_type` columns. The Store keeps every search type, so filter or group by `search_type` before you add rows together.
 Each dump writes `manifest.json` with every file size and how much of each dataset the Store holds so far. Daily sync fills the rest.
+It also writes `sites.json` with the Site URL and Store ID of each exported Site. It needs no Google call.
 Use `query --output` to write a filtered result to one file.
 
 ## Set defaults

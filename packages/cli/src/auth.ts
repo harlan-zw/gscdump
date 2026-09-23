@@ -15,6 +15,7 @@ import { CodeChallengeMethod, JWT as GoogleJWT, OAuth2Client as OAuth2ClientClas
 import { createAuth } from 'gscdump/client'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import open from 'open'
+import { resolveAuthentication } from './auth-state'
 import { getConfigDir, loadConfig } from './config'
 import { getAppliedEnvKeys, getLoadedEnvPath } from './env-file'
 import { pickCliEnvironmentValue, resolveCliEnvironment } from './environment'
@@ -642,3 +643,15 @@ export async function formatAuthProvenance(): Promise<string> {
 }
 
 export type { GscdumpConfig }
+
+/**
+ * Which credential can reach Google without a sign-in, read from disk and
+ * env only. It never calls Google, so a local read stays offline.
+ */
+export async function probeAuth(): Promise<'none' | 'google' | 'hosted'> {
+  if ((await resolveAuthentication())._tag === 'Cloud')
+    return 'hosted'
+  if (resolveBYOK() || await resolveServiceAccount())
+    return 'google'
+  return (await loadTokens()) !== null ? 'google' : 'none'
+}

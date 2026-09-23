@@ -5,7 +5,7 @@ import { isCancel, password } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { clearTokens, formatAuthProvenance, getAuth, GOOGLE_NOT_CONNECTED, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
-import { clearAuthentication, getCloudAccount, parseAuthentication, parseAuthMode, resolveAuthentication, saveAuthentication } from '../auth-state'
+import { clearAuthentication, formatHostedSync, getCloudAccount, getCloudSites, parseAuthentication, parseAuthMode, resolveAuthentication, saveAuthentication } from '../auth-state'
 import { clearBingCredentials, getBingClient, inspectBingCredentials } from '../bing-auth'
 import { authCommandMeta } from '../command-meta'
 import { loadConfig, saveConfig } from '../config'
@@ -119,13 +119,35 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
       }
       return
     }
+    // Hosted sync progress is extra detail. A failure here is a status note, not a crash.
+    const hosted = await getCloudSites(authentication).then(
+      sites => ({ _tag: 'Ok' as const, sites: sites.filter(site => site.registered) }),
+      (error: unknown) => ({ _tag: 'Err' as const, detail: error instanceof Error ? error.message : 'Hosted Site list failed.' }),
+    )
     if (json) {
-      console.log(JSON.stringify({ authenticated: true, mode: 'cloud', account: account.value.user.email, apiRoot: authentication.apiRoot, sites: account.value.sites, capabilities }, null, 2))
+      console.log(JSON.stringify({
+        authenticated: true,
+        mode: 'cloud',
+        account: account.value.user.email,
+        apiRoot: authentication.apiRoot,
+        sites: account.value.sites,
+        ...(hosted._tag === 'Ok'
+          ? { hostedSync: hosted.sites.map(site => ({ siteUrl: site.siteUrl, syncStatus: site.syncStatus ?? null, syncProgress: site.syncProgress ?? null, oldestDateSynced: site.oldestDateSynced ?? null, newestDateSynced: site.newestDateSynced ?? null })) }
+          : { hostedSyncError: hosted.detail }),
+        capabilities,
+      }, null, 2))
     }
     else {
       logger.success(`Authenticated with cloud: ${account.value.user.email}`)
       console.log(`  API: ${authentication.apiRoot}`)
       console.log(`  Sites: ${account.value.sites.length}`)
+      if (hosted._tag === 'Ok') {
+        for (const site of hosted.sites)
+          console.log(`    ${site.siteUrl}  ${formatHostedSync(site)}`)
+      }
+      else {
+        console.log(`  Hosted sync status is not available: ${hosted.detail}`)
+      }
       console.log('  Google and Bing use connections saved on gscdump.com.')
       console.log(`  Cloud commands: ${capabilities.cloud.join(', ')}`)
       console.log('  Google indexing and Site Verification require --mode local.')

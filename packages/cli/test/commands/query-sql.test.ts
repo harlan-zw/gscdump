@@ -16,13 +16,18 @@ vi.mock('../../src/config', () => ({
   loadConfig: vi.fn(async () => ({})),
 }))
 
-vi.mock('../../src/context', () => ({
+vi.mock('../../src/context', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/context')>(),
   createCommandContext: vi.fn(async () => ({
     config: {},
     store: state.store,
+    dataDir: state.store!.dataDir,
     resolveSite: vi.fn(async (hint: string) => hint),
+    matchSite: vi.fn(async (hint: string) => ({ kind: 'resolved', siteUrl: hint, via: 'exact' })),
   })),
 }))
+
+vi.mock('../../src/auth', () => ({ probeAuth: vi.fn(async () => 'none') }))
 
 vi.mock('../../src/utils', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/utils')>()
@@ -124,10 +129,14 @@ describe('query --sql views', () => {
     expect(result.data).toEqual([{ search_type: 'image', impressions: 2 }])
   })
 
-  it('warns when a query names a table with no synced data', async () => {
-    const result = await sql('SELECT COUNT(*) AS n FROM countries')
+  it('stops with the next command when no table the query names has synced data', async () => {
+    await expect(sql('SELECT COUNT(*) AS n FROM countries')).rejects.toThrow('The Store has no countries data')
+    expect(JSON.parse(output.join('\n')).error).toMatchObject({ code: 'NOT_CONNECTED', nextCommand: 'gscdump init' })
+  })
 
-    expect(result.data).toEqual([{ n: 0 }])
+  it('warns when a join names a table with no synced data', async () => {
+    const result = await sql('SELECT COUNT(*) AS n FROM pages LEFT JOIN countries USING (date)')
+
     expect(result.warnings).toEqual([expect.stringContaining('No synced data for table countries')])
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('countries'))
   })

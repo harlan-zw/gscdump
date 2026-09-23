@@ -7,6 +7,7 @@
 // state and return a new one. `openQuotaLedger` keeps that state in memory
 // and merges it into `quota-ledger.json` on `flush`.
 
+import type { FetchContext, FetchOptions } from 'ofetch'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
@@ -312,5 +313,108 @@ export async function openQuotaLedger(opts: { dataDir: string, now?: () => Date 
       delta = emptyLedgerState()
       await writeLedgerState(file, state)
     },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Request gate
+// ---------------------------------------------------------------------------
+
+const SEARCH_ANALYTICS_PATH_RE = /^\/webmasters\/v3\/sites\/([^/]+)\/searchAnalytics\/query$/
+
+/** The quota api a Google request spends, and the Site it counts against. Other requests spend none. */
+export function quotaTarget(url: string, body: unknown): { api: QuotaApi, site: string } | undefined {
+  const parsed = new URL(url)
+  if (parsed.origin === 'https://searchconsole.googleapis.com') {
+    const match = parsed.pathname.match(SEARCH_ANALYTICS_PATH_RE)
+    if (match)
+      return { api: 'searchAnalytics', site: decodeURIComponent(match[1]!) }
+    if (parsed.pathname === '/v1/urlInspection/index:inspect') {
+      const fields = typeof body === 'string' ? JSON.parse(body) as { siteUrl?: unknown } : body as { siteUrl?: unknown } | undefined
+      return typeof fields?.siteUrl === 'string' ? { api: 'urlInspection', site: fields.siteUrl } : undefined
+    }
+  }
+  if (parsed.origin === 'https://indexing.googleapis.com' && parsed.pathname === '/v3/urlNotifications:publish')
+    return { api: 'indexing', site: '*' }
+  return undefined
+}
+
+/** A call the ledger refused, or Google refused for quota. */
+export interface QuotaStop {
+  api: QuotaApi
+  site: string
+  reason: string
+  /** Epoch ms when Google lets the next call through. */
+  resetsAt: number
+}
+
+export function quotaStopError(stop: QuotaStop): Error & { quotaStop: QuotaStop } {
+  return Object.assign(new Error(formatQuotaStop(stop)), { name: 'QuotaStop', quotaStop: stop })
+}
+
+export function quotaStopOf(error: unknown): QuotaStop | undefined {
+  return (error as { quotaStop?: QuotaStop } | null)?.quotaStop
+}
+
+const API_LABELS: Record<QuotaApi, string> = {
+  searchAnalytics: 'Search Analytics',
+  urlInspection: 'URL Inspection',
+  indexing: 'Indexing API',
+}
+
+/** One line: which quota stopped the call, and when it resets. */
+export function formatQuotaStop(stop: QuotaStop, now: Date = new Date()): string {
+  const scope = stop.site === '*' ? 'this Google Cloud project' : stop.site
+  const at = new Date(stop.resetsAt)
+  const sameDay = at.toDateString() === now.toDateString()
+  const when = at.toLocaleString('en-US', sameDay
+    ? { hour: 'numeric', minute: '2-digit' }
+    : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  return `The Google ${API_LABELS[stop.api]} quota for ${scope} is used up (${stop.reason}). It resets at ${when}. Run the command again after that.`
+}
+
+function requestUrl(request: FetchContext['request']): string {
+  return typeof request === 'string' ? request : request instanceof URL ? request.href : request.url
+}
+
+function asArray<T>(hooks: T | T[] | undefined): T[] {
+  return hooks === undefined ? [] : Array.isArray(hooks) ? hooks : [hooks]
+}
+
+/**
+ * Fetch hooks that send every quota-spending Google call through the
+ * ledger. A refused reservation or a Google quota refusal throws a
+ * `QuotaStop` at once, so the client never retries into a spent quota.
+ */
+export function quotaFetchOptions(ledger: QuotaLedger, base: FetchOptions = {}): FetchOptions {
+  return {
+    ...base,
+    onRequest: [
+      async (context) => {
+        const target = quotaTarget(requestUrl(context.request), context.options.body)
+        if (!target)
+          return
+        const decision = ledger.reserve(target.api, target.site, 1)
+        if (decision.kind === 'exhausted')
+          throw quotaStopError({ ...target, reason: decision.reason, resetsAt: decision.resetsAt })
+        await ledger.flush()
+      },
+      ...asArray(base.onRequest),
+    ],
+    onResponseError: [
+      ...asArray(base.onResponseError),
+      async (context) => {
+        const target = quotaTarget(requestUrl(context.request), context.options.body)
+        if (!target)
+          return
+        const refusal = parseQuotaRefusal({ statusCode: context.response.status, data: context.response._data, message: context.error?.message ?? '' })
+        if (!refusal)
+          return
+        ledger.record(target.api, target.site, { kind: 'refused', reason: refusal })
+        await ledger.flush()
+        const block = ledger.status(target.api, target.site).blocked
+        throw quotaStopError({ ...target, reason: refusal, resetsAt: block?.until ?? Date.now() })
+      },
+    ],
   }
 }

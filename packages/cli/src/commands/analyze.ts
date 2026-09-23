@@ -5,7 +5,7 @@ import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { DEFAULT_FETCH_BUDGET, MAX_FETCH_BUDGET } from '@gscdump/engine/analysis-types'
 import { defineCommand } from 'citty'
 import { unwrapResult } from 'gscdump/result'
-import { analyzerTables, resolveAnalysisSource } from '../analysis-local'
+import { analysisNeeds, analyzerTables, resolveAnalysisSource } from '../analysis-local'
 import { analyzeCommandMeta } from '../command-meta'
 import { coverageWarning, renderAnalysis } from '../render/analysis'
 import { terminalOutputOptions } from '../render/terminal'
@@ -126,13 +126,16 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       if (!args.json && !['table', 'json', 'csv'].includes(args.format ?? 'table'))
         throw new Error('Invalid --format. Use table, json, or csv.')
       const baseParams = buildParams(tool, args)
-      const { format, runAnalysis, siteUrl, anchorFor } = await resolveAnalysisSource({
+      const format = args.json ? 'json' : String(args.format ?? 'table')
+      const { runAnalysis, siteUrl, anchor } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
-        json: !!args.json,
-        format: args.format,
+        json: format === 'json',
+        label: `analyze ${tool}`,
+        types: [tool],
+        anchorTables: analyzerTables(baseParams),
+        needs: anchor => analysisNeeds(withWindow(tool, baseParams, args, anchor)),
       })
-      const anchor = await anchorFor(analyzerTables(baseParams))
       const params = withWindow(tool, baseParams, args, anchor)
 
       logger.debug(`Running ${tool} analysis...`)

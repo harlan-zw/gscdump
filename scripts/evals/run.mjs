@@ -181,12 +181,11 @@ try {
       const ctx = await context('recovery', { seeded: true })
       const result = await run(process.execPath, [cli, 'query', '--site', site, '--start', start, '--end', end, '--dimensions', 'query', '--format', 'json'], { cwd: ctx.workspace, env: ctx.env })
       await save('recovery-query.json', result)
-      assert.equal(result.code, 1)
-      const missing = JSON.parse(result.stdout)
-      assert.equal(missing.error.code, 'STORE_RANGE_NOT_COVERED')
-      assert.equal(missing.error.table, 'queries')
-      assert(missing.error.availableTables.some(table => table.table === 'pages' && table.dimensions.includes('page')))
-      assert(missing.error.nextArgs.includes(start) && missing.error.nextArgs.includes(end))
+      // The Store holds no queries data for the Site, so the router answers live and says so.
+      assert.equal(result.code, 0, result.stderr)
+      const answered = JSON.parse(result.stdout)
+      assert.equal(answered.meta.source, 'live')
+      assert.match(result.stderr, /No synced data for .*; answering from the live Search Console API\./)
       const skipped = JSON.parse(await ctx.setup(['sync', '--site', site, '--start', start, '--end', end, '--tables', 'pages', '--json', '--no-rollups']))
       assert.equal(skipped.status, 'completed')
       assert.equal(skipped.totals.pages.rows, 0)
@@ -194,7 +193,7 @@ try {
       const retry = JSON.parse(await ctx.setup(['sync', '--site', site, '--start', start, '--end', end, '--tables', 'pages', '--json', '--retry-failed']))
       assert.equal(retry.status, 'skipped')
       assert.equal(retry.reason, 'no-failed-dates')
-      return { missingTable: missing.error.table, skippedDates: skipped.totals.pages.skipped }
+      return { liveRows: answered.data.length, skippedDates: skipped.totals.pages.skipped }
     })
     await attempt('cli-covered-empty-and-path-spaces', async () => {
       requireGoogle()

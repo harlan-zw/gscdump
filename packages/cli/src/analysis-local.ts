@@ -1,75 +1,92 @@
 import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
-import type { AnalysisQuerySource } from '@gscdump/engine/source'
+import type { AnalysisQuerySource, FileSet } from '@gscdump/engine/source'
 import type { Result } from 'gscdump/result'
-import type { LocalStore, TableName } from './local-store'
-import process from 'node:process'
+import type { TableName } from './local-store'
+import type { LiveReason, RouteNeed } from './route'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 import { AnalyzerCapabilityError, runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import { createEngineQuerySource } from '@gscdump/engine/source'
+import { getLatestGscDate } from 'gscdump/dates'
 import { err, ok, unwrapResult } from 'gscdump/result'
-import { createCommandContext, siteArg } from './context'
+import { createCommandContext } from './context'
 import { LocalStoreUnsupportedError } from './error-handler'
-import { createLocalStore } from './local-store'
+import { decideRoute, liveNote, readRouteState, readSiteStates, resolveReadSite, stopAtRoute } from './route'
+import { useCliRuntime } from './runtime'
 import { logger } from './utils'
-import { resolveAnchor } from './window'
+import { newestDoneDate } from './window'
 
-export async function hasLocalData(
-  store: LocalStore,
-  siteUrl: string,
-): Promise<boolean> {
-  const entries = await store.engine.listLive({
-    userId: store.userId,
-    siteId: store.siteIdFor(siteUrl),
-  })
-  return entries.length > 0
-}
+/** Where the rows of a run came from. JSON output carries it as `meta.source`. */
+export type RowSource = 'local' | 'live'
 
 export interface ResolvedAnalysisSource {
   source: AnalysisQuerySource
   siteUrl: string
-  format: string
   isLive: boolean
+  /** Set when the router chose live on its own or `--live` forced it. */
+  liveReason?: LiveReason
+  /** Newest complete date the window ends on. */
+  anchor: string
   /**
    * Run a single analysis through this resolved source. Translates
    * `AnalyzerCapabilityError` from the dispatcher into
    * `LocalStoreUnsupportedError` carrying the mode; the CLI shell renders it.
    */
   runAnalysis: (params: AnalysisParams) => Promise<AnalysisResult>
-  /**
-   * Newest complete date for `tables`: the Store's newest synced day in
-   * local mode, `getLatestGscDate()` in live mode. Windows end on it.
-   */
-  anchorFor: (tables: readonly TableName[]) => Promise<string>
+}
+
+const PLACEHOLDER_DATE = '2000-01-01'
+const DAILY_PARTITION_RE = /^daily\/(\d{4}-\d{2}-\d{2})$/
+
+function sqlPlanFileSets(params: AnalysisParams): FileSet[] | undefined {
+  const analyzer = defaultAnalyzerRegistry.getAnalyzerVariants(params.type)?.sql
+  if (!analyzer)
+    return undefined
+  let plan: ReturnType<typeof analyzer.build>
+  try {
+    plan = analyzer.build(params)
+  }
+  catch (error) {
+    // The run itself reports the build failure with its own message.
+    logger.debug(`Cannot plan ${params.type}: ${(error as Error).message}`)
+    return undefined
+  }
+  if (plan.kind !== 'sql')
+    return undefined
+  return [plan.current, plan.previous, ...Object.values(plan.extraFiles ?? {})].filter((fileSet): fileSet is FileSet => Boolean(fileSet))
 }
 
 /**
  * Tables an analyzer's SQL plan reads, for anchoring its window. Dates in
  * `params` do not change the tables. Returns an empty list (any table) when
- * the analyzer has no SQL plan or its plan cannot build from these params;
- * the run itself then reports that build failure.
+ * the analyzer has no SQL plan or its plan cannot build from these params.
  */
 export function analyzerTables(params: AnalysisParams): TableName[] {
-  const analyzer = defaultAnalyzerRegistry.getAnalyzerVariants(params.type)?.sql
-  if (!analyzer)
-    return []
-  let plan: ReturnType<typeof analyzer.build>
-  try {
-    plan = analyzer.build({ startDate: '2000-01-01', endDate: '2000-01-01', prevStartDate: '2000-01-01', prevEndDate: '2000-01-01', ...params })
-  }
-  catch (error) {
-    logger.debug(`Cannot plan ${params.type} to pick its tables: ${(error as Error).message}`)
-    return []
-  }
-  if (plan.kind !== 'sql')
-    return []
-  const fileSets = [plan.current, plan.previous, ...Object.values(plan.extraFiles ?? {})]
-  return [...new Set(fileSets.flatMap(fileSet => fileSet ? [fileSet.table] : []))]
+  const fileSets = sqlPlanFileSets({ startDate: PLACEHOLDER_DATE, endDate: PLACEHOLDER_DATE, prevStartDate: PLACEHOLDER_DATE, prevEndDate: PLACEHOLDER_DATE, ...params })
+  return [...new Set((fileSets ?? []).map(fileSet => fileSet.table))]
 }
 
-function warnMissingSync(siteUrl: string) {
-  return (tables: readonly TableName[], fallback: string): void => {
-    logger.warn(`No synced days for ${tables.length ? tables.join(', ') : 'any table'} on ${siteUrl}. Windows end on ${fallback}. Run \`gscdump sync\` first.`)
+/**
+ * What a run reads from the Store: each FileSet of the analyzer's SQL plan,
+ * with the dates of its daily partitions. `params` must hold the real window.
+ */
+export function analysisNeeds(params: AnalysisParams): RouteNeed[] {
+  const needs: RouteNeed[] = []
+  for (const fileSet of sqlPlanFileSets(params) ?? []) {
+    const dates = fileSet.partitions.flatMap(partition => DAILY_PARTITION_RE.exec(partition)?.[1] ?? []).sort()
+    if (dates.length === 0)
+      continue
+    needs.push({ kind: 'window', table: fileSet.table, searchType: 'web', window: { start: dates[0]!, end: dates.at(-1)! } })
+  }
+  return needs
+}
+
+/** Which sources can run these analyzers. */
+export function analyzerSources(types: readonly string[]): { local: boolean, live: boolean } {
+  const variants = types.map(type => defaultAnalyzerRegistry.getAnalyzerVariants(type))
+  return {
+    local: variants.every(variant => Boolean(variant?.sql)),
+    live: variants.every(variant => Boolean(variant?.rows)),
   }
 }
 
@@ -77,21 +94,28 @@ export interface ResolveAnalysisSourceArgs {
   site?: unknown
   live?: boolean
   json?: boolean
-  format?: unknown
+  /** The command, for messages: `analyze movers`, `report triage`. */
+  label: string
+  /** Analyzer ids the run executes. They decide which sources can answer. */
+  types: readonly string[]
+  /** Which sources can answer, when `types` alone does not say. */
+  sources?: { local: boolean, live: boolean }
+  /** Tables whose newest synced day anchors the window. */
+  anchorTables: readonly TableName[]
+  /** Store needs of the run once its window ends on `anchor`. */
+  needs: (anchor: string) => RouteNeed[]
 }
 
 /**
  * Errors-as-values core: run one analysis, returning the modelled
  * `LocalStoreUnsupportedError` as a value when the dispatcher reports the
  * analyzer has no implementation for this source (`AnalyzerCapabilityError`).
- * Any other failure is a defect and still propagates. `makeRunAnalysis` is the
- * thin throwing wrapper that re-raises the value, preserving the
- * `LocalStoreUnsupportedError` identity the global handler matches on.
+ * Any other failure is a defect and still propagates.
  */
 async function runAnalysisResult(
   source: AnalysisQuerySource,
   params: AnalysisParams,
-  mode: 'live' | 'local',
+  mode: RowSource,
 ): Promise<Result<AnalysisResult, LocalStoreUnsupportedError>> {
   return runAnalyzerFromSource(source, params, defaultAnalyzerRegistry)
     .then(ok<AnalysisResult>)
@@ -102,62 +126,46 @@ async function runAnalysisResult(
     })
 }
 
-function makeRunAnalysis(
-  source: AnalysisQuerySource,
-  mode: 'live' | 'local',
-): (params: AnalysisParams) => Promise<AnalysisResult> {
-  return async params =>
-    unwrapResult(await runAnalysisResult(source, params, mode), e => e)
+function makeRunAnalysis(source: AnalysisQuerySource, mode: RowSource): (params: AnalysisParams) => Promise<AnalysisResult> {
+  return async (params) => {
+    const result = unwrapResult(await runAnalysisResult(source, params, mode), e => e)
+    return { ...result, meta: { ...result.meta, source: mode } }
+  }
 }
 
 /**
- * Single entry point used by `analyze` and `report` commands. Picks live vs.
- * local-store source from `--live`, ensures local data exists when running
- * locally, and returns a `runAnalysis` shim that maps capability errors to
- * `LocalStoreUnsupportedError`. The CLI shell renders the final error.
- *
- * Local mode does NOT require live auth: the local store is the
- * authoritative source by design, and the Site resolves from the Store.
+ * Single entry point for `analyze` and `report`. The router picks the
+ * Store or the live API from coverage, auth and the sync run, and stops
+ * with the next command when neither can answer. A Store read never needs
+ * Google auth.
  */
-export async function resolveAnalysisSource(
-  args: ResolveAnalysisSourceArgs,
-): Promise<ResolvedAnalysisSource> {
-  const isLive = !!args.live
-  const format = args.json ? 'json' : (args.format ? String(args.format) : 'table')
+export async function resolveAnalysisSource(args: ResolveAnalysisSourceArgs): Promise<ResolvedAnalysisSource> {
+  const forceLive = Boolean(args.live)
+  const ctx = await createCommandContext({ needsStore: true })
+  const store = ctx.store!
+  let live: ReturnType<typeof createCommandContext> | undefined
+  const connect = (): ReturnType<typeof createCommandContext> => (live ??= createCommandContext({ needsAuth: true, needsStore: false }))
+  const { site, siteHint, auth } = await resolveReadSite(ctx, args.site ? String(args.site) : undefined, { forceLive, connect })
 
-  if (!isLive) {
-    const ctx = await createCommandContext()
-    const store = createLocalStore({ dataDir: ctx.dataDir })
-    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined, { scope: 'store' })
+  const states = site ? await readSiteStates(store, site) : []
+  const anchor = forceLive ? getLatestGscDate() : newestDoneDate(states, args.anchorTables) ?? getLatestGscDate()
+  const sources = args.sources ?? analyzerSources(args.types)
+  const req = { site, siteHint, label: args.label, localCapable: sources.local, liveCapable: sources.live, forceLive, argv: useCliRuntime().rawArgs }
+  const state = await readRouteState({ store, site, needs: args.needs(anchor), states, auth })
+  const route = decideRoute(req, state)
 
-    const localAvailable = await hasLocalData(store, siteUrl)
-    if (!localAvailable) {
-      logger.error(`No local data for ${siteUrl}. Run \`gscdump sync --site ${siteArg(siteUrl)}\` first, or pass --live.`)
-      process.exit(1)
-    }
-    const source = createEngineQuerySource({
-      engine: store.engine,
-      ctx: { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
-    })
-    return {
-      source,
-      siteUrl,
-      format,
-      isLive,
-      runAnalysis: makeRunAnalysis(source, 'local'),
-      anchorFor: tables => resolveAnchor({ kind: 'local', store, siteUrl, tables }, warnMissingSync(siteUrl)),
-    }
+  if (route.kind === 'syncing' || route.kind === 'prompt')
+    stopAtRoute(route, req, state.auth, { json: Boolean(args.json) })
+
+  if (route.kind === 'local') {
+    const source = createEngineQuerySource({ engine: store.engine, ctx: { userId: store.userId, siteId: store.siteIdFor(site!) } })
+    return { source, siteUrl: site!, isLive: false, anchor, runAnalysis: makeRunAnalysis(source, 'local') }
   }
 
-  const ctx = await createCommandContext({ needsAuth: true, needsStore: false })
-  const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-  const source = createGscApiQuerySource({ client: ctx.client!, siteUrl })
-  return {
-    source,
-    siteUrl,
-    format,
-    isLive,
-    runAnalysis: makeRunAnalysis(source, 'live'),
-    anchorFor: () => resolveAnchor({ kind: 'live' }, warnMissingSync(siteUrl)),
-  }
+  const liveCtx = await connect()
+  const siteUrl = site ?? await liveCtx.resolveSite(undefined)
+  if (route.reason === 'no-store-data')
+    logger.warn(liveNote(siteUrl))
+  const source = createGscApiQuerySource({ client: liveCtx.client!, siteUrl })
+  return { source, siteUrl, isLive: true, liveReason: route.reason, anchor, runAnalysis: makeRunAnalysis(source, 'live') }
 }

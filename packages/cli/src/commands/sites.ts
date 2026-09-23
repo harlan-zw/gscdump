@@ -4,6 +4,7 @@ import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { resolveSiteInput } from 'gscdump'
 import { addSite, deleteSite, fetchSitesWithSitemaps, getVerificationToken, getVerifiedSite, listVerifiedSites, siteUrlToVerificationSite, unverifySite, verificationMethodsFor, verifySite } from 'gscdump/sites'
+import { formatHostedSync, getCloudSites } from '../auth-state'
 import { sitesCommandMeta } from '../command-meta'
 import { createCommandContext, formatSiteResolution } from '../context'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
@@ -416,9 +417,25 @@ async function runListSites(args: Record<string, unknown>): Promise<void> {
 
   const all = await ctx.loadSites()
   const sites = ownerOnly ? all.filter(s => s.permissionLevel === 'siteOwner') : all
+  // Hosted mode shows the sync progress of gscdump.com next to each Site.
+  const hosted = ctx.authentication._tag === 'Cloud'
+    ? await getCloudSites(ctx.authentication).then(
+        list => new Map(list.map(site => [site.siteUrl, site])),
+        (error: Error) => {
+          // The Site list still prints. Only the hosted progress is missing.
+          logger.warn(`Hosted sync status is not available: ${error.message}`)
+          return undefined
+        },
+      )
+    : undefined
 
   if (args.json) {
-    console.log(JSON.stringify(sites, null, 2))
+    console.log(JSON.stringify(hosted
+      ? sites.map((site) => {
+          const entry = hosted.get(site.siteUrl)
+          return { ...site, hostedSync: entry?.registered ? { syncStatus: entry.syncStatus ?? null, syncProgress: entry.syncProgress ?? null, oldestDateSynced: entry.oldestDateSynced ?? null, newestDateSynced: entry.newestDateSynced ?? null } : null }
+        })
+      : sites, null, 2))
     return
   }
 
@@ -431,7 +448,9 @@ async function runListSites(args: Record<string, unknown>): Promise<void> {
   console.log()
   for (const site of sites) {
     const perm = site.permissionLevel === 'siteOwner' ? '\x1B[32m' : '\x1B[90m'
-    console.log(`  ${site.siteUrl} ${perm}(${site.permissionLevel})\x1B[0m`)
+    const entry = hosted?.get(site.siteUrl)
+    const sync = entry ? formatHostedSync(entry) : undefined
+    console.log(`  ${site.siteUrl} ${perm}(${site.permissionLevel})\x1B[0m${sync ? `  hosted sync ${sync}` : ''}`)
   }
 }
 

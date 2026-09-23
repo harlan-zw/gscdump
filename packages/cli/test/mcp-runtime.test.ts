@@ -61,6 +61,8 @@ describe('gscdump mcp runtime', () => {
 
   beforeEach(async () => {
     configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-mcp-runtime-'))
+    // Keep the quota ledger out of the real data dir.
+    await fs.writeFile(path.join(configDir, 'config.json'), JSON.stringify({ dataDir: path.join(configDir, 'data') }))
   })
 
   afterEach(async () => {
@@ -116,16 +118,27 @@ describe('gscdump mcp runtime', () => {
       ? googleError(403, 'Search Analytics load quota exceeded.', 'quotaExceeded')
       : undefined)
 
-    // One retry waits 5s on the real clock. The CLI default backoff (65s)
-    // outlasts both this test's timeout and the MCP client's 60s request timeout.
-    const result = await client.callTool({
+    // The quota ledger records the refusal and stops at once, without the
+    // client's quota backoff, so the agent gets an answer before its timeout.
+    const call = () => client.callTool({
       name: 'query',
       arguments: { siteUrl: 'example.com', startDate: '2026-08-01', endDate: '2026-08-28', dimensions: ['query'] },
-    }) as CallToolResult
+    }) as Promise<CallToolResult>
+    const result = await call()
 
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('quota exceeded')
-    expect(text(result)).toMatch(/Try again/)
+    expect(text(result)).toMatch(/It resets at /)
     expect(text(result)).not.toContain('gscdump auth status')
+
+    // The next call stops at the ledger and never reaches Google.
+    const queries = () => fetchMock.mock.calls.filter(([input]) => String(input).includes('/searchAnalytics/query')).length
+    const sent = queries()
+    const again = await call()
+    expect(again.isError).toBe(true)
+    expect(text(again)).toMatch(/It resets at /)
+    expect(queries()).toBe(sent)
+    const ledger = JSON.parse(await fs.readFile(path.join(configDir, 'data', 'quota-ledger.json'), 'utf8'))
+    expect(ledger.usage).toEqual([expect.objectContaining({ api: 'searchAnalytics', site: 'sc-domain:example.com', blockedUntil: expect.any(Number) })])
   })
 })

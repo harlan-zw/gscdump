@@ -7,6 +7,7 @@ import { isEngineError } from '@gscdump/engine/errors'
 import { classifyError } from 'gscdump/errors'
 import { isQueryError } from 'gscdump/query'
 import { isUsageError } from './command-registry'
+import { quotaStopOf } from './quota-ledger'
 
 /** A hosted 401: the gscdump.com API key failed, not a Google credential. */
 export const HOSTED_KEY_REJECTED = 'gscdump.com rejected the API key. Run `gscdump auth login --mode cloud --api-key KEY` with a valid key.'
@@ -182,6 +183,8 @@ const DEFECT_ERRORS = new Set(['TypeError', 'ReferenceError', 'RangeError', 'Syn
 
 export type CliErrorReport
   = | { kind: 'usage', message: string }
+  /** A routing stop or a spent quota: normal progress, printed as a plain line. */
+    | { kind: 'stop', message: string }
     | { kind: 'expected', message: string, hint: string, showAuthSources: boolean }
     | { kind: 'defect', message: string, stack: string }
 
@@ -192,6 +195,12 @@ export type CliErrorReport
 export function describeCliError(error: unknown): CliErrorReport {
   if (isUsageError(error))
     return { kind: 'usage', message: error.message }
+  // `routeStop` is set by `routeStopError` in ./route. Read it here without
+  // importing the router, which loads the auth module.
+  if (error instanceof Error && (error as { routeStop?: unknown }).routeStop !== undefined)
+    return { kind: 'stop', message: error.message }
+  if (error instanceof Error && quotaStopOf(error))
+    return { kind: 'stop', message: error.message }
   if (error instanceof TypeError && error.message === 'fetch failed') {
     const cause = (error as { cause?: unknown }).cause
     const reason = cause instanceof Error ? cause.message : 'no response'
@@ -240,6 +249,9 @@ export async function reportCliError(error: unknown, options: ReportCliErrorOpti
       if (options.usage)
         lines.push(await options.usage(), '')
       lines.push(red(report.message))
+      break
+    case 'stop':
+      lines.push(report.message)
       break
     case 'expected':
       lines.push(red(`Error: ${report.message}`))
