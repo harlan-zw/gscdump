@@ -15,7 +15,7 @@ import { createCommandContext } from './context'
 import { LocalStoreUnsupportedError } from './error-handler'
 import { createLocalStore } from './local-store'
 import { logger } from './utils'
-import { resolveAnchor } from './window'
+import { hasSyncedDays, resolveAnchor } from './window'
 
 export async function hasLocalData(
   store: LocalStore,
@@ -44,6 +44,13 @@ export interface ResolvedAnalysisSource {
    * local mode, `getLatestGscDate()` in live mode. Windows end on it.
    */
   anchorFor: (tables: readonly TableName[]) => Promise<string>
+  /**
+   * Missing-sync warning for a comparison window with no synced days to
+   * read, or undefined when it has data. A comparison with zero synced days
+   * would read zero baseline rows and fabricate +100% risers. Live sources
+   * never warn: the GSC API covers the windows it serves.
+   */
+  comparisonWarning: (tables: readonly TableName[], start: string, end: string) => Promise<string | undefined>
 }
 
 /**
@@ -74,6 +81,10 @@ function warnMissingSync(siteUrl: string) {
   return (tables: readonly TableName[], fallback: string): void => {
     logger.warn(`No synced days for ${tables.length ? tables.join(', ') : 'any table'} on ${siteUrl}. Windows end on ${fallback}. Run \`gscdump sync\` first.`)
   }
+}
+
+function missingComparisonSync(siteUrl: string, tables: readonly TableName[], start: string, end: string): string {
+  return `No synced days for ${tables.length ? tables.join(', ') : 'any table'} on ${siteUrl} in ${start} to ${end}. The comparison reads no data. Run \`gscdump sync\` first.`
 }
 
 export interface ResolveAnalysisSourceArgs {
@@ -191,6 +202,12 @@ export async function resolveAnalysisSource(
       isLive,
       runAnalysis: makeRunAnalysis(source, 'local'),
       anchorFor: tables => resolveAnchor({ kind: 'local', store, siteUrl, tables }, warnMissingSync(siteUrl)),
+      comparisonWarning: async (tables, start, end) => {
+        const states = await store.engine.getSyncStates({ userId: store.userId, siteId: store.siteIdFor(siteUrl), state: 'done' })
+        if (hasSyncedDays(states, tables, start, end))
+          return undefined
+        return missingComparisonSync(siteUrl, tables, start, end)
+      },
     }
   }
 
@@ -204,5 +221,6 @@ export async function resolveAnalysisSource(
     isLive,
     runAnalysis: makeRunAnalysis(source, 'live'),
     anchorFor: () => resolveAnchor({ kind: 'live' }, warnMissingSync(siteUrl)),
+    comparisonWarning: async () => undefined,
   }
 }

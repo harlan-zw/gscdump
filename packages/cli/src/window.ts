@@ -187,6 +187,26 @@ export function newestDoneDate(states: readonly SyncState[], tables: readonly Ta
   return anchor
 }
 
+/**
+ * Whether every listed table has at least one synced day inside
+ * `[start, end]`. An empty table list means every table in `states`.
+ * Filters states like `newestDoneDate`. Pure.
+ */
+export function hasSyncedDays(states: readonly SyncState[], tables: readonly TableName[], start: string, end: string): boolean {
+  const wanted = tables.length ? tables : [...new Set(states.map(state => state.table))]
+  if (!wanted.length)
+    return false
+  return wanted.every(table =>
+    states.some(state =>
+      state.table === table
+      && state.state === 'done'
+      && (state.searchType ?? 'web') === 'web'
+      && state.date >= start
+      && state.date <= end,
+    ),
+  )
+}
+
 export type AnchorTarget
   = | { kind: 'live' }
     | { kind: 'local', store: LocalStore, siteUrl: string, tables: readonly TableName[] }

@@ -126,14 +126,20 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       if (!args.json && !['table', 'json', 'csv'].includes(args.format ?? 'table'))
         throw new Error('Invalid --format. Use table, json, or csv.')
       const baseParams = buildParams(tool, args)
-      const { format, runAnalysis, siteUrl, anchorFor } = await resolveAnalysisSource({
+      const { format, runAnalysis, siteUrl, anchorFor, comparisonWarning } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
         json: !!args.json,
         format: args.format,
       })
-      const anchor = await anchorFor(analyzerTables(baseParams))
+      const tables = analyzerTables(baseParams)
+      const anchor = await anchorFor(tables)
       const params = withWindow(tool, baseParams, args, anchor)
+      if (params.prevStartDate && params.prevEndDate) {
+        const missing = await comparisonWarning(tables, params.prevStartDate, params.prevEndDate)
+        if (missing)
+          logger.warn(missing)
+      }
 
       logger.debug(`Running ${tool} analysis...`)
 

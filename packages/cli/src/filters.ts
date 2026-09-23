@@ -123,7 +123,9 @@ function livePageLeaf(operator: MatchOperator, page: PageRef, siteUrl: string): 
   // A domain property spans every host, so match the path on any of them.
   if (siteUrl.startsWith('sc-domain:'))
     return leaf('page', operator === 'equals' ? 'includingRegex' : 'excludingRegex', `^https?://[^/]+${escapeRegex(path)}$`)
-  return leaf('page', operator, `${new URL(siteUrl).origin}${path}`)
+  // A URL-prefix property owns its path, so expand against the full prefix.
+  const prefix = siteUrl.endsWith('/') ? siteUrl.slice(0, -1) : siteUrl
+  return leaf('page', operator, `${prefix}${path}`)
 }
 
 /** Filter for the live GSC API, which keeps full page URLs. */
