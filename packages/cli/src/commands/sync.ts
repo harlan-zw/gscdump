@@ -1,7 +1,9 @@
 import type { googleSearchConsole } from 'gscdump/client'
 import type { SearchType } from 'gscdump/query'
 import type { ResolvedGscdumpConfig } from '../config'
+import type { InspectionSyncResult, SitemapSyncResult } from '../local-entities'
 import type { GscApiRow, LocalStore, Row, TableName, WriteCtx } from '../local-store'
+import { randomUUID } from 'node:crypto'
 import process from 'node:process'
 import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { createRowAccumulator } from '@gscdump/engine/ingest'
@@ -11,7 +13,10 @@ import { daysAgoUtc as daysAgo, getDateRange } from 'gscdump/dates'
 import { SearchTypes } from 'gscdump/query'
 import { syncCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
+import { INSPECTION_QPD_PER_PROPERTY } from '../inspection-record'
+import { loadSitemapGenerationUrls, resolvePagePaths, syncInspections, syncSitemaps } from '../local-entities'
 import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS } from '../local-store'
+import { loadSitemapUrls } from '../sitemap'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
 const DEFAULT_TABLES: TableName[] = ['pages', 'queries', 'countries', 'dates']
@@ -19,6 +24,12 @@ const DEFAULT_TYPES: readonly SearchType[] = ['web']
 const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
 const DEFAULT_PENDING_DAYS = 3
 const DEFAULT_CONCURRENCY = 8
+// 50 calls at 4 in flight add about 15 seconds to a daily sync. At that
+// rate a site with 1,500 URLs gets each URL inspected about once a month.
+const DEFAULT_INSPECT_LIMIT = 50
+const INSPECT_CONCURRENCY = 4
+// Traffic-ranked pages to consider for inspection, before sitemap URLs.
+const INSPECT_PAGE_CANDIDATES = 5000
 // Minimum days synced before we trust a zero-row result enough to persist
 // an empty-type marker. Shorter windows fire false positives on intermittent
 // outages or low-traffic sites that happen to have zero clicks one day.
@@ -224,10 +235,27 @@ export const syncCommand = defineCommand({
       default: false,
       description: 'Ignore stored empty-type markers and re-probe every requested type',
     },
-    'no-rollups': {
+    'rollups': {
       type: 'boolean',
-      default: false,
-      description: 'Skip the post-sync rollup rebuild (daily/weekly totals, top-N tables)',
+      default: true,
+      description: 'Rebuild rollups after sync (daily and weekly totals, top-N tables)',
+      negativeDescription: 'Skip the post-sync rollup rebuild',
+    },
+    'sitemaps': {
+      type: 'boolean',
+      default: true,
+      description: 'Save the Search Console sitemap list and the URLs in each sitemap',
+      negativeDescription: 'Skip saving sitemaps',
+    },
+    'inspections': {
+      type: 'boolean',
+      default: true,
+      description: 'Run URL Inspection on URLs that are due and save the results',
+      negativeDescription: 'Skip URL Inspection',
+    },
+    'inspect-limit': {
+      type: 'string',
+      description: `Most URLs to inspect in this run (default: ${DEFAULT_INSPECT_LIMIT}; Google allows ${INSPECTION_QPD_PER_PROPERTY} per property per day)`,
     },
     'full': {
       type: 'boolean',
@@ -269,6 +297,10 @@ export const syncCommand = defineCommand({
     const { json, quiet } = applyOutputMode(args)
     const days = parseIntegerOption(args.days, '--days')
     const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? DEFAULT_CONCURRENCY
+    const inspectLimit = Math.min(
+      parseIntegerOption(args['inspect-limit'], '--inspect-limit', 0) ?? DEFAULT_INSPECT_LIMIT,
+      INSPECTION_QPD_PER_PROPERTY,
+    )
     if (args.status) {
       const ctx = await createCommandContext()
       await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, args.site ? String(args.site) : undefined, json)
@@ -346,7 +378,7 @@ export const syncCommand = defineCommand({
       process.exit(1)
     }
 
-    const printCompletion = async (status: 'completed' | 'failed' | 'skipped', totals: Record<string, { rows: number, skipped: number, failed: number }>, reason?: string, rollupError?: string): Promise<void> => {
+    const printCompletion = async (status: 'completed' | 'failed' | 'skipped', totals: Record<string, { rows: number, skipped: number, failed: number }>, reason?: string, rollupError?: string, entities?: EntitySyncReport): Promise<void> => {
       if (!json)
         return
       console.log(JSON.stringify({
@@ -360,6 +392,7 @@ export const syncCommand = defineCommand({
         totals,
         watermarks: await store.engine.getWatermarks({ userId: store.userId, siteId }),
         ...(rollupError ? { rollupError } : {}),
+        ...(entities ?? {}),
       }, null, 2))
     }
     if (types.length === 0) {
@@ -550,7 +583,7 @@ export const syncCommand = defineCommand({
     // Post-sync rollups: rebuild aggregates so the dashboard's cached widgets
     // reflect the sync we just ran. Skipped on --no-rollups, on zero-row syncs
     // (nothing to aggregate), and on full-failure runs (would read stale data).
-    const noRollups = Boolean(args['no-rollups'])
+    const noRollups = args.rollups === false
     let rollupError: string | undefined
     const anyRowsSynced = Object.values(totals).some(t => t.rows > 0)
     if (!noRollups && anyRowsSynced) {
@@ -585,11 +618,144 @@ export const syncCommand = defineCommand({
       }
     }
 
-    await printCompletion(anyFailed || rollupError ? 'failed' : 'completed', totals, undefined, rollupError)
+    const entities = await syncEntities({
+      store,
+      client,
+      siteUrl,
+      sitemaps: args.sitemaps !== false,
+      inspections: args.inspections !== false,
+      inspectLimit,
+      quiet,
+    })
+
+    await printCompletion(anyFailed || rollupError ? 'failed' : 'completed', totals, undefined, rollupError, entities)
     if (anyFailed || rollupError)
       process.exit(1)
   },
 })
+
+type EntityStep<T> = T | { _tag: 'disabled' } | { _tag: 'failed', reason: string }
+
+export interface EntitySyncReport {
+  sitemaps: EntityStep<SitemapSyncResult>
+  inspections: EntityStep<InspectionSyncResult>
+}
+
+function failureReason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+// Pages with the most impressions come first, so the inspection budget goes
+// to the URLs that matter most.
+async function topPagePaths(store: LocalStore, siteUrl: string): Promise<string[]> {
+  const entries = await store.engine.listLive({ userId: store.userId, siteId: store.siteIdFor(siteUrl), table: 'pages' })
+  if (entries.length === 0)
+    return []
+  const { rows } = await store.runRawSql({
+    sql: `SELECT url, SUM(impressions) AS impressions FROM read_parquet({{FILES}}, union_by_name = true) GROUP BY url ORDER BY impressions DESC LIMIT ${INSPECT_PAGE_CANDIDATES}`,
+    siteUrl,
+    table: 'pages',
+  })
+  return rows.map(row => String(row.url))
+}
+
+/**
+ * Save sitemaps and URL Inspection results after the analytics sync. A
+ * failure here is logged and reported. It never fails the analytics sync.
+ */
+async function syncEntities(opts: {
+  store: LocalStore
+  client: ReturnType<typeof googleSearchConsole>
+  siteUrl: string
+  sitemaps: boolean
+  inspections: boolean
+  inspectLimit: number
+  quiet: boolean
+}): Promise<EntitySyncReport> {
+  const { store, client, siteUrl, quiet } = opts
+  const ctx = { userId: store.userId, siteId: store.siteIdFor(siteUrl) }
+  const now = (): Date => new Date()
+
+  let sitemaps: EntitySyncReport['sitemaps'] = { _tag: 'disabled' }
+  if (opts.sitemaps) {
+    if (!quiet)
+      logger.info('Saving sitemaps…')
+    sitemaps = await syncSitemaps({
+      client,
+      dataSource: store.dataSource,
+      ctx,
+      siteUrl,
+      now,
+      generationId: randomUUID,
+      loadFeed: async (url) => {
+        const loaded = await loadSitemapUrls(url, { maxUrls: 500_000, maxDocuments: 1000 })
+        return loaded._tag === 'ok'
+          ? { _tag: 'ok', entries: loaded.value.entries, complete: loaded.value.complete }
+          : loaded
+      },
+    }).catch((error: unknown) => ({ _tag: 'failed' as const, reason: failureReason(error) }))
+    if (sitemaps._tag === 'failed') {
+      logger.warn(`Sitemaps not saved: ${sitemaps.reason}`)
+    }
+    else if (sitemaps._tag === 'list_only') {
+      logger.warn(`Saved ${sitemaps.sitemaps} sitemap(s). Kept the stored sitemap URLs: ${sitemaps.reason}`)
+    }
+    else if (!quiet) {
+      logger.success(`Saved ${sitemaps.sitemaps} sitemap(s) with ${sitemaps.urls.toLocaleString()} URL(s)`)
+    }
+    if (sitemaps._tag === 'saved' || sitemaps._tag === 'list_only') {
+      for (const feed of sitemaps.feeds) {
+        if (feed._tag === 'unreachable')
+          logger.warn(`  ${feed.path}: ${feed.message}`)
+        else if (!feed.complete)
+          logger.warn(`  ${feed.path}: read stopped early; saved ${feed.urls.toLocaleString()} URL(s)`)
+      }
+    }
+  }
+
+  let inspections: EntitySyncReport['inspections'] = { _tag: 'disabled' }
+  if (opts.inspections && opts.inspectLimit > 0) {
+    inspections = await (async () => {
+      const sitemapUrls = await loadSitemapGenerationUrls(store.dataSource, ctx)
+      const candidates = [
+        ...resolvePagePaths(await topPagePaths(store, siteUrl), siteUrl, sitemapUrls),
+        ...sitemapUrls,
+      ]
+      const progress = createProgressTracker(Math.min(opts.inspectLimit, candidates.length), quiet)
+      const result = await syncInspections({
+        client,
+        dataSource: store.dataSource,
+        ctx,
+        siteUrl,
+        candidates,
+        limit: opts.inspectLimit,
+        concurrency: INSPECT_CONCURRENCY,
+        now,
+        onProgress: () => progress.tick('inspect'),
+      }).finally(() => progress.done())
+      return result
+    })().catch((error: unknown) => ({ _tag: 'failed' as const, reason: failureReason(error) }))
+    if (inspections._tag === 'failed') {
+      logger.warn(`URL Inspection not saved: ${inspections.reason}`)
+    }
+    else if (inspections._tag === 'inspected') {
+      if (!quiet)
+        logger.success(`Inspected ${inspections.inspected} URL(s); ${inspections.deferred} due URL(s) left for later runs`)
+      if (inspections.failed > 0) {
+        logger.warn(`${inspections.failed} URL Inspection call(s) failed:`)
+        for (const failure of inspections.failures.slice(0, 5))
+          logger.warn(`  ${failure.url}: ${failure.error}`)
+      }
+    }
+    else if (!quiet) {
+      logger.info(inspections.quotaLeft === 0
+        ? 'URL Inspection quota is used up for today'
+        : 'No URLs are due for URL Inspection')
+    }
+  }
+
+  return { sitemaps, inspections }
+}
 
 function isKnownTable(name: string): name is TableName {
   return (allTables() as readonly string[]).includes(name)

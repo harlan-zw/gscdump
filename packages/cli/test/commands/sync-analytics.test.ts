@@ -4,7 +4,9 @@ import path from 'node:path'
 import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { createNodeHarness, resetNodeDuckDB } from '@gscdump/engine/node'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { dumpSites } from '../../src/commands/dump'
 import { syncCommand } from '../../src/commands/sync'
+import { createLocalStore } from '../../src/local-store'
 
 const configState: { dataDir: string | null } = { dataDir: null }
 
@@ -42,6 +44,13 @@ function buildRawResponse(params: { startDate: string, dimensions?: string[] }):
 
 const rawQuerySpy = vi.fn()
 const clientSitesSpy = vi.fn()
+const sitemapsListSpy = vi.fn()
+const inspectSpy = vi.fn()
+const loadSitemapUrlsSpy = vi.fn()
+
+vi.mock('../../src/sitemap', () => ({
+  loadSitemapUrls: (...args: unknown[]) => loadSitemapUrlsSpy(...args),
+}))
 
 vi.mock('gscdump/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('gscdump/client')>()
@@ -50,6 +59,8 @@ vi.mock('gscdump/client', async (importOriginal) => {
     googleSearchConsole: vi.fn(() => ({
       sites: clientSitesSpy,
       searchAnalytics: { query: rawQuerySpy },
+      sitemaps: { list: sitemapsListSpy },
+      inspect: inspectSpy,
     })),
   }
 })
@@ -107,6 +118,11 @@ describe('sync command (local analytics)', () => {
       return Promise.resolve(buildRawResponse(params))
     })
     clientSitesSpy.mockResolvedValue(gscSites)
+    sitemapsListSpy.mockReset()
+    sitemapsListSpy.mockResolvedValue([])
+    inspectSpy.mockReset()
+    inspectSpy.mockResolvedValue({ inspectionResult: { indexStatusResult: { verdict: 'PASS', coverageState: 'Submitted and indexed' } } })
+    loadSitemapUrlsSpy.mockReset()
   })
 
   afterEach(async () => {
@@ -243,13 +259,13 @@ describe('sync command (local analytics)', () => {
 
   it('keeps populated search types enabled after a repeat and syncs new dates', async () => {
     const args = {
-      'site': SITE,
-      'start': '2026-04-01',
-      'end': '2026-04-07',
-      'tables': 'pages',
-      'types': 'image',
-      'quiet': true,
-      'no-rollups': true,
+      site: SITE,
+      start: '2026-04-01',
+      end: '2026-04-07',
+      tables: 'pages',
+      types: 'image',
+      quiet: true,
+      rollups: false,
     }
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
     rawQuerySpy.mockClear()
@@ -269,13 +285,13 @@ describe('sync command (local analytics)', () => {
 
   it('repairs existing empty markers when the Store has rows for that search type', async () => {
     const args = {
-      'site': SITE,
-      'start': '2026-04-01',
-      'end': '2026-04-01',
-      'tables': 'pages',
-      'types': 'image',
-      'quiet': true,
-      'no-rollups': true,
+      site: SITE,
+      start: '2026-04-01',
+      end: '2026-04-01',
+      tables: 'pages',
+      types: 'image',
+      quiet: true,
+      rollups: false,
     }
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
     const harness = createNodeHarness({ dataDir: tmpDir })
@@ -297,13 +313,13 @@ describe('sync command (local analytics)', () => {
   it('does not infer an empty search type from skipped dates and one fresh empty day', async () => {
     rawQuerySpy.mockResolvedValue({ rows: [] })
     const args = {
-      'site': SITE,
-      'start': '2026-04-01',
-      'end': '2026-04-06',
-      'tables': 'pages',
-      'types': 'image',
-      'quiet': true,
-      'no-rollups': true,
+      site: SITE,
+      start: '2026-04-01',
+      end: '2026-04-06',
+      tables: 'pages',
+      types: 'image',
+      quiet: true,
+      rollups: false,
     }
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
     await syncCommand.run!({ args: { ...args, end: '2026-04-07' }, rawArgs: [], cmd: syncCommand })
@@ -319,13 +335,13 @@ describe('sync command (local analytics)', () => {
   it('skips freshly probed empty types and re-probes their dates with force-types', async () => {
     rawQuerySpy.mockResolvedValue({ rows: [] })
     const args = {
-      'site': SITE,
-      'start': '2026-04-01',
-      'end': '2026-04-07',
-      'tables': 'pages',
-      'types': 'image',
-      'quiet': true,
-      'no-rollups': true,
+      site: SITE,
+      start: '2026-04-01',
+      end: '2026-04-07',
+      tables: 'pages',
+      types: 'image',
+      quiet: true,
+      rollups: false,
     }
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
     rawQuerySpy.mockClear()
@@ -410,7 +426,7 @@ describe('sync command (local analytics)', () => {
     rawQuerySpy.mockImplementation((_siteUrl, params) => Promise.resolve({
       rows: params.startRow === 0 ? [first, second, first] : [],
     }))
-    const args = { 'site': SITE, 'start': day, 'end': day, 'tables': 'pages', 'quiet': true, 'no-rollups': true, 'force': true }
+    const args = { site: SITE, start: day, end: day, tables: 'pages', quiet: true, rollups: false, force: true }
     for (let sync = 0; sync < 2; sync++)
       await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
 
@@ -474,5 +490,79 @@ describe('sync command (local analytics)', () => {
       table: 'dates',
     })
     expect(states).toEqual([expect.objectContaining({ date: day, state: 'failed', error: 'device quota exceeded' })])
+  })
+  async function runSyncJson(args: Record<string, unknown>): Promise<Record<string, any>> {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await syncCommand.run!({ args: { site: SITE, start: '2026-04-01', end: '2026-04-01', tables: 'pages', json: true, rollups: false, ...args }, rawArgs: [], cmd: syncCommand })
+    const output = log.mock.calls.map(call => String(call[0])).find(line => line.trimStart().startsWith('{'))
+    log.mockRestore()
+    return JSON.parse(output!)
+  }
+
+  it('saves sitemaps and URL Inspection results that dump can export', async () => {
+    sitemapsListSpy.mockResolvedValue([{
+      path: 'https://example.com/sitemap.xml',
+      type: 'sitemap',
+      isPending: false,
+      lastSubmitted: '2026-03-01T00:00:00.000Z',
+      warnings: '0',
+      errors: '2',
+      contents: [{ type: 'web', submitted: '3' }],
+    }])
+    loadSitemapUrlsSpy.mockResolvedValue({
+      _tag: 'ok',
+      value: {
+        urls: [],
+        entries: [{ loc: 'https://example.com/guide' }, { loc: 'https://example.com/a', lastmod: '2026-03-02' }, { loc: 'https://other.com/x' }],
+        complete: true,
+        documentsRead: 1,
+      },
+    })
+
+    const result = await runSyncJson({ 'inspect-limit': '2' })
+
+    expect(result.status).toBe('completed')
+    expect(result.sitemaps).toMatchObject({ _tag: 'saved', sitemaps: 1, urls: 3, generation: 'published' })
+    // The traffic page comes first; the off-property sitemap URL is never inspected.
+    expect(result.inspections).toMatchObject({ _tag: 'inspected', inspected: 2, failed: 0, deferred: 0 })
+    expect(inspectSpy.mock.calls.map(call => call[1])).toEqual(['https://example.com/guide', 'https://example.com/a'])
+
+    const store = createLocalStore({ dataDir: tmpDir })
+    const [summary] = await dumpSites({
+      store,
+      targets: [{ site: SITE, siteId: store.siteIdFor(SITE) }],
+      outDir: path.join(tmpDir, 'out'),
+      format: 'json',
+      tables: new Set(['inspections', 'sitemaps', 'sitemap_urls']),
+    })
+    expect(Object.fromEntries(summary!.files.map(file => [file.dataset, file.rows]))).toEqual({ inspections: 2, sitemaps: 1, sitemap_urls: 3 })
+
+    // A second run finds nothing due: both URLs were just inspected.
+    inspectSpy.mockClear()
+    const again = await runSyncJson({ 'inspect-limit': '2' })
+    expect(again.inspections).toMatchObject({ _tag: 'nothing_due' })
+    expect(inspectSpy).not.toHaveBeenCalled()
+  })
+
+  it('reports a sitemap list failure without failing the analytics sync', async () => {
+    sitemapsListSpy.mockRejectedValue(new Error('403 Forbidden'))
+    inspectSpy.mockRejectedValue(new Error('quota exceeded'))
+
+    const result = await runSyncJson({})
+
+    expect(result.status).toBe('completed')
+    expect(result.totals.pages.rows).toBe(1)
+    expect(result.sitemaps).toEqual({ _tag: 'failed', reason: 'Search Console sitemap list failed: 403 Forbidden' })
+    expect(result.inspections).toMatchObject({ _tag: 'inspected', inspected: 0, failed: 1 })
+    expect(result.inspections.failures[0].error).toBe('quota exceeded')
+  })
+
+  it('skips both steps with --no-sitemaps and --no-inspections', async () => {
+    const result = await runSyncJson({ sitemaps: false, inspections: false })
+
+    expect(result.sitemaps).toEqual({ _tag: 'disabled' })
+    expect(result.inspections).toEqual({ _tag: 'disabled' })
+    expect(sitemapsListSpy).not.toHaveBeenCalled()
+    expect(inspectSpy).not.toHaveBeenCalled()
   })
 })

@@ -11,6 +11,8 @@ const COMMON_PATHS = [
 
 export interface LoadedSitemapUrls {
   urls: string[]
+  /** The same URLs with the `lastmod` each feed declares. */
+  entries: Array<{ loc: string, lastmod?: string }>
   complete: boolean
   documentsRead: number
 }
@@ -67,6 +69,9 @@ export async function loadSitemapUrls(
     _tag: 'ok',
     value: {
       urls: result.entries.map(entry => entry.loc),
+      entries: result.entries.map(entry => entry.lastmod === undefined
+        ? { loc: entry.loc }
+        : { loc: entry.loc, lastmod: entry.lastmod }),
       complete: result._tag === 'complete',
       documentsRead: result.documentsRead,
     },
