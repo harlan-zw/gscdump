@@ -20,8 +20,8 @@ import { loadSitemapGenerationUrls, resolvePagePaths, syncInspections, syncSitem
 import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS } from '../local-store'
 import { createRequestPacer } from '../request-pacer'
 import { loadSitemapUrls } from '../sitemap'
-import { datesForJob, FULL_HISTORY_DAYS, planSyncJobs } from '../sync-plan'
 import { formatSiteIdCollision, readSiteMap, recordStoreSite, siteUrlForId } from '../store-sites'
+import { datesForJob, FULL_HISTORY_DAYS, planSyncJobs } from '../sync-plan'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, parseNameList, progressBar, runWithConcurrency } from '../utils'
 
 const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
