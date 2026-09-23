@@ -99,6 +99,23 @@ describe('filesystemManifestStore', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
+  it('sets one state on many dates in one write', async () => {
+    const path = join(dir, 'manifest.json')
+    const store = createFilesystemManifestStore({ path })
+    const scope = (date: string) => ({ userId: 'u1', siteId: 's1', table: 'pages' as const, date })
+    await store.setSyncState(scope('2026-04-10'), 'done', { at: 1000 })
+
+    await store.setSyncStates([scope('2026-04-11'), scope('2026-04-12')], 'pending', { at: 2000 })
+
+    const reopened = createFilesystemManifestStore({ path })
+    const states = await reopened.getSyncStates({ userId: 'u1', siteId: 's1' })
+    expect(states.map(s => [s.date, s.state]).sort()).toEqual([
+      ['2026-04-10', 'done'],
+      ['2026-04-11', 'pending'],
+      ['2026-04-12', 'pending'],
+    ])
+  })
+
   it('round-trips registerVersion + listLive + listRetired through JSON file', async () => {
     const store = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
     await store.registerVersion({
@@ -315,6 +332,24 @@ describe('filesystemManifestStore', () => {
     expect(log).toEqual(['a:enter', 'a:leave', 'b:enter'])
   })
 
+  it('withLock queues in-process writers for one partition beyond the file-lock retry budget', async () => {
+    // A full sync writes every search type of one table and date into the same
+    // partition. Their combined hold time exceeds the ~8s file-lock retry
+    // budget, which failed writes with "Lock file is already being held".
+    const store = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
+    const scope = { userId: 'u1', siteId: 's1', table: 'pages' as const, partition: 'daily/2026-04-10' }
+    let active = 0
+    let peak = 0
+    const results = await Promise.allSettled(Array.from({ length: 30 }, () => store.withLock(scope, async () => {
+      active++
+      peak = Math.max(peak, active)
+      await new Promise(r => setTimeout(r, 300))
+      active--
+    })))
+    expect(results.filter(result => result.status === 'rejected').map(result => String((result as PromiseRejectedResult).reason))).toEqual([])
+    expect(peak).toBe(1)
+  }, 30_000)
+
   it('filters sync states by state kind and table', async () => {
     const store = createFilesystemManifestStore({ path: join(dir, 'manifest.json') })
     await store.setSyncState({ userId: 'u1', siteId: 's1', table: 'pages', date: '2026-04-10' }, 'done', { at: 1 })
@@ -461,6 +496,7 @@ describe('integration: filesystem + JSON codec (no DuckDB)', () => {
       bumpWatermark: vi.fn(),
       getSyncStates: vi.fn(),
       setSyncState: vi.fn(),
+      setSyncStates: vi.fn(),
       withLock: vi.fn(async (_scope: unknown, fn: () => Promise<unknown>) => fn()),
       purgeTenant: vi.fn(async () => {
         throw new Error('manifest unavailable')

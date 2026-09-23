@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createCommandContext } from '../src/context'
+import { createCommandContext, formatSiteResolution } from '../src/context'
 
 const sites = vi.hoisted(() => vi.fn())
 const store = vi.hoisted(() => ({ dataDir: '' }))
@@ -97,5 +97,23 @@ describe('command Site selection', () => {
     sites.mockRejectedValue(failure)
     const ctx = await createCommandContext({ needsAuth: true })
     await expect(ctx.loadSites()).rejects.toBe(failure)
+  })
+})
+
+describe('formatSiteResolution', () => {
+  const covered = {
+    kind: 'covered-by-parent',
+    input: 'blog.example.com',
+    parent: 'sc-domain:example.com',
+  } as const
+
+  it('points a Store command to --live instead of a host --page filter', () => {
+    const message = formatSiteResolution(covered, 'store')
+    expect(message).not.toContain('--page ~blog.example.com')
+    expect(message).toContain('--live')
+  })
+
+  it('keeps the host --page filter hint for account commands', () => {
+    expect(formatSiteResolution(covered, 'account')).toContain('--page ~blog.example.com')
   })
 })

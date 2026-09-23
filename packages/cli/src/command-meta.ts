@@ -5,7 +5,7 @@ export const initCommandMeta = {
 
 export const dumpCommandMeta = {
   name: 'dump',
-  description: 'Export live Parquet files from the local store to a directory',
+  description: 'Export the local Store, inspections, sitemaps, and Bing data to a directory',
 }
 
 export const queryCommandMeta = {
@@ -25,7 +25,7 @@ export const sitemapsCommandMeta = {
 
 export const syncCommandMeta = {
   name: 'sync',
-  description: 'Sync GSC data to local Parquet store',
+  description: 'Sync GSC data, sitemaps, and URL Inspection results to the local Store',
 }
 
 export const storeCommandMeta = {
@@ -35,7 +35,7 @@ export const storeCommandMeta = {
 
 export const inspectCommandMeta = {
   name: 'inspect',
-  description: 'Inspect URL indexing status (single URL; use `inspect batch` for many)',
+  description: 'Inspect the indexing status of one or more URLs and save the results to the Store',
 }
 
 export const indexingCommandMeta = {

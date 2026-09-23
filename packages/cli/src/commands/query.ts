@@ -2,6 +2,7 @@ import type { QuerySpan } from '@gscdump/engine/profile'
 import type { googleSearchConsole } from 'gscdump/client'
 import type { BuilderState, Column, Dimension, Filter, SearchType } from 'gscdump/query'
 import type { LocalStore, TableName } from '../local-store'
+import type { SqlResult, SqlViews } from '../sql-views'
 import fs from 'node:fs/promises'
 import process from 'node:process'
 import { cancel, isCancel, multiselect, text } from '@clack/prompts'
@@ -12,12 +13,12 @@ import { and, between, contains, country, date as dateCol, device, eq, gsc, hour
 import { queryCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createCommandContext, siteArg } from '../context'
-import { gscErrorHandler } from '../error-handler'
-import { allTables, inferTable, tableDimensions } from '../local-store'
+import { inferTable, tableDimensions } from '../local-store'
 import { asRecord, columnsFor } from '../render/analysis'
 import { renderTable } from '../render/layout'
 import { renderQuery } from '../render/query'
 import { terminalOutputOptions } from '../render/terminal'
+import { openSqlViews, referencedEmptyTables } from '../sql-views'
 import { ALL_SEARCH_TYPES, logger, parseSearchType, toCSV } from '../utils'
 
 const DIMENSIONS = ['page', 'query', 'date', 'hour', 'country', 'device', 'searchAppearance'] as const
@@ -197,11 +198,12 @@ export const queryCommand = defineCommand({
     },
     'sql': {
       type: 'string',
-      description: 'Raw DuckDB SQL using {{FILES}} as the file list placeholder (bypasses builder)',
+      description: 'DuckDB SQL over one view per Store table, with site and search_type columns. Example: SELECT search_type, SUM(clicks) AS clicks, gsc_position(sum_position, impressions) AS position FROM pages GROUP BY search_type. Run --schema to list views',
     },
-    'table': {
-      type: 'string',
-      description: 'Analytics table for --sql (default: pages)',
+    'schema': {
+      type: 'boolean',
+      default: false,
+      description: 'List the --sql views, their columns, and the date range of each view, then exit',
     },
     'live': {
       type: 'boolean',
@@ -242,7 +244,7 @@ export const queryCommand = defineCommand({
     },
     'type': {
       type: 'string',
-      description: `Search type (live mode only). One of: ${ALL_SEARCH_TYPES.join(',')}`,
+      description: `Search type. One of: ${ALL_SEARCH_TYPES.join(',')} (default: web; --sql and --schema default to every search type)`,
     },
     'data-state': {
       type: 'string',
@@ -270,11 +272,10 @@ export const queryCommand = defineCommand({
       logger.error('Invalid --format. Use table, json, or csv.')
       process.exit(1)
     }
-    if (args.sql) {
-      await runRawSqlMode({
-        sql: String(args.sql),
+    if (args.sql || args.schema) {
+      await runSqlMode({
+        mode: args.schema ? { kind: 'schema' } : { kind: 'sql', sql: String(args.sql) },
         site: args.site ? String(args.site) : undefined,
-        table: args.table ? String(args.table) : 'pages',
         output: args.output ? String(args.output) : undefined,
         format,
         quiet: Boolean(args.quiet),
@@ -294,6 +295,8 @@ export const queryCommand = defineCommand({
     }
     const dimensionFilter = buildDimensionFilter(args)
     const searchType = parseSearchType(args.type ?? ctxConfig.defaultSearchType, '--type')
+    // The Store holds every search type; reading them together adds web and image rows into one total.
+    const localSearchType: SearchType = searchType ?? 'web'
     const dataState = args['data-state']
       ? String(args['data-state'])
       : ctxConfig.defaultDataState
@@ -345,7 +348,7 @@ export const queryCommand = defineCommand({
         dataState,
         aggregationType,
         dimensionFilter,
-      }).catch(gscErrorHandler)
+      })
       await writeOutput({
         output: {
           siteUrl,
@@ -375,7 +378,7 @@ export const queryCommand = defineCommand({
       console.log(JSON.stringify({ siteUrl, table, state }, null, 2))
       return
     }
-    await assertRangeCovered(store, siteUrl, table, startDate, endDate, format === 'json', searchType)
+    await assertRangeCovered(store, siteUrl, table, startDate, endDate, format === 'json', localSearchType)
     const profiling = Boolean(args.profile)
     const probe = profiling ? collectSpans() : undefined
     const result = await store.engine.query(
@@ -383,7 +386,7 @@ export const queryCommand = defineCommand({
         userId: store.userId,
         siteId: store.siteIdFor(siteUrl),
         table,
-        ...(searchType !== undefined ? { searchType } : {}),
+        searchType: localSearchType,
         ...(probe ? { profiler: probe.profiler } : {}),
       },
       state,
@@ -618,54 +621,92 @@ async function assertRangeCovered(
   process.exit(1)
 }
 
-async function runRawSqlMode(opts: {
-  sql: string
+type SqlMode
+  = | { kind: 'sql', sql: string }
+    | { kind: 'schema' }
+
+async function runSqlMode(opts: {
+  mode: SqlMode
   site: string | undefined
-  table: string
   output: string | undefined
   format: 'json' | 'csv' | 'table'
   quiet: boolean
   searchType?: SearchType
 }): Promise<void> {
-  if (!isKnownTable(opts.table)) {
-    logger.error(`Unknown table "${opts.table}". Known: ${allTables().join(', ')}`)
-    process.exit(1)
-  }
-
+  // The views cover every Site in the Store. --site resolves against Store Sites only.
   const ctx = await createCommandContext({ needsStore: true })
-  const siteUrl = await ctx.resolveSite(opts.site, { scope: 'store' })
   const store = ctx.store!
-
-  if (!opts.quiet)
-    logger.debug(`Running raw SQL over table "${opts.table}" for ${siteUrl}`)
-
-  const { rows, sql } = await store.runRawSql({
-    sql: opts.sql,
-    siteUrl,
-    table: opts.table,
+  const siteIds = opts.site ? [store.siteIdFor(await ctx.resolveSite(opts.site, { scope: 'store' }))] : undefined
+  const views = await openSqlViews(store, {
+    ...(siteIds ? { siteIds } : {}),
     ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),
-  }).catch((e: Error) => {
+  })
+  try {
+    const result = opts.mode.kind === 'schema'
+      ? await describeViews(views)
+      : await runSql(views, opts.mode.sql)
+    const rows = result.rows
+    const payload = opts.format === 'table' && opts.mode.kind === 'schema'
+      ? renderSchema(rows)
+      : opts.format === 'table'
+        ? renderTable(rows, columnsFor(rows), terminalOutputOptions(Boolean(opts.output && opts.output !== '-'))).join('\n')
+        : opts.format === 'csv'
+          ? toCSV(rows.map(row => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value !== null && typeof value === 'object' ? JSON.stringify(value) : value]))), result.columns)
+          : JSON.stringify({ total: rows.length, data: rows, ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}) }, null, 2)
+    if (opts.output && opts.output !== '-') {
+      await fs.writeFile(opts.output, payload)
+      if (!opts.quiet)
+        logger.info(`Written to ${opts.output}`)
+    }
+    else {
+      console.log(payload)
+    }
+  }
+  finally {
+    views.close()
+  }
+}
+
+async function runSql(views: SqlViews, sql: string): Promise<SqlResult & { warnings: string[] }> {
+  const warnings = referencedEmptyTables(sql, views.emptyTables)
+    .map(table => `No synced data for table ${table}. Run gscdump sync --tables ${table} to fill it.`)
+  for (const warning of warnings)
+    logger.warn(warning)
+  const result = await views.run(sql).catch((e: Error) => {
     logger.error(`SQL failed: ${e.message}`)
     process.exit(1)
   })
+  return { ...result, warnings }
+}
 
-  const payload = opts.format === 'table'
-    ? renderTable(rows, columnsFor(rows), terminalOutputOptions(Boolean(opts.output && opts.output !== '-'))).join('\n')
-    : opts.format === 'csv'
-      ? toCSV(rows, Object.keys(rows[0] ?? {}))
-      : JSON.stringify(
-          { sql, total: rows.length, data: rows },
-          (_key, value: unknown) => typeof value === 'bigint' ? value.toString() : value,
-          2,
-        )
-  if (opts.output && opts.output !== '-') {
-    await fs.writeFile(opts.output, payload)
-    if (!opts.quiet)
-      logger.info(`Written to ${opts.output}`)
+/** Human `--schema` output: one line per view, then its columns. A table would cut the column list. */
+function renderSchema(rows: ReadonlyArray<Record<string, unknown>>): string {
+  return rows.map((row) => {
+    const summary = row.rows === 0
+      ? 'no synced data'
+      : `${Number(row.rows).toLocaleString()} rows, ${row.start} to ${row.end}, ${row.search_types}, ${row.sites}`
+    return `${row.view}  ${summary}\n  ${row.columns}`
+  }).join('\n')
+}
+
+/** One row per view: its columns, the Sites and search types it holds, and its date range. */
+async function describeViews(views: SqlViews): Promise<SqlResult & { warnings: string[] }> {
+  const rows: Array<Record<string, unknown>> = []
+  for (const view of views.views) {
+    const range = view.sources.length === 0
+      ? { start: null, end: null }
+      : (await views.run(`SELECT min(date) AS start, max(date) AS end FROM ${view.table}`)).rows[0]!
+    rows.push({
+      view: view.table,
+      columns: view.columns.map(column => `${column.name} ${column.type}`).join(', '),
+      sites: [...new Set(view.sources.map(source => source.site))].join(', '),
+      search_types: [...new Set(view.sources.map(source => source.searchType))].join(', '),
+      rows: view.sources.reduce((sum, source) => sum + source.rows, 0),
+      start: range.start ?? null,
+      end: range.end ?? null,
+    })
   }
-  else {
-    console.log(payload)
-  }
+  return { columns: ['view', 'columns', 'sites', 'search_types', 'rows', 'start', 'end'], rows, warnings: [] }
 }
 
 /**
@@ -714,8 +755,4 @@ async function writeOutput(opts: {
   else {
     console.log(content)
   }
-}
-
-function isKnownTable(name: string): name is TableName {
-  return (allTables() as readonly string[]).includes(name)
 }

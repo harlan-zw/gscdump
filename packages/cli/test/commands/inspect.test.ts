@@ -1,5 +1,11 @@
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { inspectCommand } from '../../src/commands/inspect'
+import { runCli } from '../../src/cli'
+import { checkInspectionBatch, inspectUrls } from '../../src/inspect-urls'
+import { loadInspectionHistory } from '../../src/local-entities'
+import { createLocalStore } from '../../src/local-store'
 
 const inspectMock = vi.fn()
 
@@ -14,87 +20,160 @@ vi.mock('gscdump/client', async (importOriginal) => {
   }
 })
 
-vi.mock('gscdump/indexing', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('gscdump/indexing')>()
-  return {
-    ...actual,
-    batchInspectUrls: vi.fn(async (_c, _site, urls) => urls.map((url: string) => ({
-      url,
-      isIndexed: url.includes('indexed'),
-      inspection: { indexStatusResult: { verdict: url.includes('indexed') ? 'PASS' : 'FAIL' } },
-    }))),
-  }
-})
-
 vi.mock('../../src/auth', () => ({
   resolveAuth: vi.fn().mockResolvedValue('mock-token'),
-  getAuth: vi.fn().mockResolvedValue({ clientId: 'x', clientSecret: 'y' }),
   resolveBYOK: vi.fn(() => null),
 }))
 
-vi.mock('../../src/config', () => ({
-  loadConfig: vi.fn().mockResolvedValue({ defaultSite: 'https://example.com/' }),
-  loadResolvedConfig: vi.fn().mockResolvedValue({
-    config: { defaultSite: 'https://example.com/' },
-    dataDir: '/tmp/gscdump-test',
-  }),
-  resolveDataDir: vi.fn(() => '/tmp/gscdump-test'),
-}))
+function googleError(status: number, message: string): Error {
+  return Object.assign(new Error(`[POST] "https://searchconsole.googleapis.com/v1/urlInspection/index:inspect": ${status}`), {
+    statusCode: status,
+    data: { error: { code: status, message } },
+  })
+}
 
-vi.mock('../../src/error-handler', () => ({
-  gscErrorHandler: vi.fn((e: unknown) => { throw e }),
-}))
+const PASS = { inspectionResult: { indexStatusResult: { verdict: 'PASS', coverageState: 'Submitted and indexed' } } }
 
-vi.mock('../../src/utils', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/utils')>()
-  return {
-    ...actual,
-    showSplash: vi.fn(),
-    VERSION: '1.0.0',
-    logger: {
-      info: vi.fn(),
-      success: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      start: vi.fn(),
-    },
-  }
+describe('inspectUrls', () => {
+  const base = { inProperty: () => true, intervalMs: 0, sleep: async () => {} }
+
+  it('keeps going after a URL fails and names the inspection rule', async () => {
+    const inspect = vi.fn(async (url: string) => {
+      if (url.endsWith('/b'))
+        throw googleError(403, 'You do not own this site, or the inspected URL is not part of this property.')
+      return PASS.inspectionResult
+    })
+    const run = await inspectUrls({ ...base, urls: ['https://x.com/a', 'https://x.com/b', 'https://x.com/c'], inspect, onOutcome: async () => {} })
+    expect(run.stopped).toBeNull()
+    expect(run.outcomes.map(outcome => outcome.kind)).toEqual(['inspected', 'failed', 'inspected'])
+    expect(run.outcomes[1]).toMatchObject({ kind: 'failed', error: expect.stringContaining('outside this property') })
+  })
+
+  it('stops at a quota error and counts the URLs left', async () => {
+    const inspect = vi.fn(async (url: string) => {
+      if (url.endsWith('/b'))
+        throw googleError(429, 'Quota exceeded for quota metric.')
+      return PASS.inspectionResult
+    })
+    const saved: string[] = []
+    const run = await inspectUrls({
+      ...base,
+      urls: ['https://x.com/a', 'https://x.com/b', 'https://x.com/c', 'https://x.com/d'],
+      inspect,
+      onOutcome: async (outcome) => {
+        saved.push(outcome.url)
+      },
+    })
+    expect(saved).toEqual(['https://x.com/a'])
+    expect(inspect).toHaveBeenCalledTimes(2)
+    expect(run.stopped).toEqual({ reason: expect.stringContaining('2,000 inspections per day'), remaining: 3 })
+  })
+
+  it('fails a URL outside the Site without an API call', async () => {
+    const inspect = vi.fn()
+    const run = await inspectUrls({ ...base, urls: ['https://other.com/'], inProperty: () => false, inspect, onOutcome: async () => {} })
+    expect(inspect).not.toHaveBeenCalled()
+    expect(run.outcomes).toEqual([{ kind: 'failed', url: 'https://other.com/', error: 'The URL is outside this Site.' }])
+  })
+
+  it('spaces call starts under 600 per minute', async () => {
+    let clock = 0
+    const waits: number[] = []
+    await inspectUrls({
+      urls: ['https://x.com/a', 'https://x.com/b', 'https://x.com/c'],
+      inProperty: () => true,
+      inspect: async () => {
+        clock += 20
+        return PASS.inspectionResult
+      },
+      onOutcome: async () => {},
+      now: () => clock,
+      sleep: async (ms) => {
+        waits.push(ms)
+        clock += ms
+      },
+    })
+    expect(waits).toEqual([100, 100])
+    expect(60_000 / (20 + waits[0]!)).toBeLessThanOrEqual(600)
+  })
+
+  it('refuses more URLs than one day of quota', () => {
+    const urls = Array.from({ length: 2001 }, (_, i) => `https://x.com/${i}`)
+    expect(checkInspectionBatch(urls)).toMatchObject({ kind: 'too-many', message: expect.stringContaining('2,000') })
+    expect(checkInspectionBatch(urls.slice(0, 2000))).toEqual({ kind: 'ok' })
+  })
 })
 
-describe('inspect command', () => {
-  let consoleOutput: string[] = []
-  const originalLog = console.log
+describe('gscdump inspect', () => {
+  let configDir: string
+  let dataDir: string
+  const output: string[] = []
+  const errors: string[] = []
 
-  beforeEach(() => {
-    consoleOutput = []
-    console.log = (...args: unknown[]) => {
-      consoleOutput.push(args.map(String).join(' '))
-    }
-    vi.clearAllMocks()
+  beforeEach(async () => {
+    configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-inspect-test-'))
+    dataDir = path.join(configDir, 'store')
+    await fs.writeFile(path.join(configDir, 'config.json'), JSON.stringify({ dataDir }))
+    output.length = 0
+    errors.length = 0
+    vi.spyOn(console, 'log').mockImplementation((...args) => output.push(args.map(String).join(' ')))
+    vi.spyOn(console, 'error').mockImplementation((...args) => errors.push(args.map(String).join(' ')))
+    inspectMock.mockReset()
   })
 
-  afterEach(() => {
-    console.log = originalLog
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    await fs.rm(configDir, { recursive: true, force: true })
   })
 
-  it('has correct metadata and batch subcommand', () => {
-    expect(inspectCommand.meta?.name).toBe('inspect')
-    expect(inspectCommand.subCommands).toHaveProperty('batch')
+  const cli = (...args: string[]) => runCli({ rawArgs: ['--config-dir', configDir, 'inspect', ...args], loadEnv: false, environment: {} })
+
+  async function storedUrls(): Promise<string[]> {
+    const store = createLocalStore({ dataDir })
+    const history = await loadInspectionHistory(store.dataSource, { userId: store.userId, siteId: store.siteIdFor('https://example.com/') })
+    return history.map(record => record.url).sort()
+  }
+
+  it('inspects every positional URL and saves each result to the Store', async () => {
+    inspectMock.mockResolvedValue(PASS)
+    const code = await cli('https://example.com/a', 'https://example.com/b', '--site', 'https://example.com/', '--json')
+    expect(code).toBe(0)
+    expect(inspectMock.mock.calls.map(call => call[1])).toEqual(['https://example.com/a', 'https://example.com/b'])
+    const json = JSON.parse(output.join('\n'))
+    expect(json).toMatchObject({ inspected: 2, failed: 0, remaining: 0 })
+    expect(json.results[0]).toMatchObject({ url: 'https://example.com/a', status: 'inspected', verdict: 'PASS', isIndexed: true })
+    expect(await storedUrls()).toEqual(['https://example.com/a', 'https://example.com/b'])
   })
 
-  it('emits json for single URL inspect when --json', async () => {
-    inspectMock.mockResolvedValue({
-      inspectionResult: { indexStatusResult: { verdict: 'PASS', coverageState: 'Submitted and indexed' } },
-    })
-    await inspectCommand.run!({
-      args: { url: 'https://example.com/x', site: 'https://example.com/', json: true },
-      rawArgs: [],
-      cmd: inspectCommand,
-    })
-    const json = JSON.parse(consoleOutput[0])
-    expect(json.url).toBe('https://example.com/x')
-    expect(json.verdict).toBe('PASS')
-    expect(json.isIndexed).toBe(true)
+  it('keeps finished results when a quota error stops the run', async () => {
+    inspectMock
+      .mockResolvedValueOnce(PASS)
+      .mockRejectedValueOnce(googleError(429, 'Quota exceeded.'))
+    const code = await cli('https://example.com/a', 'https://example.com/b', 'https://example.com/c', '--site', 'https://example.com/', '--json')
+    expect(code).toBe(1)
+    expect(JSON.parse(output.join('\n'))).toMatchObject({ inspected: 1, remaining: 2 })
+    expect(errors.join('\n')).toContain('Inspected 1 of 3 URLs and saved the results to the Store. 2 remaining.')
+    expect(await storedUrls()).toEqual(['https://example.com/a'])
+  })
+
+  it('reports a failed URL and exits 1 without dropping the others', async () => {
+    inspectMock
+      .mockRejectedValueOnce(googleError(403, 'Permission denied.'))
+      .mockResolvedValueOnce(PASS)
+    const code = await cli('https://example.com/a', 'https://example.com/b', '--site', 'https://example.com/', '--json')
+    expect(code).toBe(1)
+    const json = JSON.parse(output.join('\n'))
+    expect(json.results.map((result: { status: string }) => result.status)).toEqual(['failed', 'inspected'])
+    expect(await storedUrls()).toEqual(['https://example.com/b'])
+  })
+
+  it('names the failure without claiming Store persistence when nothing was saved', async () => {
+    inspectMock.mockRejectedValue(googleError(403, 'Permission denied.'))
+    const code = await cli('https://example.com/a', '--site', 'https://example.com/', '--json')
+    expect(code).toBe(1)
+    const text = errors.join('\n')
+    expect(text).toContain('1 failed.')
+    expect(text).not.toContain('saved the results')
   })
 
   it('does not present deprecated mobile usability data', async () => {
@@ -104,32 +183,9 @@ describe('inspect command', () => {
         mobileUsabilityResult: { verdict: 'FAIL', issues: [{ issueType: 'LEGACY' }] },
       },
     })
-    await inspectCommand.run!({
-      args: { url: 'https://example.com/x', site: 'https://example.com/', json: false },
-      rawArgs: [],
-      cmd: inspectCommand,
-    })
-
-    expect(consoleOutput.join('\n')).not.toContain('Mobile usability')
-    expect(consoleOutput.join('\n')).not.toContain('LEGACY')
-  })
-
-  it('batch invokes batchInspectUrls for each URL', async () => {
-    const batch = inspectCommand.subCommands!.batch as any
-    await batch.run({
-      args: {
-        'urls': ['https://example.com/indexed', 'https://example.com/missing'],
-        'site': 'https://example.com/',
-        'delay-ms': '0',
-        'quiet': true,
-        'json': true,
-      },
-      rawArgs: [],
-      cmd: batch,
-    })
-    const json = JSON.parse(consoleOutput[0])
-    expect(json).toHaveLength(2)
-    expect(json[0].isIndexed).toBe(true)
-    expect(json[1].isIndexed).toBe(false)
+    expect(await cli('https://example.com/x', '--site', 'https://example.com/')).toBe(0)
+    expect(output.join('\n')).toContain('Verdict')
+    expect(output.join('\n')).not.toContain('Mobile usability')
+    expect(output.join('\n')).not.toContain('LEGACY')
   })
 })

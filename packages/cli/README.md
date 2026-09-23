@@ -44,7 +44,7 @@ gscdump mcp
 
 | Command | Description |
 |---|---|
-| `init` | Full setup (OAuth + dataDir; offers to write a `.env` for later use) |
+| `init` | Full setup (OAuth + dataDir; offers to write a `.env` for later use). `--mode cloud\|local` saves the auth mode. Without a terminal it never prompts |
 | `auth` | Manage authentication (`status`, `login`, `logout`, `refresh`) |
 | `bing` | Connect Bing, list sites, dump datasets, inspect URLs, and check hosted verification |
 | `config` | Manage CLI configuration (`show`, `set`, `unset`, `path`, `validate`) |
@@ -53,17 +53,16 @@ gscdump mcp
 | `sites add <url>` / `sites delete <url> [--yes]` | Register or remove a Site in Search Console (add registers in unverified state) |
 | `sites verify-token <url> [--method]` / `sites verify <url> [--method]` | Get a verification token, then trigger ownership verification (META/FILE/DNS_TXT/DNS_CNAME/ANALYTICS/TAG_MANAGER) |
 | `sitemaps` | List, submit, or delete Google sitemaps; probe live URLs; read hosted snapshots (`current`, `history`, `membership`, `lastmod`, `export`) with `--site` |
-| `inspect <url>` / `inspect batch [--concurrency]` | URL inspection (single URL or batch from file/stdin); renders Indexing Evidence, rich results, and AMP |
+| `inspect <url...> [--file]` | URL inspection for one or more URLs; renders Indexing Evidence, rich results, and AMP, and saves each result to the Store |
 | `indexing` | Notify Google about URL changes (`submit`, `remove`, `status`, `batch`, `batch-status`, `quota`); supports `--retries`. `indexing urls --status not_indexed` lists hosted URL Inspection results |
-| `sync` | Sync GSC data to the local Parquet Store; `--retry-failed`, `--dry-run` |
-| `query` | Run a search analytics query (Store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. |
-| `dump` | Export from the Store to a directory (`--format parquet\|json\|ndjson\|csv`, `--tables`, `--all-sites`) |
+| `sync` | Sync GSC data, sitemaps, and URL Inspection results to the local Store; `--inspect-limit`, `--max-calls`, `--all-sites`, `--no-sitemaps`, `--no-inspections`, `--retry-failed`, `--dry-run` |
+| `query` | Run a search analytics query (Store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. `--sql` runs DuckDB SQL over the Store views; `--schema` lists them. |
+| `dump` | Export the Store, inspections, sitemaps, and Bing data (`--format parquet\|csv\|json\|ndjson\|sqlite\|duckdb`, `--tables`, `--all-sites`, `--no-bing`). Every row has `site` and `search_type` |
 | `analyze <tool>` | Run an SEO Analyzer against the Store (`--live` for row-based against fresh API) |
-| `entities` | Snapshot URL inspections and indexing metadata into the local entity store |
+| `entities` | Read saved URL inspections and snapshot indexing metadata into the local entity store |
 | `store stats` | Show row/byte counts per table and on-disk footprint |
 | `store compact` | Compact older data into weekly, monthly, and quarterly tiers (`--dry-run`) |
 | `store gc` | Delete orphaned objects past the grace window (`--dry-run`) |
-| `store export` | Export the live store to a single `.duckdb` file |
 | `store rm-site` / `store reset` | Delete one Site's data or reset the Store; inspect `--help` before use |
 | `store rollups rebuild` | Rebuild post-sync rollup tables |
 | `report <id>` / `report list` | Run or list Reports; `--explain` previews a plan |
@@ -196,6 +195,48 @@ gscdump query --live --site example.com \
   --dimensions page,query --format csv --output rows.csv
 ```
 
+### SQL over the Store
+
+`query --sql` runs DuckDB SQL over one view per Store table.
+Run `query --schema` to list the views, their columns, and their date ranges.
+
+```bash
+gscdump query --format json --sql "
+  SELECT p.page, SUM(q.clicks) AS clicks, gsc_position(q.sum_position, q.impressions) AS position
+  FROM pages p JOIN page_queries q USING (site, search_type, url, date)
+  WHERE p.search_type = 'web' AND p.date >= DATE '2026-08-01'
+  GROUP BY p.page ORDER BY clicks DESC LIMIT 20"
+```
+
+| Column | Meaning |
+| --- | --- |
+| `site` | The Site URL, such as `sc-domain:example.com` |
+| `search_type` | `web`, `image`, `video`, `news`, `discover`, or `googleNews` |
+| `url`, `page` | The page path. `page` is the same value as `url` |
+| `sum_position` | Zero-based position multiplied by impressions |
+
+- The Store keeps every search type. Filter or group by `search_type`, or a `SUM` adds web, image, and Discover rows together.
+- `gsc_position(sum_position, impressions)` returns the impression-weighted average position. Use it with `GROUP BY`.
+- The views cover every Site in the Store. `--site` and `--type` narrow them.
+- Dates return as `YYYY-MM-DD`. Integers return as numbers, and an integer past 2^53 returns as a string.
+- If the SQL names a table with no synced data, the CLI prints a warning.
+
+### Export formats
+
+`dump` reads only the Store. It never calls Google to fill a gap.
+Every exported row has `site` and `search_type` columns.
+
+| `--format` | Output |
+| --- | --- |
+| `parquet` (default) | `<site>/<search_type>/<table>.parquet` |
+| `csv`, `json`, `ndjson` | `<site>/<search_type>/<table>.<ext>`, plus a per-row `position` |
+| `sqlite` | One `gscdump.sqlite` file. Dates are `YYYY-MM-DD` text |
+| `duckdb` | One `gscdump.duckdb` file |
+
+Inspections, sitemaps, and Indexing API metadata go to `<site>/<dataset>.<ext>`, or to their own tables in a database file.
+`manifest.json` lists every dataset with its row count, and the same coverage that `sync --status` reports.
+`--format sqlite` needs Node.js 22.13 or later.
+
 ### Global flags
 
 - `--no-color` / `NO_COLOR` env: strip ANSI from stdout (stderr keeps colour for interactive use).
@@ -223,17 +264,25 @@ SQL-only Analyzers require local data.
 ## Sync
 
 ```bash
-# Default: three days ending three days ago; skip completed dates
-gscdump sync --site example.com --tables pages,queries,page_queries,countries,dates
+# Default: catch every table and search type up to the latest final date.
+# A table with no history starts 28 days back. Newest dates come first.
+# Also saves sitemaps and inspects up to 50 due URLs. Skips completed dates.
+gscdump sync --site example.com
 
-# Backfill from 450 days ago to three days ago
-gscdump sync --site example.com --full --tables pages,queries,page_queries,countries,dates
+# Backfill the 16 months Google keeps, plus 14 days Google often still serves
+gscdump sync --site example.com --full
+
+# Cap one run at 2,000 Search Analytics calls; the next run continues
+gscdump sync --site example.com --full --max-calls 2000
+
+# Every verified Site, one after another
+gscdump sync --all-sites
 
 # Custom range
 gscdump sync --site example.com --start 2026-08-01 --end 2026-08-31 \
   --tables pages,queries,page_queries,countries,dates
 
-# Check sync state and watermarks
+# Coverage, missing and failed dates per table, and a running sync
 gscdump sync --site example.com --status
 
 # Limit concurrent day requests per table
@@ -242,8 +291,11 @@ gscdump sync --site example.com --concurrency 4 \
 ```
 
 Sync skips completed dates; `--force` refreshes them.
+A day Google still updates stays `pending`, and the next sync fetches it again.
+Sync records Google calls in a quota ledger in the Store directory.
+If Google refuses a call for quota, sync stops, keeps the rest `pending`, and exits 0. The next run continues.
 Cross-process locks coordinate `sync`, `compact`, and `gc`.
-Pagination follows Google's 25,000-row pages, subject to [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data).
+Pagination follows Google's 25,000-row pages and stops at the first short page, subject to [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data).
 
 ## MCP server
 

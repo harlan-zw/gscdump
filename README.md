@@ -59,7 +59,7 @@ gscdump auth login --mode local
 gscdump sites
 
 # Sync before querying or exporting stored data
-gscdump sync --site example.com --days 90 --tables pages,queries,page_queries,countries,dates
+gscdump sync --site example.com --days 90
 gscdump query --site example.com --dimensions page,query
 gscdump dump --site example.com --out ./export
 
@@ -103,20 +103,19 @@ Guides:
 | `auth` | Manage authentication with `status`, `login`, and `logout` |
 | `bing` | Connect Bing, export datasets, inspect URLs, and check cloud connection verification |
 | `profile` | Manage separate credential profiles |
-| `dump` | Export stored files to a directory |
-| `query` | Query stored rows, or Google with `--live` |
+| `dump` | Export the Store as Parquet, CSV, JSON, NDJSON, SQLite, or DuckDB |
+| `query` | Query stored rows, run SQL with `--sql`, or query Google with `--live` |
 | `sync` | Fetch Google data into the Store |
 | `sites [--with-sitemaps]` | List Sites and manage Site verification |
 | `sitemaps` | List, submit, delete, and discover sitemaps |
-| `inspect <url>` / `inspect batch` | Inspect one URL or a batch of URLs |
+| `inspect <url...>` | Inspect one or more URLs and save the results to the Store |
 | `indexing` | Send eligible notifications with `submit`, `remove`, and `batch`; read metadata with `status`; list hosted URL Inspection results with `urls` |
 | `analyze <tool>` | Run one Analyzer |
 | `report <id>` | Run a Report |
-| `entities` | Save URL inspections and indexing notification metadata locally |
+| `entities` | Read saved URL inspections and save indexing notification metadata locally |
 | `store stats` | Show row counts, file sizes, and sync progress |
 | `store compact` | Combine older daily partitions into monthly files |
 | `store gc` | Delete orphaned Store files |
-| `store export` | Export a DuckDB file |
 | `store rollups` | Rebuild Rollups |
 | `config` | Manage CLI configuration |
 | `doctor` | Diagnose setup problems |

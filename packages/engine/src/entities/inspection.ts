@@ -197,6 +197,12 @@ export interface InspectionStore {
    */
   loadHistory: (ctx: TenantCtx, yearMonth: string) => Promise<InspectionHistoryShard | undefined>
   /**
+   * Month buckets (`YYYY-MM`, or `unknown`) that hold at least one history
+   * shard, sorted ascending. Pair with {@link InspectionStore.loadHistory} to
+   * read the full history.
+   */
+  listHistoryMonths: (ctx: TenantCtx) => Promise<string[]>
+  /**
    * Encode caller-provided rows into the inspections parquet sidecar at
    * `entities/inspections/index.parquet`. Sorted by `urlHash` so DuckDB
    * row-group stats can prune URL-keyed JOINs efficiently. One PUT.
@@ -208,6 +214,11 @@ export interface InspectionStore {
    * Returns the parquet object key (matches {@link parquetUri} after write).
    */
   materialize: (ctx: TenantCtx, rows: Iterable<InspectionParquetRow>) => Promise<{ key: string, rowCount: number, bytes: number }>
+  /**
+   * Rows of the inspections parquet sidecar that {@link InspectionStore.materialize}
+   * wrote last, or `undefined` if it was never written.
+   */
+  loadMaterialized: (ctx: TenantCtx) => Promise<InspectionParquetRow[] | undefined>
   /**
    * Append a batch of inspection results as an immutable per-batch parquet
    * under `events/<YYYY-MM>/<batchId>.parquet`, partitioned by the `YYYY-MM`
@@ -509,6 +520,17 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
       return { version: 1, records: records.flat() }
     },
 
+    async listHistoryMonths(ctx) {
+      const prefix = inspectionHistoryPrefix(ctx, '')
+      const months = new Set<string>()
+      for (const key of await ds.list(prefix)) {
+        const month = key.slice(prefix.length).split('/')[0]
+        if (month)
+          months.add(month)
+      }
+      return [...months].sort()
+    },
+
     async materialize(ctx, rowIter) {
       const rows = Array.from(rowIter)
       // Sorted parquet — DuckDB row-group stats can prune URL-keyed JOINs.
@@ -520,6 +542,16 @@ export function createInspectionStore(opts: CreateInspectionStoreOptions): Inspe
       const key = inspectionParquetKey(ctx)
       await ds.write(key, bytes)
       return { key, rowCount: rows.length, bytes: bytes.byteLength }
+    },
+
+    async loadMaterialized(ctx) {
+      const bytes = await readOptional(ds, inspectionParquetKey(ctx))
+      if (!bytes)
+        return undefined
+      return (await decodeParquetToRows(bytes)).map(row => ({
+        ...row,
+        scheduleNextAt: row.scheduleNextAt == null ? null : Number(row.scheduleNextAt),
+      }) as InspectionParquetRow)
     },
 
     async appendInspectionEvents(ctx, rows, options) {

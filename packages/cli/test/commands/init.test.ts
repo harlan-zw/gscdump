@@ -1,3 +1,4 @@
+import { runCommand } from 'citty'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { initCommand } from '../../src/commands/init'
 
@@ -10,16 +11,27 @@ const mocks = vi.hoisted(() => ({
   saveTokens: vi.fn(),
   loadTokens: vi.fn(() => Promise.resolve(null)),
   getAuthCredentials: vi.fn(),
+  saveAuthentication: vi.fn(),
+  text: vi.fn(async () => '/custom/store'),
   readFile: vi.fn(() => Promise.reject(new Error('ENOENT'))),
   googleSearchConsole: vi.fn(() => ({
     sites: vi.fn().mockResolvedValue([{ siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' }]),
   })),
 }))
 
+vi.mock('@clack/prompts', async importOriginal => ({
+  ...await importOriginal<typeof import('@clack/prompts')>(),
+  text: mocks.text,
+}))
+
 vi.mock('../../src/config', () => ({
   loadConfig: mocks.loadConfig,
   saveConfig: mocks.saveConfig,
   defaultDataDir: mocks.defaultDataDir,
+}))
+
+vi.mock('../../src/auth-state', () => ({
+  saveAuthentication: mocks.saveAuthentication,
 }))
 
 vi.mock('../../src/auth', () => ({
@@ -79,12 +91,6 @@ describe('init command', () => {
     expect(initCommand.meta?.description).toContain('authentication')
   })
 
-  it('exposes --force, --no-store, --quiet flags', () => {
-    expect(initCommand.args?.force).toBeDefined()
-    expect(initCommand.args?.['no-store']).toBeDefined()
-    expect(initCommand.args?.quiet).toBeDefined()
-  })
-
   it('skips re-init when already configured without --force', async () => {
     mocks.loadConfig.mockResolvedValue({ clientId: 'x', clientSecret: 'y' })
 
@@ -94,31 +100,25 @@ describe('init command', () => {
     expect(mocks.authenticate).not.toHaveBeenCalled()
   })
 
-  it('takes BYOK fast-path when access token env is set', async () => {
+  it('takes the BYOK fast path without a prompt', async () => {
     mocks.resolveBYOK.mockReturnValue('byok-access-token')
-    mocks.loadConfig.mockResolvedValue({})
 
-    await initCommand.run!({
-      args: { 'quiet': true, 'no-store': true },
-      rawArgs: [],
-      cmd: initCommand,
-    } as any)
+    await runCommand(initCommand, { rawArgs: ['--quiet'] })
 
-    expect(mocks.saveConfig).toHaveBeenCalled()
+    expect(mocks.text).not.toHaveBeenCalled()
+    expect(mocks.saveConfig).toHaveBeenCalledWith(expect.objectContaining({ dataDir: '/tmp/gscdump-test' }))
+    expect(mocks.saveAuthentication).toHaveBeenCalledWith({ _tag: 'Local' })
     expect(mocks.authenticate).not.toHaveBeenCalled()
     expect(mocks.getAuthCredentials).not.toHaveBeenCalled()
   })
 
-  it('takes BYOK fast-path with refresh-token shape', async () => {
+  it('keeps the saved Store location with --no-store', async () => {
     mocks.resolveBYOK.mockReturnValue({ getAccessToken: vi.fn() })
-    mocks.loadConfig.mockResolvedValue({})
 
-    await initCommand.run!({
-      args: { 'quiet': true, 'no-store': true },
-      rawArgs: [],
-      cmd: initCommand,
-    } as any)
+    await runCommand(initCommand, { rawArgs: ['--no-store', '--quiet'] })
 
+    expect(mocks.text).not.toHaveBeenCalled()
+    expect(mocks.saveConfig.mock.calls[0]![0]).not.toHaveProperty('dataDir')
     expect(mocks.authenticate).not.toHaveBeenCalled()
   })
 })

@@ -1,19 +1,28 @@
 import type { SearchType } from 'gscdump/query'
+import type { StoreCoverage } from '../coverage'
+import type { BingDumpStep } from '../dump-bing'
+import type { DumpedDataset, DumpFormat, DumpSink, WrittenFile } from '../dump-writers'
+import type { EntityDataset } from '../local-entities'
 import type { LocalStore, ManifestEntry, TableName } from '../local-store'
+import { Buffer } from 'node:buffer'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
 import { dumpCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
+import { nextCommand, readStoreCoverage, renderCoverage } from '../coverage'
+import { dumpBing } from '../dump-bing'
+import { DUMP_FORMATS, isDumpFormat, openDumpSink } from '../dump-writers'
+import { ENTITY_DATASETS, readEntityDatasets } from '../local-entities'
 import { allTables } from '../local-store'
-import { readParquetRows } from '../native-duckdb'
 import { readSiteMap, siteUrlForId } from '../store-sites'
-import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseSearchType, runWithConcurrency, toCSV } from '../utils'
+import { DEFAULT_INSPECT_LIMIT } from '../sync-plan'
+import { isProcessAlive, readSyncRun, syncRunStatus } from '../sync-run'
+import { groupTableSources } from '../table-sources'
+import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseNameList, parseSearchType } from '../utils'
 
 const DEFAULT_OUT = './gscdump-export'
-const FORMATS = ['parquet', 'json', 'ndjson', 'csv'] as const
-type DumpFormat = typeof FORMATS[number]
 
 export const dumpCommand = defineCommand({
   meta: dumpCommandMeta,
@@ -33,12 +42,12 @@ export const dumpCommand = defineCommand({
       type: 'string',
       alias: 'F',
       default: 'parquet',
-      description: `Output format: ${FORMATS.join(', ')} (default: parquet copies raw files)`,
+      description: `Output format: ${DUMP_FORMATS.join(', ')} (default: parquet). sqlite and duckdb write one database file`,
     },
     'tables': {
       type: 'string',
       alias: 't',
-      description: `Comma-separated table list (default: all). Known: ${allTables().join(', ')}`,
+      description: `Comma-separated tables and datasets (default: all). Known: ${[...allTables(), ...ENTITY_DATASETS, 'bing'].join(', ')}`,
     },
     'all-sites': {
       type: 'boolean',
@@ -50,6 +59,12 @@ export const dumpCommand = defineCommand({
       default: false,
       description: 'Compact every closed month into a single file before exporting',
     },
+    'bing': {
+      type: 'boolean',
+      default: true,
+      description: 'Also export Bing data for matching sites when a Bing login exists',
+      negativeDescription: 'Skip Bing',
+    },
     'search-type': {
       type: 'string',
       description: `Restrict dump to a single GSC search-type slice (${ALL_SEARCH_TYPES.join(', ')}). Default: all slices.`,
@@ -58,13 +73,13 @@ export const dumpCommand = defineCommand({
   },
   async run({ args }) {
     const { json, quiet } = applyOutputMode(args)
-    const format = String(args.format) as DumpFormat
-    if (!(FORMATS as readonly string[]).includes(format)) {
-      logger.error(`Invalid --format: ${format}. Allowed: ${FORMATS.join(', ')}`)
+    const format = String(args.format)
+    if (!isDumpFormat(format)) {
+      logger.error(`Invalid --format: ${format}. Allowed: ${DUMP_FORMATS.join(', ')}`)
       process.exit(1)
     }
     const tablesFilter = args.tables
-      ? new Set(String(args.tables).split(',').map(t => t.trim()).filter(Boolean))
+      ? new Set<string>(parseNameList(args.tables, [...allTables(), ...ENTITY_DATASETS, 'bing'], '--tables'))
       : null
     const searchType = parseSearchType(args['search-type'])
     const ctx = await createCommandContext({ needsStore: true })
@@ -101,37 +116,249 @@ export const dumpCommand = defineCommand({
       }
     }
 
-    const summary: Array<{ site: string, files: number, rows: number, format: DumpFormat, outPath: string }> = []
-    for (const target of targets) {
-      const entries = (preloadedEntries
-        ? preloadedEntries.filter(entry => entry.siteId === target.siteId)
-        : await listLiveEntries(store, target.siteId, searchType))
-        .filter(e => !tablesFilter || tablesFilter.has(e.table))
-      if (entries.length === 0) {
-        if (!quiet)
-          logger.warn(`No data for ${target.site}; skipping`)
-        continue
-      }
-      if (format === 'parquet') {
-        const written = await dumpParquet(store, entries, outDir)
-        summary.push({ site: target.site, files: written, rows: 0, format, outPath: outDir })
-      }
-      else {
-        const written = await dumpRowFormat(store, entries, outDir, target.site, format)
-        summary.push({ site: target.site, files: written.files, rows: written.rows, format, outPath: outDir })
-      }
-    }
+    const siteList = args['all-sites'] ? undefined : await readSiteListing(quiet)
+    const bing: BingDumpStep = args.bing === false || (tablesFilter && !tablesFilter.has('bing'))
+      ? { _tag: 'disabled' }
+      : await dumpBing({
+          googleSites: args['all-sites'] ? 'all' : targets.map(target => target.site),
+          outDir,
+          format,
+        }).catch((error: unknown) => ({ _tag: 'failed' as const, reason: error instanceof Error ? error.message : String(error) }))
+    const result = await dumpSites({
+      store,
+      targets,
+      outDir,
+      format,
+      ...(tablesFilter ? { tables: tablesFilter } : {}),
+      ...(searchType !== undefined ? { searchType } : {}),
+      ...(preloadedEntries ? { entries: preloadedEntries } : {}),
+      ...(siteList ? { siteList } : {}),
+      bing,
+    })
 
     if (json) {
-      console.log(JSON.stringify({ outDir, sites: summary }, null, 2))
+      console.log(JSON.stringify({ ...result, bing }, null, 2))
       return
     }
-    for (const s of summary) {
-      const rows = s.rows ? `, ${s.rows.toLocaleString()} rows` : ''
-      logger.success(`[${s.site}] ${s.files} ${s.format} file(s)${rows} → ${displayPath(s.outPath)}`)
+    const bytesByPath = new Map(result.files.map(file => [file.path, file.bytes]))
+    const database = format === 'sqlite' || format === 'duckdb'
+    if (database && result.sites.some(site => site.datasets.length > 0)) {
+      const file = result.files[0]!
+      logger.success(`Wrote ${displayPath(file.path)} (${formatBytes(file.bytes)})`)
+    }
+    for (const site of result.sites) {
+      if (site.datasets.length === 0) {
+        if (!quiet)
+          logger.warn(`No data for ${site.site}; skipping`)
+        continue
+      }
+      logger.success(`[${site.site}] ${site.totals.datasets} dataset(s), ${site.totals.rows.toLocaleString()} rows`)
+      if (quiet)
+        continue
+      for (const dataset of site.datasets) {
+        const label = database
+          ? `${dataset.dataset}${dataset.searchType ? ` (search_type = ${dataset.searchType})` : ''}`
+          : `${path.relative(outDir, dataset.path)}  ${formatBytes(bytesByPath.get(dataset.path) ?? 0)}`
+        console.log(`  ${label}  ${dataset.rows.toLocaleString()} rows`)
+      }
+      for (const skip of site.skipped)
+        console.log(`  \x1B[90m${skip.dataset}: no rows yet; skipped\x1B[0m`)
+      for (const line of renderCoverage(site.coverage))
+        console.log(`  ${line}`)
+      // Partial coverage is progress. Only a failed date earns a warning.
+      for (const job of site.coverage.analytics) {
+        if (job.coverage.kind === 'partial' && job.coverage.failed > 0)
+          logger.warn(`${site.site} ${job.table} (${job.searchType}): ${job.coverage.failed} failed date(s). Run ${nextCommand(site.coverage)} to retry them.`)
+      }
+    }
+    if (bing._tag === 'dumped') {
+      for (const site of bing.sites) {
+        const bytes = site.files.reduce((sum, file) => sum + file.bytes, 0)
+        logger.success(`[Bing ${site.siteUrl}] ${site.files.length} file(s), ${formatBytes(bytes)}`)
+        if (!quiet) {
+          for (const file of site.files)
+            console.log(`  ${path.relative(outDir, file.path)}  ${formatBytes(file.bytes)}  ${file.rows.toLocaleString()} rows`)
+        }
+      }
+      for (const failure of bing.failures)
+        logger.warn(`Bing ${failure.siteUrl} not exported: ${failure.error}`)
+    }
+    else if (bing._tag === 'failed') {
+      logger.warn(`Bing not exported: ${bing.reason}`)
+    }
+    else if (bing._tag === 'skipped' && !quiet) {
+      logger.info(`Bing skipped: ${bing.reason}`)
+    }
+    if (!quiet) {
+      for (const file of result.metadataFiles)
+        console.log(`  ${path.relative(outDir, file.path)}  ${formatBytes(file.bytes)}`)
     }
   },
 })
+
+export type { DumpedDataset, DumpFormat, WrittenFile } from '../dump-writers'
+
+export interface SiteDumpSummary {
+  site: string
+  siteId: string
+  datasets: DumpedDataset[]
+  /** Datasets with no rows. They get no file. */
+  skipped: Array<{ dataset: EntityDataset, reason: 'empty' }>
+  totals: { datasets: number, rows: number }
+  /** How much of the Site the Store holds so far. Daily sync fills the rest. */
+  coverage: StoreCoverage
+}
+
+export interface DumpResult {
+  outDir: string
+  format: DumpFormat
+  /** Data files the dump wrote, with their sizes. A database format writes one. */
+  files: WrittenFile[]
+  /** Files that describe the whole dump: `manifest.json`, and `sites.json` when the Site list was known. */
+  metadataFiles: WrittenFile[]
+  sites: SiteDumpSummary[]
+}
+
+export interface SiteListing {
+  siteUrl: string
+  permissionLevel: string | null
+}
+
+/**
+ * The Search Console Site list for `sites.json`. The dump reads only the
+ * Store, so it runs without a login; then it writes no `sites.json`.
+ */
+async function readSiteListing(quiet: boolean): Promise<SiteListing[] | undefined> {
+  return createCommandContext({ needsAuth: true })
+    .then(ctx => ctx.loadSites())
+    .then(sites => sites.map(site => ({ siteUrl: site.siteUrl, permissionLevel: site.permissionLevel })))
+    .catch((error: Error) => {
+      if (!quiet)
+        logger.info(`sites.json skipped: ${error.message}`)
+      return undefined
+    })
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024)
+    return `${bytes} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let value = bytes / 1024
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit++
+  }
+  return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[unit]}`
+}
+
+/**
+ * Write every requested analytics table and entity dataset for each Site.
+ * `tables` limits the datasets by name; omit it for all of them. `entries`
+ * reuses a manifest listing the caller already holds. The dump reads only
+ * the Store: it never calls a Search Engine to fill a gap.
+ */
+export async function dumpSites(opts: {
+  store: LocalStore
+  targets: ReadonlyArray<{ site: string, siteId: string }>
+  outDir: string
+  format: DumpFormat
+  tables?: ReadonlySet<string>
+  searchType?: SearchType
+  entries?: readonly ManifestEntry[]
+  /** Search Console Sites and permission levels, written to `sites.json`. */
+  siteList?: readonly SiteListing[]
+  /** Outcome of the Bing step, listed in `manifest.json`. */
+  bing?: BingDumpStep
+}): Promise<DumpResult> {
+  const { outDir, format } = opts
+  const sink = await openDumpSink(outDir, format)
+  // Close on failure too, so the DuckDB connection and temporary files are released.
+  const summary = await dumpEachSite(sink, opts).catch(async (error: unknown) => {
+    await sink.close()
+    throw error
+  })
+  const files = await sink.close()
+  const metadataFiles: WrittenFile[] = []
+  if (opts.siteList)
+    metadataFiles.push(await writeJsonFile(path.join(outDir, 'sites.json'), { sites: opts.siteList }))
+  metadataFiles.push(await writeJsonFile(path.join(outDir, 'manifest.json'), {
+    generatedAt: new Date().toISOString(),
+    format,
+    files: files.map(file => ({ ...file, path: path.relative(outDir, file.path) })),
+    sites: summary.map(site => ({
+      ...site,
+      datasets: site.datasets.map(dataset => ({ ...dataset, path: path.relative(outDir, dataset.path) })),
+    })),
+    ...(opts.bing ? { bing: manifestBing(opts.bing, outDir) } : {}),
+  }))
+  return { outDir, format, files, metadataFiles, sites: summary }
+}
+
+async function dumpEachSite(sink: DumpSink, opts: Parameters<typeof dumpSites>[0]): Promise<SiteDumpSummary[]> {
+  const { store, tables } = opts
+  const wantedEntities = ENTITY_DATASETS.filter(dataset => !tables || tables.has(dataset))
+  const summary: SiteDumpSummary[] = []
+  for (const target of opts.targets) {
+    const entries = (opts.entries
+      ? opts.entries.filter(entry => entry.siteId === target.siteId)
+      : await listLiveEntries(store, target.siteId, opts.searchType))
+      .filter(e => !tables || tables.has(e.table))
+    const datasets: DumpedDataset[] = []
+    // Tag rows with the Site the caller resolved: the siteId encoding is lossy.
+    for (const source of groupTableSources(entries, store.dataDir, { [target.siteId]: target.site }))
+      datasets.push(await sink.writeTable(source))
+
+    const skipped: SiteDumpSummary['skipped'] = []
+    for (const dataset of await readEntityDatasets(store.dataSource, { userId: store.userId, siteId: target.siteId }, wantedEntities)) {
+      if (dataset.rows.length === 0)
+        skipped.push({ dataset: dataset.dataset, reason: 'empty' })
+      else
+        datasets.push(await sink.writeEntity(target.site, dataset))
+    }
+
+    summary.push({
+      site: target.site,
+      siteId: target.siteId,
+      coverage: await readDumpCoverage(store, target.site),
+      datasets,
+      skipped,
+      totals: {
+        datasets: datasets.length,
+        rows: datasets.reduce((sum, dataset) => sum + dataset.rows, 0),
+      },
+    })
+  }
+  return summary
+}
+
+/** The Bing step for `manifest.json`, with file paths relative to the dump directory. */
+function manifestBing(step: BingDumpStep, outDir: string): BingDumpStep {
+  if (step._tag !== 'dumped')
+    return step
+  return {
+    ...step,
+    sites: step.sites.map(site => ({
+      siteUrl: site.siteUrl,
+      files: site.files.map(file => ({ ...file, path: path.relative(outDir, file.path) })),
+    })),
+  }
+}
+
+async function writeJsonFile(target: string, value: unknown): Promise<WrittenFile> {
+  const body = `${JSON.stringify(value, null, 2)}\n`
+  await fs.writeFile(target, body)
+  return { path: target, bytes: Buffer.byteLength(body) }
+}
+
+/**
+ * What the Store holds for a Site, from the same model as `sync --status`.
+ * The summary and manifest.json both carry it. It reads the Store only.
+ */
+async function readDumpCoverage(store: LocalStore, site: string): Promise<StoreCoverage> {
+  const run = syncRunStatus(await readSyncRun(store.dataDir), { now: Date.now(), isAlive: isProcessAlive })
+  return readStoreCoverage({ store, site, inspectLimit: DEFAULT_INSPECT_LIMIT, run })
+}
 
 async function listLiveEntries(store: LocalStore, siteId: string, searchType?: SearchType): Promise<ManifestEntry[]> {
   return store.engine.listLive({
@@ -139,69 +366,6 @@ async function listLiveEntries(store: LocalStore, siteId: string, searchType?: S
     siteId,
     ...(searchType !== undefined ? { searchType } : {}),
   })
-}
-
-async function dumpParquet(store: LocalStore, entries: ManifestEntry[], outDir: string): Promise<number> {
-  await fs.mkdir(outDir, { recursive: true })
-  const readyDirectories = new Map<string, Promise<void>>()
-  async function ensureDirectory(dir: string): Promise<void> {
-    let ready = readyDirectories.get(dir)
-    if (!ready) {
-      ready = fs.mkdir(dir, { recursive: true }).then(() => undefined)
-      readyDirectories.set(dir, ready)
-      ready.catch(() => readyDirectories.delete(dir))
-    }
-    await ready
-  }
-  let copied = 0
-  await runWithConcurrency(entries, 8, async (entry) => {
-    const bytes = await store.engine.readObject(entry.objectKey)
-    const target = path.join(outDir, entry.objectKey)
-    await ensureDirectory(path.dirname(target))
-    await fs.writeFile(target, bytes)
-    copied++
-  })
-  return copied
-}
-
-// Read parquet rows back through DuckDB and re-emit per table in the chosen
-// row format. Each table becomes one file under <outDir>/<site>/<table>.<ext>.
-async function dumpRowFormat(
-  store: LocalStore,
-  entries: ManifestEntry[],
-  outDir: string,
-  siteUrl: string,
-  format: 'json' | 'ndjson' | 'csv',
-): Promise<{ files: number, rows: number }> {
-  const byTable = new Map<TableName, ManifestEntry[]>()
-  for (const e of entries) {
-    const arr = byTable.get(e.table as TableName) ?? []
-    arr.push(e)
-    byTable.set(e.table as TableName, arr)
-  }
-  const safeSite = siteUrl.replace(/[^a-z0-9]+/gi, '_')
-  const siteDir = path.join(outDir, safeSite)
-  await fs.mkdir(siteDir, { recursive: true })
-
-  let files = 0
-  let totalRows = 0
-  for (const [table, tableEntries] of byTable) {
-    const filePaths = tableEntries.map(e => path.join(store.dataDir, e.objectKey))
-    const rows = await readParquetRows(filePaths, table)
-    const ext = format === 'csv' ? 'csv' : format === 'ndjson' ? 'ndjson' : 'json'
-    const target = path.join(siteDir, `${table}.${ext}`)
-    let body: string
-    if (format === 'json')
-      body = JSON.stringify(rows, null, 2)
-    else if (format === 'ndjson')
-      body = rows.map(r => JSON.stringify(r)).join('\n')
-    else
-      body = rows.length > 0 ? toCSV(rows, Object.keys(rows[0])) : ''
-    await fs.writeFile(target, body)
-    files++
-    totalRows += rows.length
-  }
-  return { files, rows: totalRows }
 }
 
 async function compactClosedMonths(store: LocalStore, siteId: string, quiet: unknown): Promise<void> {

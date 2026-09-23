@@ -10,6 +10,8 @@ It keeps a local Parquet Store for Google rows. Every command has `--help`.
 For `query`, `-s` means `--site`, `-d` means `--dimensions`, and `-f` means `--format`.
 Use `--start` and `--end` for dates. `--site=SITE` also works.
 Use each option once, with either its short or long spelling.
+Put options after the subcommand name: `gscdump store stats --json`, not `gscdump store --json stats`.
+A failed command prints one `Error:` line to stderr and exits 1.
 Example: `gscdump query --site=SITE --start=DATE --end=DATE -d page -f json`.
 
 ## Start each task
@@ -17,7 +19,7 @@ Example: `gscdump query --site=SITE --start=DATE --end=DATE -d page -f json`.
 1. Before reading traffic, run `gscdump auth status --json`. Do this even when the user says authentication works.
 2. Keep the requested Site, dates, dimensions, and task scope. A request for pages does not need query dimensions.
 3. Before local queries, check coverage with `gscdump store stats --site SITE --json`.
-   Use `gscdump sync --site SITE --status --json` when you need sync-state details.
+   Use `gscdump sync --site SITE --status --json` when you need coverage, gaps, or sync-state details.
 4. Read the table dimensions and watermarks. Sync only missing tables and the requested dates, once per task.
 5. Use `sync --json`. Read its completion result before deciding what to do next. Never repeat a successful sync.
 
@@ -29,6 +31,7 @@ Call the local data directory the Store in your answer.
 ## Authentication mode
 
 Check `gscdump auth status --json` before queries. Reuse the user's selected mode.
+In local mode, `googleAuthenticated: true` means Google accepted the credentials. When it is false, `googleError` says why.
 
 | Mode | Credentials | Query path |
 | --- | --- | --- |
@@ -182,17 +185,17 @@ Do not rewrite rows, estimate metrics, or add manually calculated totals.
 | `gscdump query` | Rows by page, query, date, country, or device |
 | `gscdump analyze <id>` | One Analyzer over the Store or live rows |
 | `gscdump report <id>` | A Report that composes several Analyzers |
-| `gscdump inspect <url>` | URL Inspection with Indexing Evidence |
+| `gscdump inspect <url...>` | URL Inspection with Indexing Evidence, saved to the Store |
 | `gscdump sitemaps` | List, submit, delete, and probe sitemaps |
 | `gscdump indexing` | Indexing API notifications and quota; hosted URL Inspection results |
-| `gscdump dump` | Export Store tables to Parquet, CSV, JSON, or NDJSON |
+| `gscdump dump` | Export Store tables, inspections, sitemaps, and Bing data as Parquet, CSV, JSON, NDJSON, SQLite, or DuckDB |
 | `gscdump store` | Store stats, compaction, garbage collection, resets |
-| `gscdump entities` | Snapshot URL inspections into the entity store |
+| `gscdump entities` | Read saved inspections; snapshot Indexing API metadata |
 | `gscdump config` | Defaults such as `defaultSite`, `dataDir`, `defaultLimit` |
 | `gscdump profile` | Separate credential and config directories |
 | `gscdump auth` | `status`, `login`, `logout`, `refresh` |
 | `gscdump doctor` | Health checks for auth, scopes, Store, and reachability |
-| `gscdump init` | Interactive first-time setup |
+| `gscdump init` | First-time setup. Without a terminal it never prompts: it uses BYOK env credentials or fails with the auth command |
 | `gscdump mcp` | Start Google MCP tools with the selected authentication |
 | `gscdump skill install` | Copy this skill into an agent skill directory |
 | `gscdump papercut` | Report a CLI problem to gscdump.com |
@@ -207,18 +210,39 @@ A failed Google request returns its status, Google's explanation, and the next s
 
 ```sh
 gscdump store stats --site example.com --json
-gscdump sync --site example.com --days 90 \
-  --tables pages,queries,page_queries,countries --json
 gscdump sync --site example.com --status --json
+gscdump sync --site example.com --json
 ```
 
-- Pass an explicit `--tables` list. The default list has a known daily-totals
-  limitation.
-- `--full` backfills the 450 days Google keeps.
+- A plain sync catches up. Each table runs from its oldest synced date to the
+  latest date Google has finalized (Pacific time, about 3 days late). A table
+  with no history starts 28 days back. Newest dates come first.
+- `--days N`, `--start`, and `--end` pick a range instead. `--full` fetches the
+  16 months Google keeps, plus 14 days Google often still serves.
+- Sync covers every table and search type by default. Pass `--tables` and
+  `--types` to sync less. Sync skips table and type pairs Google cannot answer.
+- Sync paces Google calls: 8 in flight and 600 per minute across all tables.
+  `--requests-per-minute N` changes the rate.
+  Sync does not retry a quota 403. The quota ledger stops the run instead.
+- Every call goes through a quota ledger in the Store directory. If Google
+  refuses a call for quota, or the run reaches `--max-calls N`, sync stops,
+  keeps the rest `pending`, and exits 0. `status` in `sync --json` is then
+  `partial` and `stopped` says why. Run the same command later to continue.
+  Exit 1 means real failures: read `failed` dates in `sync --status --json`.
+- Sync also saves the sitemap list, sitemap URLs, and URL Inspection results.
+  It inspects up to 50 due URLs per run: never-inspected sitemap URLs first,
+  then pages with impressions, then the oldest results. `--inspect-limit N`
+  changes that; Google allows 2,000 per Site per day. `--no-sitemaps` and
+  `--no-inspections` skip those steps.
+- `coverage` in `sync --json` and `sync --status --json` says how much the
+  Store holds. Partial coverage is normal progress. Never report data as
+  complete unless its `kind` is `complete`.
+- A day Google still updates stays `pending`; the next sync fetches it again.
 - Sync skips completed dates. `--force` refreshes them. `--retry-failed`
-  reruns only failed dates.
-- `--dry-run` prints the planned work without calling Google.
-- Use the user's date range. The 90-day example does not authorize a wider sync.
+  reruns only failed dates. A plain sync also retries failed dates.
+- `--dry-run` prints the planned dates and the fewest calls without calling Google.
+- `--all-sites` syncs every verified Site, one after another.
+- Use the user's date range. If the user names a range, pass `--start` and `--end`, not `--full`.
 - Empty Store metadata is expected before the first sync. It does not prove zero traffic.
 
 ## Query rows
@@ -232,13 +256,52 @@ gscdump query --site example.com --dimensions page,query \
 - Filters: `--query`, `--page`, `--country`, `--device`,
   `--search-appearance`. Prefixes: bare equals, `~` contains, `!~` not
   contains, `re:` regex, `!re:` not regex, `!` not equals.
-- `--live` bypasses the Store. `--type` selects a search type.
+- `--live` bypasses the Store. `--type` selects a search type. The default is `web`.
   `--data-state` and `--aggregation-type` apply to live mode only.
 - Metrics already include clicks, impressions, CTR, and position. There is no `--metrics` option.
 - If Store coverage is missing, read the JSON error and its bounded `nextArgs` before syncing.
   Do not switch dimensions to make a failed query succeed.
 - `--explain` prints the request body or planned SQL without executing.
-- `--sql` runs raw DuckDB SQL over the Store with `{{FILES}}` as the file list.
+
+## SQL over the Store
+
+```sh
+gscdump query --schema --format json
+gscdump query --format json --sql "SELECT search_type, SUM(clicks) AS clicks,
+  gsc_position(sum_position, impressions) AS position
+  FROM pages WHERE date >= DATE '2026-08-01' GROUP BY search_type"
+```
+
+- `--sql` runs DuckDB SQL over one view per Store table: `pages`, `queries`,
+  `page_queries`, `countries`, `dates`, `hourly_pages`, and the
+  `search_appearance*` tables. Join views on `site`, `search_type`, `url`, and `date`.
+- `--schema` lists each view, its columns, its Sites, and its date range.
+- Every view has `site` (the Site URL) and `search_type`. The Store keeps
+  every search type, so filter or group by `search_type`. A plain `SUM` adds
+  web, image, and Discover rows together.
+- `url` holds the page path. `page` is the same value.
+- `sum_position` is the zero-based position times impressions. Use
+  `gsc_position(sum_position, impressions)` for the average position. It adds 1
+  and weights by impressions. Never average a per-row position.
+- The views cover every Site in the Store. `--site` and `--type` narrow them.
+- Dates return as `YYYY-MM-DD`. Integers return as numbers.
+- If a query names a table with no synced data, the JSON has a `warnings` list.
+
+## Export the Store
+
+```sh
+gscdump dump --site example.com --format parquet --out ./export
+gscdump dump --all-sites --format sqlite --out ./export
+```
+
+- `dump` reads only the Store. It never calls Google to fill a gap.
+- Every exported row has `site` and `search_type`.
+- File formats write `<site>/<search_type>/<table>.<ext>` and
+  `<site>/<dataset>.<ext>` for inspections, sitemaps, and Indexing API metadata.
+- `csv`, `json`, and `ndjson` rows also have `position`: `sum_position / impressions + 1`.
+- `sqlite` and `duckdb` write one file, `gscdump.sqlite` or `gscdump.duckdb`,
+  with one table per dataset for every Site and search type.
+- `manifest.json` lists every dataset with its row count, plus the coverage that `sync --status --json` reports. Partial coverage is progress: daily sync fills the rest.
 
 ## Analyze and report
 
@@ -266,12 +329,14 @@ gscdump analyze striking-distance --site example.com --json
 ## Inspect and index
 
 ```sh
-gscdump inspect https://example.com/page --site example.com --json
-gscdump inspect batch --site example.com --file urls.txt --json
+gscdump inspect https://example.com/page https://example.com/other --site example.com --json
+gscdump inspect --site example.com --file urls.txt --json
 gscdump indexing quota --json
 ```
 
-Inspection spends Google's separate 2,000 requests per Site per day quota.
+Inspection spends Google's separate quota: 2,000 requests per day and 600 per minute for each property.
+`inspect` refuses more than 2,000 URLs in one run. It saves each result to the Store.
+On a quota error it stops and reports `remaining`. It exits 1 when any URL fails or remains.
 `indexing quota` describes Indexing API limits. It does not report remaining URL Inspection requests.
 Report the Indexing Evidence fields as Google returned them.
 
@@ -286,7 +351,7 @@ gscdump indexing urls --site example.com --status not_indexed --all --format csv
 - `--status` takes `indexed`, `not_indexed`, or `pending`. `--search` keeps URLs that contain the text.
 - Each row lists the sitemaps that contain the URL.
 - Pages hold 100 rows by default and 500 at most. Use `--offset` for the next page, or `--all` for every page.
-- With local authentication, the command fails. Pipe `gscdump sitemaps urls <sitemap-url>` into `gscdump entities inspect` instead.
+- With local authentication, the command fails. Pipe `gscdump sitemaps urls <sitemap-url>` into `gscdump inspect` instead.
 
 ## Report a papercut
 

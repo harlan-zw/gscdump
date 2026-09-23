@@ -15,6 +15,7 @@ import { ofetch } from 'ofetch'
 import { refreshAccessToken } from '../api/oauth'
 import { resolveToBody } from '../query/resolver'
 import { rowWithMetricDefaults } from './cli-format'
+import { classifyError } from './errors'
 
 const GSC_API = 'https://searchconsole.googleapis.com'
 const INDEXING_API = 'https://indexing.googleapis.com'
@@ -147,6 +148,11 @@ async function resolveToken(auth: Auth): Promise<string> {
   return ''
 }
 
+/** True when a 403 body is a Google quota or rate limit, not a permission failure. */
+function isQuota403(body: unknown): boolean {
+  return classifyError({ status: 403, data: body }).kind === 'rate-limited'
+}
+
 export function createFetch(auth: Auth, options?: FetchOptions): $Fetch {
   // Normalize auth if it's options to ensure stateful client
   const authState = (typeof auth === 'object' && auth !== null && 'clientId' in auth && 'refreshToken' in auth && !('getAccessToken' in auth))
@@ -159,9 +165,11 @@ export function createFetch(auth: Auth, options?: FetchOptions): $Fetch {
   if (!headers.has('User-Agent'))
     headers.set('User-Agent', 'gscdump (gzip)')
 
+  const baseRetryStatusCodes = options?.retryStatusCodes ?? [408, 425, 429, 500, 502, 503, 504]
+  const retries = options?.retry ?? 3
   return ofetch.create({
     ...options,
-    retry: options?.retry ?? 3,
+    retry: retries,
     // Honour `Retry-After` on 429/503 (RFC 7231): seconds or HTTP-date.
     // Fall back to 1s for other retryable codes.
     retryDelay: options?.retryDelay ?? ((ctx: FetchContext) => {
@@ -177,9 +185,12 @@ export function createFetch(auth: Auth, options?: FetchOptions): $Fetch {
             return Math.max(0, when - Date.now())
         }
       }
+      // Quota 403s back off 5s, 15s, 45s: Google's load quota refills over minutes.
+      if (status === 403 && typeof ctx.options.retry === 'number' && typeof retries === 'number')
+        return 5000 * 3 ** Math.max(0, retries - ctx.options.retry)
       return 1000
     }),
-    retryStatusCodes: options?.retryStatusCodes ?? [408, 425, 429, 500, 502, 503, 504],
+    retryStatusCodes: baseRetryStatusCodes,
     timeout: options?.timeout ?? DEFAULT_GSC_REQUEST_TIMEOUT_MS,
     headers,
     async onRequest(ctx) {
@@ -195,9 +206,13 @@ export function createFetch(auth: Auth, options?: FetchOptions): $Fetch {
       }
     },
     async onResponseError(ctx) {
-      if (ctx.response.status === 403) {
-        console.error('[gscdump] Permission denied (403). check your service account permissions being added to the GSC property.')
-      }
+      // Google reports Search Analytics load-quota and rate-limit exhaustion
+      // as 403. Those retry with backoff; a real permission 403 stays fatal.
+      const retryable = new Set(baseRetryStatusCodes)
+      if (ctx.response.status === 403 && isQuota403(ctx.response._data))
+        retryable.add(403)
+      if (ctx.options)
+        ctx.options.retryStatusCodes = [...retryable]
 
       if (options?.onResponseError) {
         if (Array.isArray(options.onResponseError)) {

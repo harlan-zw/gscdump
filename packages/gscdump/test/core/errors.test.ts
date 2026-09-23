@@ -1,6 +1,5 @@
 import { classifyError } from 'gscdump/errors'
 import { describe, expect, it } from 'vitest'
-import { formatErrorForCli } from '../../src/core/errors'
 
 function ofetchLike(statusCode: number, message: string, extras: Record<string, unknown> = {}): Error {
   const err = Object.assign(new Error(message), { statusCode, ...extras })
@@ -46,9 +45,27 @@ describe('classifyError', () => {
     expect(e.kind).toBe('rate-limited')
   })
 
-  it('classifies 403 without quota keyword as auth-expired', () => {
+  it('classifies 403 without quota keyword as permission-denied', () => {
     const e = classifyError(ofetchLike(403, 'Permission denied for site'))
-    expect(e.kind).toBe('auth-expired')
+    expect(e.kind).toBe('permission-denied')
+  })
+
+  it.each([
+    'Search Analytics load quota exceeded. Please try again later.',
+    'Quota exceeded for quota metric \'QPS\' and limit \'QPS per user\'.',
+    'Too many requests: QPS limit reached',
+  ])('classifies an ofetch 403 whose Google body says %j as rate-limited', (googleMessage) => {
+    const e = classifyError(ofetchLike(403, '[POST] "https://searchconsole.googleapis.com/v1/x": 403 Forbidden', {
+      data: { error: { code: 403, message: googleMessage } },
+    }))
+    expect(e).toMatchObject({ kind: 'rate-limited', message: googleMessage })
+  })
+
+  it('keeps Google\'s reason when an ofetch Error wraps it', () => {
+    const e = classifyError(ofetchLike(403, '[POST] "https://searchconsole.googleapis.com/v1/x": 403 Forbidden', {
+      data: { error: { code: 403, message: 'User does not have sufficient permission for site' } },
+    }))
+    expect(e).toMatchObject({ kind: 'permission-denied', message: 'User does not have sufficient permission for site' })
   })
 
   it('classifies 403 with quota `reason` in ErrorInfo as rate-limited', () => {
@@ -72,11 +89,11 @@ describe('classifyError', () => {
     expect(e.kind).toBe('rate-limited')
   })
 
-  it('treats unknown 403 reason as auth-expired', () => {
+  it('treats unknown 403 reason as permission-denied', () => {
     const e = classifyError(ofetchLike(403, 'forbidden', {
       data: { error: { code: 403, message: 'forbidden', errors: [{ reason: 'forbidden' }] } },
     }))
-    expect(e.kind).toBe('auth-expired')
+    expect(e.kind).toBe('permission-denied')
   })
 
   it('classifies 404 and 410 as not-found', () => {
@@ -133,30 +150,5 @@ describe('classifyError', () => {
     const original = ofetchLike(429, 'slow down')
     const e = classifyError(original)
     expect(e.cause).toBe(original)
-  })
-})
-
-describe('formatErrorForCli', () => {
-  it('adds a re-auth hint for auth-expired', () => {
-    const out = formatErrorForCli(ofetchLike(401, 'Invalid Credentials'))
-    expect(out).toContain('Invalid Credentials')
-    expect(out).toContain('`gscdump auth`')
-  })
-
-  it('mentions retryAfter for rate-limited', () => {
-    const out = formatErrorForCli(ofetchLike(429, 'too many', {
-      headers: { 'retry-after': '12' },
-    }))
-    expect(out).toContain('12s')
-  })
-
-  it('mentions daily quota for Indexing API rate-limited errors', () => {
-    const out = formatErrorForCli(ofetchLike(403, 'Quota exceeded for Indexing API'))
-    expect(out).toContain('Indexing API')
-  })
-
-  it('is terse for transport errors (no suggestion)', () => {
-    const out = formatErrorForCli(new Error('socket hang up'))
-    expect(out.split('\n')).toHaveLength(1)
   })
 })

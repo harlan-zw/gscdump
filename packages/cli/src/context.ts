@@ -157,9 +157,14 @@ export function formatSiteResolution(resolution: Exclude<SiteResolution, { kind:
   switch (resolution.kind) {
     case 'ambiguous':
       return `"${resolution.input}" matches more than one Site: ${resolution.candidates.join(', ')}. Pass one of these Site URLs to --site.`
-    case 'covered-by-parent':
+    case 'covered-by-parent': {
+      if (scope === 'store') {
+        return `"${resolution.input}" is part of the Site ${resolution.parent}. `
+          + 'The Store keeps page paths only. Pass --live to filter by host.'
+      }
       return `"${resolution.input}" is part of the Site ${resolution.parent}. `
         + `Filter its pages instead: --site ${siteArg(resolution.parent)} --page ~${resolution.input.trim().replace(/^[a-z]+:\/\//i, '')}.`
+    }
     case 'not-found': {
       if (scope === 'store') {
         const sync = `gscdump sync --site ${siteArg(resolution.input.trim())}`

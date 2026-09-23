@@ -2,12 +2,11 @@ import type { CommandDef } from 'citty'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import process from 'node:process'
 import { resetNodeDuckDB } from '@gscdump/engine/node'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { entitiesCommand } from '../../src/commands/entities'
+import { inspectCommand } from '../../src/commands/inspect'
 import { readSiteMap, recordStoreSite } from '../../src/store-sites'
-import { logger } from '../../src/utils'
 
 const configState: { dataDir: string | null } = { dataDir: null }
 
@@ -101,28 +100,23 @@ async function writeUrlList(urls: string[]): Promise<string> {
   return file
 }
 
-describe('entities inspect', () => {
+describe('inspect', () => {
   it('records the Site in the Store map before writing inspections', async () => {
-    const file = await writeUrlList(['https://example.com/page'])
-    await run(child(entitiesCommand, 'inspect'), { site: SITE, file, quiet: true })
+    await run(inspectCommand, { site: SITE, _: ['https://example.com/page'], quiet: true })
     expect(await readSiteMap(tmpDir!)).toEqual({ 'h_example.com': SITE })
   })
 
-  it('exits 1 when the Store ID holds another Site', async () => {
+  it('refuses a Site whose Store ID holds another Site', async () => {
     // A Store that already serves http://example.com/ under the shared ID.
     await fs.mkdir(path.join(tmpDir!, 'u_local', 'h_example.com'), { recursive: true })
     await fs.writeFile(
       path.join(tmpDir!, 'u_local', 'sites.json'),
       `${JSON.stringify({ version: 1, sites: { 'h_example.com': 'http://example.com/' } }, null, 2)}\n`,
     )
-    const file = await writeUrlList(['https://example.com/page'])
-    vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
-      throw new Error(`process.exit(${code})`)
-    }) as never)
-    await expect(run(child(entitiesCommand, 'inspect'), { site: SITE, file, quiet: true }))
+    await expect(run(inspectCommand, { site: SITE, _: ['https://example.com/page'], quiet: true }))
       .rejects
-      .toThrow('process.exit(1)')
-    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(expect.stringContaining('The Store keeps http://example.com/ under the same ID as https://example.com/'))
+      .toThrow('The Store keeps http://example.com/ under the same ID as https://example.com/')
+    expect(inspectSpy).not.toHaveBeenCalled()
     // Nothing was written under the claimed ID.
     expect(await recordStoreSite(tmpDir!, 'http://example.com/')).toEqual({ ok: true, value: undefined })
   })

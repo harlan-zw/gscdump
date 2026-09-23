@@ -5,6 +5,8 @@ async function resolve<T>(value: Resolvable<T>): Promise<T> {
   return typeof value === 'function' ? (value as () => T | Promise<T>)() : value
 }
 
+const GLOBAL_OPTIONS = new Set(['help', 'h', 'version', 'no-color'])
+
 /** Check only the selected command. Root help must keep lazy imports lazy. */
 export async function checkCliArgs(command: CommandDef, rawArgs: string[], path = 'gscdump'): Promise<string | undefined> {
   const definitions = await resolve(command.args ?? {})
@@ -58,6 +60,11 @@ export async function checkCliArgs(command: CommandDef, rawArgs: string[], path 
     }
     if (!selected)
       return `Unknown command ${positional.value}. Run ${path} --help.`
+    // citty gives a subcommand only the argv after its name, so a flag placed
+    // before the name would be dropped without a word.
+    const early = tokens.find(token => token.index < boundary && token.kind === 'option' && !GLOBAL_OPTIONS.has(token.name))
+    if (early?.kind === 'option')
+      return `Put ${early.rawName} after the subcommand: ${path} ${positional.value} ${early.rawName}.`
     const child = await resolve(selected)
     if (child)
       return checkCliArgs(child, rawArgs.slice(boundary + 1), `${path} ${positional.value}`)

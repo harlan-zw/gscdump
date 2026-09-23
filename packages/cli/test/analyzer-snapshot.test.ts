@@ -14,13 +14,13 @@ import {
 import { createNodeDuckDBHandle, resetNodeDuckDB } from '@gscdump/engine/node'
 import { encodeSiteId } from 'gscdump/tenant'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { exportToDuckDB } from '../../src/commands/export'
+import { writeAnalyzerSnapshot } from '../src/native-duckdb'
 
 const SITE = 'sc-domain:example.com'
 const USER = 'local'
 const siteId = encodeSiteId(SITE)
 
-describe('gscdump store export', () => {
+describe('writeAnalyzerSnapshot', () => {
   let dataDir: string
   let outPath: string
 
@@ -73,7 +73,7 @@ describe('gscdump store export', () => {
       ],
     )
 
-    const result = await exportToDuckDB({
+    const result = await writeAnalyzerSnapshot({
       engine,
       dataDir,
       userId: USER,
@@ -110,7 +110,7 @@ describe('gscdump store export', () => {
 
   it('returns empty result when no data is synced', async () => {
     const engine = makeEngine()
-    const result = await exportToDuckDB({
+    const result = await writeAnalyzerSnapshot({
       engine,
       dataDir,
       userId: USER,
@@ -134,7 +134,7 @@ describe('gscdump store export', () => {
       [{ url: 'https://other.com/a', date: '2026-04-10', clicks: 99, impressions: 99, sum_position: 99 }],
     )
 
-    const result = await exportToDuckDB({
+    const result = await writeAnalyzerSnapshot({
       engine,
       dataDir,
       userId: USER,

@@ -32,8 +32,7 @@ export interface ResolvedAnalysisSource {
   /**
    * Run a single analysis through this resolved source. Translates
    * `AnalyzerCapabilityError` from the dispatcher into
-   * `LocalStoreUnsupportedError` carrying the mode; commands attach
-   * `gscErrorHandler` to render + exit.
+   * `LocalStoreUnsupportedError` carrying the mode; the CLI shell renders it.
    */
   runAnalysis: (params: AnalysisParams) => Promise<AnalysisResult>
 }
@@ -79,8 +78,7 @@ function makeRunAnalysis(
  * Single entry point used by `analyze` and `report` commands. Picks live vs.
  * local-store source from `--live`, ensures local data exists when running
  * locally, and returns a `runAnalysis` shim that maps capability errors to
- * `LocalStoreUnsupportedError`. Commands chain `.catch(gscErrorHandler)` for
- * the final render + exit.
+ * `LocalStoreUnsupportedError`. The CLI shell renders the final error.
  *
  * Local mode does NOT require live auth: the local store is the
  * authoritative source by design, and the Site resolves from the Store.

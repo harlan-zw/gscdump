@@ -4,6 +4,7 @@
 
 export type GscErrorKind
   = | 'auth-expired'
+    | 'permission-denied'
     | 'rate-limited'
     | 'not-found'
     | 'validation'
@@ -12,18 +13,12 @@ export type GscErrorKind
 
 export type GscError
   = | { kind: 'auth-expired', message: string, cause: unknown }
+    | { kind: 'permission-denied', message: string, cause: unknown }
     | { kind: 'rate-limited', message: string, retryAfter?: number, cause: unknown }
     | { kind: 'not-found', message: string, cause: unknown }
     | { kind: 'validation', message: string, cause: unknown }
     | { kind: 'storage', message: string, cause: unknown }
     | { kind: 'transport', message: string, status?: number, cause: unknown }
-
-/** Approximate per-day GSC API quotas, used in CLI messaging. */
-const GSC_QUOTAS = {
-  searchAnalytics: 25_000,
-  urlInspection: 2_000,
-  indexing: 200,
-} as const
 
 /**
  * Walk `error` along each `path` (e.g. `['response', 'status']`) and return the
@@ -65,12 +60,11 @@ function extractMessage(error: unknown): string {
     return 'Unknown error'
   if (typeof error === 'string')
     return error
-  if (error instanceof Error)
-    return error.message
   if (typeof error !== 'object')
     return String(error)
-  // Google API nested error takes priority — its message is more specific than the ofetch wrapper's.
-  return pickField(error, [['data', 'error', 'message'], ['message'], ['statusMessage']], isString)
+  // Google's own reason beats the ofetch wrapper text ("[POST] url: 403"),
+  // including when the wrapper is an Error (ofetch's FetchError is one).
+  return pickField(error, [['data', 'error', 'message'], ['data', 'error_description'], ['message'], ['statusMessage']], isString)
     ?? String(error)
 }
 
@@ -95,7 +89,8 @@ function extractRetryAfter(error: unknown): number | undefined {
   return undefined
 }
 
-const QUOTA_MESSAGE_RE = /quota|rate\s*limit/i
+// Google words load-quota 403s as "quota exceeded" and per-second limits as "QPS".
+const QUOTA_MESSAGE_RE = /quota|rate\s*limit|\bqps\b/i
 
 /** GSC/Google API `reason` codes that indicate quota/rate exhaustion (not a real permission failure). */
 const QUOTA_REASONS = new Set([
@@ -172,7 +167,9 @@ export function classifyError(cause: unknown): GscError {
     // Google error envelope; fall back to message substring for older/unknown shapes.
     if (isQuotaCondition(cause, message))
       return { kind: 'rate-limited', message, retryAfter: extractRetryAfter(cause), cause }
-    return { kind: 'auth-expired', message, cause }
+    // A 403 means the credentials work but lack access. Signing in again
+    // does not fix it, so it is not `auth-expired`.
+    return { kind: 'permission-denied', message, cause }
   }
 
   if (status === 404 || status === 410)
@@ -314,37 +311,4 @@ const PERMISSION_SIGNALS = [
 export function isPermissionDeniedError(err: unknown): boolean {
   const msg = String((err as { message?: string } | null)?.message ?? err ?? '').toLowerCase()
   return PERMISSION_SIGNALS.some(s => msg.includes(s))
-}
-
-function suggestionFor(err: GscError): string {
-  switch (err.kind) {
-    case 'auth-expired':
-      return 'Run `gscdump auth` to re-authenticate.'
-    case 'rate-limited': {
-      const retryIn = err.retryAfter ? `${err.retryAfter}s` : 'a few minutes'
-      if (QUOTA_MESSAGE_RE.test(err.message)) {
-        if (err.message.includes('Indexing API'))
-          return `Indexing API quota exhausted (~${GSC_QUOTAS.indexing}/day). Try again tomorrow.`
-        return `Quota or rate limit hit (Search Analytics ~${GSC_QUOTAS.searchAnalytics}/day). Try again in ${retryIn}.`
-      }
-      return `Rate limited. Slow down requests. Try again in ${retryIn}.`
-    }
-    case 'not-found':
-    case 'validation':
-    case 'storage':
-    case 'transport':
-      return ''
-  }
-}
-
-/** CLI-facing formatter. Returns an ANSI-colored multi-line string. */
-export function formatErrorForCli(cause: unknown): string {
-  const err = classifyError(cause)
-  const lines: string[] = [`\x1B[31m${err.message}\x1B[0m`]
-  const suggestion = suggestionFor(err)
-  if (suggestion) {
-    lines.push('')
-    lines.push(suggestion)
-  }
-  return lines.join('\n')
 }

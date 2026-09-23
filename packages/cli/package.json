@@ -39,7 +39,7 @@
     "skills"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "build": "obuild",
@@ -52,6 +52,7 @@
     "@clack/prompts": "catalog:deps",
     "@duckdb/node-api": "catalog:",
     "@gscdump/analysis": "workspace:^",
+    "@gscdump/contracts": "workspace:^",
     "@gscdump/engine": "workspace:^",
     "@gscdump/engine-gsc-api": "workspace:^",
     "@gscdump/sdk": "workspace:^",

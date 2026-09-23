@@ -100,8 +100,8 @@ try {
   await cli('analyze', '--help')
   const site = 'sc-domain:example.com'
   const range = ['--site', site, '--start', '2026-08-01', '--end', '2026-08-01']
-  await cli('sync', ...range, '--tables', 'pages', '--no-rollups', '--quiet')
-  await cli('sync', ...range, '--tables', 'pages', '--no-rollups', '--quiet')
+  await cli('sync', ...range, '--tables', 'pages', '--types', 'web', '--no-rollups', '--quiet')
+  await cli('sync', ...range, '--tables', 'pages', '--types', 'web', '--no-rollups', '--quiet')
   const { data: rows } = JSON.parse(await cli('query', ...range, '--dimensions', 'page', '--format', 'json', '--quiet'))
   assert.equal(rows.length, 1)
   assert.equal(rows[0].clicks, 5)
@@ -109,10 +109,15 @@ try {
 
   const parquetDirectory = join(consumer, 'exported parquet')
   const dumped = JSON.parse(await cli('dump', '--site', site, '--tables', 'pages', '--format', 'parquet', '--out', parquetDirectory, '--json'))
-  assert.equal(dumped.sites[0].files, 1)
-  const duckdbFile = join(consumer, 'exported store.duckdb')
-  const exported = JSON.parse(await cli('store', 'export', '--site', site, '--out', duckdbFile, '--json'))
-  assert.equal(exported.totalRows, 1)
+  assert.equal(dumped.sites[0].datasets.length, 1)
+  assert.equal(dumped.files.length, 1)
+  assert(dumped.files[0].bytes > 0)
+  // Sync saved the sitemap and one URL Inspection; dump exports both with sizes.
+  const entityDump = JSON.parse(await cli('dump', '--site', site, '--tables', 'inspections,sitemaps,sitemap_urls', '--format', 'json', '--out', join(consumer, 'exported entities'), '--json'))
+  assert.deepEqual(Object.fromEntries(entityDump.sites[0].datasets.map(dataset => [dataset.dataset, dataset.rows])), { inspections: 1, sitemaps: 1, sitemap_urls: 1 })
+  assert(entityDump.metadataFiles.some(file => file.path.endsWith('manifest.json')))
+  const exported = JSON.parse(await cli('dump', '--site', site, '--tables', 'pages', '--format', 'duckdb', '--out', join(consumer, 'exported duckdb'), '--json'))
+  assert.equal(exported.sites[0].totals.rows, 1)
 
   // Reopen portable exports after removing the Store, using only installed production dependencies.
   await rm(join(consumer, 'data'), { recursive: true })
@@ -123,7 +128,7 @@ try {
     const columns = 'url, CAST(date AS VARCHAR) AS date, clicks::INTEGER AS clicks, impressions::INTEGER AS impressions'
     for (const [path, source] of [
       [':memory:', "read_parquet('exported parquet/**/*.parquet')"],
-      ['exported store.duckdb', 'pages'],
+      ['exported duckdb/gscdump.duckdb', "pages WHERE site = 'sc-domain:example.com' AND search_type = 'web'"],
     ]) {
       const instance = await DuckDBInstance.create(path)
       const connection = await instance.connect()

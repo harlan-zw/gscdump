@@ -30,6 +30,7 @@ describe('bing commands', () => {
       GetPageStats: [{ ...stats, Query: `${site}page`, AvgClickPosition: 2, AvgImpressionPosition: 3 }],
       GetQueryStats: [{ ...stats, Query: 'hello, "world"', AvgClickPosition: 2, AvgImpressionPosition: 3 }],
       GetCrawlStats: [],
+      GetCrawlIssues: [],
       GetUrlInfo: null,
     }
     vi.spyOn(console, 'log').mockImplementation((...args) => output.push(args.join(' ')))
@@ -65,7 +66,7 @@ describe('bing commands', () => {
     expect(output.join('\n')).not.toContain('private-key')
   })
 
-  it('dumps all four datasets using the verified URL returned by Bing', async () => {
+  it('dumps every dataset, crawl issues included, using the verified URL returned by Bing', async () => {
     const out = path.join(runtime.configDir, 'export')
     await run(['dump', '--site', 'https://example.com', '--out', out, '--json'])
     const summary = JSON.parse(output.at(-1)!)
@@ -74,13 +75,14 @@ describe('bing commands', () => {
     for (const file of summary.files)
       data[file.dataset] = JSON.parse(await fs.readFile(file.path, 'utf8'))
     expect(data).toMatchObject({
-      traffic: [{ clicks: 12, impressions: 80 }],
-      pages: [{ page: `${site}page`, averageClickPosition: 2, averageImpressionPosition: 3 }],
-      keywords: [{ query: 'hello, "world"' }],
-      crawl: [],
+      'traffic': [{ clicks: 12, impressions: 80 }],
+      'pages': [{ page: `${site}page`, averageClickPosition: 2, averageImpressionPosition: 3 }],
+      'keywords': [{ query: 'hello, "world"' }],
+      'crawl': [],
+      'crawl-issues': [],
     })
     expect(requests.filter(url => !url.pathname.endsWith('GetUserSites')).map(url => url.searchParams.get('siteUrl')))
-      .toEqual([site, site, site, site])
+      .toEqual([site, site, site, site, site])
   })
 
   it('exports CSV with escaped keywords and filters the returned dates', async () => {

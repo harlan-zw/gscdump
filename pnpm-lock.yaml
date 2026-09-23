@@ -424,6 +424,9 @@ importers:
       '@gscdump/analysis':
         specifier: workspace:^
         version: link:../analysis
+      '@gscdump/contracts':
+        specifier: workspace:^
+        version: link:../contracts
       '@gscdump/engine':
         specifier: workspace:^
         version: link:../engine

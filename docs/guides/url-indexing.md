@@ -3,38 +3,35 @@
 Read Google and Bing Indexing Evidence, save Google inspections, and manage sitemap submissions.
 Google inspection and sitemap commands use the selected cloud or local authentication.
 
-## Inspect a URL
+## Inspect URLs
 
 ```bash
 gscdump inspect https://example.com/blog/post --site example.com --json
+
+gscdump inspect https://example.com/a https://example.com/b --site example.com --json
+
+gscdump inspect --site example.com --file urls.txt --json
 ```
 
-The URL is positional.
+Pass one or more URLs, a file with one URL per line, or both.
+With neither, the command reads URLs from piped stdin.
 Results include Google's verdict, coverage state, last crawl, canonical URLs, and available rich-result details.
 Fields may be absent when Google has no evidence for them.
 
-## Inspect a batch
-
-Put one URL per line in `urls.txt`:
-
-```bash
-gscdump inspect batch --site example.com --file urls.txt --concurrency 2 --json
-
-gscdump inspect batch --site example.com --from-sitemap https://example.com/sitemap.xml --json
-```
-
-`--from-sitemap` takes a sitemap URL and reads its URLs, including sitemap indexes.
-It does not read saved sitemap membership from the hosted API.
-
-## Save inspection results
+Each result is saved to the Store's inspection history as it arrives.
+`dump` exports these records, and `sync` treats a URL inspected here as fresh.
+Read the latest saved record for a URL:
 
 ```bash
-gscdump entities inspect --site example.com --file urls.txt
-
 gscdump entities show https://example.com/blog/post --site example.com
 ```
 
-These commands save and read inspection records in the local Store.
+Google allows 2,000 URL inspections per day and 600 per minute for each property.
+The command refuses more than 2,000 URLs in one run and starts at most 500 calls per minute.
+If Google reports a quota error, the command stops, keeps the saved results, and prints how many URLs remain.
+A URL outside the Site fails without an API call.
+The command exits 1 when any URL fails or remains.
+
 To save Google's notification metadata too:
 
 ```bash
@@ -112,7 +109,7 @@ Use `--offset` for the next page, or `--all` to read every page.
 With local authentication, save inspections to the local Store instead:
 
 ```bash
-gscdump sitemaps urls https://example.com/sitemap.xml | gscdump entities inspect --site sc-domain:example.com
+gscdump sitemaps urls https://example.com/sitemap.xml | gscdump inspect --site example.com
 ```
 
 ## Inspect with Bing

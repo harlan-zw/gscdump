@@ -5,15 +5,18 @@ Keep the files as long as you need them.
 
 ## First sync
 
-After [authentication](./getting-started.md), choose a Store directory and sync 90 days:
+After [authentication](./getting-started.md), choose a Store directory and sync:
 
 ```bash
 gscdump config set dataDir /absolute/path/to/gsc-data
-gscdump sync --site example.com --days 90 --tables pages,queries,page_queries,countries,dates
+gscdump sync --site example.com
 ```
 
-Without `--days`, sync fetches three days ending three days ago.
-It skips dates already marked `done`.
+A plain sync catches up. Each table starts at its oldest synced date and ends at the latest date Google has finalized.
+Google finalizes dates on Pacific time, about three days late.
+A table with no history starts 28 days back. Use `--full` or `--start` to go further back.
+Sync skips dates already marked `done`, and fetches the newest dates first.
+If a run misses a few days, the next run fills the gap.
 Use `--force` when you need to refresh completed dates.
 
 ## Stored tables
@@ -28,19 +31,51 @@ The table choices used here are:
 | `countries` | Country metrics |
 | `page_queries` | Daily page/query pairs |
 | `dates` | Site totals, device metrics, and anonymized impressions |
+| `search_appearance` | Daily totals per search appearance |
+| `search_appearance_pages`, `search_appearance_queries`, `search_appearance_page_queries` | Page and query rows for each search appearance |
+| `hourly_pages` | Hourly page metrics for the last 10 days |
 
-Default sync includes `pages`, `queries`, `countries`, and `dates`.
-Include `page_queries` when an Analyzer needs page/query pairs.
+Default sync includes every table and every search type.
+Sync skips pairs that Google cannot answer. Discover and Google News have no query or country rows.
+Hourly rows cover only the last 10 days.
+Stored empty-type markers skip search types with no data.
 The `dates` sync combines separate requests for Site totals, device metrics, and query impressions.
 
 Sync also rebuilds Rollups unless you pass `--no-rollups`.
+Sync saves the sitemap list and sitemap URLs unless you pass `--no-sitemaps`.
+Sync inspects up to 50 due URLs per run unless you pass `--no-inspections`.
+Sync keeps 8 Search Analytics requests in flight and starts at most 600 per minute. `--requests-per-minute N` changes the rate.
+Use `--inspect-limit N` to change the budget. Google allows 2,000 inspections per Site per day.
+Inspection goes to sitemap URLs that were never inspected, then to pages with impressions, then to the oldest results.
 Run `gscdump sync --help` for the full table and search-type options.
+
+## Quotas and progress
+
+Google limits Search Analytics and URL Inspection calls.
+A large Site cannot fit into one run, so sync spends what the quotas allow and continues on the next run.
+Sync records every call in `quota-ledger.json` in the Store directory.
+If Google refuses a call for quota, sync stops cleanly, keeps the rest `pending`, and exits 0.
+The next run starts again after Google's quota resets.
+Use `--max-calls N` to cap the Search Analytics calls of one run.
+
+`sync --status` and the sync summary show how far the Store has come:
+
+```text
+Analytics: 412 of 486 days so far (2025-05-23 to 2026-09-19). The next sync continues from there.
+Inspections: 1,200 of 10,000 URLs so far. Daily sync covers the rest in about 176 runs at 50 URLs a run. Pass --inspect-limit 2000 to finish in about 5 days.
+Sitemaps: all 3 sitemaps saved, 10,000 URLs.
+Next: gscdump sync --site example.com
+```
+
+`sync --status` also lists missing and failed dates per table, and a sync that is running.
+A sync that stopped without cleanup shows as stale. The next sync retries its dates.
+If you press Ctrl+C, run the same command again to resume.
 
 ## Backfill and retry
 
 ```bash
-# Start 450 days ago, ending three days ago
-gscdump sync --site example.com --full --tables pages,queries,page_queries,countries,dates
+# Fetch all 16 months Google keeps, plus 14 days Google often still serves
+gscdump sync --site example.com --full
 
 # Select an exact range
 gscdump sync --site example.com --start 2026-08-01 --end 2026-08-31 \
@@ -49,17 +84,21 @@ gscdump sync --site example.com --start 2026-08-01 --end 2026-08-31 \
 # Read sync progress
 gscdump sync --site example.com --status
 
-# Retry failed dates in the selected window
+# Retry only failed dates in the selected window (a plain sync retries them too)
 gscdump sync --site example.com --days 90 \
   --tables pages,queries,page_queries,countries,dates --retry-failed
+
+# Count the calls first
+gscdump sync --site example.com --full --dry-run
 
 # Refresh completed dates too
 gscdump sync --site example.com --days 7 --force \
   --tables pages,queries,page_queries,countries,dates
 ```
 
-Sync follows Google's pagination until a request returns no rows.
+Google returns at most 25,000 rows per request. Sync stops paging when a page holds fewer rows.
 Google can omit rows, so a successful sync does not guarantee complete Search Console data.
+A day that Google still updates stays `pending`, and the next sync fetches it again.
 See [Google's extraction guidance](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data).
 
 ## Select tables and search types
@@ -83,9 +122,12 @@ Save this as `sync-gsc.sh`, then make it executable:
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-/path/to/gscdump sync --site example.com --days 7 --force \
-  --tables pages,queries,page_queries,countries,dates
+/path/to/gscdump sync --site example.com
 ```
+
+A plain sync catches up, so the script needs no dates and no `--force`.
+If cron misses a week, the next run fills the week.
+Use `--all-sites` to sync every Site one after another. They share one Google quota.
 
 Replace `/path/to/gscdump` with the output of `command -v gscdump`.
 Run it daily with cron:
@@ -102,13 +144,25 @@ If you use a temporary CI runner, restore and save the entire Store between runs
 ```bash
 gscdump query --site example.com --dimensions page --limit 100
 
-gscdump dump --site example.com --format parquet --out ./parquet-export
+gscdump query --format json --sql "SELECT search_type, SUM(clicks) AS clicks,
+  gsc_position(sum_position, impressions) AS position
+  FROM pages GROUP BY search_type"
 
-gscdump store export --help
+gscdump dump --site example.com --format parquet --out ./parquet-export
+gscdump dump --all-sites --format sqlite --out ./sqlite-export
 ```
 
-`dump` writes files to a directory.
-`store export` creates a single `.duckdb` file.
+`query --sql` runs DuckDB SQL over one view per Store table.
+`query --schema` lists the views, their columns, and their date ranges.
+Every view and every exported row has `site` and `search_type` columns.
+The Store keeps every search type, so filter or group by `search_type` before you add rows together.
+`url` holds the page path, and `page` is the same value.
+`sum_position` is the zero-based position multiplied by impressions.
+`gsc_position(sum_position, impressions)` returns the impression-weighted average position.
+
+`dump` writes Parquet, CSV, JSON, or NDJSON files to a directory.
+`--format sqlite` and `--format duckdb` write one database file with one table per dataset.
+CSV, JSON, and NDJSON rows also have a per-row `position`.
 
 ## Maintain the Store
 

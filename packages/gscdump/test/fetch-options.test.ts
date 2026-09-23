@@ -1,6 +1,7 @@
 import type { FetchOptions } from 'ofetch'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { googleSearchConsole } from '../src'
+import { classifyError } from '../src/core/errors'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -95,5 +96,33 @@ describe('google client fetch options', () => {
     expect(sites).toEqual([{ siteUrl: 'sc-domain:example.com' }])
     expect(fetch).toHaveBeenCalledTimes(2)
     expect(retryDelay).toHaveBeenCalledOnce()
+  })
+
+  it('retries a 403 quota error without writing to the console', async () => {
+    const quota = { error: { code: 403, message: 'Search Analytics load quota exceeded.', errors: [{ reason: 'quotaExceeded', domain: 'usageLimits' }] } }
+    const fetch = vi.fn()
+      .mockImplementationOnce(async () => jsonResponse(quota, 403))
+      .mockImplementationOnce(async () => jsonResponse({ siteEntry: [{ siteUrl: 'sc-domain:e.com' }] }))
+    vi.stubGlobal('fetch', fetch)
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const sites = await googleSearchConsole('test-token', { fetchOptions: { retryDelay: 0 } }).sites()
+
+    expect(sites).toHaveLength(1)
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(log).not.toHaveBeenCalled()
+  })
+
+  it('keeps a real permission 403 fatal and carries Google\'s reason', async () => {
+    const denied = { error: { code: 403, message: 'User does not have sufficient permission for site.', errors: [{ reason: 'forbidden' }] } }
+    const fetch = vi.fn().mockImplementation(async () => jsonResponse(denied, 403))
+    vi.stubGlobal('fetch', fetch)
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const error = await googleSearchConsole('test-token', { fetchOptions: { retryDelay: 0 } }).sites().catch((e: unknown) => e)
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(classifyError(error)).toMatchObject({ kind: 'permission-denied', message: 'User does not have sufficient permission for site.' })
+    expect(log).not.toHaveBeenCalled()
   })
 })

@@ -13,7 +13,6 @@ import { createCommandContext } from '../context'
 import { formatSiteIdCollision, recordStoreSite } from '../store-sites'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
-const INSPECTION_QPD_PER_PROPERTY = 2000
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
 
 // The redesigned InspectionStore is append-only history shards bucketed by the
@@ -57,131 +56,6 @@ async function readUrlList(opts: { file?: string }): Promise<string[]> {
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
   return Buffer.concat(chunks).toString('utf8').split('\n').map(l => l.trim()).filter(Boolean)
 }
-
-const inspectSubCommand = defineCommand({
-  meta: {
-    name: 'inspect',
-    description: 'Run URL Inspection for a list of URLs and persist results to the local entity store',
-  },
-  args: {
-    site: {
-      type: 'string',
-      alias: 's',
-      description: 'Site, for example example.com; defaults to config.defaultSite or a prompt',
-    },
-    file: {
-      type: 'string',
-      alias: 'f',
-      description: 'Path to a file with one URL per line. If omitted, reads from stdin.',
-    },
-    limit: {
-      type: 'string',
-      description: `Max URLs to inspect this run (default: ${INSPECTION_QPD_PER_PROPERTY}, the per-property GSC daily quota)`,
-    },
-    concurrency: {
-      type: 'string',
-      alias: 'c',
-      default: '4',
-      description: 'Concurrent in-flight inspect calls (default: 4)',
-    },
-    ...OUTPUT_ARGS,
-  },
-  async run({ args }) {
-    const { json, quiet } = applyOutputMode(args)
-    const limit = parseIntegerOption(args.limit, '--limit') ?? INSPECTION_QPD_PER_PROPERTY
-    const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? 4
-    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
-    const client = ctx.client!
-    const store = ctx.store!
-    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-
-    const urls = (await readUrlList({ file: args.file ? String(args.file) : undefined })).slice(0, limit)
-    if (urls.length === 0) {
-      logger.warn('No URLs to inspect.')
-      return
-    }
-    if (urls.length === limit && limit < INSPECTION_QPD_PER_PROPERTY)
-      logger.info(`Capping at --limit ${limit}`)
-    if (urls.length === INSPECTION_QPD_PER_PROPERTY)
-      logger.info(`Hit per-property daily inspection quota (${INSPECTION_QPD_PER_PROPERTY}); remaining URLs will be queued for tomorrow.`)
-
-    // Claim the siteId before spending quota, so the writes below cannot
-    // land beside another Site's data unlabelled.
-    const claim = await recordStoreSite(store.dataDir, siteUrl, { userId: store.userId })
-    if (!claim.ok) {
-      logger.error(formatSiteIdCollision(claim.error))
-      process.exit(1)
-    }
-
-    const inspector = createInspectionStore({ dataSource: store.dataSource })
-
-    let completed = 0
-    let failed = 0
-    const records: InspectionRecord[] = []
-    const failures: Array<{ url: string, error: string }> = []
-
-    await runWithConcurrency(urls, concurrency, async (url) => {
-      const result = await client.inspect(siteUrl, url).catch((err: Error) => err)
-      if (result instanceof Error) {
-        failed++
-        failures.push({ url, error: result.message })
-      }
-      else {
-        const ix = result.inspectionResult
-        const indexStatus = ix?.indexStatusResult
-        records.push({
-          url,
-          inspectedAt: new Date().toISOString(),
-          indexStatus: indexStatus?.verdict ?? undefined,
-          lastCrawlTime: indexStatus?.lastCrawlTime ?? undefined,
-          googleCanonical: indexStatus?.googleCanonical ?? undefined,
-          userCanonical: indexStatus?.userCanonical ?? undefined,
-          coverageState: indexStatus?.coverageState ?? undefined,
-          robotsTxtState: indexStatus?.robotsTxtState ?? undefined,
-          indexingState: indexStatus?.indexingState ?? undefined,
-          pageFetchState: indexStatus?.pageFetchState ?? undefined,
-          mobileUsabilityVerdict: ix?.mobileUsabilityResult?.verdict ?? undefined,
-          richResultsVerdict: ix?.richResultsResult?.verdict ?? undefined,
-          raw: ix as Record<string, unknown> | undefined,
-        })
-      }
-      completed++
-      if (!quiet)
-        process.stdout.write(`\r${progressBar(completed, urls.length, `${url.slice(0, 60)}`)}`)
-    })
-
-    if (!quiet)
-      process.stdout.write('\n')
-
-    await inspector.appendHistory(
-      { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
-      records,
-    )
-
-    if (json) {
-      console.log(JSON.stringify({
-        site: siteUrl,
-        inspected: records.length,
-        failed,
-        failures,
-        records,
-      }, null, 2))
-    }
-    else if (!quiet) {
-      logger.success(`Inspected ${records.length}/${urls.length} URL(s)`)
-      if (failed > 0) {
-        logger.warn(`${failed} failed:`)
-        for (const f of failures.slice(0, 5))
-          console.log(`  ${f.url}: ${f.error}`)
-        if (failures.length > 5)
-          console.log(`  ... and ${failures.length - 5} more`)
-      }
-    }
-
-    if (failed > 0)
-      process.exit(1)
-  },
-})
 
 const showSubCommand = defineCommand({
   meta: {
@@ -343,7 +217,6 @@ const indexingSubCommand = defineCommand({
 export const entitiesCommand = defineCommand({
   meta: entitiesCommandMeta,
   subCommands: {
-    inspect: inspectSubCommand,
     show: showSubCommand,
     indexing: indexingSubCommand,
   },

@@ -73,7 +73,7 @@ export async function dumpHostedBingSite(
   outDir: string,
   options: ReturnType<typeof parseBingDumpOptions>,
 ): Promise<BingDumpSummary> {
-  if (options.datasets.includes('crawl-issues'))
+  if (options.datasetsExplicit && options.datasets.includes('crawl-issues'))
     throw new Error('Bing crawl issues require local authentication. Use --mode local.')
   const endDate = options.end ?? new Date().toISOString().slice(0, 10)
   const startDate = options.start ?? new Date(Date.parse(endDate) - 366 * 86_400_000).toISOString().slice(0, 10)
