@@ -6,6 +6,7 @@ import { inspectCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { checkInspectionBatch, inspectUrls } from '../inspect-urls'
 import { toInspectionRecord } from '../inspection-record'
+import { formatSiteIdCollision, recordStoreSite } from '../store-sites'
 import { appendInspections, loadInspectionState, materializeInspectionIndex, urlInProperty } from '../local-entities'
 import { applyOutputMode, dim, logger, OUTPUT_ARGS, readUrlList, red } from '../utils'
 
@@ -159,6 +160,11 @@ export const inspectCommand = defineCommand({
     const client = ctx.client!
     const store = ctx.store!
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
+    // Claim the siteId before spending quota, so the writes below cannot
+    // land beside another Site's data unlabelled.
+    const claim = await recordStoreSite(store.dataDir, siteUrl, { userId: store.userId })
+    if (!claim.ok)
+      throw new Error(formatSiteIdCollision(claim.error))
     const tenant = { userId: store.userId, siteId: store.siteIdFor(siteUrl) }
     const { latest } = await loadInspectionState(store.dataSource, tenant, new Date())
     const saved: InspectionRecord[] = []

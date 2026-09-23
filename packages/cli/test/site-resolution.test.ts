@@ -159,6 +159,23 @@ describe('site map', () => {
     expect(await listStoreSites(dataDir)).toEqual([])
   })
 
+  it('refuses a claim against a pre-map Store holding another Site\'s data', async () => {
+    // Stores created before the map have no sites.json entry, so the decoded
+    // ID is the only owner label. An http twin must not relabel its data.
+    await fs.mkdir(path.join(dataDir, 'u_local', 'h_example.com'), { recursive: true })
+    const collision = await recordStoreSite(dataDir, 'http://example.com/')
+    expect(collision).toEqual({
+      ok: false,
+      error: { kind: 'site-id-collision', siteId: 'h_example.com', siteUrl: 'http://example.com/', existing: 'https://example.com/' },
+    })
+  })
+
+  it('adopts a pre-map Store for its decoded Site URL', async () => {
+    await fs.mkdir(path.join(dataDir, 'u_local', 'h_example.com'), { recursive: true })
+    expect(await recordStoreSite(dataDir, 'https://example.com/')).toEqual({ ok: true, value: undefined })
+    expect(await readSiteMap(dataDir)).toEqual({ 'h_example.com': 'https://example.com/' })
+  })
+
   it('keeps every entry when many Sites claim at once', async () => {
     const sites = Array.from({ length: 24 }, (_, index) => `https://site-${index}.example.com/`)
     const claims = await Promise.all(sites.map(siteUrl => recordStoreSite(dataDir, siteUrl)))
