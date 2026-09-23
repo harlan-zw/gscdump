@@ -506,7 +506,9 @@ export const syncCommand = defineCommand({
       latest,
       floor: getOldestGscDate(),
     })
-    const mode: SyncMode = args['retry-failed'] ? 'retry-failed' : args.force || args['force-types'] ? 'force' : 'resume'
+    // --force-types only lifts the empty-type skip in resolveTypes; done dates
+    // still resume, so a marker re-probe never becomes a full refetch.
+    const mode: SyncMode = args['retry-failed'] ? 'retry-failed' : args.force ? 'force' : 'resume'
 
     if (!args['dry-run']) {
       const existing = syncRunStatus(await readSyncRun(store.dataDir), { now: Date.now(), isAlive: isProcessAlive })

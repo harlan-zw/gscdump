@@ -333,7 +333,7 @@ describe('sync command (local analytics)', () => {
     expect(doc.emptyTypes).toEqual([])
   })
 
-  it('skips freshly probed empty types and re-probes their dates with force-types', async () => {
+  it('skips freshly probed empty types and re-probes new dates with force-types', async () => {
     rawQuerySpy.mockResolvedValue({ rows: [] })
     const args = {
       site: SITE,
@@ -349,12 +349,18 @@ describe('sync command (local analytics)', () => {
     await syncCommand.run!({ args: { ...args, end: '2026-04-08' }, rawArgs: [], cmd: syncCommand })
     expect(rawQuerySpy).not.toHaveBeenCalled()
 
+    // Data shows up on the fresh day. The re-probe fetches only that day;
+    // done days stay skipped, because --force-types is not --force.
     rawQuerySpy.mockImplementation((_siteUrl, params) => {
       if ((params.startRow ?? 0) > 0)
         return Promise.resolve({ rows: [] })
-      return Promise.resolve(buildRawResponse(params))
+      if (params.startDate === '2026-04-08')
+        return Promise.resolve(buildRawResponse(params))
+      return Promise.resolve({ rows: [] })
     })
-    await syncCommand.run!({ args: { ...args, 'force-types': true }, rawArgs: [], cmd: syncCommand })
+    await syncCommand.run!({ args: { ...args, 'end': '2026-04-08', 'force-types': true }, rawArgs: [], cmd: syncCommand })
+    expect(rawQuerySpy.mock.calls.filter(([, params]) => (params.startRow ?? 0) === 0).map(([, params]) => params.startDate))
+      .toEqual(['2026-04-08'])
     const harness = createNodeHarness({ dataDir: tmpDir })
     const doc = await createEmptyTypesStore({ dataSource: harness.dataSource }).load({
       userId: harness.userId,
@@ -367,7 +373,29 @@ describe('sync command (local analytics)', () => {
       searchType: 'image',
       sql: 'SELECT SUM(clicks)::DOUBLE AS clicks FROM read_parquet({{FILES}})',
     })
-    expect(result.rows).toEqual([{ clicks: 35 }])
+    expect(result.rows).toEqual([{ clicks: 5 }])
+  })
+
+  it('re-probes an empty-marked type with --force-types while done dates stay skipped', async () => {
+    const day = '2026-04-09'
+    const args = { site: SITE, start: day, end: day, tables: 'pages', types: 'web', quiet: true, rollups: false }
+    await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
+    // A stale marker claims image has no data; the store has done web dates.
+    const harness = createNodeHarness({ dataDir: configState.dataDir! })
+    const scope = { userId: harness.userId, siteId: harness.siteIdFor(SITE) }
+    await createEmptyTypesStore({ dataSource: harness.dataSource }).mark(scope, ['image'])
+
+    rawQuerySpy.mockClear()
+    await syncCommand.run!({ args: { ...args, 'types': 'web,image', 'force-types': true }, rawArgs: [], cmd: syncCommand })
+
+    const firstPages = rawQuerySpy.mock.calls.filter(([, params]) => (params.startRow ?? 0) === 0)
+    const queriedDates = (type: string): string[] => firstPages
+      .filter(([, params]) => params.searchType === type)
+      .map(([, params]) => params.startDate as string)
+    // --force-types is not --force: done dates stay skipped.
+    expect(queriedDates('web')).toEqual([])
+    // The wrongly marked-empty type is still re-probed.
+    expect(queriedDates('image')).toEqual([day])
   })
 
   it('stores true daily totals, device metrics, and anonymized impressions with the default tables', async () => {
