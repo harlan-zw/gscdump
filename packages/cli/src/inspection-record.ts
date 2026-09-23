@@ -1,4 +1,4 @@
-// Pure mapping and scheduling for URL Inspection records. `entities inspect`
+// Pure mapping and scheduling for URL Inspection records. `inspect`
 // and `sync` share it, so both write the same record shape to the store.
 
 import type { InspectionVerdict, ScheduleState } from '@gscdump/engine'

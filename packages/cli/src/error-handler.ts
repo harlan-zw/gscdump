@@ -1,42 +1,41 @@
 import type { AnalysisError } from '@gscdump/analysis/errors'
 import type { EngineError } from '@gscdump/engine/errors'
+import type { GscError } from 'gscdump/errors'
 import type { QueryError } from 'gscdump/query'
-import process from 'node:process'
 import { isAnalysisError } from '@gscdump/analysis/errors'
 import { isEngineError } from '@gscdump/engine/errors'
 import { classifyError } from 'gscdump/errors'
 import { isQueryError } from 'gscdump/query'
-import { formatAuthProvenance, isAuthError } from './auth'
+import { isUsageError } from './command-registry'
+
+/** A hosted 401: the gscdump.com API key failed, not a Google credential. */
+export const HOSTED_KEY_REJECTED = 'gscdump.com rejected the API key. Run `gscdump auth login --mode cloud --api-key KEY` with a valid key.'
 
 const QUOTA_MESSAGE_RE = /quota|rate\s*limit/i
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1B\[[0-9;]*m/g
 
-/** CLI-owned rendering for the package's structured Google API errors. */
-function formatErrorForCli(cause: unknown): string {
-  const error = classifyError(cause)
-  const lines = [`\x1B[31m${error.message}\x1B[0m`]
-  let suggestion = ''
-
+/** Next step for a classified Google API failure, or '' when the message says enough. */
+function suggestionForGscError(error: GscError): string {
   switch (error.kind) {
     case 'auth-expired':
-      suggestion = 'Run `gscdump auth` to re-authenticate.'
-      break
+      return 'Run `gscdump auth login` to sign in again.'
+    case 'permission-denied':
+      return 'Check that this Google account is a full user or owner of the Site. Run `gscdump sites` to see your Sites.'
     case 'rate-limited': {
       const retryIn = error.retryAfter ? `${error.retryAfter}s` : 'a few minutes'
-      if (QUOTA_MESSAGE_RE.test(error.message)) {
-        suggestion = error.message.includes('Indexing API')
-          ? 'Indexing API quota exhausted (~200/day). Try again tomorrow.'
-          : `Quota or rate limit hit (Search Analytics ~25000/day). Try again in ${retryIn}.`
-      }
-      else {
-        suggestion = `Rate limited. Slow down requests. Try again in ${retryIn}.`
-      }
-      break
+      if (!QUOTA_MESSAGE_RE.test(error.message))
+        return `Google rate limited the request. Try again in ${retryIn}.`
+      return error.message.includes('Indexing API')
+        ? 'The Indexing API quota is used up (about 200 per day). Try again tomorrow.'
+        : `A Google quota or rate limit was reached. Try again in ${retryIn}.`
     }
+    case 'not-found':
+    case 'validation':
+    case 'storage':
+    case 'transport':
+      return ''
   }
-
-  if (suggestion)
-    lines.push('', suggestion)
-  return lines.join('\n')
 }
 
 /**
@@ -51,21 +50,21 @@ function formatErrorForCli(cause: unknown): string {
 function extractQueryError(error: unknown): QueryError | null {
   if (isQueryError(error))
     return error
-  const tagged = (error as { queryError?: unknown }).queryError
+  const tagged = (error as { queryError?: unknown } | null)?.queryError
   return isQueryError(tagged) ? tagged : null
 }
 
 function extractEngineError(error: unknown): EngineError | null {
   if (isEngineError(error))
     return error
-  const tagged = (error as { engineError?: unknown }).engineError
+  const tagged = (error as { engineError?: unknown } | null)?.engineError
   return isEngineError(tagged) ? tagged : null
 }
 
 function extractAnalysisError(error: unknown): AnalysisError | null {
   if (isAnalysisError(error))
     return error
-  const tagged = (error as { analysisError?: unknown }).analysisError
+  const tagged = (error as { analysisError?: unknown } | null)?.analysisError
   // A required step that failed often wraps an EngineError as its `cause`;
   // surface that hint too, so a degraded report points at the real fix.
   return isAnalysisError(tagged) ? tagged : null
@@ -74,7 +73,7 @@ function extractAnalysisError(error: unknown): AnalysisError | null {
 /**
  * Next-step hint for a modelled upstream failure, keyed off its discriminant.
  * Returns '' when the generic formatter already says enough. Centralised here so
- * every command's `.catch(gscErrorHandler)` benefits without per-command branching.
+ * every error the shell reports benefits without per-command branching.
  */
 function suggestionForTypedError(error: unknown): string {
   const query = extractQueryError(error)
@@ -99,7 +98,7 @@ function suggestionForTypedError(error: unknown): string {
   if (analysis) {
     switch (analysis.kind) {
       case 'missing-report-param':
-        return `Report "${analysis.report}" needs --${analysis.param}.`
+        return `Report "${analysis.report}" needs ${flagForParam(analysis.param)}.`
       case 'missing-comparison-window':
         return `Report "${analysis.report}" is a comparison report; pass --vs prev-period (or --vs yoy).`
       case 'missing-brand-terms':
@@ -153,37 +152,107 @@ export class LocalStoreUnsupportedError extends Error {
 }
 
 /**
- * .catch() handler for CLI errors — prints a formatted message and exits 1.
- * Use: somePromise.catch(gscErrorHandler)
- *
- * On auth-shaped errors (401, invalid_grant, etc.) we append a provenance
- * dump so the user can see *which* config source supplied the broken
- * credential — the most common cause is a stale `.env` shadowing fresh
- * saved tokens.
+ * Heuristic: does this error look like a credentials problem? The shell then
+ * prints where each credential came from, because a stale `.env` shadowing
+ * fresh saved tokens is the usual cause.
  */
-export async function gscErrorHandler(error: unknown): Promise<never> {
-  console.error()
+export function isAuthError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase()
+  if (!msg)
+    return false
+  return /\b(?:401|unauthorized|invalid_grant|invalid_token|insufficient.*scope|invalid_client|token has been expired|token has been revoked)\b/.test(msg)
+    || msg.includes('oauth2.googleapis.com/token')
+}
+
+/** CLI flag for an analysis parameter name, e.g. `prevStartDate` → `--prev-start`. */
+export function flagForParam(param: string): string {
+  const known: Record<string, string> = {
+    prevStartDate: '--prev-start',
+    prevEndDate: '--prev-end',
+    startDate: '--start',
+    endDate: '--end',
+  }
+  return known[param] ?? `--${param.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)}`
+}
+
+const PARAM_NAME_RE = /\b(prevStartDate|prevEndDate|brandTerms)\b/g
+
+// Built-in error types that signal a defect in gscdump, not a user mistake.
+const DEFECT_ERRORS = new Set(['TypeError', 'ReferenceError', 'RangeError', 'SyntaxError', 'EvalError', 'URIError'])
+
+export type CliErrorReport
+  = | { kind: 'usage', message: string }
+    | { kind: 'expected', message: string, hint: string, showAuthSources: boolean }
+    | { kind: 'defect', message: string, stack: string }
+
+/**
+ * Sort a thrown value into what the shell prints. Expected failures get one
+ * line and an optional next step. Only defects carry a stack.
+ */
+export function describeCliError(error: unknown): CliErrorReport {
+  if (isUsageError(error))
+    return { kind: 'usage', message: error.message }
+  if (error instanceof TypeError && error.message === 'fetch failed') {
+    const cause = (error as { cause?: unknown }).cause
+    const reason = cause instanceof Error ? cause.message : 'no response'
+    return { kind: 'expected', message: `Network request failed: ${reason}`, hint: 'Check your connection, then try again.', showAuthSources: false }
+  }
+  if (error instanceof Error && DEFECT_ERRORS.has(error.constructor.name))
+    return { kind: 'defect', message: `${error.name}: ${error.message}`, stack: error.stack ?? '' }
+
   if (error instanceof LocalStoreUnsupportedError) {
-    console.error(formatErrorForCli(error))
-    if (error.mode === 'local')
-      console.error('Pass --live to run against the GSC API.')
-    console.error()
-    process.exit(1)
+    return {
+      kind: 'expected',
+      message: error.message,
+      hint: error.mode === 'local' ? 'Pass --live to run against the GSC API.' : '',
+      showAuthSources: false,
+    }
   }
-  console.error(formatErrorForCli(error))
-
-  // Modelled upstream failures (QueryError / EngineError / AnalysisError) carry a
-  // `kind` the generic formatter can't see; render the actionable next step.
+  const classified = classifyError(error)
+  if (classified.message === HOSTED_KEY_REJECTED)
+    return { kind: 'expected', message: classified.message, hint: '', showAuthSources: false }
+  const message = classified.message.replace(PARAM_NAME_RE, name => flagForParam(name))
   const typedHint = suggestionForTypedError(error)
-  if (typedHint) {
-    console.error()
-    console.error(typedHint)
+  return {
+    kind: 'expected',
+    message,
+    hint: typedHint || suggestionForGscError(classified),
+    showAuthSources: classified.kind === 'auth-expired' || classified.kind === 'permission-denied' || isAuthError(error),
   }
+}
 
-  if (isAuthError(error)) {
-    console.error()
-    console.error(await formatAuthProvenance())
+export interface ReportCliErrorOptions {
+  color: boolean
+  /** Rendered usage of the selected command, shown above a usage error. */
+  usage?: () => Promise<string>
+  /** Where the credentials came from, shown under an auth failure. */
+  authSources?: () => Promise<string>
+  write?: (text: string) => void
+}
+
+/** Print a thrown value to stderr in its final form. The shell calls this once. */
+export async function reportCliError(error: unknown, options: ReportCliErrorOptions): Promise<void> {
+  const report = describeCliError(error)
+  const red = (text: string): string => options.color ? `\x1B[31m${text}\x1B[0m` : text
+  const lines: string[] = []
+  switch (report.kind) {
+    case 'usage':
+      if (options.usage)
+        lines.push(await options.usage(), '')
+      lines.push(red(report.message))
+      break
+    case 'expected':
+      lines.push(red(`Error: ${report.message}`))
+      if (report.hint)
+        lines.push(report.hint)
+      if (report.showAuthSources && options.authSources)
+        lines.push('', await options.authSources())
+      break
+    case 'defect':
+      lines.push(red(`Unexpected error. Report it at https://github.com/harlan-zw/gscdump/issues`), report.stack || report.message)
+      break
   }
-  console.error()
-  process.exit(1)
+  const text = lines.join('\n')
+  const write = options.write ?? ((value: string) => console.error(value))
+  write(options.color ? text : text.replace(ANSI_RE, ''))
 }

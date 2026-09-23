@@ -5,7 +5,6 @@ import { defineCommand } from 'citty'
 import { addSite, deleteSite, fetchSitesWithSitemaps, getVerificationToken, getVerifiedSite, listVerifiedSites, siteUrlToVerificationSite, unverifySite, verificationMethodsFor, verifySite } from 'gscdump/sites'
 import { sitesCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
-import { gscErrorHandler } from '../error-handler'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 
 const ALL_METHODS: VerificationMethod[] = ['META', 'FILE', 'DNS_TXT', 'DNS_CNAME', 'ANALYTICS', 'TAG_MANAGER']
@@ -89,7 +88,7 @@ const addCommand = defineCommand({
   async run({ args }) {
     applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true })
-    await addSite(ctx.client!, args.url).catch(gscErrorHandler)
+    await addSite(ctx.client!, args.url)
 
     if (!args.verify) {
       if (args.json) {
@@ -105,7 +104,7 @@ const addCommand = defineCommand({
 
     // --verify: chain getToken → user-facing placement instructions → triggers verifySite.
     const method = validateMethod(args.url, args.method ?? pickDefaultMethod(args.url))
-    const tokenResult = await getVerificationToken(ctx.client!, args.url, method).catch(gscErrorHandler)
+    const tokenResult = await getVerificationToken(ctx.client!, args.url, method)
 
     if (args.json) {
       // JSON mode: emit the token, do not run verify (caller can't place it before we trigger).
@@ -133,7 +132,7 @@ const addCommand = defineCommand({
       return
     }
 
-    const resource = await verifySite(ctx.client!, args.url, method).catch(gscErrorHandler)
+    const resource = await verifySite(ctx.client!, args.url, method)
     logger.success(`Verified: ${args.url}`)
     if (resource.owners?.length) {
       console.log()
@@ -169,7 +168,7 @@ const deleteCommand = defineCommand({
     }
 
     const ctx = await createCommandContext({ needsAuth: true })
-    await deleteSite(ctx.client!, args.url).catch(gscErrorHandler)
+    await deleteSite(ctx.client!, args.url)
 
     if (args.json) {
       console.log(JSON.stringify({ siteUrl: args.url, status: 'deleted' }, null, 2))
@@ -193,7 +192,7 @@ const verifyTokenCommand = defineCommand({
     applyOutputMode(args)
     const method = validateMethod(args.url, args.method ?? pickDefaultMethod(args.url))
     const ctx = await createCommandContext({ needsAuth: true })
-    const result = await getVerificationToken(ctx.client!, args.url, method).catch(gscErrorHandler)
+    const result = await getVerificationToken(ctx.client!, args.url, method)
 
     if (args.json) {
       console.log(JSON.stringify({ siteUrl: args.url, method, token: result.token, site: result.site }, null, 2))
@@ -217,7 +216,7 @@ const verifyCommand = defineCommand({
     applyOutputMode(args)
     const method = validateMethod(args.url, args.method ?? pickDefaultMethod(args.url))
     const ctx = await createCommandContext({ needsAuth: true })
-    const resource = await verifySite(ctx.client!, args.url, method).catch(gscErrorHandler)
+    const resource = await verifySite(ctx.client!, args.url, method)
 
     if (args.json) {
       console.log(JSON.stringify({ siteUrl: args.url, method, resource }, null, 2))
@@ -245,7 +244,7 @@ const verifyGetCommand = defineCommand({
   async run({ args }) {
     applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true })
-    const resource = await getVerifiedSite(ctx.client!, args.id).catch(gscErrorHandler)
+    const resource = await getVerifiedSite(ctx.client!, args.id)
 
     if (args.json) {
       console.log(JSON.stringify(resource, null, 2))
@@ -290,7 +289,7 @@ const unverifyCommand = defineCommand({
     }
 
     const ctx = await createCommandContext({ needsAuth: true })
-    await unverifySite(ctx.client!, args.id).catch(gscErrorHandler)
+    await unverifySite(ctx.client!, args.id)
 
     if (args.json) {
       console.log(JSON.stringify({ id: args.id, status: 'unverified' }, null, 2))
@@ -311,7 +310,7 @@ const verifyListCommand = defineCommand({
   async run({ args }) {
     applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true })
-    const resources = await listVerifiedSites(ctx.client!).catch(gscErrorHandler)
+    const resources = await listVerifiedSites(ctx.client!)
 
     if (args.json) {
       console.log(JSON.stringify(resources, null, 2))
@@ -384,7 +383,7 @@ async function runListSites(args: Record<string, unknown>): Promise<void> {
   const ownerOnly = Boolean(args['owner-only'])
 
   if (args['with-sitemaps']) {
-    const all = await fetchSitesWithSitemaps(ctx.client!).catch(gscErrorHandler)
+    const all = await fetchSitesWithSitemaps(ctx.client!)
     const sites = ownerOnly ? all.filter(s => s.permissionLevel === 'siteOwner') : all
     if (args.json) {
       const enriched = sites.map(s => ({

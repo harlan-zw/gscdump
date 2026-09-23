@@ -13,7 +13,6 @@ import { decodeSiteId } from 'gscdump/tenant'
 import { queryCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createCommandContext } from '../context'
-import { gscErrorHandler } from '../error-handler'
 import { allTables, inferTable, tableDimensions } from '../local-store'
 import { asRecord, columnsFor } from '../render/analysis'
 import { renderTable } from '../render/layout'
@@ -359,7 +358,7 @@ export const queryCommand = defineCommand({
         dataState,
         aggregationType,
         dimensionFilter,
-      }).catch(gscErrorHandler)
+      })
       await writeOutput({
         output: {
           siteUrl,

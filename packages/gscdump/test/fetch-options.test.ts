@@ -1,6 +1,7 @@
 import type { FetchOptions } from 'ofetch'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { googleSearchConsole } from '../src'
+import { classifyError } from '../src/core/errors'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -97,7 +98,7 @@ describe('google client fetch options', () => {
     expect(retryDelay).toHaveBeenCalledOnce()
   })
 
-  it('retries a 403 quota error and names the quota reason', async () => {
+  it('retries a 403 quota error without writing to the console', async () => {
     const quota = { error: { code: 403, message: 'Search Analytics load quota exceeded.', errors: [{ reason: 'quotaExceeded', domain: 'usageLimits' }] } }
     const fetch = vi.fn()
       .mockImplementationOnce(async () => jsonResponse(quota, 403))
@@ -109,20 +110,19 @@ describe('google client fetch options', () => {
 
     expect(sites).toHaveLength(1)
     expect(fetch).toHaveBeenCalledTimes(2)
-    const logged = log.mock.calls.map(call => String(call[0])).join('\n')
-    expect(logged).toContain('quotaExceeded')
-    expect(logged).not.toContain('Permission denied')
+    expect(log).not.toHaveBeenCalled()
   })
 
-  it('keeps a real permission 403 fatal with the permission message', async () => {
+  it('keeps a real permission 403 fatal and carries Google\'s reason', async () => {
     const denied = { error: { code: 403, message: 'User does not have sufficient permission for site.', errors: [{ reason: 'forbidden' }] } }
     const fetch = vi.fn().mockImplementation(async () => jsonResponse(denied, 403))
     vi.stubGlobal('fetch', fetch)
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    await expect(googleSearchConsole('test-token', { fetchOptions: { retryDelay: 0 } }).sites()).rejects.toThrow('403')
+    const error = await googleSearchConsole('test-token', { fetchOptions: { retryDelay: 0 } }).sites().catch((e: unknown) => e)
 
     expect(fetch).toHaveBeenCalledTimes(1)
-    expect(log.mock.calls.map(call => String(call[0])).join('\n')).toContain('Permission denied (403)')
+    expect(classifyError(error)).toMatchObject({ kind: 'permission-denied', message: 'User does not have sufficient permission for site.' })
+    expect(log).not.toHaveBeenCalled()
   })
 })

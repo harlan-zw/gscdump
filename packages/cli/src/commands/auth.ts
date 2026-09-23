@@ -1,20 +1,19 @@
+import type { TokenInfo } from '../token-info'
 import path from 'node:path'
 import process from 'node:process'
 import { isCancel, password } from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { ofetch } from 'ofetch'
-import { clearTokens, formatAuthProvenance, getAuth, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
+import { clearTokens, formatAuthProvenance, getAuth, GOOGLE_NOT_CONNECTED, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
 import { clearAuthentication, getCloudAccount, parseAuthentication, parseAuthMode, resolveAuthentication, saveAuthentication } from '../auth-state'
 import { clearBingCredentials, getBingClient, inspectBingCredentials } from '../bing-auth'
 import { authCommandMeta } from '../command-meta'
 import { loadConfig, saveConfig } from '../config'
 import { useCliRuntime } from '../runtime'
-import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
+import { currentAccessToken, fetchTokenInfo, redactTokens } from '../token-info'
+import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 import { runSmokeTest } from './init'
 import { adoptCurrentConfigAsProfile, profileNameFromEmail, resolveActiveProfile } from './profile'
-
-const AUTH_SUBCOMMANDS = ['status', 'login', 'logout', 'refresh', 'scopes'] as const
 
 const MODE_ARG = { type: 'string' as const, description: 'Authentication mode: cloud or local' }
 
@@ -54,19 +53,6 @@ export async function loginCloud(args: Record<string, unknown>): Promise<void> {
   logger.info('Google and Bing commands use connections saved on gscdump.com.')
 }
 
-interface TokenInfo {
-  scope?: string
-  expires_in?: number
-  email?: string
-  audience?: string
-}
-
-async function fetchTokenInfo(accessToken: string): Promise<TokenInfo | null> {
-  return ofetch<TokenInfo>('https://oauth2.googleapis.com/tokeninfo', {
-    query: { access_token: accessToken },
-  }).catch(() => null)
-}
-
 /**
  * Resolve the effective live access token (BYOK takes precedence over saved
  * tokens) and pull tokeninfo + parsed scopes + the missing-scopes diff.
@@ -76,25 +62,33 @@ async function resolveLiveAuthState(): Promise<{
   byok: ReturnType<typeof resolveBYOK>
   tokens: Awaited<ReturnType<typeof loadTokens>>
   liveToken: string | null
+  /** Set only when Google confirmed the token. */
   tokenInfo: TokenInfo | null
+  /** Why the credentials failed verification, or null. */
+  failure: string | null
   scopes: string[]
   missing: string[]
 }> {
   const tokens = await loadTokens()
   const byok = resolveBYOK()
-  let liveToken: string | null = null
-  if (typeof byok === 'string')
-    liveToken = byok
-  else if (byok && 'getAccessToken' in byok)
-    liveToken = await byok.getAccessToken().then(r => r.token ?? null).catch(() => null)
-  else if (tokens?.access_token)
-    liveToken = tokens.access_token
-
-  const tokenInfo = liveToken ? await fetchTokenInfo(liveToken) : null
+  // Refresh saved credentials first: an expired saved token would fail
+  // tokeninfo even though the credentials still work.
+  const source = byok ?? (tokens ? await getAuth({ interactive: false }).catch((error: unknown) => error instanceof Error ? error : new Error(String(error))) : null)
+  const current = source === null
+    ? null
+    : source instanceof Error
+      ? { kind: 'failed' as const, detail: redactTokens(source.message) }
+      : await currentAccessToken(source)
+  const liveToken = current?.kind === 'token' ? current.token : null
+  const verified = liveToken ? await fetchTokenInfo(liveToken) : null
+  const tokenInfo = verified?.kind === 'valid' ? verified.info : null
+  const failure = current?.kind === 'failed' ? current.detail : verified?.kind === 'invalid' ? verified.detail : null
   const scopes = tokenInfo?.scope ? tokenInfo.scope.split(/\s+/).filter(Boolean) : []
   const missing = missingRequiredScopes(scopes, byok ? undefined : tokens?.provider)
+  // A refresh above may have saved new tokens; report those.
+  const savedTokens = tokens && !byok ? await loadTokens() : tokens
 
-  return { byok, tokens, liveToken, tokenInfo, scopes, missing }
+  return { byok, tokens: savedTokens, liveToken, tokenInfo, failure, scopes, missing }
 }
 
 async function runStatus(args: Record<string, unknown>): Promise<void> {
@@ -138,7 +132,8 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
     }
     return
   }
-  const { byok, tokens, tokenInfo, scopes, missing } = await resolveLiveAuthState()
+  const { byok, tokens, tokenInfo, failure, scopes, missing } = await resolveLiveAuthState()
+  const googleAuthenticated = tokenInfo !== null
   const bingCredentials = await inspectBingCredentials()
   // A failed Bing token refresh or verification is a status result, not a
   // command crash: it surfaces as bing.authenticated false plus the
@@ -155,9 +150,10 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
 
   if (json) {
     console.log(JSON.stringify({
-      authenticated: !!tokens || !!byok || bing.authenticated,
+      authenticated: googleAuthenticated || bing.authenticated,
       mode: 'local',
-      googleAuthenticated: !!tokens || !!byok,
+      googleAuthenticated,
+      googleError: failure,
       bing,
       source: byok ? 'byok' : tokens ? 'saved-tokens' : null,
       byokKind,
@@ -195,7 +191,10 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
   }
 
   if (byok) {
-    logger.success(`Authenticated via BYOK (${byokKind})`)
+    if (googleAuthenticated)
+      logger.success(`Authenticated via BYOK (${byokKind})`)
+    else
+      logger.warn(`BYOK credentials (${byokKind}) failed verification: ${failure}`)
     if (tokenInfo?.email)
       console.log(`  Account:       ${tokenInfo.email}`)
     reportScopes()
@@ -207,9 +206,7 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
       logger.info('Google credentials are missing. Run `gscdump auth login --mode local` to connect Google.')
       return
     }
-    logger.warn('Not authenticated')
-    logger.info('Run `gscdump init` (full setup) or `gscdump auth login` (OAuth only)')
-    logger.info('Or set GSC_ACCESS_TOKEN / GSC_CLIENT_ID + GSC_CLIENT_SECRET + GSC_REFRESH_TOKEN env vars')
+    logger.warn(GOOGLE_NOT_CONNECTED)
     return
   }
 
@@ -218,12 +215,10 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
   const expiry = tokens.expiry_date ? new Date(tokens.expiry_date) : null
   const isExpired = expiry && expiry < new Date()
 
-  if (isExpired && hasRefresh)
-    logger.warn('Token expired; refresh available. Run `gscdump auth refresh`, or any live command will auto-refresh.')
-  else if (isExpired)
-    logger.error('Token expired and no refresh token present. Run `gscdump auth login`.')
-  else
+  if (googleAuthenticated)
     logger.success('Authenticated (saved tokens)')
+  else
+    logger.warn(`Saved credentials failed verification: ${failure}. Run \`gscdump auth login\` to sign in again.`)
   console.log()
   console.log(`  Access token:  ${hasAccess ? '\x1B[32mpresent\x1B[0m' : '\x1B[31mmissing\x1B[0m'}`)
   console.log(`  Refresh token: ${hasRefresh ? '\x1B[32mpresent\x1B[0m' : '\x1B[31mmissing\x1B[0m'}`)
@@ -234,8 +229,6 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
   if (tokenInfo?.email)
     console.log(`  Account:       ${tokenInfo.email}`)
   reportScopes()
-  if (isExpired && !hasRefresh)
-    process.exit(1)
 }
 
 const statusCommand = defineCommand({
@@ -345,9 +338,9 @@ const loginCommand = defineCommand({
     // email so subsequent runs are scoped per-account without manual setup.
     if (!resolveActiveProfile()) {
       const tokens = await loadTokens()
-      const info = tokens?.access_token ? await fetchTokenInfo(tokens.access_token) : null
-      if (info?.email) {
-        const name = profileNameFromEmail(info.email)
+      const verified = tokens?.access_token ? await fetchTokenInfo(tokens.access_token) : null
+      if (verified?.kind === 'valid' && verified.info.email) {
+        const name = profileNameFromEmail(verified.info.email)
         const dir = await adoptCurrentConfigAsProfile(name).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error)
           logger.warn(`Login succeeded, but the config could not be moved into profile "${name}": ${message}`)
@@ -438,8 +431,6 @@ export const authCommand = defineCommand({
   },
   // No subcommand: show status (the most common intent).
   async run({ args }) {
-    if (!noSubcommandSelected('auth', AUTH_SUBCOMMANDS))
-      return
     await runStatus(args as Record<string, unknown>)
   },
 })
