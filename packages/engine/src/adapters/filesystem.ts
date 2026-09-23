@@ -214,10 +214,63 @@ function lockFileFor(locksDir: string, scope: LockScope): string {
   return join(locksDir, `${safe}.lock`)
 }
 
+// Writers in one process queue here per lock file, so the file lock only
+// arbitrates between processes. Without the queue, every search type of one
+// table and date raced for the same partition lock, and the file-lock retry
+// budget ran out once the queue held more than ~8s of work.
+const inProcessLockTails = new Map<string, Promise<void>>()
+
+async function withInProcessQueue<T>(path: string, fn: () => Promise<T>): Promise<T> {
+  const previous = inProcessLockTails.get(path) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const tail = previous.then(() => current)
+  inProcessLockTails.set(path, tail)
+  await previous
+  try {
+    return await fn()
+  }
+  finally {
+    release()
+    if (inProcessLockTails.get(path) === tail)
+      inProcessLockTails.delete(path)
+  }
+}
+
 export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptions): ManifestStore {
   const manifestPath = resolve(opts.path)
   const locksDir = join(dirname(manifestPath), 'locks')
   const readyDirectories = new Map<string, Promise<void>>()
+
+  async function withFileLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
+    // proper-lockfile needs the target to exist. Touch an empty sentinel.
+    await writeFile(path, '', { flag: 'a' }).catch(async (error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT')
+        throw error
+      readyDirectories.delete(locksDir)
+      await ensureDirectory(locksDir)
+      await writeFile(path, '', { flag: 'a' })
+    })
+    const release = await lockFile(path, {
+      realpath: false,
+      stale: 30_000,
+      retries: { retries: 20, minTimeout: 50, maxTimeout: 500, factor: 1.5 },
+    })
+    // A failed release leaves a stale lock that blocks the next writer until
+    // its `stale` window (30s) elapses. We don't fail `fn()` over a cleanup
+    // error (the protected work already succeeded), but the failure MUST be
+    // observable rather than silently swallowed.
+    return await fn().finally(() =>
+      release().catch((releaseErr: unknown) => {
+        console.warn(
+          `[gscdump/engine] failed to release lock ${path}; it will go stale after ${30_000}ms`,
+          releaseErr,
+        )
+      }),
+    )
+  }
 
   async function ensureDirectory(path: string): Promise<void> {
     let pending = readyDirectories.get(path)
@@ -374,31 +427,7 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
     async withLock(scope, fn) {
       await ensureDirectory(locksDir)
       const path = lockFileFor(locksDir, scope)
-      // proper-lockfile needs the target to exist. Touch an empty sentinel.
-      await writeFile(path, '', { flag: 'a' }).catch(async (error: NodeJS.ErrnoException) => {
-        if (error.code !== 'ENOENT')
-          throw error
-        readyDirectories.delete(locksDir)
-        await ensureDirectory(locksDir)
-        await writeFile(path, '', { flag: 'a' })
-      })
-      const release = await lockFile(path, {
-        realpath: false,
-        stale: 30_000,
-        retries: { retries: 20, minTimeout: 50, maxTimeout: 500, factor: 1.5 },
-      })
-      // A failed release leaves a stale lock that blocks the next writer until
-      // its `stale` window (30s) elapses. We don't fail `fn()` over a cleanup
-      // error (the protected work already succeeded), but the failure MUST be
-      // observable rather than silently swallowed.
-      return await fn().finally(() =>
-        release().catch((releaseErr: unknown) => {
-          console.warn(
-            `[gscdump/engine] failed to release lock ${path}; it will go stale after ${30_000}ms`,
-            releaseErr,
-          )
-        }),
-      )
+      return withInProcessQueue(path, () => withFileLock(path, fn))
     },
     async purgeTenant(filter) {
       return enqueue(async () => {

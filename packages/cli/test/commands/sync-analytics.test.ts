@@ -708,4 +708,22 @@ describe('sync command (local analytics)', () => {
 
     expect(peak).toBeLessThanOrEqual(8)
   })
+
+  it('retries earlier failed dates on a plain re-run', async () => {
+    const store = createLocalStore({ dataDir: tmpDir })
+    const old = new Date(Date.now() - 100 * 86_400_000).toISOString().slice(0, 10)
+    const scope = { userId: store.userId, siteId: store.siteIdFor(SITE), table: 'pages' as const, date: old }
+    await store.engine.setSyncState(scope, 'failed', { error: 'Lock file is already being held' })
+
+    await syncCommand.run!({
+      args: { site: SITE, tables: 'pages', types: 'web', quiet: true, rollups: false, sitemaps: false, inspections: false },
+      rawArgs: [],
+      cmd: syncCommand,
+    })
+
+    expect(rawQuerySpy.mock.calls.some(([, params]) => params.startDate === old)).toBe(true)
+    const [state] = await store.engine.getSyncStates({ ...scope, state: undefined })
+      .then(states => states.filter(s => s.date === old))
+    expect(state?.state).toBe('done')
+  })
 })
