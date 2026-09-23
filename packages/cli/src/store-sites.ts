@@ -3,13 +3,18 @@
 // `_`. So `sync` records the real Site URL for each siteId in `sites.json`,
 // and refuses a Site whose siteId already holds data for a different Site.
 // Stores created before the map fall back to `decodeSiteId`.
+//
+// Syncs run in parallel (`--all-sites`, several processes). Every change to
+// the map takes a lock, re-reads the map, and replaces the file atomically.
 
 import type { Result } from 'gscdump/result'
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { err, ok } from 'gscdump/result'
 import { decodeSiteId, encodeSiteId } from 'gscdump/tenant'
+import { lock } from 'proper-lockfile'
 import { z } from 'zod'
 
 export interface StoreSite {
@@ -89,11 +94,42 @@ export function claimSiteId(map: SiteMap, siteUrl: string, hasData: boolean): Re
 }
 
 async function writeSiteMap(dataDir: string, userId: string, sites: SiteMap): Promise<void> {
-  await fs.mkdir(tenantDir(dataDir, userId), { recursive: true })
   const file = siteMapPath(dataDir, userId)
-  const temp = `${file}.${process.pid}.tmp`
+  const temp = `${file}.${process.pid}.${randomUUID()}.tmp`
   await fs.writeFile(temp, `${JSON.stringify({ version: 1, sites }, null, 2)}\n`)
   await fs.rename(temp, file)
+}
+
+// Writers in this process wait here, so they never contend for the file lock.
+const siteMapQueues = new Map<string, Promise<void>>()
+
+async function lockSiteMapFile<T>(file: string, fn: () => Promise<T>): Promise<T> {
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  // `proper-lockfile` creates `sites.json.lock` beside the map.
+  const release = await lock(file, {
+    realpath: false,
+    stale: 30_000,
+    retries: { retries: 40, minTimeout: 25, maxTimeout: 500, factor: 1.5 },
+  })
+  return await fn().finally(() => release().catch((error: unknown) => {
+    // The change is written. A lock left behind goes stale after 30 seconds.
+    console.warn(`[gscdump] Could not release the Site map lock for ${file}.`, error)
+  }))
+}
+
+/** Run `fn` while no other writer, in any process, changes the Site map. */
+async function withSiteMapLock<T>(dataDir: string, userId: string, fn: () => Promise<T>): Promise<T> {
+  const file = siteMapPath(dataDir, userId)
+  const run = (siteMapQueues.get(file) ?? Promise.resolve()).then(() => lockSiteMapFile(file, fn))
+  const tail = run.then(() => undefined, () => {
+    // The caller receives this failure from `run`. The next writer still runs.
+  })
+  siteMapQueues.set(file, tail)
+  void tail.then(() => {
+    if (siteMapQueues.get(file) === tail)
+      siteMapQueues.delete(file)
+  })
+  return await run
 }
 
 /**
@@ -102,14 +138,15 @@ async function writeSiteMap(dataDir: string, userId: string, sites: SiteMap): Pr
  */
 export async function recordStoreSite(dataDir: string, siteUrl: string, options: { userId?: string, write?: boolean } = {}): Promise<Result<void, SiteIdCollision>> {
   const { userId = 'local', write = true } = options
-  const map = await readSiteMap(dataDir, userId)
-  const siteIds = await listSiteIds(dataDir, userId)
-  const claim = claimSiteId(map, siteUrl, siteIds.includes(encodeSiteId(siteUrl)))
-  if (!claim.ok)
-    return claim
-  if (write && claim.value !== map)
-    await writeSiteMap(dataDir, userId, claim.value)
-  return ok(undefined)
+  const claim = async (): Promise<Result<SiteMap, SiteIdCollision>> => {
+    const [map, siteIds] = await Promise.all([readSiteMap(dataDir, userId), listSiteIds(dataDir, userId)])
+    const claimed = claimSiteId(map, siteUrl, siteIds.includes(encodeSiteId(siteUrl)))
+    if (claimed.ok && write && claimed.value !== map)
+      await writeSiteMap(dataDir, userId, claimed.value)
+    return claimed
+  }
+  const result = write ? await withSiteMapLock(dataDir, userId, claim) : await claim()
+  return result.ok ? ok(undefined) : result
 }
 
 /**
@@ -119,12 +156,14 @@ export async function recordStoreSite(dataDir: string, siteUrl: string, options:
 export async function removeStoreSite(dataDir: string, siteId: string, userId = 'local'): Promise<void> {
   if (!SITE_ID_DIR_RE.test(siteId))
     throw new Error(`Refusing to remove "${siteId}": it is not a Site ID.`)
-  await fs.rm(path.join(tenantDir(dataDir, userId), siteId), { recursive: true, force: true })
-  const map = await readSiteMap(dataDir, userId)
-  if (!(siteId in map))
-    return
-  const { [siteId]: _removed, ...rest } = map
-  await writeSiteMap(dataDir, userId, rest)
+  await withSiteMapLock(dataDir, userId, async () => {
+    await fs.rm(path.join(tenantDir(dataDir, userId), siteId), { recursive: true, force: true })
+    const map = await readSiteMap(dataDir, userId)
+    if (!(siteId in map))
+      return
+    const { [siteId]: _removed, ...rest } = map
+    await writeSiteMap(dataDir, userId, rest)
+  })
 }
 
 export function formatSiteIdCollision(collision: SiteIdCollision): string {
