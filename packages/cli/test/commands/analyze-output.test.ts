@@ -12,6 +12,7 @@ vi.mock('../../src/analysis-local', () => ({
     format: args.json ? 'json' : args.format ?? 'table',
     runAnalysis: async () => boundary.result,
     anchorFor: async () => '2026-08-23',
+    comparisonWarning: async () => undefined,
   })),
   analyzerTables: vi.fn(() => []),
 }))

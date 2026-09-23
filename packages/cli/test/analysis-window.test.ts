@@ -100,6 +100,18 @@ describe('local --page filters', () => {
   })
 })
 
+describe('local comparison windows', () => {
+  it('warns when the default previous period has no synced days', async () => {
+    // Data starts 10 days back: the 28 days before the window are unsynced.
+    await seed('page_queries', days('2026-03-20', 10), date => [{ date, url: '/a', query: 'alpha', clicks: 2, impressions: 50, sum_position: 0 }])
+
+    await cli('analyze', 'movers', '--site', SITE, '--json')
+
+    expect(stderr.join('\n')).toContain('No synced days for page_queries')
+    expect(stderr.join('\n')).toContain('2026-01-24 to 2026-02-20')
+  })
+})
+
 describe('report window flags', () => {
   it('treats --start/--end without --period as a custom window', async () => {
     await cli('report', 'opportunities', '--start', '2026-01-01', '--end', '2026-01-10', '--explain')
