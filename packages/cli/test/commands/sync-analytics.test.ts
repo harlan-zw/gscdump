@@ -149,8 +149,8 @@ describe('sync command (local analytics)', () => {
     })
 
     expect(rawQuerySpy).toHaveBeenCalled()
-    // 3 days x 2 tables x (data page + empty terminal page) = 12 calls
-    expect(rawQuerySpy).toHaveBeenCalledTimes(12)
+    // 3 days x 2 tables; a short page is the last page, so one call each
+    expect(rawQuerySpy).toHaveBeenCalledTimes(6)
 
     const harness = createNodeHarness({ dataDir: configState.dataDir! })
     const siteId = harness.siteIdFor(SITE)
@@ -214,7 +214,7 @@ describe('sync command (local analytics)', () => {
     const args = { site: SITE, start: day, end: day, tables: 'pages', types: 'web', quiet: true }
 
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
-    expect(rawQuerySpy).toHaveBeenCalledTimes(2)
+    expect(rawQuerySpy).toHaveBeenCalledTimes(1)
 
     rawQuerySpy.mockClear()
     await syncCommand.run!({ args, rawArgs: [], cmd: syncCommand })
