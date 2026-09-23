@@ -2,6 +2,7 @@ import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
+import { removeStoreSite } from '../store-sites'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 
 export const rmSiteCommand = defineCommand({
@@ -10,7 +11,7 @@ export const rmSiteCommand = defineCommand({
     description: 'Delete every parquet, manifest, watermark, and sync-state record for a single site',
   },
   args: {
-    site: { type: 'positional', required: true, description: 'Site URL (e.g. sc-domain:example.com)' },
+    site: { type: 'positional', required: true, description: 'Site, for example example.com' },
     yes: { type: 'boolean', alias: 'y', default: false, description: 'Skip confirmation prompt' },
     ...OUTPUT_ARGS,
   },
@@ -18,11 +19,12 @@ export const rmSiteCommand = defineCommand({
     const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
-    const siteId = store.siteIdFor(String(args.site))
+    const siteUrl = await ctx.resolveSite(String(args.site), { scope: 'store' })
+    const siteId = store.siteIdFor(siteUrl)
 
     if (!args.yes && !json) {
       const ok = await confirm({
-        message: `Delete ALL local data for ${args.site}? This is irreversible.`,
+        message: `Delete ALL local data for ${siteUrl}? This is irreversible.`,
         initialValue: false,
       })
       if (isCancel(ok) || !ok) {
@@ -32,12 +34,13 @@ export const rmSiteCommand = defineCommand({
     }
 
     const result = await store.engine.purgeTenant({ userId: store.userId, siteId })
+    await removeStoreSite(store.dataDir, siteId, store.userId)
 
     if (json) {
       console.log(JSON.stringify(result, null, 2))
       return
     }
-    logger.success(`Removed local data for ${args.site}`)
+    logger.success(`Removed local data for ${siteUrl}`)
     console.log(`  Objects deleted:    ${result.objectsDeleted}`)
     console.log(`  Manifest entries:   ${result.entriesRemoved}`)
     console.log(`  Watermarks:         ${result.watermarksRemoved}`)

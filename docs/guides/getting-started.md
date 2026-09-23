@@ -50,7 +50,7 @@ gscdump auth status --json
 gscdump sites --json
 ```
 
-Use the exact Site value returned by `sites`, such as `sc-domain:example.com` or `https://example.com/`.
+Pass a Site as you write it, such as `--site example.com`. The CLI resolves it to the Site that `sites` prints, so you do not type `sc-domain:`.
 
 ## Read Bing data
 
@@ -80,7 +80,7 @@ See [Bing authentication and exports](../../packages/cli/README.md#bing) for OAu
 Google queries use the selected authentication mode.
 
 ```bash
-gscdump query --live --site sc-domain:example.com --dimensions page,query --limit 1000
+gscdump query --live --site example.com --dimensions page,query --limit 1000
 ```
 
 By default, `query` starts 31 days ago and ends three days ago.
@@ -88,15 +88,15 @@ Use `--start` and `--end` for a specific range.
 Dimension names are singular: `page`, `query`, `date`, `country`, and `device`.
 
 ```bash
-gscdump query --live --site sc-domain:example.com \
+gscdump query --live --site example.com \
   --dimensions page,query --start 2026-08-01 --end 2026-08-31 --format csv --output ./search-analytics.csv
 ```
 
 ## Sync and query the Store
 
 ```bash
-gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries,dates
-gscdump query --site sc-domain:example.com --dimensions page --limit 1000
+gscdump sync --site example.com --days 90 --tables pages,queries,page_queries,countries,dates
+gscdump query --site example.com --dimensions page --limit 1000
 ```
 
 Sync writes Parquet files to `~/.gscdump/data` unless you chose another directory.
@@ -109,10 +109,10 @@ See [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-
 
 ```bash
 # Copy Parquet files to a directory
-gscdump dump --site sc-domain:example.com --out ./export
+gscdump dump --site example.com --out ./export
 
 # Export the pages table as CSV files
-gscdump dump --site sc-domain:example.com --tables pages --format csv --out ./export-csv
+gscdump dump --site example.com --tables pages --format csv --out ./export-csv
 ```
 
 `dump` exports the Google data in the Store: analytics tables, URL inspections, sitemaps, and Indexing API metadata.
@@ -123,7 +123,7 @@ Use `query --output` to write a filtered result to one file.
 ## Set defaults
 
 ```bash
-gscdump config set defaultSite sc-domain:example.com
+gscdump config set defaultSite example.com
 gscdump config set dataDir /absolute/path/to/gsc-data
 gscdump config show
 ```

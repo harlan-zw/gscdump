@@ -135,18 +135,18 @@ describe('config command', () => {
       await fs.writeFile(CONFIG_FILE, JSON.stringify({ defaultPeriod: '30d' }))
 
       await configCommand.subCommands!.set.run!({
-        args: { key: 'defaultSite', value: 'test.com' },
+        args: { key: 'defaultFormat', value: 'csv' },
         rawArgs: [],
         cmd: configCommand.subCommands!.set,
       })
 
       const config = JSON.parse(await fs.readFile(CONFIG_FILE, 'utf-8'))
       expect(config.defaultPeriod).toBe('30d')
-      expect(config.defaultSite).toBe('test.com')
+      expect(config.defaultFormat).toBe('csv')
     })
 
     it('should accept all valid keys', async () => {
-      const values = { defaultSite: 'test.com', defaultPeriod: '30d', defaultFormat: 'csv', defaultDb: './data.db' }
+      const values = { defaultPeriod: '30d', defaultFormat: 'csv', defaultDb: './data.db' }
 
       for (const [key, value] of Object.entries(values)) {
         await configCommand.subCommands!.set.run!({

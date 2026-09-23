@@ -6,7 +6,7 @@ Use `analyze` when you want one Analyzer's results.
 ## Prepare data
 
 ```bash
-gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries
+gscdump sync --site example.com --days 90 --tables pages,queries,page_queries,countries
 ```
 
 The CLI reads the Store by default.
@@ -17,8 +17,8 @@ Live Sources support Analyzers with row plans; SQL-only Analyzers need stored da
 
 ```bash
 gscdump report list
-gscdump report opportunities --site sc-domain:example.com --json
-gscdump report movers --site sc-domain:example.com --period 28d --vs prev-period --json
+gscdump report opportunities --site example.com --json
+gscdump report movers --site example.com --period 28d --vs prev-period --json
 ```
 
 Reports return a `ReportResult` with bounded Sections and next steps.
@@ -47,17 +47,17 @@ These results identify candidates for review.
 They do not establish why traffic changed or guarantee gains from an edit.
 
 ```bash
-gscdump analyze striking-distance --site sc-domain:example.com --json
-gscdump analyze cannibalization --site sc-domain:example.com --json
-gscdump analyze zero-click --site sc-domain:example.com --json
-gscdump analyze brand --site sc-domain:example.com --brand-terms 'acme,acme corp' --json
+gscdump analyze striking-distance --site example.com --json
+gscdump analyze cannibalization --site example.com --json
+gscdump analyze zero-click --site example.com --json
+gscdump analyze brand --site example.com --brand-terms 'acme,acme corp' --json
 ```
 
 Use `--start` and `--end` for Analyzer date ranges.
 For `movers` and `decay`, provide comparison dates too:
 
 ```bash
-gscdump analyze decay --site sc-domain:example.com \
+gscdump analyze decay --site example.com \
   --start 2026-08-01 --end 2026-08-28 --prev-start 2026-07-04 --prev-end 2026-07-31 --json
 ```
 

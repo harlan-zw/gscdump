@@ -147,3 +147,145 @@ export function formatGscPropertyCandidates(candidates: ReadonlyArray<GscPropert
     .map(property => `${property.siteUrl} (${property.permissionLevel})`)
     .join(', ')
 }
+
+/** One Site the resolver may pick. `inStore` marks a Site with local data. */
+export interface SiteCandidate {
+  siteUrl: string
+  inStore?: boolean
+}
+
+/**
+ * Outcome of matching user input to a Site. `covered-by-parent` means a
+ * domain property covers the input, but the input names a narrower scope
+ * (a subdomain or a path). Callers must never swap one for the other
+ * silently: the parent Site holds more data than the input asked for.
+ */
+export type SiteResolution
+  = | { kind: 'resolved', siteUrl: string, via: 'exact' | 'host' }
+    | { kind: 'ambiguous', input: string, candidates: string[] }
+    | { kind: 'covered-by-parent', input: string, parent: string }
+    | { kind: 'not-found', input: string, known: string[] }
+
+interface SiteKey {
+  /** Lowercase host, `www.` kept. */
+  host: string
+  /** Lowercase host without `www.`. */
+  bareHost: string
+  /** Lowercase path without a trailing slash; empty for the root. */
+  path: string
+  domain: boolean
+  https: boolean
+}
+
+const INPUT_SCHEME_RE = /^[a-z][\w+.-]*:\/\//i
+const SC_DOMAIN_PREFIX_RE = /^sc-domain:/i
+const TRAILING_SLASHES_RE = /\/+$/
+
+function parseSiteKey(value: string): SiteKey | null {
+  const trimmed = value.trim()
+  if (!trimmed)
+    return null
+  if (SC_DOMAIN_PREFIX_RE.test(trimmed)) {
+    const host = trimmed.replace(SC_DOMAIN_PREFIX_RE, '').replace(TRAILING_SLASHES_RE, '').toLowerCase()
+    return host ? { host, bareHost: stripWww(host), path: '', domain: true, https: false } : null
+  }
+  const https = /^https:\/\//i.test(trimmed)
+  const rest = trimmed.replace(INPUT_SCHEME_RE, '').split(/[?#]/)[0]!
+  const slash = rest.indexOf('/')
+  const host = (slash === -1 ? rest : rest.slice(0, slash)).toLowerCase()
+  if (!host)
+    return null
+  const path = slash === -1 ? '' : rest.slice(slash).replace(TRAILING_SLASHES_RE, '').toLowerCase()
+  return { host, bareHost: stripWww(host), path, domain: false, https }
+}
+
+function sameSiteUrl(a: string, b: string): boolean {
+  const normalize = (value: string): string => value.trim().replace(TRAILING_SLASHES_RE, '').toLowerCase()
+  return normalize(a) === normalize(b)
+}
+
+/**
+ * Resolve what a person typed for `--site` to one Site from `candidates`.
+ *
+ * - An exact Site URL match wins, ignoring case and a trailing slash.
+ * - Otherwise the input matches on its Site root: scheme, `www.`, case and
+ *   a trailing slash are ignored. Hosts compare whole, never as substrings.
+ * - Among several root matches, a Site with Store data wins, then a domain
+ *   property, then the one whose `www.` matches the input, then HTTPS.
+ * - A domain property that only covers the input (a subdomain or a path)
+ *   returns `covered-by-parent`.
+ */
+export function resolveSiteInput(input: string, candidates: readonly SiteCandidate[]): SiteResolution {
+  const unique = new Map<string, SiteCandidate>()
+  for (const candidate of candidates) {
+    const prior = unique.get(candidate.siteUrl)
+    unique.set(candidate.siteUrl, { siteUrl: candidate.siteUrl, inStore: !!(prior?.inStore || candidate.inStore) })
+  }
+  const pool = [...unique.values()]
+  const known = pool.map(candidate => candidate.siteUrl)
+
+  const exact = pool.filter(candidate => sameSiteUrl(candidate.siteUrl, input))
+  if (exact.length === 1)
+    return { kind: 'resolved', siteUrl: exact[0]!.siteUrl, via: 'exact' }
+  if (exact.length > 1) {
+    const verbatim = exact.find(candidate => candidate.siteUrl === input.trim())
+    return verbatim
+      ? { kind: 'resolved', siteUrl: verbatim.siteUrl, via: 'exact' }
+      : { kind: 'ambiguous', input, candidates: exact.map(candidate => candidate.siteUrl) }
+  }
+
+  const key = parseSiteKey(input)
+  if (!key)
+    return { kind: 'not-found', input, known }
+  const keyed = pool.flatMap((candidate) => {
+    const candidateKey = parseSiteKey(candidate.siteUrl)
+    return candidateKey ? [{ candidate, key: candidateKey }] : []
+  })
+
+  const matches = keyed.filter(entry => entry.key.bareHost === key.bareHost && entry.key.path === key.path)
+  if (matches.length > 0) {
+    const ranked = narrow(matches, [
+      entry => !!entry.candidate.inStore,
+      entry => entry.key.domain,
+      entry => entry.key.host === key.host,
+      entry => entry.key.https,
+    ])
+    return ranked.length === 1
+      ? { kind: 'resolved', siteUrl: ranked[0]!.candidate.siteUrl, via: 'host' }
+      : { kind: 'ambiguous', input, candidates: ranked.map(entry => entry.candidate.siteUrl) }
+  }
+
+  // A root Site for the same host covers a path input; a domain property
+  // covers every subdomain. Pick the closest parent.
+  const parents = keyed.filter(entry =>
+    (entry.key.bareHost === key.bareHost && entry.key.path !== '' && key.path.startsWith(`${entry.key.path}/`))
+    || (entry.key.bareHost === key.bareHost && entry.key.path === '')
+    || (entry.key.domain && key.bareHost.endsWith(`.${entry.key.bareHost}`)),
+  )
+  if (parents.length > 0) {
+    const specificity = (entry: { key: SiteKey }): number => entry.key.bareHost.length + entry.key.path.length
+    const closest = Math.max(...parents.map(specificity))
+    const [parent] = narrow(parents.filter(entry => specificity(entry) === closest), [
+      entry => !!entry.candidate.inStore,
+      entry => entry.key.domain,
+      entry => entry.key.host === key.host,
+      entry => entry.key.https,
+    ])
+    return { kind: 'covered-by-parent', input, parent: parent!.candidate.siteUrl }
+  }
+
+  return { kind: 'not-found', input, known }
+}
+
+/** Keep the entries that pass the first rule any entry passes, rule by rule. */
+function narrow<T>(entries: readonly T[], rules: ReadonlyArray<(entry: T) => boolean>): T[] {
+  let pool = [...entries]
+  for (const rule of rules) {
+    const kept = pool.filter(rule)
+    if (kept.length > 0)
+      pool = kept
+    if (pool.length === 1)
+      break
+  }
+  return pool
+}

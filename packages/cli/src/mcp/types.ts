@@ -15,7 +15,7 @@ export const periodSchema = z.object({
   end: z.string().describe('End date (YYYY-MM-DD)'),
 }).describe('Date range for the query')
 
-export const siteUrlSchema = z.string().describe('GSC property URL (e.g., sc-domain:example.com or https://example.com/)')
+export const siteUrlSchema = z.string().describe('Site, for example example.com. Scheme, www and case do not matter. The tool resolves it to the Search Console property.')
 
 export const queryOptionsSchema = z.object({
   type: z.enum(SearchTypes).optional().describe('Data type'),

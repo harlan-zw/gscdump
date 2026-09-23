@@ -9,7 +9,7 @@ After [authentication](./getting-started.md), choose a Store directory and sync 
 
 ```bash
 gscdump config set dataDir /absolute/path/to/gsc-data
-gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries,dates
+gscdump sync --site example.com --days 90 --tables pages,queries,page_queries,countries,dates
 ```
 
 Without `--days`, sync fetches three days ending three days ago.
@@ -49,21 +49,21 @@ Run `gscdump sync --help` for the full table and search-type options.
 
 ```bash
 # Start 486 days ago, ending three days ago
-gscdump sync --site sc-domain:example.com --full
+gscdump sync --site example.com --full
 
 # Select an exact range
-gscdump sync --site sc-domain:example.com --start 2026-08-01 --end 2026-08-31 \
+gscdump sync --site example.com --start 2026-08-01 --end 2026-08-31 \
   --tables pages,queries,page_queries,countries,dates
 
 # Read sync progress
-gscdump sync --site sc-domain:example.com --status
+gscdump sync --site example.com --status
 
 # Retry failed dates in the selected window
-gscdump sync --site sc-domain:example.com --days 90 \
+gscdump sync --site example.com --days 90 \
   --tables pages,queries,page_queries,countries,dates --retry-failed
 
 # Refresh completed dates too
-gscdump sync --site sc-domain:example.com --days 7 --force \
+gscdump sync --site example.com --days 7 --force \
   --tables pages,queries,page_queries,countries,dates
 ```
 
@@ -74,7 +74,7 @@ See [Google's extraction guidance](https://developers.google.com/webmaster-tools
 ## Select tables and search types
 
 ```bash
-gscdump sync --site sc-domain:example.com --days 28 \
+gscdump sync --site example.com --days 28 \
   --tables pages,queries,page_queries,countries,dates --types web,image
 ```
 
@@ -92,7 +92,7 @@ Save this as `sync-gsc.sh`, then make it executable:
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-/path/to/gscdump sync --site sc-domain:example.com --days 7 --force \
+/path/to/gscdump sync --site example.com --days 7 --force \
   --tables pages,queries,page_queries,countries,dates
 ```
 
@@ -109,9 +109,9 @@ If you use a temporary CI runner, restore and save the entire Store between runs
 ## Query and export
 
 ```bash
-gscdump query --site sc-domain:example.com --dimensions page --limit 100
+gscdump query --site example.com --dimensions page --limit 100
 
-gscdump dump --site sc-domain:example.com --format parquet --out ./parquet-export
+gscdump dump --site example.com --format parquet --out ./parquet-export
 
 gscdump store export --help
 ```
