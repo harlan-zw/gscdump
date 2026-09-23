@@ -88,13 +88,14 @@ describe('hosted indexing urls and sitemap commands', () => {
           meta: { siteUrl: 'sc-domain:example.com', status: url.searchParams.get('status') ?? 'all', issue: null },
         })
       }
-      if (url.pathname.endsWith('/sites/s_site/sitemaps')) {
+      if (/\/sites\/s_[a-z0-9]+\/sitemaps$/.test(url.pathname)) {
+        const siteUrl = accountSites.find(site => url.pathname.endsWith(`/sites/${site.siteId}/sitemaps`))?.siteUrl
         return envelope({
           sitemaps: [],
           history: [],
           perSitemapHistory: {},
           generation: null,
-          meta: { siteUrl: 'sc-domain:example.com', gscPropertyUrl: 'sc-domain:example.com', syncStatus: 'synced', sitemapScope: { excludedCount: 0, duplicateCount: 0 } },
+          meta: { siteUrl, gscPropertyUrl: siteUrl, syncStatus: 'synced', sitemapScope: { excludedCount: 0, duplicateCount: 0 } },
         })
       }
       throw new Error(`Unexpected request: ${url.pathname}`)
@@ -179,6 +180,20 @@ describe('hosted indexing urls and sitemap commands', () => {
 
     expect(requests.map(url => url.pathname)).toEqual([expect.stringMatching(/\/cli\/me$/), expect.stringMatching(/\/sites\/s_site\/sitemaps$/)])
     expect(JSON.parse(stdout.join('\n')).meta.siteUrl).toBe('sc-domain:example.com')
+  })
+
+  it('rejects a leftover positional Site ID instead of silently reading the default Site', async () => {
+    accountSites = [
+      { siteId: 's_01', siteUrl: 'https://one.test/' },
+      { siteId: 's_02', siteUrl: 'https://two.test/' },
+    ]
+    await fs.writeFile(path.join(runtime.configDir, 'config.json'), JSON.stringify({ defaultSite: 'two.test' }))
+
+    await expect(run(['sitemaps', 'current', 's_01'])).rejects.toThrow('process.exit(1)')
+
+    expect(stderr).toContain('`gscdump sitemaps current` no longer accepts a positional Site ID. Pass --site instead.')
+    expect(requests).toEqual([])
+    expect(stdout.join('\n')).not.toContain('two.test')
   })
 })
 
