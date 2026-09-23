@@ -3,6 +3,7 @@ import type { GscSearchAnalyticsMetadata } from 'gscdump/contracts'
 import type { SearchType } from 'gscdump/query'
 import type { FetchOptions } from 'ofetch'
 import type { ResolvedGscdumpConfig } from '../config'
+import type { CommandContext } from '../context'
 import type { StoreCoverage } from '../coverage'
 import type { InspectionSyncResult, SitemapSyncResult } from '../local-entities'
 import type { GscApiRow, LocalStore, Row, TableName, WriteCtx } from '../local-store'
@@ -20,7 +21,7 @@ import { defineCommand } from 'citty'
 import { getLatestGscDate, getOldestGscDate, getPstDate, groupIntoRanges } from 'gscdump/dates'
 import { SearchTypes } from 'gscdump/query'
 import { syncCommandMeta } from '../command-meta'
-import { createCommandContext } from '../context'
+import { createCommandContext, formatSiteResolution } from '../context'
 import { analyticsCoverage, readStoreCoverage, renderCoverage } from '../coverage'
 import { INSPECTION_QPD_PER_PROPERTY } from '../inspection-record'
 import { inspectionCandidates, syncInspections, syncSitemaps } from '../local-entities'
@@ -490,7 +491,7 @@ export const syncCommand = defineCommand({
     const requestedTypes = args.types ? parseNameList(args.types, ALL_SEARCH_TYPES, '--types') : DEFAULT_TYPES
     if (args.status) {
       const ctx = await createCommandContext()
-      const siteUrl = args.site ? await ctx.resolveSite(String(args.site), { scope: 'store' }) : undefined
+      const siteUrl = args.site ? await statusSite(ctx, String(args.site)) : undefined
       await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, siteUrl, json, inspectLimit)
       return
     }
@@ -1077,6 +1078,19 @@ function gatedClient(
 
 function pacer<T>(requestPacer: RequestPacer, task: () => Promise<T>): Promise<T> {
   return requestPacer.run(task)
+}
+
+/**
+ * The Site for `sync --status`. A Store Site wins. A Site with no data yet,
+ * such as one whose first sync stopped early, still gets a status report.
+ */
+async function statusSite(ctx: CommandContext, input: string): Promise<string> {
+  const resolution = await ctx.matchSite(input, { scope: 'store' })
+  if (resolution.kind === 'resolved')
+    return resolution.siteUrl
+  if (resolution.kind === 'not-found')
+    return input.trim()
+  throw new Error(formatSiteResolution(resolution, 'store'))
 }
 
 async function printSyncStatus(
