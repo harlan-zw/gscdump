@@ -11,7 +11,9 @@ vi.mock('../../src/analysis-local', () => ({
     isLive: false,
     format: args.json ? 'json' : args.format ?? 'table',
     runAnalysis: async () => boundary.result,
+    anchorFor: async () => '2026-08-23',
   })),
+  analyzerTables: vi.fn(() => []),
 }))
 
 const columnsDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'columns')

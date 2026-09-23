@@ -1,5 +1,6 @@
-import type { AnalysisResult } from '@gscdump/engine/analysis-types'
+import type { AnalysisResult, AnalyzerCoverage } from '@gscdump/engine/analysis-types'
 import type { OutputOptions, TableColumn } from './layout'
+import { MAX_FETCH_BUDGET } from '@gscdump/engine/analysis-types'
 import { parseGscSiteUrl } from 'gscdump'
 import { barColumn, calendarBuckets, renderBars, renderShare, renderSparklines } from './charts'
 import { renderTable, textLines } from './layout'
@@ -44,6 +45,16 @@ export function columnsFor(rows: readonly Record<string, unknown>[], keys?: read
   }))
 }
 
+/**
+ * One-line warning for a run that read only part of its rows, or undefined
+ * when coverage is complete. Shared by `analyze` and `report` output.
+ */
+export function coverageWarning(coverage: AnalyzerCoverage | undefined): string | undefined {
+  if (coverage?.kind !== 'truncated')
+    return undefined
+  return `! Partial data: a fetch stopped at ${coverage.fetched.toLocaleString('en-US')} rows. To read more rows, pass --fetch-budget (max ${MAX_FETCH_BUDGET}).`
+}
+
 export function renderAnalysis(result: AnalysisResult, context: AnalysisDisplayContext, options: OutputOptions): string {
   const rows = result.results
   const meta = result.meta
@@ -55,6 +66,9 @@ export function renderAnalysis(result: AnalysisResult, context: AnalysisDisplayC
   ]
   if (context.previous)
     lines.push(...textLines(`vs ${context.previous.start} to ${context.previous.end}`, options, 'muted'))
+  const warning = coverageWarning(meta.coverage)
+  if (warning)
+    lines.push(...textLines(warning, options, 'warning'))
   lines.push('')
   if (!rows.length) {
     lines.push(...textLines('No results for this period.', options))

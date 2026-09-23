@@ -12,14 +12,12 @@
  */
 
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
-import { num } from '@gscdump/engine/analysis-types'
+import { fetchBudgetOf, num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { queriesQueryState } from '../analyzer/adapt-rows'
 import { paginateSortedInMemory } from '../analyzer/paginate'
-
-const DEFAULT_ROW_LIMIT = 25_000
 
 /**
  * Row shape both plans produce. Field names match GSC's native columns so
@@ -154,7 +152,7 @@ export const strikingDistanceAnalyzer = defineAnalyzer<
 
   buildRows(params) {
     return {
-      queries: queriesQueryState(periodOf(params), params.limit ?? DEFAULT_ROW_LIMIT),
+      queries: queriesQueryState(periodOf(params), fetchBudgetOf(params)),
     }
   },
 })

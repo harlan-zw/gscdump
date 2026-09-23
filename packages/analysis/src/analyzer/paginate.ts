@@ -157,3 +157,18 @@ export function resolveSort<K extends string>(
     : defaults.sortDir
   return { sortBy, sortDir }
 }
+
+/**
+ * SQL select-list item that carries the full match count on every row.
+ * Window functions run before `LIMIT`, so it counts rows the page drops.
+ */
+export const TOTAL_COUNT_SELECT = 'CAST(COUNT(*) OVER () AS DOUBLE) AS totalCount'
+
+/**
+ * Read the full match count that `TOTAL_COUNT_SELECT` stamped onto each row.
+ * An empty page has no row to read, so it falls back to the row count.
+ */
+export function totalCountOf(rows: readonly Record<string, unknown>[]): number {
+  const first = rows[0]
+  return first?.totalCount != null ? Number(first.totalCount) : rows.length
+}

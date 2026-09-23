@@ -5,39 +5,37 @@
  * Source: live GSC API only. Reports that require the local Store use the CLI.
  */
 
-import type { ComparisonMode, WindowPreset } from '@gscdump/engine/period'
 import type { DefinedReport, ReportArgsSpec, ReportContext, ReportPlanStep, ReportResult } from '@gscdump/engine/report'
 import type { SourceCapabilities } from '@gscdump/engine/source'
 import type { Result } from 'gscdump/result'
 import type { z } from 'zod'
+import type { WindowDefaults, WindowFlagError } from '../../window'
 import type { McpHandlerError } from '../errors'
 import type { HandlerContext } from '../types'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { defaultReportRegistry, runReport } from '@gscdump/analysis/report'
 import { createGscApiQuerySource, GSC_API_CAPABILITIES } from '@gscdump/engine-gsc-api'
-import { resolveWindow } from '@gscdump/engine/period'
+import { getLatestGscDate } from 'gscdump/dates'
 import { err, ok, unwrapResult } from 'gscdump/result'
+import { parseWindowFlags, windowFlagErrorToException } from '../../window'
 import { enrichToolError, mcpHandlerErrors, mcpHandlerErrorToException } from '../errors'
 import { runReportInput } from '../types'
 
-const PERIOD_ALIASES: Record<string, WindowPreset> = {
-  '7d': 'last-7d',
-  '28d': 'last-28d',
-  '30d': 'last-30d',
-  '90d': 'last-90d',
-  '180d': 'last-180d',
-  '365d': 'last-365d',
-  'mtd': 'mtd',
-  'ytd': 'ytd',
-  'custom': 'custom',
+function reportWindowDefaults(report: DefinedReport): WindowDefaults {
+  if (report.defaultPeriod === 'custom')
+    throw new Error(`Report "${report.id}" declares a custom default period. Declare a preset.`)
+  return { preset: report.defaultPeriod, comparison: report.defaultComparison }
 }
 
-const COMPARISON_ALIASES: Record<string, ComparisonMode> = {
-  'none': 'none',
-  'prev': 'prev-period',
-  'prev-period': 'prev-period',
-  'prior': 'prev-period',
-  'yoy': 'yoy',
+function toMcpWindowError(error: WindowFlagError): McpHandlerError {
+  switch (error.kind) {
+    case 'unknown-period':
+      return mcpHandlerErrors.unknownPeriod(error.value)
+    case 'unknown-comparison':
+      return mcpHandlerErrors.unknownComparison(error.value)
+    default:
+      return mcpHandlerErrors.invalidWindow(error.message)
+  }
 }
 
 export interface ListReportsResult {
@@ -74,7 +72,7 @@ function supportsLiveReport(report: DefinedReport): boolean {
     mcpArgName(name),
     arg.default ?? (arg.type === 'number' ? 1 : arg.type === 'boolean' ? false : 'mcp-discovery'),
   ]))
-  const window = resolveWindow({ preset: report.defaultPeriod, comparison: report.defaultComparison })
+  const window = unwrapResult(parseWindowFlags({}, reportWindowDefaults(report), getLatestGscDate()), windowFlagErrorToException)
   return supportsLiveSteps(report.plan(params, window))
 }
 
@@ -106,26 +104,18 @@ export async function runReportHandlerResult(
   if (!supportsLiveReport(report))
     return err(mcpHandlerErrors.unsupportedReport(input.id, listReports().map(report => report.id)))
 
-  const preset = input.period
-    ? (PERIOD_ALIASES[input.period.toLowerCase()] ?? null)
-    : report.defaultPeriod
-  if (!preset)
-    return err(mcpHandlerErrors.unknownPeriod(input.period ?? ''))
-
-  const comparison = input.comparison
-    ? (COMPARISON_ALIASES[input.comparison.toLowerCase()] ?? null)
-    : report.defaultComparison
-  if (!comparison)
-    return err(mcpHandlerErrors.unknownComparison(input.comparison ?? ''))
-
-  const window = resolveWindow({
-    preset,
-    comparison,
+  // Live reads end on the newest final GSC date, never on today.
+  const parsed = parseWindowFlags({
+    period: input.period,
+    vs: input.comparison,
     start: input.start,
     end: input.end,
-  })
-  if (input.prevStart && input.prevEnd)
-    window.comparison = { start: input.prevStart, end: input.prevEnd }
+    prevStart: input.prevStart,
+    prevEnd: input.prevEnd,
+  }, reportWindowDefaults(report), getLatestGscDate())
+  if (!parsed.ok)
+    return err(toMcpWindowError(parsed.error))
+  const window = parsed.value
 
   const params = Object.fromEntries(Object.keys(report.argsSpec).map((name) => {
     const key = mcpArgName(name) as keyof typeof input

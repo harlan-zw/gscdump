@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import process from 'node:process'
+import { MAX_FETCH_BUDGET } from '@gscdump/engine/analysis-types'
 import { SearchTypes } from 'gscdump/query'
 import pkg from '../package.json' with { type: 'json' }
 import { useCliRuntime } from './runtime'
@@ -103,6 +104,17 @@ export function parseIntegerOption(value: unknown, flag: string, minimum: 0 | 1 
     throw new Error(`${flag} must be ${requirement}.`)
   }
   return parsed
+}
+
+/**
+ * Parse `--fetch-budget`: rows each live fetch may read. Undefined keeps the
+ * default of one GSC page (25,000 rows).
+ */
+export function parseFetchBudget(value: unknown): number | undefined {
+  const budget = parseIntegerOption(value, '--fetch-budget')
+  if (budget !== undefined && budget > MAX_FETCH_BUDGET)
+    throw new Error(`--fetch-budget must be at most ${MAX_FETCH_BUDGET}. Larger fetches use up the GSC quota.`)
+  return budget
 }
 
 // Colour is configured deliberately by the CLI creation layer. Keeping the

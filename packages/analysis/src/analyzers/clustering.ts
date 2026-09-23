@@ -10,12 +10,13 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
 import type { QueriesRow } from '../types'
-import { num } from '@gscdump/engine/analysis-types'
+import { fetchBudgetOf, num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { queriesQueryState } from '../analyzer/adapt-rows'
+import { paginateInMemory } from '../analyzer/paginate'
 import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 
 export type ClusterType = 'prefix' | 'intent' | 'both'
@@ -265,7 +266,7 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
     }
   },
 
-  reduceSql(rows) {
+  reduceSql(rows, params) {
     const arr = Array.isArray(rows) ? rows : []
     const clusters: KeywordCluster[] = arr.map(r => ({
       clusterName: str(r.clusterName),
@@ -282,15 +283,16 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
         position: num(k.position),
       })) as unknown as QueriesRow[],
     }))
+    const paged = paginateInMemory(clusters, { limit: params.limit, offset: params.offset })
     return {
-      results: clusters,
-      meta: { total: clusters.length, totalClusters: clusters.length },
+      results: paged,
+      meta: { total: clusters.length, returned: paged.length, totalClusters: clusters.length },
     }
   },
 
   buildRows(params) {
     return {
-      queries: queriesQueryState(periodOf(params), params.limit),
+      queries: queriesQueryState(periodOf(params), fetchBudgetOf(params)),
     }
   },
 
@@ -301,9 +303,10 @@ export const clusteringAnalyzer = defineAnalyzer<AnalysisParams, Row, KeywordClu
       minClusterSize: params.minClusterSize,
       minImpressions: params.minImpressions,
     })
+    const paged = paginateInMemory(result.clusters, { limit: params.limit, offset: params.offset })
     return {
-      results: result.clusters,
-      meta: { totalClusters: result.clusters.length },
+      results: paged,
+      meta: { total: result.clusters.length, returned: paged.length, totalClusters: result.clusters.length },
     }
   },
 })

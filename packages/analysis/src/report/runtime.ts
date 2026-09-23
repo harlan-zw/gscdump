@@ -49,11 +49,21 @@ async function executeStep(
   source: AnalysisQuerySource,
   analyzers: AnalyzerRegistry,
   step: ReportPlanStep,
+  fetchBudget: number | undefined,
 ): Promise<StepOutcome> {
-  const params = { ...step.params, type: step.type } as AnalysisParams
+  const params = {
+    ...step.params,
+    ...(fetchBudget != null ? { fetchBudget } : {}),
+    type: step.type,
+  } as AnalysisParams
   return runAnalyzerFromSource(source, params, analyzers)
     .then((result): StepOutcome => ({
-      state: { key: step.key, type: step.type, status: 'done' },
+      state: {
+        key: step.key,
+        type: step.type,
+        status: 'done',
+        ...(result.meta.coverage ? { coverage: result.meta.coverage } : {}),
+      },
       result,
     }))
     .catch((thrown: Error): StepOutcome => {
@@ -166,7 +176,7 @@ export async function runReportResult<P extends ReportParams = ReportParams>(
 
   const steps = report.plan(opts.ctx.params, opts.ctx.window)
   const outcomes = await Promise.all(
-    steps.map(s => executeStep(opts.source, opts.analyzers, s)),
+    steps.map(s => executeStep(opts.source, opts.analyzers, s, opts.ctx.fetchBudget)),
   )
 
   const required = new Map<string, ReportPlanStep>(

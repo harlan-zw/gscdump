@@ -17,7 +17,7 @@ const boundary = vi.hoisted(() => ({
 }))
 
 vi.mock('../../src/context', () => ({ createCommandContext: boundary.context }))
-vi.mock('../../src/analysis-local', () => ({ resolveAnalysisSource: boundary.analysis }))
+vi.mock('../../src/analysis-local', () => ({ resolveAnalysisSource: boundary.analysis, analyzerTables: () => [] }))
 vi.mock('../../src/sitemap', () => ({ loadSitemapUrls: boundary.sitemap, discoverLiveSitemap: vi.fn() }))
 vi.mock('@gscdump/sdk/v1', () => ({ createGscdumpV1Client: boundary.hosted }))
 vi.mock('gscdump/indexing', async importOriginal => ({
@@ -112,7 +112,7 @@ describe('cLI numeric options', () => {
 
   it('forwards positive Analyzer limits and week counts', async () => {
     const runAnalysis = vi.fn().mockResolvedValue({ results: [], meta: {} })
-    boundary.analysis.mockResolvedValueOnce({ format: 'json', runAnalysis })
+    boundary.analysis.mockResolvedValueOnce({ format: 'json', runAnalysis, anchorFor: async () => '2026-08-23' })
     await run(child(analyzeCommand, 'trends'), { 'limit': '5', 'weeks': '8', 'min-weeks': '2' })
     expect(runAnalysis).toHaveBeenCalledWith(expect.objectContaining({ limit: 5, weeks: 8, minWeeksWithData: 2 }))
   })

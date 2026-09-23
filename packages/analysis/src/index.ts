@@ -29,7 +29,7 @@ export { analyzeDecay } from './analyzers/decay'
 
 export type { MoverData, MoversInput, MoversOptions, MoversResult, MoversSortMetric } from './analyzers/movers'
 
-export { analyzeMovers } from './analyzers/movers'
+export { analyzeMovers, MOVERS_SORT_METRICS } from './analyzers/movers'
 export type { OpportunityFactors, OpportunityOptions, OpportunityResult, OpportunitySortMetric, OpportunityWeights } from './analyzers/opportunity'
 export { analyzeOpportunity } from './analyzers/opportunity'
 export type { MonthlyData, SeasonalityMetric, SeasonalityOptions, SeasonalityResult } from './analyzers/seasonality'

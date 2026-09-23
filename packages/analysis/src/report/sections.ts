@@ -5,8 +5,19 @@ export function reportRows<T>(result: AnalysisResult | undefined): T[] {
   return (result?.results ?? []) as unknown as T[]
 }
 
+/** `partial` when the step failed or read only part of its rows. */
 export function sectionCoverage(result: AnalysisResult | undefined): ReportCoverage {
-  return result ? 'full' : 'partial'
+  return result && result.meta.coverage?.kind !== 'truncated' ? 'full' : 'partial'
+}
+
+/**
+ * Full match count for a step: the analyzer's `meta.total` when it reports
+ * one, else the row count. Use it when the section keeps every row it reads,
+ * so `truncated.total` counts rows the step's output `limit` dropped.
+ */
+export function resultTotal(result: AnalysisResult | undefined, fallback: number): number {
+  const total = result?.meta.total
+  return typeof total === 'number' ? Math.max(total, fallback) : fallback
 }
 
 export function sectionArtifact(

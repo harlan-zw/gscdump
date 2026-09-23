@@ -114,9 +114,10 @@ After creating `source` above, run a Report supported by that Source:
 ```ts
 import { defaultReportRegistry, runReport } from '@gscdump/analysis/report'
 import { resolveWindow } from '@gscdump/engine/period'
+import { getLatestGscDate } from 'gscdump/dates'
 
 const report = defaultReportRegistry.getReport('movers')!
-const window = resolveWindow({ preset: 'last-28d', comparison: 'prev-period' })
+const window = resolveWindow({ preset: 'last-28d', anchor: getLatestGscDate(), comparison: 'prev-period' })
 const result = await runReport(report, {
   source,
   analyzers: defaultAnalyzerRegistry,
@@ -155,12 +156,24 @@ Analyzer support depends on the Source's SQL dialect and capabilities.
 ```ts
 import { resolveWindow } from '@gscdump/analysis'
 
-const window = resolveWindow({ preset: 'last-30d', comparison: 'yoy' })
+const window = resolveWindow({ preset: 'last-30d', anchor: '2026-08-28', comparison: 'yoy' })
 console.log(window.start, window.end, window.comparison)
 ```
 
-Presets: `last-7d`, `last-28d`, `last-30d`, `last-90d`, `last-180d`, `last-365d`, `mtd`, `ytd`, and `custom`.
-Comparisons: `none`, `prev-period`, and `yoy`.
+Every preset except `custom` needs an `anchor`: the last date the window includes.
+Pass the newest complete date in your data, such as the Store's newest synced day or `getLatestGscDate()` from `gscdump/dates`.
+`resolveWindow` never reads the clock.
+
+Presets: `last-7d`, `last-28d`, `last-30d`, `last-90d`, `last-180d`, `last-365d`, `mtd`, `qtd`, `ytd`, `last-quarter`, and `custom`.
+Comparisons: `none`, `prev-period`, and `yoy`. `yoy` shifts the window back 364 days, so each day compares with the same weekday.
+
+## Fetch budget and output limit
+
+`limit` caps the rows an Analyzer returns. It never caps the rows it reads.
+Row plans read at most `fetchBudget` rows per query: 25,000 (one GSC page) by default, up to 100,000.
+`meta.total` counts every match, not only the returned rows.
+`meta.coverage` is `{ kind: 'complete' }`, or `{ kind: 'truncated', fetched }` when a query reached its fetch budget.
+A truncated run can miss rows, so treat its totals and rankings as partial.
 
 ## Public API
 

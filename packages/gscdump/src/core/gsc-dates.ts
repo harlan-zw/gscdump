@@ -25,11 +25,11 @@ export function getPstDate(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
 }
 
+// Calendar arithmetic on the Pacific date string, so the host time zone never
+// shifts the result. Re-parsing a `toLocaleString` value as host-local time
+// moved the date by one day on hosts east of UTC.
 function getPstDateDaysAgo(daysAgo: number): string {
-  const now = new Date()
-  const pstNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-  pstNow.setDate(pstNow.getDate() - daysAgo)
-  return toIsoDate(pstNow)
+  return addDays(getPstDate(), -daysAgo)
 }
 
 /** YYYY-MM-DD for `now() - n` days, UTC. */

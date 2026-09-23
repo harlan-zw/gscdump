@@ -8,13 +8,13 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
 import type { PageRow } from '../types'
-import { num } from '@gscdump/engine/analysis-types'
+import { fetchBudgetOf, num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { comparisonOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { pagesQueryState } from '../analyzer/adapt-rows'
-import { paginateInMemory } from '../analyzer/paginate'
+import { paginateClause, paginateInMemory, TOTAL_COUNT_SELECT, totalCountOf } from '../analyzer/paginate'
 import { parseJsonRows as parseJsonList, rowString as str } from '../analyzer/row-values'
 import { buildPeriodMap, createMetricSorter } from '../types'
 
@@ -124,9 +124,7 @@ export const decayAnalyzer = defineAnalyzer<AnalysisParams, Row, DecayResult[]>(
     const { current: cur, previous: prev } = comparisonOf(params)
     const minPreviousClicks = params.minPreviousClicks ?? 50
     const threshold = params.threshold ?? 0.2
-    // Fetch the full candidate pool, not the page — `reduceSql` paginates via
-    // `offset`/`limit` so deep pages resolve correctly (mirrors striking-distance).
-    const limit = 2000
+    const limit = params.limit ?? 2000
 
     // weekly: union both file sets for a per-page weekly sparkline that spans
     // prev_start → cur_end (with any between-period gap rendered as `·` at UI time).
@@ -188,11 +186,11 @@ export const decayAnalyzer = defineAnalyzer<AnalysisParams, Row, DecayResult[]>(
         LEFT JOIN cur c ON p.url = c.url
         LEFT JOIN series_by_url s ON p.url = s.url
       )
-      SELECT *
+      SELECT *, ${TOTAL_COUNT_SELECT}
       FROM joined
       WHERE declinePercent >= ? AND lostClicks > 0
       ORDER BY lostClicks DESC
-      LIMIT ${Number(limit)}
+      ${paginateClause({ limit, offset: params.offset })}
     `
 
     return {
@@ -214,7 +212,7 @@ export const decayAnalyzer = defineAnalyzer<AnalysisParams, Row, DecayResult[]>(
     }
   },
 
-  reduceSql(rows, params) {
+  reduceSql(rows) {
     const arr = Array.isArray(rows) ? rows : []
     const mapped = arr.map(r => ({
       page: str(r.page),
@@ -232,16 +230,16 @@ export const decayAnalyzer = defineAnalyzer<AnalysisParams, Row, DecayResult[]>(
       })),
     } as DecayResult))
     return {
-      results: paginateInMemory(mapped, { limit: params.limit ?? 2000, offset: params.offset }),
-      meta: { total: mapped.length },
+      results: mapped,
+      meta: { total: totalCountOf(arr), returned: mapped.length },
     }
   },
 
   buildRows(params) {
     const { current, previous } = comparisonOf(params)
     return {
-      current: pagesQueryState(current, params.limit),
-      previous: pagesQueryState(previous, params.limit),
+      current: pagesQueryState(current, fetchBudgetOf(params)),
+      previous: pagesQueryState(previous, fetchBudgetOf(params)),
     }
   },
 
@@ -253,6 +251,7 @@ export const decayAnalyzer = defineAnalyzer<AnalysisParams, Row, DecayResult[]>(
       minPreviousClicks: params.minPreviousClicks,
       threshold: params.threshold,
     })
-    return { results, meta: { total: results.length } }
+    const paged = paginateInMemory(results, { limit: params.limit ?? 2000, offset: params.offset })
+    return { results: paged, meta: { total: results.length, returned: paged.length } }
   },
 })
