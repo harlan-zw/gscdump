@@ -11,6 +11,12 @@ import { applyOutputMode, logger, noSubcommandSelected, OUTPUT_ARGS, parseIntege
 const HOSTED_SITEMAP_ALTERNATIVE = 'read a live sitemap with `gscdump sitemaps urls <sitemap-url>`'
 
 function hostedSitemapSite(args: Record<string, unknown>, name: string): ReturnType<typeof resolveHostedSite> {
+  // citty parks undeclared positional tokens in `args._`; without this guard an
+  // unmigrated `sitemaps current s_01` silently reads the default Site instead.
+  if ((args._ as string[] | undefined)?.length) {
+    logger.error(`\`gscdump sitemaps ${name}\` no longer accepts a positional Site ID. Pass --site instead.`)
+    process.exit(1)
+  }
   return resolveHostedSite(args, { name: `sitemaps ${name}`, localAlternative: HOSTED_SITEMAP_ALTERNATIVE })
 }
 
