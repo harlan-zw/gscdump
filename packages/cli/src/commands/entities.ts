@@ -10,6 +10,7 @@ import {
 import { defineCommand } from 'citty'
 import { entitiesCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
+import { formatSiteIdCollision, recordStoreSite } from '../store-sites'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
@@ -138,6 +139,14 @@ const indexingSnapshotSubCommand = defineCommand({
     if (urls.length === 0) {
       logger.warn('No URLs to fetch metadata for.')
       return
+    }
+
+    // Claim the siteId before spending quota, so the write below cannot
+    // land beside another Site's data unlabelled.
+    const claim = await recordStoreSite(store.dataDir, siteUrl, { userId: store.userId })
+    if (!claim.ok) {
+      logger.error(formatSiteIdCollision(claim.error))
+      process.exit(1)
     }
 
     const records: IndexingMetadataRecord[] = []
