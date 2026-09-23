@@ -138,7 +138,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     (server.registerTool as (...args: unknown[]) => unknown)(toolName, config, (...args: unknown[]) =>
       Promise.resolve()
         .then(() => callback(...args))
-        .catch((error: unknown) => ({ isError: true, content: [{ type: 'text', text: toolErrorMessage(error) }] })))) as McpServer['registerTool']
+        .catch(async (error: unknown) => ({ isError: true, content: [{ type: 'text', text: await toolErrorMessage(error) }] })))) as McpServer['registerTool']
 
   const getContext = async (): Promise<HandlerContext> => {
     if (options.getContext)

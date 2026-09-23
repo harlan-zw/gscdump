@@ -29,7 +29,9 @@ const MCP_RETRIES = 1
 async function hasAuthentication(): Promise<boolean> {
   if ((await resolveAuthentication())._tag === 'Cloud')
     return true
-  if (await resolveServiceAccount())
+  // A stale pointer (missing or malformed key file) is ignorable here: it
+  // must not block BYOK or saved tokens, which can still authenticate.
+  if (await resolveServiceAccount().then(Boolean).catch(() => false))
     return true
   if (resolveBYOK())
     return true
