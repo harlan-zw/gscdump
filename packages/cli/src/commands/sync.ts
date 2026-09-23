@@ -1,6 +1,7 @@
 import type { googleSearchConsole } from 'gscdump/client'
 import type { GscSearchAnalyticsMetadata } from 'gscdump/contracts'
 import type { SearchType } from 'gscdump/query'
+import type { FetchOptions } from 'ofetch'
 import type { ResolvedGscdumpConfig } from '../config'
 import type { StoreCoverage } from '../coverage'
 import type { InspectionSyncResult, SitemapSyncResult } from '../local-entities'
@@ -355,6 +356,19 @@ async function writeDayRows(
   return { kind: 'ok', rows: rows.length, final }
 }
 
+/**
+ * The quota ledger is the one budget authority for sync. The core client
+ * retries a quota 403 after 5s, 15s and 45s, and each retry is a Google call
+ * the ledger never reserved. Sync drops that retry: the gate records the
+ * refusal and stops the run, and the next run continues.
+ */
+const LEDGER_FETCH_OPTIONS: FetchOptions = {
+  onResponseError(ctx) {
+    if (ctx.options.retryStatusCodes)
+      ctx.options.retryStatusCodes = ctx.options.retryStatusCodes.filter(status => status !== 403)
+  },
+}
+
 export const syncCommand = defineCommand({
   meta: syncCommandMeta,
   args: {
@@ -477,7 +491,7 @@ export const syncCommand = defineCommand({
       return
     }
 
-    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
+    const ctx = await createCommandContext({ needsAuth: true, needsStore: true, fetchOptions: LEDGER_FETCH_OPTIONS })
     const store = ctx.store!
     const siteUrls = args['all-sites']
       ? (await ctx.loadSites()).map(site => site.siteUrl)
