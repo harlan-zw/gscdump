@@ -239,7 +239,7 @@ gscdump sync --site example.com --json
   reruns only failed dates. A plain sync also retries failed dates.
 - `--dry-run` prints the planned dates and the fewest calls without calling Google.
 - `--all-sites` syncs every verified Site, one after another.
-- Use the user's date range. The 90-day example does not authorize a wider sync.
+- Use the user's date range. If the user names a range, pass `--start` and `--end`, not `--full`.
 - Empty Store metadata is expected before the first sync. It does not prove zero traffic.
 
 ## Query rows
