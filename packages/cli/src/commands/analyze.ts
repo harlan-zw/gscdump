@@ -7,7 +7,6 @@ import { defineCommand } from 'citty'
 import { unwrapResult } from 'gscdump/result'
 import { analyzerTables, resolveAnalysisSource } from '../analysis-local'
 import { analyzeCommandMeta } from '../command-meta'
-import { gscErrorHandler } from '../error-handler'
 import { coverageWarning, renderAnalysis } from '../render/analysis'
 import { terminalOutputOptions } from '../render/terminal'
 import { logger, parseFetchBudget, parseIntegerOption, toCSV } from '../utils'
@@ -138,7 +137,7 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
 
       logger.debug(`Running ${tool} analysis...`)
 
-      const result = await runAnalysis(params).catch(gscErrorHandler)
+      const result = await runAnalysis(params)
 
       const warning = coverageWarning(result.meta.coverage)
       if (format === 'json') {

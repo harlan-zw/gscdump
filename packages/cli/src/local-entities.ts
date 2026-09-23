@@ -61,6 +61,23 @@ function toParquetRow(record: InspectionRecord): InspectionParquetRow {
   }
 }
 
+/** Append inspection records to the history. One call writes one shard, so a caller can save each result as it arrives. */
+export async function appendInspections(dataSource: DataSource, ctx: TenantCtx, records: readonly InspectionRecord[]): Promise<void> {
+  if (records.length > 0)
+    await createInspectionStore({ dataSource }).appendHistory(ctx, records)
+}
+
+/** Rewrite the latest-per-URL `index.parquet` from every record, so DuckDB readers see the newest state. */
+export async function materializeInspectionIndex(
+  dataSource: DataSource,
+  ctx: TenantCtx,
+  records: readonly InspectionRecord[],
+): Promise<{ indexKey: string, indexRows: number }> {
+  const latest = latestByUrl(records)
+  const result = await createInspectionStore({ dataSource }).materialize(ctx, [...latest.values()].map(toParquetRow))
+  return { indexKey: result.key, indexRows: result.rowCount }
+}
+
 /**
  * Append new inspection records to the history, then rewrite the
  * latest-per-URL `index.parquet` so DuckDB readers see the newest state.
@@ -73,11 +90,8 @@ export async function recordInspections(
 ): Promise<{ indexKey: string, indexRows: number } | undefined> {
   if (records.length === 0)
     return undefined
-  const inspector = createInspectionStore({ dataSource })
-  await inspector.appendHistory(ctx, records)
-  const latest = latestByUrl([...history, ...records])
-  const result = await inspector.materialize(ctx, [...latest.values()].map(toParquetRow))
-  return { indexKey: result.key, indexRows: result.rowCount }
+  await appendInspections(dataSource, ctx, records)
+  return materializeInspectionIndex(dataSource, ctx, [...history, ...records])
 }
 
 /** True when `url` belongs to the Search Console property `siteUrl`. */

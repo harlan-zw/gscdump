@@ -13,24 +13,6 @@ export const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchTyp
 
 export const VERSION: string = pkg.version
 
-/**
- * Citty calls a parent command's `run` even when a subcommand matches, so a
- * naive "default to subcommand X" runs X *in addition to* the chosen
- * subcommand. Use this to gate the default-subcommand body: returns true iff
- * the next argv after `parent` is not in `subNames`, meaning we should run the
- * default.
- */
-export function noSubcommandSelected(parent: string, subNames: readonly string[]): boolean {
-  const argv = useCliRuntime().rawArgs
-  const idx = argv.indexOf(parent)
-  if (idx < 0)
-    return true
-  const next = argv[idx + 1]
-  if (!next)
-    return true
-  return !subNames.includes(next)
-}
-
 // All progress/diagnostic logs go to stderr so stdout is reserved for
 // machine-readable output (JSON, CSV, raw query results). Consola's default
 // instance writes info/success/warn to stdout, which collides with `--json`
@@ -91,6 +73,20 @@ export function parseSearchType(value: unknown, flag: string = '--search-type'):
     process.exit(1)
   }
   return v as SearchType
+}
+
+/**
+ * Parse a comma-separated list of names. An unknown name is an error that
+ * lists the valid names, so a typo never narrows the work without a word.
+ */
+export function parseNameList<T extends string>(value: unknown, known: readonly T[], flag: string): T[] {
+  const names = String(value ?? '').split(',').map(name => name.trim()).filter(Boolean)
+  const unknown = names.filter(name => !(known as readonly string[]).includes(name))
+  if (unknown.length > 0)
+    throw new Error(`Unknown ${flag} name: ${unknown.join(', ')}. Valid names: ${known.join(', ')}.`)
+  if (names.length === 0)
+    throw new Error(`${flag} needs at least one name. Valid names: ${known.join(', ')}.`)
+  return names as T[]
 }
 
 /** Parse a decimal CLI integer before starting authentication or network work. */
@@ -316,25 +312,24 @@ export function toCSV(data: any[], columns: string[]): string {
   return [header, ...rows].join('\n')
 }
 
+function parseUrlLines(text: string): string[] {
+  return text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+}
+
 /**
- * Read a list of URLs from positional args, --file, or stdin (one per line).
- * Comments (`# ...`) and blank lines are skipped.
+ * Read a list of URLs from positional args plus --file. With neither, read
+ * piped stdin (one per line). Pass citty's `args._`: a named positional keeps
+ * only the first value. Comments (`# ...`) and blank lines are skipped.
  */
-export async function readUrlList(args: { file?: unknown, urls?: unknown }): Promise<string[]> {
-  if (args.file) {
-    const content = await fs.readFile(String(args.file), 'utf-8')
-    return content.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
-  }
-  if (args.urls) {
-    const raw = Array.isArray(args.urls) ? args.urls : [args.urls]
-    return raw.map(String).filter(Boolean)
-  }
-  if (!process.stdin.isTTY) {
-    const chunks: Buffer[] = []
-    for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
-    return Buffer.concat(chunks).toString('utf-8').split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
-  }
-  return []
+export async function readUrlList(input: { file?: unknown, positionals?: readonly unknown[] }): Promise<string[]> {
+  const urls = (input.positionals ?? []).map(String).filter(Boolean)
+  if (input.file)
+    urls.push(...parseUrlLines(await fs.readFile(String(input.file), 'utf-8')))
+  if (urls.length > 0 || input.file || process.stdin.isTTY)
+    return urls
+  const chunks: Buffer[] = []
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
+  return parseUrlLines(Buffer.concat(chunks).toString('utf-8'))
 }
 
 export function exportToCSV(output: any): string {

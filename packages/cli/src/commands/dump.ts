@@ -17,7 +17,7 @@ import { ENTITY_DATASETS, readEntityDatasets } from '../local-entities'
 import { allTables } from '../local-store'
 import { readParquetRows } from '../native-duckdb'
 import { readSiteMap, siteUrlForId } from '../store-sites'
-import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseSearchType, runWithConcurrency, toCSV } from '../utils'
+import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseNameList, parseSearchType, runWithConcurrency, toCSV } from '../utils'
 
 const DEFAULT_OUT = './gscdump-export'
 const FORMATS = ['parquet', 'json', 'ndjson', 'csv'] as const
@@ -77,7 +77,7 @@ export const dumpCommand = defineCommand({
       process.exit(1)
     }
     const tablesFilter = args.tables
-      ? new Set(String(args.tables).split(',').map(t => t.trim()).filter(Boolean))
+      ? new Set<string>(parseNameList(args.tables, [...allTables(), ...ENTITY_DATASETS, 'bing'], '--tables'))
       : null
     const searchType = parseSearchType(args['search-type'])
     const ctx = await createCommandContext({ needsStore: true })

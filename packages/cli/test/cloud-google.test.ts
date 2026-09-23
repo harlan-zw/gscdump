@@ -136,6 +136,16 @@ it.each([
     expect(error.retryAfter).toBe(12)
 })
 
+it('names the gscdump.com API key on a hosted 401, not a Google URL', async () => {
+  vi.mocked(fetch).mockResolvedValue(Response.json({ error: { message: 'Unauthorized' } }, { status: 401 }))
+  const { client } = await runWithCliRuntime(runtime, () => createCommandContext({ needsAuth: true, fetchOptions: { retry: 0 } }))
+  const error = await client!.sites().then(() => {
+    throw new Error('Expected hosted failure')
+  }, classifyError)
+  expect(error.message).toContain('gscdump.com rejected the API key')
+  expect(error.message).not.toContain('googleapis.com')
+})
+
 it('uses saved cloud authentication for hosted sitemap commands', async () => {
   const data = {
     sitemaps: [],

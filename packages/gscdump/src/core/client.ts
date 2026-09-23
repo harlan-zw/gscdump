@@ -148,14 +148,9 @@ async function resolveToken(auth: Auth): Promise<string> {
   return ''
 }
 
-/** The Google quota reason of a 403 body, or undefined for a real permission failure. */
-function quota403Reason(body: unknown): string | undefined {
-  const classified = classifyError({ status: 403, data: body })
-  if (classified.kind !== 'rate-limited')
-    return undefined
-  const error = (body as { error?: { errors?: Array<{ reason?: unknown }>, message?: unknown } } | undefined)?.error
-  const reason = error?.errors?.find(entry => typeof entry.reason === 'string')?.reason
-  return typeof reason === 'string' ? reason : typeof error?.message === 'string' ? error.message : 'quota'
+/** True when a 403 body is a Google quota or rate limit, not a permission failure. */
+function isQuota403(body: unknown): boolean {
+  return classifyError({ status: 403, data: body }).kind === 'rate-limited'
 }
 
 export function createFetch(auth: Auth, options?: FetchOptions): $Fetch {
@@ -214,16 +209,8 @@ export function createFetch(auth: Auth, options?: FetchOptions): $Fetch {
       // Google reports Search Analytics load-quota and rate-limit exhaustion
       // as 403. Those retry with backoff; a real permission 403 stays fatal.
       const retryable = new Set(baseRetryStatusCodes)
-      if (ctx.response.status === 403) {
-        const reason = quota403Reason(ctx.response._data)
-        if (reason) {
-          retryable.add(403)
-          console.error(`[gscdump] Google quota or rate limit reached (403 ${reason}). Retrying with backoff.`)
-        }
-        else {
-          console.error('[gscdump] Permission denied (403). check your service account permissions being added to the GSC property.')
-        }
-      }
+      if (ctx.response.status === 403 && isQuota403(ctx.response._data))
+        retryable.add(403)
       if (ctx.options)
         ctx.options.retryStatusCodes = [...retryable]
 

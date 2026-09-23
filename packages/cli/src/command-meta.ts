@@ -35,7 +35,7 @@ export const storeCommandMeta = {
 
 export const inspectCommandMeta = {
   name: 'inspect',
-  description: 'Inspect URL indexing status (single URL; use `inspect batch` for many)',
+  description: 'Inspect the indexing status of one or more URLs and save the results to the Store',
 }
 
 export const indexingCommandMeta = {

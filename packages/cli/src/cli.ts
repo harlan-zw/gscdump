@@ -1,13 +1,14 @@
 import type { CliRuntime } from './runtime'
 import process from 'node:process'
-import { defineCommand, runMain } from 'citty'
+import { defineCommand, renderUsage, runCommand } from 'citty'
 import { parseAuthMode } from './auth-state'
 import { checkCliArgs } from './cli-args'
-import { CLI_SUBCOMMANDS } from './command-registry'
+import { CLI_SUBCOMMANDS, resolveUsageTarget } from './command-registry'
 import { applyProfileFromCli } from './commands/profile-selection'
 import { loadEnvFromCwd } from './env-file'
 import { resolveCliEnvironment } from './environment'
-import { terminalOutputOptions } from './render/terminal'
+import { reportCliError } from './error-handler'
+import { resolveOutputOptions, terminalOutputOptions } from './render/terminal'
 import { createCliRuntime, runWithCliRuntime, useCliRuntime } from './runtime'
 import { setNoColor, showSplash, VERSION, withConfiguredOutput } from './utils'
 
@@ -97,19 +98,58 @@ export interface RunCliOptions {
   runtime?: CliRuntime
 }
 
-export async function runCli(opts: RunCliOptions = {}): Promise<void> {
+const HELP_FLAGS = new Set(['--help', '-h'])
+
+async function runMainCommand(rawArgs: string[]): Promise<void> {
+  if (rawArgs.some(arg => HELP_FLAGS.has(arg))) {
+    console.log(`${await renderUsage(...await resolveUsageTarget(main, rawArgs))}\n`)
+    return
+  }
+  if (rawArgs.length === 1 && rawArgs[0] === '--version') {
+    console.log(VERSION)
+    return
+  }
+  await runCommand(main, { rawArgs })
+}
+
+function stderrColor(runtime: CliRuntime, rawArgs: readonly string[]): boolean {
+  return resolveOutputOptions({
+    isTTY: process.stderr.isTTY,
+    environment: runtime.environment,
+    noColor: rawArgs.includes('--no-color'),
+  }).color
+}
+
+/**
+ * Run one CLI invocation. Every failure ends here: the shell prints it once
+ * and returns exit code 1. The caller owns `process.exit`.
+ */
+export async function runCli(opts: RunCliOptions = {}): Promise<number> {
   const input = opts.rawArgs ?? process.argv.slice(2)
   const runtime = opts.runtime ?? createCliRuntime({ environment: opts.environment, rawArgs: input })
   runtime.rawArgs = [...input]
-  await runWithCliRuntime(runtime, async () => {
-    if (opts.loadEnv !== false)
-      loadEnvFromCwd()
-    const rawArgs = prepareCliArgs(input)
-    runtime.rawArgs = [...rawArgs]
-    const argumentError = await checkCliArgs(main, rawArgs)
-    if (argumentError)
-      throw new Error(argumentError)
-    await withConfiguredOutput(() => runMain(main, { rawArgs }))
+  return runWithCliRuntime(runtime, async () => {
+    let rawArgs = [...input]
+    try {
+      if (opts.loadEnv !== false)
+        loadEnvFromCwd()
+      rawArgs = prepareCliArgs(input)
+      runtime.rawArgs = [...rawArgs]
+      const argumentError = await checkCliArgs(main, rawArgs)
+      if (argumentError)
+        throw new Error(argumentError)
+      await withConfiguredOutput(() => runMainCommand(rawArgs))
+      return 0
+    }
+    catch (error) {
+      await reportCliError(error, {
+        color: stderrColor(runtime, rawArgs),
+        usage: async () => renderUsage(...await resolveUsageTarget(main, rawArgs)),
+        // Loaded on demand: the auth module is heavy and only an auth failure needs it.
+        authSources: async () => (await import('./auth')).formatAuthProvenance(),
+      })
+      return 1
+    }
   })
 }
 

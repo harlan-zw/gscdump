@@ -120,6 +120,14 @@ function getTokensPath(): string {
   return path.join(getConfigDir(), 'tokens.json')
 }
 
+/** Every way to connect Google, for commands that found no credentials. */
+export const GOOGLE_NOT_CONNECTED = [
+  'Google is not connected. Use one of these:',
+  '  Local:  gscdump auth login',
+  '  Hosted: gscdump auth login --mode cloud --api-key KEY (a gscdump.com API key)',
+  '  BYOK:   set GSC_ACCESS_TOKEN, or GSC_CLIENT_ID, GSC_CLIENT_SECRET and GSC_REFRESH_TOKEN',
+].join('\n')
+
 export interface OAuth2Credentials {
   clientId: string
   clientSecret: string
@@ -390,15 +398,9 @@ export async function authenticate(
   }
 
   if (!interactive) {
-    if (refreshFailed) {
-      logger.error(`Token refresh failed${refreshError ? `: ${refreshError.message}` : ''}`)
-      logger.info('Refresh token may be revoked or expired. Run `gscdump auth login` to re-authenticate.')
-    }
-    else {
-      logger.error('Not authenticated')
-      logger.info('Run `gscdump auth login` (or `gscdump init` for full setup).')
-    }
-    process.exit(1)
+    if (refreshFailed)
+      throw new Error(`Token refresh failed${refreshError ? `: ${refreshError.message}` : ''}. The refresh token may be revoked or expired. Run \`gscdump auth login\` to sign in again.`)
+    throw new Error(GOOGLE_NOT_CONNECTED)
   }
 
   const state = randomBytes(32).toString('base64url')
@@ -453,7 +455,7 @@ export async function getAuth(opts: GetAuthOptions = {}): Promise<OAuth2Client> 
   let tokens = force ? null : await loadTokens()
   if (tokens?.provider !== 'gscdump' || !tokens.refresh_token) {
     if (!interactive)
-      throw new Error('Run `gscdump auth login` to connect Google.')
+      throw new Error(GOOGLE_NOT_CONNECTED)
     tokens = await loginWithPlatform({
       force,
       request: fetch,
@@ -637,18 +639,6 @@ export async function formatAuthProvenance(): Promise<string> {
       lines.push(`  \x1B[33m!\x1B[0m ${w}`)
   }
   return lines.join('\n')
-}
-
-/**
- * Heuristic: does this error look like an auth/credentials problem? Used by
- * the global error handler to decide whether to append the provenance dump.
- */
-export function isAuthError(err: unknown): boolean {
-  const msg = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase()
-  if (!msg)
-    return false
-  return /\b(?:401|403|unauthorized|forbidden|invalid_grant|invalid_token|insufficient.*scope|invalid_client|token has been expired|token has been revoked)\b/.test(msg)
-    || msg.includes('oauth2.googleapis.com/token')
 }
 
 export type { GscdumpConfig }

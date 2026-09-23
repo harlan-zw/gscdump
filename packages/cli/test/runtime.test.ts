@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { getConfigDir, setConfigDir } from '../src/config'
 import { resolveCliEnvironment } from '../src/environment'
 import { createCliRuntime, runWithCliRuntime } from '../src/runtime'
-import { isColorEnabled, noSubcommandSelected, setNoColor, setQuiet } from '../src/utils'
+import { isColorEnabled, setNoColor, setQuiet } from '../src/utils'
 
 describe('cli runtime', () => {
   it('isolates config, environment, output, and argv state per invocation', () => {
@@ -20,7 +20,6 @@ describe('cli runtime', () => {
     runWithCliRuntime(first, () => {
       expect(getConfigDir()).toBe('/tmp/gscdump-first')
       expect(resolveCliEnvironment().profile).toBe('first')
-      expect(noSubcommandSelected('profile', ['list'])).toBe(false)
       setConfigDir('/tmp/gscdump-first-updated')
       setQuiet(true)
       setNoColor(true)
@@ -29,7 +28,6 @@ describe('cli runtime', () => {
     runWithCliRuntime(second, () => {
       expect(getConfigDir()).toBe('/tmp/gscdump-second')
       expect(resolveCliEnvironment().profile).toBe('second')
-      expect(noSubcommandSelected('profile', ['list'])).toBe(true)
       expect(second.logger).not.toBe(first.logger)
       expect(second.quiet).toBe(false)
       expect(isColorEnabled()).toBe(true)

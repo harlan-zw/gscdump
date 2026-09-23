@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { runCli } from '../../src/cli'
 import { indexingCommand } from '../../src/commands/indexing'
 import { setConfigDir } from '../../src/config'
 
@@ -54,10 +55,6 @@ vi.mock('../../src/auth', () => ({
   resolveAuth: vi.fn().mockResolvedValue('mock-token'),
   getAuth: vi.fn().mockResolvedValue({ clientId: 'x', clientSecret: 'y' }),
   resolveBYOK: vi.fn(() => null),
-}))
-
-vi.mock('../../src/error-handler', () => ({
-  gscErrorHandler: vi.fn((e: unknown) => { throw e }),
 }))
 
 vi.mock('../../src/utils', async (importOriginal) => {
@@ -124,14 +121,25 @@ describe('indexing command', () => {
     expect(json.latestUpdate.notifyTime).toBe('u')
   })
 
-  it('batch invokes publish for each URL', async () => {
+  it('batch submits every positional URL, not only the first', async () => {
     publishMock.mockResolvedValue({ urlNotificationMetadata: { latestUpdate: { notifyTime: 't' } } })
-    const batch = indexingCommand.subCommands!.batch as any
-    await batch.run({
-      args: { 'urls': ['https://a.com', 'https://b.com'], 'delay-ms': '0', 'type': 'URL_UPDATED', 'json': true },
-      rawArgs: [],
-      cmd: batch,
+    const code = await runCli({
+      rawArgs: ['--config-dir', configDir, 'indexing', 'batch', 'https://a.com/', 'https://b.com/', 'https://c.com/', '--delay-ms', '0', '--json'],
+      loadEnv: false,
+      environment: {},
     })
-    expect(publishMock).toHaveBeenCalledTimes(2)
+    expect(code).toBe(0)
+    expect(publishMock.mock.calls.map(call => call[0])).toEqual(['https://a.com/', 'https://b.com/', 'https://c.com/'])
+  })
+
+  it('batch-status reads every positional URL', async () => {
+    getMetadataMock.mockResolvedValue({ latestUpdate: { notifyTime: 'u' } })
+    const code = await runCli({
+      rawArgs: ['--config-dir', configDir, 'indexing', 'batch-status', 'https://a.com/', 'https://b.com/', '--delay-ms', '0', '--json'],
+      loadEnv: false,
+      environment: {},
+    })
+    expect(code).toBe(0)
+    expect(getMetadataMock.mock.calls.map(call => call[0])).toEqual(['https://a.com/', 'https://b.com/'])
   })
 })

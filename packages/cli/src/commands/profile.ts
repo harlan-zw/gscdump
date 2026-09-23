@@ -7,7 +7,7 @@ import { profileCommandMeta } from '../command-meta'
 import { getConfigDir, setConfigDir } from '../config'
 import { resolveCliEnvironment } from '../environment'
 import { useCliRuntime } from '../runtime'
-import { applyOutputMode, displayPath, logger, noSubcommandSelected, OUTPUT_ARGS } from '../utils'
+import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
 import { ACTIVE_MARKER, getProfileDir, PROFILES_DIR, readActiveMarkerSync, ROOT_DIR } from './profile-selection'
 
 export function resolveActiveProfile(): string | null {
@@ -161,16 +161,16 @@ const createCmd = defineCommand({
   },
   args: {
     ...OUTPUT_ARGS,
-    'name': { type: 'positional', required: true, description: 'Profile name' },
-    'no-use': { type: 'boolean', default: false, description: 'Do not mark the new profile as active' },
+    name: { type: 'positional', required: true, description: 'Profile name' },
+    use: { type: 'boolean', default: true, description: 'Make the new profile active', negativeDescription: 'Create the profile without making it active' },
   },
   async run({ args }) {
     applyOutputMode(args)
     const name = String(args.name)
     const dir = await createProfile(name)
-    if (!args['no-use'])
+    if (args.use)
       await setActiveProfile(name)
-    logger.success(`Created profile: ${name}${args['no-use'] ? '' : ' (active)'}`)
+    logger.success(`Created profile: ${name}${args.use ? ' (active)' : ''}`)
     logger.info(displayPath(dir))
   },
 })
@@ -239,8 +239,6 @@ export const profileCommand = defineCommand({
   },
   // No subcommand: list profiles.
   async run({ args }) {
-    if (!noSubcommandSelected('profile', ['list', 'path', 'current', 'use', 'create', 'clear', 'delete']))
-      return
     await listCmd.run?.({ args, cmd: listCmd, rawArgs: [] } as any)
   },
 })

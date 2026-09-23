@@ -14,7 +14,6 @@ import { inferDataset, isDatasetResolvable } from 'gscdump/query/plan'
 import { queryCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createCommandContext, siteArg } from '../context'
-import { gscErrorHandler } from '../error-handler'
 import { FILTER_DIMS, filterDimensions, parseFilterArgs, toLiveFilter, toLocalFilter } from '../filters'
 import { allTables, tableDimensions } from '../local-store'
 import { asRecord, columnsFor } from '../render/analysis'
@@ -317,7 +316,7 @@ export const queryCommand = defineCommand({
         dataState,
         aggregationType,
         dimensionFilter,
-      }).catch(gscErrorHandler)
+      })
       await writeOutput({
         output: {
           siteUrl,

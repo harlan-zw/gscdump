@@ -7,7 +7,7 @@ import { defineCommand } from 'citty'
 import { resolveSiteInput } from 'gscdump'
 import { googleSearchConsole } from 'gscdump/client'
 import { ofetch } from 'ofetch'
-import { loadTokens, resolveAuth, resolveBYOK } from '../auth'
+import { getAuth, loadTokens, resolveAuth, resolveBYOK } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
 import { getCloudAccount, resolveAuthentication } from '../auth-state'
 import { doctorCommandMeta } from '../command-meta'
@@ -16,6 +16,7 @@ import { createCommandContext, formatSiteResolution } from '../context'
 import { parseEnvFile } from '../env-file'
 import { resolveCliEnvironment } from '../environment'
 import { createLocalStore } from '../local-store'
+import { currentAccessToken, fetchTokenInfo, redactTokens } from '../token-info'
 import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
 
 interface Check {
@@ -100,42 +101,24 @@ async function checkAuth(envKeys: Set<string>): Promise<{ checks: Check[], liveT
   if (clientId)
     checks.push({ name: 'auth.client_id', status: 'info', detail: clientId })
 
-  let liveToken: string | null = null
-  let refreshError: string | null = null
-  if (typeof byok === 'string') {
-    liveToken = byok
-  }
-  else if (byok && 'getAccessToken' in byok) {
-    liveToken = await byok.getAccessToken()
-      .then(r => r.token ?? null)
-      .catch((e: any) => {
-        // ofetch errors carry .data with Google's payload; fall back to message.
-        refreshError = e?.data?.error_description ?? e?.data?.error ?? e?.message ?? String(e)
-        return null
-      })
-  }
-  else if (tokens?.access_token) {
-    liveToken = tokens.access_token
-  }
-
-  if (!liveToken) {
-    const source = describeAuthSource(envKeys, byok)
-    const detail = refreshError
-      ? `${source} — refresh failed: ${refreshError} (token revoked / invalid — re-run \`gscdump auth login --force\` and update the source above)`
-      : `${source} — no usable access token`
-    checks.push({ name: 'auth', status: 'fail', detail })
+  // Refresh first: a saved access token expires an hour after login, and an
+  // expired one would fail tokeninfo even though the credentials work.
+  const source = byok ?? await getAuth({ interactive: false }).catch((error: unknown) => error instanceof Error ? error : new Error(String(error)))
+  const current = source instanceof Error
+    ? { kind: 'failed' as const, detail: redactTokens(source.message) }
+    : await currentAccessToken(source)
+  if (current.kind === 'failed') {
+    checks.push({ name: 'auth', status: 'fail', detail: `${describeAuthSource(envKeys, byok)}: refresh failed: ${current.detail}. Run \`gscdump auth login --force\` and update the source above.` })
     return { checks, liveToken: null }
   }
+  const liveToken = current.token
 
-  const info = await ofetch<{ scope?: string, email?: string, expires_in?: number }>(
-    'https://oauth2.googleapis.com/tokeninfo',
-    { query: { access_token: liveToken } },
-  ).catch((e: Error) => ({ error: e.message } as any))
-
-  if ('error' in info) {
-    checks.push({ name: 'auth', status: 'fail', detail: `tokeninfo failed: ${info.error}` })
+  const tokenInfo = await fetchTokenInfo(liveToken)
+  if (tokenInfo.kind === 'invalid') {
+    checks.push({ name: 'auth', status: 'fail', detail: `tokeninfo failed: ${tokenInfo.detail}` })
     return { checks, liveToken: null }
   }
+  const info = tokenInfo.info
 
   checks.push({
     name: 'auth',
@@ -152,10 +135,12 @@ async function checkAuth(envKeys: Set<string>): Promise<{ checks: Check[], liveT
   else
     checks.push({ name: 'auth.scopes', status: 'pass', detail: `${scopes.length} granted` })
 
-  if (tokens?.expiry_date) {
-    const expiresInMs = tokens.expiry_date - Date.now()
+  // The refresh above may have saved new tokens; read them again.
+  const savedAfterRefresh = byok ? null : await loadTokens()
+  if (savedAfterRefresh?.expiry_date) {
+    const expiresInMs = savedAfterRefresh.expiry_date - Date.now()
     if (expiresInMs < 0)
-      checks.push({ name: 'auth.expiry', status: 'warn', detail: `expired ${new Date(tokens.expiry_date).toISOString()} — will refresh on next call` })
+      checks.push({ name: 'auth.expiry', status: 'warn', detail: `expired ${new Date(savedAfterRefresh.expiry_date).toISOString()} — will refresh on next call` })
     else
       checks.push({ name: 'auth.expiry', status: 'pass', detail: `valid for ${Math.floor(expiresInMs / 60_000)}m` })
   }
@@ -269,7 +254,7 @@ async function checkGscSites(): Promise<Check[]> {
   const client = googleSearchConsole(auth as any)
   const sites = await client.sites().catch((e: Error) => e)
   if (sites instanceof Error)
-    return [{ name: 'gsc.sites', status: 'fail', detail: `sites() failed: ${sites.message}` }]
+    return [{ name: 'gsc.sites', status: 'fail', detail: `sites() failed: ${redactTokens(sites.message)}` }]
 
   return describeGscSites(sites, config.defaultSite)
 }
