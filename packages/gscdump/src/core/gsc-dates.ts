@@ -20,16 +20,39 @@ export const GSC_FRESHEST_LAG_DAYS = 1
 /** Approximate historical retention window for Search Analytics. */
 export const GSC_RETENTION_MONTHS = 16
 
-/** Today's date (YYYY-MM-DD) in PST. */
-export function getPstDate(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
+let pstFormatter: Intl.DateTimeFormat | undefined
+
+/** Today's date (YYYY-MM-DD) in PST, whatever the machine's time zone. */
+export function getPstDate(now: Date = new Date()): string {
+  pstFormatter ??= new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = pstFormatter.formatToParts(now)
+  const get = (type: string): string => parts.find(part => part.type === type)!.value
+  return `${get('year')}-${get('month')}-${get('day')}`
 }
 
 function getPstDateDaysAgo(daysAgo: number): string {
-  const now = new Date()
-  const pstNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-  pstNow.setDate(pstNow.getDate() - daysAgo)
-  return toIsoDate(pstNow)
+  return addDays(getPstDate(), -daysAgo)
+}
+
+/**
+ * Start of the next PST reporting day, in epoch milliseconds. Google resets
+ * its daily quotas then.
+ */
+export function getNextPstMidnight(now: Date = new Date()): number {
+  const tomorrow = addDays(getPstDate(now), 1)
+  // Los Angeles is UTC-7 or UTC-8. Try both offsets and keep the one that
+  // lands on the new PST day.
+  for (const offsetHours of [7, 8]) {
+    const at = Date.parse(`${tomorrow}T00:00:00Z`) + offsetHours * 3_600_000
+    if (getPstDate(new Date(at)) === tomorrow && getPstDate(new Date(at - 1)) !== tomorrow)
+      return at
+  }
+  return Date.parse(`${tomorrow}T08:00:00Z`)
 }
 
 /** YYYY-MM-DD for `now() - n` days, UTC. */
@@ -123,8 +146,8 @@ export function countDays(startDate: string, endDate: string): number {
 
 /** Oldest date GSC retains (~16 months ago). */
 export function getOldestGscDate(): string {
-  const date = new Date()
-  date.setMonth(date.getMonth() - GSC_RETENTION_MONTHS)
+  const date = new Date(`${getPstDate()}T00:00:00Z`)
+  date.setUTCMonth(date.getUTCMonth() - GSC_RETENTION_MONTHS)
   return toIsoDate(date)
 }
 

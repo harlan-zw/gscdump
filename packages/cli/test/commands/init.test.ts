@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   saveTokens: vi.fn(),
   loadTokens: vi.fn(() => Promise.resolve(null)),
   getAuthCredentials: vi.fn(),
+  saveAuthentication: vi.fn(),
   text: vi.fn(async () => '/custom/store'),
   readFile: vi.fn(() => Promise.reject(new Error('ENOENT'))),
   googleSearchConsole: vi.fn(() => ({
@@ -27,6 +28,10 @@ vi.mock('../../src/config', () => ({
   loadConfig: mocks.loadConfig,
   saveConfig: mocks.saveConfig,
   defaultDataDir: mocks.defaultDataDir,
+}))
+
+vi.mock('../../src/auth-state', () => ({
+  saveAuthentication: mocks.saveAuthentication,
 }))
 
 vi.mock('../../src/auth', () => ({
@@ -95,24 +100,25 @@ describe('init command', () => {
     expect(mocks.authenticate).not.toHaveBeenCalled()
   })
 
-  it('takes the BYOK fast path and asks where to keep the Store', async () => {
+  it('takes the BYOK fast path without a prompt', async () => {
     mocks.resolveBYOK.mockReturnValue('byok-access-token')
 
     await runCommand(initCommand, { rawArgs: ['--quiet'] })
 
-    expect(mocks.text).toHaveBeenCalledOnce()
-    expect(mocks.saveConfig).toHaveBeenCalledWith(expect.objectContaining({ dataDir: '/custom/store' }))
+    expect(mocks.text).not.toHaveBeenCalled()
+    expect(mocks.saveConfig).toHaveBeenCalledWith(expect.objectContaining({ dataDir: '/tmp/gscdump-test' }))
+    expect(mocks.saveAuthentication).toHaveBeenCalledWith({ _tag: 'Local' })
     expect(mocks.authenticate).not.toHaveBeenCalled()
     expect(mocks.getAuthCredentials).not.toHaveBeenCalled()
   })
 
-  it('skips the Store prompt with --no-store', async () => {
+  it('keeps the saved Store location with --no-store', async () => {
     mocks.resolveBYOK.mockReturnValue({ getAccessToken: vi.fn() })
 
     await runCommand(initCommand, { rawArgs: ['--no-store', '--quiet'] })
 
     expect(mocks.text).not.toHaveBeenCalled()
-    expect(mocks.saveConfig).toHaveBeenCalledWith(expect.objectContaining({ dataDir: undefined }))
+    expect(mocks.saveConfig.mock.calls[0]![0]).not.toHaveProperty('dataDir')
     expect(mocks.authenticate).not.toHaveBeenCalled()
   })
 })

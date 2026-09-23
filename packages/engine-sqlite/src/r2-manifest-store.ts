@@ -346,6 +346,15 @@ export function createD1ManifestStore(db: AnalyticsManifestDb): ManifestStore {
     }).run()
   }
 
+  async function setSyncStates(
+    scopes: readonly SyncStateScope[],
+    state: SyncStateKind,
+    detail?: SyncStateDetail,
+  ): Promise<void> {
+    for (const scope of scopes)
+      await setSyncState(scope, state, detail)
+  }
+
   async function withLock<T>(scope: LockScope, fn: () => Promise<T>): Promise<T> {
     const key = lockScopeKey(scope)
     const holderId = crypto.randomUUID()
@@ -447,6 +456,7 @@ export function createD1ManifestStore(db: AnalyticsManifestDb): ManifestStore {
     bumpWatermark,
     getSyncStates,
     setSyncState,
+    setSyncStates,
     withLock,
     purgeTenant,
   }

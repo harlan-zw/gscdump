@@ -19,7 +19,7 @@ Example: `gscdump query --site=SITE --start=DATE --end=DATE -d page -f json`.
 1. Before reading traffic, run `gscdump auth status --json`. Do this even when the user says authentication works.
 2. Keep the requested Site, dates, dimensions, and task scope. A request for pages does not need query dimensions.
 3. Before local queries, check coverage with `gscdump store stats --site SITE --json`.
-   Use `gscdump sync --site SITE --status --json` when you need sync-state details.
+   Use `gscdump sync --site SITE --status --json` when you need coverage, gaps, or sync-state details.
 4. Read the table dimensions and watermarks. Sync only missing tables and the requested dates, once per task.
 5. Use `sync --json`. Read its completion result before deciding what to do next. Never repeat a successful sync.
 
@@ -187,7 +187,7 @@ Do not rewrite rows, estimate metrics, or add manually calculated totals.
 | `gscdump profile` | Separate credential and config directories |
 | `gscdump auth` | `status`, `login`, `logout`, `refresh` |
 | `gscdump doctor` | Health checks for auth, scopes, Store, and reachability |
-| `gscdump init` | Interactive first-time setup |
+| `gscdump init` | First-time setup. Without a terminal it never prompts: it uses BYOK env credentials or fails with the auth command |
 | `gscdump mcp` | Start Google MCP tools with the selected authentication |
 | `gscdump skill install` | Copy this skill into an agent skill directory |
 | `gscdump papercut` | Report a CLI problem to gscdump.com |
@@ -200,25 +200,39 @@ The MCP server does not expose Bing tools. Use `gscdump bing` commands through t
 
 ```sh
 gscdump store stats --site sc-domain:example.com --json
-gscdump sync --site sc-domain:example.com --days 90 \
-  --tables pages,queries,page_queries,countries --json
 gscdump sync --site sc-domain:example.com --status --json
+gscdump sync --site sc-domain:example.com --json
 ```
 
+- A plain sync catches up. Each table runs from its oldest synced date to the
+  latest date Google has finalized (Pacific time, about 3 days late). A table
+  with no history starts 28 days back. Newest dates come first.
+- `--days N`, `--start`, and `--end` pick a range instead. `--full` fetches the
+  16 months Google keeps, plus 14 days Google often still serves.
 - Sync covers every table and search type by default. Pass `--tables` and
   `--types` to sync less. Sync skips table and type pairs Google cannot answer.
-- `--full` backfills the 486 days Google keeps.
 - Sync paces Google calls: 8 in flight and 600 per minute across all tables.
-  `--requests-per-minute N` changes the rate. A quota 403 retries with backoff.
+  `--requests-per-minute N` changes the rate.
+  Sync does not retry a quota 403. The quota ledger stops the run instead.
+- Every call goes through a quota ledger in the Store directory. If Google
+  refuses a call for quota, or the run reaches `--max-calls N`, sync stops,
+  keeps the rest `pending`, and exits 0. `status` in `sync --json` is then
+  `partial` and `stopped` says why. Run the same command later to continue.
+  Exit 1 means real failures: read `failed` dates in `sync --status --json`.
 - Sync also saves the sitemap list, sitemap URLs, and URL Inspection results.
-  It inspects up to 50 due URLs per run. `--inspect-limit N` changes that.
-  `--no-sitemaps` and `--no-inspections` skip those steps. Read the
-  `sitemaps` and `inspections` fields of `sync --json`.
-- Sync skips completed dates. `--force` refreshes them. A plain `sync` with no
-  range also retries every earlier failed date. `--retry-failed` reruns only
-  failed dates in the range.
-- `--dry-run` prints the planned work without calling Google.
-- Use the user's date range. The 90-day example does not authorize a wider sync.
+  It inspects up to 50 due URLs per run: never-inspected sitemap URLs first,
+  then pages with impressions, then the oldest results. `--inspect-limit N`
+  changes that; Google allows 2,000 per Site per day. `--no-sitemaps` and
+  `--no-inspections` skip those steps.
+- `coverage` in `sync --json` and `sync --status --json` says how much the
+  Store holds. Partial coverage is normal progress. Never report data as
+  complete unless its `kind` is `complete`.
+- A day Google still updates stays `pending`; the next sync fetches it again.
+- Sync skips completed dates. `--force` refreshes them. `--retry-failed`
+  reruns only failed dates. A plain sync also retries failed dates.
+- `--dry-run` prints the planned dates and the fewest calls without calling Google.
+- `--all-sites` syncs every verified Site, one after another.
+- Use the user's date range. If the user names a range, pass `--start` and `--end`, not `--full`.
 - Empty Store metadata is expected before the first sync. It does not prove zero traffic.
 
 ## Query rows

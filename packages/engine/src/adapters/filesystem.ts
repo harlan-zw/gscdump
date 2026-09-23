@@ -408,6 +408,22 @@ export function createFilesystemManifestStore(opts: FilesystemManifestStoreOptio
         await save(data)
       })
     },
+    async setSyncStates(scopes, state, detail) {
+      if (scopes.length === 0)
+        return
+      return enqueue(async () => {
+        const data = await load()
+        const byKey = new Map(
+          (data.syncStates ?? []).map(s => [syncStateKey(s), s] as const),
+        )
+        for (const scope of scopes) {
+          const key = syncStateKey(scope)
+          byKey.set(key, mergeSyncState(byKey.get(key), scope, state, detail))
+        }
+        data.syncStates = Array.from(byKey.values())
+        await save(data)
+      })
+    },
     async withLock(scope, fn) {
       await ensureDirectory(locksDir)
       const path = lockFileFor(locksDir, scope)

@@ -343,6 +343,27 @@ describe('runGscSyncSlice', () => {
     expect(contextRows[0]!.rows).toHaveLength(1)
   })
 
+  it('surfaces the context slices\' metadata so hosts can track incomplete days', async () => {
+    const captured: SearchAnalyticsQuery[] = []
+    const client = makeClient([
+      { rows: [{ keys: ['AMP_BLUE_LINK'], clicks: 3, impressions: 30, ctr: 0.1, position: 2 }], metadata: { first_incomplete_hour: 'DISCOVERY' } } as unknown as SearchAnalyticsResponse,
+      { rows: [] },
+      { rows: [{ keys: ['https://example.com/a', '2026-05-10'], clicks: 1, impressions: 10, ctr: 0.1, position: 2 }], metadata: { first_incomplete_hour: '2026-05-10T15:00:00-07:00' } } as unknown as SearchAnalyticsResponse,
+    ], captured)
+
+    const result = await runGscSearchAppearanceContextSlice({
+      client,
+      siteUrl: 'sc-domain:example.com',
+      startDate: '2026-05-10',
+      endDate: '2026-05-10',
+      table: 'search_appearance_pages',
+      onContextBatch: async () => {},
+    })
+
+    expect(result.metadata?.first_incomplete_hour).toBe('2026-05-10T15:00:00-07:00')
+    expect(result.hasMore).toBe(false)
+  })
+
   it('returns a resumable continuation for partial search appearance discovery', async () => {
     const captured: SearchAnalyticsQuery[] = []
     const client = makeClient([

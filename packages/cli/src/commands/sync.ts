@@ -1,10 +1,15 @@
 import type { googleSearchConsole } from 'gscdump/client'
+import type { GscSearchAnalyticsMetadata } from 'gscdump/contracts'
 import type { SearchType } from 'gscdump/query'
+import type { FetchOptions } from 'ofetch'
 import type { ResolvedGscdumpConfig } from '../config'
+import type { StoreCoverage } from '../coverage'
 import type { InspectionSyncResult, SitemapSyncResult } from '../local-entities'
 import type { GscApiRow, LocalStore, Row, TableName, WriteCtx } from '../local-store'
+import type { QuotaLedger } from '../quota-ledger'
 import type { RequestPacer } from '../request-pacer'
-import type { SyncJob } from '../sync-plan'
+import type { SyncJob, SyncMode, SyncWindow } from '../sync-plan'
+import type { SyncRun } from '../sync-run'
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
 import { runGscSearchAppearanceContextSlice, runGscSyncSlice } from '@gscdump/engine-gsc-api'
@@ -12,16 +17,19 @@ import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { createRowAccumulator } from '@gscdump/engine/ingest'
 import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
-import { daysAgoUtc as daysAgo, getDateRange } from 'gscdump/dates'
+import { getLatestGscDate, getOldestGscDate, getPstDate, groupIntoRanges } from 'gscdump/dates'
 import { SearchTypes } from 'gscdump/query'
 import { syncCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
+import { analyticsCoverage, readStoreCoverage, renderCoverage } from '../coverage'
 import { INSPECTION_QPD_PER_PROPERTY } from '../inspection-record'
-import { loadSitemapGenerationUrls, resolvePagePaths, syncInspections, syncSitemaps } from '../local-entities'
+import { inspectionCandidates, syncInspections, syncSitemaps } from '../local-entities'
 import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS } from '../local-store'
+import { googleErrorMessage, openQuotaLedger, parseQuotaRefusal, QUOTA_CAPS } from '../quota-ledger'
 import { createRequestPacer } from '../request-pacer'
 import { loadSitemapUrls } from '../sitemap'
-import { datesForJob, FULL_HISTORY_DAYS, planHealDates, planSyncJobs } from '../sync-plan'
+import { minimumCallsPerDate, planJobDates, planSyncJobs, resolveWindow, RETENTION_MARGIN_DAYS } from '../sync-plan'
+import { isProcessAlive, readSyncRun, startSyncRun, syncRunStatus } from '../sync-run'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, parseNameList, progressBar, runWithConcurrency } from '../utils'
 
 const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
@@ -37,7 +45,6 @@ type SliceTable = typeof SLICE_TABLES[number]
 function isSliceTable(table: TableName): table is SliceTable {
   return (SLICE_TABLES as readonly string[]).includes(table)
 }
-const DEFAULT_PENDING_DAYS = 3
 const DEFAULT_CONCURRENCY = 8
 // Google allows 1,200 Search Analytics queries per minute per site and per
 // user, plus a load quota on expensive queries. Every table and search type
@@ -49,8 +56,6 @@ const DEFAULT_REQUESTS_PER_MINUTE = 600
 // rate a site with 1,500 URLs gets each URL inspected about once a month.
 const DEFAULT_INSPECT_LIMIT = 50
 const INSPECT_CONCURRENCY = 4
-// Traffic-ranked pages to consider for inspection, before sitemap URLs.
-const INSPECT_PAGE_CANDIDATES = 5000
 // Minimum days synced before we trust a zero-row result enough to persist
 // an empty-type marker. Shorter windows fire false positives on intermittent
 // outages or low-traffic sites that happen to have zero clicks one day.
@@ -91,59 +96,116 @@ function createProgressTracker(total: number, quiet: boolean): ProgressTracker {
   }
 }
 
-async function syncTable(
-  store: LocalStore,
-  siteUrl: string,
-  table: TableName,
-  searchType: SearchType,
-  dates: string[],
-  client: ReturnType<typeof googleSearchConsole>,
-  concurrency: number,
-  force: boolean,
-  progress: ProgressTracker,
-): Promise<{ rows: number, skipped: number, failed: number }> {
+/**
+ * Why a run stopped early. Both leave the unfetched dates `pending`, so the
+ * next run continues. Neither is a failure.
+ */
+export type SyncStop
+  = | { kind: 'quota', reason: string, resetsAt: number }
+    | { kind: 'budget', maxCalls: number }
+
+/** Stop state for one Site. `budget` stops every Site; `quota` stops only this one. */
+interface SiteControl {
+  stop?: SyncStop
+}
+
+const SYNC_STOP = Symbol('syncStop')
+
+function stopError(stop: SyncStop): Error {
+  return Object.assign(new Error(describeStop(stop)), { [SYNC_STOP]: stop })
+}
+
+function stopOf(error: unknown): SyncStop | undefined {
+  return (error as { [SYNC_STOP]?: SyncStop } | null)?.[SYNC_STOP]
+}
+
+function describeStop(stop: SyncStop): string {
+  if (stop.kind === 'budget')
+    return `Reached --max-calls ${stop.maxCalls}.`
+  return `Google quota: ${stop.reason}`
+}
+
+interface JobTotals {
+  rows: number
+  /** Dates already done that this run left alone. */
+  skipped: number
+  failed: number
+  /** Dates fetched but not final yet, or not reached before a stop. */
+  pending: number
+  /** Dates fetched in this run, final or not. */
+  fetched: number
+}
+
+async function syncTable(opts: {
+  store: LocalStore
+  siteUrl: string
+  job: SyncJob
+  dates: string[]
+  skipped: number
+  client: ReturnType<typeof googleSearchConsole>
+  concurrency: number
+  latest: string
+  control: SiteControl
+  progress: ProgressTracker
+  run: Pick<SyncRun, 'tick'>
+}): Promise<JobTotals> {
+  const { store, siteUrl, job, control, progress } = opts
+  const { table, type: searchType } = job
   const dims = TABLE_DIMS[table]
   const siteId = store.siteIdFor(siteUrl)
-  let totalRows = 0
-  let skipped = 0
-  let failed = 0
+  const totals: JobTotals = { rows: 0, skipped: opts.skipped, failed: 0, pending: 0, fetched: 0 }
 
-  const priorStates = await store.engine.getSyncStates({
-    userId: store.userId,
-    siteId,
-    table,
-    searchType,
-  })
-  const stateByDate = new Map(priorStates.map(s => [s.date, s]))
-  const label = searchType === 'web' ? table : `${table}/${searchType}`
-
-  await runWithConcurrency(dates, concurrency, async (date) => {
-    const prior = stateByDate.get(date)
-    if (!force && prior?.state === 'done') {
-      skipped++
-      progress.tick(`${label} ${date} (skip)`)
+  await runWithConcurrency(opts.dates, opts.concurrency, async (date) => {
+    if (control.stop) {
+      totals.pending++
+      progress.tick(`${job.label} ${date} (later)`)
       return
     }
 
     const scope = { userId: store.userId, siteId, table, date, searchType }
     await store.engine.setSyncState(scope, 'inflight')
 
-    const result = await runOneDate(store, client, siteUrl, table, searchType, dims, date)
-      .catch((err: Error) => ({ kind: 'error' as const, error: err }))
+    const result = await runOneDate(store, opts.client, siteUrl, table, searchType, dims, date, opts.latest)
+      .catch((err: unknown) => ({ kind: 'error' as const, error: err }))
 
     if (result.kind === 'error') {
-      await store.engine.setSyncState(scope, 'failed', { error: result.error.message })
-      failed++
-      progress.tick(`${label} ${date} (fail)`)
+      const stop = stopOf(result.error)
+      if (stop) {
+        control.stop ??= stop
+        await store.engine.setSyncState(scope, 'pending', { error: describeStop(stop) })
+        totals.pending++
+        progress.tick(`${job.label} ${date} (later)`)
+        return
+      }
+      await store.engine.setSyncState(scope, 'failed', { error: googleErrorMessage(result.error) })
+      totals.failed++
+      progress.tick(`${job.label} ${date} (fail)`)
+      opts.run.tick()
       return
     }
 
-    await store.engine.setSyncState(scope, 'done')
-    totalRows += result.rows
-    progress.tick(`${label} ${date}`)
+    // A day Google has not finalized stays `pending`, so the next sync fetches it again.
+    await store.engine.setSyncState(scope, result.final ? 'done' : 'pending')
+    totals.rows += result.rows
+    totals.fetched++
+    if (!result.final)
+      totals.pending++
+    progress.tick(`${job.label} ${date}`)
+    opts.run.tick()
   })
 
-  return { rows: totalRows, skipped, failed }
+  return totals
+}
+
+/** True when Google has finalized `date`: it is not newer than the latest final date, and no metadata says otherwise. */
+function isFinalDate(date: string, latest: string, metadata: GscSearchAnalyticsMetadata | undefined): boolean {
+  if (date > latest)
+    return false
+  const incompleteDate = metadata?.first_incomplete_date
+  if (incompleteDate && incompleteDate <= date)
+    return false
+  const incompleteHour = metadata?.first_incomplete_hour
+  return !(incompleteHour && incompleteHour.slice(0, 10) <= date)
 }
 
 async function fetchDateRows(
@@ -153,7 +215,6 @@ async function fetchDateRows(
   dims: string[],
   date: string,
 ): Promise<GscApiRow[]> {
-  const rowLimit = 25000
   const rows: GscApiRow[] = []
   let startRow = 0
 
@@ -165,7 +226,7 @@ async function fetchDateRows(
       // GSC accepts `searchType` (legacy) and the newer `type`. Both work;
       // sending `searchType` is documented and broadly compatible.
       searchType,
-      rowLimit,
+      rowLimit: GSC_ROW_LIMIT,
       startRow,
     } as any)
     const batch = response.rows || []
@@ -178,12 +239,17 @@ async function fetchDateRows(
         position: apiRow.position ?? 0,
       })
     }
-    if (batch.length === 0)
+    // Google returns at most `rowLimit` rows a page. A shorter page is the
+    // last one, so the empty page Google's guide asks for costs a call and
+    // adds nothing.
+    if (batch.length < GSC_ROW_LIMIT)
       break
     startRow += batch.length
   }
   return rows
 }
+
+interface DateResult { kind: 'ok', rows: number, final: boolean }
 
 async function runOneDate(
   store: LocalStore,
@@ -193,9 +259,10 @@ async function runOneDate(
   searchType: SearchType,
   dims: string[],
   date: string,
-): Promise<{ kind: 'ok', rows: number }> {
+  latest: string,
+): Promise<DateResult> {
   if (isSliceTable(table))
-    return runSliceDate(store, client, siteUrl, table, searchType, date)
+    return runSliceDate(store, client, siteUrl, table, searchType, date, latest)
   const apiRows = await fetchDateRows(client, siteUrl, searchType, dims, date)
   let rows: Row[] = []
   if (table === 'dates') {
@@ -212,7 +279,8 @@ async function runOneDate(
     accumulator.push(table, apiRows)
     rows = accumulator.drain().get(table)?.get(date) ?? []
   }
-  return writeDayRows(store, siteUrl, table, searchType, date, rows)
+  // These queries use Google's default `final` data state.
+  return writeDayRows(store, siteUrl, table, searchType, date, rows, isFinalDate(date, latest, undefined))
 }
 
 // Search appearance and hourly tables need Google's own query shapes, so
@@ -224,7 +292,8 @@ async function runSliceDate(
   table: SliceTable,
   searchType: SearchType,
   date: string,
-): Promise<{ kind: 'ok', rows: number }> {
+  latest: string,
+): Promise<DateResult> {
   const base = { client, siteUrl, startDate: date, endDate: date, searchType, rowLimit: GSC_ROW_LIMIT, cpuBudgetMs: Infinity }
   const drainDay = (accumulator: ReturnType<typeof createRowAccumulator>): Row[] => {
     if (accumulator.overflowed)
@@ -232,6 +301,7 @@ async function runSliceDate(
     return accumulator.drain().get(table)?.get(date) ?? []
   }
   let rows: Row[]
+  let metadata: GscSearchAnalyticsMetadata | undefined
   if (table === 'search_appearance' || table === 'hourly_pages') {
     // GSC groups `searchAppearance` only on its own, so the day comes from the query range.
     const accumulator = createRowAccumulator({ maxRows: MAX_SLICE_ROWS, date })
@@ -240,6 +310,8 @@ async function runSliceDate(
     } })
     if (result.hasMore)
       throw new Error(`${table} ${date}: Google stopped before the last page`)
+    // These slices use the `all` and `hourly_all` data states, which include fresh data.
+    metadata = result.metadata
     rows = drainDay(accumulator)
   }
   else {
@@ -259,9 +331,12 @@ async function runSliceDate(
     })
     if (result.hasMore)
       throw new Error(`${table} ${date}: Google stopped before the last page`)
+    // The context slices read the fresh `all` data state like the discovery
+    // query, so their metadata decides whether the day is final too.
+    metadata = result.metadata
     rows = [...byAppearance.values()].flatMap(drainDay)
   }
-  return writeDayRows(store, siteUrl, table, searchType, date, rows)
+  return writeDayRows(store, siteUrl, table, searchType, date, rows, isFinalDate(date, latest, metadata))
 }
 
 async function writeDayRows(
@@ -271,7 +346,8 @@ async function writeDayRows(
   searchType: SearchType,
   date: string,
   rows: Row[],
-): Promise<{ kind: 'ok', rows: number }> {
+  final: boolean,
+): Promise<DateResult> {
   const writeCtx: WriteCtx = {
     userId: store.userId,
     siteId: store.siteIdFor(siteUrl),
@@ -280,7 +356,20 @@ async function writeDayRows(
     searchType,
   }
   await store.engine.writeDay(writeCtx, rows)
-  return { kind: 'ok', rows: rows.length }
+  return { kind: 'ok', rows: rows.length, final }
+}
+
+/**
+ * The quota ledger is the one budget authority for sync. The core client
+ * retries a quota 403 after 5s, 15s and 45s, and each retry is a Google call
+ * the ledger never reserved. Sync drops that retry: the gate records the
+ * refusal and stops the run, and the next run continues.
+ */
+const LEDGER_FETCH_OPTIONS: FetchOptions = {
+  onResponseError(ctx) {
+    if (ctx.options.retryStatusCodes)
+      ctx.options.retryStatusCodes = ctx.options.retryStatusCodes.filter(status => status !== 403)
+  },
 }
 
 export const syncCommand = defineCommand({
@@ -291,17 +380,22 @@ export const syncCommand = defineCommand({
       alias: 's',
       description: 'Site URL',
     },
+    'all-sites': {
+      type: 'boolean',
+      default: false,
+      description: 'Sync every verified Site, one after another (they share one Google quota)',
+    },
     'start': {
       type: 'string',
       description: 'Start date (YYYY-MM-DD) for backfill',
     },
     'end': {
       type: 'string',
-      description: 'End date (YYYY-MM-DD); defaults to 3 days ago',
+      description: 'End date (YYYY-MM-DD); defaults to the latest date Google has finalized',
     },
     'days': {
       type: 'string',
-      description: `Number of days back to sync (default: ${DEFAULT_PENDING_DAYS})`,
+      description: 'Sync the last N final days instead of catching up',
     },
     'tables': {
       type: 'string',
@@ -337,11 +431,15 @@ export const syncCommand = defineCommand({
     },
     'inspect-limit': {
       type: 'string',
-      description: `Most URLs to inspect in this run (default: ${DEFAULT_INSPECT_LIMIT}; Google allows ${INSPECTION_QPD_PER_PROPERTY} per property per day)`,
+      description: `Most URLs to inspect in this run (default: ${DEFAULT_INSPECT_LIMIT}; Google allows ${INSPECTION_QPD_PER_PROPERTY} per Site per day)`,
     },
     'full': {
       type: 'boolean',
-      description: `Backfill up to ${FULL_HISTORY_DAYS} days, all the Search Console data Google keeps`,
+      description: `Backfill all the Search Console data Google keeps (16 months, plus ${RETENTION_MARGIN_DAYS} days Google often still serves)`,
+    },
+    'max-calls': {
+      type: 'string',
+      description: 'Most Search Analytics calls this run makes. The next run continues where it stopped.',
     },
     ...OUTPUT_ARGS,
     'force': {
@@ -352,7 +450,7 @@ export const syncCommand = defineCommand({
     'status': {
       type: 'boolean',
       default: false,
-      description: 'Print watermarks + sync-state summary instead of syncing',
+      description: 'Print coverage, gaps, and the running sync instead of syncing',
     },
     'concurrency': {
       type: 'string',
@@ -371,7 +469,7 @@ export const syncCommand = defineCommand({
     'retry-failed': {
       type: 'boolean',
       default: false,
-      description: 'Only re-run dates currently in `failed` state (cheaper than --force)',
+      description: 'Only re-run dates currently in `failed` state (a plain sync also retries them)',
     },
     'dry-run': {
       type: 'boolean',
@@ -383,6 +481,7 @@ export const syncCommand = defineCommand({
     const { json, quiet } = applyOutputMode(args)
     const days = parseIntegerOption(args.days, '--days')
     const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? DEFAULT_CONCURRENCY
+    const maxCalls = parseIntegerOption(args['max-calls'], '--max-calls')
     const inspectLimit = Math.min(
       parseIntegerOption(args['inspect-limit'], '--inspect-limit', 0) ?? DEFAULT_INSPECT_LIMIT,
       INSPECTION_QPD_PER_PROPERTY,
@@ -391,345 +490,422 @@ export const syncCommand = defineCommand({
     const requestedTypes = args.types ? parseNameList(args.types, ALL_SEARCH_TYPES, '--types') : DEFAULT_TYPES
     if (args.status) {
       const ctx = await createCommandContext()
-      await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, args.site ? String(args.site) : undefined, json)
+      await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, args.site ? String(args.site) : undefined, json, inspectLimit)
       return
     }
 
-    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
+    const ctx = await createCommandContext({ needsAuth: true, needsStore: true, fetchOptions: LEDGER_FETCH_OPTIONS })
+    const store = ctx.store!
+    const siteUrls = args['all-sites']
+      ? (await ctx.loadSites()).map(site => site.siteUrl)
+      : [await ctx.resolveSite(args.site ? String(args.site) : undefined)]
+
+    const latest = getLatestGscDate()
+    const window = resolveWindow({
+      start: args.start ? String(args.start) : undefined,
+      end: args.end ? String(args.end) : undefined,
+      days,
+      full: Boolean(args.full),
+      latest,
+      floor: getOldestGscDate(),
+    })
+    // --force-types overrides the mode per type in buildSitePlan: only types
+    // with an empty marker re-probe in force mode, everything else resumes.
+    const mode: SyncMode = args['retry-failed'] ? 'retry-failed' : args.force ? 'force' : 'resume'
+
+    if (!args['dry-run']) {
+      const existing = syncRunStatus(await readSyncRun(store.dataDir), { now: Date.now(), isAlive: isProcessAlive })
+      if (existing.kind === 'running') {
+        logger.error(`Another sync is running (pid ${existing.record.pid}, ${existing.record.done}/${existing.record.planned} days). Wait for it to finish, or run \`gscdump sync --status\`.`)
+        process.exit(1)
+      }
+    }
+
+    const ledger = await openQuotaLedger({ dataDir: store.dataDir })
     const pacer = createRequestPacer({
       maxInFlight: DEFAULT_MAX_IN_FLIGHT,
-      perMinute: parseIntegerOption(args['requests-per-minute'], '--requests-per-minute') ?? DEFAULT_REQUESTS_PER_MINUTE,
+      perMinute: Math.min(
+        parseIntegerOption(args['requests-per-minute'], '--requests-per-minute') ?? DEFAULT_REQUESTS_PER_MINUTE,
+        QUOTA_CAPS.searchAnalytics.perMinute,
+      ),
     })
-    const client = pacedClient(ctx.client!, pacer)
-    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
+    const calls = { made: 0 }
+    const client = gatedClient(ctx.client!, { pacer, ledger, calls, maxCalls })
 
-    const store = ctx.store!
-    const siteId = store.siteIdFor(siteUrl)
-    const scope = { userId: store.userId, siteId }
-    const emptyTypesStore = createEmptyTypesStore({ dataSource: store.dataSource })
-    let emptyTypesDoc = await emptyTypesStore.load(scope)
-    // Older sync runs could mark populated types empty after skipping done dates.
-    // Existing rows disprove those markers, including rows in unselected tables.
-    if (emptyTypesDoc.emptyTypes.length > 0) {
-      const entries = await store.engine.listLive(scope)
-      const populated = new Set(entries.filter(entry => entry.rowCount > 0).map(entry => entry.searchType ?? 'web'))
-      const toClear = requestedTypes.filter(type => emptyTypesDoc.emptyTypes.includes(type) && populated.has(type))
-      if (toClear.length > 0) {
-        if (!args['dry-run'])
-          emptyTypesDoc = await emptyTypesStore.clear(scope, toClear)
-        else
-          emptyTypesDoc.emptyTypes = emptyTypesDoc.emptyTypes.filter(type => !toClear.includes(type as SearchType))
-      }
-    }
-    const forceTypes = Boolean(args['force-types'])
-    const skippedTypes: SearchType[] = []
-    const types: SearchType[] = []
-    for (const t of requestedTypes) {
-      if (!forceTypes && emptyTypesDoc.emptyTypes.includes(t) && !EMPTY_TYPE_PROTECTED.includes(t)) {
-        skippedTypes.push(t)
-        continue
-      }
-      types.push(t)
-    }
-    if (skippedTypes.length > 0 && !quiet) {
-      logger.info(
-        `Skipping ${skippedTypes.join(', ')} (marked empty for this site; pass --force-types to re-probe).`,
-      )
-    }
-
-    const endDate = args.end ? String(args.end) : daysAgo(DEFAULT_PENDING_DAYS)
-    let startDate: string
-    if (args.start) {
-      startDate = String(args.start)
-    }
-    else if (args.full) {
-      startDate = daysAgo(FULL_HISTORY_DAYS)
-    }
-    else if (days !== undefined) {
-      startDate = daysAgo(days + DEFAULT_PENDING_DAYS - 1)
-    }
-    else {
-      startDate = daysAgo(DEFAULT_PENDING_DAYS + DEFAULT_PENDING_DAYS - 1)
-    }
-
-    let dates = getDateRange(startDate, endDate)
-    if (dates.length === 0) {
-      logger.error(`No dates to sync (start=${startDate}, end=${endDate})`)
-      process.exit(1)
-    }
-
-    const printCompletion = async (status: 'completed' | 'failed' | 'skipped', totals: Record<string, { rows: number, skipped: number, failed: number }>, reason?: string, rollupError?: string, entities?: EntitySyncReport): Promise<void> => {
-      if (!json)
-        return
-      console.log(JSON.stringify({
-        status,
-        ...(reason ? { reason } : {}),
-        siteUrl,
-        range: { start: startDate, end: endDate },
-        tables,
-        types,
-        skippedTypes,
-        totals,
-        watermarks: await store.engine.getWatermarks({ userId: store.userId, siteId }),
-        ...(rollupError ? { rollupError } : {}),
-        ...(entities ?? {}),
-      }, null, 2))
-    }
-    if (types.length === 0) {
-      if (!quiet)
-        logger.warn(`All requested types are marked empty. Pass --force-types to check them again.`)
-      await printCompletion('skipped', {}, 'empty-types')
-      return
-    }
-
-    const today = new Date().toISOString().slice(0, 10)
-    const { jobs, unsupported } = planSyncJobs(tables, types)
-    if (unsupported.length > 0 && !quiet && (args.tables || args.types)) {
-      logger.info(`Skipping ${unsupported.map(job => job.label).join(', ')}: Google has no such breakdown for that search type.`)
-    }
-
-    // --retry-failed shrinks the date list to exactly the dates currently in
-    // `failed` state for the requested (table, type) jobs. Force-mode is
-    // implied; the loop will re-run those dates and overwrite their state.
-    if (args['retry-failed']) {
-      const failedSet = new Set<string>()
-      const selectedTables = new Set<TableName>(tables)
-      const selectedTypes = new Set<SearchType>(types)
-      const states = await store.engine.getSyncStates({ userId: store.userId, siteId })
-      for (const s of states) {
-        if (selectedTables.has(s.table)
-          && selectedTypes.has(s.searchType ?? 'web')
-          && s.state === 'failed'
-          && s.date >= startDate
-          && s.date <= endDate) {
-          failedSet.add(s.date)
-        }
-      }
-      dates = dates.filter(d => failedSet.has(d))
-      if (dates.length === 0) {
-        if (!quiet)
-          logger.success('No failed dates in range. Nothing to retry.')
-        await printCompletion('skipped', {}, 'no-failed-dates')
-        return
-      }
-      // Force-mode is implied so the syncer overwrites the existing `failed`
-      // state instead of skipping it as already-attempted.
-      ;(args as Record<string, unknown>).force = true
-      if (!quiet)
-        logger.info(`--retry-failed: ${dates.length} date(s) to retry`)
-    }
-
-    // A plain sync also heals: it re-runs every earlier failed date that
-    // Google still keeps, for the selected jobs. An explicit range syncs only that range.
-    const explicitRange = Boolean(args.start || args.end || args.days || args.full || args['retry-failed'])
-    const healDates = explicitRange
-      ? new Map<string, string[]>()
-      : planHealDates({
-          jobs,
-          failed: await store.engine.getSyncStates({ userId: store.userId, siteId, state: 'failed' }),
-          rangeDates: dates,
-          today,
-        })
-    const healed = [...healDates.values()].reduce((sum, list) => sum + list.length, 0)
-    if (healed > 0 && !quiet)
-      logger.info(`Retrying ${healed} earlier failed day(s) as well`)
-    const jobDates = (job: SyncJob): string[] =>
-      datesForJob(job.table, [...(healDates.get(job.label) ?? []), ...dates].sort(), today)
-
+    const common = { store, client, ledger, tables, requestedTypes, window, mode, latest, concurrency, inspectLimit, json, quiet, args }
     if (args['dry-run']) {
-      const plan: Array<{ table: string, searchType: string, date: string }> = []
-      for (const job of jobs) {
-        for (const date of jobDates(job))
-          plan.push({ table: job.table, searchType: job.type, date })
-      }
-      if (json) {
-        console.log(JSON.stringify({
-          siteUrl,
-          range: { start: startDate, end: endDate },
-          tables,
-          types,
-          totalCalls: plan.length,
-          plan,
-        }, null, 2))
-        return
-      }
-      console.log()
-      logger.info(`Plan: ${plan.length} API call(s) for ${siteUrl}`)
-      console.log(`  Tables:   ${tables.join(', ')}`)
-      console.log(`  Types:    ${types.join(', ')}`)
-      console.log(`  Range:    ${startDate} → ${endDate} (${dates.length} days)`)
-      console.log()
-      logger.info('Pass without --dry-run to execute.')
+      const plans = []
+      for (const siteUrl of siteUrls)
+        plans.push(await planSite({ ...common, siteUrl }))
+      if (json)
+        console.log(JSON.stringify(plans.length === 1 ? plans[0] : { sites: plans }, null, 2))
       return
     }
 
-    if (!quiet) {
-      logger.info(`Syncing ${siteUrl} (${tables.join(', ')}) [${types.join(', ')}] → ${displayPath(store.dataDir)}`)
-      logger.info(`Range: ${startDate} → ${endDate} (${dates.length} days)`)
+    const run = await startSyncRun({ dataDir: store.dataDir, sites: siteUrls, onHeartbeat: () => ledger.flush() })
+    const onInterrupt = (): void => {
+      clearLine()
+      logger.warn('Sync interrupted. Run the same command to resume.')
+      void Promise.all([run.finish('interrupted'), ledger.flush()])
+        .catch((error: Error) => logger.warn(`Could not save sync progress: ${error.message}`))
+        .finally(() => process.exit(130))
     }
+    process.once('SIGINT', onInterrupt)
 
-    const serialTables = Boolean(args['serial-tables'])
-
-    const start = Date.now()
-    const totals: Record<string, { rows: number, skipped: number, failed: number }> = {}
-    // Build the (table, searchType) work list. Each pair is an independent
-    // sync stream — runs in parallel by default, sequentially with
-    // --serial-tables for predictable ordering / debug.
-    const progress = createProgressTracker(
-      jobs.reduce((sum, job) => sum + jobDates(job).length, 0),
-      quiet,
-    )
-
-    if (serialTables) {
-      for (const job of jobs) {
-        totals[job.label] = await syncTable(
-          store,
-          siteUrl,
-          job.table,
-          job.type,
-          jobDates(job),
-          client,
-          concurrency,
-          args.force || forceTypes,
-          progress,
-        )
-      }
+    const results: SiteSyncResult[] = []
+    for (const siteUrl of siteUrls) {
+      run.setSite(siteUrl)
+      const result = await syncSite({ ...common, siteUrl, run })
+      results.push(result)
+      if (result.stop?.kind === 'budget')
+        break
     }
-    else {
-      const results = await Promise.all(
-        jobs.map(job => syncTable(
-          store,
-          siteUrl,
-          job.table,
-          job.type,
-          jobDates(job),
-          client,
-          concurrency,
-          args.force || forceTypes,
-          progress,
-        )),
-      )
-      jobs.forEach((job, i) => {
-        totals[job.label] = results[i]
-      })
-    }
-    progress.done()
+    process.off('SIGINT', onInterrupt)
 
-    const seconds = ((Date.now() - start) / 1000).toFixed(1)
-    if (!quiet) {
-      logger.success(`Synced ${siteUrl} in ${seconds}s`)
-      for (const [t, n] of Object.entries(totals)) {
-        const suffix = [
-          n.skipped > 0 ? `${n.skipped} skipped` : null,
-          n.failed > 0 ? `\x1B[31m${n.failed} failed\x1B[0m` : null,
-        ].filter(Boolean).join(', ')
-        const tail = suffix ? ` (${suffix})` : ''
-        console.log(`  ${t}: ${n.rows.toLocaleString()} rows${tail}`)
-      }
-      console.log()
+    const failed = results.some(result => result.status === 'failed')
+    const stopped = results.some(result => result.status === 'partial')
+    await ledger.flush()
+    await run.finish(failed ? 'failed' : stopped ? 'stopped' : 'completed')
+    if (json) {
+      const skippedSites = siteUrls.slice(results.length)
+      const reports = results.map(result => result.report)
+      console.log(JSON.stringify(siteUrls.length === 1 ? reports[0] : { sites: reports, notStarted: skippedSites }, null, 2))
     }
-
-    const anyFailed = Object.values(totals).some(t => t.failed > 0)
-
-    // Only fresh, complete probes can establish emptiness. Skipped dates
-    // provide no evidence. Existing rows also rule out a site-wide marker.
-    const rowsByType = new Map<SearchType, number>()
-    const failedByType = new Map<SearchType, number>()
-    const skippedByType = new Map<SearchType, number>()
-    for (const job of jobs) {
-      const t = totals[job.label]
-      rowsByType.set(job.type, (rowsByType.get(job.type) ?? 0) + t.rows)
-      failedByType.set(job.type, (failedByType.get(job.type) ?? 0) + t.failed)
-      skippedByType.set(job.type, (skippedByType.get(job.type) ?? 0) + t.skipped)
+    else if (siteUrls.length > results.length && !quiet) {
+      logger.info(`Not started: ${siteUrls.slice(results.length).join(', ')}. The next sync covers them.`)
     }
-    if (!forceTypes && tables.length > 0 && dates.length >= EMPTY_TYPE_PROBE_MIN_DAYS) {
-      const toMark: SearchType[] = []
-      for (const type of types) {
-        if (EMPTY_TYPE_PROTECTED.includes(type))
-          continue
-        if ((failedByType.get(type) ?? 0) > 0)
-          continue
-        if ((skippedByType.get(type) ?? 0) > 0 || (rowsByType.get(type) ?? 0) > 0)
-          continue
-        const entries = await store.engine.listLive({ ...scope, searchType: type })
-        if (entries.some(entry => entry.rowCount > 0))
-          continue
-        toMark.push(type)
-      }
-      if (toMark.length > 0) {
-        await emptyTypesStore.mark({ userId: store.userId, siteId }, toMark)
-        if (!quiet)
-          logger.info(`Marked empty for future syncs: ${toMark.join(', ')} (0 rows across ${dates.length} days; pass --force-types to re-probe).`)
-      }
-    }
-    // If --force-types surfaced real data for a type we previously marked,
-    // drop that marker so subsequent plain syncs pick it up automatically.
-    if (forceTypes && emptyTypesDoc.emptyTypes.length > 0) {
-      const toClear: SearchType[] = []
-      for (const type of types) {
-        if (emptyTypesDoc.emptyTypes.includes(type) && (rowsByType.get(type) ?? 0) > 0)
-          toClear.push(type)
-      }
-      if (toClear.length > 0) {
-        await emptyTypesStore.clear({ userId: store.userId, siteId }, toClear)
-        if (!quiet)
-          logger.info(`Cleared empty markers for: ${toClear.join(', ')} (re-probe found data).`)
-      }
-    }
-
-    // Post-sync rollups: rebuild aggregates so the dashboard's cached widgets
-    // reflect the sync we just ran. Skipped on --no-rollups, on zero-row syncs
-    // (nothing to aggregate), and on full-failure runs (would read stale data).
-    const noRollups = args.rollups === false
-    let rollupError: string | undefined
-    const anyRowsSynced = Object.values(totals).some(t => t.rows > 0)
-    if (!noRollups && anyRowsSynced) {
-      if (!quiet)
-        logger.info(`Rebuilding rollups for [${siteId}] (${DEFAULT_ROLLUPS.length} rollups)…`)
-      const rollupStart = Date.now()
-      const results = await rebuildRollups({
-        engine: {
-          runSQL: opts => store.engine.runSQL(opts),
-          listPartitions: async ({ ctx, table, searchType }) => {
-            const entries = await store.engine.listLive({
-              userId: ctx.userId,
-              ...(ctx.siteId !== undefined ? { siteId: ctx.siteId } : {}),
-              table,
-              ...(searchType !== undefined ? { searchType } : {}),
-            })
-            return entries.map(e => ({ partition: e.partition, bytes: e.bytes }))
-          },
-        },
-        dataSource: store.dataSource,
-        ctx: { userId: store.userId, siteId },
-        defs: DEFAULT_ROLLUPS,
-      }).catch((err: Error) => {
-        rollupError = err.message
-        logger.warn(`Rollup rebuild failed: ${err.message}`)
-        return [] as Awaited<ReturnType<typeof rebuildRollups>>
-      })
-      if (!quiet && results.length > 0) {
-        const kb = results.reduce((a, r) => a + r.bytes, 0) / 1024
-        const ms = Date.now() - rollupStart
-        logger.success(`Rebuilt ${results.length} rollup(s) in ${ms}ms — ${kb.toFixed(1)} KB`)
-      }
-    }
-
-    const entities = await syncEntities({
-      store,
-      client,
-      siteUrl,
-      sitemaps: args.sitemaps !== false,
-      inspections: args.inspections !== false,
-      inspectLimit,
-      quiet,
-    })
-
-    await printCompletion(anyFailed || rollupError ? 'failed' : 'completed', totals, undefined, rollupError, entities)
-    if (anyFailed || rollupError)
+    if (failed)
       process.exit(1)
   },
 })
+
+interface SiteOptions {
+  store: LocalStore
+  siteUrl: string
+  client: ReturnType<typeof googleSearchConsole>
+  ledger: QuotaLedger
+  tables: readonly TableName[]
+  requestedTypes: readonly SearchType[]
+  window: SyncWindow
+  mode: SyncMode
+  latest: string
+  concurrency: number
+  inspectLimit: number
+  json: boolean
+  quiet: boolean
+  args: Record<string, unknown>
+}
+
+interface SitePlan {
+  types: SearchType[]
+  skippedTypes: SearchType[]
+  jobs: Array<{ job: SyncJob, dates: string[], skipped: number }>
+}
+
+async function resolveTypes(opts: SiteOptions, dryRun: boolean): Promise<{ types: SearchType[], skippedTypes: SearchType[], emptyTypes: readonly string[] }> {
+  const { store, siteUrl, requestedTypes, quiet } = opts
+  const scope = { userId: store.userId, siteId: store.siteIdFor(siteUrl) }
+  const emptyTypesStore = createEmptyTypesStore({ dataSource: store.dataSource })
+  let emptyTypesDoc = await emptyTypesStore.load(scope)
+  // Older sync runs could mark populated types empty after skipping done dates.
+  // Existing rows disprove those markers, including rows in unselected tables.
+  if (emptyTypesDoc.emptyTypes.length > 0) {
+    const entries = await store.engine.listLive(scope)
+    const populated = new Set(entries.filter(entry => entry.rowCount > 0).map(entry => entry.searchType ?? 'web'))
+    const toClear = requestedTypes.filter(type => emptyTypesDoc.emptyTypes.includes(type) && populated.has(type))
+    if (toClear.length > 0) {
+      if (!dryRun)
+        emptyTypesDoc = await emptyTypesStore.clear(scope, toClear)
+      else
+        emptyTypesDoc.emptyTypes = emptyTypesDoc.emptyTypes.filter(type => !toClear.includes(type as SearchType))
+    }
+  }
+  const forceTypes = Boolean(opts.args['force-types'])
+  const skippedTypes: SearchType[] = []
+  const types: SearchType[] = []
+  for (const t of requestedTypes) {
+    if (!forceTypes && emptyTypesDoc.emptyTypes.includes(t) && !EMPTY_TYPE_PROTECTED.includes(t)) {
+      skippedTypes.push(t)
+      continue
+    }
+    types.push(t)
+  }
+  if (skippedTypes.length > 0 && !quiet) {
+    logger.info(
+      `Skipping ${skippedTypes.join(', ')} (marked empty for this site; pass --force-types to re-probe).`,
+    )
+  }
+  return { types, skippedTypes, emptyTypes: emptyTypesDoc.emptyTypes }
+}
+
+async function buildSitePlan(opts: SiteOptions, types: SearchType[], skippedTypes: SearchType[], emptyTypes: readonly string[]): Promise<SitePlan> {
+  const { store, siteUrl, tables, quiet, args } = opts
+  const { jobs, unsupported } = planSyncJobs(tables, types)
+  if (unsupported.length > 0 && !quiet && (args.tables || args.types))
+    logger.info(`Skipping ${unsupported.map(job => job.label).join(', ')}: Google has no such breakdown for that search type.`)
+  const states = await store.engine.getSyncStates({ userId: store.userId, siteId: store.siteIdFor(siteUrl) })
+  const today = getPstDate()
+  const forceTypes = Boolean(args['force-types'])
+  return {
+    types,
+    skippedTypes,
+    jobs: jobs.map((job) => {
+      const jobStates = states.filter(state => state.table === job.table && (state.searchType ?? 'web') === job.type)
+      // A marked-empty type's probe fetched 0 rows, so its window dates are
+      // done. Under --force-types that job alone re-probes in force mode;
+      // resume would skip every date and the marker could never heal.
+      const mode: SyncMode = forceTypes && opts.mode === 'resume' && emptyTypes.includes(job.type) ? 'force' : opts.mode
+      const planned = planJobDates({ table: job.table, window: opts.window, states: jobStates, today, mode })
+      return { job, dates: planned.dates, skipped: planned.skippedDone }
+    }),
+  }
+}
+
+function windowLabel(window: SyncWindow): string {
+  return window.kind === 'range'
+    ? `${window.start} → ${window.end}`
+    : `catch up to ${window.end} (new tables start ${window.firstStart})`
+}
+
+async function planSite(opts: SiteOptions): Promise<Record<string, unknown>> {
+  const { types, skippedTypes, emptyTypes } = await resolveTypes(opts, true)
+  const plan = await buildSitePlan(opts, types, skippedTypes, emptyTypes)
+  const items = plan.jobs.flatMap(({ job, dates }) => dates.map(date => ({ table: job.table, searchType: job.type, date, calls: minimumCallsPerDate(job.table) })))
+  const minimumCalls = items.reduce((sum, item) => sum + item.calls, 0)
+  const ranges = groupIntoRanges([...new Set(items.map(item => item.date))])
+  if (!opts.json) {
+    console.log()
+    logger.info(`Plan: at least ${minimumCalls.toLocaleString('en-US')} Search Analytics call(s) for ${opts.siteUrl}`)
+    console.log(`  Tables:   ${opts.tables.join(', ')}`)
+    console.log(`  Types:    ${types.join(', ')}`)
+    console.log(`  Window:   ${windowLabel(opts.window)}`)
+    console.log(`  Dates:    ${ranges.length === 0 ? 'none; every date is done' : ranges.map(range => range.startDate === range.endDate ? range.startDate : `${range.startDate}..${range.endDate}`).join(', ')}`)
+    console.log()
+    logger.info('Pass without --dry-run to execute. Google may need more calls for large days and search appearances.')
+  }
+  return {
+    siteUrl: opts.siteUrl,
+    window: opts.window,
+    tables: opts.tables,
+    types,
+    skippedTypes,
+    ranges,
+    minimumCalls,
+    totalCalls: minimumCalls,
+    plan: items,
+  }
+}
+
+interface SiteSyncResult {
+  status: 'completed' | 'partial' | 'failed' | 'skipped'
+  stop?: SyncStop
+  report: Record<string, unknown>
+}
+
+async function syncSite(opts: SiteOptions & { run: SyncRun }): Promise<SiteSyncResult> {
+  const { store, siteUrl, client, quiet, run } = opts
+  const siteId = store.siteIdFor(siteUrl)
+  const scope = { userId: store.userId, siteId }
+  const { types, skippedTypes, emptyTypes } = await resolveTypes(opts, false)
+  const forceTypes = Boolean(opts.args['force-types'])
+
+  const report = async (status: SiteSyncResult['status'], totals: Record<string, JobTotals>, extra: Record<string, unknown> = {}): Promise<Record<string, unknown>> => ({
+    status,
+    siteUrl,
+    window: opts.window,
+    tables: opts.tables,
+    types,
+    skippedTypes,
+    totals,
+    watermarks: await store.engine.getWatermarks(scope),
+    ...extra,
+  })
+
+  if (types.length === 0) {
+    if (!quiet)
+      logger.warn(`All requested types are marked empty. Pass --force-types to check them again.`)
+    return { status: 'skipped', report: await report('skipped', {}, { reason: 'empty-types' }) }
+  }
+
+  const plan = await buildSitePlan(opts, types, skippedTypes, emptyTypes)
+  const plannedDates = plan.jobs.reduce((sum, entry) => sum + entry.dates.length, 0)
+  if (opts.mode === 'retry-failed' && plannedDates === 0) {
+    if (!quiet)
+      logger.success('No failed dates in range. Nothing to retry.')
+    return { status: 'skipped', report: await report('skipped', {}, { reason: 'no-failed-dates' }) }
+  }
+
+  // Mark the whole plan pending first, so status and coverage see it and a
+  // killed run leaves an honest record.
+  await store.engine.setSyncStates(
+    plan.jobs.flatMap(({ job, dates }) => dates.map(date => ({ userId: store.userId, siteId, table: job.table, date, searchType: job.type }))),
+    'pending',
+  )
+  run.addPlanned(plannedDates)
+
+  if (!quiet) {
+    const ranges = groupIntoRanges([...new Set(plan.jobs.flatMap(entry => entry.dates))])
+    logger.info(`Syncing ${siteUrl} (${opts.tables.join(', ')}) [${types.join(', ')}] → ${displayPath(store.dataDir)}`)
+    logger.info(ranges.length === 0
+      ? `Every date is done up to ${opts.latest}.`
+      : `${plannedDates.toLocaleString('en-US')} table days, newest first: ${ranges.slice(-3).reverse().map(range => range.startDate === range.endDate ? range.startDate : `${range.startDate}..${range.endDate}`).join(', ')}${ranges.length > 3 ? `, and ${ranges.length - 3} more range(s)` : ''}`)
+  }
+
+  const control: SiteControl = {}
+  const start = Date.now()
+  const totals: Record<string, JobTotals> = {}
+  const progress = createProgressTracker(plannedDates, quiet)
+  const runJob = (entry: SitePlan['jobs'][number]): Promise<JobTotals> => syncTable({
+    store,
+    siteUrl,
+    job: entry.job,
+    dates: entry.dates,
+    skipped: entry.skipped,
+    client,
+    concurrency: opts.concurrency,
+    latest: opts.latest,
+    control,
+    progress,
+    run,
+  })
+  if (opts.args['serial-tables']) {
+    for (const entry of plan.jobs)
+      totals[entry.job.label] = await runJob(entry)
+  }
+  else {
+    const results = await Promise.all(plan.jobs.map(runJob))
+    plan.jobs.forEach((entry, i) => {
+      totals[entry.job.label] = results[i]!
+    })
+  }
+  progress.done()
+  await run.save()
+
+  const seconds = ((Date.now() - start) / 1000).toFixed(1)
+  if (!quiet) {
+    logger.success(`Synced ${siteUrl} in ${seconds}s`)
+    for (const [t, n] of Object.entries(totals)) {
+      const suffix = [
+        n.skipped > 0 ? `${n.skipped} already done` : null,
+        n.pending > 0 ? `${n.pending} for the next sync` : null,
+        n.failed > 0 ? `\x1B[31m${n.failed} failed\x1B[0m` : null,
+      ].filter(Boolean).join(', ')
+      const tail = suffix ? ` (${suffix})` : ''
+      console.log(`  ${t}: ${n.rows.toLocaleString()} rows${tail}`)
+    }
+    console.log()
+  }
+  // A budget stop is planned progress. A quota refusal blocks progress, so it warns.
+  if (control.stop?.kind === 'budget' && !quiet)
+    logger.info(`${describeStop(control.stop)} The next sync continues from here.`)
+  else if (control.stop?.kind === 'quota' && !opts.json)
+    logger.warn(`${describeStop(control.stop)} The next sync continues after ${clockTime(control.stop.resetsAt)}.`)
+
+  const anyFailed = Object.values(totals).some(t => t.failed > 0)
+
+  // Only fresh, complete probes can establish emptiness. Skipped dates
+  // provide no evidence. Existing rows also rule out a site-wide marker.
+  if (!forceTypes && opts.tables.length > 0 && !control.stop) {
+    const toMark: SearchType[] = []
+    for (const type of types) {
+      if (EMPTY_TYPE_PROTECTED.includes(type))
+        continue
+      const typeTotals = plan.jobs.filter(entry => entry.job.type === type).map(entry => totals[entry.job.label]!)
+      const probed = typeTotals.length > 0 && typeTotals.every(t => t.fetched >= EMPTY_TYPE_PROBE_MIN_DAYS && t.skipped === 0 && t.failed === 0 && t.rows === 0)
+      if (!probed)
+        continue
+      const entries = await store.engine.listLive({ ...scope, searchType: type })
+      if (entries.some(entry => entry.rowCount > 0))
+        continue
+      toMark.push(type)
+    }
+    if (toMark.length > 0) {
+      await createEmptyTypesStore({ dataSource: store.dataSource }).mark(scope, toMark)
+      if (!quiet)
+        logger.info(`Marked empty for future syncs: ${toMark.join(', ')} (0 rows across ${EMPTY_TYPE_PROBE_MIN_DAYS}+ days; pass --force-types to re-probe).`)
+    }
+  }
+  // If --force-types surfaced real data for a type we previously marked,
+  // drop that marker so subsequent plain syncs pick it up automatically.
+  if (forceTypes && emptyTypes.length > 0) {
+    const toClear = types.filter(type => emptyTypes.includes(type)
+      && plan.jobs.some(entry => entry.job.type === type && totals[entry.job.label]!.rows > 0))
+    if (toClear.length > 0) {
+      await createEmptyTypesStore({ dataSource: store.dataSource }).clear(scope, toClear)
+      if (!quiet)
+        logger.info(`Cleared empty markers for: ${toClear.join(', ')} (re-probe found data).`)
+    }
+  }
+
+  // Post-sync rollups: rebuild aggregates so the dashboard's cached widgets
+  // reflect the sync we just ran. Skipped on --no-rollups, on zero-row syncs
+  // (nothing to aggregate), and on full-failure runs (would read stale data).
+  const noRollups = opts.args.rollups === false
+  let rollupError: string | undefined
+  const anyRowsSynced = Object.values(totals).some(t => t.rows > 0)
+  if (!noRollups && anyRowsSynced) {
+    if (!quiet)
+      logger.info(`Rebuilding rollups for [${siteId}] (${DEFAULT_ROLLUPS.length} rollups)…`)
+    const rollupStart = Date.now()
+    const results = await rebuildRollups({
+      engine: {
+        runSQL: sqlOpts => store.engine.runSQL(sqlOpts),
+        listPartitions: async ({ ctx, table, searchType }) => {
+          const entries = await store.engine.listLive({
+            userId: ctx.userId,
+            ...(ctx.siteId !== undefined ? { siteId: ctx.siteId } : {}),
+            table,
+            ...(searchType !== undefined ? { searchType } : {}),
+          })
+          return entries.map(e => ({ partition: e.partition, bytes: e.bytes }))
+        },
+      },
+      dataSource: store.dataSource,
+      ctx: scope,
+      defs: DEFAULT_ROLLUPS,
+    }).catch((err: Error) => {
+      rollupError = err.message
+      logger.warn(`Rollup rebuild failed: ${err.message}`)
+      return [] as Awaited<ReturnType<typeof rebuildRollups>>
+    })
+    if (!quiet && results.length > 0) {
+      const kb = results.reduce((a, r) => a + r.bytes, 0) / 1024
+      const ms = Date.now() - rollupStart
+      logger.success(`Rebuilt ${results.length} rollup(s) in ${ms}ms — ${kb.toFixed(1)} KB`)
+    }
+  }
+
+  const entities = await syncEntities({
+    store,
+    client,
+    siteUrl,
+    ledger: opts.ledger,
+    sitemaps: opts.args.sitemaps !== false,
+    inspections: opts.args.inspections !== false,
+    inspectLimit: opts.inspectLimit,
+    quiet,
+  })
+
+  await opts.ledger.flush()
+  const coverage = await readStoreCoverage({ store, site: siteUrl, inspectLimit: opts.inspectLimit, run: { kind: 'none' } })
+  if (!quiet) {
+    for (const line of renderCoverage(coverage))
+      console.log(`  ${line}`)
+    console.log()
+  }
+
+  const status: SiteSyncResult['status'] = anyFailed || rollupError ? 'failed' : control.stop ? 'partial' : 'completed'
+  return {
+    status,
+    ...(control.stop ? { stop: control.stop } : {}),
+    report: await report(status, totals, {
+      ...(control.stop ? { stopped: control.stop } : {}),
+      ...(rollupError ? { rollupError } : {}),
+      ...entities,
+      coverage,
+    }),
+  }
+}
 
 type EntityStep<T> = T | { _tag: 'disabled' } | { _tag: 'failed', reason: string }
 
@@ -742,18 +918,8 @@ function failureReason(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-// Pages with the most impressions come first, so the inspection budget goes
-// to the URLs that matter most.
-async function topPagePaths(store: LocalStore, siteUrl: string): Promise<string[]> {
-  const entries = await store.engine.listLive({ userId: store.userId, siteId: store.siteIdFor(siteUrl), table: 'pages' })
-  if (entries.length === 0)
-    return []
-  const { rows } = await store.runRawSql({
-    sql: `SELECT url, SUM(impressions) AS impressions FROM read_parquet({{FILES}}, union_by_name = true) GROUP BY url ORDER BY impressions DESC LIMIT ${INSPECT_PAGE_CANDIDATES}`,
-    siteUrl,
-    table: 'pages',
-  })
-  return rows.map(row => String(row.url))
+function clockTime(at: number): string {
+  return new Date(at).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' })
 }
 
 /**
@@ -764,6 +930,7 @@ async function syncEntities(opts: {
   store: LocalStore
   client: ReturnType<typeof googleSearchConsole>
   siteUrl: string
+  ledger: QuotaLedger
   sitemaps: boolean
   inspections: boolean
   inspectLimit: number
@@ -813,11 +980,7 @@ async function syncEntities(opts: {
   let inspections: EntitySyncReport['inspections'] = { _tag: 'disabled' }
   if (opts.inspections && opts.inspectLimit > 0) {
     inspections = await (async () => {
-      const sitemapUrls = await loadSitemapGenerationUrls(store.dataSource, ctx)
-      const candidates = [
-        ...resolvePagePaths(await topPagePaths(store, siteUrl), siteUrl, sitemapUrls),
-        ...sitemapUrls,
-      ]
+      const candidates = await inspectionCandidates(store, siteUrl)
       const progress = createProgressTracker(Math.min(opts.inspectLimit, candidates.length), quiet)
       const result = await syncInspections({
         client,
@@ -827,6 +990,7 @@ async function syncEntities(opts: {
         candidates,
         limit: opts.inspectLimit,
         concurrency: INSPECT_CONCURRENCY,
+        ledger: opts.ledger,
         now,
         onProgress: () => progress.tick('inspect'),
       }).finally(() => progress.done())
@@ -835,9 +999,14 @@ async function syncEntities(opts: {
     if (inspections._tag === 'failed') {
       logger.warn(`URL Inspection not saved: ${inspections.reason}`)
     }
+    else if (inspections._tag === 'quota_exhausted') {
+      logger.warn(`URL Inspection paused until ${clockTime(inspections.resetsAt)}: ${inspections.reason}`)
+    }
     else if (inspections._tag === 'inspected') {
       if (!quiet)
         logger.success(`Inspected ${inspections.inspected} URL(s); ${inspections.deferred} due URL(s) left for later runs`)
+      if (inspections.stopped)
+        logger.warn(`URL Inspection paused until ${clockTime(inspections.stopped.resetsAt)}: ${inspections.stopped.reason}`)
       if (inspections.failed > 0) {
         logger.warn(`${inspections.failed} URL Inspection call(s) failed:`)
         for (const failure of inspections.failures.slice(0, 5))
@@ -854,41 +1023,99 @@ async function syncEntities(opts: {
   return { sitemaps, inspections }
 }
 
-// Route every Search Analytics query through the shared pacer. Other calls pass through.
-function pacedClient(
+/**
+ * Every Search Analytics query goes through the quota ledger, the
+ * `--max-calls` budget, and the shared pacer. A quota refusal from Google,
+ * after the client's own backoff, blocks the api in the ledger and stops the
+ * Site's run. Other calls pass through.
+ */
+function gatedClient(
   client: ReturnType<typeof googleSearchConsole>,
-  pacer: RequestPacer,
+  gate: { pacer: RequestPacer, ledger: QuotaLedger, calls: { made: number }, maxCalls: number | undefined },
 ): ReturnType<typeof googleSearchConsole> {
   const query = client.searchAnalytics.query
   return {
     ...client,
     searchAnalytics: {
       ...client.searchAnalytics,
-      query: (...args: Parameters<typeof query>) => pacer.run(() => query(...args)),
+      query: async (...args: Parameters<typeof query>) => {
+        const [siteUrl] = args
+        if (gate.maxCalls !== undefined && gate.calls.made >= gate.maxCalls)
+          throw stopError({ kind: 'budget', maxCalls: gate.maxCalls })
+        const decision = gate.ledger.reserve('searchAnalytics', siteUrl, 1)
+        if (decision.kind === 'exhausted')
+          throw stopError({ kind: 'quota', reason: decision.reason, resetsAt: decision.resetsAt })
+        gate.calls.made++
+        return pacer(gate.pacer, () => query(...args)).catch((error: unknown) => {
+          const refusal = parseQuotaRefusal(error)
+          if (!refusal)
+            throw error
+          gate.ledger.record('searchAnalytics', siteUrl, { kind: 'refused', reason: refusal })
+          const status = gate.ledger.status('searchAnalytics', siteUrl)
+          throw stopError({ kind: 'quota', reason: refusal, resetsAt: status.blocked?.until ?? Date.now() })
+        })
+      },
     },
   }
+}
+
+function pacer<T>(requestPacer: RequestPacer, task: () => Promise<T>): Promise<T> {
+  return requestPacer.run(task)
 }
 
 async function printSyncStatus(
   resolved: ResolvedGscdumpConfig,
   siteFilter: string | undefined,
   asJson: boolean,
+  inspectLimit: number,
 ): Promise<void> {
   const store = createLocalStore({ dataDir: resolved.dataDir })
   const siteId = siteFilter ? store.siteIdFor(siteFilter) : undefined
+  const run = syncRunStatus(await readSyncRun(store.dataDir), { now: Date.now(), isAlive: isProcessAlive })
 
   const watermarks = await store.engine.getWatermarks({ userId: store.userId, siteId })
   const states = await store.engine.getSyncStates({ userId: store.userId, siteId })
   const failed = states.filter(s => s.state === 'failed')
+  // An inflight date with no live sync belongs to a killed run. The next sync retries it.
   const inflight = states.filter(s => s.state === 'inflight')
+  const staleInflight = run.kind === 'running' ? [] : inflight
+
+  const bySite = new Map<string, typeof states>()
+  for (const state of states) {
+    const key = state.siteId ?? ''
+    bySite.set(key, [...(bySite.get(key) ?? []), state])
+  }
+  const latest = getLatestGscDate()
+  const gaps = [...bySite].flatMap(([id, siteStates]) =>
+    analyticsCoverage({ states: siteStates, latest, floor: getOldestGscDate(), today: getPstDate() }).jobs.map(job => ({
+      siteId: id,
+      table: job.table,
+      searchType: job.searchType,
+      from: job.from,
+      to: job.to,
+      done: job.coverage.kind === 'complete' ? job.coverage.done : job.coverage.kind === 'partial' ? job.coverage.done : 0,
+      missing: job.coverage.kind === 'partial' ? job.coverage.pending : 0,
+      failed: job.coverage.kind === 'partial' ? job.coverage.failed : 0,
+    })))
+
+  const coverageSites = siteFilter
+    ? [siteFilter]
+    : [...new Set([...(run.kind === 'none' ? [] : run.record.sites), ...(resolved.config.defaultSite ? [resolved.config.defaultSite] : [])])]
+  const coverages: StoreCoverage[] = []
+  for (const site of coverageSites)
+    coverages.push(await readStoreCoverage({ store, site, inspectLimit, run }))
 
   if (asJson) {
     console.log(JSON.stringify({
       dataDir: store.dataDir,
       siteFilter: siteFilter ?? null,
+      run,
+      gaps,
+      coverage: coverages,
       watermarks,
       failed,
       inflight,
+      staleInflight: staleInflight.length,
     }, null, 2))
     return
   }
@@ -899,38 +1126,51 @@ async function printSyncStatus(
     console.log(`  \x1B[90mSite: ${siteFilter}\x1B[0m`)
   console.log()
 
-  if (watermarks.length === 0) {
-    console.log(`  No sync watermarks. Run \`gscdump sync\` to ingest data.`)
+  if (run.kind === 'running')
+    console.log(`  Sync running: ${run.record.done}/${run.record.planned} days${run.record.site ? ` for ${run.record.site}` : ''}, pid ${run.record.pid}, started ${formatAge(run.record.startedAt)}.`)
+  else if (run.kind === 'stale')
+    console.log(`  \x1B[33mThe last sync stopped without finishing (pid ${run.record.pid}, ${run.reason === 'process-gone' ? 'process gone' : 'no heartbeat'}). The next sync retries its dates.\x1B[0m`)
+
+  if (gaps.length === 0 && watermarks.length === 0) {
+    console.log(`  No synced data. Run \`gscdump sync\` to fill the Store.`)
     console.log()
     return
   }
 
-  console.log(`  \x1B[1mWatermarks:\x1B[0m`)
-  const sorted = [...watermarks].sort((a, b) => {
-    if (a.table !== b.table)
-      return a.table.localeCompare(b.table)
-    return (a.siteId ?? '').localeCompare(b.siteId ?? '')
-  })
-  for (const w of sorted) {
-    const scope = w.siteId ? `${w.table}@${w.siteId}` : w.table
-    console.log(`  ${scope.padEnd(28)} \x1B[36m${w.oldestDateSynced}\x1B[0m → \x1B[36m${w.newestDateSynced}\x1B[0m  \x1B[90m(last ${formatAge(w.lastSyncAt)})\x1B[0m`)
+  console.log(`  \x1B[1mTables:\x1B[0m`)
+  for (const gap of gaps) {
+    const label = `${gap.searchType === 'web' ? gap.table : `${gap.table}/${gap.searchType}`}${siteFilter ? '' : `@${gap.siteId}`}`
+    const parts = [`${gap.done} done`]
+    if (gap.missing > 0)
+      parts.push(`${gap.missing} missing`)
+    if (gap.failed > 0)
+      parts.push(`\x1B[31m${gap.failed} failed\x1B[0m`)
+    console.log(`  ${label.padEnd(34)} \x1B[36m${gap.from}\x1B[0m → \x1B[36m${gap.to}\x1B[0m  ${parts.join(', ')}`)
   }
 
-  if (inflight.length > 0) {
+  if (staleInflight.length > 0) {
     console.log()
-    console.log(`  \x1B[33m${inflight.length} inflight:\x1B[0m`)
-    for (const s of inflight)
-      console.log(`    ${s.table}${s.siteId ? `@${s.siteId}` : ''} ${s.date} (attempt ${s.attempts}, started ${formatAge(s.updatedAt)})`)
+    console.log(`  \x1B[33m${staleInflight.length} date(s) stale from a stopped sync. The next sync retries them.\x1B[0m`)
   }
 
   if (failed.length > 0) {
     console.log()
     console.log(`  \x1B[31m${failed.length} failed:\x1B[0m`)
-    for (const s of failed)
+    for (const s of failed.slice(0, 20))
       console.log(`    ${s.table}${s.siteId ? `@${s.siteId}` : ''} ${s.date}: ${s.error ?? 'unknown'}`)
-    console.log()
-    console.log(`  Re-run \`gscdump sync --force\` to retry failed dates.`)
+    if (failed.length > 20)
+      console.log(`    and ${failed.length - 20} more`)
   }
 
+  for (const coverage of coverages) {
+    console.log()
+    console.log(`  \x1B[1m${coverage.site}\x1B[0m`)
+    for (const line of renderCoverage(coverage))
+      console.log(`  ${line}`)
+  }
+  if (coverages.length === 0) {
+    console.log()
+    console.log(`  Pass --site to see inspection and sitemap coverage.`)
+  }
   console.log()
 }

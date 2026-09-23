@@ -88,7 +88,7 @@ describe('config command', () => {
     })
 
     it('should output config as JSON when config exists', async () => {
-      const testConfig = { defaultPeriod: '30d', defaultSite: 'test.com' }
+      const testConfig = { dataDir: '30d', defaultSite: 'test.com' }
       await fs.mkdir(CONFIG_DIR, { recursive: true })
       await fs.writeFile(CONFIG_FILE, JSON.stringify(testConfig))
 
@@ -98,7 +98,7 @@ describe('config command', () => {
         cmd: configCommand.subCommands!.show,
       })
 
-      const jsonOutput = consoleOutput.find(line => line.includes('defaultPeriod'))
+      const jsonOutput = consoleOutput.find(line => line.includes('dataDir'))
       expect(jsonOutput).toBeDefined()
     })
   })
@@ -106,33 +106,33 @@ describe('config command', () => {
   describe('set subcommand', () => {
     it('should set config value', async () => {
       await configCommand.subCommands!.set.run!({
-        args: { key: 'defaultPeriod', value: '90d' },
+        args: { key: 'dataDir', value: '90d' },
         rawArgs: [],
         cmd: configCommand.subCommands!.set,
       })
 
       const config = JSON.parse(await fs.readFile(CONFIG_FILE, 'utf-8'))
-      expect(config.defaultPeriod).toBe('90d')
-      expect(logger.success).toHaveBeenCalledWith('Set defaultPeriod = 90d')
+      expect(config.dataDir).toBe('90d')
+      expect(logger.success).toHaveBeenCalledWith('Set dataDir = 90d')
     })
 
     it('should update existing config value', async () => {
       await fs.mkdir(CONFIG_DIR, { recursive: true })
-      await fs.writeFile(CONFIG_FILE, JSON.stringify({ defaultPeriod: '30d' }))
+      await fs.writeFile(CONFIG_FILE, JSON.stringify({ dataDir: '30d' }))
 
       await configCommand.subCommands!.set.run!({
-        args: { key: 'defaultPeriod', value: '90d' },
+        args: { key: 'dataDir', value: '90d' },
         rawArgs: [],
         cmd: configCommand.subCommands!.set,
       })
 
       const config = JSON.parse(await fs.readFile(CONFIG_FILE, 'utf-8'))
-      expect(config.defaultPeriod).toBe('90d')
+      expect(config.dataDir).toBe('90d')
     })
 
     it('should add new key to existing config', async () => {
       await fs.mkdir(CONFIG_DIR, { recursive: true })
-      await fs.writeFile(CONFIG_FILE, JSON.stringify({ defaultPeriod: '30d' }))
+      await fs.writeFile(CONFIG_FILE, JSON.stringify({ dataDir: '30d' }))
 
       await configCommand.subCommands!.set.run!({
         args: { key: 'defaultSite', value: 'test.com' },
@@ -141,12 +141,12 @@ describe('config command', () => {
       })
 
       const config = JSON.parse(await fs.readFile(CONFIG_FILE, 'utf-8'))
-      expect(config.defaultPeriod).toBe('30d')
+      expect(config.dataDir).toBe('30d')
       expect(config.defaultSite).toBe('test.com')
     })
 
     it('should accept all valid keys', async () => {
-      const values = { defaultSite: 'test.com', defaultPeriod: '30d', defaultFormat: 'csv', defaultDb: './data.db' }
+      const values = { defaultSite: 'test.com', dataDir: '30d', defaultFormat: 'csv' }
 
       for (const [key, value] of Object.entries(values)) {
         await configCommand.subCommands!.set.run!({
@@ -256,24 +256,24 @@ describe('config command', () => {
   describe('unset subcommand', () => {
     it('should remove config key', async () => {
       await fs.mkdir(CONFIG_DIR, { recursive: true })
-      await fs.writeFile(CONFIG_FILE, JSON.stringify({ defaultPeriod: '30d', defaultSite: 'test.com' }))
+      await fs.writeFile(CONFIG_FILE, JSON.stringify({ dataDir: '30d', defaultSite: 'test.com' }))
 
       await configCommand.subCommands!.unset.run!({
-        args: { key: 'defaultPeriod' },
+        args: { key: 'dataDir' },
         rawArgs: [],
         cmd: configCommand.subCommands!.unset,
       })
 
       const config = JSON.parse(await fs.readFile(CONFIG_FILE, 'utf-8'))
-      expect(config.defaultPeriod).toBeUndefined()
+      expect(config.dataDir).toBeUndefined()
       expect(config.defaultSite).toBe('test.com')
-      expect(logger.success).toHaveBeenCalledWith('Removed defaultPeriod')
+      expect(logger.success).toHaveBeenCalledWith('Removed dataDir')
     })
 
     it('should reject unknown keys', async () => {
       // unset is whitelist-validated like set, so an unknown key exits 1.
       await fs.mkdir(CONFIG_DIR, { recursive: true })
-      await fs.writeFile(CONFIG_FILE, JSON.stringify({ defaultPeriod: '30d' }))
+      await fs.writeFile(CONFIG_FILE, JSON.stringify({ dataDir: '30d' }))
 
       await expect(
         configCommand.subCommands!.unset.run!({

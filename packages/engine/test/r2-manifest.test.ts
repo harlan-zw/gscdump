@@ -353,6 +353,22 @@ describe('createR2ManifestStore — happy path', () => {
     expect(discover[0].state).toBe('inflight')
   })
 
+  it('sets one state on many dates across shards and keeps prior errors', async () => {
+    const bucket = makeFakeBucket()
+    const store = createR2ManifestStore({ bucket, userId: 'u1' })
+    const scope = (table: 'pages' | 'queries', date: string) => ({ userId: 'u1', siteId: 's1', table, date })
+    await store.setSyncState(scope('pages', '2026-04-10'), 'failed', { at: 1000, error: 'quota' })
+
+    await store.setSyncStates([scope('pages', '2026-04-10'), scope('pages', '2026-04-11'), scope('queries', '2026-04-10')], 'pending', { at: 2000 })
+
+    const states = await store.getSyncStates({ userId: 'u1', siteId: 's1' })
+    expect(states.map(s => [s.table, s.date, s.state, s.error]).sort()).toEqual([
+      ['pages', '2026-04-10', 'pending', 'quota'],
+      ['pages', '2026-04-11', 'pending', undefined],
+      ['queries', '2026-04-10', 'pending', undefined],
+    ])
+  })
+
   it('tracks sync state transitions', async () => {
     const bucket = makeFakeBucket()
     const store = createR2ManifestStore({ bucket, userId: 'u1' })

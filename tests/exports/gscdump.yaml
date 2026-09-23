@@ -164,6 +164,7 @@
   getFreshestGscDate: function
   getLatestGscDate: function
   getNextDate: function
+  getNextPstMidnight: function
   getOldestGscDate: function
   getPendingDates: function
   getPstDate: function
