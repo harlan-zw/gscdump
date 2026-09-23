@@ -62,11 +62,13 @@
     "gscdump": "workspace:^",
     "ofetch": "catalog:deps",
     "open": "catalog:deps",
+    "proper-lockfile": "catalog:deps",
     "sitemapd": "catalog:",
     "string-width": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/proper-lockfile": "catalog:",
     "vitest": "catalog:dev-test"
   }
 }

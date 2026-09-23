@@ -1,11 +1,14 @@
+import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import { createNodeHarness, resetNodeDuckDB } from '@gscdump/engine/node'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runCli } from '../src/cli'
-import { listStoreSites, recordStoreSite } from '../src/store-sites'
+import { listStoreSites, readSiteMap, recordStoreSite } from '../src/store-sites'
 
 let root: string
 let configDir: string
@@ -156,6 +159,35 @@ describe('site map', () => {
     expect(run.code).toBe(0)
     expect(await recordStoreSite(dataDir, 'http://example.com/')).toEqual({ ok: true, value: undefined })
     expect(await listStoreSites(dataDir)).toEqual([])
+  })
+
+  it('keeps every entry when many Sites claim at once', async () => {
+    const sites = Array.from({ length: 24 }, (_, index) => `https://site-${index}.example.com/`)
+    const claims = await Promise.all(sites.map(siteUrl => recordStoreSite(dataDir, siteUrl)))
+    expect(claims.every(claim => claim.ok)).toBe(true)
+    expect(Object.values(await readSiteMap(dataDir)).sort()).toEqual([...sites].sort())
+  })
+
+  it('lets one of two colliding Sites win a concurrent claim', async () => {
+    // Data exists under the shared ID, but no Site owns it yet.
+    await fs.mkdir(path.join(dataDir, 'u_local', 'h_example.com'), { recursive: true })
+    const claims = await Promise.all(['https://example.com/', 'http://example.com/'].map(siteUrl => recordStoreSite(dataDir, siteUrl)))
+    const winners = claims.filter(claim => claim.ok)
+    expect(winners).toHaveLength(1)
+    const map = await readSiteMap(dataDir)
+    expect(claims.find(claim => !claim.ok)).toEqual({
+      ok: false,
+      error: expect.objectContaining({ kind: 'site-id-collision', existing: map['h_example.com'] }),
+    })
+  })
+
+  it('keeps every entry when separate processes claim at once', async () => {
+    const module = fileURLToPath(new URL('../src/store-sites.ts', import.meta.url))
+    const sites = Array.from({ length: 6 }, (_, index) => `https://proc-${index}.example.com/`)
+    const script = `const { recordStoreSite } = await import(${JSON.stringify(module)}); `
+      + `const claim = await recordStoreSite(process.argv[1], process.argv[2]); if (!claim.ok) process.exit(2)`
+    await Promise.all(sites.map(siteUrl => promisify(execFile)(process.execPath, ['--input-type=module', '-e', script, dataDir, siteUrl])))
+    expect(Object.values(await readSiteMap(dataDir)).sort()).toEqual([...sites].sort())
   })
 
   it('falls back to the decoded ID for a Store without a map', async () => {
