@@ -581,7 +581,7 @@ describe('sync command (local analytics)', () => {
     })
 
     await syncCommand.run!({
-      args: { site: SITE, start: day, end: day, quiet: true, rollups: false, sitemaps: false, inspections: false },
+      args: { 'site': SITE, 'start': day, 'end': day, 'quiet': true, 'rollups': false, 'sitemaps': false, 'inspections': false, 'requests-per-minute': '1000000' },
       rawArgs: [],
       cmd: syncCommand,
     })
@@ -626,5 +626,53 @@ describe('sync command (local analytics)', () => {
     const plan = JSON.parse(String(log.mock.calls[0]![0]))
     log.mockRestore()
     expect(plan.plan.map((item: { table: string }) => item.table)).toEqual(['pages', 'pages'])
+  })
+
+  it('lists a date that failed on Google quota as a failed date in the dump manifest', async () => {
+    rawQuerySpy.mockImplementation((_siteUrl, params) => {
+      if (params.startDate === '2026-04-02')
+        return Promise.reject(new Error('[POST] 403 Search Analytics load quota exceeded'))
+      if ((params.startRow ?? 0) > 0)
+        return Promise.resolve({ rows: [] })
+      return Promise.resolve(buildRawResponse(params))
+    })
+    vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code})`)
+    }) as never)
+
+    await expect(syncCommand.run!({
+      args: { site: SITE, start: '2026-04-01', end: '2026-04-03', tables: 'pages', types: 'web', quiet: true, rollups: false, sitemaps: false, inspections: false },
+      rawArgs: [],
+      cmd: syncCommand,
+    })).rejects.toThrow('process.exit(1)')
+
+    const store = createLocalStore({ dataDir: tmpDir })
+    const outDir = path.join(tmpDir, 'out')
+    await dumpSites({ store, targets: [{ site: SITE, siteId: store.siteIdFor(SITE) }], outDir, format: 'parquet', tables: new Set(['pages']) })
+    const manifest = JSON.parse(await fs.readFile(path.join(outDir, 'manifest.json'), 'utf8'))
+    const pages = manifest.sites[0].coverage.find((entry: { table: string }) => entry.table === 'pages')
+    expect(pages.failedDates).toEqual([{ date: '2026-04-02', error: expect.stringContaining('quota exceeded') }])
+  })
+
+  it('keeps Search Analytics requests from all tables under one in-flight cap', async () => {
+    let active = 0
+    let peak = 0
+    rawQuerySpy.mockImplementation(async (_siteUrl, params) => {
+      active++
+      peak = Math.max(peak, active)
+      await new Promise(resolve => setTimeout(resolve, 2))
+      active--
+      if ((params.startRow ?? 0) > 0)
+        return { rows: [] }
+      return buildRawResponse(params)
+    })
+
+    await syncCommand.run!({
+      args: { 'site': SITE, 'start': '2026-04-01', 'end': '2026-04-10', 'tables': 'pages,queries,countries,page_queries', 'types': 'web', 'quiet': true, 'rollups': false, 'sitemaps': false, 'inspections': false, 'requests-per-minute': '1000000' },
+      rawArgs: [],
+      cmd: syncCommand,
+    })
+
+    expect(peak).toBeLessThanOrEqual(8)
   })
 })
