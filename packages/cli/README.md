@@ -44,7 +44,7 @@ gscdump mcp
 
 | Command | Description |
 |---|---|
-| `init` | Full setup (OAuth + dataDir; offers to write a `.env` for later use) |
+| `init` | Full setup (OAuth + dataDir; offers to write a `.env` for later use). `--mode cloud\|local` saves the auth mode. Without a terminal it never prompts |
 | `auth` | Manage authentication (`status`, `login`, `logout`, `refresh`) |
 | `bing` | Connect Bing, list sites, dump datasets, inspect URLs, and check hosted verification |
 | `config` | Manage CLI configuration (`show`, `set`, `unset`, `path`, `validate`) |
@@ -55,7 +55,7 @@ gscdump mcp
 | `sitemaps` | List, submit, or delete Google sitemaps; probe live URLs; read hosted snapshots (`current`, `history`, `membership`, `lastmod`, `export`) |
 | `inspect <url>` / `inspect batch [--concurrency]` | URL inspection (single URL or batch from file/stdin); renders Indexing Evidence, rich results, and AMP |
 | `indexing` | Notify Google about URL changes (`submit`, `remove`, `status`, `batch`, `batch-status`, `quota`); supports `--retries` |
-| `sync` | Sync GSC data, sitemaps, and URL Inspection results to the local Store; `--inspect-limit`, `--no-sitemaps`, `--no-inspections`, `--retry-failed`, `--dry-run` |
+| `sync` | Sync GSC data, sitemaps, and URL Inspection results to the local Store; `--inspect-limit`, `--max-calls`, `--all-sites`, `--no-sitemaps`, `--no-inspections`, `--retry-failed`, `--dry-run` |
 | `query` | Run a search analytics query (Store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. |
 | `dump` | Export the Store, inspections, sitemaps, and Bing data to a directory, with a size per file (`--format parquet\|json\|ndjson\|csv`, `--tables`, `--all-sites`, `--no-bing`) |
 | `analyze <tool>` | Run an SEO Analyzer against the Store (`--live` for row-based against fresh API) |
@@ -223,18 +223,25 @@ SQL-only Analyzers require local data.
 ## Sync
 
 ```bash
-# Default: every table and search type for three days ending three days ago.
+# Default: catch every table and search type up to the latest final date.
+# A table with no history starts 28 days back. Newest dates come first.
 # Also saves sitemaps and inspects up to 50 due URLs. Skips completed dates.
 gscdump sync --site sc-domain:example.com
 
-# Backfill from 486 days ago to three days ago
+# Backfill the 16 months Google keeps, plus 14 days Google often still serves
 gscdump sync --site sc-domain:example.com --full
+
+# Cap one run at 2,000 Search Analytics calls; the next run continues
+gscdump sync --site sc-domain:example.com --full --max-calls 2000
+
+# Every verified Site, one after another
+gscdump sync --all-sites
 
 # Custom range
 gscdump sync --site sc-domain:example.com --start 2026-08-01 --end 2026-08-31 \
   --tables pages,queries,page_queries,countries,dates
 
-# Check sync state and watermarks
+# Coverage, missing and failed dates per table, and a running sync
 gscdump sync --site sc-domain:example.com --status
 
 # Limit concurrent day requests per table
@@ -243,8 +250,11 @@ gscdump sync --site sc-domain:example.com --concurrency 4 \
 ```
 
 Sync skips completed dates; `--force` refreshes them.
+A day Google still updates stays `pending`, and the next sync fetches it again.
+Sync records Google calls in a quota ledger in the Store directory.
+If Google refuses a call for quota, sync stops, keeps the rest `pending`, and exits 0. The next run continues.
 Cross-process locks coordinate `sync`, `compact`, and `gc`.
-Pagination follows Google's 25,000-row pages, subject to [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data).
+Pagination follows Google's 25,000-row pages and stops at the first short page, subject to [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data).
 
 ## MCP server
 
