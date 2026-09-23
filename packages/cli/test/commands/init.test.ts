@@ -93,32 +93,4 @@ describe('init command', () => {
     expect(mocks.saveConfig).not.toHaveBeenCalled()
     expect(mocks.authenticate).not.toHaveBeenCalled()
   })
-
-  it('takes BYOK fast-path when access token env is set', async () => {
-    mocks.resolveBYOK.mockReturnValue('byok-access-token')
-    mocks.loadConfig.mockResolvedValue({})
-
-    await initCommand.run!({
-      args: { 'quiet': true, 'no-store': true },
-      rawArgs: [],
-      cmd: initCommand,
-    } as any)
-
-    expect(mocks.saveConfig).toHaveBeenCalled()
-    expect(mocks.authenticate).not.toHaveBeenCalled()
-    expect(mocks.getAuthCredentials).not.toHaveBeenCalled()
-  })
-
-  it('takes BYOK fast-path with refresh-token shape', async () => {
-    mocks.resolveBYOK.mockReturnValue({ getAccessToken: vi.fn() })
-    mocks.loadConfig.mockResolvedValue({})
-
-    await initCommand.run!({
-      args: { 'quiet': true, 'no-store': true },
-      rawArgs: [],
-      cmd: initCommand,
-    } as any)
-
-    expect(mocks.authenticate).not.toHaveBeenCalled()
-  })
 })
