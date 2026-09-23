@@ -203,7 +203,9 @@ export const inspectCommand = defineCommand({
       throw new Error(run.outcomes[0].error)
     }
 
-    const summary = [`Inspected ${saved.length} of ${urls.length} URL${urls.length === 1 ? '' : 's'} and saved the results to the Store.`]
+    const summary = [saved.length > 0
+      ? `Inspected ${saved.length} of ${urls.length} URL${urls.length === 1 ? '' : 's'} and saved the results to the Store.`
+      : `Inspected ${saved.length} of ${urls.length} URL${urls.length === 1 ? '' : 's'}. Nothing was saved to the Store.`]
     if (failed.length > 0)
       summary.push(`${failed.length} failed.`)
     if (run.stopped)
