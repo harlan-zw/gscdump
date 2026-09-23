@@ -55,9 +55,9 @@ gscdump mcp
 | `sitemaps` | List, submit, or delete Google sitemaps; probe live URLs; read hosted snapshots (`current`, `history`, `membership`, `lastmod`, `export`) |
 | `inspect <url>` / `inspect batch [--concurrency]` | URL inspection (single URL or batch from file/stdin); renders Indexing Evidence, rich results, and AMP |
 | `indexing` | Notify Google about URL changes (`submit`, `remove`, `status`, `batch`, `batch-status`, `quota`); supports `--retries` |
-| `sync` | Sync GSC data to the local Parquet Store; `--retry-failed`, `--dry-run` |
+| `sync` | Sync GSC data, sitemaps, and URL Inspection results to the local Store; `--inspect-limit`, `--no-sitemaps`, `--no-inspections`, `--retry-failed`, `--dry-run` |
 | `query` | Run a search analytics query (Store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. |
-| `dump` | Export from the Store to a directory (`--format parquet\|json\|ndjson\|csv`, `--tables`, `--all-sites`) |
+| `dump` | Export the Store, inspections, sitemaps, and Bing data to a directory, with a size per file (`--format parquet\|json\|ndjson\|csv`, `--tables`, `--all-sites`, `--no-bing`) |
 | `analyze <tool>` | Run an SEO Analyzer against the Store (`--live` for row-based against fresh API) |
 | `entities` | Snapshot URL inspections and indexing metadata into the local entity store |
 | `store stats` | Show row/byte counts per table and on-disk footprint |
@@ -223,11 +223,12 @@ SQL-only Analyzers require local data.
 ## Sync
 
 ```bash
-# Default: three days ending three days ago; skip completed dates
-gscdump sync --site sc-domain:example.com --tables pages,queries,page_queries,countries,dates
+# Default: every table and search type for three days ending three days ago.
+# Also saves sitemaps and inspects up to 50 due URLs. Skips completed dates.
+gscdump sync --site sc-domain:example.com
 
-# Backfill from 450 days ago to three days ago
-gscdump sync --site sc-domain:example.com --full --tables pages,queries,page_queries,countries,dates
+# Backfill from 486 days ago to three days ago
+gscdump sync --site sc-domain:example.com --full
 
 # Custom range
 gscdump sync --site sc-domain:example.com --start 2026-08-01 --end 2026-08-31 \

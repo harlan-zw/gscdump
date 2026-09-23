@@ -177,7 +177,7 @@ Do not rewrite rows, estimate metrics, or add manually calculated totals.
 | `gscdump inspect <url>` | URL Inspection with Indexing Evidence |
 | `gscdump sitemaps` | List, submit, delete, and probe sitemaps |
 | `gscdump indexing` | Indexing API notifications and quota |
-| `gscdump dump` | Export Store tables to Parquet, CSV, JSON, or NDJSON |
+| `gscdump dump` | Export Store tables, inspections, sitemaps, and Bing data with file sizes |
 | `gscdump store` | Store stats, compaction, garbage collection, resets |
 | `gscdump entities` | Snapshot URL inspections into the entity store |
 | `gscdump config` | Defaults such as `defaultSite`, `dataDir`, `defaultLimit` |
@@ -202,9 +202,13 @@ gscdump sync --site sc-domain:example.com --days 90 \
 gscdump sync --site sc-domain:example.com --status --json
 ```
 
-- Pass an explicit `--tables` list. The default list has a known daily-totals
-  limitation.
-- `--full` backfills the 450 days Google keeps.
+- Sync covers every table and search type by default. Pass `--tables` and
+  `--types` to sync less. Sync skips table and type pairs Google cannot answer.
+- `--full` backfills the 486 days Google keeps.
+- Sync also saves the sitemap list, sitemap URLs, and URL Inspection results.
+  It inspects up to 50 due URLs per run. `--inspect-limit N` changes that.
+  `--no-sitemaps` and `--no-inspections` skip those steps. Read the
+  `sitemaps` and `inspections` fields of `sync --json`.
 - Sync skips completed dates. `--force` refreshes them. `--retry-failed`
   reruns only failed dates.
 - `--dry-run` prints the planned work without calling Google.
