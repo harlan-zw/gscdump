@@ -101,11 +101,26 @@ describe('local --page filters', () => {
 })
 
 describe('local comparison windows', () => {
+  const tenDays = (date: string) => [{ date, url: '/a', query: 'alpha', clicks: 2, impressions: 50, sum_position: 0 }]
+
   it('warns when the default previous period has no synced days', async () => {
     // Data starts 10 days back: the 28 days before the window are unsynced.
-    await seed('page_queries', days('2026-03-20', 10), date => [{ date, url: '/a', query: 'alpha', clicks: 2, impressions: 50, sum_position: 0 }])
+    await seed('page_queries', days('2026-03-20', 10), tenDays)
 
     await cli('analyze', 'movers', '--site', SITE, '--json')
+
+    expect(stderr.join('\n')).toContain('No synced days for page_queries')
+    expect(stderr.join('\n')).toContain('2026-01-24 to 2026-02-20')
+  })
+
+  it('warns the same way on report movers', async () => {
+    // Data starts 10 days back: the 28 days before the window are unsynced.
+    // The report anchors on every table it reads, pages included.
+    const synced = days('2026-03-20', 10)
+    await seed('page_queries', synced, tenDays)
+    await seed('pages', synced, date => [{ date, url: '/a', clicks: 2, impressions: 50, sum_position: 0 }])
+
+    await cli('report', 'movers', '--site', SITE, '--period', '28d', '--json')
 
     expect(stderr.join('\n')).toContain('No synced days for page_queries')
     expect(stderr.join('\n')).toContain('2026-01-24 to 2026-02-20')

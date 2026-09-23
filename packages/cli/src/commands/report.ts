@@ -121,13 +121,19 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
         return
       }
 
-      const { source, siteUrl, anchorFor } = await resolveAnalysisSource({
+      const { source, siteUrl, anchorFor, comparisonWarning } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
         json: !!args.json,
       })
-      const anchor = await anchorFor(reportTables(report, params, flags))
+      const tables = reportTables(report, params, flags)
+      const anchor = await anchorFor(tables)
       const window = unwrapResult(parseWindowFlags(flags, reportDefaults(report), anchor), windowFlagErrorToException)
+      if (window.comparison) {
+        const missing = await comparisonWarning(tables, window.comparison.start, window.comparison.end)
+        if (missing)
+          logger.warn(missing)
+      }
 
       const ctx: ReportContext = { site: siteUrl, window, params, registryVersion: defaultReportRegistry.version, ...(fetchBudget !== undefined ? { fetchBudget } : {}) }
       const result = await runReport(report, { source, analyzers: defaultAnalyzerRegistry, ctx })
