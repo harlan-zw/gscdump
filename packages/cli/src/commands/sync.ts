@@ -2,6 +2,7 @@ import type { googleSearchConsole } from 'gscdump/client'
 import type { GscSearchAnalyticsMetadata } from 'gscdump/contracts'
 import type { SearchType } from 'gscdump/query'
 import type { ResolvedGscdumpConfig } from '../config'
+import type { CommandContext } from '../context'
 import type { StoreCoverage } from '../coverage'
 import type { InspectionSyncResult, SitemapSyncResult } from '../local-entities'
 import type { GscApiRow, LocalStore, Row, TableName, WriteCtx } from '../local-store'
@@ -16,10 +17,11 @@ import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { createRowAccumulator } from '@gscdump/engine/ingest'
 import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
+import { resolveSiteInput } from 'gscdump'
 import { getLatestGscDate, getOldestGscDate, getPstDate, groupIntoRanges } from 'gscdump/dates'
 import { SearchTypes } from 'gscdump/query'
 import { syncCommandMeta } from '../command-meta'
-import { createCommandContext } from '../context'
+import { createCommandContext, formatSiteResolution } from '../context'
 import { analyticsCoverage, readStoreCoverage, renderCoverage } from '../coverage'
 import { INSPECTION_QPD_PER_PROPERTY } from '../inspection-record'
 import { inspectionCandidates, syncInspections, syncSitemaps } from '../local-entities'
@@ -474,7 +476,7 @@ export const syncCommand = defineCommand({
     const requestedTypes = args.types ? parseNameList(args.types, ALL_SEARCH_TYPES, '--types') : DEFAULT_TYPES
     if (args.status) {
       const ctx = await createCommandContext()
-      const siteUrl = args.site ? await ctx.resolveSite(String(args.site), { scope: 'store' }) : undefined
+      const siteUrl = args.site ? await resolveStatusSite(ctx, String(args.site)) : undefined
       await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, siteUrl, json, inspectLimit)
       return
     }
@@ -1049,6 +1051,22 @@ function gatedClient(
 
 function pacer<T>(requestPacer: RequestPacer, task: () => Promise<T>): Promise<T> {
   return requestPacer.run(task)
+}
+
+/**
+ * The Site for `sync --status --site`: a Store Site, or a Site of the last
+ * sync run. A run stopped before its first write leaves no Store data, and
+ * its status must still show.
+ */
+async function resolveStatusSite(ctx: CommandContext, input: string): Promise<string> {
+  const inStore = await ctx.matchSite(input, { scope: 'store' })
+  if (inStore.kind === 'resolved')
+    return inStore.siteUrl
+  const record = await readSyncRun(ctx.dataDir)
+  const inRun = record ? resolveSiteInput(input, record.sites.map(siteUrl => ({ siteUrl }))) : undefined
+  if (inRun?.kind === 'resolved')
+    return inRun.siteUrl
+  throw new Error(formatSiteResolution(inStore, 'store'))
 }
 
 async function printSyncStatus(
