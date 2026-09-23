@@ -483,6 +483,13 @@ export async function getAuth(opts: GetAuthOptions = {}): Promise<OAuth2Client> 
   return client
 }
 
+/** A stale service-account pointer (missing file or malformed JSON) is ignorable. */
+function isStaleServiceAccountPointer(error: unknown): boolean {
+  if (error instanceof SyntaxError)
+    return true
+  return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT'
+}
+
 /**
  * Returns the right auth shape for `googleSearchConsole(auth)`. Priority:
  *   1. Explicit / env-configured service-account JSON (JWT)
@@ -490,9 +497,14 @@ export async function getAuth(opts: GetAuthOptions = {}): Promise<OAuth2Client> 
  *   3. Saved OAuth tokens / interactive loopback flow
  */
 export async function resolveAuth(opts: GetAuthOptions = {}): Promise<GscAuth | OAuth2Client | GoogleJWT> {
-  // A stale pointer (missing or malformed key file) is ignorable here: it
-  // falls through to BYOK and saved tokens instead of failing resolution.
-  const sa = await resolveServiceAccount({ path: opts.serviceAccount }).catch(() => null)
+  const sa = await resolveServiceAccount({ path: opts.serviceAccount }).catch((error: unknown) => {
+    // Only a stale pointer (missing file or malformed JSON) falls through to
+    // BYOK and saved tokens. A wrong key type or an unreadable file is a real
+    // misconfiguration: propagate it so the user sees the precise diagnostic.
+    if (isStaleServiceAccountPointer(error))
+      return null
+    throw error
+  })
   if (sa) {
     logger.success('Using service-account credentials')
     return sa
