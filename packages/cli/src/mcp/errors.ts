@@ -18,6 +18,7 @@ import { isAnalysisError } from '@gscdump/analysis/errors'
 import { isEngineError } from '@gscdump/engine/errors'
 import { classifyError } from 'gscdump/errors'
 import { isQueryError } from 'gscdump/query'
+import { resolveBYOK } from '../auth'
 import { resolveAuthentication } from '../auth-state'
 
 export type McpHandlerErrorKind
@@ -121,16 +122,37 @@ function httpStatus(error: unknown): number | undefined {
 }
 
 /** The authentication mode the failing call ran in; it decides the next step. */
-export type ApiErrorMode = 'cloud' | 'local'
+export type ApiErrorMode = 'cloud' | 'local' | 'byok'
 
 /**
  * The active authentication mode for error advice. Falls back to `local` when
- * the mode cannot be resolved, keeping the long-standing local advice.
+ * the mode cannot be resolved, keeping the long-standing local advice. BYOK env
+ * vars outrank saved tokens in `resolveAuth`, so a non-null `resolveBYOK()`
+ * means the failing call used them; `auth login` cannot fix their failures.
  */
 async function authenticationMode(): Promise<ApiErrorMode> {
-  return resolveAuthentication()
-    .then(state => (state._tag === 'Cloud' ? 'cloud' : 'local'))
-    .catch(() => 'local')
+  const state = await resolveAuthentication().catch(() => null)
+  if (state?._tag === 'Cloud')
+    return 'cloud'
+  // A throw here only means no runtime context; fall back to the local advice.
+  const byok = await Promise.resolve().then(() => resolveBYOK()).catch(() => null)
+  return byok ? 'byok' : 'local'
+}
+
+/** Google OAuth grant failures that no `auth login`-unaware advice may miss. */
+const OAUTH_TOKEN_FAILURE_RE = /invalid_grant|invalid_client|unauthorized_client|token has been expired|token has been revoked/i
+
+/**
+ * A rejected OAuth grant surfaces as a 400 from the token endpoint, not a 401,
+ * so `classifyError` files it under `validation`. Reclassify the grant signals
+ * as auth-expired; argument advice stays for real Google API 400s.
+ */
+function classifyGoogleError(error: unknown): GscError {
+  const classified = classifyError(error)
+  if (classified.kind !== 'validation')
+    return classified
+  const text = `${classified.message} ${googleMessage(error) ?? ''}`
+  return OAUTH_TOKEN_FAILURE_RE.test(text) ? { ...classified, kind: 'auth-expired' } : classified
 }
 
 function nextStep(error: GscError, status: number, mode: ApiErrorMode): string {
@@ -141,9 +163,11 @@ function nextStep(error: GscError, status: number, mode: ApiErrorMode): string {
       return 'The gscdump.com account cannot open this Site. Check the Site is connected to your account at gscdump.com.'
     return 'The signed-in account cannot open this Site. Check its Search Console permissions, or run `gscdump auth status` to see the account.'
   }
-  if (status === 401) {
+  if (status === 401 || error.kind === 'auth-expired') {
     if (mode === 'cloud')
       return 'Set or refresh GSCDUMP_API_KEY to a user API key from your gscdump.com settings.'
+    if (mode === 'byok')
+      return 'Refresh GSC_ACCESS_TOKEN (or GSC_CLIENT_ID, GSC_CLIENT_SECRET, and GSC_REFRESH_TOKEN) in the MCP server configuration and restart the MCP client.'
     return 'Run `gscdump auth login` in a terminal to connect again.'
   }
   if (error.kind === 'not-found')
@@ -162,17 +186,26 @@ export function describeApiError(error: unknown, mode: ApiErrorMode = 'local'): 
   const status = httpStatus(error)
   if (status === undefined)
     return null
-  const classified = classifyError(error)
+  const classified = classifyGoogleError(error)
   const reason = (googleMessage(error) ?? classified.message).replace(/\s+/g, ' ').trim().replace(/\.$/, '')
   return `API error ${status}: ${reason}. ${nextStep(classified, status, mode)}`.trim()
 }
 
 /** Google's own explanation beats the fetch wrapper text (`[GET] url: 403`). */
 function googleMessage(error: unknown): string | undefined {
-  const data = (error as { data?: { error?: unknown, error_description?: unknown } } | null)?.data
-  const nested = (data?.error as { message?: unknown } | undefined)?.message
-  const message = typeof nested === 'string' ? nested : data?.error_description
-  return typeof message === 'string' && message ? message : undefined
+  // ofetch wraps the body in `.data`; gaxios (google-auth-library) in `.response.data`.
+  const bodies = [
+    (error as { data?: unknown } | null)?.data,
+    (error as { response?: { data?: unknown } } | null)?.response?.data,
+  ]
+  for (const body of bodies) {
+    const data = body as { error?: unknown, error_description?: unknown } | undefined
+    const nested = (data?.error as { message?: unknown } | undefined)?.message
+    const message = typeof nested === 'string' ? nested : data?.error_description
+    if (typeof message === 'string' && message)
+      return message
+  }
+  return undefined
 }
 
 /** The text an agent sees when a tool fails. */

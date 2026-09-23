@@ -108,6 +108,22 @@ describe('gscdump mcp runtime', () => {
     expect(text(result)).not.toContain('gscdump auth login')
   })
 
+  it('points an expired BYOK access token at the MCP server configuration, not auth login', async () => {
+    await connect(
+      url => url.endsWith('/webmasters/v3/sites')
+        ? googleError(401, 'Request had invalid authentication credentials.')
+        : undefined,
+      { GSC_ACCESS_TOKEN: 'stale-token' },
+    )
+
+    const result = await client.callTool({ name: 'list-sites', arguments: {} }) as CallToolResult
+
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('GSC_ACCESS_TOKEN')
+    expect(text(result)).toContain('MCP server configuration')
+    expect(text(result)).not.toContain('gscdump auth login')
+  })
+
   it('starts without authentication and returns the next command from a tool call', async () => {
     await connect()
 

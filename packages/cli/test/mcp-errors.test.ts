@@ -2,7 +2,7 @@ import { analysisErrors } from '@gscdump/analysis/errors'
 import { engineErrors } from '@gscdump/engine/errors'
 import { queryErrors } from 'gscdump/query'
 import { describe, expect, it } from 'vitest'
-import { enrichToolError, mcpHandlerErrors, mcpHandlerErrorToException } from '../src/mcp/errors'
+import { enrichToolError, mcpHandlerErrors, mcpHandlerErrorToException, toolErrorMessage } from '../src/mcp/errors'
 import { customQueryResult } from '../src/mcp/handlers/query'
 import { runReportHandlerResult } from '../src/mcp/handlers/reports'
 
@@ -74,5 +74,38 @@ describe('enrichToolError (consuming upstream typed errors)', () => {
 
   it('returns null for an unmodelled defect', () => {
     expect(enrichToolError(new Error('totally unexpected'))).toBeNull()
+  })
+})
+
+describe('toolErrorMessage (Google + hosted API failures)', () => {
+  // google-auth-library throws this exact GaxiosError shape when the OAuth
+  // token endpoint rejects a refresh: message `invalid_grant`, numeric
+  // `.status`, and the response body at `.response.data`.
+  const expiredGrant = Object.assign(new Error('invalid_grant'), {
+    status: 400,
+    response: {
+      status: 400,
+      data: { error: 'invalid_grant', error_description: 'Token has been expired or revoked.' },
+    },
+  })
+
+  it('sends a rejected OAuth refresh to re-authentication, not the tool arguments', async () => {
+    const message = await toolErrorMessage(expiredGrant)
+
+    expect(message).toContain('Token has been expired or revoked.')
+    expect(message).toContain('gscdump auth login')
+    expect(message).not.toContain('Check the tool arguments')
+  })
+
+  it('keeps argument advice for a Google API 400', async () => {
+    const badArgument = Object.assign(new Error('[GET] https://www.googleapis.com/url: 400'), {
+      statusCode: 400,
+      data: { error: { code: 400, message: 'Invalid dimension "bogus".' } },
+    })
+
+    const message = await toolErrorMessage(badArgument)
+
+    expect(message).toContain('Invalid dimension "bogus".')
+    expect(message).toContain('Check the tool arguments')
   })
 })
