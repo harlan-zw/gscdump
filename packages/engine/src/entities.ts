@@ -14,6 +14,14 @@ export type {
 export * from './entities/inspection'
 export * from './entities/query-dim'
 export { createSitemapReadStore } from './entities/sitemap'
+export { createSitemapListStore } from './entities/sitemap-list'
+export type {
+  CreateSitemapListStoreOptions,
+  SitemapListContent,
+  SitemapListDoc,
+  SitemapListEntry,
+  SitemapListStore,
+} from './entities/sitemap-list'
 export type {
   CompleteSitemapGeneration,
   CompleteSitemapTraversal,

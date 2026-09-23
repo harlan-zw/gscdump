@@ -100,8 +100,8 @@ try {
   await cli('analyze', '--help')
   const site = 'sc-domain:example.com'
   const range = ['--site', site, '--start', '2026-08-01', '--end', '2026-08-01']
-  await cli('sync', ...range, '--tables', 'pages', '--no-rollups', '--quiet')
-  await cli('sync', ...range, '--tables', 'pages', '--no-rollups', '--quiet')
+  await cli('sync', ...range, '--tables', 'pages', '--types', 'web', '--no-rollups', '--quiet')
+  await cli('sync', ...range, '--tables', 'pages', '--types', 'web', '--no-rollups', '--quiet')
   const { data: rows } = JSON.parse(await cli('query', ...range, '--dimensions', 'page', '--format', 'json', '--quiet'))
   assert.equal(rows.length, 1)
   assert.equal(rows[0].clicks, 5)
@@ -109,7 +109,12 @@ try {
 
   const parquetDirectory = join(consumer, 'exported parquet')
   const dumped = JSON.parse(await cli('dump', '--site', site, '--tables', 'pages', '--format', 'parquet', '--out', parquetDirectory, '--json'))
-  assert.equal(dumped.sites[0].files, 1)
+  assert.equal(dumped.sites[0].files.length, 1)
+  assert(dumped.sites[0].files[0].bytes > 0)
+  // Sync saved the sitemap and one URL Inspection; dump exports both with sizes.
+  const entityDump = JSON.parse(await cli('dump', '--site', site, '--tables', 'inspections,sitemaps,sitemap_urls', '--format', 'json', '--out', join(consumer, 'exported entities'), '--json'))
+  assert.deepEqual(Object.fromEntries(entityDump.sites[0].files.map(file => [file.dataset, file.rows])), { inspections: 1, sitemaps: 1, sitemap_urls: 1 })
+  assert(entityDump.metadataFiles.some(file => file.path.endsWith('manifest.json')))
   const duckdbFile = join(consumer, 'exported store.duckdb')
   const exported = JSON.parse(await cli('store', 'export', '--site', site, '--out', duckdbFile, '--json'))
   assert.equal(exported.totalRows, 1)

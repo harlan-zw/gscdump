@@ -10,9 +10,10 @@ import {
 import { defineCommand } from 'citty'
 import { entitiesCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
+import { INSPECTION_QPD_PER_PROPERTY, toInspectionRecord } from '../inspection-record'
+import { loadInspectionState, recordInspections } from '../local-entities'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
-const INSPECTION_QPD_PER_PROPERTY = 2000
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
 
 // The redesigned InspectionStore is append-only history shards bucketed by the
@@ -104,7 +105,8 @@ const inspectSubCommand = defineCommand({
     if (urls.length === INSPECTION_QPD_PER_PROPERTY)
       logger.info(`Hit per-property daily inspection quota (${INSPECTION_QPD_PER_PROPERTY}); remaining URLs will be queued for tomorrow.`)
 
-    const inspector = createInspectionStore({ dataSource: store.dataSource })
+    const tenant = { userId: store.userId, siteId: store.siteIdFor(siteUrl) }
+    const { latest } = await loadInspectionState(store.dataSource, tenant, new Date())
 
     let completed = 0
     let failed = 0
@@ -118,23 +120,12 @@ const inspectSubCommand = defineCommand({
         failures.push({ url, error: result.message })
       }
       else {
-        const ix = result.inspectionResult
-        const indexStatus = ix?.indexStatusResult
-        records.push({
+        records.push(toInspectionRecord({
           url,
-          inspectedAt: new Date().toISOString(),
-          indexStatus: indexStatus?.verdict ?? undefined,
-          lastCrawlTime: indexStatus?.lastCrawlTime ?? undefined,
-          googleCanonical: indexStatus?.googleCanonical ?? undefined,
-          userCanonical: indexStatus?.userCanonical ?? undefined,
-          coverageState: indexStatus?.coverageState ?? undefined,
-          robotsTxtState: indexStatus?.robotsTxtState ?? undefined,
-          indexingState: indexStatus?.indexingState ?? undefined,
-          pageFetchState: indexStatus?.pageFetchState ?? undefined,
-          mobileUsabilityVerdict: ix?.mobileUsabilityResult?.verdict ?? undefined,
-          richResultsVerdict: ix?.richResultsResult?.verdict ?? undefined,
-          raw: ix as Record<string, unknown> | undefined,
-        })
+          result: result.inspectionResult,
+          inspectedAt: new Date(),
+          previous: latest.get(url),
+        }))
       }
       completed++
       if (!quiet)
@@ -144,10 +135,7 @@ const inspectSubCommand = defineCommand({
     if (!quiet)
       process.stdout.write('\n')
 
-    await inspector.appendHistory(
-      { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
-      records,
-    )
+    await recordInspections(store.dataSource, tenant, latest, records)
 
     if (json) {
       console.log(JSON.stringify({

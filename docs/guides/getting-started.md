@@ -115,7 +115,9 @@ gscdump dump --site sc-domain:example.com --out ./export
 gscdump dump --site sc-domain:example.com --tables pages --format csv --out ./export-csv
 ```
 
-`dump` exports Google data already in the Store. `bing dump` reads Bing datasets through the selected authentication mode.
+`dump` exports the Google data in the Store: analytics tables, URL inspections, sitemaps, and Indexing API metadata.
+It also exports Bing data for matching sites when a Bing login exists. Pass `--no-bing` to skip it.
+Each dump writes `manifest.json` with every file size and the dates the Store is missing.
 Use `query --output` to write a filtered result to one file.
 
 ## Set defaults

@@ -26,6 +26,15 @@ globalThis.fetch = async (request, options = {}) => {
       return Response.json({ siteEntry: [{ siteUrl: 'sc-domain:example.com', permissionLevel: 'siteOwner' }] })
     if (url.pathname.endsWith('/searchAnalytics/query'))
       return Response.json(googleRows(JSON.parse(options.body)))
+    if (url.pathname.endsWith('/sitemaps'))
+      return Response.json({ sitemap: [{ path: 'https://example.com/sitemap.xml', isPending: false, errors: '0', warnings: '0', contents: [{ type: 'web', submitted: '1' }] }] })
+    if (url.pathname === '/v1/urlInspection/index:inspect')
+      return Response.json({ inspectionResult: { indexStatusResult: { verdict: 'PASS', coverageState: 'Submitted and indexed' } } })
+  }
+  if (url.origin === 'https://example.com' && url.pathname === '/sitemap.xml') {
+    return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://example.com/guide</loc></url></urlset>', {
+      headers: { 'content-type': 'application/xml' },
+    })
   }
   if (url.hostname === 'ssl.bing.com' || url.hostname === 'www.bing.com') {
     assert.equal(url.searchParams.get('apikey'), 'packed-bing-key')

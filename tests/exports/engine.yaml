@@ -44,6 +44,7 @@
   createIndexingMetadataStore: function
   createInspectionStore: function
   createQueryDimStore: function
+  createSitemapListStore: function
   createSitemapReadStore: function
   createSitemapStore: function
   emptyTypesKey: function
@@ -64,6 +65,7 @@
   queryDimParquetKey: function
   sitemapImmutableBaseKey: function
   sitemapLegacyImportKey: function
+  sitemapListKey: function
   sitemapPayloadHashV1: function
   sitemapSiteGenerationManifestKey: function
   sitemapSiteManifestKey: function
@@ -91,6 +93,7 @@
   queryDimParquetKey: function
   sitemapImmutableBaseKey: function
   sitemapLegacyImportKey: function
+  sitemapListKey: function
   sitemapPayloadHashV1: function
   sitemapSiteGenerationManifestKey: function
   sitemapSiteManifestKey: function

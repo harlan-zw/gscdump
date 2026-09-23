@@ -1,8 +1,13 @@
 import type { googleSearchConsole } from 'gscdump/client'
 import type { SearchType } from 'gscdump/query'
 import type { ResolvedGscdumpConfig } from '../config'
+import type { InspectionSyncResult, SitemapSyncResult } from '../local-entities'
 import type { GscApiRow, LocalStore, Row, TableName, WriteCtx } from '../local-store'
+import type { RequestPacer } from '../request-pacer'
+import type { SyncJob } from '../sync-plan'
+import { randomUUID } from 'node:crypto'
 import process from 'node:process'
+import { runGscSearchAppearanceContextSlice, runGscSyncSlice } from '@gscdump/engine-gsc-api'
 import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { createRowAccumulator } from '@gscdump/engine/ingest'
 import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
@@ -11,14 +16,41 @@ import { daysAgoUtc as daysAgo, getDateRange } from 'gscdump/dates'
 import { SearchTypes } from 'gscdump/query'
 import { syncCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
+import { INSPECTION_QPD_PER_PROPERTY } from '../inspection-record'
+import { loadSitemapGenerationUrls, resolvePagePaths, syncInspections, syncSitemaps } from '../local-entities'
 import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS } from '../local-store'
+import { createRequestPacer } from '../request-pacer'
+import { loadSitemapUrls } from '../sitemap'
+import { datesForJob, FULL_HISTORY_DAYS, planHealDates, planSyncJobs } from '../sync-plan'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
-const DEFAULT_TABLES: TableName[] = ['pages', 'queries', 'countries', 'dates']
-const DEFAULT_TYPES: readonly SearchType[] = ['web']
 const ALL_SEARCH_TYPES = Object.values(SearchTypes) as readonly SearchType[]
+// Every table and every search type. Stored empty-type markers skip types
+// with no data, and capability rules skip pairs Google cannot answer.
+const DEFAULT_TABLES: readonly TableName[] = allTables()
+const DEFAULT_TYPES: readonly SearchType[] = ALL_SEARCH_TYPES
+const GSC_ROW_LIMIT = 25_000
+const MAX_SLICE_ROWS = 5_000_000
+const SLICE_TABLES = ['search_appearance', 'search_appearance_pages', 'search_appearance_queries', 'search_appearance_page_queries', 'hourly_pages'] as const
+type SliceTable = typeof SLICE_TABLES[number]
+
+function isSliceTable(table: TableName): table is SliceTable {
+  return (SLICE_TABLES as readonly string[]).includes(table)
+}
 const DEFAULT_PENDING_DAYS = 3
 const DEFAULT_CONCURRENCY = 8
+// Google allows 1,200 Search Analytics queries per minute per site and per
+// user, plus a load quota on expensive queries. Every table and search type
+// shares one gate: 8 requests in flight and 600 starts per minute, half the
+// per-minute limit, so a default full sync stays under both.
+const DEFAULT_MAX_IN_FLIGHT = 8
+const DEFAULT_REQUESTS_PER_MINUTE = 600
+// 50 calls at 4 in flight add about 15 seconds to a daily sync. At that
+// rate a site with 1,500 URLs gets each URL inspected about once a month.
+const DEFAULT_INSPECT_LIMIT = 50
+const INSPECT_CONCURRENCY = 4
+// Traffic-ranked pages to consider for inspection, before sitemap URLs.
+const INSPECT_PAGE_CANDIDATES = 5000
 // Minimum days synced before we trust a zero-row result enough to persist
 // an empty-type marker. Shorter windows fire false positives on intermittent
 // outages or low-traffic sites that happen to have zero clicks one day.
@@ -162,6 +194,8 @@ async function runOneDate(
   dims: string[],
   date: string,
 ): Promise<{ kind: 'ok', rows: number }> {
+  if (isSliceTable(table))
+    return runSliceDate(store, client, siteUrl, table, searchType, date)
   const apiRows = await fetchDateRows(client, siteUrl, searchType, dims, date)
   let rows: Row[] = []
   if (table === 'dates') {
@@ -178,7 +212,66 @@ async function runOneDate(
     accumulator.push(table, apiRows)
     rows = accumulator.drain().get(table)?.get(date) ?? []
   }
+  return writeDayRows(store, siteUrl, table, searchType, date, rows)
+}
 
+// Search appearance and hourly tables need Google's own query shapes, so
+// they go through the engine's slice runners instead of `fetchDateRows`.
+async function runSliceDate(
+  store: LocalStore,
+  client: ReturnType<typeof googleSearchConsole>,
+  siteUrl: string,
+  table: SliceTable,
+  searchType: SearchType,
+  date: string,
+): Promise<{ kind: 'ok', rows: number }> {
+  const base = { client, siteUrl, startDate: date, endDate: date, searchType, rowLimit: GSC_ROW_LIMIT, cpuBudgetMs: Infinity }
+  const drainDay = (accumulator: ReturnType<typeof createRowAccumulator>): Row[] => {
+    if (accumulator.overflowed)
+      throw new Error(`${table} ${date}: more rows than one sync can hold`)
+    return accumulator.drain().get(table)?.get(date) ?? []
+  }
+  let rows: Row[]
+  if (table === 'search_appearance' || table === 'hourly_pages') {
+    // GSC groups `searchAppearance` only on its own, so the day comes from the query range.
+    const accumulator = createRowAccumulator({ maxRows: MAX_SLICE_ROWS, date })
+    const result = await runGscSyncSlice({ ...base, table, onBatch: async (batch) => {
+      accumulator.push(table, batch)
+    } })
+    if (result.hasMore)
+      throw new Error(`${table} ${date}: Google stopped before the last page`)
+    rows = drainDay(accumulator)
+  }
+  else {
+    // Discover each appearance, then fetch its rows with a filter on it.
+    const byAppearance = new Map<string, ReturnType<typeof createRowAccumulator>>()
+    const result = await runGscSearchAppearanceContextSlice({
+      ...base,
+      table,
+      onContextBatch: async ({ searchAppearance, rows: batch }) => {
+        let accumulator = byAppearance.get(searchAppearance)
+        if (!accumulator) {
+          accumulator = createRowAccumulator({ maxRows: MAX_SLICE_ROWS, searchAppearance })
+          byAppearance.set(searchAppearance, accumulator)
+        }
+        accumulator.push(table, batch)
+      },
+    })
+    if (result.hasMore)
+      throw new Error(`${table} ${date}: Google stopped before the last page`)
+    rows = [...byAppearance.values()].flatMap(drainDay)
+  }
+  return writeDayRows(store, siteUrl, table, searchType, date, rows)
+}
+
+async function writeDayRows(
+  store: LocalStore,
+  siteUrl: string,
+  table: TableName,
+  searchType: SearchType,
+  date: string,
+  rows: Row[],
+): Promise<{ kind: 'ok', rows: number }> {
   const writeCtx: WriteCtx = {
     userId: store.userId,
     siteId: store.siteIdFor(siteUrl),
@@ -224,14 +317,31 @@ export const syncCommand = defineCommand({
       default: false,
       description: 'Ignore stored empty-type markers and re-probe every requested type',
     },
-    'no-rollups': {
+    'rollups': {
       type: 'boolean',
-      default: false,
-      description: 'Skip the post-sync rollup rebuild (daily/weekly totals, top-N tables)',
+      default: true,
+      description: 'Rebuild rollups after sync (daily and weekly totals, top-N tables)',
+      negativeDescription: 'Skip the post-sync rollup rebuild',
+    },
+    'sitemaps': {
+      type: 'boolean',
+      default: true,
+      description: 'Save the Search Console sitemap list and the URLs in each sitemap',
+      negativeDescription: 'Skip saving sitemaps',
+    },
+    'inspections': {
+      type: 'boolean',
+      default: true,
+      description: 'Run URL Inspection on URLs that are due and save the results',
+      negativeDescription: 'Skip URL Inspection',
+    },
+    'inspect-limit': {
+      type: 'string',
+      description: `Most URLs to inspect in this run (default: ${DEFAULT_INSPECT_LIMIT}; Google allows ${INSPECTION_QPD_PER_PROPERTY} per property per day)`,
     },
     'full': {
       type: 'boolean',
-      description: 'Backfill up to 450 days of available Search Console data',
+      description: `Backfill up to ${FULL_HISTORY_DAYS} days, all the Search Console data Google keeps`,
     },
     ...OUTPUT_ARGS,
     'force': {
@@ -247,7 +357,11 @@ export const syncCommand = defineCommand({
     'concurrency': {
       type: 'string',
       alias: 'c',
-      description: `Concurrent in-flight day fetches per table (default: ${DEFAULT_CONCURRENCY})`,
+      description: `Concurrent day fetches per table (default: ${DEFAULT_CONCURRENCY}). All tables share ${DEFAULT_MAX_IN_FLIGHT} requests in flight.`,
+    },
+    'requests-per-minute': {
+      type: 'string',
+      description: `Most Search Analytics requests to start per minute, across all tables (default: ${DEFAULT_REQUESTS_PER_MINUTE}; Google allows 1,200)`,
     },
     'serial-tables': {
       type: 'boolean',
@@ -269,6 +383,10 @@ export const syncCommand = defineCommand({
     const { json, quiet } = applyOutputMode(args)
     const days = parseIntegerOption(args.days, '--days')
     const concurrency = parseIntegerOption(args.concurrency, '--concurrency') ?? DEFAULT_CONCURRENCY
+    const inspectLimit = Math.min(
+      parseIntegerOption(args['inspect-limit'], '--inspect-limit', 0) ?? DEFAULT_INSPECT_LIMIT,
+      INSPECTION_QPD_PER_PROPERTY,
+    )
     if (args.status) {
       const ctx = await createCommandContext()
       await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, args.site ? String(args.site) : undefined, json)
@@ -276,7 +394,11 @@ export const syncCommand = defineCommand({
     }
 
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
-    const client = ctx.client!
+    const pacer = createRequestPacer({
+      maxInFlight: DEFAULT_MAX_IN_FLIGHT,
+      perMinute: parseIntegerOption(args['requests-per-minute'], '--requests-per-minute') ?? DEFAULT_REQUESTS_PER_MINUTE,
+    })
+    const client = pacedClient(ctx.client!, pacer)
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
 
     const tables = args.tables
@@ -331,7 +453,7 @@ export const syncCommand = defineCommand({
       startDate = String(args.start)
     }
     else if (args.full) {
-      startDate = daysAgo(450)
+      startDate = daysAgo(FULL_HISTORY_DAYS)
     }
     else if (days !== undefined) {
       startDate = daysAgo(days + DEFAULT_PENDING_DAYS - 1)
@@ -346,7 +468,7 @@ export const syncCommand = defineCommand({
       process.exit(1)
     }
 
-    const printCompletion = async (status: 'completed' | 'failed' | 'skipped', totals: Record<string, { rows: number, skipped: number, failed: number }>, reason?: string, rollupError?: string): Promise<void> => {
+    const printCompletion = async (status: 'completed' | 'failed' | 'skipped', totals: Record<string, { rows: number, skipped: number, failed: number }>, reason?: string, rollupError?: string, entities?: EntitySyncReport): Promise<void> => {
       if (!json)
         return
       console.log(JSON.stringify({
@@ -360,6 +482,7 @@ export const syncCommand = defineCommand({
         totals,
         watermarks: await store.engine.getWatermarks({ userId: store.userId, siteId }),
         ...(rollupError ? { rollupError } : {}),
+        ...(entities ?? {}),
       }, null, 2))
     }
     if (types.length === 0) {
@@ -367,6 +490,12 @@ export const syncCommand = defineCommand({
         logger.warn(`All requested types are marked empty. Pass --force-types to check them again.`)
       await printCompletion('skipped', {}, 'empty-types')
       return
+    }
+
+    const today = new Date().toISOString().slice(0, 10)
+    const { jobs, unsupported } = planSyncJobs(tables, types)
+    if (unsupported.length > 0 && !quiet && (args.tables || args.types)) {
+      logger.info(`Skipping ${unsupported.map(job => job.label).join(', ')}: Google has no such breakdown for that search type.`)
     }
 
     // --retry-failed shrinks the date list to exactly the dates currently in
@@ -400,13 +529,28 @@ export const syncCommand = defineCommand({
         logger.info(`--retry-failed: ${dates.length} date(s) to retry`)
     }
 
+    // A plain sync also heals: it re-runs every earlier failed date that
+    // Google still keeps, for the selected jobs. An explicit range syncs only that range.
+    const explicitRange = Boolean(args.start || args.end || args.days || args.full || args['retry-failed'])
+    const healDates = explicitRange
+      ? new Map<string, string[]>()
+      : planHealDates({
+          jobs,
+          failed: await store.engine.getSyncStates({ userId: store.userId, siteId, state: 'failed' }),
+          rangeDates: dates,
+          today,
+        })
+    const healed = [...healDates.values()].reduce((sum, list) => sum + list.length, 0)
+    if (healed > 0 && !quiet)
+      logger.info(`Retrying ${healed} earlier failed day(s) as well`)
+    const jobDates = (job: SyncJob): string[] =>
+      datesForJob(job.table, [...(healDates.get(job.label) ?? []), ...dates].sort(), today)
+
     if (args['dry-run']) {
       const plan: Array<{ table: string, searchType: string, date: string }> = []
-      for (const table of tables) {
-        for (const type of types) {
-          for (const date of dates)
-            plan.push({ table, searchType: type, date })
-        }
+      for (const job of jobs) {
+        for (const date of jobDates(job))
+          plan.push({ table: job.table, searchType: job.type, date })
       }
       if (json) {
         console.log(JSON.stringify({
@@ -441,14 +585,10 @@ export const syncCommand = defineCommand({
     // Build the (table, searchType) work list. Each pair is an independent
     // sync stream — runs in parallel by default, sequentially with
     // --serial-tables for predictable ordering / debug.
-    const jobs: Array<{ table: TableName, type: SearchType, label: string }> = []
-    for (const table of tables) {
-      for (const type of types) {
-        const label = type === 'web' ? table : `${table}/${type}`
-        jobs.push({ table, type, label })
-      }
-    }
-    const progress = createProgressTracker(dates.length * jobs.length, quiet)
+    const progress = createProgressTracker(
+      jobs.reduce((sum, job) => sum + jobDates(job).length, 0),
+      quiet,
+    )
 
     if (serialTables) {
       for (const job of jobs) {
@@ -457,7 +597,7 @@ export const syncCommand = defineCommand({
           siteUrl,
           job.table,
           job.type,
-          dates,
+          jobDates(job),
           client,
           concurrency,
           args.force || forceTypes,
@@ -472,7 +612,7 @@ export const syncCommand = defineCommand({
           siteUrl,
           job.table,
           job.type,
-          dates,
+          jobDates(job),
           client,
           concurrency,
           args.force || forceTypes,
@@ -550,7 +690,7 @@ export const syncCommand = defineCommand({
     // Post-sync rollups: rebuild aggregates so the dashboard's cached widgets
     // reflect the sync we just ran. Skipped on --no-rollups, on zero-row syncs
     // (nothing to aggregate), and on full-failure runs (would read stale data).
-    const noRollups = Boolean(args['no-rollups'])
+    const noRollups = args.rollups === false
     let rollupError: string | undefined
     const anyRowsSynced = Object.values(totals).some(t => t.rows > 0)
     if (!noRollups && anyRowsSynced) {
@@ -585,11 +725,159 @@ export const syncCommand = defineCommand({
       }
     }
 
-    await printCompletion(anyFailed || rollupError ? 'failed' : 'completed', totals, undefined, rollupError)
+    const entities = await syncEntities({
+      store,
+      client,
+      siteUrl,
+      sitemaps: args.sitemaps !== false,
+      inspections: args.inspections !== false,
+      inspectLimit,
+      quiet,
+    })
+
+    await printCompletion(anyFailed || rollupError ? 'failed' : 'completed', totals, undefined, rollupError, entities)
     if (anyFailed || rollupError)
       process.exit(1)
   },
 })
+
+type EntityStep<T> = T | { _tag: 'disabled' } | { _tag: 'failed', reason: string }
+
+export interface EntitySyncReport {
+  sitemaps: EntityStep<SitemapSyncResult>
+  inspections: EntityStep<InspectionSyncResult>
+}
+
+function failureReason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+// Pages with the most impressions come first, so the inspection budget goes
+// to the URLs that matter most.
+async function topPagePaths(store: LocalStore, siteUrl: string): Promise<string[]> {
+  const entries = await store.engine.listLive({ userId: store.userId, siteId: store.siteIdFor(siteUrl), table: 'pages' })
+  if (entries.length === 0)
+    return []
+  const { rows } = await store.runRawSql({
+    sql: `SELECT url, SUM(impressions) AS impressions FROM read_parquet({{FILES}}, union_by_name = true) GROUP BY url ORDER BY impressions DESC LIMIT ${INSPECT_PAGE_CANDIDATES}`,
+    siteUrl,
+    table: 'pages',
+  })
+  return rows.map(row => String(row.url))
+}
+
+/**
+ * Save sitemaps and URL Inspection results after the analytics sync. A
+ * failure here is logged and reported. It never fails the analytics sync.
+ */
+async function syncEntities(opts: {
+  store: LocalStore
+  client: ReturnType<typeof googleSearchConsole>
+  siteUrl: string
+  sitemaps: boolean
+  inspections: boolean
+  inspectLimit: number
+  quiet: boolean
+}): Promise<EntitySyncReport> {
+  const { store, client, siteUrl, quiet } = opts
+  const ctx = { userId: store.userId, siteId: store.siteIdFor(siteUrl) }
+  const now = (): Date => new Date()
+
+  let sitemaps: EntitySyncReport['sitemaps'] = { _tag: 'disabled' }
+  if (opts.sitemaps) {
+    if (!quiet)
+      logger.info('Saving sitemaps…')
+    sitemaps = await syncSitemaps({
+      client,
+      dataSource: store.dataSource,
+      ctx,
+      siteUrl,
+      now,
+      generationId: randomUUID,
+      loadFeed: async (url) => {
+        const loaded = await loadSitemapUrls(url, { maxUrls: 500_000, maxDocuments: 1000 })
+        return loaded._tag === 'ok'
+          ? { _tag: 'ok', entries: loaded.value.entries, complete: loaded.value.complete }
+          : loaded
+      },
+    }).catch((error: unknown) => ({ _tag: 'failed' as const, reason: failureReason(error) }))
+    if (sitemaps._tag === 'failed') {
+      logger.warn(`Sitemaps not saved: ${sitemaps.reason}`)
+    }
+    else if (sitemaps._tag === 'list_only') {
+      logger.warn(`Saved ${sitemaps.sitemaps} sitemap(s). Kept the stored sitemap URLs: ${sitemaps.reason}`)
+    }
+    else if (!quiet) {
+      logger.success(`Saved ${sitemaps.sitemaps} sitemap(s) with ${sitemaps.urls.toLocaleString()} URL(s)`)
+    }
+    if (sitemaps._tag === 'saved' || sitemaps._tag === 'list_only') {
+      for (const feed of sitemaps.feeds) {
+        if (feed._tag === 'unreachable')
+          logger.warn(`  ${feed.path}: ${feed.message}`)
+        else if (!feed.complete)
+          logger.warn(`  ${feed.path}: read stopped early; saved ${feed.urls.toLocaleString()} URL(s)`)
+      }
+    }
+  }
+
+  let inspections: EntitySyncReport['inspections'] = { _tag: 'disabled' }
+  if (opts.inspections && opts.inspectLimit > 0) {
+    inspections = await (async () => {
+      const sitemapUrls = await loadSitemapGenerationUrls(store.dataSource, ctx)
+      const candidates = [
+        ...resolvePagePaths(await topPagePaths(store, siteUrl), siteUrl, sitemapUrls),
+        ...sitemapUrls,
+      ]
+      const progress = createProgressTracker(Math.min(opts.inspectLimit, candidates.length), quiet)
+      const result = await syncInspections({
+        client,
+        dataSource: store.dataSource,
+        ctx,
+        siteUrl,
+        candidates,
+        limit: opts.inspectLimit,
+        concurrency: INSPECT_CONCURRENCY,
+        now,
+        onProgress: () => progress.tick('inspect'),
+      }).finally(() => progress.done())
+      return result
+    })().catch((error: unknown) => ({ _tag: 'failed' as const, reason: failureReason(error) }))
+    if (inspections._tag === 'failed') {
+      logger.warn(`URL Inspection not saved: ${inspections.reason}`)
+    }
+    else if (inspections._tag === 'inspected') {
+      if (!quiet)
+        logger.success(`Inspected ${inspections.inspected} URL(s); ${inspections.deferred} due URL(s) left for later runs`)
+      if (inspections.failed > 0) {
+        logger.warn(`${inspections.failed} URL Inspection call(s) failed:`)
+        for (const failure of inspections.failures.slice(0, 5))
+          logger.warn(`  ${failure.url}: ${failure.error}`)
+      }
+    }
+    else if (!quiet) {
+      logger.info(inspections.quotaLeft === 0
+        ? 'URL Inspection quota is used up for today'
+        : 'No URLs are due for URL Inspection')
+    }
+  }
+
+  return { sitemaps, inspections }
+}
+
+// Route every Search Analytics query through the shared pacer. Other calls pass through.
+function pacedClient(
+  client: ReturnType<typeof googleSearchConsole>,
+  pacer: RequestPacer,
+): ReturnType<typeof googleSearchConsole> {
+  const query = client.searchAnalytics.query
+  return {
+    ...client,
+    searchAnalytics: {
+      ...client.searchAnalytics,
+      query: (...args: Parameters<typeof query>) => pacer.run(() => query(...args)),
+    },
+  }
+}
 
 function isKnownTable(name: string): name is TableName {
   return (allTables() as readonly string[]).includes(name)
