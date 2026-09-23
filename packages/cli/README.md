@@ -63,7 +63,7 @@ gscdump mcp
 | `store stats` | Show row/byte counts per table and on-disk footprint |
 | `store compact` | Compact older data into weekly, monthly, and quarterly tiers (`--dry-run`) |
 | `store gc` | Delete orphaned objects past the grace window (`--dry-run`) |
-| `store export` | Export the live store to a single `.duckdb` file |
+| `store export` | Export the Store, inspections, and sitemaps to one `.duckdb` file; analytics tables carry `search_type` and `site_id` columns |
 | `store rm-site` / `store reset` | Delete one Site's data or reset the Store; inspect `--help` before use |
 | `store rollups rebuild` | Rebuild post-sync rollup tables |
 | `report <id>` / `report list` | Run or list Reports; `--explain` previews a plan |

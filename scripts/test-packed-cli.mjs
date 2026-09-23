@@ -117,7 +117,9 @@ try {
   assert(entityDump.metadataFiles.some(file => file.path.endsWith('manifest.json')))
   const duckdbFile = join(consumer, 'exported store.duckdb')
   const exported = JSON.parse(await cli('store', 'export', '--site', site, '--out', duckdbFile, '--json'))
-  assert.equal(exported.totalRows, 1)
+  assert.equal(exported.tables.find(table => table.table === 'pages').rows, 1)
+  assert.deepEqual(exported.tables.filter(table => ['inspections', 'sitemaps', 'sitemap_urls'].includes(table.table)).map(table => table.rows), [1, 1, 1])
+  assert(exported.bytes > 0)
 
   // Reopen portable exports after removing the Store, using only installed production dependencies.
   await rm(join(consumer, 'data'), { recursive: true })

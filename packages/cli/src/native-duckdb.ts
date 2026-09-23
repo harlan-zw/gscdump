@@ -4,13 +4,23 @@ import { dateColumnsFor } from '@gscdump/engine/schema'
 import { sqlEscape } from '@gscdump/engine/sql'
 import { dateReplaceClause } from '@gscdump/engine/sql-fragments'
 
-export interface NativeDuckDBTableInput {
-  table: TableName
+/** One set of Parquet files and the constant columns added to each of its rows. */
+export interface NativeDuckDBSource {
   filePaths: string[]
+  /** Column name to string value, e.g. `{ search_type: 'image' }`. */
+  constants: Record<string, string>
+}
+
+export interface NativeDuckDBTableInput {
+  /** Table name in the output database. */
+  name: string
+  /** Columns stored as calendar days, cast from their Parquet encoding. */
+  dateColumns: readonly string[]
+  sources: NativeDuckDBSource[]
 }
 
 export interface NativeDuckDBTableResult {
-  table: TableName
+  table: string
   files: number
   rows: number
 }
@@ -44,7 +54,7 @@ export async function readParquetRows(
   }
 }
 
-/** Materialise local Parquet partitions into a persistent DuckDB database. */
+/** Materialise Parquet sources into a persistent DuckDB database, one table per input. */
 export async function materializeParquetTables(
   outPath: string,
   tables: readonly NativeDuckDBTableInput[],
@@ -59,15 +69,19 @@ export async function materializeParquetTables(
   const results: NativeDuckDBTableResult[] = []
   try {
     for (const input of tables) {
-      const replace = dateReplaceClause(dateColumnsFor(input.table), 'date')
-      await conn.run(
-        `CREATE OR REPLACE TABLE ${input.table} AS SELECT * ${replace} FROM read_parquet([${parquetFileListSql(input.filePaths)}], union_by_name=true)`,
-      )
-      const reader = await conn.runAndReadAll(`SELECT count(*)::BIGINT AS n FROM ${input.table}`)
+      const replace = dateReplaceClause(input.dateColumns, 'date')
+      const selects = input.sources.map((source) => {
+        const constants = Object.entries(source.constants)
+          .map(([column, value]) => `, '${sqlEscape(value)}' AS ${column}`)
+          .join('')
+        return `SELECT * ${replace}${constants} FROM read_parquet([${parquetFileListSql(source.filePaths)}], union_by_name=true)`
+      })
+      await conn.run(`CREATE OR REPLACE TABLE ${input.name} AS ${selects.join(' UNION ALL BY NAME ')}`)
+      const reader = await conn.runAndReadAll(`SELECT count(*)::BIGINT AS n FROM ${input.name}`)
       const rows = reader.getRowObjects() as Array<{ n: bigint }>
       results.push({
-        table: input.table,
-        files: input.filePaths.length,
+        table: input.name,
+        files: input.sources.reduce((sum, source) => sum + source.filePaths.length, 0),
         rows: Number(rows[0]?.n ?? 0),
       })
     }

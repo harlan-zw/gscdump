@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { DuckDBInstance } from '@duckdb/node-api'
@@ -7,6 +7,7 @@ import {
   createDuckDBExecutor,
   createStorageEngine,
 } from '@gscdump/engine'
+import { createInspectionStore, createSitemapListStore } from '@gscdump/engine/entities'
 import {
   createFilesystemDataSource,
   createFilesystemManifestStore,
@@ -144,5 +145,51 @@ describe('gscdump store export', () => {
     })
     const pages = result.tables.find(t => t.table === 'pages')
     expect(pages?.rows).toBe(1)
+  })
+
+  it('packs entity datasets and keeps search types apart, reporting the file size', async () => {
+    const engine = makeEngine()
+    const dataSource = createFilesystemDataSource({ rootDir: dataDir })
+    const ctx = { userId: USER, siteId }
+    const row = { url: '/a', date: '2026-04-10', clicks: 1, impressions: 10, sum_position: 0 }
+    await engine.writeDay({ ...ctx, table: 'pages', date: '2026-04-10' }, [row])
+    await engine.writeDay({ ...ctx, table: 'pages', date: '2026-04-10', searchType: 'image' }, [{ ...row, clicks: 7 }])
+    await createInspectionStore({ dataSource }).appendHistory(ctx, [
+      { url: 'https://example.com/a', inspectedAt: '2026-04-01T00:00:00.000Z', indexStatus: 'FAIL' },
+      { url: 'https://example.com/a', inspectedAt: '2026-05-01T00:00:00.000Z', indexStatus: 'PASS' },
+    ])
+    await createSitemapListStore({ dataSource }).save(ctx, {
+      version: 1,
+      fetchedAt: '2026-05-03T00:00:00.000Z',
+      sitemaps: [{ path: 'https://example.com/sitemap.xml', type: 'sitemap', isPending: false, isSitemapsIndex: false, lastSubmitted: null, lastDownloaded: null, warnings: 0, errors: 0, contents: [] }],
+    })
+
+    const result = await exportToDuckDB({ engine, dataDir, userId: USER, siteId, outPath, force: true })
+
+    expect(result.tables.map(t => [t.table, t.rows])).toEqual([
+      ['pages', 2],
+      ['inspections', 1],
+      ['inspection_history', 2],
+      ['sitemaps', 1],
+    ])
+    expect(result.bytes).toBe((await stat(outPath)).size)
+    expect(result.skipped).toEqual(['sitemap_urls', 'indexing_metadata'])
+
+    const verify = await DuckDBInstance.create(':memory:')
+    const conn = await verify.connect()
+    try {
+      await conn.run(`ATTACH '${outPath}' AS v (READ_ONLY)`)
+      const pages = await conn.runAndReadAll('SELECT search_type, site_id, clicks::INT AS clicks FROM v.pages ORDER BY search_type')
+      expect(pages.getRowObjects()).toEqual([
+        { search_type: 'image', site_id: siteId, clicks: 7 },
+        { search_type: 'web', site_id: siteId, clicks: 1 },
+      ])
+      const latest = await conn.runAndReadAll('SELECT site_id, url, index_status FROM v.inspections')
+      expect(latest.getRowObjects()).toEqual([{ site_id: siteId, url: 'https://example.com/a', index_status: 'PASS' }])
+    }
+    finally {
+      conn.closeSync()
+      verify.closeSync()
+    }
   })
 })

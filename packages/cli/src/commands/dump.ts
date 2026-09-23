@@ -16,7 +16,7 @@ import { dumpBing } from '../dump-bing'
 import { ENTITY_DATASETS, readEntityDatasets } from '../local-entities'
 import { allTables } from '../local-store'
 import { readParquetRows } from '../native-duckdb'
-import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseSearchType, runWithConcurrency, toCSV } from '../utils'
+import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, formatBytes, logger, OUTPUT_ARGS, parseSearchType, runWithConcurrency, toCSV } from '../utils'
 
 const DEFAULT_OUT = './gscdump-export'
 const FORMATS = ['parquet', 'json', 'ndjson', 'csv'] as const
@@ -227,19 +227,6 @@ export interface DumpResult {
 export interface SiteListing {
   siteUrl: string
   permissionLevel: string | null
-}
-
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024)
-    return `${bytes} B`
-  const units = ['KB', 'MB', 'GB', 'TB']
-  let value = bytes / 1024
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024
-    unit++
-  }
-  return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[unit]}`
 }
 
 /**
