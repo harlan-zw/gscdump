@@ -221,10 +221,11 @@ export function printNextSteps(sites: readonly string[] = []): void {
   const site = sites.length === 1 ? sites[0] : '<site>'
   console.log()
   console.log('  Next:')
+  const line = (command: string, note: string): void => console.log(`    ${command.padEnd(44)} # ${note}`)
   if (sites.length !== 1)
-    console.log('    gscdump sites                     # list your Sites')
-  console.log(`    gscdump sync --site ${site}   # fetch the last 28 days, then catch up on each run`)
-  console.log(`    gscdump sync --status --site ${site}`)
+    line('gscdump sites', 'list your Sites')
+  line(`gscdump sync --site ${site}`, 'fetch the last 28 days, then catch up on each run')
+  line(`gscdump sync --status --site ${site}`, 'see what the Store holds')
   console.log()
 }
 

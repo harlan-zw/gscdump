@@ -781,8 +781,11 @@ async function syncSite(opts: SiteOptions & { run: SyncRun }): Promise<SiteSyncR
     }
     console.log()
   }
-  if (control.stop && !opts.json)
-    logger.warn(`Stopped early. ${describeStop(control.stop)} The next sync continues from here.`)
+  // A budget stop is planned progress. A quota refusal blocks progress, so it warns.
+  if (control.stop?.kind === 'budget' && !quiet)
+    logger.info(`${describeStop(control.stop)} The next sync continues from here.`)
+  else if (control.stop?.kind === 'quota' && !opts.json)
+    logger.warn(`${describeStop(control.stop)} The next sync continues after ${clockTime(control.stop.resetsAt)}.`)
 
   const anyFailed = Object.values(totals).some(t => t.failed > 0)
 
