@@ -28,6 +28,7 @@ import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS } from '../lo
 import { googleErrorMessage, openQuotaLedger, parseQuotaRefusal, QUOTA_CAPS } from '../quota-ledger'
 import { createRequestPacer } from '../request-pacer'
 import { loadSitemapUrls } from '../sitemap'
+import { formatSiteIdCollision, readSiteMap, recordStoreSite, siteUrlForId } from '../store-sites'
 import { DEFAULT_INSPECT_LIMIT, minimumCallsPerDate, planJobDates, planSyncJobs, resolveWindow, RETENTION_MARGIN_DAYS } from '../sync-plan'
 import { isProcessAlive, readSyncRun, startSyncRun, syncRunStatus } from '../sync-run'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, parseNameList, progressBar, runWithConcurrency } from '../utils'
@@ -377,7 +378,7 @@ export const syncCommand = defineCommand({
     'site': {
       type: 'string',
       alias: 's',
-      description: 'Site URL',
+      description: 'Site, for example example.com',
     },
     'all-sites': {
       type: 'boolean',
@@ -489,15 +490,31 @@ export const syncCommand = defineCommand({
     const requestedTypes = args.types ? parseNameList(args.types, ALL_SEARCH_TYPES, '--types') : DEFAULT_TYPES
     if (args.status) {
       const ctx = await createCommandContext()
-      await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, args.site ? String(args.site) : undefined, json, inspectLimit)
+      const siteUrl = args.site ? await ctx.resolveSite(String(args.site), { scope: 'store' }) : undefined
+      await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, siteUrl, json, inspectLimit)
       return
     }
 
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true, fetchOptions: LEDGER_FETCH_OPTIONS })
     const store = ctx.store!
-    const siteUrls = args['all-sites']
+    const requestedSites = args['all-sites']
       ? (await ctx.loadSites()).map(site => site.siteUrl)
       : [await ctx.resolveSite(args.site ? String(args.site) : undefined)]
+    // The siteId encoding is lossy, so each Site claims its siteId before a
+    // write. A single Site stops on a collision; --all-sites skips that Site.
+    const siteUrls: string[] = []
+    for (const siteUrl of requestedSites) {
+      const claim = await recordStoreSite(store.dataDir, siteUrl, { userId: store.userId, write: !args['dry-run'] })
+      if (claim.ok) {
+        siteUrls.push(siteUrl)
+        continue
+      }
+      if (!args['all-sites']) {
+        logger.error(formatSiteIdCollision(claim.error))
+        process.exit(1)
+      }
+      logger.warn(`Skipped ${siteUrl}. ${formatSiteIdCollision(claim.error)}`)
+    }
 
     const latest = getLatestGscDate()
     const window = resolveWindow({
@@ -1071,8 +1088,11 @@ async function printSyncStatus(
   const store = createLocalStore({ dataDir: resolved.dataDir })
   const siteId = siteFilter ? store.siteIdFor(siteFilter) : undefined
   const run = syncRunStatus(await readSyncRun(store.dataDir), { now: Date.now(), isAlive: isProcessAlive })
+  const siteMap = await readSiteMap(store.dataDir, store.userId)
+  const siteLabel = (id: string | undefined): string => id ? `@${siteUrlForId(siteMap, id)}` : ''
 
-  const watermarks = await store.engine.getWatermarks({ userId: store.userId, siteId })
+  const watermarks = (await store.engine.getWatermarks({ userId: store.userId, siteId }))
+    .map(w => ({ ...w, siteUrl: w.siteId ? siteUrlForId(siteMap, w.siteId) : null }))
   const states = await store.engine.getSyncStates({ userId: store.userId, siteId })
   const failed = states.filter(s => s.state === 'failed')
   // An inflight date with no live sync belongs to a killed run. The next sync retries it.
@@ -1088,6 +1108,7 @@ async function printSyncStatus(
   const gaps = [...bySite].flatMap(([id, siteStates]) =>
     analyticsCoverage({ states: siteStates, latest, floor: getOldestGscDate(), today: getPstDate() }).jobs.map(job => ({
       siteId: id,
+      siteUrl: id ? siteUrlForId(siteMap, id) : null,
       table: job.table,
       searchType: job.searchType,
       from: job.from,
@@ -1138,7 +1159,7 @@ async function printSyncStatus(
 
   console.log(`  \x1B[1mTables:\x1B[0m`)
   for (const gap of gaps) {
-    const label = `${gap.searchType === 'web' ? gap.table : `${gap.table}/${gap.searchType}`}${siteFilter ? '' : `@${gap.siteId}`}`
+    const label = `${gap.searchType === 'web' ? gap.table : `${gap.table}/${gap.searchType}`}${siteFilter ? '' : siteLabel(gap.siteId || undefined)}`
     const parts = [`${gap.done} done`]
     if (gap.missing > 0)
       parts.push(`${gap.missing} missing`)
@@ -1156,7 +1177,7 @@ async function printSyncStatus(
     console.log()
     console.log(`  \x1B[31m${failed.length} failed:\x1B[0m`)
     for (const s of failed.slice(0, 20))
-      console.log(`    ${s.table}${s.siteId ? `@${s.siteId}` : ''} ${s.date}: ${s.error ?? 'unknown'}`)
+      console.log(`    ${s.table}${siteLabel(s.siteId)} ${s.date}: ${s.error ?? 'unknown'}`)
     if (failed.length > 20)
       console.log(`    and ${failed.length - 20} more`)
   }

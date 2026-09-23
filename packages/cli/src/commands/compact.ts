@@ -3,6 +3,7 @@ import { inferLegacyTier } from '@gscdump/engine'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
 import { allTables } from '../local-store'
+import { readSiteMap, siteUrlForId } from '../store-sites'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 
 export const compactCommand = defineCommand({
@@ -14,7 +15,7 @@ export const compactCommand = defineCommand({
     'site': {
       type: 'string',
       alias: 's',
-      description: 'Restrict to a single site (default: all sites with local data)',
+      description: 'Restrict to one Site, for example example.com (default: every Site with local data)',
     },
     'raw-days': {
       type: 'string',
@@ -39,7 +40,7 @@ export const compactCommand = defineCommand({
     const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
-    const siteId = args.site ? store.siteIdFor(String(args.site)) : undefined
+    const siteId = args.site ? store.siteIdFor(await ctx.resolveSite(String(args.site), { scope: 'store' })) : undefined
     const dryRun = Boolean(args['dry-run'])
     const thresholds: { raw?: number, d7?: number, d30?: number } = {}
     if (args['raw-days'])
@@ -51,40 +52,42 @@ export const compactCommand = defineCommand({
     // One broad read is enough to build the (table, site) work list. The
     // compactor performs its own tier-scoped reads when each job runs.
     const liveEntries = await store.engine.listLive({ userId: store.userId, siteId })
+    const siteMap = await readSiteMap(store.dataDir, store.userId)
+    const siteLabel = (id: string | undefined): string => id ? siteUrlForId(siteMap, id) : '-'
 
     if (dryRun) {
-      const report: Array<{ table: string, siteId: string | undefined, raw: number, d7: number, d30: number, d90: number }> = []
+      const report: Array<{ table: string, siteUrl: string | null, raw: number, d7: number, d30: number, d90: number }> = []
       for (const table of allTables()) {
         const entries = liveEntries.filter(entry => entry.table === table)
         const bySite = groupBySite(entries)
         for (const [s, group] of bySite)
-          report.push({ table, siteId: s, ...countByTier(group) })
+          report.push({ table, siteUrl: s ? siteUrlForId(siteMap, s) : null, ...countByTier(group) })
       }
       if (json) {
         console.log(JSON.stringify({ thresholds, plan: report }, null, 2))
         return
       }
       console.log()
-      console.log(`  table                site                 raw    d7   d30   d90`)
+      console.log(`  table                Site                           raw    d7   d30   d90`)
       for (const r of report)
-        console.log(`  ${r.table.padEnd(20)} ${(r.siteId ?? '-').padEnd(20)} ${String(r.raw).padStart(4)}  ${String(r.d7).padStart(4)}  ${String(r.d30).padStart(4)}  ${String(r.d90).padStart(4)}`)
+        console.log(`  ${r.table.padEnd(20)} ${(r.siteUrl ?? '-').padEnd(30)} ${String(r.raw).padStart(4)}  ${String(r.d7).padStart(4)}  ${String(r.d30).padStart(4)}  ${String(r.d90).padStart(4)}`)
       console.log()
       logger.info(`compact --dry-run: ${report.length} (table, site) pair(s) — pass without --dry-run to apply`)
       return
     }
 
-    const summary: Array<{ table: string, siteId: string | undefined }> = []
+    const summary: Array<{ table: string, siteUrl: string | null }> = []
     for (const table of allTables()) {
       const entries = liveEntries.filter(entry => entry.table === table)
       const siteIds = new Set<string | undefined>(entries.map(e => e.siteId))
       for (const targetSite of siteIds) {
-        logger.info(`Compacting ${table} [${targetSite ?? '-'}] (raw→d7→d30→d90)`)
+        logger.info(`Compacting ${table} [${siteLabel(targetSite)}] (raw→d7→d30→d90)`)
         await store.engine.compactTiered({
           userId: store.userId,
           siteId: targetSite,
           table: table as TableName,
         }, thresholds)
-        summary.push({ table, siteId: targetSite })
+        summary.push({ table, siteUrl: targetSite ? siteUrlForId(siteMap, targetSite) : null })
       }
     }
 

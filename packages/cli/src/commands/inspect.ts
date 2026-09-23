@@ -142,7 +142,7 @@ export const inspectCommand = defineCommand({
   meta: inspectCommandMeta,
   args: {
     ...OUTPUT_ARGS,
-    site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
+    site: { type: 'string', alias: 's', description: 'Site, for example example.com; defaults to config.defaultSite or a prompt' },
     urls: { type: 'positional', required: false, description: 'One or more URLs to inspect' },
     file: { type: 'string', alias: 'f', description: 'File with URLs, one per line' },
   },

@@ -1,7 +1,9 @@
+import type { SiteCandidate } from 'gscdump'
 import type { Auth } from 'gscdump/client'
 import type { VerificationMethod } from 'gscdump/sites'
 import type { HandlerContext } from '../types'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { resolveSiteInput } from 'gscdump'
 import { googleSearchConsole } from 'gscdump/client'
 import {
   getIndexingMetadata,
@@ -18,6 +20,7 @@ import {
   verifySite,
 } from 'gscdump/sites'
 import { z } from 'zod'
+import { formatSiteResolution } from '../../context'
 import { discoverLiveSitemap } from '../../sitemap'
 import { diagnostics } from '../handlers/diagnostics'
 import {
@@ -39,6 +42,7 @@ import {
   requestIndexingInput,
   runReportInput,
   sitemapInput,
+  siteUrlSchema,
 } from '../types'
 
 export type CreateGscMcpServerOptions = {
@@ -140,6 +144,27 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
 
   const getClient = async (): Promise<ReturnType<typeof googleSearchConsole>> => (await getContext()).client
 
+  // One Site list per server. `add-site` and `delete-site` clear it.
+  let siteList: Promise<SiteCandidate[]> | undefined
+  const loadSiteList = (): Promise<SiteCandidate[]> => {
+    siteList ??= getClient()
+      .then(client => client.sites())
+      .then(raw => raw.flatMap(s => s.siteUrl && s.permissionLevel !== 'siteUnverifiedUser' ? [{ siteUrl: s.siteUrl }] : []))
+      .catch((error: unknown) => {
+        // Do not cache a failure; the next tool call asks again.
+        siteList = undefined
+        throw error
+      })
+    return siteList
+  }
+  // Agents pass Sites as people write them (`example.com`), not as GSC keys.
+  const withSite = async <T extends { siteUrl: string }>(args: T): Promise<T> => {
+    const resolution = resolveSiteInput(args.siteUrl, await loadSiteList())
+    if (resolution.kind !== 'resolved')
+      throw new Error(formatSiteResolution(resolution, 'account'))
+    return { ...args, siteUrl: resolution.siteUrl }
+  }
+
   server.registerTool(
     'list-sites',
     {
@@ -174,9 +199,10 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       description: 'List sitemaps for a specific site',
       inputSchema: listSitemapsInput.shape,
     },
-    async (args) => {
+    async (input) => {
+      const args = await withSite(input)
       const client = await getClient()
-      const sitemaps = await client.sitemaps.list(args.siteUrl as string)
+      const sitemaps = await client.sitemaps.list(args.siteUrl)
       return { content: [{ type: 'text', text: JSON.stringify(sitemaps, null, 2) }] }
     },
   )
@@ -188,7 +214,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: sitemapInput.shape,
     },
     async (args) => {
-      const result = await getSitemap(args, await getContext())
+      const result = await getSitemap(await withSite(args), await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -199,9 +225,10 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       description: 'Submit a sitemap to Google Search Console',
       inputSchema: sitemapInput.shape,
     },
-    async (args) => {
+    async (input) => {
+      const args = await withSite(input)
       const client = await getClient()
-      await client.sitemaps.submit(args.siteUrl as string, args.feedpath as string)
+      await client.sitemaps.submit(args.siteUrl, args.feedpath)
       return { content: [{ type: 'text', text: JSON.stringify({ success: true }, null, 2) }] }
     },
   )
@@ -212,9 +239,10 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       description: 'Delete a sitemap from Google Search Console',
       inputSchema: sitemapInput.shape,
     },
-    async (args) => {
+    async (input) => {
+      const args = await withSite(input)
       const client = await getClient()
-      await client.sitemaps.delete(args.siteUrl as string, args.feedpath as string)
+      await client.sitemaps.delete(args.siteUrl, args.feedpath)
       return { content: [{ type: 'text', text: JSON.stringify({ success: true }, null, 2) }] }
     },
   )
@@ -238,7 +266,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: runReportInput.shape,
     },
     async (args) => {
-      const result = await runReportHandler(args, getContext)
+      const result = await runReportHandler(args, getContext, async siteUrl => (await withSite({ siteUrl })).siteUrl)
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -268,7 +296,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     {
       description: 'Run a custom search analytics query with dimension filters (regex/contains/equals). Multiple filter groups do not implement OR.',
       inputSchema: z.object({
-        siteUrl: z.string().describe('GSC property URL (e.g., sc-domain:example.com)'),
+        siteUrl: siteUrlSchema,
         startDate: z.string().describe('Start date (YYYY-MM-DD)'),
         endDate: z.string().describe('End date (YYYY-MM-DD)'),
         dimensions: z.array(z.enum(['date', 'query', 'page', 'country', 'device', 'searchAppearance'])).describe('Dimensions to group by'),
@@ -279,10 +307,11 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
         dimensionFilterGroups: z.array(filterGroupSchema).optional().describe('Filter groups use "and" internally. Multiple groups do not implement OR.'),
       }).shape,
     },
-    async ({ siteUrl, startDate, endDate, dimensions, rowLimit, type, dataState, aggregationType, dimensionFilterGroups }) => {
+    async ({ siteUrl: input, startDate, endDate, dimensions, rowLimit, type, dataState, aggregationType, dimensionFilterGroups }) => {
+      const { siteUrl } = await withSite({ siteUrl: input as string })
       const client = await getClient()
       const result = await runMcpSearchAnalyticsQuery(client, {
-        siteUrl: siteUrl as string,
+        siteUrl,
         startDate: startDate as string,
         endDate: endDate as string,
         dimensions: dimensions as string[],
@@ -302,9 +331,10 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       description: 'Inspect a URL to check its indexing status in Google Search Console',
       inputSchema: inspectUrlInput.shape,
     },
-    async (args) => {
+    async (input) => {
+      const args = await withSite(input)
       const client = await getClient()
-      const result = await client.inspect(args.siteUrl as string, args.inspectionUrl as string)
+      const result = await client.inspect(args.siteUrl, args.inspectionUrl)
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -352,7 +382,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
       inputSchema: batchInspectUrlsInput.shape,
     },
     async (args) => {
-      const result = await batchInspectUrls(args, await getContext())
+      const result = await batchInspectUrls(await withSite(args), await getContext())
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
@@ -378,6 +408,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     async ({ siteUrl }) => {
       const client = await getClient()
       await addSite(client, siteUrl as string)
+      siteList = undefined
       return { content: [{ type: 'text', text: JSON.stringify({ siteUrl, status: 'added', verified: false }, null, 2) }] }
     },
   )
@@ -391,6 +422,7 @@ export function createGscMcpServer(options: CreateGscMcpServerOptions): McpServe
     async ({ siteUrl }) => {
       const client = await getClient()
       await deleteSite(client, siteUrl as string)
+      siteList = undefined
       return { content: [{ type: 'text', text: JSON.stringify({ siteUrl, status: 'deleted' }, null, 2) }] }
     },
   )

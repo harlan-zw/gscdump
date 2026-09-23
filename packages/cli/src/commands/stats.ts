@@ -1,16 +1,15 @@
 import type { ManifestEntry, Watermark } from '../local-store'
-import process from 'node:process'
 import { filesystemStats } from '@gscdump/engine/filesystem'
 import { defineCommand } from 'citty'
-import { decodeSiteId, parseGscSiteUrl } from 'gscdump'
-import { createCommandContext } from '../context'
+import { createCommandContext, siteArg } from '../context'
 import { allTables, tableDimensions } from '../local-store'
 import { columnsFor } from '../render/analysis'
 import { barColumn } from '../render/charts'
 import { renderTable, textLines } from '../render/layout'
 import { formatMetric } from '../render/metrics'
 import { terminalOutputOptions } from '../render/terminal'
-import { applyOutputMode, displayPath, formatAge, logger, OUTPUT_ARGS } from '../utils'
+import { readSiteMap, siteUrlForId } from '../store-sites'
+import { applyOutputMode, displayPath, formatAge, OUTPUT_ARGS } from '../utils'
 
 export const statsCommand = defineCommand({
   meta: {
@@ -21,22 +20,22 @@ export const statsCommand = defineCommand({
     ...OUTPUT_ARGS,
     site: {
       type: 'string',
-      description: 'Limit to one site URL (sc-domain:example.com, https://example.com/, ...)',
+      description: 'Limit to one Site, for example example.com',
     },
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
-    const allEntries = await store.engine.listAll({ userId: store.userId })
+    const siteUrl = args.site ? await ctx.resolveSite(String(args.site), { scope: 'store' }) : undefined
+    const siteId = siteUrl ? store.siteIdFor(siteUrl) : undefined
+    const [allEntries, siteMap] = await Promise.all([
+      store.engine.listAll({ userId: store.userId }),
+      readSiteMap(store.dataDir, store.userId),
+    ])
     const knownSites = [...new Set(allEntries
       .filter(entry => entry.retiredAt === undefined && entry.siteId !== undefined)
-      .map(entry => entry.siteId))]
-    const siteId = args.site ? store.siteIdFor(args.site) : undefined
-    if (args.site && !json && !knownSites.includes(siteId)) {
-      logger.error(`No local data for --site=${args.site}. Known site IDs: ${knownSites.length === 0 ? '(none — run \`gscdump sync\` first)' : knownSites.join(', ')}`)
-      process.exit(1)
-    }
+      .map(entry => siteUrlForId(siteMap, entry.siteId!)))]
     const selectedEntries = siteId === undefined
       ? allEntries
       : allEntries.filter(entry => entry.siteId === siteId)
@@ -55,9 +54,9 @@ export const statsCommand = defineCommand({
     if (json) {
       const payload = {
         dataDir: store.dataDir,
-        siteId: siteId ?? null,
+        siteUrl: siteUrl ?? null,
         knownSites,
-        nextCommand: `gscdump sync${args.site ? ` --site '${String(args.site).replaceAll('\'', '\'\\\'\'')}'` : ''} --status --json`,
+        nextCommand: `gscdump sync${siteUrl ? ` --site ${siteArg(siteUrl)}` : ''} --status --json`,
         disk,
         tables: perTable.map(({ table, live, retired }) => ({
           table,
@@ -70,7 +69,7 @@ export const statsCommand = defineCommand({
           watermarks: watermarks
             .filter(w => w.table === table)
             .map(w => ({
-              siteId: w.siteId ?? null,
+              siteUrl: w.siteId ? siteUrlForId(siteMap, w.siteId) : null,
               searchType: w.searchType ?? 'web',
               newestDateSynced: w.newestDateSynced,
               oldestDateSynced: w.oldestDateSynced,
@@ -114,7 +113,7 @@ export const statsCommand = defineCommand({
       lines.push(...textLines(`Total ${formatMetric('bytes', rows.reduce((sum, row) => sum + row.liveBytes, 0))} live`, options, 'muted'))
     if (watermarks.length) {
       lines.push('', ...renderTable(sortWatermarks(watermarks).map(w => ({
-        scope: w.siteId ? `${w.table}@${parseGscSiteUrl(decodeSiteId(w.siteId)).hostname}` : w.table,
+        scope: w.siteId ? `${w.table}@${siteArg(siteUrlForId(siteMap, w.siteId))}` : w.table,
         dates: `${w.oldestDateSynced} to ${w.newestDateSynced}`,
         synced: formatAge(w.lastSyncAt),
       })), [{ key: 'scope', label: '' }, { key: 'dates', label: 'Dates' }, { key: 'synced', label: 'Synced' }], options))

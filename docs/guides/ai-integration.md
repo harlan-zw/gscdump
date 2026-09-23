@@ -74,9 +74,9 @@ were removed; application embedding is not a supported v1 package surface.
 ## Example prompts
 
 - “List my Search Console Sites.”
-- “Run the movers report for `sc-domain:example.com` over the last 28 days.”
-- “Run the brand Report for `sc-domain:example.com` with brand terms `example,example.com`.”
-- “Run the pre-publish Report for `sc-domain:example.com` with topic `running shoes`.”
+- “Run the movers report for `example.com` over the last 28 days.”
+- “Run the brand Report for `example.com` with brand terms `example,example.com`.”
+- “Run the pre-publish Report for `example.com` with topic `running shoes`.”
 - “Query clicks and impressions by page for this month.”
 - “Inspect these URLs and summarize the Indexing Evidence.”
 
@@ -91,6 +91,7 @@ MCP rejects them before authentication or Google requests.
 Run them with `gscdump report <id>` after syncing the Site.
 
 `run-report` accepts the Site, Report ID, date windows, comparison, and `maxFindings`.
+Every tool that takes `siteUrl` accepts a Site as a person writes it, such as `example.com`. The tool resolves it against your Search Console Sites.
 Report inputs use the same names shown in `list-reports.argsSpec`:
 
 | Report | Additional inputs |
@@ -103,7 +104,7 @@ Example `run-report` arguments:
 
 ```json
 {
-  "siteUrl": "sc-domain:example.com",
+  "siteUrl": "example.com",
   "id": "brand",
   "period": "28d",
   "brandTerms": "example,example.com",

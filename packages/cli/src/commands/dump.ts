@@ -16,9 +16,10 @@ import { dumpBing } from '../dump-bing'
 import { DUMP_FORMATS, isDumpFormat, openDumpSink } from '../dump-writers'
 import { ENTITY_DATASETS, readEntityDatasets } from '../local-entities'
 import { allTables } from '../local-store'
+import { readSiteMap, siteUrlForId } from '../store-sites'
 import { DEFAULT_INSPECT_LIMIT } from '../sync-plan'
 import { isProcessAlive, readSyncRun, syncRunStatus } from '../sync-run'
-import { groupTableSources, siteUrlFor } from '../table-sources'
+import { groupTableSources } from '../table-sources'
 import { ALL_SEARCH_TYPES, applyOutputMode, displayPath, logger, OUTPUT_ARGS, parseNameList, parseSearchType } from '../utils'
 
 const DEFAULT_OUT = './gscdump-export'
@@ -29,7 +30,7 @@ export const dumpCommand = defineCommand({
     'site': {
       type: 'string',
       alias: 's',
-      description: 'Site URL (e.g., sc-domain:example.com); ignored with --all-sites',
+      description: 'Site, for example example.com; ignored with --all-sites',
     },
     'out': {
       type: 'string',
@@ -81,9 +82,10 @@ export const dumpCommand = defineCommand({
       ? new Set<string>(parseNameList(args.tables, [...allTables(), ...ENTITY_DATASETS, 'bing'], '--tables'))
       : null
     const searchType = parseSearchType(args['search-type'])
-    const ctx = await createCommandContext({ needsAuth: !args['all-sites'], needsStore: true })
+    const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
     const outDir = path.resolve(String(args.out))
+    const siteMap = await readSiteMap(store.dataDir, store.userId)
 
     let preloadedEntries = args['all-sites']
       ? await store.engine.listLive({
@@ -93,8 +95,8 @@ export const dumpCommand = defineCommand({
       : undefined
     const targets: Array<{ site: string, siteId: string }> = args['all-sites']
       ? [...new Set(preloadedEntries!.flatMap(entry => entry.siteId ? [entry.siteId] : []))]
-          .map(siteId => ({ site: siteUrlFor(siteId), siteId }))
-      : await ctx.resolveSite(args.site ? String(args.site) : undefined)
+          .map(siteId => ({ site: siteUrlForId(siteMap, siteId), siteId }))
+      : await ctx.resolveSite(args.site ? String(args.site) : undefined, { scope: 'store' })
           .then(site => [{ site, siteId: store.siteIdFor(site) }])
     if (targets.length === 0) {
       logger.warn('No sites with local data. Run `gscdump sync` first.')
@@ -114,9 +116,7 @@ export const dumpCommand = defineCommand({
       }
     }
 
-    const siteList = ctx.client
-      ? await ctx.loadSites().then(sites => sites.map(site => ({ siteUrl: site.siteUrl, permissionLevel: site.permissionLevel })))
-      : undefined
+    const siteList = args['all-sites'] ? undefined : await readSiteListing(quiet)
     const bing: BingDumpStep = args.bing === false || (tablesFilter && !tablesFilter.has('bing'))
       ? { _tag: 'disabled' }
       : await dumpBing({
@@ -224,6 +224,21 @@ export interface SiteListing {
   permissionLevel: string | null
 }
 
+/**
+ * The Search Console Site list for `sites.json`. The dump reads only the
+ * Store, so it runs without a login; then it writes no `sites.json`.
+ */
+async function readSiteListing(quiet: boolean): Promise<SiteListing[] | undefined> {
+  return createCommandContext({ needsAuth: true })
+    .then(ctx => ctx.loadSites())
+    .then(sites => sites.map(site => ({ siteUrl: site.siteUrl, permissionLevel: site.permissionLevel })))
+    .catch((error: Error) => {
+      if (!quiet)
+        logger.info(`sites.json skipped: ${error.message}`)
+      return undefined
+    })
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024)
     return `${bytes} B`
@@ -290,9 +305,9 @@ async function dumpEachSite(sink: DumpSink, opts: Parameters<typeof dumpSites>[0
       : await listLiveEntries(store, target.siteId, opts.searchType))
       .filter(e => !tables || tables.has(e.table))
     const datasets: DumpedDataset[] = []
-    // Tag rows with the Site the caller resolved, which may differ in case from the site id.
-    for (const source of groupTableSources(entries, store.dataDir))
-      datasets.push(await sink.writeTable({ ...source, site: target.site }))
+    // Tag rows with the Site the caller resolved: the siteId encoding is lossy.
+    for (const source of groupTableSources(entries, store.dataDir, { [target.siteId]: target.site }))
+      datasets.push(await sink.writeTable(source))
 
     const skipped: SiteDumpSummary['skipped'] = []
     for (const dataset of await readEntityDatasets(store.dataSource, { userId: store.userId, siteId: target.siteId }, wantedEntities)) {
