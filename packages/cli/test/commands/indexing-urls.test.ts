@@ -78,14 +78,15 @@ describe('hosted indexing urls and sitemap commands', () => {
       requests.push(url)
       if (url.pathname.endsWith('/cli/me'))
         return Response.json({ user: { publicId: 'u_me', email: 'user@example.com' }, sites: accountSites })
-      if (url.pathname.endsWith('/sites/s_site/indexing/urls')) {
+      if (/\/sites\/s_[a-z0-9]+\/indexing\/urls$/.test(url.pathname)) {
         const offset = Number(url.searchParams.get('offset'))
         const limit = Number(url.searchParams.get('limit'))
         const count = Math.max(0, Math.min(limit, totalRows - offset))
+        const siteUrl = accountSites.find(site => url.pathname.endsWith(`/sites/${site.siteId}/indexing/urls`))?.siteUrl
         return envelope({
           urls: Array.from({ length: count }, (_, i) => urlRow(`https://example.com/p${offset + i}`, i === 0 ? ['https://example.com/a.xml', 'https://example.com/b.xml'] : null)),
           pagination: { total: totalRows, limit, offset, hasMore: offset + count < totalRows },
-          meta: { siteUrl: 'sc-domain:example.com', status: url.searchParams.get('status') ?? 'all', issue: null },
+          meta: { siteUrl, status: url.searchParams.get('status') ?? 'all', issue: null },
         })
       }
       if (/\/sites\/s_[a-z0-9]+\/sitemaps$/.test(url.pathname)) {
@@ -191,7 +192,21 @@ describe('hosted indexing urls and sitemap commands', () => {
 
     await expect(run(['sitemaps', 'current', 's_01'])).rejects.toThrow('process.exit(1)')
 
-    expect(stderr).toContain('`gscdump sitemaps current` no longer accepts a positional Site ID. Pass --site instead.')
+    expect(stderr).toContain('`gscdump sitemaps current` does not accept a positional Site ID. Pass --site instead.')
+    expect(requests).toEqual([])
+    expect(stdout.join('\n')).not.toContain('two.test')
+  })
+
+  it('rejects a positional Site on indexing urls instead of silently reading the default Site', async () => {
+    accountSites = [
+      { siteId: 's_01', siteUrl: 'https://one.test/' },
+      { siteId: 's_02', siteUrl: 'https://two.test/' },
+    ]
+    await fs.writeFile(path.join(runtime.configDir, 'config.json'), JSON.stringify({ defaultSite: 'two.test' }))
+
+    await expect(run(['indexing', 'urls', 'one.test', '--json'])).rejects.toThrow('process.exit(1)')
+
+    expect(stderr).toContain('`gscdump indexing urls` does not accept a positional Site ID. Pass --site instead.')
     expect(requests).toEqual([])
     expect(stdout.join('\n')).not.toContain('two.test')
   })
