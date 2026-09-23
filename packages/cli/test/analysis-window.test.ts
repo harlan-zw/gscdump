@@ -125,6 +125,32 @@ describe('local comparison windows', () => {
     expect(stderr.join('\n')).toContain('No synced days for page_queries')
     expect(stderr.join('\n')).toContain('2026-01-24 to 2026-02-20')
   })
+
+  it('warns when the comparison window is only partially synced', async () => {
+    // 29 days ending 2026-03-20: the 28-day window is fully synced, but its
+    // comparison window holds exactly one synced day (2026-02-20).
+    await seed('page_queries', days('2026-03-20', 29), date => [{ date, url: '/a', query: 'alpha', clicks: 2, impressions: 50, sum_position: 0 }])
+
+    await cli('analyze', 'movers', '--site', SITE, '--json')
+
+    const warning = stderr.join('\n')
+    expect(warning).toContain('partially synced')
+    expect(warning).toContain('page_queries')
+    expect(warning).toContain('2026-01-24 to 2026-02-20')
+  })
+
+  it('names only the tables without synced comparison days', async () => {
+    // page_queries misses the comparison window; pages covers it fully.
+    await seed('page_queries', days('2026-03-20', 28), date => [{ date, url: '/a', query: 'alpha', clicks: 2, impressions: 50, sum_position: 0 }])
+    await seed('pages', days('2026-03-20', 56), date => [{ date, url: '/a', clicks: 2, impressions: 50, sum_position: 0 }])
+
+    await cli('report', 'movers', '--site', SITE, '--period', '28d', '--json')
+
+    const warning = stderr.join('\n')
+    expect(warning).toContain('No synced days for page_queries')
+    expect(warning).not.toContain('page_queries, pages')
+    expect(warning).not.toContain('no pages data')
+  })
 })
 
 describe('report window flags', () => {

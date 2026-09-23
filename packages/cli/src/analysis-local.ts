@@ -2,6 +2,7 @@ import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-ty
 import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { Result } from 'gscdump/result'
 import type { LocalStore, TableName } from './local-store'
+import type { ComparisonSyncGaps } from './window'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -15,7 +16,7 @@ import { createCommandContext } from './context'
 import { LocalStoreUnsupportedError } from './error-handler'
 import { createLocalStore } from './local-store'
 import { logger } from './utils'
-import { hasSyncedDays, resolveAnchor } from './window'
+import { comparisonSyncGaps, resolveAnchor } from './window'
 
 export async function hasLocalData(
   store: LocalStore,
@@ -45,10 +46,11 @@ export interface ResolvedAnalysisSource {
    */
   anchorFor: (tables: readonly TableName[]) => Promise<string>
   /**
-   * Missing-sync warning for a comparison window with no synced days to
-   * read, or undefined when it has data. A comparison with zero synced days
-   * would read zero baseline rows and fabricate +100% risers. Live sources
-   * never warn: the GSC API covers the windows it serves.
+   * Sync-gap warning for a comparison window, or undefined when the sync
+   * covers every day of it. Names the tables with no synced day (a zero-row
+   * baseline fabricates +100% risers) and the tables with only part of the
+   * window synced (an uneven baseline inflates change percentages). Live
+   * sources never warn: the GSC API covers the windows it serves.
    */
   comparisonWarning: (tables: readonly TableName[], start: string, end: string) => Promise<string | undefined>
 }
@@ -84,7 +86,14 @@ function warnMissingSync(siteUrl: string) {
 }
 
 function missingComparisonSync(siteUrl: string, tables: readonly TableName[], start: string, end: string): string {
-  return `No synced days for ${tables.length ? tables.join(', ') : 'any table'} on ${siteUrl} in ${start} to ${end}. The comparison reads no data. Run \`gscdump sync\` first.`
+  const names = tables.join(', ')
+  return `No synced days for ${names} on ${siteUrl} in ${start} to ${end}. The comparison reads no ${names} data. Run \`gscdump sync\` first.`
+}
+
+function partialComparisonSync(siteUrl: string, gaps: ComparisonSyncGaps['partial'], start: string, end: string): string {
+  const names = gaps.map(gap => gap.table).join(', ')
+  const counts = gaps.map(gap => `${gap.syncedDays} of ${gap.expectedDays} days`).join(', ')
+  return `Only ${counts} synced for ${names} on ${siteUrl} in ${start} to ${end}. The comparison window is only partially synced. Change percentages compare uneven windows. Run \`gscdump sync\` to backfill.`
 }
 
 export interface ResolveAnalysisSourceArgs {
@@ -204,9 +213,12 @@ export async function resolveAnalysisSource(
       anchorFor: tables => resolveAnchor({ kind: 'local', store, siteUrl, tables }, warnMissingSync(siteUrl)),
       comparisonWarning: async (tables, start, end) => {
         const states = await store.engine.getSyncStates({ userId: store.userId, siteId: store.siteIdFor(siteUrl), state: 'done' })
-        if (hasSyncedDays(states, tables, start, end))
-          return undefined
-        return missingComparisonSync(siteUrl, tables, start, end)
+        const { missing, partial } = comparisonSyncGaps(states, tables, start, end)
+        const warnings = [
+          missing.length ? missingComparisonSync(siteUrl, missing, start, end) : undefined,
+          partial.length ? partialComparisonSync(siteUrl, partial, start, end) : undefined,
+        ].filter(warning => warning !== undefined)
+        return warnings.length ? warnings.join(' ') : undefined
       },
     }
   }
