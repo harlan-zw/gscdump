@@ -6,7 +6,8 @@ import type { InspectionParquetRow, InspectionRecord, ParsedUrl, SitemapListDoc,
 import type { EncodeFlexOptions } from '@gscdump/engine/hyparquet'
 import type { googleSearchConsole } from 'gscdump/client'
 import type { ApiSitemap } from 'gscdump/sites'
-import type { DataSource, Row, TenantCtx } from './local-store'
+import type { DataSource, LocalStore, Row, TenantCtx } from './local-store'
+import type { QuotaLedger } from './quota-ledger'
 import {
   createIndexingMetadataStore,
   createInspectionStore,
@@ -17,6 +18,7 @@ import {
   parseSitemapFeedIdentity,
 } from '@gscdump/engine/entities'
 import { latestByUrl, planInspections, scheduleOf, toInspectionRecord } from './inspection-record'
+import { blockUntil, googleErrorMessage, parseQuotaRefusal } from './quota-ledger'
 import { runWithConcurrency } from './utils'
 
 type GscClient = ReturnType<typeof googleSearchConsole>
@@ -143,21 +145,62 @@ export function resolvePagePaths(paths: readonly string[], siteUrl: string, know
   return out
 }
 
+// Traffic-ranked pages to consider for inspection, next to sitemap URLs.
+const INSPECT_PAGE_CANDIDATES = 5000
+
+// Pages with the most impressions first.
+async function topPagePaths(store: LocalStore, siteUrl: string): Promise<string[]> {
+  const entries = await store.engine.listLive({ userId: store.userId, siteId: store.siteIdFor(siteUrl), table: 'pages' })
+  if (entries.length === 0)
+    return []
+  const { rows } = await store.runRawSql({
+    sql: `SELECT url, SUM(impressions) AS impressions FROM read_parquet({{FILES}}, union_by_name = true) GROUP BY url ORDER BY impressions DESC LIMIT ${INSPECT_PAGE_CANDIDATES}`,
+    siteUrl,
+    table: 'pages',
+  })
+  return rows.map(row => String(row.url))
+}
+
+/**
+ * Every URL the Site knows about, in inspection priority order: sitemap URLs
+ * first (those with impressions ahead), then pages with impressions that no
+ * sitemap lists. `planInspections` then takes never-inspected URLs in this
+ * order before the stalest records.
+ */
+export async function inspectionCandidates(store: LocalStore, siteUrl: string): Promise<string[]> {
+  const ctx = { userId: store.userId, siteId: store.siteIdFor(siteUrl) }
+  const sitemapUrls = await loadSitemapGenerationUrls(store.dataSource, ctx)
+  const trafficUrls = resolvePagePaths(await topPagePaths(store, siteUrl), siteUrl, sitemapUrls)
+  const rank = new Map(trafficUrls.map((url, i) => [url, i] as const))
+  const sitemapFirst = [...sitemapUrls].sort((a, b) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity))
+  const listed = new Set(sitemapUrls)
+  return [...new Set([...sitemapFirst, ...trafficUrls.filter(url => !listed.has(url))])]
+    .filter(url => urlInProperty(siteUrl, url))
+}
+
 export type InspectionSyncResult
   = | {
     _tag: 'inspected'
     inspected: number
     failed: number
     failures: Array<{ url: string, error: string }>
+    /** Due URLs left for later runs. */
     deferred: number
     quotaLeft: number
+    /** Set when Google or the quota ledger stopped the run early. */
+    stopped?: { reason: string, resetsAt: number }
   }
   | { _tag: 'nothing_due', candidates: number, quotaLeft: number }
+  | { _tag: 'quota_exhausted', reason: string, resetsAt: number, deferred: number }
+
+/** Results are saved after each chunk, so a stopped run keeps what it got. */
+const INSPECTION_CHUNK = 20
 
 /**
  * Inspect the URLs due under the engine's inspection policy, up to `limit`
- * and the daily quota, and append the results to the inspection history.
- * Per-URL API failures are counted; a storage failure rejects.
+ * and what the quota ledger grants, and append the results to the
+ * inspection history. Per-URL API failures are counted. A quota refusal
+ * stops inspecting for the day. A storage failure rejects.
  */
 export async function syncInspections(deps: {
   client: Pick<GscClient, 'inspect'>
@@ -167,44 +210,76 @@ export async function syncInspections(deps: {
   candidates: readonly string[]
   limit: number
   concurrency: number
+  ledger: Pick<QuotaLedger, 'reserve' | 'record'>
   now: () => Date
   onProgress?: (done: number, total: number) => void
 }): Promise<InspectionSyncResult> {
-  const history = await loadInspectionHistory(deps.dataSource, deps.ctx)
+  let history = await loadInspectionHistory(deps.dataSource, deps.ctx)
   const candidates = deps.candidates.filter(url => urlInProperty(deps.siteUrl, url))
   const plan = planInspections({ candidates, history, now: deps.now(), limit: deps.limit })
   if (plan.urls.length === 0)
     return { _tag: 'nothing_due', candidates: candidates.length, quotaLeft: plan.quotaLeft }
 
   const latest = latestByUrl(history)
-  const records: InspectionRecord[] = []
   const failures: Array<{ url: string, error: string }> = []
+  let inspected = 0
   let done = 0
-  await runWithConcurrency(plan.urls, deps.concurrency, async (url) => {
-    const response = await deps.client.inspect(deps.siteUrl, url).catch((error: Error) => error)
-    if (response instanceof Error) {
-      failures.push({ url, error: response.message })
+  let stopped: { reason: string, resetsAt: number } | undefined
+  const queue = [...plan.urls]
+  while (queue.length > 0 && !stopped) {
+    const decision = deps.ledger.reserve('urlInspection', deps.siteUrl, Math.min(INSPECTION_CHUNK, queue.length))
+    if (decision.kind === 'exhausted') {
+      stopped = { reason: decision.reason, resetsAt: decision.resetsAt }
+      break
     }
-    else {
-      records.push(toInspectionRecord({
-        url,
-        result: response.inspectionResult,
-        inspectedAt: deps.now(),
-        previous: latest.get(url),
-      }))
-    }
-    done++
-    deps.onProgress?.(done, plan.urls.length)
-  })
+    const chunk = queue.splice(0, decision.n)
+    const records: InspectionRecord[] = []
+    let unused = 0
+    await runWithConcurrency(chunk, deps.concurrency, async (url) => {
+      if (stopped) {
+        unused++
+        return
+      }
+      const response = await deps.client.inspect(deps.siteUrl, url).catch((error: unknown) => ({ error }))
+      if ('error' in response) {
+        const refusal = parseQuotaRefusal(response.error)
+        if (refusal) {
+          deps.ledger.record('urlInspection', deps.siteUrl, { kind: 'refused', reason: refusal })
+          stopped ??= { reason: refusal, resetsAt: blockUntil('urlInspection', refusal, deps.now()) }
+          unused++
+          return
+        }
+        failures.push({ url, error: googleErrorMessage(response.error) })
+      }
+      else {
+        records.push(toInspectionRecord({
+          url,
+          result: response.inspectionResult,
+          inspectedAt: deps.now(),
+          previous: latest.get(url),
+        }))
+      }
+      done++
+      deps.onProgress?.(done, plan.urls.length)
+    })
+    if (unused > 0)
+      deps.ledger.record('urlInspection', deps.siteUrl, { kind: 'unused', n: unused })
+    await recordInspections(deps.dataSource, deps.ctx, history, records)
+    history = [...history, ...records]
+    inspected += records.length
+  }
 
-  await recordInspections(deps.dataSource, deps.ctx, history, records)
+  const notRun = plan.urls.length - done
+  if (done === 0 && stopped)
+    return { _tag: 'quota_exhausted', reason: stopped.reason, resetsAt: stopped.resetsAt, deferred: plan.deferred + notRun }
   return {
     _tag: 'inspected',
-    inspected: records.length,
+    inspected,
     failed: failures.length,
     failures,
-    deferred: plan.deferred,
-    quotaLeft: Math.max(0, plan.quotaLeft - plan.urls.length),
+    deferred: plan.deferred + notRun,
+    quotaLeft: Math.max(0, plan.quotaLeft - done),
+    ...(stopped ? { stopped } : {}),
   }
 }
 

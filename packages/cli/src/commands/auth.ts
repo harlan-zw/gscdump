@@ -29,7 +29,7 @@ async function requireLocalAuth(args: Record<string, unknown>): Promise<void> {
     throw new Error('Cloud authentication uses an API key. OAuth scopes and token refresh require --mode local.')
 }
 
-async function loginCloud(args: Record<string, unknown>): Promise<void> {
+export async function loginCloud(args: Record<string, unknown>): Promise<void> {
   const env = useCliRuntime().environment
   let apiKey = String(args['api-key'] ?? env.GSCDUMP_API_KEY ?? '')
   if (!apiKey) {

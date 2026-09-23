@@ -14,6 +14,7 @@ export {
   getFreshestGscDate,
   getLatestGscDate,
   getNextDate,
+  getNextPstMidnight,
   getOldestGscDate,
   getPendingDates,
   getPstDate,

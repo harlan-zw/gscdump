@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { addDays, generateGscDateRange, getBackfillProgress, getFreshestGscDate, getLatestGscDate, getOldestGscDate } from '../../src/core/gsc-dates'
+import { addDays, generateGscDateRange, getBackfillProgress, getFreshestGscDate, getLatestGscDate, getNextPstMidnight, getOldestGscDate } from '../../src/core/gsc-dates'
 import { currentPstDate, daysAgoPst } from '../../src/query/utils/dayjs'
 
 describe('gsc date helpers', () => {
@@ -47,5 +47,35 @@ describe('gsc date helpers', () => {
     vi.setSystemTime(new Date('2024-03-11T07:30:00Z'))
     expect(currentPstDate()).toBe('2024-03-11')
     expect(daysAgoPst(1)).toBe('2024-03-10')
+  })
+})
+
+describe('pacific reporting day on a machine outside UTC', () => {
+  const originalTz = process.env.TZ
+
+  afterEach(() => {
+    process.env.TZ = originalTz
+    vi.useRealTimers()
+  })
+
+  it.each([
+    ['America/New_York', '2026-09-23T05:00:00Z', '2026-09-19'],
+    ['Australia/Brisbane', '2026-09-23T15:00:00Z', '2026-09-20'],
+    ['UTC', '2026-09-23T02:00:00Z', '2026-09-19'],
+  ])('finds the latest final date in %s at %s', (tz, now, expected) => {
+    process.env.TZ = tz
+    vi.setSystemTime(new Date(now))
+    expect(getLatestGscDate()).toBe(expected)
+  })
+})
+
+describe('getNextPstMidnight', () => {
+  it.each([
+    ['2026-09-23T05:00:00Z', '2026-09-23T07:00:00.000Z'],
+    ['2026-01-10T20:00:00Z', '2026-01-11T08:00:00.000Z'],
+    // Daylight time starts at 02:00, so that midnight is still UTC-8.
+    ['2026-03-08T01:00:00Z', '2026-03-08T08:00:00.000Z'],
+  ])('resets the quota day after %s at %s', (now, expected) => {
+    expect(new Date(getNextPstMidnight(new Date(now))).toISOString()).toBe(expected)
   })
 })

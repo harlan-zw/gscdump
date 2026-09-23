@@ -5,15 +5,18 @@ Keep the files as long as you need them.
 
 ## First sync
 
-After [authentication](./getting-started.md), choose a Store directory and sync 90 days:
+After [authentication](./getting-started.md), choose a Store directory and sync:
 
 ```bash
 gscdump config set dataDir /absolute/path/to/gsc-data
-gscdump sync --site example.com --days 90 --tables pages,queries,page_queries,countries,dates
+gscdump sync --site example.com
 ```
 
-Without `--days`, sync fetches three days ending three days ago.
-It skips dates already marked `done`.
+A plain sync catches up. Each table starts at its oldest synced date and ends at the latest date Google has finalized.
+Google finalizes dates on Pacific time, about three days late.
+A table with no history starts 28 days back. Use `--full` or `--start` to go further back.
+Sync skips dates already marked `done`, and fetches the newest dates first.
+If a run misses a few days, the next run fills the gap.
 Use `--force` when you need to refresh completed dates.
 
 ## Stored tables
@@ -42,13 +45,36 @@ Sync also rebuilds Rollups unless you pass `--no-rollups`.
 Sync saves the sitemap list and sitemap URLs unless you pass `--no-sitemaps`.
 Sync inspects up to 50 due URLs per run unless you pass `--no-inspections`.
 Sync keeps 8 Search Analytics requests in flight and starts at most 600 per minute. `--requests-per-minute N` changes the rate.
-Use `--inspect-limit N` to change the budget. Google allows 2,000 inspections per property per day.
+Use `--inspect-limit N` to change the budget. Google allows 2,000 inspections per Site per day.
+Inspection goes to sitemap URLs that were never inspected, then to pages with impressions, then to the oldest results.
 Run `gscdump sync --help` for the full table and search-type options.
+
+## Quotas and progress
+
+Google limits Search Analytics and URL Inspection calls.
+A large Site cannot fit into one run, so sync spends what the quotas allow and continues on the next run.
+Sync records every call in `quota-ledger.json` in the Store directory.
+If Google refuses a call for quota, sync stops cleanly, keeps the rest `pending`, and exits 0.
+The next run starts again after Google's quota resets.
+Use `--max-calls N` to cap the Search Analytics calls of one run.
+
+`sync --status` and the sync summary show how far the Store has come:
+
+```text
+Analytics: 412 of 486 days so far (2025-05-23 to 2026-09-19). The next sync continues from there.
+Inspections: 1,200 of 10,000 URLs so far. Daily sync covers the rest in about 176 runs at 50 URLs a run. Pass --inspect-limit 2000 to finish in about 5 days.
+Sitemaps: all 3 sitemaps saved, 10,000 URLs.
+Next: gscdump sync --site example.com
+```
+
+`sync --status` also lists missing and failed dates per table, and a sync that is running.
+A sync that stopped without cleanup shows as stale. The next sync retries its dates.
+If you press Ctrl+C, run the same command again to resume.
 
 ## Backfill and retry
 
 ```bash
-# Start 486 days ago, ending three days ago
+# Fetch all 16 months Google keeps, plus 14 days Google often still serves
 gscdump sync --site example.com --full
 
 # Select an exact range
@@ -58,17 +84,21 @@ gscdump sync --site example.com --start 2026-08-01 --end 2026-08-31 \
 # Read sync progress
 gscdump sync --site example.com --status
 
-# Retry failed dates in the selected window
+# Retry only failed dates in the selected window (a plain sync retries them too)
 gscdump sync --site example.com --days 90 \
   --tables pages,queries,page_queries,countries,dates --retry-failed
+
+# Count the calls first
+gscdump sync --site example.com --full --dry-run
 
 # Refresh completed dates too
 gscdump sync --site example.com --days 7 --force \
   --tables pages,queries,page_queries,countries,dates
 ```
 
-Sync follows Google's pagination until a request returns no rows.
+Google returns at most 25,000 rows per request. Sync stops paging when a page holds fewer rows.
 Google can omit rows, so a successful sync does not guarantee complete Search Console data.
+A day that Google still updates stays `pending`, and the next sync fetches it again.
 See [Google's extraction guidance](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data).
 
 ## Select tables and search types
@@ -92,9 +122,12 @@ Save this as `sync-gsc.sh`, then make it executable:
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-/path/to/gscdump sync --site example.com --days 7 --force \
-  --tables pages,queries,page_queries,countries,dates
+/path/to/gscdump sync --site example.com
 ```
+
+A plain sync catches up, so the script needs no dates and no `--force`.
+If cron misses a week, the next run fills the week.
+Use `--all-sites` to sync every Site one after another. They share one Google quota.
 
 Replace `/path/to/gscdump` with the output of `command -v gscdump`.
 Run it daily with cron:

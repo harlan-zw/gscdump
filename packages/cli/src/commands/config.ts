@@ -42,9 +42,7 @@ const showCommand = defineCommand({
 
 const VALID_KEYS = [
   'defaultSite',
-  'defaultPeriod',
   'defaultFormat',
-  'defaultDb',
   'dataDir',
   'defaultLimit',
   'defaultSearchType',

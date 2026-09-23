@@ -190,6 +190,47 @@ function shardScopesFromEntries(entries: readonly ManifestEntry[]): Set<string> 
   return out
 }
 
+function applySyncState(
+  snap: { syncStates: SyncState[] },
+  scope: SyncStateScope,
+  state: SyncStateKind,
+  at: number,
+  detail: SyncStateDetail | undefined,
+): void {
+  const scopeSearchType = inferSearchType(scope)
+  const idx = snap.syncStates.findIndex(s =>
+    s.userId === scope.userId
+    && s.siteId === scope.siteId
+    && s.table === scope.table
+    && s.date === scope.date
+    && inferSearchType(s) === scopeSearchType,
+  )
+  if (idx === -1) {
+    snap.syncStates.push({
+      userId: scope.userId,
+      siteId: scope.siteId,
+      table: scope.table,
+      date: scope.date,
+      state,
+      updatedAt: at,
+      attempts: 1,
+      error: detail?.error,
+      ...(scope.searchType !== undefined ? { searchType: scope.searchType } : {}),
+    })
+    return
+  }
+  const prev = snap.syncStates[idx]!
+  const attempts = state === 'inflight' && prev.state !== 'inflight' ? prev.attempts + 1 : prev.attempts
+  const error = state === 'done' ? undefined : (detail?.error ?? prev.error)
+  snap.syncStates[idx] = {
+    ...prev,
+    state,
+    updatedAt: at,
+    attempts,
+    error,
+  }
+}
+
 export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): ManifestStore {
   const { bucket, userId } = opts
   const newSnapshotId = opts.newSnapshotId ?? defaultSnapshotId
@@ -505,40 +546,26 @@ export function createR2ManifestStore(opts: CreateR2ManifestStoreOptions): Manif
       if (scope.siteId === undefined)
         throw new Error('R2 manifest store requires sync states to carry siteId')
       const at = detail?.at ?? now()
-      const scopeSearchType = inferSearchType(scope)
-      await mutateShard(scope.siteId, scope.table, (snap) => {
-        const idx = snap.syncStates.findIndex(s =>
-          s.userId === userId
-          && s.siteId === scope.siteId
-          && s.table === scope.table
-          && s.date === scope.date
-          && inferSearchType(s) === scopeSearchType,
-        )
-        if (idx === -1) {
-          snap.syncStates.push({
-            userId,
-            siteId: scope.siteId,
-            table: scope.table,
-            date: scope.date,
-            state,
-            updatedAt: at,
-            attempts: 1,
-            error: detail?.error,
-            ...(scope.searchType !== undefined ? { searchType: scope.searchType } : {}),
-          })
-          return
-        }
-        const prev = snap.syncStates[idx]!
-        const attempts = state === 'inflight' && prev.state !== 'inflight' ? prev.attempts + 1 : prev.attempts
-        const error = state === 'done' ? undefined : (detail?.error ?? prev.error)
-        snap.syncStates[idx] = {
-          ...prev,
-          state,
-          updatedAt: at,
-          attempts,
-          error,
-        }
-      })
+      await mutateShard(scope.siteId, scope.table, snap => applySyncState(snap, scope, state, at, detail))
+    },
+
+    async setSyncStates(scopes: readonly SyncStateScope[], state: SyncStateKind, detail?: SyncStateDetail) {
+      const byShard = new Map<string, { siteId: string, table: SyncStateScope['table'], scopes: SyncStateScope[] }>()
+      for (const scope of scopes) {
+        assertScopedUser(scope.userId, 'setSyncStates')
+        if (scope.siteId === undefined)
+          throw new Error('R2 manifest store requires sync states to carry siteId')
+        const key = `${scope.siteId}|${scope.table}`
+        const shard = byShard.get(key) ?? { siteId: scope.siteId, table: scope.table, scopes: [] }
+        shard.scopes.push(scope)
+        byShard.set(key, shard)
+      }
+      const at = detail?.at ?? now()
+      await mapWithConcurrency([...byShard.values()], SHARD_IO_CONCURRENCY, async shard =>
+        mutateShard(shard.siteId, shard.table, (snap) => {
+          for (const scope of shard.scopes)
+            applySyncState(snap, scope, state, at, detail)
+        }))
     },
 
     /**

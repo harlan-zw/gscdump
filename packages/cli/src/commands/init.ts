@@ -6,15 +6,25 @@ import { confirm, isCancel, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { googleSearchConsole } from 'gscdump/client'
 import { authenticate, getAuth, loadTokens, resolveBYOK, saveTokens } from '../auth'
+import { saveAuthentication } from '../auth-state'
 import { initCommandMeta } from '../command-meta'
 import { defaultDataDir, loadConfig, saveConfig } from '../config'
 import { applyCliEnvironment } from '../environment'
+import { useCliRuntime } from '../runtime'
 import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
+import { loginCloud } from './auth'
 
 const ENV_LINE_RE = /^([^=]+)=(.*)$/
 
+/** True when a person can answer prompts. Pipes, cron, and agents cannot. */
+function canPrompt(): boolean {
+  return process.stdin.isTTY === true
+}
+
 async function promptDataDir(existing?: string): Promise<string> {
   const fallback = existing ?? defaultDataDir()
+  if (!canPrompt())
+    return fallback
   const answer = await text({
     message: 'Where should Parquet data be stored?',
     placeholder: fallback,
@@ -62,11 +72,30 @@ export const initCommand = defineCommand({
       description: 'Ask where to keep the local Store',
       negativeDescription: 'Skip the Store location prompt (authentication only)',
     },
+    'mode': {
+      type: 'string',
+      description: 'Authentication mode to save: cloud or local',
+    },
+    'api-key': {
+      type: 'string',
+      description: 'gscdump user API key for --mode cloud; defaults to GSCDUMP_API_KEY',
+    },
+    'api-root': {
+      type: 'string',
+      description: 'Cloud API root for --mode cloud; defaults to GSCDUMP_API_ROOT or https://gscdump.com/api',
+    },
     ...OUTPUT_ARGS,
   },
   async run({ args }) {
     applyOutputMode(args)
     const config = await loadConfig()
+    const mode = useCliRuntime().authModeOverride
+
+    if (mode === 'cloud') {
+      await loginCloud(args)
+      printNextSteps()
+      return
+    }
 
     if (config.clientId && config.clientSecret && !args.force) {
       logger.info('Already configured')
@@ -80,20 +109,24 @@ export const initCommand = defineCommand({
           logger.info('Tokens expired but refresh available. Any live command will auto-refresh, or run `gscdump auth refresh`.')
         else if (isExpired)
           logger.warn('Tokens expired without a refresh token. Run `gscdump auth login` to re-authenticate.')
-        else
-          logger.info('Next: `gscdump sites` to list properties, or `gscdump query --help`.')
       }
+      if (mode === 'local')
+        await saveAuthentication({ _tag: 'Local' })
       logger.info('Run `gscdump init --force` to reconfigure.')
+      printNextSteps()
       return
     }
 
     // BYOK shortcut: env vars already provide credentials, skip OAuth setup.
     const byok = resolveBYOK()
     if (byok) {
-      const dataDir = args.store ? await promptDataDir(config.dataDir) : undefined
-      await saveConfig({ ...config, dataDir: dataDir ?? config.dataDir })
-      logger.success(`BYOK detected (${typeof byok === 'string' ? 'access-token' : 'refresh-token'}) — auth setup skipped`)
-      logger.success('Setup complete! Run gscdump to get started.')
+      // The credentials came from the environment, so nothing here needs a person.
+      const dataDir = args.store ? config.dataDir ?? defaultDataDir() : config.dataDir
+      await saveConfig({ ...config, ...(dataDir ? { dataDir } : {}) })
+      await saveAuthentication({ _tag: 'Local' })
+      logger.success(`BYOK detected (${typeof byok === 'string' ? 'access-token' : 'refresh-token'}). Auth setup skipped.`)
+      logger.success('Setup complete.')
+      printNextSteps()
       return
     }
 
@@ -131,8 +164,28 @@ export const initCommand = defineCommand({
         })
       }
 
+      await saveAuthentication({ _tag: 'Local' })
       console.log()
-      logger.success('Setup complete using .env credentials! Run gscdump to get started.')
+      logger.success('Setup complete using .env credentials.')
+      printNextSteps()
+      return
+    }
+
+    if (!canPrompt()) {
+      // No terminal: never prompt. Finish with saved tokens, or say which command to run.
+      const tokens = await loadTokens()
+      if (!tokens) {
+        logger.error([
+          'No Google credentials found. Init cannot prompt without a terminal.',
+          'Run `gscdump auth login` in a terminal, or set GSC_CLIENT_ID, GSC_CLIENT_SECRET and GSC_REFRESH_TOKEN.',
+          'To use gscdump.com, run `gscdump init --mode cloud --api-key <key>`.',
+        ].join('\n'))
+        process.exit(1)
+      }
+      await saveConfig({ ...config, dataDir: config.dataDir ?? defaultDataDir() })
+      await saveAuthentication({ _tag: 'Local' })
+      logger.success('Setup complete with the saved Google login.')
+      printNextSteps()
       return
     }
 
@@ -152,18 +205,29 @@ export const initCommand = defineCommand({
     // (e.g., user enabled Search Console API but didn't tick the indexing
     // scope) before the user runs an unrelated command and gets a 403 they
     // can't immediately attribute.
-    await smokeTest(oauth)
+    const sites = await runSmokeTest(oauth)
+    await saveAuthentication({ _tag: 'Local' })
 
     if (config.clientId && config.clientSecret)
       await maybeWriteEnvFile(config.clientId, config.clientSecret)
 
     console.log()
-    logger.success('Setup complete! Run gscdump to get started.')
+    logger.success('Setup complete.')
+    printNextSteps(sites)
   },
 })
 
-async function smokeTest(oauth: OAuth2Client): Promise<void> {
-  await runSmokeTest(oauth)
+/** Print the exact commands that come after setup. */
+export function printNextSteps(sites: readonly string[] = []): void {
+  const site = sites.length === 1 ? sites[0] : '<site>'
+  console.log()
+  console.log('  Next:')
+  const line = (command: string, note: string): void => console.log(`    ${command.padEnd(44)} # ${note}`)
+  if (sites.length !== 1)
+    line('gscdump sites', 'list your Sites')
+  line(`gscdump sync --site ${site}`, 'fetch the last 28 days, then catch up on each run')
+  line(`gscdump sync --status --site ${site}`, 'see what the Store holds')
+  console.log()
 }
 
 /**
@@ -172,7 +236,7 @@ async function smokeTest(oauth: OAuth2Client): Promise<void> {
  * actionable next step, since those errors won't appear until the first real
  * API call otherwise.
  */
-export async function runSmokeTest(oauth: OAuth2Client): Promise<void> {
+export async function runSmokeTest(oauth: OAuth2Client): Promise<string[]> {
   const client = googleSearchConsole(oauth)
   const sites = await client.sites().catch((e: Error) => e)
   if (sites instanceof Error) {
@@ -186,18 +250,19 @@ export async function runSmokeTest(oauth: OAuth2Client): Promise<void> {
         : 'https://console.developers.google.com/apis/api/searchconsole.googleapis.com/overview'
       logger.info(`Enable it here, then retry: ${url}`)
       logger.info('Note: it can take a few minutes to propagate after enabling.')
-      return
+      return []
     }
     if (/insufficient|scope|forbidden|403/i.test(msg)) {
       logger.warn(`Smoke test failed (likely missing scopes): ${msg}`)
       logger.info('Run `gscdump auth login --force` to re-consent with the required scopes.')
-      return
+      return []
     }
     logger.warn(`Smoke test failed: ${msg}`)
     logger.info('Auth saved, but verify via `gscdump auth status` / `gscdump doctor`.')
-    return
+    return []
   }
   logger.success(`Verified: ${sites.length} GSC site(s) accessible`)
+  return sites.flatMap(site => site.siteUrl ? [site.siteUrl] : [])
 }
 
 async function maybeWriteEnvFile(clientId: string, clientSecret: string): Promise<void> {
