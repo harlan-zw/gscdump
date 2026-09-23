@@ -106,6 +106,7 @@
   querySourceModes: object
   refreshAccessToken: function
   requestIndexing: function
+  resolveSiteInput: function
   resolveVerificationTarget: function
   rethrowAsGscApiError: function
   revokeOAuthToken: function
