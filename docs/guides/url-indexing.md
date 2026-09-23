@@ -109,7 +109,7 @@ Use `--offset` for the next page, or `--all` to read every page.
 With local authentication, save inspections to the local Store instead:
 
 ```bash
-gscdump sitemaps urls https://example.com/sitemap.xml | gscdump entities inspect --site example.com
+gscdump sitemaps urls https://example.com/sitemap.xml | gscdump inspect --site example.com
 ```
 
 ## Inspect with Bing

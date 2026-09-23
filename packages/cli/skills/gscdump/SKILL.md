@@ -323,7 +323,7 @@ gscdump indexing urls --site example.com --status not_indexed --all --format csv
 - `--status` takes `indexed`, `not_indexed`, or `pending`. `--search` keeps URLs that contain the text.
 - Each row lists the sitemaps that contain the URL.
 - Pages hold 100 rows by default and 500 at most. Use `--offset` for the next page, or `--all` for every page.
-- With local authentication, the command fails. Pipe `gscdump sitemaps urls <sitemap-url>` into `gscdump entities inspect` instead.
+- With local authentication, the command fails. Pipe `gscdump sitemaps urls <sitemap-url>` into `gscdump inspect --site <site>` instead.
 
 ## Report a papercut
 

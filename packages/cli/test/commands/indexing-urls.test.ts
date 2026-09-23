@@ -153,24 +153,24 @@ describe('hosted indexing urls and sitemap commands', () => {
   it('tells a local-only user about the hosted requirement and the local alternative', async () => {
     runtime.environment = { GSCDUMP_CONFIG_DIR: runtime.configDir }
 
-    await expect(run(['indexing', 'urls', '--site', 'example.com'])).rejects.toThrow('process.exit(1)')
+    expect(await run(['indexing', 'urls', '--site', 'example.com'])).toBe(1)
 
     expect(requests).toEqual([])
     const lines = stderr.trim().split('\n')
     expect(lines).toHaveLength(1)
     expect(lines[0]).toContain('`gscdump indexing urls` needs hosted authentication')
-    expect(lines[0]).toContain('`gscdump entities inspect`')
+    expect(lines[0]).toContain('`gscdump inspect --site <site>`')
   })
 
   it('names the hosted Sites when --site matches none', async () => {
-    await expect(run(['indexing', 'urls', '--site', 'missing.dev'])).rejects.toThrow('process.exit(1)')
+    expect(await run(['indexing', 'urls', '--site', 'missing.dev'])).toBe(1)
 
     expect(stderr).toContain('No hosted Site matches "missing.dev". Hosted Sites: sc-domain:example.com, https://other.dev/.')
     expect(indexingRequests()).toEqual([])
   })
 
   it('rejects an invalid --status before any request', async () => {
-    await expect(run(['indexing', 'urls', '--site', 'example.com', '--status', 'unknown'])).rejects.toThrow()
+    expect(await run(['indexing', 'urls', '--site', 'example.com', '--status', 'unknown'])).toBe(1)
     expect(requests).toEqual([])
   })
 
