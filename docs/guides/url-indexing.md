@@ -6,11 +6,11 @@ Google inspection and sitemap commands use the selected cloud or local authentic
 ## Inspect URLs
 
 ```bash
-gscdump inspect https://example.com/blog/post --site sc-domain:example.com --json
+gscdump inspect https://example.com/blog/post --site example.com --json
 
-gscdump inspect https://example.com/a https://example.com/b --site sc-domain:example.com --json
+gscdump inspect https://example.com/a https://example.com/b --site example.com --json
 
-gscdump inspect --site sc-domain:example.com --file urls.txt --json
+gscdump inspect --site example.com --file urls.txt --json
 ```
 
 Pass one or more URLs, a file with one URL per line, or both.
@@ -23,7 +23,7 @@ Each result is saved to the Store's inspection history as it arrives.
 Read the latest saved record for a URL:
 
 ```bash
-gscdump entities show https://example.com/blog/post --site sc-domain:example.com
+gscdump entities show https://example.com/blog/post --site example.com
 ```
 
 Google allows 2,000 URL inspections per day and 600 per minute for each property.
@@ -35,7 +35,7 @@ The command exits 1 when any URL fails or remains.
 To save Google's notification metadata too:
 
 ```bash
-gscdump entities indexing snapshot --mode local --site sc-domain:example.com --file urls.txt
+gscdump entities indexing snapshot --mode local --site example.com --file urls.txt
 ```
 
 ## Send eligible indexing notifications
@@ -72,11 +72,11 @@ The CLI does not track the project's remaining daily quota.
 ## Manage sitemaps
 
 ```bash
-gscdump sitemaps list --site sc-domain:example.com
+gscdump sitemaps list --site example.com
 
-gscdump sitemaps submit https://example.com/sitemap.xml --site sc-domain:example.com
+gscdump sitemaps submit https://example.com/sitemap.xml --site example.com
 
-gscdump sitemaps delete https://example.com/old-sitemap.xml --site sc-domain:example.com
+gscdump sitemaps delete https://example.com/old-sitemap.xml --site example.com
 ```
 
 A sitemap submission tells Google where to find URLs.
@@ -109,7 +109,7 @@ Use `--offset` for the next page, or `--all` to read every page.
 With local authentication, save inspections to the local Store instead:
 
 ```bash
-gscdump sitemaps urls https://example.com/sitemap.xml | gscdump inspect --site sc-domain:example.com
+gscdump sitemaps urls https://example.com/sitemap.xml | gscdump inspect --site example.com
 ```
 
 ## Inspect with Bing

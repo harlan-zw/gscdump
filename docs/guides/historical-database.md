@@ -9,7 +9,7 @@ After [authentication](./getting-started.md), choose a Store directory and sync:
 
 ```bash
 gscdump config set dataDir /absolute/path/to/gsc-data
-gscdump sync --site sc-domain:example.com
+gscdump sync --site example.com
 ```
 
 A plain sync catches up. Each table starts at its oldest synced date and ends at the latest date Google has finalized.
@@ -64,7 +64,7 @@ Use `--max-calls N` to cap the Search Analytics calls of one run.
 Analytics: 412 of 486 days so far (2025-05-23 to 2026-09-19). The next sync continues from there.
 Inspections: 1,200 of 10,000 URLs so far. Daily sync covers the rest in about 176 runs at 50 URLs a run. Pass --inspect-limit 2000 to finish in about 5 days.
 Sitemaps: all 3 sitemaps saved, 10,000 URLs.
-Next: gscdump sync --site sc-domain:example.com
+Next: gscdump sync --site example.com
 ```
 
 `sync --status` also lists missing and failed dates per table, and a sync that is running.
@@ -75,24 +75,24 @@ If you press Ctrl+C, run the same command again to resume.
 
 ```bash
 # Fetch all 16 months Google keeps, plus 14 days Google often still serves
-gscdump sync --site sc-domain:example.com --full
+gscdump sync --site example.com --full
 
 # Select an exact range
-gscdump sync --site sc-domain:example.com --start 2026-08-01 --end 2026-08-31 \
+gscdump sync --site example.com --start 2026-08-01 --end 2026-08-31 \
   --tables pages,queries,page_queries,countries,dates
 
 # Read sync progress
-gscdump sync --site sc-domain:example.com --status
+gscdump sync --site example.com --status
 
 # Retry only failed dates in the selected window (a plain sync retries them too)
-gscdump sync --site sc-domain:example.com --days 90 \
+gscdump sync --site example.com --days 90 \
   --tables pages,queries,page_queries,countries,dates --retry-failed
 
 # Count the calls first
-gscdump sync --site sc-domain:example.com --full --dry-run
+gscdump sync --site example.com --full --dry-run
 
 # Refresh completed dates too
-gscdump sync --site sc-domain:example.com --days 7 --force \
+gscdump sync --site example.com --days 7 --force \
   --tables pages,queries,page_queries,countries,dates
 ```
 
@@ -104,7 +104,7 @@ See [Google's extraction guidance](https://developers.google.com/webmaster-tools
 ## Select tables and search types
 
 ```bash
-gscdump sync --site sc-domain:example.com --days 28 \
+gscdump sync --site example.com --days 28 \
   --tables pages,queries,page_queries,countries,dates --types web,image
 ```
 
@@ -122,7 +122,7 @@ Save this as `sync-gsc.sh`, then make it executable:
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-/path/to/gscdump sync --site sc-domain:example.com
+/path/to/gscdump sync --site example.com
 ```
 
 A plain sync catches up, so the script needs no dates and no `--force`.
@@ -142,13 +142,13 @@ If you use a temporary CI runner, restore and save the entire Store between runs
 ## Query and export
 
 ```bash
-gscdump query --site sc-domain:example.com --dimensions page --limit 100
+gscdump query --site example.com --dimensions page --limit 100
 
 gscdump query --format json --sql "SELECT search_type, SUM(clicks) AS clicks,
   gsc_position(sum_position, impressions) AS position
   FROM pages GROUP BY search_type"
 
-gscdump dump --site sc-domain:example.com --format parquet --out ./parquet-export
+gscdump dump --site example.com --format parquet --out ./parquet-export
 gscdump dump --all-sites --format sqlite --out ./sqlite-export
 ```
 

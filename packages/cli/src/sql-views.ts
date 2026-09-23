@@ -10,6 +10,7 @@ import { DuckDBInstance, DuckDBTypeId } from '@duckdb/node-api'
 import { attachParquetIndex } from '@gscdump/engine/node'
 import { SCHEMAS } from '@gscdump/engine/schema'
 import { allTables } from './local-store'
+import { readSiteMap } from './store-sites'
 import { exportColumns, groupTableSources } from './table-sources'
 
 const RAW_SCHEMA = 'gsc_raw'
@@ -135,7 +136,8 @@ export async function openSqlViews(store: LocalStore, scope: SqlViewScope = {}):
     ...(scope.searchType !== undefined ? { searchType: scope.searchType } : {}),
   })
   const siteIds = scope.siteIds ? new Set(scope.siteIds) : undefined
-  const sources = groupTableSources(entries.filter(entry => !siteIds || (entry.siteId !== undefined && siteIds.has(entry.siteId))), store.dataDir)
+  const siteMap = await readSiteMap(store.dataDir, store.userId)
+  const sources = groupTableSources(entries.filter(entry => !siteIds || (entry.siteId !== undefined && siteIds.has(entry.siteId))), store.dataDir, siteMap)
 
   const instance = await DuckDBInstance.create(':memory:')
   const connection = await instance.connect()

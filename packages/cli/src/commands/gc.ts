@@ -18,7 +18,7 @@ export const gcCommand = defineCommand({
     'site': {
       type: 'string',
       alias: 's',
-      description: 'Restrict to a single site (default: all sites)',
+      description: 'Restrict to one Site, for example example.com (default: every Site)',
     },
     'dry-run': {
       type: 'boolean',
@@ -31,7 +31,7 @@ export const gcCommand = defineCommand({
     const { json } = applyOutputMode(args)
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
-    const siteId = args.site ? store.siteIdFor(String(args.site)) : undefined
+    const siteId = args.site ? store.siteIdFor(await ctx.resolveSite(String(args.site), { scope: 'store' })) : undefined
     const graceMs = Number(args['grace-hours']) * 3_600_000
 
     if (args['dry-run']) {
