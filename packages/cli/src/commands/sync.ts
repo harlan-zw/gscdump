@@ -30,7 +30,7 @@ import { googleErrorMessage, openQuotaLedger, parseQuotaRefusal, QUOTA_CAPS } fr
 import { createRequestPacer } from '../request-pacer'
 import { loadSitemapUrls } from '../sitemap'
 import { formatSiteIdCollision, readSiteMap, recordStoreSite, siteUrlForId } from '../store-sites'
-import { minimumCallsPerDate, planJobDates, planSyncJobs, resolveWindow, RETENTION_MARGIN_DAYS } from '../sync-plan'
+import { DEFAULT_INSPECT_LIMIT, minimumCallsPerDate, planJobDates, planSyncJobs, resolveWindow, RETENTION_MARGIN_DAYS } from '../sync-plan'
 import { isProcessAlive, readSyncRun, startSyncRun, syncRunStatus } from '../sync-run'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, parseNameList, progressBar, runWithConcurrency } from '../utils'
 
@@ -56,7 +56,6 @@ const DEFAULT_MAX_IN_FLIGHT = 8
 const DEFAULT_REQUESTS_PER_MINUTE = 600
 // 50 calls at 4 in flight add about 15 seconds to a daily sync. At that
 // rate a site with 1,500 URLs gets each URL inspected about once a month.
-const DEFAULT_INSPECT_LIMIT = 50
 const INSPECT_CONCURRENCY = 4
 // Minimum days synced before we trust a zero-row result enough to persist
 // an empty-type marker. Shorter windows fire false positives on intermittent

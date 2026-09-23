@@ -9,7 +9,7 @@ export { createNodeHarness } from './node-harness'
 export type { NodeHarness, NodeHarnessOptions } from './node-harness'
 
 export { attachParquetIndex } from './parquet-attach'
-export type { AttachParquetIndexOptions, AttachParquetIndexResult } from './parquet-attach'
+export type { AttachParquetIndexOptions, AttachParquetIndexResult, ParquetFileGroup } from './parquet-attach'
 
 export { attachSnapshotIndex, snapshotAlias } from './snapshot-attach'
 export type {

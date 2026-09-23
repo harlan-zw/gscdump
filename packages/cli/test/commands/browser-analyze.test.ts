@@ -23,7 +23,7 @@ import {
 } from '@gscdump/engine/node'
 import { encodeSiteId } from 'gscdump/tenant'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { exportToDuckDB } from '../../src/commands/export'
+import { writeAnalyzerSnapshot } from '../../src/native-duckdb'
 
 function runAnalyzerWithEngine(
   deps: Parameters<typeof rawRunAnalyzerWithEngine>[0],
@@ -91,7 +91,7 @@ describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
     expect(server.results.length).toBeGreaterThan(0)
 
     // Export to a .duckdb file
-    await exportToDuckDB({ engine, dataDir, userId: USER, siteId, outPath, force: true })
+    await writeAnalyzerSnapshot({ engine, dataDir, userId: USER, siteId, outPath, force: true })
 
     // Browser-equivalent path: attach and run through analyzeInBrowser
     const inst = await DuckDBInstance.create(':memory:')
@@ -171,7 +171,7 @@ describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
     } as const
 
     const server = await runAnalyzerWithEngine({ engine }, { userId: USER, siteId }, params)
-    await exportToDuckDB({ engine, dataDir, userId: USER, siteId, outPath, force: true })
+    await writeAnalyzerSnapshot({ engine, dataDir, userId: USER, siteId, outPath, force: true })
 
     const inst = await DuckDBInstance.create(':memory:')
     const conn = await inst.connect()
@@ -229,7 +229,7 @@ describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
     const server = await runAnalyzerWithEngine({ engine }, { userId: USER, siteId }, params)
     expect(server.results.length).toBeGreaterThan(0)
 
-    await exportToDuckDB({ engine, dataDir, userId: USER, siteId, outPath, force: true })
+    await writeAnalyzerSnapshot({ engine, dataDir, userId: USER, siteId, outPath, force: true })
 
     const inst = await DuckDBInstance.create(':memory:')
     const conn = await inst.connect()
@@ -281,7 +281,7 @@ describe('analyzeInBrowser ↔ runAnalyzerWithEngine parity', () => {
       { userId: USER, siteId },
       params,
     )
-    await exportToDuckDB({ engine, dataDir, userId: USER, siteId, outPath, force: true })
+    await writeAnalyzerSnapshot({ engine, dataDir, userId: USER, siteId, outPath, force: true })
 
     const inst = await DuckDBInstance.create(':memory:')
     const conn = await inst.connect()

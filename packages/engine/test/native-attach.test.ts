@@ -48,6 +48,39 @@ describe('native local attachments', () => {
     expect(await runner('SELECT url, clicks::INT AS clicks FROM pages')).toEqual([{ url: '/local', clicks: 7 }])
   })
 
+  it('tags each group of files with constant columns so totals split by group', async () => {
+    const write = async (name: string, impressions: number) => {
+      const path = join(directory, name)
+      await writeFile(path, encodeRowsToParquet('pages', [{ url: '/a', date: '2026-09-01', clicks: 1, impressions, sum_position: 0 }]))
+      return path
+    }
+    const web = await write('web.parquet', 10)
+    const image = await write('image.parquet', 2)
+    const other = await write('other.parquet', 5)
+
+    await attachParquetIndex(runner, {
+      tables: {
+        pages: [
+          { urls: [web], constants: { site: 'sc-domain:a.com', search_type: 'web' } },
+          { urls: [image], constants: { site: 'sc-domain:a.com', search_type: 'image' } },
+          { urls: [other], constants: { site: 'https://b.com/', search_type: 'web' } },
+        ],
+      },
+    })
+
+    expect(await runner('SELECT site, search_type, SUM(impressions)::INT AS impressions FROM pages GROUP BY ALL ORDER BY ALL')).toEqual([
+      { site: 'https://b.com/', search_type: 'web', impressions: 5 },
+      { site: 'sc-domain:a.com', search_type: 'image', impressions: 2 },
+      { site: 'sc-domain:a.com', search_type: 'web', impressions: 10 },
+    ])
+  })
+
+  it('rejects a constant column name that is not an identifier', async () => {
+    await expect(attachParquetIndex(runner, {
+      tables: { pages: [{ urls: ['/x.parquet'], constants: { 'site; DROP': 'x' } }] },
+    })).rejects.toThrow(TypeError)
+  })
+
   it('queries local cold and hot snapshots without installing httpfs for unused remote URLs', async () => {
     async function createSnapshot(filename: string, url: string, clicks: number) {
       const path = join(directory, filename)
