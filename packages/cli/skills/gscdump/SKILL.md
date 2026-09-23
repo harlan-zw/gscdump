@@ -205,6 +205,8 @@ gscdump sync --site sc-domain:example.com --status --json
 - Sync covers every table and search type by default. Pass `--tables` and
   `--types` to sync less. Sync skips table and type pairs Google cannot answer.
 - `--full` backfills the 486 days Google keeps.
+- Sync paces Google calls: 8 in flight and 600 per minute across all tables.
+  `--requests-per-minute N` changes the rate. A quota 403 retries with backoff.
 - Sync also saves the sitemap list, sitemap URLs, and URL Inspection results.
   It inspects up to 50 due URLs per run. `--inspect-limit N` changes that.
   `--no-sitemaps` and `--no-inspections` skip those steps. Read the

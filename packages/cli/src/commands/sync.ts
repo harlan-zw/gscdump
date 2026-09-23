@@ -3,6 +3,7 @@ import type { SearchType } from 'gscdump/query'
 import type { ResolvedGscdumpConfig } from '../config'
 import type { InspectionSyncResult, SitemapSyncResult } from '../local-entities'
 import type { GscApiRow, LocalStore, Row, TableName, WriteCtx } from '../local-store'
+import type { RequestPacer } from '../request-pacer'
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
 import { runGscSearchAppearanceContextSlice, runGscSyncSlice } from '@gscdump/engine-gsc-api'
@@ -17,6 +18,7 @@ import { createCommandContext } from '../context'
 import { INSPECTION_QPD_PER_PROPERTY } from '../inspection-record'
 import { loadSitemapGenerationUrls, resolvePagePaths, syncInspections, syncSitemaps } from '../local-entities'
 import { allTables, assembleDatesRow, createLocalStore, TABLE_DIMS } from '../local-store'
+import { createRequestPacer } from '../request-pacer'
 import { loadSitemapUrls } from '../sitemap'
 import { datesForJob, FULL_HISTORY_DAYS, planSyncJobs } from '../sync-plan'
 import { applyOutputMode, clearLine, displayPath, formatAge, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
@@ -36,6 +38,12 @@ function isSliceTable(table: TableName): table is SliceTable {
 }
 const DEFAULT_PENDING_DAYS = 3
 const DEFAULT_CONCURRENCY = 8
+// Google allows 1,200 Search Analytics queries per minute per site and per
+// user, plus a load quota on expensive queries. Every table and search type
+// shares one gate: 8 requests in flight and 600 starts per minute, half the
+// per-minute limit, so a default full sync stays under both.
+const DEFAULT_MAX_IN_FLIGHT = 8
+const DEFAULT_REQUESTS_PER_MINUTE = 600
 // 50 calls at 4 in flight add about 15 seconds to a daily sync. At that
 // rate a site with 1,500 URLs gets each URL inspected about once a month.
 const DEFAULT_INSPECT_LIMIT = 50
@@ -348,7 +356,11 @@ export const syncCommand = defineCommand({
     'concurrency': {
       type: 'string',
       alias: 'c',
-      description: `Concurrent in-flight day fetches per table (default: ${DEFAULT_CONCURRENCY})`,
+      description: `Concurrent day fetches per table (default: ${DEFAULT_CONCURRENCY}). All tables share ${DEFAULT_MAX_IN_FLIGHT} requests in flight.`,
+    },
+    'requests-per-minute': {
+      type: 'string',
+      description: `Most Search Analytics requests to start per minute, across all tables (default: ${DEFAULT_REQUESTS_PER_MINUTE}; Google allows 1,200)`,
     },
     'serial-tables': {
       type: 'boolean',
@@ -381,7 +393,11 @@ export const syncCommand = defineCommand({
     }
 
     const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
-    const client = ctx.client!
+    const pacer = createRequestPacer({
+      maxInFlight: DEFAULT_MAX_IN_FLIGHT,
+      perMinute: parseIntegerOption(args['requests-per-minute'], '--requests-per-minute') ?? DEFAULT_REQUESTS_PER_MINUTE,
+    })
+    const client = pacedClient(ctx.client!, pacer)
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
 
     const tables = args.tables
@@ -828,6 +844,21 @@ async function syncEntities(opts: {
   }
 
   return { sitemaps, inspections }
+}
+
+// Route every Search Analytics query through the shared pacer. Other calls pass through.
+function pacedClient(
+  client: ReturnType<typeof googleSearchConsole>,
+  pacer: RequestPacer,
+): ReturnType<typeof googleSearchConsole> {
+  const query = client.searchAnalytics.query
+  return {
+    ...client,
+    searchAnalytics: {
+      ...client.searchAnalytics,
+      query: (...args: Parameters<typeof query>) => pacer.run(() => query(...args)),
+    },
+  }
 }
 
 function isKnownTable(name: string): name is TableName {

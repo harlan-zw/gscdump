@@ -41,6 +41,7 @@ The `dates` sync combines separate requests for Site totals, device metrics, and
 Sync also rebuilds Rollups unless you pass `--no-rollups`.
 Sync saves the sitemap list and sitemap URLs unless you pass `--no-sitemaps`.
 Sync inspects up to 50 due URLs per run unless you pass `--no-inspections`.
+Sync keeps 8 Search Analytics requests in flight and starts at most 600 per minute. `--requests-per-minute N` changes the rate.
 Use `--inspect-limit N` to change the budget. Google allows 2,000 inspections per property per day.
 Run `gscdump sync --help` for the full table and search-type options.
 
