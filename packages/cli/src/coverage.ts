@@ -3,7 +3,6 @@
 // progress. `sync --status`, the sync summary, and `dump` share this value
 // and its one renderer.
 
-import type { InspectionRecord } from '@gscdump/engine/entities'
 import type { SearchType } from 'gscdump/query'
 import type { LocalStore, TableName } from './local-store'
 import type { QuotaLedgerState } from './quota-ledger'
@@ -12,7 +11,7 @@ import type { SyncRunStatus } from './sync-run'
 import { createSitemapListStore, createSitemapReadStore, parseSitemapFeedIdentity } from '@gscdump/engine/entities'
 import { getDateRange, getLatestGscDate, getOldestGscDate, getPstDate } from 'gscdump/dates'
 import { INSPECTION_QPD_PER_PROPERTY } from './inspection-record'
-import { inspectionCandidates, loadInspectionHistory } from './local-entities'
+import { inspectionCandidates, loadInspectionState } from './local-entities'
 import { quotaLedgerPath, quotaStatus, readLedgerState } from './quota-ledger'
 import { datesForJob, FIRST_SYNC_DAYS, jobWindowStart } from './sync-plan'
 
@@ -141,11 +140,12 @@ export function analyticsCoverage(input: {
 /** URLs with at least one inspection, out of every URL the Site knows about. */
 export function inspectionCoverage(input: {
   candidates: readonly string[]
-  history: readonly Pick<InspectionRecord, 'url'>[]
+  /** URLs with at least one saved inspection. */
+  inspected: ReadonlySet<string>
   perRun: number
   blockedUntil?: number
 }): InspectionCoverage {
-  const inspected = new Set(input.history.map(record => record.url))
+  const { inspected } = input
   const total = new Set(input.candidates).size
   const done = [...new Set(input.candidates)].filter(url => inspected.has(url)).length
   const pending = total - done
@@ -288,7 +288,8 @@ export async function readStoreCoverage(input: {
   const analyticsBlock = quotaStatus(ledger, { api: 'searchAnalytics', site, now }).blocked
   const inspections = inspectionCoverage({
     candidates: await inspectionCandidates(store, site),
-    history: await loadInspectionHistory(store.dataSource, ctx),
+    // The index holds the newest record per URL, so its keys are every inspected URL.
+    inspected: new Set((await loadInspectionState(store.dataSource, ctx, now)).latest.keys()),
     perRun: input.inspectLimit,
     ...(inspectBlock ? { blockedUntil: inspectBlock.until } : {}),
   })

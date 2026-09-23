@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createInspectionStore } from '@gscdump/engine/entities'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { readStoreCoverage } from '../src/coverage'
 import { toInspectionRecord } from '../src/inspection-record'
 import { loadInspectionState, recordInspections } from '../src/local-entities'
 import { createLocalStore } from '../src/local-store'
@@ -59,5 +60,37 @@ describe('loadInspectionState', () => {
     const state = await loadInspectionState(store.dataSource, ctx, NOW)
 
     expect([...state.latest.keys()]).toEqual(['https://e.com/old'])
+  })
+})
+
+describe('readStoreCoverage', () => {
+  let dataDir: string
+
+  beforeEach(async () => {
+    dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-inspection-coverage-'))
+  })
+
+  afterEach(async () => {
+    await fs.rm(dataDir, { recursive: true, force: true })
+  })
+
+  it('counts inspected URLs from the index, not the full history', async () => {
+    const store = createLocalStore({ dataDir })
+    const site = 'sc-domain:e.com'
+    const ctx = { userId: store.userId, siteId: store.siteIdFor(site) }
+    const old = inspected('https://e.com/old', 120, 'FAIL')
+    await recordInspections(store.dataSource, ctx, new Map(), [old])
+
+    const reads: string[] = []
+    const dataSource: DataSource = {
+      ...store.dataSource,
+      read: (key, ...rest) => {
+        reads.push(key)
+        return store.dataSource.read(key, ...rest)
+      },
+    }
+    await readStoreCoverage({ store: { ...store, dataSource }, site, inspectLimit: 50, run: { kind: 'none' }, now: NOW, ledger: { version: 1, usage: [] } })
+
+    expect(reads.some(key => key.includes('/2026-05/'))).toBe(false)
   })
 })

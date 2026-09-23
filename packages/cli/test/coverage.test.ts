@@ -20,7 +20,7 @@ function coverage(overrides: Partial<StoreCoverage>): StoreCoverage {
 
 describe('renderCoverage', () => {
   it('words partial inspections as progress with an ETA and a faster option', () => {
-    const inspections = inspectionCoverage({ candidates: urls(10_000), history: urls(1_200).map(url => ({ url })), perRun: 50 })
+    const inspections = inspectionCoverage({ candidates: urls(10_000), inspected: new Set(urls(1_200)), perRun: 50 })
 
     const lines = renderCoverage(coverage({ inspections }))
 
@@ -29,7 +29,7 @@ describe('renderCoverage', () => {
   })
 
   it('says complete only when every URL has a record', () => {
-    const inspections = inspectionCoverage({ candidates: urls(3), history: urls(3).map(url => ({ url })), perRun: 50 })
+    const inspections = inspectionCoverage({ candidates: urls(3), inspected: new Set(urls(3)), perRun: 50 })
     expect(renderCoverage(coverage({ inspections }))).toContain('Inspections: all 3 URLs inspected at least once.')
   })
 
