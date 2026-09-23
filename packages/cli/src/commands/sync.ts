@@ -330,6 +330,9 @@ async function runSliceDate(
     })
     if (result.hasMore)
       throw new Error(`${table} ${date}: Google stopped before the last page`)
+    // The context slices read the fresh `all` data state like the discovery
+    // query, so their metadata decides whether the day is final too.
+    metadata = result.metadata
     rows = [...byAppearance.values()].flatMap(drainDay)
   }
   return writeDayRows(store, siteUrl, table, searchType, date, rows, isFinalDate(date, latest, metadata))
@@ -505,7 +508,9 @@ export const syncCommand = defineCommand({
       latest,
       floor: getOldestGscDate(),
     })
-    const mode: SyncMode = args['retry-failed'] ? 'retry-failed' : args.force || args['force-types'] ? 'force' : 'resume'
+    // --force-types overrides the mode per type in buildSitePlan: only types
+    // with an empty marker re-probe in force mode, everything else resumes.
+    const mode: SyncMode = args['retry-failed'] ? 'retry-failed' : args.force ? 'force' : 'resume'
 
     if (!args['dry-run']) {
       const existing = syncRunStatus(await readSyncRun(store.dataDir), { now: Date.now(), isAlive: isProcessAlive })
@@ -632,19 +637,24 @@ async function resolveTypes(opts: SiteOptions, dryRun: boolean): Promise<{ types
   return { types, skippedTypes, emptyTypes: emptyTypesDoc.emptyTypes }
 }
 
-async function buildSitePlan(opts: SiteOptions, types: SearchType[], skippedTypes: SearchType[]): Promise<SitePlan> {
+async function buildSitePlan(opts: SiteOptions, types: SearchType[], skippedTypes: SearchType[], emptyTypes: readonly string[]): Promise<SitePlan> {
   const { store, siteUrl, tables, quiet, args } = opts
   const { jobs, unsupported } = planSyncJobs(tables, types)
   if (unsupported.length > 0 && !quiet && (args.tables || args.types))
     logger.info(`Skipping ${unsupported.map(job => job.label).join(', ')}: Google has no such breakdown for that search type.`)
   const states = await store.engine.getSyncStates({ userId: store.userId, siteId: store.siteIdFor(siteUrl) })
   const today = getPstDate()
+  const forceTypes = Boolean(args['force-types'])
   return {
     types,
     skippedTypes,
     jobs: jobs.map((job) => {
       const jobStates = states.filter(state => state.table === job.table && (state.searchType ?? 'web') === job.type)
-      const planned = planJobDates({ table: job.table, window: opts.window, states: jobStates, today, mode: opts.mode })
+      // A marked-empty type's probe fetched 0 rows, so its window dates are
+      // done. Under --force-types that job alone re-probes in force mode;
+      // resume would skip every date and the marker could never heal.
+      const mode: SyncMode = forceTypes && opts.mode === 'resume' && emptyTypes.includes(job.type) ? 'force' : opts.mode
+      const planned = planJobDates({ table: job.table, window: opts.window, states: jobStates, today, mode })
       return { job, dates: planned.dates, skipped: planned.skippedDone }
     }),
   }
@@ -657,8 +667,8 @@ function windowLabel(window: SyncWindow): string {
 }
 
 async function planSite(opts: SiteOptions): Promise<Record<string, unknown>> {
-  const { types, skippedTypes } = await resolveTypes(opts, true)
-  const plan = await buildSitePlan(opts, types, skippedTypes)
+  const { types, skippedTypes, emptyTypes } = await resolveTypes(opts, true)
+  const plan = await buildSitePlan(opts, types, skippedTypes, emptyTypes)
   const items = plan.jobs.flatMap(({ job, dates }) => dates.map(date => ({ table: job.table, searchType: job.type, date, calls: minimumCallsPerDate(job.table) })))
   const minimumCalls = items.reduce((sum, item) => sum + item.calls, 0)
   const ranges = groupIntoRanges([...new Set(items.map(item => item.date))])
@@ -716,7 +726,7 @@ async function syncSite(opts: SiteOptions & { run: SyncRun }): Promise<SiteSyncR
     return { status: 'skipped', report: await report('skipped', {}, { reason: 'empty-types' }) }
   }
 
-  const plan = await buildSitePlan(opts, types, skippedTypes)
+  const plan = await buildSitePlan(opts, types, skippedTypes, emptyTypes)
   const plannedDates = plan.jobs.reduce((sum, entry) => sum + entry.dates.length, 0)
   if (opts.mode === 'retry-failed' && plannedDates === 0) {
     if (!quiet)

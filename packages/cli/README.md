@@ -52,9 +52,9 @@ gscdump mcp
 | `sites [--owner-only] [--with-sitemaps]` | List available GSC sites |
 | `sites add <url>` / `sites delete <url> [--yes]` | Register or remove a Site in Search Console (add registers in unverified state) |
 | `sites verify-token <url> [--method]` / `sites verify <url> [--method]` | Get a verification token, then trigger ownership verification (META/FILE/DNS_TXT/DNS_CNAME/ANALYTICS/TAG_MANAGER) |
-| `sitemaps` | List, submit, or delete Google sitemaps; probe live URLs; read hosted snapshots (`current`, `history`, `membership`, `lastmod`, `export`) |
+| `sitemaps` | List, submit, or delete Google sitemaps; probe live URLs; read hosted snapshots (`current`, `history`, `membership`, `lastmod`, `export`) with `--site` |
 | `inspect <url...> [--file]` | URL inspection for one or more URLs; renders Indexing Evidence, rich results, and AMP, and saves each result to the Store |
-| `indexing` | Notify Google about URL changes (`submit`, `remove`, `status`, `batch`, `batch-status`, `quota`); supports `--retries` |
+| `indexing` | Notify Google about URL changes (`submit`, `remove`, `status`, `batch`, `batch-status`, `quota`); supports `--retries`. `indexing urls --status not_indexed` lists hosted URL Inspection results |
 | `sync` | Sync GSC data, sitemaps, and URL Inspection results to the local Store; `--inspect-limit`, `--max-calls`, `--all-sites`, `--no-sitemaps`, `--no-inspections`, `--retry-failed`, `--dry-run` |
 | `query` | Run a search analytics query (Store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. `--sql` runs DuckDB SQL over the Store views; `--schema` lists them. |
 | `dump` | Export the Store, inspections, sitemaps, and Bing data (`--format parquet\|csv\|json\|ndjson\|sqlite\|duckdb`, `--tables`, `--all-sites`, `--no-bing`). Every row has `site` and `search_type` |

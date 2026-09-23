@@ -109,7 +109,7 @@ Guides:
 | `sites [--with-sitemaps]` | List Sites and manage Site verification |
 | `sitemaps` | List, submit, delete, and discover sitemaps |
 | `inspect <url...>` | Inspect one or more URLs and save the results to the Store |
-| `indexing` | Send eligible notifications with `submit`, `remove`, and `batch`; read metadata with `status` |
+| `indexing` | Send eligible notifications with `submit`, `remove`, and `batch`; read metadata with `status`; list hosted URL Inspection results with `urls` |
 | `analyze <tool>` | Run one Analyzer |
 | `report <id>` | Run a Report |
 | `entities` | Read saved URL inspections and save indexing notification metadata locally |
