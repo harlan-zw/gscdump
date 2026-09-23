@@ -64,6 +64,7 @@ describe('gscdump mcp runtime', () => {
   })
 
   afterEach(async () => {
+    vi.useRealTimers()
     await client?.close()
     vi.unstubAllGlobals()
     await fs.rm(configDir, { recursive: true, force: true })
@@ -116,10 +117,20 @@ describe('gscdump mcp runtime', () => {
       ? googleError(403, 'Search Analytics load quota exceeded.', 'quotaExceeded')
       : undefined)
 
-    const result = await client.callTool({
+    // A quota 403 retries after a backoff; run the wait on fake time. The MCP
+    // client's own 60s request timeout runs on the same clock.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const state = { settled: false }
+    const call = client.callTool({
       name: 'query',
       arguments: { siteUrl: 'example.com', startDate: '2026-08-01', endDate: '2026-08-28', dimensions: ['query'] },
-    }) as CallToolResult
+    }).finally(() => {
+      state.settled = true
+    })
+    while (!state.settled)
+      await vi.advanceTimersByTimeAsync(1000)
+    vi.useRealTimers()
+    const result = await call as CallToolResult
 
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('quota exceeded')
