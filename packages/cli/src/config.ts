@@ -17,9 +17,7 @@ const configSchema = z.strictObject({
   clientId: z.string().optional(),
   clientSecret: z.string().optional(),
   defaultSite: z.string().optional(),
-  defaultPeriod: z.string().optional(),
   defaultFormat: z.enum(['json', 'csv']).optional(),
-  defaultDb: z.string().optional(),
   dataDir: z.string().optional(),
   defaultLimit: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
   defaultSearchType: z.enum(SearchTypes).optional(),
@@ -30,7 +28,7 @@ const configSchema = z.strictObject({
 export type GscdumpConfig = z.infer<typeof configSchema>
 
 // Earlier CLI versions wrote these keys. Drop them so old configs still load.
-const RETIRED_KEYS = ['mode', 'cloudUrl']
+const RETIRED_KEYS = ['mode', 'cloudUrl', 'defaultPeriod', 'defaultDb']
 
 function dropRetiredKeys(value: unknown): unknown {
   if (typeof value !== 'object' || value === null || Array.isArray(value))

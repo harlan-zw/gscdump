@@ -35,9 +35,8 @@ describe('config module', () => {
     it('should load existing config from file', async () => {
       const testConfig = {
         defaultSite: 'sc-domain:example.com',
-        defaultPeriod: '90d',
+        dataDir: '90d',
         defaultFormat: 'json',
-        defaultDb: './test.db',
       }
       await fs.writeFile(configFile, JSON.stringify(testConfig))
 
@@ -57,8 +56,8 @@ describe('config module', () => {
     })
 
     it('ignores keys written by earlier CLI versions', async () => {
-      await fs.writeFile(configFile, JSON.stringify({ mode: 'local', cloudUrl: 'https://cloud.gscdump.com', defaultPeriod: '30d' }))
-      expect(await loadConfig()).toEqual({ defaultPeriod: '30d' })
+      await fs.writeFile(configFile, JSON.stringify({ mode: 'local', cloudUrl: 'https://cloud.gscdump.com', defaultPeriod: '30d', defaultDb: './data.db', defaultSite: 'sc-domain:example.com' }))
+      expect(await loadConfig()).toEqual({ defaultSite: 'sc-domain:example.com' })
     })
 
     it('propagates config read failures', async () => {
@@ -77,7 +76,7 @@ describe('config module', () => {
     it('should save config to file', async () => {
       const testConfig = {
         defaultSite: 'sc-domain:test.com',
-        defaultPeriod: '30d',
+        dataDir: '30d',
       }
 
       await saveConfig(testConfig)
@@ -90,7 +89,7 @@ describe('config module', () => {
       const nestedDir = path.join(testDir, 'nested', 'config')
       setConfigDir(nestedDir)
 
-      await saveConfig({ defaultPeriod: '7d' })
+      await saveConfig({ dataDir: '7d' })
 
       const stats = await fs.stat(nestedDir)
       expect(stats.isDirectory()).toBe(true)
@@ -106,11 +105,11 @@ describe('config module', () => {
     })
 
     it('should overwrite existing config', async () => {
-      await saveConfig({ defaultPeriod: '30d' })
-      await saveConfig({ defaultPeriod: '90d', defaultSite: 'test.com' })
+      await saveConfig({ dataDir: '30d' })
+      await saveConfig({ dataDir: '90d', defaultSite: 'test.com' })
 
       const config = await loadConfig()
-      expect(config).toEqual({ defaultPeriod: '90d', defaultSite: 'test.com' })
+      expect(config).toEqual({ dataDir: '90d', defaultSite: 'test.com' })
     })
   })
 
@@ -118,28 +117,25 @@ describe('config module', () => {
     it('should handle all valid config keys', async () => {
       const fullConfig = {
         defaultSite: 'sc-domain:example.com',
-        defaultPeriod: '180d',
+        dataDir: '180d',
         defaultFormat: 'csv' as const,
-        defaultDb: '/path/to/db.sqlite',
       }
 
       await saveConfig(fullConfig)
       const loaded = await loadConfig()
 
       expect(loaded.defaultSite).toBe('sc-domain:example.com')
-      expect(loaded.defaultPeriod).toBe('180d')
+      expect(loaded.dataDir).toBe('180d')
       expect(loaded.defaultFormat).toBe('csv')
-      expect(loaded.defaultDb).toBe('/path/to/db.sqlite')
     })
 
     it('should handle partial config', async () => {
-      await saveConfig({ defaultPeriod: '7d' })
+      await saveConfig({ dataDir: '7d' })
       const loaded = await loadConfig()
 
-      expect(loaded.defaultPeriod).toBe('7d')
+      expect(loaded.dataDir).toBe('7d')
       expect(loaded.defaultSite).toBeUndefined()
       expect(loaded.defaultFormat).toBeUndefined()
-      expect(loaded.defaultDb).toBeUndefined()
     })
   })
 })
