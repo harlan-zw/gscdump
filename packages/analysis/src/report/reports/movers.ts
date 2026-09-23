@@ -85,7 +85,7 @@ function buildMoversSection(
     .filter(r => r.direction === direction && Math.abs(r.clicksChange) >= minChange)
     .sort((a, b) => Math.abs(b.clicksChange) - Math.abs(a.clicksChange))
 
-  const total = rows.length
+  const total = resultTotal(res, rows.length)
   const kept = rows.slice(0, max)
   const findings: ReportFinding[] = kept.map(r => ({
     entity: { kind: 'query', value: r.keyword },
@@ -136,10 +136,10 @@ function buildDeclinersSection(
   max: number,
   minChange: number,
 ): ReportSection {
-  const decliningQueries = reportRows<MoverRow>(moversRes)
+  const decliningRows = reportRows<MoverRow>(moversRes)
     .filter(r => r.direction === 'declining' && Math.abs(r.clicksChange) >= minChange)
     .sort((a, b) => Math.abs(b.clicksChange) - Math.abs(a.clicksChange))
-    .slice(0, max)
+  const decliningQueries = decliningRows.slice(0, max)
 
   const lostPages = reportRows<DecayRow>(decayRes)
     .sort((a, b) => b.lostClicks - a.lostClicks)
@@ -169,6 +169,7 @@ function buildDeclinersSection(
     severity,
     summary: { delta: -totalLost, direction: totalLost > 0 ? 'down' : 'flat', magnitudeLabel: `${Math.round(totalLost)} clicks lost` },
     findings,
+    truncated: truncation(resultTotal(moversRes, decliningRows.length), decliningQueries.length),
     coverage: sectionCoverage(moversRes) === 'full' && sectionCoverage(decayRes) === 'full' ? 'full' : 'partial',
   }
 }

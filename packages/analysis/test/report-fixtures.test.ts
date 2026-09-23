@@ -72,6 +72,70 @@ describe('movers report', () => {
       .rejects
       .toThrow(/comparison window/)
   })
+
+  it('counts every rising match in truncated.total, not just the returned page', async () => {
+    const ctx: ReportContext = { site: SITE, window, params: {}, registryVersion: 't' }
+    const risingRows = Array.from({ length: 10 }, (_, i) => ({
+      keyword: `rising ${i}`,
+      page: '/p',
+      recentClicks: 100 - i,
+      baselineClicks: 10,
+      recentImpressions: 1000,
+      baselineImpressions: 800,
+      recentPosition: 5,
+      baselinePosition: 7,
+      clicksChange: 90 - i,
+      clicksChangePercent: 9,
+      impressionsChangePercent: 0.25,
+      positionChange: -2,
+      direction: 'rising',
+    }))
+    const moversAnalyzer: Analyzer = {
+      id: 'movers',
+      requires: [],
+      build: (): RowQueriesPlan => ({ kind: 'rows', queries: {} }),
+      reduce: () => ({ results: risingRows as never[], meta: { total: 500 } }),
+    }
+    const analyzers = stubRegistry([
+      moversAnalyzer,
+      stubAnalyzer('decay', []),
+      stubAnalyzer('striking-distance', []),
+    ])
+    const out = await runReport(moversReport, { source, analyzers, ctx })
+    expect(out.sections.find(s => s.id === 'rising')!.truncated).toEqual({ kept: 5, total: 500 })
+  })
+
+  it('counts every declining match in truncated.total, not just the returned page', async () => {
+    const ctx: ReportContext = { site: SITE, window, params: {}, registryVersion: 't' }
+    const decliningRows = Array.from({ length: 10 }, (_, i) => ({
+      keyword: `declining ${i}`,
+      page: '/p',
+      recentClicks: 10,
+      baselineClicks: 100 - i,
+      recentImpressions: 1000,
+      baselineImpressions: 800,
+      recentPosition: 7,
+      baselinePosition: 5,
+      clicksChange: -(90 - i),
+      clicksChangePercent: -0.9,
+      impressionsChangePercent: -0.25,
+      positionChange: 2,
+      direction: 'declining',
+    }))
+    const moversAnalyzer: Analyzer = {
+      id: 'movers',
+      requires: [],
+      build: (): RowQueriesPlan => ({ kind: 'rows', queries: {} }),
+      reduce: () => ({ results: decliningRows as never[], meta: { total: 500 } }),
+    }
+    const analyzers = stubRegistry([
+      moversAnalyzer,
+      stubAnalyzer('decay', []),
+      stubAnalyzer('striking-distance', []),
+    ])
+    const out = await runReport(moversReport, { source, analyzers, ctx })
+    expect(out.sections.find(s => s.id === 'decliners')!.truncated).toEqual({ kept: 5, total: 500 })
+  })
 })
 
 describe('health report', () => {
