@@ -2,7 +2,7 @@ import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-ty
 import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { Result } from 'gscdump/result'
 import type { LocalStore, TableName } from './local-store'
-import type { ComparisonSyncGaps } from './window'
+import type { CoverageGap, WindowRead } from './window'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -16,7 +16,7 @@ import { createCommandContext } from './context'
 import { LocalStoreUnsupportedError } from './error-handler'
 import { createLocalStore } from './local-store'
 import { logger } from './utils'
-import { comparisonSyncGaps, resolveAnchor } from './window'
+import { resolveAnchor, windowCoverage } from './window'
 
 export async function hasLocalData(
   store: LocalStore,
@@ -47,13 +47,11 @@ export interface ResolvedAnalysisSource {
    */
   anchorFor: (tables: readonly TableName[]) => Promise<string>
   /**
-   * Sync-gap warning for a comparison window, or undefined when the sync
-   * covers every day of it. Names the tables with no synced day (a zero-row
-   * baseline fabricates +100% risers) and the tables with only part of the
-   * window synced (an uneven baseline inflates change percentages). Live
-   * sources never warn: the GSC API covers the windows it serves.
+   * Check that the Store holds a `done` sync state for every day of every
+   * read. Local runs must stop on `gaps`: partial data gives wrong numbers.
+   * Live sources are always `covered`: the GSC API serves the whole window.
    */
-  comparisonWarning: (tables: readonly TableName[], start: string, end: string) => Promise<string | undefined>
+  checkCoverage: (reads: readonly WindowRead[]) => Promise<CoverageCheck>
 }
 
 /**
@@ -80,21 +78,55 @@ export function analyzerTables(params: AnalysisParams): TableName[] {
   return [...new Set(fileSets.flatMap(fileSet => fileSet ? [fileSet.table] : []))]
 }
 
+export type CoverageCheck
+  = | { kind: 'covered' }
+    | { kind: 'gaps', gaps: CoverageGap[], message: string }
+
+/**
+ * Tables and windows an analyzer's SQL plan reads for these dated params.
+ * `current` and extra FileSets read the current window; `previous` reads the
+ * comparison window. Returns an empty list when the analyzer has no SQL plan
+ * or its plan cannot build; the run itself then reports that failure.
+ */
+export function analyzerReads(params: AnalysisParams): WindowRead[] {
+  const analyzer = defaultAnalyzerRegistry.getAnalyzerVariants(params.type)?.sql
+  if (!analyzer || !params.startDate || !params.endDate)
+    return []
+  let plan: ReturnType<typeof analyzer.build>
+  try {
+    plan = analyzer.build(params)
+  }
+  catch (error) {
+    logger.debug(`Cannot plan ${params.type} to check its sync coverage: ${(error as Error).message}`)
+    return []
+  }
+  if (plan.kind !== 'sql')
+    return []
+  const current = { window: 'current', start: params.startDate, end: params.endDate } as const
+  const reads: WindowRead[] = [plan.current, ...Object.values(plan.extraFiles ?? {})].map(fileSet => ({ ...current, table: fileSet.table }))
+  if (plan.previous && params.prevStartDate && params.prevEndDate)
+    reads.push({ window: 'comparison', table: plan.previous.table, start: params.prevStartDate, end: params.prevEndDate })
+  return reads
+}
+
+/** Stop message for sync gaps: each gap, then one sync command that fills them all. */
+export function coverageGapMessage(siteUrl: string, gaps: readonly CoverageGap[]): string {
+  const lines = gaps.map(gap => `  ${gap.window} window ${gap.start} to ${gap.end}: ${gap.table} misses ${gap.missingDays} of ${gap.expectedDays} days (${gap.missingStart} to ${gap.missingEnd}).`)
+  const start = gaps.reduce((min, gap) => gap.missingStart < min ? gap.missingStart : min, gaps[0]!.missingStart)
+  const end = gaps.reduce((max, gap) => gap.missingEnd > max ? gap.missingEnd : max, gaps[0]!.missingEnd)
+  const tables = [...new Set(gaps.map(gap => gap.table))].sort().join(',')
+  return [
+    `The local Store for ${siteUrl} does not hold every day this run reads:`,
+    ...lines,
+    'Results from partial data are wrong, so the run stops.',
+    `Run \`gscdump sync --site ${siteUrl} --start ${start} --end ${end} --tables ${tables}\`, or pass --live.`,
+  ].join('\n')
+}
+
 function warnMissingSync(siteUrl: string) {
   return (tables: readonly TableName[], fallback: string): void => {
     logger.warn(`No synced days for ${tables.length ? tables.join(', ') : 'any table'} on ${siteUrl}. Windows end on ${fallback}. Run \`gscdump sync\` first.`)
   }
-}
-
-function missingComparisonSync(siteUrl: string, tables: readonly TableName[], start: string, end: string): string {
-  const names = tables.join(', ')
-  return `No synced days for ${names} on ${siteUrl} in ${start} to ${end}. The comparison reads no ${names} data. Run \`gscdump sync\` first.`
-}
-
-function partialComparisonSync(siteUrl: string, gaps: ComparisonSyncGaps['partial'], start: string, end: string): string {
-  const names = gaps.map(gap => gap.table).join(', ')
-  const counts = gaps.map(gap => `${gap.syncedDays} of ${gap.expectedDays} days`).join(', ')
-  return `Only ${counts} synced for ${names} on ${siteUrl} in ${start} to ${end}. The comparison window is only partially synced. Change percentages compare uneven windows. Run \`gscdump sync\` to backfill.`
 }
 
 export interface ResolveAnalysisSourceArgs {
@@ -213,14 +245,10 @@ export async function resolveAnalysisSource(
       isLive,
       runAnalysis: makeRunAnalysis(source, 'local'),
       anchorFor: tables => resolveAnchor({ kind: 'local', store, siteUrl, tables }, warnMissingSync(siteUrl)),
-      comparisonWarning: async (tables, start, end) => {
+      checkCoverage: async (reads) => {
         const states = await store.engine.getSyncStates({ userId: store.userId, siteId: store.siteIdFor(siteUrl), state: 'done' })
-        const { missing, partial } = comparisonSyncGaps(states, tables, start, end)
-        const warnings = [
-          missing.length ? missingComparisonSync(siteUrl, missing, start, end) : undefined,
-          partial.length ? partialComparisonSync(siteUrl, partial, start, end) : undefined,
-        ].filter(warning => warning !== undefined)
-        return warnings.length ? warnings.join(' ') : undefined
+        const coverage = windowCoverage(states, reads)
+        return coverage.kind === 'covered' ? coverage : { ...coverage, message: coverageGapMessage(siteUrl, coverage.gaps) }
       },
     }
   }
@@ -235,6 +263,6 @@ export async function resolveAnalysisSource(
     isLive,
     runAnalysis: makeRunAnalysis(source, 'live'),
     anchorFor: () => resolveAnchor({ kind: 'live' }, warnMissingSync(siteUrl)),
-    comparisonWarning: async () => undefined,
+    checkCoverage: async () => ({ kind: 'covered' }),
   }
 }

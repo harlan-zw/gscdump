@@ -12,9 +12,10 @@ vi.mock('../../src/analysis-local', () => ({
     format: args.json ? 'json' : args.format ?? 'table',
     runAnalysis: async () => boundary.result,
     anchorFor: async () => '2026-08-23',
-    comparisonWarning: async () => undefined,
+    checkCoverage: async () => ({ kind: 'covered' }),
   })),
   analyzerTables: vi.fn(() => []),
+  analyzerReads: vi.fn(() => []),
 }))
 
 const columnsDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'columns')

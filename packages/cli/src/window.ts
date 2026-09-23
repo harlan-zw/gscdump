@@ -187,44 +187,58 @@ export function newestDoneDate(states: readonly SyncState[], tables: readonly Ta
   return anchor
 }
 
-/**
- * Per-table sync coverage of `[start, end]`. `missing` lists tables with no
- * synced day in the window: they read a zero-row baseline. `partial` lists
- * tables with some but not every day of the window synced: their baseline
- * covers fewer days than the current window and inflates change percentages.
- */
-export interface ComparisonSyncGaps {
-  missing: TableName[]
-  partial: Array<{ table: TableName, syncedDays: number, expectedDays: number }>
+/** One table that a run reads over one window. */
+export interface WindowRead {
+  window: 'current' | 'comparison'
+  table: TableName
+  start: string
+  end: string
 }
 
-/** Distinct done days a table has synced inside `[start, end]`. Pure. */
-function syncedDayCount(states: readonly SyncState[], table: TableName, start: string, end: string): number {
-  const dates = new Set<string>()
+/** A read whose window holds days with no `done` sync state. */
+export interface CoverageGap extends WindowRead {
+  /** First and last day without a `done` sync state. */
+  missingStart: string
+  missingEnd: string
+  missingDays: number
+  expectedDays: number
+}
+
+export type WindowCoverage
+  = | { kind: 'covered' }
+    | { kind: 'gaps', gaps: CoverageGap[] }
+
+function daysBetween(start: string, end: string): string[] {
+  const out: string[] = []
+  for (let time = Date.parse(`${start}T00:00:00Z`); time <= Date.parse(`${end}T00:00:00Z`); time += 86_400_000)
+    out.push(new Date(time).toISOString().slice(0, 10))
+  return out
+}
+
+/**
+ * Check that every day of every read has a `done` web sync state. A failed,
+ * pending or absent day is a gap: the run would read partial data and report
+ * wrong numbers. Duplicate reads count once. Pure.
+ */
+export function windowCoverage(states: readonly SyncState[], reads: readonly WindowRead[]): WindowCoverage {
+  const done = new Set<string>()
   for (const state of states) {
-    if (state.table === table && state.state === 'done' && (state.searchType ?? 'web') === 'web' && state.date >= start && state.date <= end)
-      dates.add(state.date)
+    if (state.state === 'done' && (state.searchType ?? 'web') === 'web')
+      done.add(`${state.table}:${state.date}`)
   }
-  return dates.size
-}
-
-/**
- * Split the listed tables by sync coverage of `[start, end]`. An empty table
- * list means every table in `states`. Filters states like `newestDoneDate`.
- * Pure.
- */
-export function comparisonSyncGaps(states: readonly SyncState[], tables: readonly TableName[], start: string, end: string): ComparisonSyncGaps {
-  const wanted = tables.length ? tables : [...new Set(states.map(state => state.table))]
-  const expectedDays = Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1
-  const gaps: ComparisonSyncGaps = { missing: [], partial: [] }
-  for (const table of wanted) {
-    const syncedDays = syncedDayCount(states, table, start, end)
-    if (syncedDays === 0)
-      gaps.missing.push(table)
-    else if (syncedDays < expectedDays)
-      gaps.partial.push({ table, syncedDays, expectedDays })
+  const seen = new Set<string>()
+  const gaps: CoverageGap[] = []
+  for (const read of reads) {
+    const key = `${read.window}:${read.table}:${read.start}:${read.end}`
+    if (seen.has(key))
+      continue
+    seen.add(key)
+    const expected = daysBetween(read.start, read.end)
+    const missing = expected.filter(date => !done.has(`${read.table}:${date}`))
+    if (missing.length)
+      gaps.push({ ...read, missingStart: missing[0]!, missingEnd: missing.at(-1)!, missingDays: missing.length, expectedDays: expected.length })
   }
-  return gaps
+  return gaps.length ? { kind: 'gaps', gaps } : { kind: 'covered' }
 }
 
 export type AnchorTarget

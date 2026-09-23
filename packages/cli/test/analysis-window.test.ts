@@ -100,56 +100,76 @@ describe('local --page filters', () => {
   })
 })
 
-describe('local comparison windows', () => {
-  const tenDays = (date: string) => [{ date, url: '/a', query: 'alpha', clicks: 2, impressions: 50, sum_position: 0 }]
+describe('local sync coverage', () => {
+  const queryRows = (date: string) => [{ date, url: '/a', query: 'alpha', clicks: 2, impressions: 50, sum_position: 0 }]
+  const pageRows = (date: string) => [{ date, url: '/a', clicks: 2, impressions: 50, sum_position: 0 }]
 
-  it('warns when the default previous period has no synced days', async () => {
-    // Data starts 10 days back: the 28 days before the window are unsynced.
-    await seed('page_queries', days('2026-03-20', 10), tenDays)
+  it('stops when the current window has a gap and names the sync command', async () => {
+    const synced = days('2026-03-20', 28)
+    const gap = ['2026-03-05', '2026-03-06', '2026-03-07']
+    await seed('page_queries', synced.filter(date => !gap.includes(date)), queryRows)
+    // A failed day counts as a gap, the same as a day never synced.
+    const store = createLocalStore({ dataDir: join(directory, 'store') })
+    await store.engine.setSyncState({ userId: store.userId, siteId: store.siteIdFor(SITE), table: 'page_queries', date: '2026-03-06' }, 'failed')
 
-    await cli('analyze', 'movers', '--site', SITE, '--json')
+    await expect(cli('analyze', 'striking-distance', '--site', SITE)).rejects.toThrow('exit 1')
 
-    expect(stderr.join('\n')).toContain('No synced days for page_queries')
-    expect(stderr.join('\n')).toContain('2026-01-24 to 2026-02-20')
+    const message = stderr.join('\n')
+    expect(message).toContain('current window 2026-02-21 to 2026-03-20')
+    expect(message).toContain('page_queries misses 3 of 28 days')
+    expect(message).toContain(`gscdump sync --site ${SITE} --start 2026-03-05 --end 2026-03-07 --tables page_queries`)
+    expect(message).toContain('--live')
+    expect(stdout.join('\n')).not.toContain('alpha')
   })
 
-  it('warns the same way on report movers', async () => {
-    // Data starts 10 days back: the 28 days before the window are unsynced.
-    // The report anchors on every table it reads, pages included.
-    const synced = days('2026-03-20', 10)
-    await seed('page_queries', synced, tenDays)
-    await seed('pages', synced, date => [{ date, url: '/a', clicks: 2, impressions: 50, sum_position: 0 }])
-
-    await cli('report', 'movers', '--site', SITE, '--period', '28d', '--json')
-
-    expect(stderr.join('\n')).toContain('No synced days for page_queries')
-    expect(stderr.join('\n')).toContain('2026-01-24 to 2026-02-20')
-  })
-
-  it('warns when the comparison window is only partially synced', async () => {
+  it('stops when the comparison window is only partially synced', async () => {
     // 29 days ending 2026-03-20: the 28-day window is fully synced, but its
     // comparison window holds exactly one synced day (2026-02-20).
-    await seed('page_queries', days('2026-03-20', 29), date => [{ date, url: '/a', query: 'alpha', clicks: 2, impressions: 50, sum_position: 0 }])
+    await seed('page_queries', days('2026-03-20', 29), queryRows)
 
-    await cli('analyze', 'movers', '--site', SITE, '--json')
+    await expect(cli('analyze', 'movers', '--site', SITE, '--json')).rejects.toThrow('exit 1')
 
-    const warning = stderr.join('\n')
-    expect(warning).toContain('partially synced')
-    expect(warning).toContain('page_queries')
-    expect(warning).toContain('2026-01-24 to 2026-02-20')
+    const message = stderr.join('\n')
+    expect(message).toContain('comparison window 2026-01-24 to 2026-02-20')
+    expect(message).toContain('page_queries misses 27 of 28 days')
+    expect(message).toContain(`gscdump sync --site ${SITE} --start 2026-01-24 --end 2026-02-19 --tables page_queries`)
+    expect(message).not.toContain('current window')
+    expect(stdout.join('\n')).toBe('')
   })
 
-  it('names only the tables without synced comparison days', async () => {
+  it('stops report movers on a comparison gap and names only the tables it misses', async () => {
     // page_queries misses the comparison window; pages covers it fully.
-    await seed('page_queries', days('2026-03-20', 28), date => [{ date, url: '/a', query: 'alpha', clicks: 2, impressions: 50, sum_position: 0 }])
-    await seed('pages', days('2026-03-20', 56), date => [{ date, url: '/a', clicks: 2, impressions: 50, sum_position: 0 }])
+    await seed('page_queries', days('2026-03-20', 28), queryRows)
+    await seed('pages', days('2026-03-20', 56), pageRows)
 
-    await cli('report', 'movers', '--site', SITE, '--period', '28d', '--json')
+    await expect(cli('report', 'movers', '--site', SITE, '--period', '28d', '--json')).rejects.toThrow('exit 1')
 
-    const warning = stderr.join('\n')
-    expect(warning).toContain('No synced days for page_queries')
-    expect(warning).not.toContain('page_queries, pages')
-    expect(warning).not.toContain('no pages data')
+    const message = stderr.join('\n')
+    expect(message).toContain('comparison window 2026-01-24 to 2026-02-20: page_queries misses 28 of 28 days')
+    expect(message).toContain(`gscdump sync --site ${SITE} --start 2026-01-24 --end 2026-02-20 --tables page_queries`)
+    expect(message).not.toContain('pages misses')
+    expect(stdout.join('\n')).toBe('')
+  })
+
+  it('runs an explicit range that the Store fully covers', async () => {
+    // Synced 2026-02-01 to 2026-03-20; the run reads 2026-03-01 to 2026-03-14
+    // and its comparison 2026-02-15 to 2026-02-28.
+    await seed('page_queries', days('2026-03-20', 48), queryRows)
+
+    await cli('analyze', 'movers', '--site', SITE, '--start', '2026-03-01', '--end', '2026-03-14', '--json')
+
+    expect(JSON.parse(stdout.join('\n')).results).toBeInstanceOf(Array)
+    expect(stderr.join('\n')).not.toContain('misses')
+  })
+
+  it('runs a default comparison window once both windows are synced', async () => {
+    await seed('page_queries', days('2026-03-20', 56), queryRows)
+    await seed('pages', days('2026-03-20', 56), pageRows)
+
+    await cli('report', 'movers', '--site', SITE, '--json')
+
+    expect(JSON.parse(stdout.join('\n')).window).toMatchObject({ start: '2026-03-14', end: '2026-03-20' })
+    expect(stderr.join('\n')).not.toContain('misses')
   })
 })
 
