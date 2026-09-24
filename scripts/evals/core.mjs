@@ -72,12 +72,44 @@ export function commands(markdown) {
   return result
 }
 
+export function syncedWindow(completion) {
+  assert(completion?.window?.start && completion.window.end, 'The sync completion is missing its window.')
+  return { start: completion.window.start, end: completion.window.end }
+}
+
+export function exportedRows(parsedFiles) {
+  // dump also writes manifest.json and sites.json alongside per-table row
+  // arrays. Those parse to plain objects, not row arrays; only row files
+  // belong in the comparison.
+  return parsedFiles.filter(Array.isArray).flat()
+}
+
 export function compareRows(left, right) {
   assert(left.length > 0, 'No rows: use a Site and date range with real traffic.')
   const normalize = rows => rows.map(row => JSON.stringify(Object.fromEntries(
     Object.entries(row).filter(([key]) => !['ctr', 'position'].includes(key)).sort(([a], [b]) => a.localeCompare(b)),
   ))).sort()
   assert.deepEqual(normalize(left), normalize(right), 'Exported or queried rows differ.')
+}
+
+export function compareLivePages(storedRows, liveRows) {
+  const stored = pageMetrics(storedRows).sort((a, b) => a.page.localeCompare(b.page))
+  const live = pageMetrics(liveRows).sort((a, b) => a.page.localeCompare(b.page))
+  assert(stored.length > 0, 'No stored page rows exist.')
+  assert.deepEqual(live.map(row => row.page), stored.map(row => row.page), 'Stored and live page paths differ.')
+  const differences = stored.map((row, index) => ({
+    page: row.page,
+    clicks: Math.abs(row.clicks - live[index].clicks),
+    impressions: Math.abs(row.impressions - live[index].impressions),
+  }))
+  for (const [index, difference] of differences.entries()) {
+    assert(difference.clicks <= 1 && difference.impressions <= Math.max(1, Math.ceil(stored[index].impressions * 0.05)), `Live metrics changed beyond the bounded revision for ${difference.page}.`)
+  }
+  const totalImpressions = stored.reduce((total, row) => total + row.impressions, 0)
+  const totalImpressionsDelta = differences.reduce((total, row) => total + row.impressions, 0)
+  const totalImpressionsLimit = Math.max(2, Math.ceil(totalImpressions * 0.02))
+  assert(totalImpressionsDelta <= totalImpressionsLimit, 'Live impressions changed beyond the bounded total revision.')
+  return { pages: stored.length, revisedPages: differences.filter(row => row.clicks || row.impressions).length, maxClicksDelta: Math.max(...differences.map(row => row.clicks)), maxImpressionsDelta: Math.max(...differences.map(row => row.impressions)), totalImpressionsDelta, totalImpressionsLimit }
 }
 
 export function invocation(args) {
@@ -134,9 +166,14 @@ export function gradeAgent({ calls, loaded, kind, text, shouldTrigger = true, st
   if (loaded !== shouldTrigger)
     failures.push(shouldTrigger ? 'The agent did not load the skill.' : 'The agent loaded the skill for an unrelated task.')
   const failed = calls.filter(call => call.code !== 0)
-  const expectedFailures = kind === 'recovery'
-    ? failed.filter(call => invocation(call.args).command === 'query' && jsonValue(call.stdout)?.error?.code === 'STORE_RANGE_NOT_COVERED')
-    : []
+  const expectedFailures = failed.filter((call) => {
+    const parsed = invocation(call.args)
+    if (kind === 'recovery')
+      return parsed.command === 'query' && jsonValue(call.stdout)?.error?.code === 'STORE_RANGE_NOT_COVERED'
+    if (kind === 'empty')
+      return parsed.command === 'store' && parsed.subcommand === 'stats' && /^Error: The Store has no data\./.test(call.stderr ?? '')
+    return false
+  })
   if (failed.length > expectedFailures.length)
     failures.push('A CLI command failed unexpectedly or was denied.')
   if (kind === 'negative') {

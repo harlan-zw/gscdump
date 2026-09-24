@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { it } from 'vitest'
 import { CASES } from './cases.mjs'
-import { analyzeWaste, commands, compareRows, finalResponse, gradeAgent, gradeAnswer, invocation, pageMetrics, parseOptions, seedCommand } from './core.mjs'
+import { analyzeWaste, commands, compareLivePages, compareRows, exportedRows, finalResponse, gradeAgent, gradeAnswer, invocation, pageMetrics, parseOptions, seedCommand, syncedWindow } from './core.mjs'
 
 it('seeds the recovery case with a partial Store so the coverage stop can trigger', () => {
   const recovery = CASES.find(test => test.id === 'recovery')
@@ -69,6 +69,17 @@ it('compares the documented pathname grouping without losing metrics', () => {
   assert.deepEqual(pageMetrics(rows), [{ page: '/a', clicks: 5, impressions: 12 }])
   assert.throws(() => compareRows(pageMetrics(rows), [{ page: '/a', clicks: 2, impressions: 5 }]), /rows differ/)
   assert.throws(() => compareRows(pageMetrics(rows), [{ page: '/b', clicks: 5, impressions: 12 }]), /rows differ/)
+})
+
+it('checks live page identities and allows only bounded Search Console revisions', () => {
+  const stored = [{ page: '/a', clicks: 3, impressions: 100 }, { page: '/b', clicks: 0, impressions: 20 }]
+  const revised = [{ page: 'https://example.com/a', clicks: 3, impressions: 101 }, { page: 'https://example.com/b', clicks: 0, impressions: 20 }]
+  assert.deepEqual(compareLivePages(stored, revised), { pages: 2, revisedPages: 1, maxClicksDelta: 0, maxImpressionsDelta: 1, totalImpressionsDelta: 1, totalImpressionsLimit: 3 })
+  assert.throws(() => compareLivePages(stored, []), /paths differ/)
+  assert.throws(() => compareLivePages(stored, [{ ...revised[0], page: '/wrong' }, revised[1]]), /paths differ/)
+  assert.throws(() => compareLivePages(stored, [{ ...revised[0], clicks: 5 }, revised[1]]), /bounded revision/)
+  assert.throws(() => compareLivePages(stored, [{ ...revised[0], impressions: 110 }, revised[1]]), /bounded revision/)
+  assert.throws(() => compareLivePages(stored, [{ ...revised[0], impressions: 105 }, { ...revised[1], impressions: 21 }]), /bounded total revision/)
 })
 
 it('records repeated commands, failures, blocked tools, and unnecessary consent queries', () => {
@@ -159,4 +170,31 @@ it('accepts a direct choice question and rejects changed Store files', () => {
   const input = { calls: [], loaded: true, kind: 'consent', text: 'Delete all, delete one Site, or keep the Store. Which would you like?' }
   assert.equal(gradeAgent({ ...input, storeUnchanged: true }).passed, true)
   assert.equal(gradeAgent({ ...input, storeUnchanged: false }).passed, false)
+})
+
+it('reads the sync completion window, not a since-renamed range field', () => {
+  assert.deepEqual(syncedWindow({ window: { kind: 'range', start: '2026-09-17', end: '2026-09-18' } }), { start: '2026-09-17', end: '2026-09-18' })
+  assert.throws(() => syncedWindow({ range: { start: '2026-09-17', end: '2026-09-18' } }), /missing its window/)
+  assert.throws(() => syncedWindow({}), /missing its window/)
+})
+
+it('drops dump metadata files from exported rows instead of treating them as data', () => {
+  // dump writes manifest.json ({ datasets: [...] }) and sites.json ({ sites: [...] })
+  // beside each table's own row-array file. Both parse to plain objects.
+  const pages = [{ page: '/a', clicks: 1, impressions: 2 }]
+  const manifest = { datasets: [{ table: 'pages', rows: 1 }] }
+  const sites = { sites: [{ site: 'sc-domain:example.com', siteId: 'd_example.com' }] }
+  assert.deepEqual(exportedRows([pages, manifest, sites]), pages)
+})
+
+it('accepts an empty Store coverage error when the agent then syncs and queries', () => {
+  const now = new Date().toISOString()
+  const calls = [
+    { args: ['store', 'stats', '--json'], code: 1, stderr: 'Error: The Store has no data. Run sync first.', stdout: '', startedAt: now, durationMs: 1 },
+    { args: ['auth', 'status', '--json'], code: 0, stdout: '{"authenticated":true}', startedAt: now, durationMs: 1 },
+    { args: ['sync', '--site', 'sc-domain:example.com'], code: 0, stdout: '{}', startedAt: now, durationMs: 1 },
+    { args: ['query', '--site', 'sc-domain:example.com'], code: 0, stdout: '{"data":[]}', startedAt: new Date(Date.now() + 1000).toISOString(), durationMs: 1 },
+  ]
+  assert.equal(gradeAgent({ calls, loaded: true, kind: 'empty', text: 'done' }).passed, true)
+  assert.equal(gradeAgent({ calls: [{ ...calls[0], stderr: 'Error: Permission denied.' }, ...calls.slice(1)], loaded: true, kind: 'empty', text: 'done' }).passed, false)
 })

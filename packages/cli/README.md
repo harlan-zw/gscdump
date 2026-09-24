@@ -195,6 +195,8 @@ Dates must use `YYYY-MM-DD`, and `--start` cannot follow `--end`.
 Live queries expand a path to the Site's origin. For a domain property, a path matches that path on any host.
 Filtered dimensions choose the Store table too: `-d query --page /a` reads `page_queries`.
 If no Store table holds every dimension and filter, the query fails and names `--live`.
+If the matching table exists but has no synced rows, an authenticated query can answer live instead.
+Check `meta.source` before describing a result as saved Store data.
 
 ```bash
 # Export query rows with a CSV header.

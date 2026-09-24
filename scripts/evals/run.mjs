@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { CASES } from './cases.mjs'
-import { analyzeWaste, commands, compareRows, finalResponse, gradeAgent, gradeAnswer, invocation, MODEL, pageMetrics, parseOptions, seedCommand } from './core.mjs'
+import { analyzeWaste, commands, compareLivePages, compareRows, exportedRows, finalResponse, gradeAgent, gradeAnswer, invocation, MODEL, pageMetrics, parseOptions, seedCommand, syncedWindow } from './core.mjs'
 import { evaluatorIdentity, fileState } from './evidence.mjs'
 import { checked, credentialEnvironment, installCandidate, run } from './runtime.mjs'
 
@@ -28,6 +28,7 @@ const end = process.env.EVAL_END ?? start
 assert(/^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end), 'Use ISO dates.')
 assert(new Date(start).toISOString().slice(0, 10) === start && new Date(end).toISOString().slice(0, 10) === end, 'Use valid calendar dates.')
 assert(Date.parse(end) >= Date.parse(start) && Date.parse(end) - Date.parse(start) <= 6 * 86400_000, 'Use one to seven days.')
+const priorStart = new Date(Date.parse(start) - (Date.parse(end) - Date.parse(start) + 86400_000)).toISOString().slice(0, 10)
 const credentials = credentialEnvironment(process.env)
 const secrets = Object.entries(credentials).filter(([key]) => /TOKEN|SECRET|KEY/.test(key)).map(([, value]) => value)
 const redact = text => secrets.reduce((value, secret) => value.replaceAll(secret, '[REDACTED]'), text)
@@ -99,7 +100,7 @@ async function context(id, { seeded = false, cloud = false, authenticated = true
   const trace = join(directory, 'calls.jsonl')
   const settings = join(directory, 'settings.json')
   await writeFile(trace, '', { mode: 0o600 })
-  await writeFile(settings, JSON.stringify({ cli, env, site, start, end, trace, secrets, workspace, allowLive: id === 'docs', tables: id === 'analysis' ? 'pages,queries,page_queries' : 'pages', reservations: join(directory, 'reservations') }), { mode: 0o600 })
+  await writeFile(settings, JSON.stringify({ cli, env, site, start: id === 'analysis' ? priorStart : start, end, trace, secrets, workspace, allowLive: id === 'docs', tables: id === 'analysis' ? 'pages,queries,page_queries' : 'pages', reservations: join(directory, 'reservations') }), { mode: 0o600 })
   for (const file of ['core.mjs', 'cases.mjs', 'policy.mjs', 'reservation.mjs'])
     await writeFile(join(bin, file), proxySources.get(file))
   const proxy = join(bin, 'gscdump')
@@ -126,7 +127,7 @@ async function verifyExport(ctx, expected) {
   }
   await walk(join(ctx.workspace, 'export'))
   assert(files.length > 0, 'No JSON export files exist.')
-  const exported = (await Promise.all(files.map(async path => JSON.parse(await readFile(path, 'utf8'))))).flat()
+  const exported = exportedRows(await Promise.all(files.filter(path => path.includes('/web/')).map(async path => JSON.parse(await readFile(path, 'utf8')))))
   const totals = new Map()
   for (const row of exported) {
     const page = row.page ?? row.url
@@ -167,14 +168,16 @@ try {
       const completion = JSON.parse(history.find(call => call.args[0] === 'sync' && !call.args.includes('--status')).stdout)
       assert.equal(completion.status, 'completed')
       assert.equal(completion.siteUrl, site)
-      assert.deepEqual(completion.range, { start, end })
+      assert.deepEqual(syncedWindow(completion), { start, end })
       assert(completion.totals.pages.rows > 0, 'Sync must report ingested rows.')
       assert.equal(completion.totals.pages.failed, 0)
       const queries = history.filter(call => call.args[0] === 'query')
       const stored = rows(queries[0].stdout)
       await save('docs-export-check.json', await verifyExport(ctx, stored))
-      compareRows(pageMetrics(stored), pageMetrics(rows(queries[1].stdout)))
-      return verifyExport(ctx, stored)
+      const live = JSON.parse(queries[1].stdout)
+      assert.equal(live.meta.source, 'live')
+      const liveComparison = compareLivePages(stored, rows(queries[1].stdout))
+      return { ...await verifyExport(ctx, stored), liveComparison }
     })
     await attempt('cli-agent-recovery', async () => {
       requireGoogle()
@@ -205,7 +208,7 @@ try {
       const files = await readdir(join(ctx.workspace, 'export with spaces'), { recursive: true })
       const jsonFiles = files.filter(path => path.endsWith('.json'))
       assert(jsonFiles.length > 0, 'No exported JSON files exist.')
-      const data = (await Promise.all(jsonFiles.map(async path => JSON.parse(await readFile(join(ctx.workspace, 'export with spaces', path), 'utf8'))))).flat()
+      const data = exportedRows(await Promise.all(jsonFiles.filter(path => path.includes('/web/')).map(async path => JSON.parse(await readFile(join(ctx.workspace, 'export with spaces', path), 'utf8')))))
       const stored = rows(await ctx.setup(['query', '--site', site, '--start', start, '--end', end, '-d', 'page', '--limit', '1000', '-f', 'json']))
       compareRows(pageMetrics(data.map(row => ({ ...row, page: row.page ?? row.url }))), pageMetrics(stored))
       return { emptyRows: result.data.length, exportFiles: jsonFiles.length }
