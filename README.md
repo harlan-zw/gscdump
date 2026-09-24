@@ -2,10 +2,10 @@
   <a href="https://gscdump.com"><img src="./.github/assets/og.png" alt="gscdump" width="1200"></a>
 </p>
 
-[![npm version](https://img.shields.io/npm/v/gscdump?color=yellow)](https://npmjs.com/package/gscdump)
-[![npm downloads](https://img.shields.io/npm/dm/gscdump?color=yellow)](https://npm.chart.dev/gscdump)
-[![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
-[![skilld](https://skilld.dev/b/harlan-zw/gscdump)](https://skilld.dev/gh/harlan-zw/gscdump)
+[![npm version](https://img.shields.io/npm/v/gscdump?color=555b66&labelColor=1b2130&style=flat)](https://npmjs.com/package/gscdump)
+[![npm downloads](https://img.shields.io/npm/dm/gscdump?color=555b66&labelColor=1b2130&style=flat)](https://npm.chart.dev/gscdump)
+[![license](https://img.shields.io/badge/license-MIT-555b66?labelColor=1b2130&style=flat)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
+[![Skill on skilld.dev](https://img.shields.io/badge/Skill-skilld.dev-c23e00?labelColor=1b2130&style=flat)](https://skilld.dev/gh/harlan-zw/gscdump)
 
 > Dump your entire Google Search Console dataset and put your agents to work finding insights and improving your SEO.
 
@@ -31,8 +31,9 @@
 
 ## What is gscdump?
 
-gscdump gives you Google Search Console data without building your own API integration.
-Query Google directly, keep a local history, or run SEO analysis from the CLI and your AI assistant.
+gscdump syncs Google Search Console data, backfills available history within your plan, and preserves your collected data for MCP, API, and SQL.
+The MIT-licensed CLI exports your data to disk for SQL queries, readable without gscdump.
+Its MCP server queries live Google data with your selected authentication.
 The CLI and TypeScript library also read Bing Webmaster data and Indexing Evidence.
 The CLI supports shared hosted authentication and local Google or Bing credentials.
 See [Bing commands and authentication](./docs/gscdump-cli/guides/2.authentication.md#hosted-and-local-authentication).
