@@ -23,6 +23,9 @@ export interface PrePublishReportParams {
 
 const DEFAULT_MAX = 10
 
+/** `clampLimit` ceiling: every row the analyzer matched. */
+const FULL_OUTPUT = 50_000
+
 export const prePublishReport = defineReport<PrePublishReportParams>({
   id: 'pre-publish',
   description: 'Pre-publish guard: cannibalization risk and striking-distance peers for a candidate topic or URL.',
@@ -35,9 +38,11 @@ export const prePublishReport = defineReport<PrePublishReportParams>({
   plan: (params, window) => {
     requireReportParam('pre-publish', 'topic', params.topic, 'pre-publish report requires --topic <topic-or-url>')
     const dates = { startDate: window.start, endDate: window.end }
+    // `reduce` filters by topic after the step runs, so a top-N page would
+    // hide matches ranked below it. Ask for the analyzer's maximum output.
     return [
-      { key: 'cannibalization', type: 'cannibalization', params: { ...dates, limit: 200 }, feeds: ['cannibalization-risk'] },
-      { key: 'striking', type: 'striking-distance', params: { ...dates, limit: 200 }, feeds: ['striking-peers'] },
+      { key: 'cannibalization', type: 'cannibalization', params: { ...dates, limit: FULL_OUTPUT }, feeds: ['cannibalization-risk'] },
+      { key: 'striking', type: 'striking-distance', params: { ...dates, limit: FULL_OUTPUT }, feeds: ['striking-peers'] },
     ]
   },
   reduce: (results, ctx) => {

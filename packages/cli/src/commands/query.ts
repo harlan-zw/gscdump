@@ -3,23 +3,27 @@ import type { googleSearchConsole } from 'gscdump/client'
 import type { BuilderState, Column, Dimension, Filter, SearchType } from 'gscdump/query'
 import type { LocalStore, TableName } from '../local-store'
 import type { SqlResult, SqlViews } from '../sql-views'
+import type { WindowFlags } from '../window'
 import fs from 'node:fs/promises'
 import process from 'node:process'
 import { cancel, isCancel, multiselect, text } from '@clack/prompts'
 import { collectSpans } from '@gscdump/engine/profile'
 import { defineCommand } from 'citty'
-import { daysAgoUtc as daysAgo } from 'gscdump/dates'
-import { and, between, contains, country, date as dateCol, device, eq, gsc, hour, notRegex, page, query as queryCol, regex, searchAppearance } from 'gscdump/query'
+import { getLatestGscDate } from 'gscdump/dates'
+import { and, between, country, date as dateCol, device, gsc, hour, page, query as queryCol, searchAppearance } from 'gscdump/query'
+import { inferDataset, isDatasetResolvable } from 'gscdump/query/plan'
 import { queryCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createCommandContext, siteArg } from '../context'
-import { inferTable, tableDimensions } from '../local-store'
+import { FILTER_DIMS, filterDimensions, parseFilterArgs, toLiveFilter, toLocalFilter } from '../filters'
+import { tableDimensions } from '../local-store'
 import { asRecord, columnsFor } from '../render/analysis'
 import { renderTable } from '../render/layout'
 import { renderQuery } from '../render/query'
 import { terminalOutputOptions } from '../render/terminal'
 import { openSqlViews, referencedEmptyTables } from '../sql-views'
 import { ALL_SEARCH_TYPES, logger, parseSearchType, toCSV } from '../utils'
+import { checkWindowFlags, DEFAULT_WINDOW, parseWindowFlags, resolveAnchor } from '../window'
 
 const DIMENSIONS = ['page', 'query', 'date', 'hour', 'country', 'device', 'searchAppearance'] as const
 type DimensionName = typeof DIMENSIONS[number]
@@ -34,53 +38,9 @@ const DIM_COLUMNS: Record<DimensionName, Column<Dimension>> = {
   searchAppearance,
 }
 
-const FILTER_DIMS = ['query', 'page', 'country', 'device', 'searchAppearance'] as const
-type FilterDim = typeof FILTER_DIMS[number]
-const FILTER_COL: Record<FilterDim, Column<Dimension>> = {
-  query: queryCol,
-  page,
-  country,
-  device,
-  searchAppearance,
-}
 const DATA_STATES = ['all', 'final', 'hourly_all'] as const
 const AGGREGATION_TYPES = ['auto', 'byPage', 'byProperty'] as const
 const POSITIVE_INTEGER_RE = /^\d+$/
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-
-// Filter expression prefixes for `--query`, `--page`, `--country`, `--device`,
-// `--search-appearance`. Bare values default to equals.
-//   ~foo         contains
-//   !~foo        not contains
-//   re:foo       regex
-//   !re:foo      not regex
-//   contains:foo contains (verbose form)
-//   eq:foo       equals (verbose form)
-//   !foo         not equals
-function buildFilterFromArg(col: Column<Dimension>, raw: string): Filter<any> {
-  if (raw.startsWith('!~'))
-    return makeLeaf(col, 'notContains', raw.slice(2))
-  if (raw.startsWith('!re:'))
-    return notRegex(col as Column<'page'>, raw.slice(4))
-  if (raw.startsWith('!'))
-    return makeLeaf(col, 'notEquals', raw.slice(1))
-  if (raw.startsWith('~'))
-    return contains(col as Column<'page'>, raw.slice(1))
-  if (raw.startsWith('re:'))
-    return regex(col as Column<'page'>, raw.slice(3))
-  if (raw.startsWith('contains:'))
-    return contains(col as Column<'page'>, raw.slice(9))
-  if (raw.startsWith('eq:'))
-    return eq(col as Column<'page'>, raw.slice(3) as any)
-  return eq(col as Column<'page'>, raw as any)
-}
-
-function makeLeaf(col: Column<Dimension>, operator: 'notEquals' | 'notContains', value: string): Filter<any> {
-  return {
-    _constraints: {},
-    _filters: [{ dimension: col.dimension, operator, expression: value }],
-  } as unknown as Filter<any>
-}
 
 async function runLiveQuery(
   client: ReturnType<typeof googleSearchConsole>,
@@ -285,7 +245,12 @@ export const queryCommand = defineCommand({
     }
 
     const dimNames = await resolveDimensions(args)
-    const { startDate, endDate } = await resolveRange(args)
+    const windowFlags = await promptRange(args)
+    const invalidWindow = checkWindowFlags(windowFlags)
+    if (invalidWindow) {
+      logger.error(invalidWindow.message)
+      process.exit(1)
+    }
     await promptFilters(args as Record<string, unknown>)
     const limitArg = String(args.limit ?? ctxConfig.defaultLimit ?? 1000)
     const rowLimit = Number(limitArg)
@@ -293,7 +258,7 @@ export const queryCommand = defineCommand({
       logger.error('Invalid --limit. Use a positive safe integer, such as --limit 1000.')
       process.exit(1)
     }
-    const dimensionFilter = buildDimensionFilter(args)
+    const filters = parseFilterArgs(args as Record<string, unknown>)
     const searchType = parseSearchType(args.type ?? ctxConfig.defaultSearchType, '--type')
     // The Store holds every search type; reading them together adds web and image rows into one total.
     const localSearchType: SearchType = searchType ?? 'web'
@@ -301,6 +266,11 @@ export const queryCommand = defineCommand({
       ? String(args['data-state'])
       : ctxConfig.defaultDataState
     const aggregationType = args['aggregation-type'] ? String(args['aggregation-type']) : undefined
+    const filterDims = filterDimensions(filters)
+    if (!args.live && !isDatasetResolvable(dimNames as Dimension[], filterDims)) {
+      logger.error(`No Store table holds ${[...new Set([...dimNames, ...filterDims])].join(' with ')}. Remove a dimension or filter, or pass --live.`)
+      process.exit(1)
+    }
 
     if (dataState && !DATA_STATES.includes(dataState as any)) {
       logger.error(`Invalid --data-state: ${dataState}. Allowed: ${DATA_STATES.join(', ')}`)
@@ -319,6 +289,8 @@ export const queryCommand = defineCommand({
     const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined, { scope: args.live ? 'account' : 'store' })
 
     if (args.live) {
+      const { start: startDate, end: endDate } = windowOrExit(windowFlags, getLatestGscDate())
+      const dimensionFilter = toLiveFilter(filters, siteUrl)
       if (args.explain) {
         const body: Record<string, unknown> = {
           startDate,
@@ -371,9 +343,14 @@ export const queryCommand = defineCommand({
     if (!args.quiet)
       logger.debug(`Querying ${siteUrl} from local Parquet store...`)
 
-    const state = buildLocalState(dimNames, startDate, endDate, rowLimit, dimensionFilter)
     const store = ctx.store!
-    const table = inferTable(dimNames)
+    // Filtered dimensions pick the table too: `-d query --page /a` needs page_queries.
+    const table = inferDataset(dimNames as Dimension[], filterDimensions(filters)) as TableName
+    const anchor = await resolveAnchor({ kind: 'local', store, siteUrl, tables: [table] }, (tables, fallback) => {
+      logger.warn(`No synced days for ${tables.join(', ')} on ${siteUrl}. The window ends on ${fallback}.`)
+    })
+    const { start: startDate, end: endDate } = windowOrExit(windowFlags, anchor)
+    const state = buildLocalState(dimNames, startDate, endDate, rowLimit, toLocalFilter(filters))
     if (args.explain) {
       console.log(JSON.stringify({ siteUrl, table, state }, null, 2))
       return
@@ -439,48 +416,44 @@ async function resolveDimensions(args: Record<string, unknown>): Promise<string[
   return ['page', 'query']
 }
 
-async function resolveRange(args: Record<string, unknown>): Promise<{ startDate: string, endDate: string }> {
-  let startDate = args.start != null ? String(args.start) : undefined
-  let endDate = args.end != null ? String(args.end) : undefined
+/** Collect `--start`/`--end`, prompting for them in interactive mode. */
+async function promptRange(args: Record<string, unknown>): Promise<WindowFlags> {
+  let start = args.start != null ? String(args.start) : undefined
+  let end = args.end != null ? String(args.end) : undefined
   if (args.interactive) {
-    if (startDate === undefined) {
+    if (start === undefined) {
       const startInput = await text({
-        message: 'Start date (YYYY-MM-DD)',
-        placeholder: daysAgo(28),
+        message: 'Start date (YYYY-MM-DD, blank for the last 28 synced days)',
+        placeholder: '',
       })
       if (isCancel(startInput)) {
         cancel('Cancelled')
         process.exit(0)
       }
-      startDate = String(startInput) || daysAgo(28)
+      start = String(startInput) || undefined
     }
-    if (endDate === undefined) {
+    if (end === undefined) {
       const endInput = await text({
-        message: 'End date (YYYY-MM-DD)',
-        placeholder: daysAgo(3),
+        message: 'End date (YYYY-MM-DD, blank for the newest synced day)',
+        placeholder: '',
       })
       if (isCancel(endInput)) {
         cancel('Cancelled')
         process.exit(0)
       }
-      endDate = String(endInput) || daysAgo(3)
+      end = String(endInput) || undefined
     }
   }
+  return { start, end }
+}
 
-  startDate ??= daysAgo(31)
-  endDate ??= daysAgo(3)
-  for (const [flag, value] of [['--start', startDate], ['--end', endDate]]) {
-    const date = new Date(`${value}T00:00:00Z`)
-    if (!ISO_DATE_RE.test(value) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
-      logger.error(`Invalid ${flag}. Use a calendar date in YYYY-MM-DD format.`)
-      process.exit(1)
-    }
-  }
-  if (startDate > endDate) {
-    logger.error('Invalid date range. --start must be on or before --end.')
+function windowOrExit(flags: WindowFlags, anchor: string): { start: string, end: string } {
+  const window = parseWindowFlags(flags, DEFAULT_WINDOW, anchor)
+  if (!window.ok) {
+    logger.error(window.error.message)
     process.exit(1)
   }
-  return { startDate, endDate }
+  return window.value
 }
 
 // Interactive mode fills in args.query/page/country/device/searchAppearance/type/data-state
@@ -548,21 +521,6 @@ function buildLocalState(
     .limit(rowLimit)
   )
     .getState()
-}
-
-function buildDimensionFilter(args: Record<string, unknown>): Filter<any> | undefined {
-  const leaves: Filter<any>[] = []
-  for (const dim of FILTER_DIMS) {
-    const raw = args[dim]
-    if (raw == null || raw === '')
-      continue
-    leaves.push(buildFilterFromArg(FILTER_COL[dim], String(raw)))
-  }
-  if (leaves.length === 0)
-    return undefined
-  if (leaves.length === 1)
-    return leaves[0]
-  return and(...leaves)
 }
 
 async function assertRangeCovered(

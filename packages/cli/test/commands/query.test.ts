@@ -130,7 +130,7 @@ describe('query command', () => {
 
   it.each([
     ['--start', '2026-04-01', { startDate: '2026-04-01', endDate: '2026-04-27' }],
-    ['--end', '2026-04-15', { startDate: '2026-03-30', endDate: '2026-04-15' }],
+    ['--end', '2026-04-15', { startDate: '2026-03-19', endDate: '2026-04-15' }],
   ])('preserves a single %s flag', async (flag, value, range) => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-30T12:00:00Z'))

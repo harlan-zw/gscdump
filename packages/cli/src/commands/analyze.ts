@@ -1,31 +1,40 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { CommandDef } from 'citty'
+import process from 'node:process'
+import { MOVERS_SORT_METRICS } from '@gscdump/analysis'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
-import { periodOf } from '@gscdump/engine/period'
+import { DEFAULT_FETCH_BUDGET, MAX_FETCH_BUDGET } from '@gscdump/engine/analysis-types'
 import { defineCommand } from 'citty'
-import { resolveAnalysisSource } from '../analysis-local'
+import { unwrapResult } from 'gscdump/result'
+import { analyzerReads, analyzerTables, resolveAnalysisSource } from '../analysis-local'
 import { analyzeCommandMeta } from '../command-meta'
-import { renderAnalysis } from '../render/analysis'
+import { coverageWarning, renderAnalysis } from '../render/analysis'
 import { terminalOutputOptions } from '../render/terminal'
-import { logger, parseIntegerOption, toCSV } from '../utils'
+import { logger, parseFetchBudget, parseIntegerOption, toCSV } from '../utils'
+import { DEFAULT_WINDOW, parseWindowFlags, PERIOD_FLAGS, windowFlagErrorToException } from '../window'
 
 const ANALYSIS_TOOLS = defaultAnalyzerRegistry.listAnalyzerIds()
 
 type AnalysisTool = string
 
 // Tool-specific args and body builder
+const COMPARISON_ARGS = {
+  'prev-start': { type: 'string', description: 'Previous period start date (default: the period before the window)' },
+  'prev-end': { type: 'string', description: 'Previous period end date (pass with --prev-start)' },
+}
+
+/** Analyzers that compare the window with a previous period. */
+const COMPARISON_TOOLS = new Set<AnalysisTool>(['movers', 'decay'])
+
 const TOOL_EXTRA_ARGS: Partial<Record<AnalysisTool, Record<string, { type: string, description: string, alias?: string }>>> = {
   brand: {
     'brand-terms': { type: 'string', description: 'Comma-separated brand terms (required)' },
   },
   movers: {
-    'prev-start': { type: 'string', description: 'Previous period start date (required)' },
-    'prev-end': { type: 'string', description: 'Previous period end date (required)' },
+    ...COMPARISON_ARGS,
+    'sort-by': { type: 'string', description: `Sort: ${MOVERS_SORT_METRICS.join(', ')} (default: clicksDelta)` },
   },
-  decay: {
-    'prev-start': { type: 'string', description: 'Previous period start date (required)' },
-    'prev-end': { type: 'string', description: 'Previous period end date (required)' },
-  },
+  decay: COMPARISON_ARGS,
   concentration: {
     dimension: { type: 'string', description: 'Dimension: pages or keywords (default: pages)' },
   },
@@ -45,22 +54,14 @@ const TOOL_EXTRA_ARGS: Partial<Record<AnalysisTool, Record<string, { type: strin
 function buildParams(tool: AnalysisTool, args: Record<string, unknown>): AnalysisParams {
   const params: AnalysisParams = {
     type: tool as AnalysisParams['type'],
-    startDate: args.start ? String(args.start) : undefined,
-    endDate: args.end ? String(args.end) : undefined,
     limit: parseIntegerOption(args.limit, '--limit'),
   }
+  const fetchBudget = parseFetchBudget(args['fetch-budget'])
+  if (fetchBudget !== undefined)
+    params.fetchBudget = fetchBudget
 
   if (args['brand-terms'])
     params.brandTerms = String(args['brand-terms']).split(',').map(t => t.trim()).filter(Boolean)
-
-  if (args['prev-start'])
-    params.prevStartDate = String(args['prev-start'])
-  if (args['prev-end'])
-    params.prevEndDate = String(args['prev-end'])
-  // Comparison analyzers need both ends of the previous period. Check here so
-  // the error names the flags, not the engine's parameter names.
-  if (TOOL_EXTRA_ARGS[tool]?.['prev-start'] && (!params.prevStartDate || !params.prevEndDate))
-    throw new Error(`${tool} compares two periods. Pass --prev-start and --prev-end (YYYY-MM-DD).`)
 
   if (args.dimension)
     params.dimension = String(args.dimension) as 'pages' | 'keywords'
@@ -68,6 +69,12 @@ function buildParams(tool: AnalysisTool, args: Record<string, unknown>): Analysi
     params.metric = String(args.metric) as 'clicks' | 'impressions'
   if (args['cluster-by'])
     params.clusterBy = String(args['cluster-by']) as 'prefix' | 'intent' | 'both'
+  if (args['sort-by']) {
+    const sortBy = String(args['sort-by'])
+    if (!(MOVERS_SORT_METRICS as readonly string[]).includes(sortBy))
+      throw new Error(`Invalid --sort-by "${sortBy}". Use one of: ${MOVERS_SORT_METRICS.join(', ')}.`)
+    params.sortBy = sortBy
+  }
   const weeks = parseIntegerOption(args.weeks, '--weeks')
   const minWeeks = parseIntegerOption(args['min-weeks'], '--min-weeks')
   if (weeks !== undefined)
@@ -76,6 +83,24 @@ function buildParams(tool: AnalysisTool, args: Record<string, unknown>): Analysi
     params.minWeeksWithData = minWeeks
 
   return params
+}
+
+/** Apply the window flags, anchored on `anchor`, to the analyzer params. */
+function withWindow(tool: AnalysisTool, params: AnalysisParams, args: Record<string, unknown>, anchor: string): AnalysisParams {
+  const optional = (key: string): string | undefined => args[key] ? String(args[key]) : undefined
+  const window = unwrapResult(parseWindowFlags({
+    period: optional('period'),
+    start: optional('start'),
+    end: optional('end'),
+    prevStart: optional('prev-start'),
+    prevEnd: optional('prev-end'),
+  }, { ...DEFAULT_WINDOW, comparison: COMPARISON_TOOLS.has(tool) ? 'prev-period' : 'none' }, anchor), windowFlagErrorToException)
+  return {
+    ...params,
+    startDate: window.start,
+    endDate: window.end,
+    ...(window.comparison ? { prevStartDate: window.comparison.start, prevEndDate: window.comparison.end } : {}),
+  }
 }
 
 function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
@@ -87,45 +112,59 @@ function makeToolCommand(tool: AnalysisTool): CommandDef<any> {
       description: `Run ${tool} analysis`,
     },
     args: {
-      site: { type: 'string', alias: 's', description: 'Site URL' },
-      start: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
-      end: { type: 'string', description: 'End date (YYYY-MM-DD)' },
-      limit: { type: 'string', alias: 'l', default: '100', description: 'Max results' },
-      format: { type: 'string', alias: 'f', default: 'table', description: 'Output: table, json, csv' },
-      json: { type: 'boolean', default: false, description: 'Output as JSON' },
-      live: { type: 'boolean', default: false, description: 'Force live GSC API; bypass local Parquet store' },
+      'site': { type: 'string', alias: 's', description: 'Site URL' },
+      'period': { type: 'string', description: `Window: ${PERIOD_FLAGS.join('|')} (default: 28d, ending on the newest synced day)` },
+      'start': { type: 'string', description: 'Start date (YYYY-MM-DD). Implies --period custom' },
+      'end': { type: 'string', description: 'End date (YYYY-MM-DD). Implies --period custom' },
+      'limit': { type: 'string', alias: 'l', default: '100', description: 'Max results to return' },
+      'fetch-budget': { type: 'string', description: `Max rows each live fetch reads (default: ${DEFAULT_FETCH_BUDGET}, max: ${MAX_FETCH_BUDGET})` },
+      'format': { type: 'string', alias: 'f', default: 'table', description: 'Output: table, json, csv' },
+      'json': { type: 'boolean', default: false, description: 'Output as JSON' },
+      'live': { type: 'boolean', default: false, description: 'Force live GSC API; bypass local Parquet store' },
       ...extraArgs,
     },
     async run({ args }) {
       if (!args.json && !['table', 'json', 'csv'].includes(args.format ?? 'table'))
         throw new Error('Invalid --format. Use table, json, or csv.')
-      const params = buildParams(tool, args)
-      const { format, runAnalysis, siteUrl } = await resolveAnalysisSource({
+      const baseParams = buildParams(tool, args)
+      const { format, runAnalysis, siteUrl, anchorFor, checkCoverage } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
         json: !!args.json,
         format: args.format,
       })
+      const tables = analyzerTables(baseParams)
+      const anchor = await anchorFor(tables)
+      const params = withWindow(tool, baseParams, args, anchor)
+      const coverage = await checkCoverage(analyzerReads(params))
+      if (coverage.kind === 'gaps') {
+        logger.error(coverage.message)
+        process.exit(1)
+      }
 
       logger.debug(`Running ${tool} analysis...`)
 
       const result = await runAnalysis(params)
 
+      const warning = coverageWarning(result.meta.coverage)
       if (format === 'json') {
         console.log(JSON.stringify(result, null, 2))
+        if (warning)
+          logger.warn(warning)
         return
       }
 
       if (format === 'csv') {
         console.log(toCSV(result.results, Object.keys(result.results[0] ?? {})))
+        if (warning)
+          logger.warn(warning)
         return
       }
-      const period = periodOf(params)
       console.log(renderAnalysis(result, {
         id: tool,
         site: siteUrl,
-        start: period.startDate,
-        end: period.endDate,
+        start: params.startDate!,
+        end: params.endDate!,
         ...(params.prevStartDate && params.prevEndDate ? { previous: { start: params.prevStartDate, end: params.prevEndDate } } : {}),
         metric: params.metric,
       }, terminalOutputOptions()))

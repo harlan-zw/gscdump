@@ -20,6 +20,16 @@ describe('gsc date helpers', () => {
     expect(generateGscDateRange(addDays(freshest, -1), addDays(freshest, 5))).toEqual([addDays(freshest, -1), freshest])
   })
 
+  it.each([
+    // 12:00 UTC is 05:00 Pacific on the same day.
+    ['2026-04-30T12:00:00.000Z', '2026-04-27'],
+    // 06:00 UTC is still 23:00 Pacific on the previous day.
+    ['2026-04-30T06:00:00.000Z', '2026-04-26'],
+  ])('counts the finalized date from the Pacific calendar at %s', (now, latest) => {
+    vi.setSystemTime(new Date(now))
+    expect(getLatestGscDate()).toBe(latest)
+  })
+
   it('counts synced and available backfill days inclusively', () => {
     vi.setSystemTime(new Date('2026-07-06T12:00:00.000Z'))
 

@@ -3,7 +3,7 @@
  * within striking distance over a current vs prior window.
  *
  * Plan steps:
- *   - movers (required)              — current vs prior aggregated mover rows
+ *   - movers-rising / movers-declining (required) — current vs prior mover rows, one direction each
  *   - decay (optional)               — pages losing clicks
  *   - striking-distance (optional)   — queries on positions 4–20
  */
@@ -12,7 +12,7 @@ import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
 import { requireComparisonWindow } from '../require'
-import { reportRows, sectionArtifact, sectionCoverage, truncation } from '../sections'
+import { reportRows, resultTotal, sectionArtifact, sectionCoverage, truncation } from '../sections'
 
 export interface MoversReportParams {
   /** Cap findings per section. Default 5. */
@@ -38,7 +38,10 @@ export const moversReport = defineReport<MoversReportParams>({
     const cur = { startDate: window.start, endDate: window.end }
     const prev = { prevStartDate: comparison.start, prevEndDate: comparison.end }
     return [
-      { key: 'movers', type: 'movers', params: { ...cur, ...prev, limit: 200 }, required: true, feeds: ['rising', 'decliners'] },
+      // One step per direction: a shared top-N by absolute delta lets large
+      // gains crowd every decline out of the page, and the reverse.
+      { key: 'movers-rising', type: 'movers', params: { ...cur, ...prev, direction: 'rising', limit: 200 }, required: true, feeds: ['rising'] },
+      { key: 'movers-declining', type: 'movers', params: { ...cur, ...prev, direction: 'declining', limit: 200 }, required: true, feeds: ['decliners'] },
       { key: 'decay', type: 'decay', params: { ...cur, ...prev, limit: 100 }, feeds: ['decliners'] },
       { key: 'striking', type: 'striking-distance', params: { ...cur, limit: 100 }, feeds: ['striking-distance'] },
     ]
@@ -48,12 +51,13 @@ export const moversReport = defineReport<MoversReportParams>({
     const minChange = ctx.params.minClicksChange ?? DEFAULT_MIN_CHANGE
 
     const sections: ReportSection[] = []
-    const moversRes = results.movers as AnalysisResult | undefined
+    const risingRes = results['movers-rising'] as AnalysisResult | undefined
+    const decliningRes = results['movers-declining'] as AnalysisResult | undefined
     const decayRes = results.decay as AnalysisResult | undefined
     const strikingRes = results.striking as AnalysisResult | undefined
 
-    sections.push(buildMoversSection(moversRes, 'rising', max, minChange))
-    sections.push(buildDeclinersSection(moversRes, decayRes, max, minChange))
+    sections.push(buildMoversSection(risingRes, 'rising', max, minChange))
+    sections.push(buildDeclinersSection(decliningRes, decayRes, max, minChange))
     sections.push(buildStrikingSection(strikingRes, max))
     return { sections }
   },
@@ -81,7 +85,7 @@ function buildMoversSection(
     .filter(r => r.direction === direction && Math.abs(r.clicksChange) >= minChange)
     .sort((a, b) => Math.abs(b.clicksChange) - Math.abs(a.clicksChange))
 
-  const total = rows.length
+  const total = resultTotal(res, rows.length)
   const kept = rows.slice(0, max)
   const findings: ReportFinding[] = kept.map(r => ({
     entity: { kind: 'query', value: r.keyword },
@@ -132,9 +136,10 @@ function buildDeclinersSection(
   max: number,
   minChange: number,
 ): ReportSection {
-  const decliningQueries = reportRows<MoverRow>(moversRes)
+  const decliningRows = reportRows<MoverRow>(moversRes)
     .filter(r => r.direction === 'declining' && Math.abs(r.clicksChange) >= minChange)
-    .slice(0, max)
+    .sort((a, b) => Math.abs(b.clicksChange) - Math.abs(a.clicksChange))
+  const decliningQueries = decliningRows.slice(0, max)
 
   const lostPages = reportRows<DecayRow>(decayRes)
     .sort((a, b) => b.lostClicks - a.lostClicks)
@@ -164,7 +169,8 @@ function buildDeclinersSection(
     severity,
     summary: { delta: -totalLost, direction: totalLost > 0 ? 'down' : 'flat', magnitudeLabel: `${Math.round(totalLost)} clicks lost` },
     findings,
-    coverage: decayRes && moversRes ? 'full' : 'partial',
+    truncated: truncation(resultTotal(moversRes, decliningRows.length), decliningQueries.length),
+    coverage: sectionCoverage(moversRes) === 'full' && sectionCoverage(decayRes) === 'full' ? 'full' : 'partial',
   }
 }
 
@@ -182,6 +188,7 @@ function buildStrikingSection(res: AnalysisResult | undefined, max: number): Rep
   const rows = reportRows<StrikingRow>(res)
     .sort((a, b) => b.potentialClicks - a.potentialClicks)
   const kept = rows.slice(0, max)
+  const total = resultTotal(res, rows.length)
 
   const findings: ReportFinding[] = kept.map(r => ({
     entity: { kind: 'query', value: r.keyword },
@@ -200,7 +207,7 @@ function buildStrikingSection(res: AnalysisResult | undefined, max: number): Rep
     severity: 'low',
     summary: { magnitudeLabel: `${kept.reduce((s, r) => s + r.potentialClicks, 0)} potential clicks` },
     findings,
-    truncated: truncation(rows.length, kept.length),
+    truncated: truncation(total, kept.length),
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'striking-distance'),
   }

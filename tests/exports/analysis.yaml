@@ -25,6 +25,7 @@
   encodeIntent: function
   ENGINE_QUERY_CAPABILITIES: object
   INTENT_CLASSIFIER_VERSION: number
+  MOVERS_SORT_METRICS: object
   normalizeQuery: function
   NORMALIZER_VERSION: number
   num: function

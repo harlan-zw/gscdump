@@ -21,6 +21,7 @@ import { isQueryError } from 'gscdump/query'
 import { resolveBYOK, resolveServiceAccount } from '../auth'
 import { resolveAuthentication } from '../auth-state'
 import { HOSTED_KEY_REJECTED, HOSTED_KEY_REJECTED_REASON } from '../error-handler'
+import { COMPARISON_FLAGS, PERIOD_FLAGS } from '../window'
 
 export type McpHandlerErrorKind
   = | 'unknown-report'
@@ -28,6 +29,7 @@ export type McpHandlerErrorKind
     | 'unknown-period'
     | 'unknown-comparison'
     | 'no-valid-dimension'
+    | 'invalid-window'
 
 export type McpHandlerError
   = | { kind: 'unknown-report', id: string, available: readonly string[], message: string }
@@ -35,9 +37,10 @@ export type McpHandlerError
     | { kind: 'unknown-period', value: string, supported: readonly string[], message: string }
     | { kind: 'unknown-comparison', value: string, supported: readonly string[], message: string }
     | { kind: 'no-valid-dimension', message: string }
+    | { kind: 'invalid-window', message: string }
 
-const PERIODS = ['7d', '28d', '30d', '90d', '180d', '365d', 'mtd', 'ytd', 'custom'] as const
-const COMPARISONS = ['none', 'prev-period', 'yoy'] as const
+const PERIODS = PERIOD_FLAGS
+const COMPARISONS = COMPARISON_FLAGS
 
 export const mcpHandlerErrors = {
   unknownReport(id: string, available: readonly string[]): McpHandlerError {
@@ -51,6 +54,9 @@ export const mcpHandlerErrors = {
   },
   unknownComparison(value: string): McpHandlerError {
     return { kind: 'unknown-comparison', value, supported: COMPARISONS, message: `Unknown comparison "${value}". Supported: ${COMPARISONS.join(', ')}.` }
+  },
+  invalidWindow(message: string): McpHandlerError {
+    return { kind: 'invalid-window', message }
   },
   noValidDimension(): McpHandlerError {
     return { kind: 'no-valid-dimension', message: 'At least one valid dimension required' }

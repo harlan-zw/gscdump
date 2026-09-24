@@ -53,15 +53,17 @@ gscdump analyze zero-click --site example.com --json
 gscdump analyze brand --site example.com --brand-terms 'acme,acme corp' --json
 ```
 
-Use `--start` and `--end` for Analyzer date ranges.
-For `movers` and `decay`, provide comparison dates too:
+Analyzer windows default to the last 28 days that end on the newest synced day. If the current or comparison window holds a day that is not synced, the run stops and prints the `gscdump sync` command that fills it. Pass `--live` to read Google instead.
+Use `--period`, or `--start` and `--end`, for other ranges.
+`movers` and `decay` compare with the previous period by default. To compare other dates, pass both comparison flags:
 
 ```bash
 gscdump analyze decay --site example.com \
   --start 2026-08-01 --end 2026-08-28 --prev-start 2026-07-04 --prev-end 2026-07-31 --json
 ```
 
-`--period` and `--vs` belong to `report`.
+`--vs` belongs to `report`.
+`--limit` caps the rows shown. If a live fetch reaches its row budget, the output shows a partial-data warning; `--fetch-budget` raises the budget up to 100000 rows.
 Check `gscdump analyze <tool> --help` for each Analyzer's supported flags.
 
 ## Analyze rows in TypeScript

@@ -256,6 +256,8 @@ gscdump query --site example.com --dimensions page,query \
 - Filters: `--query`, `--page`, `--country`, `--device`,
   `--search-appearance`. Prefixes: bare equals, `~` contains, `!~` not
   contains, `re:` regex, `!re:` not regex, `!` not equals.
+- `--page` takes a path or a full URL. The Store compares paths.
+- Without dates, `query` reads the 28 days ending on the newest synced day.
 - `--live` bypasses the Store. `--type` selects a search type. The default is `web`.
   `--data-state` and `--aggregation-type` apply to live mode only.
 - Metrics already include clicks, impressions, CTR, and position. There is no `--metrics` option.
@@ -315,13 +317,27 @@ gscdump analyze striking-distance --site example.com --json
 
 - Report ids: `brand`, `growth`, `health`, `movers`, `opportunities`,
   `pre-publish`, `risks`, `triage`.
-- `--period` takes `7d`, `28d`, `90d`, `mtd`, `ytd`, or `custom` with
-  `--start` and `--end`. `--vs` takes `none`, `prev-period`, or `yoy`.
+- `--period` takes `7d`, `28d`, `30d`, `90d`, `180d`, `365d`, `mtd`, `qtd`,
+  `ytd`, `last-quarter`, or `custom`. `--start`/`--end` without `--period`
+  select a custom window. `--vs` takes `none`, `prev-period`, or `yoy`
+  (same weekdays 52 weeks earlier).
+- Windows end on the newest synced day, or three days ago (Pacific time)
+  with `--live`. They never end on today.
 - `report <id> --explain` prints the plan without credentials or data.
 - `triage` needs `--target <page-or-query> --target-kind page|query`.
   `pre-publish` needs `--topic`. `brand` needs `--brand-terms 'a,b'`.
-- Analyzers take `--start` and `--end`. `movers` and `decay` also take
-  `--prev-start` and `--prev-end`. `--period` and `--vs` belong to `report`.
+- Analyzers take `--period`, `--start` and `--end`. `movers` and `decay`
+  compare with the previous period by default. Pass `--prev-start` and
+  `--prev-end` together to override it. `--vs` belongs to `report`.
+- `--limit` caps the rows returned. It never caps the rows read.
+  `--fetch-budget` caps each live fetch (default 25000, max 100000).
+- A `! Partial data` warning, or `meta.coverage.kind: "truncated"` in JSON,
+  means a live fetch hit its budget. Say the result is partial, or rerun
+  with a larger `--fetch-budget`.
+- Local `analyze` and `report` runs need every day of the current and
+  comparison windows synced. If a day is missing, failed or pending, the
+  run stops and prints the `gscdump sync --site ... --start ... --end ...
+  --tables ...` command that fills it. Run it, or pass `--live`.
 - SQL-only Analyzers need Store rows. `--live` runs row-based Analyzers
   against Google.
 - Results name candidates for review. They do not prove why traffic changed.

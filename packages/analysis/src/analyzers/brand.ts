@@ -11,13 +11,14 @@ import type { Row } from '@gscdump/engine/contracts'
 import type { Result } from 'gscdump/result'
 import type { AnalysisError } from '../errors'
 import type { QueriesRow } from '../types'
-import { num } from '@gscdump/engine/analysis-types'
+import { fetchBudgetOf, num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
 import { METRIC_EXPR } from '@gscdump/engine/sql-fragments'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import { queriesQueryState } from '../analyzer/adapt-rows'
+import { paginateClause, paginateSortedInMemory, TOTAL_COUNT_SELECT, totalCountOf } from '../analyzer/paginate'
 import { rowString as str } from '../analyzer/row-values'
 import { analysisErrors, analysisErrorToException } from '../errors'
 
@@ -174,13 +175,23 @@ export const brandAnalyzer = defineAnalyzer<AnalysisParams, Row, BrandResultRow[
       WHERE date >= ? AND date <= ?
       GROUP BY query, url
       HAVING SUM(impressions) >= ?
+    ),
+    segmented AS (
+      SELECT
+        query, page, clicks, impressions, ctr, position,
+        CASE WHEN regexp_matches(LOWER(query), ?) THEN 'brand' ELSE 'non-brand' END AS segment
+      FROM agg
     )
     SELECT
-      query, page, clicks, impressions, ctr, position,
-      CASE WHEN regexp_matches(LOWER(query), ?) THEN 'brand' ELSE 'non-brand' END AS segment
-    FROM agg
+      query, page, clicks, impressions, ctr, position, segment,
+      SUM(CASE WHEN segment = 'brand' THEN clicks ELSE 0 END) OVER () AS brandClicks,
+      SUM(CASE WHEN segment = 'brand' THEN 0 ELSE clicks END) OVER () AS nonBrandClicks,
+      SUM(CASE WHEN segment = 'brand' THEN impressions ELSE 0 END) OVER () AS brandImpressions,
+      SUM(CASE WHEN segment = 'brand' THEN 0 ELSE impressions END) OVER () AS nonBrandImpressions,
+      ${TOTAL_COUNT_SELECT}
+    FROM segmented
     ORDER BY clicks DESC
-    LIMIT ${Number(limit)}
+    ${paginateClause({ limit, offset: params.offset })}
   `
 
     return {
@@ -201,31 +212,22 @@ export const brandAnalyzer = defineAnalyzer<AnalysisParams, Row, BrandResultRow[
       position: num(r.position),
       segment: str(r.segment) as 'brand' | 'non-brand',
     }))
-    let brandClicks = 0
-    let nonBrandClicks = 0
-    let brandImpressions = 0
-    let nonBrandImpressions = 0
-    for (const r of normalized) {
-      if (r.segment === 'brand') {
-        brandClicks += r.clicks
-        brandImpressions += r.impressions
-      }
-      else {
-        nonBrandClicks += r.clicks
-        nonBrandImpressions += r.impressions
-      }
-    }
+    // The window sums run before LIMIT, so the summary covers every row.
+    const first = arr[0]
+    const brandClicks = num(first?.brandClicks)
+    const nonBrandClicks = num(first?.nonBrandClicks)
     const totalClicks = brandClicks + nonBrandClicks
     return {
       results: normalized,
       meta: {
-        total: normalized.length,
+        total: totalCountOf(arr),
+        returned: normalized.length,
         summary: {
           brandClicks,
           nonBrandClicks,
           brandShare: totalClicks > 0 ? brandClicks / totalClicks : 0,
-          brandImpressions,
-          nonBrandImpressions,
+          brandImpressions: num(first?.brandImpressions),
+          nonBrandImpressions: num(first?.nonBrandImpressions),
         },
       },
     }
@@ -233,7 +235,7 @@ export const brandAnalyzer = defineAnalyzer<AnalysisParams, Row, BrandResultRow[
 
   buildRows(params) {
     return {
-      queries: queriesQueryState(periodOf(params), params.limit),
+      queries: queriesQueryState(periodOf(params), fetchBudgetOf(params)),
     }
   },
 
@@ -244,12 +246,18 @@ export const brandAnalyzer = defineAnalyzer<AnalysisParams, Row, BrandResultRow[
       brandTerms,
       minImpressions: params.minImpressions,
     })
+    const segmented = [
+      ...result.brand.map(r => ({ ...r, segment: 'brand' as const })),
+      ...result.nonBrand.map(r => ({ ...r, segment: 'non-brand' as const })),
+    ] as BrandResultRow[]
+    const paged = paginateSortedInMemory(
+      segmented,
+      { limit: params.limit, offset: params.offset },
+      (left, right) => right.clicks - left.clicks,
+    )
     return {
-      results: [
-        ...result.brand.map(r => ({ ...r, segment: 'brand' as const })),
-        ...result.nonBrand.map(r => ({ ...r, segment: 'non-brand' as const })),
-      ] as BrandResultRow[],
-      meta: { summary: result.summary },
+      results: paged,
+      meta: { total: segmented.length, returned: paged.length, summary: result.summary },
     }
   },
 })

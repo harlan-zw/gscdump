@@ -11,6 +11,7 @@ import {
   createStorageEngine,
 } from '@gscdump/engine'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
+import { fetchBudgetOf } from '@gscdump/engine/analysis-types'
 import { runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import {
   createFilesystemDataSource,
@@ -39,7 +40,6 @@ import {
 } from 'gscdump/query'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { pagesQueryState, queriesQueryState } from '../src/analyzer/adapt-rows'
-import { moversAnalyzer } from '../src/analyzers/movers'
 import { defaultAnalyzerRegistry } from '../src/default-registry'
 import { createInMemoryQuerySource } from '../src/source'
 
@@ -92,8 +92,8 @@ describe('analysis sources', () => {
 
     const period = { startDate: '2026-04-10', endDate: '2026-04-10' }
     const [keywords, pages] = await Promise.all([
-      queryRows(source, queriesQueryState(period, 100)),
-      queryRows(source, pagesQueryState(period, 100)),
+      queryRows(source, queriesQueryState(period, fetchBudgetOf({ fetchBudget: 100 }))),
+      queryRows(source, pagesQueryState(period, fetchBudgetOf({ fetchBudget: 100 }))),
     ])
 
     expect(keywords[0].query).toBe('alpha')
@@ -309,6 +309,5 @@ describe('analysis sources', () => {
     expect(out.results).toHaveLength(1)
     expect((out.results as Array<{ keyword: string }>)[0].keyword).toBe('alpha')
     expect((out.meta as { rising: number }).rising).toBe(1)
-    expect(moversAnalyzer.id).toBe('movers')
   })
 })

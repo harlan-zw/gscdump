@@ -72,6 +72,70 @@ describe('movers report', () => {
       .rejects
       .toThrow(/comparison window/)
   })
+
+  it('counts every rising match in truncated.total, not just the returned page', async () => {
+    const ctx: ReportContext = { site: SITE, window, params: {}, registryVersion: 't' }
+    const risingRows = Array.from({ length: 10 }, (_, i) => ({
+      keyword: `rising ${i}`,
+      page: '/p',
+      recentClicks: 100 - i,
+      baselineClicks: 10,
+      recentImpressions: 1000,
+      baselineImpressions: 800,
+      recentPosition: 5,
+      baselinePosition: 7,
+      clicksChange: 90 - i,
+      clicksChangePercent: 9,
+      impressionsChangePercent: 0.25,
+      positionChange: -2,
+      direction: 'rising',
+    }))
+    const moversAnalyzer: Analyzer = {
+      id: 'movers',
+      requires: [],
+      build: (): RowQueriesPlan => ({ kind: 'rows', queries: {} }),
+      reduce: () => ({ results: risingRows as never[], meta: { total: 500 } }),
+    }
+    const analyzers = stubRegistry([
+      moversAnalyzer,
+      stubAnalyzer('decay', []),
+      stubAnalyzer('striking-distance', []),
+    ])
+    const out = await runReport(moversReport, { source, analyzers, ctx })
+    expect(out.sections.find(s => s.id === 'rising')!.truncated).toEqual({ kept: 5, total: 500 })
+  })
+
+  it('counts every declining match in truncated.total, not just the returned page', async () => {
+    const ctx: ReportContext = { site: SITE, window, params: {}, registryVersion: 't' }
+    const decliningRows = Array.from({ length: 10 }, (_, i) => ({
+      keyword: `declining ${i}`,
+      page: '/p',
+      recentClicks: 10,
+      baselineClicks: 100 - i,
+      recentImpressions: 1000,
+      baselineImpressions: 800,
+      recentPosition: 7,
+      baselinePosition: 5,
+      clicksChange: -(90 - i),
+      clicksChangePercent: -0.9,
+      impressionsChangePercent: -0.25,
+      positionChange: 2,
+      direction: 'declining',
+    }))
+    const moversAnalyzer: Analyzer = {
+      id: 'movers',
+      requires: [],
+      build: (): RowQueriesPlan => ({ kind: 'rows', queries: {} }),
+      reduce: () => ({ results: decliningRows as never[], meta: { total: 500 } }),
+    }
+    const analyzers = stubRegistry([
+      moversAnalyzer,
+      stubAnalyzer('decay', []),
+      stubAnalyzer('striking-distance', []),
+    ])
+    const out = await runReport(moversReport, { source, analyzers, ctx })
+    expect(out.sections.find(s => s.id === 'decliners')!.truncated).toEqual({ kept: 5, total: 500 })
+  })
 })
 
 describe('health report', () => {
@@ -122,8 +186,10 @@ describe('opportunities report', () => {
       stubAnalyzer('opportunity', [
         { keyword: 'k2', page: '/p2', clicks: 5, impressions: 1000, ctr: 0.005, position: 6, opportunityScore: 0.8, potentialClicks: 50, factors: {} },
       ]),
+      // A row the analyzer can return: top-10 position, CTR under 3%, and
+      // some clicks. The section must not call it "0 clicks".
       stubAnalyzer('zero-click', [
-        { query: 'k3', page: '/p3', clicks: 0, impressions: 800, ctr: 0, position: 12 },
+        { query: 'k3', page: '/p3', clicks: 12, impressions: 1500, ctr: 0.008, position: 2.4 },
       ]),
       stubAnalyzer('query-migration', [
         { sourcePage: '/old', targetPage: '/new', weight: 0.9, queryCount: 12, exactCount: 8, fuzzyCount: 4, examples: [] },
@@ -133,6 +199,34 @@ describe('opportunities report', () => {
     const out = await runReport(opportunitiesReport, { source, analyzers, ctx })
     expect(out.sections.map(s => s.id)).toEqual(['striking-distance', 'low-ctr', 'zero-click', 'query-migration'])
     expect(out.meta.degraded).toBe(false)
+    const zeroClick = out.sections.find(s => s.id === 'zero-click')!.findings[0]!
+    expect(zeroClick.why).toBe('0.8% CTR at position 2.4 on /p3')
+    expect(zeroClick.metrics.clicks).toBe(12)
+  })
+
+  it('marks a section partial and counts every match when its step was truncated', async () => {
+    const ctx: ReportContext = { site: SITE, window, params: { maxFindings: 2 }, registryVersion: 't' }
+    const striking = Array.from({ length: 3 }, (_, i) => ({ keyword: `k${i}`, page: '/p', clicks: 1, impressions: 200, ctr: 0.005, position: 9, potentialClicks: 30 - i }))
+    // Its one row query fills a 1-row budget, so dispatch reports truncation.
+    const truncatedStriking: Analyzer = {
+      id: 'striking-distance',
+      requires: [],
+      build: (): RowQueriesPlan => ({ kind: 'rows', queries: { q: { state: { dimensions: ['query'], rowLimit: 1 } } } }),
+      reduce: () => ({ results: striking as never[], meta: { total: 40 } }),
+    }
+    const analyzers = stubRegistry([
+      truncatedStriking,
+      stubAnalyzer('opportunity', []),
+      stubAnalyzer('zero-click', []),
+      stubAnalyzer('query-migration', []),
+    ])
+    const oneRowSource = createInMemoryQuerySource({ queryRows: () => [{ query: 'x' }] })
+    const { opportunitiesReport } = await import('../src/report/reports/opportunities')
+    const out = await runReport(opportunitiesReport, { source: oneRowSource, analyzers, ctx })
+    const section = out.sections.find(s => s.id === 'striking-distance')!
+    expect(section.coverage).toBe('partial')
+    expect(section.truncated).toEqual({ kept: 2, total: 40 })
+    expect(out.meta.steps.find(s => s.key === 'striking')!.coverage).toEqual({ kind: 'truncated', fetched: 1 })
   })
 })
 

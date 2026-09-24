@@ -9,7 +9,7 @@
 import type { AnalysisResult } from '@gscdump/engine/analysis-types'
 import type { ReportFinding, ReportSection } from '@gscdump/engine/report'
 import { defineReport } from '@gscdump/engine/report'
-import { reportRows, sectionArtifact, sectionCoverage, truncation } from '../sections'
+import { reportRows, resultTotal, sectionArtifact, sectionCoverage, truncation } from '../sections'
 
 export interface OpportunitiesReportParams {
   maxFindings?: number
@@ -73,7 +73,7 @@ function buildStrikingSection(res: AnalysisResult | undefined, max: number): Rep
     severity: 'low',
     summary: { magnitudeLabel: `${Math.round(totalPotential)} potential clicks` },
     findings,
-    truncated: truncation(rows.length, kept.length),
+    truncated: truncation(resultTotal(res, rows.length), kept.length),
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'striking-distance'),
   }
@@ -111,7 +111,7 @@ function buildOpportunitySection(res: AnalysisResult | undefined, max: number): 
     severity: 'low',
     summary: {},
     findings,
-    truncated: truncation(rows.length, kept.length),
+    truncated: truncation(resultTotal(res, rows.length), kept.length),
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'opportunity'),
   }
@@ -126,22 +126,31 @@ interface ZeroClickRow {
   position: number
 }
 
+/**
+ * The analyzer flags low CTR at a top position, not zero clicks. Say that,
+ * with the real numbers, so a row with clicks never reads as "0 clicks".
+ */
+function zeroClickWhy(r: ZeroClickRow): string {
+  const ctr = `${(r.ctr * 100).toFixed(1)}% CTR`
+  return `${ctr} at position ${r.position.toFixed(1)} on ${r.page}`
+}
+
 function buildZeroClickSection(res: AnalysisResult | undefined, max: number): ReportSection {
   const rows = reportRows<ZeroClickRow>(res)
     .sort((a, b) => b.impressions - a.impressions)
   const kept = rows.slice(0, max)
   const findings: ReportFinding[] = kept.map(r => ({
     entity: { kind: 'query', value: r.query },
-    metrics: { impressions: r.impressions, position: r.position, ctr: r.ctr },
-    why: `0 clicks on ${r.page}`,
+    metrics: { impressions: r.impressions, clicks: r.clicks, position: r.position, ctr: r.ctr },
+    why: zeroClickWhy(r),
   }))
   return {
     id: 'zero-click',
     title: 'Zero-click queries',
     severity: 'info',
-    summary: { magnitudeLabel: `${kept.reduce((s, r) => s + r.impressions, 0)} impressions wasted` },
+    summary: { magnitudeLabel: `${kept.reduce((s, r) => s + r.impressions, 0)} impressions at low CTR` },
     findings,
-    truncated: truncation(rows.length, kept.length),
+    truncated: truncation(resultTotal(res, rows.length), kept.length),
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'zero-click'),
   }
@@ -169,7 +178,7 @@ function buildMigrationSection(res: AnalysisResult | undefined, max: number): Re
     severity: 'info',
     summary: {},
     findings,
-    truncated: truncation(rows.length, kept.length),
+    truncated: truncation(resultTotal(res, rows.length), kept.length),
     coverage: sectionCoverage(res),
     artifact: sectionArtifact(res, 'query-migration'),
   }

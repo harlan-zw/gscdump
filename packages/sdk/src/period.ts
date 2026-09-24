@@ -67,7 +67,7 @@ function todayInTimezone(timezone = 'America/Los_Angeles', now = new Date()): st
   return `${value('year')}-${value('month')}-${value('day')}`
 }
 
-const ROLLING_TO_UPSTREAM: Record<string, WindowPreset> = {
+const ROLLING_TO_UPSTREAM: Record<string, Exclude<WindowPreset, 'custom'>> = {
   '7d': 'last-7d',
   '28d': 'last-28d',
   '3m': 'last-90d',
@@ -75,7 +75,7 @@ const ROLLING_TO_UPSTREAM: Record<string, WindowPreset> = {
   '12m': 'last-365d',
 }
 
-const CALENDAR_TO_UPSTREAM: Record<string, WindowPreset> = {
+const CALENDAR_TO_UPSTREAM: Record<string, Exclude<WindowPreset, 'custom'>> = {
   'this-month': 'mtd',
   'this-year': 'ytd',
 }

@@ -8,7 +8,7 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
 import type { Row } from '@gscdump/engine/contracts'
 import type { DateRow } from '../types'
-import { num } from '@gscdump/engine/analysis-types'
+import { fetchBudgetOf, num } from '@gscdump/engine/analysis-types'
 import { defineAnalyzer } from '@gscdump/engine/analyzer'
 import { periodOf } from '@gscdump/engine/period'
 import { enumeratePartitions } from '@gscdump/engine/planner'
@@ -207,13 +207,13 @@ export const seasonalityAnalyzer = defineAnalyzer<AnalysisParams, Row, MonthlyDa
 
   buildRows(params) {
     return {
-      dates: datesQueryState(periodOf(params), params.limit),
+      dates: datesQueryState(periodOf(params), fetchBudgetOf(params)),
     }
   },
 
   reduceRows(rows, params) {
     const dates = (Array.isArray(rows) ? rows : []) as unknown as DateRow[]
     const result = analyzeSeasonality(dates, { metric: params.metric as SeasonalityMetric | undefined })
-    return { results: result.monthlyBreakdown, meta: { strength: result.strength } }
+    return { results: result.monthlyBreakdown, meta: { total: result.monthlyBreakdown.length, strength: result.strength } }
   },
 })
