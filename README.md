@@ -59,12 +59,12 @@ gscdump auth login --mode local
 gscdump sites
 
 # Sync before querying or exporting stored data
-gscdump sync --site sc-domain:example.com --days 90
-gscdump query --site sc-domain:example.com --dimensions page,query
-gscdump dump --site sc-domain:example.com --out ./export
+gscdump sync --site example.com --days 90
+gscdump query --site example.com --dimensions page,query
+gscdump dump --site example.com --out ./export
 
 # Query Google directly
-gscdump query --live --mode local --site sc-domain:example.com --dimensions page,query
+gscdump query --live --mode local --site example.com --dimensions page,query
 
 # Start the MCP server
 gscdump mcp
@@ -185,12 +185,12 @@ gscdump report list
 gscdump report movers --explain
 
 # Return a Report as JSON
-gscdump report opportunities --site sc-domain:example.com --json
+gscdump report opportunities --site example.com --json
 
 # Run Reports with extra inputs
-gscdump report triage --site sc-domain:example.com --target /blog/foo --target-kind page --json
-gscdump report pre-publish --site sc-domain:example.com --topic widgets --json
-gscdump report brand --site sc-domain:example.com --brand-terms 'acme,acme corp' --json
+gscdump report triage --site example.com --target /blog/foo --target-kind page --json
+gscdump report pre-publish --site example.com --topic widgets --json
+gscdump report brand --site example.com --brand-terms 'acme,acme corp' --json
 ```
 
 Use `--period` for `7d`, `28d`, `30d`, `90d`, `180d`, `365d`, `mtd`, `qtd`, `ytd`, `last-quarter`, or `custom`.
@@ -271,12 +271,13 @@ Add this entry to your MCP client's server configuration:
 }
 ```
 
-Authenticate first with cloud mode or local Google credentials. MCP uses the selected mode for Google tools.
+Authenticate with cloud mode or local Google credentials. MCP uses the selected mode for Google tools.
+If no authentication exists, the server still starts, and each Google tool returns the command to run.
 Google Indexing API and Site Verification tools require local mode. Run Bing commands through the CLI and agent skill.
 Then ask your assistant:
 
 - "List my Search Console Sites."
-- "Run the movers Report for `sc-domain:example.com` over the last 28 days."
+- "Run the movers Report for `example.com` over the last 28 days."
 - "Query clicks and impressions by page for this month."
 - "Inspect these URLs and summarize the Indexing Evidence."
 

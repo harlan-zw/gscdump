@@ -97,6 +97,7 @@ export function listReports(): ListReportsResult[] {
 export async function runReportHandlerResult(
   input: z.infer<typeof runReportInput>,
   getContext: () => Promise<HandlerContext> | HandlerContext,
+  resolveSite: (input: string) => Promise<string> = async siteUrl => siteUrl,
 ): Promise<Result<ReportResult, McpHandlerError>> {
   const report = defaultReportRegistry.getReport(input.id)
   if (!report)
@@ -124,10 +125,12 @@ export async function runReportHandlerResult(
   if (!supportsLiveSteps(report.plan(params, window)))
     return err(mcpHandlerErrors.unsupportedReport(input.id, listReports().map(report => report.id)))
 
+  // Resolve the Site after input checks, so a rejected Report never calls Google.
+  const siteUrl = await resolveSite(input.siteUrl)
   const ctx = await getContext()
-  const source = createGscApiQuerySource({ client: ctx.client, siteUrl: input.siteUrl })
+  const source = createGscApiQuerySource({ client: ctx.client, siteUrl })
   const reportCtx: ReportContext = {
-    site: input.siteUrl,
+    site: siteUrl,
     window,
     params,
     registryVersion: defaultReportRegistry.version,
@@ -146,9 +149,10 @@ export async function runReportHandlerResult(
 export async function runReportHandler(
   input: z.infer<typeof runReportInput>,
   getContext: () => Promise<HandlerContext> | HandlerContext,
+  resolveSite?: (input: string) => Promise<string>,
 ): Promise<ReportResult> {
   return unwrapResult(
-    await runReportHandlerResult(input, getContext).catch((thrown: unknown) => {
+    await runReportHandlerResult(input, getContext, resolveSite).catch((thrown: unknown) => {
       throw enrichToolError(thrown) ?? thrown
     }),
     mcpHandlerErrorToException,

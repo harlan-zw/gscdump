@@ -1,12 +1,15 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import process from 'node:process'
 import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { createNodeHarness, resetNodeDuckDB } from '@gscdump/engine/node'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { dumpSites } from '../../src/commands/dump'
 import { syncCommand } from '../../src/commands/sync'
 import { createLocalStore } from '../../src/local-store'
+import { listStoreSites, readSiteMap } from '../../src/store-sites'
+import { logger } from '../../src/utils'
 
 const configState: { dataDir: string | null } = { dataDir: null }
 
@@ -181,6 +184,57 @@ describe('sync command (local analytics)', () => {
       const stat = await fs.stat(full)
       expect(stat.size).toBeGreaterThan(0)
     }
+  })
+
+  it('resolves a written Site and records its Site URL in the Store', async () => {
+    await syncCommand.run!({
+      args: { site: 'https://Example.com', start: '2026-04-01', end: '2026-04-01', tables: 'pages', quiet: true },
+      rawArgs: [],
+      cmd: syncCommand,
+    })
+    expect(rawQuerySpy.mock.calls.every(([siteUrl]) => siteUrl === SITE)).toBe(true)
+    expect(await listStoreSites(configState.dataDir!)).toEqual([{ siteId: 'd_example.com', siteUrl: SITE }])
+  })
+
+  it('refuses a Site whose Store ID already holds another Site', async () => {
+    clientSitesSpy.mockResolvedValue([
+      { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' },
+      { siteUrl: 'http://example.com/', permissionLevel: 'siteOwner' },
+    ])
+    const sync = (site: string) => syncCommand.run!({
+      args: { site, start: '2026-04-01', end: '2026-04-01', tables: 'pages', quiet: true },
+      rawArgs: [],
+      cmd: syncCommand,
+    })
+    await sync('https://example.com/')
+    rawQuerySpy.mockClear()
+    vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`__exit_${code}__`)
+    }) as never)
+    await expect(sync('http://example.com/')).rejects.toThrow('__exit_1__')
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(expect.stringContaining('The Store keeps https://example.com/ under the same ID as http://example.com/'))
+    expect(rawQuerySpy).not.toHaveBeenCalled()
+  })
+
+  it('skips a colliding Site with no data yet and keeps the first owner in the Site map', async () => {
+    clientSitesSpy.mockResolvedValue([
+      { siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' },
+      { siteUrl: 'http://example.com/', permissionLevel: 'siteOwner' },
+    ])
+    vi.mocked(logger.warn).mockClear()
+    await syncCommand.run!({
+      args: { 'all-sites': true, 'start': '2026-04-01', 'end': '2026-04-01', 'tables': 'pages', 'types': 'web', 'quiet': true, 'rollups': false, 'sitemaps': false, 'inspections': false },
+      rawArgs: [],
+      cmd: syncCommand,
+    })
+
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(expect.stringContaining('Skipped http://example.com/.'))
+    expect(await readSiteMap(configState.dataDir!)).toEqual({ 'h_example.com': 'https://example.com/' })
+    // The skipped Site fetched nothing, so every row in the shared directory belongs to the first owner.
+    expect(rawQuerySpy.mock.calls.every(([siteUrl]) => siteUrl === 'https://example.com/')).toBe(true)
+    const harness = createNodeHarness({ dataDir: configState.dataDir! })
+    const pages = await harness.engine.listLive({ userId: harness.userId, siteId: 'h_example.com', table: 'pages' })
+    expect(pages).toHaveLength(1)
   })
 
   it('replacing a day retires the prior version via writeDay atomicity', async () => {

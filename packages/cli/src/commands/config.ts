@@ -2,9 +2,10 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { defineCommand } from 'citty'
+import { resolveSiteInput } from 'gscdump'
 import { configCommandMeta } from '../command-meta'
 import { getConfigPath, loadConfig, resolveDataDir, saveConfig } from '../config'
-import { createCommandContext } from '../context'
+import { createCommandContext, formatSiteResolution } from '../context'
 import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
 
 const showCommand = defineCommand({
@@ -51,6 +52,21 @@ const VALID_KEYS = [
 
 const NUMERIC_KEYS = new Set(['defaultLimit'])
 
+/**
+ * The Site URL to save for `defaultSite`. The Store answers first, so this
+ * works offline. On a Store miss, the Search Console Site list decides.
+ */
+async function canonicalSite(input: string): Promise<string> {
+  const local = await createCommandContext()
+  const fromStore = await local.matchSite(input, { scope: 'store' })
+  if (fromStore.kind === 'resolved')
+    return fromStore.siteUrl
+  const ctx = await createCommandContext({ needsAuth: true }).catch((error: Error) => {
+    throw new Error(`${formatSiteResolution(fromStore, 'store')} ${error.message}`)
+  })
+  return ctx.resolveSite(input)
+}
+
 const setCommand = defineCommand({
   meta: {
     name: 'set',
@@ -78,7 +94,9 @@ const setCommand = defineCommand({
     }
 
     const config = await loadConfig()
-    const value: string | number = NUMERIC_KEYS.has(args.key) ? Number(args.value) : args.value
+    const value: string | number = NUMERIC_KEYS.has(args.key)
+      ? Number(args.value)
+      : args.key === 'defaultSite' ? await canonicalSite(args.value) : args.value
     if (NUMERIC_KEYS.has(args.key) && !Number.isFinite(value)) {
       logger.error(`Invalid numeric value for ${args.key}: ${args.value}`)
       process.exit(1)
@@ -178,8 +196,9 @@ const validateCommand = defineCommand({
             issues.push({ key: 'defaultSite', level: 'warn', message: `Could not verify Site: ${message}` })
             return undefined
           })
-        if (sites && !sites.some(s => s.siteUrl === config.defaultSite || s.siteUrl.includes(String(config.defaultSite))))
-          issues.push({ key: 'defaultSite', level: 'fail', message: `${config.defaultSite} is not in the verified site list` })
+        const resolution = sites && resolveSiteInput(config.defaultSite, sites)
+        if (resolution && resolution.kind !== 'resolved')
+          issues.push({ key: 'defaultSite', level: 'fail', message: formatSiteResolution(resolution, 'account') })
       }
       else {
         issues.push({ key: 'defaultSite', level: 'warn', message: 'Set, but auth is not configured. Verification skipped.' })

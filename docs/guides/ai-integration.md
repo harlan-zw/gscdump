@@ -48,8 +48,16 @@ stdio-compatible MCP client:
 ```
 
 The server uses the saved authentication for its profile.
+It reads the config directory from `--config-dir` or `GSCDUMP_CONFIG_DIR`, and the profile from `--profile` or `GSCDUMP_PROFILE`.
 Cloud mode accepts `GSCDUMP_API_KEY`. Local mode accepts Google access tokens, service accounts, and OAuth refresh tokens.
 Set environment credentials in the server process. Use `--profile NAME` or `--mode local` in its arguments when needed.
+
+The server starts without authentication, and the client can list its tools.
+If no authentication exists, each Google tool returns an error with the command to run.
+After `gscdump auth login`, call the tool again. After a change to environment credentials, restart the MCP client.
+
+If a Google request fails, the tool result holds the HTTP status, Google's explanation, and the next step.
+For example, a 403 permission failure names the account check, and a quota failure says when to try again.
 Cloud Google tools use gscdump.com. Google Indexing API and Site Verification tools require local mode.
 Bing commands are available through the CLI and agent skill. The MCP server does not expose Bing tools.
 Tool responses can contain your search data; review your MCP client's data-sharing settings.
@@ -74,9 +82,9 @@ were removed; application embedding is not a supported v1 package surface.
 ## Example prompts
 
 - “List my Search Console Sites.”
-- “Run the movers report for `sc-domain:example.com` over the last 28 days.”
-- “Run the brand Report for `sc-domain:example.com` with brand terms `example,example.com`.”
-- “Run the pre-publish Report for `sc-domain:example.com` with topic `running shoes`.”
+- “Run the movers report for `example.com` over the last 28 days.”
+- “Run the brand Report for `example.com` with brand terms `example,example.com`.”
+- “Run the pre-publish Report for `example.com` with topic `running shoes`.”
 - “Query clicks and impressions by page for this month.”
 - “Inspect these URLs and summarize the Indexing Evidence.”
 
@@ -91,6 +99,7 @@ MCP rejects them before authentication or Google requests.
 Run them with `gscdump report <id>` after syncing the Site.
 
 `run-report` accepts the Site, Report ID, date windows, comparison, and `maxFindings`.
+Every tool that takes `siteUrl` accepts a Site as a person writes it, such as `example.com`. The tool resolves it against your Search Console Sites.
 Report inputs use the same names shown in `list-reports.argsSpec`:
 
 | Report | Additional inputs |
@@ -103,7 +112,7 @@ Example `run-report` arguments:
 
 ```json
 {
-  "siteUrl": "sc-domain:example.com",
+  "siteUrl": "example.com",
   "id": "brand",
   "period": "28d",
   "brandTerms": "example,example.com",

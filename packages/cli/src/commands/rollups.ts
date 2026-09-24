@@ -10,6 +10,7 @@ import { buildQueryDimRecords, createQueryDimStore } from '@gscdump/engine/entit
 import { CANONICAL_ROLLUPS, DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
 import { createCommandContext } from '../context'
+import { readSiteMap, siteUrlForId } from '../store-sites'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 
 // Build the versioned query→canonical(+intent) dimension for a site from its
@@ -49,7 +50,7 @@ const rebuildSubCommand = defineCommand({
     'site': {
       type: 'string',
       alias: 's',
-      description: 'Restrict to a single site (default: all sites with local data)',
+      description: 'Restrict to one Site, for example example.com (default: every Site with local data)',
     },
     'with-canonical': {
       type: 'boolean',
@@ -62,7 +63,9 @@ const rebuildSubCommand = defineCommand({
     const defs = args['with-canonical'] ? [...DEFAULT_ROLLUPS, ...CANONICAL_ROLLUPS] : DEFAULT_ROLLUPS
     const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
-    const explicitSiteId = args.site ? store.siteIdFor(String(args.site)) : undefined
+    const explicitSiteId = args.site ? store.siteIdFor(await ctx.resolveSite(String(args.site), { scope: 'store' })) : undefined
+
+    const siteMap = await readSiteMap(store.dataDir, store.userId)
 
     // Discover sites with local data — rollups run per-site so we don't
     // bother rebuilding for sites the user hasn't synced.
@@ -86,15 +89,15 @@ const rebuildSubCommand = defineCommand({
       return
     }
 
-    const summary: Array<{ siteId: string, rollups: Array<{ id: string, bytes: number, objectKey: string }> }> = []
+    const summary: Array<{ siteUrl: string, rollups: Array<{ id: string, bytes: number, objectKey: string }> }> = []
     let totalBytes = 0
     for (const siteId of allSiteIds) {
       if (args['with-canonical']) {
         const dimRows = await buildSiteQueryDim(store, siteId)
         if (!json)
-          logger.info(`Built query dimension for [${siteId}] (${dimRows} distinct queries, normalizer v${NORMALIZER_VERSION})`)
+          logger.info(`Built query dimension for [${siteUrlForId(siteMap, siteId)}] (${dimRows} distinct queries, normalizer v${NORMALIZER_VERSION})`)
       }
-      logger.info(`Rebuilding rollups for [${siteId}] (${defs.length} rollups)`)
+      logger.info(`Rebuilding rollups for [${siteUrlForId(siteMap, siteId)}] (${defs.length} rollups)`)
       const results = await rebuildRollups({
         engine: {
           runSQL: opts => store.engine.runSQL(opts),
@@ -112,7 +115,7 @@ const rebuildSubCommand = defineCommand({
         ctx: { userId: store.userId, siteId },
         defs,
       })
-      const site = { siteId, rollups: [] as Array<{ id: string, bytes: number, objectKey: string }> }
+      const site = { siteUrl: siteUrlForId(siteMap, siteId), rollups: [] as Array<{ id: string, bytes: number, objectKey: string }> }
       for (const r of results) {
         totalBytes += r.bytes
         site.rollups.push({ id: r.id, bytes: r.bytes, objectKey: r.objectKey })

@@ -9,7 +9,8 @@ import { isQueryError } from 'gscdump/query'
 import { isUsageError } from './command-registry'
 
 /** A hosted 401: the gscdump.com API key failed, not a Google credential. */
-export const HOSTED_KEY_REJECTED = 'gscdump.com rejected the API key. Run `gscdump auth login --mode cloud --api-key KEY` with a valid key.'
+export const HOSTED_KEY_REJECTED_REASON = 'gscdump.com rejected the API key'
+export const HOSTED_KEY_REJECTED = `${HOSTED_KEY_REJECTED_REASON}. Run \`gscdump auth login --mode cloud --api-key KEY\` with a valid key.`
 
 const QUOTA_MESSAGE_RE = /quota|rate\s*limit/i
 // eslint-disable-next-line no-control-regex
