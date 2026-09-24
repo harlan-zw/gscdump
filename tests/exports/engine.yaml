@@ -144,6 +144,7 @@
 ./ingest:
   assembleDatesRow: function
   createRowAccumulator: function
+  sumByStoredKey: function
   TABLE_DIMS: object
   toPath: function
   toSumPosition: function
