@@ -1,7 +1,7 @@
 import type { NeedCoverage, Route, RouteRequest, RouteState } from '../src/route'
 import type { SyncRunStatus } from '../src/sync-run'
 import { describe, expect, it } from 'vitest'
-import { decideRoute } from '../src/route'
+import { decideRoute, routeMessage, stopCode } from '../src/route'
 
 const SITE = 'sc-domain:example.com'
 const WINDOW = { start: '2026-08-01', end: '2026-08-03' }
@@ -45,5 +45,25 @@ describe('decideRoute', () => {
     ['names the non-web search type in the sync command', {}, { coverage: [{ ...partial, searchType: 'image' }] }, { kind: 'prompt', reason: { kind: 'partial', done: 2, total: 3, missing: partial.gaps, windows: [{ period: 'current', table: 'pages', window: WINDOW, missing: partial.gaps }] }, nextCommand: `${sync} --types image` }],
   ])('%s', (_name, req, state, expected) => {
     expect(decideRoute({ ...request, ...req }, { auth: 'google', coverage: [], syncRun: none, ...state })).toEqual(expected)
+  })
+})
+
+describe('routeMessage', () => {
+  const message = (state: Partial<RouteState>): string => {
+    const route = decideRoute(request, { auth: 'none', coverage: [], syncRun: none, ...state })
+    if (route.kind !== 'prompt')
+      throw new Error(`expected a prompt route, got ${route.kind}`)
+    expect(stopCode(route)).toBe('NOT_CONNECTED')
+    return routeMessage(route, request, 'none')
+  }
+
+  it('keeps the table wording for a web read', () => {
+    expect(message({ coverage: [empty] })).toContain('The Store has no pages data for sc-domain:example.com')
+  })
+
+  it('names a non-web search type instead of claiming the table is empty', () => {
+    const text = message({ coverage: [{ ...empty, searchType: 'image' }] })
+    expect(text).toContain('The Store has no image pages data for sc-domain:example.com')
+    expect(text).not.toContain('no pages data')
   })
 })
