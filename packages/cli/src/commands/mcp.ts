@@ -1,4 +1,5 @@
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
+import type { AuthError } from '../auth'
 import type { McpServer } from '../mcp/server'
 import type { CliRuntime } from '../runtime'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -15,7 +16,7 @@ export const MCP_NO_AUTH_MESSAGE = [
   'gscdump has no Google authentication.',
   'Run `gscdump auth login` in a terminal, then call this tool again.',
   'For cloud mode, set GSCDUMP_API_KEY to a user API key from your gscdump.com settings.',
-  'For local mode, set GSC_ACCESS_TOKEN, or GSC_CLIENT_ID, GSC_CLIENT_SECRET, and GSC_REFRESH_TOKEN.',
+  'For local mode, set GSC_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS to a service-account key file, set GSC_ACCESS_TOKEN, or set GSC_CLIENT_ID, GSC_CLIENT_SECRET, and GSC_REFRESH_TOKEN.',
   'If you set environment variables, set them in the MCP server configuration and restart the MCP client.',
   'If the gscdump command is missing, run `npm install -g @gscdump/cli`.',
 ].join(' ')
@@ -39,6 +40,18 @@ async function hasAuthentication(): Promise<boolean> {
 }
 
 /**
+ * The precise failure of a configured service-account key, shown only when no
+ * other credential exists. A stale pointer (missing or malformed key file)
+ * returns null: resolveAuth falls through to BYOK or saved tokens for it, so
+ * the general advice stays right.
+ */
+async function serviceAccountMisconfiguration(): Promise<string | null> {
+  return resolveServiceAccount()
+    .then(() => null)
+    .catch((error: unknown) => (error as { authError?: AuthError }).authError?.message ?? null)
+}
+
+/**
  * Start the MCP server on `transport`. Every request runs in `runtime`, so
  * tools read the config dir and profile of this invocation. Transport events
  * (stdin data) arrive outside the async context that started the server.
@@ -48,8 +61,10 @@ export async function startMcpServer(transport: Transport, runtime: CliRuntime =
     name: 'gscdump',
     version: VERSION,
     getContext: async () => {
-      if (!await hasAuthentication())
-        throw new Error(MCP_NO_AUTH_MESSAGE)
+      if (!await hasAuthentication()) {
+        const misconfigured = await serviceAccountMisconfiguration()
+        throw new Error(misconfigured ? `${misconfigured}. ${MCP_NO_AUTH_MESSAGE}` : MCP_NO_AUTH_MESSAGE)
+      }
       const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: MCP_RETRIES } })
       return { authentication: ctx.authentication, auth: ctx.auth, client: ctx.client! }
     },

@@ -124,6 +124,19 @@ describe('gscdump mcp runtime', () => {
     expect(text(result)).not.toContain('gscdump auth login')
   })
 
+  it('surfaces the service-account diagnostic when it is the only credential configured', async () => {
+    const keyPath = path.join(configDir, 'oauth-client.json')
+    await fs.writeFile(keyPath, JSON.stringify({ type: 'authorized_user' }))
+    await connect(undefined, { GSC_SERVICE_ACCOUNT_JSON: keyPath })
+
+    const result = await client.callTool({ name: 'list-sites', arguments: {} }) as CallToolResult
+
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('is not a service-account key')
+    expect(text(result)).toContain('GSC_SERVICE_ACCOUNT_JSON')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('starts without authentication and returns the next command from a tool call', async () => {
     await connect()
 
