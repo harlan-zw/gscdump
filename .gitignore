@@ -22,6 +22,8 @@ Thumbs.db
 # Test
 coverage
 .vitest
+packages/engine-duckdb-wasm/.vitest-attachments/
+packages/engine-duckdb-wasm/test/__screenshots__/opfs.browser.test.ts/
 
 # Local
 .env
