@@ -161,7 +161,7 @@ describe('hosted indexing urls and sitemap commands', () => {
     const lines = stderr.trim().split('\n')
     expect(lines).toHaveLength(1)
     expect(lines[0]).toContain('`gscdump indexing urls` needs hosted authentication')
-    expect(lines[0]).toContain('`gscdump inspect`')
+    expect(lines[0]).toContain('`gscdump inspect --site <site>`')
   })
 
   it('names the hosted Sites when --site matches none', async () => {

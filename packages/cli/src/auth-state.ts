@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { gscdumpAvailableSiteSchema } from '@gscdump/contracts'
 import { z } from 'zod'
 import { HOSTED_KEY_REJECTED } from './error-handler'
 import { useCliRuntime } from './runtime'
@@ -118,4 +119,26 @@ export async function getCloudAccount(state: CloudAuthentication): Promise<z.inf
   if (!result.success)
     throw new Error('The hosted API returned invalid account data.')
   return result.data
+}
+
+export type HostedSite = z.infer<typeof gscdumpAvailableSiteSchema>
+
+/** The account's Sites with hosted sync status and progress. Reads `/cli/sites/available`. */
+export async function getCloudSites(state: CloudAuthentication): Promise<HostedSite[]> {
+  const result = gscdumpAvailableSiteSchema.array().safeParse(await cloudRequest(state, '/cli/sites/available'))
+  if (!result.success)
+    throw new Error('The hosted API returned invalid Site data.')
+  return result.data
+}
+
+/** One line of hosted sync state, for example `syncing: 41 of 90 days (45%)`. Undefined for a Site gscdump.com does not sync. */
+export function formatHostedSync(site: HostedSite): string | undefined {
+  if (!site.registered)
+    return undefined
+  const status = site.syncStatus ?? 'pending'
+  const progress = site.syncProgress && site.syncProgress.total > 0 && status !== 'synced'
+    ? `: ${site.syncProgress.completed.toLocaleString('en-US')} of ${site.syncProgress.total.toLocaleString('en-US')} days (${Math.round(site.syncProgress.percent)}%)`
+    : ''
+  const range = status === 'synced' && site.oldestDateSynced && site.newestDateSynced ? `: ${site.oldestDateSynced} to ${site.newestDateSynced}` : ''
+  return `${status}${progress}${range}`
 }

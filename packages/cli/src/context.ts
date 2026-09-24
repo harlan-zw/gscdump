@@ -15,6 +15,7 @@ import { resolveAuthentication } from './auth-state'
 import { createCloudGoogleClient } from './cloud-google'
 import { loadResolvedConfig } from './config'
 import { createLocalStore } from './local-store'
+import { openQuotaLedger, quotaFetchOptions } from './quota-ledger'
 import { listStoreSites } from './store-sites'
 
 export interface GscSite {
@@ -69,6 +70,11 @@ export interface CommandContextOptions {
   byok?: BYOKOptions
   /** Forwarded to googleSearchConsole(); used to surface --retries on commands. */
   fetchOptions?: FetchOptions
+  /**
+   * Send quota-spending Google calls through the quota ledger. Default true.
+   * Only `sync` turns it off: it gates its own calls on the same ledger.
+   */
+  quota?: boolean
 }
 
 const FULL_SITE_URL_RE = /^(?:sc-domain:|https?:\/\/)/i
@@ -76,9 +82,12 @@ const FULL_SITE_URL_RE = /^(?:sc-domain:|https?:\/\/)/i
 export async function createCommandContext(
   opts: CommandContextOptions = {},
 ): Promise<CommandContext> {
-  const { needsAuth = false, needsStore = false, interactive = false, byok, fetchOptions } = opts
+  const { needsAuth = false, needsStore = false, interactive = false, byok, quota = true } = opts
   const { config, dataDir } = await loadResolvedConfig()
   const authentication = needsAuth ? await resolveAuthentication() : { _tag: 'Local' } as const
+  const fetchOptions = needsAuth && quota
+    ? quotaFetchOptions(await openQuotaLedger({ dataDir }), opts.fetchOptions)
+    : opts.fetchOptions
   const auth = needsAuth && authentication._tag === 'Local' ? await resolveAuth({ interactive, config, byok }) : null
   const client = needsAuth && authentication._tag === 'Cloud'
     ? createCloudGoogleClient(authentication, fetchOptions)

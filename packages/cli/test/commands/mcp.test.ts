@@ -22,6 +22,11 @@ vi.mock('../../src/auth', () => ({
   resolveAuth: mocks.resolveAuth,
   resolveServiceAccount: mocks.resolveServiceAccount,
   loadTokens: mocks.loadTokens,
+  probeAuth: async () => {
+    if ((await mocks.resolveAuthentication())._tag === 'Cloud')
+      return 'hosted'
+    return mocks.resolveBYOK() || await mocks.resolveServiceAccount() || await mocks.loadTokens() ? 'google' : 'none'
+  },
 }))
 
 vi.mock('../../src/config', () => ({

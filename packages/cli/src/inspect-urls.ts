@@ -4,6 +4,7 @@
 import type { UrlInspectionResult } from 'gscdump/indexing'
 import { classifyError } from 'gscdump/errors'
 import { describeInspectionError, URL_INSPECTION_QUOTA } from 'gscdump/indexing'
+import { formatQuotaStop, quotaStopOf } from './quota-ledger'
 
 // One call starts at most every 120 ms: 500 per minute, under Google's 600.
 export const INSPECTION_INTERVAL_MS = 120
@@ -67,8 +68,14 @@ export async function inspectUrls(input: InspectUrlsInput): Promise<InspectRun> 
       result => ({ ok: true as const, result }),
       (error: unknown) => ({ ok: false as const, error }),
     )
-    if (!settled.ok && classifyError(settled.error).kind === 'rate-limited')
-      return { outcomes, stopped: { reason: describeInspectionError(settled.error), remaining: input.urls.length - i } }
+    if (!settled.ok) {
+      // The quota ledger refused the call, or Google refused it for quota: stop and keep the finished work.
+      const quota = quotaStopOf(settled.error)
+      if (quota)
+        return { outcomes, stopped: { reason: formatQuotaStop(quota), remaining: input.urls.length - i } }
+      if (classifyError(settled.error).kind === 'rate-limited')
+        return { outcomes, stopped: { reason: describeInspectionError(settled.error), remaining: input.urls.length - i } }
+    }
     const outcome: InspectOutcome = settled.ok
       ? { kind: 'inspected', url, result: settled.result }
       : { kind: 'failed', url, error: describeInspectionError(settled.error) }

@@ -79,14 +79,14 @@ async function sync(...flags: string[]): Promise<Run> {
       return undefined as never
     throw new Error(`process.exit(${code})`)
   }) as never)
-  await runCli({
+  // runCli catches every failure and returns 1; a mocked exit keeps its own code.
+  const code = await runCli({
     rawArgs: ['sync', ...flags],
     loadEnv: false,
     environment: { GSCDUMP_CONFIG_DIR: state.configDir, GSCDUMP_AUTH_MODE: 'local' },
-  }).catch((error: Error) => {
-    if (!error.message.startsWith('process.exit'))
-      throw error
   })
+  if (code !== 0)
+    result.exitCode ??= code
   log.mockRestore()
   exit.mockRestore()
   return result
@@ -319,5 +319,22 @@ describe('sync --status', () => {
     const run = await sync('--status', '--site', SITE)
 
     expect(run.stdout.join('\n')).toContain('The last sync stopped without finishing')
+  })
+
+  it('refuses a --site that is in neither the Store nor the last sync run', async () => {
+    await fs.mkdir(state.dataDir, { recursive: true })
+    await fs.writeFile(path.join(state.dataDir, 'sync-run.json'), JSON.stringify({
+      pid: 2 ** 22 + 12345,
+      startedAt: Date.now() - 60_000,
+      heartbeatAt: Date.now() - 1000,
+      sites: [SITE],
+      planned: 10,
+      done: 3,
+    }))
+
+    const run = await sync('--status', '--site', 'other.com')
+
+    expect(run.exitCode).toBe(1)
+    expect(run.stdout).toEqual([])
   })
 })

@@ -27,6 +27,10 @@
   validateEnabledSearchTypes: function
 ./analysis-range:
   analysisRequestedRange: function
+  buildCoveragePlan: function
+  consolidateDatesToSpans: function
+  gapsForRange: function
+  spanDays: function
 ./analysis-types:
   DEFAULT_FETCH_BUDGET: number
   fetchBudgetOf: function

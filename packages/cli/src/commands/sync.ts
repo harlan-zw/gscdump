@@ -18,6 +18,7 @@ import { createEmptyTypesStore } from '@gscdump/engine/entities'
 import { createRowAccumulator } from '@gscdump/engine/ingest'
 import { DEFAULT_ROLLUPS, rebuildRollups } from '@gscdump/engine/rollups'
 import { defineCommand } from 'citty'
+import { resolveSiteInput } from 'gscdump'
 import { getLatestGscDate, getOldestGscDate, getPstDate, groupIntoRanges } from 'gscdump/dates'
 import { SearchTypes } from 'gscdump/query'
 import { syncCommandMeta } from '../command-meta'
@@ -491,18 +492,20 @@ export const syncCommand = defineCommand({
     const requestedTypes = args.types ? parseNameList(args.types, ALL_SEARCH_TYPES, '--types') : DEFAULT_TYPES
     if (args.status) {
       const ctx = await createCommandContext()
-      const siteUrl = args.site ? await statusSite(ctx, String(args.site)) : undefined
+      const siteUrl = args.site ? await resolveStatusSite(ctx, String(args.site)) : undefined
       await printSyncStatus({ config: ctx.config, dataDir: ctx.dataDir }, siteUrl, json, inspectLimit)
       return
     }
 
-    const ctx = await createCommandContext({ needsAuth: true, needsStore: true, fetchOptions: LEDGER_FETCH_OPTIONS })
+    const ctx = await createCommandContext({ needsAuth: true, needsStore: true, fetchOptions: LEDGER_FETCH_OPTIONS, quota: false })
     const store = ctx.store!
     const requestedSites = args['all-sites']
       ? (await ctx.loadSites()).map(site => site.siteUrl)
       : [await ctx.resolveSite(args.site ? String(args.site) : undefined)]
-    // The siteId encoding is lossy, so each Site claims its siteId before a
-    // write. A single Site stops on a collision; --all-sites skips that Site.
+
+    // Claim every siteId before any API call. Two Sites can encode to one
+    // siteId (http/https, paths). A single Site stops on a collision;
+    // --all-sites skips that Site rather than mix their data.
     const siteUrls: string[] = []
     for (const siteUrl of requestedSites) {
       const claim = await recordStoreSite(store.dataDir, siteUrl, { userId: store.userId, write: !args['dry-run'] })
@@ -1081,16 +1084,19 @@ function pacer<T>(requestPacer: RequestPacer, task: () => Promise<T>): Promise<T
 }
 
 /**
- * The Site for `sync --status`. A Store Site wins. A Site with no data yet,
- * such as one whose first sync stopped early, still gets a status report.
+ * The Site for `sync --status --site`: a Store Site, or a Site of the last
+ * sync run. A run stopped before its first write leaves no Store data, and
+ * its status must still show.
  */
-async function statusSite(ctx: CommandContext, input: string): Promise<string> {
-  const resolution = await ctx.matchSite(input, { scope: 'store' })
-  if (resolution.kind === 'resolved')
-    return resolution.siteUrl
-  if (resolution.kind === 'not-found')
-    return input.trim()
-  throw new Error(formatSiteResolution(resolution, 'store'))
+async function resolveStatusSite(ctx: CommandContext, input: string): Promise<string> {
+  const inStore = await ctx.matchSite(input, { scope: 'store' })
+  if (inStore.kind === 'resolved')
+    return inStore.siteUrl
+  const record = await readSyncRun(ctx.dataDir)
+  const inRun = record ? resolveSiteInput(input, record.sites.map(siteUrl => ({ siteUrl }))) : undefined
+  if (inRun?.kind === 'resolved')
+    return inRun.siteUrl
+  throw new Error(formatSiteResolution(inStore, 'store'))
 }
 
 async function printSyncStatus(
@@ -1173,7 +1179,7 @@ async function printSyncStatus(
 
   console.log(`  \x1B[1mTables:\x1B[0m`)
   for (const gap of gaps) {
-    const label = `${gap.searchType === 'web' ? gap.table : `${gap.table}/${gap.searchType}`}${siteFilter ? '' : siteLabel(gap.siteId || undefined)}`
+    const label = `${gap.searchType === 'web' ? gap.table : `${gap.table}/${gap.searchType}`}${siteFilter ? '' : siteLabel(gap.siteId)}`
     const parts = [`${gap.done} done`]
     if (gap.missing > 0)
       parts.push(`${gap.missing} missing`)

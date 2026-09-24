@@ -26,7 +26,8 @@ export interface TableSource {
 /**
  * Group live manifest entries by table, Site, and search type. Entries
  * with no rows are left out, so no reader sees an empty file. `siteMap`
- * gives each siteId its real Site URL, since the siteId encoding is lossy.
+ * names each siteId: the encoding drops the path and scheme case, so only
+ * the recorded Site URL is exact.
  */
 export function groupTableSources(entries: readonly ManifestEntry[], dataDir: string, siteMap: SiteMap): TableSource[] {
   const groups = new Map<string, TableSource>()

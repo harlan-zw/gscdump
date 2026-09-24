@@ -1,17 +1,15 @@
 import type { AnalysisParams } from '@gscdump/engine/analysis-types'
-import type { WindowPreset } from '@gscdump/engine/period'
+import type { ResolvedWindow, WindowPreset } from '@gscdump/engine/period'
 import type { DefinedReport, ReportArgsSpec, ReportContext, ReportParams } from '@gscdump/engine/report'
 import type { CommandDef } from 'citty'
-import type { TableName } from '../local-store'
 import type { WindowDefaults, WindowFlags } from '../window'
-import process from 'node:process'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { defaultReportRegistry, dryRunReport, runReport } from '@gscdump/analysis/report'
 import { DEFAULT_FETCH_BUDGET, MAX_FETCH_BUDGET } from '@gscdump/engine/analysis-types'
 import { defineCommand } from 'citty'
 import { getLatestGscDate } from 'gscdump/dates'
 import { unwrapResult } from 'gscdump/result'
-import { analyzerReads, analyzerTables, resolveAnalysisSource } from '../analysis-local'
+import { analysisNeeds, analyzerSources, analyzerTables, resolveAnalysisSource } from '../analysis-local'
 import { reportCommandMeta } from '../command-meta'
 import { renderCliReport } from '../render/report'
 import { terminalOutputOptions } from '../render/terminal'
@@ -38,12 +36,17 @@ function windowFlags(args: Record<string, unknown>): WindowFlags {
   }
 }
 
-/** Tables every step of `report` reads, for anchoring its window. */
-function reportTables(report: DefinedReport, params: ReportParams, flags: WindowFlags): TableName[] {
-  // Tables do not depend on dates, so any valid window plans them.
-  const provisional = unwrapResult(parseWindowFlags(flags, reportDefaults(report), getLatestGscDate()), windowFlagErrorToException)
-  const steps = report.plan(params, provisional)
-  return [...new Set(steps.flatMap(step => analyzerTables({ ...step.params, type: step.type } as AnalysisParams)))]
+/**
+ * Sources that can run a report. The Store needs every step. The live API
+ * needs every required step and at least one step; an optional step it
+ * cannot run leaves the report degraded.
+ */
+function reportSources(steps: ReadonlyArray<{ type: string, required: boolean }>): { local: boolean, live: boolean } {
+  const live = (type: string): boolean => analyzerSources([type]).live
+  return {
+    local: analyzerSources(steps.map(step => step.type)).local,
+    live: steps.some(step => live(step.type)) && steps.every(step => !step.required || live(step.type)),
+  }
 }
 
 function reportArgsToCitty(spec: ReportArgsSpec): Record<string, { type: 'string' | 'boolean', description?: string, default?: unknown, alias?: string, required?: boolean }> {
@@ -122,26 +125,27 @@ function makeReportCommand(report: DefinedReport): CommandDef<any> {
         return
       }
 
-      const { source, siteUrl, anchorFor, checkCoverage } = await resolveAnalysisSource({
+      const steps = (window: ResolvedWindow): Array<{ type: string, params: AnalysisParams, required: boolean }> =>
+        report.plan(params, window).map(step => ({ type: step.type, params: { ...step.params, type: step.type } as AnalysisParams, required: step.required === true }))
+      const provisional = steps(unwrapResult(parseWindowFlags(flags, reportDefaults(report), getLatestGscDate()), windowFlagErrorToException))
+      const { source, siteUrl, anchor, isLive } = await resolveAnalysisSource({
         site: args.site,
         live: !!args.live,
         json: !!args.json,
+        label: `report ${report.id}`,
+        types: provisional.map(step => step.type),
+        sources: reportSources(provisional),
+        anchorTables: [...new Set(provisional.flatMap(step => analyzerTables(step.params)))],
+        needs: anchor => steps(unwrapResult(parseWindowFlags(flags, reportDefaults(report), anchor), windowFlagErrorToException))
+          .flatMap(step => analysisNeeds(step.params)),
       })
-      const tables = reportTables(report, params, flags)
-      const anchor = await anchorFor(tables)
       const window = unwrapResult(parseWindowFlags(flags, reportDefaults(report), anchor), windowFlagErrorToException)
-      const reads = report.plan(params, window).flatMap(step => analyzerReads({ ...step.params, type: step.type } as AnalysisParams))
-      const coverage = await checkCoverage(reads)
-      if (coverage.kind === 'gaps') {
-        logger.error(coverage.message)
-        process.exit(1)
-      }
 
       const ctx: ReportContext = { site: siteUrl, window, params, registryVersion: defaultReportRegistry.version, ...(fetchBudget !== undefined ? { fetchBudget } : {}) }
       const result = await runReport(report, { source, analyzers: defaultAnalyzerRegistry, ctx })
 
       if (args.json) {
-        console.log(JSON.stringify(result, null, 2))
+        console.log(JSON.stringify({ ...result, meta: { ...result.meta, source: isLive ? 'live' : 'local' } }, null, 2))
         return
       }
       console.log(renderCliReport(result, terminalOutputOptions()))

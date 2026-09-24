@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { CASES } from './cases.mjs'
-import { analyzeWaste, commands, compareRows, finalResponse, gradeAgent, gradeAnswer, invocation, MODEL, pageMetrics, parseOptions } from './core.mjs'
+import { analyzeWaste, commands, compareRows, finalResponse, gradeAgent, gradeAnswer, invocation, MODEL, pageMetrics, parseOptions, seedCommand } from './core.mjs'
 import { evaluatorIdentity, fileState } from './evidence.mjs'
 import { checked, credentialEnvironment, installCandidate, run } from './runtime.mjs'
 
@@ -95,7 +95,7 @@ async function context(id, { seeded = false, cloud = false, authenticated = true
   if (authenticated)
     await setup(['auth', 'login', '--mode', cloud ? 'cloud' : 'local', '--json'])
   if (seeded)
-    await setup(['sync', '--site', site, '--start', start, '--end', end, '--tables', 'pages', '--no-rollups', '--quiet'])
+    await setup(seedCommand(site, start, end, seeded))
   const trace = join(directory, 'calls.jsonl')
   const settings = join(directory, 'settings.json')
   await writeFile(trace, '', { mode: 0o600 })
@@ -181,12 +181,11 @@ try {
       const ctx = await context('recovery', { seeded: true })
       const result = await run(process.execPath, [cli, 'query', '--site', site, '--start', start, '--end', end, '--dimensions', 'query', '--format', 'json'], { cwd: ctx.workspace, env: ctx.env })
       await save('recovery-query.json', result)
-      assert.equal(result.code, 1)
-      const missing = JSON.parse(result.stdout)
-      assert.equal(missing.error.code, 'STORE_RANGE_NOT_COVERED')
-      assert.equal(missing.error.table, 'queries')
-      assert(missing.error.availableTables.some(table => table.table === 'pages' && table.dimensions.includes('page')))
-      assert(missing.error.nextArgs.includes(start) && missing.error.nextArgs.includes(end))
+      // The Store holds no queries data for the Site, so the router answers live and says so.
+      assert.equal(result.code, 0, result.stderr)
+      const answered = JSON.parse(result.stdout)
+      assert.equal(answered.meta.source, 'live')
+      assert.match(result.stderr, /No synced data for .*; answering from the live Search Console API\./)
       const skipped = JSON.parse(await ctx.setup(['sync', '--site', site, '--start', start, '--end', end, '--tables', 'pages', '--json', '--no-rollups']))
       assert.equal(skipped.status, 'completed')
       assert.equal(skipped.totals.pages.rows, 0)
@@ -194,7 +193,7 @@ try {
       const retry = JSON.parse(await ctx.setup(['sync', '--site', site, '--start', start, '--end', end, '--tables', 'pages', '--json', '--retry-failed']))
       assert.equal(retry.status, 'skipped')
       assert.equal(retry.reason, 'no-failed-dates')
-      return { missingTable: missing.error.table, skippedDates: skipped.totals.pages.skipped }
+      return { liveRows: answered.data.length, skippedDates: skipped.totals.pages.skipped }
     })
     await attempt('cli-covered-empty-and-path-spaces', async () => {
       requireGoogle()
@@ -315,6 +314,8 @@ try {
     const auth = JSON.parse(await readFile(authPath, 'utf8'))
     assert(auth['opencode-go'], 'OpenCode Go CLI login is required. Model API keys are not accepted.')
     const selectedCases = CASES.filter(test => options.cases.length ? options.cases.includes(test.id) : options.suite === 'all' || test.suite === options.suite)
+    if (selectedCases.some(test => test.seeded === 'partial'))
+      assert(Date.parse(end) > Date.parse(start), 'A partial seed needs a window longer than one day. Set EVAL_END to a day after EVAL_START.')
     for (const test of selectedCases) {
       const kind = test.kind
       for (let trial = 1; trial <= options.trials; trial++) {

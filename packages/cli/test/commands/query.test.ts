@@ -31,6 +31,7 @@ vi.mock('../../src/auth', () => ({
   resolveAuth: vi.fn().mockResolvedValue({ clientId: 'x', clientSecret: 'y' }),
   getAuth: vi.fn().mockResolvedValue({ clientId: 'x', clientSecret: 'y' }),
   resolveBYOK: vi.fn(() => null),
+  probeAuth: vi.fn(async () => 'google'),
 }))
 
 vi.mock('../../src/config', () => ({
@@ -38,7 +39,8 @@ vi.mock('../../src/config', () => ({
   resolveDataDir: vi.fn(() => '/tmp/gscdump-query-test'),
 }))
 
-vi.mock('../../src/context', () => ({
+vi.mock('../../src/context', async importOriginal => ({
+  ...await importOriginal<typeof import('../../src/context')>(),
   createCommandContext: vi.fn(async () => ({
     config: {},
     auth: {},
@@ -52,8 +54,11 @@ vi.mock('../../src/context', () => ({
       engine: {
         query: mocks.storeQuery,
         getWatermarks: mocks.storeWatermarks,
+        getSyncStates: vi.fn(async () => []),
       },
+      dataDir: '/tmp/gscdump-query-test',
     },
+    dataDir: '/tmp/gscdump-query-test',
     loadSites: vi.fn().mockResolvedValue([{ siteUrl: 'https://example.com/', permissionLevel: 'siteOwner' }]),
     resolveSite: mocks.resolveSite,
   })),

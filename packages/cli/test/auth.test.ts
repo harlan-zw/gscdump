@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { OAuth2Client } from 'google-auth-library'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearTokens, loadTokens, resolveAuth, saveTokens } from '../src/auth'
+import { clearTokens, loadTokens, probeAuth, resolveAuth, saveTokens } from '../src/auth'
 import { setConfigDir } from '../src/config'
 import { createCliRuntime, runWithCliRuntime } from '../src/runtime'
 import { mockCredentials, mockExpiredCredentials } from './__fixtures__/mocks'
@@ -127,6 +127,28 @@ describe('resolveAuth service-account handling', () => {
     const auth = await runWithCliRuntime(runtime, () => resolveAuth({ interactive: false }))
 
     expect(auth).toBeInstanceOf(OAuth2Client)
+    await fs.rm(configDir, { recursive: true, force: true })
+  })
+})
+
+describe('probeAuth service-account handling', () => {
+  it('counts a misconfigured service-account key as Google auth, so resolveAuth reports it', async () => {
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-probe-auth-'))
+    const keyPath = path.join(configDir, 'client-secret.json')
+    await fs.writeFile(keyPath, JSON.stringify({ type: 'authorized_user', refresh_token: 'r' }))
+    const runtime = createCliRuntime({ configDir, environment: { GSC_SERVICE_ACCOUNT_JSON: keyPath } })
+
+    expect(await runWithCliRuntime(runtime, () => probeAuth())).toBe('google')
+
+    await fs.rm(configDir, { recursive: true, force: true })
+  })
+
+  it('ignores a service-account pointer to a missing file', async () => {
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-probe-auth-'))
+    const runtime = createCliRuntime({ configDir, environment: { GSC_SERVICE_ACCOUNT_JSON: path.join(configDir, 'missing-key.json') } })
+
+    expect(await runWithCliRuntime(runtime, () => probeAuth())).toBe('none')
+
     await fs.rm(configDir, { recursive: true, force: true })
   })
 })

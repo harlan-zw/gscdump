@@ -32,6 +32,7 @@ Call the local data directory the Store in your answer.
 
 Check `gscdump auth status --json` before queries. Reuse the user's selected mode.
 In local mode, `googleAuthenticated: true` means Google accepted the credentials. When it is false, `googleError` says why.
+In cloud mode, `hostedSync` lists each gscdump.com Site with `syncStatus` and `syncProgress`. `gscdump sites` shows the same progress. The CLI does not read the hosted Store: cloud mode queries go to the live API through gscdump.com.
 
 | Mode | Credentials | Query path |
 | --- | --- | --- |
@@ -78,13 +79,37 @@ Hosted sitemap reads and `indexing urls` require hosted credentials. Their `--si
 - `sync`, `query --live`, `analyze --live`, `report --live`, `sites`,
   `sitemaps`, and `inspect` use the selected authentication mode.
 - Google Indexing API requests require local credentials. `indexing quota` only prints documented limits and needs no authentication.
-- `query`, `analyze`, `report`, `dump`, and `store` read the local Store by
-  default. If the Store has no rows for the Site, sync first or pass `--live`.
+- `dump` and `store` read the local Store only.
+- `query`, `analyze`, and `report` pick a source for each run. See [Routing](#routing).
 - Google returns a 2 to 3 day data delay. Default windows end three days ago.
 - Google omits low-volume rows. Pagination cannot recover them.
 - URL Inspection is limited to 2,000 requests per Site per day.
 - `indexing submit` and `indexing remove` are only for job posting and
   livestream pages. Google rejects other content.
+
+## Routing
+
+Login is optional. A user logs in (Google or hosted) or syncs a local Store.
+`query`, `analyze`, and `report` choose one source for each run. One run never
+mixes Store rows and live rows.
+
+| Store data for the Site | Google connected | Result |
+|---|---|---|
+| Covers every date the run needs | any | Answers from the Store, also while a sync runs |
+| None for the tables the run needs | yes | Answers from the live API. stderr says so, and JSON has `meta.source: "live"` |
+| None | no | Stops. Next command: `gscdump init` |
+| Some dates missing | yes | Stops with the exact `gscdump sync` command, or pass `--live` |
+| Some dates missing, a sync is running | yes | Stops with `Sync running: 41 of 90 days done.` Run again later, or pass `--live` |
+
+- `--live` always asks Search Console. It needs Google auth.
+- `query --sql` reads the Store only. It stops when no table it names has data.
+- JSON output carries `meta.source`: `local` or `live`.
+- A stop with `--format json` or `--json` prints `{ "error": { "code", "message", "nextCommand" } }` on stdout and exits 1.
+  Codes: `NOT_CONNECTED`, `STORE_RANGE_NOT_COVERED` (with `missingDates`), `SYNC_RUNNING` (with `sync.done` and `sync.total`), `NO_SYNCED_DATA`, `STORE_ONLY`, `LIVE_ONLY`.
+  Partial coverage and a running sync are normal progress. Run `nextCommand`, or tell the user to.
+- A sync is running only while its heartbeat is recent. A killed sync does not block reads.
+- Every Search Analytics, URL Inspection, and Indexing API call spends the shared quota ledger in the data dir.
+  When a quota is spent, the command stops at once and says when the quota resets.
 
 ## Get the binary
 
@@ -261,7 +286,7 @@ gscdump query --site example.com --dimensions page,query \
 - `--live` bypasses the Store. `--type` selects a search type. The default is `web`.
   `--data-state` and `--aggregation-type` apply to live mode only.
 - Metrics already include clicks, impressions, CTR, and position. There is no `--metrics` option.
-- If Store coverage is missing, read the JSON error and its bounded `nextArgs` before syncing.
+- If Store coverage is missing, read the JSON error and run its `nextCommand`. It syncs only the missing dates and tables.
   Do not switch dimensions to make a failed query succeed.
 - `--explain` prints the request body or planned SQL without executing.
 
@@ -304,6 +329,7 @@ gscdump dump --all-sites --format sqlite --out ./export
 - `sqlite` and `duckdb` write one file, `gscdump.sqlite` or `gscdump.duckdb`,
   with one table per dataset for every Site and search type.
 - `manifest.json` lists every dataset with its row count, plus the coverage that `sync --status --json` reports. Partial coverage is progress: daily sync fills the rest.
+- `sites.json` lists each exported Site URL with its Store ID.
 
 ## Analyze and report
 
@@ -367,7 +393,7 @@ gscdump indexing urls --site example.com --status not_indexed --all --format csv
 - `--status` takes `indexed`, `not_indexed`, or `pending`. `--search` keeps URLs that contain the text.
 - Each row lists the sitemaps that contain the URL.
 - Pages hold 100 rows by default and 500 at most. Use `--offset` for the next page, or `--all` for every page.
-- With local authentication, the command fails. Pipe `gscdump sitemaps urls <sitemap-url>` into `gscdump inspect` instead.
+- With local authentication, the command fails. Pipe `gscdump sitemaps urls <sitemap-url>` into `gscdump inspect --site <site>` instead.
 
 ## Report a papercut
 

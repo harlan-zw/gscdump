@@ -10,7 +10,6 @@ import { AnalyzerCapabilityError, runAnalyzerFromSource } from '@gscdump/engine/
 import { createNodeHarness, resetNodeDuckDB } from '@gscdump/engine/node'
 import { createEngineQuerySource } from '@gscdump/engine/source'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { hasLocalData } from '../src/analysis-local'
 import { LocalStoreUnsupportedError } from '../src/error-handler'
 
 const SITE = 'sc-domain:example.com'
@@ -81,19 +80,6 @@ describe('analysis-local', () => {
 
   afterEach(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true })
-  })
-
-  it('hasLocalData returns false on an empty store', async () => {
-    const harness = createNodeHarness({ dataDir: tmpDir })
-    expect(await hasLocalData(harness, SITE)).toBe(false)
-  })
-
-  it('hasLocalData returns true once a partition is written', async () => {
-    const harness = createNodeHarness({ dataDir: tmpDir })
-    await seedPageKeywords(harness, [
-      { url: '/guide', query: 'best practices', date: '2026-04-10', clicks: 5, impressions: 200, sum_position: 2000 },
-    ])
-    expect(await hasLocalData(harness, SITE)).toBe(true)
   })
 
   it('dispatches striking-distance against the store', async () => {

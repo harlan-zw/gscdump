@@ -3,6 +3,7 @@
 // progress. `sync --status`, the sync summary, and `dump` share this value
 // and its one renderer.
 
+import type { CoverageReader } from '@gscdump/engine/analysis-range'
 import type { SearchType } from 'gscdump/query'
 import type { LocalStore, TableName } from './local-store'
 import type { QuotaLedgerState } from './quota-ledger'
@@ -158,6 +159,43 @@ export function inspectionCoverage(input: {
       ...(input.blockedUntil !== undefined ? { resumesAt: input.blockedUntil } : {}),
     }),
   }
+}
+
+/** A sync state, as coverage reads it. */
+export interface CoverageSyncState {
+  table: string
+  searchType?: SearchType
+  date: string
+  state: string
+}
+
+function datasetKey(table: string, searchType: SearchType | undefined): string {
+  return `${table}|${searchType ?? 'web'}`
+}
+
+/**
+ * The Store side of the engine's coverage plan: a date is covered when its
+ * sync state is `done`. A completed zero-row day counts, so coverage never
+ * invents traffic and never hides a quiet day.
+ */
+export function syncStateCoverageReader(states: readonly CoverageSyncState[]): CoverageReader {
+  const done = new Map<string, string[]>()
+  for (const state of states) {
+    if (state.state !== 'done')
+      continue
+    const key = datasetKey(state.table, state.searchType)
+    done.set(key, [...(done.get(key) ?? []), state.date])
+  }
+  return {
+    datesForTable: async ({ table, searchType, start, end }) =>
+      (done.get(datasetKey(table, searchType)) ?? []).filter(date => date >= start && date <= end),
+  }
+}
+
+/** True when the Store holds at least one synced day of `table` for `searchType`. */
+export function hasSyncedDays(states: readonly CoverageSyncState[], table: string, searchType: SearchType): boolean {
+  const key = datasetKey(table, searchType)
+  return states.some(state => state.state === 'done' && datasetKey(state.table, state.searchType) === key)
 }
 
 // ---------------------------------------------------------------------------
