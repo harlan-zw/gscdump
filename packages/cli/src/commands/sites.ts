@@ -2,9 +2,10 @@ import type { VerificationMethod } from 'gscdump/sites'
 import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
+import { resolveSiteInput } from 'gscdump'
 import { addSite, deleteSite, fetchSitesWithSitemaps, getVerificationToken, getVerifiedSite, listVerifiedSites, siteUrlToVerificationSite, unverifySite, verificationMethodsFor, verifySite } from 'gscdump/sites'
 import { sitesCommandMeta } from '../command-meta'
-import { createCommandContext } from '../context'
+import { createCommandContext, formatSiteResolution } from '../context'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 
 const ALL_METHODS: VerificationMethod[] = ['META', 'FILE', 'DNS_TXT', 'DNS_CNAME', 'ANALYTICS', 'TAG_MANAGER']
@@ -184,7 +185,7 @@ const verifyTokenCommand = defineCommand({
     description: 'Get a verification token to place on the site or in DNS',
   },
   args: {
-    url: { type: 'positional', required: true, description: 'Property URL' },
+    url: { type: 'positional', required: true, description: 'Site, for example example.com' },
     method: { type: 'string', alias: 'm', description: 'META, FILE, DNS_TXT, DNS_CNAME, ANALYTICS, TAG_MANAGER (default: META for URL-prefix, DNS_TXT for sc-domain:)' },
     ...OUTPUT_ARGS,
   },
@@ -208,7 +209,7 @@ const verifyCommand = defineCommand({
     description: 'Trigger verification — Google fetches/validates the token you placed',
   },
   args: {
-    url: { type: 'positional', required: true, description: 'Property URL' },
+    url: { type: 'positional', required: true, description: 'Site, for example example.com' },
     method: { type: 'string', alias: 'm', description: 'Verification method to validate (must match the one used for verify-token)' },
     ...OUTPUT_ARGS,
   },
@@ -342,22 +343,21 @@ const getCommand = defineCommand({
     description: 'Show a single property\'s permissionLevel from the sites list',
   },
   args: {
-    url: { type: 'positional', required: true, description: 'Property URL' },
+    url: { type: 'positional', required: true, description: 'Site, for example example.com' },
     ...OUTPUT_ARGS,
   },
   async run({ args }) {
     applyOutputMode(args)
     const ctx = await createCommandContext({ needsAuth: true })
     const all = await ctx.loadSites()
-    const site = all.find(s => s.siteUrl === args.url)
-    if (!site) {
-      if (args.json) {
+    const resolution = resolveSiteInput(String(args.url), all)
+    if (resolution.kind !== 'resolved') {
+      if (args.json)
         console.log(JSON.stringify(null))
-        process.exit(1)
-      }
-      logger.error(`Not found: ${args.url}`)
+      logger.error(formatSiteResolution(resolution, 'account'))
       process.exit(1)
     }
+    const site = all.find(s => s.siteUrl === resolution.siteUrl)!
     if (args.json) {
       console.log(JSON.stringify(site, null, 2))
       return

@@ -20,7 +20,7 @@ const listCommand = defineCommand({
   },
   args: {
     ...OUTPUT_ARGS,
-    site: { type: 'string', alias: 's', description: 'Site URL (e.g., sc-domain:example.com or https://example.com/)' },
+    site: { type: 'string', alias: 's', description: 'Site, for example example.com' },
     pending: { type: 'boolean', default: false, description: 'Show only sitemaps with isPending=true' },
     errored: { type: 'boolean', default: false, description: 'Show only sitemaps with errors > 0' },
   },
@@ -76,7 +76,7 @@ const getCommand = defineCommand({
   },
   args: {
     ...OUTPUT_ARGS,
-    site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
+    site: { type: 'string', alias: 's', description: 'Site, for example example.com; defaults to config.defaultSite or a prompt' },
     url: { type: 'positional', required: true, description: 'Sitemap URL' },
   },
   async run({ args }) {
@@ -117,7 +117,7 @@ const submitCommand = defineCommand({
   },
   args: {
     ...OUTPUT_ARGS,
-    site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
+    site: { type: 'string', alias: 's', description: 'Site, for example example.com; defaults to config.defaultSite or a prompt' },
     url: { type: 'positional', required: true, description: 'Sitemap URL to submit' },
   },
   async run({ args }) {
@@ -141,7 +141,7 @@ const deleteCommand = defineCommand({
   },
   args: {
     ...OUTPUT_ARGS,
-    site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
+    site: { type: 'string', alias: 's', description: 'Site, for example example.com; defaults to config.defaultSite or a prompt' },
     url: { type: 'positional', required: true, description: 'Sitemap URL to delete' },
   },
   async run({ args }) {

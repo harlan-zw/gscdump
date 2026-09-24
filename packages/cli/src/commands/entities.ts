@@ -10,6 +10,7 @@ import {
 import { defineCommand } from 'citty'
 import { entitiesCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
+import { formatSiteIdCollision, recordStoreSite } from '../store-sites'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, progressBar, runWithConcurrency } from '../utils'
 
 const INDEXING_NOT_FOUND_RE = /\b404\b|NOT_FOUND/i
@@ -63,14 +64,14 @@ const showSubCommand = defineCommand({
   },
   args: {
     ...OUTPUT_ARGS,
-    site: { type: 'string', alias: 's', description: 'Site URL (defaults to config.defaultSite or prompt)' },
+    site: { type: 'string', alias: 's', description: 'Site, for example example.com; defaults to config.defaultSite or a prompt' },
     url: { type: 'positional', required: true, description: 'URL to look up' },
   },
   async run({ args }) {
     const { json } = applyOutputMode(args)
-    const ctx = await createCommandContext({ needsAuth: true, needsStore: true })
+    const ctx = await createCommandContext({ needsStore: true })
     const store = ctx.store!
-    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined, { scope: 'store' })
     const inspector = createInspectionStore({ dataSource: store.dataSource })
     const record = await findLatestInspection(
       inspector,
@@ -111,7 +112,7 @@ const indexingSnapshotSubCommand = defineCommand({
     site: {
       type: 'string',
       alias: 's',
-      description: 'Site URL (e.g., sc-domain:example.com); defaults to config.defaultSite or prompt',
+      description: 'Site, for example example.com; defaults to config.defaultSite or a prompt',
     },
     file: {
       type: 'string',
@@ -138,6 +139,14 @@ const indexingSnapshotSubCommand = defineCommand({
     if (urls.length === 0) {
       logger.warn('No URLs to fetch metadata for.')
       return
+    }
+
+    // Claim the siteId before spending quota, so the write below cannot
+    // land beside another Site's data unlabelled.
+    const claim = await recordStoreSite(store.dataDir, siteUrl, { userId: store.userId })
+    if (!claim.ok) {
+      logger.error(formatSiteIdCollision(claim.error))
+      process.exit(1)
     }
 
     const records: IndexingMetadataRecord[] = []

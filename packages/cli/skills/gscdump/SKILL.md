@@ -137,10 +137,18 @@ Cloud mode requires hosted access. Pro is free during beta, then paid after laun
 
 ## Site identifiers
 
-For Google, use the exact value that `gscdump sites` prints.
+For Google, pass the Site as the user writes it: `--site example.com`.
+`https://example.com`, `www.example.com`, and `Example.com` resolve to the same Site.
+Do not add `sc-domain:`.
 
-- Domain property: `sc-domain:example.com`
-- URL-prefix property: `https://example.com/` (trailing slash included)
+- The CLI checks Sites in the Store first. It asks Search Console only when the Store has no match and auth exists.
+- A full Site URL that names a property exactly, such as `https://example.com/`, picks that property.
+- Otherwise, if a domain property and a URL-prefix property both match, the CLI picks the one with Store data, then the domain property.
+- If a URL-prefix property has a path, include the path: `--site example.com/blog`.
+- If the input is a subdomain inside a domain property, the command fails. The error names the parent Site and a `--page` filter to use.
+- If the input matches more than one Site, the command fails and lists them. Pass one of the listed Site URLs.
+- Without `--site` and `defaultSite`, a command in a terminal shows a picker.
+  Without a terminal, the command fails with `Pass --site. Sites: ...`, unless only one Site is available.
 
 For cloud Bing commands, use a Site ID from `gscdump bing sites`, such as `s_SITE_ID`.
 For local Bing commands, use the full verified Site URL from `gscdump bing sites --mode local`.
@@ -149,7 +157,7 @@ Bing commands require their own explicit `--site`; the Google `defaultSite` sett
 Set a default once to drop `--site` from later commands:
 
 ```sh
-gscdump config set defaultSite sc-domain:example.com
+gscdump config set defaultSite example.com
 ```
 
 ## Output
@@ -199,9 +207,9 @@ The MCP server does not expose Bing tools. Use `gscdump bing` commands through t
 ## Sync before local analysis
 
 ```sh
-gscdump store stats --site sc-domain:example.com --json
-gscdump sync --site sc-domain:example.com --status --json
-gscdump sync --site sc-domain:example.com --json
+gscdump store stats --site example.com --json
+gscdump sync --site example.com --status --json
+gscdump sync --site example.com --json
 ```
 
 - A plain sync catches up. Each table runs from its oldest synced date to the
@@ -238,7 +246,7 @@ gscdump sync --site sc-domain:example.com --json
 ## Query rows
 
 ```sh
-gscdump query --site sc-domain:example.com --dimensions page,query \
+gscdump query --site example.com --dimensions page,query \
   --start 2026-08-01 --end 2026-08-28 --limit 1000 --format json
 ```
 
@@ -280,7 +288,7 @@ gscdump query --format json --sql "SELECT search_type, SUM(clicks) AS clicks,
 ## Export the Store
 
 ```sh
-gscdump dump --site sc-domain:example.com --format parquet --out ./export
+gscdump dump --site example.com --format parquet --out ./export
 gscdump dump --all-sites --format sqlite --out ./export
 ```
 
@@ -297,10 +305,10 @@ gscdump dump --all-sites --format sqlite --out ./export
 
 ```sh
 gscdump report list --json
-gscdump report opportunities --site sc-domain:example.com --json
-gscdump report movers --site sc-domain:example.com --period 28d --vs prev-period --json
+gscdump report opportunities --site example.com --json
+gscdump report movers --site example.com --period 28d --vs prev-period --json
 gscdump analyze list --json
-gscdump analyze striking-distance --site sc-domain:example.com --json
+gscdump analyze striking-distance --site example.com --json
 ```
 
 - Report ids: `brand`, `growth`, `health`, `movers`, `opportunities`,
@@ -319,8 +327,8 @@ gscdump analyze striking-distance --site sc-domain:example.com --json
 ## Inspect and index
 
 ```sh
-gscdump inspect https://example.com/page https://example.com/other --site sc-domain:example.com --json
-gscdump inspect --site sc-domain:example.com --file urls.txt --json
+gscdump inspect https://example.com/page https://example.com/other --site example.com --json
+gscdump inspect --site example.com --file urls.txt --json
 gscdump indexing quota --json
 ```
 

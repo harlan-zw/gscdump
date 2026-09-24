@@ -1,7 +1,6 @@
 import type { QuerySpan } from '@gscdump/engine/profile'
 import type { googleSearchConsole } from 'gscdump/client'
 import type { BuilderState, Column, Dimension, Filter, SearchType } from 'gscdump/query'
-import type { CommandContext } from '../context'
 import type { LocalStore, TableName } from '../local-store'
 import type { SqlResult, SqlViews } from '../sql-views'
 import fs from 'node:fs/promises'
@@ -11,10 +10,9 @@ import { collectSpans } from '@gscdump/engine/profile'
 import { defineCommand } from 'citty'
 import { daysAgoUtc as daysAgo } from 'gscdump/dates'
 import { and, between, contains, country, date as dateCol, device, eq, gsc, hour, notRegex, page, query as queryCol, regex, searchAppearance } from 'gscdump/query'
-import { decodeSiteId } from 'gscdump/tenant'
 import { queryCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
-import { createCommandContext } from '../context'
+import { createCommandContext, siteArg } from '../context'
 import { inferTable, tableDimensions } from '../local-store'
 import { asRecord, columnsFor } from '../render/analysis'
 import { renderTable } from '../render/layout'
@@ -168,7 +166,7 @@ export const queryCommand = defineCommand({
     'site': {
       type: 'string',
       alias: 's',
-      description: 'Site URL (e.g., sc-domain:example.com)',
+      description: 'Site, for example example.com',
     },
     'dimensions': {
       type: 'string',
@@ -314,11 +312,11 @@ export const queryCommand = defineCommand({
     }
 
     const ctx = await createCommandContext({
-      needsAuth: true,
+      needsAuth: Boolean(args.live),
       needsStore: !args.live,
       interactive: Boolean(args.interactive),
     })
-    const siteUrl = await resolveQuerySite(ctx, args.site ? String(args.site) : ctx.config.defaultSite, Boolean(args.live))
+    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined, { scope: args.live ? 'account' : 'store' })
 
     if (args.live) {
       if (args.explain) {
@@ -530,49 +528,6 @@ async function promptFilters(args: Record<string, unknown>): Promise<void> {
   }
 }
 
-/**
- * An exact local Site identifies files already owned by this Store.
- * Only live reads and shorthand discovery need Google's Site listing.
- * The Store's site ids keep letter case while Google canonicalises
- * domain properties to lowercase, so trust the hint only when the
- * Store holds data for that Site, verbatim or under the canonical
- * case it synced with. Data-less hints fall back to Site discovery
- * for accurate errors.
- */
-async function resolveQuerySite(ctx: CommandContext, hint: string | undefined, live: boolean): Promise<string> {
-  const exactHint = !live && ctx.store && hint && /^(?:sc-domain:\S+|https?:\/\/\S+)$/.test(hint)
-    ? hint
-    : undefined
-  return exactHint
-    ? (await resolveLocalSite(ctx.store!, exactHint)) ?? await ctx.resolveSite(hint)
-    : await ctx.resolveSite(hint)
-}
-
-/**
- * Resolve an exact Site hint against the Sites this Store actually synced.
- * `encodeSiteId` keeps letter case while Google canonicalises domain
- * properties to lowercase, so a hint like `sc-domain:Example.com` must
- * resolve to the canonical `sc-domain:example.com` the data lives under.
- * Otherwise the query reports a false coverage gap whose own sync
- * suggestion can never converge. Returns the hint verbatim when the Store
- * knows it exactly, the single case-insensitive match when one exists, and
- * undefined when the Site is data-less so Site discovery can produce an
- * accurate error.
- */
-async function resolveLocalSite(store: LocalStore, hint: string): Promise<string | undefined> {
-  const siteIds = new Set(
-    (await store.engine.getWatermarks({ userId: store.userId }))
-      .map(w => w.siteId)
-      .filter((siteId): siteId is string => siteId !== undefined),
-  )
-  const exact = store.siteIdFor(hint)
-  if (siteIds.has(exact))
-    return hint
-  const lowered = exact.toLowerCase()
-  const matches = [...siteIds].filter(siteId => siteId.toLowerCase() === lowered)
-  return matches.length === 1 ? decodeSiteId(matches[0]!) : undefined
-}
-
 function buildLocalState(
   dimNames: string[],
   startDate: string,
@@ -642,7 +597,7 @@ async function assertRangeCovered(
   }
   if (missingDates.length === 0)
     return
-  const nextArgs = ['sync', '--site', siteUrl, '--start', startDate, '--end', endDate, '--tables', table, '--types', searchType ?? 'web', '--json']
+  const nextArgs = ['sync', '--site', siteArg(siteUrl), '--start', startDate, '--end', endDate, '--tables', table, '--types', searchType ?? 'web', '--json']
   const nextCommand = `gscdump ${nextArgs.map(value => /^[\w:./=-]+$/.test(value) ? value : `'${value.replaceAll('\'', '\'\\\'\'')}'`).join(' ')}`
   const message = !wm
     ? `No data synced for ${siteUrl} / ${table}.`
@@ -678,10 +633,10 @@ async function runSqlMode(opts: {
   quiet: boolean
   searchType?: SearchType
 }): Promise<void> {
-  // The views cover every Site in the Store. Only --site needs the Site resolver.
-  const ctx = await createCommandContext({ needsAuth: opts.site !== undefined, needsStore: true })
+  // The views cover every Site in the Store. --site resolves against Store Sites only.
+  const ctx = await createCommandContext({ needsStore: true })
   const store = ctx.store!
-  const siteIds = opts.site ? [store.siteIdFor(await resolveQuerySite(ctx, opts.site, false))] : undefined
+  const siteIds = opts.site ? [store.siteIdFor(await ctx.resolveSite(opts.site, { scope: 'store' }))] : undefined
   const views = await openSqlViews(store, {
     ...(siteIds ? { siteIds } : {}),
     ...(opts.searchType !== undefined ? { searchType: opts.searchType } : {}),

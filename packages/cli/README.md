@@ -28,13 +28,13 @@ gscdump auth login --mode local
 gscdump sites
 
 # Sync 90 days to the Store
-gscdump sync --site sc-domain:example.com --days 90 --tables pages,queries,page_queries,countries,dates
+gscdump sync --site example.com --days 90 --tables pages,queries,page_queries,countries,dates
 
 # Query the Store
-gscdump query --site sc-domain:example.com --dimensions page,query --limit 50
+gscdump query --site example.com --dimensions page,query --limit 50
 
 # Run an Analyzer
-gscdump analyze striking-distance --site sc-domain:example.com
+gscdump analyze striking-distance --site example.com
 
 # Start the MCP server
 gscdump mcp
@@ -84,7 +84,7 @@ gscdump auth status --json
 
 # Google uses the connection on gscdump.com
 gscdump sites --json
-gscdump query --live --site sc-domain:example.com --dimensions page
+gscdump query --live --site example.com --dimensions page
 
 # Connect Bing through gscdump.com, then read its data
 gscdump bing sites --json
@@ -177,7 +177,7 @@ Bing Indexing Evidence preserves uncertainty and does not imply an indexed verdi
 
 ```bash
 # pages under /blog/ with brand mentions in the query
-gscdump query --live --site sc-domain:example.com \
+gscdump query --live --site example.com \
   --page '~/blog/' --query '~brand' --dimensions page,query
 ```
 
@@ -191,7 +191,7 @@ Dates must use `YYYY-MM-DD`, and `--start` cannot follow `--end`.
 
 ```bash
 # Export query rows with a CSV header.
-gscdump query --live --site sc-domain:example.com \
+gscdump query --live --site example.com \
   --dimensions page,query --format csv --output rows.csv
 ```
 
@@ -267,26 +267,26 @@ SQL-only Analyzers require local data.
 # Default: catch every table and search type up to the latest final date.
 # A table with no history starts 28 days back. Newest dates come first.
 # Also saves sitemaps and inspects up to 50 due URLs. Skips completed dates.
-gscdump sync --site sc-domain:example.com
+gscdump sync --site example.com
 
 # Backfill the 16 months Google keeps, plus 14 days Google often still serves
-gscdump sync --site sc-domain:example.com --full
+gscdump sync --site example.com --full
 
 # Cap one run at 2,000 Search Analytics calls; the next run continues
-gscdump sync --site sc-domain:example.com --full --max-calls 2000
+gscdump sync --site example.com --full --max-calls 2000
 
 # Every verified Site, one after another
 gscdump sync --all-sites
 
 # Custom range
-gscdump sync --site sc-domain:example.com --start 2026-08-01 --end 2026-08-31 \
+gscdump sync --site example.com --start 2026-08-01 --end 2026-08-31 \
   --tables pages,queries,page_queries,countries,dates
 
 # Coverage, missing and failed dates per table, and a running sync
-gscdump sync --site sc-domain:example.com --status
+gscdump sync --site example.com --status
 
 # Limit concurrent day requests per table
-gscdump sync --site sc-domain:example.com --concurrency 4 \
+gscdump sync --site example.com --concurrency 4 \
   --tables pages,queries,page_queries,countries,dates
 ```
 

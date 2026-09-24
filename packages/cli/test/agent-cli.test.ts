@@ -36,18 +36,11 @@ it.each([
   expect(result.stderr).not.toMatch(/credentials|authenticate/i)
 })
 
-it.each([['store', 'stats'], ['store']])('returns empty Store metadata for an unsynced Site: %j', async (...command) => {
+it.each([['store', 'stats'], ['store']])('rejects an unsynced Site instead of printing empty Store metadata: %j', async (...command) => {
   const result = await invoke([...command, '--site', 'sc-domain:example.com', '--json'])
-  expect(result.code, result.stderr).toBe(0)
-  const output = JSON.parse(result.stdout)
-  expect(output.siteId).toBeTruthy()
-  expect(output.tables.find((table: { table: string }) => table.table === 'pages')).toMatchObject({
-    liveRows: 0,
-    dimensions: expect.arrayContaining(['page']),
-    watermarks: [],
-  })
-  expect(output.nextCommand).toContain('gscdump sync')
-  expect(output.nextCommand).toContain('--status')
+  expect(result.code).toBe(1)
+  expect(result.stdout).toBe('')
+  expect(result.stderr).toContain('The Store has no data. Run `gscdump sync --site example.com` first.')
 })
 
 it('suggests the unique full option name before authentication', async () => {
