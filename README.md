@@ -8,12 +8,6 @@
 
 > Google Search Console data and SEO analysis for TypeScript, the CLI, and AI assistants.
 
-Tell your agent:
-
-> Set up gscdump using this skill: https://gscdump.com/SKILL.md
-
-If you cloned this repository, use [`packages/cli/skills/gscdump/SKILL.md`](./packages/cli/skills/gscdump/SKILL.md) instead.
-
 <p align="center">
 <table>
 <tbody>
@@ -49,6 +43,12 @@ Google still limits which rows its API returns; pagination cannot recover omitte
 See [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data#data-limits).
 
 ## Get Started
+
+Tell your agent:
+
+> Set up gscdump using this skill: https://gscdump.com/SKILL.md
+
+If you cloned this repository, use [`packages/cli/skills/gscdump/SKILL.md`](./packages/cli/skills/gscdump/SKILL.md) instead.
 
 ```bash
 npm install -g @gscdump/cli
