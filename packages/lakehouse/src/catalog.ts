@@ -452,6 +452,7 @@ export async function icebergAppendRetrying(
   const stampedArgs = {
     ...args,
     snapshotProperties: { ...(args as { snapshotProperties?: Record<string, string> }).snapshotProperties, [APPEND_ID_SUMMARY_KEY]: appendId },
+    isAlreadyApplied: (metadata: LandedCheckMetadata) => hasAppendId(metadata, appendId),
   } as IcebergAppendArgs
 
   let check = await checkAppendLanded(args, appendId)
@@ -497,6 +498,7 @@ export async function icebergAppendBatchesRetrying(
   const stampedArgs = {
     ...appendArgs,
     snapshotProperties: { ...appendArgs.snapshotProperties, [APPEND_ID_SUMMARY_KEY]: appendId },
+    isAlreadyApplied: (metadata: LandedCheckMetadata) => hasAppendId(metadata, appendId),
   }
 
   let check = await checkAppendLanded(args, appendId)
@@ -559,14 +561,14 @@ async function checkAppendLanded(
     namespace: a.namespace,
     table: a.table,
   })
-  const snapshots = (metadata as { snapshots?: Array<{ summary?: Record<string, string | undefined> }> }).snapshots ?? []
+  return hasAppendId(metadata, appendId)
+    ? { landed: true }
+    : { landed: false, metadata }
+}
+
+function hasAppendId(metadata: LandedCheckMetadata, appendId: string): boolean {
   // Catalog snapshot arrays have no chronological ordering guarantee.
-  // Check every retained token before staging another append.
-  for (const snapshot of snapshots) {
-    if (snapshot.summary?.[APPEND_ID_SUMMARY_KEY] === appendId)
-      return { landed: true }
-  }
-  return { landed: false, metadata }
+  return metadata.snapshots?.some(snapshot => (snapshot.summary as Record<string, string> | undefined)?.[APPEND_ID_SUMMARY_KEY] === appendId) ?? false
 }
 
 // ---------------------------------------------------------------------------
