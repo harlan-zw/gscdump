@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { CASES } from './cases.mjs'
-import { analyzeWaste, commands, compareRows, exportedRows, finalResponse, gradeAgent, gradeAnswer, invocation, MODEL, pageMetrics, parseOptions, seedCommand, syncedWindow } from './core.mjs'
+import { analyzeWaste, commands, compareLivePages, compareRows, exportedRows, finalResponse, gradeAgent, gradeAnswer, invocation, MODEL, pageMetrics, parseOptions, seedCommand, syncedWindow } from './core.mjs'
 import { evaluatorIdentity, fileState } from './evidence.mjs'
 import { checked, credentialEnvironment, installCandidate, run } from './runtime.mjs'
 
@@ -176,10 +176,8 @@ try {
       await save('docs-export-check.json', await verifyExport(ctx, stored))
       const live = JSON.parse(queries[1].stdout)
       assert.equal(live.meta.source, 'live')
-      assert(rows(queries[1].stdout).length > 0, 'Live Search Console returned no rows.')
-      // Search Console can revise recent data between sync and live query.
-      // The Store/export comparison above uses one stable snapshot.
-      return verifyExport(ctx, stored)
+      const liveComparison = compareLivePages(stored, rows(queries[1].stdout))
+      return { ...await verifyExport(ctx, stored), liveComparison }
     })
     await attempt('cli-agent-recovery', async () => {
       requireGoogle()

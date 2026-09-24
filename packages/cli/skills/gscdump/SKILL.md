@@ -20,8 +20,10 @@ Example: `gscdump query --site=SITE --start=DATE --end=DATE -d page -f json`.
 2. Keep the requested Site, dates, dimensions, and task scope. A request for pages does not need query dimensions.
 3. Before local queries, check coverage with `gscdump store stats --site SITE --json`.
    Use `gscdump sync --site SITE --status --json` when you need coverage, gaps, or sync-state details.
+   On a fresh Store, `store stats` exits 1 and says it has no data. Continue with the bounded sync.
 4. Read the table dimensions and watermarks. Sync only missing tables and the requested dates, once per task.
 5. Use `sync --json`. Read its completion result before deciding what to do next. Never repeat a successful sync.
+6. If the user asks for saved rows, check `meta.source: "local"` in the query result. A successful query can answer live when its table has no synced data.
 
 If the task only asks about deletion, explain the scope and ask for consent.
 You may read Store metadata with `store stats` and `sync --status`.
@@ -268,6 +270,7 @@ gscdump sync --site example.com --json
 - `--dry-run` prints the planned dates and the fewest calls without calling Google.
 - `--all-sites` syncs every verified Site, one after another.
 - Use the user's date range. If the user names a range, pass `--start` and `--end`, not `--full`.
+- If the user excludes rollups, pass `--no-rollups` on the sync command.
 - Empty Store metadata is expected before the first sync. It does not prove zero traffic.
 
 ## Query rows
@@ -278,6 +281,8 @@ gscdump query --site example.com --dimensions page,query \
 ```
 
 - Dimension names are singular: `page`, `query`, `date`, `country`, `device`.
+- A page breakdown uses `--tables pages` for sync and `-d page` for query.
+  `-d page,query` needs `page_queries`; syncing only `pages` does not fill that table.
 - Filters: `--query`, `--page`, `--country`, `--device`,
   `--search-appearance`. Prefixes: bare equals, `~` contains, `!~` not
   contains, `re:` regex, `!re:` not regex, `!` not equals.

@@ -11,7 +11,7 @@ Report's own default comparison is `none`. Sync that comparison window for
 `page_queries` too, or the Report stops with `STORE_RANGE_NOT_COVERED`.
 
 ```sh
-gscdump sync --site "$EVAL_SITE" --start "$(date -u -d "$EVAL_START -$(( ($(date -u -d "$EVAL_END" +%s) - $(date -u -d "$EVAL_START" +%s)) / 86400 + 1 )) day" +%Y-%m-%d)" --end "$EVAL_END" --tables pages,queries,page_queries --no-rollups --json
+gscdump sync --site "$EVAL_SITE" --start "$(node -e 'const [start,end]=process.argv.slice(1);const days=(Date.parse(end)-Date.parse(start))/86400000+1;console.log(new Date(Date.parse(start)-days*86400000).toISOString().slice(0,10))' "$EVAL_START" "$EVAL_END")" --end "$EVAL_END" --tables pages,queries,page_queries --no-rollups --json
 gscdump query --site "$EVAL_SITE" --start "$EVAL_START" --end "$EVAL_END" --dimensions page,query --limit 1000 --format json
 gscdump analyze striking-distance --site "$EVAL_SITE" --start "$EVAL_START" --end "$EVAL_END" --json
 gscdump report opportunities --site "$EVAL_SITE" --period custom --start "$EVAL_START" --end "$EVAL_END" --json

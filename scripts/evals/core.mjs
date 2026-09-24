@@ -92,6 +92,26 @@ export function compareRows(left, right) {
   assert.deepEqual(normalize(left), normalize(right), 'Exported or queried rows differ.')
 }
 
+export function compareLivePages(storedRows, liveRows) {
+  const stored = pageMetrics(storedRows).sort((a, b) => a.page.localeCompare(b.page))
+  const live = pageMetrics(liveRows).sort((a, b) => a.page.localeCompare(b.page))
+  assert(stored.length > 0, 'No stored page rows exist.')
+  assert.deepEqual(live.map(row => row.page), stored.map(row => row.page), 'Stored and live page paths differ.')
+  const differences = stored.map((row, index) => ({
+    page: row.page,
+    clicks: Math.abs(row.clicks - live[index].clicks),
+    impressions: Math.abs(row.impressions - live[index].impressions),
+  }))
+  for (const [index, difference] of differences.entries()) {
+    assert(difference.clicks <= 1 && difference.impressions <= Math.max(1, Math.ceil(stored[index].impressions * 0.05)), `Live metrics changed beyond the bounded revision for ${difference.page}.`)
+  }
+  const totalImpressions = stored.reduce((total, row) => total + row.impressions, 0)
+  const totalImpressionsDelta = differences.reduce((total, row) => total + row.impressions, 0)
+  const totalImpressionsLimit = Math.max(2, Math.ceil(totalImpressions * 0.02))
+  assert(totalImpressionsDelta <= totalImpressionsLimit, 'Live impressions changed beyond the bounded total revision.')
+  return { pages: stored.length, revisedPages: differences.filter(row => row.clicks || row.impressions).length, maxClicksDelta: Math.max(...differences.map(row => row.clicks)), maxImpressionsDelta: Math.max(...differences.map(row => row.impressions)), totalImpressionsDelta, totalImpressionsLimit }
+}
+
 export function invocation(args) {
   const options = Object.fromEntries(['start', 'end', 'tables', 'types', 'config-dir', 'profile', 'sql', 'data-dir', 'api-key', 'api-root', 'out', 'type', 'limit', 'query', 'page', 'country', 'device', 'datasets', 'agent', 'target'].map(name => [name, { type: 'string' }]))
   for (const name of ['status', 'dry-run', 'live', 'json', 'explain', 'version', 'rollups', 'retry-failed', 'force', 'all-sites', 'interactive'])

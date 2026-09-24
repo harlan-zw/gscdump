@@ -15,7 +15,8 @@ gscdump query --live --site "$EVAL_SITE" --start "$EVAL_START" --end "$EVAL_END"
 gscdump dump --site "$EVAL_SITE" --tables pages --format json --out ./export --json
 ```
 
-Compare stored and live page metrics for the same dates.
-Group live URLs by pathname, matching Store ingestion.
+Compare stored and live page paths after grouping URLs by pathname.
+Allow at most one click and a 5% or one-impression revision per page.
+Allow at most a 2% or two-impression revision across all pages.
 Reopen the exported JSON and compare page clicks and impressions with the stored results.
 If no rows exist, this journey cannot verify a data round trip.
