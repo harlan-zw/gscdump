@@ -363,7 +363,6 @@ export type IcebergAppendBatchesArgs
     & { batchFactory: AppendBatchFactory, snapshotProperties?: Record<string, string> }
 
 const APPEND_ID_SUMMARY_KEY = 'lakehouse.append-id'
-const APPEND_LANDED_SCAN_DEPTH = 25
 
 /**
  * True when `err` is an R2 Data Catalog commit rate-limit response
@@ -561,9 +560,10 @@ async function checkAppendLanded(
     table: a.table,
   })
   const snapshots = (metadata as { snapshots?: Array<{ summary?: Record<string, string | undefined> }> }).snapshots ?? []
-  const from = Math.max(0, snapshots.length - APPEND_LANDED_SCAN_DEPTH)
-  for (let i = snapshots.length - 1; i >= from; i--) {
-    if (snapshots[i]?.summary?.[APPEND_ID_SUMMARY_KEY] === appendId)
+  // Catalog snapshot arrays have no chronological ordering guarantee.
+  // Check every retained token before staging another append.
+  for (const snapshot of snapshots) {
+    if (snapshot.summary?.[APPEND_ID_SUMMARY_KEY] === appendId)
       return { landed: true }
   }
   return { landed: false, metadata }

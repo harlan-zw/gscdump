@@ -244,6 +244,26 @@ describe('icebergAppendRetrying', () => {
     expect(icebergAppend).toHaveBeenCalledTimes(0)
   })
 
+  it.each([0, 5, 18, 43])('finds a retained append token at snapshot index %s', async (index) => {
+    const snapshots = Array.from({ length: 44 }, (_, i) => ({
+      summary: { 'lakehouse.append-id': i === index ? 'prior-run' : `other-${i}` },
+    }))
+    restCatalogLoadTable.mockResolvedValue({ metadata: { snapshots } })
+    await icebergAppendRetrying(APPEND_ARGS, { ...FAST, appendId: 'prior-run' })
+    expect(icebergAppend).not.toHaveBeenCalled()
+  })
+
+  it('finds a landed token outside the array tail after a failed commit', async () => {
+    const snapshots = Array.from({ length: 44 }, (_, i) => ({
+      summary: { 'lakehouse.append-id': i === 5 ? 'landed-retry' : `other-${i}` },
+    }))
+    restCatalogLoadTable.mockResolvedValueOnce({ metadata: { snapshots: [] } })
+      .mockResolvedValue({ metadata: { snapshots } })
+    icebergAppend.mockRejectedValueOnce({ status: 503 })
+    await icebergAppendRetrying(APPEND_ARGS, { ...FAST, appendId: 'landed-retry' })
+    expect(icebergAppend).toHaveBeenCalledTimes(1)
+  })
+
   it('derives a STABLE content token across calls (same records → same id), pagination-safe', async () => {
     await icebergAppendRetrying(APPEND_ARGS, FAST)
     const id1 = (icebergAppend.mock.calls[0][0] as { snapshotProperties: Record<string, string> }).snapshotProperties['lakehouse.append-id']
@@ -322,6 +342,16 @@ describe('icebergAppendBatchesRetrying', () => {
     icebergAppendBatches.mockRejectedValueOnce(Object.assign(new Error('400 Bad Request'), { status: 400 }))
     await expect(icebergAppendBatchesRetrying(args, { ...FAST, appendId: 'batch-400' })).rejects.toThrow('400 Bad Request')
     expect(icebergAppendBatches).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips a retained batch token outside the last 25 array entries', async () => {
+    const snapshots = Array.from({ length: 44 }, (_, i) => ({
+      summary: { 'lakehouse.append-id': i === 5 ? 'batch-landed' : `other-${i}` },
+    }))
+    restCatalogLoadTable.mockResolvedValue({ metadata: { snapshots } })
+    expect(await icebergAppendBatchesRetrying(args, { ...FAST, appendId: 'batch-landed' })).toBe(false)
+    expect(batchFactory).not.toHaveBeenCalled()
+    expect(icebergAppendBatches).not.toHaveBeenCalled()
   })
 
   it('does not replay a batch transaction already recorded in snapshot metadata', async () => {
