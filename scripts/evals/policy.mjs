@@ -18,7 +18,8 @@ export function checkScope(args, settings) {
     reason = 'The evaluation configuration cannot be overridden.'
   if (values.live && !settings.allowLive)
     reason = 'Use the Store for this trial.'
-  if ('site' in values && values.site !== settings.site)
+  const domainAlias = settings.site.startsWith('sc-domain:') ? settings.site.slice('sc-domain:'.length) : null
+  if ('site' in values && values.site !== settings.site && values.site !== domainAlias)
     reason = 'The Site is outside the evaluation scope.'
   for (const key of ['out', 'output']) {
     if (!(key in values) || values[key] === '-')
@@ -28,7 +29,7 @@ export function checkScope(args, settings) {
     if (typeof path !== 'string' || isAbsolute(path) || inside === '..' || inside.startsWith('../') || isAbsolute(inside))
       reason = 'Output must stay inside the trial workspace.'
   }
-  if (sync && (values.start !== settings.start || values.end !== settings.end || values.tables !== (settings.tables ?? 'pages')))
-    reason = 'Sync must use the requested dates and pages table.'
+  if (sync && (!/^\d{4}-\d{2}-\d{2}$/.test(values.start ?? '') || !/^\d{4}-\d{2}-\d{2}$/.test(values.end ?? '') || values.start < settings.start || values.end > settings.end || values.start > values.end || values.tables !== (settings.tables ?? 'pages')))
+    reason = 'Sync must stay within the requested dates and tables.'
   return { reason, sync }
 }

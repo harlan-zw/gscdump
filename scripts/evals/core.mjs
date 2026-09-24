@@ -72,6 +72,18 @@ export function commands(markdown) {
   return result
 }
 
+export function syncedWindow(completion) {
+  assert(completion?.window?.start && completion.window.end, 'The sync completion is missing its window.')
+  return { start: completion.window.start, end: completion.window.end }
+}
+
+export function exportedRows(parsedFiles) {
+  // dump also writes manifest.json and sites.json alongside per-table row
+  // arrays. Those parse to plain objects, not row arrays; only row files
+  // belong in the comparison.
+  return parsedFiles.filter(Array.isArray).flat()
+}
+
 export function compareRows(left, right) {
   assert(left.length > 0, 'No rows: use a Site and date range with real traffic.')
   const normalize = rows => rows.map(row => JSON.stringify(Object.fromEntries(
@@ -134,9 +146,14 @@ export function gradeAgent({ calls, loaded, kind, text, shouldTrigger = true, st
   if (loaded !== shouldTrigger)
     failures.push(shouldTrigger ? 'The agent did not load the skill.' : 'The agent loaded the skill for an unrelated task.')
   const failed = calls.filter(call => call.code !== 0)
-  const expectedFailures = kind === 'recovery'
-    ? failed.filter(call => invocation(call.args).command === 'query' && jsonValue(call.stdout)?.error?.code === 'STORE_RANGE_NOT_COVERED')
-    : []
+  const expectedFailures = failed.filter((call) => {
+    const parsed = invocation(call.args)
+    if (kind === 'recovery')
+      return parsed.command === 'query' && jsonValue(call.stdout)?.error?.code === 'STORE_RANGE_NOT_COVERED'
+    if (kind === 'empty')
+      return parsed.command === 'store' && parsed.subcommand === 'stats' && /^Error: The Store has no data\./.test(call.stderr ?? '')
+    return false
+  })
   if (failed.length > expectedFailures.length)
     failures.push('A CLI command failed unexpectedly or was denied.')
   if (kind === 'negative') {

@@ -10,9 +10,20 @@ import { run } from './runtime.mjs'
 it('accepts safe equals and short options while rejecting scope escapes', () => {
   const settings = { site: 'sc-domain:example.com', start: '2026-08-01', end: '2026-08-01', workspace: '/tmp/eval' }
   assert.equal(checkScope(['query', '-s', settings.site, '-d', 'page', '--format=json'], settings).reason, null)
+  assert.equal(checkScope(['query', '-s', 'example.com', '-d', 'page', '--format=json'], settings).reason, null)
   assert.equal(checkScope(['sync', `--site=${settings.site}`, `--start=${settings.start}`, `--end=${settings.end}`, '--tables=pages'], settings).reason, null)
+  assert.equal(checkScope(['sync', '--site=example.com', '--start=2026-08-01', '--end=2026-08-01', '--tables=pages'], settings).reason, null)
   for (const args of [['query', '-s', 'sc-domain:outside.com'], ['query', '--profile=real'], ['query', '-o', '../outside.json'], ['query', '-s', settings.site, '--site=outside']])
     assert(checkScope(args, settings).reason)
+})
+
+it('allows a missing subrange for recovery but rejects dates outside the requested window', () => {
+  const settings = { site: 'sc-domain:example.com', start: '2026-08-01', end: '2026-08-03', workspace: '/tmp/eval' }
+  const sync = (start, end) => checkScope(['sync', '--site=example.com', `--start=${start}`, `--end=${end}`, '--tables=pages'], settings).reason
+  assert.equal(sync('2026-08-02', '2026-08-03'), null)
+  assert(sync('2026-07-31', '2026-08-02'))
+  assert(sync('2026-08-03', '2026-08-04'))
+  assert(sync('2026-08-03', '2026-08-02'))
 })
 
 it('reserves at most one sync across real concurrent processes', async () => {

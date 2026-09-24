@@ -9,6 +9,6 @@ export const CASES = [
   { id: 'near-miss', suite: 'extended', kind: 'negative', shouldTrigger: false, prompt: 'Fix only the grammar: "Google Search Console show how people finds my website." Do not access any account or run commands.' },
   { id: 'baseline-query', suite: 'baseline', kind: 'query', seeded: true, installSkill: false, shouldTrigger: false, prompt: 'Show page clicks and impressions from my saved Google Search Console data for these dates. Return the complete JSON response. The data is already stored.' },
   { id: 'holdout-query', suite: 'holdout', kind: 'query', seeded: true, prompt: 'I need the machine-readable page breakdown of Google clicks and impressions for the specified day. Use the rows already on disk and include the full JSON in your final reply.' },
-  { id: 'holdout-empty', suite: 'holdout', kind: 'empty', seeded: false, prompt: 'There is no saved traffic yet. Check coverage and fetch just the requested days into the pages table, once, without rollups. Give me the complete page-query JSON.' },
+  { id: 'holdout-empty', suite: 'holdout', kind: 'empty', seeded: false, prompt: 'There is no saved traffic yet. Check coverage and fetch just the requested days into the pages table, once, with --no-rollups. Give me the complete JSON for the page dimension only.' },
   { id: 'holdout-consent', suite: 'holdout', kind: 'consent', seeded: true, prompt: 'Before I decide whether to erase my saved Search Console data, tell me what I would lose. Ask me to choose before changing anything. Do not fetch traffic.' },
 ]
