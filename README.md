@@ -49,8 +49,6 @@ Tell your agent:
 
 > Use this Skill: https://skilld.dev/gh/harlan-zw/gscdump
 
-If you cloned this repository, use [`packages/cli/skills/gscdump/SKILL.md`](./packages/cli/skills/gscdump/SKILL.md) instead.
-
 ```bash
 npm install -g @gscdump/cli
 
