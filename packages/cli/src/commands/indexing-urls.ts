@@ -75,7 +75,7 @@ export const indexingUrlsCommand = defineCommand({
 
     const { client, site } = await resolveHostedSite(args, {
       name: 'indexing urls',
-      localAlternative: 'pipe `gscdump sitemaps urls <sitemap-url>` into `gscdump inspect`',
+      localAlternative: 'pipe `gscdump sitemaps urls <sitemap-url>` into `gscdump inspect --site <site>`',
     })
     const page = args.all
       ? await fetchAllPages(client, site, filters)
