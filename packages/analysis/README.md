@@ -171,7 +171,8 @@ Comparisons: `none`, `prev-period`, and `yoy`. `yoy` shifts the window back 364 
 
 `limit` caps the rows an Analyzer returns. It never caps the rows it reads.
 Row plans read at most `fetchBudget` rows per query: 25,000 (one GSC page) by default, up to 100,000.
-`meta.total` counts every match, not only the returned rows.
+`meta.total` counts every match on every Analyzer with a row plan, not only the returned rows.
+The SQL-only Analyzers are the exception. They still report `meta.total` after `limit`: `bayesian-ctr`, `bipartite-pagerank`, `change-point`, `ctr-anomaly`, `intent-atlas`, `long-tail`, `query-migration`, `stl-decompose`, and `trends`.
 `meta.coverage` is `{ kind: 'complete' }`, or `{ kind: 'truncated', fetched }` when a query reached its fetch budget.
 A truncated run can miss rows, so treat its totals and rankings as partial.
 
