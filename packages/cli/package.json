@@ -1,7 +1,7 @@
 {
   "name": "@gscdump/cli",
   "type": "module",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "CLI for Google Search Console and Bing with hosted or local authentication, data exports, and an MCP server",
   "author": {
     "name": "Harlan Wilton",
