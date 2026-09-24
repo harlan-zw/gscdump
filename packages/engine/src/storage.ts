@@ -516,11 +516,17 @@ export interface RunSQLOptions {
 }
 
 export interface StorageEngine {
+  /**
+   * Replace one day partition with `rows`. URLs are normalized to paths
+   * first, and rows that then share a stored key sum their metrics. Writing
+   * the same day again replaces it, so a re-fire never doubles the totals.
+   */
   writeDay: (ctx: WriteCtx, rows: Row[]) => Promise<void>
   /**
-   * Read-merge-write a single-day hourly partition. Idempotent on
-   * `(url, hour)` (last-write-wins): callers can re-fire the same slice
-   * after a retry and the partition converges. `ctx.date` is the PT
+   * Read-merge-write a single-day hourly partition. Rows in one call that
+   * share a stored key sum. Across calls, the newest write wins on
+   * `(url, hour)`: callers can re-fire the same slice after a retry and the
+   * partition converges. `ctx.date` is the PT
    * calendar day; rows must carry `hour` + `date` fields. Partition shape
    *  `hourly/{date}`; coexists with daily partitions in the same `table`
    *  prefix (`hourly_pages`).

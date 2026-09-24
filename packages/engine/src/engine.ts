@@ -19,10 +19,11 @@ import { normalizeUrl } from 'gscdump/normalize'
 import { buildLogicalPlan } from 'gscdump/query/plan'
 import { compactTieredImpl, dedupeOverlappingTiers, splitOverlappingTiers } from './compaction'
 import { gcOrphansImpl } from './gc'
+import { sumByStoredKey } from './ingest'
 import { dayPartition, hourPartition, inferSearchType, objectKey, tenantPrefix } from './layout'
 import { compileLogicalQueryPlan } from './parquet-plan'
 import { extractParquetPushdown } from './parquet-pushdown'
-import { currentSchemaVersion, dedupeByNaturalKey, SCHEMAS } from './schema'
+import { currentSchemaVersion, SCHEMAS } from './schema'
 
 const URL_PURGE_TABLES: readonly TableName[] = ['pages', 'page_queries']
 
@@ -98,11 +99,9 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
           searchType: inferSearchType({ searchType }),
         })
 
-        // Dedupe by natural key before writing: a day file holds one row per
-        // (date, dimension) tuple. Source rows should already be unique, but
-        // collapsing here keeps a duplicated-source regression from being
-        // persisted and then doubled again by downstream compaction.
-        const normalizedRows = dedupeByNaturalKey(
+        // A day file holds one row per stored key. URL normalization can map
+        // distinct Google URLs to one path, so rows that share a key sum.
+        const normalizedRows = sumByStoredKey(
           ctx.table,
           rows.map(r => normalizeRow(ctx.table, r)),
         )
@@ -177,7 +176,8 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
         })
 
         // Read-merge-write: each tick reads existing rows for the day,
-        // overwrites buckets on (url, hour), and rewrites the parquet.
+        // replaces buckets on (url, hour), and rewrites the parquet. Within
+        // one batch, rows that share a stored key sum first.
         const existing: Row[] = []
         for (const entry of live) {
           const rs = await codec.readRows({ table: ctx.table }, entry.objectKey, dataSource)
@@ -188,8 +188,7 @@ export function createStorageEngine(opts: EngineOptions): StorageEngine {
           const k = `${String(r.url ?? '')}\0${String(r.hour ?? '')}`
           dedup.set(k, r)
         }
-        for (const r of rows) {
-          const normalized = normalizeRow(ctx.table, r)
+        for (const normalized of sumByStoredKey(ctx.table, rows.map(r => normalizeRow(ctx.table, r)))) {
           const k = `${String(normalized.url ?? '')}\0${String(normalized.hour ?? '')}`
           dedup.set(k, normalized)
         }

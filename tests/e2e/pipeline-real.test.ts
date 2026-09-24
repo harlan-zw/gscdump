@@ -3,6 +3,7 @@
  *
  *   GSC Search Analytics API
  *     -> runGscSyncSlice (paging loop)
+ *     -> createRowAccumulator (the sync ingest path: rows per stored key)
  *     -> engine.writeDay (parquet encode + manifest register)
  *     -> engine.query   (DuckDB over the written parquet)
  *
@@ -29,6 +30,7 @@ import process from 'node:process'
 import { createDuckDBCodec, createDuckDBExecutor, createStorageEngine } from '@gscdump/engine'
 import { runGscSyncSlice } from '@gscdump/engine-gsc-api'
 import { createFilesystemDataSource, createFilesystemManifestStore } from '@gscdump/engine/filesystem'
+import { createRowAccumulator, toPath } from '@gscdump/engine/ingest'
 import { createNodeDuckDBHandle, resetNodeDuckDB } from '@gscdump/engine/node'
 import { createAuth, googleSearchConsole } from 'gscdump'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -141,20 +143,11 @@ describe.skipIf(skip)('analytics pipeline — real API → parquet → query', (
         executor: createDuckDBExecutor(factory),
       })
 
-      // `pages` slice dimensions are [page, date]; group rows per day for writeDay.
-      const byDate = new Map<string, Row[]>()
-      for (const r of fetched) {
-        const [page, date] = r.keys
-        if (!byDate.has(date))
-          byDate.set(date, [])
-        byDate.get(date)!.push({
-          url: page,
-          date,
-          clicks: r.clicks,
-          impressions: r.impressions,
-          sum_position: r.position * r.impressions,
-        })
-      }
+      // Ingest the way sync does: the accumulator maps Google URLs to stored
+      // paths and groups rows per day for writeDay.
+      const accumulator = createRowAccumulator()
+      expect(accumulator.push('pages', fetched)).toBe(true)
+      const byDate = accumulator.drain().get('pages') ?? new Map<string, Row[]>()
       for (const [date, rows] of byDate) {
         await engine.writeDay({ userId: 'e2e', siteId: 'e2e-site', table: 'pages', date }, rows)
       }
@@ -179,8 +172,9 @@ describe.skipIf(skip)('analytics pipeline — real API → parquet → query', (
       expect(queriedClicks).toBe(fetchedClicks)
       expect(queriedImpressions).toBe(fetchedImpressions)
 
-      // Row count collapses to distinct pages over the range.
-      const distinctPages = new Set(fetched.map(r => r.keys[0])).size
+      // Row count collapses to distinct stored paths over the range. Google
+      // URLs that differ only by Site prefix share one path.
+      const distinctPages = new Set(fetched.map(r => toPath(r.keys[0]!))).size
       expect(queried.rows.length).toBe(distinctPages)
     }
     finally {
