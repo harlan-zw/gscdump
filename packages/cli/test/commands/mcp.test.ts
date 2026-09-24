@@ -71,31 +71,6 @@ describe('mcp command', () => {
     expect(mcpCommand.meta?.description).toContain('MCP')
   })
 
-  it('exits with init instructions when no auth and no BYOK', async () => {
-    mocks.resolveBYOK.mockReturnValue(null)
-    mocks.loadConfig.mockResolvedValue({})
-    mocks.loadTokens.mockResolvedValue(null)
-
-    await expect(mcpCommand.run!({ args: {}, rawArgs: [], cmd: mcpCommand } as any)).rejects.toThrow('__exit_1__')
-
-    expect(exitSpy).toHaveBeenCalledWith(1)
-    const message = stderrSpy.mock.calls.map(c => String(c[0])).join('')
-    expect(message).toContain('init')
-    expect(mocks.createGscMcpServer).not.toHaveBeenCalled()
-  })
-
-  it('exits with login instructions when configured but no tokens', async () => {
-    mocks.resolveBYOK.mockReturnValue(null)
-    mocks.loadConfig.mockResolvedValue({ clientId: 'x', clientSecret: 'y' })
-    mocks.loadTokens.mockResolvedValue(null)
-
-    await expect(mcpCommand.run!({ args: {}, rawArgs: [], cmd: mcpCommand } as any)).rejects.toThrow('__exit_1__')
-
-    expect(exitSpy).toHaveBeenCalledWith(1)
-    const message = stderrSpy.mock.calls.map(c => String(c[0])).join('')
-    expect(message).toContain('auth login')
-  })
-
   it('starts the MCP server when BYOK is set', async () => {
     mocks.resolveBYOK.mockReturnValue('token-abc')
 

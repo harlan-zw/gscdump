@@ -1,9 +1,11 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { OAuth2Client } from 'google-auth-library'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearTokens, loadTokens, saveTokens } from '../src/auth'
+import { clearTokens, loadTokens, resolveAuth, saveTokens } from '../src/auth'
 import { setConfigDir } from '../src/config'
+import { createCliRuntime, runWithCliRuntime } from '../src/runtime'
 import { mockCredentials, mockExpiredCredentials } from './__fixtures__/mocks'
 
 describe('auth module', () => {
@@ -97,5 +99,34 @@ describe('token expiry', () => {
 
   it('should identify valid tokens', () => {
     expect(mockCredentials.expiry_date).toBeGreaterThan(Date.now())
+  })
+})
+
+describe('resolveAuth service-account handling', () => {
+  it('rejects when GSC_SERVICE_ACCOUNT_JSON points at a non service-account key', async () => {
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-resolve-auth-'))
+    const keyPath = path.join(configDir, 'client-secret.json')
+    await fs.writeFile(keyPath, JSON.stringify({ type: 'authorized_user', refresh_token: 'r' }))
+    const runtime = createCliRuntime({ configDir, environment: { GSC_SERVICE_ACCOUNT_JSON: keyPath } })
+
+    await expect(runWithCliRuntime(runtime, () => resolveAuth({ interactive: false })))
+      .rejects
+      .toThrow(`${keyPath} is not a service-account key (type=authorized_user)`)
+
+    await fs.rm(configDir, { recursive: true, force: true })
+  })
+
+  it('falls through to saved tokens when GSC_SERVICE_ACCOUNT_JSON points at a missing file', async () => {
+    const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-resolve-auth-'))
+    const runtime = createCliRuntime({
+      configDir,
+      environment: { GSC_SERVICE_ACCOUNT_JSON: path.join(configDir, 'missing-key.json') },
+    })
+    await runWithCliRuntime(runtime, () => saveTokens({ provider: 'gscdump', access_token: 'a', refresh_token: 'r', expiry_date: Date.now() + 3_600_000 }))
+
+    const auth = await runWithCliRuntime(runtime, () => resolveAuth({ interactive: false }))
+
+    expect(auth).toBeInstanceOf(OAuth2Client)
+    await fs.rm(configDir, { recursive: true, force: true })
   })
 })
