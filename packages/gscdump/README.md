@@ -88,7 +88,7 @@ await client.indexing.publish(
 ```
 
 Indexing notifications apply only to eligible job or livestream pages.
-See [URL inspection and indexing](../../docs/guides/url-indexing.md).
+See [URL inspection and indexing](../../docs/gscdump-cli/guides/6.url-indexing.md).
 
 The package root also exports batch and projection helpers such as `fetchSitesWithSitemaps`, `batchInspectUrlsFlatSettled`, `inspectUrlFlat`, and `batchRequestIndexing`.
 
