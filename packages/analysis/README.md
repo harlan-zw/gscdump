@@ -58,7 +58,7 @@ console.log(movers.declining, decay)
 
 Comparison functions take one `{ current, previous }` input object.
 Options are a separate second argument.
-See the [SEO guide](../../docs/guides/seo-analysis.md) for a complete striking-distance example.
+See the [SEO guide](../../docs/gscdump-cli/guides/5.seo-analysis.md) for a complete striking-distance example.
 
 ## Sources
 
@@ -132,7 +132,7 @@ const result = await runReport(report, {
 console.log(result.sections, result.meta.degraded)
 ```
 
-See the [Report list](../../README.md#reports) for inputs and defaults.
+See the [Report list](../../docs/gscdump-cli/api/7.reports.md) for inputs and defaults.
 If an optional step fails, `meta.degraded` is `true`.
 A required step failure rejects the Report.
 
