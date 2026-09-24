@@ -406,7 +406,7 @@ index 487ec24ba6d936de8459d6084ca15aaa3efbef54..032c6ead0992ae42e85be8c7ccff65e3
   * Bundled prepare + stage. Equivalent to the prior single-call API; left in
   * place so callers that don't run inside a retry loop (e.g. `icebergTransaction`)
 diff --git a/src/write/write.js b/src/write/write.js
-index 02ab344831083a390fda9a5038c33d0997ec72ef..b8d819f0c22cacb3569d9d3526154d7b02fa8ded 100644
+index 02ab344831083a390fda9a5038c33d0997ec72ef..d3989404f21c20a231917f7c0eb1a6662f01b50b 100644
 --- a/src/write/write.js
 +++ b/src/write/write.js
 @@ -5,7 +5,7 @@ import { loadLatestFileCatalogMetadata } from '../metadata.js'
@@ -446,21 +446,29 @@ index 02ab344831083a390fda9a5038c33d0997ec72ef..b8d819f0c22cacb3569d9d3526154d7b
  /**
   * Append rows to a table in one call: load metadata, stage the parquet writes
   * + manifest + new snapshot, commit through the catalog.
-@@ -32,10 +53,11 @@ const DEFAULT_RETRY = Object.freeze({
+@@ -32,10 +53,12 @@ const DEFAULT_RETRY = Object.freeze({
   * @param {Resolver} [options.resolver]
   * @param {Record<string, any>[]} options.records
   * @param {number} [options.sortOrderId] - Sort order id to apply; defaults to the table default.
 + * @param {TableMetadata} [options.metadata] - REST catalog only. Table metadata the caller just loaded; skips the initial load-table. A commit conflict still reloads.
++ * @param {(metadata: TableMetadata) => boolean} [options.isAlreadyApplied] - Checked against each conditional commit attempt, including conflict reloads.
   * @returns {Promise<TableMetadata>}
   */
 -export async function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId }) {
 -  const ctx = await loadTable({ catalog, namespace, table, tableUrl, resolver })
-+export async function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId, snapshotProperties, metadata }) {
++export async function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId, snapshotProperties, metadata, isAlreadyApplied }) {
 +  const ctx = await loadTableOrReuse({ catalog, namespace, table, tableUrl, resolver, metadata })
    // Spec v3 §"Manifest Inheritance": data and manifest files do NOT need to
    // be rewritten on optimistic-commit retry. Prepare them once outside the
    // retry loop; per attempt only the manifest list and metadata.json change.
-@@ -55,6 +77,57 @@ export async function icebergAppend({ catalog, namespace, table, tableUrl, resol
+@@ -49,12 +72,64 @@ export async function icebergAppend({ catalog, namespace, table, tableUrl, resol
+     sortOrderId,
+   })
+   return await commitWithRetry({
+-    catalog, target: { namespace, table }, ctx,
++    catalog, target: { namespace, table }, ctx, isAlreadyApplied,
+     stage: workingCtx => stageSnapshotForAppend({
+       tableUrl: workingCtx.tableUrl,
        metadata: workingCtx.metadata,
        prepared,
        resolver: requireResolver(workingCtx.resolver, 'icebergAppend'),
@@ -485,9 +493,10 @@ index 02ab344831083a390fda9a5038c33d0997ec72ef..b8d819f0c22cacb3569d9d3526154d7b
 + * @param {number} [options.sortOrderId]
 + * @param {Record<string, string>} [options.snapshotProperties]
 + * @param {TableMetadata} [options.metadata] - REST catalog only. Table metadata the caller just loaded; skips the initial load-table. A commit conflict still reloads.
++ * @param {(metadata: TableMetadata) => boolean} [options.isAlreadyApplied] - Checked against each conditional commit attempt, including conflict reloads.
 + * @returns {Promise<TableMetadata>}
 + */
-+export async function icebergAppendBatches({ catalog, namespace, table, tableUrl, resolver, batches, sortOrderId, snapshotProperties, metadata }) {
++export async function icebergAppendBatches({ catalog, namespace, table, tableUrl, resolver, batches, sortOrderId, snapshotProperties, metadata, isAlreadyApplied }) {
 +  const ctx = await loadTableOrReuse({ catalog, namespace, table, tableUrl, resolver, metadata })
 +  const writer = requireResolver(ctx.resolver, 'icebergAppendBatches')
 +  const prepared = []
@@ -508,7 +517,7 @@ index 02ab344831083a390fda9a5038c33d0997ec72ef..b8d819f0c22cacb3569d9d3526154d7b
 +  if (prepared.length === 0) return ctx.metadata
 +
 +  return await commitWithRetry({
-+    catalog, target: { namespace, table }, ctx,
++    catalog, target: { namespace, table }, ctx, isAlreadyApplied,
 +    stage: workingCtx => stageSnapshotForAppendBatches({
 +      tableUrl: workingCtx.tableUrl,
 +      metadata: workingCtx.metadata,
@@ -518,6 +527,24 @@ index 02ab344831083a390fda9a5038c33d0997ec72ef..b8d819f0c22cacb3569d9d3526154d7b
      }),
    })
  }
+@@ -587,13 +662,16 @@ async function commitStaged(catalog, target, ctx, staged) {
+  * @param {(workingCtx: {metadata: TableMetadata, metadataFileName: string | undefined, version?: number, tableUrl: string, resolver: Resolver | undefined}) => Promise<StagedCommit> | StagedCommit} options.stage
+  * @returns {Promise<TableMetadata>}
+  */
+-async function commitWithRetry({ catalog, target, ctx, stage }) {
++async function commitWithRetry({ catalog, target, ctx, stage, isAlreadyApplied }) {
+   const retryEnabled = catalog.type === 'rest'
+     || catalog.type === 'file' && catalog.conditionalCommits === true
+   const policy = resolveRetryPolicy(ctx.metadata)
+   const startedAt = Date.now()
+   let workingCtx = ctx
+   for (let attempt = 1; attempt <= policy.maxAttempts; attempt++) {
++    // The check and snapshot requirement must use the same metadata.
++    // Reloads after conflicts must check again before staging a new commit.
++    if (isAlreadyApplied?.(workingCtx.metadata)) return workingCtx.metadata
+     const staged = await stage(workingCtx)
+     try {
+       return await commitStaged(catalog, target, workingCtx, staged)
 diff --git a/types/index.d.ts b/types/index.d.ts
 index 7cfd5378c18f0cef88a1cee7f397095dd75cce76..b1cb9f5da0ed074c5dd9c9b7124fd9448155a371 100644
 --- a/types/index.d.ts
@@ -597,7 +624,7 @@ index 3f29f9f3c0ab8cc742c4a57c8cc689fdc05d2dd4..2f92916a90b9edcbc5681f821beeeac8
  /**
   * Bundled prepare + stage. Equivalent to the prior single-call API; left in
 diff --git a/types/write/write.d.ts b/types/write/write.d.ts
-index 0a6b7d987ed74879c24922be49ba30de29409a69..4239bd10472e389dee1ed6b1f7caeb3adc9f8d5f 100644
+index 0a6b7d987ed74879c24922be49ba30de29409a69..2875c423a0a6b530b412a860bd617231b914aa10 100644
 --- a/types/write/write.d.ts
 +++ b/types/write/write.d.ts
 @@ -13,7 +13,7 @@ import type { Catalog, IcebergTransaction, Lister, PartitionSpec, Resolver, Sche
@@ -605,19 +632,20 @@ index 0a6b7d987ed74879c24922be49ba30de29409a69..4239bd10472e389dee1ed6b1f7caeb3a
   * @returns {Promise<TableMetadata>}
   */
 -export declare function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId }: {
-+export declare function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId, snapshotProperties }: {
++export declare function icebergAppend({ catalog, namespace, table, tableUrl, resolver, records, sortOrderId, snapshotProperties, metadata, isAlreadyApplied }: {
      catalog: Catalog;
      namespace?: string | string[];
      table?: string;
-@@ -21,6 +21,20 @@ export declare function icebergAppend({ catalog, namespace, table, tableUrl, res
+@@ -21,6 +21,22 @@ export declare function icebergAppend({ catalog, namespace, table, tableUrl, res
      resolver?: Resolver;
      records: Record<string, any>[];
      sortOrderId?: number;
 +    snapshotProperties?: Record<string, string>;
 +    metadata?: TableMetadata;
++    isAlreadyApplied?: (metadata: TableMetadata) => boolean;
 +}): Promise<TableMetadata>;
 +/** Append lazy row batches as one snapshot and one catalog commit. */
-+export declare function icebergAppendBatches({ catalog, namespace, table, tableUrl, resolver, batches, sortOrderId, snapshotProperties }: {
++export declare function icebergAppendBatches({ catalog, namespace, table, tableUrl, resolver, batches, sortOrderId, snapshotProperties, metadata, isAlreadyApplied }: {
 +    catalog: Catalog;
 +    namespace?: string | string[];
 +    table?: string;
@@ -627,6 +655,7 @@ index 0a6b7d987ed74879c24922be49ba30de29409a69..4239bd10472e389dee1ed6b1f7caeb3a
 +    sortOrderId?: number;
 +    snapshotProperties?: Record<string, string>;
 +    metadata?: TableMetadata;
++    isAlreadyApplied?: (metadata: TableMetadata) => boolean;
  }): Promise<TableMetadata>;
  /**
   * Compact / rewrite a table in one call: load metadata, read the live rows of
