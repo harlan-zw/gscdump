@@ -71,6 +71,7 @@ The `gscdump` npm package contains the library; `@gscdump/cli` provides the comm
 
 ## Documentation
 
+- [SDK documentation](./docs/gscdump-sdk/guides/1.getting-started.md)
 - [Getting started](./docs/gscdump-cli/guides/1.getting-started.md)
 - [Authentication](./docs/gscdump-cli/guides/2.authentication.md)
 - [Command reference](./docs/gscdump-cli/api/1.commands.md)
@@ -177,7 +178,7 @@ Existing integrations can use the [migration guide](./docs/v1-migration.md).
 | CLI | Cloud/local Google and Bing authentication, local Store, exports | [Getting started](./docs/gscdump-cli/guides/1.getting-started.md) |
 | Core library | Google and Bing clients, typed queries, fetch runtimes | [Library examples](./packages/gscdump/README.md) |
 | MCP | Live Google queries and supported Reports | [AI integration](./docs/gscdump-cli/guides/3.ai-integration.md) |
-| Hosted SDK | gscdump.com API credentials and published v1 operations | [Hosted integration](./docs/guides/hosted-v1.md) |
+| Hosted SDK | gscdump.com API credentials and published v1 operations | [Hosted integration](./docs/gscdump-sdk/guides/3.hosted-integrations.md) |
 | Runtime adapters | Browser DuckDB, SQLite, and Cloudflare integrations | Package READMEs above |
 
 Use the latest published version when reporting a bug.
