@@ -31,18 +31,14 @@
 
 ## What is gscdump?
 
-gscdump syncs Google Search Console data, backfills available history within your plan, and preserves your collected data for MCP, API, and SQL.
-The MIT-licensed CLI exports your data to disk for SQL queries, readable without gscdump.
-Its MCP server queries live Google data with your selected authentication.
-The CLI and TypeScript library also read Bing Webmaster data and Indexing Evidence.
-The CLI supports shared hosted authentication and local Google or Bing credentials.
-See [Bing commands and authentication](./docs/gscdump-cli/guides/2.authentication.md#hosted-and-local-authentication).
+Google Search Console's API answers narrow questions and [limits how much you can ask](https://gscdump.com/learn-google-search-console/api/rate-limits).
+Its [16-month history window](https://gscdump.com/learn-google-search-console/limits/16-month-data-retention) keeps moving.
+Comparing pages and queries over time takes extra work, especially when you want a chart.
 
-The core library uses `fetch` and supports edge runtimes.
-For the CLI, use Node.js 22.13 or later in the 22 release line, or Node.js 24 or later.
-You control how long you keep synced data.
-Google still limits which rows its API returns; pagination cannot recover omitted data.
-See [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data#data-limits).
+With gscdump, you can keep the data you collect and compare old periods with new ones.
+See the changes in charts, then ask your agents about the same record.
+Keep your own copy for deeper analysis.
+Google's [row limits](https://gscdump.com/learn-google-search-console/limits/export-row-limits) still decide what data is available.
 
 ## Get Started
 
