@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/gscdump?color=yellow)](https://npmjs.com/package/gscdump)
 [![npm downloads](https://img.shields.io/npm/dm/gscdump?color=yellow)](https://npm.chart.dev/gscdump)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
-[![skilld](https://skilld.dev/b/harlan-zw/gscdump/gscdump)](https://skilld.dev/gh/harlan-zw/gscdump/gscdump)
+[![skilld](https://skilld.dev/b/harlan-zw/gscdump)](https://skilld.dev/gh/harlan-zw/gscdump)
 
 > Dump your entire Google Search Console dataset and put your agents to work finding insights and improving your SEO.
 
@@ -47,7 +47,7 @@ See [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-
 
 Tell your agent:
 
-> Set up gscdump with the [gscdump Skill](https://skilld.dev/gh/harlan-zw/gscdump/gscdump): `npx skilld run harlan-zw/gscdump/gscdump`
+> Use this Skill: https://skilld.dev/gh/harlan-zw/gscdump
 
 If you cloned this repository, use [`packages/cli/skills/gscdump/SKILL.md`](./packages/cli/skills/gscdump/SKILL.md) instead.
 
