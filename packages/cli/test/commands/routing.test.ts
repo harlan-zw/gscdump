@@ -96,6 +96,16 @@ describe('read routing', () => {
     expect(analyticsCalls).toBe(0)
   })
 
+  it('names the search type the Store misses instead of claiming the table is empty', async () => {
+    await seed('pages', ['2026-08-01', '2026-08-02', '2026-08-03'])
+    const run = await cli(query('--type', 'image'), 'none')
+    expect(run.code).toBe(1)
+    expect(run.stderr).toContain('The Store has no image pages data for sc-domain:example.com')
+    expect(run.stderr).not.toContain('no pages data')
+    expect(JSON.parse(run.stdout).error).toMatchObject({ code: 'NOT_CONNECTED', nextCommand: 'gscdump init' })
+    expect(analyticsCalls).toBe(0)
+  })
+
   it('answers from the live API when the Site has no Store data, and says so', async () => {
     const run = await cli(query())
     expect(run.code, run.stderr).toBe(0)

@@ -68,8 +68,8 @@ export interface WindowGap {
 }
 
 export type PromptReason
-  /** Nothing can answer without Google, and Google is not connected. */
-  = | { kind: 'not-connected', tables: TableName[] }
+  /** Nothing can answer without Google, and Google is not connected. `searchTypes` names non-web slices the Store misses. */
+  = | { kind: 'not-connected', tables: TableName[], searchTypes?: SearchType[] }
   /** The Store has no data for these tables, and the request cannot go to the live API. */
     | { kind: 'no-data', tables: TableName[] }
   /** The Store has some of the dates. `windows` names each table and window that misses days. */
@@ -171,7 +171,12 @@ export function decideRoute(req: RouteRequest, state: RouteState): Route {
   const connected = auth !== 'none'
   const syncCommand = syncCommandFor(req.site ?? req.siteHint, coverage)
   const tables = [...new Set(coverage.flatMap(need => need.kind === 'window' ? [need.table] : need.tables))]
-  const notConnected: Route = { kind: 'prompt', reason: { kind: 'not-connected', tables }, nextCommand: CONNECT_COMMAND }
+  const searchTypes = [...new Set(coverage.flatMap(need => need.searchType && need.searchType !== 'web' ? [need.searchType] : []))]
+  const notConnected: Route = {
+    kind: 'prompt',
+    reason: { kind: 'not-connected', tables, ...(searchTypes.length > 0 ? { searchTypes } : {}) },
+    nextCommand: CONNECT_COMMAND,
+  }
 
   if (req.forceLive) {
     if (!req.liveCapable)
@@ -236,8 +241,10 @@ export function routeMessage(route: Exclude<Route, { kind: 'local' } | { kind: '
   const next = route.nextCommand
   switch (route.reason.kind) {
     case 'not-connected': {
+      const types = route.reason.searchTypes ?? []
+      const slice = types.length > 0 ? `${types.join(', ')} ` : ''
       const head = route.reason.tables.length > 0
-        ? `The Store has no ${route.reason.tables.join(', ')} data for ${site}, and Google is not connected.`
+        ? `The Store has no ${slice}${route.reason.tables.join(', ')} data for ${site}, and Google is not connected.`
         : `\`${req.label}\` needs Search Console, and Google is not connected.`
       return `${head} Run \`${next}\` to connect Google and sync the Site, or \`${LOGIN_COMMAND}\` to query Search Console directly.`
     }

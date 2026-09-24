@@ -40,6 +40,8 @@ it('queries real Parquet files only after every date and search type is complete
     const image = await query(['--type', 'image', '-f', 'json'])
     expect(image.code).toBe(1)
     expect(JSON.parse(image.stdout).error).toMatchObject({ code: 'NOT_CONNECTED', nextCommand: 'gscdump init' })
+    expect(image.stderr).toContain('no image pages data')
+    expect(image.stderr).not.toContain('no pages data')
     for (const date of ['2026-04-01', '2026-04-02', '2026-04-03'])
       await store.engine.setSyncState({ ...scope, searchType: 'image', date }, 'done')
     const emptyImage = await query(['--type', 'image', '-f', 'json'])
