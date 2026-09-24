@@ -116,7 +116,6 @@ export const dumpCommand = defineCommand({
       }
     }
 
-    const siteList = args['all-sites'] ? undefined : await readSiteListing(quiet)
     const bing: BingDumpStep = args.bing === false || (tablesFilter && !tablesFilter.has('bing'))
       ? { _tag: 'disabled' }
       : await dumpBing({
@@ -132,7 +131,6 @@ export const dumpCommand = defineCommand({
       ...(tablesFilter ? { tables: tablesFilter } : {}),
       ...(searchType !== undefined ? { searchType } : {}),
       ...(preloadedEntries ? { entries: preloadedEntries } : {}),
-      ...(siteList ? { siteList } : {}),
       bing,
     })
 
@@ -214,29 +212,15 @@ export interface DumpResult {
   format: DumpFormat
   /** Data files the dump wrote, with their sizes. A database format writes one. */
   files: WrittenFile[]
-  /** Files that describe the whole dump: `manifest.json`, and `sites.json` when the Site list was known. */
+  /** Files that describe the whole dump: `sites.json` and `manifest.json`. */
   metadataFiles: WrittenFile[]
   sites: SiteDumpSummary[]
 }
 
+/** One dumped Site: its Site URL and the Store ID its files use. */
 export interface SiteListing {
   siteUrl: string
-  permissionLevel: string | null
-}
-
-/**
- * The Search Console Site list for `sites.json`. The dump reads only the
- * Store, so it runs without a login; then it writes no `sites.json`.
- */
-async function readSiteListing(quiet: boolean): Promise<SiteListing[] | undefined> {
-  return createCommandContext({ needsAuth: true })
-    .then(ctx => ctx.loadSites())
-    .then(sites => sites.map(site => ({ siteUrl: site.siteUrl, permissionLevel: site.permissionLevel })))
-    .catch((error: Error) => {
-      if (!quiet)
-        logger.info(`sites.json skipped: ${error.message}`)
-      return undefined
-    })
+  siteId: string
 }
 
 export function formatBytes(bytes: number): string {
@@ -266,8 +250,6 @@ export async function dumpSites(opts: {
   tables?: ReadonlySet<string>
   searchType?: SearchType
   entries?: readonly ManifestEntry[]
-  /** Search Console Sites and permission levels, written to `sites.json`. */
-  siteList?: readonly SiteListing[]
   /** Outcome of the Bing step, listed in `manifest.json`. */
   bing?: BingDumpStep
 }): Promise<DumpResult> {
@@ -280,8 +262,9 @@ export async function dumpSites(opts: {
   })
   const files = await sink.close()
   const metadataFiles: WrittenFile[] = []
-  if (opts.siteList)
-    metadataFiles.push(await writeJsonFile(path.join(outDir, 'sites.json'), { sites: opts.siteList }))
+  // The targets come from the Store's Site map, so `sites.json` needs no Google call.
+  const sites: SiteListing[] = opts.targets.map(target => ({ siteUrl: target.site, siteId: target.siteId }))
+  metadataFiles.push(await writeJsonFile(path.join(outDir, 'sites.json'), { sites }))
   metadataFiles.push(await writeJsonFile(path.join(outDir, 'manifest.json'), {
     generatedAt: new Date().toISOString(),
     format,
@@ -305,7 +288,7 @@ async function dumpEachSite(sink: DumpSink, opts: Parameters<typeof dumpSites>[0
       : await listLiveEntries(store, target.siteId, opts.searchType))
       .filter(e => !tables || tables.has(e.table))
     const datasets: DumpedDataset[] = []
-    // Tag rows with the Site the caller resolved: the siteId encoding is lossy.
+    // Tag rows with the Site the caller resolved; it names the site id exactly.
     for (const source of groupTableSources(entries, store.dataDir, { [target.siteId]: target.site }))
       datasets.push(await sink.writeTable(source))
 

@@ -50,10 +50,10 @@ export interface SqlViews {
   close: () => void
 }
 
-/** Tables with no synced data that a query names. A table name counts when it stands alone as a word. */
-export function referencedEmptyTables(sql: string, emptyTables: readonly TableName[]): TableName[] {
+/** The tables of `tables` that a query names. A table name counts when it stands alone as a word. */
+export function referencedTables(sql: string, tables: readonly TableName[]): TableName[] {
   const words = new Set(sql.toLowerCase().match(/[a-z_][\w$]*/g) ?? [])
-  return emptyTables.filter(table => words.has(table))
+  return tables.filter(table => words.has(table))
 }
 
 /**

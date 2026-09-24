@@ -38,6 +38,15 @@ export function finalResponse(events) {
     : last.part?.text ?? ''
 }
 
+/**
+ * The sync that pre-fills a case's Store before the agent runs. A `'partial'`
+ * seed syncs the first day only, so a query over the full window stops with
+ * `STORE_RANGE_NOT_COVERED` and the case exercises its repair guidance.
+ */
+export function seedCommand(site, start, end, seeded = true) {
+  return ['sync', '--site', site, '--start', start, '--end', seeded === 'partial' ? start : end, '--tables', 'pages', '--no-rollups', '--quiet']
+}
+
 export function commands(markdown) {
   const result = []
   let shell = false

@@ -118,7 +118,7 @@ describe('local sync coverage', () => {
     const message = stderr.join('\n')
     expect(message).toContain('current window 2026-02-21 to 2026-03-20')
     expect(message).toContain('page_queries misses 3 of 28 days')
-    expect(message).toContain(`gscdump sync --site ${SITE} --start 2026-03-05 --end 2026-03-07 --tables page_queries`)
+    expect(message).toContain(`gscdump sync --site example.com --start 2026-03-05 --end 2026-03-07 --tables page_queries`)
     expect(message).toContain('--live')
     expect(stdout.join('\n')).not.toContain('alpha')
   })
@@ -133,9 +133,10 @@ describe('local sync coverage', () => {
     const message = stderr.join('\n')
     expect(message).toContain('comparison window 2026-01-24 to 2026-02-20')
     expect(message).toContain('page_queries misses 27 of 28 days')
-    expect(message).toContain(`gscdump sync --site ${SITE} --start 2026-01-24 --end 2026-02-19 --tables page_queries`)
+    expect(message).toContain(`gscdump sync --site example.com --start 2026-01-24 --end 2026-02-19 --tables page_queries`)
     expect(message).not.toContain('current window')
-    expect(stdout.join('\n')).toBe('')
+    // --json prints the stop, never results.
+    expect(JSON.parse(stdout.join('\n'))).toMatchObject({ error: { code: 'STORE_RANGE_NOT_COVERED' } })
   })
 
   it('stops report movers on a comparison gap and names only the tables it misses', async () => {
@@ -147,9 +148,9 @@ describe('local sync coverage', () => {
 
     const message = stderr.join('\n')
     expect(message).toContain('comparison window 2026-01-24 to 2026-02-20: page_queries misses 28 of 28 days')
-    expect(message).toContain(`gscdump sync --site ${SITE} --start 2026-01-24 --end 2026-02-20 --tables page_queries`)
+    expect(message).toContain(`gscdump sync --site example.com --start 2026-01-24 --end 2026-02-20 --tables page_queries`)
     expect(message).not.toContain('pages misses')
-    expect(stdout.join('\n')).toBe('')
+    expect(JSON.parse(stdout.join('\n'))).toMatchObject({ error: { code: 'STORE_RANGE_NOT_COVERED' } })
   })
 
   it('runs an explicit range that the Store fully covers', async () => {

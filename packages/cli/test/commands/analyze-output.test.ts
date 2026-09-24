@@ -6,16 +6,14 @@ import { createCliRuntime, runWithCliRuntime } from '../../src/runtime'
 
 const boundary = vi.hoisted(() => ({ result: { results: [] as Record<string, unknown>[], meta: {} as Record<string, unknown> } }))
 vi.mock('../../src/analysis-local', () => ({
-  resolveAnalysisSource: vi.fn(async args => ({
+  resolveAnalysisSource: vi.fn(async () => ({
     siteUrl: 'sc-domain:example.com',
     isLive: false,
-    format: args.json ? 'json' : args.format ?? 'table',
     runAnalysis: async () => boundary.result,
-    anchorFor: async () => '2026-08-23',
-    checkCoverage: async () => ({ kind: 'covered' }),
+    anchor: '2026-08-23',
   })),
   analyzerTables: vi.fn(() => []),
-  analyzerReads: vi.fn(() => []),
+  analysisNeeds: vi.fn(() => []),
 }))
 
 const columnsDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'columns')

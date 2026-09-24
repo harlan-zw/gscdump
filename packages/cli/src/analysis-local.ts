@@ -1,127 +1,158 @@
 import type { AnalysisParams, AnalysisResult } from '@gscdump/engine/analysis-types'
-import type { AnalysisQuerySource } from '@gscdump/engine/source'
+import type { AnalysisQuerySource, FileSet } from '@gscdump/engine/source'
+import type { BuilderState } from 'gscdump/query'
 import type { Result } from 'gscdump/result'
-import type { LocalStore, TableName } from './local-store'
-import type { CoverageGap, WindowRead } from './window'
-import process from 'node:process'
+import type { TableName } from './local-store'
+import type { LiveReason, NeedPeriod, RouteNeed } from './route'
 import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
 import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
 import { AnalyzerCapabilityError, runAnalyzerFromSource } from '@gscdump/engine/analyzer'
 import { createEngineQuerySource } from '@gscdump/engine/source'
+import { getLatestGscDate } from 'gscdump/dates'
+import { extractDateRange } from 'gscdump/query'
 import { err, ok, unwrapResult } from 'gscdump/result'
-import { createCommandContext, siteArg } from './context'
+import { createCommandContext } from './context'
 import { LocalStoreUnsupportedError } from './error-handler'
-import { createLocalStore } from './local-store'
+import { inferTable } from './local-store'
+import { decideRoute, liveNote, readRouteState, readSiteStates, resolveReadSite, stopAtRoute } from './route'
+import { useCliRuntime } from './runtime'
 import { logger } from './utils'
-import { resolveAnchor, windowCoverage } from './window'
+import { newestDoneDate } from './window'
 
-export async function hasLocalData(
-  store: LocalStore,
-  siteUrl: string,
-): Promise<boolean> {
-  const entries = await store.engine.listLive({
-    userId: store.userId,
-    siteId: store.siteIdFor(siteUrl),
-  })
-  return entries.length > 0
-}
+/** Where the rows of a run came from. JSON output carries it as `meta.source`. */
+export type RowSource = 'local' | 'live'
 
 export interface ResolvedAnalysisSource {
   source: AnalysisQuerySource
   siteUrl: string
-  format: string
   isLive: boolean
+  /** Set when the router chose live on its own or `--live` forced it. */
+  liveReason?: LiveReason
+  /** Newest complete date the window ends on. */
+  anchor: string
   /**
    * Run a single analysis through this resolved source. Translates
    * `AnalyzerCapabilityError` from the dispatcher into
    * `LocalStoreUnsupportedError` carrying the mode; the CLI shell renders it.
    */
   runAnalysis: (params: AnalysisParams) => Promise<AnalysisResult>
-  /**
-   * Newest complete date for `tables`: the Store's newest synced day in
-   * local mode, `getLatestGscDate()` in live mode. Windows end on it.
-   */
-  anchorFor: (tables: readonly TableName[]) => Promise<string>
-  /**
-   * Check that the Store holds a `done` sync state for every day of every
-   * read. Local runs must stop on `gaps`: partial data gives wrong numbers.
-   * Live sources are always `covered`: the GSC API serves the whole window.
-   */
-  checkCoverage: (reads: readonly WindowRead[]) => Promise<CoverageCheck>
 }
 
-/**
- * Tables an analyzer's SQL plan reads, for anchoring its window. Dates in
- * `params` do not change the tables. Returns an empty list (any table) when
- * the analyzer has no SQL plan or its plan cannot build from these params;
- * the run itself then reports that build failure.
- */
-export function analyzerTables(params: AnalysisParams): TableName[] {
+const PLACEHOLDER_DATE = '2000-01-01'
+const DAILY_PARTITION_RE = /^daily\/(\d{4}-\d{2}-\d{2})$/
+
+/** A FileSet of a SQL plan, with the window it reads: `previous` reads the comparison window. */
+interface PlannedRead {
+  period: NeedPeriod
+  fileSet: FileSet
+}
+
+function sqlPlanReads(params: AnalysisParams): PlannedRead[] | undefined {
   const analyzer = defaultAnalyzerRegistry.getAnalyzerVariants(params.type)?.sql
   if (!analyzer)
-    return []
-  let plan: ReturnType<typeof analyzer.build>
-  try {
-    plan = analyzer.build({ startDate: '2000-01-01', endDate: '2000-01-01', prevStartDate: '2000-01-01', prevEndDate: '2000-01-01', ...params })
-  }
-  catch (error) {
-    logger.debug(`Cannot plan ${params.type} to pick its tables: ${(error as Error).message}`)
-    return []
-  }
-  if (plan.kind !== 'sql')
-    return []
-  const fileSets = [plan.current, plan.previous, ...Object.values(plan.extraFiles ?? {})]
-  return [...new Set(fileSets.flatMap(fileSet => fileSet ? [fileSet.table] : []))]
-}
-
-export type CoverageCheck
-  = | { kind: 'covered' }
-    | { kind: 'gaps', gaps: CoverageGap[], message: string }
-
-/**
- * Tables and windows an analyzer's SQL plan reads for these dated params.
- * `current` and extra FileSets read the current window; `previous` reads the
- * comparison window. Returns an empty list when the analyzer has no SQL plan
- * or its plan cannot build; the run itself then reports that failure.
- */
-export function analyzerReads(params: AnalysisParams): WindowRead[] {
-  const analyzer = defaultAnalyzerRegistry.getAnalyzerVariants(params.type)?.sql
-  if (!analyzer || !params.startDate || !params.endDate)
-    return []
+    return undefined
   let plan: ReturnType<typeof analyzer.build>
   try {
     plan = analyzer.build(params)
   }
   catch (error) {
-    logger.debug(`Cannot plan ${params.type} to check its sync coverage: ${(error as Error).message}`)
-    return []
+    // The run itself reports the build failure with its own message.
+    logger.debug(`Cannot plan ${params.type}: ${(error as Error).message}`)
+    return undefined
   }
   if (plan.kind !== 'sql')
-    return []
-  const current = { window: 'current', start: params.startDate, end: params.endDate } as const
-  const reads: WindowRead[] = [plan.current, ...Object.values(plan.extraFiles ?? {})].map(fileSet => ({ ...current, table: fileSet.table }))
-  if (plan.previous && params.prevStartDate && params.prevEndDate)
-    reads.push({ window: 'comparison', table: plan.previous.table, start: params.prevStartDate, end: params.prevEndDate })
-  return reads
-}
-
-/** Stop message for sync gaps: each gap, then one sync command that fills them all. */
-export function coverageGapMessage(siteUrl: string, gaps: readonly CoverageGap[]): string {
-  const lines = gaps.map(gap => `  ${gap.window} window ${gap.start} to ${gap.end}: ${gap.table} misses ${gap.missingDays} of ${gap.expectedDays} days (${gap.missingStart} to ${gap.missingEnd}).`)
-  const start = gaps.reduce((min, gap) => gap.missingStart < min ? gap.missingStart : min, gaps[0]!.missingStart)
-  const end = gaps.reduce((max, gap) => gap.missingEnd > max ? gap.missingEnd : max, gaps[0]!.missingEnd)
-  const tables = [...new Set(gaps.map(gap => gap.table))].sort().join(',')
+    return undefined
   return [
-    `The local Store for ${siteUrl} does not hold every day this run reads:`,
-    ...lines,
-    'Results from partial data are wrong, so the run stops.',
-    `Run \`gscdump sync --site ${siteUrl} --start ${start} --end ${end} --tables ${tables}\`, or pass --live.`,
-  ].join('\n')
+    { period: 'current', fileSet: plan.current },
+    ...(plan.previous ? [{ period: 'comparison', fileSet: plan.previous } as const] : []),
+    ...Object.values(plan.extraFiles ?? {}).map(fileSet => ({ period: 'current', fileSet }) as const),
+  ]
 }
 
-function warnMissingSync(siteUrl: string) {
-  return (tables: readonly TableName[], fallback: string): void => {
-    logger.warn(`No synced days for ${tables.length ? tables.join(', ') : 'any table'} on ${siteUrl}. Windows end on ${fallback}. Run \`gscdump sync\` first.`)
+/**
+ * Tables an analyzer's SQL plan reads, for anchoring its window. Dates in
+ * `params` do not change the tables. Returns an empty list (any table) when
+ * the analyzer has no SQL plan or its plan cannot build from these params.
+ */
+export function analyzerTables(params: AnalysisParams): TableName[] {
+  const reads = sqlPlanReads({ startDate: PLACEHOLDER_DATE, endDate: PLACEHOLDER_DATE, prevStartDate: PLACEHOLDER_DATE, prevEndDate: PLACEHOLDER_DATE, ...params })
+  return [...new Set((reads ?? []).map(read => read.fileSet.table))]
+}
+
+/** Whether the analyzer's SQL plan compiles through a BuildContext adapter. */
+function isAdapterPlanned(type: string): boolean {
+  return defaultAnalyzerRegistry.getAnalyzerVariants(type)?.sql?.requires.includes('adapter') ?? false
+}
+
+function isBuilderState(value: unknown): value is BuilderState {
+  return Boolean(value) && typeof value === 'object' && Array.isArray((value as { dimensions?: unknown }).dimensions)
+}
+
+/** The Store read of one BuilderState: its table, scoped to its own dates. */
+function builderStateNeed(state: BuilderState, period: NeedPeriod): RouteNeed {
+  const table = inferTable(state.dimensions)
+  const { startDate, endDate } = extractDateRange(state.filter)
+  const searchType = state.searchType && state.searchType !== 'web' ? state.searchType : undefined
+  if (startDate && endDate)
+    return { kind: 'window', period, table, searchType: searchType ?? 'web', window: { start: startDate, end: endDate } }
+  return { kind: 'any', tables: [table], ...(searchType ? { searchType } : {}) }
+}
+
+/**
+ * Store needs of the BuilderState-driven analyzers (`data-query`,
+ * `data-detail`). Their SQL plan compiles only through a source adapter, so
+ * routing reads the tables and dates off `params.q` / `params.qc` instead.
+ * Without a `q` the run reads no known table, so the need stays unmet and
+ * the router stops or answers live rather than assuming coverage.
+ */
+function builderStateNeeds(params: AnalysisParams): RouteNeed[] {
+  if (!isAdapterPlanned(params.type))
+    return []
+  if (!isBuilderState(params.q))
+    return [{ kind: 'any', tables: [] }]
+  const needs = [builderStateNeed(params.q, 'current')]
+  if (isBuilderState(params.qc))
+    needs.push(builderStateNeed(params.qc, 'comparison'))
+  return needs
+}
+
+/**
+ * What a run reads from the Store: each FileSet of the analyzer's SQL plan,
+ * with the dates of its daily partitions. `params` must hold the real window.
+ * A FileSet without daily partitions scopes its own rows, so any synced day
+ * of its table counts. Plans that cannot build here (the BuilderState-driven
+ * ones) fall back to `builderStateNeeds` — an unanalysed read must never
+ * look covered, or the router sends an empty Store into the analyzer. The
+ * list is never empty: a read the plan cannot describe stays unmet, because
+ * the router reads empty coverage as fully covered.
+ */
+export function analysisNeeds(params: AnalysisParams): RouteNeed[] {
+  const needs: RouteNeed[] = []
+  for (const { period, fileSet } of sqlPlanReads(params) ?? []) {
+    const dates = fileSet.partitions.flatMap(partition => DAILY_PARTITION_RE.exec(partition)?.[1] ?? []).sort()
+    if (dates.length === 0) {
+      needs.push({ kind: 'any', tables: [fileSet.table] })
+      continue
+    }
+    needs.push({ kind: 'window', period, table: fileSet.table, searchType: 'web', window: { start: dates[0]!, end: dates.at(-1)! } })
+  }
+  if (needs.length > 0)
+    return needs
+  const builderNeeds = builderStateNeeds(params)
+  if (builderNeeds.length > 0)
+    return builderNeeds
+  // The plan cannot build from these params (a missing required flag, for
+  // example), so the run reads an unknown set: keep it unmet and let the
+  // router stop or answer live instead of treating coverage as vacuous.
+  return [{ kind: 'any', tables: [] }]
+}
+
+/** Which sources can run these analyzers. */
+export function analyzerSources(types: readonly string[]): { local: boolean, live: boolean } {
+  const variants = types.map(type => defaultAnalyzerRegistry.getAnalyzerVariants(type))
+  return {
+    local: variants.every(variant => Boolean(variant?.sql)),
+    live: variants.every(variant => Boolean(variant?.rows)),
   }
 }
 
@@ -129,21 +160,28 @@ export interface ResolveAnalysisSourceArgs {
   site?: unknown
   live?: boolean
   json?: boolean
-  format?: unknown
+  /** The command, for messages: `analyze movers`, `report triage`. */
+  label: string
+  /** Analyzer ids the run executes. They decide which sources can answer. */
+  types: readonly string[]
+  /** Which sources can answer, when `types` alone does not say. */
+  sources?: { local: boolean, live: boolean }
+  /** Tables whose newest synced day anchors the window. */
+  anchorTables: readonly TableName[]
+  /** Store needs of the run once its window ends on `anchor`. */
+  needs: (anchor: string) => RouteNeed[]
 }
 
 /**
  * Errors-as-values core: run one analysis, returning the modelled
  * `LocalStoreUnsupportedError` as a value when the dispatcher reports the
  * analyzer has no implementation for this source (`AnalyzerCapabilityError`).
- * Any other failure is a defect and still propagates. `makeRunAnalysis` is the
- * thin throwing wrapper that re-raises the value, preserving the
- * `LocalStoreUnsupportedError` identity the global handler matches on.
+ * Any other failure is a defect and still propagates.
  */
 async function runAnalysisResult(
   source: AnalysisQuerySource,
   params: AnalysisParams,
-  mode: 'live' | 'local',
+  mode: RowSource,
 ): Promise<Result<AnalysisResult, LocalStoreUnsupportedError>> {
   return runAnalyzerFromSource(source, params, defaultAnalyzerRegistry)
     .then(ok<AnalysisResult>)
@@ -154,68 +192,46 @@ async function runAnalysisResult(
     })
 }
 
-function makeRunAnalysis(
-  source: AnalysisQuerySource,
-  mode: 'live' | 'local',
-): (params: AnalysisParams) => Promise<AnalysisResult> {
-  return async params =>
-    unwrapResult(await runAnalysisResult(source, params, mode), e => e)
+function makeRunAnalysis(source: AnalysisQuerySource, mode: RowSource): (params: AnalysisParams) => Promise<AnalysisResult> {
+  return async (params) => {
+    const result = unwrapResult(await runAnalysisResult(source, params, mode), e => e)
+    return { ...result, meta: { ...result.meta, source: mode } }
+  }
 }
 
 /**
- * Single entry point used by `analyze` and `report` commands. Picks live vs.
- * local-store source from `--live`, ensures local data exists when running
- * locally, and returns a `runAnalysis` shim that maps capability errors to
- * `LocalStoreUnsupportedError`. The CLI shell renders the final error.
- *
- * Local mode does NOT require live auth: the local store is the
- * authoritative source by design, and the Site resolves from the Store.
+ * Single entry point for `analyze` and `report`. The router picks the
+ * Store or the live API from coverage, auth and the sync run, and stops
+ * with the next command when neither can answer. A Store read never needs
+ * Google auth.
  */
-export async function resolveAnalysisSource(
-  args: ResolveAnalysisSourceArgs,
-): Promise<ResolvedAnalysisSource> {
-  const isLive = !!args.live
-  const format = args.json ? 'json' : (args.format ? String(args.format) : 'table')
+export async function resolveAnalysisSource(args: ResolveAnalysisSourceArgs): Promise<ResolvedAnalysisSource> {
+  const forceLive = Boolean(args.live)
+  const ctx = await createCommandContext({ needsStore: true })
+  const store = ctx.store!
+  let live: ReturnType<typeof createCommandContext> | undefined
+  const connect = (): ReturnType<typeof createCommandContext> => (live ??= createCommandContext({ needsAuth: true, needsStore: false }))
+  const { site, siteHint, auth } = await resolveReadSite(ctx, args.site ? String(args.site) : undefined, { forceLive, connect })
 
-  if (!isLive) {
-    const ctx = await createCommandContext()
-    const store = createLocalStore({ dataDir: ctx.dataDir })
-    const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined, { scope: 'store' })
+  const states = site ? await readSiteStates(store, site) : []
+  const anchor = forceLive ? getLatestGscDate() : newestDoneDate(states, args.anchorTables) ?? getLatestGscDate()
+  const sources = args.sources ?? analyzerSources(args.types)
+  const req = { site, siteHint, label: args.label, localCapable: sources.local, liveCapable: sources.live, forceLive, argv: useCliRuntime().rawArgs }
+  const state = await readRouteState({ store, site, needs: args.needs(anchor), states, auth })
+  const route = decideRoute(req, state)
 
-    const localAvailable = await hasLocalData(store, siteUrl)
-    if (!localAvailable) {
-      logger.error(`No local data for ${siteUrl}. Run \`gscdump sync --site ${siteArg(siteUrl)}\` first, or pass --live.`)
-      process.exit(1)
-    }
-    const source = createEngineQuerySource({
-      engine: store.engine,
-      ctx: { userId: store.userId, siteId: store.siteIdFor(siteUrl) },
-    })
-    return {
-      source,
-      siteUrl,
-      format,
-      isLive,
-      runAnalysis: makeRunAnalysis(source, 'local'),
-      anchorFor: tables => resolveAnchor({ kind: 'local', store, siteUrl, tables }, warnMissingSync(siteUrl)),
-      checkCoverage: async (reads) => {
-        const states = await store.engine.getSyncStates({ userId: store.userId, siteId: store.siteIdFor(siteUrl), state: 'done' })
-        const coverage = windowCoverage(states, reads)
-        return coverage.kind === 'covered' ? coverage : { ...coverage, message: coverageGapMessage(siteUrl, coverage.gaps) }
-      },
-    }
+  if (route.kind === 'syncing' || route.kind === 'prompt')
+    stopAtRoute(route, req, state.auth, { json: Boolean(args.json) })
+
+  if (route.kind === 'local') {
+    const source = createEngineQuerySource({ engine: store.engine, ctx: { userId: store.userId, siteId: store.siteIdFor(site!) } })
+    return { source, siteUrl: site!, isLive: false, anchor, runAnalysis: makeRunAnalysis(source, 'local') }
   }
 
-  const ctx = await createCommandContext({ needsAuth: true, needsStore: false })
-  const siteUrl = await ctx.resolveSite(args.site ? String(args.site) : undefined)
-  const source = createGscApiQuerySource({ client: ctx.client!, siteUrl })
-  return {
-    source,
-    siteUrl,
-    format,
-    isLive,
-    runAnalysis: makeRunAnalysis(source, 'live'),
-    anchorFor: () => resolveAnchor({ kind: 'live' }, warnMissingSync(siteUrl)),
-    checkCoverage: async () => ({ kind: 'covered' }),
-  }
+  const liveCtx = await connect()
+  const siteUrl = site ?? await liveCtx.resolveSite(undefined)
+  if (route.reason === 'no-store-data')
+    logger.warn(liveNote(siteUrl))
+  const source = createGscApiQuerySource({ client: liveCtx.client!, siteUrl })
+  return { source, siteUrl, isLive: true, liveReason: route.reason, anchor, runAnalysis: makeRunAnalysis(source, 'live') }
 }

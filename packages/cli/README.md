@@ -56,9 +56,9 @@ gscdump mcp
 | `inspect <url...> [--file]` | URL inspection for one or more URLs; renders Indexing Evidence, rich results, and AMP, and saves each result to the Store |
 | `indexing` | Notify Google about URL changes (`submit`, `remove`, `status`, `batch`, `batch-status`, `quota`); supports `--retries`. `indexing urls --status not_indexed` lists hosted URL Inspection results |
 | `sync` | Sync GSC data, sitemaps, and URL Inspection results to the local Store; `--inspect-limit`, `--max-calls`, `--all-sites`, `--no-sitemaps`, `--no-inspections`, `--retry-failed`, `--dry-run` |
-| `query` | Run a search analytics query (Store by default; `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. `--sql` runs DuckDB SQL over the Store views; `--schema` lists them. |
+| `query` | Run a search analytics query (the Store when it covers the dates, see [Routing](#routing); `--live` hits GSC API). Filters: `--query`, `--page`, `--country`, `--device`, `--search-appearance`, `--type`, `--data-state`, `--aggregation-type`. `--explain` previews the request body; `--output -` writes to stdout. `--sql` runs DuckDB SQL over the Store views; `--schema` lists them. |
 | `dump` | Export the Store, inspections, sitemaps, and Bing data (`--format parquet\|csv\|json\|ndjson\|sqlite\|duckdb`, `--tables`, `--all-sites`, `--no-bing`). Every row has `site` and `search_type` |
-| `analyze <tool>` | Run an SEO Analyzer against the Store (`--live` for row-based against fresh API) |
+| `analyze <tool>` | Run an SEO Analyzer against the Store, or live when the Site has no Store data (`--live` forces live for row-based Analyzers) |
 | `entities` | Read saved URL inspections and snapshot indexing metadata into the local entity store |
 | `store stats` | Show row/byte counts per table and on-disk footprint |
 | `store compact` | Compact older data into weekly, monthly, and quarterly tiers (`--dry-run`) |
@@ -116,6 +116,7 @@ If you change a saved API root, supply the API key explicitly.
 | Bing connection and CNAME verification | Uses `bing login`, `bing status`, and `bing verify` | Verify sites in Bing Webmaster Tools |
 | Hosted sitemap membership and history | Supported | Requires hosted authentication |
 | Store queries and exports | Reads the local Store | Reads the local Store |
+| Hosted sync progress | `status` and `sites` show it | Not available |
 
 Hosted Bing access follows the API's plan and preview access rules.
 `auth logout` removes the saved mode and saved Google and Bing credentials.
@@ -267,9 +268,29 @@ Windows default to the last 28 days that end on the newest synced day.
 If a fetch reaches the budget, the output shows a partial-data warning.
 Use `gscdump analyze <tool> --help` for additional options.
 
-The CLI requires local data unless you pass `--live`.
+`analyze` and `report` follow the [routing rules](#routing).
 Pass `--live` to use Google explicitly.
 SQL-only Analyzers require local data.
+
+## Routing
+
+Login is optional. Log in with Google or a hosted key, or sync a local Store.
+`query`, `analyze`, and `report` pick one source for each run:
+
+- If the Store covers every date the run needs, the run reads the Store. This is also true while a sync runs.
+- If the Store has no data for the tables the run needs, and Google is connected, the run asks the live Search Console API.
+  stderr prints `No synced data for SITE; answering from the live Search Console API.` JSON output has `meta.source: "live"`.
+- If the Store has no data and Google is not connected, the run stops and names `gscdump init`.
+- If some dates are missing, the run stops and prints the `gscdump sync` command for the missing dates and tables. Pass `--live` to ask Google instead.
+- If a sync for the Site is running and the dates are not covered yet, the run stops with `Sync running: 41 of 90 days done.`
+  A sync without a heartbeat in the last 2 minutes counts as stopped.
+
+One run never mixes Store rows and live rows. Live results hold the top rows of each request, and synced data keeps more of the long tail.
+`query --sql` reads the Store only.
+With `--format json` or `--json`, a stop prints `{ "error": { "code", "message", "nextCommand" } }` on stdout and exits 1.
+
+Every Search Analytics, URL Inspection, and Indexing API call goes through the quota ledger in the data dir, so all commands share one daily budget.
+When a quota is spent, the command stops and says when the quota resets.
 
 ## Sync
 

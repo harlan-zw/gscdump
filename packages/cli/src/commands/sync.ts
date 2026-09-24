@@ -496,7 +496,7 @@ export const syncCommand = defineCommand({
       return
     }
 
-    const ctx = await createCommandContext({ needsAuth: true, needsStore: true, fetchOptions: LEDGER_FETCH_OPTIONS })
+    const ctx = await createCommandContext({ needsAuth: true, needsStore: true, fetchOptions: LEDGER_FETCH_OPTIONS, quota: false })
     const store = ctx.store!
     const requestedSites = args['all-sites']
       ? (await ctx.loadSites()).map(site => site.siteUrl)
