@@ -157,8 +157,6 @@ export function toSumPosition(apiPosition: number, impressions: number): number 
 /**
  * Map one GSC API row into `{ date, row }` for the given table, or null if
  * the row has no keys (GSC occasionally emits empty-keys placeholders).
- * Use `createRowAccumulator` for a complete slice so URL variants combine
- * before the storage engine deduplicates stored keys.
  */
 export function transformGscRow(
   table: TableName,
@@ -391,29 +389,44 @@ export interface RowAccumulatorOptions extends IngestOptions {
 
 const DEFAULT_MAX_ROWS = 500_000
 
-function storedRows(table: TableName, sourceRows: Map<string, Row>): Row[] {
-  if (!TABLE_DIMS[table].includes('page'))
-    return [...sourceRows.values()]
+const ADDITIVE_COLUMN_RE = /^(?:clicks|impressions|sum_position)(?:_|$)/
 
-  // Distinct Google URLs can share a stored path. Combine their additive
-  // metrics only after source identities have absorbed repeated API rows.
-  const grouped = new Map<string, Row>()
-  for (const row of sourceRows.values()) {
-    const key = JSON.stringify([
-      row.searchAppearance,
-      ...TABLE_DIMS[table].map(dimension => row[dimension === 'page' ? 'url' : dimension]),
-    ])
+/** Stored columns that identify one metric row in a table's day partition. */
+const STORED_KEY_COLUMNS = Object.fromEntries(
+  (Object.keys(TABLE_DIMS) as TableName[]).map(table => [table, [...new Set([
+    'date',
+    'searchAppearance',
+    ...TABLE_DIMS[table].map(dimension => dimension === 'page' ? 'url' : dimension),
+  ])]] as const),
+) as Record<TableName, readonly string[]>
+
+/**
+ * Combine rows that share a stored key into one row. Additive metrics
+ * (`clicks`, `impressions`, `sum_position` and their per-device variants)
+ * sum. Every other column keeps the first row's value.
+ *
+ * Distinct Google URLs can share a stored key: `https://x.com/a` and
+ * `https://www.x.com/a` both store as `/a`. Each is a separate fact, so they
+ * add. Remove repeated API rows before this step; `createRowAccumulator`
+ * does that by keying on Google's own dimension tuple.
+ */
+export function sumByStoredKey(table: TableName, rows: Iterable<Row>): Row[] {
+  const keyColumns = STORED_KEY_COLUMNS[table]
+  const grouped = new Map<string, Record<string, unknown>>()
+  for (const row of rows) {
+    const r = row as Record<string, unknown>
+    const key = JSON.stringify(keyColumns.map(col => r[col] ?? null))
     const prior = grouped.get(key)
-    if (prior) {
-      prior.clicks = Number(prior.clicks) + Number(row.clicks)
-      prior.impressions = Number(prior.impressions) + Number(row.impressions)
-      prior.sum_position = Number(prior.sum_position) + Number(row.sum_position)
+    if (!prior) {
+      grouped.set(key, { ...r })
+      continue
     }
-    else {
-      grouped.set(key, { ...row })
+    for (const col of Object.keys(r)) {
+      if (ADDITIVE_COLUMN_RE.test(col))
+        prior[col] = Number(prior[col] ?? 0) + Number(r[col] ?? 0)
     }
   }
-  return [...grouped.values()]
+  return [...grouped.values()] as Row[]
 }
 
 export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAccumulator {
@@ -472,7 +485,7 @@ export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAc
       const out = new Map<TableName, Map<string, Row[]>>()
       for (const [table, byDate] of buckets) {
         out.set(table, new Map(
-          [...byDate].map(([date, sourceRows]) => [date, storedRows(table, sourceRows)]),
+          [...byDate].map(([date, sourceRows]) => [date, sumByStoredKey(table, sourceRows.values())]),
         ))
       }
       buckets = new Map()
@@ -496,7 +509,7 @@ export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAc
               outBy = new Map()
               out.set(table, outBy)
             }
-            outBy.set(date, storedRows(table, dateRows))
+            outBy.set(date, sumByStoredKey(table, dateRows.values()))
             total -= dateRows.size
           }
         }
