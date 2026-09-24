@@ -164,8 +164,8 @@ Use the [producer inventory](./hosted-api-inventory.md) to check individual oper
 
 These are command replacements, not a SQLite data migration.
 Back up old files before changing your data workflow.
-See [getting started](./guides/getting-started.md) and [historical data](./guides/historical-database.md).
-Indexing notifications must meet [Google's eligibility requirements](./guides/url-indexing.md#send-eligible-indexing-notifications).
+See [getting started](./gscdump-cli/guides/1.getting-started.md) and [historical data](./gscdump-cli/guides/4.historical-database.md).
+Indexing notifications must meet [Google's eligibility requirements](./gscdump-cli/guides/6.url-indexing.md#send-eligible-indexing-notifications).
 
 ## Consumer checks
 

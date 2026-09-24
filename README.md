@@ -6,13 +6,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/gscdump?color=yellow)](https://npm.chart.dev/gscdump)
 [![license](https://img.shields.io/github/license/harlan-zw/gscdump?color=yellow)](https://github.com/harlan-zw/gscdump/blob/main/LICENSE)
 
-> Google Search Console data and SEO analysis for TypeScript, the CLI, and AI assistants.
-
-Tell your agent:
-
-> Set up gscdump using this skill: https://gscdump.com/SKILL.md
-
-If you cloned this repository, use [`packages/cli/skills/gscdump/SKILL.md`](./packages/cli/skills/gscdump/SKILL.md) instead.
+> Dump your entire Google Search Console dataset and put your agents to work finding insights and improving your SEO.
 
 <p align="center">
 <table>
@@ -40,7 +34,7 @@ gscdump gives you Google Search Console data without building your own API integ
 Query Google directly, keep a local history, or run SEO analysis from the CLI and your AI assistant.
 The CLI and TypeScript library also read Bing Webmaster data and Indexing Evidence.
 The CLI supports shared hosted authentication and local Google or Bing credentials.
-See [Bing commands and authentication](./packages/cli/README.md#hosted-and-local-authentication).
+See [Bing commands and authentication](./docs/gscdump-cli/guides/2.authentication.md#hosted-and-local-authentication).
 
 The core library uses `fetch` and supports edge runtimes.
 For the CLI, use Node.js 22.13 or later in the 22 release line, or Node.js 24 or later.
@@ -49,6 +43,12 @@ Google still limits which rows its API returns; pagination cannot recover omitte
 See [Google's data limits](https://developers.google.com/webmaster-tools/v1/how-tos/all-your-data#data-limits).
 
 ## Get Started
+
+Tell your agent:
+
+> Set up gscdump using this skill: https://gscdump.com/SKILL.md
+
+If you cloned this repository, use [`packages/cli/skills/gscdump/SKILL.md`](./packages/cli/skills/gscdump/SKILL.md) instead.
 
 ```bash
 npm install -g @gscdump/cli
@@ -73,242 +73,17 @@ gscdump mcp
 For one-off commands, use `npx -y @gscdump/cli` in place of `gscdump`.
 The `gscdump` npm package contains the library; `@gscdump/cli` provides the command.
 
-To use connections saved on gscdump.com:
+## Documentation
 
-```bash
-export GSCDUMP_API_KEY=gsd_user_...
-gscdump auth login --mode cloud
-gscdump sites --json
-gscdump bing sites --json
-gscdump bing login --site s_SITE_ID
-gscdump bing dump --site s_SITE_ID --format csv --out ./bing-export
-```
-
-Complete the Bing browser connection before exporting.
-For local Bing credentials and available operations, see [CLI authentication](./packages/cli/README.md#hosted-and-local-authentication).
-
-Guides:
-
-- [Getting started](./docs/guides/getting-started.md)
-- [Keep historical data](./docs/guides/historical-database.md)
-- [SEO analysis](./docs/guides/seo-analysis.md)
-- [AI integration](./docs/guides/ai-integration.md)
-- [URL inspection and indexing](./docs/guides/url-indexing.md)
-
-### Commands
-
-| Command | Description |
-| --- | --- |
-| `init` | Set up OAuth credentials and the Store directory |
-| `auth` | Manage authentication with `status`, `login`, and `logout` |
-| `bing` | Connect Bing, export datasets, inspect URLs, and check cloud connection verification |
-| `profile` | Manage separate credential profiles |
-| `dump` | Export the Store as Parquet, CSV, JSON, NDJSON, SQLite, or DuckDB |
-| `query` | Query stored rows, run SQL with `--sql`, or query Google with `--live` |
-| `sync` | Fetch Google data into the Store |
-| `sites [--with-sitemaps]` | List Sites and manage Site verification |
-| `sitemaps` | List, submit, delete, and discover sitemaps |
-| `inspect <url...>` | Inspect one or more URLs and save the results to the Store |
-| `indexing` | Send eligible notifications with `submit`, `remove`, and `batch`; read metadata with `status`; list hosted URL Inspection results with `urls` |
-| `analyze <tool>` | Run one Analyzer |
-| `report <id>` | Run a Report |
-| `entities` | Read saved URL inspections and save indexing notification metadata locally |
-| `store stats` | Show row counts, file sizes, and sync progress |
-| `store compact` | Combine older daily partitions into monthly files |
-| `store gc` | Delete orphaned Store files |
-| `store rollups` | Rebuild Rollups |
-| `config` | Manage CLI configuration |
-| `doctor` | Diagnose setup problems |
-| `mcp` | Start the MCP server |
-| `skill install` | Copy the agent skill (SKILL.md) into `~/.claude/skills` or `~/.codex/skills` |
-| `papercut` | Report a CLI problem to gscdump.com (anonymous) |
-
-See the [CLI reference](./packages/cli/README.md) for flags and authentication options.
-
-### Analyzers
-
-Run `gscdump analyze <tool> --help` for each Analyzer's options.
-Twelve Analyzers support live rows; all 29 support SQL over stored data.
-See [Source support](./packages/analysis/README.md#sources) before choosing `--live`.
-
-| Analyzer | What it finds |
-|------|------------------|
-| `striking-distance` | Queries in positions 4 to 20 with low CTR |
-| `opportunity` | High-impression, low-CTR pages worth optimizing |
-| `movers` | Largest changes in clicks and impressions since the comparison period |
-| `decay` | Pages losing traffic over time |
-| `survival` | How long pages keep receiving traffic |
-| `change-point` | Statistical breakpoints in traffic |
-| `brand` | Share of clicks from brand and non-brand queries |
-| `cannibalization` | Multiple pages competing for the same query |
-| `clustering` | Groups of related queries by prefix or intent |
-| `concentration` | How traffic concentrates across pages/queries |
-| `seasonality` | Weekly and monthly traffic patterns |
-| `stl-decompose` | Traffic split into trend, seasonal changes, and remaining variation |
-| `zero-click` | High-impression queries with no clicks |
-| `trends` | Clicks and impressions across rolling date windows |
-| `ctr-curve` | Observed CTR at each position for the Site |
-| `ctr-anomaly` | Pages with CTR above or below the expected rate |
-| `bayesian-ctr` | Shrinkage-adjusted CTR estimates |
-| `position-distribution` | Ranking positions for each page or query |
-| `position-volatility` | How much rankings change over time |
-| `intent-atlas` | Search Intent across the Site's queries |
-| `query-migration` | Queries shifting between pages over time |
-| `keyword-breadth` | How many queries each page ranks for |
-| `long-tail` | Traffic split between common and less frequent queries |
-| `dark-traffic` | Estimated share of impressions from anonymized queries |
-| `device-gap` | Desktop vs. mobile performance gaps |
-| `bipartite-pagerank` | Pages and queries with the most influence in their shared graph |
-| `content-velocity` | How new pages contribute to traffic over time |
-| `data-detail` / `data-query` | Rows for closer inspection |
-
-## Reports
-
-`gscdump report <id>` combines Analyzers into a `ReportResult` with bounded Sections of findings.
-
-| Report | Analyzers | Default window | Comparison |
-|--------|------------|----------------|------------|
-| `health` | ctr-anomaly, change-point, position-volatility | 28d | none |
-| `movers` | movers, decay, striking-distance | 7d | prev-period |
-| `opportunities` | striking-distance, opportunity, zero-click, query-migration | 28d | none |
-| `risks` | decay, cannibalization, dark-traffic, device-gap | 28d | prev-period |
-| `growth` | content-velocity, keyword-breadth, intent-atlas, long-tail | 90d | yoy |
-| `brand` | brand (`--brand-terms`), concentration | 28d | none |
-| `triage` | change-point + query-migration + position-volatility scoped to `--target` | 90d | none |
-| `pre-publish` | cannibalization + striking-distance scoped to `--topic` | 90d | none |
-
-```bash
-# List Reports
-gscdump report list
-
-# Preview a Report without credentials or API calls
-gscdump report movers --explain
-
-# Return a Report as JSON
-gscdump report opportunities --site example.com --json
-
-# Run Reports with extra inputs
-gscdump report triage --site example.com --target /blog/foo --target-kind page --json
-gscdump report pre-publish --site example.com --topic widgets --json
-gscdump report brand --site example.com --brand-terms 'acme,acme corp' --json
-```
-
-Use `--period` for `7d`, `28d`, `30d`, `90d`, `180d`, `365d`, `mtd`, `qtd`, `ytd`, `last-quarter`, or `custom`.
-Use `--vs` for `none`, `prev-period`, or `yoy`. `yoy` compares with the same weekdays 52 weeks earlier.
-Windows end on the newest complete date: the newest synced day in the Store, or three days ago (Pacific time) with `--live`.
-A Site with no Store data is answered from the live API when Google is connected. Partial coverage stops with the exact `gscdump sync` command.
-See [Routing](./packages/cli/README.md#routing).
-`--start` or `--end` without `--period` selects a custom window.
-Comparison overrides need both `--prev-start` and `--prev-end`.
-If a live fetch reaches its row budget, the output shows a partial-data warning. `--fetch-budget` raises the budget up to 100000 rows.
-
-Analyzer, Report, and Section IDs are separate namespaces.
-For example, `brand` names both an Analyzer and a Report.
-
-### Programmatic use
-
-Install the Report runtime and live Google API Source:
-
-```bash
-npm install gscdump @gscdump/analysis @gscdump/engine @gscdump/engine-gsc-api
-```
-
-```ts
-import { defaultAnalyzerRegistry } from '@gscdump/analysis/registry'
-import { defaultReportRegistry, runReport } from '@gscdump/analysis/report'
-import { createGscApiQuerySource } from '@gscdump/engine-gsc-api'
-import { resolveWindow } from '@gscdump/engine/period'
-import { googleSearchConsole } from 'gscdump'
-import { getLatestGscDate } from 'gscdump/dates'
-
-const client = googleSearchConsole({ accessToken: process.env.GSC_ACCESS_TOKEN! })
-const siteUrl = 'sc-domain:example.com'
-const report = defaultReportRegistry.getReport('movers')!
-// Anchor windows on the newest complete date, never on today.
-const window = resolveWindow({ preset: 'last-7d', anchor: getLatestGscDate(), comparison: 'prev-period' })
-const source = createGscApiQuerySource({ client, siteUrl })
-
-const result = await runReport(report, {
-  source,
-  analyzers: defaultAnalyzerRegistry,
-  ctx: { site: siteUrl, window, params: {}, registryVersion: defaultReportRegistry.version },
-})
-
-console.log(result.sections)
-console.log(result.meta.degraded) // True if an optional step failed
-```
-
-Use `defineReport()` from `@gscdump/engine/report` to create a Report or adapt an existing one:
-
-```ts
-import { defaultReportRegistry } from '@gscdump/analysis/report'
-import { defineReport } from '@gscdump/engine/report'
-
-export const monthlyMovers = defineReport({
-  ...defaultReportRegistry.getReport('movers')!,
-  id: 'monthly-movers',
-  description: 'Traffic changes over the last 30 days.',
-  defaultPeriod: 'last-30d',
-})
-```
-
-**Known v1 limitations:**
-
-- Reports with required SQL-only Analyzers, such as `health`, need a stored Source.
-- Some `growth` Sections return aggregate summaries instead of per-row findings. Use `artifact.analyzer` to inspect their data.
-- The `brand` Report's concentration step covers the whole Site.
-
-## MCP Server
-
-Add this entry to your MCP client's server configuration:
-
-```json
-{
-  "mcpServers": {
-    "gscdump": {
-      "command": "npx",
-      "args": ["-y", "@gscdump/cli", "mcp"]
-    }
-  }
-}
-```
-
-Authenticate with cloud mode or local Google credentials. MCP uses the selected mode for Google tools.
-If no authentication exists, the server still starts, and each Google tool returns the command to run.
-Google Indexing API and Site Verification tools require local mode. Run Bing commands through the CLI and agent skill.
-Then ask your assistant:
-
-- "List my Search Console Sites."
-- "Run the movers Report for `example.com` over the last 28 days."
-- "Query clicks and impressions by page for this month."
-- "Inspect these URLs and summarize the Indexing Evidence."
-
-### MCP Tools
-
-**Reports:** `list-reports`, `run-report`.
-`list-reports` returns Report descriptions, date defaults, and argument definitions.
-`run-report` accepts the Site, Report ID, date windows, comparison, and maximum findings.
-
-MCP Reports read live Google data through the selected authentication mode.
-Discovery lists `brand`, `movers`, `opportunities`, `pre-publish`, and `risks`.
-Supply `brandTerms` for `brand` and `topic` for `pre-publish`.
-Some optional SQL Sections return an unknown result with an explanation.
-Use the CLI with a Store for `health`, `growth`, and `triage`.
-
-**Sites:** `list-sites`, `list-sites-with-sitemaps`, `add-site`, `delete-site`.
-
-**Verification:** `get-verification-token`, `verify-site`, `list-verified-sites`, `get-verified-site`, `unverify-site`.
-
-**Sitemaps:** `list-sitemaps`, `get-sitemap`, `submit-sitemap`, `delete-sitemap`, `discover-sitemap`.
-
-**Custom queries:** `query` returns rows with dimension filters and date ranges.
-
-**Indexing:** `inspect-url`, `batch-inspect-urls`, `request-indexing`, `batch-request-indexing`, `get-indexing-status`, `batch-get-indexing-status`.
-Indexing notifications apply only to [eligible job and livestream pages](https://developers.google.com/search/apis/indexing-api/v3/using-api).
-
-**Diagnostics:** `diagnostics` checks credentials and API scopes.
-
-See [AI integration](./docs/guides/ai-integration.md) for configuration and Report limits.
+- [Getting started](./docs/gscdump-cli/guides/1.getting-started.md)
+- [Authentication](./docs/gscdump-cli/guides/2.authentication.md)
+- [Command reference](./docs/gscdump-cli/api/1.commands.md)
+- [Keep historical data](./docs/gscdump-cli/guides/4.historical-database.md)
+- [Analyzers](./docs/gscdump-cli/api/6.analyzers.md) and [Reports](./docs/gscdump-cli/api/7.reports.md)
+- [SEO analysis](./docs/gscdump-cli/guides/5.seo-analysis.md)
+- [AI integration and MCP](./docs/gscdump-cli/guides/3.ai-integration.md)
+- [URL inspection and indexing](./docs/gscdump-cli/guides/6.url-indexing.md)
+- [CLI charts](./docs/gscdump-cli/guides/7.cli-charts.md)
 
 ## API Usage
 
@@ -373,40 +148,6 @@ await client.indexing.publish(url, 'URL_UPDATED')
 const metadata = await client.indexing.getMetadata(url)
 ```
 
-## Auth Setup
-
-Choose [cloud or local authentication](./packages/cli/README.md#hosted-and-local-authentication) for Google and Bing.
-Cloud mode uses a gscdump user API key and saved Search Engine connections.
-For local Google OAuth:
-
-1. Create a Google Cloud project and enable the Search Console API.
-2. Configure the OAuth consent screen and create OAuth credentials for a Desktop app.
-3. Run `gscdump init --mode local` to save your credentials and Store settings.
-4. Run `gscdump auth login --mode local` to save local mode.
-
-Enable the Web Search Indexing API if you need eligible indexing notifications.
-Use `gscdump auth login --mode local` to authenticate without running the full setup.
-See [Getting started](./docs/guides/getting-started.md) for service accounts and other authentication options.
-
-### BYOK environment variables
-
-Local Google authentication accepts environment credentials, so you can skip `init`.
-Use one of these options:
-
-```bash
-# Access token
-export GSC_ACCESS_TOKEN=ya29...
-
-# Or OAuth refresh-token credentials
-export GSC_CLIENT_ID=...
-export GSC_CLIENT_SECRET=...
-export GSC_REFRESH_TOKEN=...
-```
-
-The CLI prefers `GSC_*` names and also accepts their `GOOGLE_*` equivalents.
-Run `gscdump auth login --mode local` to save local mode after setting environment credentials.
-In local mode, `gscdump auth status` reports `byok` for Google environment credentials.
-
 ## Hosted API v1
 
 Use `@gscdump/sdk/v1` for the hosted gscdump.com API.
@@ -437,9 +178,9 @@ Existing integrations can use the [migration guide](./docs/v1-migration.md).
 
 | Entry point | Scope | First result |
 | --- | --- | --- |
-| CLI | Cloud/local Google and Bing authentication, local Store, exports | [Getting started](./docs/guides/getting-started.md) |
+| CLI | Cloud/local Google and Bing authentication, local Store, exports | [Getting started](./docs/gscdump-cli/guides/1.getting-started.md) |
 | Core library | Google and Bing clients, typed queries, fetch runtimes | [Library examples](./packages/gscdump/README.md) |
-| MCP | Live Google queries and supported Reports | [AI integration](./docs/guides/ai-integration.md) |
+| MCP | Live Google queries and supported Reports | [AI integration](./docs/gscdump-cli/guides/3.ai-integration.md) |
 | Hosted SDK | gscdump.com API credentials and published v1 operations | [Hosted integration](./docs/guides/hosted-v1.md) |
 | Runtime adapters | Browser DuckDB, SQLite, and Cloudflare integrations | Package READMEs above |
 
