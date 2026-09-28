@@ -71,16 +71,16 @@ The `gscdump` npm package contains the library; `@gscdump/cli` provides the comm
 
 ## Documentation
 
-- [SDK documentation](./docs/gscdump-sdk/guides/1.getting-started.md)
-- [Getting started](./docs/gscdump-cli/guides/1.getting-started.md)
-- [Authentication](./docs/gscdump-cli/guides/2.authentication.md)
+- [SDK documentation](./docs/gscdump-sdk/guides/1.start/index.md)
+- [Getting started](./docs/gscdump-cli/guides/1.start/1.first-result.md)
+- [Authentication](./docs/gscdump-cli/guides/1.start/2.choose-access.md)
 - [Command reference](./docs/gscdump-cli/api/1.commands.md)
-- [Keep historical data](./docs/gscdump-cli/guides/4.historical-database.md)
+- [Keep historical data](./docs/gscdump-cli/guides/2.use-data/1.build-history.md)
 - [Analyzers](./docs/gscdump-cli/api/6.analyzers.md) and [Reports](./docs/gscdump-cli/api/7.reports.md)
-- [SEO analysis](./docs/gscdump-cli/guides/5.seo-analysis.md)
-- [AI integration and MCP](./docs/gscdump-cli/guides/3.ai-integration.md)
-- [URL inspection and indexing](./docs/gscdump-cli/guides/6.url-indexing.md)
-- [CLI charts](./docs/gscdump-cli/guides/7.cli-charts.md)
+- [SEO analysis](./docs/gscdump-cli/guides/3.investigate-traffic/index.md)
+- [AI integration and MCP](./docs/gscdump-cli/guides/1.start/3.connect-an-agent.md)
+- [URL inspection and indexing](./docs/gscdump-cli/guides/4.check-visibility/2.indexing-evidence.md)
+- [CLI charts](./docs/gscdump-cli/guides/2.use-data/2.query-and-export.md)
 
 ## API Usage
 
@@ -153,7 +153,6 @@ The API wire version is `1.0`, separate from npm package versions.
 
 Start with the [hosted integration guide](./docs/guides/hosted-v1.md).
 The [generated contracts](./packages/contracts/generated) define operation inputs and responses.
-Existing integrations can use the [migration guide](./docs/v1-migration.md).
 
 ## Packages
 
@@ -175,10 +174,10 @@ Existing integrations can use the [migration guide](./docs/v1-migration.md).
 
 | Entry point | Scope | First result |
 | --- | --- | --- |
-| CLI | Cloud/local Google and Bing authentication, local Store, exports | [Getting started](./docs/gscdump-cli/guides/1.getting-started.md) |
+| CLI | Cloud/local Google and Bing authentication, local Store, exports | [Getting started](./docs/gscdump-cli/guides/1.start/1.first-result.md) |
 | Core library | Google and Bing clients, typed queries, fetch runtimes | [Library examples](./packages/gscdump/README.md) |
-| MCP | Live Google queries and supported Reports | [AI integration](./docs/gscdump-cli/guides/3.ai-integration.md) |
-| Hosted SDK | gscdump.com API credentials and published v1 operations | [Hosted integration](./docs/gscdump-sdk/guides/3.hosted-integrations.md) |
+| MCP | Live Google queries and supported Reports | [AI integration](./docs/gscdump-cli/guides/1.start/3.connect-an-agent.md) |
+| Hosted SDK | gscdump.com API credentials and published v1 operations | [Hosted integration](./docs/gscdump-sdk/guides/1.start/2.hosted-first-result.md) |
 | Runtime adapters | Browser DuckDB, SQLite, and Cloudflare integrations | Package READMEs above |
 
 Use the latest published version when reporting a bug.

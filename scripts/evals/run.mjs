@@ -378,7 +378,7 @@ try {
           const events = result.stdout.trim().split('\n').filter(Boolean).map(line => JSON.parse(line))
           const usage = events.filter(event => event.type === 'step_finish').map(event => ({ tokens: event.part?.tokens, reportedCost: event.part?.cost }))
           report.agentTrials ??= []
-          report.agentTrials.push({ id, caseId: test.id, kind, trial, shouldTrigger: test.shouldTrigger !== false, usage })
+          report.agentTrials.push({ id, caseId: test.id, kind, trial, shouldTrigger: test.shouldTrigger !== false, url: caseUrl, usage })
           await save(`${id}-events.json`, events)
           const waste = analyzeWaste({ calls: history, events, kind })
           report.agentTrials.at(-1).waste = waste
