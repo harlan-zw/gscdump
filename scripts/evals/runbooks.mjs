@@ -58,11 +58,33 @@ function evidenceError(call, definition, expected) {
   }
 }
 
+function parses(text) {
+  try {
+    JSON.parse(text)
+    return true
+  }
+  catch {
+    return false
+  }
+}
+
+function selectPrimary(calls, prefix) {
+  const matched = calls.filter(call => matches(call, prefix))
+  const complete = matched.filter(call => !call.args.includes('--explain') && parses(call.stdout))
+  return complete.at(-1) ?? matched.at(-1)
+}
+
+export function runbookBlock(definition, credentials) {
+  if (definition.requiresBing && !credentials.BING_API_KEY)
+    return 'Bing credentials are missing for this runbook.'
+  return null
+}
+
 export function gradeRunbook({ definition, calls, loaded, text, expected }) {
   const failures = []
   if (!loaded)
     failures.push('The agent did not load the skill.')
-  const primary = calls.find(call => matches(call, definition.operation))
+  const primary = selectPrimary(calls, definition.operation)
   if (!primary)
     failures.push(`The agent did not complete ${definition.operation.join(' ')}.`)
   if (primary) {

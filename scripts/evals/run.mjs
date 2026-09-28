@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { CASES } from './cases.mjs'
 import { analyzeWaste, commands, compareLivePages, compareRows, exportedRows, finalResponse, gradeAgent, gradeAnswer, invocation, MODEL, pageMetrics, parseOptions, seedCommand, syncedWindow } from './core.mjs'
 import { evaluatorIdentity, fileState } from './evidence.mjs'
-import { gradeRunbook } from './runbooks.mjs'
+import { gradeRunbook, runbookBlock } from './runbooks.mjs'
 import { checked, credentialEnvironment, installCandidate, run } from './runtime.mjs'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
@@ -329,8 +329,9 @@ try {
         await attempt(`agent-${id}`, async () => {
           if (kind !== 'negative')
             requireGoogle()
-          if (test.requiresBing && !(credentials.BING_API_KEY || credentials.GSCDUMP_API_KEY))
-            blocked('Bing credentials are missing for this runbook.')
+          const unmet = runbookBlock(test, credentials)
+          if (unmet)
+            blocked(unmet)
           const caseUrl = process.env.EVAL_URL
           if (test.requiresUrl && !caseUrl)
             blocked('Set EVAL_URL to a URL on the test Site for this runbook.')
