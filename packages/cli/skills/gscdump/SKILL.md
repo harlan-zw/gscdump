@@ -38,7 +38,7 @@ In cloud mode, `hostedSync` lists each gscdump.com Site with `syncStatus` and `s
 
 | Mode | Credentials | Query path |
 | --- | --- | --- |
-| `cloud` | gscdump user API key | `https://gscdump.com/api` uses saved Search Engine connections |
+| `cloud` | Browser-approved CLI session; optional user API key for automation | `https://gscdump.com/api` uses saved Search Engine connections |
 | `local` | Google OAuth/service account or Bing API key/OAuth | Calls the Search Engine directly |
 
 `--mode cloud|local` overrides one invocation. `GSCDUMP_AUTH_MODE` also overrides the saved mode.
@@ -47,10 +47,10 @@ If no mode is saved, `GSCDUMP_API_KEY` selects cloud mode.
 With neither source, the CLI defaults to local mode.
 When a saved mode exists, it remains selected unless an explicit override applies.
 Never switch modes to bypass an authentication failure.
-`GSCDUMP_API_ROOT` defaults to `https://gscdump.com/api`. Supply the API key explicitly when changing a saved API root.
+`GSCDUMP_API_ROOT` defaults to `https://gscdump.com/api`. Browser login uses this root. Supply an API key explicitly for a custom root.
 
 ```sh
-# The user supplies a user API key from gscdump.com settings.
+# Open gscdump.com in a browser and approve the CLI session.
 gscdump auth login --mode cloud
 gscdump bing sites --json
 gscdump bing login --site s_SITE_ID
@@ -68,7 +68,7 @@ Local `--oauth` uses `BING_CLIENT_ID`, `BING_CLIENT_SECRET`, and a registered lo
 The default callback is `http://127.0.0.1:53683/oauth/bing`. `BING_ACCESS_TOKEN` accepts an existing OAuth access token.
 After cloud Bing login opens a browser, use `bing status --site s_SITE_ID` to confirm the connection.
 
-`auth logout` removes the saved mode and saved Google and Bing credentials.
+`auth logout` revokes a saved cloud CLI session and removes saved mode and Google and Bing credentials.
 `bing logout --mode local` removes only saved Bing credentials. Environment credentials remain active until unset.
 
 Hosted Bing commands use the API's plan and preview access rules.
@@ -154,6 +154,8 @@ If local Google credentials are missing, use one of these paths:
 
 Default local login opens gscdump.com for free Google login and token refresh.
 Data queries call Google directly. No Google Cloud project or hosted activation is required.
+For a fully local connection, set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET` before login.
+The CLI then opens Google directly and uses a loopback callback.
 Use `gscdump auth login --mode local --no-browser` when a browser runs on another host.
 The default grant is read-only Search Console access.
 For Google write operations, use your own OAuth client with the required scopes.

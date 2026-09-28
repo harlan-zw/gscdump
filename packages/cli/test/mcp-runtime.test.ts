@@ -110,6 +110,21 @@ describe('gscdump mcp runtime', () => {
     expect(text(result)).not.toContain('gscdump auth login')
   })
 
+  it('points a rejected cloud CLI session at browser login', async () => {
+    const sessionId = 'a'.repeat(64)
+    await fs.writeFile(path.join(configDir, 'authentication.json'), JSON.stringify({ _tag: 'Cloud', apiRoot: 'https://gscdump.com/api', sessionId }))
+    await connect(url => url.endsWith('/cli/gsc/sites')
+      ? Response.json({ error: { message: 'Invalid CLI session' } }, { status: 401 })
+      : undefined)
+
+    const result = await client.callTool({ name: 'list-sites', arguments: {} }) as CallToolResult
+
+    expect(result.isError).toBe(true)
+    expect(new Headers(fetchMock.mock.calls[0]![1]?.headers).get('x-cli-session')).toBe(sessionId)
+    expect(text(result)).toContain('gscdump auth login --mode cloud')
+    expect(text(result)).not.toContain('GSCDUMP_API_KEY')
+  })
+
   it('points an expired BYOK access token at the MCP server configuration, not auth login', async () => {
     await connect(
       url => url.endsWith('/webmasters/v3/sites')
@@ -148,7 +163,7 @@ describe('gscdump mcp runtime', () => {
     const result = await client.callTool({ name: 'list-sites', arguments: {} }) as CallToolResult
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('gscdump auth login')
-    expect(text(result)).toContain('GSCDUMP_API_KEY')
+    expect(text(result)).toContain('gscdump auth login --mode cloud')
     expect(text(result)).toContain('GSC_ACCESS_TOKEN')
     expect(text(result)).not.toMatch(/GSCDump|npx/)
     expect(fetchMock).not.toHaveBeenCalled()

@@ -2,7 +2,7 @@ import type { GscdumpV1Client, GscdumpV1OperationResponse } from '@gscdump/sdk/v
 import type { CloudAuthentication } from './auth-state'
 import type { BingDumpDataset, BingDumpSummary, parseBingDumpOptions } from './bing-data'
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
-import { getCloudAccount } from './auth-state'
+import { cloudCredential, getCloudAccount } from './auth-state'
 import { writeBingDump } from './bing-data'
 import { logger } from './utils'
 
@@ -13,7 +13,7 @@ interface HostedBingSite {
 }
 
 export function hostedBingClient(state: CloudAuthentication): GscdumpV1Client {
-  return createGscdumpV1Client({ apiRoot: state.apiRoot, credential: state.apiKey })
+  return createGscdumpV1Client({ apiRoot: state.apiRoot, credential: cloudCredential(state) })
 }
 
 export async function listHostedBingSites(state: CloudAuthentication): Promise<HostedBingSite[]> {

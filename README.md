@@ -46,21 +46,45 @@ Tell your agent:
 
 > Use this Skill: https://skilld.dev/gh/harlan-zw/gscdump
 
+Install the CLI with Node.js 22.13 or later in the 22 release line, or Node.js 24 or later:
+
 ```bash
 npm install -g @gscdump/cli
+```
 
-# Set up local Google OAuth credentials and a Store directory
+### Cloud access
+
+Cloud login opens gscdump.com in your browser. Sign in, authorize the CLI, then [connect a Site](https://gscdump.com/app/sites/add). The CLI saves its own session.
+
+```bash
+gscdump auth login --mode cloud
+gscdump sites
+gscdump query --live --site example.com --dimensions date --limit 7
+```
+
+See [the cloud first-result guide](./docs/gscdump-cli/guides/1.start/1.first-result.md) for the full path.
+
+### Local access
+
+For a fully local Google connection, create a Desktop OAuth client in Google Cloud and set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET`. The [access guide](./docs/gscdump-cli/guides/1.start/2.choose-access.md#local-access) also covers a service account and the simpler login that uses gscdump.com only for OAuth.
+
+```bash
+export GSC_CLIENT_ID=your-client-id
+export GSC_CLIENT_SECRET=your-client-secret
+
 gscdump init --mode local
-gscdump auth login --mode local
 gscdump sites
 
-# Sync before querying or exporting stored data
-gscdump sync --site example.com --days 90
+# Read a quick result from Google
+gscdump query --live --mode local --site example.com --dimensions date --limit 7
+
+# Sync before querying or exporting stored data; start with one day
+gscdump sync --site example.com --days 1
 gscdump query --site example.com --dimensions page,query
 gscdump dump --site example.com --out ./export
 
-# Query Google directly
-gscdump query --live --mode local --site example.com --dimensions page,query
+# Build more history when ready
+gscdump sync --site example.com --days 90
 
 # Start the MCP server
 gscdump mcp

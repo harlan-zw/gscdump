@@ -1,14 +1,16 @@
 import type { TokenInfo } from '../token-info'
 import path from 'node:path'
 import process from 'node:process'
-import { isCancel, password } from '@clack/prompts'
+import { setTimeout as waitForPoll } from 'node:timers/promises'
 import { defineCommand } from 'citty'
+import open from 'open'
 import { clearTokens, formatAuthProvenance, getAuth, GOOGLE_NOT_CONNECTED, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
-import { clearAuthentication, formatHostedSync, getCloudAccount, getCloudSites, parseAuthentication, parseAuthMode, resolveAuthentication, saveAuthentication } from '../auth-state'
+import { clearAuthentication, formatHostedSync, getCloudAccount, getCloudSites, parseAuthentication, parseAuthMode, resolveAuthentication, revokeCloudSession, saveAuthentication } from '../auth-state'
 import { clearBingCredentials, getBingClient, inspectBingCredentials } from '../bing-auth'
 import { authCommandMeta } from '../command-meta'
 import { loadConfig, saveConfig } from '../config'
+import { loginWithCloudSession } from '../hosted-auth'
 import { useCliRuntime } from '../runtime'
 import { currentAccessToken, fetchTokenInfo, redactTokens } from '../token-info'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
@@ -26,24 +28,39 @@ function applyAuthMode(args: Record<string, unknown>): void {
 async function requireLocalAuth(args: Record<string, unknown>): Promise<void> {
   applyAuthMode(args)
   if ((await resolveAuthentication())._tag === 'Cloud')
-    throw new Error('Cloud authentication uses an API key. OAuth scopes and token refresh require --mode local.')
+    throw new Error('Cloud authentication uses a CLI session. Google OAuth scopes and token refresh require --mode local.')
 }
 
 export async function loginCloud(args: Record<string, unknown>): Promise<void> {
   const env = useCliRuntime().environment
-  let apiKey = String(args['api-key'] ?? env.GSCDUMP_API_KEY ?? '')
+  const apiKey = String(args['api-key'] ?? env.GSCDUMP_API_KEY ?? '')
+  const apiRoot = String(args['api-root'] ?? env.GSCDUMP_API_ROOT ?? 'https://gscdump.com/api')
   if (!apiKey) {
-    if (!process.stdin.isTTY)
-      throw new Error('Cloud login requires --api-key or GSCDUMP_API_KEY.')
-    const answer = await password({ message: 'gscdump user API key' })
-    if (isCancel(answer) || typeof answer !== 'string')
-      throw new Error('Login cancelled.')
-    apiKey = answer
+    if (apiRoot.replace(/\/+$/, '') !== 'https://gscdump.com/api')
+      throw new Error('Browser login uses gscdump.com. Supply --api-key for a custom API root.')
+    const sessionId = await loginWithCloudSession({
+      request: fetch,
+      now: Date.now,
+      wait: waitForPoll,
+      authorize: async (url) => {
+        logger.info(`Open this URL to connect cloud access:\n${url}`)
+        if (args.browser !== false)
+          await open(url).catch((error: Error) => logger.warn(`Browser could not open: ${error.message}. Open the URL above.`))
+      },
+    })
+    const state = parseAuthentication({ _tag: 'Cloud', apiRoot, sessionId })
+    if (state._tag !== 'Cloud')
+      throw new Error('Cloud login did not return a CLI session.')
+    const account = await getCloudAccount(state)
+    await saveAuthentication(state)
+    logger.success(`Cloud authentication saved for ${account.user.email}`)
+    logger.info('Google and Bing commands use connections saved on gscdump.com.')
+    return
   }
   const state = parseAuthentication({
     _tag: 'Cloud',
     apiKey,
-    apiRoot: String(args['api-root'] ?? env.GSCDUMP_API_ROOT ?? 'https://gscdump.com/api'),
+    apiRoot,
   })
   if (state._tag !== 'Cloud')
     throw new Error('Cloud login requires a gscdump user API key.')
@@ -390,6 +407,15 @@ const logoutCommand = defineCommand({
   },
   async run({ args }) {
     applyOutputMode(args)
+    // Revocation is best-effort: an offline host, a 5xx, an already-revoked
+    // session, or unreadable saved state must never leave local credentials
+    // on disk. Local state is cleared unconditionally below.
+    await resolveAuthentication()
+      .then(authentication => authentication._tag === 'Cloud' ? revokeCloudSession(authentication) : undefined)
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        logger.warn(`Cloud session revocation failed (${message}). Local credentials are still cleared.`)
+      })
     await clearTokens()
     await clearBingCredentials()
     await clearAuthentication()

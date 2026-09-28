@@ -14,7 +14,7 @@ import { VERSION } from '../utils'
 export const MCP_NO_AUTH_MESSAGE = [
   'gscdump has no Google authentication.',
   'Run `gscdump auth login` in a terminal, then call this tool again.',
-  'For cloud mode, set GSCDUMP_API_KEY to a user API key from your gscdump.com settings.',
+  'For cloud mode, run `gscdump auth login --mode cloud` in a terminal.',
   'For local mode, set GSC_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS to a service-account key file, set GSC_ACCESS_TOKEN, or set GSC_CLIENT_ID, GSC_CLIENT_SECRET, and GSC_REFRESH_TOKEN.',
   'If you set environment variables, set them in the MCP server configuration and restart the MCP client.',
   'If the gscdump command is missing, run `npm install -g @gscdump/cli`.',

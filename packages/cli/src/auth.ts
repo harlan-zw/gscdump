@@ -125,7 +125,7 @@ function getTokensPath(): string {
 export const GOOGLE_NOT_CONNECTED = [
   'Google is not connected. Use one of these:',
   '  Local:  gscdump auth login',
-  '  Hosted: gscdump auth login --mode cloud --api-key KEY (a gscdump.com API key)',
+  '  Cloud:  gscdump auth login --mode cloud (opens a browser)',
   '  BYOK:   set GSC_ACCESS_TOKEN, or GSC_CLIENT_ID, GSC_CLIENT_SECRET and GSC_REFRESH_TOKEN',
 ].join('\n')
 

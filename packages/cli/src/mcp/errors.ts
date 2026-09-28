@@ -19,7 +19,7 @@ import { isEngineError } from '@gscdump/engine/errors'
 import { classifyError } from 'gscdump/errors'
 import { isQueryError } from 'gscdump/query'
 import { resolveBYOK, resolveServiceAccount } from '../auth'
-import { resolveAuthentication } from '../auth-state'
+import { HOSTED_SESSION_REJECTED, resolveAuthentication } from '../auth-state'
 import { HOSTED_KEY_REJECTED, HOSTED_KEY_REJECTED_REASON } from '../error-handler'
 import { COMPARISON_FLAGS, PERIOD_FLAGS } from '../window'
 
@@ -178,7 +178,7 @@ function nextStep(error: GscError, status: number, mode: ApiErrorMode): string {
   }
   if (status === 401 || error.kind === 'auth-expired') {
     if (mode === 'cloud')
-      return 'Set or refresh GSCDUMP_API_KEY to a user API key from your gscdump.com settings.'
+      return 'Run `gscdump auth login --mode cloud` in a terminal, then restart the MCP client.'
     if (mode === 'service-account')
       return 'Fix the service-account key (GSC_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS) in the MCP server configuration and restart the MCP client, or run `gscdump auth status`.'
     if (mode === 'byok')
@@ -203,8 +203,11 @@ export function describeApiError(error: unknown, mode: ApiErrorMode = 'local'): 
     return null
   const classified = classifyGoogleError(error)
   const message = googleMessage(error) ?? classified.message
-  // The CLI's hosted key message ends in a terminal command; nextStep gives the MCP fix instead.
-  const reason = (message === HOSTED_KEY_REJECTED ? HOSTED_KEY_REJECTED_REASON : message).replace(/\s+/g, ' ').trim().replace(/\.$/, '')
+  if (message === HOSTED_KEY_REJECTED)
+    return `API error ${status}: ${HOSTED_KEY_REJECTED_REASON}. Replace GSCDUMP_API_KEY with a key from gscdump.com Agent setup, then restart the MCP client.`
+  if (message === HOSTED_SESSION_REJECTED)
+    return `API error ${status}: gscdump.com rejected the CLI session. Run \`gscdump auth login --mode cloud\` again, then restart the MCP client.`
+  const reason = message.replace(/\s+/g, ' ').trim().replace(/\.$/, '')
   return `API error ${status}: ${reason}. ${nextStep(classified, status, mode)}`.trim()
 }
 

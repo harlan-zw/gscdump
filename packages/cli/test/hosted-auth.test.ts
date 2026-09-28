@@ -1,9 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
-import { loginWithPlatform, refreshWithPlatform } from '../src/hosted-auth'
+import { loginWithCloudSession, loginWithPlatform, refreshWithPlatform } from '../src/hosted-auth'
 
 const response = (value: unknown) => new Response(JSON.stringify(value))
 
 describe('free CLI authentication', () => {
+  it('links cloud access in the browser without receiving Google tokens or an API key', async () => {
+    const sessionId = 'a'.repeat(64)
+    const request = vi.fn()
+      .mockResolvedValueOnce(response({ code: `S-${'A'.repeat(20)}`, expiresIn: 600, authUrl: 'https://evil.example/' }))
+      .mockResolvedValueOnce(response({ status: 'pending' }))
+      .mockResolvedValueOnce(response({ status: 'complete', sessionId }))
+    const authorize = vi.fn()
+    await expect(loginWithCloudSession({ request, authorize, wait: async () => {}, now: () => 0 })).resolves.toBe(sessionId)
+    expect(authorize).toHaveBeenCalledWith(`https://gscdump.com/app/cli/auth?code=S-${'A'.repeat(20)}`)
+    expect(request.mock.calls.map(([url]) => new URL(url).origin)).toEqual(Array.from({ length: 3 }).fill('https://gscdump.com'))
+  })
+
   it('polls once authorized, using only the trusted platform origin', async () => {
     const request = vi.fn()
       .mockResolvedValueOnce(response({ code: 'A'.repeat(20), expiresIn: 600, authUrl: 'https://evil.example/' }))
@@ -56,5 +68,13 @@ describe('free CLI authentication', () => {
   it('does not expose a server error body containing tokens', async () => {
     const request = vi.fn().mockResolvedValue(new Response('secret-token', { status: 401 }))
     await expect(refreshWithPlatform('refresh', request)).rejects.toThrow('Run `gscdump auth login --mode local --force`')
+  })
+
+  it('points cloud session failures at the cloud recovery command', async () => {
+    const request = vi.fn().mockResolvedValue(new Response('forbidden', { status: 403 }))
+    const error = await loginWithCloudSession({ request, authorize: async () => {}, wait: async () => {}, now: () => 0 }).then(() => null, (error: unknown) => error as Error)
+    expect(error).toBeInstanceOf(Error)
+    expect(error!.message).not.toContain('--mode local')
+    expect(error!.message).toContain('`gscdump auth login --mode cloud`')
   })
 })
