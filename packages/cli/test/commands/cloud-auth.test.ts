@@ -126,6 +126,38 @@ it('clears shared authentication on logout', async () => {
   expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Local' })
 })
 
+it('clears local credentials when cloud session revocation fails', async () => {
+  const sessionId = 'b'.repeat(64)
+  await runWithCliRuntime(runtime, () => saveAuthentication({ _tag: 'Cloud', apiRoot: cloud.apiRoot, sessionId }))
+  vi.mocked(fetch).mockResolvedValue(Response.json({ error: { code: 'unauthorized' } }, { status: 401 }))
+  await run('logout', { quiet: true })
+  expect(fetch).toHaveBeenCalledWith('https://gscdump.com/api/cli/auth/logout', expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ 'x-cli-session': sessionId }) }))
+  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Local' })
+})
+
+it('clears local state when saved authentication is corrupt', async () => {
+  await fs.writeFile(path.join(runtime.configDir, 'authentication.json'), '{oops', { mode: 0o600 })
+  await run('logout', { quiet: true })
+  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Local' })
+})
+
+it('allows a trailing slash on GSCDUMP_API_ROOT for browser cloud login', async () => {
+  const sessionId = 'c'.repeat(64)
+  runtime.environment.GSCDUMP_API_ROOT = 'https://gscdump.com/api/'
+  vi.mocked(fetch).mockImplementation(async (input: string | URL) => {
+    const url = new URL(input)
+    if (url.pathname.endsWith('/cli/auth/init'))
+      return Response.json({ code: `S-${'A'.repeat(20)}`, expiresIn: 600 })
+    if (url.pathname.endsWith('/cli/auth/poll'))
+      return Response.json({ status: 'complete', sessionId })
+    if (url.pathname.endsWith('/cli/me'))
+      return Response.json({ user: { publicId: 'u_01', email: 'user@example.com' }, sites: [] })
+    throw new Error(`Unexpected request: ${url.pathname}`)
+  })
+  await run('login', { mode: 'cloud', browser: false, quiet: true })
+  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Cloud', apiRoot: 'https://gscdump.com/api', sessionId })
+})
+
 it('rejects unsafe cloud roots before sending an API key', async () => {
   await expect(run('login', { 'mode': 'cloud', 'api-key': cloud.apiKey, 'api-root': 'http://example.com/api', 'quiet': true })).rejects.toThrow('Invalid authentication')
   expect(fetch).not.toHaveBeenCalled()

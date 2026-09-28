@@ -36,7 +36,7 @@ export async function loginCloud(args: Record<string, unknown>): Promise<void> {
   const apiKey = String(args['api-key'] ?? env.GSCDUMP_API_KEY ?? '')
   const apiRoot = String(args['api-root'] ?? env.GSCDUMP_API_ROOT ?? 'https://gscdump.com/api')
   if (!apiKey) {
-    if (apiRoot !== 'https://gscdump.com/api')
+    if (apiRoot.replace(/\/+$/, '') !== 'https://gscdump.com/api')
       throw new Error('Browser login uses gscdump.com. Supply --api-key for a custom API root.')
     const sessionId = await loginWithCloudSession({
       request: fetch,
@@ -407,9 +407,15 @@ const logoutCommand = defineCommand({
   },
   async run({ args }) {
     applyOutputMode(args)
-    const authentication = await resolveAuthentication()
-    if (authentication._tag === 'Cloud')
-      await revokeCloudSession(authentication)
+    // Revocation is best-effort: an offline host, a 5xx, an already-revoked
+    // session, or unreadable saved state must never leave local credentials
+    // on disk. Local state is cleared unconditionally below.
+    await resolveAuthentication()
+      .then(authentication => authentication._tag === 'Cloud' ? revokeCloudSession(authentication) : undefined)
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        logger.warn(`Cloud session revocation failed (${message}). Local credentials are still cleared.`)
+      })
     await clearTokens()
     await clearBingCredentials()
     await clearAuthentication()

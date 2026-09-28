@@ -69,4 +69,12 @@ describe('free CLI authentication', () => {
     const request = vi.fn().mockResolvedValue(new Response('secret-token', { status: 401 }))
     await expect(refreshWithPlatform('refresh', request)).rejects.toThrow('Run `gscdump auth login --mode local --force`')
   })
+
+  it('points cloud session failures at the cloud recovery command', async () => {
+    const request = vi.fn().mockResolvedValue(new Response('forbidden', { status: 403 }))
+    const error = await loginWithCloudSession({ request, authorize: async () => {}, wait: async () => {}, now: () => 0 }).then(() => null, (error: unknown) => error as Error)
+    expect(error).toBeInstanceOf(Error)
+    expect(error!.message).not.toContain('--mode local')
+    expect(error!.message).toContain('`gscdump auth login --mode cloud`')
+  })
 })

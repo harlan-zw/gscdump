@@ -21,7 +21,7 @@ export interface PlatformTokens {
   expiry_date: number
 }
 
-async function requestJson(request: typeof fetch, route: string, init: RequestInit = {}): Promise<unknown> {
+async function requestJson(request: typeof fetch, route: string, init: RequestInit = {}, failureMessage?: string): Promise<unknown> {
   const response = await request(`${ORIGIN}/api/cli/auth/${route}`, {
     ...init,
     redirect: 'error',
@@ -30,7 +30,7 @@ async function requestJson(request: typeof fetch, route: string, init: RequestIn
   if (!response.ok) {
     if (response.status === 429 || response.status >= 500)
       throw new Error('Google authorization is temporarily unavailable. Try again later.')
-    throw new Error('Google authorization failed. Run `gscdump auth login --mode local --force` to reconnect.')
+    throw new Error(failureMessage ?? 'Google authorization failed. Run `gscdump auth login --mode local --force` to reconnect.')
   }
   return response.json()
 }
@@ -75,6 +75,8 @@ export async function loginWithPlatform(deps: {
   throw new Error('Authorization expired. Run `gscdump auth login` to try again.')
 }
 
+const CLOUD_SESSION_FAILURE = 'Cloud authorization failed. Run `gscdump auth login --mode cloud` to try again.'
+
 export async function loginWithCloudSession(deps: {
   request: typeof fetch
   authorize: (url: string) => Promise<void>
@@ -84,12 +86,12 @@ export async function loginWithCloudSession(deps: {
   const init = z.object({
     code: z.string().regex(/^S-[A-F0-9]{20}$/),
     expiresIn: z.number().int().positive().max(600),
-  }).parse(await requestJson(deps.request, 'init?mode=cloud', { method: 'POST' }))
+  }).parse(await requestJson(deps.request, 'init?mode=cloud', { method: 'POST' }, CLOUD_SESSION_FAILURE))
   const deadline = deps.now() + init.expiresIn * 1000
   const url = `${ORIGIN}/app/cli/auth?code=${init.code}`
   await deps.authorize(url)
   while (deps.now() < deadline) {
-    const result = cloudPollSchema.parse(await requestJson(deps.request, `poll?code=${init.code}`))
+    const result = cloudPollSchema.parse(await requestJson(deps.request, `poll?code=${init.code}`, {}, CLOUD_SESSION_FAILURE))
     if (result.status === 'complete')
       return result.sessionId
     await deps.wait(2000)
