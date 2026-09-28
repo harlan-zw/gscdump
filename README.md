@@ -57,12 +57,13 @@ Choose where the CLI gets Google access:
 | Path | Login | Google data requests |
 | --- | --- | --- |
 | Cloud | gscdump.com browser sign-in | gscdump.com calls Google |
-| Local, gscdump.com OAuth | Google sign-in through gscdump.com | The CLI calls Google directly |
-| Local, your Google credentials | Your OAuth client or service account | The CLI calls Google directly |
+| Bring Your Own Keys | Your OAuth client or service account | The CLI calls Google directly |
+
+Local mode also supports gscdump.com OAuth without your own Google credentials.
 
 ### Cloud access
 
-Cloud login opens gscdump.com in your browser. Sign in, authorize the CLI, then [connect a Site](https://gscdump.com/app/sites/add). The CLI saves its own session. You do not need to copy an API key.
+Cloud login opens gscdump.com in your browser. Sign in, authorize the CLI, then [connect a Site](https://gscdump.com/app/onboarding?step=connect-sites). The CLI saves its own session. You do not need to copy an API key.
 
 ```bash
 gscdump auth login --mode cloud
@@ -76,7 +77,7 @@ See [the cloud first-result guide](./docs/gscdump-cli/guides/1.start/1.first-res
 
 For local access without a Google Cloud project, run `gscdump auth login --mode local`. The browser opens gscdump.com for OAuth. The CLI then calls Google directly.
 
-For a fully local connection, create a Desktop OAuth client in Google Cloud and set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET` before login. This path opens Google directly. The [access guide](./docs/gscdump-cli/guides/1.start/2.choose-access.md#local-access) also covers service accounts and existing Google tokens.
+For a fully local connection, create a Desktop OAuth client in Google Cloud and set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET` before login. This path opens Google directly. The [access guide](./docs/gscdump-cli/guides/1.start/2.choose-access.md#bring-your-own-keys) also covers service accounts and existing Google tokens.
 
 ```bash
 export GSC_CLIENT_ID=your-client-id
