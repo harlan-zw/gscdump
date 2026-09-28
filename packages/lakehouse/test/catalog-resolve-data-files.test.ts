@@ -89,6 +89,45 @@ describe('resolveIcebergDataFiles', () => {
     expect(out).toHaveLength(1)
   })
 
+  it('walks only numeric Site and search type manifests that may contain the slice', async () => {
+    const month = monthVal('2026-05')
+    const intBound = (value: number) => {
+      const bytes = new Uint8Array(4)
+      new DataView(bytes.buffer).setInt32(0, value, true)
+      return bytes
+    }
+    const summary = (lo: number, hi: number) => ({ contains_null: false, lower_bound: intBound(lo), upper_bound: intBound(hi) })
+    const entryFor = (siteId: number, searchType: number, path: string) => {
+      const entry = dataFile({ site_id: siteId, date_month: month }, path)
+      entry.data_file.partition.search_type = searchType
+      return entry
+    }
+    restCatalogLoadTable.mockResolvedValue({ metadata: { 'current-snapshot-id': 'snap-1' } })
+    icebergManifests.mockImplementation(fakeManifestWalker([
+      { path: 'wanted', partitions: [summary(1, 1), summary(1, 1), summary(month, month)], entries: [entryFor(1, 1, 's3://lh/gsc/dates/wanted.parquet')] },
+      { path: 'other-site', partitions: [summary(2, 2), summary(1, 1), summary(month, month)], entries: [entryFor(2, 1, 's3://lh/gsc/dates/other-site.parquet')] },
+      { path: 'other-type', partitions: [summary(1, 1), summary(2, 2), summary(month, month)], entries: [entryFor(1, 2, 's3://lh/gsc/dates/other-type.parquet')] },
+      { path: 'unknown-bound', partitions: [{ contains_null: false, lower_bound: new Uint8Array([1]), upper_bound: intBound(2) }, summary(1, 1), summary(month, month)], entries: [entryFor(1, 1, 's3://lh/gsc/dates/unknown.parquet')] },
+    ]))
+    let manifestsWalked = -1
+    const files = await resolveIcebergDataFiles(CONN, opts({
+      namespace: 'gsc',
+      table: 'dates',
+      partitionSpec: [
+        { sourceColumn: 'site_id', transform: 'identity', name: 'site_id' },
+        { sourceColumn: 'search_type', transform: 'identity', name: 'search_type' },
+        { sourceColumn: 'date', transform: 'month', name: 'date_month' },
+      ],
+      matches: [
+        { field: 'site_id', value: 1, encoding: 'int32' },
+        { field: 'search_type', value: 1, encoding: 'int32' },
+      ],
+      profiler: { start: name => name === 'iceberg.walk' ? (meta) => { manifestsWalked = Number(meta?.manifestsWalked) } : undefined },
+    }))
+    expect(files.map(file => file.filePath)).toEqual(['s3://lh/gsc/dates/unknown.parquet', 's3://lh/gsc/dates/wanted.parquet'])
+    expect(manifestsWalked).toBe(2)
+  })
+
   it('expands a multi-month range and keeps only months inside it', async () => {
     withSnapshot([
       dataFile({ site_id: 1, date_month: monthVal('2026-04') }),

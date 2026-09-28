@@ -218,9 +218,8 @@ export async function listIcebergDataFiles(
   // BOTH encodings must pass identity matches: a per-team catalog holds every
   // site (and search type) in the team, and the browser attaches the returned
   // file set with no site_id filter in SQL — the per-file check in
-  // `resolveIcebergDataFiles` is the ONLY isolation boundary. 'int32' matches
-  // are skipped by manifest-level pruning (see lakehouse's partition-prune doc)
-  // but still drive that authoritative per-file check.
+  // `resolveIcebergDataFiles` keeps the authoritative per-file check. The
+  // manifest planner also skips numeric summaries that prove a mismatch.
   const matches = encoding === 'string'
     ? [
         { field: 'site_id', value: opts.siteId, encoding: 'string' as const },
