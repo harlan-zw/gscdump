@@ -20,7 +20,7 @@ export type {
 } from './rollup-synth'
 export { createGscApiQuerySource, GSC_API_CAPABILITIES } from './source'
 export type { GscApiQuerySourceOptions } from './source'
-export { ledgerTablesForGscSync, planGscBackfillDates, planGscSyncWork, tablesCoveredByGscSync } from './sync-plan'
+export { gscSyncFanout, ledgerTablesForGscSync, planGscBackfillDates, planGscSyncWork, tablesCoveredByGscSync } from './sync-plan'
 export type {
   GscSyncEntryWork,
   GscSyncFanoutEntry,

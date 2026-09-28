@@ -51,6 +51,7 @@ Create a Source per request if your host manages token refresh between requests.
 | `runGscSyncSlice` | Read a bounded Search Analytics sync slice |
 | `runGscSearchAppearanceContextSlice` | Read a Search Appearance context slice |
 | `planGscSyncWork` | Find ledger gaps and size Sync windows |
+| `gscSyncFanout` | Build the standard Search Analytics table fanout |
 | `tablesCoveredByGscSync` | List the tables a Sync slice must write |
 | `ledgerTablesForGscSync` | List the ledger tables needed for one fanout |
 | `planGscBackfillDates` | Select interior repair or backward Backfill dates |
@@ -62,11 +63,11 @@ the dates already committed to your ledger. The plan returns only missing
 windows. Record zero-row slices in the ledger too, so they do not repeat.
 
 ```ts
-import { planGscSyncWork } from '@gscdump/engine-gsc-api'
+import { gscSyncFanout, planGscSyncWork } from '@gscdump/engine-gsc-api'
 
 const plan = planGscSyncWork({
   dates: ['2026-09-01', '2026-09-02'],
-  fanout: [{ table: 'pages' }, { table: 'queries' }],
+  fanout: gscSyncFanout(['web'], { omitWebDates: true }),
   ledger: [{ table: 'pages', searchType: 'web', date: '2026-09-01' }],
   pagesPerDayEstimate: 100,
 })

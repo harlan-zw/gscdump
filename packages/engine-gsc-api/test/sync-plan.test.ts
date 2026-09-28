@@ -1,7 +1,19 @@
-import { ledgerTablesForGscSync, planGscBackfillDates, planGscSyncWork, tablesCoveredByGscSync } from '@gscdump/engine-gsc-api'
+import { gscSyncFanout, ledgerTablesForGscSync, planGscBackfillDates, planGscSyncWork, tablesCoveredByGscSync } from '@gscdump/engine-gsc-api'
 import { describe, expect, it } from 'vitest'
 
 describe('sync coverage plan', () => {
+  it('builds web and Discover fanout without a redundant web dates job', () => {
+    expect(gscSyncFanout(['web', 'discover'], { omitWebDates: true })).toEqual([
+      { table: 'pages' },
+      { table: 'queries' },
+      { table: 'countries' },
+      { table: 'page_queries' },
+      { table: 'pages', searchType: 'discover' },
+      { table: 'countries', searchType: 'discover' },
+      { table: 'dates', searchType: 'discover' },
+    ])
+  })
+
   it('repairs a missing dates table with the web queries slice', () => {
     const plan = planGscSyncWork({
       dates: ['2026-09-01', '2026-09-02'],

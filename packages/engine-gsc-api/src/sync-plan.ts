@@ -1,5 +1,6 @@
 import type { SearchType } from '@gscdump/engine/contracts'
 import type { IcebergTableName } from '@gscdump/engine/iceberg'
+import { TABLES_BY_SEARCH_TYPE } from '@gscdump/engine/sync-config'
 import { addDays } from 'gscdump/dates'
 
 export interface GscSyncFanoutEntry {
@@ -53,6 +54,19 @@ const TABLE_DENSITY: Record<string, number> = {
   dates: 1,
   queries: 3,
   page_queries: 8,
+}
+
+/** Build the standard Search Analytics fanout. Web keeps its legacy absent searchType field. */
+export function gscSyncFanout(
+  searchTypes: readonly SearchType[],
+  options: { omitWebDates?: boolean } = {},
+): GscSyncFanoutEntry[] {
+  return searchTypes.flatMap(searchType => TABLES_BY_SEARCH_TYPE[searchType]
+    .filter(table => !(searchType === 'web' && options.omitWebDates && table === 'dates'))
+    .map(table => ({
+      table,
+      ...(searchType === 'web' ? {} : { searchType }),
+    })))
 }
 
 /** The web queries slice also writes the dates table. Other search types use a dates slice. */
