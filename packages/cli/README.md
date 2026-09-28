@@ -2,6 +2,8 @@
 
 Google Search Console CLI and MCP server.
 
+Choose [cloud or local access](../../docs/gscdump-cli/guides/1.start/2.choose-access.md) before login. Cloud login opens gscdump.com and saves a CLI session. Local login calls Google directly and can use your own Google credentials.
+
 ```bash
 npm install -g @gscdump/cli
 ```
