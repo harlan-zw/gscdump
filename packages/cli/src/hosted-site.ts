@@ -1,7 +1,7 @@
 import type { GscdumpV1Client } from '@gscdump/sdk/v1'
 import process from 'node:process'
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
-import { getCloudAccount, parseAuthentication, resolveAuthentication } from './auth-state'
+import { cloudCredential, getCloudAccount, parseAuthentication, resolveAuthentication } from './auth-state'
 import { loadConfig } from './config'
 import { resolveCliEnvironment } from './environment'
 import { logger } from './utils'
@@ -94,7 +94,7 @@ export async function resolveHostedSite(
   if (match.kind !== 'found')
     fail(describeMatchFailure(match))
   return {
-    client: createGscdumpV1Client({ apiRoot: authentication.apiRoot, credential: authentication.apiKey }),
+    client: createGscdumpV1Client({ apiRoot: authentication.apiRoot, credential: cloudCredential(authentication) }),
     site: match.site,
   }
 }

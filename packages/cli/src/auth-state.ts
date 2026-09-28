@@ -11,9 +11,10 @@ const apiRootSchema = z.url().transform(value => value.replace(/\/+$/, '')).refi
   return !url.username && !url.password && !url.search && !url.hash
     && (url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))
 }, 'Use HTTPS, or HTTP on loopback, for the API root')
-const stateSchema = z.discriminatedUnion('_tag', [
+const stateSchema = z.union([
   z.object({ _tag: z.literal('Local') }),
   z.object({ _tag: z.literal('Cloud'), apiRoot: apiRootSchema, apiKey: z.string().trim().regex(/^gsd_user_\S+$/) }),
+  z.object({ _tag: z.literal('Cloud'), apiRoot: apiRootSchema, sessionId: z.string().regex(/^[a-f0-9]{64}$/) }),
 ])
 export type Authentication = z.infer<typeof stateSchema>
 export type CloudAuthentication = Extract<Authentication, { _tag: 'Cloud' }>
@@ -29,7 +30,7 @@ export function parseAuthMode(value: unknown): 'cloud' | 'local' | undefined {
 export function parseAuthentication(value: unknown): Authentication {
   const parsed = stateSchema.safeParse(value)
   if (!parsed.success)
-    throw new Error('Invalid authentication. Use a gscdump user API key and a trusted API root.')
+    throw new Error('Invalid authentication. Use a CLI session or gscdump user API key with a trusted API root.')
   return parsed.data
 }
 
@@ -50,6 +51,12 @@ export async function saveAuthentication(state: Authentication): Promise<void> {
 
 export async function clearAuthentication(): Promise<void> {
   await fs.rm(path.join(useCliRuntime().configDir, 'authentication.json'), { force: true })
+}
+
+export async function revokeCloudSession(state: CloudAuthentication): Promise<void> {
+  if (!('sessionId' in state))
+    return
+  await cloudRequest(state, '/cli/auth/logout', { method: 'POST' })
 }
 
 export async function resolveAuthentication(): Promise<Authentication> {
@@ -81,7 +88,7 @@ export async function resolveAuthentication(): Promise<Authentication> {
   }
   if (state?._tag === 'Cloud') {
     if (env.GSCDUMP_API_ROOT && env.GSCDUMP_API_ROOT.replace(/\/+$/, '') !== state.apiRoot)
-      throw new Error('The API root changed. Supply GSCDUMP_API_KEY explicitly for the new API root.')
+      throw new Error('The API root changed. Run `gscdump auth login --mode cloud` for the new API root.')
     return state
   }
   if (mode === 'cloud')
@@ -97,13 +104,13 @@ const accountSchema = z.object({
 export async function cloudRequest(state: CloudAuthentication, route: string, options: RequestInit = {}): Promise<unknown> {
   const response = await fetch(`${state.apiRoot}${route}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', 'x-api-key': state.apiKey },
+    headers: { 'Content-Type': 'application/json', ...('sessionId' in state ? { 'x-cli-session': state.sessionId } : { 'x-api-key': state.apiKey }) },
     signal: options.signal ?? AbortSignal.timeout(30_000),
     redirect: 'error',
   })
   if (!response.ok) {
     const message = response.status === 401
-      ? HOSTED_KEY_REJECTED
+      ? 'sessionId' in state ? 'gscdump.com rejected the CLI session. Run `gscdump auth login --mode cloud` again.' : HOSTED_KEY_REJECTED
       : `Hosted request failed (${response.status}) for ${route.split('?')[0]}. Check \`gscdump auth status\`.`
     throw Object.assign(new Error(message), {
       statusCode: response.status,
@@ -112,6 +119,10 @@ export async function cloudRequest(state: CloudAuthentication, route: string, op
     })
   }
   return response.status === 204 ? undefined : response.json()
+}
+
+export function cloudCredential(state: CloudAuthentication): string {
+  return 'sessionId' in state ? state.sessionId : state.apiKey
 }
 
 export async function getCloudAccount(state: CloudAuthentication): Promise<z.infer<typeof accountSchema>> {

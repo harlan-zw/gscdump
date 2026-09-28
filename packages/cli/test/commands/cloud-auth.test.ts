@@ -37,6 +37,28 @@ it('validates cloud credentials and persists the shared authenticated state', as
   expect(fetch).toHaveBeenCalledWith('https://gscdump.com/api/cli/me', expect.objectContaining({ headers: expect.objectContaining({ 'x-api-key': cloud.apiKey }) }))
 })
 
+it('saves a browser-authorized CLI session and revokes it on logout', async () => {
+  const sessionId = 'a'.repeat(64)
+  vi.mocked(fetch).mockImplementation(async (input: string | URL) => {
+    const url = new URL(input)
+    if (url.pathname.endsWith('/cli/auth/init'))
+      return Response.json({ code: `S-${'A'.repeat(20)}`, expiresIn: 600 })
+    if (url.pathname.endsWith('/cli/auth/poll'))
+      return Response.json({ status: 'complete', sessionId })
+    if (url.pathname.endsWith('/cli/me'))
+      return Response.json({ user: { publicId: 'u_01', email: 'user@example.com' }, sites: [] })
+    if (url.pathname.endsWith('/cli/auth/logout'))
+      return Response.json({ success: true })
+    throw new Error(`Unexpected request: ${url.pathname}`)
+  })
+  await run('login', { mode: 'cloud', browser: false, quiet: true })
+  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Cloud', apiRoot: cloud.apiRoot, sessionId })
+  expect(fetch).toHaveBeenCalledWith('https://gscdump.com/api/cli/me', expect.objectContaining({ headers: expect.objectContaining({ 'x-cli-session': sessionId }) }))
+  await run('logout', { quiet: true })
+  expect(fetch).toHaveBeenCalledWith('https://gscdump.com/api/cli/auth/logout', expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ 'x-cli-session': sessionId }) }))
+  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Local' })
+})
+
 it('preserves working cloud authentication after failed cloud login', async () => {
   await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
   vi.mocked(fetch).mockResolvedValue(Response.json({}, { status: 401 }))

@@ -178,7 +178,7 @@ function nextStep(error: GscError, status: number, mode: ApiErrorMode): string {
   }
   if (status === 401 || error.kind === 'auth-expired') {
     if (mode === 'cloud')
-      return 'Set or refresh GSCDUMP_API_KEY to a user API key from your gscdump.com settings.'
+      return 'Run `gscdump auth login --mode cloud` in a terminal, then restart the MCP client.'
     if (mode === 'service-account')
       return 'Fix the service-account key (GSC_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS) in the MCP server configuration and restart the MCP client, or run `gscdump auth status`.'
     if (mode === 'byok')

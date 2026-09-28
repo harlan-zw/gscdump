@@ -178,7 +178,7 @@ export const initCommand = defineCommand({
         logger.error([
           'No Google credentials found. Init cannot prompt without a terminal.',
           'Run `gscdump auth login` in a terminal, or set GSC_CLIENT_ID, GSC_CLIENT_SECRET and GSC_REFRESH_TOKEN.',
-          'To use gscdump.com, run `gscdump init --mode cloud --api-key <key>`.',
+          'To use gscdump.com, run `gscdump auth login --mode cloud`.',
         ].join('\n'))
         process.exit(1)
       }
