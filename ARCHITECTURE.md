@@ -1,7 +1,7 @@
 # Architecture
 
 `gscdump` is a pnpm monorepo. This document is the high-level map; per-package
-READMEs and the root `CLAUDE.md` carry the operational detail.
+READMEs and the root `AGENTS.md` carry the operational detail.
 
 ## Monorepo Layout
 
@@ -179,4 +179,4 @@ MCP exposes Google tools. Agents run Bing operations through `gscdump bing` comm
 
 - `docs/adr/` — architecture decision records.
 - per-package `README.md` — package-level detail.
-- root `CLAUDE.md` — agent operational rules.
+- root `AGENTS.md`: agent operational rules.
