@@ -20,6 +20,18 @@ export type {
 } from './rollup-synth'
 export { createGscApiQuerySource, GSC_API_CAPABILITIES } from './source'
 export type { GscApiQuerySourceOptions } from './source'
+export { gscSyncFanout, ledgerTablesForGscSync, planGscBackfillDates, planGscSyncWork, tablesCoveredByGscSync } from './sync-plan'
+export type {
+  GscSyncEntryWork,
+  GscSyncFanoutEntry,
+  GscSyncLedgerRow,
+  GscSyncWindow,
+  GscSyncWorkPlan,
+  PlanGscBackfillDatesOptions,
+  PlanGscBackwardDatesOptions,
+  PlanGscSyncWorkOptions,
+} from './sync-plan'
+export { runGscSearchAppearanceContextSlice, runGscSyncSlice } from './sync-slice'
 export type {
   GscApiRow,
   RunGscSearchAppearanceContextSliceOptions,
@@ -31,4 +43,3 @@ export type {
   SyncSliceDimensionFilter,
   SyncSliceDomainFilter,
 } from './sync-slice'
-export { runGscSearchAppearanceContextSlice, runGscSyncSlice } from './sync-slice'
