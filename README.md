@@ -153,7 +153,6 @@ The API wire version is `1.0`, separate from npm package versions.
 
 Start with the [hosted integration guide](./docs/guides/hosted-v1.md).
 The [generated contracts](./packages/contracts/generated) define operation inputs and responses.
-Existing integrations can use the [migration guide](./docs/v1-migration.md).
 
 ## Packages
 
