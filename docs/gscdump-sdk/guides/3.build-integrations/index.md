@@ -7,7 +7,7 @@ description: Keep the API key on your server, then connect a UI or delivery hand
 
 # Build an integration
 
-Each framework example calls hosted analytics from a server route. The browser calls your route and never receives the API key.
+The Nuxt and Next.js examples check a user session before reading Site data. The Hono and Express examples accept a server caller key. Keep the gscdump API key on your server.
 
 | Runtime | Guide |
 | --- | --- |

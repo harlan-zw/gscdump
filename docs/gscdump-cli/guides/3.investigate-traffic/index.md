@@ -12,7 +12,7 @@ Start with a question. Keep the Site, search type, and complete date windows con
 | Question | Guide | Data |
 | --- | --- | --- |
 | What changed this week? | [Review search traffic each week](/gscdump-cli/guides/investigate-traffic/weekly-triage) | Store or live |
-| Why did one page lose clicks? | [Investigate a page traffic drop](/gscdump-cli/guides/investigate-traffic/traffic-drop) | Store or live; check coverage |
+| Why did one page lose clicks? | [Investigate a page traffic drop](/gscdump-cli/guides/investigate-traffic/traffic-drop) | Needs Store for triage |
 | Which queries have weak CTR? | [Find search queries with low CTR](/gscdump-cli/guides/investigate-traffic/low-ctr) | Store for some CTR Analyzers |
 | Did brand traffic change? | [Separate brand and non-brand traffic](/gscdump-cli/guides/investigate-traffic/brand-traffic) | Store or live; supply terms |
 | Why are impressions not turning into clicks? | [Find queries with impressions but few clicks](/gscdump-cli/guides/investigate-traffic/impressions-no-clicks) | Store or live, where supported |
