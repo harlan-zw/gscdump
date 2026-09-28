@@ -50,6 +50,37 @@ Create a Source per request if your host manages token refresh between requests.
 | `fetchGscDaily` | Read daily metrics |
 | `runGscSyncSlice` | Read a bounded Search Analytics sync slice |
 | `runGscSearchAppearanceContextSlice` | Read a Search Appearance context slice |
+| `planGscSyncWork` | Find ledger gaps and size Sync windows |
+| `gscSyncFanout` | Build the standard Search Analytics table fanout |
+| `tablesCoveredByGscSync` | List the tables a Sync slice must write |
+| `ledgerTablesForGscSync` | List the ledger tables needed for one fanout |
+| `planGscBackfillDates` | Select interior repair or backward Backfill dates |
+
+## Plan stored Sync work
+
+Pass the dates you want to cover, the planned `(table, searchType)` fanout, and
+the dates already committed to your ledger. The plan returns only missing
+windows. Record zero-row slices in the ledger too, so they do not repeat.
+
+```ts
+import { gscSyncFanout, planGscSyncWork } from '@gscdump/engine-gsc-api'
+
+const plan = planGscSyncWork({
+  dates: ['2026-09-01', '2026-09-02'],
+  fanout: gscSyncFanout(['web'], { omitWebDates: true }),
+  ledger: [{ table: 'pages', searchType: 'web', date: '2026-09-01' }],
+  pagesPerDayEstimate: 100,
+})
+
+for (const window of plan.windows) {
+  // Run runGscSyncSlice for this table and date range, then commit its ledger rows.
+  console.log(window)
+}
+```
+
+The defaults match the hosted Worker's tested window budget. Set `rowBudget`,
+`maxSpanDays`, and `maxWindowsPerRun` for your own runtime. The window count
+limit can widen a span beyond `maxSpanDays` during a long catch-up.
 
 ## Limits and fallback
 
