@@ -7,7 +7,7 @@ navigation:
 
 # Start with gscdump CLI
 
-Use cloud access for the shortest path to a result. Choose local access when you need direct Google or Bing credentials.
+Choose [cloud or local access](/gscdump-cli/guides/start/choose-access) before your first command. The choice applies to Google and Bing in the current CLI profile.
 
 | Task | Start here |
 | --- | --- |
