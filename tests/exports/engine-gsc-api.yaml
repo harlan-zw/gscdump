@@ -5,5 +5,10 @@
   fetchGscDaily: function
   fetchGscTopN: function
   GSC_API_CAPABILITIES: object
+  gscSyncFanout: function
+  ledgerTablesForGscSync: function
+  planGscBackfillDates: function
+  planGscSyncWork: function
   runGscSearchAppearanceContextSlice: function
   runGscSyncSlice: function
+  tablesCoveredByGscSync: function
