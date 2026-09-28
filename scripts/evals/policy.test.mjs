@@ -50,3 +50,11 @@ it('counts a sync when boolean flags explicitly disable status or dry-run', () =
   for (const flags of [['--status=false'], ['--dry-run=false'], ['--status', '--no-status']])
     assert.equal(checkScope([...args, ...flags], settings).sync, true)
 })
+
+it('limits runbook inspection to the supplied URL', () => {
+  const settings = { site: 'sc-domain:example.com', url: 'https://example.com/a', start: '2026-08-01', end: '2026-08-01', workspace: '/tmp/eval', allowLive: true }
+  assert.equal(checkScope(['inspect', settings.url, '--site', settings.site, '--json'], settings).reason, null)
+  assert.equal(checkScope(['bing', 'inspect', settings.url, '--site', settings.site, '--json'], settings).reason, null)
+  assert(checkScope(['inspect', 'https://example.com/b', '--site', settings.site, '--json'], settings).reason)
+  assert(checkScope(['bing', 'inspect', 'https://example.com/b', '--site', settings.site, '--json'], settings).reason)
+})

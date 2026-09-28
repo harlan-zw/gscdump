@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 export async function evaluatorIdentity() {
   const digest = async file => createHash('sha256').update(await readFile(new URL(file, import.meta.url))).digest('hex')
-  return { grader: await digest('./core.mjs'), cases: await digest('./cases.mjs'), runner: await digest('./run.mjs'), summarizer: await digest('./summarize.mjs'), proxy: await digest('./cli-proxy.mjs'), policy: await digest('./policy.mjs'), reservation: await digest('./reservation.mjs'), runtime: await digest('./runtime.mjs') }
+  return { grader: await digest('./core.mjs'), cases: await digest('./cases.mjs'), runbooks: await digest('./runbooks.mjs'), runner: await digest('./run.mjs'), summarizer: await digest('./summarize.mjs'), proxy: await digest('./cli-proxy.mjs'), policy: await digest('./policy.mjs'), reservation: await digest('./reservation.mjs'), runtime: await digest('./runtime.mjs') }
 }
 
 export async function fileState(directory) {

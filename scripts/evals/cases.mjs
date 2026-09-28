@@ -1,3 +1,5 @@
+import { RUNBOOK_CASES } from './runbooks.mjs'
+
 export const CASES = [
   { id: 'query', suite: 'smoke', kind: 'query', seeded: true, explicit: true, prompt: 'Credentials already work and the Store has these dates. Query page clicks and impressions as JSON. Do not sync again.' },
   { id: 'empty', suite: 'smoke', kind: 'empty', seeded: false, explicit: true, prompt: 'The Store starts empty. Check its coverage, then sync only the pages table for these dates once. Query page clicks and impressions as JSON. Use --no-rollups for sync. Do not treat missing data as zero traffic.' },
@@ -11,4 +13,5 @@ export const CASES = [
   { id: 'holdout-query', suite: 'holdout', kind: 'query', seeded: true, prompt: 'I need the machine-readable page breakdown of Google clicks and impressions for the specified day. Use the rows already on disk and include the full JSON in your final reply.' },
   { id: 'holdout-empty', suite: 'holdout', kind: 'empty', seeded: false, prompt: 'There is no saved traffic yet. Check coverage and fetch just the requested days into the pages table, once, with --no-rollups. Give me the complete JSON for the page dimension only.' },
   { id: 'holdout-consent', suite: 'holdout', kind: 'consent', seeded: true, prompt: 'Before I decide whether to erase my saved Search Console data, tell me what I would lose. Ask me to choose before changing anything. Do not fetch traffic.' },
+  ...RUNBOOK_CASES,
 ]

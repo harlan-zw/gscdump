@@ -1,22 +1,19 @@
 ---
 title: gscdump SDK
-description: Use TypeScript to call search APIs directly or build on hosted gscdump data.
+description: Build with direct search clients or hosted gscdump data.
 ---
 
-# gscdump SDK
+# Build with search data
 
-The SDK documentation covers the direct `gscdump` clients and the hosted `@gscdump/sdk` clients.
+Use `gscdump` for direct Google and Bing calls. Use `@gscdump/sdk/v1` for hosted data and realtime.
 
-Start with [Getting started](./guides/1.getting-started.md) to choose a package.
+Start at [Choose access](/gscdump-sdk/guides/start/choose-access). Make one request before choosing a framework.
 
-## Guides
+| Your task | Guide |
+| --- | --- |
+| Read hosted analytics | [Hosted first result](/gscdump-sdk/guides/start/hosted-first-result) |
+| Call Google directly | [Direct first result](/gscdump-sdk/guides/start/direct-first-result) |
+| Add a server route | [Build integrations](/gscdump-sdk/guides/build-integrations) |
+| Manage keys and failures | [Operate](/gscdump-sdk/guides/operate) |
 
-- [Getting started](./guides/1.getting-started.md)
-- [Direct search clients](./guides/2.direct-clients.md)
-- [Hosted integrations](./guides/3.hosted-integrations.md)
-
-## API
-
-- [Direct client exports](./api/1.direct-client.md)
-- [Hosted HTTP](./api/2.hosted-http.md)
-- [Realtime](./api/3.realtime.md)
+The [data guides](/gscdump-sdk/guides/read-data) cover rows, Reports, Indexing Evidence, sitemaps, and Bing. See the [direct client](/gscdump-sdk/api/direct-client) and [hosted HTTP](/gscdump-sdk/api/hosted-http) references for method contracts.

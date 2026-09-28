@@ -1,29 +1,26 @@
 ---
 title: gscdump CLI
-description: Install gscdump, connect Google Search Console or Bing, and use the CLI to sync, query, and export your data.
+description: Read Search Console data, keep local history, and investigate search traffic with gscdump.
 ---
 
 # gscdump CLI
 
-Use the CLI to sync search data to your disk, query it, and export it for your own tools.
-Connect your agent through the skill or MCP server.
+Get a live result, then follow the question in your data. The CLI reads Google Search Console and Bing, saves a local Store, and runs Reports and Analyzers.
+
+| Start with | When |
+| --- | --- |
+| [Run your first query](/gscdump-cli/guides/start/first-result) | You need a working Site and live result. |
+| [Use data](/gscdump-cli/guides/use-data) | You need history, filters, or an export. |
+| [Investigate traffic](/gscdump-cli/guides/investigate-traffic) | You have a change or opportunity to check. |
+| [Check visibility](/gscdump-cli/guides/check-visibility) | You need page overlap or Indexing Evidence. |
 
 ## Guides
 
-- [Getting started](./guides/1.getting-started.md)
-- [Authentication](./guides/2.authentication.md)
-- [AI integration and MCP](./guides/3.ai-integration.md)
-- [Keep historical data](./guides/4.historical-database.md)
-- [SEO analysis](./guides/5.seo-analysis.md)
-- [URL inspection and indexing](./guides/6.url-indexing.md)
-- [CLI charts](./guides/7.cli-charts.md)
+- [Start](/gscdump-cli/guides/start): access, first result, and agent setup.
+- [Use data](/gscdump-cli/guides/use-data): Store, queries, and exports.
+- [Investigate traffic](/gscdump-cli/guides/investigate-traffic): seven SEO runbooks.
+- [Check visibility](/gscdump-cli/guides/check-visibility): pages, sitemaps, Google, and Bing.
 
-## API
+## Reference
 
-- [Commands](./api/1.commands.md)
-- [Query](./api/2.query.md)
-- [Export](./api/3.export.md)
-- [Sync](./api/4.sync.md)
-- [Bing](./api/5.bing.md)
-- [Analyzers](./api/6.analyzers.md)
-- [Reports](./api/7.reports.md)
+[Commands](/gscdump-cli/api/commands) · [Query](/gscdump-cli/api/query) · [Export](/gscdump-cli/api/export) · [Sync](/gscdump-cli/api/sync) · [Bing](/gscdump-cli/api/bing) · [Analyzers](/gscdump-cli/api/analyzers) · [Reports](/gscdump-cli/api/reports)
