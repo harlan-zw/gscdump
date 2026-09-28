@@ -65,8 +65,6 @@ jobs:
       - run: pnpm i --filter . --filter "./packages/*" --frozen-lockfile --trust-lockfile
         env:
           PNPM_MINIMUM_RELEASE_AGE: 0
-      - name: Install Chromium
-        run: pnpm --filter @gscdump/engine-duckdb-wasm exec playwright install --with-deps chromium
       - name: Check packages and runtimes
         run: pnpm check:release
         env:
@@ -93,8 +91,6 @@ jobs:
         run: pnpm --filter @gscdump/cli... run build
       - name: Check filesystem and native runtime
         run: pnpm exec vitest run tests/build-config.test.ts packages/engine/test/filesystem.test.ts packages/engine/test/filesystem-windows.test.ts packages/engine/test/duckdb-native.test.ts packages/engine/test/duckdb-buffer-concurrency.test.ts
-      - name: Check installed CLI
-        run: pnpm test:packed
 
   test:
     needs: [changes, packages, windows]

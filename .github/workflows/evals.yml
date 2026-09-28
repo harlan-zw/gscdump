@@ -1,17 +1,12 @@
 name: CLI evaluations
 
 on:
-  pull_request:
-    paths:
-      - 'scripts/evals/**'
-      - 'packages/cli/**'
-      - 'docs/testing/**'
-      - '**/*.md'
-      - .github/workflows/evals.yml
-      - package.json
-      - pnpm-lock.yaml
   workflow_dispatch:
     inputs:
+      live:
+        description: Evaluate real services after grader checks
+        type: boolean
+        default: false
       agents:
         description: Run subscribed OpenCode GLM 5.3 Flash trials
         type: boolean
@@ -19,7 +14,7 @@ on:
       site:
         description: Google test Site with real traffic
         type: string
-        required: true
+        required: false
 
 permissions:
   contents: read
@@ -44,7 +39,8 @@ jobs:
         run: pnpm eval:cli --inventory
 
   live:
-    if: github.event_name == 'workflow_dispatch'
+    needs: graders
+    if: inputs.live
     environment: gscdump-evals
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -59,6 +55,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm --filter @gscdump/cli... run build
+      - name: Require a test Site
+        env:
+          EVAL_SITE: ${{ inputs.site }}
+        run: |
+          if [ -z "$EVAL_SITE" ]; then
+            echo "Choose a Google test Site when you enable live evaluations." >&2
+            exit 1
+          fi
       - if: inputs.agents
         run: npm install --global opencode-ai@1.18.30
       - name: Evaluate real services

@@ -30,7 +30,6 @@ jobs:
       - run: pnpm i --filter . --filter "./packages/*" --frozen-lockfile --trust-lockfile
         env:
           PNPM_MINIMUM_RELEASE_AGE: 0
-      - run: pnpm --filter @gscdump/engine-duckdb-wasm exec playwright install --with-deps chromium
       - run: pnpm check:release
         env:
           NODE_OPTIONS: --max-old-space-size=6144
