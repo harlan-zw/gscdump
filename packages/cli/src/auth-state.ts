@@ -6,6 +6,8 @@ import { z } from 'zod'
 import { HOSTED_KEY_REJECTED } from './error-handler'
 import { useCliRuntime } from './runtime'
 
+export const HOSTED_SESSION_REJECTED = 'gscdump.com rejected the CLI session. Run `gscdump auth login --mode cloud` again.'
+
 const apiRootSchema = z.url().transform(value => value.replace(/\/+$/, '')).refine((value) => {
   const url = new URL(value)
   return !url.username && !url.password && !url.search && !url.hash
@@ -110,7 +112,7 @@ export async function cloudRequest(state: CloudAuthentication, route: string, op
   })
   if (!response.ok) {
     const message = response.status === 401
-      ? 'sessionId' in state ? 'gscdump.com rejected the CLI session. Run `gscdump auth login --mode cloud` again.' : HOSTED_KEY_REJECTED
+      ? 'sessionId' in state ? HOSTED_SESSION_REJECTED : HOSTED_KEY_REJECTED
       : `Hosted request failed (${response.status}) for ${route.split('?')[0]}. Check \`gscdump auth status\`.`
     throw Object.assign(new Error(message), {
       statusCode: response.status,
