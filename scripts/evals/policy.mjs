@@ -11,6 +11,9 @@ export function checkScope(args, settings) {
     || (command === 'store' && (!subcommand || ['stats', 'ls', 'info'].includes(subcommand)))
     || (command === 'sites' && !subcommand)
     || (command === 'indexing' && subcommand === 'quota')
+    || (settings.allowLive && command === 'inspect')
+    || (settings.allowLive && command === 'entities' && subcommand === 'show')
+    || (settings.allowLive && command === 'bing' && ['sites', 'inspect'].includes(subcommand))
   let reason = allowed ? null : 'This operation is outside the evaluation scope.'
   if (duplicateOptions.length)
     reason = `Use each option once. Repeated options: ${duplicateOptions.map(name => `--${name}`).join(', ')}. Short flags are aliases.`
@@ -18,6 +21,8 @@ export function checkScope(args, settings) {
     reason = 'The evaluation configuration cannot be overridden.'
   if (values.live && !settings.allowLive)
     reason = 'Use the Store for this trial.'
+  if (settings.url && (command === 'inspect' || (command === 'bing' && subcommand === 'inspect') || (command === 'entities' && subcommand === 'show')) && !args.includes(settings.url))
+    reason = 'Inspect only the selected test URL.'
   const domainAlias = settings.site.startsWith('sc-domain:') ? settings.site.slice('sc-domain:'.length) : null
   if ('site' in values && values.site !== settings.site && values.site !== domainAlias)
     reason = 'The Site is outside the evaluation scope.'

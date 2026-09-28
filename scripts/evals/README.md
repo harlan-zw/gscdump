@@ -36,6 +36,16 @@ EVAL_SITE=sc-domain:example.com node --env-file=.env.test scripts/evals/run.mjs 
 `--no-docs` skips service journeys. It does not replace their previous results with passes.
 The smoke suite contains stored queries, empty Stores, and consent requests.
 The extended suite covers implicit activation, option syntax, expected recovery, and two negative prompts.
+The `runbooks` suite defines one agent case for each of the ten CLI SEO guides.
+It checks the guide's primary command, result shape, window, and a second evidence source on a real Site.
+Each result requires transcript review because live Site data may lack the signal in the question.
+Set `EVAL_RUNBOOK_STORE` to a prepared Store with complete dates and tables for the eight analytics runbooks.
+The harness copies that Store into each isolated trial. Missing fixture blocks those cases.
+The growth case needs year-earlier history before seasonality can be judged.
+The Google and Bing case needs Bing credentials and a URL visible to both Search Engines.
+Set `EVAL_URL` to an in-Site test URL for traffic-drop and Indexing Evidence cases.
+Select one case at a time with `--case`; the full suite can spend substantial API quota.
+No SDK framework examples run in this CLI-only harness.
 Reserve the holdout suite for a chosen candidate.
 `--trials 1` allows a cheaper development run.
 The fixed model applies to the main agent and helper model settings.

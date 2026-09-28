@@ -5,6 +5,7 @@ import process from 'node:process'
 import { analyzeWaste, finalResponse, gradeAgent, gradeAnswer, invocation } from './core.mjs'
 
 import { evaluatorIdentity } from './evidence.mjs'
+import { gradeRunbook, RUNBOOK_CASES } from './runbooks.mjs'
 
 // Reprocess existing evidence without running a model or contacting a Search Engine.
 const directory = resolve(process.argv[2] ?? 'tmp/evals')
@@ -44,10 +45,13 @@ for (const filename of files.filter(name => /-\d+-calls\.json$/.test(name))) {
     waste.findings.push({ kind: 'missing-events', evidence: { id }, suggestion: 'Inspect the saved process output. Agent event parsing failed.' })
   const loaded = events.some(event => event.type === 'tool_use' && event.part?.tool === 'skill' && event.part?.state?.input?.name === 'gscdump' && event.part?.state?.status === 'completed')
   const text = finalResponse(events)
-  const processGrade = gradeAgent({ calls, loaded, kind, text, shouldTrigger: recorded?.shouldTrigger ?? true, storeUnchanged: recorded?.storeUnchanged, caseId: recorded?.caseId, expected: { site: report.site, start: report.start, end: report.end } })
+  const runbook = kind === 'runbook' ? RUNBOOK_CASES.find(test => test.id === recorded?.caseId) : undefined
+  const processGrade = runbook
+    ? gradeRunbook({ definition: runbook, calls, loaded, text, expected: { site: report.site } })
+    : gradeAgent({ calls, loaded, kind, text, shouldTrigger: recorded?.shouldTrigger ?? true, storeUnchanged: recorded?.storeUnchanged, caseId: recorded?.caseId, expected: { site: report.site, start: report.start, end: report.end } })
   const query = calls.filter(call => invocation(call.args).command === 'query' && call.code === 0 && !invocation(call.args).help && !invocation(call.args).values.explain).sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)).at(-1)
   let answerGrade = null
-  if (!['consent', 'negative'].includes(kind) && query) {
+  if (!['consent', 'negative', 'runbook'].includes(kind) && query) {
     try {
       answerGrade = gradeAnswer(text, JSON.parse(query.stdout))
     }

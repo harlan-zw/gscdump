@@ -22,7 +22,7 @@ export function parseOptions(args) {
     else throw new Error(`Unknown option: ${args[i]}`)
   }
   assert(Number.isInteger(options.trials) && options.trials >= 1 && options.trials <= 3, 'Trials must be between 1 and 3.')
-  assert(['smoke', 'extended', 'holdout', 'baseline', 'all'].includes(options.suite), 'Unknown suite.')
+  assert(['smoke', 'extended', 'holdout', 'baseline', 'runbooks', 'all'].includes(options.suite), 'Unknown suite.')
   assert(options.cases.every(id => CASES.some(test => test.id === id)), 'Unknown case.')
   assert(options.agents || (options.docs && options.cases.length === 0), '--case and --no-docs require --agents.')
   return options

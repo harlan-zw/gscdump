@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import process from 'node:process'
@@ -8,12 +8,13 @@ import { fileURLToPath } from 'node:url'
 import { CASES } from './cases.mjs'
 import { analyzeWaste, commands, compareLivePages, compareRows, exportedRows, finalResponse, gradeAgent, gradeAnswer, invocation, MODEL, pageMetrics, parseOptions, seedCommand, syncedWindow } from './core.mjs'
 import { evaluatorIdentity, fileState } from './evidence.mjs'
+import { gradeRunbook, runbookBlock } from './runbooks.mjs'
 import { checked, credentialEnvironment, installCandidate, run } from './runtime.mjs'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const options = parseOptions(process.argv.slice(2))
 // Freeze proxy code before packaging. Later source edits must not change a running trial.
-const proxySources = new Map(await Promise.all(['cli-proxy.mjs', 'core.mjs', 'cases.mjs', 'policy.mjs', 'reservation.mjs'].map(async file => [file, await readFile(new URL(file, import.meta.url), 'utf8')])))
+const proxySources = new Map(await Promise.all(['cli-proxy.mjs', 'core.mjs', 'cases.mjs', 'runbooks.mjs', 'policy.mjs', 'reservation.mjs'].map(async file => [file, await readFile(new URL(file, import.meta.url), 'utf8')])))
 const docs = ['packages/cli/skills/gscdump/SKILL.md', 'packages/cli/README.md', 'docs/testing/cli-live-journey.md', 'docs/testing/cli-analysis-journey.md']
 const documents = await Promise.all(docs.map(async path => ({ path, text: await readFile(join(root, path), 'utf8') })))
 const inventory = documents.flatMap(doc => commands(doc.text).map(command => ({ source: doc.path, ...command })))
@@ -73,7 +74,7 @@ function requireGoogle() {
     blocked('Google test credentials are missing.')
 }
 let cli
-async function context(id, { seeded = false, cloud = false, authenticated = true } = {}) {
+async function context(id, { seeded = false, cloud = false, authenticated = true, allowLive = false, url, storeFixture } = {}) {
   const directory = join(temporary, id)
   const workspace = join(directory, 'workspace')
   const config = join(directory, 'config')
@@ -85,6 +86,8 @@ async function context(id, { seeded = false, cloud = false, authenticated = true
   if (!cloud)
     delete env.GSCDUMP_API_KEY
   await writeFile(join(config, 'config.json'), JSON.stringify({ defaultSite: site, dataDir: join(directory, 'store') }), { mode: 0o600 })
+  if (storeFixture)
+    await cp(storeFixture, join(directory, 'store'), { recursive: true })
   const setupCalls = []
   async function setup(args) {
     const result = await run(process.execPath, [cli, ...args], { cwd: workspace, env })
@@ -100,8 +103,8 @@ async function context(id, { seeded = false, cloud = false, authenticated = true
   const trace = join(directory, 'calls.jsonl')
   const settings = join(directory, 'settings.json')
   await writeFile(trace, '', { mode: 0o600 })
-  await writeFile(settings, JSON.stringify({ cli, env, site, start: id === 'analysis' ? priorStart : start, end, trace, secrets, workspace, allowLive: id === 'docs', tables: id === 'analysis' ? 'pages,queries,page_queries' : 'pages', reservations: join(directory, 'reservations') }), { mode: 0o600 })
-  for (const file of ['core.mjs', 'cases.mjs', 'policy.mjs', 'reservation.mjs'])
+  await writeFile(settings, JSON.stringify({ cli, env, site, url, start: id === 'analysis' ? priorStart : start, end, trace, secrets, workspace, allowLive: id === 'docs' || allowLive, tables: id === 'analysis' ? 'pages,queries,page_queries' : 'pages', reservations: join(directory, 'reservations') }), { mode: 0o600 })
+  for (const file of ['core.mjs', 'cases.mjs', 'runbooks.mjs', 'policy.mjs', 'reservation.mjs'])
     await writeFile(join(bin, file), proxySources.get(file))
   const proxy = join(bin, 'gscdump')
   await writeFile(proxy, `#!${process.execPath}\n${proxySources.get('cli-proxy.mjs')}`, { mode: 0o700 })
@@ -326,7 +329,16 @@ try {
         await attempt(`agent-${id}`, async () => {
           if (kind !== 'negative')
             requireGoogle()
-          const ctx = await context(id, { seeded: test.seeded, authenticated: kind !== 'negative' })
+          const unmet = runbookBlock(test, credentials)
+          if (unmet)
+            blocked(unmet)
+          const caseUrl = process.env.EVAL_URL
+          if (test.requiresUrl && !caseUrl)
+            blocked('Set EVAL_URL to a URL on the test Site for this runbook.')
+          const storeFixture = test.requiresStore ? process.env.EVAL_RUNBOOK_STORE : undefined
+          if (test.requiresStore && (!storeFixture || !(await stat(storeFixture).catch(() => null))?.isDirectory()))
+            blocked('Set EVAL_RUNBOOK_STORE to a prepared Store with complete windows for this runbook.')
+          const ctx = await context(id, { seeded: test.seeded, authenticated: kind !== 'negative', allowLive: kind === 'runbook', url: test.requiresUrl ? caseUrl : undefined, storeFixture })
           if (test.installSkill !== false) {
             await ctx.setup(['skill', 'install', '--target', join(ctx.workspace, '.opencode/skills')])
             const installed = await readFile(join(ctx.workspace, '.opencode/skills/gscdump/SKILL.md'), 'utf8')
@@ -347,7 +359,7 @@ try {
             agent: { build: { steps: 12 }, title: { model: MODEL }, summary: { model: MODEL } },
             permission: { '*': 'deny', 'skill': 'allow', 'read': { '*': 'deny', '*.md': 'allow' }, 'bash': { '*': 'deny', 'gscdump *': 'allow' } },
           }))
-          const base = kind === 'negative' ? '' : `${test.explicit ? 'Use the gscdump skill. ' : ''}Site: ${site}. Dates: ${start} through ${end}. Do not report papercuts. Do not inspect credentials. Use the installed CLI directly. Shell pipelines and package installation are unavailable in this evaluation. `
+          const base = kind === 'negative' ? '' : `${test.explicit ? 'Use the gscdump skill. ' : ''}Site: ${site}. Dates: ${start} through ${end}. Do not report papercuts. Do not inspect credentials. Use the installed CLI directly. Shell pipelines and package installation are unavailable in this evaluation. ${kind === 'runbook' ? `Use JSON output for substantive commands. Use live reads if the Store lacks coverage. ${caseUrl ? `URL: ${caseUrl}. ` : ''}` : ''}`
           const task = test.prompt
           const before = kind === 'consent' ? await fileState(ctx.store) : null
           const env = { HOME: ctx.env.HOME, PATH: ctx.env.PATH, LANG: 'C.UTF-8', EVAL_SETTINGS: ctx.env.EVAL_SETTINGS, XDG_CONFIG_HOME: config, XDG_DATA_HOME: data, XDG_CACHE_HOME: join(ctx.directory, 'xdg-cache'), OPENCODE_CONFIG: configFile, OPENCODE_DISABLE_CLAUDE_CODE: 'true' }
@@ -380,9 +392,11 @@ try {
           if (before !== null)
             await save(`${id}-store-state.json`, { before, after, unchanged: storeUnchanged })
           report.agentTrials.at(-1).storeUnchanged = storeUnchanged
-          const grade = gradeAgent({ calls: history, loaded, kind, text, shouldTrigger: test.shouldTrigger !== false, storeUnchanged, caseId: test.id, expected: { site, start, end } })
+          const grade = kind === 'runbook'
+            ? gradeRunbook({ definition: test, calls: history, loaded, text, expected: { site, url: caseUrl } })
+            : gradeAgent({ calls: history, loaded, kind, text, shouldTrigger: test.shouldTrigger !== false, storeUnchanged, caseId: test.id, expected: { site, start, end } })
           report.agentTrials.at(-1).processGrade = grade
-          if (!['consent', 'negative'].includes(kind)) {
+          if (!['consent', 'negative', 'runbook'].includes(kind)) {
             const query = history.filter(call => invocation(call.args).command === 'query' && call.code === 0 && !invocation(call.args).help && !invocation(call.args).values.explain).sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)).at(-1)
             assert(query, 'The agent did not run a query.')
             const expected = await ctx.setup(['query', '--live', '--site', site, '--start', start, '--end', end, '--dimensions', 'page', '--limit', '1000', '--format', 'json', '--quiet'])
