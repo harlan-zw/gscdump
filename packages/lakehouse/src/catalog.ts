@@ -157,6 +157,28 @@ export interface ConnectIcebergOptions {
   cache?: CatalogCache
   /** Injectable clock for the cache TTL. Defaults to `Date.now`. */
   clock?: () => number
+  /** Optional connection-stage timings. Spans carry no catalog coordinates. */
+  profiler?: QueryProfiler
+}
+
+function startConnectSpan(profiler: QueryProfiler | undefined, name: string): ((meta: Record<string, string | number | boolean>) => void) | undefined {
+  if (!profiler)
+    return undefined
+  // Profiling is diagnostic. A broken observer must not change a catalog read.
+  try {
+    const end = profiler.start(name)
+    if (!end)
+      return undefined
+    return (meta) => {
+      try {
+        end(meta)
+      }
+      catch {}
+    }
+  }
+  catch {
+    return undefined
+  }
 }
 
 /** The serialisable, secret-free part of an icebird REST catalog context. */
@@ -203,7 +225,12 @@ export async function connectIcebergCatalog(
 
   let catalog: Awaited<ReturnType<typeof restCatalogConnect>> | undefined
   if (opts.cache) {
-    const cached = await cacheGet<CachedCatalogConfig>(opts.cache, catalogConfigKey(config), now)
+    const endCache = startConnectSpan(opts.profiler, 'catalog.config.cache')
+    const cacheRead: { outcome: 'hit' | 'miss' | 'expired' | 'invalid' | 'error' } = { outcome: 'miss' }
+    const cached = await cacheGet<CachedCatalogConfig>(opts.cache, catalogConfigKey(config), now, (outcome) => {
+      cacheRead.outcome = outcome
+    })
+    endCache?.({ outcome: cacheRead.outcome === 'hit' && !cached ? 'invalid' : cacheRead.outcome })
     if (cached) {
       catalog = Object.freeze({
         type: 'rest' as const,
@@ -216,11 +243,19 @@ export async function connectIcebergCatalog(
     }
   }
   if (!catalog) {
-    catalog = await restCatalogConnect({
-      url: config.catalogUri,
-      warehouse: config.warehouse,
-      requestInit,
-    })
+    const endRest = startConnectSpan(opts.profiler, 'catalog.config.rest')
+    let restOutcome: 'ok' | 'error' = 'error'
+    try {
+      catalog = await restCatalogConnect({
+        url: config.catalogUri,
+        warehouse: config.warehouse,
+        requestInit,
+      })
+      restOutcome = 'ok'
+    }
+    finally {
+      endRest?.({ outcome: restOutcome })
+    }
     if (opts.cache) {
       const toCache: CachedCatalogConfig = {
         url: catalog.url,
@@ -228,7 +263,13 @@ export async function connectIcebergCatalog(
         defaults: catalog.defaults,
         overrides: catalog.overrides,
       }
-      await cachePut(opts.cache, catalogConfigKey(config), toCache, CATALOG_CONFIG_TTL_MS, now)
+      const endWrite = startConnectSpan(opts.profiler, 'catalog.config.write')
+      try {
+        await cachePut(opts.cache, catalogConfigKey(config), toCache, CATALOG_CONFIG_TTL_MS, now)
+      }
+      finally {
+        endWrite?.({ deferred: opts.cache.defer != null })
+      }
     }
   }
 

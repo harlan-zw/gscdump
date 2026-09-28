@@ -34,6 +34,9 @@ export interface CatalogCache {
   onError?: (operation: 'get' | 'set' | 'remove', key: string, error: unknown) => void
 }
 
+/** Outcome of one cache read, including misses that still permit a fresh load. */
+export type CatalogCacheGetOutcome = 'hit' | 'miss' | 'expired' | 'invalid' | 'error'
+
 /** A cached value boxed with its absolute expiry (epoch ms). */
 interface Boxed<T> {
   v: T
@@ -57,13 +60,41 @@ export function reportCatalogCacheError(cache: CatalogCache, operation: 'get' | 
  * malformed box, or any driver error (the cache is best-effort: a read failure
  * degrades to a fresh load, never to an error).
  */
-export async function cacheGet<T>(cache: CatalogCache, key: string, now: number): Promise<T | undefined> {
-  const boxed = await cache.storage.getItem<Boxed<T>>(key).catch((error: unknown) => {
+export async function cacheGet<T>(
+  cache: CatalogCache,
+  key: string,
+  now: number,
+  onOutcome?: (outcome: CatalogCacheGetOutcome) => void,
+): Promise<T | undefined> {
+  // Telemetry is best-effort and must not alter cache fallback behaviour.
+  const reportOutcome = (outcome: CatalogCacheGetOutcome): void => {
+    try {
+      onOutcome?.(outcome)
+    }
+    catch {}
+  }
+  const read = await cache.storage.getItem<Boxed<T>>(key).then(boxed => ({ _tag: 'Ok' as const, boxed }), (error: unknown) => {
     reportCatalogCacheError(cache, 'get', key, error)
-    return null
+    return { _tag: 'Error' as const }
   })
-  if (!boxed || typeof boxed.exp !== 'number' || boxed.exp <= now)
+  if (read._tag === 'Error') {
+    reportOutcome('error')
     return undefined
+  }
+  const { boxed } = read
+  if (!boxed) {
+    reportOutcome('miss')
+    return undefined
+  }
+  if (typeof boxed.exp !== 'number' || boxed.v === undefined) {
+    reportOutcome('invalid')
+    return undefined
+  }
+  if (boxed.exp <= now) {
+    reportOutcome('expired')
+    return undefined
+  }
+  reportOutcome('hit')
   return boxed.v
 }
 
