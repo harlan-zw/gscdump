@@ -13,6 +13,7 @@ Get a live result, then follow the question in your data. The CLI reads Google S
 | [Use data](/gscdump-cli/guides/use-data) | You need history, filters, or an export. |
 | [Investigate traffic](/gscdump-cli/guides/investigate-traffic) | You have a change or opportunity to check. |
 | [Check visibility](/gscdump-cli/guides/check-visibility) | You need page overlap or Indexing Evidence. |
+| [Connect an agent](/gscdump-cli/guides/start/connect-an-agent) | You want an agent to run the CLI with the packaged skill. |
 
 ## Guides
 
