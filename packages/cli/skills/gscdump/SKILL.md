@@ -56,11 +56,15 @@ gscdump bing sites --json
 gscdump bing login --site s_SITE_ID
 gscdump bing dump --site s_SITE_ID --out ./bing-export --format json
 
-# Local Google and Bing credentials stay separate.
+# Local Google login uses gscdump.com for OAuth by default.
+# Google data requests go directly from the CLI to Google.
 gscdump auth login --mode local
 gscdump bing login --mode local
 gscdump bing dump --site https://example.com/ --out ./bing-export
 ```
+
+For a fully local Google login, set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET` before `auth login --mode local`.
+The CLI then opens Google directly. A service account can use `--service-account` instead.
 
 Hosted Bing login opens the existing connection flow on gscdump.com.
 Local Bing login uses `BING_API_KEY` or a password prompt.

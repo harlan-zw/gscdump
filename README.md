@@ -52,9 +52,17 @@ Install the CLI with Node.js 22.13 or later in the 22 release line, or Node.js 2
 npm install -g @gscdump/cli
 ```
 
+Choose where the CLI gets Google access:
+
+| Path | Login | Google data requests |
+| --- | --- | --- |
+| Cloud | gscdump.com browser sign-in | gscdump.com calls Google |
+| Local, gscdump.com OAuth | Google sign-in through gscdump.com | The CLI calls Google directly |
+| Local, your Google credentials | Your OAuth client or service account | The CLI calls Google directly |
+
 ### Cloud access
 
-Cloud login opens gscdump.com in your browser. Sign in, authorize the CLI, then [connect a Site](https://gscdump.com/app/sites/add). The CLI saves its own session.
+Cloud login opens gscdump.com in your browser. Sign in, authorize the CLI, then [connect a Site](https://gscdump.com/app/sites/add). The CLI saves its own session. You do not need to copy an API key.
 
 ```bash
 gscdump auth login --mode cloud
@@ -66,7 +74,9 @@ See [the cloud first-result guide](./docs/gscdump-cli/guides/1.start/1.first-res
 
 ### Local access
 
-For a fully local Google connection, create a Desktop OAuth client in Google Cloud and set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET`. The [access guide](./docs/gscdump-cli/guides/1.start/2.choose-access.md#local-access) also covers a service account and the simpler login that uses gscdump.com only for OAuth.
+For local access without a Google Cloud project, run `gscdump auth login --mode local`. The browser opens gscdump.com for OAuth. The CLI then calls Google directly.
+
+For a fully local connection, create a Desktop OAuth client in Google Cloud and set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET` before login. This path opens Google directly. The [access guide](./docs/gscdump-cli/guides/1.start/2.choose-access.md#local-access) also covers service accounts and existing Google tokens.
 
 ```bash
 export GSC_CLIENT_ID=your-client-id
