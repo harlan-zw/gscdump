@@ -1,0 +1,48 @@
+name: README Links
+
+# The README link guard validates content that only changes in docs-only
+# PRs, which the Test workflow's code filter skips. This workflow opts into
+# markdown paths so the guard runs on exactly the changes it exists to catch.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - packages/cli/README.md
+      - docs/readme-guide-links.test.ts
+      - 'docs/gscdump-cli/**'
+      - 'docs/gscdump-sdk/**'
+  pull_request:
+    paths:
+      - README.md
+      - packages/cli/README.md
+      - docs/readme-guide-links.test.ts
+      - 'docs/gscdump-cli/**'
+      - 'docs/gscdump-sdk/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm i --filter . --frozen-lockfile --trust-lockfile
+        env:
+          PNPM_MINIMUM_RELEASE_AGE: 0
+      - name: Guard README links
+        run: pnpm exec vitest run docs/readme-guide-links.test.ts
