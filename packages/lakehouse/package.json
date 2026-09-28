@@ -80,6 +80,7 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "hyparquet": "catalog:",
+    "hyparquet-writer": "catalog:",
     "icebird": "catalog:",
     "unstorage": "catalog:",
     "vitest": "catalog:dev-test"

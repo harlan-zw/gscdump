@@ -49,20 +49,51 @@ index 2bac90d09cfa5a05243b3cf8d450df2f9e4f3c3a..a177d71fca3a3dc840b8fadfaa3ca3d7
  export { fileCatalog } from './catalog/file.js'
  export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js'
 diff --git a/src/manifest.js b/src/manifest.js
-index 873101728c62f83932cac785fb26625512c83e2b..439f7a925337f6dc52cad08eee194b9ffae7328c 100644
+index 873101728c62f83932cac785fb26625512c83e2b..15d7c8d830777a299a5cbc4b4b86515ca405c152 100644
 --- a/src/manifest.js
 +++ b/src/manifest.js
-@@ -2,6 +2,9 @@ import { avroMetadata } from './avro/avro.metadata.js'
+@@ -2,6 +2,40 @@ import { avroMetadata } from './avro/avro.metadata.js'
  import { avroRead } from './avro/avro.read.js'
  import { fetchAvroRecords, urlResolver } from './fetch.js'
  
 +// Cloudflare Workers cap subrequests per invocation, so manifest reads need bounded concurrency.
 +const MANIFEST_FETCH_CONCURRENCY = 8
 +
++/**
++ * Cache decoded immutable manifest data for one caller-owned read batch.
++ * The caller scopes the maps to one catalog, table and snapshot.
++ *
++ * @typedef {{ lists: Map<string, Promise<Manifest[]>>, entries: Map<string, Promise<{ url: string, entries: ManifestEntry[] }>> }} ManifestReadCache
++ */
++
++/**
++ * @template T
++ * @param {Map<string, Promise<T>> | undefined} cache
++ * @param {string} key
++ * @param {() => Promise<T>} read
++ * @param {boolean} [retain] - Keep successful metadata reads for this batch.
++ * @returns {Promise<T>}
++ */
++function memoRead(cache, key, read, retain = true) {
++  if (!cache) return read()
++  const existing = cache.get(key)
++  if (existing) return existing
++  const pending = Promise.resolve().then(read)
++  cache.set(key, pending)
++  // Large decoded entry arrays only coalesce while in flight. Keep the
++  // manifest list, which the month cache needs again for its second pass.
++  // Both callbacks handle the promise, so cleanup cannot reject unobserved.
++  pending.then(
++    () => { if (!retain && cache.get(key) === pending) cache.delete(key) },
++    () => { if (cache.get(key) === pending) cache.delete(key) },
++  )
++  return pending
++}
++
  /**
   * Returns manifest entries for a snapshot. Defaults to the current snapshot;
   * pass `snapshotId` to time-travel to a prior snapshot in the metadata's
-@@ -9,13 +12,21 @@ import { fetchAvroRecords, urlResolver } from './fetch.js'
+@@ -9,13 +43,22 @@ import { fetchAvroRecords, urlResolver } from './fetch.js'
   *
   * @import {Resolver, TableMetadata, Manifest, ManifestEntry, Snapshot} from '../src/types.js'
   * @typedef {{ url: string, entries: ManifestEntry[] }[]} ManifestList
@@ -71,6 +102,7 @@ index 873101728c62f83932cac785fb26625512c83e2b..439f7a925337f6dc52cad08eee194b9f
   * @param {TableMetadata} options.metadata
   * @param {Resolver} [options.resolver]
   * @param {number | bigint} [options.snapshotId] - Optional snapshot id; defaults to `current-snapshot-id`.
++ * @param {ManifestReadCache} [options.manifestCache] - Caller-owned decoded read cache, scoped to one table snapshot.
 + * @param {ManifestPartitionFilter} [options.partitionFilter] - Optional predicate
 + *   applied to each manifest's manifest-list `partitions` field-summary array
 + *   BEFORE `fetchManifests` fans out. Return `false` to skip fetching that
@@ -81,14 +113,25 @@ index 873101728c62f83932cac785fb26625512c83e2b..439f7a925337f6dc52cad08eee194b9f
   * @returns {Promise<ManifestList>}
   */
 -export async function icebergManifests({ metadata, resolver, snapshotId }) {
-+export async function icebergManifests({ metadata, resolver, snapshotId, partitionFilter }) {
++export async function icebergManifests({ metadata, resolver, snapshotId, partitionFilter, manifestCache }) {
    resolver ??= urlResolver()
    const rawTarget = snapshotId ?? metadata['current-snapshot-id']
    if (rawTarget == null || rawTarget < 0) {
-@@ -45,6 +56,17 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
+@@ -37,15 +80,26 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
+   if (snapshot['manifest-list']) {
+     // Fetch manifest list and extract manifest URLs
+     const manifestListUrl = snapshot['manifest-list']
+-    manifests = /** @type {Manifest[]} */ (await fetchAvroRecords(manifestListUrl, resolver))
++    manifests = /** @type {Manifest[]} */ (await memoRead(manifestCache?.lists, manifestListUrl, () => fetchAvroRecords(manifestListUrl, resolver)))
+   } else if (snapshot.manifests) {
+     // v1 snapshots list manifests inline instead of pointing at a manifest list
+-    manifests = await resolveInlineManifests(snapshot, resolver)
++    manifests = await memoRead(manifestCache?.lists, `inline:${targetId}`, () => resolveInlineManifests(snapshot, resolver))
+   } else {
      throw new Error('No manifest information found in snapshot')
    }
  
+-  return await fetchManifests(manifests, resolver)
 +  if (partitionFilter) {
 +    manifests = manifests.filter((manifest) => {
 +      try {
@@ -100,10 +143,11 @@ index 873101728c62f83932cac785fb26625512c83e2b..439f7a925337f6dc52cad08eee194b9f
 +    })
 +  }
 +
-   return await fetchManifests(manifests, resolver)
++  return await fetchManifests(manifests, resolver, manifestCache)
  }
  
-@@ -61,7 +83,7 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
+ /**
+@@ -61,7 +115,7 @@ export async function icebergManifests({ metadata, resolver, snapshotId }) {
   */
  export async function resolveInlineManifests(snapshot, resolver) {
    const inline = snapshot.manifests ?? []
@@ -112,7 +156,7 @@ index 873101728c62f83932cac785fb26625512c83e2b..439f7a925337f6dc52cad08eee194b9f
      const ab = await resolver.reader(manifestPath)
      const buffer = await ab.slice(0, ab.byteLength)
      const reader = { view: new DataView(buffer), offset: 0 }
-@@ -86,54 +108,86 @@ export async function resolveInlineManifests(snapshot, resolver) {
+@@ -86,54 +140,86 @@ export async function resolveInlineManifests(snapshot, resolver) {
        existing_rows_count: rows[0],
        deleted_rows_count: rows[2],
      }
@@ -147,7 +191,7 @@ index 873101728c62f83932cac785fb26625512c83e2b..439f7a925337f6dc52cad08eee194b9f
 +  const entries = /** @type {ManifestEntry[]} */ (
 +    await fetchAvroRecords(url, resolver, Number(manifest.manifest_length))
 +  )
- 
++
 +  // Inherit sequence number from manifest if not present in entry
 +  for (const entry of entries) {
 +    entry.partition_spec_id = manifest.partition_spec_id ?? 0
@@ -158,7 +202,7 @@ index 873101728c62f83932cac785fb26625512c83e2b..439f7a925337f6dc52cad08eee194b9f
 +      // sequence numbers for all files must default to 0.
 +      entry.sequence_number = manifest.sequence_number ?? 0n
 +    }
-+
+ 
 +    if (entry.status === 1) {
 +      // only ADDED can inherit sequence number
        if (entry.sequence_number === undefined) {
@@ -193,12 +237,12 @@ index 873101728c62f83932cac785fb26625512c83e2b..439f7a925337f6dc52cad08eee194b9f
 -    assignFirstRowIds(manifest, entries)
 +  }
 +  assignFirstRowIds(manifest, entries)
++
++  return { url, entries }
++}
  
 -    return { url, entries }
 -  }))
-+  return { url, entries }
-+}
-+
 +/**
 + * Fetch manifest entries with bounded concurrency and stable result order.
 + *
@@ -206,8 +250,8 @@ index 873101728c62f83932cac785fb26625512c83e2b..439f7a925337f6dc52cad08eee194b9f
 + * @param {Resolver} resolver
 + * @returns {Promise<ManifestList>}
 + */
-+async function fetchManifests(manifests, resolver) {
-+  return await mapWithConcurrency(manifests, manifest => fetchOneManifest(manifest, resolver))
++async function fetchManifests(manifests, resolver, manifestCache) {
++  return await mapWithConcurrency(manifests, manifest => memoRead(manifestCache?.entries, manifest.manifest_path, () => fetchOneManifest(manifest, resolver), false))
 +}
 +
 +/**
@@ -556,13 +600,18 @@ index 7cfd5378c18f0cef88a1cee7f397095dd75cce76..b1cb9f5da0ed074c5dd9c9b7124fd944
  export { fileCatalog } from './catalog/file.js';
  export { restCatalogConnect, restCatalogCreateNamespace, restCatalogDropNamespace, restCatalogListNamespaces, restCatalogListTables, restCatalogLoadCredentials, restCatalogLoadTable, restCatalogRegisterTable, restCatalogRenameTable } from './catalog/rest.js';
 diff --git a/types/manifest.d.ts b/types/manifest.d.ts
-index 5545860383cee1b39726a6bbcc43bdd0243e0d2e..7201f13ae29b1b93b17d2d2ce92a48924d0c94d3 100644
+index 5545860383cee1b39726a6bbcc43bdd0243e0d2e..f41d9103abca6bee5f1d8667d97e206d0ab1ab17 100644
 --- a/types/manifest.d.ts
 +++ b/types/manifest.d.ts
-@@ -3,6 +3,10 @@ export type ManifestList = {
+@@ -3,6 +3,15 @@ export type ManifestList = {
      url: string;
      entries: ManifestEntry[];
  }[];
++/** Decoded, immutable manifest data for one caller-owned table snapshot. */
++export type ManifestReadCache = {
++    lists: Map<string, Promise<Manifest[]>>;
++    entries: Map<string, Promise<{ url: string; entries: ManifestEntry[] }>>;
++};
 +/**
 + * Predicate applied before fetching a manifest's entries.
 + */
@@ -570,16 +619,17 @@ index 5545860383cee1b39726a6bbcc43bdd0243e0d2e..7201f13ae29b1b93b17d2d2ce92a4892
  /**
   * Returns manifest entries for a snapshot. Defaults to the current snapshot;
   * pass `snapshotId` to time-travel to a prior snapshot in the metadata's
-@@ -16,10 +20,11 @@ export type ManifestList = {
+@@ -16,10 +25,12 @@ export type ManifestList = {
   * @param {number | bigint} [options.snapshotId] - Optional snapshot id; defaults to `current-snapshot-id`.
   * @returns {Promise<ManifestList>}
   */
 -export declare function icebergManifests({ metadata, resolver, snapshotId }: {
-+export declare function icebergManifests({ metadata, resolver, snapshotId, partitionFilter }: {
++export declare function icebergManifests({ metadata, resolver, snapshotId, partitionFilter, manifestCache }: {
      metadata: TableMetadata;
      resolver?: Resolver;
      snapshotId?: number | bigint;
 +    partitionFilter?: ManifestPartitionFilter;
++    manifestCache?: ManifestReadCache;
  }): Promise<ManifestList>;
  /**
   * Turn a v1 snapshot's inline `manifests` (a list of manifest file locations)

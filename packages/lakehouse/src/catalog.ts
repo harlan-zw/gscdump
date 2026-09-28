@@ -10,6 +10,7 @@
  * internally.
  */
 
+import type { ManifestReadCache } from 'icebird/src/manifest.js'
 import type {
   icebergAppend,
   icebergAppendBatches,
@@ -88,6 +89,8 @@ export interface IcebergCatalogConfig {
   s3: IcebergS3Config
 }
 
+const connectionReadBatch = Symbol('iceberg-connection-read-batch')
+
 /** The connected catalog context + a signed S3 resolver — the icebird call inputs. */
 export interface IcebergConnection {
   /** icebird REST catalog context, passed as `{ catalog }` to icebird write fns. */
@@ -105,6 +108,44 @@ export interface IcebergConnection {
    * omit it ONLY when their cache is not shared across catalogs.
    */
   cacheScope?: string
+  /** Concurrent reads share decoded metadata only while their batch is active. */
+  [connectionReadBatch]?: ConnectionReadBatch
+}
+
+interface ConnectionReadBatch {
+  active: number
+  snapshots: Map<CatalogCache['storage'] | undefined, Map<string, Promise<{ snapshotId: string | null, metadata: LoadedTableMetadata | null }>>>
+  manifests: Map<string, ManifestReadCache>
+}
+
+function beginConnectionRead(conn: IcebergConnection): () => void {
+  const batch = conn[connectionReadBatch]
+  if (!batch)
+    return () => {}
+  batch.active++
+  return () => {
+    batch.active--
+    if (batch.active === 0) {
+      batch.snapshots.clear()
+      batch.manifests.clear()
+    }
+  }
+}
+
+function manifestReadCacheFor(conn: IcebergConnection, namespace: string, table: string, metadata: LoadedTableMetadata): ManifestReadCache | undefined {
+  const batch = conn[connectionReadBatch]
+  if (!batch || batch.active === 0)
+    return undefined
+  const snapshotId = metadata['current-snapshot-id']
+  if (snapshotId == null)
+    return undefined
+  const key = `${conn.cacheScope ?? ''}\0${namespace}\0${table}\0${snapshotId}`
+  let cache = batch.manifests.get(key)
+  if (!cache) {
+    cache = { lists: new Map(), entries: new Map() }
+    batch.manifests.set(key, cache)
+  }
+  return cache
 }
 
 /** Options for {@link connectIcebergCatalog}. */
@@ -200,7 +241,13 @@ export async function connectIcebergCatalog(
     pathStyle: true,
   })
   const resolver = withVerifiedWriterByteLengths(cachingResolver(s3Resolver))
-  return { catalog, resolver, namespace: config.namespace, cacheScope }
+  return {
+    catalog,
+    resolver,
+    namespace: config.namespace,
+    cacheScope,
+    [connectionReadBatch]: { active: 0, snapshots: new Map(), manifests: new Map() },
+  }
 }
 
 /**
@@ -868,6 +915,36 @@ async function loadSnapshotId(
   cache: CatalogCache | undefined,
   now: number,
 ): Promise<{ snapshotId: string | null, metadata: LoadedTableMetadata | null }> {
+  const batch = conn[connectionReadBatch]
+  if (!batch || batch.active === 0)
+    return loadSnapshotIdUnshared(conn, namespace, table, cache, now)
+
+  const storage = cache?.storage
+  let pendingByTable = batch.snapshots.get(storage)
+  if (!pendingByTable) {
+    pendingByTable = new Map()
+    batch.snapshots.set(storage, pendingByTable)
+  }
+  const key = `${conn.cacheScope ?? ''}\0${namespace}\0${table}`
+  const existing = pendingByTable.get(key)
+  if (existing)
+    return existing
+  const pending = loadSnapshotIdUnshared(conn, namespace, table, cache, now)
+  pendingByTable.set(key, pending)
+  pending.then(undefined, () => {
+    if (pendingByTable?.get(key) === pending)
+      pendingByTable.delete(key)
+  })
+  return pending
+}
+
+async function loadSnapshotIdUnshared(
+  conn: IcebergConnection,
+  namespace: string,
+  table: string,
+  cache: CatalogCache | undefined,
+  now: number,
+): Promise<{ snapshotId: string | null, metadata: LoadedTableMetadata | null }> {
   const scope = conn.cacheScope ?? ''
   if (cache) {
     const cached = await cacheGet<string>(cache, snapshotRefKey(scope, namespace, table), now)
@@ -980,8 +1057,9 @@ async function resolveViaFullWalk(
   monthFieldName: string | undefined,
   wantedMonths: ReadonlySet<number>,
   dateFieldId: number | null,
+  manifestCache: ManifestReadCache | undefined,
 ): Promise<ManifestWalkOutcome> {
-  const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter })
+  const manifests: WalkedManifest[] = await icebergManifests({ metadata, resolver: conn.resolver, partitionFilter, manifestCache })
   const entries: IcebergListedDataFile[] = []
   for (const m of manifests) {
     for (const entry of m.entries) {
@@ -1034,6 +1112,7 @@ async function resolveViaMonthCache(
   namespace: string,
   table: string,
   now: number,
+  manifestCache: ManifestReadCache | undefined,
 ): Promise<ManifestWalkOutcome> {
   const matchKey = matchKeyOf(matches)
 
@@ -1043,6 +1122,7 @@ async function resolveViaMonthCache(
   await icebergManifests({
     metadata,
     resolver: conn.resolver,
+    manifestCache,
     partitionFilter: (partitions: IcebergFieldSummary[] | undefined, _specId: number, manifest: { manifest_path: string }) => {
       try {
         if (partitionFilter(partitions) === false)
@@ -1113,6 +1193,7 @@ async function resolveViaMonthCache(
     const manifests: WalkedManifest[] = await icebergManifests({
       metadata,
       resolver: conn.resolver,
+      manifestCache,
       partitionFilter: (_partitions: IcebergFieldSummary[] | undefined, _specId: number, manifest: { manifest_path: string }) =>
         toWalk.has(manifest.manifest_path),
     })
@@ -1169,7 +1250,15 @@ async function resolveViaMonthCache(
  * the `IcebergDataset.resolveDataFiles` method is a thin wrapper that supplies
  * the def's own spec + identity/dims values.
  */
-export async function resolveIcebergDataFiles(
+export function resolveIcebergDataFiles(
+  conn: IcebergConnection,
+  opts: ResolveIcebergDataFilesOptions,
+): Promise<IcebergListedDataFile[]> {
+  const release = beginConnectionRead(conn)
+  return resolveIcebergDataFilesInBatch(conn, opts).finally(release)
+}
+
+async function resolveIcebergDataFilesInBatch(
   conn: IcebergConnection,
   opts: ResolveIcebergDataFilesOptions,
 ): Promise<IcebergListedDataFile[]> {
@@ -1225,10 +1314,11 @@ export async function resolveIcebergDataFiles(
   // unparseable range all fall back to month-tuple pruning alone.
   const dateFieldId = dateColumnFieldId(metadata, monthField?.sourceColumn)
   const dayWindow = rangeDayWindow(opts.range)
+  const manifestCache = manifestReadCacheFor(conn, namespace, table, metadata)
 
   const walk = opts.cache && monthFieldName
-    ? await resolveViaMonthCache(conn, opts.cache, metadata, partitionFilter, opts.partitionSpec, opts.matches, monthFieldName, wantedMonths, dateFieldId, scope, namespace, table, now)
-    : await resolveViaFullWalk(conn, metadata, partitionFilter, opts.matches, monthFieldName, wantedMonths, dateFieldId)
+    ? await resolveViaMonthCache(conn, opts.cache, metadata, partitionFilter, opts.partitionSpec, opts.matches, monthFieldName, wantedMonths, dateFieldId, scope, namespace, table, now, manifestCache)
+    : await resolveViaFullWalk(conn, metadata, partitionFilter, opts.matches, monthFieldName, wantedMonths, dateFieldId, manifestCache)
 
   // Day-bounds pruning runs once, over the merged (cached ∪ freshly-walked)
   // list — see `toListedFile` and `resolveViaMonthCache`'s doc for why it
