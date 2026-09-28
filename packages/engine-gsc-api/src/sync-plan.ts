@@ -1,5 +1,4 @@
-import type { SearchType } from '@gscdump/engine/contracts'
-import type { IcebergTableName } from '@gscdump/engine/iceberg'
+import type { SearchType, TableName } from '@gscdump/engine/contracts'
 import { TABLES_BY_SEARCH_TYPE } from '@gscdump/engine/sync-config'
 import { addDays } from 'gscdump/dates'
 
@@ -70,20 +69,25 @@ export function gscSyncFanout(
 }
 
 /** The web queries slice also writes the dates table. Other search types use a dates slice. */
-export function tablesCoveredByGscSync(entry: GscSyncFanoutEntry): IcebergTableName[] {
+export function tablesCoveredByGscSync(entry: GscSyncFanoutEntry): TableName[] {
   switch (entry.table) {
     case 'pages': return ['pages']
     case 'countries': return ['countries']
     case 'page_queries': return ['page_queries']
     case 'search_appearance': return ['search_appearance']
+    case 'search_appearance_pages': return ['search_appearance_pages']
+    case 'search_appearance_queries': return ['search_appearance_queries']
+    case 'search_appearance_page_queries': return ['search_appearance_page_queries']
+    case 'hourly_pages': return ['hourly_pages']
     case 'queries': return entry.searchType === undefined || entry.searchType === 'web' ? ['queries', 'dates'] : ['queries']
+    // Empty on purpose: the web queries slice already writes the dates table.
     case 'dates': return entry.searchType === undefined || entry.searchType === 'web' ? [] : ['dates']
-    default: return []
+    default: throw new RangeError(`Unknown GSC sync fanout table: '${entry.table}'`)
   }
 }
 
 /** The minimal set of ledger tables needed to inspect this fanout. */
-export function ledgerTablesForGscSync(fanout: readonly GscSyncFanoutEntry[]): IcebergTableName[] {
+export function ledgerTablesForGscSync(fanout: readonly GscSyncFanoutEntry[]): TableName[] {
   return [...new Set(fanout.flatMap(tablesCoveredByGscSync))]
 }
 

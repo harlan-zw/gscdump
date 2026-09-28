@@ -44,6 +44,26 @@ describe('sync coverage plan', () => {
     expect(tablesCoveredByGscSync({ table: 'dates' })).toEqual([])
   })
 
+  it('plans search appearance context slices instead of skipping them', () => {
+    const plan = planGscSyncWork({
+      dates: ['2026-09-01'],
+      fanout: [{ table: 'pages' }, { table: 'search_appearance_pages' }],
+      ledger: [],
+    })
+
+    expect(plan.windows).toEqual([
+      { table: 'pages', startDate: '2026-09-01', endDate: '2026-09-01' },
+      { table: 'search_appearance_pages', startDate: '2026-09-01', endDate: '2026-09-01' },
+    ])
+  })
+
+  it('maps hourly_pages and rejects unknown fanout tables', () => {
+    expect(tablesCoveredByGscSync({ table: 'hourly_pages' })).toEqual(['hourly_pages'])
+    expect(tablesCoveredByGscSync({ table: 'search_appearance_page_queries', searchType: 'discover' })).toEqual(['search_appearance_page_queries'])
+    expect(() => tablesCoveredByGscSync({ table: 'pagez' })).toThrowError(/unknown/i)
+    expect(() => planGscSyncWork({ dates: ['2026-09-01'], fanout: [{ table: 'pagez' }], ledger: [] })).toThrowError(/unknown/i)
+  })
+
   it('sizes sparse Backfill windows and bounds dense Sync windows', () => {
     const validDates = Array.from({ length: 120 }, (_, index) => new Date(Date.UTC(2026, 0, index + 1)).toISOString().slice(0, 10))
     const sparse = planGscSyncWork({
