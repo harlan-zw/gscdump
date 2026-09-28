@@ -47,7 +47,7 @@ for (const filename of files.filter(name => /-\d+-calls\.json$/.test(name))) {
   const text = finalResponse(events)
   const runbook = kind === 'runbook' ? RUNBOOK_CASES.find(test => test.id === recorded?.caseId) : undefined
   const processGrade = runbook
-    ? gradeRunbook({ definition: runbook, calls, loaded, text, expected: { site: report.site } })
+    ? gradeRunbook({ definition: runbook, calls, loaded, text, expected: { site: report.site, url: recorded?.url } })
     : gradeAgent({ calls, loaded, kind, text, shouldTrigger: recorded?.shouldTrigger ?? true, storeUnchanged: recorded?.storeUnchanged, caseId: recorded?.caseId, expected: { site: report.site, start: report.start, end: report.end } })
   const query = calls.filter(call => invocation(call.args).command === 'query' && call.code === 0 && !invocation(call.args).help && !invocation(call.args).values.explain).sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)).at(-1)
   let answerGrade = null

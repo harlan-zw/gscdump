@@ -6,10 +6,10 @@ Google Search Console CLI and MCP server.
 npm install -g @gscdump/cli
 ```
 
-- [Getting started](../../docs/gscdump-cli/guides/1.getting-started.md)
-- [Authentication](../../docs/gscdump-cli/guides/2.authentication.md)
+- [Getting started](../../docs/gscdump-cli/guides/1.start/1.first-result.md)
+- [Authentication](../../docs/gscdump-cli/guides/1.start/2.choose-access.md)
 - [Command reference](../../docs/gscdump-cli/api/1.commands.md)
-- [AI integration and MCP](../../docs/gscdump-cli/guides/3.ai-integration.md)
+- [AI integration and MCP](../../docs/gscdump-cli/guides/1.start/3.connect-an-agent.md)
 
 ## License
 
