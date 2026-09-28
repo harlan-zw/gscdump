@@ -32,13 +32,9 @@ export type ManifestPartitionFilter = (partitions: IcebergFieldSummary[] | undef
 /**
  * One identity/dims value to prune an `identity`-transform partition field by.
  *
- * `'int32'`-encoded fields are deliberately NOT pruned here (mirrors the
- * original engine behavior): an INT column's bound bytes are a 4-byte int, but
- * per-team catalogs are single-tenant, so identity pruning on them saves ~nothing
- * — the per-file partition check in the resolver remains the authoritative
- * correctness filter. Only `'string'`-encoded identity fields are pruned by
- * lexicographic UTF-8 bound comparison (the truncated-string-stats case R2 SQL
- * needs the workaround for).
+ * Identity summaries use the declared field encoding: UTF-8 for strings and
+ * four-byte little-endian for INT. Unknown bounds keep the manifest. The
+ * per-file partition check remains the authoritative correctness filter.
  */
 export interface PartitionValueMatch {
   /** Partition field name as declared in the partition spec (e.g. `'site_id'`). */
@@ -61,13 +57,15 @@ function decodeString(bytes: Uint8Array | ArrayBuffer | null | undefined): strin
   return u == null ? null : UTF8_DECODER.decode(u)
 }
 
-/** month(date)=<name> bounds are 4-byte little-endian int32 (months since epoch). */
-function decodeMonthInt(bytes: Uint8Array | ArrayBuffer | null | undefined): number | null {
+/** Iceberg INT bounds are four-byte little-endian signed values. */
+function decodeInt32(bytes: Uint8Array | ArrayBuffer | null | undefined): number | null {
   const u = toUint8(bytes)
-  if (u == null)
+  if (u?.byteLength !== 4)
     return null
   return new DataView(u.buffer, u.byteOffset, u.byteLength).getInt32(0, true)
 }
+
+const decodeMonthInt = decodeInt32
 
 /**
  * Build the `partitionFilter` predicate for a slice of `matches` (identity/dims
@@ -87,6 +85,12 @@ export function buildManifestPartitionFilter(
       return []
     const index = fieldIndex(match.field)
     return index < 0 ? [] : [{ index, value: String(match.value) }]
+  })
+  const intMatches = matches.flatMap((match) => {
+    if (match.encoding !== 'int32' || typeof match.value !== 'number' || !Number.isInteger(match.value) || match.value < -2147483648 || match.value > 2147483647)
+      return []
+    const index = fieldIndex(match.field)
+    return index < 0 || partitionSpec[index]?.transform !== 'identity' ? [] : [{ index, value: match.value }]
   })
   const wantedMonthValues = wantedMonths
     ? [...wantedMonths].filter(Number.isFinite).sort((a, b) => a - b)
@@ -118,6 +122,16 @@ export function buildManifestPartitionFilter(
       const lo = decodeString(summary.lower_bound)
       const hi = decodeString(summary.upper_bound)
       if (lo != null && hi != null && (match.value < lo || match.value > hi))
+        return false
+    }
+
+    for (const match of intMatches) {
+      const summary = partitions[match.index]
+      if (!summary || summary.lower_bound == null || summary.upper_bound == null)
+        continue
+      const lo = decodeInt32(summary.lower_bound)
+      const hi = decodeInt32(summary.upper_bound)
+      if (lo != null && hi != null && lo <= hi && (match.value < lo || match.value > hi))
         return false
     }
 

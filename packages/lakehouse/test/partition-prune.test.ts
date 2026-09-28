@@ -54,10 +54,21 @@ describe('buildManifestPartitionFilter', () => {
     expect(f(p)).toBe(true)
   })
 
-  it('does not prune int32-encoded fields (single-tenant, per-file check remains authoritative)', () => {
+  it('skips numeric Site and search type bounds that exclude the requested slice', () => {
+    const f = buildManifestPartitionFilter(SPEC, [
+      { field: 'site_id', value: 9, encoding: 'int32' },
+      { field: 'search_type', value: 1, encoding: 'int32' },
+    ], MONTHS)
+    expect(f(parts(summary(intBound(10), intBound(12)), summary(intBound(676), intBound(676)), summary(intBound(1), intBound(1))))).toBe(false)
+    expect(f(parts(summary(intBound(9), intBound(9)), summary(intBound(676), intBound(676)), summary(intBound(2), intBound(2))))).toBe(false)
+    expect(f(parts(summary(intBound(8), intBound(10)), summary(intBound(676), intBound(676)), summary(intBound(1), intBound(2))))).toBe(true)
+  })
+
+  it('keeps numeric manifests when bounds cannot prove exclusion', () => {
     const f = buildManifestPartitionFilter(SPEC, [{ field: 'site_id', value: 9, encoding: 'int32' }], MONTHS)
-    const p = parts(summary(strBound('s1'), strBound('s5')), summary(intBound(676), intBound(676)))
-    expect(f(p)).toBe(true)
+    expect(f(parts(summary(), summary(intBound(676), intBound(676))))).toBe(true)
+    expect(f(parts(summary(new Uint8Array([1]), intBound(12)), summary(intBound(676), intBound(676))))).toBe(true)
+    expect(f(parts(summary(intBound(10), intBound(8)), summary(intBound(676), intBound(676))))).toBe(true)
   })
 
   it('skips when the target site is above the range', () => {
