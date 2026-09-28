@@ -85,7 +85,7 @@ const preferGranularCoreSubpaths = {
 export default antfu({
   type: 'lib',
   ignores: [
-    'CLAUDE.md',
+    'AGENTS.md',
     'docs/gsc-api-reference/**',
     'examples/browser-attach/analyzers.mjs',
     'examples/browser-http/bundle.mjs',
