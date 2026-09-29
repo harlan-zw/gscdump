@@ -477,6 +477,20 @@ describe('runGscSyncSlice aggregation sources', () => {
     expect(result.aggregation).toBe('byPage')
   })
 
+  it('infers by-page counting for Google News, which has no by-property mode', async () => {
+    const result = await runGscSyncSlice({
+      client: makeClient([{ rows: [] }], []),
+      siteUrl: 'sc-domain:example.com',
+      table: 'countries',
+      searchType: 'googleNews',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      onBatch: async () => {},
+    })
+
+    expect(result.aggregation).toBe('byPage')
+  })
+
   it('infers by-page counting for Discover, which has no by-property mode', async () => {
     const result = await runGscSyncSlice({
       client: makeClient([{ rows: [] }], []),

@@ -271,7 +271,7 @@ export async function runGscSyncSlice(
   // become a `timeout` result (retry at this cursor); any other error is carried
   // and rethrown only when the page is consumed, preserving serial throw-order.
   type PageResult
-    = | { kind: 'ok', startRow: number, rows: GscApiRow[], metadata?: GscSearchAnalyticsMetadata }
+    = | { kind: 'ok', startRow: number, rows: GscApiRow[], metadata?: GscSearchAnalyticsMetadata, reported: GscAggregation | null }
       | { kind: 'timeout', startRow: number }
       | { kind: 'error', error: unknown }
   const fetchPage = async (row: number): Promise<PageResult> => {
@@ -287,10 +287,10 @@ export async function runGscSyncSlice(
     }
     try {
       const response = await opts.client.searchAnalytics.query(opts.siteUrl, query)
-      aggregation = reportedAggregation((response as { responseAggregationType?: unknown }).responseAggregationType) ?? aggregation
       return {
         kind: 'ok',
         startRow: row,
+        reported: reportedAggregation((response as { responseAggregationType?: unknown }).responseAggregationType),
         rows: (response.rows ?? []) as GscApiRow[],
         metadata: (response as { metadata?: GscSearchAnalyticsMetadata }).metadata,
       }
@@ -338,6 +338,8 @@ export async function runGscSyncSlice(
     pageCount++
     if (page.metadata)
       metadata = page.metadata
+    // Only a page this run consumes may set the mode, never a discarded prefetch.
+    aggregation = page.reported ?? aggregation
     opts.onPage?.({ searchType, rowsThisPage: rows.length })
 
     const isLastPage: boolean = rows.length === 0

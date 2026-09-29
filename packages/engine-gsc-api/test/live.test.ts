@@ -102,6 +102,13 @@ describe('createLiveGscSource page scope composition', () => {
     await expect(source.queryRows({ dimensions: ['query'], filter: { type: 'and', filters: 'nope' } } as any)).rejects.toMatchObject({ queryError: { kind: 'invalid-filter' } })
   })
 
+  it('rejects showcase counting under a page scope with a typed error', async () => {
+    const { source } = scoped()
+    const state = { ...gsc.select(query).where(between(date, '2026-06-01', '2026-06-30')).getState(), aggregationType: 'byNewsShowcasePanel' as const }
+
+    await expect(source.queryRows(state)).rejects.toMatchObject({ queryError: { kind: 'invalid-aggregation-type' } })
+  })
+
   it('rejects by-property counting under a page scope with a typed error', async () => {
     const { source } = scoped()
     const state = { ...gsc.select(query).where(between(date, '2026-06-01', '2026-06-30')).getState(), aggregationType: 'byProperty' as const }
