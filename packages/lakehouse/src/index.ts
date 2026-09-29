@@ -42,7 +42,7 @@ export type {
 } from './catalog'
 
 export { cacheGet, cachePut } from './catalog-cache'
-export type { CatalogCache } from './catalog-cache'
+export type { CatalogCache, CatalogCacheGetOutcome } from './catalog-cache'
 
 export {
   defineIcebergDataset,

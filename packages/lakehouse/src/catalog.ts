@@ -15,7 +15,7 @@ import type {
   icebergAppend,
   icebergAppendBatches,
 } from 'icebird/src/write/write.js'
-import type { CatalogCache } from './catalog-cache'
+import type { CatalogCache, CatalogCacheGetOutcome } from './catalog-cache'
 import type { IcebergFieldSummary, ManifestPartitionFilter, PartitionValueMatch } from './partition-prune'
 import type { IcebergPartitionField, IcebergPrimitiveType, IcebergS3Config } from './schema'
 import {
@@ -226,7 +226,7 @@ export async function connectIcebergCatalog(
   let catalog: Awaited<ReturnType<typeof restCatalogConnect>> | undefined
   if (opts.cache) {
     const endCache = startConnectSpan(opts.profiler, 'catalog.config.cache')
-    const cacheRead: { outcome: 'hit' | 'miss' | 'expired' | 'invalid' | 'error' } = { outcome: 'miss' }
+    const cacheRead: { outcome: CatalogCacheGetOutcome } = { outcome: 'miss' }
     const cached = await cacheGet<CachedCatalogConfig>(opts.cache, catalogConfigKey(config), now, (outcome) => {
       cacheRead.outcome = outcome
     })
