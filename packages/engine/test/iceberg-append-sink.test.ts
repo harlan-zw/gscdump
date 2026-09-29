@@ -124,6 +124,23 @@ describe('icebergAppendSink', () => {
     expect(recs[0].impressions).toBe(20)
   })
 
+  it('keeps the last emitted value when duplicates are far apart in the buffer', async () => {
+    const sink = makeSink()
+    const row = (url: string, date: string, clicks: number) => ({ url, date, clicks, impressions: 1, sum_position: 1 })
+    await sink.emit(slice('pages', 'web', 's1'), [row('/b', '2026-05-02', 1), row('/a', '2026-05-01', 1), row('/b', '2026-05-01', 1)])
+    await sink.emit(slice('pages', 'web', 's2'), [row('/b', '2026-05-01', 7)])
+    await sink.emit(slice('pages', 'web', 's1'), [row('/a', '2026-05-02', 1), row('/b', '2026-05-01', 9)])
+    await sink.close()
+    const day = (d: string) => Math.floor(Date.parse(`${d}T00:00:00Z`) / 86_400_000)
+    expect(callFor('pages')!.records.map(r => [r.url, r.date, r.site_id, r.clicks])).toEqual([
+      ['/a', day('2026-05-01'), 's1', 1],
+      ['/a', day('2026-05-02'), 's1', 1],
+      ['/b', day('2026-05-01'), 's1', 9],
+      ['/b', day('2026-05-01'), 's2', 7],
+      ['/b', day('2026-05-02'), 's1', 1],
+    ])
+  })
+
   it('does NOT collapse the same (date, url) across different sites or search types', async () => {
     const sink = makeSink()
     const row = { url: '/', date: '2026-05-01', clicks: 1, impressions: 2, sum_position: 3 }

@@ -1,7 +1,7 @@
 import type { TableName } from '@gscdump/engine/contracts'
 import type { GscApiRow } from '@gscdump/engine/ingest'
 import { createStorageEngine } from '@gscdump/engine'
-import { createRowAccumulator } from '@gscdump/engine/ingest'
+import { createRowAccumulator, sumByStoredKey } from '@gscdump/engine/ingest'
 import { createIngestAccumulator } from '@gscdump/engine/ingest-accumulator'
 import { describe, expect, it } from 'vitest'
 import { createInMemoryDataSource, createInMemoryManifestStore, createJsonCodec, createUnionExecutor } from './helpers/in-memory'
@@ -58,6 +58,19 @@ describe('uRL metrics at the ingest boundary', () => {
       impressions: 35,
       sum_position: 90,
     }])
+  })
+
+  it('leaves caller rows untouched when it combines them', () => {
+    const first = { url: '/guide', date: day, clicks: 1, impressions: 10, sum_position: 20 }
+    const second = { url: '/guide', date: day, clicks: 2, impressions: 5, sum_position: 15 }
+    const alone = { url: '/other', date: day, clicks: 4, impressions: 4, sum_position: 4 }
+
+    expect(sumByStoredKey('pages', [first, second, alone])).toEqual([
+      { url: '/guide', date: day, clicks: 3, impressions: 15, sum_position: 35 },
+      alone,
+    ])
+    expect(first).toEqual({ url: '/guide', date: day, clicks: 1, impressions: 10, sum_position: 20 })
+    expect(second).toEqual({ url: '/guide', date: day, clicks: 2, impressions: 5, sum_position: 15 })
   })
 
   it('counts distinct URL identities even when their metrics match', () => {

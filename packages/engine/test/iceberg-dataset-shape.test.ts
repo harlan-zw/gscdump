@@ -1875,3 +1875,21 @@ describe('gsc.* dataset-def byte-identity (9 tables x 2 encodings)', () => {
     expect(Object.keys(ORIGINAL_SHAPES)).toHaveLength(18)
   })
 })
+
+/**
+ * Dedupe-key invariant (PR #134 review finding "dedupe-key-conflates-cluster"):
+ * `clusterAndDedupe` collapses adjacent records equal on
+ * `clusterKey + (identityColumns - clusterKey)`, which equals a collapse on
+ * `identityColumns` alone ONLY while every clusterKey column is an identity
+ * column. clusterAndDedupe enforces that subset at commit time; this test pins
+ * the same invariant across the table metadata so drift fails here first.
+ */
+describe('clusterKey subset of identityColumns (dedupe-key invariant)', () => {
+  for (const table of ICEBERG_TABLES) {
+    it(`${table}: every clusterKey column is an identityColumn`, () => {
+      const spec = gscDataset(table).tableSpec
+      for (const col of spec.clusterKey ?? [])
+        expect(spec.identityColumns).toContain(col)
+    })
+  }
+})

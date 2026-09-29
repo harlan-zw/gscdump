@@ -413,13 +413,22 @@ const STORED_KEY_COLUMNS = Object.fromEntries(
 export function sumByStoredKey(table: TableName, rows: Iterable<Row>): Row[] {
   const keyColumns = STORED_KEY_COLUMNS[table]
   const grouped = new Map<string, Record<string, unknown>>()
+  // Rows this call copied and may mutate. A key seen once keeps the caller's
+  // row object as is: copying every row doubled a whale job's heap for the
+  // common case, where no two rows share a stored key.
+  const owned = new Set<Record<string, unknown>>()
   for (const row of rows) {
     const r = row as Record<string, unknown>
     const key = JSON.stringify(keyColumns.map(col => r[col] ?? null))
-    const prior = grouped.get(key)
+    let prior = grouped.get(key)
     if (!prior) {
-      grouped.set(key, { ...r })
+      grouped.set(key, r)
       continue
+    }
+    if (!owned.has(prior)) {
+      prior = { ...prior }
+      owned.add(prior)
+      grouped.set(key, prior)
     }
     for (const col of Object.keys(r)) {
       if (ADDITIVE_COLUMN_RE.test(col))
@@ -484,9 +493,14 @@ export function createRowAccumulator(options: RowAccumulatorOptions = {}): RowAc
     drain() {
       const out = new Map<TableName, Map<string, Row[]>>()
       for (const [table, byDate] of buckets) {
-        out.set(table, new Map(
-          [...byDate].map(([date, sourceRows]) => [date, sumByStoredKey(table, sourceRows.values())]),
-        ))
+        const summed = new Map<string, Row[]>()
+        for (const [date, sourceRows] of byDate) {
+          summed.set(date, sumByStoredKey(table, sourceRows.values()))
+          // Release each date's source-key map as soon as it is summed, so a
+          // whale drain never holds every date's keys and sums at once.
+          byDate.delete(date)
+        }
+        out.set(table, summed)
       }
       buckets = new Map()
       latestDate.clear()
