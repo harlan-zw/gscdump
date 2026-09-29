@@ -78,7 +78,7 @@ flowchart LR
 | Manifest authority | `ManifestStore` / R2 HEAD pointer | `engine` | (siteId, table, searchType) 1—1 Manifest | not surfaced |
 | Sitemap generation manifest | hosted entity store | `contracts` (ADR-0022) | Site 1—1 current generation | "sitemap" |
 | Store | configured Parquet directory | `@gscdump/cli` | Site 1—1 Store | "store" (`gscdump store *`) |
-| Mode | CLI authentication state (`--mode`) | `@gscdump/cli` | User 1—N Mode | "Local" or "Hosted" (`--mode local`, `--mode cloud`) |
+| Mode | CLI authentication state (`--mode`) | `@gscdump/cli` | User 1—N Mode | "Local" or "Hosted" (`--mode local`, `--mode hosted`) |
 
 ## Usage
 
@@ -155,7 +155,7 @@ Use "Google Search Console property" only to explain the Google term for a Site.
 **Never:** deployment, access type, "the CLI" or "the platform" as a mode label.
 **Casing:** `Local` and `Hosted` as labels; `local` and `hosted` mid-sentence.
 **Ratified by:** gscdump.com ADR-0012.
-**Frozen identifiers:** the `--mode cloud` value and the `Cloud` authentication tag name Hosted. Use Hosted in prose.
+**Identifiers:** `--mode local` and `--mode hosted`; the authentication tags are `Local` and `Hosted`. The CLI rejects `cloud`.
 
 ### Local
 **Is:** the CLI on the user's machine with the user's own Google keys. The Store holds the record.
@@ -334,5 +334,5 @@ check are banned; words that did not are recorded in Open questions instead.
 | bare `engine` or `source` as a public search discriminator | Search Engine | Both words already name package concepts |
 | indexing status as a public evidence noun | Indexing Evidence | It collides with pipeline state and hides observation uncertainty |
 | BYOK, Bring Your Own Keys, self-hosted (as a mode) | Local | gscdump.com ADR-0012 names the mode. `resolveBYOK` stays an internal identifier |
-| Cloud, cloud mode (in prose) | Hosted | gscdump.com ADR-0012 names the mode. `--mode cloud` stays a CLI identifier |
+| Cloud, cloud mode, `--mode cloud` | Hosted, `--mode hosted` | gscdump.com ADR-0012 names the mode. The CLI rejects `cloud` |
 | powerful, seamless, robust, blazing | (cut) | Marketing filler |
