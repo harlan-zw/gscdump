@@ -13,10 +13,13 @@ import { defineCommand } from 'citty'
 import { getLatestGscDate } from 'gscdump/dates'
 import { and, between, country, date as dateCol, device, gsc, hour, page, query as queryCol, searchAppearance } from 'gscdump/query'
 import { inferDataset, isDatasetResolvable } from 'gscdump/query/plan'
+import { resolveAuthentication } from '../auth-state'
 import { queryCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createCommandContext, formatSiteResolution } from '../context'
 import { FILTER_DIMS, filterDimensions, parseFilterArgs, toLiveFilter, toLocalFilter } from '../filters'
+import { queryHostedRows } from '../hosted-query'
+import { resolveHostedSite } from '../hosted-site'
 import { allTables } from '../local-store'
 import { asRecord, columnsFor } from '../render/analysis'
 import { renderTable } from '../render/layout'
@@ -171,7 +174,7 @@ export const queryCommand = defineCommand({
     'live': {
       type: 'boolean',
       default: false,
-      description: 'Bypass local store; hit the GSC API directly',
+      description: 'Call the Search Console API directly (Local mode only)',
     },
     'quiet': {
       type: 'boolean',
@@ -281,6 +284,38 @@ export const queryCommand = defineCommand({
     }
 
     const forceLive = Boolean(args.live)
+    // Hosted mode reads the hosted record. It never reads the Store or calls Google.
+    if (!forceLive && (await resolveAuthentication())._tag === 'Hosted') {
+      if (dataState || aggregationType)
+        logger.warn('--data-state / --aggregation-type are ignored without --live')
+      const { client, site } = await resolveHostedSite(args as Record<string, unknown>, {
+        name: 'query',
+        localAlternative: 'run `gscdump sync --site <site>` first, or pass --live',
+      })
+      const { start: startDate, end: endDate } = windowOrExit(windowFlags, getLatestGscDate())
+      const state = { ...buildLocalState(dimNames, startDate, endDate, rowLimit, toLocalFilter(filters)), searchType: localSearchType }
+      if (args.explain) {
+        console.log(JSON.stringify({ siteUrl: site.siteUrl, siteId: site.siteId, source: 'hosted', state }, null, 2))
+        return
+      }
+      if (!args.quiet)
+        logger.debug(`Querying ${site.siteUrl} from the hosted record...`)
+      const rows = await queryHostedRows(client, site.siteId, state)
+      await writeOutput({
+        output: {
+          siteUrl: site.siteUrl,
+          dimensions: dimNames,
+          dateRange: { start: startDate, end: endDate },
+          total: rows.length,
+          data: rows,
+          meta: { source: 'hosted' },
+        },
+        format,
+        path: args.output ? String(args.output) : undefined,
+        quiet: Boolean(args.quiet),
+      })
+      return
+    }
     const resolvable = isDatasetResolvable(dimNames as Dimension[], filterDims)
     // Never answer live on our own here: the Store may hold the Site, and one run never mixes sources.
     if (!resolvable && !forceLive)

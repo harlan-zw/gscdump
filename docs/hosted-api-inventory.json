@@ -19,11 +19,11 @@
     "httpOperationCount": 114,
     "websocketOperationCount": 0,
     "operationCount": 114,
-    "descriptorCount": 91,
+    "descriptorCount": 94,
     "legacyDescriptorCount": 36,
-    "v1DescriptorCount": 55,
-    "descriptorOwnedOperationCount": 57,
-    "hostOperationsWithoutDescriptorCount": 57,
+    "v1DescriptorCount": 58,
+    "descriptorOwnedOperationCount": 60,
+    "hostOperationsWithoutDescriptorCount": 54,
     "schemaLessDescriptorCount": 3,
     "descriptorWithoutHandlerCount": 34,
     "descriptorCollisionCount": 0,
@@ -76,8 +76,28 @@
     "hostOperationsWithoutDescriptor": [
       {
         "method": "GET",
+        "path": "/api/agent-skill",
+        "file": "server/api/agent-skill.get.ts"
+      },
+      {
+        "method": "GET",
         "path": "/api/bulk-sources",
         "file": "server/api/bulk-sources.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cli-docs/navigation",
+        "file": "server/api/cli-docs/navigation.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cli-docs/page",
+        "file": "server/api/cli-docs/page.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cli-docs/search",
+        "file": "server/api/cli-docs/search.get.ts"
       },
       {
         "method": "POST",
@@ -90,54 +110,24 @@
         "file": "server/api/cli/auth/init.post.ts"
       },
       {
+        "method": "POST",
+        "path": "/api/cli/auth/logout",
+        "file": "server/api/cli/auth/logout.post.ts"
+      },
+      {
         "method": "GET",
         "path": "/api/cli/auth/poll",
         "file": "server/api/cli/auth/poll.get.ts"
       },
       {
-        "method": "POST",
-        "path": "/api/cli/auth/refresh",
-        "file": "server/api/cli/auth/refresh.post.ts"
-      },
-      {
-        "method": "DELETE",
-        "path": "/api/cli/auth/revoke",
-        "file": "server/api/cli/auth/revoke.delete.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/cli/gsc/inspect",
-        "file": "server/api/cli/gsc/inspect.post.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/cli/gsc/query",
-        "file": "server/api/cli/gsc/query.post.ts"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cli/gsc/sitemaps",
-        "file": "server/api/cli/gsc/sitemaps.get.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/cli/gsc/sitemaps",
-        "file": "server/api/cli/gsc/sitemaps.post.ts"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cli/gsc/sites",
-        "file": "server/api/cli/gsc/sites.get.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/cli/gsc/sites",
-        "file": "server/api/cli/gsc/sites.post.ts"
-      },
-      {
         "method": "GET",
         "path": "/api/cli/me",
         "file": "server/api/cli/me.get.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/cli/papercuts",
+        "file": "server/api/cli/papercuts.post.ts"
       },
       {
         "method": "DELETE",
@@ -170,44 +160,14 @@
         "file": "server/api/cli/sites/[siteId]/inspect.post.ts"
       },
       {
-        "method": "GET",
-        "path": "/api/cli/sites/available",
-        "file": "server/api/cli/sites/available.get.ts"
-      },
-      {
         "method": "POST",
         "path": "/api/cli/sites/register",
         "file": "server/api/cli/sites/register.post.ts"
       },
       {
-        "method": "POST",
-        "path": "/api/gsc/inspect",
-        "file": "server/api/gsc/inspect.post.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/gsc/query",
-        "file": "server/api/gsc/query.post.ts"
-      },
-      {
         "method": "GET",
-        "path": "/api/gsc/sitemaps",
-        "file": "server/api/gsc/sitemaps.get.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/gsc/sitemaps",
-        "file": "server/api/gsc/sitemaps.post.ts"
-      },
-      {
-        "method": "GET",
-        "path": "/api/gsc/sites",
-        "file": "server/api/gsc/sites.get.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/gsc/sites",
-        "file": "server/api/gsc/sites.post.ts"
+        "path": "/api/docs/search",
+        "file": "server/api/docs/search.get.ts"
       },
       {
         "method": "GET",
@@ -238,6 +198,16 @@
         "method": "PUT",
         "path": "/api/onboarding",
         "file": "server/api/onboarding.put.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/onboarding/complete",
+        "file": "server/api/onboarding/complete.post.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/onboarding/status",
+        "file": "server/api/onboarding/status.get.ts"
       },
       {
         "method": "POST",
@@ -273,6 +243,21 @@
         "method": "GET",
         "path": "/api/quota",
         "file": "server/api/quota.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sdk-docs/navigation",
+        "file": "server/api/sdk-docs/navigation.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sdk-docs/page",
+        "file": "server/api/sdk-docs/page.get.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/sdk-docs/search",
+        "file": "server/api/sdk-docs/search.get.ts"
       },
       {
         "method": "GET",
@@ -330,6 +315,11 @@
         "file": "server/api/user.get.ts"
       },
       {
+        "method": "POST",
+        "path": "/api/user/activate",
+        "file": "server/api/user/activate.post.ts"
+      },
+      {
         "method": "GET",
         "path": "/api/user/api-key",
         "file": "server/api/user/api-key.get.ts"
@@ -353,11 +343,6 @@
         "method": "DELETE",
         "path": "/api/user/sessions/{sessionId}",
         "file": "server/api/user/sessions/[sessionId].delete.ts"
-      },
-      {
-        "method": "POST",
-        "path": "/api/webhooks/resend",
-        "file": "server/api/webhooks/resend.post.ts"
       }
     ]
   },
@@ -1184,6 +1169,39 @@
       "handlerFiles": []
     },
     {
+      "id": "partner.users.api_keys.create",
+      "owner": "partner-v1",
+      "method": "POST",
+      "path": "/api/partner/v1/users/{userId}/api-keys",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/users/[userId]/api-keys.post.ts"
+      ]
+    },
+    {
+      "id": "partner.users.api_keys.list",
+      "owner": "partner-v1",
+      "method": "GET",
+      "path": "/api/partner/v1/users/{userId}/api-keys",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/users/[userId]/api-keys.get.ts"
+      ]
+    },
+    {
+      "id": "partner.users.api_keys.revoke",
+      "owner": "partner-v1",
+      "method": "DELETE",
+      "path": "/api/partner/v1/users/{userId}/api-keys/{keyId}",
+      "routeBuilder": null,
+      "schema": "validated",
+      "handlerFiles": [
+        "server/api/partner/v1/users/[userId]/api-keys/[keyId].delete.ts"
+      ]
+    },
+    {
       "id": "partner.users.create",
       "owner": "partner-v1",
       "method": "POST",
@@ -1307,6 +1325,15 @@
   ],
   "operations": [
     {
+      "file": "server/api/agent-skill.get.ts",
+      "method": "GET",
+      "path": "/api/agent-skill",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
       "file": "server/api/analytics/v1/sites/[siteId]/reports.post.ts",
       "method": "POST",
       "path": "/api/analytics/v1/sites/{siteId}/reports",
@@ -1349,6 +1376,33 @@
       "v1Review": "outside-public-protocol"
     },
     {
+      "file": "server/api/cli-docs/navigation.get.ts",
+      "method": "GET",
+      "path": "/api/cli-docs/navigation",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli-docs/page.get.ts",
+      "method": "GET",
+      "path": "/api/cli-docs/page",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli-docs/search.get.ts",
+      "method": "GET",
+      "path": "/api/cli-docs/search",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
       "file": "server/api/cli/auth/complete.post.ts",
       "method": "POST",
       "path": "/api/cli/auth/complete",
@@ -1367,6 +1421,15 @@
       "v1Review": "outside-public-protocol"
     },
     {
+      "file": "server/api/cli/auth/logout.post.ts",
+      "method": "POST",
+      "path": "/api/cli/auth/logout",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
       "file": "server/api/cli/auth/poll.get.ts",
       "method": "GET",
       "path": "/api/cli/auth/poll",
@@ -1376,81 +1439,18 @@
       "v1Review": "outside-public-protocol"
     },
     {
-      "file": "server/api/cli/auth/refresh.post.ts",
-      "method": "POST",
-      "path": "/api/cli/auth/refresh",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "cli",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/cli/auth/revoke.delete.ts",
-      "method": "DELETE",
-      "path": "/api/cli/auth/revoke",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "cli",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/cli/gsc/inspect.post.ts",
-      "method": "POST",
-      "path": "/api/cli/gsc/inspect",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "cli",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/cli/gsc/query.post.ts",
-      "method": "POST",
-      "path": "/api/cli/gsc/query",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "cli",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/cli/gsc/sitemaps.get.ts",
-      "method": "GET",
-      "path": "/api/cli/gsc/sitemaps",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "cli",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/cli/gsc/sitemaps.post.ts",
-      "method": "POST",
-      "path": "/api/cli/gsc/sitemaps",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "cli",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/cli/gsc/sites.get.ts",
-      "method": "GET",
-      "path": "/api/cli/gsc/sites",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "cli",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/cli/gsc/sites.post.ts",
-      "method": "POST",
-      "path": "/api/cli/gsc/sites",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "cli",
-      "v1Review": "outside-public-protocol"
-    },
-    {
       "file": "server/api/cli/me.get.ts",
       "method": "GET",
       "path": "/api/cli/me",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "cli",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/cli/papercuts.post.ts",
+      "method": "POST",
+      "path": "/api/cli/papercuts",
       "descriptorOwners": [],
       "routeBuilderOwners": [],
       "currentSurface": "cli",
@@ -1511,15 +1511,6 @@
       "v1Review": "outside-public-protocol"
     },
     {
-      "file": "server/api/cli/sites/available.get.ts",
-      "method": "GET",
-      "path": "/api/cli/sites/available",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "cli",
-      "v1Review": "outside-public-protocol"
-    },
-    {
       "file": "server/api/cli/sites/register.post.ts",
       "method": "POST",
       "path": "/api/cli/sites/register",
@@ -1529,54 +1520,9 @@
       "v1Review": "outside-public-protocol"
     },
     {
-      "file": "server/api/gsc/inspect.post.ts",
-      "method": "POST",
-      "path": "/api/gsc/inspect",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "host-internal-or-session",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/gsc/query.post.ts",
-      "method": "POST",
-      "path": "/api/gsc/query",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "host-internal-or-session",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/gsc/sitemaps.get.ts",
+      "file": "server/api/docs/search.get.ts",
       "method": "GET",
-      "path": "/api/gsc/sitemaps",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "host-internal-or-session",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/gsc/sitemaps.post.ts",
-      "method": "POST",
-      "path": "/api/gsc/sitemaps",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "host-internal-or-session",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/gsc/sites.get.ts",
-      "method": "GET",
-      "path": "/api/gsc/sites",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "host-internal-or-session",
-      "v1Review": "outside-public-protocol"
-    },
-    {
-      "file": "server/api/gsc/sites.post.ts",
-      "method": "POST",
-      "path": "/api/gsc/sites",
+      "path": "/api/docs/search",
       "descriptorOwners": [],
       "routeBuilderOwners": [],
       "currentSurface": "host-internal-or-session",
@@ -1631,6 +1577,24 @@
       "file": "server/api/onboarding.put.ts",
       "method": "PUT",
       "path": "/api/onboarding",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/onboarding/complete.post.ts",
+      "method": "POST",
+      "path": "/api/onboarding/complete",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/onboarding/status.get.ts",
+      "method": "GET",
+      "path": "/api/onboarding/status",
       "descriptorOwners": [],
       "routeBuilderOwners": [],
       "currentSurface": "host-internal-or-session",
@@ -2119,6 +2083,39 @@
       "v1Review": "accepted-v1"
     },
     {
+      "file": "server/api/partner/v1/users/[userId]/api-keys.get.ts",
+      "method": "GET",
+      "path": "/api/partner/v1/users/{userId}/api-keys",
+      "descriptorOwners": [
+        "partner.users.api_keys.list"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/users/[userId]/api-keys.post.ts",
+      "method": "POST",
+      "path": "/api/partner/v1/users/{userId}/api-keys",
+      "descriptorOwners": [
+        "partner.users.api_keys.create"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
+      "file": "server/api/partner/v1/users/[userId]/api-keys/[keyId].delete.ts",
+      "method": "DELETE",
+      "path": "/api/partner/v1/users/{userId}/api-keys/{keyId}",
+      "descriptorOwners": [
+        "partner.users.api_keys.revoke"
+      ],
+      "routeBuilderOwners": [],
+      "currentSurface": "public-partner-v1",
+      "v1Review": "accepted-v1"
+    },
+    {
       "file": "server/api/partner/v1/users/[userId]/available-sites.get.ts",
       "method": "GET",
       "path": "/api/partner/v1/users/{userId}/available-sites",
@@ -2272,6 +2269,33 @@
       "v1Review": "accepted-v1"
     },
     {
+      "file": "server/api/sdk-docs/navigation.get.ts",
+      "method": "GET",
+      "path": "/api/sdk-docs/navigation",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/sdk-docs/page.get.ts",
+      "method": "GET",
+      "path": "/api/sdk-docs/page",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
+      "file": "server/api/sdk-docs/search.get.ts",
+      "method": "GET",
+      "path": "/api/sdk-docs/search",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "host-internal-or-session",
+      "v1Review": "outside-public-protocol"
+    },
+    {
       "file": "server/api/sitemap-exports/[token].get.ts",
       "method": "GET",
       "path": "/api/sitemap-exports/{token}",
@@ -2373,6 +2397,15 @@
       "v1Review": "decision-required"
     },
     {
+      "file": "server/api/user/activate.post.ts",
+      "method": "POST",
+      "path": "/api/user/activate",
+      "descriptorOwners": [],
+      "routeBuilderOwners": [],
+      "currentSurface": "shared-hosted",
+      "v1Review": "decision-required"
+    },
+    {
       "file": "server/api/user/api-key.get.ts",
       "method": "GET",
       "path": "/api/user/api-key",
@@ -2442,15 +2475,6 @@
       ],
       "currentSurface": "shared-hosted",
       "v1Review": "partner"
-    },
-    {
-      "file": "server/api/webhooks/resend.post.ts",
-      "method": "POST",
-      "path": "/api/webhooks/resend",
-      "descriptorOwners": [],
-      "routeBuilderOwners": [],
-      "currentSurface": "host-internal-or-session",
-      "v1Review": "outside-public-protocol"
     }
   ]
 }

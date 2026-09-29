@@ -1,8 +1,8 @@
 import type { GscdumpV1Client, GscdumpV1OperationResponse } from '@gscdump/sdk/v1'
-import type { CloudAuthentication } from './auth-state'
+import type { HostedAuthentication } from './auth-state'
 import type { BingDumpDataset, BingDumpSummary, parseBingDumpOptions } from './bing-data'
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
-import { cloudCredential, getCloudAccount } from './auth-state'
+import { getHostedAccount, hostedCredential } from './auth-state'
 import { writeBingDump } from './bing-data'
 import { logger } from './utils'
 
@@ -12,17 +12,17 @@ interface HostedBingSite {
   connection: GscdumpV1OperationResponse<'partner.sites.indexing.bing.connection.get'>['data']
 }
 
-export function hostedBingClient(state: CloudAuthentication): GscdumpV1Client {
-  return createGscdumpV1Client({ apiRoot: state.apiRoot, credential: cloudCredential(state) })
+export function hostedBingClient(state: HostedAuthentication): GscdumpV1Client {
+  return createGscdumpV1Client({ apiRoot: state.apiRoot, credential: hostedCredential(state) })
 }
 
-export async function listHostedBingSites(state: CloudAuthentication): Promise<HostedBingSite[]> {
-  const account = await getCloudAccount(state)
+export async function listHostedBingSites(state: HostedAuthentication): Promise<HostedBingSite[]> {
+  const account = await getHostedAccount(state)
   return loadHostedBingConnections(state, account.sites, { tolerateFailures: true })
 }
 
 async function loadHostedBingConnections(
-  state: CloudAuthentication,
+  state: HostedAuthentication,
   sites: { siteId: string, siteUrl: string }[],
   options: { tolerateFailures?: boolean } = {},
 ): Promise<HostedBingSite[]> {
@@ -45,10 +45,10 @@ async function loadHostedBingConnections(
   return loaded.filter(site => site !== null)
 }
 
-export async function resolveHostedBingSites(state: CloudAuthentication, input: { site?: string, allSites?: boolean, requireConnected?: boolean }): Promise<HostedBingSite[]> {
+export async function resolveHostedBingSites(state: HostedAuthentication, input: { site?: string, allSites?: boolean, requireConnected?: boolean }): Promise<HostedBingSite[]> {
   if (Boolean(input.site) === Boolean(input.allSites))
     throw new Error('Choose --site or --all-sites.')
-  const account = await getCloudAccount(state)
+  const account = await getHostedAccount(state)
   const exact = account.sites.filter(site => site.siteId === input.site || site.siteUrl === input.site)
   const normalize = (value: string): string | undefined => URL.parse(value.startsWith('sc-domain:') ? `https://${value.slice(10)}/` : value)?.toString()
   const requested = input.allSites
@@ -68,7 +68,7 @@ export async function resolveHostedBingSites(state: CloudAuthentication, input: 
 }
 
 export async function dumpHostedBingSite(
-  state: CloudAuthentication,
+  state: HostedAuthentication,
   site: { siteId: string, siteUrl: string },
   outDir: string,
   options: ReturnType<typeof parseBingDumpOptions>,
@@ -124,7 +124,7 @@ export async function dumpHostedBingSite(
 
 type HostedBingEvidence = GscdumpV1OperationResponse<'partner.sites.indexing.bing.evidence.list'>['data']['indexingEvidence'][number]
 
-export async function inspectHostedBingUrl(state: CloudAuthentication, siteId: string, url: string): Promise<HostedBingEvidence | { _tag: 'unknown', searchEngine: 'bing', url: string, reason: 'not-observed', observedAt: null }> {
+export async function inspectHostedBingUrl(state: HostedAuthentication, siteId: string, url: string): Promise<HostedBingEvidence | { _tag: 'unknown', searchEngine: 'bing', url: string, reason: 'not-observed', observedAt: null }> {
   const client = hostedBingClient(state)
   let offset = 0
   while (true) {

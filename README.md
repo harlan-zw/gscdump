@@ -52,32 +52,18 @@ Install the CLI with Node.js 22.13 or later in the 22 release line, or Node.js 2
 npm install -g @gscdump/cli
 ```
 
-Choose where the CLI gets Google access:
+The CLI has 2 access modes:
 
-| Path | Login | Google data requests |
+| Mode | Credentials | What the CLI reads |
 | --- | --- | --- |
-| Cloud | gscdump.com browser sign-in | gscdump.com calls Google |
-| Bring Your Own Keys | Your OAuth client or service account | The CLI calls Google directly |
+| Local | Your own Google credentials: a service account (recommended) or an OAuth client | Google directly, into a local Store |
+| Hosted | Your gscdump.com account | Your hosted record on gscdump.com. The CLI never calls Google |
 
-Local mode also supports gscdump.com OAuth without your own Google credentials.
+### Local mode
 
-### Cloud access
+A service account is the simplest Local setup, and its key never expires. Add the service account email as a user of the Site in Search Console, then run `gscdump auth login --mode local --service-account ./key.json`.
 
-Cloud login opens gscdump.com in your browser. Sign in, authorize the CLI, then [connect a Site](https://gscdump.com/app/onboarding?step=connect-sites). The CLI saves its own session. You do not need to copy an API key.
-
-```bash
-gscdump auth login --mode cloud
-gscdump sites
-gscdump query --live --site example.com --dimensions date --limit 7
-```
-
-See [the cloud first-result guide](./docs/gscdump-cli/guides/1.start/1.first-result.md) for the full path.
-
-### Local access
-
-For local access without a Google Cloud project, run `gscdump auth login --mode local`. The browser opens gscdump.com for OAuth. The CLI then calls Google directly.
-
-For a fully local connection, create a Desktop OAuth client in Google Cloud and set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET` before login. This path opens Google directly. The [access guide](./docs/gscdump-cli/guides/1.start/2.choose-access.md#bring-your-own-keys) also covers service accounts and existing Google tokens.
+To sign in as yourself, create a Desktop OAuth client in Google Cloud and set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET` before login. Set the OAuth consent screen to "In production": in "Testing" status, Google expires refresh tokens after 7 days. The [access guide](./docs/gscdump-cli/guides/1.start/2.choose-access.md#local-mode) covers both paths and existing Google tokens.
 
 ```bash
 export GSC_CLIENT_ID=your-client-id
@@ -100,6 +86,18 @@ gscdump sync --site example.com --days 90
 # Start the MCP server
 gscdump mcp
 ```
+
+### Hosted mode
+
+Hosted login opens gscdump.com in your browser. Sign in, approve the CLI, then [connect a Site](https://gscdump.com/app/onboarding?step=connect-sites). The CLI saves its own session. Hosted mode reads your hosted record and never calls Google. Commands that call Google, such as `sync`, `inspect`, and `query --live`, need Local mode.
+
+```bash
+gscdump auth login --mode hosted
+gscdump sites
+gscdump query --site example.com --dimensions date --limit 7
+```
+
+See [the first-result guide](./docs/gscdump-cli/guides/1.start/1.first-result.md) for the full path.
 
 For one-off commands, use `npx -y @gscdump/cli` in place of `gscdump`.
 The `gscdump` npm package contains the library; `@gscdump/cli` provides the command.
@@ -209,7 +207,7 @@ The [generated contracts](./packages/contracts/generated) define operation input
 
 | Entry point | Scope | First result |
 | --- | --- | --- |
-| CLI | Cloud/local Google and Bing authentication, local Store, exports | [Getting started](./docs/gscdump-cli/guides/1.start/1.first-result.md) |
+| CLI | Local and Hosted access modes for Google and Bing, local Store, exports | [Getting started](./docs/gscdump-cli/guides/1.start/1.first-result.md) |
 | Core library | Google and Bing clients, typed queries, fetch runtimes | [Library examples](./packages/gscdump/README.md) |
 | MCP | Live Google queries and supported Reports | [AI integration](./docs/gscdump-cli/guides/1.start/3.connect-an-agent.md) |
 | Hosted SDK | gscdump.com API credentials and published v1 operations | [Hosted integration](./docs/gscdump-sdk/guides/1.start/2.hosted-first-result.md) |

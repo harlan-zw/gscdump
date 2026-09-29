@@ -2,7 +2,7 @@
 
 Google Search Console CLI and MCP server.
 
-Choose [cloud or local access](../../docs/gscdump-cli/guides/1.start/2.choose-access.md) before login. Cloud login opens gscdump.com and saves a CLI session. Local login calls Google directly and can use your own Google credentials.
+Choose [Local or Hosted mode](../../docs/gscdump-cli/guides/1.start/2.choose-access.md) before login. Local mode calls Google with your own credentials: a service account or an OAuth client. Hosted mode opens gscdump.com, saves a CLI session, and reads your hosted record. It never calls Google.
 
 ```bash
 npm install -g @gscdump/cli

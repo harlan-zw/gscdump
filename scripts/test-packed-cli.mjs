@@ -154,13 +154,13 @@ try {
   assert.deepEqual(localTraffic.map(({ clicks, impressions }) => ({ clicks, impressions })), [{ clicks: 12, impressions: 80 }])
   assert.equal(localQueries[0].query, 'local search')
 
-  // One saved Cloud login must route both Search Engines in later processes.
+  // One saved Hosted login must route both Search Engines in later processes. Hosted mode never calls Google.
   await writeFile(httpTrace, '')
-  await cli('auth', 'login', '--mode', 'cloud', '--api-key', 'gsd_user_packed_fixture', '--json')
+  await cli('auth', 'login', '--mode', 'hosted', '--api-key', 'gsd_user_packed_fixture', '--json')
   const cloudSite = 'sc-domain:cloud.example.com'
   const cloudGoogleSites = JSON.parse(await cli('sites', '--json'))
   assert.equal(cloudGoogleSites[0].siteUrl, cloudSite)
-  const cloudQuery = JSON.parse(await cli('query', '--live', '--site', cloudSite, '--start', '2026-08-01', '--end', '2026-08-01', '--dimensions', 'page', '--format', 'json', '--quiet'))
+  const cloudQuery = JSON.parse(await cli('query', '--site', cloudSite, '--start', '2026-08-01', '--end', '2026-08-01', '--dimensions', 'page', '--format', 'json', '--quiet'))
   assert.equal(cloudQuery.data[0].clicks, 9)
   assert.equal(cloudQuery.data[0].impressions, 90)
   const cloudBingSites = JSON.parse(await cli('bing', 'sites', '--json'))
@@ -179,7 +179,7 @@ try {
   assert(hostedRequests.every(request => request.origin === 'https://gscdump.com'))
   assert.deepEqual(hostedRequests.filter(request => request.pathname.endsWith('/bing/data')).map(request => request.offset), ['0', '500', '0', '500'])
 
-  // A local override uses saved Bing credentials and leaves the Cloud login selected afterward.
+  // A Local override uses saved Bing credentials and leaves Hosted mode selected afterward.
   await writeFile(httpTrace, '')
   const overriddenBingSites = JSON.parse(await cli('bing', 'sites', '--mode', 'local', '--json'))
   assert.equal(overriddenBingSites.sites[0].url, localBingSite)
@@ -189,7 +189,7 @@ try {
   assert(localRequests.every(request => request.origin !== 'https://gscdump.com'))
   const stillCloud = JSON.parse(await cli('bing', 'sites', '--json'))
   assert.equal(stillCloud.sites[0].siteId, 's_packed')
-  console.log('Packed CLI: saved local Bing login/dump, shared Cloud Google/Bing queries, pagination, and local mode overrides passed.')
+  console.log('Packed CLI: saved Local Bing login/dump, Hosted record and Bing reads, pagination, and Local mode overrides passed.')
 
   if (process.platform === 'linux' && process.arch === 'x64') {
     assert(size.installedFileBytes <= 135_000_000, `Packed CLI exceeds 135 MB installed: ${(size.installedFileBytes / 1_000_000).toFixed(2)} MB`)

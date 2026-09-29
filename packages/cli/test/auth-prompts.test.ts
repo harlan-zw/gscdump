@@ -8,7 +8,8 @@ vi.mock('@clack/prompts', async importOriginal => ({
   ...await importOriginal<typeof ClackPrompts>(),
   text: vi.fn(),
 }))
-vi.mock('../src/config', () => ({ loadConfig: async () => ({}) }))
+const saveConfig = vi.hoisted(() => vi.fn())
+vi.mock('../src/config', () => ({ loadConfig: async () => ({}), saveConfig, getConfigDir: () => '/tmp/gscdump-prompts' }))
 vi.mock('../src/environment', () => ({ resolveCliEnvironment: () => ({}) }))
 
 describe('oAuth credential prompts', () => {
@@ -24,10 +25,11 @@ describe('oAuth credential prompts', () => {
     vi.restoreAllMocks()
   })
 
-  it('returns both entered credentials', async () => {
+  it('returns both entered credentials and saves them for later refreshes', async () => {
     vi.mocked(text).mockResolvedValueOnce('client-id').mockResolvedValueOnce('client-secret')
 
     expect(await getAuthCredentials(true)).toEqual({ clientId: 'client-id', clientSecret: 'client-secret' })
+    expect(saveConfig).toHaveBeenCalledWith({ clientId: 'client-id', clientSecret: 'client-secret' })
   })
 
   it.each([CANCEL_SYMBOL, Symbol('cancel')])('exits when the client ID prompt returns %s', async (cancel) => {

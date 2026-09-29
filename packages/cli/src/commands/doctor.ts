@@ -1,5 +1,5 @@
 import type { ApiSite } from 'gscdump/sites'
-import type { CloudAuthentication } from '../auth-state'
+import type { HostedAuthentication } from '../auth-state'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
@@ -7,9 +7,9 @@ import { defineCommand } from 'citty'
 import { resolveSiteInput } from 'gscdump'
 import { googleSearchConsole } from 'gscdump/client'
 import { ofetch } from 'ofetch'
-import { getAuth, loadTokens, resolveAuth, resolveBYOK } from '../auth'
+import { getAuth, isStaleServiceAccountPointer, loadTokens, resolveAuth, resolveBYOK, resolveServiceAccount } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
-import { getCloudAccount, resolveAuthentication } from '../auth-state'
+import { getHostedAccount, resolveAuthentication } from '../auth-state'
 import { doctorCommandMeta } from '../command-meta'
 import { loadConfig } from '../config'
 import { createCommandContext, formatSiteResolution } from '../context'
@@ -83,16 +83,38 @@ function describeAuthSource(envKeys: Set<string>, byok: ReturnType<typeof resolv
     : ['GSC_REFRESH_TOKEN', 'GOOGLE_REFRESH_TOKEN']
   const fromEnvFile = driverKeys.some(k => envKeys.has(k))
   const source = fromEnvFile ? '.env' : 'shell env'
-  return `BYOK ${isAccessToken ? '(access-token)' : '(refresh-token)'} from ${source} via ${driver}`
+  return `environment credentials ${isAccessToken ? '(access-token)' : '(refresh-token)'} from ${source} via ${driver}`
 }
 
 async function checkAuth(envKeys: Set<string>): Promise<{ checks: Check[], liveToken: string | null }> {
   const checks: Check[] = []
+  const serviceAccount = await resolveServiceAccount().catch((error: unknown) => {
+    // A stale pointer (missing file or malformed JSON) falls through to
+    // environment and saved tokens, exactly like `resolveAuth`.
+    if (isStaleServiceAccountPointer(error)) {
+      checks.push({ name: 'auth.service_account', status: 'warn', detail: `ignored: ${error instanceof Error ? error.message : String(error)}` })
+      return null
+    }
+    return error instanceof Error ? error : new Error(String(error))
+  })
+  if (serviceAccount instanceof Error) {
+    checks.push({ name: 'auth', status: 'fail', detail: `service account: ${serviceAccount.message}` })
+    return { checks, liveToken: null }
+  }
+  if (serviceAccount) {
+    const token = await serviceAccount.getAccessToken().then(result => result.token ?? null, (error: unknown) => error instanceof Error ? error : new Error(String(error)))
+    if (!token || token instanceof Error) {
+      checks.push({ name: 'auth', status: 'fail', detail: `service account ${serviceAccount.email}: ${token instanceof Error ? redactTokens(token.message) : 'no access token'}` })
+      return { checks, liveToken: null }
+    }
+    checks.push({ name: 'auth', status: 'pass', detail: `service account ${serviceAccount.email}` })
+    return { checks, liveToken: token }
+  }
   const byok = resolveBYOK()
   const tokens = await loadTokens()
 
   if (!byok && !tokens) {
-    checks.push({ name: 'auth', status: 'fail', detail: 'no BYOK env vars and no saved tokens; run `gscdump init`' })
+    checks.push({ name: 'auth', status: 'fail', detail: 'no Google credentials: no service account, no environment tokens, no saved tokens. Run `gscdump init`, or `gscdump auth login --mode hosted` for Hosted mode' })
     return { checks, liveToken: null }
   }
 
@@ -129,7 +151,7 @@ async function checkAuth(envKeys: Set<string>): Promise<{ checks: Check[], liveT
     checks.push({ name: 'auth.account', status: 'pass', detail: info.email })
 
   const scopes = info.scope ? info.scope.split(/\s+/) : []
-  const missing = missingRequiredScopes(scopes, byok ? undefined : tokens?.provider)
+  const missing = missingRequiredScopes(scopes)
   if (missing.length > 0)
     checks.push({ name: 'auth.scopes', status: 'warn', detail: `missing: ${missing.join(', ')} — \`gscdump auth login --force\` to re-consent` })
   else
@@ -275,8 +297,8 @@ function describeGscSites(sites: ApiSite[], defaultSite?: string): Check[] {
   return checks
 }
 
-async function checkCloudConnection(authentication: CloudAuthentication): Promise<Check[]> {
-  const account = await getCloudAccount(authentication).then(
+async function checkHostedConnection(authentication: HostedAuthentication): Promise<Check[]> {
+  const account = await getHostedAccount(authentication).then(
     value => ({ _tag: 'Ok' as const, value }),
     (error: unknown) => ({ _tag: 'Err' as const, detail: error instanceof Error ? error.message : 'Hosted authentication failed.' }),
   )
@@ -287,15 +309,12 @@ async function checkCloudConnection(authentication: CloudAuthentication): Promis
     ]
   }
 
-  const sitesChecks = await createCommandContext({ needsAuth: true }).then(async context =>
-    describeGscSites(await context.loadSites(), context.config.defaultSite),
-  ).catch((error: unknown): Check[] => [{
-    name: 'gsc.sites',
-    status: 'fail',
-    detail: error instanceof Error ? error.message : 'Hosted Sites request failed.',
-  }])
+  const count = account.value.sites.length
+  const sitesChecks: Check[] = [count > 0
+    ? { name: 'hosted.sites', status: 'pass', detail: `${count} hosted Site(s)` }
+    : { name: 'hosted.sites', status: 'warn', detail: 'no hosted Sites. Connect a Site at https://gscdump.com/app/onboarding?step=connect-sites' }]
   return [
-    { name: 'auth', status: 'pass', detail: `cloud via ${authentication.apiRoot}` },
+    { name: 'auth', status: 'pass', detail: `Hosted mode via ${authentication.apiRoot}` },
     { name: 'auth.account', status: 'pass', detail: account.value.user.email },
     ...sitesChecks,
   ]
@@ -326,8 +345,8 @@ export const doctorCommand = defineCommand({
     const authentication = await resolveAuthentication()
     const envResult = await checkEnv()
     const [connectionChecks, dataDirChecks, watermarkChecks] = await Promise.all([
-      authentication._tag === 'Cloud'
-        ? checkCloudConnection(authentication)
+      authentication._tag === 'Hosted'
+        ? checkHostedConnection(authentication)
         : checkLocalConnection(envResult.envKeys),
       checkDataDir(dataDir),
       checkStoreWatermarks(dataDir),

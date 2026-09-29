@@ -85,15 +85,15 @@ describe('init without a terminal', () => {
     expect(output.join('\n')).toContain('gscdump sync --site <site>')
   })
 
-  it('saves cloud mode with an API key', async () => {
+  it('saves Hosted mode with an API key', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       user: { publicId: 'u1', email: 'a@example.com' },
       sites: [],
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
 
-    await init(['--mode', 'cloud'], { GSCDUMP_API_KEY: 'gsd_user_test' })
+    await init(['--mode', 'hosted'], { GSCDUMP_API_KEY: 'gsd_user_test' })
 
     expect(exitCode).toBeUndefined()
-    expect(await saved('authentication.json')).toEqual({ _tag: 'Cloud', apiKey: 'gsd_user_test', apiRoot: 'https://gscdump.com/api' })
+    expect(await saved('authentication.json')).toEqual({ _tag: 'Hosted', apiKey: 'gsd_user_test', apiRoot: 'https://gscdump.com/api' })
   })
 })

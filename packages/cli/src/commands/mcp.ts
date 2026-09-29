@@ -12,12 +12,19 @@ import { runWithCliRuntime, useCliRuntime } from '../runtime'
 import { VERSION } from '../utils'
 
 export const MCP_NO_AUTH_MESSAGE = [
-  'gscdump has no Google authentication.',
-  'Run `gscdump auth login` in a terminal, then call this tool again.',
-  'For cloud mode, run `gscdump auth login --mode cloud` in a terminal.',
-  'For local mode, set GSC_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS to a service-account key file, set GSC_ACCESS_TOKEN, or set GSC_CLIENT_ID, GSC_CLIENT_SECRET, and GSC_REFRESH_TOKEN.',
+  'gscdump has no Google credentials. The CLI MCP server runs in Local mode with your own Google credentials.',
+  'Recommended: set GSC_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS to a service-account key file.',
+  'Or set GSC_CLIENT_ID, GSC_CLIENT_SECRET, and GSC_REFRESH_TOKEN, or run `gscdump auth login --mode local` in a terminal.',
   'If you set environment variables, set them in the MCP server configuration and restart the MCP client.',
+  'For Hosted mode, connect your MCP client to https://gscdump.com/mcp instead.',
   'If the gscdump command is missing, run `npm install -g @gscdump/cli`.',
+].join(' ')
+
+/** The CLI MCP server calls Google, so Hosted mode points to the gscdump.com MCP server. */
+export const MCP_HOSTED_MESSAGE = [
+  'The CLI MCP server calls Google, so it needs Local mode.',
+  'For Hosted mode, connect your MCP client to https://gscdump.com/mcp.',
+  'If you want Local mode, run `gscdump auth login --mode local` in a terminal, then restart the MCP client.',
 ].join(' ')
 
 // One retry per Google call. The CLI default retries a quota 403 after 5s,
@@ -35,7 +42,10 @@ export async function startMcpServer(transport: Transport, runtime: CliRuntime =
     name: 'gscdump',
     version: VERSION,
     getContext: async () => {
-      if (await probeAuth() === 'none')
+      const probe = await probeAuth()
+      if (probe === 'hosted')
+        throw new Error(MCP_HOSTED_MESSAGE)
+      if (probe === 'none')
         throw new Error(MCP_NO_AUTH_MESSAGE)
       const ctx = await createCommandContext({ needsAuth: true, fetchOptions: { retry: MCP_RETRIES } })
         .catch((error: unknown) => {
@@ -44,7 +54,7 @@ export async function startMcpServer(transport: Transport, runtime: CliRuntime =
             throw new Error(`${(error as Error).message}. ${MCP_NO_AUTH_MESSAGE}`)
           throw error
         })
-      return { authentication: ctx.authentication, auth: ctx.auth, client: ctx.client! }
+      return { auth: ctx.auth, client: ctx.client! }
     },
   })
   await server.connect(transport)

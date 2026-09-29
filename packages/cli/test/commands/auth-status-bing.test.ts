@@ -62,6 +62,6 @@ describe('auth status when the Bing token refresh fails', () => {
     output = []
     await runWithCliRuntime(runtime, () => runCommand(authCommand.subCommands!.status, { rawArgs: [] }))
     expect(warn).toHaveBeenCalledWith('Bing credentials failed verification. Run `gscdump bing login` again.')
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Google is not connected'))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Google credentials are missing'))
   })
 })

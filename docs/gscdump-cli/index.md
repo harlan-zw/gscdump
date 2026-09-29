@@ -9,7 +9,7 @@ Get a live result, then follow the question in your data. The CLI reads Google S
 
 | Start with | When |
 | --- | --- |
-| [Choose access](/gscdump-cli/guides/start/choose-access) | You need to choose cloud, local OAuth, or your own Google credentials. |
+| [Choose access](/gscdump-cli/guides/start/choose-access) | You need to choose Local mode (your own Google credentials) or Hosted mode (your gscdump.com record). |
 | [Run your first query](/gscdump-cli/guides/start/first-result) | You need a working Site and live result. |
 | [Use data](/gscdump-cli/guides/use-data) | You need history, filters, or an export. |
 | [Investigate traffic](/gscdump-cli/guides/investigate-traffic) | You have a change or opportunity to check. |
