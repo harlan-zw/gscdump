@@ -19,6 +19,9 @@ flowchart LR
   SEN[Search Engine<br/><small>public discriminator</small>]
   IE[Indexing Evidence<br/><small>contracts/v1</small>]
   SR[Submission Receipt<br/><small>delivery contract</small>]
+  MD[Mode<br/><small>--mode · @gscdump/cli</small>]
+  STO[Store<br/><small>Parquet directory · @gscdump/cli</small>]
+  HR[Hosted record<br/><small>gscdump.com/api</small>]
 
   SRC -- rows --> AN
   AN -- composed --> RP
@@ -29,10 +32,14 @@ flowchart LR
   BI -- identified as --> SEN
   SEN -- observed --> IE
   SEN -- accepted or rejected --> SR
+  MD -- "Local: own Google keys" --> STO
+  MD -- "Hosted: reads" --> HR
 
   TOOL(("&quot;tool&quot;<br/>customer word"))
   REP(("&quot;report&quot;<br/>customer word"))
   QRY(("&quot;query&quot;<br/>customer word"))
+  LOC(("&quot;Local&quot;<br/>customer word"))
+  HOS(("&quot;Hosted&quot;<br/>customer word"))
 
   AN -.-> TOOL
   RP -.-> TOOL
@@ -41,11 +48,13 @@ flowchart LR
   QB -.-> QRY
   QT -.-> QRY
   SRC -.-> QRY
+  MD -.-> LOC
+  MD -.-> HOS
 
   classDef internal fill:#E7EFF6,stroke:#34648A,color:#16202B;
   classDef customer fill:#F8EEDC,stroke:#9A6714,color:#16202B;
-  class SRC,AN,RP,SE,QB,QT,GO,BI,SEN,IE,SR internal
-  class TOOL,REP,QRY customer
+  class SRC,AN,RP,SE,QB,QT,GO,BI,SEN,IE,SR,MD,STO,HR internal
+  class TOOL,REP,QRY,LOC,HOS customer
 ```
 
 | Term | Table / module | Owner | Cardinality | Customer word |
@@ -69,6 +78,7 @@ flowchart LR
 | Manifest authority | `ManifestStore` / R2 HEAD pointer | `engine` | (siteId, table, searchType) 1—1 Manifest | not surfaced |
 | Sitemap generation manifest | hosted entity store | `contracts` (ADR-0022) | Site 1—1 current generation | "sitemap" |
 | Store | configured Parquet directory | `@gscdump/cli` | Site 1—1 Store | "store" (`gscdump store *`) |
+| Mode | CLI authentication state (`--mode`) | `@gscdump/cli` | User 1—N Mode | "Local" or "Hosted" (`--mode local`, `--mode cloud`) |
 
 ## Usage
 
@@ -138,6 +148,25 @@ SQLite multi-tenant path, `gscdump/tenant`, the `sites` CLI command.
 **Never:** domain, host, tenant (Team is the tenant), account.
 **Casing:** `Site` in prose, `site` in identifiers and flags.
 Use "Google Search Console property" only to explain the Google term for a Site.
+
+### Mode
+**Is:** who runs the sync and where the record lives. Two values: Local and Hosted.
+**Use for:** CLI docs, the packaged skill, `--mode` help text, and auth errors.
+**Never:** deployment, access type, "the CLI" or "the platform" as a mode label.
+**Casing:** `Local` and `Hosted` as labels; `local` and `hosted` mid-sentence.
+**Ratified by:** gscdump.com ADR-0012.
+**Frozen identifiers:** the `--mode cloud` value and the `Cloud` authentication tag name Hosted. Use Hosted in prose.
+
+### Local
+**Is:** the CLI on the user's machine with the user's own Google keys. The Store holds the record.
+**Use for:** CLI authentication with a service account first, or an OAuth client second.
+**Never:** BYOK, Bring Your Own Keys, self-hosted, "local access without your own keys".
+No Local request uses gscdump's OAuth client or Google quota.
+
+### Hosted
+**Is:** gscdump.com runs the sync and keeps the record. The CLI in Hosted mode reads that record. It does not proxy live Google calls.
+**Use for:** the SDK and CLI paths that reach `gscdump.com/api`.
+**Never:** Cloud, cloud mode, the cloud, Pro.
 
 ### Store
 **Is:** the local append-only Parquet/DuckDB directory the CLI reads and writes.
@@ -304,4 +333,6 @@ check are banned; words that did not are recorded in Open questions instead.
 | GSC account | Site or Team | "account" collides with Google account vs partner Team |
 | bare `engine` or `source` as a public search discriminator | Search Engine | Both words already name package concepts |
 | indexing status as a public evidence noun | Indexing Evidence | It collides with pipeline state and hides observation uncertainty |
+| BYOK, Bring Your Own Keys, self-hosted (as a mode) | Local | gscdump.com ADR-0012 names the mode. `resolveBYOK` stays an internal identifier |
+| Cloud, cloud mode (in prose) | Hosted | gscdump.com ADR-0012 names the mode. `--mode cloud` stays a CLI identifier |
 | powerful, seamless, robust, blazing | (cut) | Marketing filler |
