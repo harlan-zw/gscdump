@@ -36,3 +36,34 @@ describe('createLiveGscSource', () => {
     expect(createClient).toHaveBeenCalledWith('token')
   })
 })
+
+describe('createLiveGscSource page scope', () => {
+  function capture() {
+    const states: Array<Record<string, unknown>> = []
+    const client = {
+      query: vi.fn((_siteUrl: string, builder: { getState: () => Record<string, unknown> }) => {
+        states.push(builder.getState())
+        return emptyRows()
+      }),
+    }
+    return { states, createClient: () => client as any }
+  }
+
+  it('limits a scoped source to the registered host, like the sync', async () => {
+    const { states, createClient } = capture()
+    const source = createLiveGscSource({ siteUrl: 'sc-domain:example.com', getAccessToken: async () => 't', createClient, pageScope: { host: 'docs.example.com' } })
+
+    await source.queryRows(gsc.select(query).where(between(date, '2026-06-01', '2026-06-30')).getState())
+
+    expect(JSON.stringify(states[0]!.filter)).toContain('^https?://docs\\\\.example\\\\.com/')
+  })
+
+  it('sends no page filter without a scope', async () => {
+    const { states, createClient } = capture()
+    const source = createLiveGscSource({ siteUrl: 'sc-domain:example.com', getAccessToken: async () => 't', createClient })
+
+    await source.queryRows(gsc.select(query).where(between(date, '2026-06-01', '2026-06-30')).getState())
+
+    expect(JSON.stringify(states[0]!.filter)).not.toContain('includingRegex')
+  })
+})

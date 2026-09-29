@@ -81,10 +81,19 @@ export interface RunGscSyncSliceOptions {
   onPage?: (info: { searchType: SearchType, rowsThisPage: number }) => void
 }
 
+/**
+ * How GSC counted impressions for a request. Grouping or filtering by `page`
+ * counts one impression per ranking URL (`byPage`). Anything else counts one
+ * per search result (`byProperty`), which is what the Search Console UI shows.
+ */
+export type GscAggregation = 'byPage' | 'byProperty'
+
 export interface RunGscSyncSliceResult {
   totalRows: number
   hasMore: boolean
   nextStartRow: number
+  /** How GSC counted impressions for every row this slice wrote. */
+  aggregation: GscAggregation
   /**
    * Metadata from the LAST GSC API page seen during this slice run. When
    *  `dataState='hourly_all'` and grouped by `hour`, this surfaces
@@ -173,14 +182,32 @@ function isTimeoutLike(err: unknown): boolean {
 //    total. No sampling.
 //  - With `device` / `country` / `query` dimensions GSC anonymizes at the
 //    (page x dim) grain and the long-tail collapses the total to the anonymized
-//    floor (observed ‑37% to ‑79%). The `devices` / `countries` slices are
-//    therefore undercounted on `sc-domain:` properties — a known limitation,
-//    NOT a reason to drop the filter (the `pages`/`keywords` slices need it).
+//    floor (observed ‑37% to ‑79%).
+//  - Any page filter also switches GSC to by-page counting, so impressions no
+//    longer match the Search Console UI (see `requestAggregation`).
+// The host therefore passes a domain filter only when the property holds other
+// hosts. A property with only the registered host needs no filter to stay in
+// scope, and keeps the UI's by-property counting.
 // Only `groupType: 'and'` is valid; GSC rejects `'or'` with HTTP 400.
 interface SyncSliceApiFilter {
   dimension: SyncSliceDimensionFilter['dimension']
   operator: NonNullable<SyncSliceDimensionFilter['operator']>
   expression: string
+}
+
+/** The `page` regex that scopes a request to one exact host. */
+export function hostPagePattern(host: string): string {
+  return `^https?://${host.replace(/\./g, '\\.')}/`
+}
+
+/** Which counting GSC applies to a request with these dimensions and filters. */
+export function requestAggregation(
+  dimensions: readonly string[],
+  filterGroups: readonly { filters: readonly { dimension: string }[] }[] | undefined,
+): GscAggregation {
+  const byPage = dimensions.includes('page')
+    || (filterGroups ?? []).some(group => group.filters.some(filter => filter.dimension === 'page'))
+  return byPage ? 'byPage' : 'byProperty'
 }
 
 function buildDimensionFilterGroups(
@@ -193,12 +220,10 @@ function buildDimensionFilterGroups(
     expression: f.expression,
   }))
   if (domainFilter?.domain) {
-    const escapedDomain = domainFilter.domain.replace(/\./g, '\\.')
-    const pattern = `^https?://${escapedDomain}/`
     out.push({
       dimension: 'page',
       operator: 'includingRegex',
-      expression: pattern,
+      expression: hostPagePattern(domainFilter.domain),
     })
   }
   return out.length > 0 ? [{ filters: out }] : undefined
@@ -216,6 +241,7 @@ export async function runGscSyncSlice(
     : [...DIMENSIONS_BY_TABLE[opts.table]]
   const dataState: GscDataState = opts.dataState ?? (dimensions.includes('hour') ? 'hourly_all' : 'all')
   const dimensionFilterGroups = buildDimensionFilterGroups(opts.domainFilter, opts.dimensionFilters)
+  const aggregation = requestAggregation(dimensions, dimensionFilterGroups)
 
   const loopStart = Date.now()
   let startRow = opts.initialStartRow ?? 0
@@ -280,7 +306,7 @@ export async function runGscSyncSlice(
   // of look-ahead, negligible against the queue reservation window.
   let pending: Promise<PageResult> | null = startFetchIfAllowed(startRow)
   if (pending === null)
-    return { totalRows, hasMore: true, nextStartRow: startRow, metadata }
+    return { totalRows, hasMore: true, nextStartRow: startRow, metadata, aggregation }
 
   while (pending !== null) {
     const page: PageResult = await pending
@@ -289,7 +315,7 @@ export async function runGscSyncSlice(
     if (page.kind === 'error')
       throw page.error
     if (page.kind === 'timeout')
-      return { totalRows, hasMore: true, nextStartRow: page.startRow, metadata }
+      return { totalRows, hasMore: true, nextStartRow: page.startRow, metadata, aggregation }
 
     const rows: GscApiRow[] = page.rows
     totalRows += rows.length
@@ -317,14 +343,14 @@ export async function runGscSyncSlice(
       // in-flight `prefetch` is dropped (it never rejects); the continuation
       // re-fetches that page. Mirrors the Search Analytics timeout path.
       if (batchTimedOut)
-        return { totalRows: totalRows - rows.length, hasMore: true, nextStartRow: page.startRow, metadata }
+        return { totalRows: totalRows - rows.length, hasMore: true, nextStartRow: page.startRow, metadata, aggregation }
     }
 
     if (isLastPage)
-      return { totalRows, hasMore: false, nextStartRow, metadata }
+      return { totalRows, hasMore: false, nextStartRow, metadata, aggregation }
     if (prefetch === null)
       // Budget / maxPages gate hit mid-slice — more rows remain.
-      return { totalRows, hasMore: true, nextStartRow, metadata }
+      return { totalRows, hasMore: true, nextStartRow, metadata, aggregation }
 
     startRow = nextStartRow
     pending = prefetch
@@ -332,7 +358,7 @@ export async function runGscSyncSlice(
 
   // Unreachable — every loop path returns. Present so the function is total for
   // the type-checker (the loop guard alone doesn't prove a return).
-  return { totalRows, hasMore: false, nextStartRow: startRow, metadata }
+  return { totalRows, hasMore: false, nextStartRow: startRow, metadata, aggregation }
 }
 
 function contextTableForGrain(grain: SearchAppearanceContextGrain): SearchAppearanceContextTable {

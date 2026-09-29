@@ -13,8 +13,9 @@ import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { GoogleSearchConsoleClient } from 'gscdump'
 import type { BuilderState, Filter } from 'gscdump/query'
 import { googleSearchConsole } from 'gscdump'
-import { normalizeBuilderStateResult } from 'gscdump/query'
+import { and, normalizeBuilderStateResult, page, regex } from 'gscdump/query'
 import { createGscApiQuerySource } from './source'
+import { hostPagePattern } from './sync-slice'
 
 // Dimensions the GSC API can't produce (engine-derived).
 const PRO_ONLY_DIMENSIONS = new Set<string>(['queryCanonical', 'page_keywords'])
@@ -55,10 +56,21 @@ export interface CreateLiveGscSourceOptions {
    * slice only. An explicit search type already present on the state wins.
    */
   searchType?: EngineSearchType
+  /**
+   * Scope every read to one exact host with the same `page` filter the sync
+   * applies. Set it whenever the sync filters, so live and stored rows count
+   * impressions the same way.
+   */
+  pageScope?: { host: string }
 }
 
 function withSearchType(state: BuilderState, searchType: EngineSearchType): BuilderState {
   return state.searchType ? state : { ...state, searchType }
+}
+
+function withPageScope(state: BuilderState, host: string): BuilderState {
+  const scope = regex(page, hostPagePattern(host))
+  return { ...state, filter: state.filter ? and(state.filter as Filter<any>, scope) : scope }
 }
 
 export function createLiveGscSource(opts: CreateLiveGscSourceOptions): AnalysisQuerySource {
@@ -82,7 +94,8 @@ export function createLiveGscSource(opts: CreateLiveGscSourceOptions): AnalysisQ
     capabilities: { regex: true, multiDataset: false, comparisonJoin: false, windowTotals: false },
     async queryRows(state: BuilderState) {
       const client = await getClient()
-      const scopedState = opts.searchType !== undefined ? withSearchType(state, opts.searchType) : state
+      const typed = opts.searchType !== undefined ? withSearchType(state, opts.searchType) : state
+      const scopedState = opts.pageScope ? withPageScope(typed, opts.pageScope.host) : typed
       return createGscApiQuerySource({ client, siteUrl: opts.siteUrl }).queryRows(scopedState)
     },
   }

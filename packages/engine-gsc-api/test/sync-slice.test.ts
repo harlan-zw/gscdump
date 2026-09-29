@@ -433,3 +433,32 @@ describe('runGscSyncSlice', () => {
     expect(discoverCap[0]!.type).toBe('discover')
   })
 })
+
+// GSC counts impressions per ranking URL (`byPage`) whenever a request groups
+// or filters by page, and per search result (`byProperty`, what the Search
+// Console UI shows) otherwise. Hosts stamp this on stored days so reads never
+// mix the two.
+describe('runGscSyncSlice aggregation', () => {
+  it.each([
+    ['queries', null, 'byProperty'],
+    ['dates', null, 'byProperty'],
+    ['countries', null, 'byProperty'],
+    ['pages', null, 'byPage'],
+    ['page_queries', null, 'byPage'],
+    ['queries', { domain: 'example.com' }, 'byPage'],
+  ] as const)('reports %s with domain filter %j as %s', async (table, domainFilter, aggregation) => {
+    const captured: SearchAnalyticsQuery[] = []
+    const result = await runGscSyncSlice({
+      client: makeClient([{ rows: [] }], captured),
+      siteUrl: 'sc-domain:example.com',
+      table,
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      domainFilter,
+      onBatch: async () => {},
+    })
+
+    expect(result.aggregation).toBe(aggregation)
+    expect(captured[0]!.dimensionFilterGroups === undefined).toBe(domainFilter === null)
+  })
+})
