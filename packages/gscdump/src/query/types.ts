@@ -102,8 +102,12 @@ export interface MetricColumn<M extends Metric> {
   readonly metric: M
 }
 
-// Internal builder state
-export interface BuilderState {
+// Internal builder state. A type alias, never an interface: an alias gets the
+// implicit index signature that lets builder output pass straight into the
+// v1 contract's loose Report state without a spread. The lint autofix would
+// turn it back into an interface and bring the bug back.
+// eslint-disable-next-line ts/consistent-type-definitions
+export type BuilderState = {
   dimensions: Dimension[]
   metrics?: Metric[]
   filter?: Filter<any>

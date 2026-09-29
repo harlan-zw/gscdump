@@ -16,6 +16,10 @@ export default defineConfig({
     // `*.workers.test.ts` run in a real workerd runtime via the Cloudflare
     // pool — see `packages/cloudflare/vitest.workers.config.ts` (`pnpm
     // test:workers`). They can't run in this node project.
-    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**', 'packages/cloudflare/**', '**/*.workers.test.ts', '**/*.browser.test.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**', 'packages/cloudflare/**', 'packages/sdk/**', '**/*.workers.test.ts', '**/*.browser.test.ts'],
+    // The SDK suite owns its own config so its `*.test-d.ts` typecheck tests
+    // run; the root include patterns never match them. The root project must
+    // be listed explicitly or Vitest runs only the listed projects.
+    projects: ['./vitest.config.ts', 'packages/sdk/vitest.config.ts'],
   },
 })
