@@ -28,6 +28,8 @@ export interface NormalizedFilterV1 {
   }>
   _nestedGroups?: NormalizedFilterV1[]
   _groupType?: 'and' | 'or'
+  /** Type-level marker the `gscdump/query` operators emit; `{}` at runtime and ignored. */
+  _constraints?: Record<string, unknown>
 }
 
 export const GSCDUMP_V1_ANALYTICS_DIMENSIONS = [
@@ -212,16 +214,21 @@ export function createGscdumpV1BrowserSchemas(
       expression2: z.string(),
     }),
   ])
+  // `_constraints` is the marker every `gscdump/query` operator emits, so a
+  // builder filter passes as it is. It carries no query meaning.
+  const filterConstraints = z.record(z.string(), z.unknown()).optional()
   const normalizedFilter: z.ZodType<NormalizedFilterV1> = z.lazy(() => z.union([
     z.strictObject({
       _filters: z.array(normalizedFilterLeaf).min(1),
       _nestedGroups: z.array(normalizedFilter).optional(),
       _groupType: z.enum(['and', 'or']).optional(),
+      _constraints: filterConstraints,
     }),
     z.strictObject({
       _filters: z.array(normalizedFilterLeaf).max(0),
       _nestedGroups: z.array(normalizedFilter).min(1),
       _groupType: z.enum(['and', 'or']).optional(),
+      _constraints: filterConstraints,
     }),
   ]))
   const analyticsRowsRequest = z.strictObject({

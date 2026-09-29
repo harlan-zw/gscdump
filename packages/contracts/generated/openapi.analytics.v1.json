@@ -261,6 +261,13 @@
           {
             "additionalProperties": false,
             "properties": {
+              "_constraints": {
+                "additionalProperties": {},
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
               "_filters": {
                 "items": {
                   "anyOf": [
@@ -386,6 +393,13 @@
           {
             "additionalProperties": false,
             "properties": {
+              "_constraints": {
+                "additionalProperties": {},
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
               "_filters": {
                 "items": {
                   "anyOf": [
