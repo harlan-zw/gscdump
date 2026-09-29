@@ -13,7 +13,7 @@
  * date is emitted exactly once, when finalized, and never revised. Cross-RUN
  * exactly-once is enforced upstream by the D1 `iceberg_ingested_days` ledger —
  * a later sync that re-emits a stabilized slice lands a fresh commit the sink
- * cannot see. WITHIN a commit, `dedupeByIdentity` collapses duplicate identity
+ * cannot see. WITHIN a commit, `clusterAndDedupe` collapses duplicate identity
  * tuples last-wins, so a retried/overlapping `emit` cannot double-count; reads
  * `SUM/GROUP BY` and never dedupe, so this commit boundary is the only guard.
  *
@@ -39,7 +39,7 @@
  * ADR-0021 R2-FIXES C5 (amendment 10): this sink is a THIN ADAPTER over the
  * `gsc.*` `IcebergDataset` registry instances (`./schema.ts`'s `gscDataset`,
  * built on `@gscdump/lakehouse`'s `defineIcebergDataset`) — the dedupe key
- * (`dedupeByIdentity`) and the physical pre-sort (`sortByClusterKey`) read
+ * and the physical pre-sort (both in `clusterAndDedupe`) read
  * `tableSpec.identityColumns`/`.clusterKey` from the dataset def instead of
  * the frozen `ICEBERG_SCHEMAS`/`TABLE_METADATA` constants (those constants
  * are themselves now def-derived — see `./schema.ts` — so this is a direct,
@@ -152,89 +152,84 @@ function toIntPartitionSiteId(value: unknown): number {
 }
 
 /**
- * Collapse buffered records that share an Iceberg identity tuple
- * (`site_id` + `search_type` + the table's natural key) to one survivor,
- * last-wins.
- *
- * The append commit is the ONLY dedup boundary in the Iceberg model: reads
- * `SUM(metric) GROUP BY <dimensions>` (never by the natural key), so two rows
- * with the same identity tuple double-count their metrics with no downstream
- * correction — the exact class the 2026-04 compaction corruption produced.
- *
- * Scope is the single commit. This guards the intra-commit case: a retried or
- * overlapping `emit` within one sink lifecycle, and byte-identical re-fetches.
- * Cross-RUN exactly-once is still the ingest ledger's job — a later sync that
- * re-emits a stabilized slice lands a fresh `icebergAppend` this function never
- * sees, so retiring that ledger requires a read-before-append (or equivalent),
- * not just this guard. Last-wins so a revised metric supersedes a stale one
- * when both are buffered.
- *
- * Keyed on `identityColumns` (which includes `site_id`/`search_type`), NOT the
- * bare table sortKey, so the same `(date, dimension)` across different sites or
- * search types is never collapsed.
+ * Compare two identity values the way the pre-2026-09 string-keyed dedupe
+ * did: `null`/`undefined` equal `''`, numbers order numerically, anything else
+ * orders by its string form. Two values compare equal exactly when their
+ * `${v ?? ''}` forms match, so a collapse here is the same collapse the old
+ * `Map<string, …>` key produced.
  */
-function dedupeByIdentity(table: IcebergTableName, records: IcebergRecord[]): IcebergRecord[] {
-  if (records.length < 2)
-    return records
-  // Read from the dataset def (ADR-0021 amendment 3: identity + dims +
-  // naturalKey) rather than the frozen `ICEBERG_SCHEMAS` constant — the column
-  // NAME list is identical across encodings, so the encoding argument doesn't
-  // matter here; `'int'` is used as an arbitrary fixed choice.
-  const key = gscDataset(table, 'int').tableSpec.identityColumns
-  const seen = new Map<string, IcebergRecord>()
-  for (const rec of records) {
-    let identity = ''
-    for (let index = 0; index < key.length; index++) {
-      if (index > 0)
-        identity += '\0'
-      identity += `${rec[key[index]!] ?? ''}`
-    }
-    seen.set(identity, rec)
-  }
-  // Fast path: no collisions, return the original array untouched.
-  return seen.size === records.length ? records : [...seen.values()]
+function compareIdentityValue(av: unknown, bv: unknown): number {
+  if (av === bv)
+    return 0
+  if (typeof av === 'number' && typeof bv === 'number')
+    return av - bv
+  const as = `${av ?? ''}`
+  const bs = `${bv ?? ''}`
+  if (as === bs)
+    return 0
+  return as < bs ? -1 : 1
 }
 
 /**
- * Reorder a commit's records into `clusterKey` (dimension-first) order before
- * handing them to icebird.
+ * Sort a commit's records into `clusterKey` (dimension-first) order, then
+ * collapse records that share an Iceberg identity tuple (`site_id` +
+ * `search_type` + the table's natural key) to one survivor, last-wins. Works
+ * IN PLACE on `records` and returns it truncated to the survivors.
  *
- * icebird splits the buffer into one parquet file per partition (site_id,
- * search_type, month(date)); clustering the buffer first means each of those
+ * Why sort-then-collapse and not a `Map<identity, record>`: a whale job
+ * buffers hundreds of thousands of records in a 128 MB isolate. A string
+ * identity key per record costs about as much as the record itself, and the
+ * old path held the buffer, the keyed map and a sorted copy at once. Sorting
+ * by `clusterKey` and then by the remaining identity columns makes duplicates
+ * adjacent, so one linear pass removes them with no extra allocation.
+ *
+ * Clustering: icebird splits the buffer into one parquet file per partition
+ * (site_id, search_type, month(date)); clustering first means each of those
  * files lands dimension-sorted, so its row groups carry tight per-`url`/`query`
- * bounds (row-group skipping for `WHERE url = …`) and its repeated dimension
- * values form long dictionary/RLE runs instead of being interleaved across
- * appends. Same mechanism the DuckDB compaction `ORDER BY clusterKey` exploits,
- * where it measured ~28-42% smaller files and ~2.5x faster point lookups on
- * real data. Correctness-safe: reads aggregate `SUM(metric) GROUP BY <dims>`, so
- * physical row order never affects a result. A stable sort keeps the
- * last-wins dedup survivor intact for equal cluster keys.
+ * bounds and its repeated dimension values form long dictionary/RLE runs.
+ * Same mechanism the DuckDB compaction `ORDER BY clusterKey` exploits (~28-42%
+ * smaller files, ~2.5x faster point lookups on real data). Correctness-safe:
+ * reads aggregate `SUM(metric) GROUP BY <dims>`, so physical order never
+ * affects a result.
+ *
+ * Dedupe: the append commit is the ONLY dedup boundary in the Iceberg model.
+ * Reads `SUM(metric) GROUP BY <dimensions>` (never by the natural key), so two
+ * rows with the same identity tuple double-count with no downstream correction
+ * (the 2026-04 compaction corruption class). Scope is the single commit: a
+ * retried or overlapping `emit` within one sink lifecycle. Cross-RUN
+ * exactly-once is still the ingest ledger's job. `Array.prototype.sort` is
+ * stable, so within a run of equal identities the last element is the last
+ * one emitted: a revised metric supersedes a stale one. Keyed on
+ * `identityColumns` (which include `site_id`/`search_type`), so the same
+ * `(date, dimension)` across sites or search types never collapses.
  */
-function sortByClusterKey(table: IcebergTableName, records: IcebergRecord[]): IcebergRecord[] {
-  // Cluster key is encoding-independent (column names, not values) — same
-  // rationale as `dedupeByIdentity` above.
-  const cols = gscDataset(table, 'int').tableSpec.clusterKey ?? []
-  if (cols.length === 0 || records.length < 2)
+function clusterAndDedupe(table: IcebergTableName, records: IcebergRecord[]): IcebergRecord[] {
+  if (records.length < 2)
     return records
-  return records.slice().sort((a, b) => {
-    for (const col of cols) {
-      const av = a[col]
-      const bv = b[col]
-      if (av === bv)
-        continue
-      if (av == null)
-        return -1
-      if (bv == null)
-        return 1
-      if (typeof av === 'number' && typeof bv === 'number')
-        return av - bv
-      const as = String(av)
-      const bs = String(bv)
-      if (as !== bs)
-        return as < bs ? -1 : 1
+  // Column names are encoding-independent, so `'int'` is an arbitrary fixed
+  // choice (ADR-0021 amendment 3: read from the dataset def).
+  const spec = gscDataset(table, 'int').tableSpec
+  const cluster = spec.clusterKey ?? []
+  const order = [...cluster, ...spec.identityColumns.filter(col => !cluster.includes(col))]
+  const compare = (a: IcebergRecord, b: IcebergRecord): number => {
+    for (const col of order) {
+      const c = compareIdentityValue(a[col], b[col])
+      if (c !== 0)
+        return c
     }
     return 0
-  })
+  }
+  records.sort(compare)
+  let write = 0
+  for (let read = 0; read < records.length; read++) {
+    const rec = records[read]!
+    // A following record with the same identity supersedes this one.
+    if (read + 1 < records.length && compare(rec, records[read + 1]!) === 0)
+      continue
+    records[write++] = rec
+  }
+  records.length = write
+  return records
 }
 
 /**
@@ -351,9 +346,10 @@ export function createIcebergAppendSink(options: IcebergAppendSinkOptions): Iceb
       for (const [table, records] of buffers) {
         if (records.length === 0)
           continue
-        // Dedup at the commit boundary — the only dedup point in the append
-        // model (reads SUM/GROUP BY, never by natural key). See dedupeByIdentity.
-        const deduped = sortByClusterKey(table, dedupeByIdentity(table, records))
+        // Dedup at the commit boundary, the only dedup point in the append
+        // model (reads SUM/GROUP BY, never by natural key). In place: the
+        // buffer is private and cleared below. See clusterAndDedupe.
+        const deduped = clusterAndDedupe(table, records)
         await icebergAppendRetrying(
           {
             catalog: conn.catalog,
