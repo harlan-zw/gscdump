@@ -6,9 +6,11 @@
   fetchGscTopN: function
   GSC_API_CAPABILITIES: object
   gscSyncFanout: function
+  hostPagePattern: function
   ledgerTablesForGscSync: function
   planGscBackfillDates: function
   planGscSyncWork: function
+  requestAggregation: function
   runGscSearchAppearanceContextSlice: function
   runGscSyncSlice: function
   tablesCoveredByGscSync: function
