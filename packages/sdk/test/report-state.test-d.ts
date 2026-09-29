@@ -28,4 +28,9 @@ describe('Rows filter', () => {
   it('accepts query-builder filters', () => {
     expectTypeOf(and(between(date, '2026-01-01', '2026-01-31'), contains(query, 'seo'))).toExtend<RowsFilter>()
   })
+
+  it('rejects a value that is not a filter', () => {
+    expectTypeOf({ _filters: 'query' }).not.toExtend<RowsFilter>()
+    expectTypeOf({ dimension: 'query', operator: 'equals', expression: 'seo' }).not.toExtend<RowsFilter>()
+  })
 })

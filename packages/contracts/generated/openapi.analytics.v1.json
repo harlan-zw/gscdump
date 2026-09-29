@@ -262,10 +262,8 @@
             "additionalProperties": false,
             "properties": {
               "_constraints": {
-                "additionalProperties": {},
-                "propertyNames": {
-                  "type": "string"
-                },
+                "additionalProperties": false,
+                "properties": {},
                 "type": "object"
               },
               "_filters": {
@@ -394,10 +392,8 @@
             "additionalProperties": false,
             "properties": {
               "_constraints": {
-                "additionalProperties": {},
-                "propertyNames": {
-                  "type": "string"
-                },
+                "additionalProperties": false,
+                "properties": {},
                 "type": "object"
               },
               "_filters": {
