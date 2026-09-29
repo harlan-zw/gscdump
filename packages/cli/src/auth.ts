@@ -468,7 +468,7 @@ export async function getAuth(opts: GetAuthOptions = {}): Promise<OAuth2Client> 
 }
 
 /** A stale service-account pointer (missing file or malformed JSON) is ignorable. */
-function isStaleServiceAccountPointer(error: unknown): boolean {
+export function isStaleServiceAccountPointer(error: unknown): boolean {
   if (error instanceof SyntaxError)
     return true
   return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT'

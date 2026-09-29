@@ -74,6 +74,7 @@ it('reports the Hosted account and commands without token details', async () => 
   const result = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])
   expect(result).toMatchObject({ authenticated: true, mode: 'hosted', account: 'user@example.com' })
   expect(result.commands).toContain('query')
+  expect(result.commands).toContain('bing login')
   expect(result.commands).not.toContain('sync')
   expect(JSON.stringify(result)).not.toContain(hosted.apiKey)
 })

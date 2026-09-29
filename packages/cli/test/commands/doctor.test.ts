@@ -21,7 +21,8 @@ const mocks = vi.hoisted(() => ({
   getWatermarks: vi.fn(),
 }))
 
-vi.mock('../../src/auth', () => ({
+vi.mock('../../src/auth', async importOriginal => ({
+  isStaleServiceAccountPointer: (await importOriginal<typeof import('../../src/auth')>()).isStaleServiceAccountPointer,
   resolveBYOK: mocks.resolveBYOK,
   loadTokens: mocks.loadTokens,
   resolveAuth: mocks.resolveAuth,
@@ -122,6 +123,25 @@ describe('doctor command', () => {
     expect(result.checks).toContainEqual({ name: 'auth', status: 'pass', detail: 'service account reader@project.iam.gserviceaccount.com' })
     expect(mocks.resolveBYOK).not.toHaveBeenCalled()
     expect(mocks.localSites).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    ['a missing key file', () => Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' })],
+    ['a malformed key file', () => new SyntaxError('Unexpected end of JSON input')],
+  ])('warns about a stale service-account pointer with %s, then checks environment credentials', async (_label, failure) => {
+    mocks.resolveServiceAccount.mockRejectedValue(failure())
+    mocks.resolveBYOK.mockReturnValue('env-token')
+    const result = await run()
+    expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth.service_account', status: 'warn' }))
+    expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth', status: 'pass', detail: expect.stringContaining('environment credentials') }))
+    expect(tokenInfoCalls()).toEqual(['access_token=env-token'])
+  })
+
+  it('fails on a service-account key of the wrong type', async () => {
+    mocks.resolveServiceAccount.mockRejectedValue(new Error('key.json is not a service-account key (type=authorized_user)'))
+    mocks.resolveBYOK.mockReturnValue('env-token')
+    const result = await run()
+    expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth', status: 'fail', detail: expect.stringContaining('not a service-account key') }))
   })
 
   it('refreshes saved tokens before asking Google about them', async () => {

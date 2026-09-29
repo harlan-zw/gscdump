@@ -7,7 +7,7 @@ import { defineCommand } from 'citty'
 import { resolveSiteInput } from 'gscdump'
 import { googleSearchConsole } from 'gscdump/client'
 import { ofetch } from 'ofetch'
-import { getAuth, loadTokens, resolveAuth, resolveBYOK, resolveServiceAccount } from '../auth'
+import { getAuth, isStaleServiceAccountPointer, loadTokens, resolveAuth, resolveBYOK, resolveServiceAccount } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
 import { getHostedAccount, resolveAuthentication } from '../auth-state'
 import { doctorCommandMeta } from '../command-meta'
@@ -88,7 +88,15 @@ function describeAuthSource(envKeys: Set<string>, byok: ReturnType<typeof resolv
 
 async function checkAuth(envKeys: Set<string>): Promise<{ checks: Check[], liveToken: string | null }> {
   const checks: Check[] = []
-  const serviceAccount = await resolveServiceAccount().catch((error: unknown) => error instanceof Error ? error : new Error(String(error)))
+  const serviceAccount = await resolveServiceAccount().catch((error: unknown) => {
+    // A stale pointer (missing file or malformed JSON) falls through to
+    // environment and saved tokens, exactly like `resolveAuth`.
+    if (isStaleServiceAccountPointer(error)) {
+      checks.push({ name: 'auth.service_account', status: 'warn', detail: `ignored: ${error instanceof Error ? error.message : String(error)}` })
+      return null
+    }
+    return error instanceof Error ? error : new Error(String(error))
+  })
   if (serviceAccount instanceof Error) {
     checks.push({ name: 'auth', status: 'fail', detail: `service account: ${serviceAccount.message}` })
     return { checks, liveToken: null }

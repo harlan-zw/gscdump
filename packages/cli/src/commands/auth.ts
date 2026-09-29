@@ -43,6 +43,7 @@ export const HOSTED_COMMANDS = [
   'sitemaps lastmod',
   'sitemaps export',
   'indexing urls',
+  'bing login',
   'bing sites',
   'bing status',
   'bing dump',

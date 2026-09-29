@@ -67,7 +67,7 @@ gscdump query --site example.com -d page -f json
 ```
 
 Hosted mode can run only these commands: `sites`, `query`, `sitemaps current`, `sitemaps history`, `sitemaps membership`,
-`sitemaps lastmod`, `sitemaps export`, `indexing urls`, and the `bing` commands `sites`, `status`, `dump`, `inspect`, and `verify`.
+`sitemaps lastmod`, `sitemaps export`, `indexing urls`, and the `bing` commands `login --site`, `sites`, `status`, `dump`, `inspect`, and `verify`.
 Every other command calls Google, so it needs Local mode: `sync`, `inspect`, `query --live`, `analyze --live`, `report --live`,
 `sites add|get|delete|verify*`, `sitemaps list|get|submit|delete`, `indexing submit|remove|status|batch`, `entities`, and `mcp`.
 In Hosted mode these commands stop with this error: `This command calls Google, so it needs Local mode.`
