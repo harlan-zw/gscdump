@@ -1,5 +1,5 @@
 import type { GscdumpV1Client } from '../src/v1/http'
-import { between, clicks, date, gsc, impressions, query } from 'gscdump/query'
+import { and, between, clicks, contains, date, gsc, impressions, query } from 'gscdump/query'
 import { describe, expectTypeOf, it } from 'vitest'
 
 type ReportInput = Parameters<GscdumpV1Client['queryAnalyticsReport']>[0]
@@ -19,5 +19,18 @@ describe('Report state', () => {
   it('accepts query-builder state for a detail Report', () => {
     const state = gsc.select(date, clicks).where(between(date, '2026-01-01', '2026-01-31')).getState()
     expectTypeOf(state).toExtend<DetailState>()
+  })
+})
+
+type RowsFilter = Parameters<GscdumpV1Client['queryAnalyticsRows']>[0]['body']['filter']
+
+describe('Rows filter', () => {
+  it('accepts query-builder filters', () => {
+    expectTypeOf(and(between(date, '2026-01-01', '2026-01-31'), contains(query, 'seo'))).toExtend<RowsFilter>()
+  })
+
+  it('rejects a value that is not a filter', () => {
+    expectTypeOf({ _filters: 'query' }).not.toExtend<RowsFilter>()
+    expectTypeOf({ dimension: 'query', operator: 'equals', expression: 'seo' }).not.toExtend<RowsFilter>()
   })
 })

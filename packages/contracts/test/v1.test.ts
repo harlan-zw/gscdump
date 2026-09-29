@@ -927,3 +927,31 @@ describe('@gscdump/contracts/v1 generated documents', () => {
     }
   })
 })
+
+// `between()`, `and()`, and every other `gscdump/query` operator emit a
+// `_constraints` key, a type-level marker that is `{}` at runtime. The strict
+// filter schema rejected it, so builder filters could not go into a rows query.
+describe('rows filter accepts query-builder output', () => {
+  it('parses a filter carrying `_constraints` at every level', () => {
+    const body = createGscdumpV1Protocol().surfaces.analytics.operations.queryRows.request.body!
+    const result = body.safeParse({
+      dimensions: ['query'],
+      filter: {
+        _constraints: {},
+        _filters: [{ dimension: 'date', operator: 'between', expression: '2026-01-01', expression2: '2026-01-31' }],
+        _nestedGroups: [{ _constraints: {}, _filters: [{ dimension: 'query', operator: 'contains', expression: 'seo' }] }],
+        _groupType: 'and',
+      },
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('still rejects an unknown filter key', () => {
+    const body = createGscdumpV1Protocol().surfaces.analytics.operations.queryRows.request.body!
+    const result = body.safeParse({
+      dimensions: ['query'],
+      filter: { _filters: [{ dimension: 'query', operator: 'contains', expression: 'seo' }], nope: true },
+    })
+    expect(result.success).toBe(false)
+  })
+})
