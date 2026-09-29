@@ -45,6 +45,20 @@ describe('classifyError', () => {
     expect(e.kind).toBe('rate-limited')
   })
 
+  it.each([
+    [403, 'Search Analytics load quota exceeded.', 'quotaExceeded', 'load'],
+    [429, 'Search Analytics load quota exceeded. Please try again later.', undefined, 'load'],
+    [403, 'Quota exceeded for quota metric \'Queries\' and limit \'Queries per day\'.', 'dailyLimitExceeded', 'daily'],
+    [403, 'Daily Limit Exceeded', undefined, 'daily'],
+    [429, 'Quota exceeded for quota metric \'QPS\' and limit \'QPS per user\'.', 'rateLimitExceeded', 'rate'],
+    [429, 'Too Many Requests', undefined, 'rate'],
+  ] as const)('names the quota a %i %j refusal spent', (status, googleMessage, reason, quota) => {
+    const e = classifyError(ofetchLike(status, `[POST] "https://searchconsole.googleapis.com/v1/x": ${status}`, {
+      data: { error: { code: status, message: googleMessage, ...(reason ? { errors: [{ reason }] } : {}) } },
+    }))
+    expect(e).toMatchObject({ kind: 'rate-limited', quota })
+  })
+
   it('classifies 403 without quota keyword as permission-denied', () => {
     const e = classifyError(ofetchLike(403, 'Permission denied for site'))
     expect(e.kind).toBe('permission-denied')

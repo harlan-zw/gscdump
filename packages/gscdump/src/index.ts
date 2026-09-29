@@ -14,7 +14,7 @@ export {
   parseGoogleError,
   rethrowAsGscApiError,
 } from './core/errors'
-export type { GscApiErrorInfo, GscError, GscErrorKind } from './core/errors'
+export type { GscApiErrorInfo, GscError, GscErrorKind, GscQuota } from './core/errors'
 export {
   addDays,
   countDays,
