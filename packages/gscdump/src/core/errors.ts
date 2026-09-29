@@ -11,10 +11,22 @@ export type GscErrorKind
     | 'storage'
     | 'transport'
 
+/**
+ * Which Google quota a `rate-limited` refusal spent. Each one refills on its
+ * own clock, so a caller picks its backoff from this:
+ *
+ * - `load`: the Search Analytics load quota. Google charges it by query cost
+ *   (a `page,query,date` query on a large Site is the expensive shape) over
+ *   10 minute windows, so a retry sooner than that is refused again.
+ * - `daily`: a per-day cap. It resets at Pacific midnight.
+ * - `rate`: a per-second or per-minute cap. A short backoff clears it.
+ */
+export type GscQuota = 'load' | 'daily' | 'rate'
+
 export type GscError
   = | { kind: 'auth-expired', message: string, cause: unknown }
     | { kind: 'permission-denied', message: string, cause: unknown }
-    | { kind: 'rate-limited', message: string, retryAfter?: number, cause: unknown }
+    | { kind: 'rate-limited', quota: GscQuota, message: string, retryAfter?: number, cause: unknown }
     | { kind: 'not-found', message: string, cause: unknown }
     | { kind: 'validation', message: string, cause: unknown }
     | { kind: 'storage', message: string, cause: unknown }
@@ -90,7 +102,14 @@ function extractRetryAfter(error: unknown): number | undefined {
 }
 
 // Google words load-quota 403s as "quota exceeded" and per-second limits as "QPS".
-const QUOTA_MESSAGE_RE = /quota|rate\s*limit|\bqps\b/i
+const QUOTA_MESSAGE_RE = /quota|rate\s*limit|\bqps\b|daily\s*limit/i
+const LOAD_QUOTA_MESSAGE_RE = /load\s*quota/i
+const DAILY_QUOTA_MESSAGE_RE = /daily\s*limit|per\s*day|for\s*the\s*day/i
+const DAILY_QUOTA_REASONS = new Set([
+  'dailyLimitExceeded',
+  'dailyLimitExceededUnreg',
+  'variableTermExpiredDailyExceeded',
+])
 
 /** GSC/Google API `reason` codes that indicate quota/rate exhaustion (not a real permission failure). */
 const QUOTA_REASONS = new Set([
@@ -148,6 +167,15 @@ function isQuotaCondition(cause: unknown, message: string): boolean {
   return QUOTA_MESSAGE_RE.test(message)
 }
 
+function quotaOf(cause: unknown, message: string): GscQuota {
+  if (LOAD_QUOTA_MESSAGE_RE.test(message))
+    return 'load'
+  const reason = extractReason(cause)
+  if ((reason && DAILY_QUOTA_REASONS.has(reason)) || DAILY_QUOTA_MESSAGE_RE.test(message))
+    return 'daily'
+  return 'rate'
+}
+
 /**
  * Classify an unknown error into a `GscError` discriminated union.
  * Transport is the catch-all — anything without a recognizable status ends up there.
@@ -160,13 +188,13 @@ export function classifyError(cause: unknown): GscError {
     return { kind: 'auth-expired', message, cause }
 
   if (status === 429)
-    return { kind: 'rate-limited', message, retryAfter: extractRetryAfter(cause), cause }
+    return { kind: 'rate-limited', quota: quotaOf(cause, message), message, retryAfter: extractRetryAfter(cause), cause }
 
   if (status === 403) {
     // GSC folds daily-quota exhaustion into 403. Prefer the structured `reason` from the
     // Google error envelope; fall back to message substring for older/unknown shapes.
     if (isQuotaCondition(cause, message))
-      return { kind: 'rate-limited', message, retryAfter: extractRetryAfter(cause), cause }
+      return { kind: 'rate-limited', quota: quotaOf(cause, message), message, retryAfter: extractRetryAfter(cause), cause }
     // A 403 means the credentials work but lack access. Signing in again
     // does not fix it, so it is not `auth-expired`.
     return { kind: 'permission-denied', message, cause }
