@@ -202,6 +202,12 @@ function compareIdentityValue(av: unknown, bv: unknown): number {
  * one emitted: a revised metric supersedes a stale one. Keyed on
  * `identityColumns` (which include `site_id`/`search_type`), so the same
  * `(date, dimension)` across sites or search types never collapses.
+ *
+ * Invariant: the collapse key equals `identityColumns` alone only while every
+ * `clusterKey` column is also an identity column. A future table whose
+ * clusterKey gains a non-identity dimension would silently weaken this guard
+ * (equal identities sorting apart, both committing), so the spec is checked
+ * here and a violation refuses the commit.
  */
 function clusterAndDedupe(table: IcebergTableName, records: IcebergRecord[]): IcebergRecord[] {
   if (records.length < 2)
@@ -210,6 +216,10 @@ function clusterAndDedupe(table: IcebergTableName, records: IcebergRecord[]): Ic
   // choice (ADR-0021 amendment 3: read from the dataset def).
   const spec = gscDataset(table, 'int').tableSpec
   const cluster = spec.clusterKey ?? []
+  for (const col of cluster) {
+    if (!spec.identityColumns.includes(col))
+      throw new TypeError(`clusterAndDedupe: clusterKey column '${col}' is not an identity column of '${table}'. Dedupe would silently key on cluster plus identity.`)
+  }
   const order = [...cluster, ...spec.identityColumns.filter(col => !cluster.includes(col))]
   const compare = (a: IcebergRecord, b: IcebergRecord): number => {
     for (const col of order) {
@@ -349,7 +359,17 @@ export function createIcebergAppendSink(options: IcebergAppendSinkOptions): Iceb
         // Dedup at the commit boundary, the only dedup point in the append
         // model (reads SUM/GROUP BY, never by natural key). In place: the
         // buffer is private and cleared below. See clusterAndDedupe.
-        const deduped = clusterAndDedupe(table, records)
+        let deduped: IcebergRecord[]
+        try {
+          deduped = clusterAndDedupe(table, records)
+        }
+        catch (cause) {
+          // A clusterKey/identityColumns spec violation fails only its own
+          // table, like any other flush failure: the other tables still
+          // commit and the failed table's slices stay unledgered.
+          failed.push({ table, error: engineErrors.sinkTableFlushFailed(table, cause) })
+          continue
+        }
         await icebergAppendRetrying(
           {
             catalog: conn.catalog,
