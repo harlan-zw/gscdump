@@ -1,12 +1,23 @@
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { gscdumpAvailableSiteSchema } from '@gscdump/contracts'
 import { z } from 'zod'
 import { HOSTED_KEY_REJECTED } from './error-handler'
 import { useCliRuntime } from './runtime'
 
-export const HOSTED_SESSION_REJECTED = 'gscdump.com rejected the CLI session. Run `gscdump auth login --mode cloud` again.'
+export const HOSTED_SESSION_REJECTED = 'gscdump.com rejected the CLI session. Run `gscdump auth login --mode hosted` again.'
+
+/** A command that calls Google ran in Hosted mode. */
+export const LOCAL_MODE_REQUIRED = [
+  'This command calls Google, so it needs Local mode.',
+  'Hosted mode reads your gscdump.com record and never calls Google.',
+  'If you want Local mode, run `gscdump auth login --mode local`.',
+].join('\n')
+
+/** Hosted mode is selected, but no CLI session or API key exists. */
+export const HOSTED_NOT_SET_UP = 'Hosted credentials are missing. Run `gscdump auth login --mode hosted`, or set GSCDUMP_API_KEY.'
+
+const SAVED_STATE_INVALID = 'The saved access mode is invalid. Run `gscdump auth login --mode local` or `gscdump auth login --mode hosted`.'
 
 const apiRootSchema = z.url().transform(value => value.replace(/\/+$/, '')).refine((value) => {
   const url = new URL(value)
@@ -15,24 +26,47 @@ const apiRootSchema = z.url().transform(value => value.replace(/\/+$/, '')).refi
 }, 'Use HTTPS, or HTTP on loopback, for the API root')
 const stateSchema = z.union([
   z.object({ _tag: z.literal('Local') }),
-  z.object({ _tag: z.literal('Cloud'), apiRoot: apiRootSchema, apiKey: z.string().trim().regex(/^gsd_user_\S+$/) }),
-  z.object({ _tag: z.literal('Cloud'), apiRoot: apiRootSchema, sessionId: z.string().regex(/^[a-f0-9]{64}$/) }),
+  z.object({ _tag: z.literal('Hosted'), apiRoot: apiRootSchema, apiKey: z.string().trim().regex(/^gsd_user_\S+$/) }),
+  z.object({ _tag: z.literal('Hosted'), apiRoot: apiRootSchema, sessionId: z.string().regex(/^[a-f0-9]{64}$/) }),
 ])
 export type Authentication = z.infer<typeof stateSchema>
-export type CloudAuthentication = Extract<Authentication, { _tag: 'Cloud' }>
+export type HostedAuthentication = Extract<Authentication, { _tag: 'Hosted' }>
 
-export function parseAuthMode(value: unknown): 'cloud' | 'local' | undefined {
+/** The two access modes. Local calls Google with your own credentials. Hosted reads your gscdump.com record. */
+export type AccessMode = 'local' | 'hosted'
+
+export function parseAuthMode(value: unknown): AccessMode | undefined {
   if (value === undefined || value === '')
     return undefined
-  if (value === 'cloud' || value === 'local')
+  if (value === 'local' || value === 'hosted')
     return value
-  throw new Error('Authentication mode must be cloud or local.')
+  throw new Error('Access mode must be local or hosted.')
+}
+
+export type AccessModeSource = 'flag' | 'env' | 'saved' | 'api-key' | 'default'
+
+/**
+ * Pick the access mode. Pure. Order: the `--mode` flag, then
+ * `GSCDUMP_AUTH_MODE`, then the saved mode, then `GSCDUMP_API_KEY` (Hosted).
+ * Local applies when nothing is set.
+ */
+export function resolveAccessMode(input: { flag?: AccessMode, env?: string, saved?: AccessMode, apiKey?: string }): { mode: AccessMode, source: AccessModeSource } {
+  if (input.flag)
+    return { mode: input.flag, source: 'flag' }
+  const env = parseAuthMode(input.env)
+  if (env)
+    return { mode: env, source: 'env' }
+  if (input.saved)
+    return { mode: input.saved, source: 'saved' }
+  if (input.apiKey)
+    return { mode: 'hosted', source: 'api-key' }
+  return { mode: 'local', source: 'default' }
 }
 
 export function parseAuthentication(value: unknown): Authentication {
   const parsed = stateSchema.safeParse(value)
   if (!parsed.success)
-    throw new Error('Invalid authentication. Use a CLI session or gscdump user API key with a trusted API root.')
+    throw new Error('Invalid Hosted credentials. Use a CLI session or a gscdump user API key with a trusted API root.')
   return parsed.data
 }
 
@@ -55,55 +89,74 @@ export async function clearAuthentication(): Promise<void> {
   await fs.rm(path.join(useCliRuntime().configDir, 'authentication.json'), { force: true })
 }
 
-export async function revokeCloudSession(state: CloudAuthentication): Promise<void> {
+export async function revokeHostedSession(state: HostedAuthentication): Promise<void> {
   if (!('sessionId' in state))
     return
-  await cloudRequest(state, '/cli/auth/logout', { method: 'POST' })
+  await hostedRequest(state, '/cli/auth/logout', { method: 'POST' })
 }
 
-export async function resolveAuthentication(): Promise<Authentication> {
-  const runtime = useCliRuntime()
-  const env = runtime.environment
-  const mode = runtime.authModeOverride ?? parseAuthMode(env.GSCDUMP_AUTH_MODE)
-  if (mode === 'local')
-    return { _tag: 'Local' }
-  const body = await fs.readFile(path.join(runtime.configDir, 'authentication.json'), 'utf8').catch((error: NodeJS.ErrnoException) => {
+async function readSavedAuthentication(configDir: string): Promise<Authentication | null> {
+  const body = await fs.readFile(path.join(configDir, 'authentication.json'), 'utf8').catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT')
       return null
     throw error
   })
-  const saved = body === null ? null : stateSchema.safeParse(JSON.parse(body))
-  if (saved && !saved.success)
-    throw new Error('Saved authentication is invalid. Run `gscdump auth login --mode cloud` or `--mode local`.')
-  const state = saved?.success ? saved.data : null
-  if (mode !== 'cloud' && state?._tag === 'Local')
-    return state
-  if (env.GSCDUMP_API_KEY) {
-    const parsed = stateSchema.safeParse({
-      _tag: 'Cloud',
-      apiKey: env.GSCDUMP_API_KEY,
-      apiRoot: env.GSCDUMP_API_ROOT ?? (state?._tag === 'Cloud' ? state.apiRoot : 'https://gscdump.com/api'),
-    })
-    if (!parsed.success)
-      throw new Error('Invalid hosted authentication. Set GSCDUMP_API_KEY to a gscdump user API key.')
-    return parsed.data
-  }
-  if (state?._tag === 'Cloud') {
-    if (env.GSCDUMP_API_ROOT && env.GSCDUMP_API_ROOT.replace(/\/+$/, '') !== state.apiRoot)
-      throw new Error('The API root changed. Run `gscdump auth login --mode cloud` for the new API root.')
-    return state
-  }
-  if (mode === 'cloud')
-    throw new Error('Hosted credentials are missing. Run `gscdump auth login --mode cloud`.')
-  return { _tag: 'Local' }
+  if (body === null)
+    return null
+  const saved = stateSchema.safeParse(JSON.parse(body))
+  if (!saved.success)
+    throw new Error(SAVED_STATE_INVALID)
+  return saved.data
 }
 
+/** The credentials of the selected access mode. Hosted without credentials throws {@link HOSTED_NOT_SET_UP}. */
+export async function resolveAuthentication(): Promise<Authentication> {
+  const runtime = useCliRuntime()
+  const env = runtime.environment
+  const flag = runtime.authModeOverride
+  const envMode = parseAuthMode(env.GSCDUMP_AUTH_MODE)
+  if ((flag ?? envMode) === 'local')
+    return { _tag: 'Local' }
+  const state = await readSavedAuthentication(runtime.configDir)
+  const { mode } = resolveAccessMode({ flag, env: envMode, saved: state ? (state._tag === 'Hosted' ? 'hosted' : 'local') : undefined, apiKey: env.GSCDUMP_API_KEY })
+  if (mode === 'local')
+    return { _tag: 'Local' }
+  if (env.GSCDUMP_API_KEY) {
+    const parsed = stateSchema.safeParse({
+      _tag: 'Hosted',
+      apiKey: env.GSCDUMP_API_KEY,
+      apiRoot: env.GSCDUMP_API_ROOT ?? (state?._tag === 'Hosted' ? state.apiRoot : 'https://gscdump.com/api'),
+    })
+    if (!parsed.success)
+      throw new Error('GSCDUMP_API_KEY is invalid. Set it to a gscdump user API key.')
+    return parsed.data
+  }
+  if (state?._tag === 'Hosted') {
+    if (env.GSCDUMP_API_ROOT && env.GSCDUMP_API_ROOT.replace(/\/+$/, '') !== state.apiRoot)
+      throw new Error('The API root changed. Run `gscdump auth login --mode hosted` for the new API root.')
+    return state
+  }
+  throw new Error(HOSTED_NOT_SET_UP)
+}
+
+const hostedSiteSchema = z.object({
+  siteId: z.string(),
+  siteUrl: z.string(),
+  syncStatus: z.string().nullable().optional(),
+  syncProgress: z.object({ completed: z.number(), total: z.number(), percent: z.number() }).passthrough().nullable().optional(),
+  lastSyncAt: z.number().nullable().optional(),
+  newestDateSynced: z.string().nullable().optional(),
+  oldestDateSynced: z.string().nullable().optional(),
+}).passthrough()
 const accountSchema = z.object({
   user: z.object({ publicId: z.string(), email: z.string() }),
-  sites: z.array(z.object({ siteId: z.string(), siteUrl: z.string() }).passthrough()),
+  sites: z.array(hostedSiteSchema),
 })
 
-export async function cloudRequest(state: CloudAuthentication, route: string, options: RequestInit = {}): Promise<unknown> {
+/** One Site in the hosted record, with its hosted sync state. */
+export type HostedSite = z.infer<typeof hostedSiteSchema>
+
+export async function hostedRequest(state: HostedAuthentication, route: string, options: RequestInit = {}): Promise<unknown> {
   const response = await fetch(`${state.apiRoot}${route}`, {
     ...options,
     headers: { 'Content-Type': 'application/json', ...('sessionId' in state ? { 'x-cli-session': state.sessionId } : { 'x-api-key': state.apiKey }) },
@@ -123,31 +176,19 @@ export async function cloudRequest(state: CloudAuthentication, route: string, op
   return response.status === 204 ? undefined : response.json()
 }
 
-export function cloudCredential(state: CloudAuthentication): string {
+export function hostedCredential(state: HostedAuthentication): string {
   return 'sessionId' in state ? state.sessionId : state.apiKey
 }
 
-export async function getCloudAccount(state: CloudAuthentication): Promise<z.infer<typeof accountSchema>> {
-  const result = accountSchema.safeParse(await cloudRequest(state, '/cli/me'))
+export async function getHostedAccount(state: HostedAuthentication): Promise<z.infer<typeof accountSchema>> {
+  const result = accountSchema.safeParse(await hostedRequest(state, '/cli/me'))
   if (!result.success)
-    throw new Error('The hosted API returned invalid account data.')
+    throw new Error('gscdump.com returned invalid account data.')
   return result.data
 }
 
-export type HostedSite = z.infer<typeof gscdumpAvailableSiteSchema>
-
-/** The account's Sites with hosted sync status and progress. Reads `/cli/sites/available`. */
-export async function getCloudSites(state: CloudAuthentication): Promise<HostedSite[]> {
-  const result = gscdumpAvailableSiteSchema.array().safeParse(await cloudRequest(state, '/cli/sites/available'))
-  if (!result.success)
-    throw new Error('The hosted API returned invalid Site data.')
-  return result.data
-}
-
-/** One line of hosted sync state, for example `syncing: 41 of 90 days (45%)`. Undefined for a Site gscdump.com does not sync. */
-export function formatHostedSync(site: HostedSite): string | undefined {
-  if (!site.registered)
-    return undefined
+/** One line of hosted sync state, for example `syncing: 41 of 90 days (45%)`. */
+export function formatHostedSync(site: HostedSite): string {
   const status = site.syncStatus ?? 'pending'
   const progress = site.syncProgress && site.syncProgress.total > 0 && status !== 'synced'
     ? `: ${site.syncProgress.completed.toLocaleString('en-US')} of ${site.syncProgress.total.toLocaleString('en-US')} days (${Math.round(site.syncProgress.percent)}%)`

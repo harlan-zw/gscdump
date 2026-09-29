@@ -120,9 +120,9 @@ describe('resolveAuth service-account handling', () => {
     const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-resolve-auth-'))
     const runtime = createCliRuntime({
       configDir,
-      environment: { GSC_SERVICE_ACCOUNT_JSON: path.join(configDir, 'missing-key.json') },
+      environment: { GSC_SERVICE_ACCOUNT_JSON: path.join(configDir, 'missing-key.json'), GSC_CLIENT_ID: 'client-id', GSC_CLIENT_SECRET: 'client-secret' },
     })
-    await runWithCliRuntime(runtime, () => saveTokens({ provider: 'gscdump', access_token: 'a', refresh_token: 'r', expiry_date: Date.now() + 3_600_000 }))
+    await runWithCliRuntime(runtime, () => saveTokens({ access_token: 'a', refresh_token: 'r', expiry_date: Date.now() + 3_600_000 }))
 
     const auth = await runWithCliRuntime(runtime, () => resolveAuth({ interactive: false }))
 

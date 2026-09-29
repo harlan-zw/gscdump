@@ -10,7 +10,7 @@ export const dumpCommandMeta = {
 
 export const queryCommandMeta = {
   name: 'query',
-  description: 'Run a search analytics query (local Parquet by default, --live hits GSC API)',
+  description: 'Run a search analytics query (Store or hosted record; --live calls Google)',
 }
 
 export const sitesCommandMeta = {
@@ -65,7 +65,7 @@ export const authCommandMeta = {
   },
   login: {
     name: 'login',
-    description: 'Run OAuth flow and persist tokens (skip if BYOK env vars set)',
+    description: 'Set up Local mode (service account or OAuth client) or Hosted mode (--mode hosted)',
   },
   logout: {
     name: 'logout',

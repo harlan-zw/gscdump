@@ -16,8 +16,8 @@ afterEach(async () => {
 })
 
 it('uses one saved hosted state for subsequent commands', async () => {
-  await runWithCliRuntime(runtime, () => saveAuthentication({ _tag: 'Cloud', apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_secret' }))
-  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Cloud', apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_secret' })
+  await runWithCliRuntime(runtime, () => saveAuthentication({ _tag: 'Hosted', apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_secret' }))
+  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Hosted', apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_secret' })
 })
 
 it('honours explicit local selection when a hosted key is in the environment', async () => {
@@ -27,12 +27,12 @@ it('honours explicit local selection when a hosted key is in the environment', a
 })
 
 it('does not send a saved hosted key to an overridden API root', async () => {
-  await runWithCliRuntime(runtime, () => saveAuthentication({ _tag: 'Cloud', apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_secret' }))
+  await runWithCliRuntime(runtime, () => saveAuthentication({ _tag: 'Hosted', apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_secret' }))
   runtime.environment.GSCDUMP_API_ROOT = 'https://other.example/api'
   await expect(runWithCliRuntime(runtime, resolveAuthentication)).rejects.toThrow('API root')
 })
 
 it('rejects malformed saved state instead of switching to local credentials', async () => {
-  await fs.writeFile(path.join(runtime.configDir, 'authentication.json'), JSON.stringify({ _tag: 'Cloud' }))
-  await expect(runWithCliRuntime(runtime, resolveAuthentication)).rejects.toThrow('authentication')
+  await fs.writeFile(path.join(runtime.configDir, 'authentication.json'), JSON.stringify({ _tag: 'Hosted' }))
+  await expect(runWithCliRuntime(runtime, resolveAuthentication)).rejects.toThrow('saved access mode is invalid')
 })

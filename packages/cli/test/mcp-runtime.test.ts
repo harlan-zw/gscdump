@@ -51,8 +51,9 @@ describe('gscdump mcp runtime', () => {
   }
 
   async function saveTokens(accessToken: string): Promise<void> {
+    // Tokens from your own OAuth client; the client lets them refresh.
+    await fs.writeFile(path.join(configDir, 'config.json'), JSON.stringify({ dataDir: path.join(configDir, 'data'), clientId: 'client-id', clientSecret: 'client-secret' }))
     await fs.writeFile(path.join(configDir, 'tokens.json'), JSON.stringify({
-      provider: 'gscdump',
       access_token: accessToken,
       refresh_token: 'refresh-token',
       expiry_date: Date.now() + 3_600_000,
@@ -95,34 +96,20 @@ describe('gscdump mcp runtime', () => {
     expect(headers.get('authorization')).toBe('Bearer token-beside-broken-pointer')
   })
 
-  it('points a hosted 401 at GSCDUMP_API_KEY, not the local login flow', async () => {
-    await connect(
-      url => url.endsWith('/cli/gsc/sites')
-        ? Response.json({ error: { message: 'Invalid API key' } }, { status: 401 })
-        : undefined,
-      { GSCDUMP_API_KEY: 'gsd_user_test' },
-    )
+  it.each([
+    ['an API key', {}, { GSCDUMP_API_KEY: 'gsd_user_test' }],
+    ['a saved CLI session', { _tag: 'Hosted', apiRoot: 'https://gscdump.com/api', sessionId: 'a'.repeat(64) }, {}],
+  ])('points Hosted mode with %s at the gscdump.com MCP server without calling Google', async (_label, saved, environment) => {
+    if ('_tag' in saved)
+      await fs.writeFile(path.join(configDir, 'authentication.json'), JSON.stringify(saved))
+    await connect(undefined, environment as Record<string, string>)
 
     const result = await client.callTool({ name: 'list-sites', arguments: {} }) as CallToolResult
 
     expect(result.isError).toBe(true)
-    expect(text(result)).toContain('GSCDUMP_API_KEY')
-    expect(text(result)).not.toContain('gscdump auth login')
-  })
-
-  it('points a rejected cloud CLI session at browser login', async () => {
-    const sessionId = 'a'.repeat(64)
-    await fs.writeFile(path.join(configDir, 'authentication.json'), JSON.stringify({ _tag: 'Cloud', apiRoot: 'https://gscdump.com/api', sessionId }))
-    await connect(url => url.endsWith('/cli/gsc/sites')
-      ? Response.json({ error: { message: 'Invalid CLI session' } }, { status: 401 })
-      : undefined)
-
-    const result = await client.callTool({ name: 'list-sites', arguments: {} }) as CallToolResult
-
-    expect(result.isError).toBe(true)
-    expect(new Headers(fetchMock.mock.calls[0]![1]?.headers).get('x-cli-session')).toBe(sessionId)
-    expect(text(result)).toContain('gscdump auth login --mode cloud')
-    expect(text(result)).not.toContain('GSCDUMP_API_KEY')
+    expect(text(result)).toContain('https://gscdump.com/mcp')
+    expect(text(result)).toContain('gscdump auth login --mode local')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('points an expired BYOK access token at the MCP server configuration, not auth login', async () => {
@@ -162,9 +149,9 @@ describe('gscdump mcp runtime', () => {
 
     const result = await client.callTool({ name: 'list-sites', arguments: {} }) as CallToolResult
     expect(result.isError).toBe(true)
-    expect(text(result)).toContain('gscdump auth login')
-    expect(text(result)).toContain('gscdump auth login --mode cloud')
-    expect(text(result)).toContain('GSC_ACCESS_TOKEN')
+    expect(text(result)).toContain('gscdump auth login --mode local')
+    expect(text(result)).toContain('GSC_SERVICE_ACCOUNT_JSON')
+    expect(text(result)).toContain('https://gscdump.com/mcp')
     expect(text(result)).not.toMatch(/GSCDump|npx/)
     expect(fetchMock).not.toHaveBeenCalled()
   })

@@ -19,8 +19,6 @@ import { isEngineError } from '@gscdump/engine/errors'
 import { classifyError } from 'gscdump/errors'
 import { isQueryError } from 'gscdump/query'
 import { resolveBYOK, resolveServiceAccount } from '../auth'
-import { HOSTED_SESSION_REJECTED, resolveAuthentication } from '../auth-state'
-import { HOSTED_KEY_REJECTED, HOSTED_KEY_REJECTED_REASON } from '../error-handler'
 import { COMPARISON_FLAGS, PERIOD_FLAGS } from '../window'
 
 export type McpHandlerErrorKind
@@ -129,7 +127,7 @@ function httpStatus(error: unknown): number | undefined {
 }
 
 /** The authentication mode the failing call ran in; it decides the next step. */
-export type ApiErrorMode = 'cloud' | 'local' | 'byok' | 'service-account'
+export type ApiErrorMode = 'local' | 'env' | 'service-account'
 
 /**
  * The active authentication mode for error advice. Falls back to `local` when
@@ -139,9 +137,6 @@ export type ApiErrorMode = 'cloud' | 'local' | 'byok' | 'service-account'
  * one `resolveAuth` would keep outranking.
  */
 async function authenticationMode(): Promise<ApiErrorMode> {
-  const state = await resolveAuthentication().catch(() => null)
-  if (state?._tag === 'Cloud')
-    return 'cloud'
   // A stale pointer (missing or malformed key file) is ignorable here: it
   // falls through to BYOK and saved tokens, exactly like `resolveAuth`.
   const serviceAccount = await resolveServiceAccount().then(Boolean).catch(() => null)
@@ -149,7 +144,7 @@ async function authenticationMode(): Promise<ApiErrorMode> {
     return 'service-account'
   // A throw here only means no runtime context; fall back to the local advice.
   const byok = await Promise.resolve().then(() => resolveBYOK()).catch(() => null)
-  return byok ? 'byok' : 'local'
+  return byok ? 'env' : 'local'
 }
 
 /** Google OAuth grant failures that no `auth login`-unaware advice may miss. */
@@ -172,16 +167,12 @@ function nextStep(error: GscError, status: number, mode: ApiErrorMode): string {
   if (error.kind === 'rate-limited')
     return `Google quota or rate limit reached. Try again in ${error.retryAfter ? `${error.retryAfter}s` : 'a few minutes'}.`
   if (status === 403) {
-    if (mode === 'cloud')
-      return 'The gscdump.com account cannot open this Site. Check the Site is connected to your account at gscdump.com.'
     return 'The signed-in account cannot open this Site. Check its Search Console permissions, or run `gscdump auth status` to see the account.'
   }
   if (status === 401 || error.kind === 'auth-expired') {
-    if (mode === 'cloud')
-      return 'Run `gscdump auth login --mode cloud` in a terminal, then restart the MCP client.'
     if (mode === 'service-account')
       return 'Fix the service-account key (GSC_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS) in the MCP server configuration and restart the MCP client, or run `gscdump auth status`.'
-    if (mode === 'byok')
+    if (mode === 'env')
       return 'Refresh GSC_ACCESS_TOKEN (or GSC_CLIENT_ID, GSC_CLIENT_SECRET, and GSC_REFRESH_TOKEN) in the MCP server configuration and restart the MCP client.'
     return 'Run `gscdump auth login` in a terminal to connect again.'
   }
@@ -193,7 +184,7 @@ function nextStep(error: GscError, status: number, mode: ApiErrorMode): string {
 }
 
 /**
- * One line for a failed Google or hosted API call: the status, Google's own
+ * One line for a failed Google API call: the status, Google's own
  * explanation, and the next step. Returns `null` for an error with no HTTP
  * status, so the caller keeps its message.
  */
@@ -203,10 +194,6 @@ export function describeApiError(error: unknown, mode: ApiErrorMode = 'local'): 
     return null
   const classified = classifyGoogleError(error)
   const message = googleMessage(error) ?? classified.message
-  if (message === HOSTED_KEY_REJECTED)
-    return `API error ${status}: ${HOSTED_KEY_REJECTED_REASON}. Replace GSCDUMP_API_KEY with a key from gscdump.com Agent setup, then restart the MCP client.`
-  if (message === HOSTED_SESSION_REJECTED)
-    return `API error ${status}: gscdump.com rejected the CLI session. Run \`gscdump auth login --mode cloud\` again, then restart the MCP client.`
   const reason = message.replace(/\s+/g, ' ').trim().replace(/\.$/, '')
   return `API error ${status}: ${reason}. ${nextStep(classified, status, mode)}`.trim()
 }

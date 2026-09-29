@@ -9,17 +9,15 @@ import fs from 'node:fs/promises'
 import { createServer } from 'node:http'
 import path from 'node:path'
 import process from 'node:process'
-import { setTimeout as waitForPoll } from 'node:timers/promises'
 import { text } from '@clack/prompts'
 import { CodeChallengeMethod, JWT as GoogleJWT, OAuth2Client as OAuth2ClientClass } from 'google-auth-library'
 import { createAuth } from 'gscdump/client'
 import { err, ok, unwrapResult } from 'gscdump/result'
 import open from 'open'
 import { resolveAuthentication } from './auth-state'
-import { getConfigDir, loadConfig } from './config'
+import { getConfigDir, loadConfig, saveConfig } from './config'
 import { getAppliedEnvKeys, getLoadedEnvPath } from './env-file'
 import { pickCliEnvironmentValue, resolveCliEnvironment } from './environment'
-import { loginWithPlatform, refreshWithPlatform } from './hosted-auth'
 import { displayPath, logger } from './utils'
 
 /** Caller-actionable failures use the repository's `kind` and `Result` convention. */
@@ -121,12 +119,15 @@ function getTokensPath(): string {
   return path.join(getConfigDir(), 'tokens.json')
 }
 
-/** Every way to connect Google, for commands that found no credentials. */
-export const GOOGLE_NOT_CONNECTED = [
-  'Google is not connected. Use one of these:',
-  '  Local:  gscdump auth login',
-  '  Cloud:  gscdump auth login --mode cloud (opens a browser)',
-  '  BYOK:   set GSC_ACCESS_TOKEN, or GSC_CLIENT_ID, GSC_CLIENT_SECRET and GSC_REFRESH_TOKEN',
+/** Local mode found no Google credentials. Names both access modes and how to set each up. */
+export const ACCESS_NOT_SET_UP = [
+  'Google credentials are missing. Set up one of the 2 access modes:',
+  '  Local mode uses your own Google credentials:',
+  '    Service account (recommended): gscdump auth login --mode local --service-account ./key.json',
+  '    OAuth client: set GSC_CLIENT_ID and GSC_CLIENT_SECRET, then run `gscdump auth login --mode local`',
+  '  Hosted mode reads your gscdump.com record:',
+  '    gscdump auth login --mode hosted',
+  'Guide: https://gscdump.com/gscdump-cli/guides/start/choose-access',
 ].join('\n')
 
 export interface OAuth2Credentials {
@@ -135,12 +136,15 @@ export interface OAuth2Credentials {
   redirectUri?: string
 }
 
-export type SavedTokens = Credentials & { provider?: 'gscdump' }
+export type SavedTokens = Credentials
 
 export async function loadTokens(): Promise<SavedTokens | null> {
-  return fs.readFile(getTokensPath(), 'utf-8')
-    .then(data => JSON.parse(data) as SavedTokens)
+  const tokens = await fs.readFile(getTokensPath(), 'utf-8')
+    .then(data => JSON.parse(data) as SavedTokens & { provider?: string })
     .catch(() => null)
+  // Tokens from the removed gscdump.com Google login cannot refresh without
+  // gscdump.com. Treat them as absent so Local mode asks for your own credentials.
+  return tokens?.provider === 'gscdump' ? null : tokens
 }
 
 export async function saveTokens(tokens: SavedTokens): Promise<void> {
@@ -175,20 +179,22 @@ export async function getAuthCredentials(interactive: boolean): Promise<OAuth2Cr
     return { clientId: config.clientId, clientSecret: config.clientSecret }
   }
 
-  if (!interactive) {
-    logger.error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET required for non-interactive mode')
-    process.exit(1)
-  }
+  if (!interactive)
+    throw new Error(ACCESS_NOT_SET_UP)
 
   console.log()
-  console.log('  \x1B[1mOAuth 2.0 Setup Required\x1B[0m')
-  console.log('  \x1B[90mThe Google Search Console API requires OAuth 2.0 credentials.\x1B[0m')
+  console.log('  \x1B[1mLocal mode: OAuth client setup\x1B[0m')
+  console.log('  \x1B[90mA service account is simpler and never expires. To use one, press Ctrl+C and run:\x1B[0m')
+  console.log('  \x1B[90m  gscdump auth login --mode local --service-account ./key.json\x1B[0m')
+  console.log('  \x1B[90mTo read your gscdump.com record instead, run: gscdump auth login --mode hosted\x1B[0m')
   console.log()
   console.log('  \x1B[1mSteps:\x1B[0m')
-  console.log('  \x1B[90m1.\x1B[0m Go to \x1B[36mhttps://console.developers.google.com/apis/credentials\x1B[0m')
+  console.log('  \x1B[90m1.\x1B[0m Go to \x1B[36mhttps://console.cloud.google.com/apis/credentials\x1B[0m')
   console.log('  \x1B[90m2.\x1B[0m Create credentials > OAuth client ID > Desktop application')
-  console.log('  \x1B[90m3.\x1B[0m Enable "Search Console API" and "Web Search Indexing API" for your project')
-  console.log('  \x1B[90m4.\x1B[0m Copy the Client ID and Client Secret')
+  console.log('  \x1B[90m3.\x1B[0m Enable "Google Search Console API" and "Web Search Indexing API" for your project')
+  console.log('  \x1B[90m4.\x1B[0m On the OAuth consent screen, set the publishing status to "In production"')
+  console.log('  \x1B[90m   In "Testing" status, Google expires refresh tokens after 7 days.\x1B[0m')
+  console.log('  \x1B[90m5.\x1B[0m Copy the Client ID and Client Secret')
   console.log()
 
   const clientIdResult = await text({
@@ -206,8 +212,10 @@ export async function getAuthCredentials(interactive: boolean): Promise<OAuth2Cr
   if (typeof clientSecretResult !== 'string')
     process.exit(1)
 
+  // Save the client so later non-interactive runs can refresh the tokens.
+  await saveConfig({ ...config, clientId: clientIdResult, clientSecret: clientSecretResult })
   console.log()
-  logger.info('Tip: Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars to skip prompts')
+  logger.info(`Saved the OAuth client to ${displayPath(`${getConfigDir()}/config.json`)}`)
 
   return { clientId: clientIdResult, clientSecret: clientSecretResult }
 }
@@ -369,8 +377,7 @@ export async function authenticate(
     return oauth2Client
   }
 
-  const savedTokens = !opts.force ? await loadTokens() : null
-  const existingTokens = savedTokens?.provider === 'gscdump' ? null : savedTokens
+  const existingTokens = !opts.force ? await loadTokens() : null
   let refreshFailed = false
   let refreshError: Error | null = null
   if (existingTokens) {
@@ -401,7 +408,7 @@ export async function authenticate(
   if (!interactive) {
     if (refreshFailed)
       throw new Error(`Token refresh failed${refreshError ? `: ${refreshError.message}` : ''}. The refresh token may be revoked or expired. Run \`gscdump auth login\` to sign in again.`)
-    throw new Error(GOOGLE_NOT_CONNECTED)
+    throw new Error(ACCESS_NOT_SET_UP)
   }
 
   const state = randomBytes(32).toString('base64url')
@@ -444,43 +451,20 @@ export interface GetAuthOptions {
   serviceAccount?: string
 }
 
+/**
+ * Local mode with an OAuth client: saved tokens, env tokens, or the loopback
+ * browser flow. Without a configured OAuth client, a terminal prompts for one;
+ * anything else throws {@link ACCESS_NOT_SET_UP}.
+ */
 export async function getAuth(opts: GetAuthOptions = {}): Promise<OAuth2Client> {
   const { interactive = true, noBrowser = false, force = false } = opts
   const env = resolveCliEnvironment()
   const config = opts.config ?? await loadConfig()
-  if ((env.clientId && env.clientSecret) || (config.clientId && config.clientSecret)) {
-    const credentials = await getAuthCredentials(interactive)
-    return authenticate(credentials, interactive, { noBrowser, force })
-  }
-
-  let tokens = force ? null : await loadTokens()
-  if (tokens?.provider !== 'gscdump' || !tokens.refresh_token) {
-    if (!interactive)
-      throw new Error(GOOGLE_NOT_CONNECTED)
-    tokens = await loginWithPlatform({
-      force,
-      request: fetch,
-      now: Date.now,
-      wait: waitForPoll,
-      authorize: async (url) => {
-        logger.info(`Open this URL to connect Google:\n${url}`)
-        if (!noBrowser)
-          await open(url).catch((error: Error) => logger.warn(`Browser could not open: ${error.message}. Open the URL above.`))
-      },
-    })
-    await saveTokens(tokens)
-  }
-  const refreshToken = tokens.refresh_token!
-  const client = new OAuth2ClientClass()
-  // Google data calls stay direct. The platform only refreshes its own OAuth grant.
-  client.refreshHandler = async () => {
-    const refreshed = await refreshWithPlatform(refreshToken)
-    await saveTokens({ provider: 'gscdump', refresh_token: refreshToken, ...refreshed })
-    return refreshed
-  }
-  client.setCredentials({ access_token: tokens.access_token, expiry_date: tokens.expiry_date })
-  await client.getAccessToken()
-  return client
+  const configured = Boolean((env.clientId && env.clientSecret) || (config.clientId && config.clientSecret))
+  if (!configured && !interactive)
+    throw new Error(ACCESS_NOT_SET_UP)
+  const credentials = await getAuthCredentials(interactive)
+  return authenticate(credentials, interactive, { noBrowser, force })
 }
 
 /** A stale service-account pointer (missing file or malformed JSON) is ignorable. */
@@ -512,7 +496,7 @@ export async function resolveAuth(opts: GetAuthOptions = {}): Promise<GscAuth | 
   const byok = resolveBYOK(opts.byok)
   if (byok) {
     if (typeof byok !== 'string')
-      logger.success('Using BYOK credentials')
+      logger.success('Using Google credentials from the environment')
     return byok
   }
   return getAuth(opts)
@@ -620,7 +604,7 @@ export async function describeAuthProvenance(): Promise<{
   // Mismatch heuristics — surface footguns the user is likely hitting.
   const byokActive = effective === 'byok-refresh-token' || effective === 'byok-access-token'
   if (byokActive && tokens)
-    warnings.push('BYOK env vars shadow saved tokens. If you just ran `auth login --force`, the env tokens are stale; unset them or update them.')
+    warnings.push('Environment credentials take priority over saved tokens. If you just ran `auth login --force`, unset or update the environment tokens.')
 
   if (effective === 'byok-refresh-token' && clientId && refreshTok) {
     const idFromEnvFile = getAppliedEnvKeys().has(clientId.envVar)
@@ -663,7 +647,7 @@ export type { GscdumpConfig }
  * env only. It never calls Google, so a local read stays offline.
  */
 export async function probeAuth(): Promise<'none' | 'google' | 'hosted'> {
-  if ((await resolveAuthentication())._tag === 'Cloud')
+  if ((await resolveAuthentication())._tag === 'Hosted')
     return 'hosted'
   if (resolveBYOK())
     return 'google'

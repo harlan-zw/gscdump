@@ -55,7 +55,7 @@ vi.mock('../../src/auth', () => ({
   resolveBYOK: mocks.resolveBYOK,
   getAuth: mocks.getAuth,
   resolveAuth: mocks.resolveAuth,
-  GOOGLE_NOT_CONNECTED: 'Google is not connected. Use one of these:',
+  ACCESS_NOT_SET_UP: 'Google credentials are missing. Set up one of the 2 access modes:',
 }))
 
 describe('auth command', () => {
@@ -92,29 +92,8 @@ describe('auth command', () => {
     expect(authCommand.subCommands?.logout).toBeDefined()
   })
 
-  it('accepts saved platform read-only scopes without requesting re-consent', async () => {
-    mocks.loadTokens.mockResolvedValue({ ...mockCredentials, provider: 'gscdump' })
-    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
-      throw new Error('unexpected exit')
-    }) as never)
-    try {
-      const scopes = authCommand.subCommands!.scopes
-      await scopes.run!({ args: { json: true }, rawArgs: [], cmd: scopes })
-      expect(JSON.parse(consoleOutput.at(-1)!)).toEqual({
-        scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
-        missing: [],
-      })
-      const status = authCommand.subCommands!.status
-      await status.run!({ args: {}, rawArgs: [], cmd: status })
-      expect(consoleOutput.join('\n')).not.toContain('re-consent')
-    }
-    finally {
-      exit.mockRestore()
-    }
-  })
-
-  it('still rejects missing BYOK scopes when platform tokens are saved', async () => {
-    mocks.loadTokens.mockResolvedValue({ ...mockCredentials, provider: 'gscdump' })
+  it('still rejects missing environment scopes when tokens are saved', async () => {
+    mocks.loadTokens.mockResolvedValue(mockCredentials)
     mocks.resolveBYOK.mockReturnValue('byok-access' as never)
     const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
       throw new Error('exit 1')
@@ -140,7 +119,7 @@ describe('auth command', () => {
         cmd: authCommand.subCommands!.status,
       })
 
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Google is not connected'))
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Google credentials are missing'))
     })
 
     it('reports a BYOK token Google rejects as not authenticated', async () => {

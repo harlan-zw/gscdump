@@ -25,7 +25,7 @@ describe('decideRoute', () => {
     ['answers a covered read from the Store while a sync runs', {}, { coverage: [covered], syncRun: running }, { kind: 'local' }],
     ['answers a covered read from the Store without auth', {}, { auth: 'none', coverage: [covered] }, { kind: 'local' }],
     ['goes live when the Site has no Store data', {}, { coverage: [empty] }, { kind: 'live', reason: 'no-store-data' }],
-    ['goes live through hosted auth when the Site has no Store data', {}, { auth: 'hosted', coverage: [empty] }, { kind: 'live', reason: 'no-store-data' }],
+    ['never goes live in Hosted mode when the Site has no Store data', {}, { auth: 'hosted', coverage: [empty] }, { kind: 'prompt', reason: { kind: 'not-connected', tables: ['pages'] }, nextCommand: 'gscdump auth login --mode local' }],
     ['asks to connect when nothing is synced and nothing is connected', {}, { auth: 'none', coverage: [empty] }, { kind: 'prompt', reason: { kind: 'not-connected', tables: ['pages'] }, nextCommand: 'gscdump init' }],
     ['asks to sync the missing days of partial coverage', {}, { coverage: [partial] }, { kind: 'prompt', reason: { kind: 'partial', done: 2, total: 3, missing: partial.gaps, windows: [{ period: 'current', table: 'pages', window: WINDOW, missing: partial.gaps }] }, nextCommand: sync }],
     ['asks to log in first when partial coverage has no auth', {}, { auth: 'none', coverage: [partial] }, { kind: 'prompt', reason: { kind: 'partial', done: 2, total: 3, missing: partial.gaps, windows: [{ period: 'current', table: 'pages', window: WINDOW, missing: partial.gaps }] }, nextCommand: 'gscdump auth login' }],

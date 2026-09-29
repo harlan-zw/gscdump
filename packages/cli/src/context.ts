@@ -3,7 +3,6 @@ import type { SiteCandidate, SiteResolution } from 'gscdump'
 import type { googleSearchConsole, Auth as GscAuth } from 'gscdump/client'
 import type { FetchOptions } from 'ofetch'
 import type { BYOKOptions } from './auth'
-import type { Authentication } from './auth-state'
 import type { GscdumpConfig } from './config'
 import type { LocalStore } from './local-store'
 import process from 'node:process'
@@ -11,8 +10,7 @@ import { cancel, isCancel, select } from '@clack/prompts'
 import { parseGscSiteUrl, resolveSiteInput } from 'gscdump'
 import { googleSearchConsole as createGsc } from 'gscdump/client'
 import { resolveAuth } from './auth'
-import { resolveAuthentication } from './auth-state'
-import { createCloudGoogleClient } from './cloud-google'
+import { LOCAL_MODE_REQUIRED, resolveAuthentication } from './auth-state'
 import { loadResolvedConfig } from './config'
 import { createLocalStore } from './local-store'
 import { openQuotaLedger, quotaFetchOptions } from './quota-ledger'
@@ -26,7 +24,6 @@ export interface GscSite {
 type GscClient = ReturnType<typeof googleSearchConsole>
 
 export interface CommandContext {
-  authentication: Authentication
   config: GscdumpConfig
   /** Fully resolved local data directory from the same config load. */
   dataDir: string
@@ -60,7 +57,7 @@ export interface ResolveSiteOptions {
 }
 
 export interface CommandContextOptions {
-  /** Load OAuth client + GSC client. Default false. */
+  /** Load Google credentials and the Search Console client. Local mode only: Hosted mode throws. Default false. */
   needsAuth?: boolean
   /** Load local storage facade. Default false. */
   needsStore?: boolean
@@ -84,14 +81,14 @@ export async function createCommandContext(
 ): Promise<CommandContext> {
   const { needsAuth = false, needsStore = false, interactive = false, byok, quota = true } = opts
   const { config, dataDir } = await loadResolvedConfig()
-  const authentication = needsAuth ? await resolveAuthentication() : { _tag: 'Local' } as const
+  // Only Local mode calls Google. Hosted mode reads the hosted record and has no Google client.
+  if (needsAuth && (await resolveAuthentication())._tag === 'Hosted')
+    throw new Error(LOCAL_MODE_REQUIRED)
   const fetchOptions = needsAuth && quota
     ? quotaFetchOptions(await openQuotaLedger({ dataDir }), opts.fetchOptions)
     : opts.fetchOptions
-  const auth = needsAuth && authentication._tag === 'Local' ? await resolveAuth({ interactive, config, byok }) : null
-  const client = needsAuth && authentication._tag === 'Cloud'
-    ? createCloudGoogleClient(authentication, fetchOptions)
-    : auth ? createGsc(auth as GscAuth, { fetchOptions }) : null
+  const auth = needsAuth ? await resolveAuth({ interactive, config, byok }) : null
+  const client = auth ? createGsc(auth as GscAuth, { fetchOptions }) : null
   const store = needsStore ? createLocalStore({ dataDir }) : null
 
   const loadSites = async (): Promise<GscSite[]> => {
@@ -149,7 +146,7 @@ export async function createCommandContext(
     return selected as string
   }
 
-  return { config, dataDir, authentication, auth, client, store, loadSites, matchSite, resolveSite }
+  return { config, dataDir, auth, client, store, loadSites, matchSite, resolveSite }
 }
 
 /**

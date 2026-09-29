@@ -1,12 +1,12 @@
 ---
 name: gscdump
-description: Drive the `gscdump` CLI for Google Search Console and Bing with cloud or local authentication. Sync Google rows to a local Store, export Bing datasets, run SEO Analyzers and Reports, inspect Indexing Evidence, and manage sitemaps. Use when the user mentions gscdump, Search Console data, Bing Webmaster data, or GSC automation.
+description: Drive the `gscdump` CLI for Google Search Console and Bing in Local or Hosted mode. Sync Google rows to a local Store, export Bing datasets, run SEO Analyzers and Reports, inspect Indexing Evidence, and manage sitemaps. Use when the user mentions gscdump, Search Console data, Bing Webmaster data, or GSC automation.
 ---
 
 # gscdump CLI
 
-`gscdump` reads Google Search Console and Bing with hosted or local authentication.
-It keeps a local Parquet Store for Google rows. Every command has `--help`.
+`gscdump` reads Google Search Console and Bing in one of 2 access modes: Local or Hosted.
+In Local mode it keeps a local Parquet Store for Google rows. Every command has `--help`.
 For `query`, `-s` means `--site`, `-d` means `--dimensions`, and `-f` means `--format`.
 Use `--start` and `--end` for dates. `--site=SITE` also works.
 Use each option once, with either its short or long spelling.
@@ -18,73 +18,88 @@ Example: `gscdump query --site=SITE --start=DATE --end=DATE -d page -f json`.
 
 1. Before reading traffic, run `gscdump auth status --json`. Do this even when the user says authentication works.
 2. Keep the requested Site, dates, dimensions, and task scope. A request for pages does not need query dimensions.
-3. Before local queries, check coverage with `gscdump store stats --site SITE --json`.
+3. In Hosted mode, skip steps 3 to 5. `gscdump query` reads the hosted record, and `sync` needs Local mode.
+   Before Local queries, check coverage with `gscdump store stats --site SITE --json`.
    Use `gscdump sync --site SITE --status --json` when you need coverage, gaps, or sync-state details.
    On a fresh Store, `store stats` exits 1 and says it has no data. Continue with the bounded sync.
 4. Read the table dimensions and watermarks. Sync only missing tables and the requested dates, once per task.
 5. Use `sync --json`. Read its completion result before deciding what to do next. Never repeat a successful sync.
-6. If the user asks for saved rows, check `meta.source: "local"` in the query result. A successful query can answer live when its table has no synced data.
+6. If the user asks for saved rows, check `meta.source` in the query result: `local` (the Store) or `hosted` (the hosted record). In Local mode, a successful query can answer `live` when its table has no synced data.
 
 If the task only asks about deletion, explain the scope and ask for consent.
 You may read Store metadata with `store stats` and `sync --status`.
 Do not query traffic, sync rows, or delete data to explain deletion.
 Call the local data directory the Store in your answer.
 
-## Authentication mode
+## Access mode
 
-Check `gscdump auth status --json` before queries. Reuse the user's selected mode.
-In local mode, `googleAuthenticated: true` means Google accepted the credentials. When it is false, `googleError` says why.
-In cloud mode, `hostedSync` lists each gscdump.com Site with `syncStatus` and `syncProgress`. `gscdump sites` shows the same progress. The CLI does not read the hosted Store: cloud mode queries go to the live API through gscdump.com.
+gscdump has 2 access modes. Check `gscdump auth status --json` before queries. Reuse the user's selected mode.
 
-| Mode | Credentials | Query path |
+| Mode | Credentials | What it reads |
 | --- | --- | --- |
-| `cloud` | Browser-approved CLI session; optional user API key for automation | `https://gscdump.com/api` uses saved Search Engine connections |
-| `local` | Google OAuth/service account or Bing API key/OAuth | Calls the Search Engine directly |
+| `local` | The user's own Google credentials: a service account (recommended) or an OAuth client. Bing API key or OAuth | Calls Google and Bing directly. Keeps a local Store |
+| `hosted` | A browser-approved gscdump.com CLI session, or a gscdump user API key (`GSCDUMP_API_KEY`) | Reads the hosted record on gscdump.com. Never calls Google |
 
-`--mode cloud|local` overrides one invocation. `GSCDUMP_AUTH_MODE` also overrides the saved mode.
+In Local mode, `googleAuthenticated: true` means Google accepted the credentials. When it is false, `googleError` says why.
+In Hosted mode, `hostedSync` lists each hosted Site with `syncStatus` and `syncProgress`, and `commands` lists what Hosted mode can run.
+`gscdump sites` shows the same Sites and progress.
+
+`--mode local|hosted` overrides one invocation. `GSCDUMP_AUTH_MODE` also overrides the saved mode.
 A successful login saves the mode per profile.
-If no mode is saved, `GSCDUMP_API_KEY` selects cloud mode.
-With neither source, the CLI defaults to local mode.
+If no mode is saved, `GSCDUMP_API_KEY` selects Hosted mode.
+With neither source, the CLI uses Local mode.
 When a saved mode exists, it remains selected unless an explicit override applies.
 Never switch modes to bypass an authentication failure.
 `GSCDUMP_API_ROOT` defaults to `https://gscdump.com/api`. Browser login uses this root. Supply an API key explicitly for a custom root.
 
 ```sh
-# Open gscdump.com in a browser and approve the CLI session.
-gscdump auth login --mode cloud
-gscdump bing sites --json
-gscdump bing login --site s_SITE_ID
-gscdump bing dump --site s_SITE_ID --out ./bing-export --format json
+# Local mode, recommended: a service account never expires.
+gscdump auth login --mode local --service-account ./key.json
 
-# Local Google login uses gscdump.com for OAuth by default.
-# Google data requests go directly from the CLI to Google.
+# Local mode with your own OAuth client.
+export GSC_CLIENT_ID=your-client-id GSC_CLIENT_SECRET=your-client-secret
 gscdump auth login --mode local
-gscdump bing login --mode local
-gscdump bing dump --site https://example.com/ --out ./bing-export
+
+# Hosted mode: open gscdump.com in a browser and approve the CLI session.
+gscdump auth login --mode hosted
+gscdump sites --json
+gscdump query --site example.com -d page -f json
 ```
 
-For a fully local Google login, set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET` before `auth login --mode local`.
-The CLI then opens Google directly. A service account can use `--service-account` instead.
+Hosted mode can run only these commands: `sites`, `query`, `sitemaps current`, `sitemaps history`, `sitemaps membership`,
+`sitemaps lastmod`, `sitemaps export`, `indexing urls`, and the `bing` commands `sites`, `status`, `dump`, `inspect`, and `verify`.
+Every other command calls Google, so it needs Local mode: `sync`, `inspect`, `query --live`, `analyze --live`, `report --live`,
+`sites add|get|delete|verify*`, `sitemaps list|get|submit|delete`, `indexing submit|remove|status|batch`, `entities`, and `mcp`.
+In Hosted mode these commands stop with this error: `This command calls Google, so it needs Local mode.`
+Tell the user. Do not switch modes for them.
+For an MCP client in Hosted mode, use the gscdump.com MCP server at `https://gscdump.com/mcp`.
 
 Hosted Bing login opens the existing connection flow on gscdump.com.
 Local Bing login uses `BING_API_KEY` or a password prompt.
 Local `--oauth` uses `BING_CLIENT_ID`, `BING_CLIENT_SECRET`, and a registered loopback callback.
 The default callback is `http://127.0.0.1:53683/oauth/bing`. `BING_ACCESS_TOKEN` accepts an existing OAuth access token.
-After cloud Bing login opens a browser, use `bing status --site s_SITE_ID` to confirm the connection.
+After Hosted Bing login opens a browser, use `bing status --site s_SITE_ID` to confirm the connection.
 
-`auth logout` revokes a saved cloud CLI session and removes saved mode and Google and Bing credentials.
+```sh
+gscdump bing sites --json
+gscdump bing login --site s_SITE_ID
+gscdump bing dump --site s_SITE_ID --out ./bing-export --format json
+gscdump bing login --mode local
+gscdump bing dump --site https://example.com/ --out ./bing-export
+```
+
+`auth logout` revokes a saved Hosted CLI session and removes saved mode and Google and Bing credentials.
 `bing logout --mode local` removes only saved Bing credentials. Environment credentials remain active until unset.
 
-Hosted Bing commands use the API's plan and preview access rules.
+Hosted Bing commands use the API's access rules.
 Hosted connection verification uses `bing verify --site s_SITE_ID`.
-Google Indexing API and Site Verification commands require local mode.
-Hosted sitemap reads and `indexing urls` require hosted credentials. Their `--site` takes a Site URL, such as `example.com`.
+Hosted sitemap reads and `indexing urls` need Hosted mode. Their `--site` takes a Site URL, such as `example.com`.
 
 ## Data boundaries
 
-- `sync`, `query --live`, `analyze --live`, `report --live`, `sites`,
-  `sitemaps`, and `inspect` use the selected authentication mode.
-- Google Indexing API requests require local credentials. `indexing quota` only prints documented limits and needs no authentication.
+- `sync`, `query --live`, `analyze --live`, `report --live`, `inspect`, and Google sitemap and Site changes call Google. They need Local mode.
+- In Hosted mode, `sites` and `query` read the hosted record. They never call Google.
+- Google Indexing API requests need Local mode. `indexing quota` only prints documented limits and needs no authentication.
 - `dump` and `store` read the local Store only.
 - `query`, `analyze`, and `report` pick a source for each run. See [Routing](#routing).
 - Google returns a 2 to 3 day data delay. Default windows end three days ago.
@@ -95,7 +110,9 @@ Hosted sitemap reads and `indexing urls` require hosted credentials. Their `--si
 
 ## Routing
 
-Login is optional. A user logs in (Google or hosted) or syncs a local Store.
+This section covers Local mode. In Hosted mode, `query` always reads the hosted record, and JSON has `meta.source: "hosted"`.
+`analyze` and `report` read the Store only in Hosted mode. When the Store cannot answer, they stop with the Local mode command.
+
 `query`, `analyze`, and `report` choose one source for each run. One run never
 mixes Store rows and live rows.
 
@@ -107,9 +124,9 @@ mixes Store rows and live rows.
 | Some dates missing | yes | Stops with the exact `gscdump sync` command, or pass `--live` |
 | Some dates missing, a sync is running | yes | Stops with `Sync running: 41 of 90 days done.` Run again later, or pass `--live` |
 
-- `--live` always asks Search Console. It needs Google auth.
+- `--live` always asks Search Console. It needs Local mode with Google credentials.
 - `query --sql` reads the Store only. It stops when no table it names has data.
-- JSON output carries `meta.source`: `local` or `live`.
+- JSON output carries `meta.source`: `local`, `live`, or `hosted`.
 - A stop with `--format json` or `--json` prints `{ "error": { "code", "message", "nextCommand" } }` on stdout and exits 1.
   Codes: `NOT_CONNECTED`, `STORE_RANGE_NOT_COVERED` (with `missingDates`), `SYNC_RUNNING` (with `sync.done` and `sync.total`), `NO_SYNCED_DATA`, `STORE_ONLY`, `LIVE_ONLY`.
   Partial coverage and a running sync are normal progress. Run `nextCommand`, or tell the user to.
@@ -138,7 +155,7 @@ After upgrading the CLI, run this command again to update the installed skill.
 The command prints where it wrote the skill. Clients without a skill
 directory can read `gscdump --help` and `gscdump <command> --help` instead.
 
-## Local Google authentication
+## Local mode setup
 
 Check first. Never run `init` when credentials already work.
 
@@ -147,26 +164,24 @@ gscdump auth status
 gscdump doctor --json
 ```
 
-If local Google credentials are missing, use one of these paths:
+If Google credentials are missing, the CLI prints both setup paths. Use one of these:
 
 | Path | When | Command |
 | --- | --- | --- |
-| Environment token | The user already has an OAuth access token | `export GSC_ACCESS_TOKEN=ya29...` |
-| Refresh token | CI or a headless machine with OAuth client credentials | `export GSC_CLIENT_ID=... GSC_CLIENT_SECRET=... GSC_REFRESH_TOKEN=...` |
-| Service account | CI with a service-account key that has Site access | `export GOOGLE_APPLICATION_CREDENTIALS=/abs/path/key.json` |
-| Interactive OAuth | A person is present | `gscdump init --mode local` |
+| Service account (recommended) | Any machine. The key never expires | `gscdump auth login --mode local --service-account ./key.json`, or `export GOOGLE_APPLICATION_CREDENTIALS=/abs/path/key.json` |
+| OAuth client | A person is present and has a Google Cloud OAuth client | `export GSC_CLIENT_ID=... GSC_CLIENT_SECRET=...`, then `gscdump auth login --mode local` |
+| Refresh token | CI with OAuth client credentials | `export GSC_CLIENT_ID=... GSC_CLIENT_SECRET=... GSC_REFRESH_TOKEN=...` |
+| Access token | The user already has an OAuth access token | `export GSC_ACCESS_TOKEN=ya29...` |
+| Hosted mode | The user has a gscdump.com account and wants the hosted record | `gscdump auth login --mode hosted` |
 
-Default local login opens gscdump.com for free Google login and token refresh.
-Data queries call Google directly. No Google Cloud project or hosted activation is required.
-For a fully local connection, set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET` before login.
-The CLI then opens Google directly and uses a loopback callback.
+A service account needs Search Console access. Add its email as a user of the Site in Search Console, under Settings > Users and permissions.
+An OAuth client in the Google "Testing" publishing status gets refresh tokens that expire after 7 days.
+To avoid this, set the OAuth consent screen to "In production". A service account has no such limit.
+Local mode never uses gscdump.com for Google login or token refresh.
 Use `gscdump auth login --mode local --no-browser` when a browser runs on another host.
-The default grant is read-only Search Console access.
-For Google write operations, use your own OAuth client with the required scopes.
-Set `GSC_CLIENT_ID` and `GSC_CLIENT_SECRET` to use a Desktop app OAuth client.
-Cloud mode requires hosted access. Pro is free during beta, then paid after launch.
+A service account or an OAuth client with the required scopes also enables Google write operations.
 
-`--profile <name>` or `GSCDUMP_PROFILE` isolates the selected mode and Google, Bing, and cloud credentials.
+`--profile <name>` or `GSCDUMP_PROFILE` isolates the selected mode and its Google, Bing, and Hosted credentials.
 
 ## Site identifiers
 
@@ -183,7 +198,7 @@ Do not add `sc-domain:`.
 - Without `--site` and `defaultSite`, a command in a terminal shows a picker.
   Without a terminal, the command fails with `Pass --site. Sites: ...`, unless only one Site is available.
 
-For cloud Bing commands, use a Site ID from `gscdump bing sites`, such as `s_SITE_ID`.
+For Hosted Bing commands, use a Site ID from `gscdump bing sites`, such as `s_SITE_ID`.
 For local Bing commands, use the full verified Site URL from `gscdump bing sites --mode local`.
 Bing commands require their own explicit `--site`; the Google `defaultSite` setting does not select a Bing Site.
 
@@ -208,14 +223,14 @@ Do not rewrite rows, estimate metrics, or add manually calculated totals.
 
 | Command | Use it for |
 | --- | --- |
-| `gscdump sites` | List Google Sites and permission levels |
+| `gscdump sites` | Local mode: list Google Sites and permission levels. Hosted mode: list hosted Sites and sync state |
 | `gscdump bing login`, `status`, `logout` | Manage Bing authentication and check connections |
 | `gscdump bing sites` | List Bing Sites and connection details |
 | `gscdump bing dump` | Export Bing traffic, pages, keywords, and crawl data |
 | `gscdump bing inspect` | Read Bing Indexing Evidence for one URL |
-| `gscdump bing verify` | Check and activate a cloud Bing connection |
+| `gscdump bing verify` | Check and activate a Hosted Bing connection |
 | `gscdump sync` | Copy Search Console rows into the local Store |
-| `gscdump query` | Rows by page, query, date, country, or device |
+| `gscdump query` | Rows by page, query, date, country, or device, from the Store or the hosted record |
 | `gscdump analyze <id>` | One Analyzer over the Store or live rows |
 | `gscdump report <id>` | A Report that composes several Analyzers |
 | `gscdump inspect <url...>` | URL Inspection with Indexing Evidence, saved to the Store |
@@ -228,8 +243,8 @@ Do not rewrite rows, estimate metrics, or add manually calculated totals.
 | `gscdump profile` | Separate credential and config directories |
 | `gscdump auth` | `status`, `login`, `logout`, `refresh` |
 | `gscdump doctor` | Health checks for auth, scopes, Store, and reachability |
-| `gscdump init` | First-time setup. Without a terminal it never prompts: it uses BYOK env credentials or fails with the auth command |
-| `gscdump mcp` | Start Google MCP tools with the selected authentication |
+| `gscdump init` | First-time setup. Without a terminal it never prompts: it uses a service account or environment credentials, or fails with both setup paths |
+| `gscdump mcp` | Start Google MCP tools in Local mode. Hosted mode uses `https://gscdump.com/mcp` |
 | `gscdump skill install` | Copy this skill into an agent skill directory |
 | `gscdump papercut` | Report a CLI problem to gscdump.com |
 
@@ -294,7 +309,7 @@ gscdump query --site example.com --dimensions page,query \
   contains, `re:` regex, `!re:` not regex, `!` not equals.
 - `--page` takes a path or a full URL. The Store compares paths.
 - Without dates, `query` reads the 28 days ending on the newest synced day.
-- `--live` bypasses the Store. `--type` selects a search type. The default is `web`.
+- `--live` bypasses the Store and needs Local mode. `--type` selects a search type. The default is `web`.
   `--data-state` and `--aggregation-type` apply to live mode only.
 - Metrics already include clicks, impressions, CTR, and position. There is no `--metrics` option.
 - If Store coverage is missing, read the JSON error and run its `nextCommand`. It syncs only the missing dates and tables.
@@ -460,8 +475,8 @@ Do not treat Bing crawl evidence as proof that a URL is indexed.
 ## Before the next command
 
 For a traffic task, run `gscdump auth status --json` now, before any `query` command.
-The user saying credentials work does not replace this check. It identifies the selected authentication mode.
-Then check Store metadata, keep the requested dimensions, and read or sync only the requested dates.
+The user saying credentials work does not replace this check. It identifies the selected access mode.
+In Local mode, check Store metadata next, keep the requested dimensions, and read or sync only the requested dates.
 If the user requests JSON, return the command's JSON unchanged, without a table or a separate totals summary.
 Include that JSON in your final response. Tool output alone is not a final answer.
 Include every returned row. Do not refer the user to results "above".

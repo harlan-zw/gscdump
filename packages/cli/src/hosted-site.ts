@@ -1,14 +1,14 @@
 import type { GscdumpV1Client } from '@gscdump/sdk/v1'
 import process from 'node:process'
 import { createGscdumpV1Client } from '@gscdump/sdk/v1'
-import { cloudCredential, getCloudAccount, parseAuthentication, resolveAuthentication } from './auth-state'
+import { getHostedAccount, hostedCredential, parseAuthentication, resolveAuthentication } from './auth-state'
 import { loadConfig } from './config'
 import { resolveCliEnvironment } from './environment'
 import { logger } from './utils'
 
 export const HOSTED_ARGS = {
   'site': { type: 'string' as const, alias: 's', description: 'Site URL (e.g., example.com, sc-domain:example.com, or https://example.com/)' },
-  'api-root': { type: 'string' as const, description: 'Hosted API root; defaults to saved cloud authentication or https://gscdump.com/api' },
+  'api-root': { type: 'string' as const, description: 'Hosted API root; defaults to the saved Hosted mode or https://gscdump.com/api' },
   'api-key': { type: 'string' as const, description: 'Hosted API key; defaults to GSCDUMP_API_KEY' },
 }
 
@@ -82,19 +82,19 @@ export async function resolveHostedSite(
     fail(`\`gscdump ${command.name}\` does not accept a positional Site ID. Pass --site instead.`)
   const environment = resolveCliEnvironment().values
   const authentication = args['api-key']
-    ? parseAuthentication({ _tag: 'Cloud', apiKey: args['api-key'], apiRoot: String(args['api-root'] || environment.GSCDUMP_API_ROOT || 'https://gscdump.com/api') })
+    ? parseAuthentication({ _tag: 'Hosted', apiKey: args['api-key'], apiRoot: String(args['api-root'] || environment.GSCDUMP_API_ROOT || 'https://gscdump.com/api') })
     : await resolveAuthentication()
-  if (authentication._tag !== 'Cloud')
-    fail(`\`gscdump ${command.name}\` needs hosted authentication. Run \`gscdump auth login --mode cloud\` or pass --api-key. With local authentication, ${command.localAlternative}.`)
+  if (authentication._tag !== 'Hosted')
+    fail(`\`gscdump ${command.name}\` reads the hosted record, so it needs Hosted mode. Run \`gscdump auth login --mode hosted\`, or pass --api-key. In Local mode, ${command.localAlternative}.`)
   if (args['api-root'] && String(args['api-root']).replace(/\/+$/, '') !== authentication.apiRoot)
     fail('The API root changed. Pass --api-key for the new API root.')
   const target = args.site ? String(args.site) : (await loadConfig()).defaultSite
-  const account = await getCloudAccount(authentication)
+  const account = await getHostedAccount(authentication)
   const match = matchHostedSite(account.sites, target)
   if (match.kind !== 'found')
     fail(describeMatchFailure(match))
   return {
-    client: createGscdumpV1Client({ apiRoot: authentication.apiRoot, credential: cloudCredential(authentication) }),
+    client: createGscdumpV1Client({ apiRoot: authentication.apiRoot, credential: hostedCredential(authentication) }),
     site: match.site,
   }
 }

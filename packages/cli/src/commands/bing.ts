@@ -32,9 +32,9 @@ export const bingCommand = defineCommand({
         const { json } = applyOutputMode(args)
         const env = useCliRuntime().environment
         const authentication = await resolveAuthentication()
-        if (authentication._tag === 'Cloud') {
+        if (authentication._tag === 'Hosted') {
           if (args.oauth || args['api-key'] || args['client-id'] || args['client-secret'] || args['redirect-uri'])
-            throw new Error('Local Bing credentials require --mode local. Hosted login uses `gscdump auth login --mode cloud`.')
+            throw new Error('Local Bing credentials need Local mode. Pass --mode local. Hosted mode uses the Bing connection saved on gscdump.com.')
           if (!args.site)
             throw new Error('Choose --site SITE_ID from `gscdump bing sites` to connect Bing.')
           const [site] = await resolveHostedBingSites(authentication, { site: args.site, requireConnected: false })
@@ -95,7 +95,7 @@ export const bingCommand = defineCommand({
       async run({ args }) {
         const { json } = applyOutputMode(args)
         const authentication = await resolveAuthentication()
-        if (authentication._tag === 'Cloud')
+        if (authentication._tag === 'Hosted')
           throw new Error('Hosted authentication is shared with Google. Use `gscdump auth logout` to remove it.')
         await clearBingCredentials()
         const env = useCliRuntime().environment
@@ -112,11 +112,11 @@ export const bingCommand = defineCommand({
       async run({ args }) {
         const { json } = applyOutputMode(args)
         const authentication = await resolveAuthentication()
-        if (authentication._tag === 'Cloud') {
+        if (authentication._tag === 'Hosted') {
           const sites = args.site
             ? await resolveHostedBingSites(authentication, { site: args.site, requireConnected: false })
             : await listHostedBingSites(authentication)
-          console.log(JSON.stringify({ searchEngine: 'bing', mode: 'cloud', sites }, null, 2))
+          console.log(JSON.stringify({ searchEngine: 'bing', mode: 'hosted', sites }, null, 2))
           return
         }
         const client = await getBingClient()
@@ -133,7 +133,7 @@ export const bingCommand = defineCommand({
       async run({ args }) {
         applyOutputMode(args)
         const authentication = await resolveAuthentication()
-        if (authentication._tag === 'Cloud') {
+        if (authentication._tag === 'Hosted') {
           console.log(JSON.stringify({ searchEngine: 'bing', sites: await listHostedBingSites(authentication) }, null, 2))
           return
         }
@@ -149,7 +149,7 @@ export const bingCommand = defineCommand({
         'all-sites': { type: 'boolean', description: 'Dump every verified Bing site' },
         'out': { type: 'string', alias: 'o', default: './bing-export', description: 'Output directory, with one directory per site' },
         'format': { type: 'string', alias: 'F', default: 'json', description: 'File format: json, ndjson, csv' },
-        'datasets': { type: 'string', description: `Comma-separated datasets: ${BING_DATASETS.join(', ')}. Default: all. Crawl issues have no dates, so --start, --end, and cloud mode leave them out` },
+        'datasets': { type: 'string', description: `Comma-separated datasets: ${BING_DATASETS.join(', ')}. Default: all. Crawl issues have no dates, so --start, --end, and Hosted mode leave them out` },
         'start': { type: 'string', description: 'Keep returned dates on or after YYYY-MM-DD' },
         'end': { type: 'string', description: 'Keep returned dates on or before YYYY-MM-DD' },
         ...OUTPUT_ARGS,
@@ -158,7 +158,7 @@ export const bingCommand = defineCommand({
         const { json } = applyOutputMode(args)
         const options = parseBingDumpOptions(args)
         const authentication = await resolveAuthentication()
-        if (authentication._tag === 'Cloud') {
+        if (authentication._tag === 'Hosted') {
           if (options.datasetsExplicit && options.datasets.includes('crawl-issues'))
             throw new Error('Bing crawl issues require local authentication. Use --mode local.')
           if (options.start && options.end && Date.parse(options.end) - Date.parse(options.start) > 366 * 86_400_000)
@@ -201,7 +201,7 @@ export const bingCommand = defineCommand({
         if (!url || !['http:', 'https:'].includes(url.protocol))
           throw new Error('Use a full HTTP or HTTPS page URL.')
         const authentication = await resolveAuthentication()
-        if (authentication._tag === 'Cloud') {
+        if (authentication._tag === 'Hosted') {
           const [site] = await resolveHostedBingSites(authentication, { site: args.site })
           console.log(JSON.stringify(await inspectHostedBingUrl(authentication, site!.siteId, args.url), null, 2))
           return
@@ -218,8 +218,8 @@ export const bingCommand = defineCommand({
       async run({ args }) {
         applyOutputMode(args)
         const authentication = await resolveAuthentication()
-        if (authentication._tag !== 'Cloud')
-          throw new Error('Hosted Bing connection verification requires --mode cloud.')
+        if (authentication._tag !== 'Hosted')
+          throw new Error('Hosted Bing connection verification needs Hosted mode. Pass --mode hosted.')
         const [site] = await resolveHostedBingSites(authentication, { site: args.site, requireConnected: false })
         const result = await hostedBingClient(authentication).verifySiteBingConnection({ params: { siteId: site!.siteId } })
         console.log(JSON.stringify(result.data, null, 2))

@@ -89,6 +89,7 @@ export type Route
 
 const CONNECT_COMMAND = 'gscdump init'
 const LOGIN_COMMAND = 'gscdump auth login'
+const LOCAL_LOGIN_COMMAND = 'gscdump auth login --mode local'
 
 function isCovered(need: NeedCoverage): boolean {
   return need.kind === 'window' ? need.gaps.length === 0 : need.stored
@@ -168,14 +169,15 @@ export function decideRoute(req: RouteRequest, state: RouteState): Route {
   // Empty coverage says nothing, so it cannot count as covered: an unknown
   // read must stop or go live instead of routing into the Store.
   const covered = coverage.length > 0 && coverage.every(isCovered)
-  const connected = auth !== 'none'
+  // Only Local mode calls Google. Hosted mode reads the hosted record, never the live API.
+  const connected = auth === 'google'
   const syncCommand = syncCommandFor(req.site ?? req.siteHint, coverage)
   const tables = [...new Set(coverage.flatMap(need => need.kind === 'window' ? [need.table] : need.tables))]
   const searchTypes = [...new Set(coverage.flatMap(need => need.searchType && need.searchType !== 'web' ? [need.searchType] : []))]
   const notConnected: Route = {
     kind: 'prompt',
     reason: { kind: 'not-connected', tables, ...(searchTypes.length > 0 ? { searchTypes } : {}) },
-    nextCommand: CONNECT_COMMAND,
+    nextCommand: auth === 'hosted' ? LOCAL_LOGIN_COMMAND : CONNECT_COMMAND,
   }
 
   if (req.forceLive) {
@@ -223,7 +225,7 @@ export function decideRoute(req: RouteRequest, state: RouteState): Route {
   return {
     kind: 'prompt',
     reason: { kind: 'partial', done: coveredDays.size, total: wanted.size, missing: gaps, windows: windowGaps(coverage) },
-    nextCommand: connected ? syncCommand : LOGIN_COMMAND,
+    nextCommand: connected ? syncCommand : auth === 'hosted' ? LOCAL_LOGIN_COMMAND : LOGIN_COMMAND,
   }
 }
 
@@ -241,6 +243,13 @@ export function routeMessage(route: Exclude<Route, { kind: 'local' } | { kind: '
   const next = route.nextCommand
   switch (route.reason.kind) {
     case 'not-connected': {
+      if (auth === 'hosted') {
+        const read = req.site ?? req.siteHint ? ` If you want the hosted record, run \`gscdump query --site ${siteArg(req.site ?? req.siteHint!)}\`.` : ''
+        const head = route.reason.tables.length > 0
+          ? `The Store has no ${route.reason.tables.join(', ')} data for ${site}.`
+          : `\`${req.label}\` needs Search Console.`
+        return `${head} Hosted mode never calls Google, so it cannot sync or query live.${read} If you want Local mode, run \`${next}\`.`
+      }
       const types = route.reason.searchTypes ?? []
       const slice = types.length > 0 ? `${types.join(', ')} ` : ''
       const head = route.reason.tables.length > 0
@@ -257,6 +266,8 @@ export function routeMessage(route: Exclude<Route, { kind: 'local' } | { kind: '
     case 'partial': {
       const { done, total, windows } = route.reason
       const head = [`The Store has ${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} days for ${site}.`, ...windows.map(windowGapLine)].join('\n')
+      if (auth === 'hosted')
+        return `${head}\nHosted mode never calls Google, so it cannot sync the Store. If you want Local mode, run \`${next}\`, then \`${syncCommandFor(req.site ?? req.siteHint, [])}\`.`
       if (auth === 'none')
         return `${head}\nRun \`${next}\` to connect Google, then \`${syncCommandFor(req.site ?? req.siteHint, [])}\` to sync the rest.`
       const live = req.liveCapable ? ', or pass --live to ask Search Console directly' : ''
@@ -367,7 +378,7 @@ export async function resolveReadSite(
   opts: { forceLive: boolean, connect: () => Promise<CommandContext> },
 ): Promise<{ site: string | undefined, siteHint?: string, auth: RouteAuth }> {
   const auth = await probeAuth()
-  const connected = auth !== 'none'
+  const connected = auth === 'google'
   if (opts.forceLive && connected)
     return { site: await (await opts.connect()).resolveSite(target, { scope: 'account' }), auth }
   const hint = target?.trim() || ctx.config.defaultSite

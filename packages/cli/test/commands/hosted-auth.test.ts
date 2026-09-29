@@ -14,9 +14,9 @@ vi.mock('../../src/auth', async importOriginal => ({
 }))
 
 let runtime: CliRuntime
-const cloud = { _tag: 'Cloud', apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_saved' } as const
+const hosted = { _tag: 'Hosted', apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_saved' } as const
 beforeEach(async () => {
-  runtime = createCliRuntime({ configDir: await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-cloud-auth-')), environment: {} })
+  runtime = createCliRuntime({ configDir: await fs.mkdtemp(path.join(os.tmpdir(), 'gscdump-hosted-auth-')), environment: {} })
   vi.spyOn(console, 'log').mockImplementation(() => {})
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ user: { publicId: 'user-1', email: 'user@example.com' }, sites: [] })))
 })
@@ -31,18 +31,20 @@ async function run(name: 'login' | 'status' | 'logout', args: Record<string, unk
   await runWithCliRuntime(runtime, () => command.run!({ args, rawArgs: [], cmd: command }))
 }
 
-it('validates cloud credentials and persists the shared authenticated state', async () => {
-  await run('login', { 'mode': 'cloud', 'api-key': cloud.apiKey, 'quiet': true })
-  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual(cloud)
-  expect(fetch).toHaveBeenCalledWith('https://gscdump.com/api/cli/me', expect.objectContaining({ headers: expect.objectContaining({ 'x-api-key': cloud.apiKey }) }))
+it('validates Hosted credentials and persists the shared authenticated state', async () => {
+  await run('login', { 'mode': 'hosted', 'api-key': hosted.apiKey, 'quiet': true })
+  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual(hosted)
+  expect(fetch).toHaveBeenCalledWith('https://gscdump.com/api/cli/me', expect.objectContaining({ headers: expect.objectContaining({ 'x-api-key': hosted.apiKey }) }))
 })
 
 it('saves a browser-authorized CLI session and revokes it on logout', async () => {
   const sessionId = 'a'.repeat(64)
   vi.mocked(fetch).mockImplementation(async (input: string | URL) => {
     const url = new URL(input)
-    if (url.pathname.endsWith('/cli/auth/init'))
+    if (url.pathname.endsWith('/cli/auth/init')) {
+      expect(url.pathname).not.toContain('refresh')
       return Response.json({ code: `S-${'A'.repeat(20)}`, expiresIn: 600 })
+    }
     if (url.pathname.endsWith('/cli/auth/poll'))
       return Response.json({ status: 'complete', sessionId })
     if (url.pathname.endsWith('/cli/me'))
@@ -51,42 +53,37 @@ it('saves a browser-authorized CLI session and revokes it on logout', async () =
       return Response.json({ success: true })
     throw new Error(`Unexpected request: ${url.pathname}`)
   })
-  await run('login', { mode: 'cloud', browser: false, quiet: true })
-  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Cloud', apiRoot: cloud.apiRoot, sessionId })
+  await run('login', { mode: 'hosted', browser: false, quiet: true })
+  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Hosted', apiRoot: hosted.apiRoot, sessionId })
   expect(fetch).toHaveBeenCalledWith('https://gscdump.com/api/cli/me', expect.objectContaining({ headers: expect.objectContaining({ 'x-cli-session': sessionId }) }))
   await run('logout', { quiet: true })
   expect(fetch).toHaveBeenCalledWith('https://gscdump.com/api/cli/auth/logout', expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ 'x-cli-session': sessionId }) }))
   expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Local' })
 })
 
-it('preserves working cloud authentication after failed cloud login', async () => {
-  await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
+it('preserves working Hosted mode after a failed Hosted login', async () => {
+  await runWithCliRuntime(runtime, () => saveAuthentication(hosted))
   vi.mocked(fetch).mockResolvedValue(Response.json({}, { status: 401 }))
-  await expect(run('login', { 'mode': 'cloud', 'api-key': 'gsd_user_rejected', 'quiet': true })).rejects.toThrow()
-  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual(cloud)
+  await expect(run('login', { 'mode': 'hosted', 'api-key': 'gsd_user_rejected', 'quiet': true })).rejects.toThrow()
+  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual(hosted)
 })
 
-it('reports cloud account and features without token details', async () => {
-  await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
+it('reports the Hosted account and commands without token details', async () => {
+  await runWithCliRuntime(runtime, () => saveAuthentication(hosted))
   await run('status', { json: true })
   const result = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])
-  expect(result).toMatchObject({ authenticated: true, mode: 'cloud', account: 'user@example.com' })
-  expect(result.capabilities.google).toContain('query')
-  expect(JSON.stringify(result)).not.toContain(cloud.apiKey)
+  expect(result).toMatchObject({ authenticated: true, mode: 'hosted', account: 'user@example.com' })
+  expect(result.commands).toContain('query')
+  expect(result.commands).not.toContain('sync')
+  expect(JSON.stringify(result)).not.toContain(hosted.apiKey)
 })
 
 it('reports hosted sync progress for each registered Site', async () => {
-  await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
+  await runWithCliRuntime(runtime, () => saveAuthentication(hosted))
   vi.mocked(fetch).mockImplementation(async (input: string | URL) => {
     const url = new URL(input)
     if (url.pathname.endsWith('/cli/me'))
-      return Response.json({ user: { publicId: 'user-1', email: 'user@example.com' }, sites: [{ siteId: 's_1', siteUrl: 'sc-domain:example.com' }] })
-    if (url.pathname.endsWith('/cli/sites/available')) {
-      return Response.json([
-        { siteUrl: 'sc-domain:example.com', permissionLevel: 'siteOwner', registered: true, syncStatus: 'syncing', syncProgress: { completed: 41, total: 90, percent: 45.5 } },
-        { siteUrl: 'https://other.example/', permissionLevel: 'siteOwner', registered: false },
-      ])
-    }
+      return Response.json({ user: { publicId: 'user-1', email: 'user@example.com' }, sites: [{ siteId: 's_1', siteUrl: 'sc-domain:example.com', syncStatus: 'syncing', syncProgress: { completed: 41, total: 90, percent: 45.5 } }] })
     throw new Error(`Unexpected request: ${url.pathname}`)
   })
 
@@ -98,8 +95,8 @@ it('reports hosted sync progress for each registered Site', async () => {
   expect(vi.mocked(console.log).mock.calls.map(call => String(call[0]))).toContain('    sc-domain:example.com  syncing: 41 of 90 days (46%)')
 })
 
-it('reports a failed cloud status instead of rejecting when the hosted API fails', async () => {
-  await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
+it('reports a failed Hosted status instead of rejecting when the hosted API fails', async () => {
+  await runWithCliRuntime(runtime, () => saveAuthentication(hosted))
   vi.mocked(fetch).mockImplementation(async (input: string | URL) => {
     const url = new URL(input)
     if (url.pathname.endsWith('/cli/me'))
@@ -111,9 +108,9 @@ it('reports a failed cloud status instead of rejecting when the hosted API fails
   const jsonRun = runWithCliRuntime(runtime, () => run('status', { json: true }))
   await expect(jsonRun.then(() => 'resolved' as const)).resolves.toBe('resolved')
   const result = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)![0])
-  expect(result).toMatchObject({ authenticated: false, mode: 'cloud', apiRoot: cloud.apiRoot })
+  expect(result).toMatchObject({ authenticated: false, mode: 'hosted', apiRoot: hosted.apiRoot })
   expect(result.error).toContain('500')
-  expect(JSON.stringify(result)).not.toContain(cloud.apiKey)
+  expect(JSON.stringify(result)).not.toContain(hosted.apiKey)
 
   const humanRun = runWithCliRuntime(runtime, () => run('status', {}))
   await expect(humanRun.then(() => 'resolved' as const)).resolves.toBe('resolved')
@@ -121,14 +118,14 @@ it('reports a failed cloud status instead of rejecting when the hosted API fails
 })
 
 it('clears shared authentication on logout', async () => {
-  await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
+  await runWithCliRuntime(runtime, () => saveAuthentication(hosted))
   await run('logout', { quiet: true })
   expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Local' })
 })
 
-it('clears local credentials when cloud session revocation fails', async () => {
+it('clears saved credentials when Hosted session revocation fails', async () => {
   const sessionId = 'b'.repeat(64)
-  await runWithCliRuntime(runtime, () => saveAuthentication({ _tag: 'Cloud', apiRoot: cloud.apiRoot, sessionId }))
+  await runWithCliRuntime(runtime, () => saveAuthentication({ _tag: 'Hosted', apiRoot: hosted.apiRoot, sessionId }))
   vi.mocked(fetch).mockResolvedValue(Response.json({ error: { code: 'unauthorized' } }, { status: 401 }))
   await run('logout', { quiet: true })
   expect(fetch).toHaveBeenCalledWith('https://gscdump.com/api/cli/auth/logout', expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ 'x-cli-session': sessionId }) }))
@@ -141,32 +138,34 @@ it('clears local state when saved authentication is corrupt', async () => {
   expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Local' })
 })
 
-it('allows a trailing slash on GSCDUMP_API_ROOT for browser cloud login', async () => {
+it('allows a trailing slash on GSCDUMP_API_ROOT for browser Hosted login', async () => {
   const sessionId = 'c'.repeat(64)
   runtime.environment.GSCDUMP_API_ROOT = 'https://gscdump.com/api/'
   vi.mocked(fetch).mockImplementation(async (input: string | URL) => {
     const url = new URL(input)
-    if (url.pathname.endsWith('/cli/auth/init'))
+    if (url.pathname.endsWith('/cli/auth/init')) {
+      expect(url.pathname).not.toContain('refresh')
       return Response.json({ code: `S-${'A'.repeat(20)}`, expiresIn: 600 })
+    }
     if (url.pathname.endsWith('/cli/auth/poll'))
       return Response.json({ status: 'complete', sessionId })
     if (url.pathname.endsWith('/cli/me'))
       return Response.json({ user: { publicId: 'u_01', email: 'user@example.com' }, sites: [] })
     throw new Error(`Unexpected request: ${url.pathname}`)
   })
-  await run('login', { mode: 'cloud', browser: false, quiet: true })
-  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Cloud', apiRoot: 'https://gscdump.com/api', sessionId })
+  await run('login', { mode: 'hosted', browser: false, quiet: true })
+  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual({ _tag: 'Hosted', apiRoot: 'https://gscdump.com/api', sessionId })
 })
 
-it('rejects unsafe cloud roots before sending an API key', async () => {
-  await expect(run('login', { 'mode': 'cloud', 'api-key': cloud.apiKey, 'api-root': 'http://example.com/api', 'quiet': true })).rejects.toThrow('Invalid authentication')
+it('rejects unsafe Hosted API roots before sending an API key', async () => {
+  await expect(run('login', { 'mode': 'hosted', 'api-key': hosted.apiKey, 'api-root': 'http://example.com/api', 'quiet': true })).rejects.toThrow('Invalid Hosted credentials')
   expect(fetch).not.toHaveBeenCalled()
 })
 
-it('keeps cloud authentication when local login fails', async () => {
-  await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
+it('keeps Hosted mode when Local login fails', async () => {
+  await runWithCliRuntime(runtime, () => saveAuthentication(hosted))
   await expect(run('login', { mode: 'local', quiet: true })).rejects.toThrow()
-  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual(cloud)
+  expect(await runWithCliRuntime(runtime, resolveAuthentication)).toEqual(hosted)
 })
 
 it('reports a local Bing login when Google credentials are missing', async () => {

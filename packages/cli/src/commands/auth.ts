@@ -4,20 +4,20 @@ import process from 'node:process'
 import { setTimeout as waitForPoll } from 'node:timers/promises'
 import { defineCommand } from 'citty'
 import open from 'open'
-import { clearTokens, formatAuthProvenance, getAuth, GOOGLE_NOT_CONNECTED, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
+import { ACCESS_NOT_SET_UP, clearTokens, formatAuthProvenance, getAuth, loadServiceAccount, loadTokens, resolveBYOK, saveTokens } from '../auth'
 import { missingRequiredScopes } from '../auth-scopes'
-import { clearAuthentication, formatHostedSync, getCloudAccount, getCloudSites, parseAuthentication, parseAuthMode, resolveAuthentication, revokeCloudSession, saveAuthentication } from '../auth-state'
+import { clearAuthentication, formatHostedSync, getHostedAccount, parseAuthentication, parseAuthMode, resolveAuthentication, revokeHostedSession, saveAuthentication } from '../auth-state'
 import { clearBingCredentials, getBingClient, inspectBingCredentials } from '../bing-auth'
 import { authCommandMeta } from '../command-meta'
 import { loadConfig, saveConfig } from '../config'
-import { loginWithCloudSession } from '../hosted-auth'
+import { loginWithHostedSession } from '../hosted-auth'
 import { useCliRuntime } from '../runtime'
 import { currentAccessToken, fetchTokenInfo, redactTokens } from '../token-info'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
 import { runSmokeTest } from './init'
 import { adoptCurrentConfigAsProfile, profileNameFromEmail, resolveActiveProfile } from './profile'
 
-const MODE_ARG = { type: 'string' as const, description: 'Authentication mode: cloud or local' }
+const MODE_ARG = { type: 'string' as const, description: 'Access mode: local or hosted' }
 
 function applyAuthMode(args: Record<string, unknown>): void {
   const mode = parseAuthMode(args.mode)
@@ -27,47 +27,66 @@ function applyAuthMode(args: Record<string, unknown>): void {
 
 async function requireLocalAuth(args: Record<string, unknown>): Promise<void> {
   applyAuthMode(args)
-  if ((await resolveAuthentication())._tag === 'Cloud')
-    throw new Error('Cloud authentication uses a CLI session. Google OAuth scopes and token refresh require --mode local.')
+  if ((await resolveAuthentication())._tag === 'Hosted')
+    throw new Error('Google scopes and token refresh apply to Local mode only. Hosted mode uses a gscdump.com CLI session.')
 }
 
-export async function loginCloud(args: Record<string, unknown>): Promise<void> {
+const HOSTED_MODE_NOTE = 'Hosted mode reads your gscdump.com record. Commands that call Google need Local mode.'
+
+/** What Hosted mode can run. Every other Google command needs Local mode. */
+export const HOSTED_COMMANDS = [
+  'sites',
+  'query',
+  'sitemaps current',
+  'sitemaps history',
+  'sitemaps membership',
+  'sitemaps lastmod',
+  'sitemaps export',
+  'indexing urls',
+  'bing sites',
+  'bing status',
+  'bing dump',
+  'bing inspect',
+  'bing verify',
+] as const
+
+export async function loginHosted(args: Record<string, unknown>): Promise<void> {
   const env = useCliRuntime().environment
   const apiKey = String(args['api-key'] ?? env.GSCDUMP_API_KEY ?? '')
   const apiRoot = String(args['api-root'] ?? env.GSCDUMP_API_ROOT ?? 'https://gscdump.com/api')
   if (!apiKey) {
     if (apiRoot.replace(/\/+$/, '') !== 'https://gscdump.com/api')
       throw new Error('Browser login uses gscdump.com. Supply --api-key for a custom API root.')
-    const sessionId = await loginWithCloudSession({
+    const sessionId = await loginWithHostedSession({
       request: fetch,
       now: Date.now,
       wait: waitForPoll,
       authorize: async (url) => {
-        logger.info(`Open this URL to connect cloud access:\n${url}`)
+        logger.info(`Open this URL to link the CLI to gscdump.com:\n${url}`)
         if (args.browser !== false)
           await open(url).catch((error: Error) => logger.warn(`Browser could not open: ${error.message}. Open the URL above.`))
       },
     })
-    const state = parseAuthentication({ _tag: 'Cloud', apiRoot, sessionId })
-    if (state._tag !== 'Cloud')
-      throw new Error('Cloud login did not return a CLI session.')
-    const account = await getCloudAccount(state)
+    const state = parseAuthentication({ _tag: 'Hosted', apiRoot, sessionId })
+    if (state._tag !== 'Hosted')
+      throw new Error('Hosted login did not return a CLI session.')
+    const account = await getHostedAccount(state)
     await saveAuthentication(state)
-    logger.success(`Cloud authentication saved for ${account.user.email}`)
-    logger.info('Google and Bing commands use connections saved on gscdump.com.')
+    logger.success(`Hosted mode saved for ${account.user.email}`)
+    logger.info(HOSTED_MODE_NOTE)
     return
   }
   const state = parseAuthentication({
-    _tag: 'Cloud',
+    _tag: 'Hosted',
     apiKey,
     apiRoot,
   })
-  if (state._tag !== 'Cloud')
-    throw new Error('Cloud login requires a gscdump user API key.')
-  const account = await getCloudAccount(state)
+  if (state._tag !== 'Hosted')
+    throw new Error('Hosted login needs a gscdump user API key.')
+  const account = await getHostedAccount(state)
   await saveAuthentication(state)
-  logger.success(`Cloud authentication saved for ${account.user.email}`)
-  logger.info('Google and Bing commands use connections saved on gscdump.com.')
+  logger.success(`Hosted mode saved for ${account.user.email}`)
+  logger.info(HOSTED_MODE_NOTE)
 }
 
 /**
@@ -101,7 +120,7 @@ async function resolveLiveAuthState(): Promise<{
   const tokenInfo = verified?.kind === 'valid' ? verified.info : null
   const failure = current?.kind === 'failed' ? current.detail : verified?.kind === 'invalid' ? verified.detail : null
   const scopes = tokenInfo?.scope ? tokenInfo.scope.split(/\s+/).filter(Boolean) : []
-  const missing = missingRequiredScopes(scopes, byok ? undefined : tokens?.provider)
+  const missing = missingRequiredScopes(scopes)
   // A refresh above may have saved new tokens; report those.
   const savedTokens = tokens && !byok ? await loadTokens() : tokens
 
@@ -112,62 +131,44 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
   const { json } = applyOutputMode(args)
   applyAuthMode(args)
   const authentication = await resolveAuthentication()
-  if (authentication._tag === 'Cloud') {
-    const capabilities = {
-      google: ['sites', 'query', 'sync', 'inspect', 'sitemaps', 'analyze', 'report'],
-      bing: ['sites', 'dump', 'inspect', 'login', 'status', 'verify'],
-      cloud: ['sitemaps current', 'sitemaps history', 'sitemaps membership', 'sitemaps lastmod', 'sitemaps export'],
-      local: ['indexing', 'sites verification'],
-    }
+  if (authentication._tag === 'Hosted') {
     // A hosted failure is a status result, not a command crash: report it
     // like the local branch reports a failed provider verification.
-    const account = await getCloudAccount(authentication).then(
+    const account = await getHostedAccount(authentication).then(
       value => ({ _tag: 'Ok' as const, value }),
-      (error: unknown) => ({ _tag: 'Err' as const, detail: error instanceof Error ? error.message : 'Hosted authentication failed.' }),
+      (error: unknown) => ({ _tag: 'Err' as const, detail: error instanceof Error ? error.message : 'Hosted credentials failed.' }),
     )
     if (account._tag === 'Err') {
       if (json) {
-        console.log(JSON.stringify({ authenticated: false, mode: 'cloud', apiRoot: authentication.apiRoot, error: account.detail }, null, 2))
+        console.log(JSON.stringify({ authenticated: false, mode: 'hosted', apiRoot: authentication.apiRoot, error: account.detail }, null, 2))
       }
       else {
-        logger.warn(`Cloud status check failed: ${account.detail}`)
+        logger.warn(`Hosted status check failed: ${account.detail}`)
         logger.info(`API: ${authentication.apiRoot}`)
         logger.info('Fix connectivity or the API key, then run `gscdump auth status` again.')
       }
       return
     }
-    // Hosted sync progress is extra detail. A failure here is a status note, not a crash.
-    const hosted = await getCloudSites(authentication).then(
-      sites => ({ _tag: 'Ok' as const, sites: sites.filter(site => site.registered) }),
-      (error: unknown) => ({ _tag: 'Err' as const, detail: error instanceof Error ? error.message : 'Hosted Site list failed.' }),
-    )
+    const sites = account.value.sites
     if (json) {
       console.log(JSON.stringify({
         authenticated: true,
-        mode: 'cloud',
+        mode: 'hosted',
         account: account.value.user.email,
         apiRoot: authentication.apiRoot,
-        sites: account.value.sites,
-        ...(hosted._tag === 'Ok'
-          ? { hostedSync: hosted.sites.map(site => ({ siteUrl: site.siteUrl, syncStatus: site.syncStatus ?? null, syncProgress: site.syncProgress ?? null, oldestDateSynced: site.oldestDateSynced ?? null, newestDateSynced: site.newestDateSynced ?? null })) }
-          : { hostedSyncError: hosted.detail }),
-        capabilities,
+        sites: sites.map(site => ({ siteId: site.siteId, siteUrl: site.siteUrl })),
+        hostedSync: sites.map(site => ({ siteUrl: site.siteUrl, syncStatus: site.syncStatus ?? null, syncProgress: site.syncProgress ?? null, oldestDateSynced: site.oldestDateSynced ?? null, newestDateSynced: site.newestDateSynced ?? null })),
+        commands: HOSTED_COMMANDS,
       }, null, 2))
     }
     else {
-      logger.success(`Authenticated with cloud: ${account.value.user.email}`)
+      logger.success(`Hosted mode: ${account.value.user.email}`)
       console.log(`  API: ${authentication.apiRoot}`)
-      console.log(`  Sites: ${account.value.sites.length}`)
-      if (hosted._tag === 'Ok') {
-        for (const site of hosted.sites)
-          console.log(`    ${site.siteUrl}  ${formatHostedSync(site)}`)
-      }
-      else {
-        console.log(`  Hosted sync status is not available: ${hosted.detail}`)
-      }
-      console.log('  Google and Bing use connections saved on gscdump.com.')
-      console.log(`  Cloud commands: ${capabilities.cloud.join(', ')}`)
-      console.log('  Google indexing and Site Verification require --mode local.')
+      console.log(`  Sites: ${sites.length}`)
+      for (const site of sites)
+        console.log(`    ${site.siteUrl}  ${formatHostedSync(site)}`)
+      console.log(`  ${HOSTED_MODE_NOTE}`)
+      console.log(`  Hosted commands: ${HOSTED_COMMANDS.join(', ')}`)
     }
     return
   }
@@ -194,8 +195,8 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
       googleAuthenticated,
       googleError: failure,
       bing,
-      source: byok ? 'byok' : tokens ? 'saved-tokens' : null,
-      byokKind,
+      source: byok ? 'env' : tokens ? 'saved-tokens' : null,
+      envCredential: byokKind,
       scopes,
       tokenAccount: tokenInfo?.email ?? null,
       tokens: tokens
@@ -231,9 +232,9 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
 
   if (byok) {
     if (googleAuthenticated)
-      logger.success(`Authenticated via BYOK (${byokKind})`)
+      logger.success(`Authenticated with environment credentials (${byokKind})`)
     else
-      logger.warn(`BYOK credentials (${byokKind}) failed verification: ${failure}`)
+      logger.warn(`Environment credentials (${byokKind}) failed verification: ${failure}`)
     if (tokenInfo?.email)
       console.log(`  Account:       ${tokenInfo.email}`)
     reportScopes()
@@ -245,7 +246,7 @@ async function runStatus(args: Record<string, unknown>): Promise<void> {
       logger.info('Google credentials are missing. Run `gscdump auth login --mode local` to connect Google.')
       return
     }
-    logger.warn(GOOGLE_NOT_CONNECTED)
+    logger.warn(ACCESS_NOT_SET_UP)
     return
   }
 
@@ -284,7 +285,7 @@ const statusCommand = defineCommand({
 const refreshCommand = defineCommand({
   meta: {
     name: 'refresh',
-    description: 'Force-refresh saved OAuth tokens (no-op for BYOK)',
+    description: 'Force-refresh saved OAuth tokens (no-op for environment credentials)',
   },
   args: {
     ...OUTPUT_ARGS,
@@ -294,7 +295,7 @@ const refreshCommand = defineCommand({
     applyOutputMode(args)
     await requireLocalAuth(args)
     if (resolveBYOK()) {
-      logger.info('BYOK detected; refresh handled per-call by the SDK')
+      logger.info('Environment credentials found. The SDK refreshes them for each call.')
       return
     }
     const tokens = await loadTokens()
@@ -321,8 +322,8 @@ const loginCommand = defineCommand({
   args: {
     ...OUTPUT_ARGS,
     'mode': MODE_ARG,
-    'api-key': { type: 'string', description: 'gscdump user API key; defaults to GSCDUMP_API_KEY' },
-    'api-root': { type: 'string', description: 'Cloud API root; defaults to GSCDUMP_API_ROOT or https://gscdump.com/api' },
+    'api-key': { type: 'string', description: 'gscdump user API key for Hosted mode; defaults to GSCDUMP_API_KEY' },
+    'api-root': { type: 'string', description: 'Hosted API root; defaults to GSCDUMP_API_ROOT or https://gscdump.com/api' },
     'force': { type: 'boolean', alias: 'f', default: false, description: 'Re-run OAuth even if tokens already exist' },
     'browser': { type: 'boolean', default: true, description: 'Open the authorization URL automatically. Pass --no-browser to open it yourself.' },
     'service-account': { type: 'string', description: 'Path to a service-account JSON key (skips OAuth)' },
@@ -331,14 +332,14 @@ const loginCommand = defineCommand({
     applyOutputMode(args)
     const runtime = useCliRuntime()
     const requestedMode = parseAuthMode(args.mode) ?? runtime.authModeOverride ?? parseAuthMode(runtime.environment.GSCDUMP_AUTH_MODE)
-    if (requestedMode === 'cloud' || (!requestedMode && (args['api-key'] || (await resolveAuthentication())._tag === 'Cloud'))) {
-      await loginCloud(args)
+    if (requestedMode === 'hosted' || (!requestedMode && (args['api-key'] || (await resolveAuthentication())._tag === 'Hosted'))) {
+      await loginHosted(args)
       return
     }
     const byok = resolveBYOK()
     if (byok && !args.force) {
       await saveAuthentication({ _tag: 'Local' })
-      logger.info('BYOK env vars detected, no login needed (--force to override)')
+      logger.info('Google credentials found in the environment. No login is needed. Pass --force to log in again.')
       return
     }
     // Service-account "login" is just persisting which file to use; tokens
@@ -411,10 +412,10 @@ const logoutCommand = defineCommand({
     // session, or unreadable saved state must never leave local credentials
     // on disk. Local state is cleared unconditionally below.
     await resolveAuthentication()
-      .then(authentication => authentication._tag === 'Cloud' ? revokeCloudSession(authentication) : undefined)
+      .then(authentication => authentication._tag === 'Hosted' ? revokeHostedSession(authentication) : undefined)
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error)
-        logger.warn(`Cloud session revocation failed (${message}). Local credentials are still cleared.`)
+        logger.warn(`Hosted session revocation failed (${message}). Saved credentials are still cleared.`)
       })
     await clearTokens()
     await clearBingCredentials()

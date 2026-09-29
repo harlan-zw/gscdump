@@ -1,80 +1,42 @@
 import { describe, expect, it, vi } from 'vitest'
-import { loginWithCloudSession, loginWithPlatform, refreshWithPlatform } from '../src/hosted-auth'
+import { loginWithHostedSession } from '../src/hosted-auth'
 
 const response = (value: unknown) => new Response(JSON.stringify(value))
 
-describe('free CLI authentication', () => {
-  it('links cloud access in the browser without receiving Google tokens or an API key', async () => {
+describe('hosted login', () => {
+  it('links Hosted mode in the browser without receiving Google tokens or an API key', async () => {
     const sessionId = 'a'.repeat(64)
     const request = vi.fn()
       .mockResolvedValueOnce(response({ code: `S-${'A'.repeat(20)}`, expiresIn: 600, authUrl: 'https://evil.example/' }))
       .mockResolvedValueOnce(response({ status: 'pending' }))
       .mockResolvedValueOnce(response({ status: 'complete', sessionId }))
     const authorize = vi.fn()
-    await expect(loginWithCloudSession({ request, authorize, wait: async () => {}, now: () => 0 })).resolves.toBe(sessionId)
+    await expect(loginWithHostedSession({ request, authorize, wait: async () => {}, now: () => 0 })).resolves.toBe(sessionId)
     expect(authorize).toHaveBeenCalledWith(`https://gscdump.com/app/cli/auth?code=S-${'A'.repeat(20)}`)
     expect(request.mock.calls.map(([url]) => new URL(url).origin)).toEqual(Array.from({ length: 3 }).fill('https://gscdump.com'))
+    expect(request.mock.calls.map(([url]) => new URL(url).pathname)).not.toContain('/api/cli/auth/refresh')
   })
 
-  it('polls once authorized, using only the trusted platform origin', async () => {
-    const request = vi.fn()
-      .mockResolvedValueOnce(response({ code: 'A'.repeat(20), expiresIn: 600, authUrl: 'https://evil.example/' }))
-      .mockResolvedValueOnce(response({ status: 'pending' }))
-      .mockResolvedValueOnce(response({ status: 'complete', tokens: { accessToken: 'access', refreshToken: 'refresh', expiresAt: 1800000000000 } }))
-    const authorize = vi.fn()
-    const tokens = await loginWithPlatform({ request, authorize, wait: async () => {}, now: () => 0 })
-    expect(authorize).toHaveBeenCalledWith(`https://gscdump.com/app/cli/auth?code=${'A'.repeat(20)}`)
-    expect(tokens).toEqual({ provider: 'gscdump', access_token: 'access', refresh_token: 'refresh', expiry_date: 1800000000000 })
-    expect(request.mock.calls.map(([url]) => new URL(url).origin)).toEqual(Array.from({ length: 3 }).fill('https://gscdump.com'))
-  })
-
-  it('refreshes through the platform without following redirects', async () => {
-    const request = vi.fn().mockResolvedValue(response({ accessToken: 'next', expiresAt: 1800000000000 }))
-    const result = await refreshWithPlatform('refresh', request)
-    expect(result).toEqual({ access_token: 'next', expiry_date: 1800000000000 })
-    expect(request).toHaveBeenCalledWith('https://gscdump.com/api/cli/auth/refresh', expect.objectContaining({
-      redirect: 'error',
-      body: JSON.stringify({ refreshToken: 'refresh' }),
-    }))
-  })
-
-  it('requests fresh Google consent and returns to the same poll code when forced', async () => {
-    const code = '0123456789ABCDEFABCD'
-    const request = vi.fn()
-      .mockResolvedValueOnce(response({ code, expiresIn: 600, authUrl: 'https://evil.example/' }))
-      .mockResolvedValueOnce(response({ status: 'complete', tokens: { accessToken: 'access', refreshToken: 'refresh', expiresAt: 1800000000000 } }))
-    const authorize = vi.fn()
-    await loginWithPlatform({ request, authorize, wait: async () => {}, now: () => 0, force: true })
-    expect(authorize).toHaveBeenCalledWith(`https://gscdump.com/auth/google?reauth=1&redirect=${encodeURIComponent(`/app/cli/auth?code=${code}`)}`)
-    expect(request).toHaveBeenLastCalledWith(`https://gscdump.com/api/cli/auth/poll?code=${code}`, expect.objectContaining({ redirect: 'error' }))
-  })
-
-  it('rejects malformed tokens before they enter storage', async () => {
+  it('rejects a Google token response from an old host', async () => {
     const request = vi.fn()
       .mockResolvedValueOnce(response({ code: 'A'.repeat(20), expiresIn: 600 }))
-      .mockResolvedValueOnce(response({ status: 'complete', tokens: { accessToken: 'access' } }))
-    await expect(loginWithPlatform({ request, authorize: async () => {}, wait: async () => {}, now: () => 0 })).rejects.toThrow()
+    await expect(loginWithHostedSession({ request, authorize: async () => {}, wait: async () => {}, now: () => 0 })).rejects.toThrow()
   })
 
   it('stops waiting after the authorization expires', async () => {
     let now = 0
-    const request = vi.fn().mockResolvedValue(response({ code: 'A'.repeat(20), expiresIn: 1 }))
-    await expect(loginWithPlatform({ request, authorize: async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(response({ code: `S-${'A'.repeat(20)}`, expiresIn: 1 }))
+    await expect(loginWithHostedSession({ request, authorize: async () => {
       now = 2000
     }, wait: async () => {}, now: () => now })).rejects.toThrow('expired')
     expect(request).toHaveBeenCalledTimes(1)
   })
 
-  it('does not expose a server error body containing tokens', async () => {
-    const request = vi.fn().mockResolvedValue(new Response('secret-token', { status: 401 }))
-    await expect(refreshWithPlatform('refresh', request)).rejects.toThrow('Run `gscdump auth login --mode local --force`')
-  })
-
-  it('points cloud session failures at the cloud recovery command', async () => {
+  it('points Hosted login failures at the Hosted login command', async () => {
     const request = vi.fn().mockResolvedValue(new Response('forbidden', { status: 403 }))
-    const error = await loginWithCloudSession({ request, authorize: async () => {}, wait: async () => {}, now: () => 0 }).then(() => null, (error: unknown) => error as Error)
+    const error = await loginWithHostedSession({ request, authorize: async () => {}, wait: async () => {}, now: () => 0 }).then(() => null, (error: unknown) => error as Error)
     expect(error).toBeInstanceOf(Error)
-    expect(error!.message).not.toContain('--mode local')
-    expect(error!.message).toContain('`gscdump auth login --mode cloud`')
+    expect(error!.message).toContain('`gscdump auth login --mode hosted`')
   })
 })

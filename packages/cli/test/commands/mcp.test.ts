@@ -23,7 +23,7 @@ vi.mock('../../src/auth', () => ({
   resolveServiceAccount: mocks.resolveServiceAccount,
   loadTokens: mocks.loadTokens,
   probeAuth: async () => {
-    if ((await mocks.resolveAuthentication())._tag === 'Cloud')
+    if ((await mocks.resolveAuthentication())._tag === 'Hosted')
       return 'hosted'
     return mocks.resolveBYOK() || await mocks.resolveServiceAccount() || await mocks.loadTokens() ? 'google' : 'none'
   },
@@ -76,7 +76,7 @@ describe('mcp command', () => {
     expect(mcpCommand.meta?.description).toContain('MCP')
   })
 
-  it('starts the MCP server when BYOK is set', async () => {
+  it('starts the MCP server when environment credentials are set', async () => {
     mocks.resolveBYOK.mockReturnValue('token-abc')
 
     await mcpCommand.run!({ args: {}, rawArgs: [], cmd: mcpCommand } as any)
@@ -87,7 +87,7 @@ describe('mcp command', () => {
       version: '1.0.0',
     }))
     const options = mocks.createGscMcpServer.mock.calls[0]![0] as { getContext: () => Promise<unknown> }
-    await expect(options.getContext()).resolves.toMatchObject({ auth: 'resolved-auth', authentication: { _tag: 'Local' } })
+    await expect(options.getContext()).resolves.toMatchObject({ auth: 'resolved-auth' })
     expect(mocks.resolveAuth).toHaveBeenCalledWith(expect.objectContaining({ interactive: false }))
     expect(mocks.serverConnect).toHaveBeenCalled()
   })
@@ -116,15 +116,14 @@ describe('mcp command', () => {
     expect(mocks.serverConnect).toHaveBeenCalled()
   })
 
-  it('uses cloud authentication for later tools after the saved mode changes', async () => {
+  it('refuses later tools with the gscdump.com MCP server after the saved mode changes to Hosted', async () => {
     mocks.resolveBYOK.mockReturnValue('local-google-token')
     await mcpCommand.run!({ args: {}, rawArgs: [], cmd: mcpCommand } as any)
-    const options = mocks.createGscMcpServer.mock.calls[0]![0] as { getContext: () => Promise<{ client: { sites: () => Promise<unknown> } }> }
-    mocks.resolveAuthentication.mockResolvedValue({ _tag: 'Cloud', apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_changed' })
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json([{ siteUrl: 'sc-domain:example.com', permissionLevel: 'siteOwner' }])))
-    const context = await options.getContext()
-    expect(await context.client.sites()).toEqual([{ siteUrl: 'sc-domain:example.com', permissionLevel: 'siteOwner' }])
-    expect(fetch).toHaveBeenCalledWith('https://gscdump.com/api/cli/gsc/sites', expect.objectContaining({ headers: expect.objectContaining({ 'x-api-key': 'gsd_user_changed' }) }))
+    const options = mocks.createGscMcpServer.mock.calls[0]![0] as { getContext: () => Promise<unknown> }
+    mocks.resolveAuthentication.mockResolvedValue({ _tag: 'Hosted', apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_changed' })
+    vi.stubGlobal('fetch', vi.fn())
+    await expect(options.getContext()).rejects.toThrow('https://gscdump.com/mcp')
+    expect(fetch).not.toHaveBeenCalled()
     expect(mocks.resolveAuth).not.toHaveBeenCalled()
   })
 })

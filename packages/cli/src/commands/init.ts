@@ -5,14 +5,14 @@ import process from 'node:process'
 import { confirm, isCancel, text } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { googleSearchConsole } from 'gscdump/client'
-import { authenticate, getAuth, loadTokens, resolveBYOK, saveTokens } from '../auth'
+import { ACCESS_NOT_SET_UP, authenticate, getAuth, loadTokens, resolveBYOK, resolveServiceAccount, saveTokens } from '../auth'
 import { saveAuthentication } from '../auth-state'
 import { initCommandMeta } from '../command-meta'
 import { defaultDataDir, loadConfig, saveConfig } from '../config'
 import { applyCliEnvironment } from '../environment'
 import { useCliRuntime } from '../runtime'
 import { applyOutputMode, displayPath, logger, OUTPUT_ARGS } from '../utils'
-import { loginCloud } from './auth'
+import { loginHosted } from './auth'
 
 const ENV_LINE_RE = /^([^=]+)=(.*)$/
 
@@ -74,15 +74,15 @@ export const initCommand = defineCommand({
     },
     'mode': {
       type: 'string',
-      description: 'Authentication mode to save: cloud or local',
+      description: 'Access mode to save: local or hosted',
     },
     'api-key': {
       type: 'string',
-      description: 'gscdump user API key for --mode cloud; defaults to GSCDUMP_API_KEY',
+      description: 'gscdump user API key for --mode hosted; defaults to GSCDUMP_API_KEY',
     },
     'api-root': {
       type: 'string',
-      description: 'Cloud API root for --mode cloud; defaults to GSCDUMP_API_ROOT or https://gscdump.com/api',
+      description: 'Hosted API root for --mode hosted; defaults to GSCDUMP_API_ROOT or https://gscdump.com/api',
     },
     ...OUTPUT_ARGS,
   },
@@ -91,9 +91,9 @@ export const initCommand = defineCommand({
     const config = await loadConfig()
     const mode = useCliRuntime().authModeOverride
 
-    if (mode === 'cloud') {
-      await loginCloud(args)
-      printNextSteps()
+    if (mode === 'hosted') {
+      await loginHosted(args)
+      printHostedNextSteps()
       return
     }
 
@@ -117,15 +117,26 @@ export const initCommand = defineCommand({
       return
     }
 
-    // BYOK shortcut: env vars already provide credentials, skip OAuth setup.
+    // Environment shortcut: env vars already provide Google credentials, skip OAuth setup.
     const byok = resolveBYOK()
     if (byok) {
       // The credentials came from the environment, so nothing here needs a person.
       const dataDir = args.store ? config.dataDir ?? defaultDataDir() : config.dataDir
       await saveConfig({ ...config, ...(dataDir ? { dataDir } : {}) })
       await saveAuthentication({ _tag: 'Local' })
-      logger.success(`BYOK detected (${typeof byok === 'string' ? 'access-token' : 'refresh-token'}). Auth setup skipped.`)
+      logger.success(`Google credentials found in the environment (${typeof byok === 'string' ? 'access-token' : 'refresh-token'}). Login skipped.`)
       logger.success('Setup complete.')
+      printNextSteps()
+      return
+    }
+
+    // Service-account shortcut: the key file needs no login and never expires.
+    const serviceAccount = await resolveServiceAccount().catch(() => null)
+    if (serviceAccount) {
+      const dataDir = args.store ? config.dataDir ?? defaultDataDir() : config.dataDir
+      await saveConfig({ ...config, ...(dataDir ? { dataDir } : {}) })
+      await saveAuthentication({ _tag: 'Local' })
+      logger.success(`Service account found (${serviceAccount.email ?? 'key file'}). Login skipped.`)
       printNextSteps()
       return
     }
@@ -175,11 +186,7 @@ export const initCommand = defineCommand({
       // No terminal: never prompt. Finish with saved tokens, or say which command to run.
       const tokens = await loadTokens()
       if (!tokens) {
-        logger.error([
-          'No Google credentials found. Init cannot prompt without a terminal.',
-          'Run `gscdump auth login` in a terminal, or set GSC_CLIENT_ID, GSC_CLIENT_SECRET and GSC_REFRESH_TOKEN.',
-          'To use gscdump.com, run `gscdump auth login --mode cloud`.',
-        ].join('\n'))
+        logger.error(`Init cannot prompt without a terminal.\n${ACCESS_NOT_SET_UP}`)
         process.exit(1)
       }
       await saveConfig({ ...config, dataDir: config.dataDir ?? defaultDataDir() })
@@ -227,6 +234,16 @@ export function printNextSteps(sites: readonly string[] = []): void {
     line('gscdump sites', 'list your Sites')
   line(`gscdump sync --site ${site}`, 'fetch the last 28 days, then catch up on each run')
   line(`gscdump sync --status --site ${site}`, 'see what the Store holds')
+  console.log()
+}
+
+/** Print the commands that come after Hosted setup. */
+export function printHostedNextSteps(): void {
+  console.log()
+  console.log('  Next:')
+  const line = (command: string, note: string): void => console.log(`    ${command.padEnd(44)} # ${note}`)
+  line('gscdump sites', 'list your hosted Sites and their sync state')
+  line('gscdump query --site <site> -d query', 'read the hosted record')
   console.log()
 }
 

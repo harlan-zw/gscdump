@@ -21,7 +21,7 @@ Commands live in [package.json](package.json).
 Verify external migrations in the affected consumer repositories and run their tests before declaring them complete.
 
 Keep CLI authentication docs and [the packaged skill](packages/cli/skills/gscdump/SKILL.md) aligned with command behavior.
-Refresh `~/sites/gscdump.com/public/SKILL.md` when the packaged skill changes.
+Refresh `~/sites/gscdump.com/skills/gscdump/SKILL.md` when the packaged skill changes.
 
 ## Live API Checks
 

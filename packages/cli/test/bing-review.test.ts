@@ -81,7 +81,7 @@ it('refreshes OAuth credentials before continuing a long dump across Sites', asy
 })
 
 it('resolves an explicit hosted Site when an unrelated shared Site denies Bing access', async () => {
-  const state = { _tag: 'Cloud' as const, apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_test' }
+  const state = { _tag: 'Hosted' as const, apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_test' }
   const requested: string[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {
     const url = new URL(input)
@@ -128,7 +128,7 @@ it('resolves an explicit hosted Site when an unrelated shared Site denies Bing a
 })
 
 it('lists reachable hosted Sites when one Site denies Bing access', async () => {
-  const state = { _tag: 'Cloud' as const, apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_listing' }
+  const state = { _tag: 'Hosted' as const, apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_listing' }
   await runWithCliRuntime(runtime, () => saveAuthentication(state))
   const output: string[] = []
   vi.spyOn(console, 'log').mockImplementation((...args) => output.push(args.map(String).join(' ')))
@@ -179,7 +179,7 @@ it('lists reachable hosted Sites when one Site denies Bing access', async () => 
 })
 
 it('keeps the hard failure for an explicit hosted Site whose connection is denied', async () => {
-  const state = { _tag: 'Cloud' as const, apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_explicit' }
+  const state = { _tag: 'Hosted' as const, apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_explicit' }
   vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {
     const url = new URL(input)
     if (url.pathname === '/api/cli/me') {

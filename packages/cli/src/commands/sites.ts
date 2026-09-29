@@ -1,10 +1,11 @@
 import type { VerificationMethod } from 'gscdump/sites'
+import type { HostedAuthentication } from '../auth-state'
 import process from 'node:process'
 import { confirm, isCancel } from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { resolveSiteInput } from 'gscdump'
 import { addSite, deleteSite, fetchSitesWithSitemaps, getVerificationToken, getVerifiedSite, listVerifiedSites, siteUrlToVerificationSite, unverifySite, verificationMethodsFor, verifySite } from 'gscdump/sites'
-import { formatHostedSync, getCloudSites } from '../auth-state'
+import { formatHostedSync, getHostedAccount, LOCAL_MODE_REQUIRED, resolveAuthentication } from '../auth-state'
 import { sitesCommandMeta } from '../command-meta'
 import { createCommandContext, formatSiteResolution } from '../context'
 import { applyOutputMode, logger, OUTPUT_ARGS } from '../utils'
@@ -377,10 +378,37 @@ const LIST_ARGS = {
   'owner-only': { type: 'boolean' as const, default: false, description: 'Filter to permissionLevel=siteOwner' },
 }
 
+/** Hosted mode lists the Sites in the gscdump.com record. It never calls Google. */
+async function runListHostedSites(args: Record<string, unknown>, authentication: HostedAuthentication): Promise<void> {
+  if (args['with-sitemaps'] || args['owner-only'])
+    throw new Error(`--with-sitemaps and --owner-only read Search Console permissions.\n${LOCAL_MODE_REQUIRED}`)
+  const { sites } = await getHostedAccount(authentication)
+  if (args.json) {
+    console.log(JSON.stringify(sites.map(site => ({
+      siteId: site.siteId,
+      siteUrl: site.siteUrl,
+      hostedSync: { syncStatus: site.syncStatus ?? null, syncProgress: site.syncProgress ?? null, oldestDateSynced: site.oldestDateSynced ?? null, newestDateSynced: site.newestDateSynced ?? null },
+    })), null, 2))
+    return
+  }
+  if (sites.length === 0) {
+    logger.warn('Your hosted record has no Sites. Connect a Site at https://gscdump.com/app/onboarding?step=connect-sites.')
+    return
+  }
+  logger.success(`Found ${sites.length} hosted sites:`)
+  console.log()
+  for (const site of sites)
+    console.log(`  ${site.siteUrl} \x1B[90m(${site.siteId})\x1B[0m  hosted sync ${formatHostedSync(site)}`)
+}
+
 async function runListSites(args: Record<string, unknown>): Promise<void> {
   applyOutputMode(args)
+  const authentication = await resolveAuthentication()
+  if (authentication._tag === 'Hosted') {
+    await runListHostedSites(args, authentication)
+    return
+  }
   const ctx = await createCommandContext({ needsAuth: true })
-
   const ownerOnly = Boolean(args['owner-only'])
 
   if (args['with-sitemaps']) {
@@ -417,25 +445,8 @@ async function runListSites(args: Record<string, unknown>): Promise<void> {
 
   const all = await ctx.loadSites()
   const sites = ownerOnly ? all.filter(s => s.permissionLevel === 'siteOwner') : all
-  // Hosted mode shows the sync progress of gscdump.com next to each Site.
-  const hosted = ctx.authentication._tag === 'Cloud'
-    ? await getCloudSites(ctx.authentication).then(
-        list => new Map(list.map(site => [site.siteUrl, site])),
-        (error: Error) => {
-          // The Site list still prints. Only the hosted progress is missing.
-          logger.warn(`Hosted sync status is not available: ${error.message}`)
-          return undefined
-        },
-      )
-    : undefined
-
   if (args.json) {
-    console.log(JSON.stringify(hosted
-      ? sites.map((site) => {
-          const entry = hosted.get(site.siteUrl)
-          return { ...site, hostedSync: entry?.registered ? { syncStatus: entry.syncStatus ?? null, syncProgress: entry.syncProgress ?? null, oldestDateSynced: entry.oldestDateSynced ?? null, newestDateSynced: entry.newestDateSynced ?? null } : null }
-        })
-      : sites, null, 2))
+    console.log(JSON.stringify(sites, null, 2))
     return
   }
 
@@ -448,9 +459,7 @@ async function runListSites(args: Record<string, unknown>): Promise<void> {
   console.log()
   for (const site of sites) {
     const perm = site.permissionLevel === 'siteOwner' ? '\x1B[32m' : '\x1B[90m'
-    const entry = hosted?.get(site.siteUrl)
-    const sync = entry ? formatHostedSync(entry) : undefined
-    console.log(`  ${site.siteUrl} ${perm}(${site.permissionLevel})\x1B[0m${sync ? `  hosted sync ${sync}` : ''}`)
+    console.log(`  ${site.siteUrl} ${perm}(${site.permissionLevel})\x1B[0m`)
   }
 }
 

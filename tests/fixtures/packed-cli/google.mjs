@@ -8,11 +8,9 @@ const cloudBingSite = 'https://cloud.example.com/'
 const bingStats = { Date: '/Date(1786406400000)/', Clicks: 12, Impressions: 80 }
 const envelope = data => Response.json({ data, meta: { requestId: 'req_packed', surface: 'partner', version: '1.0' } })
 
-function googleRows(body, hosted = false) {
-  const keys = body.dimensions.map(dimension => dimension === 'page'
-    ? hosted ? 'https://cloud.example.com/hosted-guide' : 'https://example.com/guide'
-    : body.startDate)
-  return { rows: body.startRow > 0 ? [] : [{ keys, clicks: hosted ? 9 : 5, impressions: hosted ? 90 : 50, position: 3, ctr: 0.1 }] }
+function googleRows(body) {
+  const keys = body.dimensions.map(dimension => dimension === 'page' ? 'https://example.com/guide' : body.startDate)
+  return { rows: body.startRow > 0 ? [] : [{ keys, clicks: 5, impressions: 50, position: 3, ctr: 0.1 }] }
 }
 
 // The installed CLI uses only these fixtures. Unknown hosts and credentials fail.
@@ -57,12 +55,14 @@ globalThis.fetch = async (request, options = {}) => {
         sites: [{ siteId: 's_packed', siteUrl: cloudSite }],
       })
     }
-    if (url.pathname === '/api/cli/gsc/sites')
-      return Response.json([{ siteUrl: cloudSite, permissionLevel: 'siteOwner' }])
-    if (url.pathname === '/api/cli/gsc/query') {
+    // Hosted mode reads the hosted record through the public rows operation. It has no Google proxy.
+    if (url.pathname === '/api/analytics/v1/sites/s_packed/rows') {
       const body = JSON.parse(options.body)
-      assert.equal(body.siteUrl, cloudSite)
-      return Response.json(googleRows(body, true))
+      assert.deepEqual(body.dimensions, ['page'])
+      return Response.json({
+        data: { rows: [{ page: 'https://cloud.example.com/hosted-guide', clicks: 9, impressions: 90, position: 3, ctr: 0.1 }] },
+        meta: { requestId: 'req_packed', surface: 'analytics', version: '1.0', sourceName: 'packed', sourceKind: 'row', queryMs: 1 },
+      })
     }
     if (url.pathname === '/api/partner/v1/sites/s_packed/indexing/bing/connection') {
       return envelope({

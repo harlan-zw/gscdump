@@ -65,7 +65,7 @@ export async function dumpBing(opts: {
   const failures: Array<{ siteUrl: string, error: string }> = []
 
   const authentication = await resolveAuthentication()
-  if (authentication._tag === 'Cloud') {
+  if (authentication._tag === 'Hosted') {
     const hosted = (await listHostedBingSites(authentication)).filter(site => site.connection._tag === 'connected')
     const wanted = new Set(matchBingSites(hosted.map(site => site.siteUrl), opts.googleSites))
     const selected = hosted.filter(site => wanted.has(site.siteUrl))

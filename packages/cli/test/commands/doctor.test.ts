@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   loadTokens: vi.fn(),
   resolveAuth: vi.fn(),
   getAuth: vi.fn(),
+  resolveServiceAccount: vi.fn(),
   ofetchRaw: vi.fn(),
   ofetch: vi.fn(),
   localSites: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('../../src/auth', () => ({
   loadTokens: mocks.loadTokens,
   resolveAuth: mocks.resolveAuth,
   getAuth: mocks.getAuth,
+  resolveServiceAccount: mocks.resolveServiceAccount,
 }))
 vi.mock('../../src/env-file', () => ({ parseEnvFile: () => null }))
 vi.mock('../../src/local-store', () => ({
@@ -44,7 +46,7 @@ vi.mock('gscdump/client', async (importOriginal) => {
   }
 })
 
-const cloud = { _tag: 'Cloud' as const, apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_private_secret' }
+const cloud = { _tag: 'Hosted' as const, apiRoot: 'https://gscdump.com/api', apiKey: 'gsd_user_private_secret' }
 const hostedSite = 'https://cloud.example.com/'
 
 describe('doctor command', () => {
@@ -63,12 +65,12 @@ describe('doctor command', () => {
     output = []
     requests = []
     replies = {
-      '/api/cli/me': { user: { publicId: 'usr_123', email: 'cloud@example.com' }, sites: [] },
-      '/api/cli/gsc/sites': [{ siteUrl: hostedSite, permissionLevel: 'siteOwner' }],
+      '/api/cli/me': { user: { publicId: 'usr_123', email: 'cloud@example.com' }, sites: [{ siteId: 's_1', siteUrl: hostedSite }] },
     }
     vi.clearAllMocks()
     vi.spyOn(console, 'log').mockImplementation((...args) => output.push(args.join(' ')))
     mocks.resolveBYOK.mockReturnValue(null)
+    mocks.resolveServiceAccount.mockResolvedValue(null)
     mocks.loadTokens.mockResolvedValue(null)
     mocks.resolveAuth.mockResolvedValue('local-token')
     mocks.getAuth.mockResolvedValue({ getAccessToken: async () => ({ token: 'refreshed-token' }) })
@@ -113,15 +115,17 @@ describe('doctor command', () => {
     await runWithCliRuntime(runtime, () => saveAuthentication(cloud))
   }
 
-  it('accepts the platform read-only grant', async () => {
-    mocks.loadTokens.mockResolvedValue({ provider: 'gscdump', access_token: 'token' })
-    mocks.ofetch.mockResolvedValue({ scope: 'webmasters.readonly' })
+  it('checks a service account first, without OAuth tokens', async () => {
+    mocks.resolveServiceAccount.mockResolvedValue({ email: 'reader@project.iam.gserviceaccount.com', getAccessToken: async () => ({ token: 'sa-token' }) })
+    mocks.resolveBYOK.mockReturnValue('unused-env-token')
     const result = await run()
-    expect(result.checks).toContainEqual({ name: 'auth.scopes', status: 'pass', detail: '1 granted' })
+    expect(result.checks).toContainEqual({ name: 'auth', status: 'pass', detail: 'service account reader@project.iam.gserviceaccount.com' })
+    expect(mocks.resolveBYOK).not.toHaveBeenCalled()
+    expect(mocks.localSites).toHaveBeenCalledOnce()
   })
 
   it('refreshes saved tokens before asking Google about them', async () => {
-    mocks.loadTokens.mockResolvedValue({ provider: 'gscdump', access_token: 'expired-token', refresh_token: 'r', expiry_date: 1 })
+    mocks.loadTokens.mockResolvedValue({ access_token: 'expired-token', refresh_token: 'r', expiry_date: 1 })
     const result = await run()
     expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth', status: 'pass' }))
     expect(tokenInfoCalls()).toEqual(['access_token=refreshed-token'])
@@ -153,14 +157,14 @@ describe('doctor command', () => {
     const result = await run()
 
     expect(result.ok).toBe(true)
-    expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth', status: 'pass', detail: expect.stringContaining('BYOK') }))
+    expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth', status: 'pass', detail: expect.stringContaining('environment credentials') }))
     expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth.scopes', status: 'pass' }))
     expect(result.checks).toContainEqual(expect.objectContaining({ name: 'gsc.sites', status: 'pass' }))
     expect(tokenInfoCalls()).toEqual(['access_token=byok-token'])
     expect(requests).toEqual([])
   })
 
-  it('checks a hosted account and Sites without using local Google credentials', async () => {
+  it('checks a Hosted account and Sites without calling Google', async () => {
     await selectCloud()
     mocks.resolveBYOK.mockReturnValue('unrelated-local-token')
     mocks.getWatermarks.mockResolvedValue([{ siteId: hostedSite, newestDateSynced: '2020-01-01' }])
@@ -170,10 +174,10 @@ describe('doctor command', () => {
     expect(result.ok).toBe(true)
     expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth', status: 'pass' }))
     expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth.account', detail: 'cloud@example.com' }))
-    expect(result.checks).toContainEqual(expect.objectContaining({ name: 'gsc.sites', status: 'pass' }))
+    expect(result.checks).toContainEqual({ name: 'hosted.sites', status: 'pass', detail: '1 hosted Site(s)' })
     expect(result.checks).toContainEqual(expect.objectContaining({ name: 'store.watermarks', status: 'warn', detail: expect.stringContaining(hostedSite) }))
-    expect(requests.map(request => request.url.pathname)).toEqual(['/api/cli/me', '/api/cli/gsc/sites'])
-    expect(requests.map(request => request.headers.get('x-api-key'))).toEqual([cloud.apiKey, cloud.apiKey])
+    expect(requests.map(request => request.url.pathname)).toEqual(['/api/cli/me'])
+    expect(requests.map(request => request.headers.get('x-api-key'))).toEqual([cloud.apiKey])
     expect(mocks.resolveBYOK).not.toHaveBeenCalled()
     expect(mocks.loadTokens).not.toHaveBeenCalled()
     expect(mocks.resolveAuth).not.toHaveBeenCalled()
@@ -198,19 +202,7 @@ describe('doctor command', () => {
     expect(output.join('\n')).not.toContain(cloud.apiKey)
   })
 
-  it('reports hosted Sites failures without falling back to local Sites', async () => {
-    await selectCloud()
-    replies['/api/cli/gsc/sites'] = Response.json({ error: 'connection_missing' }, { status: 403 })
-
-    const result = await run()
-
-    expect(result.ok).toBe(false)
-    expect(result.checks).toContainEqual(expect.objectContaining({ name: 'auth', status: 'pass' }))
-    expect(result.checks).toContainEqual(expect.objectContaining({ name: 'gsc.sites', status: 'fail', detail: expect.stringContaining('403') }))
-    expect(mocks.localSites).not.toHaveBeenCalled()
-  })
-
-  it('honours a local mode override when cloud authentication is saved', async () => {
+  it('honours a Local mode override when Hosted mode is saved', async () => {
     await selectCloud()
     runtime.authModeOverride = 'local'
     mocks.resolveBYOK.mockReturnValue('local-override-token')

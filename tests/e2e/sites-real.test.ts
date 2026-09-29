@@ -110,7 +110,7 @@ describe.skipIf(skip)('verification — real API (read-only)', () => {
   })
 })
 
-describe.runIf(skip)('sites — real API (skipped: no BYOK env vars)', () => {
+describe.runIf(skip)('sites — real API (skipped: no Google env credentials)', () => {
   it('skipped — set GSC_CLIENT_ID/SECRET/REFRESH_TOKEN or GSC_ACCESS_TOKEN to run', () => {
     expect(true).toBe(true)
   })

@@ -22,7 +22,7 @@ describe('cli help', () => {
       environment: { NO_COLOR: '1' },
     })
 
-    expect(output.join('\n')).toContain('query    Run a search analytics query (local Parquet by default, --live hits GSC API)')
+    expect(output.join('\n')).toContain('query    Run a search analytics query (Store or hosted record; --live calls Google)')
   })
 
   it('renders nested command help through the shallow command', async () => {

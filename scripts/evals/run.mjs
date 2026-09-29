@@ -74,7 +74,7 @@ function requireGoogle() {
     blocked('Google test credentials are missing.')
 }
 let cli
-async function context(id, { seeded = false, cloud = false, authenticated = true, allowLive = false, url, storeFixture } = {}) {
+async function context(id, { seeded = false, hosted = false, authenticated = true, allowLive = false, url, storeFixture } = {}) {
   const directory = join(temporary, id)
   const workspace = join(directory, 'workspace')
   const config = join(directory, 'config')
@@ -83,7 +83,7 @@ async function context(id, { seeded = false, cloud = false, authenticated = true
   const home = join(directory, 'home')
   await mkdir(home)
   const env = { ...(authenticated ? credentials : { PATH: credentials.PATH }), HOME: home, GSCDUMP_CONFIG_DIR: config }
-  if (!cloud)
+  if (!hosted)
     delete env.GSCDUMP_API_KEY
   await writeFile(join(config, 'config.json'), JSON.stringify({ defaultSite: site, dataDir: join(directory, 'store') }), { mode: 0o600 })
   if (storeFixture)
@@ -97,7 +97,7 @@ async function context(id, { seeded = false, cloud = false, authenticated = true
     return result.stdout
   }
   if (authenticated)
-    await setup(['auth', 'login', '--mode', cloud ? 'cloud' : 'local', '--json'])
+    await setup(['auth', 'login', '--mode', hosted ? 'hosted' : 'local', '--json'])
   if (seeded)
     await setup(seedCommand(site, start, end, seeded))
   const trace = join(directory, 'calls.jsonl')
@@ -284,21 +284,20 @@ try {
       assert.equal(section.findings.length, Math.min(5, analyzer.results.length))
       return { queryRows: query.data.length, analyzerFindings: analyzer.results.length, reportSections: composed.sections.length }
     })
-    await attempt('cloud-mode', async () => {
-      requireGoogle()
+    await attempt('hosted-mode', async () => {
       if (!credentials.GSCDUMP_API_KEY)
         blocked('Set GSCDUMP_API_KEY to a real test user key.')
-      const ctx = await context('cloud', { cloud: true })
+      const ctx = await context('hosted', { hosted: true })
       const state = await readFile(join(ctx.config, 'authentication.json'), 'utf8')
-      assert.equal(JSON.parse(state)._tag, 'Cloud')
-      const value = await ctx.setup(['query', '--live', '--site', site, '--start', start, '--end', end, '--dimensions', 'page', '--format', 'json'])
-      assert(rows(value).length > 0, 'The cloud query returned no rows.')
+      assert.equal(JSON.parse(state)._tag, 'Hosted')
+      const value = await ctx.setup(['query', '--site', site, '--start', start, '--end', end, '--dimensions', 'page', '--format', 'json'])
+      assert(rows(value).length > 0, 'The hosted record query returned no rows.')
       assert.equal(await readFile(join(ctx.config, 'authentication.json'), 'utf8'), state)
     })
     await attempt('bing-pagination', async () => {
       if (!credentials.GSCDUMP_API_KEY || !process.env.EVAL_BING_SITE)
-        blocked('Set GSCDUMP_API_KEY and EVAL_BING_SITE to a connected cloud Bing Site.')
-      const ctx = await context('bing', { cloud: true })
+        blocked('Set GSCDUMP_API_KEY and EVAL_BING_SITE to a Bing Site connected on gscdump.com.')
+      const ctx = await context('bing', { hosted: true })
       const dump = JSON.parse(await ctx.setup(['bing', 'dump', '--site', process.env.EVAL_BING_SITE, '--datasets', 'pages', '--format', 'json', '--out', './export', '--json']))
       assert(dump.files.length > 0, 'Bing export has no files.')
       let count = 0
