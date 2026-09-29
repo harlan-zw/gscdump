@@ -31,8 +31,9 @@ export type {
   PlanGscBackwardDatesOptions,
   PlanGscSyncWorkOptions,
 } from './sync-plan'
-export { runGscSearchAppearanceContextSlice, runGscSyncSlice } from './sync-slice'
+export { hostPagePattern, requestAggregation, runGscSearchAppearanceContextSlice, runGscSyncSlice } from './sync-slice'
 export type {
+  GscAggregation,
   GscApiRow,
   RunGscSearchAppearanceContextSliceOptions,
   RunGscSearchAppearanceContextSliceResult,

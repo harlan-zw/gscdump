@@ -67,3 +67,45 @@ describe('createLiveGscSource page scope', () => {
     expect(JSON.stringify(states[0]!.filter)).not.toContain('includingRegex')
   })
 })
+
+describe('createLiveGscSource page scope composition', () => {
+  function scoped() {
+    const states: Array<Record<string, unknown>> = []
+    const client = { query: vi.fn((_s: string, builder: { getState: () => Record<string, unknown> }) => {
+      states.push(builder.getState())
+      return emptyRows()
+    }) }
+    const source = createLiveGscSource({ siteUrl: 'sc-domain:example.com', getAccessToken: async () => 't', createClient: () => client as any, pageScope: { host: 'example.com' } })
+    return { states, source }
+  }
+
+  it('keeps the caller filter and adds the scope', async () => {
+    const { states, source } = scoped()
+    await source.queryRows(gsc.select(query).where(between(date, '2026-06-01', '2026-06-30')).getState())
+
+    const filter = JSON.stringify(states[0]!.filter)
+    expect(filter).toContain('2026-06-01')
+    expect(filter).toContain('includingRegex')
+  })
+
+  it('composes a wire-shaped filter instead of crashing', async () => {
+    const { states, source } = scoped()
+    const wire = { type: 'and', filters: [{ type: 'between', column: 'date', from: '2026-06-01', to: '2026-06-30' }] }
+    await source.queryRows({ dimensions: ['query'], filter: wire } as any)
+
+    expect(JSON.stringify(states[0]!.filter)).toContain('includingRegex')
+  })
+
+  it('rejects a malformed filter with the typed query error, not a crash', async () => {
+    const { source } = scoped()
+
+    await expect(source.queryRows({ dimensions: ['query'], filter: { type: 'and', filters: 'nope' } } as any)).rejects.toMatchObject({ queryError: { kind: 'invalid-filter' } })
+  })
+
+  it('rejects by-property counting under a page scope with a typed error', async () => {
+    const { source } = scoped()
+    const state = { ...gsc.select(query).where(between(date, '2026-06-01', '2026-06-30')).getState(), aggregationType: 'byProperty' as const }
+
+    await expect(source.queryRows(state)).rejects.toMatchObject({ queryError: { kind: 'invalid-aggregation-type' } })
+  })
+})

@@ -135,6 +135,8 @@ export type SearchAppearanceContinuation
 export interface RunGscSearchAppearanceContextSliceResult {
   appearances: string[]
   totalRows: number
+  /** How GSC counted impressions for each table this run wrote rows to. */
+  aggregation: Partial<Record<'search_appearance' | SearchAppearanceContextTable, GscAggregation>>
   hasMore: boolean
   continuation?: SearchAppearanceContinuation
   /**
@@ -200,14 +202,26 @@ export function hostPagePattern(host: string): string {
   return `^https?://${host.replace(/\./g, '\\.')}/`
 }
 
-/** Which counting GSC applies to a request with these dimensions and filters. */
+/**
+ * The counting GSC should apply to a request with these dimensions, filters,
+ * and search type. The sync prefers the `responseAggregationType` GSC reports;
+ * this is the fallback when a response omits it.
+ */
 export function requestAggregation(
   dimensions: readonly string[],
   filterGroups: readonly { filters: readonly { dimension: string }[] }[] | undefined,
+  searchType: SearchType = 'web',
 ): GscAggregation {
+  // Discover and Google News have no by-property counting.
+  if (searchType === 'discover' || searchType === 'googleNews')
+    return 'byPage'
   const byPage = dimensions.includes('page')
     || (filterGroups ?? []).some(group => group.filters.some(filter => filter.dimension === 'page'))
   return byPage ? 'byPage' : 'byProperty'
+}
+
+function reportedAggregation(value: unknown): GscAggregation | null {
+  return value === 'byPage' || value === 'byProperty' ? value : null
 }
 
 function buildDimensionFilterGroups(
@@ -241,7 +255,8 @@ export async function runGscSyncSlice(
     : [...DIMENSIONS_BY_TABLE[opts.table]]
   const dataState: GscDataState = opts.dataState ?? (dimensions.includes('hour') ? 'hourly_all' : 'all')
   const dimensionFilterGroups = buildDimensionFilterGroups(opts.domainFilter, opts.dimensionFilters)
-  const aggregation = requestAggregation(dimensions, dimensionFilterGroups)
+  // What GSC reports on each response wins over the inferred fallback.
+  let aggregation = requestAggregation(dimensions, dimensionFilterGroups, searchType)
 
   const loopStart = Date.now()
   let startRow = opts.initialStartRow ?? 0
@@ -272,6 +287,7 @@ export async function runGscSyncSlice(
     }
     try {
       const response = await opts.client.searchAnalytics.query(opts.siteUrl, query)
+      aggregation = reportedAggregation((response as { responseAggregationType?: unknown }).responseAggregationType) ?? aggregation
       return {
         kind: 'ok',
         startRow: row,
@@ -385,6 +401,7 @@ export async function runGscSearchAppearanceContextSlice(
   let totalRows = 0
   let hasMore = false
   let metadata: GscSearchAnalyticsMetadata | undefined
+  const aggregation: RunGscSearchAppearanceContextSliceResult['aggregation'] = {}
 
   if (!opts.appearances && opts.continuation?.phase !== 'context') {
     const discovered = new Set<string>(appearances)
@@ -413,10 +430,12 @@ export async function runGscSearchAppearanceContextSlice(
     })
     totalRows += discovery.totalRows
     metadata = discovery.metadata
+    aggregation.search_appearance = discovery.aggregation
     if (discovery.hasMore) {
       return {
         appearances: [...discovered],
         totalRows,
+        aggregation,
         hasMore: true,
         continuation: { phase: 'discovery', appearances: [...discovered], nextStartRow: discovery.nextStartRow },
         metadata,
@@ -449,10 +468,12 @@ export async function runGscSearchAppearanceContextSlice(
     })
     totalRows += context.totalRows
     metadata = context.metadata
+    aggregation[table] = context.aggregation
     if (context.hasMore) {
       return {
         appearances,
         totalRows,
+        aggregation,
         hasMore: true,
         continuation: { phase: 'context', appearances, appearanceIndex: i, nextStartRow: context.nextStartRow },
         metadata,
@@ -461,5 +482,5 @@ export async function runGscSearchAppearanceContextSlice(
     hasMore ||= context.hasMore
   }
 
-  return { appearances, totalRows, hasMore, metadata }
+  return { appearances, totalRows, hasMore, metadata, aggregation }
 }

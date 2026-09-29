@@ -13,7 +13,7 @@ import type { AnalysisQuerySource } from '@gscdump/engine/source'
 import type { GoogleSearchConsoleClient } from 'gscdump'
 import type { BuilderState, Filter } from 'gscdump/query'
 import { googleSearchConsole } from 'gscdump'
-import { and, normalizeBuilderStateResult, page, regex } from 'gscdump/query'
+import { and, normalizeBuilderStateResult, page, queryErrors, queryErrorToException, regex } from 'gscdump/query'
 import { createGscApiQuerySource } from './source'
 import { hostPagePattern } from './sync-slice'
 
@@ -68,9 +68,20 @@ function withSearchType(state: BuilderState, searchType: EngineSearchType): Buil
   return state.searchType ? state : { ...state, searchType }
 }
 
+// Normalizes first so a wire-shaped filter composes like a builder one. A
+// requested by-property or showcase counting cannot hold under a page filter,
+// so it fails as the typed query error GSC's own rule would raise.
 function withPageScope(state: BuilderState, host: string): BuilderState {
+  const parsed = normalizeBuilderStateResult(state)
+  if (!parsed.ok)
+    throw queryErrorToException(parsed.error)
+  const base = parsed.value
+  if (base.aggregationType === 'byProperty')
+    throw queryErrorToException(queryErrors.byPropertyNotAllowedWithPage())
+  if (base.aggregationType === 'byNewsShowcasePanel')
+    throw queryErrorToException(queryErrors.byNewsShowcaseNotAllowedWithPage())
   const scope = regex(page, hostPagePattern(host))
-  return { ...state, filter: state.filter ? and(state.filter as Filter<any>, scope) : scope }
+  return { ...base, filter: base.filter ? and(base.filter as Filter<any>, scope) : scope }
 }
 
 export function createLiveGscSource(opts: CreateLiveGscSourceOptions): AnalysisQuerySource {

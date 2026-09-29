@@ -462,3 +462,48 @@ describe('runGscSyncSlice aggregation', () => {
     expect(captured[0]!.dimensionFilterGroups === undefined).toBe(domainFilter === null)
   })
 })
+
+describe('runGscSyncSlice aggregation sources', () => {
+  it('prefers the counting GSC reports over the inferred one', async () => {
+    const result = await runGscSyncSlice({
+      client: makeClient([{ rows: [], responseAggregationType: 'byPage' } as SearchAnalyticsResponse], []),
+      siteUrl: 'sc-domain:example.com',
+      table: 'queries',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      onBatch: async () => {},
+    })
+
+    expect(result.aggregation).toBe('byPage')
+  })
+
+  it('infers by-page counting for Discover, which has no by-property mode', async () => {
+    const result = await runGscSyncSlice({
+      client: makeClient([{ rows: [] }], []),
+      siteUrl: 'sc-domain:example.com',
+      table: 'dates',
+      searchType: 'discover',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      onBatch: async () => {},
+    })
+
+    expect(result.aggregation).toBe('byPage')
+  })
+
+  it('reports counting per table for search-appearance runs', async () => {
+    const result = await runGscSearchAppearanceContextSlice({
+      client: makeClient([
+        { rows: [{ keys: ['AMP_TOP_STORIES'], clicks: 1, impressions: 2, ctr: 0.5, position: 1 }] },
+        { rows: [] },
+      ], []),
+      siteUrl: 'sc-domain:example.com',
+      grain: 'query',
+      startDate: '2026-05-10',
+      endDate: '2026-05-17',
+      onContextBatch: async () => {},
+    })
+
+    expect(result.aggregation).toEqual({ search_appearance: 'byProperty', search_appearance_queries: 'byProperty' })
+  })
+})
