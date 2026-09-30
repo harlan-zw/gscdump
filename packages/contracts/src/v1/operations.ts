@@ -2,6 +2,11 @@ import type { HttpV1ErrorCode, HttpV1ProtocolOperation } from './http-core'
 import type { RealtimeV1Schemas } from './realtime'
 import { z } from 'zod'
 import {
+  watchedUrlsChangeRequestSchema,
+  watchedUrlsChangeResponseSchema,
+  watchedUrlsResponseSchema,
+} from '../indexing-coverage'
+import {
   addPartnerTeamMemberSchema,
   bindPartnerSiteTeamSchema,
   bindPartnerTeamCatalogResponseSchema,
@@ -586,6 +591,9 @@ export function createGscdumpV1Protocol() {
     errors: z.array(z.strictObject({ url: z.string(), error: z.string() })),
     skipped: z.array(z.strictObject({ url: z.string(), reason: z.enum(['domain_mismatch', 'rate_limited']) })),
   }), partnerResponseMeta)
+
+  const watchedUrlsResponse = defineSuccessResponse(defineResponseObject(watchedUrlsResponseSchema.shape), partnerResponseMeta)
+  const watchedUrlsChangeResponse = defineSuccessResponse(defineResponseObject(watchedUrlsChangeResponseSchema.shape), partnerResponseMeta)
 
   // ── 1.2.0 promotions (2026-07-22 full train, tranche B: analysis endpoints) ──
   // Shapes authored from the private handlers' return statements (the routes'
@@ -1768,6 +1776,136 @@ export function createGscdumpV1Protocol() {
             request: { params: { siteId: 's_01' }, body: { urls: ['https://example.com/'] } },
             response: {
               data: { siteId: 's_01', rateLimit: { reserved: 1, remaining: 199, limit: 200 }, results: [], errors: [], skipped: [] },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      listSiteWatchedUrls: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.watched.list'),
+        visibility: 'public',
+        semantics: { kind: 'query', sideEffects: 'none', idempotent: true, retry: 'idempotent', readConsistency: 'primary' },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:read'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: null,
+        },
+        responses: { 200: watchedUrlsResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: { reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }], changes: [] },
+        lifecycle: { introduced: '4.6.0' },
+        docs: {
+          summary: 'List Watched URLs',
+          description: 'Returns the Site\'s Watched URLs. gscdump inspects each one every 7 days, before other scheduled URLs, and never backs off. Each Checkpoint is one scheduled URL Inspection, newest first, with the parsed coverage state and Google\'s coverage text.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { siteId: 's_01' } },
+            response: {
+              data: {
+                watched: [{
+                  url: 'https://example.com/guide',
+                  addedAt: '2026-09-30T00:00:00.000Z',
+                  dueAt: '2026-10-07T01:00:00.000Z',
+                  checkpoints: [{
+                    checkedAt: '2026-09-30T01:00:00.000Z',
+                    coverageState: 'unknown_to_google',
+                    googleCoverageState: 'URL is unknown to Google',
+                    verdict: 'NEUTRAL',
+                    lastCrawlTime: null,
+                  }],
+                }],
+                limit: 50,
+                cadenceDays: 7,
+                meta: { siteUrl: 'sc-domain:example.com' },
+              },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      addSiteWatchedUrls: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.watched.add'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: watchedUrlsChangeRequestSchema,
+        },
+        responses: { 200: watchedUrlsChangeResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }],
+          changes: [{ type: 'site.indexing', idFrom: 'params.siteId' }],
+        },
+        lifecycle: { introduced: '4.6.0' },
+        docs: {
+          summary: 'Add Watched URLs',
+          description: 'Adds URLs on the Site host to the Site\'s Watched URLs, up to 50 per Site. A new Watched URL is due for inspection at once. Each scheduled inspection spends the Site\'s daily URL Inspection budget and the URL Inspections meter. URLs off the Site host, fragment URLs, and URLs past the limit come back in `skipped`.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { siteId: 's_01' }, body: { urls: ['https://example.com/guide'] } },
+            response: {
+              data: { changed: ['https://example.com/guide'], unchanged: [], skipped: [], total: 1, limit: 50 },
+              meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
+            },
+          },
+        },
+      }),
+      removeSiteWatchedUrls: defineHttpOperation({
+        ...gscdumpV1OperationRoute('partner.sites.indexing.watched.remove'),
+        visibility: 'public',
+        semantics: { kind: 'mutation', sideEffects: 'state', idempotent: true, retry: 'idempotent', readConsistency: null },
+        auth: {
+          credentials: ['user_key', 'partner_key'],
+          scopes: ['indexing:write'],
+          ownership: [
+            { credential: 'user_key', rule: 'authorized_site' },
+            { credential: 'partner_key', rule: 'authorized_site' },
+          ],
+        },
+        request: {
+          params: z.strictObject({ siteId: realtimeSchemas.publicSiteId }),
+          query: null,
+          headers: requestHeaders,
+          body: watchedUrlsChangeRequestSchema,
+        },
+        responses: { 200: watchedUrlsChangeResponse },
+        errors: partnerSiteErrors,
+        errorResponse: errorEnvelopeSchemas(partnerSiteErrors, realtimeSchemas.publicRequestId),
+        resources: {
+          reads: [{ type: 'site.indexing', idFrom: 'params.siteId' }],
+          changes: [{ type: 'site.indexing', idFrom: 'params.siteId' }],
+        },
+        lifecycle: { introduced: '4.6.0' },
+        docs: {
+          summary: 'Remove Watched URLs',
+          description: 'Removes URLs from the Site\'s Watched URLs and deletes their Checkpoints. The stored URL Inspection results stay. URLs that were not watched come back in `unchanged`.',
+          tags: ['Indexing'],
+          examples: {
+            request: { params: { siteId: 's_01' }, body: { urls: ['https://example.com/guide'] } },
+            response: {
+              data: { changed: ['https://example.com/guide'], unchanged: [], skipped: [], total: 0, limit: 50 },
               meta: { requestId: 'req_01', surface: 'partner', version: '1.0' },
             },
           },
@@ -3328,6 +3466,8 @@ export function createGscdumpV1Protocol() {
       indexingTransitionsResponse,
       indexingUrlsQuery,
       indexingUrlsResponse,
+      watchedUrlsResponse,
+      watchedUrlsChangeResponse,
       bingIndexingEvidenceQuery,
       bingIndexingEvidenceResponse,
       bingConnectionResponse,
@@ -3371,6 +3511,8 @@ export type PartnerBingIndexingEvidenceV1Response = z.infer<GscdumpV1Protocol['s
 export type PartnerBingConnectionV1Response = z.infer<GscdumpV1Protocol['schemas']['bingConnectionResponse']['client']>
 export type PartnerIndexingTransitionsV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingTransitionsResponse']['client']>
 export type PartnerIndexingDiagnosticsV1Response = z.infer<GscdumpV1Protocol['schemas']['indexingDiagnosticsResponse']['client']>
+export type PartnerWatchedUrlsV1Response = z.infer<GscdumpV1Protocol['schemas']['watchedUrlsResponse']['client']>
+export type PartnerWatchedUrlsChangeV1Response = z.infer<GscdumpV1Protocol['schemas']['watchedUrlsChangeResponse']['client']>
 export type PartnerSitemapsV1Response = z.infer<GscdumpV1Protocol['schemas']['sitemapsResponse']['client']>
 export type PartnerSitemapChangesV1Response = z.infer<GscdumpV1Protocol['schemas']['sitemapChangesResponse']['client']>
 export type PartnerSiteRegistrationV1Response = z.infer<GscdumpV1Protocol['schemas']['siteRegistrationResponse']['client']>

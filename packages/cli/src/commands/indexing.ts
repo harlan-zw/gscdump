@@ -5,7 +5,9 @@ import { indexingCommandMeta } from '../command-meta'
 import { createCommandContext } from '../context'
 import { loadSitemapUrls } from '../sitemap'
 import { applyOutputMode, logger, OUTPUT_ARGS, parseIntegerOption, readUrlList } from '../utils'
+import { indexingSummaryCommand } from './indexing-summary'
 import { indexingUrlsCommand } from './indexing-urls'
+import { indexingWatchCommand } from './indexing-watch'
 
 const RETRIES_ARG = {
   retries: { type: 'string' as const, description: 'Override per-call retry count (default: 3)' },
@@ -264,5 +266,7 @@ export const indexingCommand = defineCommand({
     'batch-status': batchStatusCommand,
     'quota': quotaCommand,
     'urls': indexingUrlsCommand,
+    'summary': indexingSummaryCommand,
+    'watch': indexingWatchCommand,
   },
 })

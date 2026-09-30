@@ -6,6 +6,7 @@ export * from './api/sites'
 export * from './api/verification'
 export * from './core/canonical'
 export * from './core/client'
+export * from './core/coverage-state'
 export {
   classifyError,
   GscApiError,

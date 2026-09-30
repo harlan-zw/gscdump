@@ -1,4 +1,5 @@
 import type { FileResolutionResponse } from './file-resolution'
+import type { CoverageStatesPoint, IndexingCapture } from './indexing-coverage'
 import type { AccountNextAction, AccountStatus, PartnerLifecycleSite } from './onboarding'
 import type { GscSearchType } from './search-types'
 
@@ -783,6 +784,8 @@ export interface GscdumpIndexingTrendPoint {
     crawledNotIndexed: number | null
     discoveredNotCrawled: number | null
   }
+  /** Optional only so a client can still read a host deployed before this field. */
+  coverageStates?: CoverageStatesPoint
   signals: {
     mobilePass: number
     mobileFail: number
@@ -825,6 +828,8 @@ export interface GscdumpIndexingResponse {
     sitemapsPending: boolean
     rollupBuiltAt?: number
   }
+  /** Optional only so a client can still read a host deployed before this field. */
+  capture?: IndexingCapture
 }
 
 export type GscdumpIndexingUrlStatus = 'indexed' | 'not_indexed' | 'pending'
@@ -878,6 +883,8 @@ export interface GscdumpIndexingDiagnosticsResponse {
     fix: string
   }>
   samples?: Record<string, GscdumpIndexingUrl[]>
+  /** Optional only so a client can still read a host deployed before this field. */
+  capture?: IndexingCapture
   meta: {
     siteUrl: string
     indexingStatus?: 'pending' | 'partial' | 'complete'

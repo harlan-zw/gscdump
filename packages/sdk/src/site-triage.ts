@@ -31,6 +31,7 @@ export type HealthStage
   = | 'healthy'
     | 'crawl_faults' // real 5xx / broken links on pages that matter
     | 'quality_rejection' // Google crawled then refused — soft quality / AI-spam suppression
+    | 'not_indexed' // Discovered and Crawled, currently not indexed together dominate the known URLs
 
 export interface TriageEvidence {
   label: string
@@ -226,6 +227,10 @@ const HEALTH_COPY: Record<HealthStage, Pick<HealthVerdict, 'summary' | 'primaryA
     summary: 'Real access faults (server errors / broken links) are capping otherwise-indexable pages.',
     primaryAction: 'Fix the 5xx and broken URLs; return 410/404 for pages you retire on purpose.',
   },
+  not_indexed: {
+    summary: 'Google has not indexed most known URLs. It queued many without a crawl, and it crawled others and left them out.',
+    primaryAction: 'Link to the queued URLs from pages Google already indexed, and consolidate or improve the crawled ones.',
+  },
   quality_rejection: {
     summary: 'Google is crawling pages and refusing to index them — a soft quality signal it never reports explicitly.',
     primaryAction: 'Consolidate or improve the rejected pages, or noindex the thin/low-value set.',
@@ -249,6 +254,7 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
   const softFound = countSearchConsoleIssues(issues, 'soft_404')
   const serverError = countSearchConsoleIssues(issues, 'server_error', 'blocked_robots', 'access_denied', 'forbidden')
   const crawledNotIndexed = countSearchConsoleIssues(issues, 'crawled_not_indexed')
+  const discoveredNotIndexed = countSearchConsoleIssues(issues, 'discovered_not_indexed')
 
   const intentionalDead = isIntentionalRetirementSite(input, notFound, serverError) ? notFound : 0
   const indexableUrls = Math.max(1, totalUrls - noindex - intentionalDead)
@@ -293,6 +299,31 @@ export function classifyHealthStage(input: SiteTriageInput): HealthVerdict {
         share,
         REJECT_SHARE,
         `${(share * 100).toFixed(0)}% rejected — improve/consolidate ~${formatSearchConsoleCount(toClear)} pages to clear`,
+      ),
+    }
+  }
+
+  // Site-wide not indexed: Discovered URLs were never crawled, so they are not a
+  // quality rejection. Together with the crawled and soft 404 URLs they can
+  // still dominate the known URLs. Crawled alone dominating stays above.
+  const notIndexedPool = rejectPool + discoveredNotIndexed
+  if (totalUrls > 0 && notIndexedPool > REJECT_MIN && notIndexedPool / totalUrls >= REJECT_SHARE) {
+    const share = notIndexedPool / totalUrls
+    const toClear = Math.max(0, Math.ceil(notIndexedPool - REJECT_SHARE * totalUrls))
+    return {
+      stage: 'not_indexed',
+      ...HEALTH_COPY.not_indexed,
+      evidence: [
+        { label: 'Discovered, currently not indexed', value: formatSearchConsoleCount(discoveredNotIndexed) },
+        { label: 'Crawled, currently not indexed', value: formatSearchConsoleCount(rejectPool) },
+        { label: 'Share of known URLs', value: `${(share * 100).toFixed(0)}%` },
+      ],
+      progression: escapeReduce(
+        'healthy',
+        'not-indexed share',
+        share,
+        REJECT_SHARE,
+        `${(share * 100).toFixed(0)}% not indexed. Get ~${formatSearchConsoleCount(toClear)} URLs indexed to clear the gate`,
       ),
     }
   }

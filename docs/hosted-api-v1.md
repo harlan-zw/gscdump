@@ -206,6 +206,9 @@ principal and operation:
 | `partner.sites.indexing.inspect.create` | 20 |
 | `partner.sites.indexing.transitions.list` | 30 |
 | `partner.sites.indexing.urls.list` | 60 |
+| `partner.sites.indexing.watched.add` | 20 |
+| `partner.sites.indexing.watched.list` | 60 |
+| `partner.sites.indexing.watched.remove` | 20 |
 | `partner.sites.keyword.breadth.get` | 30 |
 | `partner.sites.keyword.sparklines.query` | 60 |
 | `partner.sites.page.trend.get` | 60 |
