@@ -92,6 +92,41 @@ See [URL inspection and indexing](../../docs/gscdump-cli/guides/6.url-indexing.m
 
 The package root also exports batch and projection helpers such as `fetchSitesWithSitemaps`, `batchInspectUrlsFlatSettled`, `inspectUrlFlat`, and `batchRequestIndexing`.
 
+## Send IndexNow change notifications
+
+Publish a UTF-8 key file on the exact host you submit.
+The key file contains your key, with no other content.
+
+```ts
+import { indexNow } from 'gscdump/indexnow'
+
+const client = indexNow()
+const input = {
+  host: 'example.com',
+  key: 'your-key-12345',
+  keyLocation: 'https://example.com/your-key-12345.txt',
+}
+const verification = await client.verify(input)
+if (verification.ok && verification.value._tag === 'verified') {
+  const result = await client.submit({
+    ...input,
+    urls: ['https://example.com/changed-page'],
+  })
+  console.log(result)
+}
+```
+
+The client rejects URLs outside the exact host or key directory before sending.
+Verification allows HTTPS, disables redirects, and reads at most 1,024 bytes within ten seconds.
+Inject `fetch`, `clock`, or `timeoutMs` when you need different transport or timing.
+Expected input failures return `Result`; infrastructure failures propagate.
+
+Submission Receipts describe delivery. HTTP 200 means accepted; HTTP 202 means key validation remains pending.
+Neither response proves indexing.
+The direct client sends one batch of up to 10,000 URLs without retries.
+Hosted callers use the SDK operations, which cap each batch at 1,000 URLs.
+See the [IndexNow protocol](https://www.indexnow.org/documentation).
+
 ## Read Bing Indexing Evidence
 
 Use `gscdump/bing` with an OAuth access token or Bing Webmaster API key. The client returns tagged
@@ -129,6 +164,7 @@ sitemap membership is available through `@gscdump/sdk/v1`.
 
 - `gscdump/client`: Google client and authentication types
 - `gscdump/indexing`: inspection and indexing helpers
+- `gscdump/indexnow`: key verification and change notifications
 - `gscdump/errors`: typed Google API failures
 - `gscdump/sites`: Site helpers
 - `gscdump/sitemap-identity`: sitemap scope and membership hashing
